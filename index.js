@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { DocsDatabase } from './src/storage/database.js'

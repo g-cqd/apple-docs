@@ -21,8 +21,8 @@ Zero npm dependencies. Runs on [Bun](https://bun.sh).
 # Install Bun if you don't have it
 curl -fsSL https://bun.sh/install | bash
 
-# Clone and link
-git clone <repo-url> apple-docs
+# Clone and link (installs `apple-docs` CLI + `apple-docs-mcp` server globally)
+git clone https://github.com/g-cqd/apple-docs.git
 cd apple-docs
 bun link
 
@@ -174,31 +174,49 @@ The MCP server exposes read-only query tools to AI assistants. Sync the corpus v
 ### Setup
 
 ```bash
-# 1. Sync documentation
+# 1. Install and link
+bun link
+
+# 2. Sync documentation
 apple-docs sync --roots swiftui,combine,foundation --rate 50 --concurrency 20
 
-# 2. Add to your MCP client config
+# 3. Add to your MCP client config (see below)
 ```
+
+After `bun link`, two commands are available globally:
+- `apple-docs` — the CLI
+- `apple-docs-mcp` — the MCP server (stdio)
+
+`APPLE_DOCS_HOME` is required for the MCP server and must point to an existing synced data directory.
 
 #### Claude Code
 
-In `~/.claude/settings.json`:
+In `~/.claude.json`, add to the `mcpServers` object:
 
 ```json
 {
-  "mcpServers": {
-    "apple-docs": {
-      "command": "bun",
-      "args": ["run", "/path/to/apple-docs/index.js"],
-      "env": {
-        "APPLE_DOCS_HOME": "/Users/you/.apple-docs"
-      }
+  "apple-docs": {
+    "command": "apple-docs-mcp",
+    "args": [],
+    "env": {
+      "APPLE_DOCS_HOME": "/Users/you/.apple-docs"
     }
   }
 }
 ```
 
-`APPLE_DOCS_HOME` is required and must point to an existing synced data directory.
+#### Codex
+
+In `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.apple-docs]
+command = "apple-docs-mcp"
+args = []
+
+[mcp_servers.apple-docs.env]
+APPLE_DOCS_HOME = "/Users/you/.apple-docs"
+```
 
 ### MCP Tools
 

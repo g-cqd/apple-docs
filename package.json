@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "bin": {
-    "apple-docs": "./cli.js"
+    "apple-docs": "./cli.js",
+    "apple-docs-mcp": "./index.js"
   },
   "scripts": {
     "test": "bun test",
