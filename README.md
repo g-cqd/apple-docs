@@ -32,8 +32,8 @@ apple-docs sync --roots swiftui,combine,foundation --rate 50 --concurrency 20
 # Search
 apple-docs search "NavigationStack"
 
-# Look up a symbol
-apple-docs lookup swiftui/view
+# Read a symbol
+apple-docs read swiftui/view
 
 # Sync everything (takes a few hours)
 apple-docs sync --full --parallel 10 --concurrency 50 --rate 100
@@ -50,7 +50,7 @@ apple-docs <command> [options]
 | Command | Description |
 |---------|-------------|
 | `search <query>` | Search with typo tolerance and tiered ranking |
-| `lookup <path-or-symbol>` | Look up a page, print Markdown |
+| `read <path-or-symbol>` | Read a page, print Markdown |
 | `frameworks` | List documentation roots |
 | `browse <framework>` | Browse topic tree |
 | `sync` | Discover, download, and index |
@@ -83,15 +83,15 @@ apple-docs search "Publisher" --json               # machine-readable output
 | `--no-eager` | | Wait for body search to finish (exhaustive) |
 | `--json` | | Output raw JSON |
 
-### lookup
+### read
 
 ```bash
-apple-docs lookup swiftui/view
-apple-docs lookup combine/publisher
-apple-docs lookup design/human-interface-guidelines/accessibility
+apple-docs read swiftui/view
+apple-docs read combine/publisher
+apple-docs read design/human-interface-guidelines/accessibility
 
 # By symbol name (fuzzy)
-apple-docs lookup View --framework swiftui
+apple-docs read View --framework swiftui
 ```
 
 Prints full Markdown to stdout. Pipe to `less`, `bat`, or redirect to a file.
@@ -222,11 +222,11 @@ APPLE_DOCS_HOME = "/Users/you/.apple-docs"
 
 | Tool | Description |
 |------|-------------|
-| `apple_docs_search` | Tiered search with fuzzy matching and body search |
-| `apple_docs_lookup` | Fetch page by path or symbol name, returns Markdown |
-| `apple_docs_list_frameworks` | List all documentation roots |
-| `apple_docs_browse` | Navigate topic tree for a framework |
-| `apple_docs_status` | Corpus statistics |
+| `search` | Full-text search with fuzzy matching and tiered ranking |
+| `read` | Fetch page by path or symbol name, returns Markdown |
+| `list_frameworks` | List all indexed documentation roots |
+| `browse` | Explore the documentation topic tree |
+| `status` | Corpus health and statistics |
 
 ## How It Works
 

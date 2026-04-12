@@ -57,9 +57,9 @@ try {
       break
     }
 
-    case 'lookup': {
+    case 'read': {
       const target = positional[0]
-      if (!target) { showHelp('lookup'); process.exit(1) }
+      if (!target) { showHelp('read'); process.exit(1) }
       // If it contains '/', treat as path; otherwise as symbol name
       const opts = target.includes('/') ? { path: target } : { symbol: target, framework: flags.framework }
       result = await lookup(opts, ctx)

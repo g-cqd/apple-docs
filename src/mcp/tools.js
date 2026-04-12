@@ -6,8 +6,8 @@ import { status } from '../commands/status.js'
 
 export const TOOL_DEFINITIONS = [
   {
-    name: 'apple_docs_search',
-    description: 'Search Apple Developer Documentation with typo tolerance and tiered ranking. Supports exact, prefix, substring, fuzzy, and full-body matching. Results include matchQuality field.',
+    name: 'search',
+    description: 'Full-text search across all Apple documentation with fuzzy matching and tiered ranking. Use to find APIs, symbols, articles, or HIG pages by keyword.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -23,8 +23,8 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'apple_docs_lookup',
-    description: 'Look up a specific Apple documentation page by path or symbol name. Returns full Markdown content with metadata including declarations, parameters, platforms, and relationships.',
+    name: 'read',
+    description: 'Fetch the full Markdown content of a documentation page by path or symbol name. Returns declarations, parameters, platforms, and relationships. Use when you already know what you\'re looking for.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -35,8 +35,8 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'apple_docs_list_frameworks',
-    description: 'List all known Apple documentation roots including frameworks, technologies, HIG, and tooling. Shows name, kind, page count, and status.',
+    name: 'list_frameworks',
+    description: 'List all indexed documentation roots — frameworks, technologies, HIG, tooling, and release notes — with page counts and status. Use to discover what\'s available.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -45,8 +45,8 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'apple_docs_browse',
-    description: 'Browse the documentation topic tree for a framework. Lists all pages or drills into a specific page to show its children and references.',
+    name: 'browse',
+    description: 'Explore the documentation topic tree. Lists all pages in a framework, or drills into a specific page to show its children and references.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -58,8 +58,8 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'apple_docs_status',
-    description: 'Show corpus statistics: total pages, frameworks by kind, disk usage, crawl progress, and last sync time.',
+    name: 'status',
+    description: 'Show corpus health: total pages, frameworks by kind, disk usage, crawl progress, and last sync time.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -72,15 +72,15 @@ export const TOOL_DEFINITIONS = [
  */
 export async function dispatchTool(name, args, ctx) {
   switch (name) {
-    case 'apple_docs_search':
+    case 'search':
       return await search(args, ctx)
-    case 'apple_docs_lookup':
+    case 'read':
       return await lookup(args, ctx)
-    case 'apple_docs_list_frameworks':
+    case 'list_frameworks':
       return await frameworks(args, ctx)
-    case 'apple_docs_browse':
+    case 'browse':
       return await browse(args, ctx)
-    case 'apple_docs_status':
+    case 'status':
       return await status(args, ctx)
     default:
       throw new Error(`Unknown tool: ${name}`)

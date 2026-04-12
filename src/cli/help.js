@@ -5,7 +5,7 @@ Usage: apple-docs <command> [options]
 
 Commands:
   search <query>       Search documentation by term or symbol
-  lookup <path>        Look up a specific page or symbol
+  read <path>          Read a specific page or symbol
   frameworks           List known documentation roots
   browse <framework>   Browse topic tree for a framework
   sync                 Discover, download, and index documentation
@@ -47,10 +47,10 @@ Examples:
   apple-docs search "async patterns" --no-eager  # wait for body results
 `.trim(),
 
-  lookup: `
-Usage: apple-docs lookup <path-or-symbol> [options]
+  read: `
+Usage: apple-docs read <path-or-symbol> [options]
 
-Look up a specific documentation page and print its Markdown content.
+Read a specific documentation page and print its Markdown content.
 
 Options:
   --framework <name>   Disambiguate symbol by framework
