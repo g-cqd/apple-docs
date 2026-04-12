@@ -1,0 +1,12 @@
+{
+  "name": "apple-docs",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "apple-docs": "./cli.js"
+  },
+  "scripts": {
+    "test": "bun test",
+    "start": "bun run index.js"
+  }
+}
