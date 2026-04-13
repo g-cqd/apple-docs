@@ -1,5 +1,7 @@
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 import { renderSnippet } from '../content/render-snippet.js'
+import { detectIntent } from '../search/intent.js'
+import { rerank } from '../search/ranking.js'
 
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 
@@ -145,9 +147,9 @@ export async function search(opts, ctx) {
     }
   }
 
-  // Sort: exact first, then prefix, contains, match, substring, fuzzy, body
-  const qualityOrder = { exact: 0, prefix: 1, contains: 2, match: 3, substring: 4, fuzzy: 5, body: 6 }
-  results.sort((a, b) => (qualityOrder[a.matchQuality] ?? 9) - (qualityOrder[b.matchQuality] ?? 9))
+  // Intent detection + source-aware reranking
+  const intent = detectIntent(q)
+  rerank(results, q, intent)
 
   const sliced = results.slice(0, limit)
 
@@ -172,6 +174,7 @@ export async function search(opts, ctx) {
     results: sliced,
     total: results.length,
     query,
+    intent,
   }
 }
 
