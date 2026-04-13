@@ -298,5 +298,58 @@
       "minResults": 1,
       "topContains": ["sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app"]
     }
+  },
+
+  {
+    "name": "platform-filter-ios16-navigationstack",
+    "query": "NavigationStack",
+    "min_ios": "16.0",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/swiftui/navigationstack"
+    }
+  },
+  {
+    "name": "platform-filter-ios12-excludes-navigationstack",
+    "query": "NavigationStack",
+    "min_ios": "12.0",
+    "expect": {
+      "minResults": 0
+    }
+  },
+  {
+    "name": "language-filter-swift",
+    "query": "View",
+    "language": "swift",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["documentation/swiftui/view"]
+    }
+  },
+  {
+    "name": "language-filter-objc-uiview",
+    "query": "UIView",
+    "language": "objc",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/uikit/uiview"
+    }
+  },
+  {
+    "name": "platform-shorthand-ios",
+    "query": "View",
+    "platform": "ios",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["documentation/swiftui/view"]
+    }
+  },
+  {
+    "name": "synonym-coreanimation-quartzcore",
+    "query": "Layer",
+    "framework": "coreanimation",
+    "expect": {
+      "minResults": 0
+    }
   }
 ]

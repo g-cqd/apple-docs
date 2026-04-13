@@ -41,6 +41,13 @@ Options:
   --framework <name>   Filter by framework (e.g. swiftui, design, app-store-review)
   --source <name>      Filter by source type (e.g. apple-docc, hig, guidelines, wwdc, sample-code)
   --kind <role>        Filter by role (e.g. symbol, article)
+  --language <lang>    Filter by language: swift, objc
+  --platform <name>    Filter by platform availability: ios, macos, watchos, tvos, visionos
+  --min-ios <ver>      Only show docs available on iOS >= version (e.g. 17.0)
+  --min-macos <ver>    Only show docs available on macOS >= version
+  --min-watchos <ver>  Only show docs available on watchOS >= version
+  --min-tvos <ver>     Only show docs available on tvOS >= version
+  --min-visionos <ver> Only show docs available on visionOS >= version
   --limit <n>          Max results (default: 100)
   --no-fuzzy           Disable typo-tolerant matching
   --no-deep            Disable full-body search entirely

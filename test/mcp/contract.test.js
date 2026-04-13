@@ -140,6 +140,27 @@ describe('MCP contract — tools', () => {
     expect(parsed.results[0].sourceType).toBe('wwdc')
   })
 
+  test('search_docs accepts language and platform filters', async () => {
+    const result = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'View', language: 'swift', platform: 'ios' },
+    })
+    expect(result.isError).toBeFalsy()
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.results).toBeArray()
+    expect(parsed.results.length).toBeGreaterThan(0)
+  })
+
+  test('search_docs accepts min_ios version filter without error', async () => {
+    const result = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'View', min_ios: '13.0' },
+    })
+    expect(result.isError).toBeFalsy()
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.results).toBeArray()
+  })
+
   test('search_docs with read returns content', async () => {
     const result = await client.callTool({ name: 'search_docs', arguments: { query: 'View', read: true } })
     expect(result.isError).toBeFalsy()

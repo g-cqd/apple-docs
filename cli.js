@@ -53,6 +53,13 @@ try {
         fuzzy: !flags['no-fuzzy'],
         noDeep: !!flags['no-deep'],
         noEager: !!flags['no-eager'],
+        language: flags.language,
+        platform: flags.platform,
+        minIos: flags['min-ios'],
+        minMacos: flags['min-macos'],
+        minWatchos: flags['min-watchos'],
+        minTvos: flags['min-tvos'],
+        minVisionos: flags['min-visionos'],
       }, ctx)
       if (flags.read) {
         if (result.results.length === 0) {

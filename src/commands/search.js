@@ -6,7 +6,10 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
  * Search with tiered cascade: FTS5 → trigram → fuzzy → body (background).
  *
  * @param {{ query: string, framework?: string, kind?: string, limit?: number,
- *           fuzzy?: boolean, noDeep?: boolean, noEager?: boolean }} opts
+ *           fuzzy?: boolean, noDeep?: boolean, noEager?: boolean,
+ *           source?: string, language?: string, platform?: string,
+ *           minIos?: string, minMacos?: string, minWatchos?: string,
+ *           minTvos?: string, minVisionos?: string }} opts
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function search(opts, ctx) {
@@ -25,11 +28,33 @@ export async function search(opts, ctx) {
   const noDeep = !!opts.noDeep
   const noEager = !!opts.noEager
 
+  // Language and platform version filters
+  const language = opts.language ?? null
+  const minIos = opts.minIos ?? opts['min-ios'] ?? null
+  const minMacos = opts.minMacos ?? opts['min-macos'] ?? null
+  const minWatchos = opts.minWatchos ?? opts['min-watchos'] ?? null
+  const minTvos = opts.minTvos ?? opts['min-tvos'] ?? null
+  const minVisionos = opts.minVisionos ?? opts['min-visionos'] ?? null
+
+  // --platform shorthand: ensure the platform column is non-null (available on that platform)
+  const platform = opts.platform ?? null
+  const platformFilters = buildPlatformFilters(platform, { minIos, minMacos, minWatchos, minTvos, minVisionos })
+
   if (!query?.trim()) return { results: [], total: 0, query: '' }
 
   const q = query.trim()
   const ftsQuery = buildFtsQuery(q)
-  const filterOpts = { framework, kind, limit: searchLimit }
+
+  // Framework synonym expansion
+  const frameworks = [framework]
+  if (framework) {
+    const synonyms = ctx.db.getFrameworkSynonyms(framework)
+    for (const s of synonyms) {
+      if (!frameworks.includes(s)) frameworks.push(s)
+    }
+  }
+
+  const filterOpts = { kind, limit: searchLimit, language, ...platformFilters }
 
   // Start body search in background if index exists and not disabled
   let bodyPromise = null
@@ -41,7 +66,11 @@ export async function search(opts, ctx) {
       setTimeout(() => {
         if (bodyCancelled) return resolve([])
         try {
-          resolve(ctx.db.searchBody(ftsQuery, filterOpts))
+          const bodyResults = []
+          for (const fw of frameworks) {
+            bodyResults.push(...ctx.db.searchBody(ftsQuery, { ...filterOpts, framework: fw }))
+          }
+          resolve(bodyResults)
         } catch { resolve([]) }
       }, 200)
     })
@@ -61,26 +90,33 @@ export async function search(opts, ctx) {
 
   // Tier 1: FTS5 tiered search (exact/prefix/contains/match via SQL CASE)
   try {
-    const ftsResults = ctx.db.searchPages(ftsQuery, q, filterOpts)
-    for (const r of ftsResults) {
-      if (seen.has(r.path)) continue
-      seen.add(r.path)
-      results.push({ ...formatResult(r), matchQuality: TIER_LABELS[r.tier] ?? 'match' })
+    for (const fw of frameworks) {
+      const ftsResults = ctx.db.searchPages(ftsQuery, q, { ...filterOpts, framework: fw })
+      for (const r of ftsResults) {
+        if (!matchesSourceFilter(r, sourceTypes)) continue
+        if (seen.has(r.path)) continue
+        seen.add(r.path)
+        results.push({ ...formatResult(r), matchQuality: TIER_LABELS[r.tier] ?? 'match' })
+      }
     }
   } catch {
     // FTS5 query syntax error — try simpler query
     try {
       const simple = `"${q.replace(/"/g, '')}"*`
-      const ftsResults = ctx.db.searchPages(simple, q, filterOpts)
-      addResults(ftsResults, 'match')
+      for (const fw of frameworks) {
+        const ftsResults = ctx.db.searchPages(simple, q, { ...filterOpts, framework: fw })
+        addResults(ftsResults, 'match')
+      }
     } catch {}
   }
 
   // Tier 2: Trigram substring (if < 5 results and query >= 3 chars)
   if (results.length < 5 && q.length >= 3) {
     try {
-      const triResults = ctx.db.searchTrigram(q, filterOpts)
-      addResults(triResults, 'substring')
+      for (const fw of frameworks) {
+        const triResults = ctx.db.searchTrigram(q, { ...filterOpts, framework: fw })
+        addResults(triResults, 'substring')
+      }
     } catch {}
   }
 
@@ -131,6 +167,10 @@ function formatResult(r) {
     path: r.path,
     platforms: r.platforms ? (typeof r.platforms === 'string' ? JSON.parse(r.platforms) : r.platforms) : [],
     declaration: r.declaration,
+    urlDepth: r.url_depth ?? 0,
+    isReleaseNotes: !!(r.is_release_notes),
+    docKind: r.doc_kind ?? null,
+    language: r.language ?? null,
   }
 }
 
@@ -147,6 +187,28 @@ function matchesSourceFilter(row, sourceTypes) {
   if (!sourceTypes) return true
   const sourceType = String(row?.source_type ?? row?.sourceType ?? '').toLowerCase()
   return sourceTypes.has(sourceType)
+}
+
+/**
+ * Map --platform shorthand to specific min_* filters.
+ * If --platform ios is given without --min-ios, set minIos to '0' (meaning "available on iOS at all").
+ */
+function buildPlatformFilters(platform, explicit) {
+  const filters = {
+    minIos: explicit.minIos ?? null,
+    minMacos: explicit.minMacos ?? null,
+    minWatchos: explicit.minWatchos ?? null,
+    minTvos: explicit.minTvos ?? null,
+    minVisionos: explicit.minVisionos ?? null,
+  }
+  if (platform) {
+    const key = {
+      ios: 'minIos', macos: 'minMacos', watchos: 'minWatchos',
+      tvos: 'minTvos', visionos: 'minVisionos',
+    }[platform.toLowerCase()]
+    if (key && !filters[key]) filters[key] = '0'
+  }
+  return filters
 }
 
 /**

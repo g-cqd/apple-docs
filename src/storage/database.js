@@ -694,6 +694,7 @@ export class DocsDatabase {
              d.declaration_text as declaration, d.platforms_json as platforms,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
+             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language,
              bm25(documents_fts, 10.0, 5.0, 3.0, 2.0, 1.0) as rank,
              CASE
                WHEN LOWER(d.title) = LOWER($raw) THEN 0
@@ -708,6 +709,12 @@ export class DocsDatabase {
       WHERE documents_fts MATCH $query
         AND ($framework IS NULL OR d.framework = $framework)
         AND ($kind IS NULL OR d.kind = $kind OR d.role = $kind)
+        AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
+        AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
+        AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
+        AND ($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)
+        AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
+        AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
       ORDER BY tier, rank
       LIMIT $limit
     `)
@@ -715,13 +722,20 @@ export class DocsDatabase {
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
-             d.source_type as source_type, d.source_metadata as source_metadata
+             d.source_type as source_type, d.source_metadata as source_metadata,
+             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language
       FROM documents_trigram
       JOIN documents d ON documents_trigram.rowid = d.id
       LEFT JOIN roots r ON r.slug = d.framework
       WHERE documents_trigram MATCH $query
         AND ($framework IS NULL OR d.framework = $framework)
         AND ($kind IS NULL OR d.kind = $kind OR d.role = $kind)
+        AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
+        AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
+        AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
+        AND ($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)
+        AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
+        AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
       LIMIT $limit
     `)
     this._searchDocumentsBody = this.db.query(`
@@ -729,6 +743,7 @@ export class DocsDatabase {
              d.declaration_text as declaration, d.platforms_json as platforms,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
+             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language,
              bm25(documents_body_fts, 1.0) as rank
       FROM documents_body_fts
       JOIN documents d ON documents_body_fts.rowid = d.id
@@ -736,6 +751,12 @@ export class DocsDatabase {
       WHERE documents_body_fts MATCH $query
         AND ($framework IS NULL OR d.framework = $framework)
         AND ($kind IS NULL OR d.kind = $kind OR d.role = $kind)
+        AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
+        AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
+        AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
+        AND ($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)
+        AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
+        AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
       ORDER BY rank
       LIMIT $limit
     `)
@@ -770,7 +791,8 @@ export class DocsDatabase {
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
-             d.source_type as source_type, d.source_metadata as source_metadata
+             d.source_type as source_type, d.source_metadata as source_metadata,
+             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language
       FROM documents d
       LEFT JOIN roots r ON r.slug = d.framework
       WHERE d.id = ?
@@ -784,6 +806,12 @@ export class DocsDatabase {
       FROM pages p
       JOIN roots r ON p.root_id = r.id
       WHERE p.id = ? AND p.status = 'active'
+    `)
+
+    this._getFrameworkSynonyms = this.db.query(`
+      SELECT alias FROM framework_synonyms WHERE canonical = ?
+      UNION
+      SELECT canonical FROM framework_synonyms WHERE alias = ?
     `)
 
     this._addRef = this.db.query('INSERT INTO refs (source_id, target_path, anchor_text, section) VALUES (?, ?, ?, ?)')
@@ -1064,29 +1092,38 @@ export class DocsDatabase {
     return this._getPagesByRoot.all(rootSlug)
   }
 
-  searchPages(ftsQuery, rawQuery, { framework = null, kind = null, limit = 100 } = {}) {
+  searchPages(ftsQuery, rawQuery, { framework = null, kind = null, limit = 100, language = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
+    const filterParams = { $language: language, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     if (this.hasNormalizedDocuments()) {
-      return this._searchDocuments.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit })
+      return this._searchDocuments.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
     }
     return this._searchPages.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit })
   }
 
-  searchTrigram(query, { framework = null, kind = null, limit = 100 } = {}) {
+  searchTrigram(query, { framework = null, kind = null, limit = 100, language = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
+    const filterParams = { $language: language, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
       if (this.hasNormalizedDocuments()) {
-        return this._searchDocumentsTrigram.all({ $query: query, $framework: framework, $kind: kind, $limit: limit })
+        return this._searchDocumentsTrigram.all({ $query: query, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
       }
       return this._searchTrigram.all({ $query: query, $framework: framework, $kind: kind, $limit: limit })
     } catch { return [] }
   }
 
-  searchBody(ftsQuery, { framework = null, kind = null, limit = 100 } = {}) {
+  searchBody(ftsQuery, { framework = null, kind = null, limit = 100, language = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
+    const filterParams = { $language: language, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
       if (this.hasNormalizedDocuments()) {
-        return this._searchDocumentsBody.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit })
+        return this._searchDocumentsBody.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
       }
       return this._searchBody.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit })
     } catch { return [] }
+  }
+
+  getFrameworkSynonyms(slug) {
+    if (!slug) return []
+    const normalized = slug.toLowerCase()
+    return this._getFrameworkSynonyms.all(normalized, normalized).map(r => r.alias ?? r.canonical)
   }
 
   getBodyIndexCount() {

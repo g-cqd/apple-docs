@@ -252,6 +252,19 @@ describe('DocsDatabase', () => {
     }
   })
 
+  test('getFrameworkSynonyms returns bidirectional aliases', () => {
+    const aliases = db.getFrameworkSynonyms('quartzcore')
+    expect(aliases).toContain('coreanimation')
+
+    const reverse = db.getFrameworkSynonyms('coreanimation')
+    expect(reverse).toContain('quartzcore')
+  })
+
+  test('getFrameworkSynonyms returns empty array for unknown framework', () => {
+    expect(db.getFrameworkSynonyms('nonexistent')).toEqual([])
+    expect(db.getFrameworkSynonyms(null)).toEqual([])
+  })
+
   test('upsertNormalizedDocument stores sections and relationships', () => {
     db.upsertNormalizedDocument({
       document: {

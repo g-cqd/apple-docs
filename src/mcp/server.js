@@ -32,6 +32,13 @@ export function createServer(ctx) {
       framework: z.string().optional().describe('Filter by framework slug (e.g. swiftui, foundation, design, app-store-review)'),
       source: z.string().optional().describe('Filter by source type slug or comma-separated list (e.g. apple-docc, wwdc, sample-code)'),
       kind: z.string().optional().describe('Filter by role (e.g. symbol, article, collection)'),
+      language: z.enum(['swift', 'objc']).optional().describe('Filter by programming language'),
+      platform: z.enum(['ios', 'macos', 'watchos', 'tvos', 'visionos']).optional().describe('Filter by platform availability'),
+      min_ios: z.string().optional().describe('Minimum iOS version (e.g. "17.0")'),
+      min_macos: z.string().optional().describe('Minimum macOS version (e.g. "14.0")'),
+      min_watchos: z.string().optional().describe('Minimum watchOS version'),
+      min_tvos: z.string().optional().describe('Minimum tvOS version'),
+      min_visionos: z.string().optional().describe('Minimum visionOS version'),
       limit: z.number().optional().describe('Max results (default 100)'),
       fuzzy: z.boolean().optional().describe('Enable typo-tolerant fuzzy matching (default true)'),
       noDeep: z.boolean().optional().describe('Disable background full-body search (default false)'),
@@ -39,7 +46,14 @@ export function createServer(ctx) {
       read: z.boolean().optional().describe('Return the full Markdown content of the top search result instead of the result list'),
     },
     async (args) => {
-      const result = await search(args, ctx)
+      const result = await search({
+        ...args,
+        minIos: args.min_ios,
+        minMacos: args.min_macos,
+        minWatchos: args.min_watchos,
+        minTvos: args.min_tvos,
+        minVisionos: args.min_visionos,
+      }, ctx)
       if (args.read && result.results.length > 0) {
         const hit = result.results[0]
         const page = await lookup({ path: hit.path }, ctx)

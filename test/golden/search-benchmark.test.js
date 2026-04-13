@@ -29,6 +29,10 @@ describe('Golden Search Queries', () => {
         query: golden.query,
         framework: golden.framework,
         source: golden.source,
+        language: golden.language,
+        platform: golden.platform,
+        minIos: golden.min_ios,
+        minMacos: golden.min_macos,
         limit: 20,
         fuzzy: true,
         noDeep: true, // No body index in test DB
