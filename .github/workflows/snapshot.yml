@@ -17,14 +17,15 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: write
-    env:
-      APPLE_DOCS_HOME: ${{ runner.temp }}/apple-docs
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
 
       - run: bun install --frozen-lockfile
+
+      - name: Set data directory
+        run: echo "APPLE_DOCS_HOME=${{ runner.temp }}/apple-docs" >> "$GITHUB_ENV"
 
       - name: Sync corpus
         run: bun run cli.js sync --full --parallel 5 --concurrency 10 --rate 10
