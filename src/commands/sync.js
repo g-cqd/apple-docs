@@ -206,7 +206,7 @@ async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
     logger.info(`Syncing ${adapter.constructor.displayName} (${keys.length} keys)...`)
 
     await pool(keys, concurrency, async (key) => {
-      const existing = db.getPage(key)
+      const existing = db.getPageByPath(key)
       if (existing?.status === 'active') {
         skipped++
         return

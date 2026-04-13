@@ -994,7 +994,7 @@ export class DocsDatabase {
   }
 
   getPageByPath(path) {
-    return this.getPage(path)
+    return this._getPage.get(path, 'active')
   }
 
   getDocumentSections(key) {

@@ -90,14 +90,27 @@ describe('DocsDatabase', () => {
     expect(page.framework).toBe('Combine')
   })
 
-  test('getPageByPath remains available as a compatibility alias', () => {
+  test('getPageByPath returns the active page row when normalized documents exist', () => {
     const root = db.upsertRoot('combine', 'Combine', 'framework', 'test')
     db.upsertPage({ rootId: root.id, path: 'combine/publisher', url: 'u', title: 'Publisher', role: 'symbol' })
+    db.upsertNormalizedDocument({
+      document: {
+        key: 'combine/publisher',
+        title: 'Publisher',
+        sourceType: 'apple-docc',
+        framework: 'combine',
+        role: 'symbol',
+      },
+      sections: [],
+      relationships: [],
+    })
 
     const page = db.getPageByPath('combine/publisher')
     expect(page).not.toBeNull()
     expect(page.title).toBe('Publisher')
     expect(page.root_slug).toBe('combine')
+    expect(page.status).toBe('active')
+    expect(page.root_id).toBe(root.id)
   })
 
   test('crawl state operations', () => {
