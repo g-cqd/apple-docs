@@ -30,6 +30,11 @@ export async function lookup(opts, ctx) {
   let content = await readText(mdPath)
   let fallback = false
 
+  // If section extraction is requested, always load sections from DB
+  if (opts.section && content) {
+    sections = db.getDocumentSections(page.path)
+  }
+
   if (!content) {
     sections = db.getDocumentSections(page.path)
     if (sections.length === 0) {
@@ -70,23 +75,41 @@ export async function lookup(opts, ctx) {
     }
   }
 
+  const metadata = {
+    title: page.title,
+    framework: page.framework,
+    rootSlug: page.root_slug,
+    role: page.role,
+    roleHeading: page.role_heading,
+    abstract: page.abstract,
+    platforms: page.platforms
+      ? (typeof page.platforms === 'string' ? JSON.parse(page.platforms) : page.platforms)
+      : [],
+    declaration: page.declaration,
+    path: page.path,
+    downloadedAt: page.downloaded_at,
+    convertedAt: page.converted_at,
+  }
+
+  // Section extraction: return a specific section by heading, sectionKind, or content match
+  if (opts.section && sections.length > 0) {
+    const sectionQuery = opts.section
+    const match = sections.find(s =>
+      s.heading === sectionQuery || s.heading?.endsWith(sectionQuery)
+      || (s.sectionKind ?? s.section_kind) === sectionQuery,
+    ) ?? sections.find(s =>
+      (s.contentText ?? s.content_text)?.includes(sectionQuery),
+    )
+    if (match) {
+      return { found: true, metadata, content: match.contentText ?? match.content_text ?? 'Section content not available.', sections: [match] }
+    }
+    const available = sections.map(s => s.heading ?? s.sectionKind ?? s.section_kind).filter(Boolean).join(', ')
+    return { found: true, metadata, content: null, sections, note: `Section not found: ${sectionQuery}. Available sections: ${available}` }
+  }
+
   return {
     found: true,
-    metadata: {
-      title: page.title,
-      framework: page.framework,
-      rootSlug: page.root_slug,
-      role: page.role,
-      roleHeading: page.role_heading,
-      abstract: page.abstract,
-      platforms: page.platforms
-        ? (typeof page.platforms === 'string' ? JSON.parse(page.platforms) : page.platforms)
-        : [],
-      declaration: page.declaration,
-      path: page.path,
-      downloadedAt: page.downloaded_at,
-      convertedAt: page.converted_at,
-    },
+    metadata,
     content: content ?? null,
     sections,
     note: content

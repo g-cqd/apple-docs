@@ -3,7 +3,7 @@ import { checkHtmlPage } from '../apple/api.js'
 import { SourceAdapter } from './base.js'
 
 const ROOT_SLUG = 'wwdc'
-const APPLE_VIDEOS_BASE = 'https://developer.apple.com/tutorials/data/content/videos'
+const APPLE_VIDEOS_INDEX = 'https://developer.apple.com/videos'
 const APPLE_BASE = 'https://developer.apple.com/videos/play'
 const ASCIIWWDC_OWNER = 'ASCIIwwdc'
 const ASCIIWWDC_REPO = 'wwdc-session-transcripts'
@@ -12,7 +12,7 @@ const ASCIIWWDC_LANGUAGE = 'en'
 const USER_AGENT = 'apple-docs/2.0'
 const DEFAULT_TIMEOUT = 30_000
 
-/** Years served by Apple's structured JSON API. */
+/** Years served by Apple's WWDC videos pages (HTML scraping). */
 const APPLE_YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
 
 /** Years served by ASCIIwwdc community transcripts. */
@@ -53,19 +53,19 @@ function buildAsciiwwdcPath(year, sessionId) {
 }
 
 // ---------------------------------------------------------------------------
-// Apple JSON fetch helpers
+// Apple HTML scraping helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch the year-level session index from Apple's video data API.
- * Returns an array of session ID strings, or an empty array on failure.
+ * Fetch the year-level session index from Apple's WWDC videos page.
+ * Scrapes the HTML listing to extract session IDs from link hrefs.
  *
  * @param {number} year
  * @param {{ acquire(): Promise<void> }} rateLimiter
  * @returns {Promise<string[]>}
  */
 async function fetchAppleYearIndex(year, rateLimiter) {
-  const url = `${APPLE_VIDEOS_BASE}/wwdc${year}.json`
+  const url = `${APPLE_VIDEOS_INDEX}/wwdc${year}/`
   await rateLimiter.acquire()
 
   try {
@@ -74,62 +74,41 @@ async function fetchAppleYearIndex(year, rateLimiter) {
       signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
     })
     if (!res.ok) return []
-    const data = await res.json()
-    return extractSessionIds(data)
+    const html = await res.text()
+    return extractSessionIdsFromHtml(html, year)
   } catch {
     return []
   }
 }
 
 /**
- * Extract session IDs from the Apple year-index JSON.
- * The exact shape varies by year, but common patterns are checked.
+ * Extract session IDs from an Apple WWDC year-index HTML page.
+ * Session links have the shape: /videos/play/wwdc{year}/{id}/
  *
- * @param {object} data
+ * @param {string} html
+ * @param {number} year
  * @returns {string[]}
  */
-function extractSessionIds(data) {
+function extractSessionIdsFromHtml(html, year) {
   const ids = new Set()
-
-  // Pattern: { sections: [{ videos: [{ id: '10001' }] }] }
-  if (Array.isArray(data?.sections)) {
-    for (const section of data.sections) {
-      for (const video of section?.videos ?? []) {
-        if (video?.id) ids.add(String(video.id))
-      }
-    }
+  const re = new RegExp(`/videos/play/wwdc${year}/(\\d+)/?["']`, 'g')
+  let match
+  while ((match = re.exec(html)) !== null) {
+    ids.add(match[1])
   }
-
-  // Pattern: { videos: [{ id: '10001' }] }
-  if (Array.isArray(data?.videos)) {
-    for (const video of data.videos) {
-      if (video?.id) ids.add(String(video.id))
-    }
-  }
-
-  // Pattern: { sessions: [{ id: '10001' }] } or flat array of sessions
-  const sessions = Array.isArray(data?.sessions)
-    ? data.sessions
-    : Array.isArray(data)
-      ? data
-      : []
-  for (const session of sessions) {
-    if (session?.id) ids.add(String(session.id))
-  }
-
   return [...ids]
 }
 
 /**
- * Fetch the per-session Apple JSON payload.
+ * Fetch a per-session Apple WWDC page by scraping the HTML.
  *
  * @param {number} year
  * @param {string} sessionId
  * @param {{ acquire(): Promise<void> }} rateLimiter
- * @returns {Promise<{ json: object, etag: string|null, lastModified: string|null }>}
+ * @returns {Promise<{ payload: object, etag: string|null, lastModified: string|null }>}
  */
 async function fetchAppleSession(year, sessionId, rateLimiter) {
-  const url = `${APPLE_VIDEOS_BASE}/play/wwdc${year}/${sessionId}.json`
+  const url = `${APPLE_BASE}/wwdc${year}/${sessionId}/`
   await rateLimiter.acquire()
 
   const res = await fetch(url, {
@@ -144,11 +123,97 @@ async function fetchAppleSession(year, sessionId, rateLimiter) {
     throw new Error(`HTTP ${res.status} fetching ${url}`)
   }
 
+  const html = await res.text()
   return {
-    json: await res.json(),
+    payload: parseSessionHtml(html, year, sessionId),
     etag: res.headers.get('etag'),
     lastModified: res.headers.get('last-modified'),
   }
+}
+
+// ---------------------------------------------------------------------------
+// HTML session page parsing
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse an Apple WWDC session HTML page into a structured payload.
+ *
+ * @param {string} html - Raw HTML of the session page.
+ * @param {number} year
+ * @param {string} sessionId
+ * @returns {object}
+ */
+function parseSessionHtml(html, year, sessionId) {
+  // Strip noise elements (including site chrome)
+  let cleaned = html
+  for (const tag of ['script', 'style', 'noscript', 'nav', 'header', 'footer']) {
+    let prev
+    do {
+      prev = cleaned
+      cleaned = cleaned.replace(new RegExp(`<${tag}[\\s>][\\s\\S]*?</${tag}>`, 'gi'), '')
+    } while (cleaned !== prev)
+  }
+
+  // Title from <h1>
+  const h1Match = cleaned.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
+  const title = h1Match ? stripHtmlTags(h1Match[1]) : null
+
+  // Work with content after the <h1> to avoid picking up nav text
+  const afterH1 = h1Match ? cleaned.slice(h1Match.index + h1Match[0].length) : cleaned
+
+  // All paragraphs after the heading
+  const allParagraphs = [...afterH1.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map(m => stripHtmlTags(m[1]))
+    .filter(t => t.length > 0)
+
+  // Description: first substantial paragraph (the abstract)
+  const description = allParagraphs.find(p => p.length > 30) ?? allParagraphs[0] ?? null
+  const descIndex = description ? allParagraphs.indexOf(description) : -1
+
+  // Chapters: look for "Chapters" heading followed by a list
+  const chapters = extractChaptersFromHtml(cleaned)
+
+  // Transcript: paragraphs after the description (skip short UI labels)
+  const transcriptParagraphs = descIndex >= 0
+    ? allParagraphs.slice(descIndex + 1).filter(p => p.length > 15)
+    : []
+  const transcript = transcriptParagraphs.join('\n\n') || null
+
+  return {
+    title,
+    description,
+    chapters,
+    transcript,
+    year,
+    sessionId,
+    format: 'html',
+  }
+}
+
+/**
+ * Strip all HTML tags from a string and decode entities.
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+function stripHtmlTags(html) {
+  return decodeHtmlEntities(
+    html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '),
+  ).trim()
+}
+
+/**
+ * Extract chapter titles from a session page's "Chapters" section.
+ *
+ * @param {string} html
+ * @returns {string[]}
+ */
+function extractChaptersFromHtml(html) {
+  const match = html.match(/<h2[^>]*>\s*Chapters\s*<\/h2>\s*<ul[^>]*>([\s\S]*?)<\/ul>/i)
+  if (!match) return []
+  return [...match[1].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+    .map(m => stripHtmlTags(m[1]))
+    .filter(Boolean)
 }
 
 // ---------------------------------------------------------------------------
@@ -414,10 +479,10 @@ export class WwdcAdapter extends SourceAdapter {
     const { year, sessionId } = parsed
 
     if (year >= 2020) {
-      const { json, etag, lastModified } = await fetchAppleSession(year, sessionId, ctx.rateLimiter)
+      const { payload, etag, lastModified } = await fetchAppleSession(year, sessionId, ctx.rateLimiter)
       return this.validateFetchResult({
         key,
-        payload: json,
+        payload,
         etag,
         lastModified,
       })
@@ -456,7 +521,7 @@ export class WwdcAdapter extends SourceAdapter {
     const { year, sessionId } = parsed
 
     if (year >= 2020) {
-      const url = `${APPLE_VIDEOS_BASE}/play/wwdc${year}/${sessionId}.json`
+      const url = `${APPLE_BASE}/wwdc${year}/${sessionId}/`
       const result = await checkHtmlPage(url, previousState?.etag ?? null, ctx.rateLimiter)
       return this.validateCheckResult({
         status: result.status,
@@ -550,6 +615,14 @@ export class WwdcAdapter extends SourceAdapter {
         sectionKind: 'abstract',
         heading: null,
         contentText: description,
+      })
+    }
+
+    if (Array.isArray(json?.chapters) && json.chapters.length > 0) {
+      sections.push({
+        sectionKind: 'content',
+        heading: 'Chapters',
+        contentText: json.chapters.join('\n'),
       })
     }
 

@@ -60,6 +60,8 @@ try {
         minWatchos: flags['min-watchos'],
         minTvos: flags['min-tvos'],
         minVisionos: flags['min-visionos'],
+        year: flags.year ? Number.parseInt(flags.year) : undefined,
+        track: flags.track,
       }, ctx)
       if (flags.read) {
         if (result.results.length === 0) {
@@ -81,6 +83,7 @@ try {
       if (!target) { showHelp('read'); process.exit(1) }
       // If it contains '/', treat as path; otherwise as symbol name
       const opts = target.includes('/') ? { path: target } : { symbol: target, framework: flags.framework }
+      if (flags.section) opts.section = flags.section
       result = await lookup(opts, ctx)
       formatter = formatLookup
       break

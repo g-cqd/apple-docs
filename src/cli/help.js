@@ -57,6 +57,8 @@ Options:
   --min-watchos <ver>  Only show docs available on watchOS >= version
   --min-tvos <ver>     Only show docs available on tvOS >= version
   --min-visionos <ver> Only show docs available on visionOS >= version
+  --year <n>           Filter WWDC sessions by year (e.g. 2024)
+  --track <name>       Filter WWDC sessions by track (e.g. SwiftUI, Accessibility)
   --limit <n>          Max results (default: 100)
   --no-fuzzy           Disable typo-tolerant matching
   --no-deep            Disable full-body search entirely
@@ -71,6 +73,7 @@ Examples:
   apple-docs search "async patterns" --no-eager  # wait for body results
   apple-docs search "in-app purchase" --framework app-store-review
   apple-docs search "Observation" --source wwdc
+  apple-docs search "Swift Testing" --source wwdc --year 2024
   apple-docs search "privacy" --framework guidelines --read  # search + read best match
 `.trim(),
 
@@ -81,6 +84,7 @@ Read a specific documentation page and print its Markdown content.
 
 Options:
   --framework <name>   Disambiguate symbol by framework
+  --section <name>     Extract a specific section by heading or file path
   --json               Output metadata as JSON instead of Markdown
 `.trim(),
 

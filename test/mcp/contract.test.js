@@ -104,12 +104,11 @@ afterEach(async () => {
 })
 
 describe('MCP contract — tools', () => {
-  test('lists all 8 tools', async () => {
+  test('lists all 5 tools', async () => {
     const result = await client.listTools()
     const names = result.tools.map((t) => t.name).sort()
     expect(names).toEqual([
-      'browse', 'list_frameworks', 'read_doc', 'read_sample_file',
-      'search_docs', 'search_samples', 'search_wwdc', 'status',
+      'browse', 'list_frameworks', 'read_doc', 'search_docs', 'status',
     ])
   })
 
@@ -225,10 +224,10 @@ describe('MCP contract — tools', () => {
     expect(parsed).toBeDefined()
   })
 
-  test('search_wwdc applies year filtering using source metadata', async () => {
+  test('search_docs with year filters WWDC sessions by source metadata', async () => {
     const result = await client.callTool({
-      name: 'search_wwdc',
-      arguments: { query: 'Swift Testing', year: 2024 },
+      name: 'search_docs',
+      arguments: { query: 'Swift Testing', source: 'wwdc', year: 2024 },
     })
     expect(result.isError).toBeFalsy()
     const parsed = JSON.parse(result.content[0].text)
@@ -236,10 +235,20 @@ describe('MCP contract — tools', () => {
     expect(parsed.results[0].path).toBe('wwdc/wwdc2024-10001')
   })
 
-  test('search_samples returns sample project results', async () => {
+  test('search_docs with track filters WWDC sessions', async () => {
     const result = await client.callTool({
-      name: 'search_samples',
-      arguments: { query: 'Food Truck' },
+      name: 'search_docs',
+      arguments: { query: 'Swift Testing', source: 'wwdc', track: 'Testing' },
+    })
+    expect(result.isError).toBeFalsy()
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.results).toHaveLength(1)
+  })
+
+  test('search_docs with kind=sample-project returns sample code results', async () => {
+    const result = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'Food Truck', kind: 'sample-project' },
     })
     expect(result.isError).toBeFalsy()
     const parsed = JSON.parse(result.content[0].text)
@@ -247,16 +256,26 @@ describe('MCP contract — tools', () => {
     expect(parsed.results[0].sourceType).toBe('sample-code')
   })
 
-  test('read_sample_file returns sample overview when file path is omitted', async () => {
+  test('read_doc with section extracts specific section', async () => {
     const result = await client.callTool({
-      name: 'read_sample_file',
-      arguments: { sample_key: 'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app' },
+      name: 'read_doc',
+      arguments: { path: 'swiftui/view', section: 'abstract' },
     })
     expect(result.isError).toBeFalsy()
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.found).toBe(true)
-    expect(parsed.metadata.title).toBe('Food Truck: Building a SwiftUI Multiplatform App')
-    expect(parsed.sections).toBeArray()
+    expect(parsed.sections).toHaveLength(1)
+  })
+
+  test('read_doc with missing section returns available sections', async () => {
+    const result = await client.callTool({
+      name: 'read_doc',
+      arguments: { path: 'swiftui/view', section: 'nonexistent-section' },
+    })
+    expect(result.isError).toBeFalsy()
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.found).toBe(true)
+    expect(parsed.note).toContain('Section not found')
   })
 })
 

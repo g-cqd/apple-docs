@@ -71,9 +71,9 @@ describe('WwdcAdapter.discover', () => {
     let root = null
 
     globalThis.fetch = async (url) => {
-      // Apple year-index — return empty arrays for all years
-      if (url.includes('/tutorials/data/content/videos/')) {
-        return new Response(JSON.stringify({ videos: [] }), { status: 200 })
+      // Apple year-index HTML — return empty page for all years
+      if (url.includes('developer.apple.com/videos/wwdc')) {
+        return new Response('<html><body></body></html>', { status: 200 })
       }
       // GitHub tree — empty
       if (url.includes('api.github.com')) {
@@ -105,13 +105,16 @@ describe('WwdcAdapter.discover', () => {
     const adapter = new WwdcAdapter()
 
     globalThis.fetch = async (url) => {
-      // Apple year-index for 2024 returns one session
-      if (url.includes('wwdc2024.json')) {
-        return new Response(JSON.stringify({ videos: [{ id: '10001' }] }), { status: 200 })
+      // Apple year-index HTML for 2024 returns one session link
+      if (url.includes('/videos/wwdc2024/')) {
+        return new Response(
+          '<html><body><a href="/videos/play/wwdc2024/10001/">Session</a></body></html>',
+          { status: 200 },
+        )
       }
-      // All other Apple year indexes return empty
-      if (url.includes('/tutorials/data/content/videos/')) {
-        return new Response(JSON.stringify({ videos: [] }), { status: 200 })
+      // All other Apple year indexes return empty HTML
+      if (url.includes('developer.apple.com/videos/wwdc')) {
+        return new Response('<html><body></body></html>', { status: 200 })
       }
       // GitHub tree returns one ASCIIwwdc file
       if (url.includes('api.github.com')) {
@@ -150,7 +153,7 @@ describe('WwdcAdapter.discover', () => {
 
     globalThis.fetch = async (url) => {
       // Simulate Apple returning 404 for all years
-      if (url.includes('/tutorials/data/content/videos/')) {
+      if (url.includes('developer.apple.com/videos/wwdc')) {
         return new Response('Not Found', { status: 404 })
       }
       if (url.includes('api.github.com')) {
@@ -171,8 +174,8 @@ describe('WwdcAdapter.discover', () => {
     let root = null
 
     globalThis.fetch = async (url) => {
-      if (url.includes('/tutorials/data/content/videos/')) {
-        return new Response(JSON.stringify({ videos: [] }), { status: 200 })
+      if (url.includes('developer.apple.com/videos/wwdc')) {
+        return new Response('<html><body></body></html>', { status: 200 })
       }
       if (url.includes('api.github.com')) {
         return new Response(JSON.stringify({ tree: [] }), { status: 200 })
@@ -205,12 +208,16 @@ describe('WwdcAdapter.discover', () => {
 // ---------------------------------------------------------------------------
 
 describe('WwdcAdapter.fetch', () => {
-  test('fetches Apple JSON for a 2024 session', async () => {
+  test('fetches and parses Apple HTML for a 2024 session', async () => {
     const adapter = new WwdcAdapter()
-    const payload = { title: 'Meet Swift Testing', description: 'Learn about Swift Testing.' }
+    const mockHtml = `<html><body>
+      <h1>Meet Swift Testing</h1>
+      <p>Learn about the Swift Testing framework and how to use it.</p>
+      <p>Hello, I'm a framework engineer working on Swift Testing.</p>
+    </body></html>`
 
     globalThis.fetch = async () =>
-      new Response(JSON.stringify(payload), {
+      new Response(mockHtml, {
         status: 200,
         headers: { etag: '"abc"', 'last-modified': 'Mon, 01 Jan 2024 00:00:00 GMT' },
       })
@@ -218,7 +225,9 @@ describe('WwdcAdapter.fetch', () => {
     const result = await adapter.fetch('wwdc/wwdc2024-10001', { rateLimiter: makeRateLimiter() })
 
     expect(result.key).toBe('wwdc/wwdc2024-10001')
-    expect(result.payload).toEqual(payload)
+    expect(result.payload.title).toBe('Meet Swift Testing')
+    expect(result.payload.description).toBe('Learn about the Swift Testing framework and how to use it.')
+    expect(result.payload.format).toBe('html')
     expect(result.etag).toBe('"abc"')
   })
 

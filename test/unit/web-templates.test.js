@@ -3,6 +3,7 @@ import {
   renderDocumentPage,
   renderIndexPage,
   renderFrameworkPage,
+  renderSearchPage,
   buildBreadcrumbs,
 } from '../../src/web/templates.js'
 
@@ -348,5 +349,81 @@ describe('renderFrameworkPage', () => {
     const fw = { slug: 'foundation' }
     const page = renderFrameworkPage(fw, mockDocuments, siteConfig)
     expect(page).toContain('foundation')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// renderSearchPage
+// ---------------------------------------------------------------------------
+
+describe('renderSearchPage', () => {
+  test('returns a string starting with <!DOCTYPE html>', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page.trimStart()).toMatch(/^<!DOCTYPE html>/)
+  })
+
+  test('contains search form with id', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('id="search-form"')
+    expect(page).toContain('id="search-q"')
+  })
+
+  test('contains filter dropdowns', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('filter-framework')
+    expect(page).toContain('filter-source')
+    expect(page).toContain('filter-kind')
+  })
+
+  test('contains language radio buttons', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('name="language"')
+    expect(page).toContain('value="swift"')
+    expect(page).toContain('value="objc"')
+  })
+
+  test('contains platform checkboxes', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('value="ios"')
+    expect(page).toContain('value="macos"')
+    expect(page).toContain('value="visionos"')
+  })
+
+  test('contains advanced filter section', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('filter-advanced')
+    expect(page).toContain('min_ios')
+    expect(page).toContain('min_macos')
+  })
+
+  test('contains WWDC year and track filters', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('name="year"')
+    expect(page).toContain('name="track"')
+  })
+
+  test('contains results container and load-more button', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('id="search-results"')
+    expect(page).toContain('id="search-load-more"')
+  })
+
+  test('includes search-page.js script', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('search-page.js')
+  })
+
+  test('contains header and footer', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('site-header')
+    expect(page).toContain('site-footer')
+    expect(page).toContain('2026-04-13')
+  })
+
+  test('applies baseUrl prefix to assets', () => {
+    const config = { ...siteConfig, baseUrl: '/apple-docs' }
+    const page = renderSearchPage(config)
+    expect(page).toContain('/apple-docs/assets/search-page.js')
+    expect(page).toContain('/apple-docs/assets/style.css')
   })
 })

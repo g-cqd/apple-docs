@@ -153,6 +153,18 @@ export async function search(opts, ctx) {
   const intent = detectIntent(q)
   rerank(results, q, intent)
 
+  // Post-filter by WWDC year/track from sourceMetadata (enables search_wwdc consolidation)
+  if (opts.year || opts.track) {
+    const before = results.length
+    for (let i = results.length - 1; i >= 0; i--) {
+      try {
+        const meta = JSON.parse(results[i].sourceMetadata ?? '{}')
+        if (opts.year && meta.year !== opts.year) { results.splice(i, 1); continue }
+        if (opts.track && meta.track && !meta.track.toLowerCase().includes(opts.track.toLowerCase())) { results.splice(i, 1); continue }
+      } catch { results.splice(i, 1) }
+    }
+  }
+
   const sliced = results.slice(0, limit)
 
   // Batch-fetch snippet data and related counts for final results

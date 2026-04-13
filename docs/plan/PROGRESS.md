@@ -1,9 +1,9 @@
 # apple-docs v2 — Implementation Progress
 
 > Last updated: 2026-04-13
-> Verification snapshot: 2026-04-13 (Phases 7 + 8 complete)
-> Execution policy: no Phase 5 work before Phase 4 is complete; no Phase 6 work before Phase 5 is complete; no Phase 7 work before Phase 6 is complete; Phase 8 may run in parallel with Phase 7 (orthogonal concerns — see parallelization analysis)
-> Evidence: `bun test` passes (656 tests), `bun run typecheck` passes
+> Verification snapshot: 2026-04-13 (Phases 9-A + 9-B complete)
+> Execution policy: no Phase 5 work before Phase 4 is complete; no Phase 6 work before Phase 5 is complete; no Phase 7 work before Phase 6 is complete; Phase 8 may run in parallel with Phase 7 (orthogonal concerns — see parallelization analysis); Phase 9-A and 9-B may run in parallel (web search page vs MCP consolidation — disjoint concerns)
+> Evidence: `bun test` passes (748 tests), `bun run typecheck` passes
 
 ## Phase Status Overview
 
@@ -18,16 +18,91 @@
 | **6** | Distribution & Setup | `COMPLETE` | All 7 tasks done: snapshot build pipeline, setup command, doctor verification, status update check, CI/CD workflows, npm publishing config, cross-platform binary workflow | Met |
 | **7** | Static Website | `COMPLETE` | All 6 slices done: templates+CSS, search artifacts, client search, static builder, dev server, CLI wiring+deploy | Met |
 | **8** | Storage Profiles & Polish | `COMPLETE` | All 10 slices done: profiles, stats/GC/materialize, CLI wiring, render cache, freshness checks, corpus integrity, migration tests, benchmark history, legacy cleanup, README | Met |
+| **9-A** | Advanced Web Search Page | `COMPLETE` | 8/8 tasks done: API extension, search page template, frontend JS, CSS, route wiring, static build, top-bar link, tests | Met |
+| **9-B** | CLI / MCP Command Consolidation | `COMPLETE` | 11/11 tasks done: year/track in search, section in lookup, CLI flags, MCP params, 3 tools removed, contract tests, help text | Met |
 
 ```
-Overall: phases 0-8 are complete for the current v2 scope.
+Overall: phases 0-8 + 9-A + 9-B are complete for the current v2 scope.
 ```
 
 ## Current Planning Wave
 
 **Planner mode**: `Project + Orchestration`
-**Active phase**: None (all phases complete)
-**Execution intent**: All phases 0-8 are complete
+**Active phase**: Phase 9-A + 9-B (parallel tracks)
+**Execution intent**: Both sub-phases can run in parallel — 9-A touches web templates/routes/CSS/JS, 9-B touches MCP server/commands/CLI wiring — disjoint file sets
+
+| Slice | Status | Evidence | Next action |
+|---|---|---|---|
+| `P9A` | `done` | Search page + API extension + 7 new serve tests + 11 new template tests; 748 tests pass | — |
+| `P9B` | `done` | MCP 8→5 tools, year/track/section params, CLI flags, 5 new contract tests; 748 tests pass | — |
+
+---
+
+## Phase 9-A: Advanced Web Search Page
+
+**Status**: `COMPLETE` (2026-04-13)
+**Depends on**: Phase 7 (static website), Phase 5 (search quality)
+**Blocks**: Nothing
+**Can parallel with**: Phase 9-B
+
+### Tasks
+
+| ID | Task | Status | Files Touched |
+|---|---|---|---|
+| 9A.1 | Extend `/api/search` with full CLI params (kind, platform, min versions, offset, pagination) | `done` | `src/web/serve.js` |
+| 9A.2 | Add search page template (`renderSearchPage`) | `done` | `src/web/templates.js` |
+| 9A.3 | Build search page frontend JS (`search-page.js`) with URL-driven state | `done` | `src/web/assets/search-page.js` |
+| 9A.4 | Add filter panel + result card CSS (facets, chips, responsive) | `done` | `src/web/assets/style.css` |
+| 9A.5 | Wire `/search` route in dev server + `/api/filters` endpoint | `done` | `src/web/serve.js` |
+| 9A.6 | Generate `/search/index.html` in static build | `done` | `src/web/build.js` |
+| 9A.7 | Connect top-bar quick search "View all results" link to search page | `done` | `src/web/assets/search.js` |
+| 9A.8 | Tests: 7 serve tests + 11 template tests for search page | `done` | `test/unit/web-serve.test.js`, `test/unit/web-templates.test.js` |
+
+### Exit Criteria
+
+- [x] `/search` page renders with filter form and result list
+- [x] All CLI search dimensions available as URL query params
+- [x] URL state is bookmarkable and shareable
+- [x] Top-bar quick search shows "View all results →" link
+- [x] Results show badges, abstracts, snippets, related counts
+- [x] Responsive layout: filter panel stacks on mobile
+- [x] Static build includes `/search/index.html` with graceful fallback
+- [x] Tests cover API wiring, template rendering, URL state parsing
+
+---
+
+## Phase 9-B: CLI / MCP Command Consolidation
+
+**Status**: `COMPLETE` (2026-04-13)
+**Depends on**: Phase 3 (MCP SDK), Phase 5 (search quality)
+**Blocks**: Nothing
+**Can parallel with**: Phase 9-A
+
+### Tasks
+
+| ID | Task | Status | Files Touched |
+|---|---|---|---|
+| 9B.1 | Add `year`/`track` post-filter to `search()` command | `done` | `src/commands/search.js` |
+| 9B.2 | Add `--year` and `--track` CLI flags to `search` | `done` | `cli.js`, `src/cli/help.js` |
+| 9B.3 | Add `section` extraction to `lookup()` command | `done` | `src/commands/lookup.js` |
+| 9B.4 | Add `--section` CLI flag to `read` | `done` | `cli.js`, `src/cli/help.js` |
+| 9B.5 | Add `year`, `track` params to `search_docs` MCP tool | `done` | `src/mcp/server.js` |
+| 9B.6 | Add `section` param to `read_doc` MCP tool | `done` | `src/mcp/server.js` |
+| 9B.7 | Remove `search_wwdc` MCP tool | `done` | `src/mcp/server.js` |
+| 9B.8 | Remove `search_samples` MCP tool | `done` | `src/mcp/server.js` |
+| 9B.9 | Remove `read_sample_file` MCP tool | `done` | `src/mcp/server.js` |
+| 9B.10 | Update MCP contract tests | `done` | `test/mcp/contract.test.js` |
+| 9B.11 | Update CLI help text | `done` | `src/cli/help.js` |
+
+### Exit Criteria
+
+- [x] `search_wwdc` removed; `search_docs` gains `year` + `track` params
+- [x] `search_samples` removed; agents use `search_docs` with `kind=sample-project`
+- [x] `read_sample_file` removed; `read_doc` gains `section` param
+- [x] CLI `search` gains `--year`, `--track` flags
+- [x] CLI `read` gains `--section` flag
+- [x] MCP contract tests updated (removed tools, new params)
+- [x] Help text updated
 
 | Slice | Status | Evidence | Next action |
 |---|---|---|---|

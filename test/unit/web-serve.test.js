@@ -92,4 +92,56 @@ describe('Dev Server (P7-E)', () => {
     expect(data.frameworks).toBeDefined()
     expect(data.entries).toBeDefined()
   })
+
+  test('serves search page at /search', async () => {
+    const res = await fetch(`${serverInfo.url}/search`)
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('<!DOCTYPE html>')
+    expect(html).toContain('search-form')
+    expect(html).toContain('search-page.js')
+  })
+
+  test('serves search page at /search/', async () => {
+    const res = await fetch(`${serverInfo.url}/search/`)
+    expect(res.status).toBe(200)
+  })
+
+  test('/api/search accepts kind filter', async () => {
+    const res = await fetch(`${serverInfo.url}/api/search?q=View&kind=symbol`)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.results).toBeDefined()
+  })
+
+  test('/api/search accepts platform filter', async () => {
+    const res = await fetch(`${serverInfo.url}/api/search?q=View&platform=ios`)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.results).toBeDefined()
+  })
+
+  test('/api/search accepts limit and offset', async () => {
+    const res = await fetch(`${serverInfo.url}/api/search?q=View&limit=5&offset=0`)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.results).toBeDefined()
+  })
+
+  test('/api/search accepts min version filters', async () => {
+    const res = await fetch(`${serverInfo.url}/api/search?q=View&min_ios=13.0`)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.results).toBeDefined()
+  })
+
+  test('/api/filters returns filter options', async () => {
+    const res = await fetch(`${serverInfo.url}/api/filters`)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.frameworks).toBeArray()
+    expect(data.sources).toBeArray()
+    expect(data.kinds).toBeArray()
+    expect(data.frameworks).toContain('swiftui')
+  })
 })

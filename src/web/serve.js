@@ -1,6 +1,6 @@
 import { join, dirname } from 'node:path'
 import { existsSync, readFileSync } from 'node:fs'
-import { renderDocumentPage, renderIndexPage, renderFrameworkPage } from './templates.js'
+import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage } from './templates.js'
 import { buildTitleIndex } from './search-artifacts.js'
 import { search } from '../commands/search.js'
 import { fetchDocPage } from '../apple/api.js'
@@ -42,20 +42,57 @@ export function startDevServer(opts, ctx) {
       if (pathname === '/api/search') {
         const query = url.searchParams.get('q')
         if (!query) return Response.json({ results: [], total: 0 })
-        const searchOpts = { query, limit: 10, fuzzy: true, noDeep: true }
-        const framework = url.searchParams.get('framework')
-        const language = url.searchParams.get('language')
-        const source = url.searchParams.get('source')
-        if (framework) searchOpts.framework = framework
-        if (language) searchOpts.language = language
-        if (source) searchOpts.source = source
+        const searchOpts = {
+          query,
+          limit: Number.parseInt(url.searchParams.get('limit') ?? '50') || 50,
+          fuzzy: url.searchParams.get('no_fuzzy') !== '1',
+          noDeep: url.searchParams.get('no_deep') === '1',
+          noEager: url.searchParams.get('no_eager') === '1',
+        }
+        for (const key of ['framework', 'language', 'source', 'kind', 'platform']) {
+          const val = url.searchParams.get(key)
+          if (val) searchOpts[key] = val
+        }
+        for (const key of ['min_ios', 'min_macos', 'min_watchos', 'min_tvos', 'min_visionos']) {
+          const val = url.searchParams.get(key)
+          if (val) searchOpts[key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = val
+        }
+        const year = url.searchParams.get('year')
+        if (year) searchOpts.year = Number.parseInt(year)
+        const track = url.searchParams.get('track')
+        if (track) searchOpts.track = track
+        const offset = Number.parseInt(url.searchParams.get('offset') ?? '0') || 0
         const results = await search(searchOpts, ctx)
+        if (offset > 0) {
+          results.results = results.results.slice(offset)
+        }
         return Response.json(results)
+      }
+
+      // API: filter options for search page
+      if (pathname === '/api/filters') {
+        const frameworks = db.db.query('SELECT DISTINCT framework FROM documents WHERE framework IS NOT NULL ORDER BY framework').all().map(r => r.framework)
+        const sources = db.db.query('SELECT DISTINCT source_type FROM documents WHERE source_type IS NOT NULL ORDER BY source_type').all().map(r => r.source_type)
+        const kinds = db.db.query('SELECT DISTINCT role_heading FROM documents WHERE role_heading IS NOT NULL ORDER BY role_heading').all().map(r => r.role_heading)
+        return Response.json({ frameworks, sources, kinds })
+      }
+
+      // Search page
+      if (pathname === '/search' || pathname === '/search/') {
+        const html = renderSearchPage(siteConfig)
+        return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
 
       // Landing page
       if (pathname === '/' || pathname === '/index.html') {
-        const roots = db.getRoots()
+        const roots = db.getRoots().filter(r => {
+          // Hide self-referential roots (collection pages with only themselves as content)
+          if (r.page_count <= 1) {
+            const pages = db.getPagesByRoot(r.slug)
+            if (pages.length <= 1 && (!pages[0] || pages[0].path === r.slug)) return false
+          }
+          return true
+        })
         const html = renderIndexPage(roots, siteConfig)
         return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
@@ -100,8 +137,14 @@ export function startDevServer(opts, ctx) {
         const root = db.getRootBySlug(key)
         if (root) {
           const docs = db.getPagesByRoot(root.slug)
-          const html = renderFrameworkPage(root, docs, siteConfig)
-          return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+          // Self-referential roots (only contain themselves) should render as
+          // document pages instead of empty framework listings
+          const isSelfRef = docs.length <= 1 && docs[0]?.path === key
+          if (!isSelfRef && docs.length > 0) {
+            const html = renderFrameworkPage(root, docs, siteConfig)
+            return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+          }
+          // Fall through to document page rendering
         }
 
         // Try as document page

@@ -44,6 +44,8 @@ export function createServer(ctx) {
       noDeep: z.boolean().optional().describe('Disable background full-body search (default false)'),
       noEager: z.boolean().optional().describe('Wait for full-body search to complete instead of returning early (default false)'),
       read: z.boolean().optional().describe('Return the full Markdown content of the top search result instead of the result list'),
+      year: z.number().optional().describe('Filter WWDC sessions by year (e.g. 2024)'),
+      track: z.string().optional().describe('Filter WWDC sessions by track (e.g. SwiftUI, Accessibility)'),
     },
     async (args) => {
       const result = await search({
@@ -53,6 +55,8 @@ export function createServer(ctx) {
         minWatchos: args.min_watchos,
         minTvos: args.min_tvos,
         minVisionos: args.min_visionos,
+        year: args.year,
+        track: args.track,
       }, ctx)
       if (args.read && result.results.length > 0) {
         const hit = result.results[0]
@@ -72,6 +76,7 @@ export function createServer(ctx) {
       path: z.string().optional().describe('Canonical page path (e.g. swiftui/view, design/human-interface-guidelines/accessibility, app-store-review/3.1)'),
       symbol: z.string().optional().describe('Symbol name to look up (e.g. View, Publisher, NavigationStack)'),
       framework: z.string().optional().describe('Disambiguate symbol by framework slug when multiple frameworks define the same name'),
+      section: z.string().optional().describe('Extract a specific section by heading or file path (e.g. ContentView.swift). Omit to get the full document.'),
     },
     async (args) => {
       const result = await lookup(args, ctx)
@@ -111,84 +116,6 @@ export function createServer(ctx) {
     {},
     async () => {
       const result = await status({}, ctx)
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.tool(
-    'search_wwdc',
-    'Search WWDC session transcripts by keyword, year, or track. Returns session titles, descriptions, and transcript excerpts.',
-    {
-      query: z.string().describe('Search query (topic, API name, or keyword)'),
-      year: z.number().optional().describe('Filter by WWDC year (e.g. 2024)'),
-      track: z.string().optional().describe('Filter by track (e.g. SwiftUI, UIKit, Accessibility)'),
-      limit: z.number().optional().describe('Max results (default 10)'),
-    },
-    async (args) => {
-      const requestedLimit = args.limit ?? 10
-      const searchArgs = {
-        query: args.query,
-        framework: 'wwdc',
-        limit: (args.year || args.track) ? requestedLimit * 5 : requestedLimit,
-      }
-      const result = await search(searchArgs, ctx)
-      // Post-filter by year/track from sourceMetadata
-      let filtered = result.results
-      if (args.year || args.track) {
-        filtered = filtered.filter(r => {
-          try {
-            const meta = JSON.parse(r.sourceMetadata ?? r.source_metadata ?? '{}')
-            if (args.year && meta.year !== args.year) return false
-            if (args.track && meta.track && !meta.track.toLowerCase().includes(args.track.toLowerCase())) return false
-            return true
-          } catch { return false }
-        }).slice(0, requestedLimit)
-      }
-      return { content: [{ type: 'text', text: JSON.stringify({ ...result, results: filtered }, null, 2) }] }
-    },
-  )
-
-  server.tool(
-    'search_samples',
-    'Search Apple sample code projects by keyword or framework. Returns project titles, descriptions, and associated frameworks.',
-    {
-      query: z.string().describe('Search query (project name, topic, or framework)'),
-      framework: z.string().optional().describe('Filter by framework (e.g. swiftui, arkit, realitykit)'),
-      limit: z.number().optional().describe('Max results (default 10)'),
-    },
-    async (args) => {
-      const searchArgs = {
-        query: args.query,
-        kind: 'sample-project',
-        limit: args.limit ?? 10,
-      }
-      if (args.framework) searchArgs.framework = args.framework
-      const result = await search(searchArgs, ctx)
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.tool(
-    'read_sample_file',
-    'Read a specific file from an Apple sample code project. Provide the sample key and file path.',
-    {
-      sample_key: z.string().describe('Sample code project key (e.g. sample-code/swiftui/food-truck)'),
-      file_path: z.string().optional().describe('Specific file path within the project. Omit to get the project overview.'),
-    },
-    async (args) => {
-      const result = await lookup({ path: args.sample_key }, ctx)
-      if (args.file_path && result.sections) {
-        // Try heading match first, then search content text for the file path
-        const fileSection = result.sections.find(s =>
-          s.heading === args.file_path || s.heading?.endsWith(args.file_path),
-        ) ?? result.sections.find(s =>
-          s.contentText?.includes(args.file_path),
-        )
-        if (fileSection) {
-          return { content: [{ type: 'text', text: fileSection.contentText ?? fileSection.content_text ?? 'File content not available.' }] }
-        }
-        return { content: [{ type: 'text', text: `File not found: ${args.file_path}. Available sections: ${result.sections.map(s => s.heading ?? s.sectionKind).filter(Boolean).join(', ')}` }] }
-      }
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )

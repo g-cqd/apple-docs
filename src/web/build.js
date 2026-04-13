@@ -1,6 +1,6 @@
 import { join, dirname } from 'node:path'
 import { readFileSync, existsSync } from 'node:fs'
-import { renderDocumentPage, renderIndexPage, renderFrameworkPage } from './templates.js'
+import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage } from './templates.js'
 import { generateSearchArtifacts } from './search-artifacts.js'
 import { ensureDir } from '../storage/files.js'
 import { pool } from '../lib/pool.js'
@@ -22,13 +22,13 @@ export async function buildStaticSite(opts, ctx) {
   const { db, logger } = ctx
 
   // 1. Create directory structure
-  for (const sub of ['assets', 'docs', 'data/search', 'data/frameworks', 'worker']) {
+  for (const sub of ['assets', 'docs', 'data/search', 'data/frameworks', 'worker', 'search']) {
     ensureDir(join(outDir, sub))
   }
 
   // 2. Copy static assets (CSS, JS, theme, worker)
   const srcWebDir = dirname(new URL(import.meta.url).pathname)
-  for (const file of ['style.css', 'theme.js', 'search.js']) {
+  for (const file of ['style.css', 'theme.js', 'search.js', 'search-page.js']) {
     const src = join(srcWebDir, 'assets', file)
     if (existsSync(src)) {
       await Bun.write(join(outDir, 'assets', file), readFileSync(src, 'utf8'))
@@ -42,9 +42,11 @@ export async function buildStaticSite(opts, ctx) {
   // 3. Get all frameworks/roots
   const roots = db.getRoots()
 
-  // 4. Build landing page
+  // 4. Build landing page + search page
   const indexHtml = renderIndexPage(roots, siteConfig)
   await Bun.write(join(outDir, 'index.html'), indexHtml)
+  const searchHtml = renderSearchPage(siteConfig)
+  await Bun.write(join(outDir, 'search', 'index.html'), searchHtml)
 
   // 5. Build document pages in batches
   const totalDocs = db.db.query('SELECT COUNT(*) as count FROM documents').get().count

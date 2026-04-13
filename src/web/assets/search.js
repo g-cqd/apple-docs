@@ -64,7 +64,7 @@
       </a>
     `,
       )
-      .join('')
+      .join('') + `<a href="/search?q=${encodeURIComponent(_query || '')}" class="search-view-all">View all results &rarr;</a>`
     dropdown.hidden = false
   }
 

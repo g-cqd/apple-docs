@@ -60,6 +60,10 @@ Phase 7: Static Website ──────────────────�
     │
 Phase 8: Storage Profiles & Polish ───────────────── [Profiles, GC, benchmarks, hardening]
                                                       ↕ (can parallel with Phase 7)
+
+Phase 9-A: Advanced Web Search Page ─────────────── [Full-page search, faceted filters, URL state]
+    ↕ (can parallel with Phase 9-B)
+Phase 9-B: CLI / MCP Consolidation ──────────────── [Merge 3 MCP wrappers, add flags to core tools]
 ```
 
 ## Parallelization Opportunities
@@ -69,6 +73,7 @@ Phase 8: Storage Profiles & Polish ───────────────
 | After Phase 1 | Phase 2 (adapters) ‖ Phase 3 (MCP SDK) | Adapters touch pipeline/storage; MCP touches protocol layer — disjoint |
 | After Phase 4 | Phase 5 (search) ‖ Phase 6 (distribution) | Search improves ranking; distribution packages artifacts — independent |
 | After Phase 6 | Phase 7 (website) ‖ Phase 8 (storage) | Website reads from model; storage controls materialization — orthogonal. **Confirmed**: all Phase 8 tasks have no hard dependencies on Phase 7 outputs |
+| After Phase 8 | Phase 9-A (web search) ‖ Phase 9-B (MCP consolidation) | 9-A touches web templates/routes/CSS/JS; 9-B touches MCP server/commands/CLI — disjoint file sets |
 
 ## Constraints & Principles
 
