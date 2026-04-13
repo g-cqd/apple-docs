@@ -12,6 +12,7 @@ on:
 
 jobs:
   build-snapshot:
+    if: github.event_name != 'push'
     runs-on: macos-latest
     timeout-minutes: 180
     permissions:
@@ -36,16 +37,24 @@ jobs:
         id: tag
         run: echo "tag=snapshot-$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve tiers
+        id: tiers
+        run: |
+          TIERS="${{ inputs.tiers || 'all' }}"
+          echo "build_lite=$( [[ "$TIERS" == "all" || "$TIERS" == *lite* ]] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+          echo "build_standard=$( [[ "$TIERS" == "all" || "$TIERS" == *standard* ]] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+          echo "build_full=$( [[ "$TIERS" == "all" || "$TIERS" == *full* ]] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+
       - name: Build lite snapshot
-        if: inputs.tiers == 'all' || inputs.tiers == '' || contains(inputs.tiers, 'lite')
+        if: steps.tiers.outputs.build_lite == 'true'
         run: bun run cli.js snapshot build --tier lite --out dist/ --tag ${{ steps.tag.outputs.tag }}
 
       - name: Build standard snapshot
-        if: inputs.tiers == 'all' || inputs.tiers == '' || contains(inputs.tiers, 'standard')
+        if: steps.tiers.outputs.build_standard == 'true'
         run: bun run cli.js snapshot build --tier standard --out dist/ --tag ${{ steps.tag.outputs.tag }}
 
       - name: Build full snapshot
-        if: inputs.tiers == 'all' || inputs.tiers == '' || contains(inputs.tiers, 'full')
+        if: steps.tiers.outputs.build_full == 'true'
         run: bun run cli.js snapshot build --tier full --out dist/ --tag ${{ steps.tag.outputs.tag }}
 
       - name: Corpus stats
@@ -73,7 +82,7 @@ jobs:
 
             **Install:**
             ```bash
-            bun run apple-docs setup --tier standard
+            apple-docs setup --tier standard
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,6 +3,7 @@ name: Build Binaries
 on:
   release:
     types: [published]
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -12,7 +13,7 @@ jobs:
           - os: macos-latest
             target: bun-darwin-arm64
             name: apple-docs-macos-arm64
-          - os: macos-13
+          - os: macos-14
             target: bun-darwin-x64
             name: apple-docs-macos-x64
           - os: ubuntu-latest
@@ -32,8 +33,17 @@ jobs:
         run: bun build --compile --target=${{ matrix.target }} cli.js --outfile ${{ matrix.name }}
 
       - name: Upload binary to release
+        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload binary as artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+          retention-days: 7
