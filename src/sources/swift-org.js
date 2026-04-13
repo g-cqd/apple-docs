@@ -12,11 +12,12 @@ const CURATED_PATHS = [
   'documentation',
   'documentation/api-design-guidelines',
   'documentation/standard-library',
-  'documentation/articles/zero-to-swift',
-  'documentation/articles/value-and-reference-types',
+  'documentation/articles/value-and-reference-types.html',
+  'documentation/articles/getting-started-with-vscode-swift.html',
   'documentation/concurrency',
+  'documentation/core-libraries',
   'documentation/cxx-interop',
-  'documentation/embedded-swift',
+  'documentation/docc',
   'documentation/package-manager',
   'documentation/server',
   'getting-started',
@@ -28,7 +29,6 @@ const CURATED_PATHS = [
   'contributing',
   'diversity',
   'about',
-  'migration-guide-swift6',
   'platform-support',
 ]
 

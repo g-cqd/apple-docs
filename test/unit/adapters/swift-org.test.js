@@ -85,8 +85,10 @@ describe('SwiftOrgAdapter', () => {
       expect(result.keys).toContain('swift-org/documentation/concurrency')
       expect(result.keys).toContain('swift-org/documentation/api-design-guidelines')
       expect(result.keys).toContain('swift-org/getting-started')
-      expect(result.keys).toContain('swift-org/migration-guide-swift6')
+      expect(result.keys).toContain('swift-org/documentation/articles/value-and-reference-types.html')
       expect(result.keys).toContain('swift-org/documentation/package-manager')
+      expect(result.keys).toContain('swift-org/documentation/core-libraries')
+      expect(result.keys).toContain('swift-org/documentation/docc')
     })
 
     test('registers root in DB when not present', async () => {

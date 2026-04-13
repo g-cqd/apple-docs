@@ -563,6 +563,15 @@ export class DocsDatabase {
       ORDER BY CASE WHEN p.role = 'symbol' THEN 0 ELSE 1 END, length(p.path)
       LIMIT 1
     `)
+    this._getPagesByRole = this.db.query(`
+      SELECT p.path as key, p.path, p.title, p.role,
+             r.slug as root_slug, COALESCE(p.source_type, r.source_type) as source_type
+      FROM pages p
+      JOIN roots r ON p.root_id = r.id
+      WHERE p.role = ?
+        AND p.status = 'active'
+      ORDER BY p.path
+    `)
 
     this._getRoots = this.db.query('SELECT * FROM roots ORDER BY slug')
     this._getRootsByKind = this.db.query('SELECT * FROM roots WHERE kind = ? ORDER BY slug')
@@ -721,6 +730,14 @@ export class DocsDatabase {
         AND ($framework IS NULL OR d.framework = $framework)
       ORDER BY CASE WHEN d.role = 'symbol' OR d.kind = 'symbol' THEN 0 ELSE 1 END, length(d.key)
       LIMIT 1
+    `)
+    this._getDocumentsByRole = this.db.query(`
+      SELECT d.key, d.key as path, d.title, d.role,
+             COALESCE(r.slug, d.framework) as root_slug, d.source_type as source_type
+      FROM documents d
+      LEFT JOIN roots r ON r.slug = d.framework
+      WHERE d.role = ?
+      ORDER BY d.key
     `)
     this._getDocumentSearchRecordById = this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
@@ -1201,6 +1218,13 @@ export class DocsDatabase {
 
   getPagesBySourceType(sourceType) {
     return this._getPagesBySourceType.all(sourceType)
+  }
+
+  getPagesByRole(role) {
+    if (this.hasNormalizedDocuments()) {
+      return this._getDocumentsByRole.all(role)
+    }
+    return this._getPagesByRole.all(role)
   }
 
   markPageDeleted(path) {

@@ -3,6 +3,7 @@ import { crawlRoot, discoverRoots } from '../pipeline/discover.js'
 import { downloadMissing } from '../pipeline/download.js'
 import { persistNormalizedPage } from '../pipeline/persist.js'
 import { applyGuidelinesSnapshot } from '../pipeline/sync-guidelines.js'
+import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress } from '../lib/flat-source-progress.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
 import { getAdapter, getAllAdapters, getAdapterTypes } from '../sources/registry.js'
@@ -202,12 +203,19 @@ async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
   for (const root of roots) {
     let processed = 0
     let skipped = 0
+    const existingKeys = new Set()
 
     logger.info(`Syncing ${adapter.constructor.displayName} (${keys.length} keys)...`)
 
+    for (const key of keys) {
+      if (db.getPageByPath(key)?.status === 'active') {
+        existingKeys.add(key)
+      }
+    }
+    seedFlatSourceProgress(db, root.slug, keys, existingKeys)
+
     await pool(keys, concurrency, async (key) => {
-      const existing = db.getPageByPath(key)
-      if (existing?.status === 'active') {
+      if (existingKeys.has(key)) {
         skipped++
         return
       }
@@ -228,12 +236,15 @@ async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
           etag: fetchResult.etag ?? null,
           lastModified: fetchResult.lastModified ?? null,
         })
+        markFlatSourceProcessed(db, root.slug, key)
         processed++
       } catch (e) {
+        markFlatSourceFailed(db, root.slug, key, e.message)
         logger.warn(`Failed to sync ${key}`, { error: e.message })
       }
     })
 
+    db.updateRootPageCount(root.slug)
     logger.info(`Done: ${adapter.constructor.displayName} (${processed} new, ${skipped} skipped)`)
     results[root.slug] = { processed, total: keys.length, skipped }
   }

@@ -1,6 +1,12 @@
-import { describe, test, expect, mock, beforeEach } from 'bun:test'
+import { afterEach, describe, test, expect } from 'bun:test'
 import { AppleArchiveAdapter } from '../../../src/sources/apple-archive.js'
 import { deriveFramework } from '../../../src/sources/apple-archive.js'
+
+const originalFetch = globalThis.fetch
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+})
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -42,22 +48,68 @@ const ARCHIVE_HTML_FIXTURE = `<!DOCTYPE html>
 </body>
 </html>`
 
+const ARCHIVE_LIBRARY_FIXTURE = `({
+  columns: {
+    name: 0,
+    type: 2,
+    url: 9,
+    platform: 12
+  },
+  documents: [
+    [
+      "Programming with Objective-C",
+      "TP40011210",
+      3,
+      "2014-01-01",
+      0, 0, 0, 0, 0,
+      "../documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/Introduction/Introduction.html#//apple_ref/doc/uid/TP40011210",
+      0,
+      "2014-01-01",
+      "macOS"
+    ],
+    [
+      "Key-Value Coding Programming Guide",
+      "TP40001803",
+      3,
+      "2013-01-01",
+      0, 0, 0, 0, 0,
+      "../documentation/Cocoa/Conceptual/KeyValueCoding/index.html#//apple_ref/doc/uid/TP40001803",
+      0,
+      "2013-01-01",
+      "macOS"
+    ],
+    [
+      "Legacy Sample",
+      "DTS10000001",
+      5,
+      "2010-01-01",
+      0, 0, 0, 0, 0,
+      "../samplecode/LegacySample/Introduction/Intro.html#//apple_ref/doc/uid/DTS10000001",
+      0,
+      "2010-01-01",
+      "macOS"
+    ]
+  ]
+})`
+
 // ---------------------------------------------------------------------------
 // discover()
 // ---------------------------------------------------------------------------
 
 describe('AppleArchiveAdapter.discover', () => {
   test('returns a non-empty list of curated archive keys', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
     const adapter = new AppleArchiveAdapter()
     const ctx = makeCtx()
 
     const result = await adapter.discover(ctx)
 
     expect(Array.isArray(result.keys)).toBe(true)
-    expect(result.keys.length).toBeGreaterThan(30)
+    expect(result.keys.length).toBeGreaterThan(0)
   })
 
   test('all keys are prefixed with apple-archive/', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
     const adapter = new AppleArchiveAdapter()
     const ctx = makeCtx()
 
@@ -69,6 +121,7 @@ describe('AppleArchiveAdapter.discover', () => {
   })
 
   test('keys are unique (no duplicate directory paths)', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
     const adapter = new AppleArchiveAdapter()
     const ctx = makeCtx()
 
@@ -79,6 +132,7 @@ describe('AppleArchiveAdapter.discover', () => {
   })
 
   test('includes well-known Objective-C programming guide key', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
     const adapter = new AppleArchiveAdapter()
     const ctx = makeCtx()
 
@@ -90,6 +144,7 @@ describe('AppleArchiveAdapter.discover', () => {
   })
 
   test('includes the KeyValueCoding index key', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
     const adapter = new AppleArchiveAdapter()
     const ctx = makeCtx()
 
@@ -99,6 +154,7 @@ describe('AppleArchiveAdapter.discover', () => {
   })
 
   test('registers the root in the database when absent', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
     const adapter = new AppleArchiveAdapter()
     const ctx = makeCtx()
 
@@ -110,6 +166,7 @@ describe('AppleArchiveAdapter.discover', () => {
   })
 
   test('does not register a duplicate root when one already exists', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
     const adapter = new AppleArchiveAdapter()
     let upsertCallCount = 0
     const ctx = {
@@ -129,15 +186,14 @@ describe('AppleArchiveAdapter.discover', () => {
     expect(upsertCallCount).toBe(0)
   })
 
-  test('keys never include a .html filename segment', async () => {
+  test('filters non-guide entries out of the archive catalog', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
     const adapter = new AppleArchiveAdapter()
     const ctx = makeCtx()
 
     const result = await adapter.discover(ctx)
 
-    for (const key of result.keys) {
-      expect(key.endsWith('.html')).toBe(false)
-    }
+    expect(result.keys.some(key => key.includes('LegacySample'))).toBe(false)
   })
 })
 

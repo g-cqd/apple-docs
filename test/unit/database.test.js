@@ -113,6 +113,21 @@ describe('DocsDatabase', () => {
     expect(page.root_id).toBe(root.id)
   })
 
+  test('getPagesByRole returns normalized-document hits when available', () => {
+    const root = db.upsertRoot('accelerate', 'Accelerate', 'framework', 'test')
+    db.upsertPage({
+      rootId: root.id,
+      path: 'accelerate/adding-a-bokeh-effect-to-images',
+      url: 'u',
+      title: 'Adding a bokeh effect to images',
+      role: 'sampleCode',
+      sourceType: 'apple-docc',
+    })
+
+    const pages = db.getPagesByRole('sampleCode')
+    expect(pages.some(page => page.key === 'accelerate/adding-a-bokeh-effect-to-images')).toBe(true)
+  })
+
   test('crawl state operations', () => {
     db.seedCrawlIfNew('swiftui', 'swiftui', 0)
     db.seedCrawlIfNew('swiftui/view', 'swiftui', 1)

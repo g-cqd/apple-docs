@@ -300,4 +300,44 @@ describe('retry on 429', () => {
     // One acquire per attempt: initial + 1 retry = 2
     expect(acquireCount).toBe(2)
   })
+
+  test('retries fetchGitHubTree after a transient 503 and resolves on the subsequent success', async () => {
+    const treeFixture = [{ path: 'file.md', type: 'blob', sha: 'abc', size: 10 }]
+    let callCount = 0
+
+    globalThis.fetch = async () => {
+      callCount += 1
+      if (callCount === 1) {
+        return new Response('', { status: 503 })
+      }
+      return Response.json({ tree: treeFixture })
+    }
+
+    const tree = await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
+
+    expect(callCount).toBe(2)
+    expect(tree).toEqual(treeFixture)
+  })
+
+  test('retries fetchRawGitHub after a thrown network error and resolves on the subsequent success', async () => {
+    let callCount = 0
+
+    globalThis.fetch = async () => {
+      callCount += 1
+      if (callCount === 1) {
+        throw new Error('socket timeout')
+      }
+      return new Response('file content', {
+        status: 200,
+        headers: { etag: '"etag-1"' },
+      })
+    }
+
+    const result = await fetchRawGitHub(
+      'apple', 'swift-evolution', 'main', 'file.md', noopLimiter,
+    )
+
+    expect(callCount).toBe(2)
+    expect(result.text).toBe('file content')
+  })
 })

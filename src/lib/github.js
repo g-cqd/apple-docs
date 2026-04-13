@@ -1,5 +1,5 @@
 const USER_AGENT = 'apple-docs/2.0'
-const DEFAULT_TIMEOUT = 30_000
+const DEFAULT_TIMEOUT = parseInt(process.env.APPLE_DOCS_GITHUB_TIMEOUT ?? process.env.APPLE_DOCS_TIMEOUT ?? '45000', 10)
 const MAX_RETRIES = 3
 
 /**
@@ -91,19 +91,27 @@ export async function checkRawGitHub(owner, repo, branch, filePath, previousEtag
 async function fetchJsonWithRetry(url, rateLimiter, attempt = 0) {
   await rateLimiter.acquire()
 
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': USER_AGENT,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...authHeaders(),
-    },
-    signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
-  })
+  let res
+  try {
+    res = await fetch(url, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...authHeaders(),
+      },
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
+    })
+  } catch (error) {
+    if (attempt < MAX_RETRIES) {
+      await sleep(retryDelayMs(null, attempt))
+      return fetchJsonWithRetry(url, rateLimiter, attempt + 1)
+    }
+    throw error
+  }
 
-  if (res.status === 429 && attempt < MAX_RETRIES) {
-    const retryAfter = parseInt(res.headers.get('retry-after') ?? '2', 10)
-    await sleep(retryAfter * 1000)
+  if (isRetriableStatus(res.status) && attempt < MAX_RETRIES) {
+    await sleep(retryDelayMs(res, attempt))
     return fetchJsonWithRetry(url, rateLimiter, attempt + 1)
   }
 
@@ -120,17 +128,25 @@ async function fetchJsonWithRetry(url, rateLimiter, attempt = 0) {
 async function fetchTextWithRetry(url, rateLimiter, attempt = 0) {
   await rateLimiter.acquire()
 
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': USER_AGENT,
-      ...authHeaders(),
-    },
-    signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
-  })
+  let res
+  try {
+    res = await fetch(url, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        ...authHeaders(),
+      },
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
+    })
+  } catch (error) {
+    if (attempt < MAX_RETRIES) {
+      await sleep(retryDelayMs(null, attempt))
+      return fetchTextWithRetry(url, rateLimiter, attempt + 1)
+    }
+    throw error
+  }
 
-  if (res.status === 429 && attempt < MAX_RETRIES) {
-    const retryAfter = parseInt(res.headers.get('retry-after') ?? '2', 10)
-    await sleep(retryAfter * 1000)
+  if (isRetriableStatus(res.status) && attempt < MAX_RETRIES) {
+    await sleep(retryDelayMs(res, attempt))
     return fetchTextWithRetry(url, rateLimiter, attempt + 1)
   }
 
@@ -154,4 +170,17 @@ async function fetchTextWithRetry(url, rateLimiter, attempt = 0) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isRetriableStatus(status) {
+  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
+}
+
+function retryDelayMs(response, attempt) {
+  const retryAfter = response?.headers?.get?.('retry-after')
+  if (retryAfter != null) {
+    const seconds = parseInt(retryAfter, 10)
+    if (!Number.isNaN(seconds)) return seconds * 1000
+  }
+  return Math.min(1000 * (2 ** attempt), 8000)
 }

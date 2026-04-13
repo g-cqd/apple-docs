@@ -5,50 +5,24 @@ import { SourceAdapter } from './base.js'
 const ROOT_SLUG = 'sample-code'
 
 /**
- * Curated list of well-known Apple sample code project paths.
- * Each entry is the doc path relative to /documentation/ (i.e. framework/slug).
- * Discovered from Apple's developer portal and DocC JSON API.
+ * Minimal bootstrap list for environments that haven't yet synced the main
+ * DocC corpus. Once the local corpus exists, discovery should come from pages
+ * with role='sampleCode' so we can retrieve the full modern sample catalog.
  */
-const KNOWN_SAMPLE_PATHS = [
-  // SwiftUI
+const BOOTSTRAP_SAMPLE_PATHS = [
   'swiftui/food-truck-building-a-swiftui-multiplatform-app',
-  'swiftui/fruta-building-a-feature-rich-app-with-swiftui',
-  'swiftui/introducing-swiftui',
-  'swiftui/backyard-birds-building-an-app-with-swiftdata-and-widgets',
-  'swiftui/building-a-document-based-app-using-swiftui',
-  'swiftui/building-a-great-mac-app-with-swiftui',
-  'swiftui/building-custom-views-with-swiftui',
   'swiftui/composing-swiftui-gestures',
-  'swiftui/drawing-paths-and-shapes',
   'swiftui/loading-and-displaying-a-large-data-feed',
-  // UIKit
   'uikit/implementing-modern-collection-views',
   'uikit/building-high-performance-lists-and-collection-views',
-  'uikit/restoring-your-app-s-state-with-swiftui',
-  'uikit/navigating-hierarchical-data-using-outline-views',
   'uikit/supporting-desktop-class-features-in-your-ipad-app',
-  // ARKit / RealityKit
   'arkit/creating-a-multiuser-ar-experience',
-  'arkit/building-an-ar-app-with-realitykit',
   'arkit/visualizing-and-interacting-with-a-reconstructed-scene',
   'realitykit/building-an-immersive-experience-with-realitykit',
-  'realitykit/swift-splash-take-a-swim-with-a-new-swiftui-game-built-with-realitykit',
   'realitykit/creating-a-spaceship-game',
-  // Core Data / SwiftData
   'coredata/synchronizing-a-local-store-to-the-cloud',
-  'coredata/loading-and-displaying-a-large-data-feed',
-  'swiftdata/adopting-swiftdata-for-a-core-data-app',
-  'swiftdata/building-a-document-based-app-using-swiftdata',
-  // WidgetKit
-  'widgetkit/building-widgets-using-widgetkit-and-swiftui',
-  'widgetkit/adding-widgets-to-the-lock-screen-and-apple-watch',
   'widgetkit/keeping-a-widget-up-to-date',
-  // AppKit
-  'appkit/building-a-great-mac-app-with-swiftui',
-  // Combine / Async
   'combine/using-combine-for-your-app-s-asynchronous-code',
-  // Accessibility
-  'accessibility/delivering-an-exceptional-accessibility-experience',
 ]
 
 /**
@@ -70,22 +44,28 @@ export class SampleCodeAdapter extends SourceAdapter {
     }
 
     const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
+    const keySet = new Set()
 
-    // Start from the curated list
-    const pathSet = new Set(KNOWN_SAMPLE_PATHS)
-
-    // Supplement with any sample code pages already crawled in the DB
+    // Prefer the local DocC corpus as the canonical inventory for modern
+    // sample code pages. The main crawl already discovers these with
+    // role='sampleCode', which scales much better than a handwritten list.
     const dbSamples = ctx.db?.getPagesByRole?.('sampleCode') ?? []
     for (const page of dbSamples) {
-      if (page.key && !page.key.startsWith(ROOT_SLUG + '/')) {
-        pathSet.add(page.key)
+      const docKey = page.key ?? page.path
+      if (!docKey) continue
+      keySet.add(docKey.startsWith(ROOT_SLUG + '/') ? docKey : `${ROOT_SLUG}/${docKey}`)
+    }
+
+    // Fall back to a small bootstrap seed set when the corpus doesn't have
+    // any sample-code pages yet.
+    if (keySet.size === 0) {
+      for (const docPath of BOOTSTRAP_SAMPLE_PATHS) {
+        keySet.add(`${ROOT_SLUG}/${docPath}`)
       }
     }
 
-    const keys = [...pathSet].map(docPath => `${ROOT_SLUG}/${docPath}`)
-
     return this.validateDiscoveryResult({
-      keys,
+      keys: [...keySet],
       roots: root ? [root] : undefined,
     })
   }

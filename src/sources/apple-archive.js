@@ -4,115 +4,39 @@ import { SourceAdapter } from './base.js'
 
 const ROOT_SLUG = 'apple-archive'
 const ARCHIVE_BASE = 'https://developer.apple.com/library/archive'
+const ARCHIVE_LIBRARY_URL = `${ARCHIVE_BASE}/navigation/library.json`
+const GUIDE_RESOURCE_TYPE_KEY = '3'
+const USER_AGENT = 'apple-docs/2.0'
+const DEFAULT_TIMEOUT = 30_000
 
 /**
- * Curated list of well-known Apple Developer Archive guide paths.
- * Each entry is the path relative to ARCHIVE_BASE, including the filename.
- * The key is derived by stripping the filename, keeping only the directory.
+ * Apple serves the archive catalog as a JS-object literal, not strict JSON.
+ * We only evaluate Apple's own manifest response here.
  *
- * These guides are frozen (no longer updated), so the adapter uses 'flat'
- * sync mode and always returns 'unchanged' on subsequent check() calls.
+ * @param {string} rawText
+ * @returns {object}
  */
-const ARCHIVE_GUIDES = [
-  // Objective-C and language fundamentals
-  'documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/MemoryMgmt/Articles/MemoryMgmt.html',
-  'documentation/Cocoa/Conceptual/KeyValueObserving/KeyValueObserving.html',
-  'documentation/Cocoa/Conceptual/KeyValueCoding/index.html',
-  'documentation/Cocoa/Conceptual/Notifications/Introduction/introNotifications.html',
-  'documentation/Cocoa/Conceptual/Blocks/Articles/00_Introduction.html',
-  'documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html',
-  'documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtForwarding.html',
+function parseArchiveLibrary(rawText) {
+  return new Function(`return (${rawText})`)()
+}
 
-  // Core Data and persistence
-  'documentation/Cocoa/Conceptual/CoreData/index.html',
-  'documentation/Cocoa/Conceptual/Predicates/predicates.html',
-
-  // Networking
-  'documentation/Cocoa/Conceptual/URLLoadingSystem/URLLoadingSystem.html',
-
-  // Cocoa fundamentals and patterns
-  'documentation/Cocoa/Conceptual/CocoaEncyclopedia/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/CocoaBindings/CocoaBindings.html',
-  'documentation/Cocoa/Conceptual/CoreAnimation_guide/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/CoreAnimation_guide/CoreAnimationBasics/CoreAnimationBasics.html',
-  'documentation/Cocoa/Conceptual/DrawingGuide/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/BinaryData/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/Archiving/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/Collections/Collections.html',
-  'documentation/Cocoa/Conceptual/NumbersandValues/NumbersandValues.html',
-  'documentation/Cocoa/Conceptual/Strings/introStrings.html',
-  'documentation/Cocoa/Conceptual/AttributedStrings/AttributedStrings.html',
-  'documentation/Cocoa/Conceptual/TextLayout/TextLayout.html',
-
-  // Application lifecycle and UI
-  'documentation/Cocoa/Conceptual/EventOverview/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/ResponderChain/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/ErrorHandlingCocoa/ErrorHandling.html',
-  'documentation/Cocoa/Conceptual/UndoArchitecture/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/MultithreadingCocoaObjectivec/Introduction/Introduction.html',
-
-  // General / DevPedia
-  'documentation/General/Conceptual/DevPedia-CocoaCore/Accessibility.html',
-  'documentation/General/Conceptual/DevPedia-CocoaCore/MVC.html',
-  'documentation/General/Conceptual/DevPedia-CocoaCore/Delegation.html',
-  'documentation/General/Conceptual/DevPedia-CocoaCore/Singleton.html',
-  'documentation/General/Conceptual/DevPedia-CocoaCore/DesignPattern.html',
-  'documentation/General/Conceptual/DevPedia-CocoaCore/Notification.html',
-  'documentation/General/Conceptual/DevPedia-CocoaCore/ObjectCreation.html',
-  'documentation/General/Conceptual/DevPedia-CocoaCore/Category.html',
-  'documentation/General/Conceptual/DevPedia-CocoaCore/Protocol.html',
-  'documentation/General/Conceptual/DevPedia-CocoaCore/ClassClusters.html',
-  'documentation/General/Conceptual/ConcurrencyProgrammingGuide/Introduction/Introduction.html',
-
-  // Developer Tools
-  'documentation/DeveloperTools/Conceptual/InstrumentsUserGuide/index.html',
-  'documentation/DeveloperTools/Conceptual/DynamicLibraries/000-Introduction/Introduction.html',
-  'documentation/DeveloperTools/Conceptual/XcodeBuildSystem/Introduction/Introduction.html',
-  'documentation/DeveloperTools/Conceptual/testing_with_xcode/chapters/01-introduction.html',
-
-  // macOS AppKit
-  'documentation/Cocoa/Conceptual/AppArchitecture/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/WinPanel/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/Documents/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/TableView/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/OutlineView/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/Toolbar/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/SyncServices/Introduction/Introduction.html',
-  'documentation/Cocoa/Conceptual/SpellChecking/Introduction/Introduction.html',
-
-  // iOS / UIKit legacy
-  'documentation/iPhone/Conceptual/iPhoneOSProgrammingGuide/Introduction/Introduction.html',
-  'documentation/UIKit/Conceptual/UIKitUICatalog/UIButton.html',
-  'documentation/UIKit/Conceptual/UIKitUICatalog/UILabel.html',
-  'documentation/UIKit/Conceptual/UIKitUICatalog/UITableView.html',
-  'documentation/WindowsViews/Conceptual/ViewPG_iPhoneOS/Introduction/Introduction.html',
-  'documentation/EventHandling/Conceptual/EventHandlingiPhoneOS/Introduction/Introduction.html',
-
-  // Core Foundation
-  'documentation/CoreFoundation/Conceptual/CFDesignConcepts/CFDesignConcepts.html',
-  'documentation/CoreFoundation/Conceptual/CFMemoryMgmt/CFMemoryMgmt.html',
-  'documentation/CoreFoundation/Conceptual/CFStrings/introduction.html',
-  'documentation/CoreFoundation/Conceptual/CFCollections/CFCollections.html',
-
-  // Graphics and media
-  'documentation/GraphicsImaging/Conceptual/CoreImaging/ci_intro/ci_intro.html',
-  'documentation/GraphicsImaging/Conceptual/drawingwithquartz2d/Introduction/Introduction.html',
-  'documentation/GraphicsImaging/Conceptual/OpenGL-MacProgGuide/opengl_intro/opengl_intro.html',
-  'documentation/AudioVideo/Conceptual/AVFoundationPG/Articles/00_Introduction.html',
-
-  // Security
-  'documentation/Security/Conceptual/keychainServConcepts/01chapter_Introduction_chapter_1_section_1.html',
-  'documentation/Security/Conceptual/cryptoservices/Introduction/Introduction.html',
-]
+/**
+ * Convert a relative archive URL from library.json into a path suitable for
+ * key generation and fetching.
+ *
+ * @param {string} relativeUrl
+ * @returns {string}
+ */
+function normalizeArchiveRelativeUrl(relativeUrl) {
+  return relativeUrl.replace(/^\.\.\//, '').replace(/#.*$/, '')
+}
 
 /**
  * Derive the canonical key for an archive guide path.
- * Strips the filename from the path to produce the directory key.
+ * Strips the terminal HTML filename while preserving the guide directory.
  *
- * @param {string} guidePath - e.g. 'documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/Introduction/Introduction.html'
- * @returns {string} - e.g. 'apple-archive/documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/Introduction'
+ * @param {string} guidePath
+ * @returns {string}
  */
 function pathToKey(guidePath) {
   const withoutFilename = guidePath.replace(/\/[^/]+\.html$/, '')
@@ -120,37 +44,41 @@ function pathToKey(guidePath) {
 }
 
 /**
- * Reconstruct the canonical URL for an archive guide from its key.
- * Appends 'index.html' for index-style paths, otherwise uses the original filename.
+ * Best-effort fallback URL reconstruction if the catalog isn't cached.
  *
- * @param {string} key - e.g. 'apple-archive/documentation/Cocoa/Conceptual/KeyValueCoding'
- * @param {string[]} guidePaths - The full list of guide paths to search for a match.
+ * @param {string} key
  * @returns {string}
  */
-function keyToUrl(key, guidePaths) {
+function keyToFallbackUrl(key) {
   const pathPrefix = key.replace(`${ROOT_SLUG}/`, '')
-
-  // Find the first guide path that starts with this directory path
-  const match = guidePaths.find(p => p.startsWith(pathPrefix + '/') || p === pathPrefix)
-  if (match) {
-    return `${ARCHIVE_BASE}/${match}`
-  }
-
-  // Fallback: append index.html
   return `${ARCHIVE_BASE}/${pathPrefix}/index.html`
+}
+
+/**
+ * Decode the small set of entities commonly present in the archive manifest.
+ *
+ * @param {string|null|undefined} value
+ * @returns {string|null}
+ */
+function decodeHtmlEntities(value) {
+  if (typeof value !== 'string') return null
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
 }
 
 /**
  * Derive the framework name from an archive key path.
  * Extracts the top-level documentation area (e.g. 'cocoa', 'general', 'corefoundation').
  *
- * @param {string} key - e.g. 'apple-archive/documentation/Cocoa/Conceptual/...'
+ * @param {string} key
  * @returns {string|null}
  */
 export function deriveFramework(key) {
-  // key shape: apple-archive/documentation/<Framework>/...
   const parts = key.split('/')
-  // parts[0] = 'apple-archive', parts[1] = 'documentation', parts[2] = framework segment
   const frameworkSegment = parts[2]
   if (!frameworkSegment) return null
   return frameworkSegment.toLowerCase()
@@ -161,25 +89,29 @@ export class AppleArchiveAdapter extends SourceAdapter {
   static displayName = 'Apple Developer Archive'
   static syncMode = 'flat'
 
+  constructor() {
+    super()
+    this._guideCatalog = null
+  }
+
   async discover(ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
       ctx.db.upsertRoot(ROOT_SLUG, 'Apple Developer Archive', 'collection', ROOT_SLUG)
     }
 
     const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
-
-    // Deduplicate keys: multiple guide paths may map to the same directory key
-    const keySet = new Set(ARCHIVE_GUIDES.map(pathToKey))
-    const keys = [...keySet]
+    const guides = await this.#loadGuideCatalog(ctx)
 
     return this.validateDiscoveryResult({
-      keys,
+      keys: [...guides.keys()],
       roots: root ? [root] : undefined,
     })
   }
 
   async fetch(key, ctx) {
-    const url = keyToUrl(key, ARCHIVE_GUIDES)
+    const guides = await this.#loadGuideCatalog(ctx)
+    const entry = guides.get(key)
+    const url = entry?.url ?? keyToFallbackUrl(key)
     const { html, etag, lastModified } = await fetchHtmlPage(url, ctx.rateLimiter)
 
     return this.validateFetchResult({
@@ -203,7 +135,8 @@ export class AppleArchiveAdapter extends SourceAdapter {
 
   normalize(key, rawPayload) {
     const html = typeof rawPayload === 'string' ? rawPayload : String(rawPayload)
-    const url = keyToUrl(key, ARCHIVE_GUIDES)
+    const entry = this._guideCatalog?.get(key) ?? null
+    const url = entry?.url ?? keyToFallbackUrl(key)
     const framework = deriveFramework(key)
 
     const result = parseHtmlToNormalized(html, key, {
@@ -211,9 +144,57 @@ export class AppleArchiveAdapter extends SourceAdapter {
       kind: 'archive-guide',
       framework,
       url,
+      sourceMetadata: entry?.sourceMetadata ?? null,
       containerSelector: '#contents',
     })
 
     return this.validateNormalizeResult(result)
+  }
+
+  async #loadGuideCatalog(ctx) {
+    if (this._guideCatalog) return this._guideCatalog
+
+    await ctx.rateLimiter.acquire()
+    const res = await fetch(ARCHIVE_LIBRARY_URL, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
+    })
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} fetching ${ARCHIVE_LIBRARY_URL}`)
+    }
+
+    const library = parseArchiveLibrary(await res.text())
+    const columns = library.columns ?? {}
+    const guides = new Map()
+
+    for (const document of library.documents ?? []) {
+      const resourceType = String(document[columns.type] ?? '')
+      if (resourceType !== GUIDE_RESOURCE_TYPE_KEY) continue
+
+      const relativeUrl = normalizeArchiveRelativeUrl(document[columns.url] ?? '')
+      if (!relativeUrl.startsWith('documentation/') && !relativeUrl.startsWith('featuredarticles/')) {
+        continue
+      }
+
+      const key = pathToKey(relativeUrl)
+      if (guides.has(key)) continue
+
+      const title = decodeHtmlEntities(document[columns.name])
+      const platform = decodeHtmlEntities(document[columns.platform])
+      guides.set(key, {
+        key,
+        title,
+        url: `${ARCHIVE_BASE}/${relativeUrl}`,
+        sourceMetadata: JSON.stringify({
+          resourceType: 'Guides',
+          platform,
+          archivePath: relativeUrl,
+        }),
+      })
+    }
+
+    this._guideCatalog = guides
+    return guides
   }
 }

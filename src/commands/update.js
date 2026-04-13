@@ -1,6 +1,7 @@
 import { crawlRoot, discoverRoots } from '../pipeline/discover.js'
 import { persistFetchedDocPage, persistNormalizedPage } from '../pipeline/persist.js'
 import { applyGuidelinesSnapshot } from '../pipeline/sync-guidelines.js'
+import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress } from '../lib/flat-source-progress.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
 import { getAdapter, getAllAdapters, getAdapterTypes } from '../sources/registry.js'
@@ -219,7 +220,17 @@ async function updateDoccSource(adapter, requestedRoots, concurrency, parallel, 
 async function updateFlatSource(adapter, requestedRoots, concurrency, semaphore, ctx) {
   const { db, dataDir, logger } = ctx
   const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0 }
+  const discovery = await adapter.discover(ctx)
+  const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
+  const root = roots[0] ?? null
   const pages = filterPagesByRoots(db.getPagesBySourceType(adapter.constructor.type), requestedRoots)
+  const existingKeys = new Set(pages.map(page => page.path))
+  const discoveredKeys = discovery.keys ?? []
+  const discoveredKeySet = new Set(discoveredKeys)
+
+  if (root) {
+    seedFlatSourceProgress(db, root.slug, discoveredKeys, existingKeys)
+  }
 
   // Check existing pages for updates
   if (pages.length > 0) {
@@ -244,13 +255,22 @@ async function updateFlatSource(adapter, requestedRoots, concurrency, semaphore,
               break
             case 'deleted':
               db.markPageDeleted(page.path)
+              if (root && discoveredKeySet.has(page.path)) {
+                markFlatSourceFailed(db, root.slug, page.path, 'Source entry is no longer available')
+              }
               counts.delCount++
               break
             default:
+              if (root && discoveredKeySet.has(page.path)) {
+                markFlatSourceFailed(db, root.slug, page.path, 'Update check failed')
+              }
               counts.errCount++
               break
           }
         } catch (e) {
+          if (root && discoveredKeySet.has(page.path)) {
+            markFlatSourceFailed(db, root.slug, page.path, e.message)
+          }
           counts.errCount++
           logger.warn(`Check failed: ${page.path}`, { error: e.message })
         }
@@ -277,8 +297,14 @@ async function updateFlatSource(adapter, requestedRoots, concurrency, semaphore,
               etag: fetchResult.etag ?? null,
               lastModified: fetchResult.lastModified ?? null,
             })
+            if (root && discoveredKeySet.has(page.path)) {
+              markFlatSourceProcessed(db, root.slug, page.path)
+            }
             counts.modCount++
           } catch (e) {
+            if (root && discoveredKeySet.has(page.path)) {
+              markFlatSourceFailed(db, root.slug, page.path, e.message)
+            }
             counts.errCount++
             logger.warn(`Pull failed: ${page.path}`, { error: e.message })
           }
@@ -287,14 +313,10 @@ async function updateFlatSource(adapter, requestedRoots, concurrency, semaphore,
     }
   }
 
-  // Discover new keys not yet in DB
-  const discovery = await adapter.discover(ctx)
-  const existingKeys = new Set(pages.map(p => p.path))
-  const newKeys = (discovery.keys ?? []).filter(k => !existingKeys.has(k))
+  const newKeys = discoveredKeys.filter(k => !existingKeys.has(k))
 
   if (newKeys.length > 0) {
     logger.info(`Fetching ${newKeys.length} new ${adapter.constructor.displayName} pages...`)
-    const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
     const rootId = roots[0]?.id ?? null
 
     await Promise.all(newKeys.map(key =>
@@ -315,8 +337,14 @@ async function updateFlatSource(adapter, requestedRoots, concurrency, semaphore,
             etag: fetchResult.etag ?? null,
             lastModified: fetchResult.lastModified ?? null,
           })
+          if (root) {
+            markFlatSourceProcessed(db, root.slug, key)
+          }
           counts.newCount++
         } catch (e) {
+          if (root) {
+            markFlatSourceFailed(db, root.slug, key, e.message)
+          }
           counts.errCount++
           logger.warn(`Fetch failed: ${key}`, { error: e.message })
         }
@@ -324,6 +352,9 @@ async function updateFlatSource(adapter, requestedRoots, concurrency, semaphore,
     ))
   }
 
+  if (root) {
+    db.updateRootPageCount(root.slug)
+  }
   return counts
 }
 
@@ -420,4 +451,3 @@ function validateRequestedSources(requestedSources) {
 function normalizeList(values) {
   return values?.map(value => value.toLowerCase()) ?? null
 }
-

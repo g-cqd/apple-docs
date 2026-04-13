@@ -75,23 +75,23 @@ describe('SampleCodeAdapter', () => {
       }
     })
 
-    test('includes known SwiftUI sample paths', async () => {
+    test('includes bootstrap sample paths when the corpus has no sample inventory yet', async () => {
       const adapter = new SampleCodeAdapter()
       const ctx = { db: null }
       const result = await adapter.discover(ctx)
 
       expect(result.keys).toContain('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app')
-      expect(result.keys).toContain('sample-code/swiftui/fruta-building-a-feature-rich-app-with-swiftui')
-      expect(result.keys).toContain('sample-code/swiftui/introducing-swiftui')
-      expect(result.keys).toContain('sample-code/swiftui/backyard-birds-building-an-app-with-swiftdata-and-widgets')
+      expect(result.keys).toContain('sample-code/swiftui/composing-swiftui-gestures')
+      expect(result.keys).toContain('sample-code/uikit/implementing-modern-collection-views')
+      expect(result.keys).toContain('sample-code/arkit/creating-a-multiuser-ar-experience')
     })
 
-    test('includes at least 30 sample paths', async () => {
+    test('includes at least 10 bootstrap sample paths', async () => {
       const adapter = new SampleCodeAdapter()
       const ctx = { db: null }
       const result = await adapter.discover(ctx)
 
-      expect(result.keys.length).toBeGreaterThanOrEqual(30)
+      expect(result.keys.length).toBeGreaterThanOrEqual(10)
     })
 
     test('registers root in DB when absent', async () => {
@@ -163,6 +163,21 @@ describe('SampleCodeAdapter', () => {
       const result = await adapter.discover(ctx)
 
       expect(result.keys).toContain('sample-code/mapkit/find-nearby-points-of-interest')
+    })
+
+    test('accepts DB sample pages returned with a path field', async () => {
+      const adapter = new SampleCodeAdapter()
+      const ctx = {
+        db: {
+          getRootBySlug: () => null,
+          upsertRoot() {},
+          getPagesByRole: () => [{ path: 'accelerate/adding-a-bokeh-effect-to-images' }],
+        },
+      }
+
+      const result = await adapter.discover(ctx)
+
+      expect(result.keys).toContain('sample-code/accelerate/adding-a-bokeh-effect-to-images')
     })
 
     test('does not duplicate keys from DB that already match curated list', async () => {
