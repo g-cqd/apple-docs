@@ -9,7 +9,7 @@ Zero npm dependencies. Runs on [Bun](https://bun.sh).
 - Full-text search across all Apple documentation with BM25 ranking
 - Symbol lookup with complete Markdown content (declarations, parameters, discussion, relationships)
 - Browse framework topic trees
-- Discover and index all Apple documentation roots (frameworks, technologies, HIG, release notes)
+- Discover and index all Apple documentation roots (frameworks, technologies, HIG, release notes, App Store Review Guidelines)
 - Incremental updates via ETag-based change detection
 - Resumable sync -- stop and restart without losing progress
 - MCP server for Claude and other AI assistants
@@ -70,6 +70,7 @@ apple-docs search "Publsher"                       # fuzzy: finds Publisher (d=1
 apple-docs search "navig"                          # substring match on titles
 apple-docs search "dismiss a sheet" --no-eager     # wait for body search results
 apple-docs search "View" --framework swiftui       # filter by framework
+apple-docs search "in-app purchase" --framework app-store-review  # search guidelines
 apple-docs search "Publisher" --json               # machine-readable output
 ```
 
@@ -89,6 +90,7 @@ apple-docs search "Publisher" --json               # machine-readable output
 apple-docs read swiftui/view
 apple-docs read combine/publisher
 apple-docs read design/human-interface-guidelines/accessibility
+apple-docs read app-store-review/3.1                               # App Store Review Guidelines
 
 # By symbol name (fuzzy)
 apple-docs read View --framework swiftui
@@ -103,6 +105,9 @@ Options: `--framework <slug>`, `--json`
 ```bash
 # Sync specific frameworks
 apple-docs sync --roots swiftui,uikit,foundation
+
+# Sync App Store Review Guidelines
+apple-docs sync --roots app-store-review
 
 # Sync everything with maximum speed
 apple-docs sync --full --parallel 10 --concurrency 50 --rate 100
@@ -232,9 +237,10 @@ APPLE_DOCS_HOME = "/Users/you/.apple-docs"
 
 1. **Discovery**: Fetches Apple's technology index to enumerate all documentation roots (frameworks, technologies, HIG, etc.)
 2. **Crawl**: BFS traversal of each root's documentation tree via Apple's JSON API at `developer.apple.com/tutorials/data/documentation/{path}.json`
-3. **Storage**: Raw JSON saved to disk, metadata and FTS5 index in SQLite
-4. **Conversion**: Apple's DocC JSON converted to Markdown with YAML front matter and cross-reference links
-5. **Query**: SQLite FTS5 with BM25 ranking for search; exact path lookup for symbol pages
+3. **Guidelines**: Fetches and parses the App Store Review Guidelines HTML page into searchable sections using Bun's built-in `HTMLRewriter`
+4. **Storage**: Raw JSON/HTML saved to disk, metadata and FTS5 index in SQLite
+5. **Conversion**: Apple's DocC JSON (and guidelines HTML) converted to Markdown with YAML front matter and cross-reference links
+6. **Query**: SQLite FTS5 with BM25 ranking for search; exact path lookup for symbol pages
 
 ### Data Layout
 
@@ -248,6 +254,7 @@ APPLE_DOCS_HOME = "/Users/you/.apple-docs"
   markdown/              Converted Markdown
     swiftui/view.md
     combine/publisher.md
+    app-store-review/3.1.md
     ...
 ```
 
@@ -258,6 +265,7 @@ A full sync discovers ~370 documentation roots and indexes ~330,000 pages includ
 - Swift standard library
 - Apple REST APIs (App Store Server API, Apple Music API, etc.)
 - Human Interface Guidelines (via the `design` root)
+- App Store Review Guidelines (57 sections, parsed from HTML)
 - Release notes, tech notes, technology overviews
 
 ## Configuration

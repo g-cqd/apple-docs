@@ -50,6 +50,11 @@ export async function discoverRoots(db, rateLimiter, logger) {
   db.upsertRoot('design', 'Human Interface Guidelines', 'technology', 'apple-index', 'design/human-interface-guidelines')
   count++
 
+  // App Store Review Guidelines are an HTML page, not DocC JSON.
+  // Register here so it appears in list_frameworks; actual sync handled by sync-guidelines.js.
+  db.upsertRoot('app-store-review', 'App Store Review Guidelines', 'guidelines', 'html-scrape')
+  count++
+
   logger.info(`Discovered ${count} documentation roots`)
   return count
 }

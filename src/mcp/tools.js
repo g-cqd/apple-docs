@@ -7,12 +7,12 @@ import { status } from '../commands/status.js'
 export const TOOL_DEFINITIONS = [
   {
     name: 'search',
-    description: 'Full-text search across all Apple documentation with fuzzy matching and tiered ranking. Use to find APIs, symbols, articles, or HIG pages by keyword.',
+    description: 'Full-text search across all Apple documentation with fuzzy matching and tiered ranking. Use to find APIs, symbols, articles, HIG pages, or App Store Review Guidelines by keyword.',
     inputSchema: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Search query (symbol name, API term, or natural language)' },
-        framework: { type: 'string', description: 'Filter by framework slug (e.g. swiftui, foundation, design)' },
+        framework: { type: 'string', description: 'Filter by framework slug (e.g. swiftui, foundation, design, app-store-review)' },
         kind: { type: 'string', description: 'Filter by role (e.g. symbol, article, collection)' },
         limit: { type: 'number', description: 'Max results (default 100)' },
         fuzzy: { type: 'boolean', description: 'Enable typo-tolerant fuzzy matching (default true)' },
@@ -28,7 +28,7 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Canonical page path (e.g. swiftui/view, design/human-interface-guidelines/accessibility)' },
+        path: { type: 'string', description: 'Canonical page path (e.g. swiftui/view, design/human-interface-guidelines/accessibility, app-store-review/3.1)' },
         symbol: { type: 'string', description: 'Symbol name to look up (e.g. View, Publisher, NavigationStack)' },
         framework: { type: 'string', description: 'Disambiguate symbol by framework slug when multiple frameworks define the same name' },
       },
@@ -36,11 +36,11 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'list_frameworks',
-    description: 'List all indexed documentation roots — frameworks, technologies, HIG, tooling, and release notes — with page counts and status. Use to discover what\'s available.',
+    description: 'List all indexed documentation roots — frameworks, technologies, HIG, tooling, release notes, and App Store Review Guidelines — with page counts and status. Use to discover what\'s available.',
     inputSchema: {
       type: 'object',
       properties: {
-        kind: { type: 'string', description: 'Filter by kind: framework, technology, tooling, release-notes, tutorial' },
+        kind: { type: 'string', description: 'Filter by kind: framework, technology, tooling, release-notes, tutorial, guidelines' },
       },
     },
   },
@@ -50,7 +50,7 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: 'object',
       properties: {
-        framework: { type: 'string', description: 'Framework slug (e.g. swiftui, combine, design)' },
+        framework: { type: 'string', description: 'Framework slug (e.g. swiftui, combine, design, app-store-review)' },
         path: { type: 'string', description: 'Page path to show children of (e.g. swiftui/view, design/human-interface-guidelines/components)' },
         limit: { type: 'number', description: 'Max pages to return when listing a full framework (default: all)' },
       },

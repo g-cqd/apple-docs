@@ -1,7 +1,11 @@
 import { discoverRoots, crawlRoot } from '../pipeline/discover.js'
 import { downloadMissing } from '../pipeline/download.js'
 import { convertAll } from '../pipeline/convert.js'
+import { syncGuidelines } from '../pipeline/sync-guidelines.js'
 import { Semaphore } from '../lib/semaphore.js'
+
+/** Roots that use a custom sync pipeline instead of DocC BFS crawl. */
+const HTML_ROOTS = new Set(['app-store-review'])
 
 /**
  * Full sync pipeline: discover roots -> crawl (parallel) -> convert remaining.
@@ -33,12 +37,14 @@ export async function sync(opts, ctx) {
     rootsToCrawl = db.getRoots().map(r => r.slug)
   }
 
-  // Filter to valid roots
+  // Filter to valid roots, separating HTML-based roots from DocC roots
   const validRoots = rootsToCrawl.filter(slug => {
+    if (HTML_ROOTS.has(slug)) return false // handled separately below
     const root = db.getRootBySlug(slug)
     if (!root) { logger.warn(`Root not found: ${slug}`); return false }
     return true
   })
+  const htmlRootsToSync = rootsToCrawl.filter(slug => HTML_ROOTS.has(slug))
 
   // 3. Shared concurrency control
   // One semaphore caps total in-flight fetches across ALL roots.
@@ -76,7 +82,17 @@ export async function sync(opts, ctx) {
     })
   }
 
-  // 5. Download any missing pages (resume case)
+  // 5. Sync HTML-based roots (e.g. App Store Review Guidelines)
+  let guidelinesResult = null
+  if (htmlRootsToSync.includes('app-store-review')) {
+    try {
+      guidelinesResult = await syncGuidelines(db, dataDir, rateLimiter, logger)
+    } catch (e) {
+      logger.error('Guidelines sync failed', { error: e.message })
+    }
+  }
+
+  // 6. Download any missing pages (resume case)
   const dlResult = await downloadMissing(db, dataDir, rateLimiter, logger)
 
   // 6. Convert any remaining unconverted pages
@@ -109,6 +125,7 @@ export async function sync(opts, ctx) {
     rootsDiscovered: rootCount,
     rootsCrawled: validRoots.length,
     crawlResults,
+    guidelines: guidelinesResult,
     downloaded: dlResult.downloaded,
     bodyIndexed,
     converted: cvResult.converted,

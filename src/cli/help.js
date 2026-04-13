@@ -32,7 +32,7 @@ Body search runs in background by default when the index exists. Fast tiers get
 a 200ms head start; if they fill the limit, body results are skipped (eager mode).
 
 Options:
-  --framework <name>   Filter by framework (e.g. swiftui, design)
+  --framework <name>   Filter by framework (e.g. swiftui, design, app-store-review)
   --kind <role>        Filter by role (e.g. symbol, article)
   --limit <n>          Max results (default: 100)
   --no-fuzzy           Disable typo-tolerant matching
@@ -45,6 +45,7 @@ Examples:
   apple-docs search "Publsher"                # fuzzy: finds Publisher (d=1)
   apple-docs search "navig"                   # substring match on titles
   apple-docs search "async patterns" --no-eager  # wait for body results
+  apple-docs search "in-app purchase" --framework app-store-review
 `.trim(),
 
   read: `
@@ -96,6 +97,7 @@ Options:
 
 Examples:
   apple-docs sync --roots swiftui,combine                   # sync two frameworks
+  apple-docs sync --roots app-store-review                  # sync App Store Review Guidelines
   apple-docs sync --full --parallel 5 --rate 10             # 5 roots at once, 10 req/s
   apple-docs sync --roots uikit --concurrency 10 --rate 10  # fast single root
   apple-docs sync --retry-failed                            # retry 404s/timeouts

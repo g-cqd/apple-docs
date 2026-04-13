@@ -90,6 +90,57 @@ async function fetchWithRetry(url, rateLimiter, attempt = 0) {
   }
 }
 
+/**
+ * Fetch a raw HTML page (e.g. App Store Review Guidelines).
+ * @param {string} url - Full URL to fetch
+ * @param {import('../lib/rate-limiter.js').RateLimiter} rateLimiter
+ * @returns {{ html: string, etag: string|null, lastModified: string|null }}
+ */
+export async function fetchHtmlPage(url, rateLimiter) {
+  await rateLimiter.acquire()
+
+  const res = await fetch(url, {
+    headers: { 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
+  })
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} fetching ${url}`)
+  }
+
+  return {
+    html: await res.text(),
+    etag: res.headers.get('etag'),
+    lastModified: res.headers.get('last-modified'),
+  }
+}
+
+/**
+ * Check if an HTML page has changed via HEAD request.
+ * @returns {{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }}
+ */
+export async function checkHtmlPage(url, etag, rateLimiter) {
+  await rateLimiter.acquire()
+
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      headers: {
+        'User-Agent': USER_AGENT,
+        ...(etag ? { 'If-None-Match': etag } : {}),
+      },
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
+    })
+
+    if (res.status === 304) return { status: 'unchanged' }
+    if (res.status === 404) return { status: 'deleted' }
+    if (res.ok) return { status: 'modified', etag: res.headers.get('etag') }
+    return { status: 'error' }
+  } catch {
+    return { status: 'error' }
+  }
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
