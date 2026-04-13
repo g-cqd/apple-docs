@@ -23,6 +23,11 @@ Commands:
   web serve            Start local dev server (coming soon)
   web build            Build static documentation site (coming soon)
 
+  storage stats        Show disk usage breakdown
+  storage gc           Garbage collect cached files
+  storage materialize  Force-render markdown or HTML
+  storage profile      Show or change storage profile
+
 Global options:
   --json               Output raw JSON (for scripting)
   --home <path>        Override data directory (default: ~/.apple-docs)
@@ -241,6 +246,39 @@ Planned subcommands:
   serve                Start local dev server
   build                Build static site to dist/web/
   deploy               Show deployment instructions
+`.trim(),
+
+  storage: `
+Usage: apple-docs storage <subcommand> [options]
+
+Manage on-disk storage: profiles, materialization, and garbage collection.
+
+Subcommands:
+  profile [set <name>]    Show or change the active storage profile
+  profile list            List all available profiles
+  stats                   Show disk usage breakdown by category
+  materialize <format>    Force-render markdown or HTML for all documents
+  gc                      Garbage collect cached materializations
+
+Profile subcommand:
+  apple-docs storage profile                    Show current profile
+  apple-docs storage profile set raw-only       Switch to minimal disk usage
+  apple-docs storage profile set balanced       Switch to cache-on-read (default)
+  apple-docs storage profile set prebuilt       Switch to full materialization
+  apple-docs storage profile list               List all profiles with descriptions
+
+GC options:
+  --drop <types>       Categories to drop: markdown, html (comma-separated)
+  --no-vacuum          Skip database VACUUM after cleanup
+
+Materialize options:
+  --roots <a,b,c>      Only materialize specific frameworks
+
+Examples:
+  apple-docs storage stats
+  apple-docs storage gc --drop markdown,html
+  apple-docs storage materialize markdown --roots swiftui
+  apple-docs storage profile set raw-only
 `.trim(),
 }
 

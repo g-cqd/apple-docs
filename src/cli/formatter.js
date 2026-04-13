@@ -308,3 +308,70 @@ export function formatIndex(result) {
     `  Errors:   ${result.errors}`,
   ].join('\n')
 }
+
+export function formatStorageStats(result) {
+  const fmt = (bytes) => {
+    if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
+    if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
+    if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`
+    return `${bytes} B`
+  }
+  const lines = [
+    bold('Storage Breakdown'),
+    `  Database:     ${fmt(result.database.size)}`,
+    `  Raw JSON:     ${fmt(result.rawJson.size)} (${result.rawJson.files} files)`,
+    `  Markdown:     ${fmt(result.markdown.size)} (${result.markdown.files} files)`,
+    `  HTML cache:   ${fmt(result.html.size)} (${result.html.files} files)`,
+    `  Total:        ${fmt(result.total)}`,
+    '',
+    bold('Table Row Counts'),
+  ]
+  for (const [table, count] of Object.entries(result.tables)) {
+    lines.push(`  ${table}: ${count}`)
+  }
+  return lines.join('\n')
+}
+
+export function formatStorageGc(result) {
+  const lines = [bold('Garbage Collection')]
+  if (result.droppedDirs.length > 0) {
+    lines.push(`  Dropped:   ${result.droppedDirs.join(', ')}`)
+  }
+  lines.push(`  Orphans:   ${result.orphansCleaned} removed`)
+  lines.push(`  Vacuumed:  ${result.vacuumed ? 'yes' : 'no'}`)
+  return lines.join('\n')
+}
+
+export function formatStorageMaterialize(result) {
+  return [
+    bold('Materialize complete'),
+    `  Format:       ${result.format}`,
+    `  Materialized: ${result.materialized} documents`,
+  ].join('\n')
+}
+
+export function formatStorageProfile(result) {
+  if (result.action === 'set') {
+    return [
+      bold(`Storage profile set to: ${result.name}`),
+      `  ${result.config.description}`,
+    ].join('\n')
+  }
+  if (result.action === 'list') {
+    const lines = [bold('Available Storage Profiles')]
+    for (const p of result.profiles) {
+      lines.push(`  ${bold(p.name)}`)
+      lines.push(`    ${p.description}`)
+      lines.push(`    Persist markdown: ${p.persistMarkdown}, HTML: ${p.persistHtml}, Cache on read: ${p.cacheOnRead}`)
+      lines.push('')
+    }
+    return lines.join('\n')
+  }
+  return [
+    bold(`Current profile: ${result.name}`),
+    `  ${result.config.description}`,
+    `  Persist markdown: ${result.config.persistMarkdown}`,
+    `  Persist HTML: ${result.config.persistHtml}`,
+    `  Cache on read: ${result.config.cacheOnRead}`,
+  ].join('\n')
+}

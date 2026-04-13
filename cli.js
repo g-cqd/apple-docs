@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup } from './src/cli/formatter.js'
+import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { RateLimiter } from './src/lib/rate-limiter.js'
@@ -216,9 +216,47 @@ try {
     }
 
     case 'storage': {
-      console.log('Storage commands are coming in a future release.')
-      console.log('Planned: apple-docs storage profile | stats | gc')
-      process.exit(0)
+      switch (subcommand) {
+        case 'stats': {
+          const { storageStats } = await import('./src/commands/storage.js')
+          result = await storageStats({}, ctx)
+          formatter = formatStorageStats
+          break
+        }
+        case 'gc': {
+          const { storageGc } = await import('./src/commands/storage.js')
+          const drop = flags.drop ? flags.drop.split(',').map(s => s.trim()) : []
+          const olderThan = flags['older-than'] ? parseInt(flags['older-than'], 10) : undefined
+          result = await storageGc({ drop, olderThan, vacuum: !flags['no-vacuum'] }, ctx)
+          formatter = formatStorageGc
+          break
+        }
+        case 'materialize': {
+          const { storageMaterialize } = await import('./src/commands/storage.js')
+          const format = positional[0] || 'markdown'
+          const roots = flags.roots ? flags.roots.split(',').map(s => s.trim()) : undefined
+          result = await storageMaterialize({ format, roots }, ctx)
+          formatter = formatStorageMaterialize
+          break
+        }
+        case 'profile': {
+          const { getProfile, setProfile, getProfileConfig, listProfiles } = await import('./src/storage/profiles.js')
+          if (positional[0] === 'set' && positional[1]) {
+            setProfile(db, positional[1])
+            result = { action: 'set', name: positional[1], config: getProfileConfig(positional[1]) }
+          } else if (positional[0] === 'list') {
+            result = { action: 'list', profiles: listProfiles() }
+          } else {
+            const name = getProfile(db)
+            result = { action: 'get', name, config: getProfileConfig(name) }
+          }
+          formatter = formatStorageProfile
+          break
+        }
+        default:
+          showHelp('storage')
+          process.exit(subcommand ? 1 : 0)
+      }
       break
     }
 

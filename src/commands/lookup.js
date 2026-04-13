@@ -1,12 +1,13 @@
 import { join } from 'node:path'
-import { readText, readJSON } from '../storage/files.js'
+import { readText, readJSON, writeText } from '../storage/files.js'
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { normalize } from '../content/normalize.js'
 import { renderMarkdown } from '../content/render-markdown.js'
+import { getProfile, getProfileConfig } from '../storage/profiles.js'
 
 /**
  * Look up a specific documentation page by path or symbol name.
- * @param {{ path?: string, symbol?: string, framework?: string }} opts
+ * @param {{ path?: string, symbol?: string, framework?: string, noCache?: boolean }} opts
  * @param {{ db, dataDir }} ctx
  */
 export async function lookup(opts, ctx) {
@@ -53,6 +54,19 @@ export async function lookup(opts, ctx) {
       } catch {
         // Render failed — content stays null
       }
+    }
+  }
+
+  // Cache on-demand rendered content if the active profile supports it
+  if (fallback && content && !opts.noCache) {
+    try {
+      const profile = getProfile(db)
+      const config = getProfileConfig(profile)
+      if (config.cacheOnRead) {
+        await writeText(mdPath, content)
+      }
+    } catch {
+      // Caching is best-effort — don't fail the lookup
     }
   }
 
