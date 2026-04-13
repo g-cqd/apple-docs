@@ -71,6 +71,7 @@ apple-docs search "navig"                          # substring match on titles
 apple-docs search "dismiss a sheet" --no-eager     # wait for body search results
 apple-docs search "View" --framework swiftui       # filter by framework
 apple-docs search "in-app purchase" --framework app-store-review  # search guidelines
+apple-docs search "privacy" --framework guidelines --read  # search + read best match
 apple-docs search "Publisher" --json               # machine-readable output
 ```
 
@@ -82,6 +83,7 @@ apple-docs search "Publisher" --json               # machine-readable output
 | `--no-fuzzy` | | Disable typo-tolerant matching |
 | `--no-deep` | | Disable full-body search entirely |
 | `--no-eager` | | Wait for body search to finish (exhaustive) |
+| `--read` | | Read the full content of the best match |
 | `--json` | | Output raw JSON |
 
 ### read

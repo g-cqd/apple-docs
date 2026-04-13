@@ -22,6 +22,24 @@ export function formatSearchResults(result) {
   return lines.join('\n')
 }
 
+export function formatSearchRead(result) {
+  const { hit, page } = result
+  const quality = hit.matchQuality ?? 'match'
+  const lines = [
+    `  ${dim('┌')} Best match: ${bold(hit.title)}`,
+    `  ${dim('│')} Framework:  ${hit.framework}`,
+    `  ${dim('│')} Match:      ${quality}${quality === 'fuzzy' ? ` (d=${hit.distance})` : ''}`,
+    `  ${dim('└')} Path:       ${hit.path}`,
+    '',
+  ]
+  if (!page.found || !page.content) {
+    lines.push(page.note ?? 'Markdown not available.')
+  } else {
+    lines.push(page.content)
+  }
+  return lines.join('\n')
+}
+
 export function formatLookup(result) {
   if (!result.found) {
     return `Not found: ${result.path}`

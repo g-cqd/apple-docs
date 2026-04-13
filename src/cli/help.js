@@ -38,6 +38,7 @@ Options:
   --no-fuzzy           Disable typo-tolerant matching
   --no-deep            Disable full-body search entirely
   --no-eager           Wait for body search to finish (exhaustive results)
+  --read               Read the full content of the best match
   --json               Output raw JSON
 
 Examples:
@@ -46,6 +47,7 @@ Examples:
   apple-docs search "navig"                   # substring match on titles
   apple-docs search "async patterns" --no-eager  # wait for body results
   apple-docs search "in-app purchase" --framework app-store-review
+  apple-docs search "privacy" --framework guidelines --read  # search + read best match
 `.trim(),
 
   read: `

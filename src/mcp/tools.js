@@ -18,6 +18,7 @@ export const TOOL_DEFINITIONS = [
         fuzzy: { type: 'boolean', description: 'Enable typo-tolerant fuzzy matching (default true)' },
         noDeep: { type: 'boolean', description: 'Disable background full-body search (default false)' },
         noEager: { type: 'boolean', description: 'Wait for full-body search to complete instead of returning early (default false)' },
+        read: { type: 'boolean', description: 'Return the full Markdown content of the top search result instead of the result list' },
       },
       required: ['query'],
     },
@@ -72,8 +73,15 @@ export const TOOL_DEFINITIONS = [
  */
 export async function dispatchTool(name, args, ctx) {
   switch (name) {
-    case 'search':
-      return await search(args, ctx)
+    case 'search': {
+      const result = await search(args, ctx)
+      if (args.read && result.results.length > 0) {
+        const hit = result.results[0]
+        const page = await lookup({ path: hit.path }, ctx)
+        return { bestMatch: hit, content: page.content ?? page.note ?? 'Markdown not available.' }
+      }
+      return result
+    }
     case 'read':
       return await lookup(args, ctx)
     case 'list_frameworks':

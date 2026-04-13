@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex } from './src/cli/formatter.js'
+import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { RateLimiter } from './src/lib/rate-limiter.js'
@@ -53,7 +53,18 @@ try {
         noDeep: !!flags['no-deep'],
         noEager: !!flags['no-eager'],
       }, ctx)
-      formatter = formatSearchResults
+      if (flags.read) {
+        if (result.results.length === 0) {
+          formatter = formatSearchResults
+        } else {
+          const hit = result.results[0]
+          const page = await lookup({ path: hit.path }, ctx)
+          result = { hit, page }
+          formatter = formatSearchRead
+        }
+      } else {
+        formatter = formatSearchResults
+      }
       break
     }
 
