@@ -131,9 +131,19 @@ try {
     }
 
     case 'index': {
-      const { index: indexCmd } = await import('./src/commands/index.js')
-      result = await indexCmd({ full: !!flags.full }, ctx)
-      formatter = formatIndex
+      if (subcommand === 'rebuild-trigram') {
+        const { rebuildTrigram } = await import('./src/commands/index-rebuild.js')
+        result = await rebuildTrigram({}, ctx)
+        formatter = formatIndex
+      } else if (subcommand === 'rebuild-body') {
+        const { rebuildBody } = await import('./src/commands/index-rebuild.js')
+        result = await rebuildBody({ full: !!flags.full }, ctx)
+        formatter = formatIndex
+      } else {
+        const { index: indexCmd } = await import('./src/commands/index.js')
+        result = await indexCmd({ full: !!flags.full }, ctx)
+        formatter = formatIndex
+      }
       break
     }
 

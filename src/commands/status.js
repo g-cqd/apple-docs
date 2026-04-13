@@ -90,8 +90,18 @@ export async function status(opts, ctx) {
     updateAvailable = await checkForUpdate(db)
   }
 
+  const tier = db.getTier()
+  const capabilities = {
+    search: true,
+    searchTrigram: db.hasTable('documents_trigram'),
+    searchBody: db.getBodyIndexCount() > 0,
+    readContent: db.hasTable('document_sections'),
+  }
+
   return {
     dataDir,
+    tier,
+    capabilities,
     databaseSize: dbSize,
     rawJson: { size: rawJsonSize, files: rawJsonFiles },
     markdown: { size: markdownSize, files: markdownFiles },

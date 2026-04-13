@@ -282,21 +282,40 @@ a:hover {
    6. Theme toggle
    ------------------------------------------------------------ */
 
-.theme-toggle {
+.theme-switcher {
   flex-shrink: 0;
-  background: none;
+  display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--fg);
-  cursor: pointer;
-  font-size: 1rem;
-  padding: 0.3rem 0.5rem;
-  line-height: 1;
-  transition: background-color 0.15s ease;
+  border-radius: 8px;
+  padding: 2px;
+  margin: 0;
+  gap: 2px;
+  background: var(--code-bg);
 }
 
-.theme-toggle:hover {
-  background-color: var(--code-bg);
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary-fg);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-option:hover {
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.theme-option.active {
+  background: var(--bg);
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 /* ------------------------------------------------------------

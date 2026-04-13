@@ -26,11 +26,16 @@ export async function setup(opts, ctx) {
   // 1. Check existing corpus
   const dbPath = join(dataDir, 'apple-docs.db')
   const stats = db.getStats()
+  const currentTier = db.getTier()
   if (stats.totalPages > 0 && !force) {
     return {
       status: 'exists',
       dataDir,
       pages: stats.totalPages,
+      currentTier,
+      hint: currentTier !== tier
+        ? `Run 'apple-docs setup --tier ${tier} --force' to upgrade from ${currentTier} to ${tier}.`
+        : undefined,
     }
   }
 
@@ -112,12 +117,17 @@ export async function setup(opts, ctx) {
       verifyDb.setSnapshotMeta('snapshot_tag', release.tag)
       verifyDb.setSnapshotMeta('snapshot_installed_at', new Date().toISOString())
 
+      const transition = currentTier && currentTier !== tier ? { from: currentTier, to: tier } : null
+      if (transition) {
+        logger.info(`Upgraded from ${transition.from} to ${transition.to} tier.`)
+      }
       logger.info(`Setup complete! ${documentCount} documents ready.`)
 
       return {
         status: 'ok',
         tag: release.tag,
         tier,
+        transition,
         documentCount,
         schemaVersion,
         dataDir,

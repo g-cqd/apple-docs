@@ -18,6 +18,11 @@ export async function indexBodyIncremental(db, dataDir, logger, onProgress) {
 }
 
 async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
+  if (!db.hasTable('document_sections')) {
+    logger.info('document_sections table not available (lite tier) — cannot build body index')
+    return { indexed: 0, total: 0, errors: 0 }
+  }
+
   const documents = since
     ? db.db.query(`
       SELECT id, key, title, abstract_text, declaration_text, headings, source_type

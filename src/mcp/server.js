@@ -61,8 +61,13 @@ export function createServer(ctx) {
       if (args.read && result.results.length > 0) {
         const hit = result.results[0]
         const page = await lookup({ path: hit.path }, ctx)
+        const readResult = {
+          bestMatch: hit,
+          content: page.content ?? page.note ?? 'Markdown not available.',
+          ...(page.tierLimitation ? { tierLimitation: page.tierLimitation } : {}),
+        }
         return {
-          content: [{ type: 'text', text: JSON.stringify({ bestMatch: hit, content: page.content ?? page.note ?? 'Markdown not available.' }, null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify(readResult, null, 2) }],
         }
       }
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }

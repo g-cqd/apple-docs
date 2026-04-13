@@ -48,7 +48,7 @@ export function storageStats(_opts, ctx) {
 
   const tables = {
     documents: db.db.query('SELECT COUNT(*) as count FROM documents').get().count,
-    document_sections: db.db.query('SELECT COUNT(*) as count FROM document_sections').get().count,
+    document_sections: db.hasTable('document_sections') ? db.db.query('SELECT COUNT(*) as count FROM document_sections').get().count : 0,
     pages: db.db.query('SELECT COUNT(*) as count FROM pages').get().count,
     roots: db.db.query('SELECT COUNT(*) as count FROM roots').get().count,
     crawl_state: db.db.query('SELECT COUNT(*) as count FROM crawl_state').get().count,
@@ -155,14 +155,19 @@ export async function storageMaterialize(opts, ctx) {
     ).all()
   }
 
-  const getSections = db.db.query(
+  const getSections = db.hasTable('document_sections') ? db.db.query(
     `SELECT section_kind, heading, content_text, content_json, sort_order
      FROM document_sections
      WHERE document_id = ?
      ORDER BY sort_order, id`
-  )
+  ) : null
 
   let materialized = 0
+
+  if (!getSections) {
+    logger.info('document_sections table not available (lite tier) — cannot materialize')
+    return { format, materialized: 0, total: docsRows.length }
+  }
 
   await pool(docsRows, 50, async (doc) => {
     const sections = getSections.all(doc.id)

@@ -107,13 +107,31 @@ export async function lookup(opts, ctx) {
     return { found: true, metadata, content: null, sections, note: `Section not found: ${sectionQuery}. Available sections: ${available}` }
   }
 
+  // Tier-aware messaging when content is unavailable
+  let note = undefined
+  let tierLimitation = undefined
+  if (content) {
+    note = fallback ? 'Rendered on-demand from normalized content.' : undefined
+  } else {
+    const tier = db.getTier()
+    if (tier === 'lite') {
+      note = 'Content body unavailable on lite tier. Metadata and declaration shown.'
+      tierLimitation = {
+        tier: 'lite',
+        reason: 'The lite snapshot includes metadata only — document sections and raw content are not included.',
+        upgrade: "Run 'apple-docs setup --tier standard --force' to upgrade and get full document content.",
+      }
+    } else {
+      note = 'No content available. Run apple-docs sync first.'
+    }
+  }
+
   return {
     found: true,
     metadata,
     content: content ?? null,
     sections,
-    note: content
-      ? (fallback ? 'Rendered on-demand from normalized content.' : undefined)
-      : 'No content available. Run apple-docs sync first.',
+    note,
+    tierLimitation,
   }
 }

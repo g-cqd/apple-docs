@@ -156,17 +156,28 @@ Examples:
 `.trim(),
 
   index: `
-Usage: apple-docs index [options]
+Usage: apple-docs index [subcommand] [options]
 
-Build or update the full-body search index. This indexes the complete Markdown
-content of every page, enabling deep search across discussions, code examples,
-and parameter descriptions.
+Build or update search indexes.
+
+Subcommands:
+  (none)               Build or update the full-body search index
+  rebuild-trigram      Rebuild trigram index from document titles (fuzzy search)
+  rebuild-body         Rebuild body index from document sections (deep search)
 
 Options:
   --full               Rebuild the entire index from scratch
   --json               Output results as JSON
 
-Run this once after syncing, then incrementally after updates.
+The rebuild subcommands are useful for lower-tier snapshots that ship without
+certain indexes. rebuild-trigram works on any tier (uses titles).
+rebuild-body requires document_sections (standard tier or above).
+
+Examples:
+  apple-docs index                    # build/update body index
+  apple-docs index --full             # full rebuild
+  apple-docs index rebuild-trigram    # add fuzzy search to a lite snapshot
+  apple-docs index rebuild-body      # add deep search (requires standard tier)
 `.trim(),
 
   doctor: `

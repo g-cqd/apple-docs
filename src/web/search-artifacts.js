@@ -64,7 +64,8 @@ export function buildAliasMap(db) {
  * @returns {Promise<number>} Number of shard files written
  */
 export async function buildBodyShards(db, outputDir) {
-  const rows = db.db.query(`
+  const hasSections = db.hasTable('document_sections')
+  const rows = db.db.query(hasSections ? `
     SELECT
       d.key,
       d.framework,
@@ -72,6 +73,10 @@ export async function buildBodyShards(db, outputDir) {
     FROM documents d
     LEFT JOIN document_sections ds ON ds.document_id = d.id
     GROUP BY d.id
+    ORDER BY d.key
+  ` : `
+    SELECT d.key, d.framework, NULL AS body_text
+    FROM documents d
     ORDER BY d.key
   `).all()
 

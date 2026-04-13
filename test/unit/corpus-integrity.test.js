@@ -46,7 +46,8 @@ describe('Corpus Integrity (P8-F)', () => {
   })
 
   test('detects missing raw-json files', () => {
-    // Seed a document but don't create the JSON file
+    // Create raw-json dir (simulating a full-tier install) but don't create the file
+    mkdirSync(join(tmpDir, 'raw-json'), { recursive: true })
     const now = new Date().toISOString()
     db.db.run("INSERT INTO documents (source_type, key, title, kind, role, framework, created_at, updated_at) VALUES ('apple-docc', 'documentation/test/missing', 'Missing', 'symbol', 'symbol', 'test', ?, ?)", [now, now])
 

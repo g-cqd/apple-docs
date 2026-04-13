@@ -445,7 +445,43 @@ export class DocsDatabase {
     }
   }
 
+  /**
+   * Check if a table exists in the database.
+   * @param {string} name
+   * @returns {boolean}
+   */
+  hasTable(name) {
+    return !!this.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name)
+  }
+
+  /**
+   * Return the snapshot tier (lite/standard/full) or null for non-snapshot databases.
+   * Reads from snapshot_meta, falls back to capability probing.
+   * @returns {string|null}
+   */
+  getTier() {
+    if (this._tier !== undefined) return this._tier
+    try {
+      const row = this.db.query("SELECT value FROM snapshot_meta WHERE key='snapshot_tier'").get()
+      if (row) { this._tier = row.value; return this._tier }
+    } catch {}
+    // Capability probing fallback: lite tier drops document_sections entirely
+    if (this.hasTable('document_sections')) {
+      this._tier = 'standard'
+    } else if (this.hasTable('documents')) {
+      this._tier = 'lite'
+    } else {
+      this._tier = null
+    }
+    return this._tier
+  }
+
   _prepareStatements() {
+    // Detect available tier-optional tables once
+    const hasSections = this.hasTable('document_sections')
+    const hasTrigram = this.hasTable('documents_trigram')
+    const hasBodyFts = this.hasTable('documents_body_fts')
+
     this._upsertRoot = this.db.query(`
       INSERT INTO roots (slug, display_name, kind, status, source, seed_path, source_type, first_seen, last_seen)
       VALUES ($slug, $display_name, $kind, 'active', $source, $seed_path, $source_type, $now, $now)
@@ -563,12 +599,12 @@ export class DocsDatabase {
       LEFT JOIN roots r ON r.slug = d.framework
       WHERE d.key = ?
     `)
-    this._getDocumentSections = this.db.query(`
+    this._getDocumentSections = hasSections ? this.db.query(`
       SELECT section_kind, heading, content_text, content_json, sort_order
       FROM document_sections
       WHERE document_id = ?
       ORDER BY sort_order, id
-    `)
+    `) : null
     this._getDocumentIdByKey = this.db.query('SELECT id FROM documents WHERE key = ?')
     this._getDocumentRelationshipsBySource = this.db.query(`
       SELECT dr.to_key as target_path,
@@ -579,15 +615,15 @@ export class DocsDatabase {
       WHERE dr.from_key = ?
       ORDER BY dr.sort_order, dr.to_key
     `)
-    this._deleteDocumentSections = this.db.query('DELETE FROM document_sections WHERE document_id = ?')
-    this._insertDocumentSection = this.db.query(`
+    this._deleteDocumentSections = hasSections ? this.db.query('DELETE FROM document_sections WHERE document_id = ?') : null
+    this._insertDocumentSection = hasSections ? this.db.query(`
       INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order)
       VALUES ($document_id, $section_kind, $heading, $content_text, $content_json, $sort_order)
       ON CONFLICT(document_id, section_kind, sort_order) DO UPDATE SET
         heading = $heading,
         content_text = $content_text,
         content_json = $content_json
-    `)
+    `) : null
     this._deleteDocumentRelationships = this.db.query('DELETE FROM document_relationships WHERE from_key = ?')
     this._deleteDocumentRelationshipsByKey = this.db.query('DELETE FROM document_relationships WHERE from_key = ? OR to_key = ?')
     this._insertDocumentRelationship = this.db.query(`
@@ -627,7 +663,7 @@ export class DocsDatabase {
       ORDER BY tier, rank
       LIMIT $limit
     `)
-    this._searchDocumentsTrigram = this.db.query(`
+    this._searchDocumentsTrigram = hasTrigram ? this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
@@ -647,8 +683,8 @@ export class DocsDatabase {
         AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
         AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
       LIMIT $limit
-    `)
-    this._searchDocumentsBody = this.db.query(`
+    `) : null
+    this._searchDocumentsBody = hasBodyFts ? this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
@@ -670,17 +706,17 @@ export class DocsDatabase {
         AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
       ORDER BY rank
       LIMIT $limit
-    `)
-    this._documentsBodyIndexCount = this.db.query('SELECT COUNT(*) as c FROM documents_body_fts')
-    this._insertDocumentBody = this.db.query('INSERT OR REPLACE INTO documents_body_fts(rowid, body) VALUES ($id, $body)')
-    this._clearDocumentBody = this.db.query("DELETE FROM documents_body_fts")
-    this._deleteDocumentBody = this.db.query('DELETE FROM documents_body_fts WHERE rowid = ?')
-    this._documentTrigramCandidates = this.db.query(`
+    `) : null
+    this._documentsBodyIndexCount = hasBodyFts ? this.db.query('SELECT COUNT(*) as c FROM documents_body_fts') : null
+    this._insertDocumentBody = hasBodyFts ? this.db.query('INSERT OR REPLACE INTO documents_body_fts(rowid, body) VALUES ($id, $body)') : null
+    this._clearDocumentBody = hasBodyFts ? this.db.query("DELETE FROM documents_body_fts") : null
+    this._deleteDocumentBody = hasBodyFts ? this.db.query('DELETE FROM documents_body_fts WHERE rowid = ?') : null
+    this._documentTrigramCandidates = hasTrigram ? this.db.query(`
       SELECT d.id, d.title
       FROM documents_trigram
       JOIN documents d ON documents_trigram.rowid = d.id
       WHERE documents_trigram MATCH $trigram
-    `)
+    `) : null
     this._searchDocumentByTitle = this.db.query(`
       SELECT d.*, COALESCE(r.slug, d.framework) as root_slug, COALESCE(r.display_name, d.framework) as framework
       FROM documents d
@@ -899,6 +935,7 @@ export class DocsDatabase {
   }
 
   replaceDocumentSections(documentId, sections) {
+    if (!this._deleteDocumentSections || !this._insertDocumentSection) return
     this._deleteDocumentSections.run(documentId)
     for (const section of sections ?? []) {
       this._insertDocumentSection.run({
@@ -959,6 +996,7 @@ export class DocsDatabase {
   }
 
   getDocumentSections(key) {
+    if (!this._getDocumentSections) return []
     const document = this._getDocument.get(key)
     if (!document) return []
     return this._getDocumentSections.all(document.id).map(section => ({
@@ -984,6 +1022,7 @@ export class DocsDatabase {
   }
 
   searchTrigram(query, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
+    if (!this._searchDocumentsTrigram) return []
     const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
       return this._searchDocumentsTrigram.all({ $query: query, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
@@ -991,6 +1030,7 @@ export class DocsDatabase {
   }
 
   searchBody(ftsQuery, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
+    if (!this._searchDocumentsBody) return []
     const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
       return this._searchDocumentsBody.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
@@ -1016,7 +1056,7 @@ export class DocsDatabase {
       idToKey.set(d.id, d.key)
       docMap.set(d.key, { document: d, sections: [] })
     }
-    if (idToKey.size > 0) {
+    if (idToKey.size > 0 && this.hasTable('document_sections')) {
       const ids = [...idToKey.keys()]
       const sPlaceholders = ids.map(() => '?').join(',')
       const sections = this.db.query(`
@@ -1048,18 +1088,22 @@ export class DocsDatabase {
   }
 
   getBodyIndexCount() {
+    if (!this._documentsBodyIndexCount) return 0
     try { return this._documentsBodyIndexCount.get().c } catch { return 0 }
   }
 
   insertBody(documentId, body) {
+    if (!this._insertDocumentBody) return
     this._insertDocumentBody.run({ $id: documentId, $body: body })
   }
 
   clearBodyIndex() {
+    if (!this._clearDocumentBody) return
     this._clearDocumentBody.run()
   }
 
   getTrigramCandidates(trigram) {
+    if (!this._documentTrigramCandidates) return []
     try {
       return this._documentTrigramCandidates.all({ $trigram: trigram })
     } catch { return [] }
@@ -1198,8 +1242,8 @@ export class DocsDatabase {
     const document = this._getDocumentIdByKey.get(key)
     if (!document) return false
 
-    this._deleteDocumentBody.run(document.id)
-    this._deleteDocumentSections.run(document.id)
+    if (this._deleteDocumentBody) this._deleteDocumentBody.run(document.id)
+    if (this._deleteDocumentSections) this._deleteDocumentSections.run(document.id)
     this._deleteDocumentRelationshipsByKey.run(key, key)
     this._deleteDocumentByKey.run(key)
     return true

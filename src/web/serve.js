@@ -177,9 +177,11 @@ export function startDevServer(opts, ctx) {
         }
 
         if (doc) {
-          const sections = db.db.query(
-            'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'
-          ).all(doc.id)
+          const sections = db.hasTable('document_sections')
+            ? db.db.query(
+              'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'
+            ).all(doc.id)
+            : []
           const html = renderDocumentPage(doc, sections, siteConfig, {
             resolveRoleHeadings: (keys) => {
               if (keys.length === 0) return new Map()

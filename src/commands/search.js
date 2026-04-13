@@ -189,6 +189,9 @@ export async function search(opts, ctx) {
     total: results.length,
     query,
     intent,
+    tier: ctx.db.getTier(),
+    trigramAvailable: ctx.db.hasTable('documents_trigram'),
+    bodyIndexAvailable: hasBody,
   }
 }
 

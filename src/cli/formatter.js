@@ -56,7 +56,24 @@ export function formatLookup(result) {
     return `Not found: ${result.path}`
   }
   if (!result.content) {
-    return result.note ?? 'Markdown not available.'
+    const lines = []
+    const m = result.metadata
+    if (m) {
+      lines.push(bold(m.title))
+      if (m.roleHeading) lines.push(dim(m.roleHeading))
+      if (m.framework) lines.push(`Framework: ${m.framework}`)
+      if (m.abstract) lines.push(`\n${m.abstract}`)
+      if (m.declaration) lines.push(`\n${dim('Declaration:')} ${m.declaration}`)
+      if (m.platforms?.length) lines.push(`Platforms: ${m.platforms.map(p => `${p.name} ${p.introducedAt ?? ''}`).join(', ')}`)
+      lines.push('')
+    }
+    if (result.tierLimitation) {
+      lines.push(dim(`[${result.tierLimitation.tier} tier] ${result.tierLimitation.reason}`))
+      lines.push(dim(`Upgrade: ${result.tierLimitation.upgrade}`))
+    } else {
+      lines.push(result.note ?? 'Markdown not available.')
+    }
+    return lines.join('\n')
   }
   return result.content
 }
@@ -128,8 +145,10 @@ export function formatStatus(result) {
 
   const kindStr = Object.entries(result.roots.byKind).map(([k, v]) => `${v} ${k}`).join(', ')
 
+  const tierLabel = result.tier ? ` [${result.tier} tier]` : ''
+
   const lines = [
-    bold('Apple Documentation Corpus'),
+    bold(`Apple Documentation Corpus${tierLabel}`),
     `  Data directory:  ${result.dataDir}`,
     `  Database:        ${fmt(result.databaseSize)}`,
     `  Raw JSON:        ${fmt(result.rawJson.size)} (${result.rawJson.files} files)`,
@@ -139,6 +158,19 @@ export function formatStatus(result) {
     `  Last sync:       ${result.lastSync ?? 'never'}`,
     `  Last action:     ${result.lastAction ?? 'none'}`,
   ]
+
+  if (result.capabilities) {
+    const c = result.capabilities
+    const caps = []
+    caps.push(`search: yes`)
+    caps.push(`fuzzy: ${c.searchTrigram ? 'yes' : 'no'}`)
+    caps.push(`body: ${c.searchBody ? 'yes' : 'no'}`)
+    caps.push(`read: ${c.readContent ? 'yes' : 'metadata only'}`)
+    lines.push(`  Capabilities:    ${caps.join(', ')}`)
+    if (result.tier === 'lite') {
+      lines.push(dim("  Hint:            Run 'apple-docs setup --tier standard --force' to upgrade"))
+    }
+  }
 
   // Activity status
   if (result.activity) {
@@ -311,20 +343,32 @@ export function formatSnapshot(result) {
 
 export function formatSetup(result) {
   if (result.status === 'exists') {
-    return `Corpus already exists at ${result.dataDir}\nUse --force to overwrite.`
+    const lines = [`Corpus already exists at ${result.dataDir} (${result.pages} pages)`]
+    if (result.hint) lines.push(dim(result.hint))
+    else lines.push('Use --force to overwrite.')
+    return lines.join('\n')
   }
-  return [
+  const lines = [
     bold('Setup complete'),
     `  Tag:         ${result.tag}`,
     `  Tier:        ${result.tier}`,
     `  Documents:   ${result.documentCount}`,
     `  Data dir:    ${result.dataDir}`,
-    '',
-    'Run `apple-docs search <query>` to start searching.',
-  ].join('\n')
+  ]
+  if (result.transition) {
+    lines.push(`  Upgraded:    ${result.transition.from} → ${result.transition.to}`)
+  }
+  lines.push('', 'Run `apple-docs search <query>` to start searching.')
+  return lines.join('\n')
 }
 
 export function formatIndex(result) {
+  if (result.status === 'error') {
+    return result.message
+  }
+  if (result.status === 'ok' && result.total === undefined) {
+    return `${bold('Index rebuilt')}\n  Indexed:  ${result.indexed} entries`
+  }
   return [
     bold('Index complete'),
     `  Indexed:  ${result.indexed} pages`,

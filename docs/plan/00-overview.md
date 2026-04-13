@@ -135,3 +135,4 @@ Live progress is tracked in **[PROGRESS.md](./PROGRESS.md)** — phase status, t
 | [12-phase-9b-cli-mcp-consolidation.md](./12-phase-9b-cli-mcp-consolidation.md) | 9-B | CLI and MCP command consolidation |
 | [13-phase-10a-collection-filters.md](./13-phase-10a-collection-filters.md) | 10-A | Collection type filter chips (home, framework, doc pages) |
 | [14-phase-10b-page-toc.md](./14-phase-10b-page-toc.md) | 10-B | Page section navigation / table of contents sidebar |
+| [15-phase-11-tier-awareness.md](./15-phase-11-tier-awareness.md) | 11 | Snapshot tier awareness, upgrade paths, index rebuild |

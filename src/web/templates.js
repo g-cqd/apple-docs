@@ -166,7 +166,11 @@ function buildHeader(siteConfig) {
       <input class="search-input" type="search" placeholder="Search…" aria-label="Search documentation" autocomplete="off">
       <div class="search-dropdown" hidden aria-live="polite"></div>
     </div>
-    <button class="theme-toggle" aria-label="Toggle theme" type="button">&#9680;</button>
+    <fieldset class="theme-switcher" role="radiogroup" aria-label="Color scheme">
+      <button class="theme-option" type="button" data-theme-value="light" aria-label="Light theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button>
+      <button class="theme-option" type="button" data-theme-value="auto" aria-label="System theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11" fill="currentColor"/><path d="M8 2.5A5.5 5.5 0 0 1 8 13.5" fill="currentColor"/></svg></button>
+      <button class="theme-option" type="button" data-theme-value="dark" aria-label="Dark theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 9.5A5.5 5.5 0 1 1 6.5 3 4.5 4.5 0 0 0 13 9.5z"/></svg></button>
+    </fieldset>
   </nav>
 </header>`
 }
