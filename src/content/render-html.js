@@ -221,6 +221,12 @@ function renderBlockNodeToHtml(node) {
           const title = (typeof item === 'object' ? item?._resolvedTitle : null) ?? readableNameFromKey(key)
           return `<li><a href="/docs/${escapeHtml(key)}/">${escapeHtml(title)}</a></li>`
         }
+        // Try external URL / video reference
+        const refUrl = resolveReferenceUrl(id)
+        if (refUrl) {
+          const title = (typeof item === 'object' ? item?._resolvedTitle : null) ?? refUrl.title
+          return `<li><a href="${escapeHtml(refUrl.href)}">${escapeHtml(title)}</a></li>`
+        }
         return `<li>${escapeHtml(typeof item === 'string' ? item : (item?.title ?? ''))}</li>`
       }).join('')}</ul>`
 
@@ -288,11 +294,17 @@ function renderInlineNodeToHtml(node) {
     case 'reference': {
       // Use resolved data from normalization, or fall back to extracting from identifier
       const key = node._resolvedKey ?? normalizeIdentifier(node.identifier)
-      const title = node._resolvedTitle ?? (key ? readableNameFromKey(key) : (node.identifier ?? ''))
+      const title = node._resolvedTitle ?? (key ? readableNameFromKey(key) : null)
       if (key) {
         return `<a href="/docs/${escapeHtml(key)}/">${escapeHtml(title)}</a>`
       }
-      return `<code>${escapeHtml(title)}</code>`
+      // External URL references — render as clickable links
+      const refUrl = resolveReferenceUrl(node.identifier)
+      if (refUrl) {
+        const displayTitle = title || refUrl.title
+        return `<a href="${escapeHtml(refUrl.href)}">${escapeHtml(displayTitle)}</a>`
+      }
+      return `<code>${escapeHtml(title || node.identifier || '')}</code>`
     }
 
     case 'link': {
@@ -344,6 +356,207 @@ function readableNameFromKey(key) {
     .split('-')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
+}
+
+// ---------------------------------------------------------------------------
+// Lightweight markdown → HTML converter (for Swift Book, WWDC, Swift Evolution)
+// ---------------------------------------------------------------------------
+
+function markdownToHtml(md) {
+  if (!md) return ''
+
+  // Strip stray XML declarations/processing instructions
+  const cleaned = md.replace(/<\?[^?]*\?>/g, '').trim()
+  if (!cleaned) return ''
+
+  const lines = cleaned.split('\n')
+  const out = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    // Blank line — skip
+    if (line.trim() === '') { i++; continue }
+
+    // HTML comment — skip entirely
+    if (line.trim().startsWith('<!--')) {
+      // Consume until closing -->
+      let comment = line
+      while (!comment.includes('-->') && i + 1 < lines.length) {
+        i++
+        comment += '\n' + lines[i]
+      }
+      i++
+      continue
+    }
+
+    // Fenced code block
+    const fenceMatch = line.match(/^(`{3,}|~{3,})(\w*)/)
+    if (fenceMatch) {
+      const fence = fenceMatch[1]
+      const lang = fenceMatch[2] || 'swift'
+      const codeLines = []
+      i++
+      while (i < lines.length && !lines[i].startsWith(fence)) {
+        codeLines.push(lines[i])
+        i++
+      }
+      i++ // skip closing fence
+      out.push(`<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(codeLines.join('\n'))}</code></pre>`)
+      continue
+    }
+
+    // ATX Heading
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/)
+    if (headingMatch) {
+      const level = Math.min(headingMatch[1].length + 1, 6) // bump by 1 since h2 is section heading
+      out.push(`<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`)
+      i++
+      continue
+    }
+
+    // Blockquote
+    if (line.startsWith('> ') || line === '>') {
+      const quoteLines = []
+      while (i < lines.length && (lines[i].startsWith('> ') || lines[i] === '>')) {
+        quoteLines.push(lines[i].replace(/^>\s?/, ''))
+        i++
+      }
+      out.push(`<blockquote>${markdownToHtml(quoteLines.join('\n'))}</blockquote>`)
+      continue
+    }
+
+    // Unordered list
+    if (/^[\-\*\+]\s+/.test(line)) {
+      const items = []
+      while (i < lines.length && /^[\-\*\+]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^[\-\*\+]\s+/, ''))
+        i++
+      }
+      out.push(`<ul>${items.map(item => `<li>${inlineMarkdown(item)}</li>`).join('')}</ul>`)
+      continue
+    }
+
+    // Ordered list
+    if (/^\d+[\.\)]\s+/.test(line)) {
+      const items = []
+      while (i < lines.length && /^\d+[\.\)]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+[\.\)]\s+/, ''))
+        i++
+      }
+      out.push(`<ol>${items.map(item => `<li>${inlineMarkdown(item)}</li>`).join('')}</ol>`)
+      continue
+    }
+
+    // Horizontal rule
+    if (/^[-*_]{3,}\s*$/.test(line)) {
+      out.push('<hr>')
+      i++
+      continue
+    }
+
+    // Paragraph — collect consecutive non-special lines
+    const paraLines = []
+    while (i < lines.length && lines[i].trim() !== '' &&
+      !lines[i].match(/^(`{3,}|~{3,})/) &&
+      !lines[i].match(/^#{1,6}\s/) &&
+      !lines[i].match(/^>\s/) &&
+      !lines[i].match(/^[\-\*\+]\s+/) &&
+      !lines[i].match(/^\d+[\.\)]\s+/) &&
+      !lines[i].match(/^[-*_]{3,}\s*$/) &&
+      !lines[i].trim().startsWith('<!--')) {
+      paraLines.push(lines[i])
+      i++
+    }
+    if (paraLines.length > 0) {
+      out.push(`<p>${inlineMarkdown(paraLines.join(' '))}</p>`)
+    }
+  }
+
+  return out.join('')
+}
+
+/**
+ * Convert inline markdown syntax to HTML.
+ */
+function inlineMarkdown(text) {
+  // Pre-process: convert <doc:PageName> and <doc:PageName#Section> references before escaping
+  let pre = text.replace(/<doc:([^>#]+)(?:#([^>]+))?>/g, (_match, page, section) => {
+    const displayName = section
+      ? `${page.replace(/-/g, ' ')} — ${section.replace(/-/g, ' ')}`
+      : page.replace(/-/g, ' ')
+    // Link to a search-friendly path — use the page name as the last segment
+    return `[${displayName}](/docs/swift-book/?q=${encodeURIComponent(page)})`
+  })
+
+  let s = escapeHtml(pre)
+  // Images: ![alt](url) — render alt text only (no images in docs)
+  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt) => alt ? `<em>[${alt}]</em>` : '')
+  // Remove empty image/link brackets: ![] or []
+  s = s.replace(/!\[\]/g, '')
+  s = s.replace(/\[\]\([^)]*\)/g, '')
+  s = s.replace(/\[\]/g, '')
+  // Links: [text](url)
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+  // Bold+italic: ***text*** or ___text___
+  s = s.replace(/\*{3}(.+?)\*{3}/g, '<strong><em>$1</em></strong>')
+  s = s.replace(/_{3}(.+?)_{3}/g, '<strong><em>$1</em></strong>')
+  // Bold: **text** or __text__
+  s = s.replace(/\*{2}(.+?)\*{2}/g, '<strong>$1</strong>')
+  s = s.replace(/_{2}(.+?)_{2}/g, '<strong>$1</strong>')
+  // Italic: *text* or _text_ (avoid matching underscores inside words)
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>')
+  s = s.replace(/(?<![a-zA-Z0-9])_(.+?)_(?![a-zA-Z0-9])/g, '<em>$1</em>')
+  // Inline code: `code`
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>')
+  return s
+}
+
+/**
+ * Resolve a reference identifier to an external URL when normalizeIdentifier fails.
+ * Handles https:// URLs, video doc:// refs, and other non-documentation references.
+ * @returns {{ href: string, title: string } | null}
+ */
+function resolveReferenceUrl(identifier) {
+  if (!identifier) return null
+
+  // Direct https:// or http:// URL
+  if (/^https?:\/\//.test(identifier)) {
+    // Extract readable title from URL
+    const url = identifier.replace(/\/+$/, '')
+    const lastSegment = url.split('/').pop() || url
+    const title = lastSegment
+      .replace(/[-_]/g, ' ')
+      .replace(/\.\w+$/, '') // strip file extensions
+      .split(' ')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ')
+    return { href: identifier, title: title || identifier }
+  }
+
+  // doc:// video references: doc://com.apple.documentation/videos/play/wwdc2025/281
+  const videoMatch = identifier.match(/doc:\/\/[^/]+\/videos\/play\/(\w+)\/(\d+)/)
+  if (videoMatch) {
+    const event = videoMatch[1].toUpperCase()
+    const sessionId = videoMatch[2]
+    return {
+      href: `https://developer.apple.com/videos/play/${videoMatch[1]}/${sessionId}/`,
+      title: `${event} Session ${sessionId}`,
+    }
+  }
+
+  // doc:// with non-documentation paths (e.g. tutorials, videos)
+  const docNonDocMatch = identifier.match(/doc:\/\/[^/]+\/(.+)/)
+  if (docNonDocMatch) {
+    const path = docNonDocMatch[1]
+    return {
+      href: `https://developer.apple.com/${path}`,
+      title: readableNameFromKey(path),
+    }
+  }
+
+  return null
 }
 
 function coerceDocument(document) {

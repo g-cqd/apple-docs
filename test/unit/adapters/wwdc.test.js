@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { WwdcAdapter, parseWwdcKey } from '../../../src/sources/wwdc.js'
 
 const originalFetch = globalThis.fetch
@@ -293,9 +293,9 @@ describe('WwdcAdapter.normalize — Apple JSON', () => {
       description: 'A description.',
     })
 
-    const abstractSection = result.sections.find(s => s.kind === 'abstract')
+    const abstractSection = result.sections.find(s => s.sectionKind === 'abstract')
     expect(abstractSection).toBeDefined()
-    expect(abstractSection.content).toBe('A description.')
+    expect(abstractSection.contentText).toBe('A description.')
   })
 
   test('produces a transcript section when transcript is present', () => {
@@ -305,9 +305,9 @@ describe('WwdcAdapter.normalize — Apple JSON', () => {
       transcript: 'Hello world.',
     })
 
-    const contentSection = result.sections.find(s => s.kind === 'content')
+    const contentSection = result.sections.find(s => s.sectionKind === 'content')
     expect(contentSection).toBeDefined()
-    expect(contentSection.content).toBe('Hello world.')
+    expect(contentSection.contentText).toBe('Hello world.')
   })
 
   test('falls back to a derived title when JSON has no title', () => {
@@ -369,8 +369,8 @@ describe('WwdcAdapter.normalize — ASCIIwwdc text', () => {
     expect(result.document.framework).toBe('wwdc')
     expect(result.document.url).toBe('https://developer.apple.com/videos/play/wwdc2019/234/')
     expect(result.sections).toHaveLength(1)
-    expect(result.sections[0].kind).toBe('content')
-    expect(result.sections[0].content).toBe(">> Hi, everyone.\nI'm Jacob Xiao and I'll be")
+    expect(result.sections[0].sectionKind).toBe('content')
+    expect(result.sections[0].contentText).toBe(">> Hi, everyone.\nI'm Jacob Xiao and I'll be")
     expect(result.relationships).toEqual([])
   })
 
@@ -422,7 +422,7 @@ describe('WwdcAdapter.normalize — ASCIIwwdc text', () => {
       sessionId: '100',
     })
 
-    expect(result.sections[0].content).toBe(text)
+    expect(result.sections[0].contentText).toBe(text)
   })
 
   test('abstractText is null for ASCIIwwdc sessions', () => {

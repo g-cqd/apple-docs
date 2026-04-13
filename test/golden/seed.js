@@ -73,12 +73,12 @@ export function seedDatabase(db) {
 
   // --- Phase 4 sources (use normalized document model directly) ---
 
-  const swiftEvolution = db.upsertRoot('swift-evolution', 'Swift Evolution Proposals', 'collection', 'swift-evolution')
-  const swiftBook = db.upsertRoot('swift-book', 'The Swift Programming Language', 'collection', 'swift-book')
-  const swiftOrg = db.upsertRoot('swift-org', 'Swift.org Documentation', 'collection', 'swift-org')
-  const appleArchive = db.upsertRoot('apple-archive', 'Apple Developer Archive', 'collection', 'apple-archive')
-  const wwdc = db.upsertRoot('wwdc', 'WWDC Session Transcripts', 'collection', 'wwdc')
-  const sampleCode = db.upsertRoot('sample-code', 'Apple Sample Code', 'collection', 'sample-code')
+  const _swiftEvolution = db.upsertRoot('swift-evolution', 'Swift Evolution Proposals', 'collection', 'swift-evolution')
+  const _swiftBook = db.upsertRoot('swift-book', 'The Swift Programming Language', 'collection', 'swift-book')
+  const _swiftOrg = db.upsertRoot('swift-org', 'Swift.org Documentation', 'collection', 'swift-org')
+  const _appleArchive = db.upsertRoot('apple-archive', 'Apple Developer Archive', 'collection', 'apple-archive')
+  const _wwdc = db.upsertRoot('wwdc', 'WWDC Session Transcripts', 'collection', 'wwdc')
+  const _sampleCode = db.upsertRoot('sample-code', 'Apple Sample Code', 'collection', 'sample-code')
 
   const normalizedDocs = [
     // Swift Evolution proposals

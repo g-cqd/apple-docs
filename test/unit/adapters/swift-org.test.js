@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { SwiftOrgAdapter } from '../../../src/sources/swift-org.js'
 
 const originalFetch = globalThis.fetch

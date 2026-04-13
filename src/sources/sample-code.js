@@ -53,7 +53,7 @@ export class SampleCodeAdapter extends SourceAdapter {
     for (const page of dbSamples) {
       const docKey = page.key ?? page.path
       if (!docKey) continue
-      keySet.add(docKey.startsWith(ROOT_SLUG + '/') ? docKey : `${ROOT_SLUG}/${docKey}`)
+      keySet.add(docKey.startsWith(`${ROOT_SLUG}/`) ? docKey : `${ROOT_SLUG}/${docKey}`)
     }
 
     // Fall back to a small bootstrap seed set when the corpus doesn't have

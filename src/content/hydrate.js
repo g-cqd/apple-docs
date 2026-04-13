@@ -16,7 +16,7 @@ export async function ensureNormalizedDocument(db, dataDir, key, sourceType = 'a
     return hydrateGuidelines(db, dataDir, key)
   }
 
-  const rawJson = await readJSON(join(dataDir, 'raw-json', key + '.json'))
+  const rawJson = await readJSON(join(dataDir, 'raw-json', `${key}.json`))
   if (!rawJson) return false
 
   const normalized = normalize(rawJson, key, sourceType)

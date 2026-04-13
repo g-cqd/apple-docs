@@ -1,19 +1,17 @@
-'use strict'
-
 let titleIndex = null // { frameworks, entries }
 let aliases = null
-let bodyShards = {}
+const _bodyShards = {}
 let baseUrl = ''
 
-self.addEventListener('message', async function (event) {
+self.addEventListener('message', async (event) => {
   const { type, query, limit, base } = event.data
 
   if (type === 'init') {
     if (base) baseUrl = base
     try {
       const [titleResp, aliasResp] = await Promise.all([
-        fetch(baseUrl + '/data/search/title-index.json'),
-        fetch(baseUrl + '/data/search/aliases.json'),
+        fetch(`${baseUrl}/data/search/title-index.json`),
+        fetch(`${baseUrl}/data/search/aliases.json`),
       ])
       titleIndex = await titleResp.json()
       aliases = await aliasResp.json()
@@ -38,9 +36,7 @@ function tokenize(query) {
   return query
     .toLowerCase()
     .split(/\s+/)
-    .filter(function (t) {
-      return t.length > 0
-    })
+    .filter((t) => t.length > 0)
 }
 
 function searchEntries(query, limit) {
@@ -74,18 +70,16 @@ function searchEntries(query, limit) {
       score = 80
     }
     // Key ends with query (path match)
-    else if (keyLower.endsWith('/' + queryLower) || keyLower === queryLower) {
+    else if (keyLower.endsWith(`/${queryLower}`) || keyLower === queryLower) {
       score = 75
     }
     // All terms found in title
-    else if (terms.every(function (t) { return titleLower.includes(t) })) {
+    else if (terms.every((t) => titleLower.includes(t))) {
       score = 60
     }
     // Some terms found in title or key
     else {
-      const matched = terms.filter(function (t) {
-        return titleLower.includes(t) || keyLower.includes(t)
-      })
+      const matched = terms.filter((t) => titleLower.includes(t) || keyLower.includes(t))
       if (matched.length > 0) {
         score = 30 * (matched.length / terms.length)
       }
@@ -111,8 +105,6 @@ function searchEntries(query, limit) {
   }
 
   // Sort by score descending, then by title length ascending (prefer shorter titles)
-  scored.sort(function (a, b) {
-    return b.score - a.score || a.title.length - b.title.length
-  })
+  scored.sort((a, b) => b.score - a.score || a.title.length - b.title.length)
   return scored.slice(0, limit)
 }

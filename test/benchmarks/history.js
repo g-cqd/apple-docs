@@ -19,7 +19,7 @@ export function recordBenchmark(name, metrics, opts = {}) {
     timestamp: new Date().toISOString(),
     runtime: `bun ${Bun.version}`,
   }
-  appendFileSync(filePath, JSON.stringify(entry) + '\n')
+  appendFileSync(filePath, `${JSON.stringify(entry)}\n`)
   return entry
 }
 

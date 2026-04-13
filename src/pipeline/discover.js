@@ -80,7 +80,7 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
 
   // Batch size for pulling from the queue — pull more than we can run
   // so the semaphore always has work to schedule
-  const batchSize = semaphore ? semaphore.max : (opts.concurrency ?? parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10))
+  const batchSize = semaphore ? semaphore.max : (opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10))
   let processed = 0
 
   while (true) {

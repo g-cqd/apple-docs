@@ -68,7 +68,7 @@ function normalizeDocC(json, key, sourceType) {
   const isDeprecated = meta.deprecated === true
   const isBeta = meta.beta === true
   const isReleaseNotes = Boolean(
-    (key && key.includes('release-notes')) || role === 'releaseNotes'
+    (key?.includes('release-notes')) || role === 'releaseNotes'
   )
   const urlDepth = key ? key.split('/').length - 1 : 0
 
@@ -163,7 +163,7 @@ function normalizeDocC(json, key, sourceType) {
       sectionKind: 'discussion',
       heading,
       contentText: renderContentNodesToText(nodes, refs) || null,
-      contentJson: JSON.stringify(nodes),
+      contentJson: JSON.stringify(resolveContentReferences(nodes, refs)),
       sortOrder: order++,
     })
   }
@@ -385,10 +385,7 @@ function resolveKind(json) {
  * Detect the primary language from module name or declaration tokens.
  */
 function resolveLanguage(json) {
-  const moduleName = json?.metadata?.modules?.[0]?.name
-  if (moduleName) return 'swift' // Apple frameworks are Swift-first
-
-  // Scan declaration languages
+  // Scan explicit declaration languages first — they are the most precise signal
   for (const section of json?.primaryContentSections ?? []) {
     if (section.kind !== 'declarations') continue
     for (const decl of section.declarations ?? []) {
@@ -397,6 +394,11 @@ function resolveLanguage(json) {
       if (langs.includes('occ')) return 'occ'
     }
   }
+
+  // Fall back to module name presence — Apple frameworks default to Swift
+  const moduleName = json?.metadata?.modules?.[0]?.name
+  if (moduleName) return 'swift'
+
   return null
 }
 
@@ -523,6 +525,71 @@ function resolveRefKey(id, refs) {
 }
 
 // ---------------------------------------------------------------------------
+// resolveContentReferences — embed titles and keys into content nodes
+// ---------------------------------------------------------------------------
+
+/**
+ * Deep-clone content nodes and resolve all reference identifiers to include
+ * human-readable titles and canonical keys for HTML rendering.
+ */
+function resolveContentReferences(nodes, refs) {
+  if (!Array.isArray(nodes)) return nodes
+  return nodes.map(node => resolveNodeRefs(node, refs))
+}
+
+function resolveNodeRefs(node, refs) {
+  if (!node || typeof node !== 'object') return node
+
+  // Reference inline node — embed title and key
+  if (node.type === 'reference') {
+    const ref = refs?.[node.identifier]
+    const key = resolveRefKey(node.identifier, refs)
+    const title = ref?.title ?? node.title ?? null
+    return { ...node, _resolvedTitle: title, _resolvedKey: key }
+  }
+
+  // Links block node — resolve each item identifier
+  if (node.type === 'links' && Array.isArray(node.items)) {
+    const resolvedItems = node.items.map(id => {
+      const ref = refs?.[id]
+      const key = resolveRefKey(id, refs)
+      const title = ref?.title ?? null
+      return { identifier: id, _resolvedTitle: title, _resolvedKey: key }
+    })
+    return { ...node, items: resolvedItems }
+  }
+
+  // Recurse into child content
+  const clone = { ...node }
+  if (Array.isArray(clone.inlineContent)) {
+    clone.inlineContent = clone.inlineContent.map(child => resolveNodeRefs(child, refs))
+  }
+  if (Array.isArray(clone.content)) {
+    clone.content = clone.content.map(child => resolveNodeRefs(child, refs))
+  }
+  if (Array.isArray(clone.items)) {
+    clone.items = clone.items.map(item => {
+      if (item?.content) return { ...item, content: item.content.map(child => resolveNodeRefs(child, refs)) }
+      return item
+    })
+  }
+  // Term list items
+  if (node.type === 'termList' && Array.isArray(clone.items)) {
+    clone.items = clone.items.map(item => {
+      const resolved = { ...item }
+      if (resolved.term?.inlineContent) {
+        resolved.term = { ...resolved.term, inlineContent: resolved.term.inlineContent.map(child => resolveNodeRefs(child, refs)) }
+      }
+      if (resolved.definition?.content) {
+        resolved.definition = { ...resolved.definition, content: resolved.definition.content.map(child => resolveNodeRefs(child, refs)) }
+      }
+      return resolved
+    })
+  }
+  return clone
+}
+
+// ---------------------------------------------------------------------------
 // renderContentNodesToText
 // ---------------------------------------------------------------------------
 
@@ -543,15 +610,15 @@ function renderNode(node, refs) {
 
   switch (node.type) {
     case 'paragraph':
-      return renderInlineNodes(node.inlineContent ?? [], refs) + '\n'
+      return `${renderInlineNodes(node.inlineContent ?? [], refs)}\n`
 
     case 'heading': {
       const text = node.text ?? renderInlineNodes(node.inlineContent ?? [], refs)
-      return (text ?? '') + '\n'
+      return `${text ?? ''}\n`
     }
 
     case 'codeListing':
-      return (node.code ?? []).join('\n') + '\n'
+      return `${(node.code ?? []).join('\n')}\n`
 
     case 'unorderedList':
     case 'orderedList':
@@ -567,23 +634,23 @@ function renderNode(node, refs) {
 
     case 'table': {
       const rows = node.rows ?? []
-      return rows
+      return `${rows
         .map(row => {
           const cells = Array.isArray(row) ? row : (row.cells ?? [])
           return cells
             .map(cell => renderContentNodesToText(cell.content ?? [], refs).trim())
             .join(' | ')
         })
-        .join('\n') + '\n'
+        .join('\n')}\n`
     }
 
     case 'links':
-      return (node.items ?? [])
+      return `${(node.items ?? [])
         .map(id => {
           const ref = refs?.[id]
           return ref?.title ?? normalizeIdentifier(id) ?? id
         })
-        .join('\n') + '\n'
+        .join('\n')}\n`
 
     // Inline types that may appear at block level
     case 'text':

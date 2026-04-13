@@ -11,7 +11,8 @@ import {
   writeSearchManifest,
 } from '../../src/web/search-artifacts.js'
 
-let db, tmpDir
+let db
+let tmpDir
 
 beforeEach(() => {
   db = new DocsDatabase(':memory:')
@@ -131,10 +132,10 @@ describe('buildAliasMap', () => {
   test('maps aliases to their canonical framework names', () => {
     const aliasMap = buildAliasMap(db)
     // Schema seeds: quartzcore -> coreanimation alias, coreanimation -> quartzcore alias, etc.
-    expect(aliasMap['coreanimation']).toBe('quartzcore')
-    expect(aliasMap['quartzcore']).toBe('coreanimation')
-    expect(aliasMap['quartz2d']).toBe('coregraphics')
-    expect(aliasMap['cocoa']).toBe('appkit')
+    expect(aliasMap.coreanimation).toBe('quartzcore')
+    expect(aliasMap.quartzcore).toBe('coreanimation')
+    expect(aliasMap.quartz2d).toBe('coregraphics')
+    expect(aliasMap.cocoa).toBe('appkit')
   })
 
   test('each value is a string canonical name', () => {
@@ -272,7 +273,7 @@ describe('generateSearchArtifacts', () => {
     await generateSearchArtifacts(db, tmpDir)
     const data = await Bun.file(join(tmpDir, 'aliases.json')).json()
     expect(typeof data).toBe('object')
-    expect(data['coreanimation']).toBe('quartzcore')
+    expect(data.coreanimation).toBe('quartzcore')
   })
 
   test('search-manifest.json contains expected fields', async () => {
@@ -300,7 +301,8 @@ describe('generateSearchArtifacts', () => {
 // ---------------------------------------------------------------------------
 
 describe('empty database', () => {
-  let emptyDb, emptyDir
+  let emptyDb
+  let emptyDir
 
   beforeEach(() => {
     emptyDb = new DocsDatabase(':memory:')

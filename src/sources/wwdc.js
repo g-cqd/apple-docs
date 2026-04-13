@@ -34,7 +34,7 @@ const VTT_TIMESTAMP_RE = /^(?:\d{2}:)?\d{2}:\d{2}\.\d{3}\s+-->\s+(?:\d{2}:)?\d{2
 export function parseWwdcKey(key) {
   const match = key.match(/^wwdc\/wwdc(\d{4})-(\d+)$/)
   if (!match) return null
-  return { year: parseInt(match[1], 10), sessionId: match[2] }
+  return { year: Number.parseInt(match[1], 10), sessionId: match[2] }
 }
 
 /**
@@ -396,7 +396,7 @@ export class WwdcAdapter extends SourceAdapter {
       // Expected path shape: en/<year>/<sessionId>.vtt  (e.g. en/2019/234.vtt)
       const match = entry.path.match(new RegExp(`^${ASCIIWWDC_LANGUAGE}/(\\d{4})/(\\d+)\\.vtt$`))
       if (!match) continue
-      const year = parseInt(match[1], 10)
+      const year = Number.parseInt(match[1], 10)
       if (year < ASCIIWWDC_YEAR_MIN || year > ASCIIWWDC_YEAR_MAX) continue
       keys.push(buildKey(year, match[2]))
     }
@@ -547,17 +547,17 @@ export class WwdcAdapter extends SourceAdapter {
 
     if (description) {
       sections.push({
-        kind: 'abstract',
+        sectionKind: 'abstract',
         heading: null,
-        content: description,
+        contentText: description,
       })
     }
 
     if (transcript) {
       sections.push({
-        kind: 'content',
+        sectionKind: 'content',
         heading: 'Transcript',
-        content: transcript,
+        contentText: transcript,
       })
     }
 
@@ -612,9 +612,9 @@ export class WwdcAdapter extends SourceAdapter {
 
     const sections = [
       {
-        kind: 'content',
+        sectionKind: 'content',
         heading: 'Transcript',
-        content: text,
+        contentText: text,
       },
     ]
 

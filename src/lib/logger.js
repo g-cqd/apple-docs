@@ -7,7 +7,7 @@ export function createLogger(level = process.env.APPLE_DOCS_LOG_LEVEL || 'info')
     if (LEVELS[lvl] < threshold) return
     const entry = { ts: new Date().toISOString(), level: lvl, msg }
     if (data !== undefined) entry.data = data
-    process.stderr.write(JSON.stringify(entry) + '\n')
+    process.stderr.write(`${JSON.stringify(entry)}\n`)
   }
 
   return {

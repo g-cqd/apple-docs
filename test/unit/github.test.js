@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import {
   checkRawGitHub,
   fetchGitHubTree,
@@ -164,50 +164,54 @@ describe('checkRawGitHub', () => {
 describe('token authentication', () => {
   test('includes Authorization header when GITHUB_TOKEN is set', async () => {
     process.env.GITHUB_TOKEN = 'ghp_test_token'
+    // biome-ignore lint/performance/noDelete: env vars require delete
     delete process.env.GH_TOKEN
 
     let capturedHeaders
 
-    globalThis.fetch = async (url, options) => {
+    globalThis.fetch = async (_url, options) => {
       capturedHeaders = options?.headers ?? {}
       return Response.json({ tree: [] })
     }
 
     await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
 
-    expect(capturedHeaders['Authorization']).toBe('Bearer ghp_test_token')
+    expect(capturedHeaders.Authorization).toBe('Bearer ghp_test_token')
   })
 
   test('includes Authorization header when GH_TOKEN is set (fallback)', async () => {
+    // biome-ignore lint/performance/noDelete: env vars require delete
     delete process.env.GITHUB_TOKEN
     process.env.GH_TOKEN = 'ghp_fallback_token'
 
     let capturedHeaders
 
-    globalThis.fetch = async (url, options) => {
+    globalThis.fetch = async (_url, options) => {
       capturedHeaders = options?.headers ?? {}
       return Response.json({ tree: [] })
     }
 
     await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
 
-    expect(capturedHeaders['Authorization']).toBe('Bearer ghp_fallback_token')
+    expect(capturedHeaders.Authorization).toBe('Bearer ghp_fallback_token')
   })
 
   test('omits Authorization header when no token is set', async () => {
+    // biome-ignore lint/performance/noDelete: env vars require delete
     delete process.env.GITHUB_TOKEN
+    // biome-ignore lint/performance/noDelete: env vars require delete
     delete process.env.GH_TOKEN
 
     let capturedHeaders
 
-    globalThis.fetch = async (url, options) => {
+    globalThis.fetch = async (_url, options) => {
       capturedHeaders = options?.headers ?? {}
       return Response.json({ tree: [] })
     }
 
     await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
 
-    expect(capturedHeaders['Authorization']).toBeUndefined()
+    expect(capturedHeaders.Authorization).toBeUndefined()
   })
 
   test('GITHUB_TOKEN takes precedence over GH_TOKEN', async () => {
@@ -216,14 +220,14 @@ describe('token authentication', () => {
 
     let capturedHeaders
 
-    globalThis.fetch = async (url, options) => {
+    globalThis.fetch = async (_url, options) => {
       capturedHeaders = options?.headers ?? {}
       return Response.json({ tree: [] })
     }
 
     await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
 
-    expect(capturedHeaders['Authorization']).toBe('Bearer primary_token')
+    expect(capturedHeaders.Authorization).toBe('Bearer primary_token')
   })
 })
 

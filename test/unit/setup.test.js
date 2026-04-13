@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, rmSync, } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'

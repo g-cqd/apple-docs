@@ -200,7 +200,7 @@ describe('extractHtmlContent — container detection', () => {
   })
 
   test('falls back to <body> when no semantic container found', () => {
-    const html = `<html><body><p>Body text only.</p></body></html>`
+    const html = "<html><body><p>Body text only.</p></body></html>"
     const { sections } = extractHtmlContent(html)
     const allText = sections.map(s => s.content).join(' ')
     expect(allText).toContain('Body text only.')

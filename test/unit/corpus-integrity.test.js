@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { verifyCorpusIntegrity } from '../../src/commands/consolidate.js'
 
-let db, tmpDir, logger
+let db
+let tmpDir
+let logger
 
 beforeEach(() => {
   db = new DocsDatabase(':memory:')

@@ -1,20 +1,18 @@
-(function () {
-  'use strict'
-
+;(() => {
   const worker = new Worker('/worker/search-worker.js')
-  const input = document.getElementById('search-input')
-  const dropdown = document.getElementById('search-results')
+  const input = document.querySelector('.search-input')
+  const dropdown = document.querySelector('.search-dropdown')
   if (!input || !dropdown) return
 
   let debounceTimer = null
   let activeIndex = -1
-  let currentResults = []
+  let _currentResults = []
 
   // Debounce helper
   function debounce(fn, ms) {
-    return function (...args) {
+    return (...args) => {
       clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(() => fn.apply(this, args), ms)
+      debounceTimer = setTimeout(() => fn(...args), ms)
     }
   }
 
@@ -28,11 +26,11 @@
   }
 
   // Handle input
-  const onInput = debounce(function () {
+  const onInput = debounce(() => {
     const query = input.value.trim()
     if (query.length < 2) {
       dropdown.hidden = true
-      currentResults = []
+      _currentResults = []
       return
     }
     worker.postMessage({ type: 'search', query, limit: 10 })
@@ -41,15 +39,15 @@
   input.addEventListener('input', onInput)
 
   // Handle worker results
-  worker.addEventListener('message', function (event) {
+  worker.addEventListener('message', (event) => {
     const { type, results, query } = event.data
     if (type === 'results') {
-      currentResults = results
+      _currentResults = results
       renderResults(results, query)
     }
   })
 
-  function renderResults(hits, query) {
+  function renderResults(hits, _query) {
     activeIndex = -1
     if (hits.length === 0) {
       dropdown.innerHTML = '<div class="no-results">No results found</div>'
@@ -61,8 +59,8 @@
         (hit, i) => `
       <a href="/docs/${esc(hit.key)}/" class="search-result" data-index="${i}">
         <span class="result-title">${esc(hit.title)}</span>
-        <span class="result-meta">${esc(hit.framework || '')}${hit.kind ? ' · ' + esc(hit.kind) : ''}</span>
-        ${hit.abstract ? '<span class="result-snippet">' + esc(hit.abstract) + '</span>' : ''}
+        <span class="result-meta">${esc(hit.framework || '')}${hit.kind ? ` · ${esc(hit.kind)}` : ''}</span>
+        ${hit.abstract ? `<span class="result-snippet">${esc(hit.abstract)}</span>` : ''}
       </a>
     `,
       )
@@ -71,7 +69,7 @@
   }
 
   // Keyboard navigation
-  input.addEventListener('keydown', function (e) {
+  input.addEventListener('keydown', (e) => {
     const items = dropdown.querySelectorAll('.search-result')
     if (items.length === 0) return
 
@@ -93,21 +91,21 @@
   })
 
   function updateActive(items) {
-    items.forEach(function (item, i) {
+    items.forEach((item, i) => {
       item.classList.toggle('active', i === activeIndex)
     })
     if (activeIndex >= 0) items[activeIndex].scrollIntoView({ block: 'nearest' })
   }
 
   // Close dropdown when clicking outside
-  document.addEventListener('click', function (e) {
+  document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-container')) {
       dropdown.hidden = true
     }
   })
 
   // Focus search with / key
-  document.addEventListener('keydown', function (e) {
+  document.addEventListener('keydown', (e) => {
     if (e.key === '/' && document.activeElement !== input && !e.ctrlKey && !e.metaKey) {
       e.preventDefault()
       input.focus()

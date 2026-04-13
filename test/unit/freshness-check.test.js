@@ -5,7 +5,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-let db, tmpDir, ctx
+let db
+let tmpDir
+let ctx
 
 beforeEach(() => {
   db = new DocsDatabase(':memory:')

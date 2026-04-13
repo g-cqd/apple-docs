@@ -70,8 +70,13 @@ function decodeEntities(text) {
 export function htmlToPlainText(html) {
   if (!html) return ''
 
+  // Strip XML declarations and processing instructions
+  let cleaned = html.replace(/<\?[^?]*\?>/g, '')
+  // Strip SVG elements entirely
+  cleaned = cleaned.replace(/<svg[\s\S]*?<\/svg>/gi, '')
+
   // Replace opening block tags with a paragraph-break sentinel
-  const withBreaks = html.replace(
+  const withBreaks = cleaned.replace(
     /<(\/?)(\w+)([^>]*)>/g,
     (_match, _slash, tag) => {
       const lower = tag.toLowerCase()

@@ -25,8 +25,8 @@ if (flags.help || !command) {
 const dataDir = flags.home ?? process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
 const logLevel = flags.verbose ? 'debug' : 'info'
 const logger = createLogger(logLevel)
-const rate = parseInt(flags.rate ?? process.env.APPLE_DOCS_RATE ?? '5', 10)
-const burst = Math.max(rate, parseInt(process.env.APPLE_DOCS_BURST ?? '2', 10))
+const rate = Number.parseInt(flags.rate ?? process.env.APPLE_DOCS_RATE ?? '5', 10)
+const burst = Math.max(rate, Number.parseInt(process.env.APPLE_DOCS_BURST ?? '2', 10))
 const rateLimiter = new RateLimiter(rate, burst)
 
 const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
@@ -49,7 +49,7 @@ try {
         framework: flags.framework,
         source: flags.source,
         kind: flags.kind,
-        limit: flags.limit ? parseInt(flags.limit) : undefined,
+        limit: flags.limit ? Number.parseInt(flags.limit) : undefined,
         fuzzy: !flags['no-fuzzy'],
         noDeep: !!flags['no-deep'],
         noEager: !!flags['no-eager'],
@@ -95,7 +95,7 @@ try {
     case 'browse': {
       const fw = positional[0]
       if (!fw) { showHelp('browse'); process.exit(1) }
-      result = await browse({ framework: fw, path: flags.path, limit: flags.limit ? parseInt(flags.limit) : undefined }, ctx)
+      result = await browse({ framework: fw, path: flags.path, limit: flags.limit ? Number.parseInt(flags.limit) : undefined }, ctx)
       formatter = formatBrowse
       break
     }
@@ -103,8 +103,8 @@ try {
     case 'sync': {
       const roots = flags.roots ? flags.roots.split(',').map(s => s.trim()) : undefined
       const sources = flags.sources ? flags.sources.split(',').map(s => s.trim()) : undefined
-      const concurrency = flags.concurrency ? parseInt(flags.concurrency, 10) : undefined
-      const parallel = flags.parallel ? parseInt(flags.parallel, 10) : undefined
+      const concurrency = flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined
+      const parallel = flags.parallel ? Number.parseInt(flags.parallel, 10) : undefined
       result = await sync({ roots, sources, full: !!flags.full, retryFailed: !!flags['retry-failed'], concurrency, parallel, indexBody: !!flags.index }, ctx)
       formatter = formatSync
       break
@@ -114,8 +114,8 @@ try {
       const { update } = await import('./src/commands/update.js')
       const roots = flags.roots ? flags.roots.split(',').map(s => s.trim()) : undefined
       const sources = flags.sources ? flags.sources.split(',').map(s => s.trim()) : undefined
-      const concurrency = flags.concurrency ? parseInt(flags.concurrency, 10) : undefined
-      const parallel = flags.parallel ? parseInt(flags.parallel, 10) : undefined
+      const concurrency = flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined
+      const parallel = flags.parallel ? Number.parseInt(flags.parallel, 10) : undefined
       result = await update({ roots, sources, concurrency, parallel, indexBody: !!flags.index }, ctx)
       formatter = formatUpdate
       break
@@ -146,11 +146,12 @@ try {
         case 'start': {
           const { startServer } = await import('./src/mcp/server.js')
           await startServer(ctx)
-          process.exit(0)
+          // Keep process alive — server uses stdio transport, exits on disconnect
+          await new Promise(() => {})
           break
         }
         case 'install': {
-          console.log(`MCP server configuration for apple-docs:\n`)
+          console.log("MCP server configuration for apple-docs:\n")
           console.log(JSON.stringify({
             mcpServers: {
               'apple-docs': {
@@ -160,7 +161,7 @@ try {
               },
             },
           }, null, 2))
-          console.log(`\nAlternatively, use the backward-compatible binary:`)
+          console.log("\nAlternatively, use the backward-compatible binary:")
           console.log(JSON.stringify({
             mcpServers: {
               'apple-docs': {
@@ -218,7 +219,7 @@ try {
         }
         case 'serve': {
           const { startDevServer } = await import('./src/web/serve.js')
-          const info = startDevServer({ port: flags.port ? parseInt(flags.port) : 3000, baseUrl: flags['base-url'] }, ctx)
+          const info = startDevServer({ port: flags.port ? Number.parseInt(flags.port) : 3000, baseUrl: flags['base-url'] }, ctx)
           console.log(`Dev server running at ${info.url}`)
           console.log('Press Ctrl+C to stop')
           // Keep process alive
@@ -249,7 +250,7 @@ try {
         case 'gc': {
           const { storageGc } = await import('./src/commands/storage.js')
           const drop = flags.drop ? flags.drop.split(',').map(s => s.trim()) : []
-          const olderThan = flags['older-than'] ? parseInt(flags['older-than'], 10) : undefined
+          const olderThan = flags['older-than'] ? Number.parseInt(flags['older-than'], 10) : undefined
           result = await storageGc({ drop, olderThan, vacuum: !flags['no-vacuum'] }, ctx)
           formatter = formatStorageGc
           break

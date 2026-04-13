@@ -1,5 +1,5 @@
-import { join, basename } from 'node:path'
-import { existsSync, statSync, readdirSync } from 'node:fs'
+import { join, } from 'node:path'
+import { existsSync, } from 'node:fs'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
@@ -69,6 +69,7 @@ export async function snapshotBuild(opts, ctx) {
 
     // 3. Strip per tier
     const copyDb = new Database(copyPath)
+    let documentCount = 0
     try {
       const tablesToDrop = tier === 'lite' ? [...LITE_DROP] : []
 
@@ -89,7 +90,7 @@ export async function snapshotBuild(opts, ctx) {
       }
 
       // 4. Write snapshot_meta
-      const documentCount = copyDb.query('SELECT COUNT(*) as c FROM documents').get().c
+      documentCount = copyDb.query('SELECT COUNT(*) as c FROM documents').get().c
       const pageCount = copyDb.query("SELECT COUNT(*) as c FROM pages WHERE status = 'active'").get().c
 
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_version', tag])
@@ -115,12 +116,7 @@ export async function snapshotBuild(opts, ctx) {
       schemaVersion: SCHEMA_VERSION,
       tier,
       createdAt: new Date().toISOString(),
-      documentCount: parseInt(
-        new Database(copyPath, { readonly: true })
-          .query('SELECT value FROM snapshot_meta WHERE key = ?')
-          .get('snapshot_document_count').value,
-        10,
-      ),
+      documentCount,
       dbChecksum,
       dbSize,
     }

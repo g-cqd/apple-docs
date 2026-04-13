@@ -29,7 +29,20 @@ const DEFAULT_TIMEOUT = 30_000
  * @returns {object}
  */
 function parseArchiveLibrary(rawText) {
-  return new Function(`return (${rawText})`)()
+  // Try strict JSON first
+  try { return JSON.parse(rawText) } catch {}
+  // Apple serves JS object literals — sanitize to valid JSON before parsing:
+  // 1. Strip wrapping parens: ({...}) → {...}
+  // 2. Remove trailing commas before } or ]
+  // 3. Quote unquoted property keys
+  let sanitized = rawText.trim()
+  if (sanitized.startsWith('(') && sanitized.endsWith(')')) {
+    sanitized = sanitized.slice(1, -1)
+  }
+  sanitized = sanitized
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/([{,]\s*)([a-zA-Z_$][\w$]*)\s*:/g, '$1"$2":')
+  return JSON.parse(sanitized)
 }
 
 /**

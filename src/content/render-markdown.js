@@ -37,7 +37,7 @@ export function renderMarkdown(document, sections = []) {
     }
   }
 
-  return parts.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n'
+  return `${parts.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`
 }
 
 function renderSectionMarkdown(section) {

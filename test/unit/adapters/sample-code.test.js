@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { SampleCodeAdapter } from '../../../src/sources/sample-code.js'
 
 const originalFetch = globalThis.fetch

@@ -277,8 +277,16 @@ export function renderFrameworkPage(framework, documents, siteConfig) {
   const roleSections = []
   for (const [role, docs] of byRole) {
     const docsHtml = docs.map(doc => {
-      const href = `${siteConfig.baseUrl}/docs/${escapeAttr(doc.key)}/`
-      return `<li><a href="${href}">${escapeAttr(doc.title ?? doc.key)}</a></li>`
+      const docKey = doc.key ?? doc.path ?? ''
+      const href = `${siteConfig.baseUrl}/docs/${escapeAttr(docKey)}/`
+      const title = escapeAttr(doc.title ?? docKey)
+      // Show role_heading as metadata to distinguish duplicates (e.g. .!=(_:_:) across types)
+      const meta = doc.role_heading ? `<span class="doc-item-meta">${escapeAttr(doc.role_heading)}</span>` : ''
+      const abstractText = doc.abstract_text ?? doc.abstract ?? ''
+      const abstract = abstractText
+        ? `<span class="doc-item-meta">— ${escapeAttr(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
+        : ''
+      return `<li><a href="${href}">${title}</a>${meta}${abstract}</li>`
     }).join('\n      ')
 
     roleSections.push(`<section class="role-group">

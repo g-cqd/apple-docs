@@ -125,10 +125,11 @@ export function createServer(ctx) {
       limit: z.number().optional().describe('Max results (default 10)'),
     },
     async (args) => {
+      const requestedLimit = args.limit ?? 10
       const searchArgs = {
         query: args.query,
         framework: 'wwdc',
-        limit: args.limit ?? 10,
+        limit: (args.year || args.track) ? requestedLimit * 5 : requestedLimit,
       }
       const result = await search(searchArgs, ctx)
       // Post-filter by year/track from sourceMetadata
@@ -140,8 +141,8 @@ export function createServer(ctx) {
             if (args.year && meta.year !== args.year) return false
             if (args.track && meta.track && !meta.track.toLowerCase().includes(args.track.toLowerCase())) return false
             return true
-          } catch { return true }
-        })
+          } catch { return false }
+        }).slice(0, requestedLimit)
       }
       return { content: [{ type: 'text', text: JSON.stringify({ ...result, results: filtered }, null, 2) }] }
     },
@@ -177,13 +178,16 @@ export function createServer(ctx) {
     async (args) => {
       const result = await lookup({ path: args.sample_key }, ctx)
       if (args.file_path && result.sections) {
+        // Try heading match first, then search content text for the file path
         const fileSection = result.sections.find(s =>
           s.heading === args.file_path || s.heading?.endsWith(args.file_path),
+        ) ?? result.sections.find(s =>
+          s.contentText?.includes(args.file_path),
         )
         if (fileSection) {
-          return { content: [{ type: 'text', text: fileSection.content_text ?? fileSection.contentText ?? 'File content not available.' }] }
+          return { content: [{ type: 'text', text: fileSection.contentText ?? fileSection.content_text ?? 'File content not available.' }] }
         }
-        return { content: [{ type: 'text', text: `File not found: ${args.file_path}` }] }
+        return { content: [{ type: 'text', text: `File not found: ${args.file_path}. Available sections: ${result.sections.map(s => s.heading ?? s.sectionKind).filter(Boolean).join(', ')}` }] }
       }
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },

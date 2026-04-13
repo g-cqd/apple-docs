@@ -26,7 +26,7 @@ export async function lookup(opts, ctx) {
   }
 
   // Read markdown content — try persisted file first, then render on-demand from raw JSON
-  const mdPath = join(dataDir, 'markdown', page.path + '.md')
+  const mdPath = join(dataDir, 'markdown', `${page.path}.md`)
   let content = await readText(mdPath)
   let fallback = false
 
@@ -43,7 +43,7 @@ export async function lookup(opts, ctx) {
   }
 
   if (!content) {
-    const jsonPath = join(dataDir, 'raw-json', page.path + '.json')
+    const jsonPath = join(dataDir, 'raw-json', `${page.path}.json`)
     const json = await readJSON(jsonPath)
     if (json) {
       try {

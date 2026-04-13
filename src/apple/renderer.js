@@ -87,7 +87,7 @@ export function renderPage(json, canonicalPath) {
     }
   }
 
-  return parts.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n'
+  return `${parts.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`
 }
 
 // --- Section renderers ---
@@ -97,7 +97,7 @@ function renderDeclarations(section) {
   for (const decl of section.declarations ?? []) {
     const code = (decl.tokens ?? []).map(t => t.text).join('')
     const lang = decl.languages?.[0] ?? 'swift'
-    lines.push('```' + lang)
+    lines.push(`\`\`\`${lang}`)
     lines.push(code)
     lines.push('```')
     lines.push('')
@@ -148,26 +148,26 @@ function renderContentNodes(nodes, refs, fromPath) {
 function renderContentNode(node, refs, fromPath) {
   switch (node.type) {
     case 'paragraph':
-      return renderInline(node.inlineContent ?? [], refs, fromPath) + '\n'
+      return `${renderInline(node.inlineContent ?? [], refs, fromPath)}\n`
 
     case 'heading':
-      return '#'.repeat(node.level ?? 2) + ' ' + (node.text ?? renderInline(node.inlineContent ?? [], refs, fromPath)) + '\n'
+      return `${'#'.repeat(node.level ?? 2)} ${node.text ?? renderInline(node.inlineContent ?? [], refs, fromPath)}\n`
 
     case 'codeListing': {
       const lang = node.syntax ?? ''
       const code = (node.code ?? []).join('\n')
-      return '```' + lang + '\n' + code + '\n```\n'
+      return `\`\`\`${lang}\n${code}\n\`\`\`\n`
     }
 
     case 'unorderedList':
-      return (node.items ?? []).map(item =>
+      return `${(node.items ?? []).map(item =>
         renderListItem(item, '- ', refs, fromPath)
-      ).join('\n') + '\n'
+      ).join('\n')}\n`
 
     case 'orderedList':
-      return (node.items ?? []).map((item, i) =>
+      return `${(node.items ?? []).map((item, i) =>
         renderListItem(item, `${i + 1}. `, refs, fromPath)
-      ).join('\n') + '\n'
+      ).join('\n')}\n`
 
     case 'aside': {
       const style = node.style ?? 'Note'
@@ -180,7 +180,7 @@ function renderContentNode(node, refs, fromPath) {
 
     case 'links':
       // Links section: render as list
-      return (node.items ?? []).map(id => {
+      return `${(node.items ?? []).map(id => {
         const ref = refs[id]
         const normPath = normalizeIdentifier(id)
         const title = ref?.title ?? normPath ?? id
@@ -188,12 +188,12 @@ function renderContentNode(node, refs, fromPath) {
           return `- [${title}](${relativePath(fromPath, normPath)}.md)`
         }
         return `- ${title}`
-      }).join('\n') + '\n'
+      }).join('\n')}\n`
 
     default:
       // Try to render inline content if present
       if (node.inlineContent) {
-        return renderInline(node.inlineContent, refs, fromPath) + '\n'
+        return `${renderInline(node.inlineContent, refs, fromPath)}\n`
       }
       if (node.content) {
         return renderContentNodes(node.content, refs, fromPath)
@@ -216,7 +216,7 @@ function renderTable(node, refs, fromPath) {
   }
 
   const header = rows[0]
-  const headerCells = (header.cells ?? header).map?.(c => Array.isArray(c) ? c : c) ?? []
+  const _headerCells = (header.cells ?? header).map?.(c => Array.isArray(c) ? c : c) ?? []
   // Handle both { cells: [...] } format and direct array format
   const getRowCells = (row) => {
     if (Array.isArray(row)) return row
@@ -225,13 +225,13 @@ function renderTable(node, refs, fromPath) {
 
   const hCells = getRowCells(rows[0]).map(renderCell)
   const lines = [
-    '| ' + hCells.join(' | ') + ' |',
-    '| ' + hCells.map(() => '---').join(' | ') + ' |',
+    `| ${hCells.join(' | ')} |`,
+    `| ${hCells.map(() => '---').join(' | ')} |`,
   ]
 
   for (let i = 1; i < rows.length; i++) {
     const cells = getRowCells(rows[i]).map(renderCell)
-    lines.push('| ' + cells.join(' | ') + ' |')
+    lines.push(`| ${cells.join(' | ')} |`)
   }
   lines.push('')
   return lines.join('\n')

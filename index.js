@@ -11,7 +11,7 @@ if (!dataDir) {
   process.stderr.write('Set it to the path of your apple-docs data directory.\n')
   process.stderr.write('Populate it first with: apple-docs sync --home /path/to/data\n\n')
   process.stderr.write('Example MCP config:\n')
-  process.stderr.write(JSON.stringify({
+  process.stderr.write(`${JSON.stringify({
     mcpServers: {
       'apple-docs': {
         command: 'bun',
@@ -19,7 +19,7 @@ if (!dataDir) {
         env: { APPLE_DOCS_HOME: '/path/to/apple-docs-data' },
       },
     },
-  }, null, 2) + '\n')
+  }, null, 2)}\n`)
   process.exit(1)
 }
 

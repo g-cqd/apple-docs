@@ -17,7 +17,7 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
  */
 export async function search(opts, ctx) {
   const { query, kind } = opts
-  const limit = Math.max(parseInt(opts.limit) || 100, 1)
+  const limit = Math.max(Number.parseInt(opts.limit) || 100, 1)
   const sourceTypes = normalizeSourceFilter(opts.source)
   const searchLimit = sourceTypes ? Math.max(limit * 10, 200) : limit
 
@@ -57,7 +57,9 @@ export async function search(opts, ctx) {
     }
   }
 
-  const filterOpts = { kind, limit: searchLimit, language, ...platformFilters }
+  // Push single source_type to SQL for efficient filtering; multi-source stays as JS post-filter
+  const sqlSourceType = sourceTypes && sourceTypes.length === 1 ? sourceTypes[0] : null
+  const filterOpts = { kind, limit: searchLimit, language, sourceType: sqlSourceType, ...platformFilters }
 
   // Start body search in background if index exists and not disabled
   let bodyPromise = null
@@ -258,5 +260,5 @@ function buildFtsQuery(q) {
   }
 
   // All terms with prefix on last
-  return unique.slice(0, -1).map(t => `"${t}"`).join(' ') + ` "${unique.at(-1)}"*`
+  return `${unique.slice(0, -1).map(t => `"${t}"`).join(' ')} "${unique.at(-1)}"*`
 }

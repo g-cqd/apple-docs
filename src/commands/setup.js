@@ -86,7 +86,7 @@ export async function setup(opts, ctx) {
     db.close()
 
     // Remove old DB files (WAL/SHM may interfere with the extracted snapshot)
-    const dbFiles = [dbPath, dbPath + '-wal', dbPath + '-shm']
+    const dbFiles = [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]
     for (const f of dbFiles) {
       if (existsSync(f)) rmSync(f, { force: true })
     }

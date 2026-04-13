@@ -1,15 +1,13 @@
-;(function () {
-  'use strict'
-
-  var STORAGE_KEY = 'apple-docs-theme'
-  var CYCLE = ['auto', 'light', 'dark']
+;(() => {
+  const STORAGE_KEY = 'apple-docs-theme'
+  const CYCLE = ['auto', 'light', 'dark']
 
   /** Read the persisted theme preference, defaulting to 'auto'. */
   function readPreference() {
     try {
-      var stored = localStorage.getItem(STORAGE_KEY)
+      const stored = localStorage.getItem(STORAGE_KEY)
       if (stored && CYCLE.indexOf(stored) !== -1) return stored
-    } catch (_) {
+    } catch {
       // localStorage unavailable (private browsing, storage disabled)
     }
     return 'auto'
@@ -19,7 +17,7 @@
   function savePreference(theme) {
     try {
       localStorage.setItem(STORAGE_KEY, theme)
-    } catch (_) {
+    } catch {
       // Ignore write errors
     }
   }
@@ -29,12 +27,12 @@
     document.documentElement.setAttribute('data-theme', theme)
   }
 
-  /** Cycle the theme: auto → light → dark → auto */
+  /** Cycle the theme: auto -> light -> dark -> auto */
   function cycleTheme() {
-    var current = document.documentElement.getAttribute('data-theme') || 'auto'
-    var currentIndex = CYCLE.indexOf(current)
-    var nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % CYCLE.length
-    var next = CYCLE[nextIndex]
+    const current = document.documentElement.getAttribute('data-theme') || 'auto'
+    const currentIndex = CYCLE.indexOf(current)
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % CYCLE.length
+    const next = CYCLE[nextIndex]
     applyTheme(next)
     savePreference(next)
     updateToggleLabel(next)
@@ -42,24 +40,24 @@
 
   /** Update the toggle button aria-label and symbol to reflect the active theme. */
   function updateToggleLabel(theme) {
-    var toggles = document.querySelectorAll('.theme-toggle')
-    var labels = { auto: 'Theme: auto', light: 'Theme: light', dark: 'Theme: dark' }
-    var symbols = { auto: '\u9680', light: '\u2600\ufe0f', dark: '\uD83C\uDF19' }
-    for (var i = 0; i < toggles.length; i++) {
+    const toggles = document.querySelectorAll('.theme-toggle')
+    const labels = { auto: 'Theme: auto', light: 'Theme: light', dark: 'Theme: dark' }
+    const symbols = { auto: '\u9680', light: '\u2600\ufe0f', dark: '\uD83C\uDF19' }
+    for (let i = 0; i < toggles.length; i++) {
       toggles[i].setAttribute('aria-label', labels[theme] || 'Toggle theme')
       toggles[i].textContent = symbols[theme] || '\u9680'
     }
   }
 
   // Apply preference immediately to avoid flash of wrong theme
-  var initial = readPreference()
+  const initial = readPreference()
   applyTheme(initial)
 
   // Wire up toggle buttons once the DOM is ready
-  document.addEventListener('DOMContentLoaded', function () {
+  document.addEventListener('DOMContentLoaded', () => {
     updateToggleLabel(initial)
-    var toggles = document.querySelectorAll('.theme-toggle')
-    for (var i = 0; i < toggles.length; i++) {
+    const toggles = document.querySelectorAll('.theme-toggle')
+    for (let i = 0; i < toggles.length; i++) {
       toggles[i].addEventListener('click', cycleTheme)
     }
   })

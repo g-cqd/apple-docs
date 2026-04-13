@@ -5,7 +5,9 @@ import { createServer } from '../../src/mcp/server.js'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { createLogger } from '../../src/lib/logger.js'
 
-let db, server, client
+let db
+let server
+let client
 
 beforeEach(async () => {
   db = new DocsDatabase(':memory:')

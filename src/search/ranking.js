@@ -80,6 +80,24 @@ export function rerank(results, query, intent) {
       score *= 1.1
     }
 
+    // R9: Error intent — boost articles about errors and troubleshooting
+    if (intent.type === 'error') {
+      const kind = (r.kind ?? r.docKind ?? '').toLowerCase()
+      const title = (r.title ?? '').toLowerCase()
+      if (kind === 'article' || title.includes('error') || title.includes('troubleshoot')) {
+        score *= 1.2
+      }
+    }
+
+    // R10: Concept intent — boost guides, articles, and conceptual content
+    if (intent.type === 'concept') {
+      const kind = (r.kind ?? r.docKind ?? '').toLowerCase()
+      const st = (r.sourceType ?? '').toLowerCase()
+      if (kind === 'article' || st === 'hig' || st === 'swift-book') {
+        score *= 1.2
+      }
+    }
+
     r.score = score
   }
 

@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { buildStaticSite } from '../../src/web/build.js'
 
-let db, tmpDir, outDir, ctx
+let db
+let tmpDir
+let outDir
+let ctx
 
 beforeEach(() => {
   db = new DocsDatabase(':memory:')
@@ -70,7 +73,7 @@ describe('buildStaticSite (P7-D)', () => {
   })
 
   test('creates manifest.json with correct counts', async () => {
-    const result = await buildStaticSite({ out: outDir }, ctx)
+    const _result = await buildStaticSite({ out: outDir }, ctx)
     expect(existsSync(join(outDir, 'manifest.json'))).toBe(true)
     const manifest = JSON.parse(readFileSync(join(outDir, 'manifest.json'), 'utf8'))
     expect(manifest.totalDocuments).toBe(2)

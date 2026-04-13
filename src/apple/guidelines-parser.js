@@ -9,7 +9,7 @@ const ROOT_SLUG = 'app-store-review'
 /**
  * Section number regex — matches patterns like: 1, 1.1, 1.1.1, 3.1.3(a), 5.1.1
  */
-const SECTION_NUM_RE = /^(\d+(?:\.\d+)*(?:\([a-z]\))?)$/
+const _SECTION_NUM_RE = /^(\d+(?:\.\d+)*(?:\([a-z]\))?)$/
 
 /**
  * Parse the guidelines HTML into an array of section objects.
@@ -71,7 +71,7 @@ export async function parseGuidelinesHtml(html) {
   const markerPositions = []
   let m
   while ((m = markerRe.exec(contentHtml)) !== null) {
-    markerPositions.push({ index: m.index, metaIdx: parseInt(m[1], 10), marker: m[0] })
+    markerPositions.push({ index: m.index, metaIdx: Number.parseInt(m[1], 10), marker: m[0] })
   }
 
   const sections = []
@@ -82,7 +82,7 @@ export async function parseGuidelinesHtml(html) {
     const chunkStart = pos.index + pos.marker.length
     const chunkEnd = i + 1 < markerPositions.length ? markerPositions[i + 1].index : contentHtml.length
 
-    let chunkHtml = contentHtml.slice(chunkStart, chunkEnd)
+    const chunkHtml = contentHtml.slice(chunkStart, chunkEnd)
 
     // For <li data-sidenav> sections, the chunk starts inside the <li> — it includes
     // the content of that <li> plus any nested children. But it may also include
@@ -134,8 +134,8 @@ async function htmlToMarkdown(html) {
   let linkHref = null
   let inStrong = false
   let strongBuf = ''
-  let listStack = []  // track list nesting: 'disc' | 'no-bullet'
-  let inListItem = false
+  const listStack = []  // track list nesting: 'disc' | 'no-bullet'
+  let _inListItem = false
   let skipDepth = 0   // for elements we want to skip entirely
 
   const rw = new HTMLRewriter()
@@ -150,8 +150,8 @@ async function htmlToMarkdown(html) {
   rw.on('h1, h2, h3', {
     element(el) {
       if (skipDepth > 0) return
-      const level = parseInt(el.tagName[1])
-      parts.push('\n' + '#'.repeat(level) + ' ')
+      const level = Number.parseInt(el.tagName[1])
+      parts.push(`\n${'#'.repeat(level)} `)
       el.onEndTag(() => parts.push('\n\n'))
     },
   })
@@ -196,11 +196,11 @@ async function htmlToMarkdown(html) {
       el.onEndTag(() => {
         // Make relative URLs absolute
         let href = linkHref
-        if (href && href.startsWith('/')) {
+        if (href?.startsWith('/')) {
           href = `https://developer.apple.com${href}`
         }
         // Convert internal guideline anchors to section references
-        if (href && href.startsWith('#')) {
+        if (href?.startsWith('#')) {
           href = `#${href.slice(1)}`
         }
         parts.push(`](${href})`)
@@ -257,9 +257,9 @@ async function htmlToMarkdown(html) {
         parts.push(`${indent}1. `)
       }
       // 'no-bullet' list items get no prefix — they're guideline sections
-      inListItem = true
+      _inListItem = true
       el.onEndTag(() => {
-        inListItem = false
+        _inListItem = false
         parts.push('\n')
       })
     },
@@ -275,7 +275,7 @@ async function htmlToMarkdown(html) {
 
   // Images (skip, they're mostly ASR/NR badges already stripped)
   rw.on('img', {
-    element(el) {
+    element(_el) {
       // Already stripped ASR badges in phase 1, skip any remaining
     },
   })
@@ -303,7 +303,7 @@ async function htmlToMarkdown(html) {
   await rw.transform(new Response(wrapped)).text()
 
   // Clean up the markdown
-  let md = parts.join('')
+  const md = parts.join('')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -334,7 +334,7 @@ function resolveTitle(meta, markdown) {
   const firstLine = markdown.split('\n').find(l => l.trim())
   if (firstLine) {
     // Strip markdown heading prefix and numbering-dot prefix
-    let title = firstLine.replace(/^#+\s*/, '').trim()
+    const title = firstLine.replace(/^#+\s*/, '').trim()
     return title
   }
 
@@ -357,7 +357,7 @@ function extractSectionNumber(title) {
 /**
  * Extract the first sentence as an abstract.
  */
-function extractAbstract(markdown, title) {
+function extractAbstract(markdown, _title) {
   // Remove the title line, heading lines, and list prefixes
   const lines = markdown.split('\n')
     .filter(l => !l.startsWith('#') && l.trim())

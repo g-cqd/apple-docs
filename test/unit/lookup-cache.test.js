@@ -7,7 +7,9 @@ import { lookup } from '../../src/commands/lookup.js'
 import { setProfile } from '../../src/storage/profiles.js'
 import { readText } from '../../src/storage/files.js'
 
-let db, dataDir, ctx
+let db
+let dataDir
+let ctx
 
 beforeEach(() => {
   db = new DocsDatabase(':memory:')
