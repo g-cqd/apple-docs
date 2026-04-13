@@ -30,7 +30,7 @@ export async function consolidate(opts, ctx) {
   let resolved = 0
   let retried = 0
   let retriedOk = 0
-  let genuine = 0
+  const _genuine = 0
   const resolvedPaths = [] // { oldPath, newPath, root }
 
   // Phase 1: clean up entries that are not valid standalone pages
@@ -57,10 +57,10 @@ export async function consolidate(opts, ctx) {
     const parentPath = segments.slice(0, -1).join('/')
 
     // Read parent's raw JSON to find the correct reference URL
-    const parentJson = await readJSON(join(dataDir, 'raw-json', parentPath + '.json'))
+    const parentJson = await readJSON(join(dataDir, 'raw-json', `${parentPath}.json`))
     if (!parentJson) continue
 
-    const lastSeg = segments[segments.length - 1]
+    const _lastSeg = segments[segments.length - 1]
 
     // Search references for one whose identifier matches this failed path
     for (const [id, ref] of Object.entries(parentJson.references ?? {})) {
@@ -100,7 +100,7 @@ export async function consolidate(opts, ctx) {
       // Fetch the correct URL
       try {
         const { json, etag, lastModified } = await fetchDocPage(newPath, rateLimiter)
-        const jsonStr = await writeJSON(join(dataDir, 'raw-json', newPath + '.json'), json)
+        const jsonStr = await writeJSON(join(dataDir, 'raw-json', `${newPath}.json`), json)
         const contentHash = sha256(jsonStr)
         const meta = extractMetadata(json)
         const rootSlug = extractRootSlug(newPath)
@@ -126,7 +126,7 @@ export async function consolidate(opts, ctx) {
           // Convert to markdown
           try {
             const markdown = renderPage(json, newPath)
-            await writeText(join(dataDir, 'markdown', newPath + '.md'), markdown)
+            await writeText(join(dataDir, 'markdown', `${newPath}.md`), markdown)
             db.markConverted(newPath)
           } catch {}
 
@@ -175,7 +175,19 @@ export async function consolidate(opts, ctx) {
     bodyIndexed = idxResult.indexed
   }
 
-  // Phase 6: verify snapshot/corpus integrity (if requested)
+  // Phase 6: clean up orphan relationships (referencing non-existent documents)
+  let orphanRelsCleaned = 0
+  if (!dryRun) {
+    const { changes } = db.db.run(
+      'DELETE FROM document_relationships WHERE from_key NOT IN (SELECT key FROM documents) OR to_key NOT IN (SELECT key FROM documents)'
+    )
+    orphanRelsCleaned = changes
+    if (orphanRelsCleaned > 0) {
+      logger.info(`Cleaned ${orphanRelsCleaned} orphan relationships`)
+    }
+  }
+
+  // Phase 7: verify snapshot/corpus integrity (if requested)
   let snapshotVerification = null
   let corpusIntegrity = null
   if (opts.verify) {
@@ -195,6 +207,7 @@ export async function consolidate(opts, ctx) {
     minified,
     minifySaved,
     bodyIndexed,
+    orphanRelsCleaned,
     snapshotVerification,
     corpusIntegrity,
     resolvedPaths: dryRun ? resolvedPaths : undefined,
@@ -202,7 +215,7 @@ export async function consolidate(opts, ctx) {
   }
 }
 
-function verifySnapshot(db, logger) {
+function verifySnapshot(db, _logger) {
   const tier = db.getSnapshotMeta('snapshot_tier')
   if (!tier) {
     return { installed: false, message: 'No snapshot found. Corpus was built locally.' }
@@ -211,7 +224,7 @@ function verifySnapshot(db, logger) {
   const checks = []
 
   // Check 1: document count
-  const expectedCount = parseInt(db.getSnapshotMeta('snapshot_document_count') ?? '0', 10)
+  const expectedCount = Number.parseInt(db.getSnapshotMeta('snapshot_document_count') ?? '0', 10)
   const actualCount = db.db.query('SELECT COUNT(*) as c FROM documents').get().c
   checks.push({
     name: 'document_count',
@@ -221,7 +234,7 @@ function verifySnapshot(db, logger) {
   })
 
   // Check 2: schema version
-  const expectedSchema = parseInt(db.getSnapshotMeta('snapshot_schema_version') ?? '0', 10)
+  const expectedSchema = Number.parseInt(db.getSnapshotMeta('snapshot_schema_version') ?? '0', 10)
   const actualSchema = db.getSchemaVersion()
   checks.push({
     name: 'schema_version',
@@ -257,7 +270,7 @@ function verifySnapshot(db, logger) {
  * @param {{ debug: Function, info: Function, warn: Function, error: Function }} logger
  * @returns {{ checks: Array<{ name: string, ok: boolean, detail?: string }>, allOk: boolean }}
  */
-export function verifyCorpusIntegrity(db, dataDir, logger) {
+export function verifyCorpusIntegrity(db, dataDir, _logger) {
   const checks = []
 
   // Check 1: FTS integrity for documents_fts
@@ -314,7 +327,7 @@ export function verifyCorpusIntegrity(db, dataDir, logger) {
   const sampleDocs = db.db.query('SELECT key FROM documents ORDER BY RANDOM() LIMIT 10').all()
   let missingFiles = 0
   for (const doc of sampleDocs) {
-    const filePath = join(dataDir, 'raw-json', doc.key + '.json')
+    const filePath = join(dataDir, 'raw-json', `${doc.key}.json`)
     try {
       statSync(filePath)
     } catch {

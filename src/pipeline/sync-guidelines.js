@@ -1,37 +1,9 @@
-import { fetchHtmlPage } from '../apple/api.js'
-import { parseGuidelinesHtml, ROOT_SLUG, GUIDELINES_URL } from '../apple/guidelines-parser.js'
+import { ROOT_SLUG, GUIDELINES_URL } from '../apple/guidelines-parser.js'
 import { normalize } from '../content/normalize.js'
 import { toFrontMatter } from '../lib/yaml.js'
 import { sha256 } from '../lib/hash.js'
 import { stableStringify, writeText } from '../storage/files.js'
 import { join } from 'node:path'
-
-/**
- * Sync the App Store Review Guidelines from Apple's website.
- * Fetches the HTML page, parses it into sections, and stores them
- * in the same format as DocC documentation (DB + Markdown files).
- *
- * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string, rateLimiter: import('../lib/rate-limiter.js').RateLimiter, logger: object }} ctx
- * @returns {{ sections: number, lastUpdated: string|null }}
- */
-export async function syncGuidelines(db, dataDir, rateLimiter, logger) {
-  logger.info('Fetching App Store Review Guidelines...')
-  const { html, etag, lastModified } = await fetchHtmlPage(GUIDELINES_URL, rateLimiter)
-
-  logger.info('Parsing guidelines HTML...')
-  const { sections, lastUpdated } = await parseGuidelinesHtml(html)
-  logger.info(`Parsed ${sections.length} guideline sections (last updated: ${lastUpdated ?? 'unknown'})`)
-
-  const result = await applyGuidelinesSnapshot(db, dataDir, {
-    html,
-    etag,
-    lastModified,
-    sections,
-    lastUpdated,
-  })
-  logger.info(`Synced ${result.sections} guideline sections`)
-  return result
-}
 
 export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
   const {
@@ -75,10 +47,10 @@ export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
       notarization: section.notarization || undefined,
       last_updated: lastUpdated || undefined,
     }
-    const markdown = toFrontMatter(fm) + '\n\n' + section.markdown + '\n'
+    const markdown = `${toFrontMatter(fm)}\n\n${section.markdown}\n`
 
     // Write Markdown file
-    await writeText(join(dataDir, 'markdown', section.path + '.md'), markdown)
+    await writeText(join(dataDir, 'markdown', `${section.path}.md`), markdown)
 
     // Upsert page in DB
     const page = db.upsertPage({

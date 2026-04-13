@@ -1,5 +1,10 @@
+import {
+  fetchWithRetry,
+  checkResourceEtag,
+} from './fetch-with-retry.js'
+
 const USER_AGENT = 'apple-docs/2.0'
-const DEFAULT_TIMEOUT = parseInt(process.env.APPLE_DOCS_GITHUB_TIMEOUT ?? process.env.APPLE_DOCS_TIMEOUT ?? '45000', 10)
+const DEFAULT_TIMEOUT = Number.parseInt(process.env.APPLE_DOCS_GITHUB_TIMEOUT ?? process.env.APPLE_DOCS_TIMEOUT ?? '45000', 10)
 const MAX_RETRIES = 3
 
 /**
@@ -30,7 +35,17 @@ function authHeaders() {
  */
 export async function fetchGitHubTree(owner, repo, branch, rateLimiter) {
   const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`
-  const data = await fetchJsonWithRetry(url, rateLimiter)
+  const { data } = await fetchWithRetry(url, rateLimiter, {
+    headers: {
+      'User-Agent': USER_AGENT,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...authHeaders(),
+    },
+    maxRetries: MAX_RETRIES,
+    timeout: DEFAULT_TIMEOUT,
+    notFoundAs: 'http-error',
+  })
   return data.tree
 }
 
@@ -46,7 +61,15 @@ export async function fetchGitHubTree(owner, repo, branch, rateLimiter) {
  */
 export async function fetchRawGitHub(owner, repo, branch, filePath, rateLimiter) {
   const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`
-  return fetchTextWithRetry(url, rateLimiter)
+  return fetchWithRetry(url, rateLimiter, {
+    headers: {
+      'User-Agent': USER_AGENT,
+      ...authHeaders(),
+    },
+    parseAs: 'text',
+    maxRetries: MAX_RETRIES,
+    timeout: DEFAULT_TIMEOUT,
+  })
 }
 
 /**
@@ -62,125 +85,12 @@ export async function fetchRawGitHub(owner, repo, branch, filePath, rateLimiter)
  */
 export async function checkRawGitHub(owner, repo, branch, filePath, previousEtag, rateLimiter) {
   const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`
-  await rateLimiter.acquire()
-
-  try {
-    const res = await fetch(url, {
-      method: 'HEAD',
-      headers: {
-        'User-Agent': USER_AGENT,
-        ...authHeaders(),
-        ...(previousEtag ? { 'If-None-Match': previousEtag } : {}),
-      },
-      signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
-    })
-
-    if (res.status === 304) return { status: 'unchanged' }
-    if (res.status === 404) return { status: 'deleted' }
-    if (res.ok) return { status: 'modified', etag: res.headers.get('etag') }
-    return { status: 'error' }
-  } catch {
-    return { status: 'error' }
-  }
+  return checkResourceEtag(url, previousEtag, rateLimiter, {
+    headers: {
+      'User-Agent': USER_AGENT,
+      ...authHeaders(),
+    },
+    timeout: DEFAULT_TIMEOUT,
+  })
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-async function fetchJsonWithRetry(url, rateLimiter, attempt = 0) {
-  await rateLimiter.acquire()
-
-  let res
-  try {
-    res = await fetch(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        ...authHeaders(),
-      },
-      signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
-    })
-  } catch (error) {
-    if (attempt < MAX_RETRIES) {
-      await sleep(retryDelayMs(null, attempt))
-      return fetchJsonWithRetry(url, rateLimiter, attempt + 1)
-    }
-    throw error
-  }
-
-  if (isRetriableStatus(res.status) && attempt < MAX_RETRIES) {
-    await sleep(retryDelayMs(res, attempt))
-    return fetchJsonWithRetry(url, rateLimiter, attempt + 1)
-  }
-
-  if (!res.ok) {
-    throw Object.assign(
-      new Error(`HTTP ${res.status} fetching ${url}`),
-      { status: res.status },
-    )
-  }
-
-  return res.json()
-}
-
-async function fetchTextWithRetry(url, rateLimiter, attempt = 0) {
-  await rateLimiter.acquire()
-
-  let res
-  try {
-    res = await fetch(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        ...authHeaders(),
-      },
-      signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
-    })
-  } catch (error) {
-    if (attempt < MAX_RETRIES) {
-      await sleep(retryDelayMs(null, attempt))
-      return fetchTextWithRetry(url, rateLimiter, attempt + 1)
-    }
-    throw error
-  }
-
-  if (isRetriableStatus(res.status) && attempt < MAX_RETRIES) {
-    await sleep(retryDelayMs(res, attempt))
-    return fetchTextWithRetry(url, rateLimiter, attempt + 1)
-  }
-
-  if (res.status === 404) {
-    throw Object.assign(new Error(`Not found: ${url}`), { status: 404 })
-  }
-
-  if (!res.ok) {
-    throw Object.assign(
-      new Error(`HTTP ${res.status} fetching ${url}`),
-      { status: res.status },
-    )
-  }
-
-  return {
-    text: await res.text(),
-    etag: res.headers.get('etag'),
-    lastModified: res.headers.get('last-modified'),
-  }
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-function isRetriableStatus(status) {
-  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
-}
-
-function retryDelayMs(response, attempt) {
-  const retryAfter = response?.headers?.get?.('retry-after')
-  if (retryAfter != null) {
-    const seconds = parseInt(retryAfter, 10)
-    if (!Number.isNaN(seconds)) return seconds * 1000
-  }
-  return Math.min(1000 * (2 ** attempt), 8000)
-}

@@ -4,9 +4,8 @@ import { applyGuidelinesSnapshot } from '../pipeline/sync-guidelines.js'
 import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress } from '../lib/flat-source-progress.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
-import { getAdapter, getAllAdapters, getAdapterTypes } from '../sources/registry.js'
-
-const ROOT_CATALOG_SOURCE_TYPES = new Set(['apple-docc', 'hig'])
+import { getAdapter, getAllAdapters } from '../sources/registry.js'
+import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, selectRootsForAdapter, filterPagesByRoots } from './command-helpers.js'
 
 /**
  * Check for documentation updates and pull changes.
@@ -16,7 +15,7 @@ const ROOT_CATALOG_SOURCE_TYPES = new Set(['apple-docc', 'hig'])
 export async function update(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const startMs = Date.now()
-  const concurrency = opts.concurrency ?? parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
+  const concurrency = opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
   const parallel = opts.parallel ?? 1
   const semaphore = new Semaphore(concurrency)
   const requestedSources = normalizeList(opts.sources)
@@ -57,7 +56,6 @@ export async function update(opts, ctx) {
           case 'flat':
             counts = await updateFlatSource(adapter, requestedRoots, concurrency, semaphore, adapterCtx)
             break
-          case 'crawl':
           default:
             counts = await updateDoccSource(adapter, requestedRoots, concurrency, parallel, semaphore, adapterCtx)
             break
@@ -217,7 +215,7 @@ async function updateDoccSource(adapter, requestedRoots, concurrency, parallel, 
   return counts
 }
 
-async function updateFlatSource(adapter, requestedRoots, concurrency, semaphore, ctx) {
+async function updateFlatSource(adapter, requestedRoots, _concurrency, semaphore, ctx) {
   const { db, dataDir, logger } = ctx
   const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0 }
   const discovery = await adapter.discover(ctx)
@@ -421,33 +419,3 @@ async function updateGuidelinesSource(adapter, requestedRoots, ctx) {
   return counts
 }
 
-function selectRootsForAdapter(adapter, discovery, db, requestedRoots) {
-  const requestedRootSet = requestedRoots ? new Set(requestedRoots) : null
-  const discoveredRoots = discovery.roots ?? db.getRoots().filter(root => root.source_type === adapter.constructor.type)
-
-  return discoveredRoots.filter(root => {
-    if (!root?.slug) return false
-    if (!requestedRootSet) return true
-    return requestedRootSet.has(root.slug)
-  })
-}
-
-function filterPagesByRoots(pages, requestedRoots) {
-  if (!requestedRoots) return pages
-  const requestedRootSet = new Set(requestedRoots)
-  return pages.filter(page => requestedRootSet.has(page.root_slug))
-}
-
-function validateRequestedSources(requestedSources) {
-  if (!requestedSources) return
-
-  const knownSources = new Set(getAdapterTypes())
-  const unknownSources = requestedSources.filter(source => !knownSources.has(source))
-  if (unknownSources.length > 0) {
-    throw new Error(`Unknown source type(s): ${unknownSources.join(', ')}`)
-  }
-}
-
-function normalizeList(values) {
-  return values?.map(value => value.toLowerCase()) ?? null
-}

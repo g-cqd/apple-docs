@@ -3,6 +3,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { renderDocumentPage, renderIndexPage, renderFrameworkPage } from './templates.js'
 import { buildTitleIndex } from './search-artifacts.js'
 import { search } from '../commands/search.js'
+import { fetchDocPage } from '../apple/api.js'
+import { persistFetchedDocPage } from '../pipeline/persist.js'
+import { RateLimiter } from '../lib/rate-limiter.js'
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -18,8 +21,8 @@ const MIME_TYPES = {
  * @returns {{ server: object, url: string }}
  */
 export function startDevServer(opts, ctx) {
-  const port = opts.port || 3000
-  const { db, logger } = ctx
+  const port = opts.port ?? 3000
+  const { db, dataDir, logger } = ctx
   const siteConfig = {
     baseUrl: opts.baseUrl || '',
     siteName: opts.siteName || 'Apple Developer Docs',
@@ -27,6 +30,7 @@ export function startDevServer(opts, ctx) {
   }
 
   const srcWebDir = dirname(new URL(import.meta.url).pathname)
+  const rateLimiter = new RateLimiter(5, 2)
 
   const server = Bun.serve({
     port,
@@ -38,7 +42,14 @@ export function startDevServer(opts, ctx) {
       if (pathname === '/api/search') {
         const query = url.searchParams.get('q')
         if (!query) return Response.json({ results: [], total: 0 })
-        const results = await search({ query, limit: 10, fuzzy: true, noDeep: true }, ctx)
+        const searchOpts = { query, limit: 10, fuzzy: true, noDeep: true }
+        const framework = url.searchParams.get('framework')
+        const language = url.searchParams.get('language')
+        const source = url.searchParams.get('source')
+        if (framework) searchOpts.framework = framework
+        if (language) searchOpts.language = language
+        if (source) searchOpts.source = source
+        const results = await search(searchOpts, ctx)
         return Response.json(results)
       }
 
@@ -54,7 +65,7 @@ export function startDevServer(opts, ctx) {
         const file = pathname.replace('/assets/', '')
         const filePath = join(srcWebDir, 'assets', file)
         if (existsSync(filePath)) {
-          const ext = '.' + file.split('.').pop()
+          const ext = `.${file.split('.').pop()}`
           return new Response(readFileSync(filePath), {
             headers: { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' },
           })
@@ -96,9 +107,34 @@ export function startDevServer(opts, ctx) {
         }
 
         // Try as document page
-        const doc = db.db.query(
+        let doc = db.db.query(
           'SELECT id, key, title, kind, role, role_heading, framework, abstract_text, source_type FROM documents WHERE key = ?'
         ).get(key)
+
+        // On-demand fetch from Apple if not in database
+        if (!doc) {
+          try {
+            const { json, etag, lastModified } = await fetchDocPage(key, rateLimiter)
+            const framework = key.split('/')[0]
+            const rootRow = db.getRootBySlug(framework)
+            await persistFetchedDocPage({
+              db,
+              dataDir,
+              rootId: rootRow?.id ?? null,
+              path: key,
+              sourceType: 'apple-docc',
+              json,
+              etag,
+              lastModified,
+            })
+            doc = db.db.query(
+              'SELECT id, key, title, kind, role, role_heading, framework, abstract_text, source_type FROM documents WHERE key = ?'
+            ).get(key)
+          } catch {
+            // fetch failed — fall through to 404
+          }
+        }
+
         if (doc) {
           const sections = db.db.query(
             'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'

@@ -2,8 +2,9 @@
  * Levenshtein edit distance with early exit.
  * Returns maxDist + 1 if distance exceeds maxDist (avoids full computation).
  */
-export function levenshtein(a, b, maxDist = 2) {
-  const m = a.length, n = b.length
+function levenshtein(a, b, maxDist = 2) {
+  const m = a.length
+  const n = b.length
   if (Math.abs(m - n) > maxDist) return maxDist + 1
   if (m === 0) return n
   if (n === 0) return m
@@ -27,7 +28,7 @@ export function levenshtein(a, b, maxDist = 2) {
 /**
  * Extract character trigrams from a string.
  */
-export function trigrams(s) {
+function trigrams(s) {
   const lower = s.toLowerCase()
   const set = new Set()
   for (let i = 0; i <= lower.length - 3; i++) {
@@ -43,7 +44,7 @@ export function trigrams(s) {
  * @param {{ framework?: string, kind?: string, limit?: number, maxDist?: number }} opts
  * @returns {Array<{ id: number, title: string, distance: number }>}
  */
-export function fuzzyMatchTitles(query, db, { framework, kind, limit = 100, maxDist = 2 } = {}) {
+export function fuzzyMatchTitles(query, db, { framework: _framework, kind: _kind, limit = 100, maxDist = 2 } = {}) {
   const queryTrigrams = trigrams(query)
   if (queryTrigrams.size < 2) return []
 

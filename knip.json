@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "test/benchmarks/search-bench.js"
+  ],
+  "project": [
+    "src/**/*.js",
+    "test/**/*.js",
+    "!test/fixtures/**"
+  ],
+  "ignore": [
+    "src/web/assets/**",
+    "src/web/worker/**"
+  ],
+  "ignoreDependencies": [
+    "zod",
+    "@stryker-mutator/command-runner",
+    "bun-types"
+  ]
+}

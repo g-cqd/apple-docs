@@ -6,6 +6,8 @@
  * No external HTML parser dependency — uses regex/string-based parsing.
  */
 
+import { createDocumentTemplate } from './document-template.js'
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -46,7 +48,7 @@ function decodeEntities(text) {
     // Decimal numeric entities: &#NNN;
     .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
     // Hex numeric entities: &#xHH; or &#XHH;
-    .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +73,7 @@ export function htmlToPlainText(html) {
   // Replace opening block tags with a paragraph-break sentinel
   const withBreaks = html.replace(
     /<(\/?)(\w+)([^>]*)>/g,
-    (match, slash, tag) => {
+    (_match, _slash, tag) => {
       const lower = tag.toLowerCase()
       if (BLOCK_TAGS.has(lower)) {
         return '\n\n'
@@ -197,7 +199,7 @@ function extractBySelector(html, selector) {
     if (attrFilter && !attrFilter.test(match[0])) continue
 
     const actualTag = match[1]
-    const startIndex = match.index + match[0].length
+    const _startIndex = match.index + match[0].length
 
     // Extract balanced inner HTML
     const inner = extractBalancedInner(html, actualTag, match.index)
@@ -385,31 +387,14 @@ export function parseHtmlToNormalized(html, key, opts = {}) {
     .filter(Boolean)
   const headings = headingTexts.length > 0 ? headingTexts.join(' ') : null
 
-  const document = {
-    sourceType: opts.sourceType ?? null,
-    key,
-    title: title ?? null,
-    kind: opts.kind ?? 'article',
-    role: 'article',
-    roleHeading: null,
-    framework: opts.framework ?? null,
-    url: opts.url ?? null,
-    language: opts.language ?? null,
-    abstractText,
-    declarationText: null,
-    platformsJson: null,
-    minIos: null,
-    minMacos: null,
-    minWatchos: null,
-    minTvos: null,
-    minVisionos: null,
-    isDeprecated: false,
-    isBeta: false,
-    isReleaseNotes: false,
-    urlDepth: key ? key.split('/').length - 1 : 0,
-    headings,
-    sourceMetadata: opts.sourceMetadata ?? null,
-  }
+  const document = createDocumentTemplate(key, title, abstractText, headings, {
+    sourceType: opts.sourceType,
+    kind: opts.kind,
+    framework: opts.framework,
+    url: opts.url,
+    language: opts.language,
+    sourceMetadata: opts.sourceMetadata,
+  })
 
   // ── Sections ──────────────────────────────────────────────────────────────
 

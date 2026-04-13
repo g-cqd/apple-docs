@@ -5,7 +5,7 @@ import { renderHtml } from '../content/render-html.js'
 // ---------------------------------------------------------------------------
 
 /** Escape a value for use inside HTML attribute values or text content. */
-export function escapeAttr(value) {
+function escapeAttr(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -84,7 +84,7 @@ export function buildBreadcrumbs(key) {
     if (isLast) {
       parts.push(`<span aria-current="page">${escapeAttr(segment)}</span>`)
     } else {
-      const href = '/docs/' + segments.slice(0, i + 1).join('/') + '/'
+      const href = `/docs/${segments.slice(0, i + 1).join('/')}/`
       parts.push(`<a href="${escapeAttr(href)}">${escapeAttr(segment)}</a>`)
     }
   }
@@ -112,6 +112,46 @@ function buildDocMeta(doc) {
 }
 
 // ---------------------------------------------------------------------------
+// Relationship sidebar
+// ---------------------------------------------------------------------------
+
+function buildRelationshipSidebar(section) {
+  const contentJson = section?.content_json ?? section?.contentJson ?? null
+  let groups = null
+  if (contentJson && typeof contentJson === 'string') {
+    try { groups = JSON.parse(contentJson) } catch { /* ignore */ }
+  } else if (contentJson && typeof contentJson === 'object') {
+    groups = contentJson
+  }
+
+  const parts = ['<aside class="doc-sidebar">', '<h2>Relationships</h2>']
+
+  if (Array.isArray(groups) && groups.length > 0) {
+    for (const group of groups) {
+      if (group?.title) {
+        parts.push(`<h3 class="sidebar-group-title">${escapeAttr(group.title)}</h3>`)
+      }
+      const items = (group?.items ?? [])
+        .map(item => {
+          if (item?.key) {
+            return `<li><a href="/docs/${escapeAttr(item.key)}/">${escapeAttr(item.title ?? item.key)}</a></li>`
+          }
+          return `<li>${escapeAttr(item?.title ?? item?.identifier ?? '')}</li>`
+        })
+        .join('')
+      if (items) {
+        parts.push(`<ul class="sidebar-list">${items}</ul>`)
+      }
+    }
+  } else {
+    parts.push('<p class="sidebar-hint">See relationships section in the article.</p>')
+  }
+
+  parts.push('</aside>')
+  return parts.join('\n  ')
+}
+
+// ---------------------------------------------------------------------------
 // Page templates
 // ---------------------------------------------------------------------------
 
@@ -128,17 +168,14 @@ export function renderDocumentPage(doc, sections, siteConfig) {
   const content = renderHtml(doc, sections)
   const breadcrumbs = doc.key ? buildBreadcrumbs(doc.key) : ''
 
-  // Collect relationships from sections for optional sidebar
+  // Collect relationships from sections for sidebar
   const relationshipSection = (sections ?? []).find(s =>
     s.sectionKind === 'relationships' || s.section_kind === 'relationships'
   )
   const hasSidebar = Boolean(relationshipSection)
 
   const sidebar = hasSidebar
-    ? `<aside class="doc-sidebar">
-  <h2>Relationships</h2>
-  <p class="sidebar-hint">See relationships section in the article.</p>
-</aside>`
+    ? buildRelationshipSidebar(relationshipSection)
     : ''
 
   return `<!DOCTYPE html>
@@ -186,7 +223,7 @@ export function renderIndexPage(frameworks, siteConfig) {
       const countBadge = fw.doc_count != null
         ? ` <span class="badge badge-count">${escapeAttr(String(fw.doc_count))}</span>`
         : ''
-      return `<li><a href="${href}">${escapeAttr(fw.name ?? fw.slug)}</a>${countBadge}</li>`
+      return `<li><a href="${href}">${escapeAttr(fw.display_name ?? fw.name ?? fw.slug)}</a>${countBadge}</li>`
     }).join('\n      ')
 
     sections.push(`<section class="framework-group">
@@ -206,7 +243,7 @@ export function renderIndexPage(frameworks, siteConfig) {
 ${buildHead({ title: pageTitle, description: 'Apple developer documentation, indexed locally.', siteConfig })}
 <body>
 ${buildHeader(siteConfig)}
-<main class="main-content">
+<main class="main-content listing">
   <h1>${escapeAttr(siteConfig.siteName)}</h1>
   ${mainContent}
 </main>
@@ -225,7 +262,7 @@ ${buildFooter(siteConfig)}
  * @returns {string} Complete HTML page string
  */
 export function renderFrameworkPage(framework, documents, siteConfig) {
-  const fwName = framework?.name ?? framework?.slug ?? 'Framework'
+  const fwName = framework?.display_name ?? framework?.name ?? framework?.slug ?? 'Framework'
   const pageTitle = `${fwName} — ${siteConfig.siteName}`
   const docList = documents ?? []
 
@@ -256,14 +293,14 @@ export function renderFrameworkPage(framework, documents, siteConfig) {
     ? roleSections.join('\n  ')
     : '<p>No documents found for this framework.</p>'
 
-  const breadcrumbs = buildBreadcrumbs(`documentation/${framework?.slug ?? ''}`)
+  const breadcrumbs = `<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${escapeAttr(fwName)}</span></nav>`
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({ title: pageTitle, description: `${fwName} documentation index.`, siteConfig })}
 <body>
 ${buildHeader(siteConfig)}
-<main class="main-content">
+<main class="main-content listing">
   ${breadcrumbs}
   <h1>${escapeAttr(fwName)}</h1>
   ${mainContent}

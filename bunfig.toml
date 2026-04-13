@@ -1,0 +1,6 @@
+[test]
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+coverageSkipTestFiles = true
+# Baseline: 80.30% functions, 78.48% lines (measured 2026-04-13)
+coverageThreshold = { line = 0.75, function = 0.75 }

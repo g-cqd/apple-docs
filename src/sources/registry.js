@@ -11,7 +11,7 @@ import { WwdcAdapter } from './wwdc.js'
 
 const registry = new Map()
 
-export function registerAdapter(AdapterClass) {
+function registerAdapter(AdapterClass) {
   if (!(AdapterClass.prototype instanceof SourceAdapter)) {
     throw new Error('Adapter must extend SourceAdapter')
   }

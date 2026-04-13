@@ -1,0 +1,23 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  status:
+    project:
+      default:
+        # Start informational — does not block PRs
+        informational: true
+    patch:
+      default:
+        target: 60%
+        informational: true
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+
+ignore:
+  - "test/**"
+  - "src/web/assets/**"
+  - "src/web/worker/**"

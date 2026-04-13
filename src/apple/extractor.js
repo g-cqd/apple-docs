@@ -47,7 +47,7 @@ export function extractReferences(json) {
   }
 
   // references that are documentation topics (catch any not in sections)
-  for (const [key, ref] of Object.entries(refs)) {
+  for (const [, ref] of Object.entries(refs)) {
     if (ref.type === 'topic' && ref.url?.includes('/documentation/')) {
       const norm = normalizeIdentifier(ref.url)
       if (norm) ids.add(norm)

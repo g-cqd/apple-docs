@@ -1,21 +1,7 @@
-function coerceDocument(document) {
-  return {
-    key: document?.key ?? document?.path ?? null,
-    title: document?.title ?? null,
-    abstractText: document?.abstractText ?? document?.abstract_text ?? null,
-    declarationText: document?.declarationText ?? document?.declaration_text ?? null,
-    headings: document?.headings ?? null,
-  }
-}
+import { coerceDocument as _coerceDocument, coerceSection as _coerceSection } from './coercion.js'
 
-function coerceSection(section) {
-  return {
-    sectionKind: section?.sectionKind ?? section?.section_kind ?? null,
-    heading: section?.heading ?? null,
-    contentText: section?.contentText ?? section?.content_text ?? '',
-    sortOrder: section?.sortOrder ?? section?.sort_order ?? 0,
-  }
-}
+const coerceDocument = (document) => _coerceDocument(document, { includeKey: true })
+const coerceSection = (section) => _coerceSection(section)
 
 export function renderPlainText(document, sections = []) {
   const doc = coerceDocument(document)

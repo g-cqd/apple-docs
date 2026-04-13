@@ -3,6 +3,13 @@ const isTTY = process.stdout.isTTY
 const bold = (s) => isTTY ? `\x1b[1m${s}\x1b[0m` : s
 const dim = (s) => isTTY ? `\x1b[2m${s}\x1b[0m` : s
 
+function formatBytes(bytes) {
+  if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
+  if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
+  if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`
+  return `${bytes} B`
+}
+
 export function formatSearchResults(result) {
   if (result.results.length === 0) {
     return `No results for "${result.query}"`
@@ -13,7 +20,7 @@ export function formatSearchResults(result) {
     const quality = r.matchQuality ?? 'match'
     const tag = quality === 'match' ? '' : quality === 'fuzzy' ? dim(` [fuzzy d=${r.distance}]`) : dim(` [${quality}]`)
     const sourceLabel = r.sourceType ? `${r.sourceType} / ` : ''
-    lines.push(`  ${dim(sourceLabel + r.framework + ' / ' + (r.kind ?? ''))}${tag}`)
+    lines.push(`  ${dim(`${sourceLabel + r.framework} / ${r.kind ?? ''}`)}${tag}`)
     lines.push(`  ${bold(r.title)}`)
     if (r.abstract) lines.push(`  ${r.abstract}`)
     if (r.snippet && r.snippet !== r.abstract) lines.push(`  ${dim(r.snippet)}`)
@@ -109,12 +116,7 @@ export function formatBrowse(result) {
 }
 
 export function formatStatus(result) {
-  const fmt = (bytes) => {
-    if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
-    if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
-    if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`
-    return `${bytes} B`
-  }
+  const fmt = formatBytes
 
   const bar = (processed, total) => {
     if (total === 0) return ''
@@ -185,7 +187,7 @@ export function formatStatus(result) {
     lines.push('')
     lines.push(bold(`  Update available: ${result.updateAvailable.latest}`))
     lines.push(`  Current:  ${result.updateAvailable.current}`)
-    lines.push(`  Run: apple-docs setup --force`)
+    lines.push("  Run: apple-docs setup --force")
   }
 
   if (result.freshness) {
@@ -198,7 +200,7 @@ export function formatStatus(result) {
         lines.push(`  Stale roots:     ${f.staleRoots.map(r => `${r.slug} (${r.daysSince}d)`).join(', ')}`)
       }
     } else {
-      lines.push(`  Freshness:       No sync history`)
+      lines.push("  Freshness:       No sync history")
     }
   }
 
@@ -242,9 +244,12 @@ export function formatConsolidate(result) {
 
   lines.push(`  Remaining:       ${result.genuine} genuinely missing pages`)
 
+  if (result.orphanRelsCleaned > 0) {
+    lines.push(`  Orphan rels:     ${result.orphanRelsCleaned} removed`)
+  }
+
   if (result.minified > 0) {
-    const fmt = (b) => b > 1e9 ? `${(b/1e9).toFixed(1)} GB` : b > 1e6 ? `${(b/1e6).toFixed(1)} MB` : `${(b/1e3).toFixed(1)} KB`
-    lines.push(`  Minified:        ${result.minified} JSON files (saved ${fmt(result.minifySaved)})`)
+    lines.push(`  Minified:        ${result.minified} JSON files (saved ${formatBytes(result.minifySaved)})`)
   }
 
   if (result.snapshotVerification) {
@@ -293,19 +298,13 @@ export function formatConsolidate(result) {
 }
 
 export function formatSnapshot(result) {
-  const fmt = (bytes) => {
-    if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
-    if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
-    if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`
-    return `${bytes} B`
-  }
   return [
     bold('Snapshot built'),
     `  Tier:       ${result.tier}`,
     `  Tag:        ${result.tag}`,
     `  Documents:  ${result.documentCount}`,
-    `  DB size:    ${fmt(result.dbSize)}`,
-    `  Archive:    ${result.archivePath} (${fmt(result.archiveSize)})`,
+    `  DB size:    ${formatBytes(result.dbSize)}`,
+    `  Archive:    ${result.archivePath} (${formatBytes(result.archiveSize)})`,
     `  Checksum:   ${result.archiveChecksum.slice(0, 16)}...`,
   ].join('\n')
 }
@@ -335,19 +334,13 @@ export function formatIndex(result) {
 }
 
 export function formatStorageStats(result) {
-  const fmt = (bytes) => {
-    if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
-    if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
-    if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`
-    return `${bytes} B`
-  }
   const lines = [
     bold('Storage Breakdown'),
-    `  Database:     ${fmt(result.database.size)}`,
-    `  Raw JSON:     ${fmt(result.rawJson.size)} (${result.rawJson.files} files)`,
-    `  Markdown:     ${fmt(result.markdown.size)} (${result.markdown.files} files)`,
-    `  HTML cache:   ${fmt(result.html.size)} (${result.html.files} files)`,
-    `  Total:        ${fmt(result.total)}`,
+    `  Database:     ${formatBytes(result.database.size)}`,
+    `  Raw JSON:     ${formatBytes(result.rawJson.size)} (${result.rawJson.files} files)`,
+    `  Markdown:     ${formatBytes(result.markdown.size)} (${result.markdown.files} files)`,
+    `  HTML cache:   ${formatBytes(result.html.size)} (${result.html.files} files)`,
+    `  Total:        ${formatBytes(result.total)}`,
     '',
     bold('Table Row Counts'),
   ]
@@ -376,12 +369,6 @@ export function formatStorageMaterialize(result) {
 }
 
 export function formatWebBuild(result) {
-  const fmt = (bytes) => {
-    if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
-    if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
-    if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`
-    return `${bytes} B`
-  }
   return [
     bold('Static site built'),
     `  Pages:       ${result.pagesBuilt}`,

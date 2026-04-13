@@ -20,39 +20,19 @@ export async function persistFetchedDocPage({
   etag = null,
   lastModified = null,
 }) {
-  const jsonStr = await writeJSON(join(dataDir, 'raw-json', path + '.json'), json)
+  const jsonStr = await writeJSON(join(dataDir, 'raw-json', `${path}.json`), json)
   const rawPayloadHash = sha256(jsonStr)
   const normalized = normalize(json, path, sourceType)
   const normalizedHash = sha256(stableStringify(normalized))
   const doc = normalized.document
   const downloadedAt = new Date().toISOString()
 
-  const page = db.upsertPage({
-    rootId,
-    path,
-    url: doc.url ?? defaultDoccUrl(path),
-    title: doc.title,
-    role: doc.role,
-    roleHeading: doc.roleHeading,
-    abstract: doc.abstractText,
-    platforms: doc.platformsJson,
-    declaration: doc.declarationText,
+  const page = upsertPageFromDocument(db, rootId, path, doc, {
     etag,
     lastModified,
-    contentHash: rawPayloadHash,
+    rawPayloadHash,
     downloadedAt,
-    sourceType: doc.sourceType,
-    language: doc.language,
-    isReleaseNotes: doc.isReleaseNotes,
-    urlDepth: doc.urlDepth,
-    docKind: doc.kind,
-    sourceMetadata: doc.sourceMetadata,
-    minIos: doc.minIos,
-    minMacos: doc.minMacos,
-    minWatchos: doc.minWatchos,
-    minTvos: doc.minTvos,
-    minVisionos: doc.minVisionos,
-    skipDocumentSync: true,
+    defaultUrl: defaultDoccUrl(path),
   })
 
   db.upsertNormalizedDocument(normalized, {
@@ -61,7 +41,7 @@ export async function persistFetchedDocPage({
   })
 
   const markdown = renderPage(json, path)
-  await writeText(join(dataDir, 'markdown', path + '.md'), markdown)
+  await writeText(join(dataDir, 'markdown', `${path}.md`), markdown)
   db.markConverted(path)
 
   return {
@@ -94,27 +74,48 @@ export async function persistNormalizedPage({
   const isStringPayload = typeof rawPayload === 'string'
   const rawObj = isStringPayload ? { _raw: rawPayload, _format: 'text' } : rawPayload
   const rawStr = stableStringify(rawObj)
-  await writeJSON(join(dataDir, 'raw-json', path + '.json'), rawObj)
+  await writeJSON(join(dataDir, 'raw-json', `${path}.json`), rawObj)
   const rawPayloadHash = sha256(rawStr)
   const normalizedHash = sha256(stableStringify(normalized))
   const doc = normalized.document
   const downloadedAt = new Date().toISOString()
 
-  const page = db.upsertPage({
+  const page = upsertPageFromDocument(db, rootId, path, doc, {
+    etag,
+    lastModified,
+    rawPayloadHash,
+    downloadedAt,
+    sourceTypeFallback: sourceType,
+  })
+
+  db.upsertNormalizedDocument(normalized, {
+    contentHash: normalizedHash,
+    rawPayloadHash,
+  })
+
+  const markdown = renderMarkdown(doc, normalized.sections)
+  await writeText(join(dataDir, 'markdown', `${path}.md`), markdown)
+  db.markConverted(path)
+
+  return { page, normalized, rawPayloadHash, normalizedHash }
+}
+
+function upsertPageFromDocument(db, rootId, path, doc, meta) {
+  return db.upsertPage({
     rootId,
     path,
-    url: doc.url ?? null,
+    url: doc.url ?? meta.defaultUrl ?? null,
     title: doc.title,
     role: doc.role,
     roleHeading: doc.roleHeading,
     abstract: doc.abstractText,
     platforms: doc.platformsJson,
     declaration: doc.declarationText,
-    etag,
-    lastModified,
-    contentHash: rawPayloadHash,
-    downloadedAt,
-    sourceType: doc.sourceType ?? sourceType,
+    etag: meta.etag,
+    lastModified: meta.lastModified,
+    contentHash: meta.rawPayloadHash,
+    downloadedAt: meta.downloadedAt,
+    sourceType: doc.sourceType ?? meta.sourceTypeFallback ?? null,
     language: doc.language,
     isReleaseNotes: doc.isReleaseNotes,
     urlDepth: doc.urlDepth,
@@ -127,17 +128,6 @@ export async function persistNormalizedPage({
     minVisionos: doc.minVisionos,
     skipDocumentSync: true,
   })
-
-  db.upsertNormalizedDocument(normalized, {
-    contentHash: normalizedHash,
-    rawPayloadHash,
-  })
-
-  const markdown = renderMarkdown(doc, normalized.sections)
-  await writeText(join(dataDir, 'markdown', path + '.md'), markdown)
-  db.markConverted(path)
-
-  return { page, normalized, rawPayloadHash, normalizedHash }
 }
 
 function defaultDoccUrl(path) {

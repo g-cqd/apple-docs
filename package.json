@@ -36,14 +36,26 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test",
+    "test:coverage": "bun test --coverage",
     "start": "bun run index.js",
     "typecheck": "bun x tsc --noEmit",
     "lint": "biome check --diagnostic-level=error ./src ./test ./cli.js ./index.js",
+    "lint:unused": "bunx knip",
+    "lint:unused:fix": "bunx knip --fix",
+    "lint:duplication": "bunx jscpd src/ cli.js index.js",
+    "audit": "bun run lint && bun run typecheck && bun run lint:unused && bun run lint:duplication && bun run test:coverage",
+    "audit:report": "mkdir -p reports && bun run lint && bun run typecheck && bunx knip --reporter json > reports/knip.json; bunx jscpd src/ cli.js index.js; bun run test:coverage",
+    "test:mutate": "npx stryker run",
+    "test:mutate:changed": "npx stryker run --incremental",
     "ci": "bun run lint && bun run typecheck && bun test"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@types/bun": "^1.2.0"
+    "@stryker-mutator/core": "^9.6.1",
+    "@types/bun": "^1.2.0",
+    "jscpd": "^4.0.9",
+    "knip": "^6.4.1",
+    "typescript": "^6.0.2"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0"

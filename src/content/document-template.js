@@ -1,0 +1,27 @@
+export function createDocumentTemplate(key, title, abstractText, headings, opts = {}) {
+  return {
+    sourceType: opts.sourceType ?? null,
+    key,
+    title: title ?? null,
+    kind: opts.kind ?? 'article',
+    role: 'article',
+    roleHeading: null,
+    framework: opts.framework ?? null,
+    url: opts.url ?? null,
+    language: opts.language ?? null,
+    abstractText,
+    declarationText: null,
+    platformsJson: null,
+    minIos: null,
+    minMacos: null,
+    minWatchos: null,
+    minTvos: null,
+    minVisionos: null,
+    isDeprecated: false,
+    isBeta: false,
+    isReleaseNotes: false,
+    urlDepth: key ? key.split('/').length - 1 : 0,
+    headings,
+    sourceMetadata: opts.sourceMetadata ?? null,
+  }
+}

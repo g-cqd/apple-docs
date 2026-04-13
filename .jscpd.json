@@ -1,0 +1,16 @@
+{
+  "threshold": 6,
+  "minTokens": 50,
+  "minLines": 5,
+  "reporters": ["console", "json", "html"],
+  "output": "reports/jscpd",
+  "ignore": [
+    "**/node_modules/**",
+    "**/test/fixtures/**",
+    "**/coverage/**",
+    "**/reports/**"
+  ],
+  "format": ["javascript"],
+  "gitignore": true,
+  "mode": "mild"
+}

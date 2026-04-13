@@ -6,9 +6,8 @@ import { applyGuidelinesSnapshot } from '../pipeline/sync-guidelines.js'
 import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress } from '../lib/flat-source-progress.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
-import { getAdapter, getAllAdapters, getAdapterTypes } from '../sources/registry.js'
-
-const ROOT_CATALOG_SOURCE_TYPES = new Set(['apple-docc', 'hig'])
+import { getAdapter, getAllAdapters } from '../sources/registry.js'
+import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, selectRootsForAdapter, filterPages } from './command-helpers.js'
 
 /**
  * Full sync pipeline: discover roots -> crawl (parallel) -> convert remaining.
@@ -36,7 +35,7 @@ export async function sync(opts, ctx) {
       adapterCtx.rootCatalogReady = true
     }
 
-    const concurrency = opts.concurrency ?? parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
+    const concurrency = opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
     const parallel = opts.parallel ?? 1
     const semaphore = new Semaphore(concurrency)
     const crawlOpts = { retryFailed: !!opts.retryFailed, semaphore }
@@ -67,7 +66,6 @@ export async function sync(opts, ctx) {
             Object.assign(crawlResults, flatResults)
             break
           }
-          case 'crawl':
           default: {
             const rootSlugs = roots.map(root => root.slug)
             if (rootSlugs.length === 0) break
@@ -163,37 +161,6 @@ async function crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpts, adap
   return results
 }
 
-function selectRootsForAdapter(adapter, discovery, db, requestedRoots) {
-  const requestedRootSet = requestedRoots ? new Set(requestedRoots) : null
-  const discoveredRoots = discovery.roots ?? db.getRoots().filter(root => root.source_type === adapter.constructor.type)
-
-  return discoveredRoots.filter(root => {
-    if (!root?.slug) return false
-    if (!requestedRootSet) return true
-    return requestedRootSet.has(root.slug)
-  })
-}
-
-function filterPages(pages, requestedRoots, requestedSources) {
-  const rootSet = requestedRoots ? new Set(requestedRoots) : null
-  const sourceSet = requestedSources ? new Set(requestedSources) : null
-
-  return pages.filter(page => {
-    if (rootSet && !rootSet.has(page.root_slug)) return false
-    if (sourceSet && !sourceSet.has(page.source_type)) return false
-    return true
-  })
-}
-
-function validateRequestedSources(requestedSources) {
-  if (!requestedSources) return
-
-  const knownSources = new Set(getAdapterTypes())
-  const unknownSources = requestedSources.filter(source => !knownSources.has(source))
-  if (unknownSources.length > 0) {
-    throw new Error(`Unknown source type(s): ${unknownSources.join(', ')}`)
-  }
-}
 
 async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
   const { db, dataDir, logger } = ctx
@@ -252,6 +219,3 @@ async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
   return results
 }
 
-function normalizeList(values) {
-  return values?.map(value => value.toLowerCase()) ?? null
-}

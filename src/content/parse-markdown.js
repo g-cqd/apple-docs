@@ -5,6 +5,8 @@
  * Used by Swift Evolution and Swift Book adapters.
  */
 
+import { createDocumentTemplate } from './document-template.js'
+
 // ---------------------------------------------------------------------------
 // extractFrontmatter
 // ---------------------------------------------------------------------------
@@ -154,7 +156,7 @@ export function splitByHeadings(body, level = 2) {
   const prefix = '#'.repeat(level)
   // Match ATX headings of exactly `level` hashes followed by a space
   // The regex captures the heading text and the boundary between sections
-  const headingRe = new RegExp(`^${prefix}(?!#) +(.+)$`, 'm')
+  const _headingRe = new RegExp(`^${prefix}(?!#) +(.+)$`, 'm')
 
   const sections = []
 
@@ -162,7 +164,7 @@ export function splitByHeadings(body, level = 2) {
    * @param {string|null} heading
    * @param {string} content
    */
-  const pushSection = (heading, content) => {
+  const _pushSection = (heading, content) => {
     const trimmed = content.trim()
     if (trimmed !== '' || heading !== null) {
       sections.push({ heading, content: trimmed })
@@ -171,11 +173,11 @@ export function splitByHeadings(body, level = 2) {
 
   // Split on each occurrence of the heading pattern
   const splitRe = new RegExp(`^(${prefix}(?!#) +.+)$`, 'mg')
-  let lastIndex = 0
-  let lastHeading = null
-  let match
+  const _lastIndex = 0
+  const _lastHeading = null
+  let _match
 
-  const preText = []
+  const _preText = []
   splitRe.lastIndex = 0
 
   // Collect all heading positions
@@ -269,31 +271,14 @@ export function parseMarkdownToSections(markdown, key, opts = {}) {
   const headings = headingTexts.length > 0 ? headingTexts.join(' ') : null
 
   // ── Document ──────────────────────────────────────────────────────────────
-  const document = {
-    sourceType: opts.sourceType ?? null,
-    key,
-    title,
-    kind: opts.kind ?? 'article',
-    role: 'article',
-    roleHeading: null,
-    framework: opts.framework ?? null,
-    url: opts.url ?? null,
-    language: opts.language ?? null,
-    abstractText,
-    declarationText: null,
-    platformsJson: null,
-    minIos: null,
-    minMacos: null,
-    minWatchos: null,
-    minTvos: null,
-    minVisionos: null,
-    isDeprecated: false,
-    isBeta: false,
-    isReleaseNotes: false,
-    urlDepth: key ? key.split('/').length - 1 : 0,
-    headings,
-    sourceMetadata: opts.sourceMetadata ?? null,
-  }
+  const document = createDocumentTemplate(key, title, abstractText, headings, {
+    sourceType: opts.sourceType,
+    kind: opts.kind,
+    framework: opts.framework,
+    url: opts.url,
+    language: opts.language,
+    sourceMetadata: opts.sourceMetadata,
+  })
 
   // ── Sections ──────────────────────────────────────────────────────────────
   const sections = []
