@@ -121,6 +121,11 @@ export function rerank(results, query, intent) {
       }
     }
 
+    // R11: WWDC intent — boost WWDC sessions when query is WWDC-related
+    if (intent.type === 'wwdc' && sourceType === 'wwdc') {
+      score *= 1.4
+    }
+
     r.score = score
   }
 

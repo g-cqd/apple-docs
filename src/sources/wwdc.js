@@ -13,7 +13,7 @@ const USER_AGENT = 'apple-docs/2.0'
 const DEFAULT_TIMEOUT = 30_000
 
 /** Years served by Apple's WWDC videos pages (HTML scraping). */
-const APPLE_YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
+const APPLE_YEARS = Array.from({ length: new Date().getFullYear() - 2020 + 1 }, (_, i) => 2020 + i)
 
 /** Years served by ASCIIwwdc community transcripts. */
 const ASCIIWWDC_YEAR_MIN = 1997
@@ -692,5 +692,9 @@ export class WwdcAdapter extends SourceAdapter {
     ]
 
     return { document, sections, relationships: [] }
+  }
+
+  renderHints() {
+    return { showTimestamps: true, showYear: true }
   }
 }

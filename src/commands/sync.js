@@ -40,6 +40,7 @@ export async function sync(opts, ctx) {
     const semaphore = new Semaphore(concurrency)
     const crawlOpts = { retryFailed: !!opts.retryFailed, semaphore }
     const crawlResults = {}
+    const failedSources = []
     let guidelinesResult = null
     let rootsCrawled = 0
 
@@ -78,6 +79,7 @@ export async function sync(opts, ctx) {
         }
       } catch (e) {
         logger.error(`Source ${adapter.constructor.type} failed`, { error: e.message })
+        failedSources.push({ source: adapter.constructor.type, error: e.message })
       }
     }
 
@@ -112,6 +114,7 @@ export async function sync(opts, ctx) {
       rootsDiscovered: db.getRoots().length,
       rootsCrawled,
       crawlResults,
+      failedSources,
       guidelines: guidelinesResult,
       downloaded: dlResult.downloaded,
       bodyIndexed,

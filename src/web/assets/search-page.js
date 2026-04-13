@@ -63,9 +63,9 @@
     const lang = form.querySelector('input[name="language"]:checked')?.value
     if (lang) params.set('language', lang)
 
-    // Platform checkboxes — use first checked (API takes single value)
+    // Platform checkboxes — send comma-joined list
     const platforms = [...form.querySelectorAll('input[name="platform"]:checked')].map(el => el.value)
-    if (platforms.length > 0) params.set('platform', platforms[0])
+    if (platforms.length > 0) params.set('platform', platforms.join(','))
 
     // Text inputs
     for (const name of ['min_ios', 'min_macos', 'min_watchos', 'min_tvos', 'min_visionos', 'year', 'track']) {
@@ -227,6 +227,10 @@
 
   loadMoreBtn.addEventListener('click', () => {
     doSearch(currentOffset)
+  })
+
+  window.addEventListener('popstate', () => {
+    if (restoreFromUrl()) doSearch(0)
   })
 
   // Initialize

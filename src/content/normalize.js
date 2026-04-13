@@ -1,4 +1,3 @@
-import { renderInlineToText } from '../apple/extractor.js'
 import { normalizeIdentifier } from '../apple/normalizer.js'
 
 // ---------------------------------------------------------------------------
@@ -48,7 +47,7 @@ function normalizeDocC(json, key, sourceType) {
   // Language: prefer module name, fall back to scanning declaration languages
   const language = resolveLanguage(json)
 
-  const abstractText = json?.abstract ? renderInlineToText(json.abstract) : null
+  const abstractText = json?.abstract ? renderInlineNodes(json.abstract, refs) : null
 
   // Declaration text: first declarations section, all token texts joined
   const declarationText = resolveDeclarationText(json)
@@ -73,7 +72,7 @@ function normalizeDocC(json, key, sourceType) {
   const urlDepth = key ? key.split('/').length - 1 : 0
 
   // Collect headings from all content sections for FTS
-  const headings = collectHeadings(json)
+  const headings = collectHeadings(json, refs)
 
   const document = {
     sourceType,
@@ -111,7 +110,7 @@ function normalizeDocC(json, key, sourceType) {
     sections.push({
       sectionKind: 'abstract',
       heading: null,
-      contentText: renderInlineToText(json.abstract),
+      contentText: renderInlineNodes(json.abstract, refs),
       contentJson: JSON.stringify(json.abstract),
       sortOrder: order++,
     })
@@ -158,7 +157,7 @@ function normalizeDocC(json, key, sourceType) {
   for (const section of json?.primaryContentSections ?? []) {
     if (section.kind !== 'content') continue
     const nodes = section.content ?? []
-    const heading = extractFirstHeading(nodes) ?? 'Overview'
+    const heading = extractFirstHeading(nodes, refs) ?? 'Overview'
     sections.push({
       sectionKind: 'discussion',
       heading,
@@ -451,11 +450,11 @@ function findSection(sections, kind) {
 /**
  * Extract the text of the first heading node from a content nodes array.
  */
-function extractFirstHeading(nodes) {
+function extractFirstHeading(nodes, refs) {
   if (!Array.isArray(nodes)) return null
   for (const node of nodes) {
     if (node.type === 'heading') {
-      return node.text ?? renderInlineToText(node.inlineContent ?? []) ?? null
+      return node.text ?? renderInlineNodes(node.inlineContent ?? [], refs) ?? null
     }
   }
   return null
@@ -465,13 +464,13 @@ function extractFirstHeading(nodes) {
  * Collect all heading texts from all 'content' primary sections, space-joined,
  * for use as an FTS hint field.
  */
-function collectHeadings(json) {
+function collectHeadings(json, refs) {
   const texts = []
   for (const section of json?.primaryContentSections ?? []) {
     if (section.kind !== 'content') continue
     for (const node of section.content ?? []) {
       if (node.type === 'heading') {
-        const text = node.text ?? renderInlineToText(node.inlineContent ?? [])
+        const text = node.text ?? renderInlineNodes(node.inlineContent ?? [], refs)
         if (text) texts.push(text)
       }
     }

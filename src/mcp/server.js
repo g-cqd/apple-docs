@@ -18,7 +18,7 @@ import { status } from '../commands/status.js'
  */
 export function createServer(ctx) {
   const server = new McpServer(
-    { name: 'apple-docs', version: '2.0.0' },
+    { name: 'apple-docs', version: '1.0.0' },
     { capabilities: { resources: {}, tools: {} } },
   )
 
@@ -55,8 +55,6 @@ export function createServer(ctx) {
         minWatchos: args.min_watchos,
         minTvos: args.min_tvos,
         minVisionos: args.min_visionos,
-        year: args.year,
-        track: args.track,
       }, ctx)
       if (args.read && result.results.length > 0) {
         const hit = result.results[0]
@@ -120,7 +118,7 @@ export function createServer(ctx) {
     'Show corpus health: total pages, frameworks by kind, disk usage, crawl progress, and last sync time.',
     {},
     async () => {
-      const result = await status({}, ctx)
+      const result = await status({ skipUpdateCheck: true }, ctx)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )

@@ -197,12 +197,11 @@ describe('convertAll', () => {
       sourceType: 'apple-docc',
     })
 
-    // No raw JSON file exists → convertPage returns false but doesn't throw,
-    // so the loop still increments done++ (current behavior)
+    // No raw JSON file exists → convertPage returns false, done is not incremented
     const result = await convertAll(db, dataDir, logger)
     // Should not crash
     expect(result.total).toBe(1)
-    // done++ runs because convertPage doesn't throw, it returns false
-    expect(result.converted).toBe(1)
+    // Missing JSON is not counted as a successful conversion
+    expect(result.converted).toBe(0)
   })
 })

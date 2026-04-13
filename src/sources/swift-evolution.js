@@ -144,4 +144,8 @@ export class SwiftEvolutionAdapter extends SourceAdapter {
 
     return this.validateNormalizeResult(result)
   }
+
+  renderHints() {
+    return { showSENumber: true }
+  }
 }

@@ -61,4 +61,8 @@ export class GuidelinesAdapter extends SourceAdapter {
     const section = rawPayload?.section ?? rawPayload
     return section?.children ?? []
   }
+
+  renderHints() {
+    return { showSectionNumbers: true }
+  }
 }

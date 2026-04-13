@@ -104,4 +104,8 @@ export class SwiftBookAdapter extends SourceAdapter {
 
     return this.validateNormalizeResult(result)
   }
+
+  renderHints() {
+    return { showChapterNumbers: true }
+  }
 }

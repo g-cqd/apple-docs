@@ -139,6 +139,35 @@ describe('rerank', () => {
     expect(normal.score).toBeGreaterThan(archivedReleaseNotes.score * 3)
   })
 
+  test('R9: error intent boosts troubleshooting articles', () => {
+    const article = makeResult({ matchQuality: 'match', kind: 'article', path: 'a', title: 'Troubleshooting Core Data' })
+    const symbol = makeResult({ matchQuality: 'match', kind: 'structure', path: 'b' })
+    rerank([symbol, article], 'core data crash', { type: 'error', confidence: 0.8 })
+    expect(article.score).toBeGreaterThan(symbol.score)
+  })
+
+  test('R10: concept intent boosts HIG and Swift Book articles', () => {
+    const hig = makeResult({ matchQuality: 'match', sourceType: 'hig', path: 'a' })
+    const docc = makeResult({ matchQuality: 'match', sourceType: 'apple-docc', path: 'b' })
+    rerank([docc, hig], 'what is typography', { type: 'concept', confidence: 0.7 })
+    expect(hig.score).toBeGreaterThan(docc.score)
+  })
+
+  test('R11: WWDC intent boosts WWDC sessions', () => {
+    const wwdc = makeResult({ matchQuality: 'match', sourceType: 'wwdc', path: 'wwdc/2024/10144' })
+    const docc = makeResult({ matchQuality: 'match', sourceType: 'apple-docc', path: 'other/swiftui' })
+    rerank([docc, wwdc], 'wwdc 2024 swiftui', { type: 'wwdc', confidence: 0.8 })
+    expect(wwdc.score).toBeGreaterThan(docc.score)
+  })
+
+  test('WWDC intent does not boost non-WWDC sources', () => {
+    const docc = makeResult({ matchQuality: 'match', sourceType: 'apple-docc', path: 'a' })
+    const hig = makeResult({ matchQuality: 'match', sourceType: 'hig', path: 'b' })
+    rerank([docc, hig], 'wwdc 2024', { type: 'wwdc', confidence: 0.8 })
+    // apple-docc still beats hig via preferred source multiplier
+    expect(docc.score).toBeGreaterThan(hig.score)
+  })
+
   test('sorts results by score descending', () => {
     const results = [
       makeResult({ matchQuality: 'body', path: 'a' }),

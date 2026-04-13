@@ -18,14 +18,20 @@
   let currentActive = null
 
   const observer = new IntersectionObserver((entries) => {
+    let topEntry = null
     for (const entry of entries) {
       if (entry.isIntersecting) {
-        const match = sections.find(s => s.el === entry.target)
-        if (match) {
-          if (currentActive) currentActive.link.classList.remove('toc-active')
-          match.link.classList.add('toc-active')
-          currentActive = match
+        if (!topEntry || entry.boundingClientRect.top < topEntry.boundingClientRect.top) {
+          topEntry = entry
         }
+      }
+    }
+    if (topEntry) {
+      const match = sections.find(s => s.el === topEntry.target)
+      if (match && match !== currentActive) {
+        if (currentActive) currentActive.link.classList.remove('toc-active')
+        match.link.classList.add('toc-active')
+        currentActive = match
       }
     }
   }, {

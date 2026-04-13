@@ -287,7 +287,7 @@ export class PackagesAdapter extends SourceAdapter {
       framework: ROOT_SLUG,
       url: repo.html_url ?? `https://github.com/${repo.full_name ?? `${repo.owner?.login ?? ''}/${repo.name ?? ''}`}`,
       language: normalizeLanguage(repo.language),
-      sourceMetadata,
+      sourceMetadata: JSON.stringify(sourceMetadata),
     })
 
     result.document.title = repo.full_name ?? repo.name ?? result.document.title
@@ -296,5 +296,9 @@ export class PackagesAdapter extends SourceAdapter {
     result.sections = appendMetadataSection(result.sections, repo, readme)
 
     return this.validateNormalizeResult(result)
+  }
+
+  renderHints() {
+    return { showStars: true, showLicense: true }
   }
 }

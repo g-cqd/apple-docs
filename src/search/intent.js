@@ -1,6 +1,7 @@
 const HOWTO_WORDS = /\b(how|guide|tutorial|example|implement|create|build|use|setup|configure|add|make)\b/i
 const ERROR_WORDS = /\b(error|crash|exception|fail|issue|bug|fix|troubleshoot|exc_bad|abort|segfault)\b/i
 const CONCEPT_PATTERNS = /\b(what\s+is|difference\s+between|vs\.?|overview|introduction|explain)\b/i
+const WWDC_PATTERN = /\bwwdc\b|\b20[12]\d\b/i
 const CAMEL_CASE = /[a-z][A-Z]/
 const QUALIFIED_NAME = /[.:]{2}|(?:[A-Z]\w+\.(?:[a-z]\w+|[A-Z]\w+))/
 const SINGLE_CAPITALIZED = /^[A-Z][A-Za-z0-9]+$/
@@ -38,6 +39,11 @@ export function detectIntent(query) {
   // Conceptual queries
   if (CONCEPT_PATTERNS.test(q)) {
     return { type: 'concept', confidence: 0.7 }
+  }
+
+  // WWDC / conference queries (year or "wwdc" keyword)
+  if (WWDC_PATTERN.test(q)) {
+    return { type: 'wwdc', confidence: 0.8 }
   }
 
   return { type: 'general', confidence: 0.5 }

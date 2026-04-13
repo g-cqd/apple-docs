@@ -46,4 +46,8 @@ export class HigAdapter extends SourceAdapter {
   extractReferences(_key, rawPayload) {
     return extractReferences(rawPayload)
   }
+
+  renderHints() {
+    return { showPlatformBadges: true }
+  }
 }

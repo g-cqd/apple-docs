@@ -1,6 +1,6 @@
 {
   "name": "@g-cqd/apple-docs",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "Apple Developer Documentation CLI and MCP server — search, read, and browse Apple docs locally",
   "type": "module",
   "bin": {

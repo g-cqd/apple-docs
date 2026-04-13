@@ -262,6 +262,9 @@ export class DocsDatabase {
           ['metalkit', 'metal'],
           ['uikitcore', 'uikit'],
           ['appkit', 'cocoa'],
+          ['metalperformanceshaders', 'metal'],
+          ['foundation', 'nsobject'],
+          ['swiftui', 'declarativeui'],
         ]
         const insertSynonym = this.db.query('INSERT OR IGNORE INTO framework_synonyms (canonical, alias) VALUES (?, ?)')
         for (const [canonical, alias] of synonyms) {

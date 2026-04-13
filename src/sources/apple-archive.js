@@ -310,4 +310,8 @@ export class AppleArchiveAdapter extends SourceAdapter {
     this._guideCatalog = guides
     return guides
   }
+
+  renderHints() {
+    return { showArchiveBadge: true }
+  }
 }

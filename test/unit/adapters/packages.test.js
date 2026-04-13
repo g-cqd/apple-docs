@@ -259,7 +259,7 @@ describe('PackagesAdapter', () => {
     expect(result.document.abstractText).toBe('Straightforward, type-safe argument parsing for Swift')
     expect(result.document.language).toBe('swift')
 
-    const meta = result.document.sourceMetadata
+    const meta = JSON.parse(result.document.sourceMetadata)
     expect(meta.package).toBe(true)
     expect(meta.fullName).toBe('apple/swift-argument-parser')
     expect(meta.license).toBe('Apache-2.0')

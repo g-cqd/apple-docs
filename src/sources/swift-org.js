@@ -88,4 +88,8 @@ export class SwiftOrgAdapter extends SourceAdapter {
 
     return this.validateNormalizeResult(result)
   }
+
+  renderHints() {
+    return {}
+  }
 }

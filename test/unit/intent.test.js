@@ -53,6 +53,23 @@ describe('detectIntent', () => {
     expect(detectIntent('what is concurrency').type).toBe('concept')
   })
 
+  test('detects WWDC queries', () => {
+    expect(detectIntent('wwdc 2024 sessions').type).toBe('wwdc')
+    expect(detectIntent('wwdc').type).toBe('wwdc')
+    expect(detectIntent('wwdc swiftui').type).toBe('wwdc')
+    expect(detectIntent('wwdc 2024 sessions').confidence).toBe(0.8)
+  })
+
+  test('year alone triggers WWDC intent', () => {
+    expect(detectIntent('2024 swiftdata').type).toBe('wwdc')
+    expect(detectIntent('2023 concurrency').type).toBe('wwdc')
+  })
+
+  test('CamelCase takes priority over WWDC year', () => {
+    // CamelCase detection runs first
+    expect(detectIntent('NavigationStack 2024').type).toBe('symbol')
+  })
+
   test('falls back to general for unclassified queries', () => {
     expect(detectIntent('privacy').type).toBe('general')
     expect(detectIntent('networking').type).toBe('general')

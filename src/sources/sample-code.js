@@ -203,4 +203,8 @@ export class SampleCodeAdapter extends SourceAdapter {
 
     return this.validateNormalizeResult(result)
   }
+
+  renderHints() {
+    return { showFrameworkBadges: true }
+  }
 }

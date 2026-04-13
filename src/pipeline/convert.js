@@ -25,8 +25,8 @@ export async function convertAll(db, dataDir, logger, onProgress, filters = {}) 
 
   for (const { path } of pages) {
     try {
-      await convertPage(db, dataDir, path)
-      done++
+      const ok = await convertPage(db, dataDir, path)
+      if (ok !== false) done++
       onProgress?.({ done, total: pages.length, path })
     } catch (e) {
       logger.warn(`Convert failed: ${path}`, { error: e.message })
