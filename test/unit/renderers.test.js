@@ -88,6 +88,219 @@ describe('renderHtml', () => {
   })
 })
 
+describe('renderHtml block nodes', () => {
+  test('renders paragraph with inline content', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Overview',
+      contentJson: JSON.stringify([
+        { type: 'paragraph', inlineContent: [{ type: 'text', text: 'Hello world' }] },
+      ]),
+      contentText: 'Hello world',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<p>Hello world</p>')
+  })
+
+  test('renders codeListing with language', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Example',
+      contentJson: JSON.stringify([
+        { type: 'codeListing', syntax: 'swift', code: ['let x = 1', 'print(x)'] },
+      ]),
+      contentText: 'let x = 1',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<pre><code class="language-swift">')
+    expect(html).toContain('let x = 1\nprint(x)')
+  })
+
+  test('renders unordered and ordered lists', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Lists',
+      contentJson: JSON.stringify([
+        { type: 'unorderedList', items: [
+          { content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'item A' }] }] },
+          { content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'item B' }] }] },
+        ]},
+        { type: 'orderedList', items: [
+          { content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'first' }] }] },
+        ]},
+      ]),
+      contentText: 'item A item B first',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<ul>')
+    expect(html).toContain('<li><p>item A</p></li>')
+    expect(html).toContain('<ol>')
+    expect(html).toContain('<li><p>first</p></li>')
+  })
+
+  test('renders aside with style', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Notes',
+      contentJson: JSON.stringify([
+        { type: 'aside', style: 'Important', content: [
+          { type: 'paragraph', inlineContent: [{ type: 'text', text: 'Be careful' }] },
+        ]},
+      ]),
+      contentText: 'Be careful',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<aside>')
+    expect(html).toContain('Important:')
+    expect(html).toContain('Be careful')
+  })
+
+  test('renders table with header row', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Data',
+      contentJson: JSON.stringify([
+        { type: 'table', header: 'row', rows: [
+          [{ content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Name' }] }] }],
+          [{ content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Alice' }] }] }],
+        ]},
+      ]),
+      contentText: 'Name Alice',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<table>')
+    expect(html).toContain('<th>')
+    expect(html).toContain('<td>')
+    expect(html).toContain('</table>')
+  })
+
+  test('renders termList as dl', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Terms',
+      contentJson: JSON.stringify([
+        { type: 'termList', items: [
+          { term: { inlineContent: [{ type: 'text', text: 'Key' }] },
+            definition: { content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Value' }] }] } },
+        ]},
+      ]),
+      contentText: 'Key Value',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<dl>')
+    expect(html).toContain('<dt>Key</dt>')
+    expect(html).toContain('<dd><p>Value</p></dd>')
+  })
+
+  test('renders heading with anchor', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Details',
+      contentJson: JSON.stringify([
+        { type: 'heading', level: 3, text: 'Subsection', anchor: 'subsection' },
+      ]),
+      contentText: 'Subsection',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<h3 id="subsection">Subsection</h3>')
+  })
+})
+
+describe('renderHtml inline nodes', () => {
+  function renderInline(nodes) {
+    return renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Test',
+      contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: nodes }]),
+      contentText: '',
+      sortOrder: 3,
+    }])
+  }
+
+  test('renders codeVoice as <code>', () => {
+    const html = renderInline([{ type: 'codeVoice', code: 'View' }])
+    expect(html).toContain('<code>View</code>')
+  })
+
+  test('renders emphasis as <em>', () => {
+    const html = renderInline([{ type: 'emphasis', inlineContent: [{ type: 'text', text: 'italic' }] }])
+    expect(html).toContain('<em>italic</em>')
+  })
+
+  test('renders strong as <strong>', () => {
+    const html = renderInline([{ type: 'strong', inlineContent: [{ type: 'text', text: 'bold' }] }])
+    expect(html).toContain('<strong>bold</strong>')
+  })
+
+  test('renders superscript and subscript', () => {
+    const html = renderInline([
+      { type: 'superscript', inlineContent: [{ type: 'text', text: '2' }] },
+      { type: 'subscript', inlineContent: [{ type: 'text', text: 'n' }] },
+    ])
+    expect(html).toContain('<sup>2</sup>')
+    expect(html).toContain('<sub>n</sub>')
+  })
+
+  test('renders strikethrough as <s>', () => {
+    const html = renderInline([{ type: 'strikethrough', inlineContent: [{ type: 'text', text: 'old' }] }])
+    expect(html).toContain('<s>old</s>')
+  })
+
+  test('renders link with destination', () => {
+    const html = renderInline([{ type: 'link', destination: 'https://example.com', title: 'Example' }])
+    expect(html).toContain('<a href="https://example.com">Example</a>')
+  })
+
+  test('renders image as text placeholder', () => {
+    const html = renderInline([{ type: 'image', alt: 'diagram' }])
+    expect(html).toContain('[diagram]')
+  })
+})
+
+describe('renderHtml parameters section', () => {
+  test('renders parameters from JSON', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'parameters',
+      heading: null,
+      contentJson: JSON.stringify([
+        { name: 'content', content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'The view content' }] }] },
+        { name: 'label', content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'A label' }] }] },
+      ]),
+      contentText: 'content: The view content\nlabel: A label',
+      sortOrder: 2,
+    }])
+    expect(html).toContain('<section id="parameters">')
+    expect(html).toContain('<strong>content</strong>')
+    expect(html).toContain('<strong>label</strong>')
+  })
+
+  test('falls back to text when JSON is null', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'parameters',
+      heading: null,
+      contentJson: null,
+      contentText: 'content: The view content\nlabel: A label',
+      sortOrder: 2,
+    }])
+    expect(html).toContain('<section id="parameters">')
+    expect(html).toContain('content: The view content')
+  })
+})
+
+describe('renderHtml markdown fallback', () => {
+  test('renders discussion from plain text with markdown', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Overview',
+      contentJson: null,
+      contentText: '# Heading\n\nA paragraph.\n\n```swift\nlet x = 1\n```\n\n- item 1\n- item 2',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<section id="overview">')
+    expect(html).toContain('<p>A paragraph.</p>')
+  })
+})
+
 describe('renderPlainText', () => {
   test('produces plain text with title and content', () => {
     const text = renderPlainText(document, sections)

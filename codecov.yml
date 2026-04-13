@@ -5,12 +5,11 @@ coverage:
   status:
     project:
       default:
-        # Start informational — does not block PRs
-        informational: true
+        target: 75%
+        threshold: 2%
     patch:
       default:
         target: 60%
-        informational: true
 
 comment:
   layout: "reach,diff,flags,files"
