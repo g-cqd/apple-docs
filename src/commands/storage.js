@@ -12,7 +12,7 @@ import { pool } from '../lib/pool.js'
  * @param {object} opts
  * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string }} ctx
  */
-export function storageStats(opts, ctx) {
+export function storageStats(_opts, ctx) {
   const { db, dataDir } = ctx
 
   const dbPath = join(dataDir, 'apple-docs.db')
@@ -20,8 +20,8 @@ export function storageStats(opts, ctx) {
   try {
     dbSize = statSync(dbPath).size
     // Also account for the WAL file when present
-    if (existsSync(dbPath + '-wal')) {
-      dbSize += statSync(dbPath + '-wal').size
+    if (existsSync(`${dbPath}-wal`)) {
+      dbSize += statSync(`${dbPath}-wal`).size
     }
   } catch {
     dbSize = 0
@@ -75,9 +75,10 @@ export function storageStats(opts, ctx) {
  * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string, logger?: object }} ctx
  * @returns {{ droppedDirs: string[], orphansCleaned: number, vacuumed: boolean }}
  */
-export function storageGc(opts = {}, ctx) {
+export function storageGc(opts, ctx) {
   const { db, dataDir, logger } = ctx
-  const { drop = [], vacuum = true } = opts
+  const _opts = opts ?? {}
+  const { drop = [], vacuum = true, olderThan = null } = _opts
 
   const droppedDirs = []
 
@@ -99,15 +100,19 @@ export function storageGc(opts = {}, ctx) {
 
   // Remove orphan crawl_state entries (root_slug not in roots)
   db.db.run('DELETE FROM crawl_state WHERE root_slug NOT IN (SELECT slug FROM roots)')
+  let orphansCleaned = db.db.query('SELECT changes() as c').get().c
 
   // Remove orphan refs (source page deleted or missing)
   db.db.run("DELETE FROM refs WHERE source_id NOT IN (SELECT id FROM pages WHERE status = 'active')")
+  orphansCleaned += db.db.query('SELECT changes() as c').get().c
 
   // Remove stale activity records
-  db.db.run('DELETE FROM activity')
-
-  // Count cleaned rows (crawl_state and refs combined — already gone, so report via changes)
-  const orphansCleaned = db.db.query('SELECT changes() as c').get().c
+  if (olderThan != null) {
+    db.db.run("DELETE FROM activity WHERE timestamp < datetime('now', '-' || ? || ' days')", [Math.max(1, Math.floor(olderThan))])
+  } else {
+    db.db.run('DELETE FROM activity')
+  }
+  orphansCleaned += db.db.query('SELECT changes() as c').get().c
 
   if (vacuum) {
     db.db.run('VACUUM')
@@ -125,20 +130,22 @@ export function storageGc(opts = {}, ctx) {
  * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string, logger?: object }} ctx
  * @returns {Promise<{ materialized: number, format: string }>}
  */
-export async function storageMaterialize(opts = {}, ctx) {
+export async function storageMaterialize(opts, ctx) {
   const { db, dataDir, logger } = ctx
-  const { format = 'markdown', roots } = opts
+  const { format = 'markdown', roots } = opts ?? {}
 
-  let docsQuery
+  let _docsQuery
   let docsRows
 
   if (roots && roots.length > 0) {
     const placeholders = roots.map(() => '?').join(', ')
     docsRows = db.db.query(
-      `SELECT id, key, title, kind, role, role_heading, framework, abstract_text, declaration_text, source_type
-       FROM documents
-       WHERE framework IN (${placeholders})
-       ORDER BY key`
+      `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.abstract_text, d.declaration_text, d.source_type
+       FROM documents d
+       JOIN pages p ON p.path = d.key
+       JOIN roots r ON p.root_id = r.id
+       WHERE r.slug IN (${placeholders}) AND p.status = 'active'
+       ORDER BY d.key`
     ).all(...roots)
   } else {
     docsRows = db.db.query(

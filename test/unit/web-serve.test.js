@@ -2,17 +2,32 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { startDevServer } from '../../src/web/serve.js'
 
-let db, ctx, serverInfo
+let db
+let ctx
+let serverInfo
 
 beforeEach(() => {
   db = new DocsDatabase(':memory:')
 
-  db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
-  const now = new Date().toISOString()
-  db.db.run(`INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
-    VALUES ('apple-docc', 'documentation/swiftui/view', 'View', 'symbol', 'symbol', 'Protocol', 'swiftui', 'A type that represents part of your app UI', ?, ?)`, [now, now])
+  const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+  db.upsertPage({
+    rootId: root.id,
+    path: 'documentation/swiftui/view',
+    url: 'https://developer.apple.com/documentation/swiftui/view',
+    title: 'View',
+    role: 'symbol',
+    roleHeading: 'Protocol',
+    abstract: 'A type that represents part of your app UI',
+    platforms: null,
+    declaration: null,
+    etag: null,
+    lastModified: null,
+    contentHash: 'test',
+    downloadedAt: new Date().toISOString(),
+    sourceType: 'apple-docc',
+  })
   const docId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
-  db.db.run(`INSERT INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`, [docId])
+  db.db.run(`INSERT OR REPLACE INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`, [docId])
 
   ctx = { db, dataDir: '/tmp', logger: { info() {}, warn() {}, error() {} } }
   serverInfo = startDevServer({ port: 0 }, ctx)

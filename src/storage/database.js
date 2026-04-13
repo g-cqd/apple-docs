@@ -165,13 +165,12 @@ export class DocsDatabase {
     // Check existing version before starting
     this.db.run('CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
     const row = this.db.query('SELECT value FROM schema_meta WHERE key = ?').get('schema_version')
-    const current = row ? parseInt(row.value, 10) : 0
+    const current = row ? Number.parseInt(row.value, 10) : 0
 
     // Refuse to open a database from a newer version (downgrade protection)
     if (current > SCHEMA_VERSION) {
       throw new Error(
-        `Database schema version ${current} is newer than supported version ${SCHEMA_VERSION}. ` +
-        `Update apple-docs to a newer version.`
+        `Database schema version ${current} is newer than supported version ${SCHEMA_VERSION}. Update apple-docs to a newer version.`
       )
     }
 
@@ -504,7 +503,9 @@ export class DocsDatabase {
     this._getDocumentsByRoot = this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract
       FROM documents d
-      WHERE d.framework = ?
+      JOIN pages p ON p.path = d.key
+      JOIN roots r ON p.root_id = r.id
+      WHERE r.slug = ? AND p.status = 'active'
       ORDER BY d.key
     `)
 
@@ -615,6 +616,7 @@ export class DocsDatabase {
       LEFT JOIN roots r ON r.slug = d.framework
       WHERE documents_fts MATCH $query
         AND ($framework IS NULL OR d.framework = $framework)
+        AND ($source_type IS NULL OR d.source_type = $source_type)
         AND ($kind IS NULL OR d.kind = $kind OR d.role = $kind)
         AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
         AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
@@ -636,6 +638,7 @@ export class DocsDatabase {
       LEFT JOIN roots r ON r.slug = d.framework
       WHERE documents_trigram MATCH $query
         AND ($framework IS NULL OR d.framework = $framework)
+        AND ($source_type IS NULL OR d.source_type = $source_type)
         AND ($kind IS NULL OR d.kind = $kind OR d.role = $kind)
         AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
         AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
@@ -657,6 +660,7 @@ export class DocsDatabase {
       LEFT JOIN roots r ON r.slug = d.framework
       WHERE documents_body_fts MATCH $query
         AND ($framework IS NULL OR d.framework = $framework)
+        AND ($source_type IS NULL OR d.source_type = $source_type)
         AND ($kind IS NULL OR d.kind = $kind OR d.role = $kind)
         AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
         AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
@@ -974,20 +978,20 @@ export class DocsDatabase {
     return this._getDocumentsByRoot.all(rootSlug)
   }
 
-  searchPages(ftsQuery, rawQuery, { framework = null, kind = null, limit = 100, language = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
-    const filterParams = { $language: language, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
+  searchPages(ftsQuery, rawQuery, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
+    const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     return this._searchDocuments.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
   }
 
-  searchTrigram(query, { framework = null, kind = null, limit = 100, language = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
-    const filterParams = { $language: language, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
+  searchTrigram(query, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
+    const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
       return this._searchDocumentsTrigram.all({ $query: query, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
     } catch { return [] }
   }
 
-  searchBody(ftsQuery, { framework = null, kind = null, limit = 100, language = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
-    const filterParams = { $language: language, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
+  searchBody(ftsQuery, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
+    const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
       return this._searchDocumentsBody.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
     } catch { return [] }
@@ -1257,7 +1261,7 @@ export class DocsDatabase {
 
   getSchemaVersion() {
     const row = this.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
-    return row ? parseInt(row.value, 10) : 0
+    return row ? Number.parseInt(row.value, 10) : 0
   }
 
   getStats() {

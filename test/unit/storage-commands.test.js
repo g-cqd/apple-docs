@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { storageStats, storageGc, storageMaterialize } from '../../src/commands/storage.js'
 
-let db, dataDir, ctx
+let db
+let dataDir
+let ctx
 
 beforeEach(() => {
   db = new DocsDatabase(':memory:')
@@ -15,15 +17,26 @@ beforeEach(() => {
   mkdirSync(join(dataDir, 'markdown'), { recursive: true })
   mkdirSync(join(dataDir, 'html'), { recursive: true })
 
-  const now = new Date().toISOString()
-  db.db.run(
-    `INSERT INTO documents (source_type, key, title, kind, framework, abstract_text, created_at, updated_at)
-     VALUES ('apple-docc', 'documentation/swiftui/view', 'View', 'symbol', 'swiftui', 'A type that represents part of your app UI', ?, ?)`,
-    [now, now]
-  )
+  const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'apple-docc')
+  db.upsertPage({
+    rootId: root.id,
+    path: 'documentation/swiftui/view',
+    url: 'https://developer.apple.com/documentation/swiftui/view',
+    title: 'View',
+    role: 'symbol',
+    roleHeading: 'Protocol',
+    abstract: 'A type that represents part of your app UI',
+    platforms: null,
+    declaration: null,
+    etag: null,
+    lastModified: null,
+    contentHash: 'test',
+    downloadedAt: new Date().toISOString(),
+    sourceType: 'apple-docc',
+  })
   const docId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
   db.db.run(
-    `INSERT INTO document_sections (document_id, section_kind, heading, content_text, sort_order)
+    `INSERT OR REPLACE INTO document_sections (document_id, section_kind, heading, content_text, sort_order)
      VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`,
     [docId]
   )

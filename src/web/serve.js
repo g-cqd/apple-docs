@@ -99,9 +99,7 @@ export function startDevServer(opts, ctx) {
         // Try as framework listing first
         const root = db.getRootBySlug(key)
         if (root) {
-          const docs = db.db.query(
-            'SELECT key, title, kind, role, role_heading, abstract_text FROM documents WHERE framework = ? ORDER BY title'
-          ).all(root.slug)
+          const docs = db.getPagesByRoot(root.slug)
           const html = renderFrameworkPage(root, docs, siteConfig)
           return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
         }
