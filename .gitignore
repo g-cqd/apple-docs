@@ -1,9 +1,26 @@
 node_modules/
 .DS_Store
+
+# SQLite
 *.db
 *.db-wal
 *.db-shm
 
-# Audit reports
+# Build outputs
+dist/
+
+# Test artifacts
 coverage/
 reports/
+test/.tmp-*
+
+# Mutation testing
+.stryker-tmp/
+stryker.log
+
+# Benchmark history
+test/benchmarks/*.jsonl
+
+# Environment
+.env
+.env.*
