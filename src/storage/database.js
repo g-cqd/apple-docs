@@ -501,12 +501,6 @@ export class DocsDatabase {
 
     this._getPage = this.db.query('SELECT p.*, r.slug as root_slug, r.display_name as framework FROM pages p JOIN roots r ON p.root_id = r.id WHERE p.path = ? AND p.status = ?')
 
-    this._getPagesByRoot = this.db.query(`
-      SELECT p.path, p.title, p.role, p.role_heading, p.abstract
-      FROM pages p JOIN roots r ON p.root_id = r.id
-      WHERE r.slug = ? AND p.status = 'active'
-      ORDER BY p.path
-    `)
     this._getDocumentsByRoot = this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract
       FROM documents d
@@ -514,98 +508,11 @@ export class DocsDatabase {
       ORDER BY d.key
     `)
 
-    this._searchPages = this.db.query(`
-      SELECT p.path, p.title, p.role, p.role_heading, p.abstract,
-             p.declaration, p.platforms, r.display_name as framework, r.slug as root_slug,
-             COALESCE(p.source_type, r.source_type) as source_type,
-             p.source_metadata as source_metadata,
-             bm25(pages_fts, 10.0, 5.0, 3.0, 2.0, 1.0) as rank,
-             CASE
-               WHEN LOWER(p.title) = LOWER($raw) THEN 0
-               WHEN LOWER(p.title) LIKE LOWER($raw) || '%' THEN 1
-               WHEN INSTR(LOWER(p.title), LOWER($raw)) > 0 THEN 2
-               ELSE 3
-             END as tier
-      FROM pages_fts
-      JOIN pages p ON pages_fts.rowid = p.id
-      JOIN roots r ON p.root_id = r.id
-      WHERE pages_fts MATCH $query
-        AND ($framework IS NULL OR r.slug = $framework)
-        AND ($kind IS NULL OR p.role = $kind)
-        AND p.status = 'active'
-      ORDER BY tier, rank
-      LIMIT $limit
-    `)
-
-    // Trigram substring search on titles
-    this._searchTrigram = this.db.query(`
-      SELECT p.path, p.title, p.role, p.role_heading, p.abstract,
-             p.declaration, p.platforms, r.display_name as framework, r.slug as root_slug,
-             COALESCE(p.source_type, r.source_type) as source_type,
-             p.source_metadata as source_metadata
-      FROM titles_trigram
-      JOIN pages p ON titles_trigram.rowid = p.id
-      JOIN roots r ON p.root_id = r.id
-      WHERE titles_trigram MATCH $query
-        AND ($framework IS NULL OR r.slug = $framework)
-        AND ($kind IS NULL OR p.role = $kind)
-        AND p.status = 'active'
-      LIMIT $limit
-    `)
-
-    // Full-body search
-    this._searchBody = this.db.query(`
-      SELECT p.path, p.title, p.role, p.role_heading, p.abstract,
-             p.declaration, p.platforms, r.display_name as framework, r.slug as root_slug,
-             COALESCE(p.source_type, r.source_type) as source_type,
-             p.source_metadata as source_metadata,
-             bm25(pages_body_fts, 1.0) as rank
-      FROM pages_body_fts
-      JOIN pages p ON pages_body_fts.rowid = p.id
-      JOIN roots r ON p.root_id = r.id
-      WHERE pages_body_fts MATCH $query
-        AND ($framework IS NULL OR r.slug = $framework)
-        AND ($kind IS NULL OR p.role = $kind)
-        AND p.status = 'active'
-      ORDER BY rank
-      LIMIT $limit
-    `)
-
-    this._bodyIndexCount = this.db.query('SELECT COUNT(*) as c FROM pages_body_fts')
-    this._insertBody = this.db.query('INSERT OR REPLACE INTO pages_body_fts(rowid, body) VALUES ($id, $body)')
-    this._clearBody = this.db.query("DELETE FROM pages_body_fts")
-
-    // Trigram candidates for fuzzy (returns id + title for JS-side Levenshtein)
-    this._trigramCandidates = this.db.query(`
-      SELECT p.id, p.title FROM titles_trigram
-      JOIN pages p ON titles_trigram.rowid = p.id
-      WHERE titles_trigram MATCH $trigram AND p.status = 'active'
-    `)
-
-    this._searchByTitle = this.db.query(`
-      SELECT p.*, r.slug as root_slug, r.display_name as framework
-      FROM pages p JOIN roots r ON p.root_id = r.id
-      WHERE p.title = $title AND p.status = 'active'
-        AND ($framework IS NULL OR r.slug = $framework)
-      ORDER BY CASE WHEN p.role = 'symbol' THEN 0 ELSE 1 END, length(p.path)
-      LIMIT 1
-    `)
-    this._getPagesByRole = this.db.query(`
-      SELECT p.path as key, p.path, p.title, p.role,
-             r.slug as root_slug, COALESCE(p.source_type, r.source_type) as source_type
-      FROM pages p
-      JOIN roots r ON p.root_id = r.id
-      WHERE p.role = ?
-        AND p.status = 'active'
-      ORDER BY p.path
-    `)
-
     this._getRoots = this.db.query('SELECT * FROM roots ORDER BY slug')
     this._getRootsByKind = this.db.query('SELECT * FROM roots WHERE kind = ? ORDER BY slug')
     this._getRootBySlug = this.db.query('SELECT * FROM roots WHERE slug = ?')
     this._getRootById = this.db.query('SELECT * FROM roots WHERE id = ?')
 
-    this._normalizedDocumentCount = this.db.query('SELECT COUNT(*) as count FROM documents')
     this._upsertDocument = this.db.query(`
       INSERT INTO documents (
         source_type, key, title, kind, role, role_heading, framework, url, language,
@@ -798,15 +705,6 @@ export class DocsDatabase {
       WHERE d.id = ?
     `)
     this._deleteDocumentByKey = this.db.query('DELETE FROM documents WHERE key = ?')
-    this._getPageSearchRecordById = this.db.query(`
-      SELECT p.path, p.title, p.role, p.role_heading, p.abstract,
-             p.declaration, p.platforms, r.display_name as framework, r.slug as root_slug,
-             COALESCE(p.source_type, r.source_type) as source_type,
-             p.source_metadata as source_metadata
-      FROM pages p
-      JOIN roots r ON p.root_id = r.id
-      WHERE p.id = ? AND p.status = 'active'
-    `)
 
     this._getFrameworkSynonyms = this.db.query(`
       SELECT alias FROM framework_synonyms WHERE canonical = ?
@@ -964,21 +862,7 @@ export class DocsDatabase {
     return page
   }
 
-  hasNormalizedDocuments() {
-    if (this._hasNormalizedDocsCache !== undefined) return this._hasNormalizedDocsCache
-    try {
-      this._hasNormalizedDocsCache = this._normalizedDocumentCount.get().count > 0
-      return this._hasNormalizedDocsCache
-    } catch { return false }
-  }
-
-  /** Invalidate the normalized documents cache (call after bulk inserts). */
-  invalidateNormalizedDocsCache() {
-    this._hasNormalizedDocsCache = undefined
-  }
-
   upsertDocument(params) {
-    this._hasNormalizedDocsCache = true // After any upsert, normalized docs exist
     const now = new Date().toISOString()
     return this._upsertDocument.get({
       $source_type: params.sourceType ?? 'apple-docc',
@@ -1050,19 +934,17 @@ export class DocsDatabase {
   }
 
   getPage(path) {
-    if (this.hasNormalizedDocuments()) {
-      const document = this._getDocument.get(path)
-      if (document) {
-        return {
-          ...document,
-          path: document.key,
-          framework: document.framework_display,
-          abstract: document.abstract_text,
-          declaration: document.declaration_text,
-          platforms: document.platforms_json,
-          downloaded_at: null,
-          converted_at: null,
-        }
+    const document = this._getDocument.get(path)
+    if (document) {
+      return {
+        ...document,
+        path: document.key,
+        framework: document.framework_display,
+        abstract: document.abstract_text,
+        declaration: document.declaration_text,
+        platforms: document.platforms_json,
+        downloaded_at: null,
+        converted_at: null,
       }
     }
     return this._getPage.get(path, 'active')
@@ -1089,37 +971,25 @@ export class DocsDatabase {
   }
 
   getPagesByRoot(rootSlug) {
-    if (this.hasNormalizedDocuments()) {
-      return this._getDocumentsByRoot.all(rootSlug)
-    }
-    return this._getPagesByRoot.all(rootSlug)
+    return this._getDocumentsByRoot.all(rootSlug)
   }
 
   searchPages(ftsQuery, rawQuery, { framework = null, kind = null, limit = 100, language = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
     const filterParams = { $language: language, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
-    if (this.hasNormalizedDocuments()) {
-      return this._searchDocuments.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
-    }
-    return this._searchPages.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit })
+    return this._searchDocuments.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
   }
 
   searchTrigram(query, { framework = null, kind = null, limit = 100, language = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
     const filterParams = { $language: language, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
-      if (this.hasNormalizedDocuments()) {
-        return this._searchDocumentsTrigram.all({ $query: query, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
-      }
-      return this._searchTrigram.all({ $query: query, $framework: framework, $kind: kind, $limit: limit })
+      return this._searchDocumentsTrigram.all({ $query: query, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
     } catch { return [] }
   }
 
   searchBody(ftsQuery, { framework = null, kind = null, limit = 100, language = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
     const filterParams = { $language: language, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
-      if (this.hasNormalizedDocuments()) {
-        return this._searchDocumentsBody.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
-      }
-      return this._searchBody.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit })
+      return this._searchDocumentsBody.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
     } catch { return [] }
   }
 
@@ -1174,49 +1044,29 @@ export class DocsDatabase {
   }
 
   getBodyIndexCount() {
-    if (this.hasNormalizedDocuments()) {
-      try { return this._documentsBodyIndexCount.get().c } catch {}
-    }
-    try { return this._bodyIndexCount.get().c } catch { return 0 }
+    try { return this._documentsBodyIndexCount.get().c } catch { return 0 }
   }
 
-  insertBody(pageId, body) {
-    if (this.hasNormalizedDocuments()) {
-      this._insertDocumentBody.run({ $id: pageId, $body: body })
-      return
-    }
-    this._insertBody.run({ $id: pageId, $body: body })
+  insertBody(documentId, body) {
+    this._insertDocumentBody.run({ $id: documentId, $body: body })
   }
 
   clearBodyIndex() {
-    if (this.hasNormalizedDocuments()) {
-      this._clearDocumentBody.run()
-      return
-    }
-    this._clearBody.run()
+    this._clearDocumentBody.run()
   }
 
   getTrigramCandidates(trigram) {
     try {
-      if (this.hasNormalizedDocuments()) {
-        return this._documentTrigramCandidates.all({ $trigram: trigram })
-      }
-      return this._trigramCandidates.all({ $trigram: trigram })
+      return this._documentTrigramCandidates.all({ $trigram: trigram })
     } catch { return [] }
   }
 
   searchByTitle(title, framework = null) {
-    if (this.hasNormalizedDocuments()) {
-      return this._searchDocumentByTitle.get({ $title: title, $framework: framework })
-    }
-    return this._searchByTitle.get({ $title: title, $framework: framework })
+    return this._searchDocumentByTitle.get({ $title: title, $framework: framework })
   }
 
   getSearchRecordById(id) {
-    if (this.hasNormalizedDocuments()) {
-      return this._getDocumentSearchRecordById.get(id)
-    }
-    return this._getPageSearchRecordById.get(id)
+    return this._getDocumentSearchRecordById.get(id)
   }
 
   getRoots(kind = null) {
@@ -1332,10 +1182,7 @@ export class DocsDatabase {
   }
 
   getPagesByRole(role) {
-    if (this.hasNormalizedDocuments()) {
-      return this._getDocumentsByRole.all(role)
-    }
-    return this._getPagesByRole.all(role)
+    return this._getDocumentsByRole.all(role)
   }
 
   markPageDeleted(path) {

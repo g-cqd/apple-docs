@@ -58,6 +58,8 @@ apple-docs <command> [options]
 | `index` | Build full-body search index |
 | `doctor` | Diagnose and repair corpus |
 | `status` | Show corpus statistics |
+| `web <subcommand>` | Build, preview, and deploy static documentation site |
+| `storage <subcommand>` | Manage disk usage, caching profiles, and materialization |
 
 ### search
 
@@ -163,7 +165,66 @@ apple-docs doctor             # analyze and fix
 apple-docs doctor --minify    # also minify raw JSON (~40% disk savings)
 apple-docs doctor --index     # also rebuild body index
 apple-docs doctor --dry-run   # show what would be fixed
+apple-docs doctor --verify    # run corpus integrity checks (FTS integrity, orphan detection, file existence sampling)
 ```
+
+### status
+
+Show corpus statistics. Also reports freshness information: days since last sync, and any roots that have not been updated recently.
+
+```bash
+apple-docs status
+```
+
+### web
+
+Build and preview a fully static documentation website from the local corpus. The static site supports light/dark mode via system preference detection, client-side search powered by a Web Worker, and a responsive layout that works on mobile and desktop.
+
+```bash
+apple-docs web build               # build static site to dist/web/
+apple-docs web build --out <dir>   # specify output directory
+apple-docs web serve               # start local preview server (default port 3000)
+apple-docs web serve --port 8080   # use a different port
+apple-docs web deploy github-pages # show deployment instructions for GitHub Pages
+apple-docs web deploy cloudflare   # show deployment instructions for Cloudflare Pages
+apple-docs web deploy vercel       # show deployment instructions for Vercel
+apple-docs web deploy netlify      # show deployment instructions for Netlify
+```
+
+The generated site in `dist/web/` is self-contained and deployable to any static host. Client-side search loads a compact title index eagerly and fetches body shards on demand, so search works offline after the first page load.
+
+#### Static website workflow
+
+```bash
+apple-docs sync --full
+apple-docs web build --out dist/web
+apple-docs web serve               # preview locally at http://localhost:3000
+apple-docs web deploy github-pages # get deployment instructions
+```
+
+### storage
+
+Manage disk usage and rendering materialization. Storage profiles let you trade disk space against read-time rendering cost.
+
+```bash
+apple-docs storage profile         # show current storage profile
+apple-docs storage profile set <name>  # change profile (raw-only, balanced, prebuilt)
+apple-docs storage profile list    # list all available profiles
+apple-docs storage stats           # show disk usage breakdown (database, raw JSON, markdown, HTML)
+apple-docs storage gc              # garbage collect cached rendered files
+apple-docs storage materialize markdown   # force-render all pages to markdown
+apple-docs storage materialize html       # force-render all pages to HTML
+```
+
+#### Storage profiles
+
+| Profile | Description | Disk usage |
+|---------|-------------|------------|
+| `raw-only` | No rendering cache. Renders Markdown on demand for every `read` call. | Minimal (~2.5 GB) |
+| `balanced` | Default. Caches rendered Markdown on first read with a 7-day TTL. | Medium (~2.5–3.5 GB) |
+| `prebuilt` | Full materialization. Pre-renders both Markdown and HTML for all pages. | Full (~5+ GB) |
+
+The `balanced` profile is the default and suits most workflows. Switch to `raw-only` to minimise disk usage in CI or headless environments. Use `prebuilt` for offline power-user setups or reproducible snapshot builds.
 
 ### Global options
 

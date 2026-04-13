@@ -20,8 +20,9 @@ Commands:
   mcp start            Start MCP stdio server
   mcp install          Show MCP configuration instructions
 
-  web serve            Start local dev server (coming soon)
-  web build            Build static documentation site (coming soon)
+  web serve            Start local dev server
+  web build            Build static documentation site
+  web deploy           Show deployment instructions
 
   storage stats        Show disk usage breakdown
   storage gc           Garbage collect cached files
@@ -238,14 +239,33 @@ Examples:
 `.trim(),
 
   web: `
-Usage: apple-docs web <subcommand>
+Usage: apple-docs web <subcommand> [options]
 
-Static documentation website commands (coming in a future release).
+Static documentation website commands.
 
-Planned subcommands:
+Subcommands:
   serve                Start local dev server
   build                Build static site to dist/web/
-  deploy               Show deployment instructions
+  deploy [platform]    Show deployment instructions
+
+Build options:
+  --out <dir>          Output directory (default: dist/web)
+  --base-url <url>     Base URL prefix for links
+  --site-name <name>   Site title
+
+Serve options:
+  --port <n>           Port number (default: 3000)
+
+Deploy platforms:
+  github-pages         GitHub Pages (default)
+  cloudflare           Cloudflare Pages
+  vercel               Vercel
+  netlify              Netlify
+
+Examples:
+  apple-docs web serve
+  apple-docs web build --out dist/web
+  apple-docs web deploy github-pages
 `.trim(),
 
   storage: `

@@ -188,6 +188,20 @@ export function formatStatus(result) {
     lines.push(`  Run: apple-docs setup --force`)
   }
 
+  if (result.freshness) {
+    const f = result.freshness
+    lines.push('')
+    if (f.lastSyncAt) {
+      const staleLabel = f.isStale ? ' (STALE)' : ''
+      lines.push(`  Last sync:       ${f.daysSinceSync} days ago${staleLabel}`)
+      if (f.staleRoots.length > 0) {
+        lines.push(`  Stale roots:     ${f.staleRoots.map(r => `${r.slug} (${r.daysSince}d)`).join(', ')}`)
+      }
+    } else {
+      lines.push(`  Freshness:       No sync history`)
+    }
+  }
+
   return lines.join('\n')
 }
 
@@ -250,6 +264,17 @@ export function formatConsolidate(result) {
       }
       lines.push(`    Overall:       ${sv.ok ? 'healthy' : 'issues found'}`)
     }
+  }
+
+  if (result.corpusIntegrity) {
+    const ci = result.corpusIntegrity
+    lines.push('')
+    lines.push(bold('  Corpus Integrity'))
+    for (const c of ci.checks) {
+      const icon = c.ok ? 'ok' : 'FAIL'
+      lines.push(`    ${c.name}: ${icon}${c.detail ? ` (${c.detail})` : ''}`)
+    }
+    lines.push(`    Overall:       ${ci.allOk ? 'healthy' : 'issues found'}`)
   }
 
   if (result.dryRun && result.resolvedPaths?.length > 0) {
@@ -348,6 +373,30 @@ export function formatStorageMaterialize(result) {
     `  Format:       ${result.format}`,
     `  Materialized: ${result.materialized} documents`,
   ].join('\n')
+}
+
+export function formatWebBuild(result) {
+  const fmt = (bytes) => {
+    if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
+    if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
+    if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`
+    return `${bytes} B`
+  }
+  return [
+    bold('Static site built'),
+    `  Pages:       ${result.pagesBuilt}`,
+    `  Frameworks:  ${result.frameworksBuilt}`,
+    `  Output:      ${result.outputDir}`,
+    `  Duration:    ${(result.durationMs / 1000).toFixed(1)}s`,
+  ].join('\n')
+}
+
+export function formatWebDeploy(result) {
+  const lines = [bold(`Deploy to ${result.platform}`), '']
+  for (const step of result.instructions) {
+    lines.push(`  ${step}`)
+  }
+  return lines.join('\n')
 }
 
 export function formatStorageProfile(result) {

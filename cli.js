@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile } from './src/cli/formatter.js'
+import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile, formatWebBuild, formatWebDeploy } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { RateLimiter } from './src/lib/rate-limiter.js'
@@ -209,9 +209,32 @@ try {
     }
 
     case 'web': {
-      console.log('Web commands are coming in a future release.')
-      console.log('Planned: apple-docs web serve | build | deploy')
-      process.exit(0)
+      switch (subcommand) {
+        case 'build': {
+          const { buildStaticSite } = await import('./src/web/build.js')
+          result = await buildStaticSite({ out: flags.out, baseUrl: flags['base-url'], siteName: flags['site-name'] }, ctx)
+          formatter = formatWebBuild
+          break
+        }
+        case 'serve': {
+          const { startDevServer } = await import('./src/web/serve.js')
+          const info = startDevServer({ port: flags.port ? parseInt(flags.port) : 3000, baseUrl: flags['base-url'] }, ctx)
+          console.log(`Dev server running at ${info.url}`)
+          console.log('Press Ctrl+C to stop')
+          // Keep process alive
+          await new Promise(() => {})
+          break
+        }
+        case 'deploy': {
+          const { webDeploy } = await import('./src/commands/web-deploy.js')
+          result = webDeploy({ platform: positional[0] ?? 'github-pages' })
+          formatter = formatWebDeploy
+          break
+        }
+        default:
+          showHelp('web')
+          process.exit(subcommand ? 1 : 0)
+      }
       break
     }
 

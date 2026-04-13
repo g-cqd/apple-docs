@@ -2,6 +2,40 @@ import { join } from 'node:path'
 import { dirSize, fileCount } from '../storage/files.js'
 import { statSync, existsSync } from 'node:fs'
 
+const STALE_THRESHOLD_DAYS = 14
+
+/**
+ * Check data freshness against update_log and per-root update_log entries.
+ * @param {{ db: import('../storage/database.js').DocsDatabase }} db
+ * @returns {{ lastSyncAt: string|null, daysSinceSync: number|null, isStale: boolean, staleRoots: Array<{slug: string, daysSince: number}> }}
+ */
+function freshnessCheck(db) {
+  // Last global sync time
+  const lastLogRow = db.db.query('SELECT timestamp FROM update_log ORDER BY id DESC LIMIT 1').get()
+
+  if (!lastLogRow) {
+    return { lastSyncAt: null, daysSinceSync: null, isStale: true, staleRoots: [] }
+  }
+
+  const lastSyncAt = lastLogRow.timestamp
+  const daysSinceSync = Math.floor((Date.now() - new Date(lastSyncAt).getTime()) / 86400000)
+  const isStale = daysSinceSync > STALE_THRESHOLD_DAYS
+
+  // Per-root staleness: last update_log entry per root_slug
+  const rootRows = db.db.query(
+    "SELECT root_slug, MAX(timestamp) as last_update FROM update_log WHERE root_slug IS NOT NULL GROUP BY root_slug"
+  ).all()
+
+  const staleRoots = rootRows
+    .map(r => ({
+      slug: r.root_slug,
+      daysSince: Math.floor((Date.now() - new Date(r.last_update).getTime()) / 86400000),
+    }))
+    .filter(r => r.daysSince > STALE_THRESHOLD_DAYS)
+
+  return { lastSyncAt, daysSinceSync, isStale, staleRoots }
+}
+
 /**
  * Return corpus status, activity state, and crawl progress.
  * @param {object} opts - (unused)
@@ -75,6 +109,7 @@ export async function status(opts, ctx) {
     lastSync: stats.lastLog?.timestamp ?? null,
     lastAction: stats.lastLog?.action ?? null,
     updateAvailable,
+    freshness: freshnessCheck(db),
   }
 }
 

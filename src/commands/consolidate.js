@@ -175,10 +175,12 @@ export async function consolidate(opts, ctx) {
     bodyIndexed = idxResult.indexed
   }
 
-  // Phase 6: verify snapshot integrity (if requested)
+  // Phase 6: verify snapshot/corpus integrity (if requested)
   let snapshotVerification = null
+  let corpusIntegrity = null
   if (opts.verify) {
     snapshotVerification = verifySnapshot(db, logger)
+    corpusIntegrity = verifyCorpusIntegrity(db, dataDir, logger)
   }
 
   db.clearActivity()
@@ -194,6 +196,7 @@ export async function consolidate(opts, ctx) {
     minifySaved,
     bodyIndexed,
     snapshotVerification,
+    corpusIntegrity,
     resolvedPaths: dryRun ? resolvedPaths : undefined,
     dryRun,
   }
@@ -244,6 +247,88 @@ function verifySnapshot(db, logger) {
     checks,
     ok: allOk,
   }
+}
+
+/**
+ * Verify structural integrity of the corpus database and raw-json files.
+ *
+ * @param {import('../storage/database.js').DocsDatabase} db
+ * @param {string} dataDir
+ * @param {{ debug: Function, info: Function, warn: Function, error: Function }} logger
+ * @returns {{ checks: Array<{ name: string, ok: boolean, detail?: string }>, allOk: boolean }}
+ */
+export function verifyCorpusIntegrity(db, dataDir, logger) {
+  const checks = []
+
+  // Check 1: FTS integrity for documents_fts
+  try {
+    db.db.query("INSERT INTO documents_fts(documents_fts) VALUES('integrity-check')").run()
+    checks.push({ name: 'documents_fts', ok: true })
+  } catch (e) {
+    checks.push({ name: 'documents_fts', ok: false, detail: e.message })
+  }
+
+  // Check 2: FTS integrity for documents_body_fts (if exists)
+  try {
+    db.db.query("INSERT INTO documents_body_fts(documents_body_fts) VALUES('integrity-check')").run()
+    checks.push({ name: 'body_fts', ok: true })
+  } catch (e) {
+    // body_fts might not exist if index hasn't been built
+    if (e.message.includes('no such table')) {
+      checks.push({ name: 'body_fts', ok: true, detail: 'table not yet created' })
+    } else {
+      checks.push({ name: 'body_fts', ok: false, detail: e.message })
+    }
+  }
+
+  // Check 3: Document count consistency
+  const docCount = db.db.query('SELECT COUNT(*) as c FROM documents').get().c
+  const pageCount = db.db.query("SELECT COUNT(*) as c FROM pages WHERE status = 'active'").get().c
+  checks.push({
+    name: 'document_page_consistency',
+    ok: docCount <= pageCount + 10, // Allow small delta for edge cases
+    detail: `documents: ${docCount}, active pages: ${pageCount}`,
+  })
+
+  // Check 4: Orphan sections (sections referencing non-existent documents)
+  const orphanSections = db.db.query(
+    'SELECT COUNT(*) as c FROM document_sections WHERE document_id NOT IN (SELECT id FROM documents)'
+  ).get().c
+  checks.push({
+    name: 'orphan_sections',
+    ok: orphanSections === 0,
+    detail: `${orphanSections} orphan sections`,
+  })
+
+  // Check 5: Orphan relationships (referencing non-existent documents)
+  const orphanRels = db.db.query(
+    'SELECT COUNT(*) as c FROM document_relationships WHERE from_key NOT IN (SELECT key FROM documents) OR to_key NOT IN (SELECT key FROM documents)'
+  ).get().c
+  checks.push({
+    name: 'orphan_relationships',
+    ok: orphanRels === 0,
+    detail: `${orphanRels} orphan relationships`,
+  })
+
+  // Check 6: Sample-based raw-json file existence check
+  const sampleDocs = db.db.query('SELECT key FROM documents ORDER BY RANDOM() LIMIT 10').all()
+  let missingFiles = 0
+  for (const doc of sampleDocs) {
+    const filePath = join(dataDir, 'raw-json', doc.key + '.json')
+    try {
+      statSync(filePath)
+    } catch {
+      missingFiles++
+    }
+  }
+  checks.push({
+    name: 'raw_json_files',
+    ok: missingFiles === 0,
+    detail: `${missingFiles}/${sampleDocs.length} sampled files missing`,
+  })
+
+  const allOk = checks.every(c => c.ok)
+  return { checks, allOk }
 }
 
 /**
