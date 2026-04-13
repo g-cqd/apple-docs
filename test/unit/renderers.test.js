@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test'
 import { normalize } from '../../src/content/normalize.js'
 import { renderMarkdown } from '../../src/content/render-markdown.js'
-import { renderHtml } from '../../src/content/render-html.js'
+import { renderHtml, slugify } from '../../src/content/render-html.js'
 import { renderPlainText } from '../../src/content/render-text.js'
 import { renderSnippet } from '../../src/content/render-snippet.js'
 
@@ -70,6 +70,22 @@ describe('renderHtml', () => {
     expect(html).toContain('<h1>')
     expect(html).toContain('Empty')
   })
+
+  test('sections have id attributes for TOC anchoring', () => {
+    const html = renderHtml(document, sections)
+    // Declaration section should have id
+    if (html.includes('<h2>Declaration</h2>')) {
+      expect(html).toContain('id="declaration"')
+    }
+    // Topics section should have id
+    if (html.includes('<h2>Topics</h2>')) {
+      expect(html).toContain('id="topics"')
+    }
+    // Discussion/Overview section should have id
+    if (html.includes('<h2>Overview</h2>')) {
+      expect(html).toContain('id="overview"')
+    }
+  })
 })
 
 describe('renderPlainText', () => {
@@ -113,5 +129,27 @@ describe('renderSnippet', () => {
   test('handles empty sections', () => {
     const snippet = renderSnippet({ title: 'Test', abstractText: 'Fallback text' }, [], 'test', 100)
     expect(snippet).toBeTruthy()
+  })
+})
+
+describe('slugify', () => {
+  test('converts heading text to URL-safe slug', () => {
+    expect(slugify('See Also')).toBe('see-also')
+    expect(slugify('Overview')).toBe('overview')
+    expect(slugify('Declaration')).toBe('declaration')
+  })
+
+  test('strips non-word characters', () => {
+    expect(slugify('What\'s New?')).toBe('whats-new')
+  })
+
+  test('handles empty/null input', () => {
+    expect(slugify('')).toBe('')
+    expect(slugify(null)).toBe('')
+    expect(slugify(undefined)).toBe('')
+  })
+
+  test('collapses multiple hyphens', () => {
+    expect(slugify('A   B---C')).toBe('a-b-c')
   })
 })

@@ -64,6 +64,10 @@ Phase 8: Storage Profiles & Polish ───────────────
 Phase 9-A: Advanced Web Search Page ─────────────── [Full-page search, faceted filters, URL state]
     ↕ (can parallel with Phase 9-B)
 Phase 9-B: CLI / MCP Consolidation ──────────────── [Merge 3 MCP wrappers, add flags to core tools]
+
+Phase 10-A: Collection Type Filters ─────────────── [Filter chips on home/framework/doc pages by type]
+    ↕ (can parallel with Phase 10-B)
+Phase 10-B: Page Section Navigation (TOC) ──────── [In-page TOC sidebar, section anchors, scroll tracking]
 ```
 
 ## Parallelization Opportunities
@@ -74,6 +78,7 @@ Phase 9-B: CLI / MCP Consolidation ───────────────
 | After Phase 4 | Phase 5 (search) ‖ Phase 6 (distribution) | Search improves ranking; distribution packages artifacts — independent |
 | After Phase 6 | Phase 7 (website) ‖ Phase 8 (storage) | Website reads from model; storage controls materialization — orthogonal. **Confirmed**: all Phase 8 tasks have no hard dependencies on Phase 7 outputs |
 | After Phase 8 | Phase 9-A (web search) ‖ Phase 9-B (MCP consolidation) | 9-A touches web templates/routes/CSS/JS; 9-B touches MCP server/commands/CLI — disjoint file sets |
+| After Phase 9 | Phase 10-A (collection filters) ‖ Phase 10-B (page TOC) | 10-A touches listing templates/collection-filters.js/CSS chips; 10-B touches document template/render-html.js/page-toc.js/CSS sidebar — disjoint functions, shared files need merge care |
 
 ## Constraints & Principles
 
@@ -126,3 +131,7 @@ Live progress is tracked in **[PROGRESS.md](./PROGRESS.md)** — phase status, t
 | [08-phase-7-static-website.md](./08-phase-7-static-website.md) | 7 | Static site generation with client-side search |
 | [09-phase-8-storage-polish.md](./09-phase-8-storage-polish.md) | 8 | Storage profiles, hardening, benchmarks |
 | [10-technical-specs.md](./10-technical-specs.md) | All | Schema DDL, adapter interface, search ranking, rendering specs |
+| [11-phase-9a-web-search.md](./11-phase-9a-web-search.md) | 9-A | Advanced web search page with faceted filters |
+| [12-phase-9b-cli-mcp-consolidation.md](./12-phase-9b-cli-mcp-consolidation.md) | 9-B | CLI and MCP command consolidation |
+| [13-phase-10a-collection-filters.md](./13-phase-10a-collection-filters.md) | 10-A | Collection type filter chips (home, framework, doc pages) |
+| [14-phase-10b-page-toc.md](./14-phase-10b-page-toc.md) | 10-B | Page section navigation / table of contents sidebar |

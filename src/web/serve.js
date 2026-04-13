@@ -180,7 +180,18 @@ export function startDevServer(opts, ctx) {
           const sections = db.db.query(
             'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'
           ).all(doc.id)
-          const html = renderDocumentPage(doc, sections, siteConfig)
+          const html = renderDocumentPage(doc, sections, siteConfig, {
+            resolveRoleHeadings: (keys) => {
+              if (keys.length === 0) return new Map()
+              const placeholders = keys.map(() => '?').join(',')
+              const rows = db.db.query(
+                `SELECT key, role_heading FROM documents WHERE key IN (${placeholders})`
+              ).all(...keys)
+              const map = new Map()
+              for (const r of rows) if (r.role_heading) map.set(r.key, r.role_heading)
+              return map
+            }
+          })
           return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
         }
 

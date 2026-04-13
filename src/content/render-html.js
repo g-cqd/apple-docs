@@ -7,6 +7,20 @@ const LINK_SECTION_TITLES = {
   see_also: 'See Also',
 }
 
+/**
+ * Generate a URL-safe slug from heading text.
+ * e.g. "See Also" → "see-also", "Overview" → "overview"
+ */
+export function slugify(text) {
+  return String(text ?? '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]/g, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 export function renderHtml(document, sections = []) {
   const doc = coerceDocument(document)
   const orderedSections = sections
@@ -74,7 +88,7 @@ function renderDeclarationHtml(section) {
   }
 
   if (snippets.length === 0) return ''
-  return `<section><h2>Declaration</h2>${snippets.join('')}</section>`
+  return `<section id="declaration"><h2>Declaration</h2>${snippets.join('')}</section>`
 }
 
 function renderParametersHtml(section) {
@@ -89,11 +103,12 @@ function renderParametersHtml(section) {
       : []
 
   if (items.length === 0) return ''
-  return `<section><h2>Parameters</h2><ul>${items.join('')}</ul></section>`
+  return `<section id="parameters"><h2>Parameters</h2><ul>${items.join('')}</ul></section>`
 }
 
 function renderDiscussionHtml(section) {
   const heading = section.heading ?? 'Overview'
+  const sectionId = slugify(heading)
   const nodes = safeJson(section.contentJson)
 
   if (Array.isArray(nodes) && nodes.length > 0) {
@@ -101,16 +116,17 @@ function renderDiscussionHtml(section) {
     const filtered = skipDuplicateHeading(nodes, heading)
     const body = renderContentNodesToHtml(filtered)
     if (!body.trim()) return ''
-    return `<section><h2>${escapeHtml(heading)}</h2>${body}</section>`
+    return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2>${body}</section>`
   }
 
   // Fallback: render markdown/plain text content as HTML
   if (!section.contentText?.trim()) return ''
   const body = markdownToHtml(section.contentText.trim())
-  return `<section><h2>${escapeHtml(heading)}</h2>${body}</section>`
+  return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2>${body}</section>`
 }
 
 function renderLinkSectionHtml(title, section) {
+  const sectionId = slugify(title)
   const groups = safeJson(section.contentJson)
   const body = []
 
@@ -120,9 +136,14 @@ function renderLinkSectionHtml(title, section) {
         body.push(`<h3>${escapeHtml(group.title)}</h3>`)
       }
       const items = (group?.items ?? [])
-        .map(item => item?.key
-          ? `<li><a href="/docs/${escapeHtml(item.key)}/">${escapeHtml(item.title ?? item.key)}</a></li>`
-          : `<li>${escapeHtml(item?.title ?? item?.identifier ?? '')}</li>`)
+        .map(item => {
+          const filterAttr = item?._resolvedRoleHeading
+            ? ` data-filter-kind="${escapeHtml(item._resolvedRoleHeading)}"`
+            : ''
+          return item?.key
+            ? `<li${filterAttr}><a href="/docs/${escapeHtml(item.key)}/">${escapeHtml(item.title ?? item.key)}</a></li>`
+            : `<li>${escapeHtml(item?.title ?? item?.identifier ?? '')}</li>`
+        })
         .join('')
       if (items) {
         body.push(`<ul>${items}</ul>`)
@@ -134,7 +155,7 @@ function renderLinkSectionHtml(title, section) {
   }
 
   if (body.length === 0) return ''
-  return `<section><h2>${escapeHtml(title)}</h2>${body.join('')}</section>`
+  return `<section id="${sectionId}"><h2>${escapeHtml(title)}</h2>${body.join('')}</section>`
 }
 
 // ---------------------------------------------------------------------------

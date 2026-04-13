@@ -2,8 +2,8 @@
 
 > Last updated: 2026-04-13
 > Verification snapshot: 2026-04-13 (Phases 9-A + 9-B complete)
-> Execution policy: no Phase 5 work before Phase 4 is complete; no Phase 6 work before Phase 5 is complete; no Phase 7 work before Phase 6 is complete; Phase 8 may run in parallel with Phase 7 (orthogonal concerns — see parallelization analysis); Phase 9-A and 9-B may run in parallel (web search page vs MCP consolidation — disjoint concerns)
-> Evidence: `bun test` passes (748 tests), `bun run typecheck` passes
+> Execution policy: no Phase 5 work before Phase 4 is complete; no Phase 6 work before Phase 5 is complete; no Phase 7 work before Phase 6 is complete; Phase 8 may run in parallel with Phase 7 (orthogonal concerns — see parallelization analysis); Phase 9-A and 9-B may run in parallel (web search page vs MCP consolidation — disjoint concerns); Phase 10-A and 10-B may run in parallel (collection filters vs page TOC — see parallelization analysis)
+> Evidence: `bun test` passes (764 tests), `bun run typecheck` passes
 
 ## Phase Status Overview
 
@@ -20,16 +20,25 @@
 | **8** | Storage Profiles & Polish | `COMPLETE` | All 10 slices done: profiles, stats/GC/materialize, CLI wiring, render cache, freshness checks, corpus integrity, migration tests, benchmark history, legacy cleanup, README | Met |
 | **9-A** | Advanced Web Search Page | `COMPLETE` | 8/8 tasks done: API extension, search page template, frontend JS, CSS, route wiring, static build, top-bar link, tests | Met |
 | **9-B** | CLI / MCP Command Consolidation | `COMPLETE` | 11/11 tasks done: year/track in search, section in lookup, CLI flags, MCP params, 3 tools removed, contract tests, help text | Met |
+| **10-A** | Collection Type Filters | `COMPLETE` | 10/10 tasks done: data-filter-kind attrs on home/framework/doc pages, collection-filters.js, CSS chips, build pipeline, tests | Met |
+| **10-B** | Page Section Navigation (TOC) | `COMPLETE` | 9/9 tasks done: section IDs, buildPageToc, sidebar refactor, mobile details, page-toc.js, CSS, build pipeline, tests | Met |
 
 ```
-Overall: phases 0-8 + 9-A + 9-B are complete for the current v2 scope.
+Overall: phases 0-8 + 9-A + 9-B + 10-A + 10-B are complete for the current v2 scope.
 ```
 
 ## Current Planning Wave
 
 **Planner mode**: `Project + Orchestration`
-**Active phase**: Phase 9-A + 9-B (parallel tracks)
-**Execution intent**: Both sub-phases can run in parallel — 9-A touches web templates/routes/CSS/JS, 9-B touches MCP server/commands/CLI wiring — disjoint file sets
+**Active phase**: Phase 10-A + 10-B (parallel tracks)
+**Execution intent**: Both sub-phases can run in parallel — 10-A touches listing templates/collection-filters.js/CSS filter chips, 10-B touches document template/render-html.js/page-toc.js/CSS sidebar — minimal overlap (both touch `templates.js` and `style.css` but different functions/sections)
+
+| Slice | Status | Evidence | Next action |
+|---|---|---|---|
+| `P10A` | `done` | data-filter-kind attrs on 3 page types + collection-filters.js + CSS + 6 new template tests; 764 tests pass | — |
+| `P10B` | `done` | Section IDs + TOC sidebar + mobile details + page-toc.js + CSS + 5 new template tests + 5 renderer tests; 764 tests pass | — |
+
+### Previous wave (complete)
 
 | Slice | Status | Evidence | Next action |
 |---|---|---|---|
@@ -103,6 +112,81 @@ Overall: phases 0-8 + 9-A + 9-B are complete for the current v2 scope.
 - [x] CLI `read` gains `--section` flag
 - [x] MCP contract tests updated (removed tools, new params)
 - [x] Help text updated
+
+---
+
+## Phase 10-A: Collection Type Filters
+
+**Status**: `COMPLETE` (2026-04-13)
+**Depends on**: Phase 7 (static website), Phase 9-A (search page)
+**Blocks**: Nothing
+**Can parallel with**: Phase 10-B
+
+### Tasks
+
+| ID | Task | Status | Files Touched |
+|---|---|---|---|
+| 10A.1 | Add `data-filter-kind` attributes to `renderIndexPage` framework groups and list items | `done` | `src/web/templates.js` |
+| 10A.2 | Add `data-filter-kind` attributes to `renderFrameworkPage` role groups and list items | `done` | `src/web/templates.js` |
+| 10A.3 | Add `data-filter-kind` to Topics section items via DB lookup during rendering | `done` | `src/web/templates.js`, `src/content/render-html.js` |
+| 10A.4 | Add `<div class="collection-filter-bar">` placeholder to index, framework, and document page templates | `done` | `src/web/templates.js` |
+| 10A.5 | Build `collection-filters.js` — scan data attributes, build chips with counts, toggle visibility, URL fragment state | `done` | `src/web/assets/collection-filters.js` |
+| 10A.6 | Add filter chip CSS (chip bar layout, active/inactive states, counts badge, responsive wrap) | `done` | `src/web/assets/style.css` |
+| 10A.7 | Wire `collection-filters.js` into index, framework, and document page `<script>` tags | `done` | `src/web/templates.js` |
+| 10A.8 | Pass DB context to topic item rendering in `buildStaticSite` and `startDevServer` for role_heading resolution | `done` | `src/web/build.js`, `src/web/serve.js` |
+| 10A.9 | Copy `collection-filters.js` in static build asset pipeline | `done` | `src/web/build.js` |
+| 10A.10 | Tests: data-attribute rendering on all 3 page types, chip generation, multi-select toggle, URL fragment | `done` | `test/unit/web-templates.test.js`, `test/unit/web-collection-filters.test.js` |
+
+### Exit Criteria
+
+- [x] Home page shows filter chips for framework `kind` values with counts
+- [x] Framework pages show filter chips for `role_heading` values with counts
+- [x] Clicking one or more chips filters the listing (OR logic)
+- [x] "All" chip resets the filter
+- [x] Filter state persists in URL fragment (`#filter=Protocol,Structure`)
+- [x] Document pages with Topics sections show filter chips for child document types
+- [x] Topics items enriched with resolved `role_heading` from documents table
+- [x] Filter chips wrap responsively on mobile
+- [x] Empty groups hidden when all items filtered out
+- [x] Static build includes `collection-filters.js` and pre-computed data attributes
+- [x] Tests cover data-attribute rendering, chip generation, toggle logic, URL fragment parsing
+
+---
+
+## Phase 10-B: Page Section Navigation (TOC)
+
+**Status**: `COMPLETE` (2026-04-13)
+**Depends on**: Phase 7 (static website)
+**Blocks**: Nothing
+**Can parallel with**: Phase 10-A
+
+### Tasks
+
+| ID | Task | Status | Files Touched |
+|---|---|---|---|
+| 10B.1 | Add `id` attributes to `<section>` elements in `renderSectionHtml` | `done` | `src/content/render-html.js` |
+| 10B.2 | Add `buildPageToc(sections)` helper in templates.js | `done` | `src/web/templates.js` |
+| 10B.3 | Integrate TOC into `renderDocumentPage` — all document pages gain sidebar with TOC | `done` | `src/web/templates.js` |
+| 10B.4 | Refactor `.has-sidebar` logic — all pages with >= 2 sections get sidebar | `done` | `src/web/templates.js` |
+| 10B.5 | Add TOC CSS: sticky positioning, active state, mobile `<details>` collapse | `done` | `src/web/assets/style.css` |
+| 10B.6 | Build `page-toc.js` — IntersectionObserver scroll tracking, active link highlighting | `done` | `src/web/assets/page-toc.js` |
+| 10B.7 | Wire `page-toc.js` into document page `<script>` tags | `done` | `src/web/templates.js` |
+| 10B.8 | Copy `page-toc.js` in static build asset pipeline | `done` | `src/web/build.js` |
+| 10B.9 | Tests: section anchor IDs, TOC generation, sidebar layout conditions | `done` | `test/unit/web-templates.test.js`, `test/unit/render-html.test.js` |
+
+### Exit Criteria
+
+- [x] Every `<section>` in rendered document pages has a stable `id` attribute
+- [x] Document pages with 2+ sections show a TOC sidebar on desktop
+- [x] TOC links scroll to the correct section via anchor navigation
+- [x] Current section highlighted in TOC as user scrolls (JS enhancement)
+- [x] Relationship sidebar content appears below TOC in same sidebar column
+- [x] Mobile layout shows TOC as collapsible `<details>` above the article
+- [x] Static build includes `page-toc.js` and all section IDs in generated HTML
+- [x] TOC works without JavaScript (plain anchor links)
+- [x] Tests cover section ID generation, TOC rendering, sidebar layout conditions
+
+---
 
 | Slice | Status | Evidence | Next action |
 |---|---|---|---|
@@ -701,15 +785,20 @@ Overall: phases 0-8 + 9-A + 9-B are complete for the current v2 scope.
 ## Dependency Graph
 
 ```
-P0 -> P1 -> P2 -> P4 -> P5 -> P6 -> P7
-           \                       \
-            -> P3 -----^            -> P8  (parallel with P7)
+P0 -> P1 -> P2 -> P4 -> P5 -> P6 -> P7 -> P9-A -> P10-A
+           \                       \     \              (parallel with P10-B)
+            -> P3 -----^            \     -> P9-B
+                                     \
+                                      -> P8  (parallel with P7)
+                                     \
+                                      -> P10-B (parallel with P10-A)
 ```
 
 Dependency notes:
 - Earlier architecture work still allows `P3` to feed into `P6`, but active execution is now strictly sequenced `P4 -> P5 -> P6` by project policy.
 - No Phase 7 work should begin until Phase 6 is marked complete.
 - Phase 8 can run in parallel with Phase 7: website reads from the content model; storage profiles control materialization — the two concerns are orthogonal. All Phase 8 tasks (8.1–8.10, 8.12) have no hard dependencies on Phase 7 outputs.
+- Phase 10-A and 10-B can run in parallel: 10-A touches listing templates + collection-filters.js, 10-B touches document template + render-html.js + page-toc.js. Both modify `templates.js` and `style.css` but in disjoint functions/sections. Care should be taken to merge cleanly.
 
 ## Metrics
 
@@ -717,7 +806,7 @@ Dependency notes:
 |---|---|---|---|
 | Source count | 3 | 9 | 11+ |
 | Total documents | ~330K | ~330K (not re-verified in this refresh; first full phase-4 sync still pending) | ~365K+ |
-| Test count | 53 | 656 | 150+ |
+| Test count | 53 | 764 | 150+ |
 | Schema version | 4 | 7 | 6+ |
 | Source adapters | 0 | 9 (apple-docc, hig, guidelines, swift-evolution, swift-book, swift-org, apple-archive, wwdc, sample-code) | 10+ |
 | Content renderers | 1 (markdown from raw JSON) | 4 (markdown, html, text, snippet from normalized model) | 4 |

@@ -28,7 +28,7 @@ export async function buildStaticSite(opts, ctx) {
 
   // 2. Copy static assets (CSS, JS, theme, worker)
   const srcWebDir = dirname(new URL(import.meta.url).pathname)
-  for (const file of ['style.css', 'theme.js', 'search.js', 'search-page.js']) {
+  for (const file of ['style.css', 'theme.js', 'search.js', 'search-page.js', 'collection-filters.js', 'page-toc.js']) {
     const src = join(srcWebDir, 'assets', file)
     if (existsSync(src)) {
       await Bun.write(join(outDir, 'assets', file), readFileSync(src, 'utf8'))
@@ -62,7 +62,18 @@ export async function buildStaticSite(opts, ctx) {
       const sections = db.db.query(
         'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'
       ).all(doc.id)
-      const html = renderDocumentPage(doc, sections, siteConfig)
+      const html = renderDocumentPage(doc, sections, siteConfig, {
+        resolveRoleHeadings: (keys) => {
+          if (keys.length === 0) return new Map()
+          const placeholders = keys.map(() => '?').join(',')
+          const rows = db.db.query(
+            `SELECT key, role_heading FROM documents WHERE key IN (${placeholders})`
+          ).all(...keys)
+          const map = new Map()
+          for (const r of rows) if (r.role_heading) map.set(r.key, r.role_heading)
+          return map
+        }
+      })
       const filePath = join(outDir, 'docs', doc.key, 'index.html')
       ensureDir(dirname(filePath))
       await Bun.write(filePath, html)

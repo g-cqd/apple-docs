@@ -1,4 +1,4 @@
-import { renderHtml } from '../content/render-html.js'
+import { renderHtml, slugify } from '../content/render-html.js'
 
 // ---------------------------------------------------------------------------
 // Search page
@@ -239,7 +239,8 @@ function buildDocMeta(doc) {
 // Relationship sidebar
 // ---------------------------------------------------------------------------
 
-function buildRelationshipSidebar(section) {
+/** Returns the inner HTML content of the relationships sidebar (without the wrapping <aside>). */
+function buildRelationshipContent(section) {
   const contentJson = section?.content_json ?? section?.contentJson ?? null
   let groups = null
   if (contentJson && typeof contentJson === 'string') {
@@ -248,7 +249,7 @@ function buildRelationshipSidebar(section) {
     groups = contentJson
   }
 
-  const parts = ['<aside class="doc-sidebar">', '<h2>Relationships</h2>']
+  const parts = ['<h2>Relationships</h2>']
 
   if (Array.isArray(groups) && groups.length > 0) {
     for (const group of groups) {
@@ -271,8 +272,56 @@ function buildRelationshipSidebar(section) {
     parts.push('<p class="sidebar-hint">See relationships section in the article.</p>')
   }
 
-  parts.push('</aside>')
   return parts.join('\n  ')
+}
+
+// ---------------------------------------------------------------------------
+// Page TOC (Table of Contents)
+// ---------------------------------------------------------------------------
+
+/** Build TOC item list from ordered sections. Skips abstract. */
+function buildPageToc(sections) {
+  const items = []
+  for (const section of sections ?? []) {
+    const kind = section.sectionKind ?? section.section_kind
+    if (kind === 'abstract') continue
+
+    let id, label
+    switch (kind) {
+      case 'declaration':
+        id = 'declaration'; label = 'Declaration'; break
+      case 'parameters':
+        id = 'parameters'; label = 'Parameters'; break
+      case 'discussion':
+        label = section.heading ?? 'Overview'
+        id = slugify(label)
+        break
+      case 'topics':
+        id = 'topics'; label = 'Topics'; break
+      case 'relationships':
+        id = 'relationships'; label = 'Relationships'; break
+      case 'see_also':
+        id = 'see-also'; label = 'See Also'; break
+      default:
+        label = section.heading ?? 'Section'
+        id = slugify(label)
+    }
+    if (id) items.push({ id, label })
+  }
+  return items
+}
+
+/** Render the TOC HTML. In mobile mode, wraps in a <details> element. */
+function renderTocHtml(tocItems, mobile = false) {
+  if (tocItems.length < 2) return ''
+  const listHtml = `<ul>${tocItems.map(item =>
+    `<li><a href="#${escapeAttr(item.id)}">${escapeAttr(item.label)}</a></li>`
+  ).join('')}</ul>`
+
+  if (mobile) {
+    return `<details class="page-toc-mobile"><summary>On this page</summary><nav class="page-toc">${listHtml}</nav></details>`
+  }
+  return `<nav class="page-toc"><h3>On this page</h3>${listHtml}</nav>`
 }
 
 // ---------------------------------------------------------------------------
@@ -285,22 +334,47 @@ function buildRelationshipSidebar(section) {
  * @param {object} doc - Document record (title, key, framework, role_heading, source_type, abstract_text)
  * @param {Array}  sections - Section records passed to renderHtml()
  * @param {object} siteConfig - { baseUrl, siteName, buildDate }
+ * @param {object} [opts] - { resolveRoleHeadings?: (keys: string[]) => Map<string, string> }
  * @returns {string} Complete HTML page string
  */
-export function renderDocumentPage(doc, sections, siteConfig) {
+export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
+  const sectionsList = sections ?? []
+
+  // Enrich topics items with role_heading from DB (if resolver provided)
+  if (opts.resolveRoleHeadings) {
+    enrichTopicItems(sectionsList, opts.resolveRoleHeadings)
+  }
+
   const pageTitle = `${doc.title ?? 'Untitled'} — ${siteConfig.siteName}`
-  const content = renderHtml(doc, sections)
+  const content = renderHtml(doc, sectionsList)
   const breadcrumbs = doc.key ? buildBreadcrumbs(doc.key) : ''
 
-  // Collect relationships from sections for sidebar
-  const relationshipSection = (sections ?? []).find(s =>
-    s.sectionKind === 'relationships' || s.section_kind === 'relationships'
+  // Sort sections for TOC (same order as renderHtml uses)
+  const orderedSections = sectionsList.slice().sort((a, b) =>
+    (a.sortOrder ?? a.sort_order ?? 0) - (b.sortOrder ?? b.sort_order ?? 0)
   )
-  const hasSidebar = Boolean(relationshipSection)
+  const tocItems = buildPageToc(orderedSections)
 
-  const sidebar = hasSidebar
-    ? buildRelationshipSidebar(relationshipSection)
+  const relationshipSection = orderedSections.find(s =>
+    (s.sectionKind ?? s.section_kind) === 'relationships'
+  )
+
+  const hasSidebar = tocItems.length >= 2
+
+  // Compose sidebar: TOC first, then relationships below
+  const sidebarParts = []
+  if (hasSidebar) {
+    sidebarParts.push(renderTocHtml(tocItems, false))
+  }
+  if (relationshipSection) {
+    sidebarParts.push(buildRelationshipContent(relationshipSection))
+  }
+
+  const sidebar = sidebarParts.length > 0
+    ? `<aside class="doc-sidebar">${sidebarParts.join('\n')}</aside>`
     : ''
+
+  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
@@ -310,6 +384,7 @@ ${buildHeader(siteConfig)}
 <main class="main-content${hasSidebar ? ' has-sidebar' : ''}">
   ${breadcrumbs}
   ${buildDocMeta(doc)}
+  ${mobileToc}
   <article class="doc-article">
     ${content}
   </article>
@@ -317,8 +392,56 @@ ${buildHeader(siteConfig)}
 </main>
 ${buildFooter(siteConfig)}
 <script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search.js`)}" defer></script>
+<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/collection-filters.js`)}" defer></script>
+<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/page-toc.js`)}" defer></script>
 </body>
 </html>`
+}
+
+/** Batch-enrich topics section items with _resolvedRoleHeading from DB. */
+function enrichTopicItems(sections, resolveRoleHeadings) {
+  for (const section of sections) {
+    const kind = section.sectionKind ?? section.section_kind
+    if (kind !== 'topics') continue
+
+    const raw = section.contentJson ?? section.content_json
+    let contentJson = null
+    if (typeof raw === 'string') {
+      try { contentJson = JSON.parse(raw) } catch { continue }
+    } else if (typeof raw === 'object') {
+      contentJson = raw
+    }
+    if (!Array.isArray(contentJson)) continue
+
+    // Collect all item keys
+    const keys = []
+    for (const group of contentJson) {
+      for (const item of group?.items ?? []) {
+        if (item.key) keys.push(item.key)
+      }
+    }
+    if (keys.length === 0) continue
+
+    // Batch resolve
+    const roleMap = resolveRoleHeadings(keys)
+
+    // Enrich items
+    for (const group of contentJson) {
+      for (const item of group?.items ?? []) {
+        if (item.key && roleMap.has(item.key)) {
+          item._resolvedRoleHeading = roleMap.get(item.key)
+        }
+      }
+    }
+
+    // Write back serialized
+    const serialized = JSON.stringify(contentJson)
+    if (section.contentJson !== undefined) {
+      section.contentJson = serialized
+    } else {
+      section.content_json = serialized
+    }
+  }
 }
 
 /**
@@ -347,10 +470,10 @@ export function renderIndexPage(frameworks, siteConfig) {
       const countBadge = fw.doc_count != null
         ? ` <span class="badge badge-count">${escapeAttr(String(fw.doc_count))}</span>`
         : ''
-      return `<li><a href="${href}">${escapeAttr(fw.display_name ?? fw.name ?? fw.slug)}</a>${countBadge}</li>`
+      return `<li data-filter-kind="${escapeAttr(kind)}"><a href="${href}">${escapeAttr(fw.display_name ?? fw.name ?? fw.slug)}</a>${countBadge}</li>`
     }).join('\n      ')
 
-    sections.push(`<section class="framework-group">
+    sections.push(`<section class="framework-group" data-filter-kind="${escapeAttr(kind)}">
     <h2 class="framework-kind">${escapeAttr(kind)}</h2>
     <ul class="framework-list">
       ${itemsHtml}
@@ -373,6 +496,7 @@ ${buildHeader(siteConfig)}
 </main>
 ${buildFooter(siteConfig)}
 <script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search.js`)}" defer></script>
+<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/collection-filters.js`)}" defer></script>
 </body>
 </html>`
 }
@@ -404,16 +528,17 @@ export function renderFrameworkPage(framework, documents, siteConfig) {
       const docKey = doc.key ?? doc.path ?? ''
       const href = `${siteConfig.baseUrl}/docs/${escapeAttr(docKey)}/`
       const title = escapeAttr(doc.title ?? docKey)
+      const filterKind = escapeAttr(doc.role_heading ?? doc.role ?? 'Other')
       // Show role_heading as metadata to distinguish duplicates (e.g. .!=(_:_:) across types)
       const meta = doc.role_heading ? `<span class="doc-item-meta">${escapeAttr(doc.role_heading)}</span>` : ''
       const abstractText = doc.abstract_text ?? doc.abstract ?? ''
       const abstract = abstractText
         ? `<span class="doc-item-meta">— ${escapeAttr(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
         : ''
-      return `<li><a href="${href}">${title}</a>${meta}${abstract}</li>`
+      return `<li data-filter-kind="${filterKind}"><a href="${href}">${title}</a>${meta}${abstract}</li>`
     }).join('\n      ')
 
-    roleSections.push(`<section class="role-group">
+    roleSections.push(`<section class="role-group" data-filter-kind="${escapeAttr(role)}">
     <h2 class="role-heading">${escapeAttr(role)}</h2>
     <ul class="doc-list">
       ${docsHtml}
@@ -439,6 +564,7 @@ ${buildHeader(siteConfig)}
 </main>
 ${buildFooter(siteConfig)}
 <script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search.js`)}" defer></script>
+<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/collection-filters.js`)}" defer></script>
 </body>
 </html>`
 }

@@ -187,6 +187,57 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('/apple-docs/assets/search.js')
   })
 
+  test('page with 2+ sections has TOC sidebar and section IDs', () => {
+    const sections = [
+      { sectionKind: 'abstract', contentText: 'Abstract text', sortOrder: 0 },
+      { sectionKind: 'declaration', contentText: 'func foo()', contentJson: JSON.stringify([{ tokens: [{ text: 'func foo()' }], languages: ['swift'] }]), sortOrder: 1 },
+      { sectionKind: 'discussion', heading: 'Overview', contentText: 'Discussion here', contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Discussion here' }] }]), sortOrder: 3 },
+    ]
+    const page = renderDocumentPage(mockDoc, sections, siteConfig)
+    expect(page).toContain('class="page-toc"')
+    expect(page).toContain('href="#declaration"')
+    expect(page).toContain('href="#overview"')
+    expect(page).toContain('has-sidebar')
+    expect(page).toContain('id="declaration"')
+    expect(page).toContain('id="overview"')
+  })
+
+  test('page with only abstract has no TOC', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, siteConfig)
+    expect(page).not.toContain('class="page-toc"')
+    expect(page).not.toContain('has-sidebar')
+  })
+
+  test('mobile TOC rendered as details element', () => {
+    const sections = [
+      { sectionKind: 'abstract', contentText: 'text', sortOrder: 0 },
+      { sectionKind: 'declaration', contentText: 'code', contentJson: '[]', sortOrder: 1 },
+      { sectionKind: 'discussion', heading: 'Overview', contentText: 'text', contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'x' }] }]), sortOrder: 3 },
+    ]
+    const page = renderDocumentPage(mockDoc, sections, siteConfig)
+    expect(page).toContain('class="page-toc-mobile"')
+    expect(page).toContain('<summary>On this page</summary>')
+  })
+
+  test('page includes page-toc.js and collection-filters.js scripts', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, siteConfig)
+    expect(page).toContain('page-toc.js')
+    expect(page).toContain('collection-filters.js')
+  })
+
+  test('relationships sidebar content appears in combined sidebar with TOC', () => {
+    const sections = [
+      { sectionKind: 'abstract', contentText: 'text', sortOrder: 0 },
+      { sectionKind: 'declaration', contentText: 'code', contentJson: JSON.stringify([{ tokens: [{ text: 'var x' }], languages: ['swift'] }]), sortOrder: 1 },
+      { sectionKind: 'relationships', contentText: '', contentJson: JSON.stringify([{ title: 'Conforms To', items: [{ key: 'swiftui/view', title: 'View' }] }]), sortOrder: 10 },
+    ]
+    const page = renderDocumentPage(mockDoc, sections, siteConfig)
+    expect(page).toContain('class="page-toc"')
+    expect(page).toContain('<h2>Relationships</h2>')
+    expect(page).toContain('Conforms To')
+    expect(page).toContain('class="doc-sidebar"')
+  })
+
   test('HTML-encodes doc title in <title> to prevent injection', () => {
     const xssDoc = { ...mockDoc, title: '<script>alert(1)</script>' }
     const page = renderDocumentPage(xssDoc, mockSections, siteConfig)
@@ -274,6 +325,24 @@ describe('renderIndexPage', () => {
     const page = renderIndexPage(mockFrameworks, siteConfig)
     expect(page).toContain('2026-04-13')
   })
+
+  test('framework items have data-filter-kind attributes', () => {
+    const page = renderIndexPage(mockFrameworks, siteConfig)
+    expect(page).toContain('data-filter-kind="framework"')
+    expect(page).toContain('data-filter-kind="guidelines"')
+  })
+
+  test('framework groups have data-filter-kind attributes', () => {
+    const page = renderIndexPage(mockFrameworks, siteConfig)
+    // Section elements also have the attribute
+    expect(page).toMatch(/section class="framework-group" data-filter-kind="framework"/)
+    expect(page).toMatch(/section class="framework-group" data-filter-kind="guidelines"/)
+  })
+
+  test('includes collection-filters.js script', () => {
+    const page = renderIndexPage(mockFrameworks, siteConfig)
+    expect(page).toContain('collection-filters.js')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -349,6 +418,22 @@ describe('renderFrameworkPage', () => {
     const fw = { slug: 'foundation' }
     const page = renderFrameworkPage(fw, mockDocuments, siteConfig)
     expect(page).toContain('foundation')
+  })
+
+  test('document items have data-filter-kind attributes', () => {
+    const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig)
+    expect(page).toContain('data-filter-kind="Protocol"')
+    expect(page).toContain('data-filter-kind="Structure"')
+  })
+
+  test('role groups have data-filter-kind attributes', () => {
+    const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig)
+    expect(page).toMatch(/section class="role-group" data-filter-kind="symbol"/)
+  })
+
+  test('includes collection-filters.js script', () => {
+    const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig)
+    expect(page).toContain('collection-filters.js')
   })
 })
 
