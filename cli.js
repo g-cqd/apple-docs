@@ -15,7 +15,7 @@ import { browse } from './src/commands/browse.js'
 import { sync } from './src/commands/sync.js'
 import { status } from './src/commands/status.js'
 
-const { command, positional, flags } = parseArgs(process.argv)
+const { command, subcommand, positional, flags } = parseArgs(process.argv)
 
 if (flags.help || !command) {
   showHelp(command)
@@ -47,6 +47,7 @@ try {
       result = await search({
         query,
         framework: flags.framework,
+        source: flags.source,
         kind: flags.kind,
         limit: flags.limit ? parseInt(flags.limit) : undefined,
         fuzzy: !flags['no-fuzzy'],
@@ -94,9 +95,10 @@ try {
 
     case 'sync': {
       const roots = flags.roots ? flags.roots.split(',').map(s => s.trim()) : undefined
+      const sources = flags.sources ? flags.sources.split(',').map(s => s.trim()) : undefined
       const concurrency = flags.concurrency ? parseInt(flags.concurrency, 10) : undefined
       const parallel = flags.parallel ? parseInt(flags.parallel, 10) : undefined
-      result = await sync({ roots, full: !!flags.full, retryFailed: !!flags['retry-failed'], concurrency, parallel, indexBody: !!flags.index }, ctx)
+      result = await sync({ roots, sources, full: !!flags.full, retryFailed: !!flags['retry-failed'], concurrency, parallel, indexBody: !!flags.index }, ctx)
       formatter = formatSync
       break
     }
@@ -104,9 +106,10 @@ try {
     case 'update': {
       const { update } = await import('./src/commands/update.js')
       const roots = flags.roots ? flags.roots.split(',').map(s => s.trim()) : undefined
+      const sources = flags.sources ? flags.sources.split(',').map(s => s.trim()) : undefined
       const concurrency = flags.concurrency ? parseInt(flags.concurrency, 10) : undefined
       const parallel = flags.parallel ? parseInt(flags.parallel, 10) : undefined
-      result = await update({ roots, concurrency, parallel, indexBody: !!flags.index }, ctx)
+      result = await update({ roots, sources, concurrency, parallel, indexBody: !!flags.index }, ctx)
       formatter = formatUpdate
       break
     }
@@ -131,16 +134,70 @@ try {
       break
     }
 
+    case 'mcp': {
+      switch (subcommand) {
+        case 'start': {
+          const { startServer } = await import('./src/mcp/server.js')
+          await startServer(ctx)
+          process.exit(0)
+          break
+        }
+        case 'install': {
+          console.log(`MCP server configuration for apple-docs:\n`)
+          console.log(JSON.stringify({
+            mcpServers: {
+              'apple-docs': {
+                command: 'apple-docs',
+                args: ['mcp', 'start'],
+                env: { APPLE_DOCS_HOME: dataDir },
+              },
+            },
+          }, null, 2))
+          console.log(`\nAlternatively, use the backward-compatible binary:`)
+          console.log(JSON.stringify({
+            mcpServers: {
+              'apple-docs': {
+                command: 'apple-docs-mcp',
+                env: { APPLE_DOCS_HOME: dataDir },
+              },
+            },
+          }, null, 2))
+          process.exit(0)
+          break
+        }
+        default:
+          showHelp('mcp')
+          process.exit(subcommand ? 1 : 0)
+      }
+      break
+    }
+
+    case 'web': {
+      console.log('Web commands are coming in a future release.')
+      console.log('Planned: apple-docs web serve | build | deploy')
+      process.exit(0)
+      break
+    }
+
+    case 'storage': {
+      console.log('Storage commands are coming in a future release.')
+      console.log('Planned: apple-docs storage profile | stats | gc')
+      process.exit(0)
+      break
+    }
+
     default:
       console.error(`Unknown command: ${command}`)
       showHelp()
       process.exit(1)
   }
 
-  if (flags.json) {
-    console.log(JSON.stringify(result, null, 2))
-  } else {
-    console.log(formatter(result))
+  if (formatter && result !== undefined) {
+    if (flags.json) {
+      console.log(JSON.stringify(result, null, 2))
+    } else {
+      console.log(formatter(result))
+    }
   }
 } catch (e) {
   logger.error(e.message, { stack: e.stack })

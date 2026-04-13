@@ -8,6 +8,16 @@
   },
   "scripts": {
     "test": "bun test",
-    "start": "bun run index.js"
+    "start": "bun run index.js",
+    "typecheck": "bun x tsc --noEmit",
+    "lint": "biome check --diagnostic-level=error ./src ./test ./cli.js ./index.js",
+    "ci": "bun run lint && bun run typecheck && bun test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "^1.2.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

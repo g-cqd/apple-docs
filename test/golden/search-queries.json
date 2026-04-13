@@ -1,0 +1,302 @@
+[
+  {
+    "name": "exact-symbol-view",
+    "query": "View",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["documentation/swiftui/view"]
+    }
+  },
+  {
+    "name": "exact-symbol-navigationstack",
+    "query": "NavigationStack",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/swiftui/navigationstack"
+    }
+  },
+  {
+    "name": "exact-symbol-urlsession",
+    "query": "URLSession",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/foundation/urlsession"
+    }
+  },
+  {
+    "name": "exact-symbol-publisher",
+    "query": "Publisher",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/combine/publisher"
+    }
+  },
+  {
+    "name": "prefix-navig",
+    "query": "Navig",
+    "expect": {
+      "minResults": 2,
+      "topContains": [
+        "documentation/swiftui/navigationstack",
+        "documentation/swiftui/navigationlink"
+      ]
+    }
+  },
+  {
+    "name": "camelcase-navigationsplitview",
+    "query": "NavigationSplitView",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/swiftui/navigationsplitview"
+    }
+  },
+  {
+    "name": "multi-word-async-await",
+    "query": "async await",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["documentation/swift/concurrency"]
+    }
+  },
+  {
+    "name": "multi-word-in-app-purchase",
+    "query": "in-app purchase",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["app-store-review/3.1.1"]
+    }
+  },
+  {
+    "name": "framework-scoped-list-swiftui",
+    "query": "List",
+    "framework": "swiftui",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/swiftui/list"
+    }
+  },
+  {
+    "name": "framework-scoped-view-uikit",
+    "query": "UIView",
+    "framework": "uikit",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/uikit/uiview"
+    }
+  },
+  {
+    "name": "abstract-search-byte-buffer",
+    "query": "byte buffer",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["documentation/foundation/data"]
+    }
+  },
+  {
+    "name": "abstract-search-notification-center",
+    "query": "notification center",
+    "expect": {
+      "minResults": 1
+    }
+  },
+  {
+    "name": "declaration-search-protocol",
+    "query": "protocol Publisher",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["documentation/combine/publisher"]
+    }
+  },
+  {
+    "name": "hig-accessibility",
+    "query": "accessibility",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["design/human-interface-guidelines/accessibility"]
+    }
+  },
+  {
+    "name": "hig-typography",
+    "query": "typography",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "design/human-interface-guidelines/typography"
+    }
+  },
+  {
+    "name": "guidelines-data-collection",
+    "query": "data collection",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["app-store-review/5.1.1"]
+    }
+  },
+  {
+    "name": "guidelines-design",
+    "query": "Design",
+    "framework": "app-store-review",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["app-store-review/4.0"]
+    }
+  },
+  {
+    "name": "property-wrapper-search",
+    "query": "EnvironmentObject",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/swiftui/environmentobject"
+    }
+  },
+  {
+    "name": "concurrency-sendable",
+    "query": "Sendable",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "documentation/swift/sendable"
+    }
+  },
+  {
+    "name": "fuzzy-typo-publsher",
+    "query": "Publsher",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["documentation/combine/publisher"]
+    }
+  },
+
+  {
+    "name": "swift-evolution-se-number",
+    "query": "SE-0296",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["swift-evolution/0296-async-await"]
+    }
+  },
+  {
+    "name": "swift-evolution-proposal-topic",
+    "query": "Observation",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["swift-evolution/0395-observability"]
+    }
+  },
+  {
+    "name": "swift-evolution-sendable-proposal",
+    "query": "Sendable closures",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["swift-evolution/0302-sendable"]
+    }
+  },
+  {
+    "name": "swift-book-chapter",
+    "query": "Closures",
+    "framework": "swift-book",
+    "expect": {
+      "minResults": 1,
+      "firstResultPath": "swift-book/Closures"
+    }
+  },
+  {
+    "name": "swift-book-concurrency",
+    "query": "task groups actors",
+    "framework": "swift-book",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["swift-book/Concurrency"]
+    }
+  },
+  {
+    "name": "swift-org-api-design",
+    "query": "API Design Guidelines",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["swift-org/documentation/api-design-guidelines"]
+    }
+  },
+  {
+    "name": "swift-org-swift6-migration",
+    "query": "Swift 6 migration",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["swift-org/migration-guide-swift6"]
+    }
+  },
+  {
+    "name": "apple-archive-memory-management",
+    "query": "memory management",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["apple-archive/documentation/Cocoa/Conceptual/MemoryMgmt/Articles"]
+    }
+  },
+  {
+    "name": "apple-archive-kvo",
+    "query": "key-value observing",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["apple-archive/documentation/Cocoa/Conceptual/KeyValueObserving"]
+    }
+  },
+  {
+    "name": "apple-archive-mvc",
+    "query": "Model-View-Controller",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["apple-archive/documentation/General/Conceptual/DevPedia-CocoaCore/MVC"]
+    }
+  },
+  {
+    "name": "wwdc-session-title",
+    "query": "Swift Testing",
+    "framework": "wwdc",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["wwdc/wwdc2024-10001"]
+    }
+  },
+  {
+    "name": "wwdc-observation-session",
+    "query": "Observable macro",
+    "framework": "wwdc",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["wwdc/wwdc2023-10164"]
+    }
+  },
+  {
+    "name": "sample-code-food-truck",
+    "query": "Food Truck multiplatform",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app"]
+    }
+  },
+  {
+    "name": "sample-code-realitykit",
+    "query": "Swift Splash",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["sample-code/realitykit/swift-splash-take-a-swim-with-a-new-swiftui-game-built-with-realitykit"]
+    }
+  },
+  {
+    "name": "source-filter-wwdc",
+    "query": "Swift Testing",
+    "source": "wwdc",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["wwdc/wwdc2024-10001"]
+    }
+  },
+  {
+    "name": "source-filter-sample-code",
+    "query": "Food Truck",
+    "source": "sample-code",
+    "expect": {
+      "minResults": 1,
+      "topContains": ["sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app"]
+    }
+  }
+]

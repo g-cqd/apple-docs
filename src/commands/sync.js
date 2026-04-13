@@ -1,160 +1,246 @@
-import { discoverRoots, crawlRoot } from '../pipeline/discover.js'
-import { downloadMissing } from '../pipeline/download.js'
 import { convertAll } from '../pipeline/convert.js'
-import { syncGuidelines } from '../pipeline/sync-guidelines.js'
+import { crawlRoot, discoverRoots } from '../pipeline/discover.js'
+import { downloadMissing } from '../pipeline/download.js'
+import { persistNormalizedPage } from '../pipeline/persist.js'
+import { applyGuidelinesSnapshot } from '../pipeline/sync-guidelines.js'
 import { Semaphore } from '../lib/semaphore.js'
+import { pool } from '../lib/pool.js'
+import { getAdapter, getAllAdapters, getAdapterTypes } from '../sources/registry.js'
 
-/** Roots that use a custom sync pipeline instead of DocC BFS crawl. */
-const HTML_ROOTS = new Set(['app-store-review'])
+const ROOT_CATALOG_SOURCE_TYPES = new Set(['apple-docc', 'hig'])
 
 /**
  * Full sync pipeline: discover roots -> crawl (parallel) -> convert remaining.
- * @param {{ roots?: string[], full?: boolean, concurrency?: number, parallel?: number, retryFailed?: boolean }} opts
+ * @param {{ roots?: string[], sources?: string[], full?: boolean, concurrency?: number, parallel?: number, retryFailed?: boolean }} opts
  * @param {{ db, dataDir, rateLimiter, logger }} ctx
  */
 export async function sync(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const startMs = Date.now()
+  const requestedSources = normalizeList(opts.sources)
+  const requestedRoots = normalizeList(opts.roots)
+
+  validateRequestedSources(requestedSources)
+
+  const adapters = requestedSources
+    ? requestedSources.map(getAdapter)
+    : getAllAdapters()
+  const adapterCtx = { ...ctx, rootCatalogReady: false }
 
   db.setActivity('sync', opts.roots ?? null)
 
-  // 1. Discover roots
-  let rootCount
   try {
-    rootCount = await discoverRoots(db, rateLimiter, logger)
-  } catch (e) {
-    db.clearActivity()
-    throw e
-  }
+    if (adapters.some(adapter => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
+      await discoverRoots(db, rateLimiter, logger)
+      adapterCtx.rootCatalogReady = true
+    }
 
-  // 2. Determine which roots to crawl
-  let rootsToCrawl
-  if (opts.roots?.length) {
-    rootsToCrawl = opts.roots.map(r => r.toLowerCase())
-  } else if (opts.full) {
-    rootsToCrawl = db.getRoots().map(r => r.slug)
-  } else {
-    rootsToCrawl = db.getRoots().map(r => r.slug)
-  }
+    const concurrency = opts.concurrency ?? parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
+    const parallel = opts.parallel ?? 1
+    const semaphore = new Semaphore(concurrency)
+    const crawlOpts = { retryFailed: !!opts.retryFailed, semaphore }
+    const crawlResults = {}
+    let guidelinesResult = null
+    let rootsCrawled = 0
 
-  // Filter to valid roots, separating HTML-based roots from DocC roots
-  const validRoots = rootsToCrawl.filter(slug => {
-    if (HTML_ROOTS.has(slug)) return false // handled separately below
-    const root = db.getRootBySlug(slug)
-    if (!root) { logger.warn(`Root not found: ${slug}`); return false }
-    return true
-  })
-  const htmlRootsToSync = rootsToCrawl.filter(slug => HTML_ROOTS.has(slug))
+    for (const adapter of adapters) {
+      logger.info(`Syncing ${adapter.constructor.displayName}...`)
 
-  // 3. Shared concurrency control
-  // One semaphore caps total in-flight fetches across ALL roots.
-  // One rate limiter caps total requests/sec across ALL roots.
-  const concurrency = opts.concurrency ?? parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
-  const parallel = opts.parallel ?? 1
-  const semaphore = new Semaphore(concurrency)
-  const crawlOpts = { retryFailed: !!opts.retryFailed, semaphore }
-
-  // 4. Crawl roots
-  const crawlResults = {}
-
-  if (parallel <= 1) {
-    for (const slug of validRoots) {
-      logger.info(`Crawling ${slug}...`)
       try {
-        crawlResults[slug] = await crawlRoot(db, dataDir, rateLimiter, slug, logger, null, crawlOpts)
+        const discovery = await adapter.discover(adapterCtx)
+        const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
+
+        switch (adapter.constructor.syncMode) {
+          case 'snapshot': {
+            if (roots.length > 0) {
+              logger.info(`Fetching ${adapter.constructor.displayName} via adapter...`)
+              const fetchResult = await adapter.fetch(roots[0].slug, adapterCtx)
+              guidelinesResult = await applyGuidelinesSnapshot(db, dataDir, fetchResult.payload)
+              logger.info(`Synced ${guidelinesResult.sections} guideline sections`)
+            }
+            break
+          }
+          case 'flat': {
+            const flatResults = await syncFlatSource(adapter, discovery, roots, concurrency, adapterCtx)
+            rootsCrawled += roots.length
+            Object.assign(crawlResults, flatResults)
+            break
+          }
+          case 'crawl':
+          default: {
+            const rootSlugs = roots.map(root => root.slug)
+            if (rootSlugs.length === 0) break
+
+            rootsCrawled += rootSlugs.length
+            const adapterResults = await crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpts, adapter)
+            Object.assign(crawlResults, adapterResults)
+            break
+          }
+        }
       } catch (e) {
-        logger.error(`Crawl failed for ${slug}`, { error: e.message })
-        crawlResults[slug] = { error: e.message }
+        logger.error(`Source ${adapter.constructor.type} failed`, { error: e.message })
       }
     }
-  } else {
-    logger.info(`Crawling ${validRoots.length} roots (${parallel} parallel, ${concurrency} max fetches, ${ctx.rateLimiter.rate} req/s)...`)
-    await pool(validRoots, parallel, async (slug) => {
-      logger.info(`Crawling ${slug}...`)
-      try {
-        crawlResults[slug] = await crawlRoot(db, dataDir, rateLimiter, slug, logger, null, crawlOpts)
-        const r = crawlResults[slug]
-        logger.info(`Done: ${slug} (${r.total} total, ${r.processed} new)`)
-      } catch (e) {
-        logger.error(`Crawl failed for ${slug}`, { error: e.message })
-        crawlResults[slug] = { error: e.message }
-      }
+
+    const activeSourceTypes = adapters.map(adapter => adapter.constructor.type)
+    const filters = { roots: requestedRoots, sources: activeSourceTypes }
+    const dlResult = await downloadMissing(db, dataDir, rateLimiter, logger, null, filters)
+
+    const pendingConversions = filterPages(db.getUnconvertedPages(), requestedRoots, activeSourceTypes)
+    let cvResult = { converted: 0, total: 0 }
+    if (pendingConversions.length > 0) {
+      logger.info(`Converting ${pendingConversions.length} remaining pages to Markdown...`)
+      cvResult = await convertAll(db, dataDir, logger, null, filters)
+    }
+
+    let bodyIndexed = 0
+    if (opts.indexBody) {
+      const { indexBodyIncremental } = await import('../pipeline/index-body.js')
+      const idxResult = await indexBodyIncremental(db, dataDir, logger)
+      bodyIndexed = idxResult.indexed
+    }
+
+    const durationMs = Date.now() - startMs
+    const totalProcessed = Object.values(crawlResults).reduce((sum, result) => sum + (result.processed ?? 0), 0)
+
+    db.addUpdateLog({
+      action: 'sync',
+      newCount: totalProcessed,
+      durationMs,
     })
-  }
 
-  // 5. Sync HTML-based roots (e.g. App Store Review Guidelines)
-  let guidelinesResult = null
-  if (htmlRootsToSync.includes('app-store-review')) {
-    try {
-      guidelinesResult = await syncGuidelines(db, dataDir, rateLimiter, logger)
-    } catch (e) {
-      logger.error('Guidelines sync failed', { error: e.message })
+    return {
+      rootsDiscovered: db.getRoots().length,
+      rootsCrawled,
+      crawlResults,
+      guidelines: guidelinesResult,
+      downloaded: dlResult.downloaded,
+      bodyIndexed,
+      converted: cvResult.converted,
+      durationMs,
     }
-  }
-
-  // 6. Download any missing pages (resume case)
-  const dlResult = await downloadMissing(db, dataDir, rateLimiter, logger)
-
-  // 6. Convert any remaining unconverted pages
-  const unconverted = db.getUnconvertedPages()
-  let cvResult = { converted: 0, total: 0 }
-  if (unconverted.length > 0) {
-    logger.info(`Converting ${unconverted.length} remaining pages to Markdown...`)
-    cvResult = await convertAll(db, dataDir, logger)
-  }
-
-  // 7. Optional body indexing
-  let bodyIndexed = 0
-  if (opts.indexBody) {
-    const { indexBodyIncremental } = await import('../pipeline/index-body.js')
-    const idxResult = await indexBodyIncremental(db, dataDir, logger)
-    bodyIndexed = idxResult.indexed
-  }
-
-  const durationMs = Date.now() - startMs
-
-  const totalProcessed = Object.values(crawlResults).reduce((s, r) => s + (r.processed ?? 0), 0)
-  db.addUpdateLog({
-    action: 'sync',
-    newCount: totalProcessed,
-    durationMs,
-  })
-  db.clearActivity()
-
-  return {
-    rootsDiscovered: rootCount,
-    rootsCrawled: validRoots.length,
-    crawlResults,
-    guidelines: guidelinesResult,
-    downloaded: dlResult.downloaded,
-    bodyIndexed,
-    converted: cvResult.converted,
-    durationMs,
+  } finally {
+    db.clearActivity()
   }
 }
 
-/**
- * Run async tasks with bounded concurrency.
- * Starts up to `limit` tasks. When one finishes, starts the next.
- */
-function pool(items, limit, fn) {
-  const queue = [...items]
-  const active = new Set()
+async function crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpts, adapter) {
+  const { db, dataDir, rateLimiter, logger } = ctx
+  const results = {}
 
-  return new Promise((resolve) => {
-    function drain() {
-      while (active.size < limit && queue.length > 0) {
-        const item = queue.shift()
-        const p = fn(item).finally(() => {
-          active.delete(p)
-          drain()
+  if (parallel <= 1) {
+    for (const slug of rootSlugs) {
+      logger.info(`Crawling ${slug}...`)
+      try {
+        results[slug] = await crawlRoot(db, dataDir, rateLimiter, slug, logger, null, {
+          ...crawlOpts,
+          adapter,
         })
-        active.add(p)
-      }
-      if (active.size === 0 && queue.length === 0) {
-        resolve()
+      } catch (e) {
+        logger.error(`Crawl failed for ${slug}`, { error: e.message })
+        results[slug] = { error: e.message }
       }
     }
-    drain()
+    return results
+  }
+
+  logger.info(`Crawling ${rootSlugs.length} roots (${parallel} parallel, ${concurrency} max fetches, ${ctx.rateLimiter.rate} req/s)...`)
+  await pool(rootSlugs, parallel, async (slug) => {
+    logger.info(`Crawling ${slug}...`)
+    try {
+      results[slug] = await crawlRoot(db, dataDir, rateLimiter, slug, logger, null, {
+        ...crawlOpts,
+        adapter,
+      })
+      const result = results[slug]
+      logger.info(`Done: ${slug} (${result.total} total, ${result.processed} new)`)
+    } catch (e) {
+      logger.error(`Crawl failed for ${slug}`, { error: e.message })
+      results[slug] = { error: e.message }
+    }
   })
+  return results
+}
+
+function selectRootsForAdapter(adapter, discovery, db, requestedRoots) {
+  const requestedRootSet = requestedRoots ? new Set(requestedRoots) : null
+  const discoveredRoots = discovery.roots ?? db.getRoots().filter(root => root.source_type === adapter.constructor.type)
+
+  return discoveredRoots.filter(root => {
+    if (!root?.slug) return false
+    if (!requestedRootSet) return true
+    return requestedRootSet.has(root.slug)
+  })
+}
+
+function filterPages(pages, requestedRoots, requestedSources) {
+  const rootSet = requestedRoots ? new Set(requestedRoots) : null
+  const sourceSet = requestedSources ? new Set(requestedSources) : null
+
+  return pages.filter(page => {
+    if (rootSet && !rootSet.has(page.root_slug)) return false
+    if (sourceSet && !sourceSet.has(page.source_type)) return false
+    return true
+  })
+}
+
+function validateRequestedSources(requestedSources) {
+  if (!requestedSources) return
+
+  const knownSources = new Set(getAdapterTypes())
+  const unknownSources = requestedSources.filter(source => !knownSources.has(source))
+  if (unknownSources.length > 0) {
+    throw new Error(`Unknown source type(s): ${unknownSources.join(', ')}`)
+  }
+}
+
+async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
+  const { db, dataDir, logger } = ctx
+  const results = {}
+  const keys = discovery.keys ?? []
+
+  for (const root of roots) {
+    let processed = 0
+    let skipped = 0
+
+    logger.info(`Syncing ${adapter.constructor.displayName} (${keys.length} keys)...`)
+
+    await pool(keys, concurrency, async (key) => {
+      const existing = db.getPage(key)
+      if (existing?.status === 'active') {
+        skipped++
+        return
+      }
+
+      try {
+        const fetchResult = await adapter.fetch(key, ctx)
+        const normalized = adapter.normalize(key, fetchResult.payload)
+        adapter.validateNormalizeResult(normalized)
+
+        await persistNormalizedPage({
+          db,
+          dataDir,
+          rootId: root.id,
+          path: key,
+          sourceType: adapter.constructor.type,
+          rawPayload: fetchResult.payload,
+          normalized,
+          etag: fetchResult.etag ?? null,
+          lastModified: fetchResult.lastModified ?? null,
+        })
+        processed++
+      } catch (e) {
+        logger.warn(`Failed to sync ${key}`, { error: e.message })
+      }
+    })
+
+    logger.info(`Done: ${adapter.constructor.displayName} (${processed} new, ${skipped} skipped)`)
+    results[root.slug] = { processed, total: keys.length, skipped }
+  }
+
+  return results
+}
+
+function normalizeList(values) {
+  return values?.map(value => value.toLowerCase()) ?? null
 }

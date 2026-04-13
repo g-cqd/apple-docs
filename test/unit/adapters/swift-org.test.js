@@ -1,0 +1,330 @@
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { SwiftOrgAdapter } from '../../../src/sources/swift-org.js'
+
+const originalFetch = globalThis.fetch
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+})
+
+// ---------------------------------------------------------------------------
+// Minimal HTML fixture representative of a swift.org documentation page
+// ---------------------------------------------------------------------------
+
+const HTML_FIXTURE = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Concurrency | Swift.org</title>
+  <meta name="description" content="Learn how Swift supports concurrent code using async/await and actors.">
+</head>
+<body>
+  <header><nav>Navigation</nav></header>
+  <main>
+    <h1>Concurrency</h1>
+    <p>Swift has built-in support for writing asynchronous and parallel code.</p>
+    <h2>Asynchronous Functions</h2>
+    <p>An asynchronous function can be suspended while it is partway through execution.</p>
+    <h2>Actors</h2>
+    <p>Actors allow only one task to access their mutable state at a time.</p>
+  </main>
+  <footer>Footer</footer>
+</body>
+</html>`
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe('SwiftOrgAdapter', () => {
+  test('static metadata is correct', () => {
+    expect(SwiftOrgAdapter.type).toBe('swift-org')
+    expect(SwiftOrgAdapter.displayName).toBe('Swift.org Documentation')
+    expect(SwiftOrgAdapter.syncMode).toBe('flat')
+  })
+
+  describe('discover', () => {
+    test('returns curated keys prefixed with swift-org', async () => {
+      let root = null
+      const adapter = new SwiftOrgAdapter()
+      const ctx = {
+        db: {
+          getRootBySlug() {
+            return root
+          },
+          upsertRoot(slug, displayName, kind, source) {
+            root = { slug, display_name: displayName, kind, source, source_type: 'swift-org' }
+            return root
+          },
+        },
+      }
+
+      const result = await adapter.discover(ctx)
+
+      expect(Array.isArray(result.keys)).toBe(true)
+      expect(result.keys.length).toBeGreaterThan(0)
+      for (const key of result.keys) {
+        expect(key.startsWith('swift-org/')).toBe(true)
+      }
+    })
+
+    test('includes expected curated documentation paths', async () => {
+      let root = null
+      const adapter = new SwiftOrgAdapter()
+      const ctx = {
+        db: {
+          getRootBySlug() { return root },
+          upsertRoot(slug, displayName, kind, source) {
+            root = { slug, display_name: displayName, kind, source }
+            return root
+          },
+        },
+      }
+
+      const result = await adapter.discover(ctx)
+
+      expect(result.keys).toContain('swift-org/documentation/concurrency')
+      expect(result.keys).toContain('swift-org/documentation/api-design-guidelines')
+      expect(result.keys).toContain('swift-org/getting-started')
+      expect(result.keys).toContain('swift-org/migration-guide-swift6')
+      expect(result.keys).toContain('swift-org/documentation/package-manager')
+    })
+
+    test('registers root in DB when not present', async () => {
+      let upsertCalled = false
+      let root = null
+      const adapter = new SwiftOrgAdapter()
+      const ctx = {
+        db: {
+          getRootBySlug() { return root },
+          upsertRoot(slug, displayName, kind, source) {
+            upsertCalled = true
+            root = { slug, display_name: displayName, kind, source }
+            return root
+          },
+        },
+      }
+
+      await adapter.discover(ctx)
+
+      expect(upsertCalled).toBe(true)
+      expect(root?.slug).toBe('swift-org')
+    })
+
+    test('does not re-register root when already present', async () => {
+      let upsertCallCount = 0
+      const existingRoot = { slug: 'swift-org', display_name: 'Swift.org Documentation' }
+      const adapter = new SwiftOrgAdapter()
+      const ctx = {
+        db: {
+          getRootBySlug() { return existingRoot },
+          upsertRoot() {
+            upsertCallCount++
+            return existingRoot
+          },
+        },
+      }
+
+      await adapter.discover(ctx)
+
+      expect(upsertCallCount).toBe(0)
+    })
+
+    test('exposes root in result', async () => {
+      let root = null
+      const adapter = new SwiftOrgAdapter()
+      const ctx = {
+        db: {
+          getRootBySlug() { return root },
+          upsertRoot(slug, displayName, kind, source) {
+            root = { slug, display_name: displayName, kind, source }
+            return root
+          },
+        },
+      }
+
+      const result = await adapter.discover(ctx)
+
+      expect(result.roots?.[0]?.slug).toBe('swift-org')
+    })
+  })
+
+  describe('normalize', () => {
+    test('produces a valid normalized document from an HTML fixture', () => {
+      const adapter = new SwiftOrgAdapter()
+      const key = 'swift-org/documentation/concurrency'
+
+      const result = adapter.normalize(key, HTML_FIXTURE)
+
+      expect(result.document).toBeDefined()
+      expect(result.sections).toBeDefined()
+      expect(result.relationships).toEqual([])
+      expect(Array.isArray(result.sections)).toBe(true)
+    })
+
+    test('sets sourceType to swift-org', () => {
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation/concurrency', HTML_FIXTURE)
+
+      expect(result.document.sourceType).toBe('swift-org')
+    })
+
+    test('sets framework to swift-org', () => {
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation/concurrency', HTML_FIXTURE)
+
+      expect(result.document.framework).toBe('swift-org')
+    })
+
+    test('sets kind to article', () => {
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation/concurrency', HTML_FIXTURE)
+
+      expect(result.document.kind).toBe('article')
+    })
+
+    test('extracts title from HTML', () => {
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation/concurrency', HTML_FIXTURE)
+
+      expect(result.document.title).toContain('Concurrency')
+    })
+
+    test('extracts abstract from meta description', () => {
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation/concurrency', HTML_FIXTURE)
+
+      expect(result.document.abstractText).toContain('async/await')
+    })
+
+    test('derives URL from key', () => {
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation/concurrency', HTML_FIXTURE)
+
+      expect(result.document.url).toBe('https://swift.org/documentation/concurrency')
+    })
+
+    test('sets document key to the input key', () => {
+      const adapter = new SwiftOrgAdapter()
+      const key = 'swift-org/documentation/concurrency'
+      const result = adapter.normalize(key, HTML_FIXTURE)
+
+      expect(result.document.key).toBe(key)
+    })
+
+    test('creates sections from HTML headings', () => {
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation/concurrency', HTML_FIXTURE)
+
+      // Should have at least the abstract and discussion sections
+      expect(result.sections.length).toBeGreaterThan(0)
+    })
+
+    test('handles non-string payload by coercing to string', () => {
+      const adapter = new SwiftOrgAdapter()
+
+      // Should not throw; invalid payload coerced via String()
+      expect(() => {
+        adapter.normalize('swift-org/about', 42)
+      }).not.toThrow()
+    })
+  })
+
+  describe('check', () => {
+    test('returns unchanged when server responds 304', async () => {
+      globalThis.fetch = async () => ({ status: 304, ok: false, headers: { get: () => null } })
+
+      const adapter = new SwiftOrgAdapter()
+      const result = await adapter.check(
+        'swift-org/documentation/concurrency',
+        { etag: '"abc123"' },
+        { rateLimiter: { acquire: async () => {} } },
+      )
+
+      expect(result.status).toBe('unchanged')
+      expect(result.changed).toBe(false)
+    })
+
+    test('returns modified when server responds 200', async () => {
+      globalThis.fetch = async () => ({
+        status: 200,
+        ok: true,
+        headers: { get: (h) => h === 'etag' ? '"new-etag"' : null },
+      })
+
+      const adapter = new SwiftOrgAdapter()
+      const result = await adapter.check(
+        'swift-org/documentation/concurrency',
+        { etag: '"old-etag"' },
+        { rateLimiter: { acquire: async () => {} } },
+      )
+
+      expect(result.status).toBe('modified')
+      expect(result.changed).toBe(true)
+    })
+
+    test('returns deleted when server responds 404', async () => {
+      globalThis.fetch = async () => ({ status: 404, ok: false, headers: { get: () => null } })
+
+      const adapter = new SwiftOrgAdapter()
+      const result = await adapter.check(
+        'swift-org/documentation/concurrency',
+        { etag: '"abc123"' },
+        { rateLimiter: { acquire: async () => {} } },
+      )
+
+      expect(result.status).toBe('deleted')
+      expect(result.deleted).toBe(true)
+      expect(result.changed).toBe(false)
+    })
+
+    test('returns error when network request throws', async () => {
+      globalThis.fetch = async () => {
+        throw new Error('network failure')
+      }
+
+      const adapter = new SwiftOrgAdapter()
+      const result = await adapter.check(
+        'swift-org/documentation/concurrency',
+        { etag: '"abc123"' },
+        { rateLimiter: { acquire: async () => {} } },
+      )
+
+      expect(result.status).toBe('error')
+      expect(result.changed).toBe(false)
+    })
+
+    test('preserves previous etag when server returns no new etag', async () => {
+      globalThis.fetch = async () => ({
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+      })
+
+      const adapter = new SwiftOrgAdapter()
+      const result = await adapter.check(
+        'swift-org/documentation/concurrency',
+        { etag: '"old-etag"' },
+        { rateLimiter: { acquire: async () => {} } },
+      )
+
+      expect(result.newState?.etag).toBe('"old-etag"')
+    })
+
+    test('constructs the correct URL from the key', async () => {
+      let capturedUrl = null
+      globalThis.fetch = async (url) => {
+        capturedUrl = url
+        return { status: 304, ok: false, headers: { get: () => null } }
+      }
+
+      const adapter = new SwiftOrgAdapter()
+      await adapter.check(
+        'swift-org/getting-started/cli-swiftpm',
+        null,
+        { rateLimiter: { acquire: async () => {} } },
+      )
+
+      expect(capturedUrl).toBe('https://swift.org/getting-started/cli-swiftpm')
+    })
+  })
+})

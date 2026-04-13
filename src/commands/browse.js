@@ -20,7 +20,9 @@ export async function browse(opts, ctx) {
     const page = db.getPage(opts.path)
     if (!page) throw new Error(`Page not found: ${opts.path}`)
 
-    const refs = db.getRefsBySource(page.id)
+    const refs = db.hasNormalizedDocuments()
+      ? db.getDocumentRelationships(page.path)
+      : db.getRefsBySource(page.id)
     return {
       framework: root.display_name,
       path: opts.path,

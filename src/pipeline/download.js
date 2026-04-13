@@ -1,31 +1,44 @@
-import { join } from 'node:path'
 import { fetchDocPage } from '../apple/api.js'
-import { sha256 } from '../lib/hash.js'
-import { writeJSON } from '../storage/files.js'
+import { persistFetchedDocPage } from './persist.js'
 
 /**
  * Download any pages that were discovered but not yet downloaded.
  * This handles the resume edge case where discovery succeeded but download didn't persist.
  */
-export async function downloadMissing(db, dataDir, rateLimiter, logger, onProgress) {
-  const pages = db.db.query(`
-    SELECT p.path, r.slug as root_slug
+export async function downloadMissing(db, dataDir, rateLimiter, logger, onProgress, filters = {}) {
+  let pages = db.db.query(`
+    SELECT p.path, p.root_id, r.slug as root_slug, r.source_type
     FROM pages p JOIN roots r ON p.root_id = r.id
     WHERE p.downloaded_at IS NULL AND p.status = 'active'
   `).all()
+  const rootSet = filters.roots ? new Set(filters.roots.map(root => root.toLowerCase())) : null
+  const sourceSet = filters.sources ? new Set(filters.sources.map(source => source.toLowerCase())) : null
+
+  if (rootSet) {
+    pages = pages.filter(page => rootSet.has(page.root_slug))
+  }
+  if (sourceSet) {
+    pages = pages.filter(page => sourceSet.has(page.source_type))
+  }
 
   if (pages.length === 0) return { downloaded: 0 }
 
   logger.info(`Downloading ${pages.length} missing pages...`)
   let downloaded = 0
 
-  for (const { path } of pages) {
+  for (const { path, root_id: rootId, source_type: sourceType } of pages) {
     try {
       const { json, etag, lastModified } = await fetchDocPage(path, rateLimiter)
-      const jsonStr = await writeJSON(join(dataDir, 'raw-json', path + '.json'), json)
-      const contentHash = sha256(jsonStr)
-
-      db.updatePageAfterDownload(path, etag, lastModified, contentHash)
+      await persistFetchedDocPage({
+        db,
+        dataDir,
+        rootId,
+        path,
+        sourceType: sourceType ?? 'apple-docc',
+        json,
+        etag,
+        lastModified,
+      })
       downloaded++
       onProgress?.({ downloaded, total: pages.length, path })
     } catch (e) {

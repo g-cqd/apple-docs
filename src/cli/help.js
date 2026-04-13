@@ -14,6 +14,12 @@ Commands:
   doctor               Diagnose and repair corpus
   status               Show corpus statistics
 
+  mcp start            Start MCP stdio server
+  mcp install          Show MCP configuration instructions
+
+  web serve            Start local dev server (coming soon)
+  web build            Build static documentation site (coming soon)
+
 Global options:
   --json               Output raw JSON (for scripting)
   --home <path>        Override data directory (default: ~/.apple-docs)
@@ -33,6 +39,7 @@ a 200ms head start; if they fill the limit, body results are skipped (eager mode
 
 Options:
   --framework <name>   Filter by framework (e.g. swiftui, design, app-store-review)
+  --source <name>      Filter by source type (e.g. apple-docc, hig, guidelines, wwdc, sample-code)
   --kind <role>        Filter by role (e.g. symbol, article)
   --limit <n>          Max results (default: 100)
   --no-fuzzy           Disable typo-tolerant matching
@@ -47,6 +54,7 @@ Examples:
   apple-docs search "navig"                   # substring match on titles
   apple-docs search "async patterns" --no-eager  # wait for body results
   apple-docs search "in-app purchase" --framework app-store-review
+  apple-docs search "Observation" --source wwdc
   apple-docs search "privacy" --framework guidelines --read  # search + read best match
 `.trim(),
 
@@ -89,6 +97,7 @@ Resumable: if interrupted, re-run the same command to continue where you left of
 
 Options:
   --roots <a,b,c>      Only sync specific roots (comma-separated)
+  --sources <a,b,c>    Only sync specific source types (apple-docc,hig,guidelines)
   --full               Sync all discovered roots
   --parallel <n>       Crawl N frameworks simultaneously (default: 1)
   --concurrency <n>    Max total in-flight fetches across all roots (default: 5)
@@ -99,6 +108,7 @@ Options:
 
 Examples:
   apple-docs sync --roots swiftui,combine                   # sync two frameworks
+  apple-docs sync --sources guidelines                      # sync only App Store Review Guidelines
   apple-docs sync --roots app-store-review                  # sync App Store Review Guidelines
   apple-docs sync --full --parallel 5 --rate 10             # 5 roots at once, 10 req/s
   apple-docs sync --roots uikit --concurrency 10 --rate 10  # fast single root
@@ -112,6 +122,7 @@ Check for documentation updates and pull changes.
 
 Options:
   --roots <a,b,c>      Only check specific roots
+  --sources <a,b,c>    Only check specific source types (apple-docc,hig,guidelines)
   --concurrency <n>    Max concurrent HEAD checks / fetches (default: 5)
   --rate <n>           Max requests per second (default: 5)
   --parallel <n>       Crawl N new roots simultaneously (default: 1)
@@ -121,6 +132,7 @@ Options:
 Examples:
   apple-docs update --concurrency 50 --rate 100    # fast update check
   apple-docs update --roots swiftui,combine         # check specific roots
+  apple-docs update --sources guidelines            # check only App Store Review Guidelines
 `.trim(),
 
   index: `
@@ -162,6 +174,31 @@ Show corpus statistics and health.
 
 Options:
   --json               Output raw JSON
+`.trim(),
+
+  mcp: `
+Usage: apple-docs mcp <subcommand>
+
+MCP (Model Context Protocol) server commands.
+
+Subcommands:
+  start                Start MCP stdio server for AI assistants
+  install              Show MCP configuration for Claude, Cursor, etc.
+
+Examples:
+  apple-docs mcp start            # start server (used by MCP clients)
+  apple-docs mcp install          # print configuration JSON
+`.trim(),
+
+  web: `
+Usage: apple-docs web <subcommand>
+
+Static documentation website commands (coming in a future release).
+
+Planned subcommands:
+  serve                Start local dev server
+  build                Build static site to dist/web/
+  deploy               Show deployment instructions
 `.trim(),
 }
 

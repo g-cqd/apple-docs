@@ -1,8 +1,9 @@
 import { fetchHtmlPage } from '../apple/api.js'
 import { parseGuidelinesHtml, ROOT_SLUG, GUIDELINES_URL } from '../apple/guidelines-parser.js'
+import { normalize } from '../content/normalize.js'
 import { toFrontMatter } from '../lib/yaml.js'
 import { sha256 } from '../lib/hash.js'
-import { writeText } from '../storage/files.js'
+import { stableStringify, writeText } from '../storage/files.js'
 import { join } from 'node:path'
 
 /**
@@ -21,6 +22,26 @@ export async function syncGuidelines(db, dataDir, rateLimiter, logger) {
   const { sections, lastUpdated } = await parseGuidelinesHtml(html)
   logger.info(`Parsed ${sections.length} guideline sections (last updated: ${lastUpdated ?? 'unknown'})`)
 
+  const result = await applyGuidelinesSnapshot(db, dataDir, {
+    html,
+    etag,
+    lastModified,
+    sections,
+    lastUpdated,
+  })
+  logger.info(`Synced ${result.sections} guideline sections`)
+  return result
+}
+
+export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
+  const {
+    html,
+    etag = null,
+    lastModified = null,
+    sections = [],
+    lastUpdated = null,
+  } = snapshot
+
   // Ensure root exists
   const root = db.upsertRoot(ROOT_SLUG, 'App Store Review Guidelines', 'guidelines', 'html-scrape')
   const rootId = root.id
@@ -31,8 +52,19 @@ export async function syncGuidelines(db, dataDir, rateLimiter, logger) {
   // Save raw HTML for reference
   await writeText(join(dataDir, 'raw-json', `${ROOT_SLUG}.html`), html)
 
+  const currentPaths = new Set(sections.map(section => section.path))
+  for (const existing of db.getPagesByRoot(ROOT_SLUG)) {
+    if (!currentPaths.has(existing.path)) {
+      db.markPageDeleted(existing.path)
+    }
+  }
+
   // Process each section
   for (const section of sections) {
+    const normalized = normalize(section, section.path, 'guidelines')
+    const doc = normalized.document
+    const normalizedHash = sha256(stableStringify(normalized))
+
     // Build Markdown with YAML front matter (same format as DocC pages)
     const fm = {
       title: section.title,
@@ -53,16 +85,27 @@ export async function syncGuidelines(db, dataDir, rateLimiter, logger) {
       rootId,
       path: section.path,
       url: `${GUIDELINES_URL}#${section.id}`,
-      title: section.title,
-      role: section.role,
-      roleHeading: section.roleHeading,
-      abstract: section.abstract,
+      title: doc.title,
+      role: doc.role,
+      roleHeading: doc.roleHeading,
+      abstract: doc.abstractText,
       platforms: null,
       declaration: null,
       etag,
       lastModified,
       contentHash,
       downloadedAt: now,
+      sourceType: doc.sourceType,
+      language: doc.language,
+      isReleaseNotes: doc.isReleaseNotes,
+      urlDepth: doc.urlDepth,
+      docKind: doc.kind,
+      sourceMetadata: doc.sourceMetadata,
+      skipDocumentSync: true,
+    })
+    db.upsertNormalizedDocument(normalized, {
+      contentHash: normalizedHash,
+      rawPayloadHash: contentHash,
     })
 
     db.markConverted(section.path)
@@ -81,6 +124,5 @@ export async function syncGuidelines(db, dataDir, rateLimiter, logger) {
 
   db.updateRootPageCount(ROOT_SLUG)
 
-  logger.info(`Synced ${sections.length} guideline sections`)
   return { sections: sections.length, lastUpdated }
 }

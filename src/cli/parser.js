@@ -1,13 +1,29 @@
 /**
- * Minimal argv parser. Returns { command, positional, flags }.
- * Handles: --key value, --bool, positional args, -- separator.
+ * Commands that accept a second-level subcommand (e.g. `mcp start`, `web serve`).
+ * For these, the next non-flag argument after the command is consumed as `subcommand`.
+ */
+const COMMAND_FAMILIES = new Set(['mcp', 'web', 'storage', 'snapshot'])
+
+/**
+ * Minimal argv parser. Returns { command, subcommand, positional, flags }.
+ * Handles: --key value, --bool, positional args, -- separator, 2-level commands.
  */
 export function parseArgs(argv) {
   const args = argv.slice(2) // skip runtime and script path
   const command = args[0] && !args[0].startsWith('-') ? args[0] : null
+
+  // Check for subcommand on command families
+  let subcommand = null
+  if (command && COMMAND_FAMILIES.has(command)) {
+    const next = args[1]
+    if (next && !next.startsWith('-')) {
+      subcommand = next
+    }
+  }
+
   const positional = []
   const flags = {}
-  const start = command ? 1 : 0
+  const start = command ? (subcommand ? 2 : 1) : 0
 
   for (let i = start; i < args.length; i++) {
     if (args[i] === '--') {
@@ -29,5 +45,5 @@ export function parseArgs(argv) {
     }
   }
 
-  return { command, positional, flags }
+  return { command, subcommand, positional, flags }
 }

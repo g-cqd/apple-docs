@@ -1,10 +1,6 @@
 import { normalizeIdentifier, extractRootSlug } from '../apple/normalizer.js'
-import { extractReferences, extractMetadata } from '../apple/extractor.js'
 import { fetchDocPage, fetchTechnologies } from '../apple/api.js'
-import { renderPage } from '../apple/renderer.js'
-import { sha256 } from '../lib/hash.js'
-import { writeJSON, writeText } from '../storage/files.js'
-import { join } from 'node:path'
+import { persistFetchedDocPage } from './persist.js'
 
 const KIND_MAP = {
   'App Frameworks': 'framework',
@@ -47,7 +43,7 @@ export async function discoverRoots(db, rateLimiter, logger) {
   // HIG uses /design/ instead of /documentation/. Apple's technologies index
   // points to it via https:// URL (which we reject). Register it explicitly
   // with its actual seed path.
-  db.upsertRoot('design', 'Human Interface Guidelines', 'technology', 'apple-index', 'design/human-interface-guidelines')
+  db.upsertRoot('design', 'Human Interface Guidelines', 'design', 'apple-index', 'design/human-interface-guidelines')
   count++
 
   // App Store Review Guidelines are an HTML page, not DocC JSON.
@@ -65,7 +61,7 @@ export async function discoverRoots(db, rateLimiter, logger) {
  * @param {import('../lib/semaphore.js').Semaphore} semaphore - shared across all parallel roots
  */
 export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onProgress, opts = {}) {
-  const { retryFailed = false, semaphore } = opts
+  const { retryFailed = false, semaphore, adapter = null } = opts
   const root = db.getRootBySlug(rootSlug)
   if (!root) throw new Error(`Unknown root: ${rootSlug}`)
 
@@ -93,7 +89,7 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
 
     const results = await Promise.allSettled(
       batch.map(({ path, depth }) => {
-        const run = () => processPage(db, dataDir, rateLimiter, root.id, rootSlug, path, depth, logger)
+        const run = () => processPage(db, dataDir, rateLimiter, root.id, rootSlug, root.source_type, path, depth, logger, adapter)
         return semaphore ? semaphore.run(run) : run()
       })
     )
@@ -117,50 +113,34 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
   return { processed, total: finalStats.processed + finalStats.failed }
 }
 
-async function processPage(db, dataDir, rateLimiter, rootId, rootSlug, path, depth, logger) {
+async function processPage(db, dataDir, rateLimiter, rootId, rootSlug, sourceType, path, depth, logger, adapter = null) {
   try {
-    const { json, etag, lastModified } = await fetchDocPage(path, rateLimiter)
-
-    // Save raw JSON (writeJSON returns the serialized string — reuse for hash)
-    const jsonStr = await writeJSON(join(dataDir, 'raw-json', path + '.json'), json)
-    const contentHash = sha256(jsonStr)
-
-    // Extract metadata
-    const meta = extractMetadata(json)
-
-    // Upsert page
-    db.upsertPage({
+    const fetched = adapter
+      ? await adapter.fetch(path, { db, dataDir, rateLimiter, logger })
+      : await fetchDocPage(path, rateLimiter)
+    const json = fetched.payload ?? fetched.json
+    const etag = fetched.etag ?? null
+    const lastModified = fetched.lastModified ?? null
+    const persisted = await persistFetchedDocPage({
+      db,
+      dataDir,
       rootId,
       path,
-      url: `https://developer.apple.com/tutorials/data/documentation/${path}.json`,
-      title: meta.title,
-      role: meta.role,
-      roleHeading: meta.roleHeading,
-      abstract: meta.abstract,
-      platforms: meta.platforms,
-      declaration: meta.declaration,
+      sourceType: adapter?.constructor.type ?? sourceType ?? 'apple-docc',
+      json,
       etag,
       lastModified,
-      contentHash,
-      downloadedAt: new Date().toISOString(),
     })
 
     // Extract and seed references
-    const refs = extractReferences(json)
-    for (const refPath of refs) {
+    const references = adapter
+      ? adapter.extractReferences(path, json)
+      : persisted.references
+    for (const refPath of references) {
       const refRoot = extractRootSlug(refPath)
       if (refRoot === rootSlug) {
         db.seedCrawlIfNew(refPath, rootSlug, depth + 1)
       }
-    }
-
-    // Convert to Markdown inline
-    try {
-      const markdown = renderPage(json, path)
-      await writeText(join(dataDir, 'markdown', path + '.md'), markdown)
-      db.markConverted(path)
-    } catch (e) {
-      logger.warn(`Inline convert failed: ${path}`, { error: e.message })
     }
 
     db.setCrawlState(path, 'processed', rootSlug, depth)

@@ -14,7 +14,7 @@ afterEach(() => {
 describe('DocsDatabase', () => {
   test('creates schema on init', () => {
     const row = db.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
-    expect(row.value).toBe('4')
+    expect(row.value).toBe('6')
   })
 
   test('upsertRoot inserts and returns id', () => {
@@ -90,6 +90,16 @@ describe('DocsDatabase', () => {
     expect(page.framework).toBe('Combine')
   })
 
+  test('getPageByPath remains available as a compatibility alias', () => {
+    const root = db.upsertRoot('combine', 'Combine', 'framework', 'test')
+    db.upsertPage({ rootId: root.id, path: 'combine/publisher', url: 'u', title: 'Publisher', role: 'symbol' })
+
+    const page = db.getPageByPath('combine/publisher')
+    expect(page).not.toBeNull()
+    expect(page.title).toBe('Publisher')
+    expect(page.root_slug).toBe('combine')
+  })
+
   test('crawl state operations', () => {
     db.seedCrawlIfNew('swiftui', 'swiftui', 0)
     db.seedCrawlIfNew('swiftui/view', 'swiftui', 1)
@@ -128,6 +138,83 @@ describe('DocsDatabase', () => {
 
     db.deleteRefsBySource(page.id)
     expect(db.getRefsBySource(page.id).length).toBe(0)
+  })
+
+  test('schema v6 keeps source metadata and normalized tables available', () => {
+    // Check roots has source_type column
+    const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+    const rootRow = db.db.query('SELECT source_type FROM roots WHERE slug = ?').get('swiftui')
+    expect(rootRow.source_type).toBe('apple-docc')
+
+    // Check pages has new columns
+    db.upsertPage({ rootId: root.id, path: 'swiftui/view', url: 'u', title: 'View', role: 'symbol' })
+    const pageRow = db.db.query('SELECT source_type, language, is_release_notes, url_depth FROM pages WHERE path = ?').get('swiftui/view')
+    expect(pageRow.source_type).toBe('apple-docc')
+    expect(pageRow.is_release_notes).toBe(0)
+
+    // Check framework_synonyms table exists and has seed data
+    const synonym = db.db.query('SELECT canonical FROM framework_synonyms WHERE alias = ?').get('coreanimation')
+    expect(synonym).not.toBeNull()
+    expect(synonym.canonical).toBe('quartzcore')
+
+    // New normalized tables should mirror page inserts
+    const documentRow = db.db.query('SELECT key, title FROM documents WHERE key = ?').get('swiftui/view')
+    expect(documentRow).not.toBeNull()
+    expect(documentRow.title).toBe('View')
+
+    const designRoot = db.upsertRoot('design', 'Human Interface Guidelines', 'design', 'test')
+    const designRow = db.db.query('SELECT source_type FROM roots WHERE id = ?').get(designRoot.id)
+    expect(designRow.source_type).toBe('hig')
+
+    const guidelinesRoot = db.upsertRoot('app-store-review', 'App Store Review Guidelines', 'guidelines', 'test')
+    const guidelinesRow = db.db.query('SELECT source_type FROM roots WHERE id = ?').get(guidelinesRoot.id)
+    expect(guidelinesRow.source_type).toBe('guidelines')
+  })
+
+  test('upsertNormalizedDocument stores sections and relationships', () => {
+    db.upsertNormalizedDocument({
+      document: {
+        sourceType: 'apple-docc',
+        key: 'swiftui/view',
+        title: 'View',
+        kind: 'symbol',
+        role: 'symbol',
+        roleHeading: 'Protocol',
+        framework: 'swiftui',
+        url: 'https://developer.apple.com/documentation/swiftui/view',
+        abstractText: 'A view.',
+        declarationText: 'protocol View',
+      },
+      sections: [
+        {
+          sectionKind: 'discussion',
+          heading: 'Overview',
+          contentText: 'Overview text',
+          contentJson: null,
+          sortOrder: 0,
+        },
+      ],
+      relationships: [
+        {
+          fromKey: 'swiftui/view',
+          toKey: 'swiftui/text',
+          relationType: 'see_also',
+          section: 'See Also',
+          sortOrder: 0,
+        },
+      ],
+    }, {
+      contentHash: 'normalized-hash',
+      rawPayloadHash: 'raw-hash',
+    })
+
+    const sections = db.getDocumentSections('swiftui/view')
+    expect(sections.length).toBe(1)
+    expect(sections[0].heading).toBe('Overview')
+
+    const relationship = db.db.query('SELECT to_key, relation_type FROM document_relationships WHERE from_key = ?').get('swiftui/view')
+    expect(relationship.to_key).toBe('swiftui/text')
+    expect(relationship.relation_type).toBe('see_also')
   })
 
   test('getStats returns aggregate data', () => {

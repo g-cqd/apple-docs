@@ -1,4 +1,4 @@
-const TUTORIALS_BASE = 'https://developer.apple.com/tutorials/data'
+const TUTORIALS_BASE = process.env.APPLE_DOCS_API_BASE ?? 'https://developer.apple.com/tutorials/data'
 const USER_AGENT = 'apple-docs-mcp/1.0'
 const DEFAULT_TIMEOUT = parseInt(process.env.APPLE_DOCS_TIMEOUT ?? '30000', 10)
 const MAX_RETRIES = 3

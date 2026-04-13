@@ -12,6 +12,8 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 export async function search(opts, ctx) {
   const { query, kind } = opts
   const limit = Math.max(parseInt(opts.limit) || 100, 1)
+  const sourceTypes = normalizeSourceFilter(opts.source)
+  const searchLimit = sourceTypes ? Math.max(limit * 10, 200) : limit
 
   // Resolve framework slug (allows fuzzy input like "guidelines" → "app-store-review")
   let framework = opts.framework
@@ -27,7 +29,7 @@ export async function search(opts, ctx) {
 
   const q = query.trim()
   const ftsQuery = buildFtsQuery(q)
-  const filterOpts = { framework, kind, limit }
+  const filterOpts = { framework, kind, limit: searchLimit }
 
   // Start body search in background if index exists and not disabled
   let bodyPromise = null
@@ -39,8 +41,7 @@ export async function search(opts, ctx) {
       setTimeout(() => {
         if (bodyCancelled) return resolve([])
         try {
-          const bodyResults = ctx.db.searchBody(ftsQuery, filterOpts)
-          resolve(bodyResults.map(r => ({ ...formatResult(r), matchQuality: 'body' })))
+          resolve(ctx.db.searchBody(ftsQuery, filterOpts))
         } catch { resolve([]) }
       }, 200)
     })
@@ -51,6 +52,7 @@ export async function search(opts, ctx) {
 
   const addResults = (rows, quality) => {
     for (const r of rows) {
+      if (!matchesSourceFilter(r, sourceTypes)) continue
       if (seen.has(r.path)) continue
       seen.add(r.path)
       results.push({ ...formatResult(r), matchQuality: quality })
@@ -87,17 +89,12 @@ export async function search(opts, ctx) {
     const fuzzyMatches = fuzzyMatchTitles(q, ctx.db, { framework, kind, limit })
     for (const fm of fuzzyMatches) {
       if (seen.has(fm.id)) continue
-      // Need to fetch full page data for this match
-      const page = ctx.db.db.query(`
-        SELECT p.path, p.title, p.role, p.role_heading, p.abstract,
-               p.declaration, p.platforms, r.display_name as framework, r.slug as root_slug
-        FROM pages p JOIN roots r ON p.root_id = r.id
-        WHERE p.id = ? AND p.status = 'active'
-      `).get(fm.id)
-      if (!page) continue
-      if (seen.has(page.path)) continue
-      seen.add(page.path)
-      results.push({ ...formatResult(page), matchQuality: 'fuzzy', distance: fm.distance })
+      const record = ctx.db.getSearchRecordById(fm.id)
+      if (!record) continue
+      if (!matchesSourceFilter(record, sourceTypes)) continue
+      if (seen.has(record.path)) continue
+      seen.add(record.path)
+      results.push({ ...formatResult(record), matchQuality: 'fuzzy', distance: fm.distance })
     }
   }
 
@@ -127,12 +124,29 @@ function formatResult(r) {
     title: r.title,
     framework: r.framework,
     rootSlug: r.root_slug,
+    sourceType: r.source_type ?? null,
+    sourceMetadata: r.source_metadata ?? null,
     kind: r.role_heading ?? r.role,
     abstract: r.abstract,
     path: r.path,
     platforms: r.platforms ? (typeof r.platforms === 'string' ? JSON.parse(r.platforms) : r.platforms) : [],
     declaration: r.declaration,
   }
+}
+
+function normalizeSourceFilter(source) {
+  if (!source) return null
+  const values = Array.isArray(source) ? source : String(source).split(',')
+  const normalized = values
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean)
+  return normalized.length > 0 ? new Set(normalized) : null
+}
+
+function matchesSourceFilter(row, sourceTypes) {
+  if (!sourceTypes) return true
+  const sourceType = String(row?.source_type ?? row?.sourceType ?? '').toLowerCase()
+  return sourceTypes.has(sourceType)
 }
 
 /**

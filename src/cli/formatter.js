@@ -12,7 +12,8 @@ export function formatSearchResults(result) {
   for (const r of result.results) {
     const quality = r.matchQuality ?? 'match'
     const tag = quality === 'match' ? '' : quality === 'fuzzy' ? dim(` [fuzzy d=${r.distance}]`) : dim(` [${quality}]`)
-    lines.push(`  ${dim(r.framework + ' / ' + (r.kind ?? ''))}${tag}`)
+    const sourceLabel = r.sourceType ? `${r.sourceType} / ` : ''
+    lines.push(`  ${dim(sourceLabel + r.framework + ' / ' + (r.kind ?? ''))}${tag}`)
     lines.push(`  ${bold(r.title)}`)
     if (r.abstract) lines.push(`  ${r.abstract}`)
     lines.push(`  ${dim(r.path)}`)
@@ -27,6 +28,7 @@ export function formatSearchRead(result) {
   const quality = hit.matchQuality ?? 'match'
   const lines = [
     `  ${dim('┌')} Best match: ${bold(hit.title)}`,
+    `  ${dim('│')} Source:     ${hit.sourceType ?? 'unknown'}`,
     `  ${dim('│')} Framework:  ${hit.framework}`,
     `  ${dim('│')} Match:      ${quality}${quality === 'fuzzy' ? ` (d=${hit.distance})` : ''}`,
     `  ${dim('└')} Path:       ${hit.path}`,
