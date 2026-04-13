@@ -14,27 +14,28 @@
 | **2** | Source Adapter Layer | `COMPLETE` | 7/7 tasks landed | Met |
 | **3** | MCP SDK Migration | `COMPLETE` | 7/7 tasks landed | Met |
 | **4** | Source Coverage Expansion | `COMPLETE` | v2 source-expansion scope is implemented, integrated, and verified in repo tests | Met for committed v2 scope |
-| **5** | Search Quality Upgrade | `IN_PROGRESS` | Phase 5 is now active; source-aware search metadata plumbing and `--source` filtering have landed | In progress |
-| **6** | Distribution & Setup | `BLOCKED_BY:P5` | Baseline CI and package bins exist; work intentionally paused until Phase 5 is complete | Not yet met |
+| **5** | Search Quality Upgrade | `COMPLETE` | All 9 tasks done: platform/language/synonym filtering, snippets, related counts, 8-rule reranking, intent detection, p95 benchmark | Met |
+| **6** | Distribution & Setup | `READY` | Baseline CI and package bins exist; Phase 5 complete, Phase 6 is now unblocked | Not yet met |
 | **7** | Static Website | `NOT_STARTED` | `web` namespace is reserved in CLI/help only | Not yet met |
 | **8** | Storage Profiles & Polish | `NOT_STARTED` | On-demand lookup rendering and `doctor` groundwork exist; profile system is absent | Not yet met |
 
 ```
-Overall: phases 0-4 are complete for the current v2 scope; phase 5 is active; phase 6 is intentionally blocked until phase 5 is complete.
+Overall: phases 0-5 are complete for the current v2 scope; phase 6 is now unblocked and ready to begin.
 ```
 
 ## Current Planning Wave
 
 **Planner mode**: `Project + Orchestration`
-**Active phase**: `P5`
-**Execution intent**: complete Phase 5 before allowing any Phase 6 work
+**Active phase**: `P6` (ready to begin)
+**Execution intent**: Phase 5 is complete; Phase 6 is now unblocked
 
 | Slice | Status | Evidence | Next action |
 |---|---|---|---|
-| `P5-A` | `done` | Search rows now carry `source_type`/`source_metadata`; CLI and MCP both accept source filtering | Move on to platform/language filters and richer ranking |
-| `P5-B` | `ready` | `framework_synonyms` is seeded and `src/content/render-snippet.js` exists with tests | Wire alias expansion and snippets into search results |
-| `P5-C` | `pending` | No `src/search/ranking.js` or `src/search/intent.js` exists yet | Implement deterministic reranking and intent detection after metadata plumbing |
-| `P5-D` | `pending` | Golden query suite exists, but no p50/p95 benchmark harness or history exists | Add benchmark harness after search behavior stabilizes |
+| `P5-A` | `done` | Search rows carry `source_type`/`source_metadata`; CLI and MCP accept source filtering | — |
+| `P5-B` | `done` | Platform/language/synonym filtering wired through CLI/MCP/DB; 6 new golden queries | — |
+| `P5-C` | `done` | Snippets and related counts in search results via batch queries | — |
+| `P5-D` | `done` | Intent detection + 8-rule reranking replaces static tier sort; 24 unit tests | — |
+| `P5-E` | `done` | Benchmark harness: 42 queries × 50 iterations; p50=0.15ms p95=0.20ms p99=0.23ms | — |
 
 ---
 
@@ -368,45 +369,53 @@ Overall: phases 0-4 are complete for the current v2 scope; phase 5 is active; ph
 
 ## Phase 5: Search Quality Upgrade
 
-**Status**: `IN_PROGRESS`
+**Status**: `COMPLETE` (verified 2026-04-13)
 **Depends on**: Phase 4
 **Blocks**: Phase 6
-**Current objective**: continue Phase 5 execution now that Phase 4 is complete
 
 ### Actual State
 
 | ID | Task | Status | Evidence / Gap |
 |---|---|---|---|
-| 5.1 | Platform Version Filtering | `partial` | `documents.min_*` columns exist and are populated by normalization; CLI/MCP/DB search filters are not wired yet |
+| 5.1 | Platform Version Filtering | `done` | CLI flags `--min-ios`, `--min-macos`, `--platform`, etc. wired through search → DB with nullable SQL filters; MCP `search_docs` accepts `min_ios`/`platform`/etc.; golden queries cover platform filtering |
 | 5.2 | Source Type Filtering | `done` | `search()` now supports source filtering through CLI and MCP; golden queries cover `wwdc` and `sample-code` |
-| 5.3 | Language Filtering | `partial` | `language` is stored for normalized docs; search path ignores it |
-| 5.4 | Framework Aliases & Synonyms | `partial` | `framework_synonyms` is seeded in the DB; query expansion still only handles CamelCase splitting |
-| 5.5 | Snippet Generation | `partial` | `src/content/render-snippet.js` exists and is tested; search results do not return snippets |
-| 5.6 | Source-Aware Reranking (8 rules) | `pending` | no `src/search/ranking.js` exists |
-| 5.7 | Query Intent Detection | `pending` | no `src/search/intent.js` exists |
-| 5.8 | Related Document Graph | `partial` | relationships already exist in the normalized model and power `browse()`/`lookup()`; search results do not expose related counts |
-| 5.9 | Search Benchmark Suite | `partial` | `test/golden/search-benchmark.test.js` exists with latency assertions; no p50/p95 benchmark harness or history exists |
+| 5.3 | Language Filtering | `done` | `--language swift|objc` wired through CLI + MCP; SQL filter `d.language = $language OR d.language = 'both' OR d.language IS NULL`; golden queries for language filtering |
+| 5.4 | Framework Aliases & Synonyms | `done` | `getFrameworkSynonyms(slug)` reads bidirectional pairs from `framework_synonyms` table; search expands to synonym frameworks and merges results; golden query for synonym expansion |
+| 5.5 | Snippet Generation | `done` | `renderSnippet()` called with batch-fetched document+sections data via `getDocumentSnippetData()`; snippet field included in search results; displayed in CLI output |
+| 5.6 | Source-Aware Reranking (8 rules) | `done` | `src/search/ranking.js` implements 8 multiplicative rules (exact match, symbol kind, guide boost, release notes penalty, archive penalty, sample code boost, depth penalty, freshness boost); replaces static tier sort |
+| 5.7 | Query Intent Detection | `done` | `src/search/intent.js` classifies queries as symbol/howto/error/concept/general with confidence scores; intent fed to reranker and returned in search results |
+| 5.8 | Related Document Graph | `done` | `getRelatedDocCounts()` batch method returns counts from `document_relationships`; `relatedCount` field included in search results; displayed in CLI output |
+| 5.9 | Search Benchmark Suite | `done` | `test/golden/search-benchmark.test.js` runs 42 queries × 50 iterations, computes p50/p95/p99, asserts p95 < 50ms; measured p95=0.20ms |
 
 ### Exit Criteria
 
-- [ ] Platform filtering works
-- [ ] Source filtering works
-- [ ] Language filtering works
-- [ ] Aliases expand queries
-- [ ] Snippets are included in search results
-- [ ] 8+ reranking rules are applied
-- [ ] Release notes are down-weighted
-- [ ] Golden queries pass at improved or equal quality
-- [ ] Search latency is measured and remains < 50ms p95
+- [x] Platform filtering works
+- [x] Source filtering works
+- [x] Language filtering works
+- [x] Aliases expand queries
+- [x] Snippets are included in search results
+- [x] 8+ reranking rules are applied
+- [x] Release notes are down-weighted
+- [x] Golden queries pass at improved or equal quality (42 queries, all passing)
+- [x] Search latency is measured and remains < 50ms p95 (measured: p50=0.15ms, p95=0.20ms, p99=0.23ms)
 
 ### Planned Waves
 
-| Wave | Goal | Depends on |
+| Wave | Goal | Status |
 |---|---|---|
-| `P5-A` | Metadata plumbing: expose source/language/platform/source metadata through search rows, CLI flags, and MCP args | None |
-| `P5-B` | User-visible filters and snippets | `P5-A` |
-| `P5-C` | Intent detection and deterministic reranking | `P5-A` |
-| `P5-D` | Benchmark harness and golden-suite refresh | `P5-B`, `P5-C` |
+| `P5-A` | Metadata plumbing: expose source/language/platform/source metadata through search rows, CLI flags, and MCP args | `done` |
+| `P5-B` | Platform, language, and framework synonym filtering | `done` |
+| `P5-C` | Contextual snippets and related document counts | `done` |
+| `P5-D` | Intent detection and source-aware reranking (8 rules) | `done` |
+| `P5-E` | Benchmark harness with p50/p95/p99 and golden suite validation | `done` |
+
+### Key Artifacts
+
+| File | Purpose |
+|---|---|
+| `src/search/intent.js` | `detectIntent(query)` → `{ type, confidence }` — symbol/howto/error/concept/general classification |
+| `src/search/ranking.js` | `rerank(results, query, intent)` — 8-rule multiplicative reranker |
+| `src/content/render-snippet.js` | `renderSnippet(document, sections, query, maxLength)` — context-window extraction |
 
 ### Execution Log
 
@@ -414,13 +423,18 @@ Overall: phases 0-4 are complete for the current v2 scope; phase 5 is active; ph
 - [2026-04-13T16:45] [P5-A] DONE: search rows now expose `sourceType` and `sourceMetadata`; WWDC MCP filtering now uses returned metadata consistently
 - [2026-04-13T16:45] [5.2] DONE: `--source` wired through CLI + MCP `search_docs`; golden queries added for `wwdc` and `sample-code`
 - [2026-04-13T16:52] [P5-KICKOFF] VERIFIED: source-filter search coverage passes in golden tests and MCP contract tests
+- [2026-04-13T18:15] [P5-B] DONE: platform version filtering (--min-ios, --min-macos, --platform), language filtering (--language), and framework synonym expansion all wired through CLI/MCP/DB; 6 new golden queries
+- [2026-04-13T18:20] [P5-C] DONE: batch getDocumentSnippetData() and getRelatedDocCounts() methods; snippet and relatedCount fields in search results; CLI displays snippets and related counts
+- [2026-04-13T18:25] [P5-D] DONE: intent.js (symbol/howto/error/concept/general detection) and ranking.js (8 multiplicative rules) wired into search pipeline; replaces static tier-based sort; 24 unit tests
+- [2026-04-13T18:30] [P5-E] DONE: benchmark harness runs 42 queries × 50 iterations; p50=0.15ms p95=0.20ms p99=0.23ms; enrichment tests verify snippet/relatedCount/intent/score fields
+- [2026-04-13T18:30] [P5-CLOSE] VERIFIED: `bun test` (455 pass), all 42 golden queries pass, p95 latency well under 50ms threshold
 
 ---
 
 ## Phase 6: Distribution & Setup
 
-**Status**: `BLOCKED_BY:P5`
-**Depends on**: Phase 5 (project sequencing policy)
+**Status**: `READY`
+**Depends on**: Phase 5 (complete)
 **Blocks**: Phase 7
 
 ### Actual State
@@ -448,6 +462,7 @@ Overall: phases 0-4 are complete for the current v2 scope; phase 5 is active; ph
 ### Execution Log
 
 - [2026-04-13T16:52] [P6-STATUS] BLOCKED: work intentionally deferred until Phase 5 completes
+- [2026-04-13T18:30] [P6-STATUS] UNBLOCKED: Phase 5 is complete; Phase 6 is ready to begin
 
 ---
 
@@ -543,12 +558,12 @@ Dependency notes:
 |---|---|---|---|
 | Source count | 3 | 9 | 11+ |
 | Total documents | ~330K | ~330K (not re-verified in this refresh; first full phase-4 sync still pending) | ~365K+ |
-| Test count | 53 | 406 | 150+ |
-| Schema version | 4 | 6 | 6+ |
+| Test count | 53 | 455 | 150+ |
+| Schema version | 4 | 7 | 6+ |
 | Source adapters | 0 | 9 (apple-docc, hig, guidelines, swift-evolution, swift-book, swift-org, apple-archive, wwdc, sample-code) | 10+ |
 | Content renderers | 1 (markdown from raw JSON) | 4 (markdown, html, text, snippet from normalized model) | 4 |
 | Content parsers | 0 | 2 (parse-markdown, parse-html) | 2 |
-| Search latency p95 | ~50ms | not yet re-measured with a true p95 harness; golden query suite now covers source filtering and still passes quickly in the seed DB | < 50ms |
+| Search latency p95 | ~50ms | 0.20ms (measured: 42 queries × 50 iterations on seed DB) | < 50ms |
 | Setup time (new user) | hours (sync) | hours | < 60s |
 | MCP tools | 5 (custom) | 8 (SDK, Zod-typed) | 10+ (SDK) |
 | MCP resources | 0 | 2 (doc, framework) | 2+ |
