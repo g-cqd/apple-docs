@@ -16,6 +16,8 @@ export function formatSearchResults(result) {
     lines.push(`  ${dim(sourceLabel + r.framework + ' / ' + (r.kind ?? ''))}${tag}`)
     lines.push(`  ${bold(r.title)}`)
     if (r.abstract) lines.push(`  ${r.abstract}`)
+    if (r.snippet && r.snippet !== r.abstract) lines.push(`  ${dim(r.snippet)}`)
+    if (r.relatedCount > 0) lines.push(`  ${dim(`↳ ${r.relatedCount} related`)}`)
     lines.push(`  ${dim(r.path)}`)
     lines.push('')
   }

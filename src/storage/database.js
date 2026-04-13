@@ -1126,6 +1126,50 @@ export class DocsDatabase {
     return this._getFrameworkSynonyms.all(normalized, normalized).map(r => r.alias ?? r.canonical)
   }
 
+  getDocumentSnippetData(keys) {
+    if (!keys || keys.length === 0) return new Map()
+    const placeholders = keys.map(() => '?').join(',')
+    const docs = this.db.query(`
+      SELECT id, key, title, abstract_text, declaration_text, headings
+      FROM documents WHERE key IN (${placeholders})
+    `).all(...keys)
+    const docMap = new Map()
+    const idToKey = new Map()
+    for (const d of docs) {
+      idToKey.set(d.id, d.key)
+      docMap.set(d.key, { document: d, sections: [] })
+    }
+    if (idToKey.size > 0) {
+      const ids = [...idToKey.keys()]
+      const sPlaceholders = ids.map(() => '?').join(',')
+      const sections = this.db.query(`
+        SELECT document_id, section_kind, heading, content_text, sort_order
+        FROM document_sections WHERE document_id IN (${sPlaceholders})
+        ORDER BY sort_order
+      `).all(...ids)
+      for (const s of sections) {
+        const key = idToKey.get(s.document_id)
+        if (key && docMap.has(key)) {
+          docMap.get(key).sections.push(s)
+        }
+      }
+    }
+    return docMap
+  }
+
+  getRelatedDocCounts(keys) {
+    if (!keys || keys.length === 0) return new Map()
+    const placeholders = keys.map(() => '?').join(',')
+    const rows = this.db.query(`
+      SELECT from_key, COUNT(*) as count
+      FROM document_relationships WHERE from_key IN (${placeholders})
+      GROUP BY from_key
+    `).all(...keys)
+    const map = new Map()
+    for (const r of rows) map.set(r.from_key, r.count)
+    return map
+  }
+
   getBodyIndexCount() {
     if (this.hasNormalizedDocuments()) {
       try { return this._documentsBodyIndexCount.get().c } catch {}

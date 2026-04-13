@@ -1,4 +1,5 @@
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
+import { renderSnippet } from '../content/render-snippet.js'
 
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 
@@ -148,8 +149,27 @@ export async function search(opts, ctx) {
   const qualityOrder = { exact: 0, prefix: 1, contains: 2, match: 3, substring: 4, fuzzy: 5, body: 6 }
   results.sort((a, b) => (qualityOrder[a.matchQuality] ?? 9) - (qualityOrder[b.matchQuality] ?? 9))
 
+  const sliced = results.slice(0, limit)
+
+  // Batch-fetch snippet data and related counts for final results
+  try {
+    const resultKeys = sliced.map(r => r.path)
+    const snippetData = ctx.db.getDocumentSnippetData(resultKeys)
+    const relatedCounts = ctx.db.getRelatedDocCounts(resultKeys)
+
+    for (const r of sliced) {
+      const data = snippetData.get(r.path)
+      if (data) {
+        r.snippet = renderSnippet(data.document, data.sections, q)
+      }
+      r.relatedCount = relatedCounts.get(r.path) ?? 0
+    }
+  } catch {
+    // Snippet/related enrichment is non-critical
+  }
+
   return {
-    results: results.slice(0, limit),
+    results: sliced,
     total: results.length,
     query,
   }
