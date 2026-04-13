@@ -452,6 +452,24 @@ export class DocsDatabase {
     return this._getRootBySlug.get(slug)
   }
 
+  /**
+   * Resolve a root by exact slug, then by case-insensitive slug/display_name substring.
+   * Returns the best match or null.
+   */
+  resolveRoot(input) {
+    // Exact match first
+    const exact = this._getRootBySlug.get(input)
+    if (exact) return exact
+
+    // Fuzzy: case-insensitive match on slug or display_name
+    const lower = input.toLowerCase()
+    const all = this._getRoots.all()
+    return all.find(r => r.slug.toLowerCase() === lower)
+      ?? all.find(r => r.display_name.toLowerCase().includes(lower))
+      ?? all.find(r => r.slug.includes(lower))
+      ?? null
+  }
+
   addRef(sourceId, targetPath, anchorText, section) {
     this._addRef.run(sourceId, targetPath, anchorText, section)
   }

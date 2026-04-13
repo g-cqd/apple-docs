@@ -11,7 +11,7 @@ export async function browse(opts, ctx) {
     throw new Error('framework is required')
   }
 
-  const root = db.getRootBySlug(framework)
+  const root = db.resolveRoot(framework)
   if (!root) {
     throw new Error(`Unknown framework: ${framework}`)
   }
@@ -33,7 +33,7 @@ export async function browse(opts, ctx) {
     }
   }
 
-  const allPages = db.getPagesByRoot(framework)
+  const allPages = db.getPagesByRoot(root.slug)
   const limit = opts.limit ? Math.max(parseInt(opts.limit), 1) : undefined
   const pages = limit ? allPages.slice(0, limit) : allPages
   return {

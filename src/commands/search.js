@@ -10,8 +10,15 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function search(opts, ctx) {
-  const { query, framework, kind } = opts
+  const { query, kind } = opts
   const limit = Math.max(parseInt(opts.limit) || 100, 1)
+
+  // Resolve framework slug (allows fuzzy input like "guidelines" → "app-store-review")
+  let framework = opts.framework
+  if (framework) {
+    const root = ctx.db.resolveRoot(framework)
+    framework = root?.slug ?? opts.framework
+  }
   const fuzzy = opts.fuzzy !== false
   const noDeep = !!opts.noDeep
   const noEager = !!opts.noEager
