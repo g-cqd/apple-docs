@@ -130,6 +130,7 @@ const ROOT_SOURCE_TYPE_BY_SLUG = new Map([
   ['app-store-review', 'guidelines'],
   ['design', 'hig'],
   ['apple-archive', 'apple-archive'],
+  ['packages', 'packages'],
   ['sample-code', 'sample-code'],
   ['swift-book', 'swift-book'],
   ['swift-evolution', 'swift-evolution'],
@@ -813,9 +814,9 @@ export class DocsDatabase {
     `)
     this._crawlProgressAll = this.db.query(`
       SELECT
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'processed' THEN 1 ELSE 0 END) as processed,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+        COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pending,
+        COALESCE(SUM(CASE WHEN status = 'processed' THEN 1 ELSE 0 END), 0) as processed,
+        COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed,
         COUNT(*) as total
       FROM crawl_state
     `)
@@ -1301,6 +1302,9 @@ export class DocsDatabase {
 
   setSnapshotMeta(key, value) {
     this._setSnapshotMeta.run(key, String(value))
+    if (key === 'snapshot_tier') {
+      this._tier = undefined
+    }
   }
 
   getSchemaVersion() {

@@ -19,7 +19,7 @@ const { command, subcommand, positional, flags } = parseArgs(process.argv)
 
 if (flags.help || !command) {
   showHelp(command)
-  process.exit(command ? 0 : 1)
+  process.exit(flags.help ? 0 : (command ? 0 : 1))
 }
 
 const dataDir = flags.home ?? process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
@@ -217,6 +217,7 @@ try {
       result = await setupCmd({
         tier: flags.tier ?? 'standard',
         force: !!flags.force,
+        downgrade: !!flags.downgrade,
       }, ctx)
       formatter = formatSetup
       break

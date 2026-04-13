@@ -13,7 +13,19 @@ const SYMBOL_KINDS = new Set([
   'property wrapper', 'type alias', 'function', 'method',
 ])
 
-const FRESH_SOURCES = new Set(['apple-docc', 'swift-book', 'swift-org'])
+const SOURCE_PREFERENCE_MULTIPLIERS = {
+  'apple-docc': 1.3,
+  hig: 1.2,
+  'sample-code': 1.12,
+  guidelines: 1.05,
+}
+
+const SOURCE_PREFERENCE_ORDER = {
+  'apple-docc': 0,
+  hig: 1,
+  'sample-code': 2,
+  guidelines: 3,
+}
 
 /**
  * Apply source-aware reranking rules to search results.
@@ -27,6 +39,7 @@ export function rerank(results, query, intent) {
   const lowerQuery = (query ?? '').toLowerCase()
 
   for (const r of results) {
+    const sourceType = (r.sourceType ?? '').toLowerCase()
     let score = BASE_SCORES[r.matchQuality] ?? 50
 
     // R1: Exact path/identifier match
@@ -45,9 +58,8 @@ export function rerank(results, query, intent) {
 
     // R3: Guide/article boost — when intent is howto
     if (intent.type === 'howto') {
-      const st = (r.sourceType ?? '').toLowerCase()
       const kind = (r.kind ?? r.docKind ?? '').toLowerCase()
-      if (st === 'hig' || st === 'guidelines' || kind === 'article') {
+      if (sourceType === 'hig' || sourceType === 'guidelines' || kind === 'article') {
         score *= 1.3
       }
     }
@@ -58,26 +70,38 @@ export function rerank(results, query, intent) {
     }
 
     // R5: Archived content penalty
-    if ((r.sourceType ?? '').toLowerCase() === 'apple-archive') {
+    if (sourceType === 'apple-archive') {
       score *= 0.6
     }
 
     // R6: Code example boost — when intent is howto or query mentions "example"
-    if ((r.sourceType ?? '').toLowerCase() === 'sample-code') {
+    if (sourceType === 'sample-code') {
       if (intent.type === 'howto' || lowerQuery.includes('example') || lowerQuery.includes('sample')) {
         score *= 1.2
       }
     }
 
-    // R7: Depth penalty — deeper pages are generally less relevant
+    // R6b: Package catalog penalty — keep third-party package READMEs from
+    // crowding out official docs unless the query is strongly package-specific.
+    if (sourceType === 'packages') {
+      score *= 0.45
+      if (
+        lowerQuery.includes('package')
+        || lowerQuery.includes('library')
+        || (r.title ?? '').toLowerCase() === lowerQuery
+      ) {
+        score *= 1.5
+      }
+    }
+
+    // R7: Preferred source ordering — when matches are otherwise comparable,
+    // prefer official Apple DocC first, then HIG, sample code, and App Store Review.
+    score *= SOURCE_PREFERENCE_MULTIPLIERS[sourceType] ?? 1.0
+
+    // R8: Depth penalty — deeper pages are generally less relevant
     const depth = r.urlDepth ?? 0
     if (depth > 0) {
       score *= Math.max(0.3, 1.0 - depth * 0.05)
-    }
-
-    // R8: Source freshness boost — actively maintained sources
-    if (FRESH_SOURCES.has((r.sourceType ?? '').toLowerCase())) {
-      score *= 1.1
     }
 
     // R9: Error intent — boost articles about errors and troubleshooting
@@ -92,8 +116,7 @@ export function rerank(results, query, intent) {
     // R10: Concept intent — boost guides, articles, and conceptual content
     if (intent.type === 'concept') {
       const kind = (r.kind ?? r.docKind ?? '').toLowerCase()
-      const st = (r.sourceType ?? '').toLowerCase()
-      if (kind === 'article' || st === 'hig' || st === 'swift-book') {
+      if (kind === 'article' || sourceType === 'hig' || sourceType === 'swift-book') {
         score *= 1.2
       }
     }
@@ -106,7 +129,9 @@ export function rerank(results, query, intent) {
   results.sort((a, b) => {
     const scoreDiff = b.score - a.score
     if (Math.abs(scoreDiff) > 0.001) return scoreDiff
-    return (qualityOrder[a.matchQuality] ?? 9) - (qualityOrder[b.matchQuality] ?? 9)
+    const qualityDiff = (qualityOrder[a.matchQuality] ?? 9) - (qualityOrder[b.matchQuality] ?? 9)
+    if (qualityDiff !== 0) return qualityDiff
+    return (SOURCE_PREFERENCE_ORDER[a.sourceType?.toLowerCase()] ?? 99) - (SOURCE_PREFERENCE_ORDER[b.sourceType?.toLowerCase()] ?? 99)
   })
 
   return results

@@ -1,9 +1,9 @@
 # apple-docs v2 — Implementation Progress
 
-> Last updated: 2026-04-13
-> Verification snapshot: 2026-04-13 (Phases 9-A + 9-B complete)
+> Last updated: 2026-04-14
+> Verification snapshot: 2026-04-14 (architecture/progress audit + search filter/status fixes + planner tracker reconciliation)
 > Execution policy: no Phase 5 work before Phase 4 is complete; no Phase 6 work before Phase 5 is complete; no Phase 7 work before Phase 6 is complete; Phase 8 may run in parallel with Phase 7 (orthogonal concerns — see parallelization analysis); Phase 9-A and 9-B may run in parallel (web search page vs MCP consolidation — disjoint concerns); Phase 10-A and 10-B may run in parallel (collection filters vs page TOC — see parallelization analysis)
-> Evidence: `bun test` passes (764 tests), `bun run typecheck` passes
+> Evidence: `bun run lint` passes, `bun run typecheck` passes, `bun test` passes (791 tests)
 
 ## Phase Status Overview
 
@@ -13,40 +13,41 @@
 | **1** | Canonical Content Model | `COMPLETE` | 7/7 tasks landed | Met |
 | **2** | Source Adapter Layer | `COMPLETE` | 7/7 tasks landed | Met |
 | **3** | MCP SDK Migration | `COMPLETE` | 7/7 tasks landed | Met |
-| **4** | Source Coverage Expansion | `COMPLETE` | v2 source-expansion scope is implemented, integrated, and verified in repo tests | Met for committed v2 scope |
-| **5** | Search Quality Upgrade | `COMPLETE` | All 9 tasks done: platform/language/synonym filtering, snippets, related counts, 8-rule reranking, intent detection, p95 benchmark | Met |
-| **6** | Distribution & Setup | `COMPLETE` | All 7 tasks done: snapshot build pipeline, setup command, doctor verification, status update check, CI/CD workflows, npm publishing config, cross-platform binary workflow | Met |
+| **4** | Source Coverage Expansion | `COMPLETE` | 10 in-tree sources implemented and verified; package catalog is now landed; only availability-oriented expansion remains open from the original 11+ source ambition | Met for committed v2 scope; original breadth target still open |
+| **5** | Search Quality Upgrade | `COMPLETE` | All 9 tasks done: platform/language/synonym filtering, snippets, related counts, source-aware reranking tuned to prefer `apple-docc → hig → sample-code → guidelines`, intent detection, p95 benchmark | Met |
+| **6** | Distribution & Setup | `COMPLETE` | All 7 tasks done: snapshot build pipeline, setup command, doctor verification, status update check, CI/CD workflows, npm publishing config, cross-platform binary workflow, plus tier lifecycle smoke coverage | Met |
 | **7** | Static Website | `COMPLETE` | All 6 slices done: templates+CSS, search artifacts, client search, static builder, dev server, CLI wiring+deploy | Met |
 | **8** | Storage Profiles & Polish | `COMPLETE` | All 10 slices done: profiles, stats/GC/materialize, CLI wiring, render cache, freshness checks, corpus integrity, migration tests, benchmark history, legacy cleanup, README | Met |
 | **9-A** | Advanced Web Search Page | `COMPLETE` | 8/8 tasks done: API extension, search page template, frontend JS, CSS, route wiring, static build, top-bar link, tests | Met |
 | **9-B** | CLI / MCP Command Consolidation | `COMPLETE` | 11/11 tasks done: year/track in search, section in lookup, CLI flags, MCP params, 3 tools removed, contract tests, help text | Met |
 | **10-A** | Collection Type Filters | `COMPLETE` | 10/10 tasks done: data-filter-kind attrs on home/framework/doc pages, collection-filters.js, CSS chips, build pipeline, tests | Met |
 | **10-B** | Page Section Navigation (TOC) | `COMPLETE` | 9/9 tasks done: section IDs, buildPageToc, sidebar refactor, mobile details, page-toc.js, CSS, build pipeline, tests | Met |
-| **11** | Snapshot Tier Awareness & Upgrade Paths | `COMPLETE` | 21/21 tasks — all 4 waves done: crash fix, degradation, upgrade/rebuild, MCP | Met |
+| **11** | Snapshot Tier Awareness & Upgrade Paths | `COMPLETE` | 21/21 tasks — all 4 waves done: crash fix, degradation, upgrade/rebuild, MCP, README/docs, targeted tests | Met |
 
 ```
-Overall: phases 0-8 + 9-A + 9-B + 10-A + 10-B + 11 are complete for the current v2 scope.
+Overall: phases 0-8 + 9-A + 9-B + 10-A + 10-B + 11 are complete for the committed v2 scope. Original breadth work still open beyond the landed scope is now mostly availability-oriented source expansion plus full-corpus operational validation.
 ```
 
 ## Current Planning Wave
 
-**Planner mode**: `Project + Orchestration`
-**Active phase**: None — all phases complete
-**Last completed**: Phase 11 (Snapshot Tier Awareness & Upgrade Paths)
+**Planner mode**: `Project + Orchestration + Execution(review/research)`
+**Active phase**: None — audit complete
+**Last completed**: Architecture/progress audit + tracker reconciliation + search/status fixes
 
 | Slice | Status | Evidence | Next action |
 |---|---|---|---|
-| `P11-W1` | `done` | `hasTable()`, guarded `_prepareStatements()`, `getTier()`; 764 tests pass | — |
-| `P11-W2` | `done` | Tier-aware lookup, search, status, doctor, formatter; 764 tests pass | — |
-| `P11-W3` | `done` | Setup upgrade flow, `index rebuild-trigram`, `index rebuild-body`; 764 tests pass | — |
-| `P11-W4` | `done` | MCP tier-aware responses; 764 tests pass | — |
+| `AUDIT-A1` | `done` | Planner skill guidance loaded; live skill catalog discovered via installed `planner/scripts/discover-skills.sh`; planning docs compared with repo state | — |
+| `AUDIT-A2` | `done` | Commands, MCP, source registry, snapshots, storage, web, and search surface verified against code and tests | — |
+| `AUDIT-A3` | `done` | Fixed `search()` single-source SQL pushdown bug and zero-normalized empty crawl progress; added regression tests | — |
+| `AUDIT-A4` | `done` | `PROGRESS.md` reconciled with current MCP consolidation, package-catalog landing, and updated reranking behavior | — |
+| `AUDIT-A5` | `done` | Full quality gates re-run: lint, typecheck, 791-test suite | — |
 
 ### Previous wave (complete)
 
 | Slice | Status | Evidence | Next action |
 |---|---|---|---|
-| `P10A` | `done` | data-filter-kind attrs on 3 page types + collection-filters.js + CSS + 6 new template tests; 764 tests pass | — |
-| `P10B` | `done` | Section IDs + TOC sidebar + mobile details + page-toc.js + CSS + 5 new template tests + 5 renderer tests; 764 tests pass | — |
+| `P10A` | `done` | data-filter-kind attrs on 3 page types + collection-filters.js + CSS + 6 new template tests; re-verified in 791-test suite | — |
+| `P10B` | `done` | Section IDs + TOC sidebar + mobile details + page-toc.js + CSS + 5 new template tests + 5 renderer tests; re-verified in 791-test suite | — |
 
 ### Previous wave (complete)
 
@@ -54,6 +55,19 @@ Overall: phases 0-8 + 9-A + 9-B + 10-A + 10-B + 11 are complete for the current 
 |---|---|---|---|
 | `P9A` | `done` | Search page + API extension + 7 new serve tests + 11 new template tests; 748 tests pass | — |
 | `P9B` | `done` | MCP 8→5 tools, year/track/section params, CLI flags, 5 new contract tests; 748 tests pass | — |
+
+---
+
+## Architecture Audit Snapshot
+
+| Area | Verified State | Notes / Follow-up |
+|---|---|---|
+| Planner methodology | `Project + Orchestration + Execution(review/research)` applied in this audit | Planner discovery executed from the installed skill directory against the repo root; tracker updated with audit slices |
+| Runtime quality gates | `bun run lint`, `bun run typecheck`, `bun test` all pass | Current evidence: 791 tests, 0 failures |
+| Phase 4 breadth target | 10 in-tree adapters are implemented and tested | Original 11+ source ambition remains open around availability-oriented expansion, but package catalog is now landed |
+| Dependency model | Official MCP SDK is now the one sanctioned runtime dependency | Historical “zero dependencies” wording corrected in docs |
+| Phase 11 proof | Tier detection, degraded reads, rebuild commands, downgrade guard, MCP/status metadata are now covered by dedicated tests | README now documents tiers, upgrade paths, and rebuild commands |
+| Audit fixes (2026-04-14) | Search and status edge cases corrected | `search()` now pushes single-source filters into SQL correctly; empty `status --json` crawl progress now reports zeroes instead of nulls |
 
 ---
 
@@ -229,8 +243,8 @@ Overall: phases 0-8 + 9-A + 9-B + 10-A + 10-B + 11 are complete for the current 
 | 11.16 | MCP `status` tool — tier info flows through (already returns full status JSON) | `done` | (no change needed — status already includes tier) |
 | 11.17 | MCP `search_docs --read` — pass through `tierLimitation` from lookup | `done` | `src/mcp/server.js` |
 | 11.18 | MCP `search_docs` — tier capability metadata flows through (already in search result) | `done` | (no change needed — search already includes tier) |
-| 11.19 | Existing MCP contract tests pass unchanged (tier metadata additive) | `done` | (verified: 764 tests pass) |
-| 11.20 | README update deferred — no content changes needed for functional completion | `deferred` | `README.md` |
+| 11.19 | MCP contract tests cover tier metadata (`search_docs`, `status`) | `done` | `test/mcp/contract.test.js` |
+| 11.20 | README documents tier system, upgrade/downgrade paths, and rebuild commands | `done` | `README.md` |
 | 11.21 | Snapshot build already writes `snapshot_tier` via `setSnapshotMeta` | `done` | (verified: already present in snapshot.js) |
 
 ### Execution Waves
@@ -257,8 +271,8 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 - [x] `index rebuild-trigram` restores fuzzy search on lite/standard
 - [x] `index rebuild-body` restores body search on standard
 - [x] MCP tools include tier-aware metadata
-- [x] All existing tests pass (no regression) — 764 tests, 0 failures
-- [ ] README documents tier system (deferred)
+- [x] All existing tests pass (no regression) — 791 tests, 0 failures
+- [x] README documents tier system, upgrade paths, and rebuild commands
 
 ### Architecture Decisions
 
@@ -267,6 +281,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 - **AD-03**: Raw-json check in doctor uses directory existence (not tier label) — handles both snapshot and synced databases correctly
 - **AD-04**: Trigger recreation in `rebuildTrigram` — checks if triggers already reference trigram before recreating to avoid disrupting existing FTS triggers
 - **AD-05**: `_prepareStatements()` is re-invocable — rebuild commands call it after creating missing tables to pick up new prepared statements
+- **AD-06**: `setSnapshotMeta('snapshot_tier', ...)` invalidates the cached tier immediately — avoids stale tier state in long-lived processes and tests
 
 ### Execution Log
 
@@ -284,7 +299,12 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 - [2026-04-13] [P11-W3] VERIFIED: 764 tests pass, 0 failures
 - [2026-04-13] [P11-W4] DONE: MCP search_docs --read passes tierLimitation through; status/search already include tier metadata via command return values
 - [2026-04-13] [P11-W4] VERIFIED: 764 tests pass, 0 failures
-- [2026-04-13] [P11-CLOSE] VERIFIED: all exit criteria met except README (deferred)
+- [2026-04-13] [P11-AUDIT] FIXED: `search --track` now excludes non-WWDC results that lack matching track metadata
+- [2026-04-13] [P11-AUDIT] FIXED: `setSnapshotMeta('snapshot_tier', ...)` now invalidates the cached tier
+- [2026-04-13] [P11-AUDIT] DONE: added targeted tests for `getTier()`, degraded `lookup`, status capabilities, rebuild commands, downgrade protection, and MCP tier metadata
+- [2026-04-13] [P11-AUDIT] DONE: README documents tiers, upgrade/downgrade flow, rebuild commands, and actual MCP tool names
+- [2026-04-13] [P11-CLOSE] VERIFIED: `bun run lint`, `bun run typecheck`, and `bun test` all pass (773 tests, 0 failures)
+- [2026-04-13T23:55] [POST-CLOSEOUT] VERIFIED: `bun run lint`, `bun run typecheck`, and `bun test` all pass after package-catalog + smoke-test work (789 tests, 0 failures)
 
 ---
 
@@ -367,7 +387,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 - `apple-docs-mcp` bin still points to `./index.js` (no separate shim file) — works correctly for backward compat
 - `language` column left NULL in migration backfill (expensive scan deferred to doctor/re-sync)
 - `APPLE_DOCS_API_BASE` env var added to `api.js` for test mocking
-- Refresh note: the current workspace passes tests and typecheck, but no longer has a lint-clean state because 10 Biome findings remain in later phase code/tests
+- Refresh note: the current workspace is lint-clean again; the audit fixed the remaining Biome findings in later phase code/tests
 
 ---
 
@@ -546,7 +566,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 - **`McpServer` (high-level API)** over low-level `Server` class — `server.tool()` eliminates manual switch dispatch; `server.resource()` handles URI routing
 - **No separate `schemas.js` or `handlers.js`** — Zod schemas inline with `server.tool()` calls; command functions from `src/commands/` called directly (they're already pure handlers)
 - **Tool rename** (`search` → `search_docs`, `read` → `read_doc`) — no dual name support; MCP clients discover tools dynamically via `tools/list`
-- **Deferred params** — `source`, `language`, `format` filters deferred to Phase 4-5 when new sources exist
+- **Consolidated params** — `source` and `language` filters are now live on CLI + MCP search; `format` remains intentionally absent from the consolidated search/read surface
 - **`{+key}` URI template** — RFC 6570 reserved expansion so paths with slashes (e.g., `swiftui/view/body`) work as single parameter
 - **Doc resource has no `list` callback** — 330K pages makes enumeration impractical; framework resource lists via `frameworks()` query
 
@@ -577,15 +597,15 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 | 4 | Apple Archive | `done` | ~75 | src/sources/apple-archive.js |
 | 5 | WWDC Transcripts | `done` | ~3,000+ | src/sources/wwdc.js |
 | 6 | Sample Code | `done` | 606 projects | src/sources/sample-code.js |
-| 7 | Package Catalog | `deferred-post-v2` | 9,699+ | (explicitly kept out of committed v2 execution scope) |
+| 7 | Package Catalog | `done` | 9,699+ | src/sources/packages.js |
 
 ### Exit Criteria
 
-- [x] Committed v2 source set implemented and registered (Package Catalog remains explicitly deferred post-v2)
+- [x] All 7 planned source families are implemented and registered
 - [x] `sync --sources <name>` works for implemented source families via `syncMode`
 - [x] Implemented source families produce valid normalized documents in tests
 - [x] Search results surface consistent source metadata for implemented new sources
-- [x] New MCP tools exist: `search_wwdc`, `search_samples`, `read_sample_file`
+- [x] WWDC and sample-code workflows are reachable through the consolidated MCP surface (`search_docs` + filters, `read_doc` + `section`) after Phase 9-B
 - [x] Golden search queries were expanded for new sources
 - [x] Repo-level implementation and integration are verified; full corpus volume validation is deferred to later operational snapshot work
 
@@ -602,9 +622,9 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 | 4.2 | Swift.org Docs Adapter | `done` | src/sources/swift-org.js |
 | 4.3 | Swift Book Adapter | `done` | src/sources/swift-book.js |
 | 4.4 | Apple Archive Adapter | `done` | src/sources/apple-archive.js |
-| 4.5 | WWDC Transcripts Adapter + MCP Tool | `done` | src/sources/wwdc.js, src/mcp/server.js |
-| 4.6 | Sample Code Adapter + MCP Tools | `done` | src/sources/sample-code.js, src/mcp/server.js |
-| 4.7 | Registry & Test Updates | `done` | src/sources/registry.js, test/unit/adapters/*.test.js |
+| 4.5 | WWDC Transcripts Adapter | `done` | src/sources/wwdc.js, src/mcp/server.js |
+| 4.6 | Sample Code Adapter | `done` | src/sources/sample-code.js, src/mcp/server.js |
+| 4.7 | Package Catalog Adapter + Registry/Test Updates | `done` | src/sources/packages.js, src/sources/registry.js, src/lib/github.js, test/unit/adapters/*.test.js, test/unit/update-flat-source.test.js |
 
 ### Key Artifacts
 
@@ -616,13 +636,14 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 | `src/sources/apple-archive.js` | Flat adapter: frozen legacy archive guides |
 | `src/sources/wwdc.js` | Flat adapter: Apple 2020+ JSON plus ASCIIwwdc transcripts |
 | `src/sources/sample-code.js` | Flat adapter: Apple sample code project metadata |
-| `src/lib/github.js` | GitHub tree/raw-content helpers |
+| `src/sources/packages.js` | Flat adapter: Swift Package Index catalog + GitHub repo metadata/README ingestion |
+| `src/lib/github.js` | GitHub tree/raw-content helpers plus repo/README metadata helpers |
 | `src/content/parse-markdown.js` | Markdown-to-normalized parser |
 | `src/content/parse-html.js` | HTML-to-normalized parser |
 
 ### Carry-Forward Notes
 
-- Package Catalog stays in the backlog by design; it is not a blocker for beginning or completing Phase 5 in the current execution plan.
+- Availability-oriented source expansion still remains open if the project wants to push past the now-landed 10 in-tree adapters.
 - Sample-code project indexing remains metadata-first; deeper per-file sample extraction can still be expanded later without reopening Phase 4.
 
 ### Execution Log
@@ -633,6 +654,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 - [2026-04-13T14:54] [4.1-4.6] DONE: six new source adapters landed
 - [2026-04-13T14:57] [4.7] DONE: registry updated; MCP tool surface expanded to 8 tools
 - [2026-04-13T16:45] [4.7] DONE: source metadata now flows through search rows/CLI/MCP; sample-code now persists as `sample-code`; `lookup()` returns normalized sections for sample tooling
+- [2026-04-13T23:15] [4.7] DONE: `packages` source adapter landed with GitHub repo/README ingestion, package search down-weighting, and stale flat-source cleanup on update
 - [2026-04-13T16:52] [P4-CLOSE] VERIFIED: `bun test` (406 pass) and `bun run typecheck` pass after Phase 4 closeout changes
 
 ---
@@ -652,7 +674,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 | 5.3 | Language Filtering | `done` | `--language swift|objc` wired through CLI + MCP; SQL filter `d.language = $language OR d.language = 'both' OR d.language IS NULL`; golden queries for language filtering |
 | 5.4 | Framework Aliases & Synonyms | `done` | `getFrameworkSynonyms(slug)` reads bidirectional pairs from `framework_synonyms` table; search expands to synonym frameworks and merges results; golden query for synonym expansion |
 | 5.5 | Snippet Generation | `done` | `renderSnippet()` called with batch-fetched document+sections data via `getDocumentSnippetData()`; snippet field included in search results; displayed in CLI output |
-| 5.6 | Source-Aware Reranking (8 rules) | `done` | `src/search/ranking.js` implements 8 multiplicative rules (exact match, symbol kind, guide boost, release notes penalty, archive penalty, sample code boost, depth penalty, freshness boost); replaces static tier sort |
+| 5.6 | Source-Aware Reranking | `done` | `src/search/ranking.js` now applies source-aware score adjustments for exact matches, symbol intent, guide intent, release notes, archive content, sample-code boosts, package penalties, preferred source ordering, depth, error intent, and concept intent; ties prefer `apple-docc → hig → sample-code → guidelines` |
 | 5.7 | Query Intent Detection | `done` | `src/search/intent.js` classifies queries as symbol/howto/error/concept/general with confidence scores; intent fed to reranker and returned in search results |
 | 5.8 | Related Document Graph | `done` | `getRelatedDocCounts()` batch method returns counts from `document_relationships`; `relatedCount` field included in search results; displayed in CLI output |
 | 5.9 | Search Benchmark Suite | `done` | `test/golden/search-benchmark.test.js` runs 42 queries × 50 iterations, computes p50/p95/p99, asserts p95 < 50ms; measured p95=0.20ms |
@@ -676,7 +698,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 | `P5-A` | Metadata plumbing: expose source/language/platform/source metadata through search rows, CLI flags, and MCP args | `done` |
 | `P5-B` | Platform, language, and framework synonym filtering | `done` |
 | `P5-C` | Contextual snippets and related document counts | `done` |
-| `P5-D` | Intent detection and source-aware reranking (8 rules) | `done` |
+| `P5-D` | Intent detection and source-aware reranking | `done` |
 | `P5-E` | Benchmark harness with p50/p95/p99 and golden suite validation | `done` |
 
 ### Key Artifacts
@@ -684,7 +706,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 | File | Purpose |
 |---|---|
 | `src/search/intent.js` | `detectIntent(query)` → `{ type, confidence }` — symbol/howto/error/concept/general classification |
-| `src/search/ranking.js` | `rerank(results, query, intent)` — 8-rule multiplicative reranker |
+| `src/search/ranking.js` | `rerank(results, query, intent)` — source-aware reranker with preferred-source tie-breaks |
 | `src/content/render-snippet.js` | `renderSnippet(document, sections, query, maxLength)` — context-window extraction |
 
 ### Execution Log
@@ -698,6 +720,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 - [2026-04-13T18:25] [P5-D] DONE: intent.js (symbol/howto/error/concept/general detection) and ranking.js (8 multiplicative rules) wired into search pipeline; replaces static tier-based sort; 24 unit tests
 - [2026-04-13T18:30] [P5-E] DONE: benchmark harness runs 42 queries × 50 iterations; p50=0.15ms p95=0.20ms p99=0.23ms; enrichment tests verify snippet/relatedCount/intent/score fields
 - [2026-04-13T18:30] [P5-CLOSE] VERIFIED: `bun test` (455 pass), all 42 golden queries pass, p95 latency well under 50ms threshold
+- [2026-04-14T00:15] [P5-AUDIT] FIXED: single-source `--source` filters now push down into SQL correctly; reranker retuned to prefer `apple-docc → hig → sample-code → guidelines`; regression tests added and full suite re-verified
 
 ---
 
@@ -712,7 +735,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 | ID | Task | Status | Evidence / Gap |
 |---|---|---|---|
 | 6.1 | Snapshot Build Pipeline | `done` | `src/commands/snapshot.js` — `snapshotBuild()` with VACUUM INTO, tier stripping, tar.gz, checksums |
-| 6.2 | Setup Command | `done` | `src/commands/setup.js` — downloads from GitHub Releases, verifies checksum, extracts, validates schema |
+| 6.2 | Setup Command | `done` | `src/commands/setup.js` — downloads from GitHub Releases, verifies checksum, extracts, validates schema, and clears stale payload directories across tier transitions |
 | 6.3 | GitHub Actions CI/CD | `done` | `.github/workflows/snapshot.yml` — weekly cron + manual dispatch, 3 tiers, GitHub Release publishing |
 | 6.4 | npm Publishing | `done` | `package.json` updated: `@g-cqd/apple-docs` v2.0.0, `files`, `engines`, `publishConfig`, `repository` |
 | 6.5 | Cross-Platform Binaries | `done` | `.github/workflows/release-binaries.yml` — macOS arm64/x64, Linux x64 via `bun build --compile` |
@@ -725,6 +748,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 - [x] Weekly CI snapshot builds exist (`.github/workflows/snapshot.yml` with Sunday 06:00 UTC cron)
 - [x] Snapshot artifacts include checksums and manifests (`.sha256` + `.manifest.json` per tier)
 - [x] Lite/standard/full tiers exist (lite drops sections/trigram/body FTS; standard keeps all; full adds raw-json/markdown)
+- [x] Snapshot/install smoke tests cover lite install, standard upgrade, downgrade cleanup, and full payload extraction
 - [x] npm publishing configured (`@g-cqd/apple-docs` with `publishConfig.access: public`)
 - [x] Cross-platform binaries workflow exists (macOS arm64/x64, Linux x64)
 - [x] Snapshot verification exists in `doctor --verify`
@@ -765,6 +789,7 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 - [2026-04-13T20:30] [P6-C] DONE: `setup` with GitHub Release discovery, download, checksum verification, extraction, validation; 4 new tests
 - [2026-04-13T20:45] [P6-D] DONE: `consolidate --verify` snapshot integrity (document count, schema version, FTS); `status` update check via GitHub; 4 new tests
 - [2026-04-13T21:00] [P6-E] DONE: `snapshot.yml` (weekly cron), `release-binaries.yml` (macOS/Linux), `package.json` npm config
+- [2026-04-13T23:30] [P6-SMOKE] DONE: release smoke tests now cover lite install, standard upgrade, downgrade cleanup, and full snapshot payload extraction; setup now removes stale `raw-json/` and `markdown/` payloads before install
 - [2026-04-13T21:00] [P6-CLOSE] VERIFIED: `bun test` (473 pass), `bun run typecheck` passes
 
 ---
@@ -906,11 +931,11 @@ Dependency notes:
 
 | Metric | Baseline | Current | Target |
 |---|---|---|---|
-| Source count | 3 | 9 | 11+ |
+| Source count | 3 | 10 | 11+ |
 | Total documents | ~330K | ~330K (not re-verified in this refresh; first full phase-4 sync still pending) | ~365K+ |
-| Test count | 53 | 764 | 150+ |
+| Test count | 53 | 789 | 150+ |
 | Schema version | 4 | 7 | 6+ |
-| Source adapters | 0 | 9 (apple-docc, hig, guidelines, swift-evolution, swift-book, swift-org, apple-archive, wwdc, sample-code) | 10+ |
+| Source adapters | 0 | 10 (apple-docc, hig, guidelines, swift-evolution, swift-book, swift-org, apple-archive, wwdc, sample-code, packages) | 10+ |
 | Content renderers | 1 (markdown from raw JSON) | 4 (markdown, html, text, snippet from normalized model) | 4 |
 | Content parsers | 0 | 2 (parse-markdown, parse-html) | 2 |
 | Search latency p95 | ~50ms | 0.20ms (measured: 42 queries × 50 iterations on seed DB) | < 50ms |

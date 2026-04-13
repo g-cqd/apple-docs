@@ -1,6 +1,8 @@
 # Phase 5: Search Quality Upgrade
 
 > **Goal**: Make apple-docs search materially better than any competitor through metadata-aware ranking, filters, snippets, and source-aware reranking.
+> **Status**: `HISTORICAL PLAN`
+> **Live status**: See `docs/plan/PROGRESS.md` — the current reranker is complete but has evolved beyond the baseline documented here; it now prefers `apple-docc → hig → sample-code → guidelines` ahead of other comparable sources and no longer uses the earlier freshness-boost heuristic.
 
 ## Current Search Architecture (Baseline)
 

@@ -195,4 +195,20 @@ describe('setup', () => {
       setup({ tier: 'mega' }, { db, dataDir, logger })
     ).rejects.toThrow('Invalid tier')
   })
+
+  test('rejects downgrades without --downgrade', async () => {
+    const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+    db.upsertPage({
+      rootId: root.id,
+      path: 'swiftui/view',
+      url: 'u',
+      title: 'View',
+      role: 'symbol',
+    })
+    db.setSnapshotMeta('snapshot_tier', 'full')
+
+    await expect(
+      setup({ tier: 'standard', force: true }, { db, dataDir, logger })
+    ).rejects.toThrow('Refusing to downgrade from full to standard without --downgrade')
+  })
 })

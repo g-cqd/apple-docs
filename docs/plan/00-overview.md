@@ -1,6 +1,8 @@
 # apple-docs v2 — Consolidated Implementation Plan
 
 > **Goal**: Transform apple-docs into the most complete, reliable, cross-platform on-device Apple knowledge base — surpassing every competitor in source breadth, search quality, distribution, and output formats.
+>
+> **Status note (2026-04-13)**: The current repo implements 10 in-tree source adapters (`apple-docc`, `hig`, `guidelines`, `swift-evolution`, `swift-org`, `swift-book`, `apple-archive`, `wwdc`, `sample-code`, `packages`). The package catalog now ships in-tree; availability-oriented source expansion remains open from the original 11+ breadth ambition. The official MCP SDK is the one sanctioned npm dependency.
 
 ## Strategic Position
 
@@ -18,7 +20,7 @@
 ## Competitive Moat
 
 1. **Cross-platform** — Bun runtime vs cupertino's macOS-only WKWebView
-2. **Zero dependencies** — No npm packages, no supply chain risk
+2. **Minimal dependency surface** — one sanctioned MCP SDK dependency; otherwise Bun built-ins
 3. **WWDC transcripts** — Blue ocean; no competitor has comprehensive coverage
 4. **Static website** — Deployable docs with search; unique among MCP-capable tools
 5. **Direct JSON API** — Simpler and faster than browser-based crawling
@@ -82,7 +84,7 @@ Phase 10-B: Page Section Navigation (TOC) ──────── [In-page TOC 
 
 ## Constraints & Principles
 
-- **C-01**: Zero npm dependencies — Bun built-ins only (bun:sqlite, HTMLRewriter, Bun.markdown, Bun.serve)
+- **C-01**: Minimal runtime dependencies — Bun built-ins plus the sanctioned MCP SDK
 - **C-02**: Backward compatibility — existing `apple-docs-mcp` configurations must keep working
 - **C-03**: Offline-first — all search and rendering works without network after sync
 - **C-04**: Source payloads are canonical truth — raw JSON/HTML is always retained

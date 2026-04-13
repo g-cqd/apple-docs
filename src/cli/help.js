@@ -48,7 +48,7 @@ a 200ms head start; if they fill the limit, body results are skipped (eager mode
 
 Options:
   --framework <name>   Filter by framework (e.g. swiftui, design, app-store-review)
-  --source <name>      Filter by source type (e.g. apple-docc, hig, guidelines, wwdc, sample-code)
+  --source <name>      Filter by source type (e.g. apple-docc, hig, guidelines, wwdc, sample-code, packages)
   --kind <role>        Filter by role (e.g. symbol, article)
   --language <lang>    Filter by language: swift, objc
   --platform <name>    Filter by platform availability: ios, macos, watchos, tvos, visionos
@@ -117,7 +117,7 @@ Resumable: if interrupted, re-run the same command to continue where you left of
 
 Options:
   --roots <a,b,c>      Only sync specific roots (comma-separated)
-  --sources <a,b,c>    Only sync specific source types (apple-docc,hig,guidelines)
+  --sources <a,b,c>    Only sync specific source types (apple-docc,hig,guidelines,...,packages)
   --full               Sync all discovered roots
   --parallel <n>       Crawl N frameworks simultaneously (default: 1)
   --concurrency <n>    Max total in-flight fetches across all roots (default: 5)
@@ -130,6 +130,7 @@ Examples:
   apple-docs sync --roots swiftui,combine                   # sync two frameworks
   apple-docs sync --sources guidelines                      # sync only App Store Review Guidelines
   apple-docs sync --roots app-store-review                  # sync App Store Review Guidelines
+  apple-docs sync --sources packages                        # sync Swift package catalog (GitHub token recommended)
   apple-docs sync --full --parallel 5 --rate 10             # 5 roots at once, 10 req/s
   apple-docs sync --roots uikit --concurrency 10 --rate 10  # fast single root
   apple-docs sync --retry-failed                            # retry 404s/timeouts
@@ -142,7 +143,7 @@ Check for documentation updates and pull changes.
 
 Options:
   --roots <a,b,c>      Only check specific roots
-  --sources <a,b,c>    Only check specific source types (apple-docc,hig,guidelines)
+  --sources <a,b,c>    Only check specific source types (apple-docc,hig,guidelines,...,packages)
   --concurrency <n>    Max concurrent HEAD checks / fetches (default: 5)
   --rate <n>           Max requests per second (default: 5)
   --parallel <n>       Crawl N new roots simultaneously (default: 1)
@@ -153,6 +154,7 @@ Examples:
   apple-docs update --concurrency 50 --rate 100    # fast update check
   apple-docs update --roots swiftui,combine         # check specific roots
   apple-docs update --sources guidelines            # check only App Store Review Guidelines
+  apple-docs update --sources packages              # refresh package catalog entries
 `.trim(),
 
   index: `
@@ -231,6 +233,7 @@ No crawling required — ready in under 60 seconds.
 Options:
   --tier <name>    Snapshot tier: lite, standard, full (default: standard)
   --force          Overwrite existing corpus
+  --downgrade      Allow replacing a higher tier with a lower tier
   --json           Output results as JSON
 `.trim(),
 
@@ -270,6 +273,7 @@ Build options:
 
 Serve options:
   --port <n>           Port number (default: 3000)
+  --base-url <url>     Base URL prefix for links
 
 Deploy platforms:
   github-pages         GitHub Pages (default)
@@ -304,6 +308,7 @@ Profile subcommand:
 
 GC options:
   --drop <types>       Categories to drop: markdown, html (comma-separated)
+  --older-than <days>  Remove activity records older than this many days before cleanup
   --no-vacuum          Skip database VACUUM after cleanup
 
 Materialize options:
@@ -312,6 +317,7 @@ Materialize options:
 Examples:
   apple-docs storage stats
   apple-docs storage gc --drop markdown,html
+  apple-docs storage gc --older-than 30 --no-vacuum
   apple-docs storage materialize markdown --roots swiftui
   apple-docs storage profile set raw-only
 `.trim(),

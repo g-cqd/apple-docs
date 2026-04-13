@@ -11,6 +11,7 @@ let client
 
 beforeEach(async () => {
   db = new DocsDatabase(':memory:')
+  db.setSnapshotMeta('snapshot_tier', 'standard')
 
   // Seed minimal test data
   db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
@@ -128,6 +129,8 @@ describe('MCP contract — tools', () => {
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.results).toBeArray()
     expect(parsed.results.length).toBeGreaterThan(0)
+    expect(parsed.tier).toBe('standard')
+    expect(parsed.trigramAvailable).toBe(true)
   })
 
   test('search_docs supports source filtering', async () => {
@@ -222,6 +225,8 @@ describe('MCP contract — tools', () => {
     expect(result.isError).toBeFalsy()
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed).toBeDefined()
+    expect(parsed.tier).toBe('standard')
+    expect(parsed.capabilities).toBeDefined()
   })
 
   test('search_docs with year filters WWDC sessions by source metadata', async () => {

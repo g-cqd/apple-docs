@@ -5,11 +5,11 @@
 
   // Count distinct kinds from <li> items only (not group <section>s)
   const kindCounts = new Map()
-  filterableItems.forEach(el => {
-    if (el.tagName !== 'LI') return
+  for (const el of filterableItems) {
+    if (el.tagName !== 'LI') continue
     const kind = el.getAttribute('data-filter-kind')
     kindCounts.set(kind, (kindCounts.get(kind) || 0) + 1)
-  })
+  }
 
   if (kindCounts.size <= 1) return
 
@@ -53,7 +53,9 @@
 
     if (value === '') {
       activeFilters.clear()
-      bar.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'))
+      for (const chip of bar.querySelectorAll('.filter-chip')) {
+        chip.classList.remove('active')
+      }
       btn.classList.add('active')
     } else {
       allBtn.classList.remove('active')
@@ -77,17 +79,17 @@
     const showAll = activeFilters.size === 0
 
     // Show/hide individual items
-    filterableItems.forEach(el => {
-      if (el.tagName !== 'LI') return
+    for (const el of filterableItems) {
+      if (el.tagName !== 'LI') continue
       const kind = el.getAttribute('data-filter-kind')
       el.hidden = !showAll && !activeFilters.has(kind)
-    })
+    }
 
     // Hide empty group sections
-    document.querySelectorAll('.framework-group, .role-group').forEach(section => {
+    for (const section of document.querySelectorAll('.framework-group, .role-group')) {
       const visibleItems = section.querySelectorAll('li:not([hidden])')
       section.hidden = visibleItems.length === 0
-    })
+    }
   }
 
   function updateHash() {

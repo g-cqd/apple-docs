@@ -16,11 +16,13 @@ describe('SourceAdapter base + registry', () => {
     expect(types).toContain('apple-archive')
     expect(types).toContain('wwdc')
     expect(types).toContain('sample-code')
-    expect(types.length).toBe(9)
+    expect(types).toContain('packages')
+    expect(types.length).toBe(10)
 
     expect(getAdapter('apple-docc').constructor.type).toBe('apple-docc')
     expect(getAdapter('swift-evolution').constructor.type).toBe('swift-evolution')
     expect(getAdapter('wwdc').constructor.type).toBe('wwdc')
+    expect(getAdapter('packages').constructor.type).toBe('packages')
   })
 
   test('registry throws for unknown source type', () => {

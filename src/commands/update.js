@@ -222,20 +222,30 @@ async function updateFlatSource(adapter, requestedRoots, _concurrency, semaphore
   const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
   const root = roots[0] ?? null
   const pages = filterPagesByRoots(db.getPagesBySourceType(adapter.constructor.type), requestedRoots)
-  const existingKeys = new Set(pages.map(page => page.path))
   const discoveredKeys = discovery.keys ?? []
   const discoveredKeySet = new Set(discoveredKeys)
+  const stalePages = pages.filter(page => !discoveredKeySet.has(page.path))
+  const trackedPages = pages.filter(page => discoveredKeySet.has(page.path))
+  const existingKeys = new Set(trackedPages.map(page => page.path))
 
   if (root) {
     seedFlatSourceProgress(db, root.slug, discoveredKeys, existingKeys)
   }
 
+  if (stalePages.length > 0) {
+    logger.info(`Removing ${stalePages.length} stale ${adapter.constructor.displayName} pages...`)
+    for (const page of stalePages) {
+      db.markPageDeleted(page.path)
+      counts.delCount++
+    }
+  }
+
   // Check existing pages for updates
-  if (pages.length > 0) {
-    logger.info(`Checking ${pages.length} ${adapter.constructor.displayName} pages for updates...`)
+  if (trackedPages.length > 0) {
+    logger.info(`Checking ${trackedPages.length} ${adapter.constructor.displayName} pages for updates...`)
     const modified = []
 
-    await Promise.all(pages.map(page =>
+    await Promise.all(trackedPages.map(page =>
       semaphore.run(async () => {
         try {
           const result = await adapter.check(page.path, {
@@ -418,4 +428,3 @@ async function updateGuidelinesSource(adapter, requestedRoots, ctx) {
 
   return counts
 }
-

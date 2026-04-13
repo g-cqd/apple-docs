@@ -1,6 +1,7 @@
 # Technical Specifications
 
 > Detailed specifications for key components referenced across all phases. An engineer should be able to implement directly from these specs.
+> **Live note**: This file is a design/reference document. Some implementation details have since evolved; for live phase status see `docs/plan/PROGRESS.md`, and for current search behavior see `src/search/ranking.js`.
 
 ---
 
@@ -489,10 +490,14 @@ const tierScore = `
 
 ```js
 function computeAdjustedScore(result, query, intent) {
+  const sourceType = (result.sourceType ?? '').toLowerCase();
   let score = result.bm25Score;
 
   // R1: Exact path/identifier match
-  if (result.key.toLowerCase().endsWith('/' + query.toLowerCase())) {
+  if (
+    result.key.toLowerCase().endsWith('/' + query.toLowerCase()) ||
+    result.title.toLowerCase() === query.toLowerCase()
+  ) {
     score *= 3.0;
   }
 
@@ -517,18 +522,37 @@ function computeAdjustedScore(result, query, intent) {
   }
 
   // R6: Code example boost
-  if (result.hasCodeExamples) {
+  if (sourceType === 'sample-code' && (intent.type === 'howto' || /example|sample/i.test(query))) {
     score *= 1.2;
   }
 
-  // R7: Depth penalty
-  if (result.urlDepth > 5) {
-    score *= Math.max(0.5, 1.0 - (result.urlDepth - 5) * 0.05);
+  // R7: Package penalty
+  if (sourceType === 'packages') {
+    score *= 0.45;
+    if (/package|library/i.test(query) || result.title.toLowerCase() === query.toLowerCase()) {
+      score *= 1.5;
+    }
   }
 
-  // R8: Source freshness boost
-  if (result.sourceType === 'wwdc' && result.sourceMetadata?.year === currentYear) {
-    score *= 1.1;
+  // R8: Preferred source ordering
+  if (sourceType === 'apple-docc') score *= 1.3;
+  else if (sourceType === 'hig') score *= 1.2;
+  else if (sourceType === 'sample-code') score *= 1.12;
+  else if (sourceType === 'guidelines') score *= 1.05;
+
+  // R9: Depth penalty
+  if (result.urlDepth > 0) {
+    score *= Math.max(0.3, 1.0 - result.urlDepth * 0.05);
+  }
+
+  // R10: Error intent boost
+  if (intent.type === 'error' && ['article', 'troubleshooting'].includes(result.kind)) {
+    score *= 1.2;
+  }
+
+  // R11: Concept intent boost
+  if (intent.type === 'concept' && (result.kind === 'article' || sourceType === 'hig' || sourceType === 'swift-book')) {
+    score *= 1.2;
   }
 
   return score;
@@ -808,7 +832,7 @@ apple-docs/
 │   │   ├── apple-archive.js        # Phase 4
 │   │   ├── wwdc.js                 # Phase 4
 │   │   ├── sample-code.js          # Phase 4
-│   │   └── packages.js             # Phase 4 (deferred)
+│   │   └── packages.js             # Phase 4
 │   ├── content/                    # Normalized content model (Phase 1)
 │   │   ├── normalize.js
 │   │   ├── render-markdown.js

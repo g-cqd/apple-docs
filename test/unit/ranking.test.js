@@ -76,6 +76,31 @@ describe('rerank', () => {
     expect(sample.score).toBeGreaterThan(doc.score)
   })
 
+  test('R6b: packages are penalized for general queries', () => {
+    const doc = makeResult({ matchQuality: 'match', path: 'doc' })
+    const pkg = makeResult({
+      matchQuality: 'match',
+      sourceType: 'packages',
+      title: 'apple/swift-argument-parser',
+      path: 'packages/apple/swift-argument-parser',
+    })
+    rerank([doc, pkg], 'argument parser', { type: 'general', confidence: 0.5 })
+    expect(doc.score).toBeGreaterThan(pkg.score)
+  })
+
+  test('R6b: exact package-name queries still surface packages', () => {
+    const doc = makeResult({ matchQuality: 'match', path: 'doc' })
+    const pkg = makeResult({
+      matchQuality: 'exact',
+      sourceType: 'packages',
+      title: 'apple/swift-argument-parser',
+      path: 'packages/apple/swift-argument-parser',
+      urlDepth: 3,
+    })
+    rerank([doc, pkg], 'apple/swift-argument-parser', { type: 'general', confidence: 0.5 })
+    expect(pkg.score).toBeGreaterThan(doc.score)
+  })
+
   test('R7: deep paths are penalized', () => {
     const shallow = makeResult({ matchQuality: 'match', urlDepth: 2 })
     const deep = makeResult({ matchQuality: 'match', urlDepth: 12, path: 'deep/nested/very/long/path/to/item' })
@@ -83,11 +108,22 @@ describe('rerank', () => {
     expect(shallow.score).toBeGreaterThan(deep.score)
   })
 
-  test('R8: fresh sources get a boost', () => {
-    const fresh = makeResult({ matchQuality: 'match', sourceType: 'apple-docc' })
-    const wwdc = makeResult({ matchQuality: 'match', sourceType: 'wwdc', path: 'other' })
-    rerank([fresh, wwdc], 'View', { type: 'symbol', confidence: 0.7 })
-    expect(fresh.score).toBeGreaterThan(wwdc.score)
+  test('R8: preferred sources sort in the requested order when matches are comparable', () => {
+    const results = [
+      makeResult({ matchQuality: 'match', sourceType: 'wwdc', path: 'other/wwdc' }),
+      makeResult({ matchQuality: 'match', sourceType: 'guidelines', path: 'other/guidelines', framework: 'app-store-review' }),
+      makeResult({ matchQuality: 'match', sourceType: 'sample-code', path: 'other/sample' }),
+      makeResult({ matchQuality: 'match', sourceType: 'hig', path: 'other/hig', framework: 'design' }),
+      makeResult({ matchQuality: 'match', sourceType: 'apple-docc', path: 'other/docc' }),
+    ]
+    rerank(results, 'layout', { type: 'general', confidence: 0.5 })
+    expect(results.map(r => r.sourceType)).toEqual([
+      'apple-docc',
+      'hig',
+      'sample-code',
+      'guidelines',
+      'wwdc',
+    ])
   })
 
   test('combined: release notes of archived content get both penalties', () => {
@@ -99,7 +135,7 @@ describe('rerank', () => {
       path: 'archive/release-notes',
     })
     rerank([normal, archivedReleaseNotes], 'SwiftUI', { type: 'general', confidence: 0.5 })
-    // Normal apple-docc gets R8 boost (×1.1), archived release notes get R4 (×0.4) + R5 (×0.6)
+    // Normal apple-docc gets the preferred-source boost, archived release notes get R4 + R5 penalties.
     expect(normal.score).toBeGreaterThan(archivedReleaseNotes.score * 3)
   })
 

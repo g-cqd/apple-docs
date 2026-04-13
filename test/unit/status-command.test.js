@@ -112,9 +112,10 @@ describe('status command', () => {
   test('crawl progress exists for empty database', async () => {
     const result = await status({ skipUpdateCheck: true }, { db, dataDir })
     expect(result.crawlProgress).toBeDefined()
-    expect(result.crawlProgress.total).toBeOneOf([0, null])
-    expect(result.crawlProgress.processed).toBeOneOf([0, null])
-    expect(result.crawlProgress.pending).toBeOneOf([0, null])
+    expect(result.crawlProgress.total).toBe(0)
+    expect(result.crawlProgress.processed).toBe(0)
+    expect(result.crawlProgress.pending).toBe(0)
+    expect(result.crawlProgress.failed).toBe(0)
   })
 
   test('lastSync and lastAction are null with no log', async () => {
@@ -138,5 +139,18 @@ describe('status command', () => {
   test('skipUpdateCheck prevents update check', async () => {
     const result = await status({ skipUpdateCheck: true }, { db, dataDir })
     expect(result.updateAvailable).toBeNull()
+  })
+
+  test('reports tier and capabilities', async () => {
+    db.setSnapshotMeta('snapshot_tier', 'standard')
+
+    const result = await status({ skipUpdateCheck: true }, { db, dataDir })
+    expect(result.tier).toBe('standard')
+    expect(result.capabilities).toEqual({
+      search: true,
+      searchTrigram: true,
+      searchBody: false,
+      readContent: true,
+    })
   })
 })

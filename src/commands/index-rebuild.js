@@ -48,10 +48,10 @@ export async function rebuildTrigram(_opts, ctx) {
  * Rebuild the body FTS5 index from document_sections.
  * Requires document_sections table (standard tier or above).
  *
- * @param {object} opts - { full?: boolean }
+ * @param {object} _opts - unused
  * @param {{ db, dataDir, logger }} ctx
  */
-export async function rebuildBody(opts, ctx) {
+export async function rebuildBody(_opts, ctx) {
   const { db, dataDir, logger } = ctx
 
   if (!db.hasTable('document_sections')) {

@@ -15,6 +15,10 @@ function getGitHubToken() {
   return process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? null
 }
 
+export function hasGitHubToken() {
+  return getGitHubToken() !== null
+}
+
 /**
  * Build auth headers using the available GitHub token.
  * @returns {Record<string, string>}
@@ -22,6 +26,16 @@ function getGitHubToken() {
 function authHeaders() {
   const token = getGitHubToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+function githubApiHeaders(extra = {}) {
+  return {
+    'User-Agent': USER_AGENT,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    ...authHeaders(),
+    ...extra,
+  }
 }
 
 /**
@@ -36,12 +50,7 @@ function authHeaders() {
 export async function fetchGitHubTree(owner, repo, branch, rateLimiter) {
   const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`
   const { data } = await fetchWithRetry(url, rateLimiter, {
-    headers: {
-      'User-Agent': USER_AGENT,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...authHeaders(),
-    },
+    headers: githubApiHeaders(),
     maxRetries: MAX_RETRIES,
     timeout: DEFAULT_TIMEOUT,
     notFoundAs: 'http-error',
@@ -94,3 +103,89 @@ export async function checkRawGitHub(owner, repo, branch, filePath, previousEtag
   })
 }
 
+/**
+ * Fetch repository metadata from the GitHub REST API.
+ *
+ * @param {string} owner
+ * @param {string} repo
+ * @param {{ acquire(): Promise<void> }} rateLimiter
+ * @returns {Promise<{ data: object, etag: string|null, lastModified: string|null }>}
+ */
+export async function fetchGitHubRepo(owner, repo, rateLimiter) {
+  const url = `https://api.github.com/repos/${owner}/${repo}`
+  return fetchWithRetry(url, rateLimiter, {
+    headers: githubApiHeaders(),
+    maxRetries: MAX_RETRIES,
+    timeout: DEFAULT_TIMEOUT,
+    notFoundAs: 'http-error',
+  })
+}
+
+/**
+ * Check whether repository metadata changed since the previous ETag.
+ *
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string|null} previousEtag
+ * @param {{ acquire(): Promise<void> }} rateLimiter
+ * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
+ */
+export async function checkGitHubRepo(owner, repo, previousEtag, rateLimiter) {
+  const url = `https://api.github.com/repos/${owner}/${repo}`
+  return checkResourceEtag(url, previousEtag, rateLimiter, {
+    headers: githubApiHeaders(),
+    timeout: DEFAULT_TIMEOUT,
+  })
+}
+
+/**
+ * Fetch repository README metadata and decoded text from the GitHub contents API.
+ *
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string} branch
+ * @param {{ acquire(): Promise<void> }} rateLimiter
+ * @returns {Promise<{ text: string, path: string|null, sha: string|null, htmlUrl: string|null, downloadUrl: string|null, etag: string|null, lastModified: string|null }>}
+ */
+export async function fetchGitHubReadme(owner, repo, branch, rateLimiter) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/readme?ref=${encodeURIComponent(branch)}`
+  const { data, etag, lastModified } = await fetchWithRetry(url, rateLimiter, {
+    headers: githubApiHeaders(),
+    maxRetries: MAX_RETRIES,
+    timeout: DEFAULT_TIMEOUT,
+    notFoundAs: 'http-error',
+  })
+
+  const encoded = typeof data?.content === 'string' ? data.content.replace(/\n/g, '') : ''
+  const text = encoded
+    ? Buffer.from(encoded, data?.encoding === 'base64' ? 'base64' : 'utf8').toString('utf8')
+    : ''
+
+  return {
+    text,
+    path: data?.path ?? null,
+    sha: data?.sha ?? null,
+    htmlUrl: data?.html_url ?? null,
+    downloadUrl: data?.download_url ?? null,
+    etag,
+    lastModified,
+  }
+}
+
+/**
+ * Check whether repository README changed since the previous ETag.
+ *
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string} branch
+ * @param {string|null} previousEtag
+ * @param {{ acquire(): Promise<void> }} rateLimiter
+ * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
+ */
+export async function checkGitHubReadme(owner, repo, branch, previousEtag, rateLimiter) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/readme?ref=${encodeURIComponent(branch)}`
+  return checkResourceEtag(url, previousEtag, rateLimiter, {
+    headers: githubApiHeaders(),
+    timeout: DEFAULT_TIMEOUT,
+  })
+}

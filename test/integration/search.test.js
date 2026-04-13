@@ -44,6 +44,27 @@ beforeAll(async () => {
     abstract: 'A custom button control',
     declaration: 'struct MyButton<Label> where Label : View',
   })
+  const wwdcRoot = db.upsertRoot('wwdc', 'WWDC', 'collection', 'test')
+  db.upsertPage({
+    rootId: wwdcRoot.id,
+    path: 'wwdc/wwdc2024-10001',
+    url: 'u',
+    title: 'Meet Swift Testing',
+    role: 'article',
+    roleHeading: 'Session',
+    abstract: 'Learn about the Swift Testing framework.',
+    sourceType: 'wwdc',
+    sourceMetadata: JSON.stringify({ year: 2024, track: 'Testing' }),
+  })
+  db.upsertPage({
+    rootId: root.id,
+    path: 'documentation/testfw/testing-guide',
+    url: 'u',
+    title: 'Testing Guide',
+    role: 'article',
+    roleHeading: 'Article',
+    abstract: 'Testing patterns for custom controls.',
+  })
 
   // Write raw JSON for one page (to test fallback rendering in lookup)
   const fixture = await Bun.file(new URL('../fixtures/swiftui-view.json', import.meta.url)).json()
@@ -81,6 +102,13 @@ describe('Integration: Search', () => {
     expect(result.results.length).toBeGreaterThanOrEqual(1)
     expect(result.results[0].path).toBe('documentation/testfw/myview')
   })
+
+  test('track filter excludes non-WWDC results without matching metadata', async () => {
+    const result = await search({ query: 'Testing', track: 'Testing', limit: 10, fuzzy: true, noDeep: true }, ctx)
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0].path).toBe('wwdc/wwdc2024-10001')
+    expect(result.results[0].sourceType).toBe('wwdc')
+  })
 })
 
 describe('Integration: Lookup with Fallback', () => {
@@ -105,5 +133,16 @@ describe('Integration: Lookup with Fallback', () => {
     expect(result.found).toBe(true)
     expect(result.content).toBeNull()
     expect(result.note).toBe('No content available. Run apple-docs sync first.')
+  })
+
+  test('lookup returns tier limitation metadata on lite tier', async () => {
+    db.setSnapshotMeta('snapshot_tier', 'lite')
+
+    const result = await lookup({ path: 'documentation/testfw/mybutton' }, ctx)
+    expect(result.found).toBe(true)
+    expect(result.content).toBeNull()
+    expect(result.tierLimitation).toBeDefined()
+    expect(result.tierLimitation.tier).toBe('lite')
+    expect(result.note).toContain('Content body unavailable on lite tier')
   })
 })

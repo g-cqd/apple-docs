@@ -7,11 +7,11 @@
 
   // Map each TOC link to the corresponding section element
   const sections = []
-  links.forEach(link => {
+  for (const link of links) {
     const id = link.getAttribute('href').slice(1)
     const el = document.getElementById(id)
     if (el) sections.push({ el, link })
-  })
+  }
 
   if (sections.length === 0) return
 
@@ -33,5 +33,7 @@
     threshold: 0
   })
 
-  sections.forEach(s => observer.observe(s.el))
+  for (const section of sections) {
+    observer.observe(section.el)
+  }
 })()

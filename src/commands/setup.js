@@ -11,13 +11,14 @@ const USER_AGENT = 'apple-docs/2.0'
 /**
  * Download and install a pre-built documentation snapshot.
  *
- * @param {{ tier?: string, force?: boolean }} opts
+ * @param {{ tier?: string, force?: boolean, downgrade?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function setup(opts, ctx) {
   const { db, dataDir, logger } = ctx
   const tier = opts.tier ?? 'standard'
   const force = opts.force ?? false
+  const downgrade = opts.downgrade ?? false
 
   if (!['lite', 'standard', 'full'].includes(tier)) {
     throw new Error(`Invalid tier "${tier}". Must be one of: lite, standard, full`)
@@ -27,6 +28,7 @@ export async function setup(opts, ctx) {
   const dbPath = join(dataDir, 'apple-docs.db')
   const stats = db.getStats()
   const currentTier = db.getTier()
+  const tierRank = { lite: 0, standard: 1, full: 2 }
   if (stats.totalPages > 0 && !force) {
     return {
       status: 'exists',
@@ -37,6 +39,18 @@ export async function setup(opts, ctx) {
         ? `Run 'apple-docs setup --tier ${tier} --force' to upgrade from ${currentTier} to ${tier}.`
         : undefined,
     }
+  }
+
+  if (
+    stats.totalPages > 0
+    && currentTier
+    && tierRank[tier] < tierRank[currentTier]
+    && !downgrade
+  ) {
+    throw new Error(
+      `Refusing to downgrade from ${currentTier} to ${tier} without --downgrade. ` +
+      `Re-run 'apple-docs setup --tier ${tier} --force --downgrade' if you really want to replace the current corpus.`,
+    )
   }
 
   // 2. Fetch latest release
@@ -90,10 +104,21 @@ export async function setup(opts, ctx) {
     // 6. Close current DB and extract
     db.close()
 
-    // Remove old DB files (WAL/SHM may interfere with the extracted snapshot)
-    const dbFiles = [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]
-    for (const f of dbFiles) {
-      if (existsSync(f)) rmSync(f, { force: true })
+    // Remove old extracted payloads before installing the new tier.
+    // This prevents stale markdown/raw-json content from surviving a
+    // downgrade (for example, standard -> lite).
+    const installPaths = [
+      dbPath,
+      `${dbPath}-wal`,
+      `${dbPath}-shm`,
+      join(dataDir, 'manifest.json'),
+      join(dataDir, 'raw-json'),
+      join(dataDir, 'markdown'),
+    ]
+    for (const target of installPaths) {
+      if (existsSync(target)) {
+        rmSync(target, { recursive: true, force: true })
+      }
     }
 
     const proc = Bun.spawn(['tar', '-xzf', tmpPath, '-C', dataDir], {

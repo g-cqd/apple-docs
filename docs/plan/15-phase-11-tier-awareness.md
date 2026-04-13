@@ -1,6 +1,7 @@
 # Phase 11: Snapshot Tier Awareness & Upgrade Paths
 
-> **Status**: `PENDING`
+> **Status**: `HISTORICAL PLAN`
+> **Live status**: See `docs/plan/PROGRESS.md` — the functional Phase 11 scope is complete as of 2026-04-13 and the tracker contains the verified task/evidence state.
 > **Depends on**: Phase 6 (distribution), Phase 8 (storage profiles)
 > **Blocks**: Nothing
 > **Can parallel with**: Nothing (standalone improvement phase)
@@ -261,4 +262,4 @@ Wave 4 (MCP/Docs):  11.16 + 11.17 + 11.18 (parallel) → 11.19 → 11.20 + 11.21
 
 ## Execution Log
 
-*(To be filled during implementation)*
+This file remains the original phase plan. The execution log and validated completion evidence now live in `docs/plan/PROGRESS.md`.

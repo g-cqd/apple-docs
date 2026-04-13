@@ -1,6 +1,8 @@
 # Phase 4: Source Coverage Expansion
 
 > **Goal**: Catch and surpass the strongest competitor (cupertino: 8 sources) on breadth. Add 7 new knowledge sources via the adapter layer built in Phase 2.
+> **Status**: `HISTORICAL PLAN`
+> **Live status**: See `docs/plan/PROGRESS.md` — the package catalog is now landed in-tree, and the temporary WWDC/sample MCP wrappers described here were later consolidated into the core `search_docs` / `read_doc` surface in Phase 9-B.
 
 ## Source Priority Order
 

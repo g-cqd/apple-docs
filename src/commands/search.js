@@ -58,7 +58,7 @@ export async function search(opts, ctx) {
   }
 
   // Push single source_type to SQL for efficient filtering; multi-source stays as JS post-filter
-  const sqlSourceType = sourceTypes && sourceTypes.length === 1 ? sourceTypes[0] : null
+  const sqlSourceType = sourceTypes?.size === 1 ? [...sourceTypes][0] : null
   const filterOpts = { kind, limit: searchLimit, language, sourceType: sqlSourceType, ...platformFilters }
 
   // Start body search in background if index exists and not disabled
@@ -155,12 +155,13 @@ export async function search(opts, ctx) {
 
   // Post-filter by WWDC year/track from sourceMetadata (enables search_wwdc consolidation)
   if (opts.year || opts.track) {
-    const before = results.length
     for (let i = results.length - 1; i >= 0; i--) {
       try {
         const meta = JSON.parse(results[i].sourceMetadata ?? '{}')
         if (opts.year && meta.year !== opts.year) { results.splice(i, 1); continue }
-        if (opts.track && meta.track && !meta.track.toLowerCase().includes(opts.track.toLowerCase())) { results.splice(i, 1); continue }
+        if (opts.track && (!meta.track || !meta.track.toLowerCase().includes(opts.track.toLowerCase()))) {
+          results.splice(i, 1)
+        }
       } catch { results.splice(i, 1) }
     }
   }

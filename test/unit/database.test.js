@@ -205,6 +205,10 @@ describe('DocsDatabase', () => {
     const sampleCodeRoot = db.upsertRoot('sample-code', 'Apple Sample Code', 'collection', 'test')
     const sampleCodeRow = db.db.query('SELECT source_type FROM roots WHERE id = ?').get(sampleCodeRoot.id)
     expect(sampleCodeRow.source_type).toBe('sample-code')
+
+    const packagesRoot = db.upsertRoot('packages', 'Swift Package Catalog', 'collection', 'test')
+    const packagesRow = db.db.query('SELECT source_type FROM roots WHERE id = ?').get(packagesRoot.id)
+    expect(packagesRow.source_type).toBe('packages')
   })
 
   test('migrates legacy flat-source roots out of apple-docc on open', () => {
@@ -324,6 +328,30 @@ describe('DocsDatabase', () => {
     db.setSnapshotMeta('snapshot_tier', 'lite')
     db.setSnapshotMeta('snapshot_tier', 'full')
     expect(db.getSnapshotMeta('snapshot_tier')).toBe('full')
+  })
+
+  test('getTier prefers snapshot_meta when present', () => {
+    db.setSnapshotMeta('snapshot_tier', 'full')
+    expect(db.getTier()).toBe('full')
+  })
+
+  test('getTier falls back to lite when document_sections table is absent', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'apple-docs-db-tier-'))
+    const dbPath = join(tempDir, 'apple-docs.db')
+    const seeded = new DocsDatabase(dbPath)
+    try {
+      seeded.db.run('DROP TABLE document_sections')
+      seeded.close()
+
+      const reopened = new DocsDatabase(dbPath)
+      try {
+        expect(reopened.getTier()).toBe('lite')
+      } finally {
+        reopened.close()
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
   })
 
   test('getSchemaVersion returns current schema version', () => {
