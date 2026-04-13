@@ -1,16 +1,63 @@
 # apple-docs
 
-`apple-docs` builds a local Apple developer documentation corpus and exposes it three ways:
+Local Apple developer documentation corpus with CLI search, an MCP server for AI assistants, and a static website generator. 10 sources, tiered search, offline-first. Runs on [Bun](https://bun.sh).
 
-- a CLI for search, lookup, sync, maintenance, and snapshot management
-- an MCP server for AI assistants
-- a static documentation website generator
+## Setup
 
-It runs on [Bun](https://bun.sh). The only runtime dependency is the official MCP SDK.
+```bash
+git clone https://github.com/g-cqd/apple-docs.git
+cd apple-docs
+bun install
+bun link
+```
+
+Build the full corpus (about 15 minutes):
+
+```bash
+apple-docs sync --concurrency 500 --rate 500 --full --parallel 20 --retry-failed --index
+```
+
+This fetches all 10 sources, converts every page, and builds the deep-search index in one pass.
+
+## MCP Server
+
+Print ready-to-paste configuration for Claude Desktop, Cursor, or any MCP client:
+
+```bash
+apple-docs mcp install
+```
+
+Or add this to your MCP client config manually:
+
+```json
+{
+  "mcpServers": {
+    "apple-docs": {
+      "command": "apple-docs",
+      "args": ["mcp", "start"],
+      "env": {
+        "APPLE_DOCS_HOME": "/Users/you/.apple-docs"
+      }
+    }
+  }
+}
+```
+
+The server exposes 5 tools (`search_docs`, `read_doc`, `list_frameworks`, `browse`, `status`) and 2 resources (`apple-docs://doc/{key}`, `apple-docs://framework/{slug}`).
+
+## Local Website
+
+```bash
+apple-docs web serve
+```
+
+Opens a local documentation site at `http://localhost:3000` with full-text search, framework browsing, light/dark mode, and page navigation. To generate a static build for deployment:
+
+```bash
+apple-docs web build --out dist/web
+```
 
 ## What It Covers
-
-The corpus is multi-source. Today the in-tree source adapters are:
 
 | Source type | Coverage |
 | --- | --- |
@@ -24,63 +71,6 @@ The corpus is multi-source. Today the in-tree source adapters are:
 | `wwdc` | WWDC session catalog and metadata |
 | `sample-code` | Apple sample code catalog |
 | `packages` | Swift package catalog entries enriched with GitHub repository metadata and README content |
-
-## Install
-
-```bash
-git clone https://github.com/g-cqd/apple-docs.git
-cd apple-docs
-bun install
-bun link
-```
-
-After `bun link`, these commands are available globally:
-
-- `apple-docs`
-- `apple-docs-mcp`
-
-If you do not want a global link, run the CLI locally with `bun run cli.js <command>`.
-
-## Quick Start
-
-### Fastest Path: Install a Snapshot
-
-```bash
-apple-docs setup --tier standard
-apple-docs search "NavigationStack"
-apple-docs read swiftui/view
-```
-
-`standard` is the best default for most users. It includes full `read` output and supports rebuilding the deep-search index.
-
-### Build Your Own Corpus
-
-```bash
-apple-docs sync --roots swiftui,combine,foundation --rate 50 --concurrency 20
-apple-docs index
-apple-docs search "Publisher"
-```
-
-To crawl broadly:
-
-```bash
-apple-docs sync --full --parallel 10 --concurrency 50 --rate 100
-```
-
-### Generate MCP Config
-
-```bash
-apple-docs mcp install
-```
-
-That prints ready-to-paste MCP configuration using your current data directory.
-
-### Build a Static Site
-
-```bash
-apple-docs web build --out dist/web
-apple-docs web serve
-```
 
 ## Global CLI Shape
 
@@ -455,53 +445,14 @@ Notes:
 - `storage gc --older-than <days>` prunes old activity records before cleanup.
 - `storage materialize` requires `document_sections`, so `lite` snapshots will not produce useful rendered output.
 
-## MCP Server
+## MCP Server Reference
 
-The MCP server is read-only. It expects an existing corpus on disk.
+See [MCP Server](#mcp-server) at the top for quick setup. Additional notes:
 
-Fastest setup:
-
-```bash
-apple-docs mcp install
-```
-
-That prints config for both:
-
-- `apple-docs mcp start`
-- `apple-docs-mcp` (backward-compatible standalone binary)
-
-Recommended manual config:
-
-```json
-{
-  "mcpServers": {
-    "apple-docs": {
-      "command": "apple-docs",
-      "args": ["mcp", "start"],
-      "env": {
-        "APPLE_DOCS_HOME": "/Users/you/.apple-docs"
-      }
-    }
-  }
-}
-```
-
-Legacy-compatible alternative:
-
-```json
-{
-  "mcpServers": {
-    "apple-docs": {
-      "command": "apple-docs-mcp",
-      "env": {
-        "APPLE_DOCS_HOME": "/Users/you/.apple-docs"
-      }
-    }
-  }
-}
-```
-
-The MCP server exposes these tools:
+- `apple-docs-mcp` is a backward-compatible standalone binary (`apple-docs mcp install` prints config for both entry points)
+- `APPLE_DOCS_HOME` is required for MCP server processes
+- `apple-docs-mcp` uses `APPLE_DOCS_LOG_LEVEL` for logging control
+- Use `--verbose` on `apple-docs mcp start` for debug logging
 
 | Tool | Purpose |
 | --- | --- |
@@ -511,18 +462,10 @@ The MCP server exposes these tools:
 | `browse` | Explore a framework tree or subtree |
 | `status` | Return corpus health and capability information |
 
-It also exposes these resources:
-
 | Resource | Purpose |
 | --- | --- |
 | `apple-docs://doc/{key}` | Read a document as markdown |
 | `apple-docs://framework/{slug}` | Browse a framework tree as JSON |
-
-Operational notes:
-
-- `APPLE_DOCS_HOME` is required for MCP server processes.
-- `apple-docs-mcp` uses `APPLE_DOCS_LOG_LEVEL` for logging control.
-- When you start the server through `apple-docs mcp start`, use `--verbose` on the CLI for debug logging.
 
 ## Data Layout
 
