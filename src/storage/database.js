@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite'
 import { mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-const SCHEMA_VERSION = 6
+const SCHEMA_VERSION = 7
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -126,9 +126,21 @@ function deriveFrameworkFromPath(path) {
   return parts[0] ?? null
 }
 
+const ROOT_SOURCE_TYPE_BY_SLUG = new Map([
+  ['app-store-review', 'guidelines'],
+  ['design', 'hig'],
+  ['apple-archive', 'apple-archive'],
+  ['sample-code', 'sample-code'],
+  ['swift-book', 'swift-book'],
+  ['swift-evolution', 'swift-evolution'],
+  ['swift-org', 'swift-org'],
+  ['wwdc', 'wwdc'],
+])
+
 function deriveRootSourceType(slug, kind) {
-  if (slug === 'app-store-review' || kind === 'guidelines') return 'guidelines'
-  if (slug === 'design' || kind === 'design') return 'hig'
+  if (ROOT_SOURCE_TYPE_BY_SLUG.has(slug)) return ROOT_SOURCE_TYPE_BY_SLUG.get(slug)
+  if (kind === 'guidelines') return 'guidelines'
+  if (kind === 'design') return 'hig'
   return 'apple-docc'
 }
 
@@ -410,6 +422,21 @@ export class DocsDatabase {
           FROM refs
           JOIN pages p ON p.id = refs.source_id
         `)
+      }
+      if (current < 7) {
+        for (const [slug, sourceType] of ROOT_SOURCE_TYPE_BY_SLUG) {
+          this.db.run('UPDATE roots SET source_type = ? WHERE slug = ?', [sourceType, slug])
+          this.db.run(`
+            UPDATE pages
+            SET source_type = ?
+            WHERE root_id IN (SELECT id FROM roots WHERE slug = ?)
+          `, [sourceType, slug])
+          this.db.run(`
+            UPDATE documents
+            SET source_type = ?
+            WHERE key = ? OR key LIKE ?
+          `, [sourceType, slug, `${slug}/%`])
+        }
       }
       this.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)", [String(SCHEMA_VERSION)])
       this.db.run('COMMIT')
@@ -828,7 +855,7 @@ export class DocsDatabase {
     `)
   }
 
-  upsertRoot(slug, displayName, kind, source, seedPath = null) {
+  upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
     const now = new Date().toISOString()
     return this._upsertRoot.get({
       $slug: slug,
@@ -836,7 +863,7 @@ export class DocsDatabase {
       $kind: kind,
       $source: source,
       $seed_path: seedPath,
-      $source_type: deriveRootSourceType(slug, kind),
+      $source_type: sourceType ?? deriveRootSourceType(slug, kind),
       $now: now,
     })
   }

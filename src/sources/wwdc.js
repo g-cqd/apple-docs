@@ -8,6 +8,7 @@ const APPLE_BASE = 'https://developer.apple.com/videos/play'
 const ASCIIWWDC_OWNER = 'ASCIIwwdc'
 const ASCIIWWDC_REPO = 'wwdc-session-transcripts'
 const ASCIIWWDC_BRANCH = 'master'
+const ASCIIWWDC_LANGUAGE = 'en'
 const USER_AGENT = 'apple-docs/2.0'
 const DEFAULT_TIMEOUT = 30_000
 
@@ -15,8 +16,9 @@ const DEFAULT_TIMEOUT = 30_000
 const APPLE_YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
 
 /** Years served by ASCIIwwdc community transcripts. */
-const ASCIIWWDC_YEAR_MIN = 2012
+const ASCIIWWDC_YEAR_MIN = 1997
 const ASCIIWWDC_YEAR_MAX = 2019
+const VTT_TIMESTAMP_RE = /^(?:\d{2}:)?\d{2}:\d{2}\.\d{3}\s+-->\s+(?:\d{2}:)?\d{2}:\d{2}\.\d{3}(?:\s+.*)?$/
 
 // ---------------------------------------------------------------------------
 // Key helpers
@@ -44,6 +46,10 @@ export function parseWwdcKey(key) {
  */
 function buildKey(year, sessionId) {
   return `${ROOT_SLUG}/wwdc${year}-${sessionId}`
+}
+
+function buildAsciiwwdcPath(year, sessionId) {
+  return `${ASCIIWWDC_LANGUAGE}/${year}/${sessionId}.vtt`
 }
 
 // ---------------------------------------------------------------------------
@@ -269,12 +275,45 @@ function extractAppleTitle(json, year, sessionId) {
  * @returns {string}
  */
 function extractAsciiwwdcTitle(text, year, sessionId) {
+  if (String(text).includes('WEBVTT') || VTT_TIMESTAMP_RE.test(String(text).split('\n')[0]?.trim() ?? '')) {
+    return `WWDC${year} Session ${sessionId}`
+  }
+
   const firstLine = text.split('\n').find(line => line.trim().length > 0)
   if (firstLine && !/^\[?\d{2}:\d{2}/.test(firstLine.trim())) {
     const candidate = firstLine.trim()
     if (candidate.length > 0 && candidate.length < 200) return candidate
   }
   return `WWDC${year} Session ${sessionId}`
+}
+
+function decodeHtmlEntities(value) {
+  return String(value ?? '')
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+}
+
+function normalizeAsciiwwdcTranscript(text) {
+  const lines = String(text ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+
+  const cleaned = []
+  for (const rawLine of lines) {
+    const line = decodeHtmlEntities(rawLine).replace(/<[^>]+>/g, '').trim()
+    if (!line) continue
+    if (line === 'WEBVTT') continue
+    if (/^\d+$/.test(line)) continue
+    if (line.startsWith('NOTE')) continue
+    if (VTT_TIMESTAMP_RE.test(line)) continue
+    if (cleaned[cleaned.length - 1] === line) continue
+    cleaned.push(line)
+  }
+
+  return cleaned.join('\n')
 }
 
 // ---------------------------------------------------------------------------
@@ -353,9 +392,9 @@ export class WwdcAdapter extends SourceAdapter {
 
     const keys = []
     for (const entry of tree) {
-      if (entry.type !== 'blob' || !entry.path.endsWith('.txt')) continue
-      // Expected path shape: <year>/<sessionId>.txt  (e.g. 2019/234.txt)
-      const match = entry.path.match(/^(\d{4})\/(\d+)\.txt$/)
+      if (entry.type !== 'blob' || !entry.path.endsWith('.vtt')) continue
+      // Expected path shape: en/<year>/<sessionId>.vtt  (e.g. en/2019/234.vtt)
+      const match = entry.path.match(new RegExp(`^${ASCIIWWDC_LANGUAGE}/(\\d{4})/(\\d+)\\.vtt$`))
       if (!match) continue
       const year = parseInt(match[1], 10)
       if (year < ASCIIWWDC_YEAR_MIN || year > ASCIIWWDC_YEAR_MAX) continue
@@ -389,12 +428,12 @@ export class WwdcAdapter extends SourceAdapter {
       ASCIIWWDC_OWNER,
       ASCIIWWDC_REPO,
       ASCIIWWDC_BRANCH,
-      `${year}/${sessionId}.txt`,
+      buildAsciiwwdcPath(year, sessionId),
       ctx.rateLimiter,
     )
     return this.validateFetchResult({
       key,
-      payload: { transcript: text, year, sessionId },
+      payload: { transcript: text, year, sessionId, format: 'vtt' },
       etag,
       lastModified,
     })
@@ -432,7 +471,7 @@ export class WwdcAdapter extends SourceAdapter {
       ASCIIWWDC_OWNER,
       ASCIIWWDC_REPO,
       ASCIIWWDC_BRANCH,
-      `${year}/${sessionId}.txt`,
+      buildAsciiwwdcPath(year, sessionId),
       previousState?.etag ?? null,
       ctx.rateLimiter,
     )
@@ -535,13 +574,14 @@ export class WwdcAdapter extends SourceAdapter {
    * @returns {import('./base.js').NormalizeResult}
    */
   #normalizeAsciiwwdc(key, payload, year, sessionId) {
-    const text = typeof payload?.transcript === 'string'
+    const rawText = typeof payload?.transcript === 'string'
       ? payload.transcript
       : typeof payload === 'string'
         ? payload
         : ''
+    const text = normalizeAsciiwwdcTranscript(rawText)
 
-    const title = extractAsciiwwdcTitle(text, year, sessionId)
+    const title = extractAsciiwwdcTitle(rawText, year, sessionId)
     const url = `${APPLE_BASE}/wwdc${year}/${sessionId}/`
 
     const document = {

@@ -79,6 +79,28 @@ const ARCHIVE_LIBRARY_FIXTURE = `({
       "macOS"
     ],
     [
+      "Java for WebObjects Developers",
+      "TP40001434",
+      3,
+      "2003-01-01",
+      0, 0, 0, 0, 0,
+      "../documentation/WebObjects/JavaForWODev/JavaForWODev.pdf",
+      0,
+      "2003-01-01",
+      "macOS"
+    ],
+    [
+      "What's New In QuickTime",
+      "TP40000939",
+      3,
+      "2004-01-01",
+      0, 0, 0, 0, 0,
+      "../documentation/QuickTime/whatsnew.htm",
+      0,
+      "2004-01-01",
+      "macOS"
+    ],
+    [
       "Legacy Sample",
       "DTS10000001",
       5,
@@ -153,6 +175,16 @@ describe('AppleArchiveAdapter.discover', () => {
     expect(result.keys).toContain('apple-archive/documentation/Cocoa/Conceptual/KeyValueCoding')
   })
 
+  test('includes reachable PDF guides from the archive catalog', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
+    const adapter = new AppleArchiveAdapter()
+    const ctx = makeCtx()
+
+    const result = await adapter.discover(ctx)
+
+    expect(result.keys).toContain('apple-archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf')
+  })
+
   test('registers the root in the database when absent', async () => {
     globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
     const adapter = new AppleArchiveAdapter()
@@ -194,6 +226,17 @@ describe('AppleArchiveAdapter.discover', () => {
     const result = await adapter.discover(ctx)
 
     expect(result.keys.some(key => key.includes('LegacySample'))).toBe(false)
+  })
+
+  test('filters known missing archive URLs out of the catalog', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
+    const adapter = new AppleArchiveAdapter()
+    const ctx = makeCtx()
+
+    const result = await adapter.discover(ctx)
+
+    expect(result.keys).not.toContain('apple-archive/documentation/QuickTime')
+    expect(result.keys).not.toContain('apple-archive/documentation/QuickTime/whatsnew.htm')
   })
 })
 
@@ -339,6 +382,29 @@ describe('AppleArchiveAdapter.normalize', () => {
     const key = 'apple-archive/documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/Introduction'
 
     expect(() => adapter.normalize(key, Buffer.from(ARCHIVE_HTML_FIXTURE))).not.toThrow()
+  })
+
+  test('creates a metadata-only document for PDF archive guides', () => {
+    const adapter = new AppleArchiveAdapter()
+    adapter._guideCatalog = new Map([[
+      'apple-archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf',
+      {
+        title: 'Java for WebObjects Developers',
+        url: 'https://developer.apple.com/library/archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf',
+        format: 'pdf',
+        sourceMetadata: JSON.stringify({ resourceType: 'Guides', archivePath: 'documentation/WebObjects/JavaForWODev/JavaForWODev.pdf', format: 'pdf' }),
+      },
+    ]])
+
+    const result = adapter.normalize(
+      'apple-archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf',
+      { format: 'pdf', title: 'Java for WebObjects Developers' },
+    )
+
+    expect(result.document.sourceType).toBe('apple-archive')
+    expect(result.document.title).toBe('Java for WebObjects Developers')
+    expect(result.document.abstractText).toContain('PDF')
+    expect(result.sections[0].contentText).toContain('original document')
   })
 })
 

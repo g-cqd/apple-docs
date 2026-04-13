@@ -1,4 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { Database as SqliteDatabase } from 'bun:sqlite'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'
 
 let db
@@ -14,7 +18,7 @@ afterEach(() => {
 describe('DocsDatabase', () => {
   test('creates schema on init', () => {
     const row = db.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
-    expect(row.value).toBe('6')
+    expect(row.value).toBe('7')
   })
 
   test('upsertRoot inserts and returns id', () => {
@@ -168,7 +172,7 @@ describe('DocsDatabase', () => {
     expect(db.getRefsBySource(page.id).length).toBe(0)
   })
 
-  test('schema v6 keeps source metadata and normalized tables available', () => {
+  test('schema v7 keeps source metadata and normalized tables available', () => {
     // Check roots has source_type column
     const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
     const rootRow = db.db.query('SELECT source_type FROM roots WHERE slug = ?').get('swiftui')
@@ -197,6 +201,55 @@ describe('DocsDatabase', () => {
     const guidelinesRoot = db.upsertRoot('app-store-review', 'App Store Review Guidelines', 'guidelines', 'test')
     const guidelinesRow = db.db.query('SELECT source_type FROM roots WHERE id = ?').get(guidelinesRoot.id)
     expect(guidelinesRow.source_type).toBe('guidelines')
+
+    const sampleCodeRoot = db.upsertRoot('sample-code', 'Apple Sample Code', 'collection', 'test')
+    const sampleCodeRow = db.db.query('SELECT source_type FROM roots WHERE id = ?').get(sampleCodeRoot.id)
+    expect(sampleCodeRow.source_type).toBe('sample-code')
+  })
+
+  test('migrates legacy flat-source roots out of apple-docc on open', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'apple-docs-db-'))
+    const dbPath = join(tempDir, 'apple-docs.db')
+    const seeded = new DocsDatabase(dbPath)
+    const root = seeded.upsertRoot('sample-code', 'Apple Sample Code', 'collection', 'sample-code')
+    seeded.upsertPage({
+      rootId: root.id,
+      path: 'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
+      url: 'https://developer.apple.com/documentation/swiftui/food-truck-building-a-swiftui-multiplatform-app',
+      title: 'Food Truck',
+      sourceType: 'sample-code',
+    })
+    seeded.upsertNormalizedDocument({
+      document: {
+        key: 'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
+        title: 'Food Truck',
+        sourceType: 'sample-code',
+        framework: 'sample-code',
+      },
+      sections: [],
+      relationships: [],
+    })
+    seeded.close()
+
+    const legacy = new SqliteDatabase(dbPath)
+    try {
+      legacy.run("UPDATE schema_meta SET value = '6' WHERE key = 'schema_version'")
+      legacy.run("UPDATE roots SET source_type = 'apple-docc' WHERE slug = 'sample-code'")
+      legacy.run("UPDATE pages SET source_type = 'apple-docc' WHERE path = 'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app'")
+      legacy.run("UPDATE documents SET source_type = 'apple-docc' WHERE key = 'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app'")
+    } finally {
+      legacy.close()
+    }
+
+    const migrated = new DocsDatabase(dbPath)
+    try {
+      expect(migrated.getRootBySlug('sample-code').source_type).toBe('sample-code')
+      expect(migrated.db.query('SELECT source_type FROM pages WHERE path = ?').get('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app').source_type).toBe('sample-code')
+      expect(migrated.db.query('SELECT source_type FROM documents WHERE key = ?').get('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app').source_type).toBe('sample-code')
+    } finally {
+      migrated.close()
+      rmSync(tempDir, { recursive: true, force: true })
+    }
   })
 
   test('upsertNormalizedDocument stores sections and relationships', () => {

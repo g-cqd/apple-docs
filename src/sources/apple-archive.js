@@ -6,6 +6,18 @@ const ROOT_SLUG = 'apple-archive'
 const ARCHIVE_BASE = 'https://developer.apple.com/library/archive'
 const ARCHIVE_LIBRARY_URL = `${ARCHIVE_BASE}/navigation/library.json`
 const GUIDE_RESOURCE_TYPE_KEY = '3'
+const ARCHIVE_SUPPORTED_FORMATS = new Set(['html', 'htm', 'pdf'])
+const KNOWN_MISSING_ARCHIVE_PATHS = new Set([
+  'documentation/Hardware/hardware2.html',
+  'documentation/Hardware/legacy/legacy.html',
+  'documentation/Carbon/Conceptual/DesktopIcons/ch13.html',
+  'documentation/Carbon/Conceptual/DragMgrProgrammersGuide/DragMgrProgrammersGuide.pdf',
+  'documentation/General/Conceptual/Apple_News_Format_Ref/index.html',
+  'documentation/General/Conceptual/News_API_Ref/index.html',
+  'documentation/Performance/Conceptual/Mac_OSX_Numerics/Mac_OSX_Numerics.pdf',
+  'documentation/General/Conceptual/AppStoreSearchAdsAPIReference/index.html',
+  'documentation/QuickTime/whatsnew.htm',
+])
 const USER_AGENT = 'apple-docs/2.0'
 const DEFAULT_TIMEOUT = 30_000
 
@@ -39,7 +51,7 @@ function normalizeArchiveRelativeUrl(relativeUrl) {
  * @returns {string}
  */
 function pathToKey(guidePath) {
-  const withoutFilename = guidePath.replace(/\/[^/]+\.html$/, '')
+  const withoutFilename = guidePath.replace(/\/[^/]+\.(?:html|htm)$/i, '')
   return `${ROOT_SLUG}/${withoutFilename}`
 }
 
@@ -68,6 +80,34 @@ function decodeHtmlEntities(value) {
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+}
+
+function getArchiveFormat(relativeUrl) {
+  const match = relativeUrl.match(/\.([a-z0-9]+)$/i)
+  return (match?.[1] ?? 'html').toLowerCase()
+}
+
+async function fetchArchivePdfMetadata(url, rateLimiter) {
+  await rateLimiter.acquire()
+
+  const res = await fetch(url, {
+    method: 'HEAD',
+    headers: { 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
+  })
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} fetching ${url}`)
+  }
+
+  return {
+    payload: {
+      format: 'pdf',
+      url,
+    },
+    etag: res.headers.get('etag'),
+    lastModified: res.headers.get('last-modified'),
+  }
 }
 
 /**
@@ -112,6 +152,20 @@ export class AppleArchiveAdapter extends SourceAdapter {
     const guides = await this.#loadGuideCatalog(ctx)
     const entry = guides.get(key)
     const url = entry?.url ?? keyToFallbackUrl(key)
+    if (entry?.format === 'pdf') {
+      const { payload, etag, lastModified } = await fetchArchivePdfMetadata(url, ctx.rateLimiter)
+      return this.validateFetchResult({
+        key,
+        payload: {
+          ...payload,
+          title: entry.title ?? null,
+          sourceMetadata: entry.sourceMetadata ?? null,
+        },
+        etag,
+        lastModified,
+      })
+    }
+
     const { html, etag, lastModified } = await fetchHtmlPage(url, ctx.rateLimiter)
 
     return this.validateFetchResult({
@@ -134,10 +188,51 @@ export class AppleArchiveAdapter extends SourceAdapter {
   }
 
   normalize(key, rawPayload) {
-    const html = typeof rawPayload === 'string' ? rawPayload : String(rawPayload)
     const entry = this._guideCatalog?.get(key) ?? null
     const url = entry?.url ?? keyToFallbackUrl(key)
     const framework = deriveFramework(key)
+    const format = entry?.format ?? (typeof rawPayload === 'object' ? rawPayload?.format : null)
+
+    if (format === 'pdf') {
+      return this.validateNormalizeResult({
+        document: {
+          sourceType: AppleArchiveAdapter.type,
+          key,
+          title: entry?.title ?? rawPayload?.title ?? key.split('/').pop() ?? key,
+          kind: 'archive-guide',
+          role: 'article',
+          roleHeading: null,
+          framework,
+          url,
+          language: null,
+          abstractText: 'Archived PDF guide. Open the original PDF URL for the full document.',
+          declarationText: null,
+          platformsJson: null,
+          minIos: null,
+          minMacos: null,
+          minWatchos: null,
+          minTvos: null,
+          minVisionos: null,
+          isDeprecated: false,
+          isBeta: false,
+          isReleaseNotes: false,
+          urlDepth: key.split('/').length - 1,
+          headings: null,
+          sourceMetadata: entry?.sourceMetadata ?? rawPayload?.sourceMetadata ?? null,
+        },
+        sections: [
+          {
+            sectionKind: 'discussion',
+            heading: 'Original PDF',
+            contentText: `This archive guide is only available as a PDF.\n\nOpen the original document: ${url}`,
+            sortOrder: 0,
+          },
+        ],
+        relationships: [],
+      })
+    }
+
+    const html = typeof rawPayload === 'string' ? rawPayload : String(rawPayload)
 
     const result = parseHtmlToNormalized(html, key, {
       sourceType: AppleArchiveAdapter.type,
@@ -173,9 +268,12 @@ export class AppleArchiveAdapter extends SourceAdapter {
       if (resourceType !== GUIDE_RESOURCE_TYPE_KEY) continue
 
       const relativeUrl = normalizeArchiveRelativeUrl(document[columns.url] ?? '')
+      const format = getArchiveFormat(relativeUrl)
       if (!relativeUrl.startsWith('documentation/') && !relativeUrl.startsWith('featuredarticles/')) {
         continue
       }
+      if (!ARCHIVE_SUPPORTED_FORMATS.has(format)) continue
+      if (KNOWN_MISSING_ARCHIVE_PATHS.has(relativeUrl)) continue
 
       const key = pathToKey(relativeUrl)
       if (guides.has(key)) continue
@@ -190,7 +288,9 @@ export class AppleArchiveAdapter extends SourceAdapter {
           resourceType: 'Guides',
           platform,
           archivePath: relativeUrl,
+          format,
         }),
+        format,
       })
     }
 

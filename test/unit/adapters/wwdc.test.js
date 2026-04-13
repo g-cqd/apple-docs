@@ -118,12 +118,14 @@ describe('WwdcAdapter.discover', () => {
         return new Response(
           JSON.stringify({
             tree: [
-              { path: '2019/234.txt', type: 'blob', sha: 'abc' },
-              { path: '2018/101.txt', type: 'blob', sha: 'def' },
-              // A non-.txt entry should be ignored
-              { path: '2019/README.md', type: 'blob', sha: 'ghi' },
+              { path: 'en/2019/234.vtt', type: 'blob', sha: 'abc' },
+              { path: 'en/2018/101.vtt', type: 'blob', sha: 'def' },
+              // A non-English transcript should be ignored.
+              { path: 'ja/2019/234.vtt', type: 'blob', sha: 'ghi' },
+              // A non-.vtt entry should be ignored
+              { path: 'en/2019/README.md', type: 'blob', sha: 'jkl' },
               // A year outside the allowed range should be ignored
-              { path: '2021/999.txt', type: 'blob', sha: 'jkl' },
+              { path: 'en/2021/999.vtt', type: 'blob', sha: 'mno' },
             ],
           }),
           { status: 200 },
@@ -346,10 +348,21 @@ describe('WwdcAdapter.normalize — Apple JSON', () => {
 // ---------------------------------------------------------------------------
 
 describe('WwdcAdapter.normalize — ASCIIwwdc text', () => {
-  test('produces a transcript section with the full text', () => {
+  test('normalizes WEBVTT transcripts into plain text content', () => {
     const adapter = new WwdcAdapter()
-    const text = '[00:00:00] Hello, welcome to WWDC 2019.\n[00:00:05] Today we look at SwiftUI.'
-    const result = adapter.normalize('wwdc/wwdc2019-234', { transcript: text, year: 2019, sessionId: '234' })
+    const text = [
+      'WEBVTT',
+      '',
+      '00:00:15.576 --> 00:00:16.136 A:middle',
+      '&gt;&gt; Hi, everyone.',
+      '',
+      '00:00:17.146 --> 00:00:18.806 A:middle',
+      "I'm Jacob Xiao and I'll be",
+      '',
+      '00:00:17.146 --> 00:00:18.806 A:middle',
+      "I'm Jacob Xiao and I'll be",
+    ].join('\n')
+    const result = adapter.normalize('wwdc/wwdc2019-234', { transcript: text, year: 2019, sessionId: '234', format: 'vtt' })
 
     expect(result.document.sourceType).toBe('wwdc')
     expect(result.document.kind).toBe('wwdc-session')
@@ -357,7 +370,7 @@ describe('WwdcAdapter.normalize — ASCIIwwdc text', () => {
     expect(result.document.url).toBe('https://developer.apple.com/videos/play/wwdc2019/234/')
     expect(result.sections).toHaveLength(1)
     expect(result.sections[0].kind).toBe('content')
-    expect(result.sections[0].content).toBe(text)
+    expect(result.sections[0].content).toBe(">> Hi, everyone.\nI'm Jacob Xiao and I'll be")
     expect(result.relationships).toEqual([])
   })
 
@@ -375,7 +388,7 @@ describe('WwdcAdapter.normalize — ASCIIwwdc text', () => {
     expect(meta.source).toBe('asciiwwdc')
   })
 
-  test('uses the first non-timestamp line as title when it is short enough', () => {
+  test('uses the first non-timestamp line as title when the payload is plain text', () => {
     const adapter = new WwdcAdapter()
     const text = 'Advances in UIKit\n[00:00:00] Welcome.'
     const result = adapter.normalize('wwdc/wwdc2018-101', {
@@ -387,9 +400,9 @@ describe('WwdcAdapter.normalize — ASCIIwwdc text', () => {
     expect(result.document.title).toBe('Advances in UIKit')
   })
 
-  test('falls back to derived title when first line looks like a timestamp', () => {
+  test('falls back to a derived title for WEBVTT transcripts', () => {
     const adapter = new WwdcAdapter()
-    const text = '[00:00:00] Hello world.'
+    const text = 'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello world.'
     const result = adapter.normalize('wwdc/wwdc2015-101', {
       transcript: text,
       year: 2015,
@@ -467,7 +480,7 @@ describe('WwdcAdapter.check', () => {
     )
 
     expect(requestedUrl).toContain('raw.githubusercontent.com')
-    expect(requestedUrl).toContain('2019/234.txt')
+    expect(requestedUrl).toContain('en/2019/234.vtt')
     expect(result.status).toBe('unchanged')
     expect(result.changed).toBe(false)
   })
