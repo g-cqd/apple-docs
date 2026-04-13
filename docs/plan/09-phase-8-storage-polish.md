@@ -1,6 +1,11 @@
 # Phase 8: Storage Profiles & Polish
 
 > **Goal**: Give users explicit control over disk usage, add operational hardening, and finalize the platform from "powerful" to "trusted."
+>
+> **Depends on**: Phase 6 (complete)
+> **Can parallel with**: Phase 7 (static website — orthogonal concerns: website reads from content model, storage controls materialization)
+>
+> **Parallelization rationale**: All Phase 8 tasks (Parts A, B, and C) operate on the storage layer, CLI commands, test infrastructure, and legacy cleanup. None require Phase 7's static site builder, web templates, or client-side search artifacts. The `prebuilt` storage profile's `persistHtml: true` option uses the existing `render-html.js` renderer from Phase 1, not Phase 7's full-page templates.
 
 ## Part A: Storage Profiles
 

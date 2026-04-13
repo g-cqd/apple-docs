@@ -59,6 +59,7 @@ Phase 6: Distribution & Setup ────────────────�
 Phase 7: Static Website ─────────────────────────── [web build/serve/deploy, client search]
     │
 Phase 8: Storage Profiles & Polish ───────────────── [Profiles, GC, benchmarks, hardening]
+                                                      ↕ (can parallel with Phase 7)
 ```
 
 ## Parallelization Opportunities
@@ -67,7 +68,7 @@ Phase 8: Storage Profiles & Polish ───────────────
 |---|---|---|
 | After Phase 1 | Phase 2 (adapters) ‖ Phase 3 (MCP SDK) | Adapters touch pipeline/storage; MCP touches protocol layer — disjoint |
 | After Phase 4 | Phase 5 (search) ‖ Phase 6 (distribution) | Search improves ranking; distribution packages artifacts — independent |
-| After Phase 6 | Phase 7 (website) ‖ Phase 8 (storage) | Website reads from model; storage controls materialization — orthogonal |
+| After Phase 6 | Phase 7 (website) ‖ Phase 8 (storage) | Website reads from model; storage controls materialization — orthogonal. **Confirmed**: all Phase 8 tasks have no hard dependencies on Phase 7 outputs |
 
 ## Constraints & Principles
 

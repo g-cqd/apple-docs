@@ -1,8 +1,8 @@
 # apple-docs v2 — Implementation Progress
 
 > Last updated: 2026-04-13
-> Verification snapshot: 2026-04-13 22:00:00 CEST
-> Execution policy: no Phase 5 work before Phase 4 is complete; no Phase 6 work before Phase 5 is complete; no Phase 7 work before Phase 6 is complete
+> Verification snapshot: 2026-04-13 22:00:00 CEST (dependency analysis update: Phase 8 unblocked in parallel with Phase 7)
+> Execution policy: no Phase 5 work before Phase 4 is complete; no Phase 6 work before Phase 5 is complete; no Phase 7 work before Phase 6 is complete; Phase 8 may run in parallel with Phase 7 (orthogonal concerns — see parallelization analysis)
 > Evidence: `bun test` passes (473 tests), `bun run typecheck` passes, `bun run lint` currently fails with pre-existing Biome findings in `src/commands/sync.js`, `src/commands/update.js`, and `test/unit/github.test.js`
 
 ## Phase Status Overview
@@ -17,7 +17,7 @@
 | **5** | Search Quality Upgrade | `COMPLETE` | All 9 tasks done: platform/language/synonym filtering, snippets, related counts, 8-rule reranking, intent detection, p95 benchmark | Met |
 | **6** | Distribution & Setup | `COMPLETE` | All 7 tasks done: snapshot build pipeline, setup command, doctor verification, status update check, CI/CD workflows, npm publishing config, cross-platform binary workflow | Met |
 | **7** | Static Website | `READY` | `web` namespace is reserved in CLI/help only; Phase 6 complete, Phase 7 is now unblocked | Not yet met |
-| **8** | Storage Profiles & Polish | `NOT_STARTED` | On-demand lookup rendering and `doctor` groundwork exist; profile system is absent | Not yet met |
+| **8** | Storage Profiles & Polish | `READY` | On-demand lookup rendering and `doctor` groundwork exist; profile system is absent. Unblocked in parallel with Phase 7 | Not yet met |
 
 ```
 Overall: phases 0-6 are complete for the current v2 scope; phase 7 is now unblocked and ready to begin.
@@ -26,8 +26,8 @@ Overall: phases 0-6 are complete for the current v2 scope; phase 7 is now unbloc
 ## Current Planning Wave
 
 **Planner mode**: `Project + Orchestration`
-**Active phase**: `P7` (ready to begin)
-**Execution intent**: Phase 6 is complete; Phase 7 is now unblocked
+**Active phase**: `P7` and `P8` (both ready to begin, can run in parallel)
+**Execution intent**: Phase 6 is complete; Phase 7 and Phase 8 are both unblocked (orthogonal concerns)
 
 | Slice | Status | Evidence | Next action |
 |---|---|---|---|
@@ -537,8 +537,9 @@ Overall: phases 0-6 are complete for the current v2 scope; phase 7 is now unbloc
 
 ## Phase 8: Storage Profiles & Polish
 
-**Status**: `NOT_STARTED`
-**Depends on**: Phase 7
+**Status**: `READY`
+**Depends on**: Phase 6 (complete)
+**Can parallel with**: Phase 7 (website reads from model; storage controls materialization — orthogonal)
 
 ### Actual State
 
@@ -571,20 +572,22 @@ Overall: phases 0-6 are complete for the current v2 scope; phase 7 is now unbloc
 ### Execution Log
 
 - [2026-04-13T16:20] [P8-STATUS] VERIFIED: only groundwork exists; no storage profile system has been implemented
+- [2026-04-13T21:00] [P8-STATUS] UNBLOCKED: dependency analysis confirms Phase 8 is orthogonal to Phase 7; all tasks (8.1–8.10, 8.12) have no hard dependencies on static website work
 
 ---
 
 ## Dependency Graph
 
 ```
-P0 -> P1 -> P2 -> P4 -> P5 -> P6 -> P7 -> P8
-           \
-            -> P3 -----^
+P0 -> P1 -> P2 -> P4 -> P5 -> P6 -> P7
+           \                       \
+            -> P3 -----^            -> P8  (parallel with P7)
 ```
 
 Dependency notes:
-- Earlier architecture work still allows `P3` to feed into `P6`, but active execution is now strictly sequenced `P4 -> P5 -> P6 -> P7` by project policy.
+- Earlier architecture work still allows `P3` to feed into `P6`, but active execution is now strictly sequenced `P4 -> P5 -> P6` by project policy.
 - No Phase 7 work should begin until Phase 6 is marked complete.
+- Phase 8 can run in parallel with Phase 7: website reads from the content model; storage profiles control materialization — the two concerns are orthogonal. All Phase 8 tasks (8.1–8.10, 8.12) have no hard dependencies on Phase 7 outputs.
 
 ## Metrics
 

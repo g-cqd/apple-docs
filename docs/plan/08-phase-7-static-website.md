@@ -1,6 +1,9 @@
 # Phase 7: Static Website
 
 > **Goal**: Generate a fully static, deployable documentation website with client-side dynamic search from the same corpus that powers CLI and MCP.
+>
+> **Depends on**: Phase 6 (complete)
+> **Can parallel with**: Phase 8 (storage profiles & polish — orthogonal concerns)
 
 ## Architecture Decision: Static HTML + Vanilla JS
 
