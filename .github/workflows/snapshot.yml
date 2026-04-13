@@ -28,11 +28,8 @@ jobs:
         run: echo "APPLE_DOCS_HOME=${{ runner.temp }}/apple-docs" >> "$GITHUB_ENV"
 
       - name: Sync corpus
-        run: bun run cli.js sync --full --parallel 5 --concurrency 10 --rate 10
-        timeout-minutes: 120
-
-      - name: Build body index
-        run: bun run cli.js index
+        run: bun run cli.js sync --concurrency 500 --rate 500 --full --parallel 20 --retry-failed --index
+        timeout-minutes: 30
 
       - name: Determine tag
         id: tag
