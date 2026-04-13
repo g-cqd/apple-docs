@@ -1,11 +1,39 @@
 {
-  "name": "apple-docs",
-  "version": "1.0.0",
+  "name": "@g-cqd/apple-docs",
+  "version": "2.0.0",
+  "description": "Apple Developer Documentation CLI and MCP server — search, read, and browse Apple docs locally",
   "type": "module",
   "bin": {
     "apple-docs": "./cli.js",
     "apple-docs-mcp": "./index.js"
   },
+  "files": [
+    "cli.js",
+    "index.js",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/g-cqd/apple-docs.git"
+  },
+  "keywords": [
+    "apple",
+    "documentation",
+    "mcp",
+    "swift",
+    "swiftui",
+    "developer",
+    "xcode"
+  ],
+  "license": "MIT",
   "scripts": {
     "test": "bun test",
     "start": "bun run index.js",

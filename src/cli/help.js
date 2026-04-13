@@ -13,6 +13,9 @@ Commands:
   index                Build full-body search index
   doctor               Diagnose and repair corpus
   status               Show corpus statistics
+  setup                Download pre-built documentation snapshot
+
+  snapshot build       Build snapshot archive from current corpus
 
   mcp start            Start MCP stdio server
   mcp install          Show MCP configuration instructions
@@ -171,6 +174,7 @@ Options:
   --dry-run            Show what would be fixed without changing anything
   --minify             Minify all existing JSON files (sorted keys, no whitespace)
   --index              Rebuild the full-body search index
+  --verify             Verify snapshot integrity (if installed from snapshot)
   --json               Output results as JSON
 `.trim(),
 
@@ -195,6 +199,37 @@ Subcommands:
 Examples:
   apple-docs mcp start            # start server (used by MCP clients)
   apple-docs mcp install          # print configuration JSON
+`.trim(),
+
+  setup: `
+Usage: apple-docs setup [options]
+
+Download a pre-built documentation snapshot for instant access.
+No crawling required — ready in under 60 seconds.
+
+Options:
+  --tier <name>    Snapshot tier: lite, standard, full (default: standard)
+  --force          Overwrite existing corpus
+  --json           Output results as JSON
+`.trim(),
+
+  snapshot: `
+Usage: apple-docs snapshot <subcommand> [options]
+
+Build and manage documentation snapshots.
+
+Subcommands:
+  build            Build a snapshot archive from the current corpus
+
+Build options:
+  --tier <name>    Snapshot tier: lite, standard, full (default: standard)
+  --out <dir>      Output directory (default: dist)
+  --tag <name>     Version tag for the archive filename
+  --json           Output results as JSON
+
+Examples:
+  apple-docs snapshot build --tier lite --out dist/
+  apple-docs snapshot build --tier full --tag snapshot-20260413
 `.trim(),
 
   web: `

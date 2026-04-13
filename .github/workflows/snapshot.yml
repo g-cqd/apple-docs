@@ -1,0 +1,79 @@
+name: Build Snapshots
+
+on:
+  schedule:
+    - cron: '0 6 * * 0' # Every Sunday at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      tiers:
+        description: 'Tiers to build (comma-separated or "all")'
+        default: 'all'
+        type: string
+
+jobs:
+  build-snapshot:
+    runs-on: macos-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    env:
+      APPLE_DOCS_HOME: ${{ runner.temp }}/apple-docs
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Sync corpus
+        run: bun run cli.js sync --full --parallel 5 --concurrency 10 --rate 10
+        timeout-minutes: 120
+
+      - name: Build body index
+        run: bun run cli.js index
+
+      - name: Determine tag
+        id: tag
+        run: echo "tag=snapshot-$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Build lite snapshot
+        if: inputs.tiers == 'all' || inputs.tiers == '' || contains(inputs.tiers, 'lite')
+        run: bun run cli.js snapshot build --tier lite --out dist/ --tag ${{ steps.tag.outputs.tag }}
+
+      - name: Build standard snapshot
+        if: inputs.tiers == 'all' || inputs.tiers == '' || contains(inputs.tiers, 'standard')
+        run: bun run cli.js snapshot build --tier standard --out dist/ --tag ${{ steps.tag.outputs.tag }}
+
+      - name: Build full snapshot
+        if: inputs.tiers == 'all' || inputs.tiers == '' || contains(inputs.tiers, 'full')
+        run: bun run cli.js snapshot build --tier full --out dist/ --tag ${{ steps.tag.outputs.tag }}
+
+      - name: Corpus stats
+        run: bun run cli.js status --json > dist/status.json
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: 'Weekly Snapshot (${{ steps.tag.outputs.tag }})'
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+            dist/*.manifest.json
+            dist/status.json
+          draft: false
+          prerelease: false
+          body: |
+            Automated weekly snapshot build.
+
+            **Tiers:**
+            - `lite` — Metadata + FTS5 title/abstract index
+            - `standard` — + trigram index + body FTS5 + normalized sections
+            - `full` — Standard + raw JSON + Markdown files
+
+            **Install:**
+            ```bash
+            bun run apple-docs setup --tier standard
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

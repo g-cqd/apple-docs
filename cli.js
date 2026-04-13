@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex } from './src/cli/formatter.js'
+import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { RateLimiter } from './src/lib/rate-limiter.js'
@@ -136,7 +136,7 @@ try {
 
     case 'doctor': {
       const { consolidate } = await import('./src/commands/consolidate.js')
-      result = await consolidate({ dryRun: !!flags['dry-run'], minify: !!flags.minify, indexBody: !!flags.index }, ctx)
+      result = await consolidate({ dryRun: !!flags['dry-run'], minify: !!flags.minify, indexBody: !!flags.index, verify: !!flags.verify }, ctx)
       formatter = formatConsolidate
       break
     }
@@ -176,6 +176,35 @@ try {
           showHelp('mcp')
           process.exit(subcommand ? 1 : 0)
       }
+      break
+    }
+
+    case 'snapshot': {
+      switch (subcommand) {
+        case 'build': {
+          const { snapshotBuild } = await import('./src/commands/snapshot.js')
+          result = await snapshotBuild({
+            tier: flags.tier ?? 'standard',
+            out: flags.out ?? 'dist',
+            tag: flags.tag,
+          }, ctx)
+          formatter = formatSnapshot
+          break
+        }
+        default:
+          showHelp('snapshot')
+          process.exit(subcommand ? 1 : 0)
+      }
+      break
+    }
+
+    case 'setup': {
+      const { setup: setupCmd } = await import('./src/commands/setup.js')
+      result = await setupCmd({
+        tier: flags.tier ?? 'standard',
+        force: !!flags.force,
+      }, ctx)
+      formatter = formatSetup
       break
     }
 

@@ -89,10 +89,12 @@ export async function persistNormalizedPage({
   etag = null,
   lastModified = null,
 }) {
-  const rawStr = typeof rawPayload === 'string'
-    ? rawPayload
-    : stableStringify(rawPayload)
-  await writeText(join(dataDir, 'raw-json', path + '.json'), rawStr)
+  // Always store as valid JSON so downstream tools (minify, readJSON) work uniformly.
+  // String payloads (Markdown, HTML) from flat sources are wrapped in a JSON envelope.
+  const isStringPayload = typeof rawPayload === 'string'
+  const rawObj = isStringPayload ? { _raw: rawPayload, _format: 'text' } : rawPayload
+  const rawStr = stableStringify(rawObj)
+  await writeJSON(join(dataDir, 'raw-json', path + '.json'), rawObj)
   const rawPayloadHash = sha256(rawStr)
   const normalizedHash = sha256(stableStringify(normalized))
   const doc = normalized.document

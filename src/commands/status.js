@@ -50,6 +50,12 @@ export async function status(opts, ctx) {
       : 0,
   }))
 
+  // Check for updates (only if installed from snapshot)
+  let updateAvailable = null
+  if (!opts.skipUpdateCheck) {
+    updateAvailable = await checkForUpdate(db)
+  }
+
   return {
     dataDir,
     databaseSize: dbSize,
@@ -68,5 +74,35 @@ export async function status(opts, ctx) {
     crawlByRoot,
     lastSync: stats.lastLog?.timestamp ?? null,
     lastAction: stats.lastLog?.action ?? null,
+    updateAvailable,
+  }
+}
+
+async function checkForUpdate(db) {
+  try {
+    const currentTag = db.getSnapshotMeta('snapshot_tag')
+    if (!currentTag) return null
+
+    const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? null
+    const headers = {
+      'User-Agent': 'apple-docs/2.0',
+      Accept: 'application/vnd.github+json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+
+    const res = await fetch('https://api.github.com/repos/g-cqd/apple-docs/releases/latest', {
+      headers,
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+
+    const release = await res.json()
+    const latestTag = release.tag_name
+    if (latestTag !== currentTag) {
+      return { current: currentTag, latest: latestTag, available: true }
+    }
+    return { current: currentTag, latest: latestTag, available: false }
+  } catch {
+    return null
   }
 }

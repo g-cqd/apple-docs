@@ -311,6 +311,25 @@ describe('DocsDatabase', () => {
     expect(relationship.relation_type).toBe('see_also')
   })
 
+  test('getSnapshotMeta returns null for missing key', () => {
+    expect(db.getSnapshotMeta('nonexistent')).toBeNull()
+  })
+
+  test('setSnapshotMeta + getSnapshotMeta round-trips', () => {
+    db.setSnapshotMeta('snapshot_tier', 'standard')
+    expect(db.getSnapshotMeta('snapshot_tier')).toBe('standard')
+  })
+
+  test('setSnapshotMeta overwrites existing value', () => {
+    db.setSnapshotMeta('snapshot_tier', 'lite')
+    db.setSnapshotMeta('snapshot_tier', 'full')
+    expect(db.getSnapshotMeta('snapshot_tier')).toBe('full')
+  })
+
+  test('getSchemaVersion returns current schema version', () => {
+    expect(db.getSchemaVersion()).toBe(7)
+  })
+
   test('getStats returns aggregate data', () => {
     const root = db.upsertRoot('test', 'Test', 'framework', 'test')
     db.upsertPage({ rootId: root.id, path: 'test/a', url: 'u', title: 'A' })

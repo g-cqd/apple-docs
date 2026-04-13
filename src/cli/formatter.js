@@ -181,6 +181,13 @@ export function formatStatus(result) {
     }
   }
 
+  if (result.updateAvailable?.available) {
+    lines.push('')
+    lines.push(bold(`  Update available: ${result.updateAvailable.latest}`))
+    lines.push(`  Current:  ${result.updateAvailable.current}`)
+    lines.push(`  Run: apple-docs setup --force`)
+  }
+
   return lines.join('\n')
 }
 
@@ -226,6 +233,25 @@ export function formatConsolidate(result) {
     lines.push(`  Minified:        ${result.minified} JSON files (saved ${fmt(result.minifySaved)})`)
   }
 
+  if (result.snapshotVerification) {
+    const sv = result.snapshotVerification
+    lines.push('')
+    if (!sv.installed) {
+      lines.push(`  Snapshot:        ${sv.message}`)
+    } else {
+      lines.push(bold('  Snapshot Verification'))
+      lines.push(`    Tier:          ${sv.tier}`)
+      lines.push(`    Tag:           ${sv.tag ?? 'unknown'}`)
+      lines.push(`    Installed:     ${sv.installedAt ?? 'unknown'}`)
+      for (const c of sv.checks) {
+        const icon = c.ok ? 'ok' : 'FAIL'
+        const detail = c.ok ? '' : ` (expected ${c.expected}, got ${c.actual})`
+        lines.push(`    ${c.name}: ${icon}${detail}`)
+      }
+      lines.push(`    Overall:       ${sv.ok ? 'healthy' : 'issues found'}`)
+    }
+  }
+
   if (result.dryRun && result.resolvedPaths?.length > 0) {
     lines.push('')
     lines.push(bold('  Would retry:'))
@@ -239,6 +265,39 @@ export function formatConsolidate(result) {
   }
 
   return lines.join('\n')
+}
+
+export function formatSnapshot(result) {
+  const fmt = (bytes) => {
+    if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
+    if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
+    if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`
+    return `${bytes} B`
+  }
+  return [
+    bold('Snapshot built'),
+    `  Tier:       ${result.tier}`,
+    `  Tag:        ${result.tag}`,
+    `  Documents:  ${result.documentCount}`,
+    `  DB size:    ${fmt(result.dbSize)}`,
+    `  Archive:    ${result.archivePath} (${fmt(result.archiveSize)})`,
+    `  Checksum:   ${result.archiveChecksum.slice(0, 16)}...`,
+  ].join('\n')
+}
+
+export function formatSetup(result) {
+  if (result.status === 'exists') {
+    return `Corpus already exists at ${result.dataDir}\nUse --force to overwrite.`
+  }
+  return [
+    bold('Setup complete'),
+    `  Tag:         ${result.tag}`,
+    `  Tier:        ${result.tier}`,
+    `  Documents:   ${result.documentCount}`,
+    `  Data dir:    ${result.dataDir}`,
+    '',
+    'Run `apple-docs search <query>` to start searching.',
+  ].join('\n')
 }
 
 export function formatIndex(result) {

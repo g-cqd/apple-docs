@@ -175,6 +175,12 @@ export async function consolidate(opts, ctx) {
     bodyIndexed = idxResult.indexed
   }
 
+  // Phase 6: verify snapshot integrity (if requested)
+  let snapshotVerification = null
+  if (opts.verify) {
+    snapshotVerification = verifySnapshot(db, logger)
+  }
+
   db.clearActivity()
 
   return {
@@ -187,8 +193,56 @@ export async function consolidate(opts, ctx) {
     minified,
     minifySaved,
     bodyIndexed,
+    snapshotVerification,
     resolvedPaths: dryRun ? resolvedPaths : undefined,
     dryRun,
+  }
+}
+
+function verifySnapshot(db, logger) {
+  const tier = db.getSnapshotMeta('snapshot_tier')
+  if (!tier) {
+    return { installed: false, message: 'No snapshot found. Corpus was built locally.' }
+  }
+
+  const checks = []
+
+  // Check 1: document count
+  const expectedCount = parseInt(db.getSnapshotMeta('snapshot_document_count') ?? '0', 10)
+  const actualCount = db.db.query('SELECT COUNT(*) as c FROM documents').get().c
+  checks.push({
+    name: 'document_count',
+    expected: expectedCount,
+    actual: actualCount,
+    ok: actualCount >= expectedCount,
+  })
+
+  // Check 2: schema version
+  const expectedSchema = parseInt(db.getSnapshotMeta('snapshot_schema_version') ?? '0', 10)
+  const actualSchema = db.getSchemaVersion()
+  checks.push({
+    name: 'schema_version',
+    expected: expectedSchema,
+    actual: actualSchema,
+    ok: actualSchema >= expectedSchema,
+  })
+
+  // Check 3: FTS integrity
+  try {
+    db.db.query("INSERT INTO documents_fts(documents_fts) VALUES('integrity-check')").run()
+    checks.push({ name: 'fts_integrity', ok: true })
+  } catch (e) {
+    checks.push({ name: 'fts_integrity', ok: false, error: e.message })
+  }
+
+  const allOk = checks.every(c => c.ok)
+  return {
+    installed: true,
+    tier,
+    tag: db.getSnapshotMeta('snapshot_tag') ?? db.getSnapshotMeta('snapshot_version'),
+    installedAt: db.getSnapshotMeta('snapshot_installed_at'),
+    checks,
+    ok: allOk,
   }
 }
 
@@ -211,8 +265,12 @@ function minifyDir(dirPath, logger) {
       try {
         const raw = readFileSync(full)
 
-        // Quick check: already minified if no newline in first 200 bytes
+        // Quick check: skip files that aren't actually JSON (e.g. Markdown/HTML from flat sources)
         const head = raw.subarray(0, Math.min(200, raw.length))
+        const firstByte = head.length > 0 ? head[0] : 0
+        if (firstByte !== 123 && firstByte !== 91) continue // 123 = '{', 91 = '['
+
+        // Already minified if no newline in first 200 bytes
         if (!head.includes(10)) continue // 10 = '\n'
 
         const obj = JSON.parse(raw)

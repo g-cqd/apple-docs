@@ -881,6 +881,9 @@ export class DocsDatabase {
         COUNT(*) as total
       FROM crawl_state
     `)
+
+    this._getSnapshotMeta = this.db.query('SELECT value FROM snapshot_meta WHERE key = ?')
+    this._setSnapshotMeta = this.db.query('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)')
   }
 
   upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
@@ -1394,6 +1397,20 @@ export class DocsDatabase {
 
   getCrawlProgressAll() {
     return this._crawlProgressAll.get() ?? { pending: 0, processed: 0, failed: 0, total: 0 }
+  }
+
+  getSnapshotMeta(key) {
+    const row = this._getSnapshotMeta.get(key)
+    return row ? row.value : null
+  }
+
+  setSnapshotMeta(key, value) {
+    this._setSnapshotMeta.run(key, String(value))
+  }
+
+  getSchemaVersion() {
+    const row = this.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
+    return row ? parseInt(row.value, 10) : 0
   }
 
   getStats() {

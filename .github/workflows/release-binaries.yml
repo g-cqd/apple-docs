@@ -1,0 +1,39 @@
+name: Build Binaries
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: bun-darwin-arm64
+            name: apple-docs-macos-arm64
+          - os: macos-13
+            target: bun-darwin-x64
+            name: apple-docs-macos-x64
+          - os: ubuntu-latest
+            target: bun-linux-x64
+            name: apple-docs-linux-x64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Compile binary
+        run: bun build --compile --target=${{ matrix.target }} cli.js --outfile ${{ matrix.name }}
+
+      - name: Upload binary to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
