@@ -129,8 +129,8 @@ function buildIndices() {
       }
       invertedIndex.get(term).add(i)
 
-      // Add all prefixes of length >= 2 to prefix index
-      const maxLen = term.length
+      // Add prefixes of length 2–6 to prefix index (capped to limit memory)
+      const maxLen = Math.min(term.length, 6)
       for (let len = 2; len <= maxLen; len++) {
         const prefix = term.substring(0, len)
         if (!prefixIndex.has(prefix)) {

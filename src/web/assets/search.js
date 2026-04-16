@@ -60,12 +60,14 @@
 
   // Show the dropdown
   function showDropdown() {
+    dropdown.setAttribute('role', 'listbox')
     dropdown.hidden = false
     setExpanded(true)
   }
 
   // Hide the dropdown
   function hideDropdown() {
+    dropdown.removeAttribute('role')
     dropdown.hidden = true
     setExpanded(false)
     input.setAttribute('aria-activedescendant', '')

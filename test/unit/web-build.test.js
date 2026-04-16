@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from 'node
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'
-import { buildStaticSite } from '../../src/web/build.js'
+import { buildStaticSite, minifyCSS } from '../../src/web/build.js'
 
 let db
 let tmpDir
@@ -129,5 +129,56 @@ describe('buildStaticSite (P7-D)', () => {
   test('copies CSS assets', async () => {
     await buildStaticSite({ out: outDir }, ctx)
     expect(existsSync(join(outDir, 'assets', 'style.css'))).toBe(true)
+  })
+
+  test('minifies CSS in output', async () => {
+    await buildStaticSite({ out: outDir }, ctx)
+    const css = readFileSync(join(outDir, 'assets', 'style.css'), 'utf8')
+    // Minified CSS should not contain block comments or multi-newlines
+    expect(css).not.toContain('/*')
+    expect(css).not.toContain('\n\n')
+  })
+
+  test('creates bundled JS files', async () => {
+    await buildStaticSite({ out: outDir }, ctx)
+    expect(existsSync(join(outDir, 'assets', 'core.js'))).toBe(true)
+    expect(existsSync(join(outDir, 'assets', 'listing.js'))).toBe(true)
+    // Core bundle should contain theme, search, and page-toc code
+    const core = readFileSync(join(outDir, 'assets', 'core.js'), 'utf8')
+    expect(core).toContain('apple-docs-theme') // from theme.js
+    expect(core).toContain('search-input')     // from search.js
+    expect(core).toContain('page-toc')         // from page-toc.js
+    // Listing bundle should contain collection-filters and tree-view code
+    const listing = readFileSync(join(outDir, 'assets', 'listing.js'), 'utf8')
+    expect(listing).toContain('filter-chip')   // from collection-filters.js
+    expect(listing).toContain('tree-data')     // from tree-view.js
+  })
+
+  test('bundled build references core.js in HTML', async () => {
+    await buildStaticSite({ out: outDir }, ctx)
+    const html = readFileSync(join(outDir, 'docs', 'documentation', 'swiftui', 'view', 'index.html'), 'utf8')
+    expect(html).toContain('core.js')
+    expect(html).not.toContain('search.js')
+    expect(html).not.toContain('page-toc.js')
+  })
+})
+
+describe('minifyCSS', () => {
+  test('strips block comments', () => {
+    expect(minifyCSS('/* comment */ body { color: red; }')).not.toContain('comment')
+  })
+
+  test('collapses whitespace around syntax chars', () => {
+    const result = minifyCSS('body {\n  color : red ;\n}')
+    expect(result).toBe('body{color:red}')
+  })
+
+  test('removes trailing semicolons before closing brace', () => {
+    expect(minifyCSS('a { color: red; }')).toBe('a{color:red}')
+  })
+
+  test('preserves values that contain spaces', () => {
+    const result = minifyCSS('body { font-family: "Helvetica Neue", Arial; }')
+    expect(result).toContain('"Helvetica Neue"')
   })
 })

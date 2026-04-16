@@ -39,6 +39,7 @@
   --token-type: #703daa;
   --token-identifier: #4b21b0;
   --token-number: #272ad8;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 [data-theme="dark"] {
@@ -156,14 +157,6 @@
   outline: none;
 }
 
-/* Explicit focus-visible for interactive elements that override outlines */
-.search-clear:focus-visible,
-.filter-chip:focus-visible,
-.theme-option:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 /* ------------------------------------------------------------
    2. Reset & base
    ------------------------------------------------------------ */
@@ -174,14 +167,20 @@
 
 html {
   font-size: 16px;
-  scroll-behavior: smooth;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
   margin: 0;
   background-color: var(--bg);
   color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   font-size: 1rem;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -203,40 +202,37 @@ a:hover {
    ------------------------------------------------------------ */
 
 .main-content {
-  max-width: 720px;
+  max-width: 780px;
   margin: 0 auto;
   padding: 1.5rem 1rem 3rem;
 }
 
 .main-content.listing {
-  max-width: 960px;
+  max-width: 1100px;
 }
 
 @media (min-width: 768px) {
   .main-content {
-    padding: 2rem 1.5rem 4rem;
+    padding: 2rem 2rem 4rem;
   }
 }
 
 @media (min-width: 1024px) {
   .main-content.has-sidebar {
-    max-width: 1024px;
+    max-width: 1100px;
     display: grid;
     grid-template-columns: 1fr 260px;
-    column-gap: 2rem;
+    column-gap: 2.5rem;
     align-items: start;
   }
 
   /* Full-width elements span both columns */
   .main-content.has-sidebar .breadcrumbs,
-  .main-content.has-sidebar .doc-meta,
   .main-content.has-sidebar > h1,
   .main-content.has-sidebar > .page-toc-mobile {
     grid-column: 1 / -1;
   }
 
-  /* Article and sidebar share a row — auto-placement handles this
-     because all full-width elements above span both columns */
   .main-content.has-sidebar .doc-article {
     grid-column: 1;
   }
@@ -264,7 +260,7 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  max-width: 1024px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 0.75rem 1rem;
 }
@@ -284,7 +280,7 @@ a:hover {
 
 @media (min-width: 768px) {
   .site-nav {
-    padding: 0.75rem 1.5rem;
+    padding: 0.75rem 2rem;
   }
 }
 
@@ -411,13 +407,7 @@ a:hover {
   white-space: nowrap;
 }
 
-.no-results {
-  padding: 1rem;
-  text-align: center;
-  font-size: 0.875rem;
-  color: var(--secondary-fg);
-}
-
+.no-results,
 .search-loading {
   padding: 1rem;
   text-align: center;
@@ -480,11 +470,13 @@ a:hover {
 .breadcrumbs {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+  word-break: break-all;
   gap: 0.25rem;
   font-size: 0.8125rem;
   color: var(--secondary-fg);
-  margin-bottom: 1rem;
+  margin-bottom: 0.375rem;
 }
 
 .breadcrumbs a {
@@ -507,7 +499,7 @@ a:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.25rem;
 }
 
 .badge {
@@ -561,7 +553,7 @@ a:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-  margin-top: 0.35rem;
+  margin-bottom: 0.5rem;
 }
 
 /* ------------------------------------------------------------
@@ -570,45 +562,54 @@ a:hover {
 
 .doc-article {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .doc-article h1 {
   font-size: 1.75rem;
   font-weight: 700;
   line-height: 1.25;
-  margin: 0 0 0.75rem;
+  text-wrap: balance;
+  margin: 0.25rem 0 0.5rem;
 }
 
 .doc-article h2 {
   font-size: 1.25rem;
   font-weight: 600;
-  margin: 2rem 0 0.5rem;
+  margin: 0 0 0.5rem;
   padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--border);
+  text-wrap: balance;
 }
 
 .doc-article h3 {
   font-size: 1.05rem;
   font-weight: 600;
-  margin: 1.25rem 0 0.4rem;
+  margin: 1rem 0 0.35rem;
+  text-wrap: balance;
 }
 
 .doc-article p {
-  margin: 0.75rem 0;
+  margin: 0.5rem 0;
 }
 
 .doc-article ul,
 .doc-article ol {
-  margin: 0.75rem 0;
+  margin: 0.5rem 0;
   padding-left: 1.5rem;
 }
 
 .doc-article li {
-  margin: 0.3rem 0;
+  margin: 0.25rem 0;
 }
 
 .doc-article section {
-  margin: 1.5rem 0;
+  margin-top: 1.5rem;
+  margin-bottom: 0;
+}
+
+.doc-article section:first-child {
+  margin-top: 0;
 }
 
 /* Code */
@@ -625,7 +626,7 @@ a:hover {
 }
 
 .doc-article code {
-  font-family: "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.875em;
   background-color: var(--code-bg);
   padding: 0.1em 0.3em;
@@ -637,6 +638,20 @@ a:hover {
   padding: 0;
   font-size: inherit;
   border-radius: 0;
+}
+
+/* Symbol links in topic/relationship lists — monospace without background pill */
+.doc-article a > code,
+.doc-sidebar a > code {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+/* Sidebar code — ensure monospace font */
+.doc-sidebar code {
+  font-family: var(--font-mono);
+  font-size: 0.8125em;
 }
 
 /* Shiki syntax highlighting — dual theme support
@@ -665,6 +680,45 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .code-type-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
 .code-type-link:hover { text-decoration: underline solid; opacity: 0.85; }
 .code-type-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
+
+/* Language variant toggle — declaration show/hide */
+.decl-variant[hidden] { display: none; }
+
+/* Language toggle button group */
+.lang-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.lang-btn {
+  flex: 1;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  color: var(--secondary-fg);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.lang-btn:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+
+.lang-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.lang-btn:hover:not(.active) {
+  background: var(--code-bg);
+  color: var(--fg);
+}
 
 /* Declaration block */
 
@@ -875,12 +929,35 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   border: 1px solid var(--border);
   border-radius: 10px;
   font-size: 0.875rem;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .doc-sidebar h2 {
   font-size: 0.9375rem;
   font-weight: 600;
   margin: 0 0 0.75rem;
+}
+
+/* Sidebar meta (badges + platforms) */
+.sidebar-meta {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-meta:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.sidebar-meta .doc-meta {
+  margin-bottom: 0.375rem;
+}
+
+.sidebar-meta .doc-availability {
+  margin-bottom: 0;
 }
 
 /* Separate TOC from relationships in sidebar */
@@ -929,6 +1006,8 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .framework-group,
 .role-group {
   margin: 2rem 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
 }
 
 .framework-kind,
@@ -1099,7 +1178,10 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   white-space: nowrap;
 }
 
-.deprecated-toggle input[type="checkbox"] {
+.deprecated-toggle input[type="checkbox"],
+.filter-chips input[type="radio"],
+.filter-chips input[type="checkbox"],
+.filter-checkbox input[type="checkbox"] {
   accent-color: var(--accent);
 }
 
@@ -1134,13 +1216,8 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   margin-bottom: 1.25rem;
 }
 
-.page-toc h3 {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--secondary-fg);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin: 0 0 0.5rem;
+.page-toc:last-child {
+  margin-bottom: 0;
 }
 
 .page-toc ul {
@@ -1181,6 +1258,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
     max-height: calc(100vh - 6rem);
     overflow-y: auto;
     scrollbar-gutter: stable;
+    overscroll-behavior: contain;
     z-index: 10;
   }
 
@@ -1576,6 +1654,13 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   border-left: 1px solid var(--border);
   margin-left: 0.5rem;
   list-style: none;
+}
+
+/* Tree item links are always code symbols */
+.tree-node summary > a,
+.tree-leaf > a {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
 }
 
 .tree-meta {

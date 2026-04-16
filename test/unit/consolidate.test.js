@@ -59,36 +59,6 @@ describe('consolidate', () => {
     expect(remaining).toBe(1)
   })
 
-  test('cleans orphan relationships', async () => {
-    // Insert a document
-    const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'apple-docc')
-    db.upsertPage({
-      rootId: root.id,
-      path: 'documentation/swiftui/view',
-      url: 'https://developer.apple.com/documentation/swiftui/view',
-      title: 'View',
-      role: 'symbol',
-      roleHeading: 'Protocol',
-      abstract: 'A view.',
-      platforms: null,
-      declaration: null,
-      etag: null,
-      lastModified: null,
-      contentHash: 'abc',
-      downloadedAt: new Date().toISOString(),
-      sourceType: 'apple-docc',
-    })
-
-    // Insert an orphan relationship referencing non-existent docs
-    db.db.run(
-      "INSERT INTO document_relationships (from_key, to_key, relation_type, section, sort_order) VALUES (?, ?, ?, ?, ?)",
-      ['nonexistent/a', 'nonexistent/b', 'conformsTo', null, 0]
-    )
-
-    const result = await consolidate({}, { db, dataDir, rateLimiter, logger })
-    expect(result.orphanRelsCleaned).toBe(1)
-  })
-
   test('minify option minifies JSON files', async () => {
     // Create a non-minified JSON file
     const prettyJson = JSON.stringify({ key: 'value', nested: { a: 1 } }, null, 2)

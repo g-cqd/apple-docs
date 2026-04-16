@@ -1,5 +1,5 @@
 import { join, dirname } from 'node:path'
-import { existsSync, readFileSync } from 'node:fs'
+import { gzipSync } from 'node:zlib'
 import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage } from './templates.js'
 import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { search } from '../commands/search.js'
@@ -45,9 +45,48 @@ export async function startDevServer(opts, ctx) {
     return knownKeys
   }
 
+  // Cached search artifacts (invalidated when knownKeys resets)
+  let cachedTitleIndex = null
+  let cachedAliasMap = null
+  function getTitleIndex() { return cachedTitleIndex ??= buildTitleIndex(db) }
+  function getAliasMap() { return cachedAliasMap ??= buildAliasMap(db) }
+
+  const securityHeaders = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+  }
+
+  const COMPRESSIBLE = new Set(['text/html', 'text/css', 'text/javascript', 'application/json'])
+
   const server = Bun.serve({
     port,
     async fetch(request) {
+      const response = await handleRequest(request)
+      for (const [k, v] of Object.entries(securityHeaders)) response.headers.set(k, v)
+
+      // Gzip compress text responses when client accepts it
+      const accept = request.headers.get('accept-encoding') || ''
+      const ct = response.headers.get('content-type') || ''
+      const mimeBase = ct.split(';')[0].trim()
+      if (accept.includes('gzip') && COMPRESSIBLE.has(mimeBase)) {
+        const body = await response.arrayBuffer()
+        const compressed = gzipSync(Buffer.from(body))
+        return new Response(compressed, {
+          status: response.status,
+          headers: {
+            ...Object.fromEntries(response.headers.entries()),
+            'Content-Encoding': 'gzip',
+            'Content-Length': String(compressed.length),
+          },
+        })
+      }
+
+      return response
+    },
+  })
+
+  async function handleRequest(request) {
       const url = new URL(request.url)
       const pathname = url.pathname
 
@@ -57,7 +96,7 @@ export async function startDevServer(opts, ctx) {
         if (!query) return Response.json({ results: [], total: 0 })
         const searchOpts = {
           query,
-          limit: Number.parseInt(url.searchParams.get('limit') ?? '50') || 50,
+          limit: Math.min(Number.parseInt(url.searchParams.get('limit') ?? '50') || 50, 200),
           fuzzy: url.searchParams.get('no_fuzzy') !== '1',
           noDeep: url.searchParams.get('no_deep') === '1',
           noEager: url.searchParams.get('no_eager') === '1',
@@ -114,11 +153,16 @@ export async function startDevServer(opts, ctx) {
       // Static assets from src/web/assets/
       if (pathname.startsWith('/assets/')) {
         const file = pathname.replace('/assets/', '')
+        if (file.includes('..') || file.includes('\0')) return new Response('Forbidden', { status: 403 })
         const filePath = join(srcWebDir, 'assets', file)
-        if (existsSync(filePath)) {
+        const bunFile = Bun.file(filePath)
+        if (await bunFile.exists()) {
           const ext = `.${file.split('.').pop()}`
-          return new Response(readFileSync(filePath), {
-            headers: { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' },
+          return new Response(bunFile, {
+            headers: {
+              'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+              'Cache-Control': 'public, max-age=3600',
+            },
           })
         }
         return new Response('Not Found', { status: 404 })
@@ -127,10 +171,15 @@ export async function startDevServer(opts, ctx) {
       // Worker JS
       if (pathname.startsWith('/worker/')) {
         const file = pathname.replace('/worker/', '')
+        if (file.includes('..') || file.includes('\0')) return new Response('Forbidden', { status: 403 })
         const filePath = join(srcWebDir, 'worker', file)
-        if (existsSync(filePath)) {
-          return new Response(readFileSync(filePath), {
-            headers: { 'Content-Type': 'text/javascript; charset=utf-8' },
+        const bunFile = Bun.file(filePath)
+        if (await bunFile.exists()) {
+          return new Response(bunFile, {
+            headers: {
+              'Content-Type': 'text/javascript; charset=utf-8',
+              'Cache-Control': 'public, max-age=3600',
+            },
           })
         }
         return new Response('Not Found', { status: 404 })
@@ -139,8 +188,8 @@ export async function startDevServer(opts, ctx) {
       // Search data on demand — supports manifest-based and direct access
       if (pathname === '/data/search/search-manifest.json') {
         // Build on-demand and generate a manifest with hashed filenames
-        const titleIndex = buildTitleIndex(db)
-        const aliasMap = buildAliasMap(db)
+        const titleIndex = getTitleIndex()
+        const aliasMap = getAliasMap()
         const titleJson = JSON.stringify(titleIndex)
         const aliasJson = JSON.stringify(aliasMap)
         const titleHash = sha256(titleJson).slice(0, 10)
@@ -166,14 +215,12 @@ export async function startDevServer(opts, ctx) {
         const fileName = pathname.replace('/data/search/', '')
         // Determine which artifact this is
         if (fileName.startsWith('title-index.')) {
-          const titleIndex = buildTitleIndex(db)
-          return Response.json(titleIndex, {
+          return Response.json(getTitleIndex(), {
             headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
           })
         }
         if (fileName.startsWith('aliases.')) {
-          const aliasMap = buildAliasMap(db)
-          return Response.json(aliasMap, {
+          return Response.json(getAliasMap(), {
             headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
           })
         }
@@ -182,12 +229,10 @@ export async function startDevServer(opts, ctx) {
 
       // Unhashed fallback for backward compatibility
       if (pathname === '/data/search/title-index.json') {
-        const titleIndex = buildTitleIndex(db)
-        return Response.json(titleIndex)
+        return Response.json(getTitleIndex())
       }
       if (pathname === '/data/search/aliases.json') {
-        const aliasMap = buildAliasMap(db)
-        return Response.json(aliasMap)
+        return Response.json(getAliasMap())
       }
 
       // Document pages
@@ -219,7 +264,7 @@ export async function startDevServer(opts, ctx) {
         ).get(key)
 
         // On-demand fetch from Apple if not in database
-        if (!doc) {
+        if (!doc && /^[a-z][a-z0-9_-]*(?:\/[a-z0-9_-]+)*$/i.test(key)) {
           try {
             const { json, etag, lastModified } = await fetchDocPage(key, rateLimiter)
             const framework = key.split('/')[0]
@@ -240,7 +285,7 @@ export async function startDevServer(opts, ctx) {
                       COALESCE(r.display_name, d.framework) as framework_display
                FROM documents d LEFT JOIN roots r ON r.slug = d.framework WHERE d.key = ?`
             ).get(key)
-            knownKeys = null // invalidate cache after new doc added
+            knownKeys = null; cachedTitleIndex = null; cachedAliasMap = null // invalidate caches
           } catch {
             // fetch failed — fall through to 404
           }
@@ -279,8 +324,20 @@ export async function startDevServer(opts, ctx) {
             }
           }
 
+          // Resolve ancestor titles for breadcrumbs
+          const ancestorTitles = new Map()
+          if (doc.key) {
+            const segs = doc.key.split('/').filter(Boolean)
+            for (let i = 1; i < segs.length - 1; i++) {
+              const partialKey = segs.slice(0, i + 1).join('/')
+              const row = db.db.query('SELECT title FROM documents WHERE key = ?').get(partialKey)
+              if (row?.title) ancestorTitles.set(partialKey, row.title)
+            }
+          }
+
           const html = renderDocumentPage(doc, sections, siteConfig, {
             knownKeys: getKnownKeys(),
+            ancestorTitles,
             resolveRoleHeadings: (keys) => {
               if (keys.length === 0) return new Map()
               const placeholders = keys.map(() => '?').join(',')
@@ -299,8 +356,7 @@ export async function startDevServer(opts, ctx) {
       }
 
       return new Response('Not Found', { status: 404 })
-    },
-  })
+  }
 
   const serverUrl = `http://localhost:${server.port}`
   if (logger) logger.info(`Dev server running at ${serverUrl}`)

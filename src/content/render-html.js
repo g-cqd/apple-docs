@@ -88,21 +88,37 @@ function renderDeclarationHtml(section, opts = {}) {
   const declarations = safeJson(section.contentJson)
   const blocks = Array.isArray(declarations) ? declarations : []
   const knownKeys = opts.knownKeys
+
+  // Detect available language variants
+  const langSet = new Set()
+  for (const decl of blocks) {
+    for (const lang of decl?.languages ?? []) langSet.add(lang)
+  }
+  const hasMultipleLangs = langSet.size > 1
+
   const snippets = blocks
     .map(declaration => {
       const tokens = declaration?.tokens ?? []
       if (tokens.length === 0) return null
       const hasTypeLinks = knownKeys && tokens.some(t =>
         t._resolvedKey && (t.kind === 'typeIdentifier' || t.kind === 'attribute'))
+      let html
       if (hasTypeLinks) {
-        return renderDeclarationTokens(tokens, knownKeys)
+        html = renderDeclarationTokens(tokens, knownKeys)
+      } else {
+        // Fall back to Shiki for declarations without type link data
+        const code = joinTokenTexts(tokens).trim()
+        const language = declaration?.languages?.[0] ?? 'swift'
+        if (!code) return null
+        const highlighted = highlightCode(code, language)
+        html = highlighted ?? `<pre><code class="language-${escapeHtml(language)}">${escapeHtml(code)}</code></pre>`
       }
-      // Fall back to Shiki for declarations without type link data
-      const code = tokens.map(t => t.text ?? '').join('').trim()
-      const language = declaration?.languages?.[0] ?? 'swift'
-      if (!code) return null
-      const highlighted = highlightCode(code, language)
-      return highlighted ?? `<pre><code class="language-${escapeHtml(language)}">${escapeHtml(code)}</code></pre>`
+      // Wrap in a language variant container when multiple languages exist
+      if (hasMultipleLangs && declaration?.languages?.length) {
+        const lang = declaration.languages[0]
+        return `<div class="decl-variant" data-lang="${escapeHtml(lang)}">${html}</div>`
+      }
+      return html
     })
     .filter(Boolean)
 
@@ -112,7 +128,29 @@ function renderDeclarationHtml(section, opts = {}) {
   }
 
   if (snippets.length === 0) return ''
-  return `<section id="declaration"><h2>Declaration</h2>${snippets.join('')}</section>`
+
+  // Add language attributes to the section for toggle detection
+  const langAttr = hasMultipleLangs ? ` data-languages="${[...langSet].map(escapeHtml).join(',')}"` : ''
+  return `<section id="declaration"${langAttr}><h2>Declaration</h2>${snippets.join('')}</section>`
+}
+
+const SEMANTIC_TOKEN_KINDS = new Set(['keyword', 'attribute', 'typeIdentifier', 'identifier', 'genericParameter', 'externalParam', 'internalParam', 'number'])
+
+/** Join token texts, inserting spaces between adjacent semantic tokens that lack whitespace separators. */
+function joinTokenTexts(tokens) {
+  let result = ''
+  let prevWasSemantic = false
+  let prevText = ''
+  for (const t of tokens) {
+    const text = t.text ?? ''
+    if (!text) continue
+    const isSemantic = SEMANTIC_TOKEN_KINDS.has(t.kind ?? 'text')
+    if (isSemantic && prevWasSemantic && !prevText.endsWith('@')) result += ' '
+    prevWasSemantic = isSemantic
+    prevText = text
+    result += text
+  }
+  return result
 }
 
 /**
@@ -120,15 +158,29 @@ function renderDeclarationHtml(section, opts = {}) {
  * Used when tokens have resolved type references for interactive navigation.
  */
 function renderDeclarationTokens(tokens, knownKeys) {
-  const spans = tokens.map(token => {
+  const spans = []
+  let prevWasSemantic = false
+  let prevTokenText = ''
+
+  for (const token of tokens) {
     const text = escapeHtml(token.text ?? '')
-    if (!text) return ''
+    if (!text) continue
     const kind = token.kind ?? 'text'
+    const isSemantic = SEMANTIC_TOKEN_KINDS.has(kind)
+
+    // Insert a space when two semantic tokens are adjacent with no whitespace between them,
+    // but not after @ (attribute prefix like @MainActor)
+    if (isSemantic && prevWasSemantic && !prevTokenText.endsWith('@')) {
+      spans.push(' ')
+    }
+    prevWasSemantic = isSemantic
+    prevTokenText = token.text ?? ''
 
     // Link resolved types to their documentation pages
     if (token._resolvedKey && (kind === 'typeIdentifier' || kind === 'attribute')) {
       if (knownKeys.has(token._resolvedKey)) {
-        return `<a href="/docs/${escapeHtml(token._resolvedKey)}/" class="code-type-link"><span class="decl-${kind}">${text}</span></a>`
+        spans.push(`<a href="/docs/${escapeHtml(token._resolvedKey)}/" class="code-type-link"><span class="decl-${kind}">${text}</span></a>`)
+        continue
       }
     }
 
@@ -136,22 +188,22 @@ function renderDeclarationTokens(tokens, knownKeys) {
     switch (kind) {
       case 'keyword':
       case 'attribute':
-        return `<span class="decl-keyword">${text}</span>`
+        spans.push(`<span class="decl-keyword">${text}</span>`); break
       case 'typeIdentifier':
-        return `<span class="decl-type">${text}</span>`
+        spans.push(`<span class="decl-type">${text}</span>`); break
       case 'identifier':
-        return `<span class="decl-identifier">${text}</span>`
+        spans.push(`<span class="decl-identifier">${text}</span>`); break
       case 'genericParameter':
-        return `<span class="decl-generic">${text}</span>`
+        spans.push(`<span class="decl-generic">${text}</span>`); break
       case 'externalParam':
       case 'internalParam':
-        return `<span class="decl-param">${text}</span>`
+        spans.push(`<span class="decl-param">${text}</span>`); break
       case 'number':
-        return `<span class="decl-number">${text}</span>`
+        spans.push(`<span class="decl-number">${text}</span>`); break
       default:
-        return text
+        spans.push(text)
     }
-  })
+  }
   return `<pre class="decl-tokens"><code>${spans.join('')}</code></pre>`
 }
 
@@ -319,7 +371,7 @@ function renderLinkSectionHtml(title, section) {
             ? ` data-filter-kind="${escapeHtml(item._resolvedRoleHeading)}"`
             : ''
           return item?.key
-            ? `<li${filterAttr}><a href="/docs/${escapeHtml(item.key)}/">${escapeHtml(item.title ?? item.key)}</a></li>`
+            ? `<li${filterAttr}><a href="/docs/${escapeHtml(item.key)}/"><code>${escapeHtml(item.title ?? item.key)}</code></a></li>`
             : `<li>${escapeHtml(item?.title ?? item?.identifier ?? '')}</li>`
         })
         .join('')
@@ -508,7 +560,8 @@ function renderInlineNodeToHtml(node) {
     }
 
     case 'link': {
-      const href = node.destination ?? '#'
+      const rawHref = node.destination ?? '#'
+      const href = isSafeHref(rawHref) ? rawHref : '#'
       const title = node.title ?? (renderInlineNodesToHtml(node.inlineContent ?? []) || href)
       return `<a href="${escapeHtml(href)}">${typeof title === 'string' ? escapeHtml(title) : title}</a>`
     }
@@ -699,8 +752,11 @@ function inlineMarkdown(text) {
   s = s.replace(/!\[\]/g, '')
   s = s.replace(/\[\]\([^)]*\)/g, '')
   s = s.replace(/\[\]/g, '')
-  // Links: [text](url)
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+  // Links: [text](url) — block javascript: protocol
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, url) => {
+    const href = isSafeHref(url) ? url : '#'
+    return `<a href="${href}">${text}</a>`
+  })
   // Bold+italic: ***text*** or ___text___
   s = s.replace(/\*{3}(.+?)\*{3}/g, '<strong><em>$1</em></strong>')
   s = s.replace(/_{3}(.+?)_{3}/g, '<strong><em>$1</em></strong>')
@@ -772,6 +828,11 @@ function coerceSection(section) {
 function safeJson(value) {
   if (!value || typeof value !== 'string') return value ?? null
   try { return JSON.parse(value) } catch { return null }
+}
+
+function isSafeHref(href) {
+  if (!href || href.startsWith('#') || href.startsWith('/')) return true
+  return /^https?:\/\//i.test(href)
 }
 
 function escapeHtml(value) {

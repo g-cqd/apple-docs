@@ -24,7 +24,7 @@
       const btn = buttons[i]
       const isActive = btn.getAttribute('data-theme-value') === theme
       btn.classList.toggle('active', isActive)
-      btn.setAttribute('aria-pressed', String(isActive))
+      btn.setAttribute('aria-checked', String(isActive))
     }
   }
 

@@ -175,19 +175,7 @@ export async function consolidate(opts, ctx) {
     bodyIndexed = idxResult.indexed
   }
 
-  // Phase 6: clean up orphan relationships (referencing non-existent documents)
-  let orphanRelsCleaned = 0
-  if (!dryRun) {
-    const { changes } = db.db.run(
-      'DELETE FROM document_relationships WHERE from_key NOT IN (SELECT key FROM documents) OR to_key NOT IN (SELECT key FROM documents)'
-    )
-    orphanRelsCleaned = changes
-    if (orphanRelsCleaned > 0) {
-      logger.info(`Cleaned ${orphanRelsCleaned} orphan relationships`)
-    }
-  }
-
-  // Phase 7: verify snapshot/corpus integrity (if requested)
+  // Phase 6: verify snapshot/corpus integrity (if requested)
   let snapshotVerification = null
   let corpusIntegrity = null
   if (opts.verify) {
@@ -207,7 +195,6 @@ export async function consolidate(opts, ctx) {
     minified,
     minifySaved,
     bodyIndexed,
-    orphanRelsCleaned,
     snapshotVerification,
     corpusIntegrity,
     resolvedPaths: dryRun ? resolvedPaths : undefined,

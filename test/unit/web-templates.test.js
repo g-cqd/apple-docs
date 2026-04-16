@@ -19,7 +19,7 @@ const siteConfig = {
 
 const mockDoc = {
   title: 'View',
-  key: 'documentation/swiftui/view',
+  key: 'swiftui/view',
   framework: 'swiftui',
   role_heading: 'Protocol',
   source_type: 'apple-docc',
@@ -40,12 +40,12 @@ const mockSections = [
 
 describe('buildBreadcrumbs', () => {
   test('multi-segment key produces linked ancestors and plain last segment', () => {
-    const html = buildBreadcrumbs('documentation/swiftui/view')
-    expect(html).toContain('<a href="/docs/documentation/">documentation</a>')
-    expect(html).toContain('<a href="/docs/documentation/swiftui/">swiftui</a>')
+    const html = buildBreadcrumbs('swiftui/view/body')
+    expect(html).toContain('<a href="/docs/swiftui/">swiftui</a>')
+    expect(html).toContain('<a href="/docs/swiftui/view/">view</a>')
     // Last segment is not a link
-    expect(html).toContain('<span aria-current="page">view</span>')
-    expect(html).not.toMatch(/<a [^>]*>view<\/a>/)
+    expect(html).toContain('<span aria-current="page">body</span>')
+    expect(html).not.toMatch(/<a [^>]*>body<\/a>/)
   })
 
   test('single-segment key returns plain text with no link', () => {
@@ -55,16 +55,27 @@ describe('buildBreadcrumbs', () => {
   })
 
   test('two-segment key links the first and makes the second plain', () => {
-    const html = buildBreadcrumbs('documentation/swiftui')
-    expect(html).toContain('<a href="/docs/documentation/">documentation</a>')
-    expect(html).toContain('<span aria-current="page">swiftui</span>')
+    const html = buildBreadcrumbs('swiftui/view')
+    expect(html).toContain('<a href="/docs/swiftui/">swiftui</a>')
+    expect(html).toContain('<span aria-current="page">view</span>')
   })
 
-  test('uses the framework display name only for the framework segment', () => {
-    const html = buildBreadcrumbs('documentation/swiftui/view', { title: 'View', framework: 'SwiftUI' })
-    expect(html).toContain('<a href="/docs/documentation/">documentation</a>')
-    expect(html).toContain('<a href="/docs/documentation/swiftui/">SwiftUI</a>')
+  test('uses the framework display name for the first segment', () => {
+    const html = buildBreadcrumbs('swiftui/view', { title: 'View', framework: 'SwiftUI' })
+    expect(html).toContain('<a href="/docs/swiftui/">SwiftUI</a>')
     expect(html).not.toContain('>swiftui</a>')
+  })
+
+  test('uses ancestor titles for intermediate segments', () => {
+    const ancestors = new Map([['cryptokit/kemprivatekey', 'KEMPrivateKey']])
+    const html = buildBreadcrumbs('cryptokit/kemprivatekey/publickey', {
+      title: 'PublicKey',
+      framework: 'Apple CryptoKit',
+      ancestorTitles: ancestors,
+    })
+    expect(html).toContain('<a href="/docs/cryptokit/">Apple CryptoKit</a>')
+    expect(html).toContain('<a href="/docs/cryptokit/kemprivatekey/">KEMPrivateKey</a>')
+    expect(html).toContain('<span aria-current="page">PublicKey</span>')
   })
 
   test('empty string returns empty string', () => {
@@ -76,7 +87,7 @@ describe('buildBreadcrumbs', () => {
   })
 
   test('contains breadcrumbs nav element', () => {
-    const html = buildBreadcrumbs('documentation/swiftui/view')
+    const html = buildBreadcrumbs('swiftui/view')
     expect(html).toContain('<nav class="breadcrumbs"')
   })
 })
@@ -231,6 +242,14 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('/apple-docs/assets/search.js')
   })
 
+  test('bundled mode emits core.js instead of individual scripts', () => {
+    const config = { ...siteConfig, bundled: true }
+    const page = renderDocumentPage(mockDoc, mockSections, config)
+    expect(page).toContain('/assets/core.js')
+    expect(page).not.toContain('/assets/search.js')
+    expect(page).not.toContain('/assets/page-toc.js')
+  })
+
   test('page with 2+ sections has TOC sidebar and section IDs', () => {
     const sections = [
       { sectionKind: 'abstract', contentText: 'Abstract text', sortOrder: 0 },
@@ -246,10 +265,11 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('id="overview"')
   })
 
-  test('page with only abstract has no TOC', () => {
+  test('page with only abstract has no TOC but has sidebar for meta', () => {
     const page = renderDocumentPage(mockDoc, mockSections, siteConfig)
     expect(page).not.toContain('class="page-toc"')
-    expect(page).not.toContain('has-sidebar')
+    // Sidebar still present for doc meta badges
+    expect(page).toContain('sidebar-meta')
   })
 
   test('mobile TOC rendered as details element', () => {
@@ -260,26 +280,28 @@ describe('renderDocumentPage', () => {
     ]
     const page = renderDocumentPage(mockDoc, sections, siteConfig)
     expect(page).toContain('class="page-toc-mobile"')
-    expect(page).toContain('<summary>On this page</summary>')
+    expect(page).toContain('<summary>Contents</summary>')
   })
 
-  test('page includes page-toc.js and collection-filters.js scripts', () => {
+  test('page includes page-toc.js but not collection-filters.js script', () => {
     const page = renderDocumentPage(mockDoc, mockSections, siteConfig)
     expect(page).toContain('page-toc.js')
-    expect(page).toContain('collection-filters.js')
+    expect(page).not.toContain('collection-filters.js')
   })
 
-  test('relationships sidebar content appears in combined sidebar with TOC', () => {
+  test('relationships sidebar content appears in sidebar without TOC entry', () => {
     const sections = [
       { sectionKind: 'abstract', contentText: 'text', sortOrder: 0 },
       { sectionKind: 'declaration', contentText: 'code', contentJson: JSON.stringify([{ tokens: [{ text: 'var x' }], languages: ['swift'] }]), sortOrder: 1 },
+      { sectionKind: 'discussion', heading: 'Overview', contentText: 'discussion text', contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'text' }] }]), sortOrder: 5 },
       { sectionKind: 'relationships', contentText: '', contentJson: JSON.stringify([{ title: 'Conforms To', items: [{ key: 'swiftui/view', title: 'View' }] }]), sortOrder: 10 },
     ]
     const page = renderDocumentPage(mockDoc, sections, siteConfig)
-    expect(page).toContain('class="page-toc"')
     expect(page).toContain('<h2>Relationships</h2>')
     expect(page).toContain('Conforms To')
     expect(page).toContain('class="doc-sidebar"')
+    // Relationships should not appear in the TOC since it's sidebar-only
+    expect(page).not.toContain('href="#relationships"')
   })
 
   test('see also content remains rendered in the article when a sidebar exists', () => {
@@ -490,7 +512,7 @@ describe('renderFrameworkPage', () => {
 
   test('role groups have data-filter-kind attributes', () => {
     const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig)
-    expect(page).toMatch(/section[^>]*class="role-group" data-filter-kind="symbol"/)
+    expect(page).toMatch(/section[^>]*class="role-group" data-filter-kind="Symbols"/)
   })
 
   test('includes collection-filters.js script', () => {
@@ -521,6 +543,31 @@ describe('renderFrameworkPage', () => {
     expect(json.edges).toBeArray()
     expect(json.edges).toHaveLength(1)
     expect(json.docs).toBeObject()
+  })
+
+  test('defers list rendering when tree edges are provided', () => {
+    const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig, {
+      treeEdges: [
+        { from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' },
+      ],
+    })
+    // List container should be empty with data-deferred attribute
+    expect(page).toContain('data-deferred')
+    expect(page).not.toMatch(/<div id="list-container"[^>]*>[\s]*<section/)
+    // Tree data should include roleGroups for client-side list building
+    const match = page.match(/<script type="application\/json" id="tree-data">([\s\S]*?)<\/script>/)
+    const json = JSON.parse(match[1])
+    expect(json.roleGroups).toBeArray()
+    expect(json.roleGroups.length).toBeGreaterThan(0)
+    expect(json.roleGroups[0].docs).toBeArray()
+  })
+
+  test('renders list HTML server-side when no tree edges are provided', () => {
+    const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig)
+    // No deferral — list container should have content
+    expect(page).not.toContain('data-deferred')
+    expect(page).toContain('class="role-group"')
+    expect(page).toContain('class="doc-list"')
   })
 })
 

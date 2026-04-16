@@ -149,6 +149,7 @@ function buildHead({ title, description, siteConfig }) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapedTitle}</title>
   ${escapedDesc ? `<meta name="description" content="${escapedDesc}">` : ''}
+  <link rel="preload" href="${escapeAttr(cssHref)}" as="style">
   <link rel="stylesheet" href="${escapeAttr(cssHref)}">
   <script src="${escapeAttr(themeHref)}" defer></script>
 </head>`
@@ -160,15 +161,15 @@ function buildHeader(siteConfig) {
   <nav class="site-nav">
     <a class="site-name" href="${escapeAttr(homeHref)}">${escapeAttr(siteConfig.siteName)}</a>
     <div class="search-container">
-      <input class="search-input" type="search" placeholder="Search…" aria-label="Search documentation" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-listbox" aria-activedescendant="" aria-autocomplete="list">
+      <input class="search-input" type="search" placeholder="Search…" aria-label="Search documentation" autocomplete="off" aria-expanded="false" aria-controls="search-listbox" aria-activedescendant="" aria-autocomplete="list">
       <button class="search-clear" type="button" aria-label="Clear search" hidden>&times;</button>
-      <div class="search-dropdown" id="search-listbox" role="listbox" hidden></div>
+      <div class="search-dropdown" id="search-listbox" hidden></div>
       <div id="header-search-status" aria-live="assertive" class="sr-only"></div>
     </div>
     <fieldset class="theme-switcher" role="radiogroup" aria-label="Color scheme">
-      <button class="theme-option" type="button" data-theme-value="light" aria-label="Light theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button>
-      <button class="theme-option" type="button" data-theme-value="auto" aria-label="System theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11" fill="currentColor"/><path d="M8 2.5A5.5 5.5 0 0 1 8 13.5" fill="currentColor"/></svg></button>
-      <button class="theme-option" type="button" data-theme-value="dark" aria-label="Dark theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 9.5A5.5 5.5 0 1 1 6.5 3 4.5 4.5 0 0 0 13 9.5z"/></svg></button>
+      <button class="theme-option" type="button" role="radio" data-theme-value="light" aria-label="Light theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button>
+      <button class="theme-option" type="button" role="radio" data-theme-value="auto" aria-label="System theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11" fill="currentColor"/><path d="M8 2.5A5.5 5.5 0 0 1 8 13.5" fill="currentColor"/></svg></button>
+      <button class="theme-option" type="button" role="radio" data-theme-value="dark" aria-label="Dark theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 9.5A5.5 5.5 0 1 1 6.5 3 4.5 4.5 0 0 0 13 9.5z"/></svg></button>
     </fieldset>
   </nav>
 </header>`
@@ -179,6 +180,41 @@ function buildFooter(siteConfig) {
   return `<footer class="site-footer">
   <p>Built on ${buildDate}</p>
 </footer>`
+}
+
+// ---------------------------------------------------------------------------
+// Script tags — bundled (static build) vs individual (dev server)
+// ---------------------------------------------------------------------------
+
+/**
+ * Script bundles map. When siteConfig.bundled is true, emit bundles.
+ * When false (dev server), emit individual script tags.
+ */
+const BUNDLES = {
+  core: ['theme.js', 'search.js', 'page-toc.js'],
+  listing: ['collection-filters.js', 'tree-view.js'],
+}
+
+function buildScripts(siteConfig, groups) {
+  const base = siteConfig.baseUrl
+  if (siteConfig.bundled) {
+    return groups.map(g => {
+      const file = BUNDLES[g] ? `${g}.js` : `${g}.js`
+      return `<script src="${escapeAttr(`${base}/assets/${file}`)}" defer></script>`
+    }).join('\n')
+  }
+  // Dev mode — emit individual files
+  const files = []
+  for (const g of groups) {
+    if (BUNDLES[g]) {
+      for (const f of BUNDLES[g]) files.push(f)
+    } else {
+      files.push(`${g}.js`)
+    }
+  }
+  return files.map(f =>
+    `<script src="${escapeAttr(`${base}/assets/${f}`)}" defer></script>`
+  ).join('\n')
 }
 
 // ---------------------------------------------------------------------------
@@ -207,15 +243,30 @@ export function buildBreadcrumbs(key, opts = {}) {
     return `<nav class="breadcrumbs" aria-label="Breadcrumb"><span>${escapeAttr(lastLabel)}</span></nav>`
   }
 
+  // Ancestor title lookup (maps partial key path -> display title)
+  const ancestorTitles = opts.ancestorTitles ?? new Map()
+
   const parts = []
   for (let i = 0; i < segments.length; i++) {
     const isLast = i === segments.length - 1
-    const isFrameworkSegment = !isLast && i === 1 && !!opts.framework
-    const label = isLast ? lastLabel : (isFrameworkSegment ? opts.framework : segments[i])
+    const partialKey = segments.slice(0, i + 1).join('/')
+
+    let label
+    if (isLast) {
+      label = lastLabel
+    } else if (i === 0 && opts.framework) {
+      // First segment is the framework slug — use the display name
+      label = opts.framework
+    } else if (ancestorTitles.has(partialKey)) {
+      label = ancestorTitles.get(partialKey)
+    } else {
+      label = segments[i]
+    }
+
     if (isLast) {
       parts.push(`<span aria-current="page">${escapeAttr(label)}</span>`)
     } else {
-      const href = `/docs/${segments.slice(0, i + 1).join('/')}/`
+      const href = `/docs/${partialKey}/`
       parts.push(`<a href="${escapeAttr(href)}">${escapeAttr(label)}</a>`)
     }
   }
@@ -301,7 +352,7 @@ function buildRelationshipContent(section) {
       const items = (group?.items ?? [])
         .map(item => {
           if (item?.key) {
-            return `<li><a href="/docs/${escapeAttr(item.key)}/">${escapeAttr(item.title ?? item.key)}</a></li>`
+            return `<li><a href="/docs/${escapeAttr(item.key)}/"><code>${escapeAttr(item.title ?? item.key)}</code></a></li>`
           }
           return `<li>${escapeAttr(item?.title ?? item?.identifier ?? '')}</li>`
         })
@@ -330,8 +381,10 @@ function buildPageToc(sections) {
 
     // Skip sections that have no renderable content
     const text = section.contentText ?? section.content_text ?? ''
-    const json = section.contentJson ?? section.content_json ?? ''
-    if (!text.trim() && !json.trim()) continue
+    const json = section.contentJson ?? section.content_json ?? null
+    const hasText = typeof text === 'string' && text.trim().length > 0
+    const hasJson = json != null && (typeof json === 'string' ? json.trim().length > 0 : true)
+    if (!hasText && !hasJson) continue
 
     // For link sections (topics, relationships, see_also), check if the parsed
     // JSON actually has items — an empty group list produces no visible content
@@ -374,7 +427,7 @@ function buildPageToc(sections) {
       case 'topics':
         id = 'topics'; label = 'Topics'; break
       case 'relationships':
-        id = 'relationships'; label = 'Relationships'; break
+        continue // rendered in sidebar, not in article body
       case 'see_also':
         id = 'see-also'; label = 'See Also'; break
       default:
@@ -386,20 +439,23 @@ function buildPageToc(sections) {
   return items
 }
 
-/** Check if a JSON content string for a link section has at least one renderable item. */
+/** Check if a JSON content string (or parsed object) for a link section has at least one renderable item. */
 function hasRenderableItems(json) {
-  if (!json || typeof json !== 'string') return false
-  try {
-    const groups = JSON.parse(json)
-    if (!Array.isArray(groups)) return false
-    for (const group of groups) {
-      const items = group?.items ?? []
-      if (items.length > 0) return true
-    }
-    return false
-  } catch {
+  if (!json) return false
+  let groups = null
+  if (typeof json === 'string') {
+    try { groups = JSON.parse(json) } catch { return false }
+  } else if (Array.isArray(json)) {
+    groups = json
+  } else {
     return false
   }
+  if (!Array.isArray(groups)) return false
+  for (const group of groups) {
+    const items = group?.items ?? []
+    if (items.length > 0) return true
+  }
+  return false
 }
 
 /** Render the TOC HTML. In mobile mode, wraps in a <details> element. */
@@ -410,9 +466,9 @@ function renderTocHtml(tocItems, mobile = false) {
   ).join('')}</ul>`
 
   if (mobile) {
-    return `<details class="page-toc-mobile"><summary>On this page</summary><nav class="page-toc">${listHtml}</nav></details>`
+    return `<details class="page-toc-mobile"><summary>Contents</summary><nav class="page-toc">${listHtml}</nav></details>`
   }
-  return `<nav class="page-toc"><h3>On this page</h3>${listHtml}</nav>`
+  return `<nav class="page-toc">${listHtml}</nav>`
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +496,10 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   const renderOpts = {}
   if (opts.knownKeys) renderOpts.knownKeys = opts.knownKeys
   let content = renderHtml(doc, sectionsList, renderOpts)
-  const breadcrumbs = doc.key ? buildBreadcrumbs(doc.key, { title: doc.title, framework: doc.framework_display ?? doc.framework }) : ''
+
+  // Detect multi-language declarations for language toggle
+  const hasLangToggle = content.includes('data-languages=')
+  const breadcrumbs = doc.key ? buildBreadcrumbs(doc.key, { title: doc.title, framework: doc.framework_display ?? doc.framework, ancestorTitles: opts.ancestorTitles }) : ''
 
   // Sort sections for TOC (same order as renderHtml uses)
   const orderedSections = sectionsList.slice().sort((a, b) =>
@@ -459,8 +518,18 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
     content = content.replace('<section id="relationships">', '<section id="relationships" aria-hidden="true">')
   }
 
-  // Compose sidebar: TOC first, then relationships below
+  // Build doc meta (badges + platforms)
+  const docMeta = buildDocMeta(doc)
+
+  // Compose sidebar: language toggle, meta badges, TOC, then relationships
   const sidebarParts = []
+  if (hasLangToggle) {
+    sidebarParts.push(`<div class="lang-toggle" role="group" aria-label="Language">
+  <button class="lang-btn active" data-lang="swift" aria-pressed="true">Swift</button>
+  <button class="lang-btn" data-lang="occ" aria-pressed="false">ObjC</button>
+</div>`)
+  }
+  if (docMeta) sidebarParts.push(`<div class="sidebar-meta">${docMeta}</div>`)
   if (hasSidebar) {
     sidebarParts.push(renderTocHtml(tocItems, false))
   }
@@ -473,7 +542,9 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
 
   const sidebar = sidebarParts.length > 0
     ? `<aside class="doc-sidebar">${sidebarParts.join('\n')}</aside>`
-    : ''
+    : (docMeta ? `<aside class="doc-sidebar"><div class="sidebar-meta">${docMeta}</div></aside>` : '')
+
+  const hasSidebarFinal = sidebar.length > 0
 
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
 
@@ -483,9 +554,8 @@ ${buildHead({ title: pageTitle, description: doc.abstract_text, siteConfig })}
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
-<main id="main-content" class="main-content${hasSidebar ? ' has-sidebar' : ''}">
+<main id="main-content" class="main-content${hasSidebarFinal ? ' has-sidebar' : ''}">
   ${breadcrumbs}
-  ${buildDocMeta(doc)}
   ${mobileToc}
   <article class="doc-article">
     ${content}
@@ -493,9 +563,7 @@ ${buildHeader(siteConfig)}
   ${sidebar}
 </main>
 ${buildFooter(siteConfig)}
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search.js`)}" defer></script>
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/collection-filters.js`)}" defer></script>
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/page-toc.js`)}" defer></script>
+${buildScripts(siteConfig, ['core', ...(hasLangToggle ? ['lang-toggle'] : [])])}
 </body>
 </html>`
 }
@@ -611,9 +679,7 @@ ${buildHeader(siteConfig)}
   ${sidebar}
 </main>
 ${buildFooter(siteConfig)}
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search.js`)}" defer></script>
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/page-toc.js`)}" defer></script>
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/collection-filters.js`)}" defer></script>
+${buildScripts(siteConfig, ['core', 'listing'])}
 </body>
 </html>`
 }
@@ -633,10 +699,25 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   const docList = documents ?? []
   const treeEdges = opts.treeEdges ?? []
 
+  // Human-readable labels for DocC roles
+  const ROLE_LABELS = {
+    symbol: 'Symbols',
+    collection: 'Collections',
+    collectionGroup: 'Collection Groups',
+    sampleCode: 'Sample Code',
+    article: 'Articles',
+    dictionarySymbol: 'Dictionary Symbols',
+    overview: 'Overview',
+    pseudoSymbol: 'Pseudo Symbols',
+    restRequestSymbol: 'REST Requests',
+    link: 'Links',
+  }
+
   // Group documents by role
   const byRole = new Map()
   for (const doc of docList) {
-    const role = doc.role ?? doc.role_heading ?? 'Other'
+    const rawRole = doc.role ?? doc.role_heading ?? 'Other'
+    const role = ROLE_LABELS[rawRole] ?? rawRole
     if (!byRole.has(role)) byRole.set(role, [])
     byRole.get(role).push(doc)
   }
@@ -656,7 +737,9 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
         ? `<span class="doc-item-meta">— ${escapeAttr(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
         : ''
       const deprecatedAttr = isDeprecated ? ' data-deprecated="true"' : ''
-      return `<li data-filter-kind="${filterKind}"${deprecatedAttr}><a href="${href}">${title}</a>${meta}${abstract}</li>`
+      const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
+      const titleHtml = isSymbol ? `<code>${title}</code>` : title
+      return `<li data-filter-kind="${filterKind}"${deprecatedAttr}><a href="${href}">${titleHtml}</a>${meta}${abstract}</li>`
     }).join('\n      ')
 
     const roleId = slugify(role)
@@ -671,6 +754,16 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   const mainContent = roleSections.length > 0
     ? roleSections.join('\n  ')
     : '<p>No documents found for this framework.</p>'
+
+  // View toggle only shown when we have tree edges
+  const hasTree = treeEdges.length > 0
+
+  // When tree view is default, skip rendering the full list HTML server-side.
+  // The list is hidden on load and contains thousands of <li> elements that bloat
+  // the HTML payload (e.g., Swift stdlib: 10 MB HTML, 138k DOM nodes, 53s FCP).
+  // Instead, collection-filters.js will build the list on-demand when the user
+  // switches to list view.
+  const deferList = hasTree
 
   const breadcrumbs = `<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${escapeAttr(fwName)}</span></nav>`
 
@@ -693,15 +786,40 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     }
   }
 
-  // Serialize tree data as JSON
-  const treeDataJson = JSON.stringify({ edges: treeEdges, docs: docLookup })
+  // Build role grouping for deferred list rendering
+  const roleGroups = []
+  if (deferList) {
+    for (const [role, roleDocs] of byRole) {
+      roleGroups.push({
+        role,
+        id: slugify(role),
+        docs: roleDocs.map(doc => {
+          const docKey = doc.key ?? doc.path ?? ''
+          const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
+          return {
+            key: docKey,
+            title: doc.title ?? docKey,
+            role_heading: doc.role_heading ?? doc.role ?? 'Other',
+            abstract: doc.abstract_text ?? doc.abstract ?? '',
+            deprecated: /\bDeprecated\b/i.test(doc.abstract_text ?? doc.abstract ?? ''),
+            symbol: isSymbol,
+          }
+        }),
+      })
+    }
+  }
 
-  // View toggle only shown when we have tree edges
-  const hasTree = treeEdges.length > 0
+  // Serialize tree data as JSON — escape HTML-significant chars to prevent </script> breakout
+  const treeDataJson = JSON.stringify({ edges: treeEdges, docs: docLookup, ...(deferList ? { roleGroups } : {}) })
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e')
+    .replaceAll('/', '\\u002f')
+    .replaceAll('&', '\\u0026')
+
   const viewToggle = hasTree
     ? `<div class="view-toggle" role="group" aria-label="View mode">
-    <button class="active" data-view="list" aria-pressed="true">List</button>
-    <button data-view="tree" aria-pressed="false">Tree</button>
+    <button data-view="list" aria-pressed="false">List</button>
+    <button class="active" data-view="tree" aria-pressed="true">Tree</button>
   </div>`
     : ''
 
@@ -716,20 +834,17 @@ ${buildHeader(siteConfig)}
   <h1>${escapeAttr(fwName)}${viewToggle}</h1>
   ${mobileToc}
   <article class="doc-article">
-  <div id="collection-controls"></div>
-  <div id="list-container">
-  ${mainContent}
+  <div id="collection-controls"${deferList ? ' class="hidden"' : ''}></div>
+  <div id="list-container"${hasTree ? ' class="hidden"' : ''}${deferList ? ' data-deferred' : ''}>
+  ${deferList ? '' : mainContent}
   </div>
-  <div id="tree-container" class="hidden"></div>
+  <div id="tree-container"></div>
   ${hasTree ? `<script type="application/json" id="tree-data">${treeDataJson}</script>` : ''}
   </article>
   ${sidebar}
 </main>
 ${buildFooter(siteConfig)}
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search.js`)}" defer></script>
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/page-toc.js`)}" defer></script>
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/collection-filters.js`)}" defer></script>
-${hasTree ? `<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/tree-view.js`)}" defer></script>` : ''}
+${buildScripts(siteConfig, ['core', 'listing'])}
 </body>
 </html>`
 }

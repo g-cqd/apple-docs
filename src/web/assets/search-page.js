@@ -142,13 +142,13 @@
     }
     const lang = params.get('language')
     if (lang) {
-      const radio = form.querySelector(`input[name="language"][value="${lang}"]`)
+      const radio = form.querySelector(`input[name="language"][value="${CSS.escape(lang)}"]`)
       if (radio) radio.checked = true
     }
     const platform = params.get('platform')
     if (platform) {
       for (const p of platform.split(',')) {
-        const cb = form.querySelector(`input[name="platform"][value="${p}"]`)
+        const cb = form.querySelector(`input[name="platform"][value="${CSS.escape(p)}"]`)
         if (cb) cb.checked = true
       }
     }

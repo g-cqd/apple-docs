@@ -230,17 +230,23 @@ function extractChaptersFromHtml(html) {
 function extractAppleTranscript(json) {
   // Look for a "transcript" key at any depth (common in some years)
   const candidate = deepFind(json, 'transcript')
-  if (typeof candidate === 'string' && candidate.length > 0) return candidate
+  if (typeof candidate === 'string' && candidate.length > 0) {
+    return { text: candidate, nodes: null }
+  }
 
   // Look for primaryContentSections or sections with prose content
   const sections = json?.primaryContentSections ?? json?.sections ?? []
   const texts = []
+  const allNodes = []
   for (const section of Array.isArray(sections) ? sections : []) {
     if (section?.kind === 'content' || section?.kind === 'transcript') {
-      texts.push(...collectInlineText(section?.content ?? []))
+      const contentNodes = section?.content ?? []
+      texts.push(...collectInlineText(contentNodes))
+      allNodes.push(...contentNodes)
     }
   }
-  return texts.length > 0 ? texts.join('\n\n') : null
+  if (texts.length === 0) return { text: null, nodes: null }
+  return { text: texts.join('\n\n'), nodes: allNodes.length > 0 ? allNodes : null }
 }
 
 /**
@@ -263,6 +269,7 @@ function deepFind(obj, key, maxDepth = 6) {
 
 /**
  * Collect plain text strings from a DocC render-tree content array.
+ * Handles paragraph, codeListing, codeVoice, and other inline nodes.
  *
  * @param {unknown[]} content
  * @returns {string[]}
@@ -272,10 +279,16 @@ function collectInlineText(content) {
   for (const node of Array.isArray(content) ? content : []) {
     if (node?.type === 'text' && typeof node.text === 'string') {
       texts.push(node.text)
+    } else if (node?.type === 'codeVoice' && typeof node.code === 'string') {
+      texts.push(node.code)
+    } else if (node?.type === 'codeListing') {
+      texts.push((node.code ?? []).join('\n'))
     } else if (node?.type === 'paragraph') {
       texts.push(...collectInlineText(node.inlineContent ?? []))
     } else if (Array.isArray(node?.inlineContent)) {
       texts.push(...collectInlineText(node.inlineContent))
+    } else if (Array.isArray(node?.content)) {
+      texts.push(...collectInlineText(node.content))
     }
   }
   return texts
@@ -579,7 +592,7 @@ export class WwdcAdapter extends SourceAdapter {
   #normalizeApple(key, json, year, sessionId) {
     const title = extractAppleTitle(json, year, sessionId)
     const description = extractAppleDescription(json)
-    const transcript = extractAppleTranscript(json)
+    const { text: transcript, nodes: transcriptNodes } = extractAppleTranscript(json)
     const url = `${APPLE_BASE}/wwdc${year}/${sessionId}/`
 
     const document = {
@@ -628,9 +641,10 @@ export class WwdcAdapter extends SourceAdapter {
 
     if (transcript) {
       sections.push({
-        sectionKind: 'content',
+        sectionKind: transcriptNodes ? 'discussion' : 'content',
         heading: 'Transcript',
         contentText: transcript,
+        contentJson: transcriptNodes ? JSON.stringify(transcriptNodes) : null,
       })
     }
 

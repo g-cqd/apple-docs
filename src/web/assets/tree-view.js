@@ -19,6 +19,64 @@
   const listContainer = document.getElementById('list-container')
   if (!treeContainer || !listContainer) return
 
+  const collectionControls = document.getElementById('collection-controls')
+
+  function setViewMode(mode) {
+    if (mode === 'tree') {
+      listContainer.classList.add('hidden')
+      treeContainer.classList.remove('hidden')
+      if (collectionControls) collectionControls.classList.add('hidden')
+      ensureTreeBuilt()
+    } else {
+      treeContainer.classList.add('hidden')
+      listContainer.classList.remove('hidden')
+      if (collectionControls) collectionControls.classList.remove('hidden')
+      ensureListBuilt()
+    }
+  }
+
+  // ---- Deferred list rendering ----
+  // When the server skips rendering the list HTML (data-deferred), build it
+  // client-side from the roleGroups data in the tree JSON.
+  let listBuilt = !listContainer.hasAttribute('data-deferred')
+
+  function ensureListBuilt() {
+    if (listBuilt) return
+    listBuilt = true
+    listContainer.removeAttribute('data-deferred')
+
+    const groups = treeData.roleGroups
+    if (!groups || groups.length === 0) {
+      listContainer.innerHTML = '<p>No documents found for this framework.</p>'
+      return
+    }
+
+    const html = groups.map(group => {
+      const items = group.docs.map(doc => {
+        const titleHtml = doc.symbol ? `<code>${esc(doc.title)}</code>` : esc(doc.title)
+        const meta = doc.role_heading ? `<span class="doc-item-meta">${esc(doc.role_heading)}</span>` : ''
+        const abstractText = doc.abstract
+        const abstract = abstractText
+          ? `<span class="doc-item-meta">— ${esc(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
+          : ''
+        const deprecatedAttr = doc.deprecated ? ' data-deprecated="true"' : ''
+        return `<li data-filter-kind="${esc(doc.role_heading)}"${deprecatedAttr}><a href="/docs/${esc(doc.key)}/">${titleHtml}</a>${meta}${abstract}</li>`
+      }).join('\n      ')
+
+      return `<section id="${esc(group.id)}" class="role-group" data-filter-kind="${esc(group.role)}">
+    <h2 class="role-heading">${esc(group.role)}</h2>
+    <ul class="doc-list">
+      ${items}
+    </ul>
+  </section>`
+    }).join('\n  ')
+
+    listContainer.innerHTML = html
+
+    // Notify collection-filters that the list is now available
+    document.dispatchEvent(new CustomEvent('list-container:ready'))
+  }
+
   // ---- View toggle logic ----
   const viewToggle = document.querySelector('.view-toggle')
   if (viewToggle) {
@@ -34,14 +92,7 @@
       btn.classList.add('active')
       btn.setAttribute('aria-pressed', 'true')
 
-      if (mode === 'tree') {
-        listContainer.classList.add('hidden')
-        treeContainer.classList.remove('hidden')
-        ensureTreeBuilt()
-      } else {
-        treeContainer.classList.add('hidden')
-        listContainer.classList.remove('hidden')
-      }
+      setViewMode(mode)
     })
   }
 
@@ -112,15 +163,43 @@
       .replace(/"/g, '&quot;')
   }
 
-  // ---- Count all descendants ----
-  function countDescendants(key, visited) {
-    if (visited.has(key)) return 0
-    visited.add(key)
-    const kids = children.get(key)
-    if (!kids) return 0
-    let count = kids.length
-    for (const k of kids) count += countDescendants(k, visited)
-    return count
+  // ---- Count all descendants (memoized) ----
+  const descendantCounts = new Map()
+  function computeDescendantCounts() {
+    const visited = new Set()
+    function count(key) {
+      if (visited.has(key)) return 0
+      visited.add(key)
+      const kids = children.get(key)
+      if (!kids) { descendantCounts.set(key, 0); return 0 }
+      let total = kids.length
+      for (const k of kids) total += count(k)
+      descendantCounts.set(key, total)
+      return total
+    }
+    for (const key of rootKeys) count(key)
+    for (const key of children.keys()) if (!visited.has(key)) count(key)
+  }
+  computeDescendantCounts()
+
+  // ---- Chain compaction ----
+  // Walk down single-child chains and return the compacted label + terminal key.
+  // E.g. P256 -> Signing (only child) -> PrivateKey becomes "P256.Signing" with
+  // the terminal key being the Signing node (which has multiple children).
+  function compactChain(key) {
+    const parts = [docs[key]?.title || key]
+    let cur = key
+    while (true) {
+      const kids = children.get(cur)
+      if (!kids || kids.length !== 1) break
+      const onlyChild = kids[0]
+      const childKids = children.get(onlyChild)
+      // Only compact if the single child also has children (i.e., it's an intermediate node)
+      if (!childKids || childKids.length === 0) break
+      parts.push(docs[onlyChild]?.title || onlyChild)
+      cur = onlyChild
+    }
+    return { label: parts.join('.'), terminalKey: cur }
   }
 
   // ---- Render a tree node ----
@@ -131,36 +210,56 @@
 
     const info = docs[key]
     if (!info) return ''
-    const title = displayTitle || info.title || key
 
     const kids = children.get(key)
     const isLeaf = !kids || kids.length === 0
     const filterKind = esc(info.role_heading || 'Other')
+    const title = displayTitle || info.title || key
 
     if (isLeaf) {
       return `<li class="tree-leaf" data-filter-kind="${filterKind}" data-tree-key="${esc(key)}"><a href="${esc(info.href)}">${esc(title)}</a><span class="tree-meta">${esc(info.role_heading)}</span></li>`
     }
 
-    const desc = countDescendants(key, new Set())
+    // Compact single-child chains (unless a display override was provided)
+    let renderKey = key
+    let renderTitle = title
+    if (!displayTitle) {
+      const { label, terminalKey } = compactChain(key)
+      if (terminalKey !== key) {
+        // Mark intermediate nodes as visited
+        let cur = key
+        while (cur !== terminalKey) {
+          visited.add(cur)
+          cur = children.get(cur)[0]
+        }
+        visited.add(terminalKey)
+        renderKey = terminalKey
+        renderTitle = label
+      }
+    }
+
+    const renderInfo = docs[renderKey] || info
+    const renderKids = children.get(renderKey)
+    const desc = descendantCounts.get(renderKey) ?? 0
     const isOpen = depth < 2 ? ' open' : ''
 
     // Disambiguate children with identical titles
-    const overrides = disambiguateChildren(key, kids)
+    const overrides = renderKids ? disambiguateChildren(renderKey, renderKids) : new Map()
 
     let childHtml
     if (depth >= maxDepth) {
       // Lazy placeholder
-      childHtml = `<ul class="tree-children" data-lazy-parent="${esc(key)}"></ul>`
+      childHtml = `<ul class="tree-children" data-lazy-parent="${esc(renderKey)}"></ul>`
     } else {
-      const items = kids.map(k => {
-        const displayTitle = overrides.get(k)
-        return renderNode(k, depth + 1, maxDepth, visited, displayTitle)
+      const items = (renderKids || []).map(k => {
+        const dt = overrides.get(k)
+        return renderNode(k, depth + 1, maxDepth, visited, dt)
       }).join('\n')
       childHtml = `<ul class="tree-children">${items}</ul>`
     }
 
-    return `<details class="tree-node" data-filter-kind="${filterKind}" data-tree-key="${esc(key)}"${isOpen}>
-  <summary><a href="${esc(info.href)}">${esc(title)}</a><span class="tree-meta">${esc(info.role_heading)}</span><span class="tree-count">${desc}</span></summary>
+    return `<details class="tree-node" data-filter-kind="${filterKind}" data-tree-key="${esc(renderKey)}"${isOpen}>
+  <summary><a href="${esc(renderInfo.href)}">${esc(renderTitle)}</a><span class="tree-meta">${esc(renderInfo.role_heading)}</span><span class="tree-count">${desc}</span></summary>
   ${childHtml}
 </details>`
   }
@@ -228,15 +327,27 @@
     const collapseAllBtn = document.getElementById('tree-collapse-all')
 
     if (expandAllBtn) {
-      expandAllBtn.addEventListener('click', () => {
-        // First expand all lazy nodes
-        let lazyEl
-        while ((lazyEl = treeContainer.querySelector('[data-lazy-parent]'))) {
-          expandLazy(lazyEl.getAttribute('data-lazy-parent'))
+      expandAllBtn.addEventListener('click', async () => {
+        expandAllBtn.disabled = true
+        expandAllBtn.textContent = 'Expanding…'
+        // Expand lazy nodes in batches to avoid freezing the UI
+        while (true) {
+          const lazyEls = treeContainer.querySelectorAll('[data-lazy-parent]')
+          if (lazyEls.length === 0) break
+          const batch = [...lazyEls].slice(0, 20)
+          for (const el of batch) expandLazy(el.getAttribute('data-lazy-parent'))
+          await new Promise(r => requestAnimationFrame(r))
         }
-        for (const d of treeContainer.querySelectorAll('details.tree-node')) {
-          d.open = true
+        // Open all details in chunks
+        const allDetails = [...treeContainer.querySelectorAll('details.tree-node')]
+        for (let i = 0; i < allDetails.length; i += 100) {
+          for (let j = i; j < Math.min(i + 100, allDetails.length); j++) {
+            allDetails[j].open = true
+          }
+          await new Promise(r => requestAnimationFrame(r))
         }
+        expandAllBtn.disabled = false
+        expandAllBtn.textContent = 'Expand all'
       })
     }
 
@@ -290,4 +401,7 @@
       requestAnimationFrame(applyTreeFilters)
     })
   }
+
+  // Tree is the default view — build immediately and hide list controls
+  setViewMode('tree')
 })()

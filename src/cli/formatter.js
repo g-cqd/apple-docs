@@ -291,10 +291,6 @@ export function formatConsolidate(result) {
 
   lines.push(`  Remaining:       ${result.genuine} genuinely missing pages`)
 
-  if (result.orphanRelsCleaned > 0) {
-    lines.push(`  Orphan rels:     ${result.orphanRelsCleaned} removed`)
-  }
-
   if (result.minified > 0) {
     lines.push(`  Minified:        ${result.minified} JSON files (saved ${formatBytes(result.minifySaved)})`)
   }

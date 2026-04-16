@@ -1,17 +1,42 @@
 ;(() => {
-  // Find all elements with data-filter-kind
-  const filterableItems = document.querySelectorAll('[data-filter-kind]')
-  if (filterableItems.length === 0) return
+  // Find all elements with data-filter-kind.
+  // When the list container is deferred (tree view default), there may be no
+  // filterable items yet — we still need to initialise the filter UI so it's
+  // ready when the list is built client-side.
+  const listContainer = document.getElementById('list-container')
+  const isDeferred = listContainer && listContainer.hasAttribute('data-deferred')
+
+  let filterableItems = document.querySelectorAll('[data-filter-kind]')
+  if (filterableItems.length === 0 && !isDeferred) return
 
   // Count distinct kinds from <li> items only (not group <section>s)
+  // When deferred, pull counts from tree-data JSON instead
   const kindCounts = new Map()
-  for (const el of filterableItems) {
-    if (el.tagName !== 'LI') continue
-    const kind = el.getAttribute('data-filter-kind')
-    kindCounts.set(kind, (kindCounts.get(kind) || 0) + 1)
+
+  if (isDeferred) {
+    const dataEl = document.getElementById('tree-data')
+    if (dataEl) {
+      try {
+        const td = JSON.parse(dataEl.textContent || '')
+        if (td.roleGroups) {
+          for (const group of td.roleGroups) {
+            for (const doc of group.docs) {
+              const kind = doc.role_heading || 'Other'
+              kindCounts.set(kind, (kindCounts.get(kind) || 0) + 1)
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  } else {
+    for (const el of filterableItems) {
+      if (el.tagName !== 'LI') continue
+      const kind = el.getAttribute('data-filter-kind')
+      kindCounts.set(kind, (kindCounts.get(kind) || 0) + 1)
+    }
   }
 
-  if (kindCounts.size <= 1) return
+  if (kindCounts.size <= 1 && !isDeferred) return
 
   // Sort kinds alphabetically
   const sortedKinds = [...kindCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]))
@@ -37,6 +62,7 @@
   sortLabel.textContent = 'Sort by:'
   const sortSelect = document.createElement('select')
   sortSelect.id = 'sort-select'
+  sortSelect.setAttribute('aria-label', 'Sort by')
   const optAlpha = document.createElement('option')
   optAlpha.value = 'alpha'
   optAlpha.textContent = 'Name (A\u2013Z)'
@@ -340,7 +366,7 @@
 
     // Restore search
     if (map.has('q')) {
-      searchQuery = decodeURIComponent(map.get('q'))
+      try { searchQuery = decodeURIComponent(map.get('q')) } catch { searchQuery = map.get('q') }
       searchInput.value = searchQuery
     }
 
@@ -397,7 +423,7 @@
     for (const toc of document.querySelectorAll('.page-toc')) {
       const mobileDetails = toc.closest('.page-toc-mobile')
       toc.hidden = sections.length < 2
-      toc.innerHTML = mobileDetails ? tocHtml : `<h3>On this page</h3>${tocHtml}`
+      toc.innerHTML = tocHtml
       if (mobileDetails) {
         mobileDetails.hidden = sections.length < 2
       }
@@ -416,8 +442,16 @@
   }
 
   // Save original HTML for restoring after sort-by-kind
-  const listContainer = document.getElementById('list-container')
-  const originalListHtml = listContainer ? listContainer.innerHTML : null
+  let originalListHtml = listContainer ? listContainer.innerHTML : null
+
+  // When list is deferred, re-capture original HTML once the list is built
+  if (isDeferred) {
+    document.addEventListener('list-container:ready', () => {
+      originalListHtml = listContainer ? listContainer.innerHTML : null
+      restoreFromHash()
+      syncToc()
+    }, { once: true })
+  }
 
   restoreFromHash()
   syncToc()
