@@ -213,6 +213,7 @@ export async function startDevServer(opts, ctx) {
         // Try as document page
         let doc = db.db.query(
           `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.abstract_text, d.source_type,
+                  d.platforms_json, d.is_deprecated, d.is_beta,
                   COALESCE(r.display_name, d.framework) as framework_display
            FROM documents d LEFT JOIN roots r ON r.slug = d.framework WHERE d.key = ?`
         ).get(key)
@@ -235,6 +236,7 @@ export async function startDevServer(opts, ctx) {
             })
             doc = db.db.query(
               `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.abstract_text, d.source_type,
+                      d.platforms_json, d.is_deprecated, d.is_beta,
                       COALESCE(r.display_name, d.framework) as framework_display
                FROM documents d LEFT JOIN roots r ON r.slug = d.framework WHERE d.key = ?`
             ).get(key)

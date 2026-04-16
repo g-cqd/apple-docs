@@ -50,6 +50,18 @@ function renderSectionHtml(section, opts = {}) {
       return renderDeclarationHtml(section, opts)
     case 'parameters':
       return renderParametersHtml(section)
+    case 'properties':
+      return renderPropertiesHtml(section, opts)
+    case 'rest_endpoint':
+      return renderRestEndpointHtml(section)
+    case 'rest_parameters':
+      return renderRestParametersHtml(section, opts)
+    case 'rest_responses':
+      return renderRestResponsesHtml(section, opts)
+    case 'possible_values':
+      return renderPossibleValuesHtml(section)
+    case 'mentioned_in':
+      return renderMentionedInHtml(section)
     case 'discussion':
       return renderDiscussionHtml(section)
     case 'topics':
@@ -156,6 +168,120 @@ function renderParametersHtml(section) {
 
   if (items.length === 0) return ''
   return `<section id="parameters"><h2>Parameters</h2><ul>${items.join('')}</ul></section>`
+}
+
+function renderPropertiesHtml(section, opts = {}) {
+  const items = safeJson(section.contentJson)
+  if (!Array.isArray(items) || items.length === 0) return ''
+  const knownKeys = opts.knownKeys
+  const heading = section.heading ?? 'Properties'
+  const sectionId = slugify(heading)
+  const rows = items.map(item => {
+    const name = escapeHtml(item.name ?? '')
+    const typeHtml = renderTypeTokens(item.type ?? [], knownKeys)
+    const desc = renderContentNodesToHtml(item.content ?? [])
+    const requiredBadge = item.required ? ' <span class="badge badge-required">Required</span>' : ''
+    return `<tr><td><code>${name}</code>${requiredBadge}</td><td>${typeHtml}</td><td>${desc}</td></tr>`
+  })
+  return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><table class="properties-table"><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>${rows.join('')}</tbody></table></section>`
+}
+
+function renderRestEndpointHtml(section) {
+  const tokens = safeJson(section.contentJson)
+  if (!Array.isArray(tokens) || tokens.length === 0) return ''
+  const heading = section.heading ?? 'URL'
+  const sectionId = slugify(heading)
+  const spans = tokens.map(token => {
+    const text = escapeHtml(token.text ?? '')
+    switch (token.kind) {
+      case 'method': return `<span class="rest-method">${text}</span>`
+      case 'baseURL': return `<span class="rest-base-url">${text}</span>`
+      case 'path': return `<span class="rest-path">${text}</span>`
+      case 'parameter': return `<span class="rest-param">${text}</span>`
+      default: return text
+    }
+  })
+  return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><pre class="rest-endpoint"><code>${spans.join('')}</code></pre></section>`
+}
+
+function renderRestParametersHtml(section, opts = {}) {
+  const items = safeJson(section.contentJson)
+  if (!Array.isArray(items) || items.length === 0) return ''
+  const knownKeys = opts.knownKeys
+  const heading = section.heading ?? 'Parameters'
+  const sectionId = slugify(heading)
+  const rows = items.map(item => {
+    const name = escapeHtml(item.name ?? '')
+    const typeHtml = renderTypeTokens(item.type ?? [], knownKeys)
+    const desc = renderContentNodesToHtml(item.content ?? [])
+    const requiredBadge = item.required
+      ? '<span class="badge badge-required">Required</span>'
+      : '<span class="badge badge-optional">Optional</span>'
+    return `<tr><td><code>${name}</code> ${requiredBadge}</td><td>${typeHtml}</td><td>${desc}</td></tr>`
+  })
+  return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><table class="params-table"><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>${rows.join('')}</tbody></table></section>`
+}
+
+function renderRestResponsesHtml(section, opts = {}) {
+  const items = safeJson(section.contentJson)
+  if (!Array.isArray(items) || items.length === 0) return ''
+  const knownKeys = opts.knownKeys
+  const heading = section.heading ?? 'Response Codes'
+  const sectionId = slugify(heading)
+  const rows = items.map(item => {
+    const status = escapeHtml(String(item.status ?? ''))
+    const reason = escapeHtml(item.reason ?? '')
+    const mimeType = item.mimeType ? `<div class="rest-mime">Content-Type: ${escapeHtml(item.mimeType)}</div>` : ''
+    const typeHtml = renderTypeTokens(item.type ?? [], knownKeys)
+    const desc = renderContentNodesToHtml(item.content ?? [])
+    return `<tr><td><strong>${status}</strong></td><td>${reason}${mimeType}</td><td>${typeHtml}</td><td>${desc}</td></tr>`
+  })
+  return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><table class="responses-table"><thead><tr><th>Status</th><th>Reason</th><th>Type</th><th>Description</th></tr></thead><tbody>${rows.join('')}</tbody></table></section>`
+}
+
+function renderPossibleValuesHtml(section) {
+  const values = safeJson(section.contentJson)
+  if (!Array.isArray(values) || values.length === 0) return ''
+  const heading = section.heading ?? 'Possible Values'
+  const sectionId = slugify(heading)
+  const items = values.map(v => {
+    const name = escapeHtml(v.name ?? '')
+    const desc = renderContentNodesToHtml(v.content ?? [])
+    return `<dt><code>${name}</code></dt><dd>${desc}</dd>`
+  })
+  return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><dl class="possible-values">${items.join('')}</dl></section>`
+}
+
+function renderMentionedInHtml(section) {
+  const items = safeJson(section.contentJson)
+  if (!Array.isArray(items) || items.length === 0) return ''
+  const heading = section.heading ?? 'Mentioned in'
+  const sectionId = slugify(heading)
+  const listItems = items.map(item => {
+    if (item.key) {
+      return `<li><a href="/docs/${escapeHtml(item.key)}/">${escapeHtml(item.title ?? item.key)}</a></li>`
+    }
+    return `<li>${escapeHtml(item.title ?? item.identifier ?? '')}</li>`
+  })
+  return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><ul>${listItems.join('')}</ul></section>`
+}
+
+/** Render type tokens (from properties, restParams, restResponses) with links. */
+function renderTypeTokens(tokens, knownKeys) {
+  if (!Array.isArray(tokens) || tokens.length === 0) return ''
+  return tokens.map(token => {
+    const text = escapeHtml(token.text ?? '')
+    if (!text) return ''
+    if (token.kind === 'typeIdentifier' && token._resolvedKey) {
+      if (!knownKeys || knownKeys.has(token._resolvedKey)) {
+        return `<a href="/docs/${escapeHtml(token._resolvedKey)}/" class="code-type-link"><code>${text}</code></a>`
+      }
+    }
+    if (token.kind === 'typeIdentifier') {
+      return `<code>${text}</code>`
+    }
+    return text
+  }).join('')
 }
 
 function renderDiscussionHtml(section) {

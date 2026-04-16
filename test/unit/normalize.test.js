@@ -202,3 +202,202 @@ describe('renderContentNodesToText', () => {
     expect(renderContentNodesToText(undefined, {})).toBe('')
   })
 })
+
+// ---------------------------------------------------------------------------
+// New section types: properties, REST, possibleValues, mentions, fallback
+// ---------------------------------------------------------------------------
+
+describe('normalize — properties section', () => {
+  const payload = {
+    metadata: { title: 'MyResponse', role: 'symbol', roleHeading: 'Object' },
+    abstract: [{ type: 'text', text: 'A response object.' }],
+    primaryContentSections: [
+      {
+        kind: 'properties',
+        title: 'Properties',
+        items: [
+          {
+            name: 'signedInfo',
+            type: [{ kind: 'typeIdentifier', text: 'JWSTransaction', identifier: 'doc://com.apple/JWSTransaction' }],
+            content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Signed transaction info.' }] }],
+            required: false,
+            attributes: [],
+          },
+        ],
+      },
+    ],
+    references: {
+      'doc://com.apple/JWSTransaction': { url: '/documentation/api/jwstransaction', title: 'JWSTransaction' },
+    },
+  }
+
+  test('extracts properties section', () => {
+    const { sections } = normalize(payload, 'api/myresponse', 'apple-docc')
+    const props = sections.find(s => s.sectionKind === 'properties')
+    expect(props).toBeTruthy()
+    expect(props.heading).toBe('Properties')
+    expect(props.contentText).toContain('signedInfo')
+  })
+
+  test('stores structured contentJson with resolved type keys', () => {
+    const { sections } = normalize(payload, 'api/myresponse', 'apple-docc')
+    const props = sections.find(s => s.sectionKind === 'properties')
+    const items = JSON.parse(props.contentJson)
+    expect(items).toHaveLength(1)
+    expect(items[0].name).toBe('signedInfo')
+    expect(items[0].type[0]._resolvedKey).toBe('api/jwstransaction')
+  })
+})
+
+describe('normalize — REST endpoint sections', () => {
+  const payload = {
+    metadata: { title: 'Get Statuses', role: 'symbol', roleHeading: 'Web Service Endpoint' },
+    abstract: [{ type: 'text', text: 'Get subscription statuses.' }],
+    primaryContentSections: [
+      {
+        kind: 'restEndpoint',
+        title: 'URL',
+        tokens: [
+          { kind: 'method', text: 'GET' },
+          { kind: 'text', text: ' ' },
+          { kind: 'baseURL', text: 'https://api.example.com/' },
+          { kind: 'path', text: 'v1/subscriptions/' },
+          { kind: 'parameter', text: '{id}' },
+        ],
+      },
+      {
+        kind: 'restParameters',
+        title: 'Path Parameters',
+        source: 'path',
+        items: [
+          {
+            name: 'id',
+            type: [{ kind: 'typeIdentifier', text: 'string' }],
+            content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'The transaction ID.' }] }],
+            required: true,
+          },
+        ],
+      },
+      {
+        kind: 'restResponses',
+        title: 'Response Codes',
+        items: [
+          { status: 200, reason: 'OK', mimeType: 'application/json', type: [], content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Success.' }] }] },
+          { status: 401, reason: 'Unauthorized', type: [], content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Invalid token.' }] }] },
+        ],
+      },
+    ],
+    references: {},
+  }
+
+  test('extracts rest_endpoint section', () => {
+    const { sections } = normalize(payload, 'api/get-statuses', 'apple-docc')
+    const endpoints = sections.filter(s => s.sectionKind === 'rest_endpoint')
+    expect(endpoints).toHaveLength(1)
+    expect(endpoints[0].heading).toBe('URL')
+    expect(endpoints[0].contentText).toContain('GET')
+    expect(endpoints[0].contentText).toContain('https://api.example.com/')
+  })
+
+  test('extracts rest_parameters section', () => {
+    const { sections } = normalize(payload, 'api/get-statuses', 'apple-docc')
+    const params = sections.find(s => s.sectionKind === 'rest_parameters')
+    expect(params).toBeTruthy()
+    expect(params.heading).toBe('Path Parameters')
+    const items = JSON.parse(params.contentJson)
+    expect(items[0].name).toBe('id')
+    expect(items[0].required).toBe(true)
+  })
+
+  test('extracts rest_responses section', () => {
+    const { sections } = normalize(payload, 'api/get-statuses', 'apple-docc')
+    const responses = sections.find(s => s.sectionKind === 'rest_responses')
+    expect(responses).toBeTruthy()
+    expect(responses.heading).toBe('Response Codes')
+    const items = JSON.parse(responses.contentJson)
+    expect(items).toHaveLength(2)
+    expect(items[0].status).toBe(200)
+    expect(items[1].status).toBe(401)
+  })
+})
+
+describe('normalize — possibleValues section', () => {
+  const payload = {
+    metadata: { title: 'Status', role: 'symbol' },
+    abstract: [{ type: 'text', text: 'A status value.' }],
+    primaryContentSections: [
+      {
+        kind: 'possibleValues',
+        title: 'Possible Values',
+        values: [
+          { name: '1', content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Active.' }] }] },
+          { name: '2', content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Expired.' }] }] },
+        ],
+      },
+    ],
+    references: {},
+  }
+
+  test('extracts possible_values section', () => {
+    const { sections } = normalize(payload, 'api/status', 'apple-docc')
+    const pv = sections.find(s => s.sectionKind === 'possible_values')
+    expect(pv).toBeTruthy()
+    expect(pv.heading).toBe('Possible Values')
+    const values = JSON.parse(pv.contentJson)
+    expect(values).toHaveLength(2)
+    expect(values[0].name).toBe('1')
+  })
+})
+
+describe('normalize — mentions section', () => {
+  const payload = {
+    metadata: { title: 'MyAPI', role: 'symbol' },
+    abstract: [{ type: 'text', text: 'An API.' }],
+    primaryContentSections: [
+      {
+        kind: 'mentions',
+        mentions: [
+          'doc://com.apple/documentation/changelog',
+          'doc://com.apple/documentation/guide',
+        ],
+      },
+    ],
+    references: {
+      'doc://com.apple/documentation/changelog': { url: '/documentation/changelog', title: 'API Changelog' },
+      'doc://com.apple/documentation/guide': { url: '/documentation/guide', title: 'Getting Started' },
+    },
+  }
+
+  test('extracts mentioned_in section', () => {
+    const { sections } = normalize(payload, 'api/myapi', 'apple-docc')
+    const mi = sections.find(s => s.sectionKind === 'mentioned_in')
+    expect(mi).toBeTruthy()
+    expect(mi.heading).toBe('Mentioned in')
+    const items = JSON.parse(mi.contentJson)
+    expect(items).toHaveLength(2)
+    expect(items[0].title).toBe('API Changelog')
+    expect(items[0].key).toBe('changelog')
+  })
+})
+
+describe('normalize — unknown section fallback', () => {
+  const payload = {
+    metadata: { title: 'Test', role: 'symbol' },
+    abstract: [{ type: 'text', text: 'Test.' }],
+    primaryContentSections: [
+      {
+        kind: 'someFutureKind',
+        title: 'Future Section',
+        content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Future content.' }] }],
+      },
+    ],
+    references: {},
+  }
+
+  test('captures unknown sections as discussion fallback', () => {
+    const { sections } = normalize(payload, 'test/page', 'apple-docc')
+    const discussion = sections.find(s => s.sectionKind === 'discussion' && s.heading === 'Future Section')
+    expect(discussion).toBeTruthy()
+    expect(discussion.contentText).toContain('Future content')
+  })
+})

@@ -1,0 +1,448 @@
+meta:
+  project: apple-docs
+  context: brownfield
+  mode:
+    primary: Task Mode
+    supporting:
+      - Execution Mode
+    rationale: >
+      Targeted rendering improvements across the normalize → store → render pipeline.
+      Each task is a vertical slice touching all three layers for one section type.
+  generated_at: 2026-04-15
+  completed_at: 2026-04-15
+  status: completed
+  repository:
+    branch: main
+    head_commit: 52f3021
+  parent_plan: apple-docs-brownfield-improvement-plan.yml
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Problem Statement
+# ─────────────────────────────────────────────────────────────────────────────
+
+problem_statement: >
+  The web renderer only handles 3 of 7+ Apple DocC primaryContentSections kinds
+  (declarations, parameters, content). Entire section types — properties, REST
+  endpoint URLs, REST parameters, REST response codes, possible values — are
+  silently dropped during normalization, so they never reach the database or
+  rendered pages. Additionally, the tree view is completely non-functional due
+  to a JSON escaping bug, and page metadata (platform availability, beta,
+  deprecated) is stored but never displayed.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Evidence from Screenshot Comparison
+# ─────────────────────────────────────────────────────────────────────────────
+
+screenshot_findings:
+  - id: SF-01
+    page: AppTransactionInfoResponse (Object)
+    apple_shows:
+      - Properties section with signedAppTransactionInfo, type JWSAppTransaction, description
+      - Platform availability badge "App Store Server API 1.17+"
+      - Mentioned in section
+    apple_docs_missing:
+      - Properties section entirely absent
+      - Platform availability badge absent
+      - Mentioned in section absent
+
+  - id: SF-02
+    page: Get All Subscription Statuses (REST Endpoint)
+    apple_shows:
+      - URL section with endpoint path
+      - Sandbox URL section
+      - Path Parameters with (Required) badge and type info
+      - Query Parameters with type and description
+      - Response Codes (200, 400, 401, 404, 429, 500) with status text and content type
+      - Mentioned in section
+    apple_docs_missing:
+      - URL and Sandbox URL sections entirely absent
+      - Path Parameters absent (different from function parameters)
+      - Query Parameters absent
+      - Response Codes section entirely absent
+      - Mentioned in section absent
+
+  - id: SF-03
+    page: Information Property List / Entitlements
+    apple_shows:
+      - Details section (Type/Value)
+      - Mentioned in section
+      - Rich Topics with many subcategories
+      - Type Aliases section
+      - Property Lists section
+    apple_docs_missing:
+      - Details metadata absent
+      - Some topic subcategories may be flattened
+
+  - id: SF-04
+    page: Tree sidebar (Account Data Transfer)
+    apple_shows:
+      - Expandable tree with grouped items (Request creation, Status, Downloads, Cancellation)
+      - Type badges (object, endpoint icons)
+    apple_docs_missing:
+      - Tree view completely non-functional (JSON parse failure)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Root Causes
+# ─────────────────────────────────────────────────────────────────────────────
+
+root_causes:
+  - id: RC-01
+    title: Tree JSON double-escaped
+    file: src/web/templates.js
+    line: 638
+    detail: >
+      escapeAttr() applied to JSON inside <script type="application/json">,
+      converting " to &quot; which breaks JSON.parse() in tree-view.js.
+      Silent try/catch means zero visible error.
+
+  - id: RC-02
+    title: Normalizer drops unknown primaryContentSections kinds
+    file: src/content/normalize.js
+    lines: 122-169
+    detail: >
+      Only 'declarations', 'parameters', and 'content' kinds are extracted.
+      Apple DocC also sends: 'properties', 'restParameters', 'restBody',
+      'restResponses', 'possibleValues', 'mentions'. All silently dropped.
+
+  - id: RC-03
+    title: Renderer has no handlers for missing section types
+    file: src/content/render-html.js
+    lines: 45-62
+    detail: >
+      renderSectionHtml switch only handles: abstract, declaration, parameters,
+      discussion, topics, relationships, see_also. Even if new sections were
+      stored, they'd fall through to the discussion fallback.
+
+  - id: RC-04
+    title: Platform metadata not rendered
+    file: src/web/templates.js
+    lines: 230-241
+    detail: >
+      buildDocMeta() only renders framework and role_heading badges.
+      platforms_json, is_deprecated, is_beta are in the DB but not displayed.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Affected Files
+# ─────────────────────────────────────────────────────────────────────────────
+
+affected_files:
+  normalize: src/content/normalize.js
+  render_html: src/content/render-html.js
+  templates: src/web/templates.js
+  style: src/web/assets/style.css
+  tree_view: src/web/assets/tree-view.js
+  serve: src/web/serve.js
+  build: src/web/build.js
+  database: src/storage/database.js
+  tests:
+    - test/unit/normalize.test.js
+    - test/unit/renderers.test.js
+    - test/unit/web-templates.test.js
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dependency Graph (ASCII)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+#  Phase 1 (Critical Fix)
+#  ┌─────────┐
+#  │ T-01    │  Fix tree JSON escaping
+#  │ (1 file)│
+#  └─────────┘
+#
+#  Phase 2 (Data Layer — normalize + store new section kinds)
+#  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐
+#  │ T-02    │  │ T-03    │  │ T-04    │  │ T-05    │  │ T-06    │
+#  │properties│  │restEnd- │  │restResp-│  │possible-│  │mentions │
+#  │normalize│  │point    │  │onses    │  │Values   │  │normalize│
+#  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘
+#       │            │            │            │            │
+#  Phase 3 (Render Layer — HTML output for each new section)
+#  ┌────┴────┐  ┌────┴────┐  ┌────┴────┐  ┌────┴────┐  ┌────┴────┐
+#  │ T-07    │  │ T-08    │  │ T-09    │  │ T-10    │  │ T-11    │
+#  │render   │  │render   │  │render   │  │render   │  │render   │
+#  │properti-│  │endpoint │  │response │  │possible │  │mentioned│
+#  │es       │  │+params  │  │codes    │  │values   │  │in       │
+#  └─────────┘  └─────────┘  └─────────┘  └─────────┘  └─────────┘
+#
+#  Phase 4 (Page Chrome — metadata badges, structure)
+#  ┌─────────┐  ┌─────────┐  ┌─────────┐
+#  │ T-12    │  │ T-13    │  │ T-14    │
+#  │platform │  │beta/dep-│  │dynamic  │
+#  │badges   │  │recated  │  │fallback │
+#  │         │  │badges   │  │sections │
+#  └─────────┘  └─────────┘  └─────────┘
+#
+#  Phase 5 (CSS + Tests)
+#  ┌─────────┐  ┌─────────┐
+#  │ T-15    │  │ T-16    │
+#  │CSS for  │  │tests for│
+#  │new sect-│  │all new  │
+#  │ions     │  │sections │
+#  └─────────┘  └─────────┘
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tasks
+# ─────────────────────────────────────────────────────────────────────────────
+
+tasks:
+  # ── Phase 1: Critical Bug Fix ──────────────────────────────────────────────
+
+  - id: T-01
+    phase: 1
+    subject: Fix tree view JSON escaping bug
+    status: pending
+    files:
+      - src/web/templates.js:638
+    description: >
+      Remove escapeAttr() from the tree data JSON serialization. JSON inside
+      <script type="application/json"> must NOT be HTML-escaped. The current
+      code converts " to &quot; which makes JSON.parse() fail silently in
+      tree-view.js, rendering the entire tree feature non-functional.
+    verification:
+      - Tree toggle on framework pages actually renders the tree
+      - Existing tree-view tests still pass
+      - JSON in script tag is valid and parseable
+    depends_on: []
+
+  # ── Phase 2: Normalize Missing Section Types ──────────────────────────────
+
+  - id: T-02
+    phase: 2
+    subject: Normalize 'properties' primaryContentSections
+    status: pending
+    files:
+      - src/content/normalize.js
+    description: >
+      Add extraction of 'properties' sections from Apple DocC JSON. These
+      contain object/struct property definitions with name, type reference,
+      and description. Store as sectionKind='properties' with structured
+      contentJson containing property name, type key, and content nodes.
+      Apple format: { kind: "properties", items: [{ name, type: [{kind,text,identifier}], content: [...] }] }
+    verification:
+      - Properties section appears in normalized output
+      - Property names, types, and descriptions are preserved
+    depends_on: []
+
+  - id: T-03
+    phase: 2
+    subject: Normalize REST endpoint sections (httpEndpoint + restParameters)
+    status: pending
+    files:
+      - src/content/normalize.js
+    description: >
+      Add extraction of 'restParameters' and HTTP endpoint data from Apple DocC.
+      REST endpoints have: httpEndpoint metadata (method, baseURL, path),
+      restParameters sections (path params, query params with type/required info).
+      Store as sectionKind='rest_endpoint' and sectionKind='rest_parameters'.
+    verification:
+      - Endpoint URL and method are captured
+      - Path and query parameters with required/optional flags are stored
+    depends_on: []
+
+  - id: T-04
+    phase: 2
+    subject: Normalize REST response codes (restResponses)
+    status: pending
+    files:
+      - src/content/normalize.js
+    description: >
+      Add extraction of 'restResponses' sections. These contain HTTP status
+      codes (200, 400, 401, 404, 429, 500) with status text, content type,
+      and error type references. Store as sectionKind='rest_responses'.
+    verification:
+      - Response codes with descriptions are captured
+      - Error type references are resolved
+    depends_on: []
+
+  - id: T-05
+    phase: 2
+    subject: Normalize 'possibleValues' primaryContentSections
+    status: pending
+    files:
+      - src/content/normalize.js
+    description: >
+      Add extraction of 'possibleValues' sections for enums and option types.
+      These list allowed values with descriptions. Store as
+      sectionKind='possible_values'.
+    verification:
+      - Possible values with descriptions are captured
+    depends_on: []
+
+  - id: T-06
+    phase: 2
+    subject: Normalize 'mentions' for "Mentioned in" rendering
+    status: pending
+    files:
+      - src/content/normalize.js
+    description: >
+      Extract 'mentions' sections that contain references to pages mentioning
+      the current document (changelogs, guides, etc.). Currently explicitly
+      skipped. Store as sectionKind='mentioned_in' with resolved keys/titles.
+    verification:
+      - "Mentioned in" references are captured and resolvable
+    depends_on: []
+
+  # ── Phase 3: Render New Section Types ──────────────────────────────────────
+
+  - id: T-07
+    phase: 3
+    subject: Render properties section in HTML
+    status: pending
+    files:
+      - src/content/render-html.js
+    description: >
+      Add renderPropertiesHtml() handler. Display each property as a definition
+      list or table row with: property name (bold/code), type (linked if
+      resolved), and description. Apple renders these between Declaration and
+      Mentioned In. Add to renderSectionHtml switch and buildPageToc.
+    verification:
+      - Properties section renders with name, type link, and description
+      - Appears in page TOC
+    depends_on: [T-02]
+
+  - id: T-08
+    phase: 3
+    subject: Render REST endpoint URL and parameters in HTML
+    status: pending
+    files:
+      - src/content/render-html.js
+    description: >
+      Add renderRestEndpointHtml() and renderRestParametersHtml(). Render:
+      endpoint method + URL in a styled code block, parameters as a table
+      with name, type, required badge, and description. Apple shows separate
+      URL and Sandbox URL blocks, and separate Path/Query parameter groups.
+    verification:
+      - Endpoint URL renders in styled block
+      - Parameters show name, type, required/optional badge, description
+    depends_on: [T-03]
+
+  - id: T-09
+    phase: 3
+    subject: Render REST response codes in HTML
+    status: pending
+    files:
+      - src/content/render-html.js
+    description: >
+      Add renderRestResponsesHtml(). Display response codes as a structured
+      list with: HTTP status code (bold), status text, content type, and
+      associated error types. Apple groups these with colored status badges.
+    verification:
+      - Response codes render with status, description, and error types
+    depends_on: [T-04]
+
+  - id: T-10
+    phase: 3
+    subject: Render possible values section in HTML
+    status: pending
+    files:
+      - src/content/render-html.js
+    description: >
+      Add renderPossibleValuesHtml(). Display as a definition list with
+      value name in code font and description.
+    verification:
+      - Possible values render with code-styled names and descriptions
+    depends_on: [T-05]
+
+  - id: T-11
+    phase: 3
+    subject: Render "Mentioned in" section in HTML
+    status: pending
+    files:
+      - src/content/render-html.js
+    description: >
+      Add renderMentionedInHtml(). Display as a bulleted list of links to
+      mentioning documents, similar to See Also but with "Mentioned in"
+      heading. Add to renderSectionHtml switch and buildPageToc.
+    verification:
+      - "Mentioned in" section renders with linked document titles
+      - Appears in page TOC
+    depends_on: [T-06]
+
+  # ── Phase 4: Page Chrome Improvements ──────────────────────────────────────
+
+  - id: T-12
+    phase: 4
+    subject: Add platform availability badges to page metadata
+    status: pending
+    files:
+      - src/web/templates.js
+      - src/web/serve.js
+    description: >
+      Extend buildDocMeta() to render platform version badges from the
+      document's platforms_json field. Display as compact badges like
+      "iOS 15.0+", "macOS 12.0+", similar to Apple's availability line.
+      Data already exists in DB (min_ios, min_macos, etc.).
+    verification:
+      - Platform badges appear below title on document pages
+      - Only platforms with actual version data are shown
+    depends_on: []
+
+  - id: T-13
+    phase: 4
+    subject: Add beta and deprecated badges to page metadata
+    status: pending
+    files:
+      - src/web/templates.js
+    description: >
+      Extend buildDocMeta() to render visual indicators when is_deprecated
+      or is_beta flags are set. Show as colored badges (orange for deprecated,
+      blue for beta) near the title.
+    verification:
+      - Deprecated pages show deprecated badge
+      - Beta pages show beta badge
+    depends_on: []
+
+  - id: T-14
+    phase: 4
+    subject: Add dynamic fallback for unrecognized primaryContentSections
+    status: pending
+    files:
+      - src/content/normalize.js
+      - src/content/render-html.js
+    description: >
+      Instead of silently dropping unknown section kinds, normalize them as
+      generic discussion-like sections preserving their original kind as
+      metadata. Render them with a best-effort content renderer. This ensures
+      future Apple DocC section types appear rather than vanish.
+    verification:
+      - Unknown section kinds are stored and rendered rather than dropped
+      - Existing known section rendering is unchanged
+    depends_on: []
+
+  # ── Phase 5: CSS and Tests ─────────────────────────────────────────────────
+
+  - id: T-15
+    phase: 5
+    subject: Add CSS styles for new section types
+    status: pending
+    files:
+      - src/web/assets/style.css
+    description: >
+      Add styling for: properties tables/lists, REST endpoint URL blocks,
+      REST parameter tables, response code lists, possible values lists,
+      mentioned-in sections, platform badges, beta/deprecated badges.
+      Follow existing design patterns in style.css.
+    verification:
+      - New sections are visually consistent with existing design
+      - Responsive on mobile
+    depends_on: [T-07, T-08, T-09, T-10, T-11, T-12, T-13]
+
+  - id: T-16
+    phase: 5
+    subject: Add tests for all new section types
+    status: pending
+    files:
+      - test/unit/normalize.test.js
+      - test/unit/renderers.test.js
+      - test/unit/web-templates.test.js
+    description: >
+      Add unit tests for: properties normalization + rendering, REST endpoint
+      normalization + rendering, REST responses normalization + rendering,
+      possible values normalization + rendering, mentioned-in normalization +
+      rendering, platform badges, beta/deprecated badges, tree JSON validity,
+      and dynamic fallback sections.
+    verification:
+      - All new section types have normalize and render test coverage
+      - Tree JSON test validates parseability (not just presence)
+      - All tests pass
+    depends_on: [T-01, T-07, T-08, T-09, T-10, T-11, T-12, T-13, T-14]

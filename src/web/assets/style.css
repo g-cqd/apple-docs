@@ -29,6 +29,12 @@
   --badge-role-fg: #166534;
   --badge-source-bg: #fef3c7;
   --badge-source-fg: #92400e;
+  --badge-deprecated-bg: #fed7aa;
+  --badge-deprecated-fg: #9a3412;
+  --badge-beta-bg: #dbeafe;
+  --badge-beta-fg: #1e40af;
+  --badge-platform-bg: #f3f4f6;
+  --badge-platform-fg: #4b5563;
   --token-keyword: #ad3da4;
   --token-type: #703daa;
   --token-identifier: #4b21b0;
@@ -56,6 +62,12 @@
   --badge-role-fg: #86efac;
   --badge-source-bg: #451a03;
   --badge-source-fg: #fcd34d;
+  --badge-deprecated-bg: #7c2d12;
+  --badge-deprecated-fg: #fdba74;
+  --badge-beta-bg: #1e3a5f;
+  --badge-beta-fg: #93c5fd;
+  --badge-platform-bg: #374151;
+  --badge-platform-fg: #d1d5db;
   --token-keyword: #ff7ab2;
   --token-type: #dabaff;
   --token-identifier: #b281eb;
@@ -84,6 +96,12 @@
     --badge-role-fg: #86efac;
     --badge-source-bg: #451a03;
     --badge-source-fg: #fcd34d;
+    --badge-deprecated-bg: #7c2d12;
+    --badge-deprecated-fg: #fdba74;
+    --badge-beta-bg: #1e3a5f;
+    --badge-beta-fg: #93c5fd;
+    --badge-platform-bg: #374151;
+    --badge-platform-fg: #d1d5db;
     --token-keyword: #ff7ab2;
     --token-type: #dabaff;
     --token-identifier: #b281eb;
@@ -518,9 +536,32 @@ a:hover {
   color: var(--badge-source-fg);
 }
 
+.badge-deprecated {
+  background-color: var(--badge-deprecated-bg);
+  color: var(--badge-deprecated-fg);
+}
+
+.badge-beta {
+  background-color: var(--badge-beta-bg);
+  color: var(--badge-beta-fg);
+}
+
+.badge-platform {
+  background-color: var(--badge-platform-bg);
+  color: var(--badge-platform-fg);
+  font-size: 0.7rem;
+}
+
 .badge-count {
   background-color: var(--badge-bg);
   color: var(--secondary-fg);
+}
+
+.doc-availability {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
 }
 
 /* ------------------------------------------------------------
@@ -710,6 +751,118 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .doc-article dd {
   margin-left: 1.5rem;
   margin-bottom: 0.5rem;
+}
+
+/* ------------------------------------------------------------
+   9b. Properties, REST endpoints, response codes, possible values
+   ------------------------------------------------------------ */
+
+.properties-table,
+.params-table,
+.responses-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin: 0.75rem 0;
+}
+
+.properties-table th,
+.params-table th,
+.responses-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid var(--border);
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--secondary-fg);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.properties-table td,
+.params-table td,
+.responses-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.properties-table td:first-child,
+.params-table td:first-child {
+  white-space: nowrap;
+}
+
+.badge-required {
+  background-color: var(--badge-deprecated-bg);
+  color: var(--badge-deprecated-fg);
+  font-size: 0.65rem;
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.badge-optional {
+  background-color: var(--badge-bg);
+  color: var(--secondary-fg);
+  font-size: 0.65rem;
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.rest-endpoint {
+  background-color: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}
+
+.rest-endpoint code {
+  font-size: 0.875rem;
+  background: none;
+  padding: 0;
+}
+
+.rest-method {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.rest-base-url {
+  color: var(--secondary-fg);
+}
+
+.rest-path {
+  color: var(--fg);
+}
+
+.rest-param {
+  color: var(--token-type);
+  font-style: italic;
+}
+
+.rest-mime {
+  font-size: 0.75rem;
+  color: var(--secondary-fg);
+  margin-top: 0.2rem;
+}
+
+.possible-values {
+  margin: 0.75rem 0;
+}
+
+.possible-values dt {
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
+
+.possible-values dd {
+  margin-left: 1.5rem;
+  margin-bottom: 0.25rem;
 }
 
 /* ------------------------------------------------------------

@@ -193,6 +193,36 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('SwiftUI')
   })
 
+  test('renders deprecated badge when is_deprecated is set', () => {
+    const doc = { ...mockDoc, is_deprecated: 1 }
+    const page = renderDocumentPage(doc, mockSections, siteConfig)
+    expect(page).toContain('badge-deprecated')
+    expect(page).toContain('Deprecated')
+  })
+
+  test('renders beta badge when is_beta is set', () => {
+    const doc = { ...mockDoc, is_beta: 1 }
+    const page = renderDocumentPage(doc, mockSections, siteConfig)
+    expect(page).toContain('badge-beta')
+    expect(page).toContain('Beta')
+  })
+
+  test('renders platform availability badges from platforms_json', () => {
+    const doc = { ...mockDoc, platforms_json: '{"ios":"15.0","macos":"12.0","visionos":"1.0"}' }
+    const page = renderDocumentPage(doc, mockSections, siteConfig)
+    expect(page).toContain('badge-platform')
+    expect(page).toContain('iOS 15.0+')
+    expect(page).toContain('macOS 12.0+')
+    expect(page).toContain('visionOS 1.0+')
+    expect(page).toContain('doc-availability')
+  })
+
+  test('omits platform badges when platforms_json is null', () => {
+    const doc = { ...mockDoc, platforms_json: null }
+    const page = renderDocumentPage(doc, mockSections, siteConfig)
+    expect(page).not.toContain('doc-availability')
+  })
+
   test('baseUrl prefix is applied to asset links', () => {
     const config = { ...siteConfig, baseUrl: '/apple-docs' }
     const page = renderDocumentPage(mockDoc, mockSections, config)
@@ -477,6 +507,20 @@ describe('renderFrameworkPage', () => {
     expect(page).toContain('class="view-toggle"')
     expect(page).toContain('id="tree-data"')
     expect(page).toContain('tree-view.js')
+  })
+
+  test('tree data JSON is valid and parseable (not HTML-escaped)', () => {
+    const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig, {
+      treeEdges: [
+        { from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' },
+      ],
+    })
+    const match = page.match(/<script type="application\/json" id="tree-data">([\s\S]*?)<\/script>/)
+    expect(match).toBeTruthy()
+    const json = JSON.parse(match[1])
+    expect(json.edges).toBeArray()
+    expect(json.edges).toHaveLength(1)
+    expect(json.docs).toBeObject()
   })
 })
 

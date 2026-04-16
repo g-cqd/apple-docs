@@ -154,11 +154,155 @@ function normalizeDocC(json, key, sourceType) {
     order++
   }
 
-  // 4. Discussion / content (sortOrder 3+, one per 'content' section)
+  // 4. Properties (sortOrder 3, for objects/structs with property definitions)
+  const propertiesSection = findSection(json?.primaryContentSections, 'properties')
+  if (propertiesSection?.items?.length) {
+    const items = propertiesSection.items.map(item => ({
+      name: item.name ?? null,
+      type: enrichTypeTokens(item.type ?? [], refs),
+      content: resolveContentReferences(item.content ?? [], refs),
+      required: item.required ?? false,
+      attributes: item.attributes ?? [],
+      introducedVersion: item.introducedVersion ?? null,
+    }))
+    const contentText = items.map(p => {
+      const desc = p.content ? renderContentNodesToText(p.content, refs) : ''
+      return `${p.name ?? ''}: ${desc}`.trim()
+    }).join('\n') || null
+    sections.push({
+      sectionKind: 'properties',
+      heading: propertiesSection.title ?? 'Properties',
+      contentText,
+      contentJson: JSON.stringify(items),
+      sortOrder: order++,
+    })
+  } else {
+    order++
+  }
+
+  // 5. REST endpoints (URL, Sandbox URL)
+  const restEndpointSections = (json?.primaryContentSections ?? []).filter(s => s.kind === 'restEndpoint')
+  for (const endpoint of restEndpointSections) {
+    const tokens = (endpoint.tokens ?? []).map(t => ({
+      kind: t.kind ?? 'text',
+      text: t.text ?? '',
+    }))
+    const contentText = tokens.map(t => t.text).join('')
+    sections.push({
+      sectionKind: 'rest_endpoint',
+      heading: endpoint.title ?? 'URL',
+      contentText: contentText || null,
+      contentJson: JSON.stringify(tokens),
+      sortOrder: order++,
+    })
+  }
+
+  // 6. REST parameters (path parameters, query parameters)
+  const restParamSections = (json?.primaryContentSections ?? []).filter(s => s.kind === 'restParameters')
+  for (const paramSection of restParamSections) {
+    const items = (paramSection.items ?? []).map(item => ({
+      name: item.name ?? null,
+      type: enrichTypeTokens(item.type ?? [], refs),
+      content: resolveContentReferences(item.content ?? [], refs),
+      required: item.required ?? false,
+      source: paramSection.source ?? null,
+      attributes: item.attributes ?? [],
+    }))
+    const contentText = items.map(p => {
+      const desc = p.content ? renderContentNodesToText(p.content, refs) : ''
+      return `${p.name ?? ''}: ${desc}`.trim()
+    }).join('\n') || null
+    sections.push({
+      sectionKind: 'rest_parameters',
+      heading: paramSection.title ?? 'Parameters',
+      contentText,
+      contentJson: JSON.stringify(items),
+      sortOrder: order++,
+    })
+  }
+
+  // 7. REST responses (status codes)
+  const restResponsesSection = findSection(json?.primaryContentSections, 'restResponses')
+  if (restResponsesSection?.items?.length) {
+    const items = restResponsesSection.items.map(item => ({
+      status: item.status ?? null,
+      reason: item.reason ?? null,
+      mimeType: item.mimeType ?? null,
+      type: enrichTypeTokens(item.type ?? [], refs),
+      content: resolveContentReferences(item.content ?? [], refs),
+    }))
+    const contentText = items.map(r =>
+      `${r.status ?? ''} ${r.reason ?? ''}: ${r.content ? renderContentNodesToText(r.content, refs) : ''}`.trim()
+    ).join('\n') || null
+    sections.push({
+      sectionKind: 'rest_responses',
+      heading: restResponsesSection.title ?? 'Response Codes',
+      contentText,
+      contentJson: JSON.stringify(items),
+      sortOrder: order++,
+    })
+  }
+
+  // 8. Possible values (enums/options)
+  const possibleValuesSection = findSection(json?.primaryContentSections, 'possibleValues')
+  if (possibleValuesSection?.values?.length) {
+    const values = possibleValuesSection.values.map(v => ({
+      name: v.name ?? null,
+      content: resolveContentReferences(v.content ?? [], refs),
+    }))
+    const contentText = values.map(v => {
+      const desc = v.content ? renderContentNodesToText(v.content, refs) : ''
+      return `${v.name ?? ''}: ${desc}`.trim()
+    }).join('\n') || null
+    sections.push({
+      sectionKind: 'possible_values',
+      heading: possibleValuesSection.title ?? 'Possible Values',
+      contentText,
+      contentJson: JSON.stringify(values),
+      sortOrder: order++,
+    })
+  }
+
+  // 9. Mentions ("Mentioned in")
+  const mentionsSection = findSection(json?.primaryContentSections, 'mentions')
+  if (mentionsSection?.mentions?.length) {
+    const items = mentionsSection.mentions.map(id => ({
+      identifier: id,
+      key: resolveRefKey(id, refs),
+      title: refs?.[id]?.title ?? normalizeIdentifier(id) ?? id,
+    }))
+    const contentText = items.map(m => m.title).join('\n') || null
+    sections.push({
+      sectionKind: 'mentioned_in',
+      heading: 'Mentioned in',
+      contentText,
+      contentJson: JSON.stringify(items),
+      sortOrder: order++,
+    })
+  }
+
+  // 10. Discussion / content (one per 'content' section)
   for (const section of json?.primaryContentSections ?? []) {
     if (section.kind !== 'content') continue
     const nodes = section.content ?? []
     const heading = extractFirstHeading(nodes, refs) ?? 'Overview'
+    sections.push({
+      sectionKind: 'discussion',
+      heading,
+      contentText: renderContentNodesToText(nodes, refs) || null,
+      contentJson: JSON.stringify(resolveContentReferences(nodes, refs)),
+      sortOrder: order++,
+    })
+  }
+
+  // 11. Fallback: capture any unknown primaryContentSections kinds
+  const handledKinds = new Set(['declarations', 'parameters', 'content', 'properties', 'restEndpoint', 'restParameters', 'restResponses', 'possibleValues', 'mentions'])
+  for (const section of json?.primaryContentSections ?? []) {
+    if (handledKinds.has(section.kind)) continue
+    // Best-effort: if it has content nodes, store as discussion
+    const nodes = section.content ?? []
+    if (nodes.length === 0) continue
+    const heading = section.title ?? extractFirstHeading(nodes, refs) ?? section.kind ?? 'Section'
     sections.push({
       sectionKind: 'discussion',
       heading,
@@ -427,6 +571,22 @@ function enrichDeclarationTokens(declarations, refs) {
     })
 
     return { ...decl, tokens: enrichedTokens }
+  })
+}
+
+/**
+ * Enrich type tokens (from properties, restParameters, restResponses)
+ * with resolved keys for linking, similar to declaration tokens.
+ */
+function enrichTypeTokens(tokens, refs) {
+  if (!Array.isArray(tokens) || tokens.length === 0) return tokens
+  return tokens.map(token => {
+    if (token.kind !== 'typeIdentifier') return token
+    if (token.identifier) {
+      const key = resolveRefKey(token.identifier, refs)
+      if (key) return { ...token, _resolvedKey: key }
+    }
+    return token
   })
 }
 

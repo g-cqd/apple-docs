@@ -236,8 +236,45 @@ function buildDocMeta(doc) {
   if (doc.role_heading) {
     badges.push(`<span class="badge badge-role">${escapeAttr(doc.role_heading)}</span>`)
   }
-  if (badges.length === 0) return ''
-  return `<div class="doc-meta">${badges.join('')}</div>`
+  if (doc.is_deprecated) {
+    badges.push('<span class="badge badge-deprecated">Deprecated</span>')
+  }
+  if (doc.is_beta) {
+    badges.push('<span class="badge badge-beta">Beta</span>')
+  }
+
+  // Platform availability badges
+  const platforms = parsePlatformsJson(doc.platforms_json)
+  const platformBadges = buildPlatformBadges(platforms)
+
+  const parts = []
+  if (badges.length > 0) parts.push(`<div class="doc-meta">${badges.join('')}</div>`)
+  if (platformBadges) parts.push(platformBadges)
+  return parts.join('\n  ')
+}
+
+/** Parse platforms_json from DB (string or object). */
+function parsePlatformsJson(platformsJson) {
+  if (!platformsJson) return null
+  if (typeof platformsJson === 'object') return platformsJson
+  try { return JSON.parse(platformsJson) } catch { return null }
+}
+
+/** Build a platform availability line from a platforms map. */
+function buildPlatformBadges(platforms) {
+  if (!platforms || typeof platforms !== 'object') return ''
+  const platformNames = {
+    ios: 'iOS', macos: 'macOS', watchos: 'watchOS', tvos: 'tvOS',
+    visionos: 'visionOS', maccatalyst: 'Mac Catalyst', ipados: 'iPadOS',
+  }
+  const items = []
+  for (const [slug, version] of Object.entries(platforms)) {
+    if (!version) continue
+    const name = platformNames[slug] ?? slug
+    items.push(`<span class="badge badge-platform">${escapeAttr(name)} ${escapeAttr(version)}+</span>`)
+  }
+  if (items.length === 0) return ''
+  return `<div class="doc-availability">${items.join('')}</div>`
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +345,28 @@ function buildPageToc(sections) {
         id = 'declaration'; label = 'Declaration'; break
       case 'parameters':
         id = 'parameters'; label = 'Parameters'; break
+      case 'properties':
+        label = section.heading ?? 'Properties'
+        id = slugify(label)
+        break
+      case 'rest_endpoint':
+        label = section.heading ?? 'URL'
+        id = slugify(label)
+        break
+      case 'rest_parameters':
+        label = section.heading ?? 'Parameters'
+        id = slugify(label)
+        break
+      case 'rest_responses':
+        label = section.heading ?? 'Response Codes'
+        id = slugify(label)
+        break
+      case 'possible_values':
+        label = section.heading ?? 'Possible Values'
+        id = slugify(label)
+        break
+      case 'mentioned_in':
+        id = 'mentioned-in'; label = 'Mentioned in'; break
       case 'discussion':
         label = section.heading ?? 'Overview'
         id = slugify(label)
@@ -635,7 +694,7 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   }
 
   // Serialize tree data as JSON
-  const treeDataJson = escapeAttr(JSON.stringify({ edges: treeEdges, docs: docLookup }))
+  const treeDataJson = JSON.stringify({ edges: treeEdges, docs: docLookup })
 
   // View toggle only shown when we have tree edges
   const hasTree = treeEdges.length > 0

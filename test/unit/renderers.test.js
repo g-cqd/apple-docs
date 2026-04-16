@@ -466,3 +466,148 @@ describe('slugify', () => {
     expect(slugify('A   B---C')).toBe('a-b-c')
   })
 })
+
+// ---------------------------------------------------------------------------
+// New section renderers: properties, REST, possibleValues, mentionedIn
+// ---------------------------------------------------------------------------
+
+describe('renderHtml properties section', () => {
+  test('renders properties table with name, type, and description', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'properties',
+      heading: 'Properties',
+      contentJson: JSON.stringify([
+        {
+          name: 'signedInfo',
+          type: [{ kind: 'typeIdentifier', text: 'JWSTransaction', _resolvedKey: 'api/jwstransaction' }],
+          content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Signed info.' }] }],
+          required: false,
+        },
+      ]),
+      contentText: 'signedInfo: Signed info.',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<section id="properties">')
+    expect(html).toContain('<code>signedInfo</code>')
+    expect(html).toContain('JWSTransaction')
+    expect(html).toContain('Signed info.')
+    expect(html).toContain('properties-table')
+  })
+
+  test('renders required badge when item is required', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'properties',
+      heading: 'Properties',
+      contentJson: JSON.stringify([{
+        name: 'id', type: [], content: [], required: true,
+      }]),
+      contentText: 'id',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('badge-required')
+    expect(html).toContain('Required')
+  })
+})
+
+describe('renderHtml REST endpoint section', () => {
+  test('renders endpoint URL with method and path tokens', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'rest_endpoint',
+      heading: 'URL',
+      contentJson: JSON.stringify([
+        { kind: 'method', text: 'GET' },
+        { kind: 'text', text: ' ' },
+        { kind: 'baseURL', text: 'https://api.example.com/' },
+        { kind: 'path', text: 'v1/items/' },
+        { kind: 'parameter', text: '{id}' },
+      ]),
+      contentText: 'GET https://api.example.com/v1/items/{id}',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<section id="url">')
+    expect(html).toContain('rest-method')
+    expect(html).toContain('GET')
+    expect(html).toContain('rest-base-url')
+    expect(html).toContain('rest-param')
+    expect(html).toContain('{id}')
+  })
+})
+
+describe('renderHtml REST parameters section', () => {
+  test('renders parameter table with required/optional badges', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'rest_parameters',
+      heading: 'Path Parameters',
+      contentJson: JSON.stringify([
+        { name: 'id', type: [{ kind: 'typeIdentifier', text: 'string' }], content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'The ID.' }] }], required: true },
+        { name: 'filter', type: [], content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Optional filter.' }] }], required: false },
+      ]),
+      contentText: 'id: The ID.\nfilter: Optional filter.',
+      sortOrder: 4,
+    }])
+    expect(html).toContain('<section id="path-parameters">')
+    expect(html).toContain('<code>id</code>')
+    expect(html).toContain('badge-required')
+    expect(html).toContain('badge-optional')
+    expect(html).toContain('params-table')
+  })
+})
+
+describe('renderHtml REST responses section', () => {
+  test('renders response codes table with status and reason', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'rest_responses',
+      heading: 'Response Codes',
+      contentJson: JSON.stringify([
+        { status: 200, reason: 'OK', mimeType: 'application/json', type: [], content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Success.' }] }] },
+        { status: 401, reason: 'Unauthorized', type: [], content: [] },
+      ]),
+      contentText: '200 OK: Success.\n401 Unauthorized',
+      sortOrder: 5,
+    }])
+    expect(html).toContain('<section id="response-codes">')
+    expect(html).toContain('<strong>200</strong>')
+    expect(html).toContain('OK')
+    expect(html).toContain('application/json')
+    expect(html).toContain('<strong>401</strong>')
+    expect(html).toContain('responses-table')
+  })
+})
+
+describe('renderHtml possible values section', () => {
+  test('renders definition list of values', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'possible_values',
+      heading: 'Possible Values',
+      contentJson: JSON.stringify([
+        { name: '1', content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Active.' }] }] },
+        { name: '2', content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Expired.' }] }] },
+      ]),
+      contentText: '1: Active.\n2: Expired.',
+      sortOrder: 3,
+    }])
+    expect(html).toContain('<section id="possible-values">')
+    expect(html).toContain('<dl')
+    expect(html).toContain('<dt><code>1</code></dt>')
+    expect(html).toContain('<dd><p>Active.</p></dd>')
+    expect(html).toContain('<dt><code>2</code></dt>')
+  })
+})
+
+describe('renderHtml mentioned-in section', () => {
+  test('renders linked list of mentioning docs', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'mentioned_in',
+      heading: 'Mentioned in',
+      contentJson: JSON.stringify([
+        { key: 'api/changelog', title: 'API Changelog' },
+        { key: 'api/guide', title: 'Getting Started' },
+      ]),
+      contentText: 'API Changelog\nGetting Started',
+      sortOrder: 6,
+    }])
+    expect(html).toContain('<section id="mentioned-in">')
+    expect(html).toContain('<a href="/docs/api/changelog/">API Changelog</a>')
+    expect(html).toContain('<a href="/docs/api/guide/">Getting Started</a>')
+  })
+})
