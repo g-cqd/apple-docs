@@ -64,11 +64,25 @@ For large MCP responses, `search_docs`, `read_doc`, `list_frameworks`, and `brow
 apple-docs web serve
 ```
 
-Opens a local documentation site at `http://localhost:3000` with full-text search, framework browsing, light/dark mode, and page navigation. To generate a static build for deployment:
+Opens a local documentation site at `http://localhost:3000` backed by your synced corpus. Key features:
+
+- Full-text client-side search across all sources, with filters for framework, kind, language, and platform versions
+- Swift / Objective-C declaration toggle, persisted per browser
+- Tree view for type hierarchies with single-child chain compaction
+- Syntax-highlighted Swift and Objective-C code via Shiki
+- Auto / light / dark theme with `prefers-color-scheme` detection
+- Per-page table of contents and framework sidebar navigation
+- Platform availability, deprecated, and beta badges on symbols
+- Security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) and gzip compression on the dev server
+- Dev server fetches missing pages from `developer.apple.com` on demand and persists them to the corpus
+
+To generate a static build for deployment:
 
 ```bash
 apple-docs web build --out dist/web
 ```
+
+The static build emits self-contained HTML, assets, and a client-side search index with no server-side dependency.
 
 ## What It Covers
 
@@ -165,6 +179,8 @@ apple-docs search "Publisher" --json
 | `--no-deep` | Disable body search entirely |
 | `--no-eager` | Wait for body search to finish instead of returning early |
 | `--read` | Resolve the top hit and return its content immediately |
+| `--max-chars <n>` | With `--read`, paginate the rendered content to fit within a character budget |
+| `--page <n>` | With `--read` and `--max-chars`, select a specific page (1-based) |
 
 Notes:
 
@@ -191,6 +207,8 @@ Options:
 | --- | --- |
 | `--framework <slug>` | Disambiguate a symbol lookup |
 | `--section <heading-or-file>` | Return one section instead of the full document |
+| `--max-chars <n>` | Paginate the rendered content to fit within a character budget |
+| `--page <n>` | Select a specific page when `--max-chars` is used (1-based) |
 | `--json` | Return the lookup payload as JSON |
 
 On a `lite` snapshot, `read` may return metadata plus a tier-upgrade hint instead of full rendered content.
