@@ -21,6 +21,18 @@
   --header-bg: rgba(255, 255, 255, 0.85);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --highlight-bg: #fef08a;
+  --highlight-fg: inherit;
+  --badge-framework-bg: #dbeafe;
+  --badge-framework-fg: #1e40af;
+  --badge-role-bg: #dcfce7;
+  --badge-role-fg: #166534;
+  --badge-source-bg: #fef3c7;
+  --badge-source-fg: #92400e;
+  --token-keyword: #ad3da4;
+  --token-type: #703daa;
+  --token-identifier: #4b21b0;
+  --token-number: #272ad8;
 }
 
 [data-theme="dark"] {
@@ -36,6 +48,18 @@
   --header-bg: rgba(28, 28, 30, 0.85);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --highlight-bg: #854d0e;
+  --highlight-fg: #fef08a;
+  --badge-framework-bg: #1e3a5f;
+  --badge-framework-fg: #93c5fd;
+  --badge-role-bg: #14532d;
+  --badge-role-fg: #86efac;
+  --badge-source-bg: #451a03;
+  --badge-source-fg: #fcd34d;
+  --token-keyword: #ff7ab2;
+  --token-type: #dabaff;
+  --token-identifier: #b281eb;
+  --token-number: #d0bf69;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,6 +76,18 @@
     --header-bg: rgba(28, 28, 30, 0.85);
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --highlight-bg: #854d0e;
+    --highlight-fg: #fef08a;
+    --badge-framework-bg: #1e3a5f;
+    --badge-framework-fg: #93c5fd;
+    --badge-role-bg: #14532d;
+    --badge-role-fg: #86efac;
+    --badge-source-bg: #451a03;
+    --badge-source-fg: #fcd34d;
+    --token-keyword: #ff7ab2;
+    --token-type: #dabaff;
+    --token-identifier: #b281eb;
+    --token-number: #d0bf69;
   }
 }
 
@@ -72,6 +108,25 @@
   border: 0;
 }
 
+/* Skip-to-content link */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  z-index: 1000;
+  padding: 0.5rem 1rem;
+  background: var(--bg);
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+  border: 2px solid var(--accent);
+  border-radius: 0 0 8px 0;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
 /* Focus-visible outlines for keyboard users */
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -81,6 +136,14 @@
 /* Remove default outline for mouse/touch users */
 :focus:not(:focus-visible) {
   outline: none;
+}
+
+/* Explicit focus-visible for interactive elements that override outlines */
+.search-clear:focus-visible,
+.filter-chip:focus-visible,
+.theme-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ------------------------------------------------------------
@@ -346,22 +409,10 @@ a:hover {
 
 /* Match highlighting in search results */
 .search-result mark {
-  background-color: #fef08a;
-  color: inherit;
+  background-color: var(--highlight-bg);
+  color: var(--highlight-fg);
   border-radius: 2px;
   padding: 0 0.05em;
-}
-
-@media (prefers-color-scheme: dark) {
-  [data-theme="auto"] .search-result mark {
-    background-color: #854d0e;
-    color: #fef08a;
-  }
-}
-
-[data-theme="dark"] .search-result mark {
-  background-color: #854d0e;
-  color: #fef08a;
 }
 
 /* ------------------------------------------------------------
@@ -453,53 +504,23 @@ a:hover {
 }
 
 .badge-framework {
-  background-color: #dbeafe;
-  color: #1e40af;
+  background-color: var(--badge-framework-bg);
+  color: var(--badge-framework-fg);
 }
 
 .badge-role {
-  background-color: #dcfce7;
-  color: #166534;
+  background-color: var(--badge-role-bg);
+  color: var(--badge-role-fg);
 }
 
 .badge-source {
-  background-color: #fef3c7;
-  color: #92400e;
+  background-color: var(--badge-source-bg);
+  color: var(--badge-source-fg);
 }
 
 .badge-count {
   background-color: var(--badge-bg);
   color: var(--secondary-fg);
-}
-
-@media (prefers-color-scheme: dark) {
-  [data-theme="auto"] .badge-framework {
-    background-color: #1e3a5f;
-    color: #93c5fd;
-  }
-  [data-theme="auto"] .badge-role {
-    background-color: #14532d;
-    color: #86efac;
-  }
-  [data-theme="auto"] .badge-source {
-    background-color: #451a03;
-    color: #fcd34d;
-  }
-}
-
-[data-theme="dark"] .badge-framework {
-  background-color: #1e3a5f;
-  color: #93c5fd;
-}
-
-[data-theme="dark"] .badge-role {
-  background-color: #14532d;
-  color: #86efac;
-}
-
-[data-theme="dark"] .badge-source {
-  background-color: #451a03;
-  color: #fcd34d;
 }
 
 /* ------------------------------------------------------------
@@ -578,43 +599,26 @@ a:hover {
 }
 
 /* Shiki syntax highlighting — dual theme support
-   Light theme values are in the inline style attributes (color, background-color).
-   Dark theme values are in --shiki-dark / --shiki-dark-bg CSS variables. */
-[data-theme="dark"] .shiki,
-[data-theme="dark"] .shiki span {
-  color: var(--shiki-dark) !important;
-  background-color: var(--shiki-dark-bg, transparent) !important;
-}
+   defaultColor: false emits only CSS variables (--shiki-light, --shiki-dark);
+   no inline color/background-color, so no !important needed.
+   Spans only get color — background stays transparent to avoid inheriting
+   the container's --shiki-light-bg onto every token. */
+.shiki span { color: var(--shiki-light); }
+[data-theme="dark"] .shiki span { color: var(--shiki-dark); }
 @media (prefers-color-scheme: dark) {
-  [data-theme="auto"] .shiki,
-  [data-theme="auto"] .shiki span {
-    color: var(--shiki-dark) !important;
-    background-color: var(--shiki-dark-bg, transparent) !important;
-  }
+  [data-theme="auto"] .shiki span { color: var(--shiki-dark); }
 }
-.shiki { background-color: var(--code-bg) !important; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.8125rem; }
+.shiki { background-color: var(--code-bg); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.8125rem; }
 
 /* Declaration token rendering — semantic coloring for Apple DocC tokens */
 pre.decl-tokens { background-color: var(--code-bg); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.8125rem; }
 pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; border-radius: 0; }
-.decl-keyword { color: #ad3da4; }
-.decl-type { color: #703daa; }
-.decl-identifier { color: #4b21b0; }
-.decl-generic { color: #703daa; font-style: italic; }
+.decl-keyword { color: var(--token-keyword); }
+.decl-type { color: var(--token-type); }
+.decl-identifier { color: var(--token-identifier); }
+.decl-generic { color: var(--token-type); font-style: italic; }
 .decl-param { color: var(--fg); }
-.decl-number { color: #272ad8; }
-[data-theme="dark"] .decl-keyword { color: #ff7ab2; }
-[data-theme="dark"] .decl-type { color: #dabaff; }
-[data-theme="dark"] .decl-identifier { color: #b281eb; }
-[data-theme="dark"] .decl-generic { color: #dabaff; }
-[data-theme="dark"] .decl-number { color: #d0bf69; }
-@media (prefers-color-scheme: dark) {
-  [data-theme="auto"] .decl-keyword { color: #ff7ab2; }
-  [data-theme="auto"] .decl-type { color: #dabaff; }
-  [data-theme="auto"] .decl-identifier { color: #b281eb; }
-  [data-theme="auto"] .decl-generic { color: #dabaff; }
-  [data-theme="auto"] .decl-number { color: #d0bf69; }
-}
+.decl-number { color: var(--token-number); }
 
 /* Type links in declaration blocks */
 .code-type-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
@@ -909,9 +913,12 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  border: none;
+  padding: 0;
+  margin: 0;
 }
 
-.sort-controls label {
+.sort-controls legend {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--secondary-fg);
@@ -1021,6 +1028,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
     max-height: calc(100vh - 6rem);
     overflow-y: auto;
     scrollbar-gutter: stable;
+    z-index: 10;
   }
 
   .page-toc-mobile {

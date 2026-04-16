@@ -48,7 +48,7 @@ a 200ms head start; if they fill the limit, body results are skipped (eager mode
 
 Options:
   --framework <name>   Filter by framework (e.g. swiftui, design, app-store-review)
-  --source <name>      Filter by source type (e.g. apple-docc, hig, guidelines, wwdc, sample-code, packages)
+  --source <name>      Filter by source type(s), comma-separated (e.g. apple-docc, wwdc, sample-code)
   --kind <kind>        Filter by role or displayed kind (e.g. symbol, article, Article, Session)
   --language <lang>    Filter by language: swift, objc
   --platform <name>    Filter by platform availability: ios, macos, watchos, tvos, visionos
@@ -64,6 +64,8 @@ Options:
   --no-deep            Disable full-body search entirely
   --no-eager           Wait for body search to finish (exhaustive results)
   --read               Read the full content of the best match
+  --max-chars <n>      Paginate output to fit within N characters (use with --read)
+  --page <n>           Page number to display (default: 1, requires --max-chars)
   --json               Output raw JSON
 
 Examples:
@@ -75,6 +77,7 @@ Examples:
   apple-docs search "Observation" --source wwdc
   apple-docs search "Swift Testing" --source wwdc --year 2024
   apple-docs search "privacy" --framework guidelines --read  # search + read best match
+  apple-docs search "View" --read --max-chars 4000            # paginated read
 `.trim(),
 
   read: `
@@ -85,6 +88,8 @@ Read a specific documentation page and print its Markdown content.
 Options:
   --framework <name>   Disambiguate symbol by framework
   --section <name>     Extract a specific section by heading or file path
+  --max-chars <n>      Paginate output to fit within N characters
+  --page <n>           Page number to display (default: 1, requires --max-chars)
   --json               Output metadata as JSON instead of Markdown
 `.trim(),
 

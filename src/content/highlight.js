@@ -32,6 +32,7 @@ export function highlightCode(code, lang) {
   return _highlighter.codeToHtml(code, {
     lang: grammar,
     themes: { light: 'github-light', dark: 'github-dark' },
+    defaultColor: false,
   })
 }
 

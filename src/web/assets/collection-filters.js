@@ -31,10 +31,9 @@
   searchInput.setAttribute('aria-label', 'Filter symbols in this framework')
 
   // --- Sort controls ---
-  const sortControls = document.createElement('div')
+  const sortControls = document.createElement('fieldset')
   sortControls.className = 'sort-controls'
-  const sortLabel = document.createElement('label')
-  sortLabel.htmlFor = 'sort-select'
+  const sortLabel = document.createElement('legend')
   sortLabel.textContent = 'Sort by:'
   const sortSelect = document.createElement('select')
   sortSelect.id = 'sort-select'
@@ -80,6 +79,7 @@
     const btn = document.createElement('button')
     btn.className = 'filter-chip'
     btn.setAttribute('data-value', kind)
+    btn.setAttribute('aria-label', `Filter by ${kind} (${count})`)
     btn.innerHTML = esc(kind) + ' <span class="filter-chip-count">' + count + '</span>'
     bar.appendChild(btn)
   }

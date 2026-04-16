@@ -48,6 +48,13 @@ export function formatSearchRead(result) {
   } else {
     lines.push(page.content)
   }
+  if (page.pageInfo) {
+    lines.push('')
+    lines.push(dim(`--- Page ${page.pageInfo.page}/${page.pageInfo.totalPages} (${page.pageInfo.strategy}) ---`))
+    if (page.pageInfo.hasNextPage) {
+      lines.push(dim(`Next page: add --page ${page.pageInfo.page + 1}`))
+    }
+  }
   return lines.join('\n')
 }
 
@@ -75,7 +82,15 @@ export function formatLookup(result) {
     }
     return lines.join('\n')
   }
-  return result.content
+  const lines = [result.content]
+  if (result.pageInfo) {
+    lines.push('')
+    lines.push(dim(`--- Page ${result.pageInfo.page}/${result.pageInfo.totalPages} (${result.pageInfo.strategy}) ---`))
+    if (result.pageInfo.hasNextPage) {
+      lines.push(dim(`Next page: add --page ${result.pageInfo.page + 1}`))
+    }
+  }
+  return lines.join('\n')
 }
 
 export function formatFrameworks(result) {

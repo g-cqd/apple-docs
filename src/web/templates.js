@@ -17,8 +17,9 @@ export function renderSearchPage(siteConfig) {
 <html lang="en" data-theme="auto">
 ${buildHead({ title: pageTitle, description: 'Search Apple developer documentation with filters.', siteConfig })}
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
-<main class="main-content search-page">
+<main id="main-content" class="main-content search-page">
   <h1>Search Documentation</h1>
 
   <form class="search-filters" id="search-form" role="search">
@@ -219,7 +220,7 @@ export function buildBreadcrumbs(key, opts = {}) {
     }
   }
 
-  return `<nav class="breadcrumbs" aria-label="Breadcrumb">${parts.join('<span class="breadcrumb-sep"> / </span>')}</nav>`
+  return `<nav class="breadcrumbs" aria-label="Breadcrumb">${parts.join('<span class="breadcrumb-sep" aria-hidden="true"> / </span>')}</nav>`
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +380,7 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   const pageTitle = `${doc.title ?? 'Untitled'} — ${siteConfig.siteName}`
   const renderOpts = {}
   if (opts.knownKeys) renderOpts.knownKeys = opts.knownKeys
-  const content = renderHtml(doc, sectionsList, renderOpts)
+  let content = renderHtml(doc, sectionsList, renderOpts)
   const breadcrumbs = doc.key ? buildBreadcrumbs(doc.key, { title: doc.title, framework: doc.framework_display ?? doc.framework }) : ''
 
   // Sort sections for TOC (same order as renderHtml uses)
@@ -393,6 +394,11 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   )
 
   const hasSidebar = tocItems.length >= 2
+
+  // When sidebar renders relationships separately, mark the in-article duplicate as hidden from assistive tech
+  if (hasSidebar) {
+    content = content.replace('<section id="relationships">', '<section id="relationships" aria-hidden="true">')
+  }
 
   // Compose sidebar: TOC first, then relationships below
   const sidebarParts = []
@@ -416,8 +422,9 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
 <html lang="en" data-theme="auto">
 ${buildHead({ title: pageTitle, description: doc.abstract_text, siteConfig })}
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
-<main class="main-content${hasSidebar ? ' has-sidebar' : ''}">
+<main id="main-content" class="main-content${hasSidebar ? ' has-sidebar' : ''}">
   ${breadcrumbs}
   ${buildDocMeta(doc)}
   ${mobileToc}
@@ -534,8 +541,9 @@ export function renderIndexPage(frameworks, siteConfig) {
 <html lang="en" data-theme="auto">
 ${buildHead({ title: pageTitle, description: 'Apple developer documentation, indexed locally.', siteConfig })}
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
-<main class="main-content${hasSidebar ? ' has-sidebar' : ''} listing">
+<main id="main-content" class="main-content${hasSidebar ? ' has-sidebar' : ''} listing">
   <h1>${escapeAttr(siteConfig.siteName)}</h1>
   ${mobileToc}
   <article class="doc-article">
@@ -642,8 +650,9 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
 <html lang="en" data-theme="auto">
 ${buildHead({ title: pageTitle, description: `${fwName} documentation index.`, siteConfig })}
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
-<main class="main-content${hasSidebar ? ' has-sidebar' : ''} listing">
+<main id="main-content" class="main-content${hasSidebar ? ' has-sidebar' : ''} listing">
   ${breadcrumbs}
   <h1>${escapeAttr(fwName)}${viewToggle}</h1>
   ${mobileToc}

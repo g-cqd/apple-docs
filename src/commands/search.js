@@ -4,7 +4,7 @@ import { detectIntent } from '../search/intent.js'
 import { rerank } from '../search/ranking.js'
 
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
-const ROLE_KIND_FILTERS = new Set(['symbol', 'article', 'collection', 'overview', 'tutorial', 'samplecode', 'sample_code'])
+const ROLE_KIND_FILTERS = new Set(['symbol', 'article', 'collection', 'overview', 'tutorial', 'samplecode', 'sample_code', 'sample-project', 'sampleproject'])
 
 /**
  * Search with tiered cascade: fast title/path tiers first, deep body search only
@@ -222,6 +222,11 @@ function formatResult(r) {
     isReleaseNotes: !!(r.is_release_notes),
     docKind: r.doc_kind ?? null,
     language: r.language ?? null,
+    minIos: r.min_ios ?? null,
+    minMacos: r.min_macos ?? null,
+    minWatchos: r.min_watchos ?? null,
+    minTvos: r.min_tvos ?? null,
+    minVisionos: r.min_visionos ?? null,
   }
 }
 

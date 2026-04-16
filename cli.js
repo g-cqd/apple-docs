@@ -14,6 +14,7 @@ import { frameworks } from './src/commands/frameworks.js'
 import { browse } from './src/commands/browse.js'
 import { sync } from './src/commands/sync.js'
 import { status } from './src/commands/status.js'
+import { paginateCliContent } from './src/cli/paginate.js'
 
 const { command, subcommand, positional, flags } = parseArgs(process.argv)
 
@@ -68,8 +69,14 @@ try {
           formatter = formatSearchResults
         } else {
           const hit = result.results[0]
-          const page = await lookup({ path: hit.path }, ctx)
-          result = { hit, page }
+          const maxChars = flags['max-chars'] ? Number.parseInt(flags['max-chars'], 10) : null
+          const pageNum = flags.page ? Number.parseInt(flags.page, 10) : 1
+          const readPage = await lookup({ path: hit.path }, ctx)
+          if (maxChars != null && readPage.found && readPage.content) {
+            result = { hit, page: paginateCliContent(readPage, maxChars, pageNum) }
+          } else {
+            result = { hit, page: readPage }
+          }
           formatter = formatSearchRead
         }
       } else {
@@ -84,7 +91,12 @@ try {
       // If it contains '/', treat as path; otherwise as symbol name
       const opts = target.includes('/') ? { path: target } : { symbol: target, framework: flags.framework }
       if (flags.section) opts.section = flags.section
+      const maxChars = flags['max-chars'] ? Number.parseInt(flags['max-chars'], 10) : null
+      const pageNum = flags.page ? Number.parseInt(flags.page, 10) : 1
       result = await lookup(opts, ctx)
+      if (maxChars != null && result.found && result.content) {
+        result = paginateCliContent(result, maxChars, pageNum)
+      }
       formatter = formatLookup
       break
     }

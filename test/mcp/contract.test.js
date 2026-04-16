@@ -480,6 +480,23 @@ describe('MCP contract — tools', () => {
     expect(result.isError).toBe(true)
     expect(result.content[0].text).toContain('requires maxChars')
   })
+
+  test('maxChars too small for a single result returns descriptive error', async () => {
+    const result = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'Mock', maxChars: 800 },
+    })
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain('exceeds the maxChars budget')
+  })
+
+  test('maxChars below minimum rejects with validation error', async () => {
+    const result = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'View', maxChars: 100 },
+    })
+    expect(result.isError).toBe(true)
+  })
 })
 
 describe('MCP contract — resources', () => {

@@ -296,7 +296,7 @@
   form.addEventListener('submit', (e) => {
     e.preventDefault()
     pushState()
-    doSearch(0, { preserveResults: currentResultCount > 0 })
+    doSearch(0)
   })
 
   loadMoreBtn.addEventListener('click', () => {
@@ -304,11 +304,15 @@
   })
 
   window.addEventListener('popstate', () => {
-    if (restoreFromUrl()) {
-      doSearch(0, { preserveResults: currentResultCount > 0 })
-    } else {
-      doSearch(0)
-    }
+    restoreFromUrl()
+    doSearch(0)
+  })
+
+  // Auto-search when filters change
+  form.addEventListener('change', (e) => {
+    if (e.target === queryInput) return
+    pushState()
+    doSearch(0)
   })
 
   // Initialize
