@@ -2,7 +2,7 @@ name: Build Snapshots
 
 on:
   schedule:
-    - cron: '0 6 * * 0' # Every Sunday at 06:00 UTC
+    - cron: '0 6 * * 0' # Sundays at 06:00 UTC
   workflow_dispatch:
     inputs:
       tiers:
@@ -10,19 +10,21 @@ on:
         default: 'all'
         type: string
 
+concurrency:
+  group: snapshot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   build-snapshot:
-    if: github.event_name != 'push'
     runs-on: macos-latest
     timeout-minutes: 180
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Set data directory
         run: echo "APPLE_DOCS_HOME=${{ runner.temp }}/apple-docs" >> "$GITHUB_ENV"
@@ -39,9 +41,11 @@ jobs:
         id: tiers
         run: |
           TIERS="${{ inputs.tiers || 'all' }}"
-          echo "build_lite=$( [[ "$TIERS" == "all" || "$TIERS" == *lite* ]] && echo true || echo false )" >> "$GITHUB_OUTPUT"
-          echo "build_standard=$( [[ "$TIERS" == "all" || "$TIERS" == *standard* ]] && echo true || echo false )" >> "$GITHUB_OUTPUT"
-          echo "build_full=$( [[ "$TIERS" == "all" || "$TIERS" == *full* ]] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+          {
+            echo "build_lite=$( [[ "$TIERS" == "all" || "$TIERS" == *lite* ]] && echo true || echo false )"
+            echo "build_standard=$( [[ "$TIERS" == "all" || "$TIERS" == *standard* ]] && echo true || echo false )"
+            echo "build_full=$( [[ "$TIERS" == "all" || "$TIERS" == *full* ]] && echo true || echo false )"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build lite snapshot
         if: steps.tiers.outputs.build_lite == 'true'
@@ -62,7 +66,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: 'Weekly Snapshot (${{ steps.tag.outputs.tag }})'
+          name: 'Snapshot (${{ steps.tag.outputs.tag }})'
           files: |
             dist/*.tar.gz
             dist/*.sha256
@@ -71,7 +75,7 @@ jobs:
           draft: false
           prerelease: false
           body: |
-            Automated weekly snapshot build.
+            ${{ github.event_name == 'schedule' && 'Scheduled snapshot build.' || 'Manual snapshot build.' }}
 
             **Tiers:**
             - `lite` — Metadata + FTS5 title/abstract index

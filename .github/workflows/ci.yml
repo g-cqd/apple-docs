@@ -6,13 +6,18 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Lint (Biome)
         run: bun run lint
@@ -41,13 +46,12 @@ jobs:
 
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Run tests with coverage
         run: bun test --coverage
@@ -72,22 +76,36 @@ jobs:
   mutation:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
         with:
-          fetch-depth: 0
-      - uses: oven-sh/setup-bun@v2
-      - uses: actions/setup-node@v4
+          fetch-depth: '0'
+
+      - name: Restore Stryker incremental baseline
+        uses: actions/cache@v4
         with:
-          node-version: '22'
-      - run: bun install --frozen-lockfile
+          path: |
+            .stryker-tmp
+            reports/stryker-incremental.json
+          key: stryker-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            stryker-${{ github.ref }}-
+            stryker-refs/heads/main-
 
       - name: Mutation testing (changed files)
         run: |
-          CHANGED=$(git diff --name-only origin/main...HEAD -- 'src/**/*.js' | tr '\n' ',')
-          if [ -n "$CHANGED" ]; then
-            npx stryker run --mutate "$CHANGED" --incremental
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="origin/${{ github.base_ref }}"
+            git fetch --no-tags --depth=50 origin "${{ github.base_ref }}"
           else
-            echo "No src/ JS files changed — skipping mutation testing"
+            BASE="HEAD~1"
+          fi
+          CHANGED=$(git diff --name-only "$BASE"...HEAD -- 'src/**/*.js' | paste -sd, -)
+          if [ -n "$CHANGED" ]; then
+            echo "Mutating: $CHANGED"
+            bunx stryker run --mutate "$CHANGED" --incremental
+          else
+            echo "No src/ JS files changed since $BASE — skipping mutation testing"
           fi
 
       - name: Upload mutation report

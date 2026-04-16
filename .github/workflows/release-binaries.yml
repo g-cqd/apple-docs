@@ -5,9 +5,17 @@ on:
     types: [published]
   workflow_dispatch: {}
 
+concurrency:
+  group: release-binaries-${{ github.event.release.tag_name || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -23,20 +31,21 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Compile binary
         run: bun build --compile --target=${{ matrix.target }} cli.js --outfile ${{ matrix.name }}
+
+      - name: Generate checksum
+        run: shasum -a 256 ${{ matrix.name }} > ${{ matrix.name }}.sha256
 
       - name: Upload binary to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.name }}
+          files: |
+            ${{ matrix.name }}
+            ${{ matrix.name }}.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -45,5 +54,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: ${{ matrix.name }}
+          path: |
+            ${{ matrix.name }}
+            ${{ matrix.name }}.sha256
           retention-days: 7

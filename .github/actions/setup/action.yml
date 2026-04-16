@@ -1,0 +1,29 @@
+name: Setup
+description: Checkout repository, install Bun, cache dependencies, and run frozen install
+
+inputs:
+  fetch-depth:
+    description: Git fetch depth for the checkout step.
+    required: false
+    default: '1'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: ${{ inputs.fetch-depth }}
+
+    - uses: oven-sh/setup-bun@v2
+
+    - name: Cache Bun install artifacts
+      uses: actions/cache@v4
+      with:
+        path: ~/.bun/install/cache
+        key: bun-install-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+        restore-keys: |
+          bun-install-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: bun install --frozen-lockfile
