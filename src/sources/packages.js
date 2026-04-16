@@ -42,7 +42,7 @@ function packageSyncLimit() {
  * @param {{ logger?: { warn?: Function } }} [ctx]
  * @returns {'official'|'full'}
  */
-export function packagesScope(ctx) {
+function packagesScope(ctx) {
   const raw = (process.env.APPLE_DOCS_PACKAGES_SCOPE ?? '').trim().toLowerCase()
   const hasToken = hasGitHubToken()
 

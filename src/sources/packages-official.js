@@ -44,11 +44,3 @@ export const OFFICIAL_PACKAGES = Object.freeze([
   { owner: 'swiftlang', repo: 'swift-evolution' },
   { owner: 'swiftlang', repo: 'swift-markdown' },
 ])
-
-/**
- * Prebuilt `packages/<owner>/<repo>` keys (lowercased), matching the
- * `packageKey` shape used elsewhere in the adapter.
- */
-export const OFFICIAL_PACKAGE_KEYS = Object.freeze(
-  OFFICIAL_PACKAGES.map(({ owner, repo }) => `packages/${owner.toLowerCase()}/${repo.toLowerCase()}`),
-)
