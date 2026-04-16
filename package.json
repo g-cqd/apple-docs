@@ -52,7 +52,7 @@
     "ci": "bun run lint && bun run typecheck && bun test"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.4.12",
     "@stryker-mutator/core": "^9.6.1",
     "@types/bun": "^1.2.0",
     "jscpd": "^4.0.9",
