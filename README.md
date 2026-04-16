@@ -1,6 +1,6 @@
 # apple-docs
 
-Local Apple developer documentation corpus with CLI search, an MCP server for AI assistants, and a static website generator. 10 sources, tiered search, offline-first. Runs on [Bun](https://bun.sh).
+Read, search, and share Apple's developer documentation from the command line, from your AI assistant, or from a local website — entirely offline. One install covers 10 sources, from SwiftUI references to WWDC sessions. Runs on [Bun](https://bun.sh).
 
 ## Setup
 
@@ -11,13 +11,17 @@ bun install
 bun link
 ```
 
-Build the full corpus (about 15 minutes):
+Grab everything in one pass (takes about 15 minutes):
 
 ```bash
 apple-docs sync --concurrency 500 --rate 500 --full --parallel 20 --retry-failed --index
 ```
 
-This fetches all 10 sources, converts every page, and builds the deep-search index in one pass.
+Prefer not to wait? Install a prebuilt snapshot instead:
+
+```bash
+apple-docs setup --tier standard
+```
 
 ## MCP Server
 
@@ -45,18 +49,9 @@ Or add this to your MCP client config manually:
 
 The server exposes 5 tools (`search_docs`, `read_doc`, `list_frameworks`, `browse`, `status`) and 2 resources (`apple-docs://doc/{key}`, `apple-docs://framework/{slug}`).
 
-For large MCP responses, `search_docs`, `read_doc`, `list_frameworks`, and `browse` support:
+Large responses can be paged with `maxChars` and `page`; responses report `pageInfo` with `totalPages` when paging is active.
 
-- `maxChars`: cap one response page by serialized character count
-- `page`: request a specific 1-based response page
-- `pageInfo`: returned when `maxChars` is used, including `totalPages`
-
-`read_doc` and `search_docs` read mode also support focused excerpt reads with:
-
-- `match`: literal substring match
-- `contextChars`: context window around each match
-- `maxMatches`: maximum number of excerpts to return
-- `caseSensitive`: case-sensitive matching toggle
+`read_doc` and `search_docs` (in read mode) also support focused excerpts via `match`, `contextChars`, `maxMatches`, and `caseSensitive`.
 
 ## Local Website
 
@@ -64,40 +59,37 @@ For large MCP responses, `search_docs`, `read_doc`, `list_frameworks`, and `brow
 apple-docs web serve
 ```
 
-Opens a local documentation site at `http://localhost:3000` backed by your synced corpus. Key features:
+Opens a local documentation site at `http://localhost:3000` backed by your corpus. Highlights:
 
-- Full-text client-side search across all sources, with filters for framework, kind, language, and platform versions
-- Swift / Objective-C declaration toggle, persisted per browser
-- Tree view for type hierarchies with single-child chain compaction
-- Syntax-highlighted Swift and Objective-C code via Shiki
-- Auto / light / dark theme with `prefers-color-scheme` detection
-- Per-page table of contents and framework sidebar navigation
-- Platform availability, deprecated, and beta badges on symbols
-- Security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) and gzip compression on the dev server
-- Dev server fetches missing pages from `developer.apple.com` on demand and persists them to the corpus
+- Fast search with filters for framework, language, and platform
+- Toggle between Swift and Objective-C declarations
+- Collapsible tree view for type hierarchies
+- Syntax-highlighted Swift and Objective-C code
+- Light and dark themes
+- Per-page table of contents and framework sidebar
+- Platform availability, deprecated, and beta badges
+- Missing pages are fetched from Apple on demand and cached for next time
 
-To generate a static build for deployment:
+Prefer a self-hosted site? Build a static bundle you can drop on any host:
 
 ```bash
 apple-docs web build --out dist/web
 ```
 
-The static build emits self-contained HTML, assets, and a client-side search index with no server-side dependency.
-
 ## What It Covers
 
 | Source type | Coverage |
 | --- | --- |
-| `apple-docc` | Apple's DocC corpus from `developer.apple.com/tutorials/data`, including frameworks, technologies, API references, release notes, and related documentation roots |
-| `hig` | Human Interface Guidelines content under the `design` root |
+| `apple-docc` | Apple's official developer docs: frameworks, API references, technologies, release notes |
+| `hig` | Human Interface Guidelines |
 | `guidelines` | App Store Review Guidelines |
 | `swift-evolution` | Swift Evolution proposals |
 | `swift-book` | The Swift Programming Language |
 | `swift-org` | Swift.org articles and reference material |
-| `apple-archive` | Archived Apple documentation imported through the archive adapter |
+| `apple-archive` | Archived Apple documentation |
 | `wwdc` | WWDC session catalog and metadata |
 | `sample-code` | Apple sample code catalog |
-| `packages` | Swift package catalog entries enriched with GitHub repository metadata and README content |
+| `packages` | Swift package catalog, enriched with repository READMEs |
 
 ## Global CLI Shape
 
@@ -118,32 +110,32 @@ Global flags supported by most command handlers:
 
 | Command | Purpose |
 | --- | --- |
-| `search <query>` | Search the corpus with fuzzy, substring, and deep-body search |
-| `read <path-or-symbol>` | Read a page by canonical path or symbol name |
-| `frameworks` | List indexed roots |
+| `search <query>` | Search the corpus, from exact matches down to page-body text |
+| `read <path-or-symbol>` | Read a page by path or symbol name |
+| `frameworks` | List available frameworks |
 | `browse <framework>` | Browse a framework or subtree |
-| `sync` | Discover, fetch, convert, and index content |
+| `sync` | Fetch and index content |
 | `update` | Pull incremental changes |
 | `index` | Build or rebuild search indexes |
 | `doctor` | Diagnose and repair corpus issues |
-| `status` | Show corpus health, capabilities, freshness, and progress |
-| `setup` | Install a prebuilt snapshot from the latest release |
-| `snapshot build` | Build a snapshot archive from the current corpus |
-| `mcp start` | Start the MCP stdio server |
+| `status` | Show corpus health, freshness, and progress |
+| `setup` | Install a prebuilt snapshot |
+| `snapshot build` | Package a snapshot from the current corpus |
+| `mcp start` | Start the MCP server |
 | `mcp install` | Print MCP client configuration snippets |
 | `web build` | Build a static documentation website |
-| `web serve` | Preview the static site locally |
-| `web deploy [platform]` | Print deployment instructions for supported static hosts |
+| `web serve` | Preview the local website |
+| `web deploy [platform]` | Print deployment instructions for popular hosts |
 | `storage stats` | Show storage usage |
-| `storage gc` | Drop cached materializations and clean orphaned data |
-| `storage materialize <format>` | Pre-render markdown or HTML for all or selected roots |
+| `storage gc` | Drop cached content and clean up |
+| `storage materialize <format>` | Pre-render markdown or HTML to disk |
 | `storage profile` | Inspect or change the storage policy |
 
 ## Search and Read
 
 ### `search`
 
-Ranking is tiered: `exact > prefix > contains > match > substring > fuzzy > body`.
+Results are ordered by how directly they match, starting with exact title matches and ending with deep body-text matches.
 
 Examples:
 
@@ -162,25 +154,25 @@ apple-docs search "Publisher" --json
 
 | Option | Description |
 | --- | --- |
-| `--framework <slug>` | Filter to one framework or root slug |
-| `--source <slug[,slug]>` | Filter by one or more source types |
-| `--kind <role>` | Filter by role such as `symbol`, `article`, or `collection` |
-| `--language <swift\|objc>` | Filter by language metadata |
+| `--framework <slug>` | Limit to a single framework |
+| `--source <slug[,slug]>` | Limit to one or more sources |
+| `--kind <role>` | Limit to a kind (`symbol`, `article`, `collection`, ...) |
+| `--language <swift\|objc>` | Limit to a language |
 | `--platform <ios\|macos\|watchos\|tvos\|visionos>` | Require availability on that platform |
-| `--min-ios <ver>` | Require iOS availability at or above a version |
-| `--min-macos <ver>` | Require macOS availability at or above a version |
-| `--min-watchos <ver>` | Require watchOS availability at or above a version |
-| `--min-tvos <ver>` | Require tvOS availability at or above a version |
-| `--min-visionos <ver>` | Require visionOS availability at or above a version |
+| `--min-ios <ver>` | Require iOS at or above a version |
+| `--min-macos <ver>` | Require macOS at or above a version |
+| `--min-watchos <ver>` | Require watchOS at or above a version |
+| `--min-tvos <ver>` | Require tvOS at or above a version |
+| `--min-visionos <ver>` | Require visionOS at or above a version |
 | `--year <n>` | Filter WWDC sessions by year |
 | `--track <name>` | Filter WWDC sessions by track |
 | `--limit <n>` | Cap results. Default: `100` |
-| `--no-fuzzy` | Disable typo-tolerant title matching |
-| `--no-deep` | Disable body search entirely |
-| `--no-eager` | Wait for body search to finish instead of returning early |
-| `--read` | Resolve the top hit and return its content immediately |
-| `--max-chars <n>` | With `--read`, paginate the rendered content to fit within a character budget |
-| `--page <n>` | With `--read` and `--max-chars`, select a specific page (1-based) |
+| `--no-fuzzy` | Turn off typo-tolerant matching |
+| `--no-deep` | Skip searching inside page bodies |
+| `--no-eager` | Wait for full results instead of showing title matches first |
+| `--read` | Open the top result right away |
+| `--max-chars <n>` | With `--read`, split the page into character-limited chunks |
+| `--page <n>` | With `--read` and `--max-chars`, pick a chunk (1-based) |
 
 Notes:
 
@@ -205,13 +197,13 @@ Options:
 
 | Option | Description |
 | --- | --- |
-| `--framework <slug>` | Disambiguate a symbol lookup |
-| `--section <heading-or-file>` | Return one section instead of the full document |
-| `--max-chars <n>` | Paginate the rendered content to fit within a character budget |
-| `--page <n>` | Select a specific page when `--max-chars` is used (1-based) |
-| `--json` | Return the lookup payload as JSON |
+| `--framework <slug>` | Disambiguate when a symbol name is shared |
+| `--section <heading-or-file>` | Return one section instead of the full page |
+| `--max-chars <n>` | Split the page into character-limited chunks |
+| `--page <n>` | Pick a chunk when `--max-chars` is set (1-based) |
+| `--json` | Return the raw payload as JSON |
 
-On a `lite` snapshot, `read` may return metadata plus a tier-upgrade hint instead of full rendered content.
+On a `lite` snapshot, `read` returns metadata with a hint to upgrade to a larger tier for the full page.
 
 ### `frameworks`
 
@@ -223,7 +215,7 @@ apple-docs frameworks --kind framework
 apple-docs frameworks --json
 ```
 
-Use `--json` when you need the canonical slugs instead of the grouped human-readable list.
+Use `--json` when you need the raw slugs instead of the grouped list.
 
 ### `browse`
 
@@ -241,11 +233,11 @@ Options:
 
 | Option | Description |
 | --- | --- |
-| `--path <page-path>` | Browse one page's children instead of the whole root |
-| `--limit <n>` | Limit the returned page list |
-| `--json` | Return the full browse payload as JSON |
+| `--path <page-path>` | Browse one page's children instead of the whole framework |
+| `--limit <n>` | Cap the number of entries returned |
+| `--json` | Return the full listing as JSON |
 
-The pretty terminal formatter previews the first 50 entries when browsing an entire root. Use `--json` for the full list.
+Terminal output previews the first 50 entries when browsing a whole framework. Use `--json` for the full list.
 
 ## Build and Maintain the Corpus
 
@@ -264,24 +256,24 @@ apple-docs sync --full --parallel 10 --concurrency 50 --rate 100 --index
 
 | Option | Description |
 | --- | --- |
-| `--roots <a,b,c>` | Restrict sync to specific root slugs |
-| `--sources <a,b,c>` | Restrict sync to source adapters |
-| `--full` | Crawl all discovered roots |
-| `--parallel <n>` | Crawl up to `n` roots simultaneously |
-| `--concurrency <n>` | Max in-flight fetches across all work |
-| `--rate <n>` | Max requests per second |
-| `--retry-failed` | Retry pages that previously failed |
-| `--index` | Build or refresh the deep-search index after sync |
+| `--roots <a,b,c>` | Limit sync to specific frameworks |
+| `--sources <a,b,c>` | Limit sync to specific sources |
+| `--full` | Fetch everything the sources expose |
+| `--parallel <n>` | Work on up to `n` frameworks at once |
+| `--concurrency <n>` | Cap simultaneous network requests |
+| `--rate <n>` | Cap requests per second |
+| `--retry-failed` | Retry pages that failed last time |
+| `--index` | Refresh the deep-search index when sync finishes |
 | `--json` | Return the sync summary as JSON |
 
-Current source adapter names:
+Available sources:
 
 `apple-docc`, `hig`, `guidelines`, `swift-evolution`, `swift-book`, `swift-org`, `apple-archive`, `wwdc`, `sample-code`, `packages`
 
-Packages note:
+For the `packages` source:
 
-- A full `packages` sync requires `GITHUB_TOKEN` or `GH_TOKEN`.
-- For a small unauthenticated sample, set `APPLE_DOCS_PACKAGES_LIMIT=<n>`.
+- A full sync needs a GitHub token (`GITHUB_TOKEN` or `GH_TOKEN`).
+- Set `APPLE_DOCS_PACKAGES_LIMIT=<n>` to grab a small unauthenticated sample.
 
 ### `update`
 
@@ -294,7 +286,7 @@ apple-docs update --sources packages
 apple-docs update --concurrency 50 --rate 100 --parallel 5
 ```
 
-`update` reuses the existing corpus and only fetches changed or new items. It supports the same `--roots`, `--sources`, `--parallel`, `--concurrency`, `--rate`, `--index`, and `--json` controls as `sync`.
+`update` keeps your existing corpus and only fetches what changed. It takes the same options as `sync` (`--roots`, `--sources`, `--parallel`, `--concurrency`, `--rate`, `--index`, `--json`).
 
 ### `index`
 
@@ -311,15 +303,15 @@ Subcommands:
 
 | Command | Purpose |
 | --- | --- |
-| `apple-docs index` | Build or incrementally update the body index |
-| `apple-docs index --full` | Rebuild the entire body index |
-| `apple-docs index rebuild-trigram` | Rebuild the title trigram index used for fast substring and fuzzy lookups |
-| `apple-docs index rebuild-body` | Rebuild the body index from `document_sections` |
+| `apple-docs index` | Build or update the body-search index |
+| `apple-docs index --full` | Rebuild the body-search index from scratch |
+| `apple-docs index rebuild-trigram` | Rebuild the title index for substring and typo-tolerant search |
+| `apple-docs index rebuild-body` | Rebuild the full-text index for page bodies |
 
 Notes:
 
-- `rebuild-trigram` works on any tier because it only needs document titles.
-- `rebuild-body` requires `document_sections`, so it works on `standard`, `full`, or a locally synced corpus with sections.
+- `rebuild-trigram` works on any tier.
+- `rebuild-body` needs a `standard` or `full` corpus.
 
 ### `doctor`
 
@@ -333,7 +325,7 @@ apple-docs doctor --index
 apple-docs doctor --verify
 ```
 
-`doctor` upgrades schema state, cleans invalid crawl entries, retries resolvable failures, can minify raw JSON, and can run integrity checks. `--verify` is especially useful after installing a snapshot.
+`doctor` cleans up invalid crawl entries, retries recoverable failures, can shrink stored JSON, and can verify corpus integrity. Run it with `--verify` after installing a snapshot if anything feels off.
 
 ### `status`
 
@@ -344,20 +336,18 @@ apple-docs status --json
 
 `status` reports:
 
-- current snapshot tier
-- search and read capabilities
-- database, raw JSON, and markdown sizes
-- root counts and page counts
-- active or interrupted crawl activity
-- per-root progress
-- freshness and stale roots
-- latest-release availability when the corpus was installed from a snapshot
+- the current snapshot tier and what it supports
+- storage used by the database, raw JSON, and markdown
+- how many frameworks and pages are available
+- any crawl in progress or left interrupted
+- per-framework progress and freshness
+- whether a newer snapshot is available on GitHub Releases
 
 ## Snapshots
 
 ### `setup`
 
-`setup` downloads the latest published snapshot from GitHub Releases instead of crawling locally.
+`setup` grabs the latest snapshot from GitHub Releases so you can skip the initial crawl.
 
 Examples:
 
@@ -371,19 +361,19 @@ apple-docs setup --tier lite --force --downgrade
 
 | Tier | Includes | Best for |
 | --- | --- | --- |
-| `lite` | Metadata, title/declaration search, browse, MCP metadata access | Quick install, smallest footprint |
-| `standard` | `lite` plus normalized document sections and full `read` output | Best default |
-| `full` | `standard` plus raw payloads and materialization-friendly on-disk content | Offline power use, snapshot publishing, heavy web/storage workflows |
+| `lite` | Titles, declarations, browse, metadata | Fastest install, smallest footprint |
+| `standard` | `lite` plus full page content for `read` | Recommended default |
+| `full` | `standard` plus raw JSON and pre-rendered files on disk | Offline power use, publishing snapshots, web builds |
 
-Rules:
+Tips:
 
-- Use `--force` to reinstall or upgrade an existing corpus.
-- Downgrading from a higher tier to a lower tier requires `--downgrade`.
-- `setup` talks to GitHub Releases and optionally uses `GITHUB_TOKEN` or `GH_TOKEN` to avoid API limits.
+- `--force` reinstalls or upgrades an existing corpus.
+- Downgrading to a smaller tier requires `--downgrade`.
+- Set `GITHUB_TOKEN` or `GH_TOKEN` to avoid GitHub rate limits.
 
 ### `snapshot build`
 
-Build a release-style archive from the corpus you already have.
+Package your existing corpus into a release-style archive.
 
 Examples:
 
@@ -399,11 +389,11 @@ Output:
 - `apple-docs-<tier>-<tag>.sha256`
 - `apple-docs-<tier>-<tag>.manifest.json`
 
-Tier behavior:
+What each tier ships:
 
-- `lite` strips section and search-body tables
-- `standard` ships the database plus manifest
-- `full` additionally bundles `raw-json/` and `markdown/`
+- `lite` — titles and metadata only
+- `standard` — the full database plus a manifest
+- `full` — everything above plus raw JSON and Markdown files
 
 ## Static Site
 
@@ -425,8 +415,8 @@ apple-docs web deploy netlify
 - landing page
 - framework index pages
 - one page per document
-- static client-side search assets
-- a `manifest.json` for the generated site
+- search index and assets
+- a build manifest
 
 Supported `web` options:
 
@@ -455,102 +445,99 @@ Storage profiles:
 
 | Profile | Behavior |
 | --- | --- |
-| `raw-only` | Minimal disk use. Render on demand only |
-| `balanced` | Default. Cache markdown on first read with eviction |
-| `prebuilt` | Persist markdown and HTML aggressively |
+| `raw-only` | Smallest footprint. Render pages only when asked |
+| `balanced` | Default. Cache markdown as you read it |
+| `prebuilt` | Keep markdown and HTML on disk for instant reads |
 
 Subcommands:
 
 | Command | Purpose |
 | --- | --- |
-| `storage profile` | Show the current profile |
+| `storage profile` | Show the active profile |
 | `storage profile set <name>` | Switch profile |
 | `storage profile list` | List all profiles |
-| `storage stats` | Show disk and table usage |
-| `storage gc` | Drop cached markdown/HTML and clean orphaned data |
-| `storage materialize <markdown\|html>` | Render all documents to disk, optionally limited with `--roots` |
+| `storage stats` | Show disk usage |
+| `storage gc` | Drop cached markdown/HTML and clean up |
+| `storage materialize <markdown\|html>` | Pre-render pages to disk (optionally `--roots <slugs>`) |
 
 Notes:
 
-- `storage gc --drop markdown,html` recreates empty cache directories after deletion.
-- `storage gc --older-than <days>` prunes old activity records before cleanup.
-- `storage materialize` requires `document_sections`, so `lite` snapshots will not produce useful rendered output.
+- `storage gc --older-than <days>` also prunes old activity records.
+- `storage materialize` needs a `standard` or `full` corpus.
 
 ## MCP Server Reference
 
-See [MCP Server](#mcp-server) at the top for quick setup. Additional notes:
+See [MCP Server](#mcp-server) for quick setup. A few extra details:
 
-- `apple-docs-mcp` is a backward-compatible standalone binary (`apple-docs mcp install` prints config for both entry points)
-- `APPLE_DOCS_HOME` is required for MCP server processes
-- `apple-docs-mcp` uses `APPLE_DOCS_LOG_LEVEL` for logging control
+- `apple-docs-mcp` is a standalone binary kept around for backward compatibility (`apple-docs mcp install` prints config for both entry points)
+- `APPLE_DOCS_HOME` must be set in the MCP process environment
+- `APPLE_DOCS_LOG_LEVEL` controls logging for the standalone binary
 - Use `--verbose` on `apple-docs mcp start` for debug logging
 
 | Tool | Purpose |
 | --- | --- |
-| `search_docs` | Search the corpus with the same ranking and filters as the CLI |
-| `read_doc` | Fetch a page by path or symbol, with optional paged and match-scoped output |
-| `list_frameworks` | List indexed roots, optionally paged by response size |
-| `browse` | Explore a framework tree or subtree, optionally paged by response size |
-| `status` | Return corpus health and capability information |
+| `search_docs` | Search with the same ranking and filters as the CLI |
+| `read_doc` | Fetch a page by path or symbol, with optional paging and focused excerpts |
+| `list_frameworks` | List available frameworks, optionally paged |
+| `browse` | Explore a framework tree or subtree, optionally paged |
+| `status` | Report corpus health and capabilities |
 
 | Resource | Purpose |
 | --- | --- |
 | `apple-docs://doc/{key}` | Read a document as markdown |
-| `apple-docs://framework/{slug}` | Browse a framework tree as JSON, with optional `?maxChars=<n>&page=<n>` paging |
+| `apple-docs://framework/{slug}` | Browse a framework tree as JSON (supports `?maxChars=<n>&page=<n>`) |
 
 ## Data Layout
 
-Typical data directory layout:
+Typical data directory:
 
 ```text
 ~/.apple-docs/
   apple-docs.db
-  apple-docs.db-wal
-  apple-docs.db-shm
   manifest.json
   raw-json/
   markdown/
   html/
 ```
 
-Not every installation has every directory:
+Not every install has every directory:
 
-- `raw-json/` and `markdown/` are guaranteed on `full` snapshots and common in locally synced corpora
-- `html/` exists when HTML has been materialized or generated for caching workflows
-- `manifest.json` exists for snapshot installs and generated snapshots
+- `raw-json/` and `markdown/` always ship with `full` snapshots and are common after a local sync
+- `html/` shows up once you pre-render HTML to disk
+- `manifest.json` is present for installs and packaged snapshots
 
 ## Configuration
 
-CLI flags override environment variables when both are supplied.
+CLI flags take precedence over environment variables.
 
 Core settings:
 
 | Variable | Default | Used by | Description |
 | --- | --- | --- | --- |
-| `APPLE_DOCS_HOME` | `~/.apple-docs` | CLI, MCP | Data directory |
-| `APPLE_DOCS_RATE` | `5` | CLI sync/update | Default request rate if `--rate` is omitted |
-| `APPLE_DOCS_BURST` | `2` | CLI sync/update | Rate-limiter burst size |
-| `APPLE_DOCS_CONCURRENCY` | `5` | CLI sync/update | Default fetch concurrency if flags are omitted |
-| `APPLE_DOCS_TIMEOUT` | `30000` | HTTP clients | General request timeout in ms |
-| `APPLE_DOCS_GITHUB_TIMEOUT` | `45000` or `APPLE_DOCS_TIMEOUT` | GitHub-backed sources | GitHub-specific timeout override |
-| `APPLE_DOCS_API_BASE` | Apple tutorial data URL | Apple DocC adapter | Advanced override for the Apple API base URL |
+| `APPLE_DOCS_HOME` | `~/.apple-docs` | CLI, MCP | Where the corpus lives |
+| `APPLE_DOCS_RATE` | `5` | `sync`, `update` | Default requests per second |
+| `APPLE_DOCS_BURST` | `2` | `sync`, `update` | Rate-limiter burst size |
+| `APPLE_DOCS_CONCURRENCY` | `5` | `sync`, `update` | Default simultaneous requests |
+| `APPLE_DOCS_TIMEOUT` | `30000` | All HTTP | Request timeout in milliseconds |
+| `APPLE_DOCS_GITHUB_TIMEOUT` | `45000` or `APPLE_DOCS_TIMEOUT` | GitHub requests | Timeout override for GitHub calls |
+| `APPLE_DOCS_API_BASE` | Apple tutorial data URL | DocC source | Advanced: override Apple's API base URL |
 
-GitHub-backed workflows:
+GitHub access:
 
 | Variable | Used by | Description |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | `setup`, `status`, `packages`, GitHub fetches | Preferred GitHub token |
+| `GITHUB_TOKEN` | `setup`, `status`, `packages` | Preferred GitHub token |
 | `GH_TOKEN` | Same as above | Fallback token name |
-| `APPLE_DOCS_PACKAGES_LIMIT` | `packages` source | Limit package discovery for unauthenticated sampling |
+| `APPLE_DOCS_PACKAGES_LIMIT` | `packages` source | Cap package discovery when running unauthenticated |
 
 Logging:
 
 | Setting | Applies to | Notes |
 | --- | --- | --- |
-| `--verbose` | `apple-docs` CLI | Enables debug-level CLI logging |
-| `APPLE_DOCS_LOG_LEVEL` | `apple-docs-mcp` | Used by the standalone MCP binary |
+| `--verbose` | `apple-docs` CLI | Enables debug logging |
+| `APPLE_DOCS_LOG_LEVEL` | `apple-docs-mcp` | Standalone MCP binary logging level |
 
-## Repository Verification
+## Contributing
 
 If you are working on the repo itself:
 
