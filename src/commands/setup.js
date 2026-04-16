@@ -158,9 +158,16 @@ export async function setup(opts, ctx) {
       verifyDb.setSnapshotMeta('snapshot_tag', release.tag)
       verifyDb.setSnapshotMeta('snapshot_installed_at', new Date().toISOString())
 
-      const transition = currentTier && currentTier !== tier ? { from: currentTier, to: tier } : null
+      // Only treat this as a tier transition when there was an actual populated
+      // corpus before setup ran. Empty databases report a default tier from
+      // capability probing, which would otherwise produce misleading
+      // "Upgraded from standard to <tier>" messages on fresh installs.
+      const transition = stats.totalPages > 0 && currentTier && currentTier !== tier
+        ? { from: currentTier, to: tier }
+        : null
       if (transition) {
-        logger.info(`Upgraded from ${transition.from} to ${transition.to} tier.`)
+        const verb = tierRank[transition.to] >= tierRank[transition.from] ? 'Upgraded' : 'Downgraded'
+        logger.info(`${verb} from ${transition.from} to ${transition.to} tier.`)
       }
       logger.info(`Setup complete! ${documentCount} documents ready.`)
 

@@ -367,7 +367,9 @@ export function formatSetup(result) {
     `  Data dir:    ${result.dataDir}`,
   ]
   if (result.transition) {
-    lines.push(`  Upgraded:    ${result.transition.from} → ${result.transition.to}`)
+    const tierRank = { lite: 0, standard: 1, full: 2 }
+    const label = tierRank[result.transition.to] >= tierRank[result.transition.from] ? 'Upgraded' : 'Downgraded'
+    lines.push(`  ${label}:   ${result.transition.from} → ${result.transition.to}`)
   }
   lines.push('', 'Run `apple-docs search <query>` to start searching.')
   return lines.join('\n')
