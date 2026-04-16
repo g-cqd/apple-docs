@@ -41,7 +41,6 @@ function trigrams(s) {
  * Module-level trigram cache: lazily built on first fuzzy search per db instance.
  * Maps trigram string -> array of { id, title } rows.
  * Automatically invalidated when a different db instance is used.
- * Can also be cleared explicitly via clearTrigramCache().
  * @type {Map<string, Array<{ id: number, title: string }>> | null}
  */
 let _trigramCache = null
@@ -68,14 +67,6 @@ function buildTrigramCache(db) {
       bucket.push({ id: row.id, title: row.title })
     }
   }
-}
-
-/**
- * Clear the trigram cache. Call when the database content changes (e.g. after sync).
- */
-export function clearTrigramCache() {
-  _trigramCache = null
-  _trigramCacheDb = null
 }
 
 /**
