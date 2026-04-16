@@ -17,6 +17,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
 
       - name: Lint (Biome)
@@ -38,7 +39,7 @@ jobs:
 
       - name: Upload quality reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: quality-reports
           path: reports/
@@ -51,6 +52,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
 
       - name: Run tests with coverage
@@ -58,7 +60,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-lcov
           path: coverage/
@@ -66,7 +68,7 @@ jobs:
 
       - name: Upload to Codecov
         if: matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: coverage/lcov.info
           fail_ci_if_error: false
@@ -76,12 +78,13 @@ jobs:
   mutation:
     runs-on: ubuntu-latest
     steps:
-      - uses: ./.github/actions/setup
+      - uses: actions/checkout@v5
         with:
-          fetch-depth: '0'
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
 
       - name: Restore Stryker incremental baseline
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             .stryker-tmp
@@ -110,8 +113,9 @@ jobs:
 
       - name: Upload mutation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: mutation-report
           path: reports/stryker/
           retention-days: 30
+          if-no-files-found: ignore

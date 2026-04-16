@@ -24,6 +24,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
 
       - name: Set data directory
@@ -63,7 +64,7 @@ jobs:
         run: bun run cli.js status --json > dist/status.json
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: 'Snapshot (${{ steps.tag.outputs.tag }})'
