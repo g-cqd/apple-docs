@@ -61,7 +61,7 @@ describe('renderHtml', () => {
 
   test('includes declaration code block', () => {
     const html = renderHtml(document, sections)
-    expect(html).toContain('<pre>')
+    expect(html).toContain('<pre')
     expect(html).toContain('<code')
   })
 
@@ -85,6 +85,103 @@ describe('renderHtml', () => {
     if (html.includes('<h2>Overview</h2>')) {
       expect(html).toContain('id="overview"')
     }
+  })
+
+  test('declaration renders type links when knownKeys provided and tokens have _resolvedKey', () => {
+    const declSection = {
+      sectionKind: 'declaration',
+      heading: 'Declaration',
+      contentJson: JSON.stringify([{
+        tokens: [
+          { kind: 'keyword', text: 'var' },
+          { kind: 'text', text: ' body: ' },
+          { kind: 'typeIdentifier', text: 'View', _resolvedKey: 'swiftui/view' },
+        ],
+        languages: ['swift'],
+      }]),
+      contentText: 'var body: View',
+      sortOrder: 1,
+    }
+    const knownKeys = new Set(['swiftui/view'])
+    const html = renderHtml({ title: 'Test' }, [declSection], { knownKeys })
+    expect(html).toContain('<a href="/docs/swiftui/view/"')
+    expect(html).toContain('class="code-type-link"')
+    expect(html).toContain('decl-type')
+    expect(html).toContain('View</span></a>')
+  })
+
+  test('declaration does not link types missing from knownKeys', () => {
+    const declSection = {
+      sectionKind: 'declaration',
+      heading: 'Declaration',
+      contentJson: JSON.stringify([{
+        tokens: [
+          { kind: 'keyword', text: 'var' },
+          { kind: 'text', text: ' body: ' },
+          { kind: 'typeIdentifier', text: 'UnknownType', _resolvedKey: 'missing/unknowntype' },
+        ],
+        languages: ['swift'],
+      }]),
+      contentText: 'var body: UnknownType',
+      sortOrder: 1,
+    }
+    const knownKeys = new Set(['swiftui/view'])
+    const html = renderHtml({ title: 'Test' }, [declSection], { knownKeys })
+    expect(html).not.toContain('<a ')
+    expect(html).toContain('decl-type')
+    expect(html).toContain('UnknownType')
+  })
+
+  test('declaration falls back to Shiki/plain when no knownKeys provided', () => {
+    const declSection = {
+      sectionKind: 'declaration',
+      heading: 'Declaration',
+      contentJson: JSON.stringify([{
+        tokens: [
+          { kind: 'keyword', text: 'protocol' },
+          { kind: 'text', text: ' ' },
+          { kind: 'identifier', text: 'View' },
+        ],
+        languages: ['swift'],
+      }]),
+      contentText: 'protocol View',
+      sortOrder: 1,
+    }
+    const html = renderHtml({ title: 'Test' }, [declSection])
+    // Without knownKeys, should not produce decl-tokens rendering
+    expect(html).toContain('<pre')
+    // Content should include "protocol" and "View" (possibly wrapped in Shiki spans)
+    expect(html).toContain('protocol')
+    expect(html).toContain('View')
+    expect(html).not.toContain('decl-tokens')
+  })
+
+  test('declaration applies semantic CSS classes to token kinds', () => {
+    const declSection = {
+      sectionKind: 'declaration',
+      heading: 'Declaration',
+      contentJson: JSON.stringify([{
+        tokens: [
+          { kind: 'keyword', text: 'func' },
+          { kind: 'text', text: ' ' },
+          { kind: 'identifier', text: 'doThing' },
+          { kind: 'text', text: '(' },
+          { kind: 'externalParam', text: 'with' },
+          { kind: 'text', text: ': ' },
+          { kind: 'typeIdentifier', text: 'String', _resolvedKey: 'swift/string' },
+          { kind: 'text', text: ')' },
+        ],
+        languages: ['swift'],
+      }]),
+      contentText: 'func doThing(with: String)',
+      sortOrder: 1,
+    }
+    const knownKeys = new Set(['swift/string'])
+    const html = renderHtml({ title: 'Test' }, [declSection], { knownKeys })
+    expect(html).toContain('class="decl-keyword"')
+    expect(html).toContain('class="decl-identifier"')
+    expect(html).toContain('class="decl-param"')
+    expect(html).toContain('class="code-type-link"')
   })
 })
 
@@ -112,8 +209,11 @@ describe('renderHtml block nodes', () => {
       contentText: 'let x = 1',
       sortOrder: 3,
     }])
-    expect(html).toContain('<pre><code class="language-swift">')
-    expect(html).toContain('let x = 1\nprint(x)')
+    expect(html).toContain('<pre')
+    // Code content present (may be wrapped in Shiki spans)
+    expect(html).toContain('let')
+    expect(html).toContain('print')
+    expect(html).toContain('(x)')
   })
 
   test('renders unordered and ordered lists', () => {

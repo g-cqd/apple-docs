@@ -7,13 +7,14 @@ import { getProfile, getProfileConfig } from '../storage/profiles.js'
 
 /**
  * Look up a specific documentation page by path or symbol name.
- * @param {{ path?: string, symbol?: string, framework?: string, noCache?: boolean }} opts
+ * @param {{ path?: string, symbol?: string, framework?: string, noCache?: boolean, includeSections?: boolean }} opts
  * @param {{ db, dataDir }} ctx
  */
 export async function lookup(opts, ctx) {
   const { db, dataDir } = ctx
   let page = null
   let sections = []
+  const includeSections = opts.includeSections === true || opts.section != null
 
   if (opts.path) {
     page = db.getPage(opts.path)
@@ -31,7 +32,7 @@ export async function lookup(opts, ctx) {
   let fallback = false
 
   // If section extraction is requested, always load sections from DB
-  if (opts.section && content) {
+  if (includeSections && content) {
     sections = db.getDocumentSections(page.path)
   }
 
@@ -130,7 +131,7 @@ export async function lookup(opts, ctx) {
     found: true,
     metadata,
     content: content ?? null,
-    sections,
+    sections: includeSections ? sections : [],
     note,
     tierLimitation,
   }

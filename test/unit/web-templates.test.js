@@ -60,6 +60,13 @@ describe('buildBreadcrumbs', () => {
     expect(html).toContain('<span aria-current="page">swiftui</span>')
   })
 
+  test('uses the framework display name only for the framework segment', () => {
+    const html = buildBreadcrumbs('documentation/swiftui/view', { title: 'View', framework: 'SwiftUI' })
+    expect(html).toContain('<a href="/docs/documentation/">documentation</a>')
+    expect(html).toContain('<a href="/docs/documentation/swiftui/">SwiftUI</a>')
+    expect(html).not.toContain('>swiftui</a>')
+  })
+
   test('empty string returns empty string', () => {
     expect(buildBreadcrumbs('')).toBe('')
   })
@@ -141,10 +148,10 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('Protocol')
   })
 
-  test('contains source_type badge when doc has source_type', () => {
+  test('does not expose source_type as a visible badge', () => {
     const page = renderDocumentPage(mockDoc, mockSections, siteConfig)
-    expect(page).toContain('badge-source')
-    expect(page).toContain('apple-docc')
+    expect(page).not.toContain('badge-source')
+    expect(page).not.toContain('apple-docc')
   })
 
   test('contains search input', () => {
@@ -177,6 +184,13 @@ describe('renderDocumentPage', () => {
     const docWithoutFramework = { ...mockDoc, framework: undefined }
     const page = renderDocumentPage(docWithoutFramework, mockSections, siteConfig)
     expect(page).not.toContain('badge-framework')
+  })
+
+  test('framework badge uses framework_display when available', () => {
+    const docWithDisplay = { ...mockDoc, framework_display: 'SwiftUI' }
+    const page = renderDocumentPage(docWithDisplay, mockSections, siteConfig)
+    expect(page).toContain('badge-framework')
+    expect(page).toContain('SwiftUI')
   })
 
   test('baseUrl prefix is applied to asset links', () => {
@@ -236,6 +250,24 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('<h2>Relationships</h2>')
     expect(page).toContain('Conforms To')
     expect(page).toContain('class="doc-sidebar"')
+  })
+
+  test('see also content remains rendered in the article when a sidebar exists', () => {
+    const sections = [
+      { sectionKind: 'abstract', contentText: 'text', sortOrder: 0 },
+      { sectionKind: 'declaration', contentText: 'code', contentJson: JSON.stringify([{ tokens: [{ text: 'var x' }], languages: ['swift'] }]), sortOrder: 1 },
+      { sectionKind: 'see_also', contentText: '', contentJson: JSON.stringify([{ title: 'Related', items: [{ key: 'swiftui/text', title: 'Text' }] }]), sortOrder: 10 },
+    ]
+    const page = renderDocumentPage(mockDoc, sections, siteConfig)
+    expect(page).toContain('id="see-also"')
+    expect(page).toContain('<h2>See Also</h2>')
+    expect(page).toContain('href="/docs/swiftui/text/"')
+  })
+
+  test('header search status uses a unique id separate from the search page status region', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, siteConfig)
+    expect(page).toContain('id="header-search-status"')
+    expect(page).not.toContain('id="search-status" aria-live="assertive"')
   })
 
   test('HTML-encodes doc title in <title> to prevent injection', () => {
@@ -334,9 +366,9 @@ describe('renderIndexPage', () => {
 
   test('framework groups have data-filter-kind attributes', () => {
     const page = renderIndexPage(mockFrameworks, siteConfig)
-    // Section elements also have the attribute
-    expect(page).toMatch(/section class="framework-group" data-filter-kind="framework"/)
-    expect(page).toMatch(/section class="framework-group" data-filter-kind="guidelines"/)
+    // Section elements also have the attribute (may include id attribute)
+    expect(page).toMatch(/section[^>]*class="framework-group" data-filter-kind="framework"/)
+    expect(page).toMatch(/section[^>]*class="framework-group" data-filter-kind="guidelines"/)
   })
 
   test('includes collection-filters.js script', () => {
@@ -428,12 +460,23 @@ describe('renderFrameworkPage', () => {
 
   test('role groups have data-filter-kind attributes', () => {
     const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig)
-    expect(page).toMatch(/section class="role-group" data-filter-kind="symbol"/)
+    expect(page).toMatch(/section[^>]*class="role-group" data-filter-kind="symbol"/)
   })
 
   test('includes collection-filters.js script', () => {
     const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig)
     expect(page).toContain('collection-filters.js')
+  })
+
+  test('renders a tree toggle and serialized tree data when tree edges are provided', () => {
+    const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig, {
+      treeEdges: [
+        { from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' },
+      ],
+    })
+    expect(page).toContain('class="view-toggle"')
+    expect(page).toContain('id="tree-data"')
+    expect(page).toContain('tree-view.js')
   })
 })
 
@@ -456,7 +499,6 @@ describe('renderSearchPage', () => {
   test('contains filter dropdowns', () => {
     const page = renderSearchPage(siteConfig)
     expect(page).toContain('filter-framework')
-    expect(page).toContain('filter-source')
     expect(page).toContain('filter-kind')
   })
 
@@ -491,6 +533,12 @@ describe('renderSearchPage', () => {
     const page = renderSearchPage(siteConfig)
     expect(page).toContain('id="search-results"')
     expect(page).toContain('id="search-load-more"')
+  })
+
+  test('search page exposes a visible search status region and does not duplicate the header id', () => {
+    const page = renderSearchPage(siteConfig)
+    expect(page).toContain('id="search-status"')
+    expect(page).toContain('id="header-search-status"')
   })
 
   test('includes search-page.js script', () => {

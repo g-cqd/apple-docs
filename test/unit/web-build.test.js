@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'
@@ -81,10 +81,21 @@ describe('buildStaticSite (P7-D)', () => {
     expect(manifest.buildDate).toBeTruthy()
   })
 
-  test('generates search artifacts', async () => {
+  test('generates search artifacts with hashed filenames', async () => {
     await buildStaticSite({ out: outDir }, ctx)
-    expect(existsSync(join(outDir, 'data', 'search', 'title-index.json'))).toBe(true)
+    // search-manifest.json is always present (unhashed)
     expect(existsSync(join(outDir, 'data', 'search', 'search-manifest.json'))).toBe(true)
+    // title-index and aliases now use content-hashed filenames
+    const searchDir = join(outDir, 'data', 'search')
+    const files = readdirSync(searchDir)
+    expect(files.some(f => /^title-index\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
+    expect(files.some(f => /^aliases\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
+    // Manifest contains file mappings
+    const manifest = JSON.parse(readFileSync(join(searchDir, 'search-manifest.json'), 'utf8'))
+    expect(manifest.version).toBe(2)
+    expect(manifest.files).toBeDefined()
+    expect(manifest.files['title-index']).toMatch(/^title-index\.[0-9a-f]{10}\.json$/)
+    expect(manifest.files['aliases']).toMatch(/^aliases\.[0-9a-f]{10}\.json$/)
   })
 
   test('generates framework metadata', async () => {

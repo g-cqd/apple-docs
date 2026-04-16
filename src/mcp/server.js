@@ -11,6 +11,17 @@ import { lookup } from '../commands/lookup.js'
 import { frameworks } from '../commands/frameworks.js'
 import { browse } from '../commands/browse.js'
 import { status } from '../commands/status.js'
+import {
+  MIN_PAGINATED_MAX_CHARS,
+  buildMatchedDocumentPayload,
+  createMcpTextResult,
+  paginateArrayField,
+  paginateDocumentPayload,
+} from './pagination.js'
+import { coerceSection } from '../content/coercion.js'
+
+const paginatedMaxChars = z.number().int().min(MIN_PAGINATED_MAX_CHARS)
+const paginatedPage = z.number().int().min(1)
 
 /**
  * Create an MCP server instance with all tools and resources registered.
@@ -31,7 +42,7 @@ export function createServer(ctx) {
       query: z.string().describe('Search query (symbol name, API term, or natural language)'),
       framework: z.string().optional().describe('Filter by framework slug (e.g. swiftui, foundation, design, app-store-review)'),
       source: z.string().optional().describe('Filter by source type slug or comma-separated list (e.g. apple-docc, wwdc, sample-code)'),
-      kind: z.string().optional().describe('Filter by role (e.g. symbol, article, collection)'),
+      kind: z.string().optional().describe('Filter by role or displayed kind (e.g. symbol, article, Article, Session, Collection)'),
       language: z.enum(['swift', 'objc']).optional().describe('Filter by programming language'),
       platform: z.enum(['ios', 'macos', 'watchos', 'tvos', 'visionos']).optional().describe('Filter by platform availability'),
       min_ios: z.string().optional().describe('Minimum iOS version (e.g. "17.0")'),
@@ -46,8 +57,15 @@ export function createServer(ctx) {
       read: z.boolean().optional().describe('Return the full Markdown content of the top search result instead of the result list'),
       year: z.number().optional().describe('Filter WWDC sessions by year (e.g. 2024)'),
       track: z.string().optional().describe('Filter WWDC sessions by track (e.g. SwiftUI, Accessibility)'),
+      maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
+      page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
+      match: z.string().optional().describe('Return focused match excerpts from the top read result instead of the full page content.'),
+      contextChars: z.number().int().min(20).max(2000).optional().describe('Context window around each match excerpt (default 140 characters).'),
+      maxMatches: z.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
+      caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
     async (args) => {
+      validatePaginationArgs(args)
       const result = await search({
         ...args,
         minIos: args.min_ios,
@@ -58,17 +76,44 @@ export function createServer(ctx) {
       }, ctx)
       if (args.read && result.results.length > 0) {
         const hit = result.results[0]
-        const page = await lookup({ path: hit.path }, ctx)
-        const readResult = {
-          bestMatch: hit,
+        const page = await lookup({
+          path: hit.path,
+          includeSections: args.maxChars != null || args.match != null,
+        }, ctx)
+        let readResult = sanitizeDocumentPayload({
+          found: page.found,
+          bestMatch: compactSearchHit(hit, { compact: args.maxChars != null }),
+          metadata: page.metadata,
           content: page.content ?? page.note ?? 'Markdown not available.',
+          sections: page.sections,
+          ...(page.note ? { note: page.note } : {}),
           ...(page.tierLimitation ? { tierLimitation: page.tierLimitation } : {}),
+        })
+        if (args.match) {
+          readResult = buildMatchedDocumentPayload(readResult, {
+            match: args.match,
+            contextChars: args.contextChars,
+            maxMatches: args.maxMatches,
+            caseSensitive: args.caseSensitive,
+          })
         }
-        return {
-          content: [{ type: 'text', text: JSON.stringify(readResult, null, 2) }],
+        if (args.maxChars != null) {
+          readResult = paginateDocumentPayload(readResult, {
+            maxChars: args.maxChars,
+            page: args.page,
+            document: page.metadata,
+          })
         }
+        return createMcpTextResult(readResult)
       }
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+      const payload = args.maxChars != null
+        ? paginateArrayField(result, 'results', {
+            maxChars: args.maxChars,
+            page: args.page,
+            strategy: 'items',
+          })
+        : result
+      return createMcpTextResult(payload)
     },
   )
 
@@ -80,10 +125,36 @@ export function createServer(ctx) {
       symbol: z.string().optional().describe('Symbol name to look up (e.g. View, Publisher, NavigationStack)'),
       framework: z.string().optional().describe('Disambiguate symbol by framework slug when multiple frameworks define the same name'),
       section: z.string().optional().describe('Extract a specific section by heading or file path (e.g. ContentView.swift). Omit to get the full document.'),
+      maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
+      page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
+      match: z.string().optional().describe('Return focused match excerpts instead of the full document.'),
+      contextChars: z.number().int().min(20).max(2000).optional().describe('Context window around each match excerpt (default 140 characters).'),
+      maxMatches: z.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
+      caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
     async (args) => {
-      const result = await lookup(args, ctx)
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+      validatePaginationArgs(args)
+      const result = await lookup({
+        ...args,
+        includeSections: args.maxChars != null || args.match != null,
+      }, ctx)
+      let payload = sanitizeDocumentPayload(result)
+      if (args.match) {
+        payload = buildMatchedDocumentPayload(payload, {
+          match: args.match,
+          contextChars: args.contextChars,
+          maxMatches: args.maxMatches,
+          caseSensitive: args.caseSensitive,
+        })
+      }
+      if (args.maxChars != null) {
+        payload = paginateDocumentPayload(payload, {
+          maxChars: args.maxChars,
+          page: args.page,
+          document: result.metadata,
+        })
+      }
+      return createMcpTextResult(payload)
     },
   )
 
@@ -92,10 +163,20 @@ export function createServer(ctx) {
     'List all indexed documentation roots — frameworks, technologies, HIG, tooling, release notes, and App Store Review Guidelines — with page counts and status. Use to discover what\'s available.',
     {
       kind: z.string().optional().describe('Filter by kind: framework, technology, tooling, release-notes, tutorial, guidelines'),
+      maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
+      page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
     async (args) => {
+      validatePaginationArgs(args)
       const result = await frameworks(args, ctx)
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+      const payload = args.maxChars != null
+        ? paginateArrayField(result, 'roots', {
+            maxChars: args.maxChars,
+            page: args.page,
+            strategy: 'items',
+          })
+        : result
+      return createMcpTextResult(payload)
     },
   )
 
@@ -106,10 +187,22 @@ export function createServer(ctx) {
       framework: z.string().describe('Framework slug (e.g. swiftui, combine, design, app-store-review)'),
       path: z.string().optional().describe('Page path to show children of (e.g. swiftui/view, design/human-interface-guidelines/components)'),
       limit: z.number().optional().describe('Max pages to return when listing a full framework (default: all)'),
+      maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
+      page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
     async (args) => {
+      validatePaginationArgs(args)
       const result = await browse(args, ctx)
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+      if (args.maxChars == null) {
+        return createMcpTextResult(result)
+      }
+      const fieldName = args.path ? 'children' : 'pages'
+      const payload = paginateArrayField(result, fieldName, {
+        maxChars: args.maxChars,
+        page: args.page,
+        strategy: 'items',
+      })
+      return createMcpTextResult(payload)
     },
   )
 
@@ -119,7 +212,7 @@ export function createServer(ctx) {
     {},
     async () => {
       const result = await status({ skipUpdateCheck: true }, ctx)
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+      return createMcpTextResult(result)
     },
   )
 
@@ -156,11 +249,19 @@ export function createServer(ctx) {
     }),
     { description: 'Browse a framework topic tree', mimeType: 'application/json' },
     async (uri, { slug }) => {
-      const result = await browse({ framework: slug }, ctx)
+      const { maxChars, page } = parseResourcePagination(uri)
+      const result = await browse({ framework: String(slug).split('?')[0] }, ctx)
+      const payload = maxChars == null
+        ? result
+        : paginateArrayField(result, 'pages', {
+            maxChars,
+            page,
+            strategy: 'items',
+          })
       return {
         contents: [{
           uri: uri.href,
-          text: JSON.stringify(result, null, 2),
+          text: JSON.stringify(payload, null, 2),
           mimeType: 'application/json',
         }],
       }
@@ -179,4 +280,69 @@ export async function startServer(ctx) {
   const server = createServer(ctx)
   const transport = new StdioServerTransport()
   await server.connect(transport)
+}
+
+function sanitizeDocumentPayload(payload) {
+  if (!Array.isArray(payload?.sections) || payload.sections.length === 0) return payload
+  return {
+    ...payload,
+    sections: payload.sections.map(section => coerceSection(section)),
+  }
+}
+
+function validatePaginationArgs(args) {
+  if (args.page != null && args.maxChars == null) {
+    throw new Error('The page parameter requires maxChars.')
+  }
+}
+
+function parseResourcePagination(uri) {
+  const maxCharsValue = uri.searchParams.get('maxChars')
+  const pageValue = uri.searchParams.get('page')
+  const maxChars = maxCharsValue == null ? null : Number.parseInt(maxCharsValue, 10)
+  const page = pageValue == null ? 1 : Number.parseInt(pageValue, 10)
+
+  if (Number.isNaN(maxChars)) {
+    throw new Error('Invalid maxChars query parameter.')
+  }
+  if (Number.isNaN(page) || page < 1) {
+    throw new Error('Invalid page query parameter.')
+  }
+  if (pageValue != null && maxCharsValue == null) {
+    throw new Error('The page query parameter requires maxChars.')
+  }
+  if (maxChars != null && maxChars < MIN_PAGINATED_MAX_CHARS) {
+    throw new Error(`maxChars must be at least ${MIN_PAGINATED_MAX_CHARS}.`)
+  }
+
+  return { maxChars, page }
+}
+
+function compactSearchHit(hit, opts = {}) {
+  const { compact = false } = opts
+  const result = {
+    title: hit?.title ?? null,
+    framework: hit?.framework ?? null,
+    rootSlug: hit?.rootSlug ?? null,
+    kind: hit?.kind ?? null,
+    path: hit?.path ?? null,
+    matchQuality: hit?.matchQuality ?? null,
+  }
+
+  if (!compact) {
+    result.sourceType = hit?.sourceType ?? null
+    result.sourceMetadata = hit?.sourceMetadata ?? null
+    result.abstract = hit?.abstract ?? null
+    result.platforms = hit?.platforms ?? []
+    result.declaration = hit?.declaration ?? null
+    result.urlDepth = hit?.urlDepth ?? 0
+    result.isReleaseNotes = hit?.isReleaseNotes ?? false
+    result.docKind = hit?.docKind ?? null
+    result.language = hit?.language ?? null
+    result.score = hit?.score ?? null
+    result.snippet = hit?.snippet ?? null
+    result.relatedCount = hit?.relatedCount ?? null
+  }
+
+  return result
 }

@@ -109,6 +109,13 @@ describe('Integration: Search', () => {
     expect(result.results[0].path).toBe('wwdc/wwdc2024-10001')
     expect(result.results[0].sourceType).toBe('wwdc')
   })
+
+  test('kind filter matches displayed kinds as rendered on the web page', async () => {
+    const result = await search({ query: 'Testing', kind: 'Article', limit: 10, fuzzy: true, noDeep: true }, ctx)
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0].path).toBe('documentation/testfw/testing-guide')
+    expect(result.results[0].kind).toBe('Article')
+  })
 })
 
 describe('Integration: Lookup with Fallback', () => {

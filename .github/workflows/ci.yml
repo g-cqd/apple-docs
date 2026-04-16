@@ -17,6 +17,9 @@ jobs:
       - name: Lint (Biome)
         run: bun run lint
 
+      - name: Lint web assets (Biome)
+        run: bun run lint:web
+
       - name: Type check
         run: bun run typecheck
 

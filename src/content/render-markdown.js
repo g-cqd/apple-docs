@@ -7,24 +7,30 @@ const LINK_SECTION_TITLES = {
   see_also: 'See Also',
 }
 
-export function renderMarkdown(document, sections = []) {
+export function renderMarkdown(document, sections = [], opts = {}) {
+  const {
+    includeFrontMatter = true,
+    includeTitle = true,
+  } = opts
   const doc = coerceDocument(document)
   const orderedSections = sections
     .map(coerceSection)
     .sort((a, b) => a.sortOrder - b.sortOrder)
 
   const parts = []
-  parts.push(toFrontMatter(compactObject({
-    title: doc.title,
-    framework: doc.frameworkDisplay ?? doc.framework,
-    role: doc.role,
-    role_heading: doc.roleHeading,
-    platforms: formatPlatforms(doc.platformsJson),
-    path: doc.key,
-  })))
-  parts.push('')
+  if (includeFrontMatter) {
+    parts.push(toFrontMatter(compactObject({
+      title: doc.title,
+      framework: doc.frameworkDisplay ?? doc.framework,
+      role: doc.role,
+      role_heading: doc.roleHeading,
+      platforms: formatPlatforms(doc.platformsJson),
+      path: doc.key,
+    })))
+    parts.push('')
+  }
 
-  if (doc.title) {
+  if (includeTitle && doc.title) {
     parts.push(`# ${doc.title}`)
     parts.push('')
   }

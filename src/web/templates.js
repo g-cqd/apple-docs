@@ -30,21 +30,17 @@ ${buildHeader(siteConfig)}
     <div class="filter-row filter-row-selects">
       <div class="filter-group">
         <label class="filter-label" for="filter-framework">Framework</label>
-        <select class="filter-select" id="filter-framework" name="framework">
+        <select class="filter-select" id="filter-framework" name="framework" aria-describedby="filter-framework-desc">
           <option value="">All</option>
         </select>
-      </div>
-      <div class="filter-group">
-        <label class="filter-label" for="filter-source">Source</label>
-        <select class="filter-select" id="filter-source" name="source">
-          <option value="">All</option>
-        </select>
+        <span id="filter-framework-desc" class="sr-only">Filter results by framework</span>
       </div>
       <div class="filter-group">
         <label class="filter-label" for="filter-kind">Kind</label>
-        <select class="filter-select" id="filter-kind" name="kind">
+        <select class="filter-select" id="filter-kind" name="kind" aria-describedby="filter-kind-desc">
           <option value="">All</option>
         </select>
+        <span id="filter-kind-desc" class="sr-only">Filter results by symbol kind</span>
       </div>
     </div>
 
@@ -114,9 +110,9 @@ ${buildHeader(siteConfig)}
     </div>
   </form>
 
-  <div id="search-status" class="search-status" hidden></div>
+  <div id="search-status" class="search-status" role="status" hidden></div>
   <div id="search-results" class="search-results"></div>
-  <button id="search-load-more" class="load-more" hidden>Load more results</button>
+  <button id="search-load-more" class="load-more" hidden aria-label="Load more search results">Load more results</button>
 </main>
 ${buildFooter(siteConfig)}
 <script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search-page.js`)}" defer></script>
@@ -163,8 +159,10 @@ function buildHeader(siteConfig) {
   <nav class="site-nav">
     <a class="site-name" href="${escapeAttr(homeHref)}">${escapeAttr(siteConfig.siteName)}</a>
     <div class="search-container">
-      <input class="search-input" type="search" placeholder="Search…" aria-label="Search documentation" autocomplete="off">
-      <div class="search-dropdown" hidden aria-live="polite"></div>
+      <input class="search-input" type="search" placeholder="Search…" aria-label="Search documentation" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-listbox" aria-activedescendant="" aria-autocomplete="list">
+      <button class="search-clear" type="button" aria-label="Clear search" hidden>&times;</button>
+      <div class="search-dropdown" id="search-listbox" role="listbox" hidden></div>
+      <div id="header-search-status" aria-live="assertive" class="sr-only"></div>
     </div>
     <fieldset class="theme-switcher" role="radiogroup" aria-label="Color scheme">
       <button class="theme-option" type="button" data-theme-value="light" aria-label="Light theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button>
@@ -197,27 +195,31 @@ function buildFooter(siteConfig) {
  * The last segment is rendered as plain text (current page).
  * A single-segment key produces plain text with no link.
  */
-export function buildBreadcrumbs(key) {
+export function buildBreadcrumbs(key, opts = {}) {
   if (!key || typeof key !== 'string') return ''
   const segments = key.split('/').filter(Boolean)
   if (segments.length === 0) return ''
+
+  // Use the document title for the last segment instead of the raw path
+  const lastLabel = opts.title ?? segments[segments.length - 1]
   if (segments.length === 1) {
-    return `<nav class="breadcrumbs" aria-label="Breadcrumb"><span>${escapeAttr(segments[0])}</span></nav>`
+    return `<nav class="breadcrumbs" aria-label="Breadcrumb"><span>${escapeAttr(lastLabel)}</span></nav>`
   }
 
   const parts = []
   for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i]
     const isLast = i === segments.length - 1
+    const isFrameworkSegment = !isLast && i === 1 && !!opts.framework
+    const label = isLast ? lastLabel : (isFrameworkSegment ? opts.framework : segments[i])
     if (isLast) {
-      parts.push(`<span aria-current="page">${escapeAttr(segment)}</span>`)
+      parts.push(`<span aria-current="page">${escapeAttr(label)}</span>`)
     } else {
       const href = `/docs/${segments.slice(0, i + 1).join('/')}/`
-      parts.push(`<a href="${escapeAttr(href)}">${escapeAttr(segment)}</a>`)
+      parts.push(`<a href="${escapeAttr(href)}">${escapeAttr(label)}</a>`)
     }
   }
 
-  return `<nav class="breadcrumbs" aria-label="Breadcrumb">${parts.join(' / ')}</nav>`
+  return `<nav class="breadcrumbs" aria-label="Breadcrumb">${parts.join('<span class="breadcrumb-sep"> / </span>')}</nav>`
 }
 
 // ---------------------------------------------------------------------------
@@ -226,14 +228,12 @@ export function buildBreadcrumbs(key) {
 
 function buildDocMeta(doc) {
   const badges = []
-  if (doc.framework) {
-    badges.push(`<span class="badge badge-framework">${escapeAttr(doc.framework)}</span>`)
+  const frameworkLabel = doc.framework_display ?? doc.framework
+  if (frameworkLabel) {
+    badges.push(`<span class="badge badge-framework">${escapeAttr(frameworkLabel)}</span>`)
   }
   if (doc.role_heading) {
     badges.push(`<span class="badge badge-role">${escapeAttr(doc.role_heading)}</span>`)
-  }
-  if (doc.source_type) {
-    badges.push(`<span class="badge badge-source">${escapeAttr(doc.source_type)}</span>`)
   }
   if (badges.length === 0) return ''
   return `<div class="doc-meta">${badges.join('')}</div>`
@@ -283,12 +283,23 @@ function buildRelationshipContent(section) {
 // Page TOC (Table of Contents)
 // ---------------------------------------------------------------------------
 
-/** Build TOC item list from ordered sections. Skips abstract. */
+/** Build TOC item list from ordered sections. Skips abstract and empty sections. */
 function buildPageToc(sections) {
   const items = []
   for (const section of sections ?? []) {
     const kind = section.sectionKind ?? section.section_kind
     if (kind === 'abstract') continue
+
+    // Skip sections that have no renderable content
+    const text = section.contentText ?? section.content_text ?? ''
+    const json = section.contentJson ?? section.content_json ?? ''
+    if (!text.trim() && !json.trim()) continue
+
+    // For link sections (topics, relationships, see_also), check if the parsed
+    // JSON actually has items — an empty group list produces no visible content
+    if (kind === 'topics' || kind === 'relationships' || kind === 'see_also') {
+      if (!hasRenderableItems(json)) continue
+    }
 
     let id, label
     switch (kind) {
@@ -313,6 +324,22 @@ function buildPageToc(sections) {
     if (id) items.push({ id, label })
   }
   return items
+}
+
+/** Check if a JSON content string for a link section has at least one renderable item. */
+function hasRenderableItems(json) {
+  if (!json || typeof json !== 'string') return false
+  try {
+    const groups = JSON.parse(json)
+    if (!Array.isArray(groups)) return false
+    for (const group of groups) {
+      const items = group?.items ?? []
+      if (items.length > 0) return true
+    }
+    return false
+  } catch {
+    return false
+  }
 }
 
 /** Render the TOC HTML. In mobile mode, wraps in a <details> element. */
@@ -350,8 +377,10 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   }
 
   const pageTitle = `${doc.title ?? 'Untitled'} — ${siteConfig.siteName}`
-  const content = renderHtml(doc, sectionsList)
-  const breadcrumbs = doc.key ? buildBreadcrumbs(doc.key) : ''
+  const renderOpts = {}
+  if (opts.knownKeys) renderOpts.knownKeys = opts.knownKeys
+  const content = renderHtml(doc, sectionsList, renderOpts)
+  const breadcrumbs = doc.key ? buildBreadcrumbs(doc.key, { title: doc.title, framework: doc.framework_display ?? doc.framework }) : ''
 
   // Sort sections for TOC (same order as renderHtml uses)
   const orderedSections = sectionsList.slice().sort((a, b) =>
@@ -371,7 +400,10 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
     sidebarParts.push(renderTocHtml(tocItems, false))
   }
   if (relationshipSection) {
-    sidebarParts.push(buildRelationshipContent(relationshipSection))
+    const relJson = relationshipSection.contentJson ?? relationshipSection.content_json ?? ''
+    if (typeof relJson === 'string' ? hasRenderableItems(relJson) : true) {
+      sidebarParts.push(buildRelationshipContent(relationshipSection))
+    }
   }
 
   const sidebar = sidebarParts.length > 0
@@ -477,7 +509,8 @@ export function renderIndexPage(frameworks, siteConfig) {
       return `<li data-filter-kind="${escapeAttr(kind)}"><a href="${href}">${escapeAttr(fw.display_name ?? fw.name ?? fw.slug)}</a>${countBadge}</li>`
     }).join('\n      ')
 
-    sections.push(`<section class="framework-group" data-filter-kind="${escapeAttr(kind)}">
+    const kindId = slugify(kind)
+    sections.push(`<section id="${escapeAttr(kindId)}" class="framework-group" data-filter-kind="${escapeAttr(kind)}">
     <h2 class="framework-kind">${escapeAttr(kind)}</h2>
     <ul class="framework-list">
       ${itemsHtml}
@@ -489,17 +522,30 @@ export function renderIndexPage(frameworks, siteConfig) {
     ? sections.join('\n  ')
     : '<p>No frameworks indexed yet.</p>'
 
+  // Build sidebar TOC from kind groups
+  const tocItems = [...byKind.keys()].map(kind => ({ id: slugify(kind), label: kind }))
+  const hasSidebar = tocItems.length >= 2
+  const sidebar = hasSidebar
+    ? `<aside class="doc-sidebar">${renderTocHtml(tocItems, false)}</aside>`
+    : ''
+  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
+
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({ title: pageTitle, description: 'Apple developer documentation, indexed locally.', siteConfig })}
 <body>
 ${buildHeader(siteConfig)}
-<main class="main-content listing">
+<main class="main-content${hasSidebar ? ' has-sidebar' : ''} listing">
   <h1>${escapeAttr(siteConfig.siteName)}</h1>
+  ${mobileToc}
+  <article class="doc-article">
   ${mainContent}
+  </article>
+  ${sidebar}
 </main>
 ${buildFooter(siteConfig)}
 <script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search.js`)}" defer></script>
+<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/page-toc.js`)}" defer></script>
 <script src="${escapeAttr(`${siteConfig.baseUrl}/assets/collection-filters.js`)}" defer></script>
 </body>
 </html>`
@@ -511,12 +557,14 @@ ${buildFooter(siteConfig)}
  * @param {object} framework - Framework record (name, slug, kind)
  * @param {Array}  documents - Document records (title, key, role, role_heading)
  * @param {object} siteConfig - { baseUrl, siteName, buildDate }
+ * @param {object} [opts] - { treeEdges?: Array<{from_key: string, to_key: string}> }
  * @returns {string} Complete HTML page string
  */
-export function renderFrameworkPage(framework, documents, siteConfig) {
+export function renderFrameworkPage(framework, documents, siteConfig, opts = {}) {
   const fwName = framework?.display_name ?? framework?.name ?? framework?.slug ?? 'Framework'
   const pageTitle = `${fwName} — ${siteConfig.siteName}`
   const docList = documents ?? []
+  const treeEdges = opts.treeEdges ?? []
 
   // Group documents by role
   const byRole = new Map()
@@ -536,13 +584,16 @@ export function renderFrameworkPage(framework, documents, siteConfig) {
       // Show role_heading as metadata to distinguish duplicates (e.g. .!=(_:_:) across types)
       const meta = doc.role_heading ? `<span class="doc-item-meta">${escapeAttr(doc.role_heading)}</span>` : ''
       const abstractText = doc.abstract_text ?? doc.abstract ?? ''
+      const isDeprecated = /\bDeprecated\b/i.test(abstractText)
       const abstract = abstractText
         ? `<span class="doc-item-meta">— ${escapeAttr(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
         : ''
-      return `<li data-filter-kind="${filterKind}"><a href="${href}">${title}</a>${meta}${abstract}</li>`
+      const deprecatedAttr = isDeprecated ? ' data-deprecated="true"' : ''
+      return `<li data-filter-kind="${filterKind}"${deprecatedAttr}><a href="${href}">${title}</a>${meta}${abstract}</li>`
     }).join('\n      ')
 
-    roleSections.push(`<section class="role-group" data-filter-kind="${escapeAttr(role)}">
+    const roleId = slugify(role)
+    roleSections.push(`<section id="${escapeAttr(roleId)}" class="role-group" data-filter-kind="${escapeAttr(role)}">
     <h2 class="role-heading">${escapeAttr(role)}</h2>
     <ul class="doc-list">
       ${docsHtml}
@@ -556,19 +607,61 @@ export function renderFrameworkPage(framework, documents, siteConfig) {
 
   const breadcrumbs = `<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${escapeAttr(fwName)}</span></nav>`
 
+  // Build sidebar TOC from role groups
+  const tocItems = [...byRole.keys()].map(role => ({ id: slugify(role), label: role }))
+  const hasSidebar = tocItems.length >= 2
+  const sidebar = hasSidebar
+    ? `<aside class="doc-sidebar">${renderTocHtml(tocItems, false)}</aside>`
+    : ''
+  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
+
+  // Build the doc lookup JSON for tree view (key -> {title, role_heading, href})
+  const docLookup = {}
+  for (const doc of docList) {
+    const docKey = doc.key ?? doc.path ?? ''
+    docLookup[docKey] = {
+      title: doc.title ?? docKey,
+      role_heading: doc.role_heading ?? doc.role ?? 'Other',
+      href: `${siteConfig.baseUrl}/docs/${docKey}/`,
+    }
+  }
+
+  // Serialize tree data as JSON
+  const treeDataJson = escapeAttr(JSON.stringify({ edges: treeEdges, docs: docLookup }))
+
+  // View toggle only shown when we have tree edges
+  const hasTree = treeEdges.length > 0
+  const viewToggle = hasTree
+    ? `<div class="view-toggle" role="group" aria-label="View mode">
+    <button class="active" data-view="list" aria-pressed="true">List</button>
+    <button data-view="tree" aria-pressed="false">Tree</button>
+  </div>`
+    : ''
+
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({ title: pageTitle, description: `${fwName} documentation index.`, siteConfig })}
 <body>
 ${buildHeader(siteConfig)}
-<main class="main-content listing">
+<main class="main-content${hasSidebar ? ' has-sidebar' : ''} listing">
   ${breadcrumbs}
-  <h1>${escapeAttr(fwName)}</h1>
+  <h1>${escapeAttr(fwName)}${viewToggle}</h1>
+  ${mobileToc}
+  <article class="doc-article">
+  <div id="collection-controls"></div>
+  <div id="list-container">
   ${mainContent}
+  </div>
+  <div id="tree-container" class="hidden"></div>
+  ${hasTree ? `<script type="application/json" id="tree-data">${treeDataJson}</script>` : ''}
+  </article>
+  ${sidebar}
 </main>
 ${buildFooter(siteConfig)}
 <script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search.js`)}" defer></script>
+<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/page-toc.js`)}" defer></script>
 <script src="${escapeAttr(`${siteConfig.baseUrl}/assets/collection-filters.js`)}" defer></script>
+${hasTree ? `<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/tree-view.js`)}" defer></script>` : ''}
 </body>
 </html>`
 }

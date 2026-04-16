@@ -49,7 +49,7 @@ a 200ms head start; if they fill the limit, body results are skipped (eager mode
 Options:
   --framework <name>   Filter by framework (e.g. swiftui, design, app-store-review)
   --source <name>      Filter by source type (e.g. apple-docc, hig, guidelines, wwdc, sample-code, packages)
-  --kind <role>        Filter by role (e.g. symbol, article)
+  --kind <kind>        Filter by role or displayed kind (e.g. symbol, article, Article, Session)
   --language <lang>    Filter by language: swift, objc
   --platform <name>    Filter by platform availability: ios, macos, watchos, tvos, visionos
   --min-ios <ver>      Only show docs available on iOS >= version (e.g. 17.0)

@@ -114,6 +114,39 @@ const ARCHIVE_LIBRARY_FIXTURE = `({
   ]
 })`
 
+const ARCHIVE_LIBRARY_SIBLING_HTML_FIXTURE = `({
+  columns: {
+    name: 0,
+    type: 2,
+    url: 9,
+    platform: 12
+  },
+  documents: [
+    [
+      "Ownership Policy",
+      "TP40001148",
+      3,
+      "2009-01-01",
+      0, 0, 0, 0, 0,
+      "../documentation/CoreFoundation/Conceptual/CFMemoryMgmt/Concepts/Ownership.html#//apple_ref/doc/uid/20001148-103029",
+      0,
+      "2009-01-01",
+      "macOS"
+    ],
+    [
+      "The Create Rule",
+      "TP40001148",
+      3,
+      "2009-01-01",
+      0, 0, 0, 0, 0,
+      "../documentation/CoreFoundation/Conceptual/CFMemoryMgmt/Concepts/CreateRule.html#//apple_ref/doc/uid/20001148-103030",
+      0,
+      "2009-01-01",
+      "macOS"
+    ]
+  ]
+})`
+
 // ---------------------------------------------------------------------------
 // discover()
 // ---------------------------------------------------------------------------
@@ -237,6 +270,28 @@ describe('AppleArchiveAdapter.discover', () => {
 
     expect(result.keys).not.toContain('apple-archive/documentation/QuickTime')
     expect(result.keys).not.toContain('apple-archive/documentation/QuickTime/whatsnew.htm')
+  })
+
+  test('preserves distinct sibling html pages under the same guide directory', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_SIBLING_HTML_FIXTURE, { status: 200 })
+    const adapter = new AppleArchiveAdapter()
+    const ctx = makeCtx()
+
+    const result = await adapter.discover(ctx)
+
+    expect(result.keys).toContain('apple-archive/documentation/CoreFoundation/Conceptual/CFMemoryMgmt/Concepts/Ownership.html')
+    expect(result.keys).toContain('apple-archive/documentation/CoreFoundation/Conceptual/CFMemoryMgmt/Concepts/CreateRule.html')
+  })
+
+  test('still strips redundant index or repeated basename html pages', async () => {
+    globalThis.fetch = async () => new Response(ARCHIVE_LIBRARY_FIXTURE, { status: 200 })
+    const adapter = new AppleArchiveAdapter()
+    const ctx = makeCtx()
+
+    const result = await adapter.discover(ctx)
+
+    expect(result.keys).toContain('apple-archive/documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/Introduction')
+    expect(result.keys).toContain('apple-archive/documentation/Cocoa/Conceptual/KeyValueCoding')
   })
 })
 

@@ -9,12 +9,22 @@ let db
 let server
 let client
 
+function repeatSentence(sentence, count) {
+  return Array.from({ length: count }, () => sentence).join(' ')
+}
+
 beforeEach(async () => {
   db = new DocsDatabase(':memory:')
   db.setSnapshotMeta('snapshot_tier', 'standard')
+  const seedPage = (rootId, params) => db.upsertPage({
+    rootId,
+    url: `https://example.com/${params.path}`,
+    ...params,
+  })
 
   // Seed minimal test data
   db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+  const swiftuiRootId = db.getRootBySlug('swiftui').id
   db.upsertNormalizedDocument({
     document: {
       sourceType: 'apple-docc',
@@ -34,6 +44,13 @@ beforeEach(async () => {
       { fromKey: 'swiftui/view', toKey: 'swiftui/text', relationType: 'child', section: 'Topics', sortOrder: 0 },
     ],
   })
+  seedPage(swiftuiRootId, {
+    path: 'swiftui/view',
+    title: 'View',
+    role: 'symbol',
+    roleHeading: 'Protocol',
+    abstract: 'A type that represents part of your app\'s user interface.',
+  })
   db.upsertNormalizedDocument({
     document: {
       sourceType: 'apple-docc',
@@ -50,6 +67,82 @@ beforeEach(async () => {
     ],
     relationships: [],
   })
+  seedPage(swiftuiRootId, {
+    path: 'swiftui/text',
+    title: 'Text',
+    role: 'symbol',
+    roleHeading: 'Structure',
+    abstract: 'A view that displays one or more lines of read-only text.',
+  })
+
+  db.upsertNormalizedDocument({
+    document: {
+      sourceType: 'apple-docc',
+      key: 'swiftui/long-article',
+      title: 'Long Article',
+      kind: 'article',
+      role: 'article',
+      roleHeading: 'Article',
+      framework: 'swiftui',
+      abstractText: 'A deliberately long document for pagination tests.',
+    },
+    sections: [
+      { sectionKind: 'abstract', contentText: 'A deliberately long document for pagination tests.', sortOrder: 0 },
+      {
+        sectionKind: 'discussion',
+        heading: 'Overview',
+        contentText: repeatSentence('Observation pipelines help coordinate view updates in complex hierarchies.', 90),
+        sortOrder: 1,
+      },
+      {
+        sectionKind: 'discussion',
+        heading: 'Implementation Notes',
+        contentText: repeatSentence('Pagination should preserve section boundaries whenever possible for agent consumption.', 85),
+        sortOrder: 2,
+      },
+      {
+        sectionKind: 'discussion',
+        heading: 'Transcript',
+        contentText: repeatSentence('Observation appears in this transcript excerpt so match lookups can find it repeatedly.', 110),
+        sortOrder: 3,
+      },
+    ],
+    relationships: [],
+  })
+  seedPage(swiftuiRootId, {
+    path: 'swiftui/long-article',
+    title: 'Long Article',
+    role: 'article',
+    roleHeading: 'Article',
+    abstract: 'A deliberately long document for pagination tests.',
+  })
+
+  for (let i = 0; i < 18; i++) {
+    db.upsertNormalizedDocument({
+      document: {
+        sourceType: 'apple-docc',
+        key: `swiftui/mock-${i}`,
+        title: `Mock ${i}`,
+        kind: 'symbol',
+        role: 'symbol',
+        roleHeading: 'Structure',
+        framework: 'swiftui',
+        abstractText: `Synthetic page ${i} for browse pagination tests.`,
+      },
+      sections: [
+        { sectionKind: 'abstract', contentText: `Synthetic page ${i} for browse pagination tests.`, sortOrder: 0 },
+      ],
+      relationships: [],
+    })
+    seedPage(swiftuiRootId, {
+      path: `swiftui/mock-${i}`,
+      title: `Mock ${i}`,
+      role: 'symbol',
+      roleHeading: 'Structure',
+      abstract: `Synthetic page ${i} for browse pagination tests.`,
+    })
+  }
+
   db.upsertRoot('wwdc', 'WWDC Session Transcripts', 'collection', 'test')
   db.upsertNormalizedDocument({
     document: {
@@ -84,6 +177,10 @@ beforeEach(async () => {
     ],
     relationships: [],
   })
+
+  for (let i = 0; i < 8; i++) {
+    db.upsertRoot(`extra-root-${i}`, `Extra Root ${i}`, 'framework', 'test')
+  }
 
   const logger = createLogger('error')
   const ctx = { db, dataDir: '/tmp/apple-docs-test', logger }
@@ -210,6 +307,7 @@ describe('MCP contract — tools', () => {
     expect(result.isError).toBeFalsy()
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed).toBeDefined()
+    expect(parsed.pages.length).toBeGreaterThan(5)
   })
 
   test('browse with path shows children', async () => {
@@ -282,6 +380,106 @@ describe('MCP contract — tools', () => {
     expect(parsed.found).toBe(true)
     expect(parsed.note).toContain('Section not found')
   })
+
+  test('read_doc paginates a long document by maxChars', async () => {
+    const result = await client.callTool({
+      name: 'read_doc',
+      arguments: { path: 'swiftui/long-article', maxChars: 1400 },
+    })
+    expect(result.isError).toBeFalsy()
+    expect(result.content[0].text.length).toBeLessThanOrEqual(1400)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.pageInfo.totalPages).toBeGreaterThan(1)
+    expect(parsed.pageInfo.page).toBe(1)
+    expect(parsed.content).toContain('Long Article')
+  })
+
+  test('read_doc returns a later page when requested', async () => {
+    const result = await client.callTool({
+      name: 'read_doc',
+      arguments: { path: 'swiftui/long-article', maxChars: 1400, page: 2 },
+    })
+    expect(result.isError).toBeFalsy()
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.pageInfo.page).toBe(2)
+    expect(parsed.pageInfo.hasPreviousPage).toBe(true)
+  })
+
+  test('read_doc supports focused match excerpts', async () => {
+    const result = await client.callTool({
+      name: 'read_doc',
+      arguments: {
+        path: 'swiftui/long-article',
+        match: 'Observation',
+        maxChars: 1200,
+        maxMatches: 2,
+      },
+    })
+    expect(result.isError).toBeFalsy()
+    expect(result.content[0].text.length).toBeLessThanOrEqual(1200)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.matches.length).toBeGreaterThan(0)
+    expect(parsed.pageInfo.strategy).toBe('matches')
+    expect(parsed.pageInfo.totalPages).toBeGreaterThan(1)
+    expect(parsed.matches[0].excerpt).toContain('Observation')
+  })
+
+  test('search_docs paginates result lists by maxChars', async () => {
+    const result = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'Mock', maxChars: 1200 },
+    })
+    expect(result.isError).toBeFalsy()
+    expect(result.content[0].text.length).toBeLessThanOrEqual(1200)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.pageInfo.totalPages).toBeGreaterThan(1)
+    expect(parsed.results.length).toBeGreaterThan(0)
+  })
+
+  test('search_docs paginates read mode using the same page contract', async () => {
+    const result = await client.callTool({
+      name: 'search_docs',
+      arguments: { query: 'Long Article', read: true, maxChars: 1400 },
+    })
+    expect(result.isError).toBeFalsy()
+    expect(result.content[0].text.length).toBeLessThanOrEqual(1400)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.bestMatch.path).toBe('swiftui/long-article')
+    expect(parsed.pageInfo.totalPages).toBeGreaterThan(1)
+  })
+
+  test('browse paginates framework pages by maxChars', async () => {
+    const result = await client.callTool({
+      name: 'browse',
+      arguments: { framework: 'swiftui', maxChars: 1000 },
+    })
+    expect(result.isError).toBeFalsy()
+    expect(result.content[0].text.length).toBeLessThanOrEqual(1000)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.pageInfo.totalPages).toBeGreaterThan(1)
+    expect(parsed.pages.length).toBeGreaterThan(0)
+  })
+
+  test('list_frameworks paginates roots by maxChars', async () => {
+    const result = await client.callTool({
+      name: 'list_frameworks',
+      arguments: { maxChars: 900 },
+    })
+    expect(result.isError).toBeFalsy()
+    expect(result.content[0].text.length).toBeLessThanOrEqual(900)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.pageInfo.totalPages).toBeGreaterThan(1)
+    expect(parsed.roots.length).toBeGreaterThan(0)
+  })
+
+  test('page requires maxChars', async () => {
+    const result = await client.callTool({
+      name: 'browse',
+      arguments: { framework: 'swiftui', page: 2 },
+    })
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain('requires maxChars')
+  })
 })
 
 describe('MCP contract — resources', () => {
@@ -309,5 +507,13 @@ describe('MCP contract — resources', () => {
     const result = await client.readResource({ uri: 'apple-docs://framework/swiftui' })
     expect(result.contents).toBeArray()
     expect(result.contents[0].uri).toBe('apple-docs://framework/swiftui')
+  })
+
+  test('reads paginated framework resource', async () => {
+    const result = await client.readResource({ uri: 'apple-docs://framework/swiftui?maxChars=1000' })
+    expect(result.contents).toBeArray()
+    expect(result.contents[0].text.length).toBeLessThanOrEqual(1000)
+    const parsed = JSON.parse(result.contents[0].text)
+    expect(parsed.pageInfo.totalPages).toBeGreaterThan(1)
   })
 })

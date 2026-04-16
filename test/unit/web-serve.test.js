@@ -6,7 +6,7 @@ let db
 let ctx
 let serverInfo
 
-beforeEach(() => {
+beforeEach(async () => {
   db = new DocsDatabase(':memory:')
 
   const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
@@ -29,8 +29,80 @@ beforeEach(() => {
   const docId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
   db.db.run(`INSERT OR REPLACE INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`, [docId])
 
+  db.upsertNormalizedDocument({
+    document: {
+      sourceType: 'apple-docc',
+      key: 'documentation/swiftui/view',
+      title: 'View',
+      kind: 'symbol',
+      role: 'symbol',
+      roleHeading: 'Protocol',
+      framework: 'swiftui',
+      abstractText: 'A type that represents part of your app UI',
+    },
+    sections: [
+      { sectionKind: 'abstract', contentText: 'A type that represents part of your app UI', sortOrder: 0 },
+    ],
+    relationships: [
+      { fromKey: 'documentation/swiftui/view', toKey: 'documentation/swiftui/text', relationType: 'child', section: 'Topics', sortOrder: 0 },
+    ],
+  })
+
+  db.upsertNormalizedDocument({
+    document: {
+      sourceType: 'apple-docc',
+      key: 'documentation/swiftui/text',
+      title: 'Text',
+      kind: 'symbol',
+      role: 'symbol',
+      roleHeading: 'Structure',
+      framework: 'swiftui',
+      abstractText: 'A view that displays read-only text.',
+    },
+    sections: [
+      { sectionKind: 'abstract', contentText: 'A view that displays read-only text.', sortOrder: 0 },
+    ],
+    relationships: [],
+  })
+
+  db.upsertNormalizedDocument({
+    document: {
+      sourceType: 'apple-docc',
+      key: 'documentation/swiftui/copying-data',
+      title: 'Copying Data',
+      kind: 'article',
+      role: 'article',
+      roleHeading: 'Article',
+      framework: 'swiftui',
+      abstractText: 'Learn how to copy values safely.',
+    },
+    sections: [
+      { sectionKind: 'abstract', contentText: 'Learn how to copy values safely.', sortOrder: 0 },
+    ],
+    relationships: [],
+  })
+
+  for (let i = 0; i < 24; i++) {
+    db.upsertNormalizedDocument({
+      document: {
+        sourceType: 'apple-docc',
+        key: `documentation/swiftui/mock-${i}`,
+        title: `Mock ${i}`,
+        kind: 'symbol',
+        role: 'symbol',
+        roleHeading: 'Structure',
+        framework: 'swiftui',
+        abstractText: `Synthetic result ${i}.`,
+      },
+      sections: [
+        { sectionKind: 'abstract', contentText: `Synthetic result ${i}.`, sortOrder: 0 },
+      ],
+      relationships: [],
+    })
+  }
+
   ctx = { db, dataDir: '/tmp', logger: { info() {}, warn() {}, error() {} } }
-  serverInfo = startDevServer({ port: 0 }, ctx)
+  serverInfo = await startDevServer({ port: 0 }, ctx)
 })
 
 afterEach(() => {
@@ -60,6 +132,8 @@ describe('Dev Server (P7-E)', () => {
     expect(res.status).toBe(200)
     const html = await res.text()
     expect(html).toContain('View')
+    expect(html).toContain('id="tree-data"')
+    expect(html).toContain('class="view-toggle"')
   })
 
   test('returns 404 for unknown document', async () => {
@@ -85,12 +159,36 @@ describe('Dev Server (P7-E)', () => {
     expect(data.results).toBeDefined()
   })
 
-  test('title index endpoint works', async () => {
+  test('title index endpoint returns v2 columnar format', async () => {
     const res = await fetch(`${serverInfo.url}/data/search/title-index.json`)
     expect(res.status).toBe(200)
     const data = await res.json()
+    expect(data.v).toBe(2)
     expect(data.frameworks).toBeDefined()
-    expect(data.entries).toBeDefined()
+    expect(data.keys).toBeDefined()
+    expect(data.titles).toBeDefined()
+  })
+
+  test('search manifest endpoint returns v2 with file mappings', async () => {
+    const res = await fetch(`${serverInfo.url}/data/search/search-manifest.json`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toContain('no-cache')
+    const manifest = await res.json()
+    expect(manifest.version).toBe(2)
+    expect(manifest.files).toBeDefined()
+    expect(manifest.files['title-index']).toMatch(/^title-index\.[0-9a-f]{10}\.json$/)
+  })
+
+  test('content-hashed search file returns immutable cache headers', async () => {
+    // First get the manifest to find the hashed filename
+    const manifestRes = await fetch(`${serverInfo.url}/data/search/search-manifest.json`)
+    const manifest = await manifestRes.json()
+    const titleFile = manifest.files['title-index']
+    const res = await fetch(`${serverInfo.url}/data/search/${titleFile}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toContain('immutable')
+    const data = await res.json()
+    expect(data.v).toBe(2)
   })
 
   test('serves search page at /search', async () => {
@@ -114,6 +212,15 @@ describe('Dev Server (P7-E)', () => {
     expect(data.results).toBeDefined()
   })
 
+  test('/api/search kind filter matches displayed kinds', async () => {
+    const res = await fetch(`${serverInfo.url}/api/search?q=Copying&kind=Article`)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.results).toHaveLength(1)
+    expect(data.results[0].path).toBe('documentation/swiftui/copying-data')
+    expect(data.results[0].kind).toBe('Article')
+  })
+
   test('/api/search accepts platform filter', async () => {
     const res = await fetch(`${serverInfo.url}/api/search?q=View&platform=ios`)
     expect(res.status).toBe(200)
@@ -122,10 +229,27 @@ describe('Dev Server (P7-E)', () => {
   })
 
   test('/api/search accepts limit and offset', async () => {
-    const res = await fetch(`${serverInfo.url}/api/search?q=View&limit=5&offset=0`)
-    expect(res.status).toBe(200)
-    const data = await res.json()
-    expect(data.results).toBeDefined()
+    const first = await fetch(`${serverInfo.url}/api/search?q=Mock&limit=5&offset=0`)
+    const second = await fetch(`${serverInfo.url}/api/search?q=Mock&limit=5&offset=5`)
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    const firstData = await first.json()
+    const secondData = await second.json()
+    expect(firstData.results).toHaveLength(5)
+    expect(secondData.results).toHaveLength(5)
+    expect(firstData.results[0].path).not.toBe(secondData.results[0].path)
+  })
+
+  test('/api/search offset applies before pagination truncation', async () => {
+    const first = await fetch(`${serverInfo.url}/api/search?q=Mock&limit=10&offset=0`)
+    const second = await fetch(`${serverInfo.url}/api/search?q=Mock&limit=10&offset=10`)
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    const firstData = await first.json()
+    const secondData = await second.json()
+    const firstPaths = new Set(firstData.results.map(r => r.path))
+    expect(secondData.results).toHaveLength(10)
+    expect(secondData.results.every(r => !firstPaths.has(r.path))).toBe(true)
   })
 
   test('/api/search accepts min version filters', async () => {
@@ -140,8 +264,9 @@ describe('Dev Server (P7-E)', () => {
     expect(res.status).toBe(200)
     const data = await res.json()
     expect(data.frameworks).toBeArray()
-    expect(data.sources).toBeArray()
     expect(data.kinds).toBeArray()
-    expect(data.frameworks).toContain('swiftui')
+    // Frameworks now return {label, value} objects with display names
+    const fwValues = data.frameworks.map(f => f.value)
+    expect(fwValues).toContain('swiftui')
   })
 })

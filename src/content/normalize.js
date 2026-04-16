@@ -121,12 +121,13 @@ function normalizeDocC(json, key, sourceType) {
   // 2. Declaration (sortOrder 1)
   const declarationSection = findSection(json?.primaryContentSections, 'declarations')
   if (declarationSection) {
-    const tokens = declarationSection.declarations?.[0]?.tokens ?? []
+    const enrichedDeclarations = enrichDeclarationTokens(declarationSection.declarations ?? [], refs)
+    const tokens = enrichedDeclarations[0]?.tokens ?? []
     sections.push({
       sectionKind: 'declaration',
       heading: 'Declaration',
       contentText: tokens.map(t => t.text ?? '').join('') || null,
-      contentJson: JSON.stringify(declarationSection.declarations ?? []),
+      contentJson: JSON.stringify(enrichedDeclarations),
       sortOrder: order++,
     })
   } else {
@@ -378,6 +379,55 @@ function resolveKind(json) {
     init: 'init',
   }
   return roleMap[meta.role] ?? meta.role ?? null
+}
+
+/**
+ * Enrich declaration tokens with resolved keys for type linking.
+ *
+ * For each `typeIdentifier` or `attribute` token, resolve its `identifier`
+ * (doc:// URL) via the references map, or fall back to matching the token
+ * text against reference titles. Stores resolved path as `_resolvedKey`.
+ */
+function enrichDeclarationTokens(declarations, refs) {
+  if (!Array.isArray(declarations) || declarations.length === 0) return declarations
+
+  // Build a title → canonical key lookup from references
+  const titleToKey = new Map()
+  if (refs && typeof refs === 'object') {
+    for (const [id, ref] of Object.entries(refs)) {
+      if (!id.startsWith('doc://')) continue
+      if (!ref?.url) continue
+      const key = normalizeIdentifier(ref.url)
+      if (!key || !ref.title) continue
+      // Only map type-like entries (not methods with parentheses)
+      if (ref.title.includes('(')) continue
+      titleToKey.set(ref.title, key)
+    }
+  }
+
+  return declarations.map(decl => {
+    const tokens = decl?.tokens
+    if (!Array.isArray(tokens)) return decl
+
+    const enrichedTokens = tokens.map(token => {
+      if (token.kind !== 'typeIdentifier' && token.kind !== 'attribute') return token
+
+      // 1. Direct identifier resolution (doc:// URL on the token)
+      if (token.identifier) {
+        const key = resolveRefKey(token.identifier, refs)
+        if (key) return { ...token, _resolvedKey: key }
+      }
+
+      // 2. Title-based resolution from references map
+      if (token.text && titleToKey.has(token.text)) {
+        return { ...token, _resolvedKey: titleToKey.get(token.text) }
+      }
+
+      return token
+    })
+
+    return { ...decl, tokens: enrichedTokens }
+  })
 }
 
 /**

@@ -20,3 +20,7 @@ ignore:
   - "test/**"
   - "src/web/assets/**"
   - "src/web/worker/**"
+
+# Note: src/web/assets/** and src/web/worker/** are browser-only JS that cannot
+# be instrumented by bun test coverage. Server-side web code (templates.js,
+# serve.js, build.js, search-artifacts.js) IS covered by tests and tracked.

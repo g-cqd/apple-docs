@@ -45,4 +45,19 @@ describe('normalized content model', () => {
     expect(snippet.length).toBeLessThanOrEqual(146)
     expect(snippet.toLowerCase()).toContain('user interface')
   })
+
+  test('enriches declaration tokens with _resolvedKey from references', () => {
+    const normalized = normalize(fixture, 'swiftui/view', 'apple-docc')
+    const declSection = normalized.sections.find(s => s.sectionKind === 'declaration')
+    expect(declSection).toBeDefined()
+
+    const decls = JSON.parse(declSection.contentJson)
+    const tokens = decls[0]?.tokens ?? []
+
+    // The @MainActor attribute has identifier: "doc://com.externally.resolved.symbol/s:ScM"
+    // which resolves via the references map
+    const mainActor = tokens.find(t => t.text === 'MainActor')
+    expect(mainActor).toBeDefined()
+    expect(mainActor._resolvedKey).toBe('swift/mainactor')
+  })
 })

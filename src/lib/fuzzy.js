@@ -38,20 +38,70 @@ function trigrams(s) {
 }
 
 /**
+ * Module-level trigram cache: lazily built on first fuzzy search per db instance.
+ * Maps trigram string -> array of { id, title } rows.
+ * Automatically invalidated when a different db instance is used.
+ * Can also be cleared explicitly via clearTrigramCache().
+ * @type {Map<string, Array<{ id: number, title: string }>> | null}
+ */
+let _trigramCache = null
+/** @type {object | null} */
+let _trigramCacheDb = null
+
+/**
+ * Build the trigram cache from the database's trigram index.
+ * Groups all trigram candidates by trigram string for O(1) lookup.
+ */
+function buildTrigramCache(db) {
+  _trigramCache = new Map()
+  _trigramCacheDb = db
+  // Get all titles from the database and build trigrams locally
+  const allTitles = db.getAllTitlesForFuzzy()
+  for (const row of allTitles) {
+    const titleTrigrams = trigrams(row.title)
+    for (const tri of titleTrigrams) {
+      let bucket = _trigramCache.get(tri)
+      if (!bucket) {
+        bucket = []
+        _trigramCache.set(tri, bucket)
+      }
+      bucket.push({ id: row.id, title: row.title })
+    }
+  }
+}
+
+/**
+ * Clear the trigram cache. Call when the database content changes (e.g. after sync).
+ */
+export function clearTrigramCache() {
+  _trigramCache = null
+  _trigramCacheDb = null
+}
+
+/**
  * Find fuzzy title matches using trigram pre-filter + Levenshtein.
+ * Caches trigram sets on first call for fast subsequent lookups.
  * @param {string} query - The user's search query
  * @param {import('../storage/database.js').DocsDatabase} db
- * @param {{ framework?: string, kind?: string, limit?: number, maxDist?: number }} opts
+ * @param {{ framework?: string, kind?: string, limit?: number, maxDist?: number, excludeIds?: Set<string> }} opts
  * @returns {Array<{ id: number, title: string, distance: number }>}
  */
-export function fuzzyMatchTitles(query, db, { framework: _framework, kind: _kind, limit = 100, maxDist = 2 } = {}) {
+export function fuzzyMatchTitles(query, db, { framework: _framework, kind: _kind, limit = 100, maxDist = 2, excludeIds = null } = {}) {
   const queryTrigrams = trigrams(query)
   if (queryTrigrams.size < 2) return []
 
-  // Collect candidates from trigram index: titles sharing any trigram with query
-  const hits = new Map() // id → { title, count }
+  // Lazy-init: build trigram cache on first call, or rebuild if db instance changed
+  if (!_trigramCache || _trigramCacheDb !== db) {
+    buildTrigramCache(db)
+  }
+
+  // Collect candidates from cached trigrams: titles sharing any trigram with query
+  const hits = new Map() // id -> { title, count }
   for (const tri of queryTrigrams) {
-    for (const row of db.getTrigramCandidates(tri)) {
+    const bucket = _trigramCache.get(tri)
+    if (!bucket) continue
+    for (const row of bucket) {
+      if (excludeIds && excludeIds.has(row.id)) continue
       const existing = hits.get(row.id)
       if (existing) {
         existing.count++

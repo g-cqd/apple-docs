@@ -16,7 +16,55 @@
   // Sort kinds alphabetically
   const sortedKinds = [...kindCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]))
 
-  // Build chip bar
+  // -----------------------------------------------------------------------
+  // Controls container — inserted into #collection-controls if it exists,
+  // otherwise falls back to inserting before first group
+  // -----------------------------------------------------------------------
+
+  const controlsHost = document.getElementById('collection-controls')
+
+  // --- Quick search input ---
+  const searchInput = document.createElement('input')
+  searchInput.type = 'search'
+  searchInput.className = 'framework-search'
+  searchInput.placeholder = 'Filter symbols\u2026'
+  searchInput.setAttribute('aria-label', 'Filter symbols in this framework')
+
+  // --- Sort controls ---
+  const sortControls = document.createElement('div')
+  sortControls.className = 'sort-controls'
+  const sortLabel = document.createElement('label')
+  sortLabel.htmlFor = 'sort-select'
+  sortLabel.textContent = 'Sort by:'
+  const sortSelect = document.createElement('select')
+  sortSelect.id = 'sort-select'
+  const optAlpha = document.createElement('option')
+  optAlpha.value = 'alpha'
+  optAlpha.textContent = 'Name (A\u2013Z)'
+  const optKind = document.createElement('option')
+  optKind.value = 'kind'
+  optKind.textContent = 'Kind'
+  sortSelect.appendChild(optAlpha)
+  sortSelect.appendChild(optKind)
+  sortControls.appendChild(sortLabel)
+  sortControls.appendChild(sortSelect)
+
+  // --- Deprecated toggle ---
+  const deprecatedToggle = document.createElement('label')
+  deprecatedToggle.className = 'deprecated-toggle'
+  const deprecatedCb = document.createElement('input')
+  deprecatedCb.type = 'checkbox'
+  deprecatedCb.id = 'hide-deprecated'
+  deprecatedToggle.appendChild(deprecatedCb)
+  deprecatedToggle.appendChild(document.createTextNode(' Hide deprecated'))
+
+  // --- Inline row for sort + deprecated toggle ---
+  const inlineRow = document.createElement('div')
+  inlineRow.className = 'collection-controls-row'
+  inlineRow.appendChild(sortControls)
+  inlineRow.appendChild(deprecatedToggle)
+
+  // --- Build chip bar ---
   const bar = document.createElement('div')
   bar.className = 'collection-filter-bar'
   bar.setAttribute('role', 'toolbar')
@@ -36,14 +84,32 @@
     bar.appendChild(btn)
   }
 
-  // Insert before the first filterable group
-  const firstGroup = document.querySelector('.framework-group, .role-group')
-  if (firstGroup && firstGroup.parentNode) {
-    firstGroup.parentNode.insertBefore(bar, firstGroup)
+  // --- Insert controls ---
+  if (controlsHost) {
+    controlsHost.appendChild(searchInput)
+    controlsHost.appendChild(inlineRow)
+    controlsHost.appendChild(bar)
+  } else {
+    const firstGroup = document.querySelector('.framework-group, .role-group')
+    if (firstGroup && firstGroup.parentNode) {
+      firstGroup.parentNode.insertBefore(bar, firstGroup)
+      firstGroup.parentNode.insertBefore(inlineRow, bar)
+      firstGroup.parentNode.insertBefore(searchInput, inlineRow)
+    }
   }
 
-  // Active filters (multi-select OR logic)
+  // -----------------------------------------------------------------------
+  // State
+  // -----------------------------------------------------------------------
+
   const activeFilters = new Set()
+  let currentSort = 'alpha'
+  let searchQuery = ''
+  let hideDeprecated = false
+
+  // -----------------------------------------------------------------------
+  // Chip click handler
+  // -----------------------------------------------------------------------
 
   bar.addEventListener('click', (e) => {
     const btn = e.target.closest('.filter-chip')
@@ -71,18 +137,142 @@
       }
     }
 
-    applyFilters()
-    updateHash()
+    applyAll()
   })
 
-  function applyFilters() {
-    const showAll = activeFilters.size === 0
+  // -----------------------------------------------------------------------
+  // Sort handler
+  // -----------------------------------------------------------------------
 
-    // Show/hide individual items
-    for (const el of filterableItems) {
-      if (el.tagName !== 'LI') continue
+  sortSelect.addEventListener('change', () => {
+    currentSort = sortSelect.value
+    applySort()
+    applyAll()
+  })
+
+  function applySort() {
+    const container = document.getElementById('list-container')
+    if (!container) return
+
+    const sections = [...container.querySelectorAll('.framework-group, .role-group')]
+    if (sections.length === 0) return
+
+    if (currentSort === 'kind') {
+      // Re-group all <li> items by their data-filter-kind (role_heading)
+      // Collect all LI elements from all sections
+      const allLis = []
+      for (const section of sections) {
+        for (const li of section.querySelectorAll('li[data-filter-kind]')) {
+          allLis.push(li)
+        }
+      }
+
+      // Group by kind
+      const byKind = new Map()
+      for (const li of allLis) {
+        const kind = li.getAttribute('data-filter-kind')
+        if (!byKind.has(kind)) byKind.set(kind, [])
+        byKind.get(kind).push(li)
+      }
+
+      // Sort kind groups alphabetically
+      const sortedGroups = [...byKind.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+
+      // Remove existing sections
+      for (const section of sections) {
+        section.remove()
+      }
+
+      // Create new sections grouped by kind
+      for (const [kind, lis] of sortedGroups) {
+        const section = document.createElement('section')
+        const kindSlug = slugify(kind)
+        section.id = kindSlug
+        section.className = 'role-group'
+        section.setAttribute('data-filter-kind', kind)
+
+        const heading = document.createElement('h2')
+        heading.className = 'role-heading'
+        heading.textContent = kind
+        section.appendChild(heading)
+
+        const ul = document.createElement('ul')
+        ul.className = 'doc-list'
+
+        // Sort LIs alphabetically within each kind group
+        lis.sort((a, b) => {
+          const aText = (a.querySelector('a')?.textContent ?? '').toLowerCase()
+          const bText = (b.querySelector('a')?.textContent ?? '').toLowerCase()
+          return aText.localeCompare(bText)
+        })
+        for (const li of lis) {
+          ul.appendChild(li)
+        }
+        section.appendChild(ul)
+        container.appendChild(section)
+      }
+    } else {
+      // 'alpha' — restore original role-based grouping
+      // We saved the original HTML on first load
+      if (originalListHtml) {
+        container.innerHTML = originalListHtml
+      }
+    }
+
+    syncToc()
+  }
+
+  // -----------------------------------------------------------------------
+  // Quick search handler
+  // -----------------------------------------------------------------------
+
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value.trim().toLowerCase()
+    applyAll()
+  })
+
+  // -----------------------------------------------------------------------
+  // Deprecated toggle handler
+  // -----------------------------------------------------------------------
+
+  deprecatedCb.addEventListener('change', () => {
+    hideDeprecated = deprecatedCb.checked
+    applyAll()
+  })
+
+  // -----------------------------------------------------------------------
+  // Unified apply (filters + search + deprecated)
+  // -----------------------------------------------------------------------
+
+  function applyAll() {
+    const showAllKinds = activeFilters.size === 0
+
+    // Get the current LI items (might be re-arranged by sort)
+    const currentItems = document.querySelectorAll('.role-group li[data-filter-kind], .framework-group li[data-filter-kind]')
+
+    for (const el of currentItems) {
       const kind = el.getAttribute('data-filter-kind')
-      el.hidden = !showAll && !activeFilters.has(kind)
+      const isDeprecatedItem = el.getAttribute('data-deprecated') === 'true'
+      const text = (el.textContent ?? '').toLowerCase()
+
+      let visible = true
+
+      // Kind filter
+      if (!showAllKinds && !activeFilters.has(kind)) {
+        visible = false
+      }
+
+      // Deprecated filter
+      if (visible && hideDeprecated && isDeprecatedItem) {
+        visible = false
+      }
+
+      // Search filter
+      if (visible && searchQuery && !text.includes(searchQuery)) {
+        visible = false
+      }
+
+      el.hidden = !visible
     }
 
     // Hide empty group sections
@@ -90,32 +280,85 @@
       const visibleItems = section.querySelectorAll('li:not([hidden])')
       section.hidden = visibleItems.length === 0
     }
+
+    syncToc()
+    updateHash()
   }
 
+  // -----------------------------------------------------------------------
+  // URL hash state
+  // -----------------------------------------------------------------------
+
   function updateHash() {
-    if (activeFilters.size === 0) {
+    const params = []
+    if (currentSort !== 'alpha') params.push('sort=' + currentSort)
+    if (activeFilters.size > 0) params.push('filter=' + [...activeFilters].join(','))
+    if (searchQuery) params.push('q=' + encodeURIComponent(searchQuery))
+    if (hideDeprecated) params.push('hideDeprecated=1')
+
+    if (params.length === 0) {
       history.replaceState(null, '', location.pathname + location.search)
     } else {
-      history.replaceState(null, '', location.pathname + location.search + '#filter=' + [...activeFilters].join(','))
+      history.replaceState(null, '', location.pathname + location.search + '#' + params.join('&'))
     }
   }
 
   function restoreFromHash() {
     const hash = location.hash
-    if (!hash.startsWith('#filter=')) return
-    const values = hash.slice(8).split(',').filter(Boolean)
-    for (const v of values) {
-      if (kindCounts.has(v)) {
-        activeFilters.add(v)
-        const btn = bar.querySelector('[data-value="' + CSS.escape(v) + '"]')
-        if (btn) btn.classList.add('active')
+    if (!hash || hash.length < 2) return
+
+    const raw = hash.slice(1)
+    const pairs = raw.split('&')
+    const map = new Map()
+    for (const pair of pairs) {
+      const idx = pair.indexOf('=')
+      if (idx === -1) continue
+      map.set(pair.slice(0, idx), pair.slice(idx + 1))
+    }
+
+    // Restore sort
+    if (map.has('sort') && map.get('sort') === 'kind') {
+      currentSort = 'kind'
+      sortSelect.value = 'kind'
+      applySort()
+    }
+
+    // Restore filters
+    if (map.has('filter')) {
+      const values = map.get('filter').split(',').filter(Boolean)
+      for (const v of values) {
+        if (kindCounts.has(v)) {
+          activeFilters.add(v)
+          const btn = bar.querySelector('[data-value="' + CSS.escape(v) + '"]')
+          if (btn) btn.classList.add('active')
+        }
+      }
+      if (activeFilters.size > 0) {
+        allBtn.classList.remove('active')
       }
     }
-    if (activeFilters.size > 0) {
-      allBtn.classList.remove('active')
-      applyFilters()
+
+    // Restore search
+    if (map.has('q')) {
+      searchQuery = decodeURIComponent(map.get('q'))
+      searchInput.value = searchQuery
+    }
+
+    // Restore deprecated toggle
+    if (map.has('hideDeprecated') && map.get('hideDeprecated') === '1') {
+      hideDeprecated = true
+      deprecatedCb.checked = true
+    }
+
+    // Apply everything if any state was restored
+    if (activeFilters.size > 0 || searchQuery || hideDeprecated) {
+      applyAll()
     }
   }
+
+  // -----------------------------------------------------------------------
+  // Helpers
+  // -----------------------------------------------------------------------
 
   function esc(s) {
     return String(s || '')
@@ -125,5 +368,57 @@
       .replace(/"/g, '&quot;')
   }
 
+  function slugify(text) {
+    return String(text || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+  }
+
+  function syncToc() {
+    const container = document.getElementById('list-container')
+    if (!container) return
+
+    const sections = [...container.children]
+      .filter(el =>
+        (el.classList.contains('framework-group') || el.classList.contains('role-group'))
+        && !el.hidden
+        && el.id,
+      )
+      .map(section => ({
+        id: section.id,
+        label: (section.querySelector('h2, .role-heading')?.textContent ?? section.id).trim(),
+      }))
+
+    const tocHtml = `<ul>${sections.map(section =>
+      `<li><a href="#${esc(section.id)}">${esc(section.label)}</a></li>`
+    ).join('')}</ul>`
+
+    for (const toc of document.querySelectorAll('.page-toc')) {
+      const mobileDetails = toc.closest('.page-toc-mobile')
+      toc.hidden = sections.length < 2
+      toc.innerHTML = mobileDetails ? tocHtml : `<h3>On this page</h3>${tocHtml}`
+      if (mobileDetails) {
+        mobileDetails.hidden = sections.length < 2
+      }
+    }
+
+    const sidebar = document.querySelector('.doc-sidebar')
+    const mainContent = document.querySelector('.main-content')
+    if (sidebar && sidebar.children.length === 1 && sidebar.querySelector(':scope > .page-toc')) {
+      sidebar.hidden = sections.length < 2
+      if (mainContent) {
+        mainContent.classList.toggle('has-sidebar', sections.length >= 2)
+      }
+    }
+
+    document.dispatchEvent(new CustomEvent('page-toc:refresh'))
+  }
+
+  // Save original HTML for restoring after sort-by-kind
+  const listContainer = document.getElementById('list-container')
+  const originalListHtml = listContainer ? listContainer.innerHTML : null
+
   restoreFromHash()
+  syncToc()
 })()

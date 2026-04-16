@@ -233,7 +233,7 @@ try {
         }
         case 'serve': {
           const { startDevServer } = await import('./src/web/serve.js')
-          const info = startDevServer({ port: flags.port ? Number.parseInt(flags.port) : 3000, baseUrl: flags['base-url'] }, ctx)
+          const info = await startDevServer({ port: flags.port ? Number.parseInt(flags.port) : 3000, baseUrl: flags['base-url'] }, ctx)
           console.log(`Dev server running at ${info.url}`)
           console.log('Press Ctrl+C to stop')
           // Keep process alive

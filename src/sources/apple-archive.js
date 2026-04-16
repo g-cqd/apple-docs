@@ -58,14 +58,27 @@ function normalizeArchiveRelativeUrl(relativeUrl) {
 
 /**
  * Derive the canonical key for an archive guide path.
- * Strips the terminal HTML filename while preserving the guide directory.
+ * Strips only redundant terminal HTML filenames while preserving distinct
+ * sibling pages within the same guide directory.
  *
  * @param {string} guidePath
  * @returns {string}
  */
 function pathToKey(guidePath) {
-  const withoutFilename = guidePath.replace(/\/[^/]+\.(?:html|htm)$/i, '')
-  return `${ROOT_SLUG}/${withoutFilename}`
+  const match = guidePath.match(/^(.*)\/([^/]+)\.(html|htm)$/i)
+  if (!match) return `${ROOT_SLUG}/${guidePath}`
+
+  const directoryPath = match[1]
+  const fileBase = match[2]
+  const parentSegment = directoryPath.split('/').pop() ?? ''
+  const lowerBase = fileBase.toLowerCase()
+  const lowerParent = parentSegment.toLowerCase()
+
+  if (lowerBase === 'index' || lowerBase === lowerParent) {
+    return `${ROOT_SLUG}/${directoryPath}`
+  }
+
+  return `${ROOT_SLUG}/${directoryPath}/${fileBase}.${match[3]}`
 }
 
 /**
@@ -76,6 +89,9 @@ function pathToKey(guidePath) {
  */
 function keyToFallbackUrl(key) {
   const pathPrefix = key.replace(`${ROOT_SLUG}/`, '')
+  if (/\.(?:html|htm|pdf)$/i.test(pathPrefix)) {
+    return `${ARCHIVE_BASE}/${pathPrefix}`
+  }
   return `${ARCHIVE_BASE}/${pathPrefix}/index.html`
 }
 

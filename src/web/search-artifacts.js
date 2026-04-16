@@ -1,19 +1,25 @@
 import { join } from 'node:path'
 import { ensureDir } from '../storage/files.js'
+import { sha256 } from '../lib/hash.js'
 
 /**
- * Build a compact title index for browser-side search.
+ * Compute a short content hash (first 10 hex chars of SHA-256).
+ * @param {string} data
+ * @returns {string}
+ */
+function contentHash(data) {
+  return sha256(data).slice(0, 10)
+}
+
+/**
+ * Build a compact columnar title index (v2) for browser-side search.
  *
- * Returns `{ frameworks, entries }` where:
- * - `frameworks` is a sorted array of all framework names (deduped)
- * - `entries` is an array of compact arrays per document:
- *   `[key, title, abstractSnippet, frameworkIndex, kind, roleHeading]`
- *
- * Framework index is `-1` when the document has no framework.
- * Abstract snippets are truncated to 80 characters.
+ * Returns a columnar structure where each field is stored as a parallel array,
+ * which compresses significantly better with gzip because similar data is
+ * adjacent.
  *
  * @param {import('../storage/database.js').DocsDatabase} db
- * @returns {{ frameworks: string[], entries: Array<[string, string, string, number, string, string]> }}
+ * @returns {{ v: 2, frameworks: string[], keys: string[], titles: string[], abstracts: string[], fwIndices: number[], kinds: string[], roleHeadings: string[] }}
  */
 export function buildTitleIndex(db) {
   const docs = db.db.query(`
@@ -23,18 +29,17 @@ export function buildTitleIndex(db) {
   `).all()
 
   const frameworks = [...new Set(docs.map(d => d.framework).filter(Boolean))].sort()
-  const fwIndex = Object.fromEntries(frameworks.map((f, i) => [f, i]))
+  const fwLookup = Object.fromEntries(frameworks.map((f, i) => [f, i]))
 
   return {
+    v: 2,
     frameworks,
-    entries: docs.map(d => [
-      d.key,
-      d.title,
-      (d.abstract_text || '').slice(0, 80),
-      fwIndex[d.framework] ?? -1,
-      d.kind || '',
-      d.role_heading || '',
-    ]),
+    keys: docs.map(d => d.key),
+    titles: docs.map(d => d.title),
+    abstracts: docs.map(d => (d.abstract_text || '').slice(0, 80)),
+    fwIndices: docs.map(d => fwLookup[d.framework] ?? -1),
+    kinds: docs.map(d => d.kind || ''),
+    roleHeadings: docs.map(d => d.role_heading || ''),
   }
 }
 
@@ -59,9 +64,12 @@ export function buildAliasMap(db) {
  * document's framework (a–z), with `_` used for documents that have no
  * framework. Body text is truncated to 500 characters per document.
  *
+ * Returns an array of `{ letter, hash }` for each shard written, so the
+ * caller can build the manifest mapping.
+ *
  * @param {import('../storage/database.js').DocsDatabase} db
  * @param {string} outputDir
- * @returns {Promise<number>} Number of shard files written
+ * @returns {Promise<Array<{ letter: string, hash: string }>>} Shard metadata
  */
 export async function buildBodyShards(db, outputDir) {
   const hasSections = db.hasTable('document_sections')
@@ -100,42 +108,70 @@ export async function buildBodyShards(db, outputDir) {
   ensureDir(shardsDir)
 
   const writeOps = []
+  /** @type {Array<{ letter: string, hash: string }>} */
+  const shardMeta = []
+
   for (const [letter, shard] of shards) {
-    const filePath = join(shardsDir, `${letter}.json`)
-    writeOps.push(Bun.write(filePath, JSON.stringify(shard)))
+    const json = JSON.stringify(shard)
+    const hash = contentHash(json)
+    const filePath = join(shardsDir, `${letter}.${hash}.json`)
+    writeOps.push(Bun.write(filePath, json))
+    shardMeta.push({ letter, hash })
   }
 
   await Promise.all(writeOps)
 
-  return shards.size
+  return shardMeta
 }
 
 /**
- * Write the search manifest file containing metadata about generated artifacts.
+ * Write the search manifest file containing metadata about generated artifacts
+ * and the mapping from logical names to content-hashed filenames.
+ *
+ * The manifest itself is NOT hashed — it should be served with `Cache-Control:
+ * no-cache` so clients always get the latest version, while the hashed artifact
+ * files can be served with immutable caching.
  *
  * @param {string} outputDir
- * @param {{ titleCount: number, aliasCount: number, shardCount: number }} stats
+ * @param {{ titleCount: number, aliasCount: number, shardCount: number, files: Record<string, string> }} stats
  * @returns {Promise<void>}
  */
 export async function writeSearchManifest(outputDir, stats) {
   const manifest = {
-    version: 1,
+    version: 2,
     titleCount: stats.titleCount,
     aliasCount: stats.aliasCount,
     shardCount: stats.shardCount,
+    files: stats.files,
     generatedAt: new Date().toISOString(),
   }
   await Bun.write(join(outputDir, 'search-manifest.json'), JSON.stringify(manifest))
 }
 
 /**
+ * Write a JSON artifact with a content-hashed filename.
+ *
+ * @param {string} outputDir - Directory to write into
+ * @param {string} baseName - Logical name without extension (e.g. "title-index")
+ * @param {object} data - Object to serialize as JSON
+ * @returns {Promise<{ hash: string, json: string }>}
+ */
+async function writeHashedJSON(outputDir, baseName, data) {
+  const json = JSON.stringify(data)
+  const hash = contentHash(json)
+  const filePath = join(outputDir, `${baseName}.${hash}.json`)
+  await Bun.write(filePath, json)
+  return { hash, json }
+}
+
+/**
  * Orchestrate the generation of all search artifact files.
  *
- * Writes:
- * - `${outputDir}/title-index.json`
- * - `${outputDir}/aliases.json`
- * - `${outputDir}/shards/<letter>.json` (one per first-letter bucket)
- * - `${outputDir}/search-manifest.json`
+ * Writes content-hashed files:
+ * - `${outputDir}/title-index.{hash}.json`
+ * - `${outputDir}/aliases.{hash}.json`
+ * - `${outputDir}/shards/<letter>.{hash}.json` (one per first-letter bucket)
+ * - `${outputDir}/search-manifest.json` (not hashed — always fresh)
  *
  * @param {import('../storage/database.js').DocsDatabase} db
  * @param {string} outputDir
@@ -144,19 +180,32 @@ export async function writeSearchManifest(outputDir, stats) {
 export async function generateSearchArtifacts(db, outputDir) {
   ensureDir(outputDir)
 
+  // Build data structures (CPU-bound, synchronous)
   const titleIndex = buildTitleIndex(db)
   const aliasMap = buildAliasMap(db)
 
-  const [shardCount] = await Promise.all([
+  // Write all artifacts in parallel (IO-bound)
+  const [titleResult, aliasResult, shardMeta] = await Promise.all([
+    writeHashedJSON(outputDir, 'title-index', titleIndex),
+    writeHashedJSON(outputDir, 'aliases', aliasMap),
     buildBodyShards(db, outputDir),
-    Bun.write(join(outputDir, 'title-index.json'), JSON.stringify(titleIndex)),
-    Bun.write(join(outputDir, 'aliases.json'), JSON.stringify(aliasMap)),
   ])
 
-  const titleCount = titleIndex.entries.length
+  const titleCount = titleIndex.keys.length
   const aliasCount = Object.keys(aliasMap).length
+  const shardCount = shardMeta.length
 
-  await writeSearchManifest(outputDir, { titleCount, aliasCount, shardCount })
+  // Build the file mapping for the manifest
+  /** @type {Record<string, string>} */
+  const files = {
+    'title-index': `title-index.${titleResult.hash}.json`,
+    'aliases': `aliases.${aliasResult.hash}.json`,
+  }
+  for (const { letter, hash } of shardMeta) {
+    files[`shard-${letter}`] = `shards/${letter}.${hash}.json`
+  }
+
+  await writeSearchManifest(outputDir, { titleCount, aliasCount, shardCount, files })
 
   return { titleCount, aliasCount, shardCount }
 }

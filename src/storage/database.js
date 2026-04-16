@@ -480,6 +480,35 @@ export class DocsDatabase {
     return this._tier
   }
 
+  /**
+   * Ensure the document_sections table exists (e.g. for lite snapshots where it was dropped).
+   * Creates the table and re-prepares the affected statements.
+   */
+  ensureSectionsTable() {
+    if (this.hasTable('document_sections')) return
+    this.db.run(`CREATE TABLE IF NOT EXISTS document_sections (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id   INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      section_kind  TEXT NOT NULL,
+      heading       TEXT,
+      content_text  TEXT NOT NULL,
+      content_json  TEXT,
+      sort_order    INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(document_id, section_kind, sort_order)
+    )`)
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_sections_doc ON document_sections(document_id)')
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_sections_kind ON document_sections(section_kind)')
+    this._deleteDocumentSections = this.db.query('DELETE FROM document_sections WHERE document_id = ?')
+    this._insertDocumentSection = this.db.query(`
+      INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order)
+      VALUES ($document_id, $section_kind, $heading, $content_text, $content_json, $sort_order)
+      ON CONFLICT(document_id, section_kind, sort_order) DO UPDATE SET
+        heading = $heading,
+        content_text = $content_text,
+        content_json = $content_json
+    `)
+  }
+
   _prepareStatements() {
     // Detect available tier-optional tables once
     const hasSections = this.hasTable('document_sections')
@@ -640,6 +669,7 @@ export class DocsDatabase {
     this._searchDocuments = this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
+             d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
              d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language,
@@ -657,7 +687,12 @@ export class DocsDatabase {
       WHERE documents_fts MATCH $query
         AND ($framework IS NULL OR d.framework = $framework)
         AND ($source_type IS NULL OR d.source_type = $source_type)
-        AND ($kind IS NULL OR d.kind = $kind OR d.role = $kind)
+        AND (
+          $kind IS NULL
+          OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
+          OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
+          OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
+        )
         AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
         AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
         AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
@@ -670,6 +705,7 @@ export class DocsDatabase {
     this._searchDocumentsTrigram = hasTrigram ? this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
+             d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
              d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language
@@ -679,7 +715,12 @@ export class DocsDatabase {
       WHERE documents_trigram MATCH $query
         AND ($framework IS NULL OR d.framework = $framework)
         AND ($source_type IS NULL OR d.source_type = $source_type)
-        AND ($kind IS NULL OR d.kind = $kind OR d.role = $kind)
+        AND (
+          $kind IS NULL
+          OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
+          OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
+          OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
+        )
         AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
         AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
         AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
@@ -691,6 +732,7 @@ export class DocsDatabase {
     this._searchDocumentsBody = hasBodyFts ? this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
+             d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
              d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language,
@@ -701,7 +743,12 @@ export class DocsDatabase {
       WHERE documents_body_fts MATCH $query
         AND ($framework IS NULL OR d.framework = $framework)
         AND ($source_type IS NULL OR d.source_type = $source_type)
-        AND ($kind IS NULL OR d.kind = $kind OR d.role = $kind)
+        AND (
+          $kind IS NULL
+          OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
+          OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
+          OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
+        )
         AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
         AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
         AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
@@ -743,12 +790,14 @@ export class DocsDatabase {
              d.declaration_text as declaration, d.platforms_json as platforms,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
-             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language
+             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language,
+             d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos
       FROM documents d
       LEFT JOIN roots r ON r.slug = d.framework
       WHERE d.id = ?
     `)
     this._deleteDocumentByKey = this.db.query('DELETE FROM documents WHERE key = ?')
+    this._getAllTitlesForFuzzy = this.db.query('SELECT id, title FROM documents WHERE title IS NOT NULL')
 
     this._getFrameworkSynonyms = this.db.query(`
       SELECT alias FROM framework_synonyms WHERE canonical = ?
@@ -1113,6 +1162,10 @@ export class DocsDatabase {
     } catch { return [] }
   }
 
+  getAllTitlesForFuzzy() {
+    return this._getAllTitlesForFuzzy.all()
+  }
+
   searchByTitle(title, framework = null) {
     return this._searchDocumentByTitle.get({ $title: title, $framework: framework })
   }
@@ -1308,6 +1361,23 @@ export class DocsDatabase {
     if (key === 'snapshot_tier') {
       this._tier = undefined
     }
+  }
+
+  /**
+   * Return parent->child edges for a framework's document tree.
+   * Each row has { from_key, to_key }.
+   * @param {string} framework - The framework slug (e.g. 'documentation/swiftui')
+   * @returns {Array<{from_key: string, to_key: string}>}
+   */
+  getFrameworkTree(framework) {
+    if (!this.hasTable('document_relationships')) return []
+    return this.db.query(`
+      SELECT dr.from_key, dr.to_key
+      FROM document_relationships dr
+      JOIN documents d ON d.key = dr.from_key
+      WHERE d.framework = ? AND dr.relation_type = 'child'
+      ORDER BY dr.sort_order
+    `).all(framework)
   }
 
   getSchemaVersion() {

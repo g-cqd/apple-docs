@@ -4,6 +4,7 @@ import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchP
 import { generateSearchArtifacts } from './search-artifacts.js'
 import { ensureDir } from '../storage/files.js'
 import { pool } from '../lib/pool.js'
+import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
 
 /**
  * Build a complete static documentation site from the corpus.
@@ -13,6 +14,7 @@ import { pool } from '../lib/pool.js'
  */
 export async function buildStaticSite(opts, ctx) {
   const start = performance.now()
+  await initHighlighter()
   const outDir = opts.out || 'dist/web'
   const siteConfig = {
     baseUrl: opts.baseUrl || '',
@@ -28,7 +30,7 @@ export async function buildStaticSite(opts, ctx) {
 
   // 2. Copy static assets (CSS, JS, theme, worker)
   const srcWebDir = dirname(new URL(import.meta.url).pathname)
-  for (const file of ['style.css', 'theme.js', 'search.js', 'search-page.js', 'collection-filters.js', 'page-toc.js']) {
+  for (const file of ['style.css', 'theme.js', 'search.js', 'search-page.js', 'collection-filters.js', 'page-toc.js', 'tree-view.js']) {
     const src = join(srcWebDir, 'assets', file)
     if (existsSync(src)) {
       await Bun.write(join(outDir, 'assets', file), readFileSync(src, 'utf8'))
@@ -49,13 +51,19 @@ export async function buildStaticSite(opts, ctx) {
   await Bun.write(join(outDir, 'search', 'index.html'), searchHtml)
 
   // 5. Build document pages in batches
+  const knownKeys = new Set(
+    db.db.query('SELECT key FROM documents').all().map(r => r.key)
+  )
   const totalDocs = db.db.query('SELECT COUNT(*) as count FROM documents').get().count
   const batchSize = 500
   let pagesBuilt = 0
 
   for (let offset = 0; offset < totalDocs; offset += batchSize) {
     const docs = db.db.query(
-      'SELECT id, key, title, kind, role, role_heading, framework, abstract_text, source_type, language FROM documents ORDER BY key LIMIT ? OFFSET ?'
+      `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.abstract_text, d.source_type, d.language,
+              COALESCE(r.display_name, d.framework) as framework_display
+       FROM documents d LEFT JOIN roots r ON r.slug = d.framework
+       ORDER BY d.key LIMIT ? OFFSET ?`
     ).all(batchSize, offset)
 
     await pool(docs, 50, async (doc) => {
@@ -65,6 +73,7 @@ export async function buildStaticSite(opts, ctx) {
         ).all(doc.id)
         : []
       const html = renderDocumentPage(doc, sections, siteConfig, {
+        knownKeys,
         resolveRoleHeadings: (keys) => {
           if (keys.length === 0) return new Map()
           const placeholders = keys.map(() => '?').join(',')
@@ -93,7 +102,8 @@ export async function buildStaticSite(opts, ctx) {
     ).all(root.slug)
     if (docs.length === 0) continue
 
-    const html = renderFrameworkPage(root, docs, siteConfig)
+    const treeEdges = db.getFrameworkTree(root.slug)
+    const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges })
     const filePath = join(outDir, 'docs', root.slug, 'index.html')
     ensureDir(dirname(filePath))
     await Bun.write(filePath, html)
@@ -123,6 +133,8 @@ export async function buildStaticSite(opts, ctx) {
     searchArtifacts,
   }
   await Bun.write(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2))
+
+  disposeHighlighter()
 
   const durationMs = Math.round(performance.now() - start)
   if (logger) logger.info(`Static site built: ${outDir} (${pagesBuilt} pages, ${frameworksBuilt} frameworks in ${durationMs}ms)`)

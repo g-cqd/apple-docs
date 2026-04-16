@@ -45,6 +45,19 @@ Or add this to your MCP client config manually:
 
 The server exposes 5 tools (`search_docs`, `read_doc`, `list_frameworks`, `browse`, `status`) and 2 resources (`apple-docs://doc/{key}`, `apple-docs://framework/{slug}`).
 
+For large MCP responses, `search_docs`, `read_doc`, `list_frameworks`, and `browse` support:
+
+- `maxChars`: cap one response page by serialized character count
+- `page`: request a specific 1-based response page
+- `pageInfo`: returned when `maxChars` is used, including `totalPages`
+
+`read_doc` and `search_docs` read mode also support focused excerpt reads with:
+
+- `match`: literal substring match
+- `contextChars`: context window around each match
+- `maxMatches`: maximum number of excerpts to return
+- `caseSensitive`: case-sensitive matching toggle
+
 ## Local Website
 
 ```bash
@@ -457,15 +470,15 @@ See [MCP Server](#mcp-server) at the top for quick setup. Additional notes:
 | Tool | Purpose |
 | --- | --- |
 | `search_docs` | Search the corpus with the same ranking and filters as the CLI |
-| `read_doc` | Fetch a page by path or symbol |
-| `list_frameworks` | List indexed roots |
-| `browse` | Explore a framework tree or subtree |
+| `read_doc` | Fetch a page by path or symbol, with optional paged and match-scoped output |
+| `list_frameworks` | List indexed roots, optionally paged by response size |
+| `browse` | Explore a framework tree or subtree, optionally paged by response size |
 | `status` | Return corpus health and capability information |
 
 | Resource | Purpose |
 | --- | --- |
 | `apple-docs://doc/{key}` | Read a document as markdown |
-| `apple-docs://framework/{slug}` | Browse a framework tree as JSON |
+| `apple-docs://framework/{slug}` | Browse a framework tree as JSON, with optional `?maxChars=<n>&page=<n>` paging |
 
 ## Data Layout
 

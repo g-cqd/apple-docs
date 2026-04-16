@@ -4,12 +4,19 @@ import { detectIntent } from '../search/intent.js'
 import { rerank } from '../search/ranking.js'
 
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
+const ROLE_KIND_FILTERS = new Set(['symbol', 'article', 'collection', 'overview', 'tutorial', 'samplecode', 'sample_code'])
 
 /**
- * Search with tiered cascade: FTS5 → trigram → fuzzy → body (background).
+ * Search with tiered cascade: fast title/path tiers first, deep body search only
+ * when needed.
+ *
+ * Tiers 1 (FTS5) and 2 (trigram) run in parallel. Tier 3 (fuzzy) runs
+ * sequentially only when fast tiers produce very few results. Tier 4 (body)
+ * runs only when the requested result window is not already satisfied, or when
+ * explicitly forced with `noEager`.
  *
  * @param {{ query: string, framework?: string, kind?: string, limit?: number,
- *           fuzzy?: boolean, noDeep?: boolean, noEager?: boolean,
+ *           offset?: number, fuzzy?: boolean, noDeep?: boolean, noEager?: boolean,
  *           source?: string, language?: string, platform?: string,
  *           minIos?: string, minMacos?: string, minWatchos?: string,
  *           minTvos?: string, minVisionos?: string }} opts
@@ -18,8 +25,9 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 export async function search(opts, ctx) {
   const { query, kind } = opts
   const limit = Math.max(Number.parseInt(opts.limit) || 100, 1)
+  const offset = Math.max(Number.parseInt(opts.offset) || 0, 0)
+  const requestedWindow = limit + offset
   const sourceTypes = normalizeSourceFilter(opts.source)
-  const searchLimit = sourceTypes ? Math.max(limit * 10, 200) : limit
 
   // Resolve framework slug (allows fuzzy input like "guidelines" → "app-store-review")
   let framework = opts.framework
@@ -42,6 +50,12 @@ export async function search(opts, ctx) {
   // --platform shorthand: ensure the platform column is non-null (available on that platform)
   const platform = opts.platform ?? null
   const platformFilters = buildPlatformFilters(platform, { minIos, minMacos, minWatchos, minTvos, minVisionos })
+  const hasJsPostFilters = sourceTypes?.size > 1
+    || !!kind
+    || !!opts.year
+    || !!opts.track
+    || Object.values(platformFilters).some(Boolean)
+  const searchLimit = hasJsPostFilters ? Math.min(Math.max(requestedWindow * 10, 200), 1000) : requestedWindow
 
   if (!query?.trim()) return { results: [], total: 0, query: '' }
 
@@ -59,93 +73,102 @@ export async function search(opts, ctx) {
 
   // Push single source_type to SQL for efficient filtering; multi-source stays as JS post-filter
   const sqlSourceType = sourceTypes?.size === 1 ? [...sourceTypes][0] : null
-  const filterOpts = { kind, limit: searchLimit, language, sourceType: sqlSourceType, ...platformFilters }
-
-  // Start body search in background if index exists and not disabled
-  let bodyPromise = null
-  let bodyCancelled = false
-  const hasBody = !noDeep && ctx.db.getBodyIndexCount() > 0
-  if (hasBody) {
-    bodyPromise = new Promise((resolve) => {
-      // Give fast tiers a 200ms head start
-      setTimeout(() => {
-        if (bodyCancelled) return resolve([])
-        try {
-          const bodyResults = []
-          for (const fw of frameworks) {
-            bodyResults.push(...ctx.db.searchBody(ftsQuery, { ...filterOpts, framework: fw }))
-          }
-          resolve(bodyResults)
-        } catch { resolve([]) }
-      }, 200)
-    })
-  }
+  const filterOpts = { limit: searchLimit, language, sourceType: sqlSourceType }
+  const activeFilters = { frameworks, sourceTypes, kind, language, platformFilters, year: opts.year, track: opts.track }
 
   const results = []
   const seen = new Set()
 
   const addResults = (rows, quality) => {
     for (const r of rows) {
-      if (!matchesSourceFilter(r, sourceTypes)) continue
+      if (!matchesSearchFilters(r, activeFilters)) continue
       if (seen.has(r.path)) continue
       seen.add(r.path)
       results.push({ ...formatResult(r), matchQuality: quality })
     }
   }
 
-  // Tier 1: FTS5 tiered search (exact/prefix/contains/match via SQL CASE)
-  try {
-    for (const fw of frameworks) {
-      const ftsResults = ctx.db.searchPages(ftsQuery, q, { ...filterOpts, framework: fw })
-      for (const r of ftsResults) {
-        if (!matchesSourceFilter(r, sourceTypes)) continue
-        if (seen.has(r.path)) continue
-        seen.add(r.path)
-        results.push({ ...formatResult(r), matchQuality: TIER_LABELS[r.tier] ?? 'match' })
+  // --- Fast phase: run T1 (FTS5) and T2 (trigram) concurrently ---
+
+  // Tier 1: FTS5 tiered search
+  const runFts = () => {
+    const ftsResults = []
+    try {
+      for (const fw of frameworks) {
+        ftsResults.push(...ctx.db.searchPages(ftsQuery, q, { ...filterOpts, framework: fw }))
       }
+    } catch {
+      // FTS5 query syntax error — try simpler query
+      try {
+        const simple = `"${q.replace(/"/g, '')}"*`
+        for (const fw of frameworks) {
+          ftsResults.push(...ctx.db.searchPages(simple, q, { ...filterOpts, framework: fw }))
+        }
+      } catch {}
     }
-  } catch {
-    // FTS5 query syntax error — try simpler query
-    try {
-      const simple = `"${q.replace(/"/g, '')}"*`
-      for (const fw of frameworks) {
-        const ftsResults = ctx.db.searchPages(simple, q, { ...filterOpts, framework: fw })
-        addResults(ftsResults, 'match')
-      }
-    } catch {}
+    return ftsResults
   }
 
-  // Tier 2: Trigram substring (if < 5 results and query >= 3 chars)
-  if (results.length < 5 && q.length >= 3) {
+  // Tier 2: Trigram substring (only if query >= 3 chars)
+  const runTrigram = () => {
+    if (q.length < 3) return []
+    const triResults = []
     try {
       for (const fw of frameworks) {
-        const triResults = ctx.db.searchTrigram(q, { ...filterOpts, framework: fw })
-        addResults(triResults, 'substring')
+        triResults.push(...ctx.db.searchTrigram(q, { ...filterOpts, framework: fw }))
       }
     } catch {}
+    return triResults
   }
 
-  // Tier 3: Levenshtein fuzzy (if < 5 results and query >= 4 chars)
+  // Tier 4: Body search
+  const hasBody = !noDeep && ctx.db.getBodyIndexCount() > 0
+  const runBody = () => {
+    if (!hasBody) return []
+    try {
+      const bodyResults = []
+      for (const fw of frameworks) {
+        bodyResults.push(...ctx.db.searchBody(ftsQuery, { ...filterOpts, framework: fw }))
+      }
+      return bodyResults
+    } catch { return [] }
+  }
+
+  // Run the fast tiers first so the web/CLI search path can return promptly.
+  const [ftsResults, triResults] = await Promise.all([
+    Promise.resolve().then(runFts),
+    Promise.resolve().then(runTrigram),
+  ])
+
+  // Merge T1 results with tier labels
+  for (const r of ftsResults) {
+    if (!matchesSearchFilters(r, activeFilters)) continue
+    if (seen.has(r.path)) continue
+    seen.add(r.path)
+    results.push({ ...formatResult(r), matchQuality: TIER_LABELS[r.tier] ?? 'match' })
+  }
+
+  // Merge T2 results (skipping already-seen from T1)
+  addResults(triResults, 'substring')
+
+  // Tier 3: Levenshtein fuzzy (only if T1+T2 combined < 5 and query >= 4 chars)
   if (results.length < 5 && q.length >= 4 && fuzzy) {
-    const fuzzyMatches = fuzzyMatchTitles(q, ctx.db, { framework, kind, limit })
+    const fuzzyMatches = fuzzyMatchTitles(q, ctx.db, { framework, kind, limit: searchLimit })
     for (const fm of fuzzyMatches) {
-      if (seen.has(fm.id)) continue
       const record = ctx.db.getSearchRecordById(fm.id)
       if (!record) continue
-      if (!matchesSourceFilter(record, sourceTypes)) continue
+      if (!matchesSearchFilters(record, activeFilters)) continue
       if (seen.has(record.path)) continue
       seen.add(record.path)
       results.push({ ...formatResult(record), matchQuality: 'fuzzy', distance: fm.distance })
     }
   }
 
-  // Body search: wait or cancel based on result count and flags
-  if (bodyPromise) {
-    if (results.length >= limit && !noEager) {
-      bodyCancelled = true
-    } else {
-      const bodyResults = await bodyPromise
-      addResults(bodyResults.filter(r => !seen.has(r.path)), 'body')
+  // Body search: merge results or discard if we already have enough
+  if (hasBody) {
+    if (results.length < requestedWindow || noEager) {
+      const bodyResults = await Promise.resolve().then(runBody)
+      addResults(bodyResults, 'body')
     }
   }
 
@@ -153,20 +176,7 @@ export async function search(opts, ctx) {
   const intent = detectIntent(q)
   rerank(results, q, intent)
 
-  // Post-filter by WWDC year/track from sourceMetadata (enables search_wwdc consolidation)
-  if (opts.year || opts.track) {
-    for (let i = results.length - 1; i >= 0; i--) {
-      try {
-        const meta = JSON.parse(results[i].sourceMetadata ?? '{}')
-        if (opts.year && meta.year !== opts.year) { results.splice(i, 1); continue }
-        if (opts.track && (!meta.track || !meta.track.toLowerCase().includes(opts.track.toLowerCase()))) {
-          results.splice(i, 1)
-        }
-      } catch { results.splice(i, 1) }
-    }
-  }
-
-  const sliced = results.slice(0, limit)
+  const sliced = results.slice(offset, offset + limit)
 
   // Batch-fetch snippet data and related counts for final results
   try {
@@ -228,6 +238,142 @@ function matchesSourceFilter(row, sourceTypes) {
   if (!sourceTypes) return true
   const sourceType = String(row?.source_type ?? row?.sourceType ?? '').toLowerCase()
   return sourceTypes.has(sourceType)
+}
+
+function matchesSearchFilters(row, filters) {
+  return matchesSourceFilter(row, filters.sourceTypes)
+    && matchesFrameworkFilter(row, filters.frameworks)
+    && matchesKindFilter(row, filters.kind)
+    && matchesLanguageFilter(row, filters.language)
+    && matchesPlatformFilters(row, filters.platformFilters)
+    && matchesMetadataFilters(row, filters.year, filters.track)
+}
+
+function matchesFrameworkFilter(row, frameworks) {
+  const candidates = (frameworks ?? []).filter(Boolean).map(normalizeFilterValue)
+  if (candidates.length === 0) return true
+
+  const rowValues = [
+    normalizeFilterValue(row?.root_slug ?? row?.rootSlug),
+    normalizeFilterValue(row?.framework),
+  ].filter(Boolean)
+
+  return rowValues.some(value => candidates.includes(value))
+}
+
+function matchesKindFilter(row, kind) {
+  if (!kind) return true
+  const target = normalizeFilterValue(kind)
+  if (!target) return true
+
+  const displayedKind = normalizeFilterValue(row?.role_heading ?? row?.roleHeading)
+  const looksLikeDisplayedKind = String(kind) !== String(kind).toLowerCase()
+  if (looksLikeDisplayedKind) return displayedKind === target
+
+  const roleCandidates = [
+    row?.role,
+    row?.doc_kind,
+    row?.docKind,
+    row?.kind,
+  ].map(normalizeFilterValue).filter(Boolean)
+
+  if (ROLE_KIND_FILTERS.has(target)) {
+    return roleCandidates.includes(target)
+  }
+
+  return displayedKind === target
+}
+
+function matchesLanguageFilter(row, language) {
+  if (!language) return true
+  const normalizedLanguage = normalizeFilterValue(language)
+  const value = normalizeFilterValue(row?.language)
+  return !value || value === normalizedLanguage || value === 'both'
+}
+
+function matchesPlatformFilters(row, platformFilters) {
+  const platforms = parsePlatforms(row?.platforms)
+  return [
+    ['minIos', 'ios', row?.min_ios ?? row?.minIos],
+    ['minMacos', 'macos', row?.min_macos ?? row?.minMacos],
+    ['minWatchos', 'watchos', row?.min_watchos ?? row?.minWatchos],
+    ['minTvos', 'tvos', row?.min_tvos ?? row?.minTvos],
+    ['minVisionos', 'visionos', row?.min_visionos ?? row?.minVisionos],
+  ].every(([filterKey, platformKey, actual]) =>
+    matchesPlatformVersion(actual ?? platforms?.[platformKey] ?? null, platformFilters[filterKey], {
+      platformKey,
+      platforms,
+    }),
+  )
+}
+
+function matchesPlatformVersion(actual, requested, opts = {}) {
+  if (!requested) return true
+  if (requested === '0') {
+    if (actual) return true
+    const explicitPlatforms = opts.platforms ? Object.keys(opts.platforms) : []
+    if (explicitPlatforms.length === 0) return true
+    return explicitPlatforms.includes(opts.platformKey)
+  }
+  if (!actual) return true
+  return compareVersions(actual, requested) <= 0
+}
+
+function matchesMetadataFilters(row, year, track) {
+  if (!year && !track) return true
+
+  let metadata = null
+  try {
+    metadata = row?.source_metadata ?? row?.sourceMetadata
+    metadata = typeof metadata === 'string' ? JSON.parse(metadata) : metadata
+  } catch {
+    metadata = null
+  }
+
+  if (!metadata) return false
+  if (year && metadata.year !== year) return false
+  if (track) {
+    const metadataTrack = normalizeFilterValue(metadata.track)
+    if (!metadataTrack || !metadataTrack.includes(normalizeFilterValue(track))) return false
+  }
+  return true
+}
+
+function normalizeFilterValue(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function compareVersions(left, right) {
+  const leftParts = parseVersionParts(left)
+  const rightParts = parseVersionParts(right)
+  const length = Math.max(leftParts.length, rightParts.length)
+
+  for (let i = 0; i < length; i++) {
+    const leftPart = leftParts[i] ?? 0
+    const rightPart = rightParts[i] ?? 0
+    if (leftPart !== rightPart) return leftPart - rightPart
+  }
+
+  return 0
+}
+
+function parseVersionParts(version) {
+  return String(version ?? '')
+    .match(/\d+/g)
+    ?.map(part => Number.parseInt(part, 10))
+    .filter(Number.isFinite) ?? []
+}
+
+function parsePlatforms(platforms) {
+  if (!platforms) return null
+  if (typeof platforms === 'string') {
+    try {
+      return JSON.parse(platforms)
+    } catch {
+      return null
+    }
+  }
+  return typeof platforms === 'object' ? platforms : null
 }
 
 /**

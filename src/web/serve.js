@@ -1,11 +1,13 @@
 import { join, dirname } from 'node:path'
 import { existsSync, readFileSync } from 'node:fs'
 import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage } from './templates.js'
-import { buildTitleIndex } from './search-artifacts.js'
+import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { search } from '../commands/search.js'
 import { fetchDocPage } from '../apple/api.js'
 import { persistFetchedDocPage } from '../pipeline/persist.js'
 import { RateLimiter } from '../lib/rate-limiter.js'
+import { sha256 } from '../lib/hash.js'
+import { initHighlighter } from '../content/highlight.js'
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -20,7 +22,7 @@ const MIME_TYPES = {
  * @param {object} ctx - { db, dataDir, logger }
  * @returns {{ server: object, url: string }}
  */
-export function startDevServer(opts, ctx) {
+export async function startDevServer(opts, ctx) {
   const port = opts.port ?? 3000
   const { db, dataDir, logger } = ctx
   const siteConfig = {
@@ -29,8 +31,19 @@ export function startDevServer(opts, ctx) {
     buildDate: new Date().toISOString().split('T')[0],
   }
 
+  await initHighlighter()
+
   const srcWebDir = dirname(new URL(import.meta.url).pathname)
   const rateLimiter = new RateLimiter(5, 2)
+
+  // Lazy-built known keys set for declaration type linking
+  let knownKeys = null
+  function getKnownKeys() {
+    if (!knownKeys) {
+      knownKeys = new Set(db.db.query('SELECT key FROM documents').all().map(r => r.key))
+    }
+    return knownKeys
+  }
 
   const server = Bun.serve({
     port,
@@ -62,19 +75,20 @@ export function startDevServer(opts, ctx) {
         const track = url.searchParams.get('track')
         if (track) searchOpts.track = track
         const offset = Number.parseInt(url.searchParams.get('offset') ?? '0') || 0
+        if (offset > 0) searchOpts.offset = offset
         const results = await search(searchOpts, ctx)
-        if (offset > 0) {
-          results.results = results.results.slice(offset)
-        }
         return Response.json(results)
       }
 
       // API: filter options for search page
       if (pathname === '/api/filters') {
-        const frameworks = db.db.query('SELECT DISTINCT framework FROM documents WHERE framework IS NOT NULL ORDER BY framework').all().map(r => r.framework)
-        const sources = db.db.query('SELECT DISTINCT source_type FROM documents WHERE source_type IS NOT NULL ORDER BY source_type').all().map(r => r.source_type)
+        const frameworks = db.db.query(
+          `SELECT DISTINCT COALESCE(r.display_name, d.framework) as label, d.framework as value
+           FROM documents d LEFT JOIN roots r ON r.slug = d.framework
+           WHERE d.framework IS NOT NULL ORDER BY label`
+        ).all().map(r => ({ label: r.label, value: r.value }))
         const kinds = db.db.query('SELECT DISTINCT role_heading FROM documents WHERE role_heading IS NOT NULL ORDER BY role_heading').all().map(r => r.role_heading)
-        return Response.json({ frameworks, sources, kinds })
+        return Response.json({ frameworks, kinds })
       }
 
       // Search page
@@ -122,10 +136,58 @@ export function startDevServer(opts, ctx) {
         return new Response('Not Found', { status: 404 })
       }
 
-      // Title index on demand
+      // Search data on demand — supports manifest-based and direct access
+      if (pathname === '/data/search/search-manifest.json') {
+        // Build on-demand and generate a manifest with hashed filenames
+        const titleIndex = buildTitleIndex(db)
+        const aliasMap = buildAliasMap(db)
+        const titleJson = JSON.stringify(titleIndex)
+        const aliasJson = JSON.stringify(aliasMap)
+        const titleHash = sha256(titleJson).slice(0, 10)
+        const aliasHash = sha256(aliasJson).slice(0, 10)
+        const manifest = {
+          version: 2,
+          titleCount: titleIndex.keys.length,
+          aliasCount: Object.keys(aliasMap).length,
+          shardCount: 0,
+          files: {
+            'title-index': `title-index.${titleHash}.json`,
+            'aliases': `aliases.${aliasHash}.json`,
+          },
+          generatedAt: new Date().toISOString(),
+        }
+        return Response.json(manifest, {
+          headers: { 'Cache-Control': 'no-cache' },
+        })
+      }
+
+      // Content-hashed search artifacts: immutable caching
+      if (pathname.startsWith('/data/search/') && /\.[0-9a-f]{10}\.json$/.test(pathname)) {
+        const fileName = pathname.replace('/data/search/', '')
+        // Determine which artifact this is
+        if (fileName.startsWith('title-index.')) {
+          const titleIndex = buildTitleIndex(db)
+          return Response.json(titleIndex, {
+            headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
+          })
+        }
+        if (fileName.startsWith('aliases.')) {
+          const aliasMap = buildAliasMap(db)
+          return Response.json(aliasMap, {
+            headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
+          })
+        }
+        return new Response('Not Found', { status: 404 })
+      }
+
+      // Unhashed fallback for backward compatibility
       if (pathname === '/data/search/title-index.json') {
         const titleIndex = buildTitleIndex(db)
         return Response.json(titleIndex)
+      }
+      if (pathname === '/data/search/aliases.json') {
+        const aliasMap = buildAliasMap(db)
+        return Response.json(aliasMap)
       }
 
       // Document pages
@@ -141,7 +203,8 @@ export function startDevServer(opts, ctx) {
           // document pages instead of empty framework listings
           const isSelfRef = docs.length <= 1 && docs[0]?.path === key
           if (!isSelfRef && docs.length > 0) {
-            const html = renderFrameworkPage(root, docs, siteConfig)
+            const treeEdges = db.getFrameworkTree(root.slug)
+            const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges })
             return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
           }
           // Fall through to document page rendering
@@ -149,7 +212,9 @@ export function startDevServer(opts, ctx) {
 
         // Try as document page
         let doc = db.db.query(
-          'SELECT id, key, title, kind, role, role_heading, framework, abstract_text, source_type FROM documents WHERE key = ?'
+          `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.abstract_text, d.source_type,
+                  COALESCE(r.display_name, d.framework) as framework_display
+           FROM documents d LEFT JOIN roots r ON r.slug = d.framework WHERE d.key = ?`
         ).get(key)
 
         // On-demand fetch from Apple if not in database
@@ -169,20 +234,51 @@ export function startDevServer(opts, ctx) {
               lastModified,
             })
             doc = db.db.query(
-              'SELECT id, key, title, kind, role, role_heading, framework, abstract_text, source_type FROM documents WHERE key = ?'
+              `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.abstract_text, d.source_type,
+                      COALESCE(r.display_name, d.framework) as framework_display
+               FROM documents d LEFT JOIN roots r ON r.slug = d.framework WHERE d.key = ?`
             ).get(key)
+            knownKeys = null // invalidate cache after new doc added
           } catch {
             // fetch failed — fall through to 404
           }
         }
 
         if (doc) {
-          const sections = db.hasTable('document_sections')
+          let sections = db.hasTable('document_sections')
             ? db.db.query(
               'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'
             ).all(doc.id)
             : []
+
+          // On-demand fetch sections for lite snapshots (doc exists but sections are missing)
+          if (sections.length === 0 && doc.source_type === 'apple-docc') {
+            try {
+              db.ensureSectionsTable()
+              const { json, etag, lastModified } = await fetchDocPage(doc.key, rateLimiter)
+              const framework = doc.key.split('/')[0]
+              const rootRow = db.getRootBySlug(framework)
+              await persistFetchedDocPage({
+                db,
+                dataDir,
+                rootId: rootRow?.id ?? null,
+                path: doc.key,
+                sourceType: 'apple-docc',
+                json,
+                etag,
+                lastModified,
+              })
+              sections = db.db.query(
+                'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'
+              ).all(doc.id)
+              knownKeys = null
+            } catch {
+              // fetch failed — render with empty sections
+            }
+          }
+
           const html = renderDocumentPage(doc, sections, siteConfig, {
+            knownKeys: getKnownKeys(),
             resolveRoleHeadings: (keys) => {
               if (keys.length === 0) return new Map()
               const placeholders = keys.map(() => '?').join(',')

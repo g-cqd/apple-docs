@@ -1,5 +1,6 @@
 import { coerceDocument as _coerceDocument, coerceSection as _coerceSection } from './coercion.js'
 import { normalizeIdentifier } from '../apple/normalizer.js'
+import { highlightCode } from './highlight.js'
 
 const LINK_SECTION_TITLES = {
   topics: 'Topics',
@@ -21,7 +22,7 @@ export function slugify(text) {
     .replace(/^-|-$/g, '')
 }
 
-export function renderHtml(document, sections = []) {
+export function renderHtml(document, sections = [], opts = {}) {
   const doc = coerceDocument(document)
   const orderedSections = sections
     .map(coerceSection)
@@ -34,19 +35,19 @@ export function renderHtml(document, sections = []) {
   }
 
   for (const section of orderedSections) {
-    const rendered = renderSectionHtml(section)
+    const rendered = renderSectionHtml(section, opts)
     if (rendered) parts.push(rendered)
   }
 
   return parts.join('\n').trim()
 }
 
-function renderSectionHtml(section) {
+function renderSectionHtml(section, opts = {}) {
   switch (section.sectionKind) {
     case 'abstract':
       return renderAbstractHtml(section)
     case 'declaration':
-      return renderDeclarationHtml(section)
+      return renderDeclarationHtml(section, opts)
     case 'parameters':
       return renderParametersHtml(section)
     case 'discussion':
@@ -71,24 +72,75 @@ function renderAbstractHtml(section) {
   return ''
 }
 
-function renderDeclarationHtml(section) {
+function renderDeclarationHtml(section, opts = {}) {
   const declarations = safeJson(section.contentJson)
   const blocks = Array.isArray(declarations) ? declarations : []
+  const knownKeys = opts.knownKeys
   const snippets = blocks
     .map(declaration => {
-      const code = (declaration?.tokens ?? []).map(token => token.text ?? '').join('').trim()
+      const tokens = declaration?.tokens ?? []
+      if (tokens.length === 0) return null
+      const hasTypeLinks = knownKeys && tokens.some(t =>
+        t._resolvedKey && (t.kind === 'typeIdentifier' || t.kind === 'attribute'))
+      if (hasTypeLinks) {
+        return renderDeclarationTokens(tokens, knownKeys)
+      }
+      // Fall back to Shiki for declarations without type link data
+      const code = tokens.map(t => t.text ?? '').join('').trim()
       const language = declaration?.languages?.[0] ?? 'swift'
       if (!code) return null
-      return `<pre><code class="language-${escapeHtml(language)}">${escapeHtml(code)}</code></pre>`
+      const highlighted = highlightCode(code, language)
+      return highlighted ?? `<pre><code class="language-${escapeHtml(language)}">${escapeHtml(code)}</code></pre>`
     })
     .filter(Boolean)
 
   if (snippets.length === 0 && section.contentText?.trim()) {
-    snippets.push(`<pre><code class="language-swift">${escapeHtml(section.contentText.trim())}</code></pre>`)
+    const highlighted = highlightCode(section.contentText.trim(), 'swift')
+    snippets.push(highlighted ?? `<pre><code class="language-swift">${escapeHtml(section.contentText.trim())}</code></pre>`)
   }
 
   if (snippets.length === 0) return ''
   return `<section id="declaration"><h2>Declaration</h2>${snippets.join('')}</section>`
+}
+
+/**
+ * Render declaration tokens with semantic CSS classes and type links.
+ * Used when tokens have resolved type references for interactive navigation.
+ */
+function renderDeclarationTokens(tokens, knownKeys) {
+  const spans = tokens.map(token => {
+    const text = escapeHtml(token.text ?? '')
+    if (!text) return ''
+    const kind = token.kind ?? 'text'
+
+    // Link resolved types to their documentation pages
+    if (token._resolvedKey && (kind === 'typeIdentifier' || kind === 'attribute')) {
+      if (knownKeys.has(token._resolvedKey)) {
+        return `<a href="/docs/${escapeHtml(token._resolvedKey)}/" class="code-type-link"><span class="decl-${kind}">${text}</span></a>`
+      }
+    }
+
+    // Map token kinds to CSS classes
+    switch (kind) {
+      case 'keyword':
+      case 'attribute':
+        return `<span class="decl-keyword">${text}</span>`
+      case 'typeIdentifier':
+        return `<span class="decl-type">${text}</span>`
+      case 'identifier':
+        return `<span class="decl-identifier">${text}</span>`
+      case 'genericParameter':
+        return `<span class="decl-generic">${text}</span>`
+      case 'externalParam':
+      case 'internalParam':
+        return `<span class="decl-param">${text}</span>`
+      case 'number':
+        return `<span class="decl-number">${text}</span>`
+      default:
+        return text
+    }
+  })
+  return `<pre class="decl-tokens"><code>${spans.join('')}</code></pre>`
 }
 
 function renderParametersHtml(section) {
@@ -184,7 +236,8 @@ function renderBlockNodeToHtml(node) {
     case 'codeListing': {
       const lang = node.syntax ?? 'swift'
       const code = (node.code ?? []).join('\n')
-      return `<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(code)}</code></pre>`
+      const highlighted = highlightCode(code, lang)
+      return highlighted ?? `<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(code)}</code></pre>`
     }
 
     case 'unorderedList':
@@ -424,7 +477,9 @@ function markdownToHtml(md) {
         i++
       }
       i++ // skip closing fence
-      out.push(`<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(codeLines.join('\n'))}</code></pre>`)
+      const fencedCode = codeLines.join('\n')
+      const highlighted = highlightCode(fencedCode, lang)
+      out.push(highlighted ?? `<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(fencedCode)}</code></pre>`)
       continue
     }
 

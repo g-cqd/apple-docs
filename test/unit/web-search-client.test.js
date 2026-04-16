@@ -28,10 +28,10 @@ describe('Client-Side Search Assets', () => {
       expect(code).toContain('Enter')
     })
 
-    test('creates Web Worker', () => {
+    test('uses /api/search endpoint', () => {
       const code = readFileSync(join(assetsDir, 'search.js'), 'utf8')
-      expect(code).toContain('Worker')
-      expect(code).toContain('search-worker.js')
+      expect(code).toContain('/api/search')
+      expect(code).toContain('AbortController')
     })
 
     test('escapes HTML in output', () => {
@@ -46,12 +46,27 @@ describe('Client-Side Search Assets', () => {
     })
   })
 
+  describe('search-page.js', () => {
+    test('is valid JavaScript', () => {
+      const code = readFileSync(join(assetsDir, 'search-page.js'), 'utf8')
+      expect(code.length).toBeGreaterThan(100)
+      expect(() => new Function(code)).not.toThrow()
+    })
+
+    test('preserves results while showing a loading state', () => {
+      const code = readFileSync(join(assetsDir, 'search-page.js'), 'utf8')
+      expect(code).toContain('AbortController')
+      expect(code).toContain('search-result-placeholder')
+      expect(code).toContain('Searching…')
+      expect(code).toContain('aria-busy')
+    })
+  })
+
   describe('search-worker.js', () => {
     test('is valid JavaScript', () => {
       const code = readFileSync(join(workerDir, 'search-worker.js'), 'utf8')
       expect(code.length).toBeGreaterThan(100)
-      // Can't use new Function because of self.addEventListener, but can check parse
-      expect(code).toBeTruthy()
+      expect(() => new Function(code)).not.toThrow()
     })
 
     test('contains search scoring logic', () => {

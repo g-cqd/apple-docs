@@ -1,45 +1,73 @@
 ;(() => {
-  const toc = document.querySelector('.page-toc')
-  if (!toc) return
+  let observer = null
+  let currentActiveId = null
 
-  const links = toc.querySelectorAll('a[href^="#"]')
-  if (links.length === 0) return
+  function initPageToc() {
+    if (observer) {
+      observer.disconnect()
+      observer = null
+    }
+    currentActiveId = null
 
-  // Map each TOC link to the corresponding section element
-  const sections = []
-  for (const link of links) {
-    const id = link.getAttribute('href').slice(1)
-    const el = document.getElementById(id)
-    if (el) sections.push({ el, link })
-  }
+    const tocs = [...document.querySelectorAll('.page-toc')]
+    if (tocs.length === 0) return
 
-  if (sections.length === 0) return
-
-  let currentActive = null
-
-  const observer = new IntersectionObserver((entries) => {
-    let topEntry = null
-    for (const entry of entries) {
-      if (entry.isIntersecting) {
-        if (!topEntry || entry.boundingClientRect.top < topEntry.boundingClientRect.top) {
-          topEntry = entry
+    const sectionMap = new Map()
+    for (const toc of tocs) {
+      for (const link of toc.querySelectorAll('a[href^="#"]')) {
+        const id = link.getAttribute('href')?.slice(1)
+        if (!id) continue
+        const el = document.getElementById(id)
+        if (!el) continue
+        const existing = sectionMap.get(id)
+        if (existing) {
+          existing.links.push(link)
+        } else {
+          sectionMap.set(id, { id, el, links: [link] })
         }
       }
     }
-    if (topEntry) {
-      const match = sections.find(s => s.el === topEntry.target)
-      if (match && match !== currentActive) {
-        if (currentActive) currentActive.link.classList.remove('toc-active')
-        match.link.classList.add('toc-active')
-        currentActive = match
-      }
-    }
-  }, {
-    rootMargin: '-80px 0px -60% 0px',
-    threshold: 0
-  })
 
-  for (const section of sections) {
-    observer.observe(section.el)
+    if (sectionMap.size === 0) return
+
+    const sections = [...sectionMap.values()]
+    const sectionByElement = new Map(sections.map(section => [section.el, section]))
+
+    observer = new IntersectionObserver((entries) => {
+      let topEntry = null
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          if (!topEntry || entry.boundingClientRect.top < topEntry.boundingClientRect.top) {
+            topEntry = entry
+          }
+        }
+      }
+
+      if (!topEntry) return
+
+      const match = sectionByElement.get(topEntry.target)
+      if (!match || match.id === currentActiveId) return
+
+      if (currentActiveId && sectionMap.has(currentActiveId)) {
+        for (const link of sectionMap.get(currentActiveId).links) {
+          link.classList.remove('toc-active')
+        }
+      }
+
+      for (const link of match.links) {
+        link.classList.add('toc-active')
+      }
+      currentActiveId = match.id
+    }, {
+      rootMargin: '-80px 0px -60% 0px',
+      threshold: 0
+    })
+
+    for (const section of sections) {
+      observer.observe(section.el)
+    }
   }
+
+  document.addEventListener('page-toc:refresh', initPageToc)
+  initPageToc()
 })()

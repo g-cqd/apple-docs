@@ -4,12 +4,17 @@
   const statusEl = document.getElementById('search-status')
   const resultsEl = document.getElementById('search-results')
   const loadMoreBtn = document.getElementById('search-load-more')
+  const submitBtn = form?.querySelector('button[type="submit"]')
   if (!form || !queryInput || !resultsEl) return
 
   const LIMIT = 50
+  const defaultSubmitLabel = submitBtn?.textContent?.trim() || 'Search'
+  const defaultLoadMoreLabel = loadMoreBtn?.textContent?.trim() || 'Load more results'
   let currentOffset = 0
   let currentTotal = 0
   let currentResultCount = 0
+  let searchSeqId = 0
+  let abortController = null
 
   function esc(s) {
     return String(s || '')
@@ -26,7 +31,6 @@
       if (!resp.ok) return
       const data = await resp.json()
       populateSelect('filter-framework', data.frameworks)
-      populateSelect('filter-source', data.sources)
       populateSelect('filter-kind', data.kinds)
     } catch {
       // Filters unavailable (static mode) — dropdowns stay with "All" only
@@ -37,11 +41,27 @@
     const select = document.getElementById(id)
     if (!select || !values) return
     for (const val of values) {
+      const value = typeof val === 'object' && val.value !== undefined ? val.value : val
+      const label = typeof val === 'object' && val.value !== undefined ? (val.label ?? val.value) : val
+      const existing = [...select.options].find(option => option.value === value)
+      if (existing) {
+        if (existing.textContent === existing.value) existing.textContent = label
+        continue
+      }
       const opt = document.createElement('option')
-      opt.value = val
-      opt.textContent = val
+      opt.value = value
+      opt.textContent = label
       select.appendChild(opt)
     }
+  }
+
+  function ensureSelectOption(select, value) {
+    if (!select || !value) return
+    if ([...select.options].some(option => option.value === value)) return
+    const opt = document.createElement('option')
+    opt.value = value
+    opt.textContent = value
+    select.appendChild(opt)
   }
 
   // Build search URL from form state
@@ -54,7 +74,7 @@
     if (offset > 0) params.set('offset', String(offset))
 
     // Selects
-    for (const name of ['framework', 'source', 'kind']) {
+    for (const name of ['framework', 'kind']) {
       const val = form.querySelector(`[name="${name}"]`)?.value
       if (val) params.set(name, val)
     }
@@ -87,7 +107,7 @@
     const params = new URLSearchParams()
     const q = queryInput.value.trim()
     if (q) params.set('q', q)
-    for (const name of ['framework', 'source', 'kind']) {
+    for (const name of ['framework', 'kind']) {
       const val = form.querySelector(`[name="${name}"]`)?.value
       if (val) params.set(name, val)
     }
@@ -112,10 +132,13 @@
     const params = new URLSearchParams(location.search)
     const q = params.get('q')
     if (q) queryInput.value = q
-    for (const name of ['framework', 'source', 'kind']) {
+    for (const name of ['framework', 'kind']) {
       const el = form.querySelector(`[name="${name}"]`)
       const val = params.get(name)
-      if (el && val) el.value = val
+      if (el && val) {
+        if (el.tagName === 'SELECT') ensureSelectOption(el, val)
+        el.value = val
+      }
     }
     const lang = params.get('language')
     if (lang) {
@@ -150,7 +173,6 @@
           <span class="result-card-badges">
             ${r.framework ? `<span class="badge badge-framework">${esc(r.framework)}</span>` : ''}
             ${r.kind ? `<span class="badge badge-role">${esc(r.kind)}</span>` : ''}
-            ${r.sourceType ? `<span class="badge badge-source">${esc(r.sourceType)}</span>` : ''}
           </span>
         </div>
         ${r.abstract ? `<p class="result-card-abstract">${esc(r.abstract)}</p>` : ''}
@@ -169,30 +191,76 @@
     }
   }
 
+  function renderLoadingState(message, keepResults) {
+    statusEl.textContent = message
+    statusEl.hidden = false
+    resultsEl.classList.add('is-loading')
+    resultsEl.setAttribute('aria-busy', 'true')
+    if (!keepResults) {
+      resultsEl.innerHTML = `<div class="search-result-placeholder" role="status">${esc(message)}</div>`
+    }
+  }
+
+  function resetLoadingState() {
+    resultsEl.classList.remove('is-loading')
+    resultsEl.setAttribute('aria-busy', 'false')
+    if (submitBtn) {
+      submitBtn.disabled = false
+      submitBtn.textContent = defaultSubmitLabel
+    }
+    if (loadMoreBtn) {
+      loadMoreBtn.disabled = false
+      loadMoreBtn.textContent = defaultLoadMoreLabel
+    }
+  }
+
   // Perform search
-  async function doSearch(offset) {
+  async function doSearch(offset, { preserveResults = false } = {}) {
     const searchUrl = buildSearchUrl(offset)
     if (!searchUrl) {
+      if (abortController) abortController.abort()
+      searchSeqId++
       statusEl.hidden = true
       resultsEl.innerHTML = ''
+      resultsEl.classList.remove('is-loading')
+      resultsEl.setAttribute('aria-busy', 'false')
       loadMoreBtn.hidden = true
+      currentOffset = 0
+      currentTotal = 0
+      currentResultCount = 0
+      resetLoadingState()
       return
     }
 
-    statusEl.textContent = 'Searching…'
-    statusEl.hidden = false
-    if (offset === 0) {
-      resultsEl.innerHTML = ''
+    const seqId = ++searchSeqId
+    if (abortController) abortController.abort()
+    abortController = new AbortController()
+
+    const keepResults = offset > 0 || (preserveResults && currentResultCount > 0)
+    renderLoadingState(offset > 0 ? 'Loading more results…' : 'Searching…', keepResults)
+    if (submitBtn && offset === 0) {
+      submitBtn.disabled = true
+      submitBtn.textContent = 'Searching…'
+    }
+    loadMoreBtn.disabled = true
+    if (offset > 0) {
+      loadMoreBtn.hidden = false
+      loadMoreBtn.textContent = 'Loading…'
+    } else if (!keepResults) {
       loadMoreBtn.hidden = true
     }
 
     try {
-      const resp = await fetch(searchUrl)
+      const resp = await fetch(searchUrl, { signal: abortController.signal })
+      if (seqId !== searchSeqId) return
       if (!resp.ok) {
         statusEl.textContent = 'Search requires the live server. Run: apple-docs web serve'
+        if (!keepResults) resultsEl.innerHTML = ''
+        loadMoreBtn.hidden = true
         return
       }
       const data = await resp.json()
+      if (seqId !== searchSeqId) return
       const results = data.results ?? []
       currentTotal = data.total ?? 0
 
@@ -206,15 +274,21 @@
 
       if (results.length === 0 && offset === 0) {
         statusEl.textContent = 'No results found.'
+        resultsEl.innerHTML = ''
       } else {
         const intentLabel = data.intent?.type ? ` · ${data.intent.type}` : ''
         statusEl.textContent = `${currentTotal} results${intentLabel}`
+        renderResults(results, offset > 0)
       }
 
-      renderResults(results, offset > 0)
       loadMoreBtn.hidden = currentResultCount >= currentTotal || results.length === 0
-    } catch {
+    } catch (error) {
+      if (error?.name === 'AbortError') return
       statusEl.textContent = 'Search requires the live server. Run: apple-docs web serve'
+      if (!keepResults) resultsEl.innerHTML = ''
+      loadMoreBtn.hidden = true
+    } finally {
+      if (seqId === searchSeqId) resetLoadingState()
     }
   }
 
@@ -222,7 +296,7 @@
   form.addEventListener('submit', (e) => {
     e.preventDefault()
     pushState()
-    doSearch(0)
+    doSearch(0, { preserveResults: currentResultCount > 0 })
   })
 
   loadMoreBtn.addEventListener('click', () => {
@@ -230,13 +304,17 @@
   })
 
   window.addEventListener('popstate', () => {
-    if (restoreFromUrl()) doSearch(0)
-  })
-
-  // Initialize
-  loadFilters().then(() => {
     if (restoreFromUrl()) {
+      doSearch(0, { preserveResults: currentResultCount > 0 })
+    } else {
       doSearch(0)
     }
   })
+
+  // Initialize
+  const hasInitialQuery = restoreFromUrl()
+  loadFilters()
+  if (hasInitialQuery) {
+    doSearch(0)
+  }
 })()
