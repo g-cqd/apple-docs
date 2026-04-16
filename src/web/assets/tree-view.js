@@ -188,15 +188,18 @@
   // the terminal key being the Signing node (which has multiple children).
   function compactChain(key) {
     const parts = [docs[key]?.title || key]
+    const seen = new Set([key])
     let cur = key
     while (true) {
       const kids = children.get(cur)
       if (!kids || kids.length !== 1) break
       const onlyChild = kids[0]
+      if (seen.has(onlyChild)) break // cycle guard
       const childKids = children.get(onlyChild)
       // Only compact if the single child also has children (i.e., it's an intermediate node)
       if (!childKids || childKids.length === 0) break
       parts.push(docs[onlyChild]?.title || onlyChild)
+      seen.add(onlyChild)
       cur = onlyChild
     }
     return { label: parts.join('.'), terminalKey: cur }

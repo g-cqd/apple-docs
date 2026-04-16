@@ -244,7 +244,6 @@ describe('content splitting quality', () => {
     // Content with both \n\n and \n — paragraph break should be preferred
     const para1 = 'First paragraph that is somewhat long.\n\n'
     const para2 = 'Second paragraph that is also fairly long.\n\n'
-    const lines = Array.from({ length: 5 }, (_, i) => `Line ${i + 1}`).join('\n')
     const content = para1 + para2 + 'x'.repeat(300)
     const out = paginateCliContent(makeResult(content), 200)
     // The split should occur after a paragraph (content ends with \n\n or after a \n\n)

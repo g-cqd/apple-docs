@@ -21,6 +21,9 @@ stryker.log
 # Benchmark history
 test/benchmarks/*.jsonl
 
+# Internal planning artifacts (see commits bb99fa3, b1fcb74)
+plans/
+
 # Environment
 .env
 .env.*

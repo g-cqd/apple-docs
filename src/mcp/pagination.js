@@ -68,8 +68,8 @@ export function paginateDocumentPayload(payload, opts = {}) {
     totalPages: 1,
     maxChars,
     strategy: payload?.matches ? 'matches' : 'document',
-    totalSections: sanitizedBase.sections.length,
-    pageSections: sanitizedBase.sections.length,
+    totalSections: sections.length,
+    pageSections: sections.length,
   })
 
   if (serializePayload(singlePage).length <= maxChars) {

@@ -287,7 +287,7 @@ describe('generateSearchArtifacts', () => {
   test('hashed aliases.json contains the alias mapping object', async () => {
     await generateSearchArtifacts(db, tmpDir)
     const manifest = await Bun.file(join(tmpDir, 'search-manifest.json')).json()
-    const aliasFile = manifest.files['aliases']
+    const aliasFile = manifest.files.aliases
     const data = await Bun.file(join(tmpDir, aliasFile)).json()
     expect(typeof data).toBe('object')
     expect(data.coreanimation).toBe('quartzcore')
@@ -303,7 +303,7 @@ describe('generateSearchArtifacts', () => {
     expect(typeof manifest.generatedAt).toBe('string')
     expect(typeof manifest.files).toBe('object')
     expect(manifest.files['title-index']).toMatch(/^title-index\.[0-9a-f]{10}\.json$/)
-    expect(manifest.files['aliases']).toMatch(/^aliases\.[0-9a-f]{10}\.json$/)
+    expect(manifest.files.aliases).toMatch(/^aliases\.[0-9a-f]{10}\.json$/)
     // generatedAt should be a valid ISO 8601 date
     expect(new Date(manifest.generatedAt).toISOString()).toBe(manifest.generatedAt)
   })

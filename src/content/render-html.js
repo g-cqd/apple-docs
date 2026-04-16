@@ -831,7 +831,10 @@ function safeJson(value) {
 }
 
 function isSafeHref(href) {
-  if (!href || href.startsWith('#') || href.startsWith('/')) return true
+  if (!href) return false
+  if (href.startsWith('#')) return true
+  if (href.startsWith('//')) return false
+  if (href.startsWith('/')) return true
   return /^https?:\/\//i.test(href)
 }
 

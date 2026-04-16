@@ -351,6 +351,42 @@ describe('renderHtml inline nodes', () => {
     expect(html).toContain('<a href="https://example.com">Example</a>')
   })
 
+  test('preserves safe href shapes: root-relative, fragment, http(s)', () => {
+    const cases = [
+      { href: '/foo/bar', expected: 'href="/foo/bar"' },
+      { href: '#anchor', expected: 'href="#anchor"' },
+      { href: 'http://apple.com', expected: 'href="http://apple.com"' },
+      { href: 'https://apple.com', expected: 'href="https://apple.com"' },
+    ]
+    for (const { href, expected } of cases) {
+      const html = renderInline([{ type: 'link', destination: href, title: 'x' }])
+      expect(html).toContain(expected)
+    }
+  })
+
+  test('falls back to # for unsafe hrefs including protocol-relative', () => {
+    const unsafe = [
+      '//evil.com',              // protocol-relative
+      '//evil.com/path',
+      'javascript:alert(1)',      // js: protocol
+      'data:text/html,<script>', // data: protocol
+      'ftp://somewhere',          // other protocols
+      'vbscript:msgbox',
+    ]
+    for (const href of unsafe) {
+      const html = renderInline([{ type: 'link', destination: href, title: 'x' }])
+      expect(html).toContain('href="#"')
+      expect(html).not.toContain(`href="${href}"`)
+    }
+  })
+
+  test('empty / missing destination falls back to #', () => {
+    const html1 = renderInline([{ type: 'link', destination: '', title: 'x' }])
+    const html2 = renderInline([{ type: 'link', title: 'x' }])
+    expect(html1).toContain('href="#"')
+    expect(html2).toContain('href="#"')
+  })
+
   test('renders image as text placeholder', () => {
     const html = renderInline([{ type: 'image', alt: 'diagram' }])
     expect(html).toContain('[diagram]')

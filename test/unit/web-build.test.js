@@ -95,7 +95,7 @@ describe('buildStaticSite (P7-D)', () => {
     expect(manifest.version).toBe(2)
     expect(manifest.files).toBeDefined()
     expect(manifest.files['title-index']).toMatch(/^title-index\.[0-9a-f]{10}\.json$/)
-    expect(manifest.files['aliases']).toMatch(/^aliases\.[0-9a-f]{10}\.json$/)
+    expect(manifest.files.aliases).toMatch(/^aliases\.[0-9a-f]{10}\.json$/)
   })
 
   test('generates framework metadata', async () => {

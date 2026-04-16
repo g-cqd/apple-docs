@@ -26,9 +26,10 @@
     try { localStorage.setItem(STORAGE_KEY, lang) } catch { /* storage full or disabled */ }
   }
 
-  // Restore preference or default to swift
+  // Restore preference, or fall back to the first available language (e.g. ObjC-only docs)
   const stored = (() => { try { return localStorage.getItem(STORAGE_KEY) } catch { return null } })()
-  const initial = stored && available.has(stored) ? stored : 'swift'
+  const fallback = [...available][0] ?? 'swift'
+  const initial = stored && available.has(stored) ? stored : fallback
   activate(initial)
 
   // Handle clicks
