@@ -43,6 +43,10 @@ Usage: apple-docs search <query> [options]
 Search Apple documentation with typo tolerance and tiered ranking.
 Results are ranked: exact > prefix > contains > match > substring > fuzzy > body.
 
+Keep queries short and keyword-shaped. Use symbol names or API terms rather
+than natural-language questions, and apply filters (--framework, --source,
+--platform, ...) to narrow results instead of stuffing them into the query.
+
 Body search runs in background by default when the index exists. Fast tiers get
 a 200ms head start; if they fill the limit, body results are skipped (eager mode).
 

@@ -38,9 +38,9 @@ export function createServer(ctx) {
 
   server.tool(
     'search_docs',
-    'Full-text search across all Apple documentation with fuzzy matching and tiered ranking. Use to find APIs, symbols, articles, HIG pages, or App Store Review Guidelines by keyword.',
+    'Keyword search across all Apple documentation with fuzzy matching and tiered ranking. Use it to find APIs, symbols, articles, HIG pages, or App Store Review Guidelines. This is NOT a natural-language endpoint: pass compact, keyword-shaped queries (symbol names or API terms) and push constraints into the filter arguments (framework, source, kind, language, platform, min_*, year, track) rather than into the query string. Do not ask the user to reformulate — convert their intent yourself before calling.',
     {
-      query: z.string().describe('Search query (symbol name, API term, or natural language)'),
+      query: z.string().describe('Compact keyword query. Prefer symbol names or API terms (e.g. "NavigationStack", "dismiss sheet", "async let") over natural-language sentences. Use the other arguments for framework/source/platform constraints instead of appending them to the query.'),
       framework: z.string().optional().describe('Filter by framework slug (e.g. swiftui, foundation, design, app-store-review)'),
       source: z.string().optional().describe('Filter by source type slug or comma-separated list (e.g. apple-docc, wwdc, sample-code)'),
       kind: z.string().optional().describe('Filter by role or displayed kind (e.g. symbol, article, Article, Session, Collection)'),

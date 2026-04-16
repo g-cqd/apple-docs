@@ -11,7 +11,7 @@ bun install
 bun link
 ```
 
-Grab everything in one pass (takes about 15 minutes):
+Grab everything in one pass (15 to 30 minutes depending on your machine and connection):
 
 ```bash
 apple-docs sync --concurrency 500 --rate 500 --full --parallel 20 --retry-failed --index
@@ -136,6 +136,8 @@ Global flags supported by most command handlers:
 ### `search`
 
 Results are ordered by how directly they match, starting with exact title matches and ending with deep body-text matches.
+
+Keep queries short and keyword-shaped — symbol names, API terms, or a few related words. Natural-language questions ("how do I dismiss a sheet") match worse than a compact query ("dismiss sheet"). Let filters (`--framework`, `--source`, `--platform`) do the narrowing instead of stuffing them into the query.
 
 Examples:
 
