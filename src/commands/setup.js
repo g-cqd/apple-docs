@@ -79,7 +79,23 @@ export async function setup(opts, ctx) {
     if (!archiveRes.ok) {
       throw new Error(`Download failed: HTTP ${archiveRes.status}`)
     }
-    await Bun.write(tmpPath, archiveRes)
+    if (!archiveRes.body) {
+      throw new Error('Download failed: response has no body')
+    }
+    // Stream to disk via an explicit reader loop. Bun.write(path, response)
+    // hangs on large responses behind HTTP/2 redirects (e.g. GitHub release
+    // asset downloads), so pull chunks manually and feed a FileSink.
+    const sink = Bun.file(tmpPath).writer()
+    const reader = archiveRes.body.getReader()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        sink.write(value)
+      }
+    } finally {
+      await sink.end()
+    }
     logger.info('Download complete.')
 
     // 5. Verify checksum
