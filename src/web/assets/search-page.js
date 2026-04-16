@@ -164,9 +164,22 @@
     return !!q
   }
 
+  // Coalesce the three relaxed subtypes into a single user-facing label while
+  // preserving the original subtype on a data attribute for analytics.
+  function displayQuality(quality) {
+    if (!quality) return null
+    if (quality === 'relaxed' || quality === 'relaxed-or' || quality === 'relaxed-token') return 'relaxed'
+    return quality
+  }
+
   // Render results
   function renderResults(results, append) {
-    const html = results.map(r => `
+    const html = results.map(r => {
+      const label = displayQuality(r.matchQuality)
+      const qualityHtml = label
+        ? `<span class="result-card-quality" data-relaxation-tier="${esc(r.matchQuality)}">${esc(label)}</span>`
+        : ''
+      return `
       <a href="/docs/${esc(r.path)}/" class="search-result-card">
         <div class="result-card-header">
           <span class="result-card-title">${esc(r.title)}</span>
@@ -178,12 +191,13 @@
         ${r.abstract ? `<p class="result-card-abstract">${esc(r.abstract)}</p>` : ''}
         ${r.snippet ? `<p class="result-card-snippet">${esc(r.snippet)}</p>` : ''}
         <div class="result-card-footer">
-          ${r.matchQuality ? `<span class="result-card-quality">${esc(r.matchQuality)}</span>` : ''}
+          ${qualityHtml}
           ${r.relatedCount ? `<span class="result-card-related">${r.relatedCount} related</span>` : ''}
           ${r.language ? `<span class="result-card-lang">${esc(r.language)}</span>` : ''}
         </div>
       </a>
-    `).join('')
+    `
+    }).join('')
     if (append) {
       resultsEl.insertAdjacentHTML('beforeend', html)
     } else {
@@ -277,7 +291,8 @@
         resultsEl.innerHTML = ''
       } else {
         const intentLabel = data.intent?.type ? ` · ${data.intent.type}` : ''
-        statusEl.textContent = `${currentTotal} results${intentLabel}`
+        const relaxedLabel = data.relaxed ? ' · best-effort (query relaxed)' : ''
+        statusEl.textContent = `${currentTotal} results${intentLabel}${relaxedLabel}`
         renderResults(results, offset > 0)
       }
 

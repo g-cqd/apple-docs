@@ -181,6 +181,7 @@ Notes:
 - `--platform ios` means "available on iOS at all". Use `--min-ios 17.0` when you need a version threshold.
 - `--year` and `--track` are mainly useful with `--source wwdc`.
 - `--source` accepts a comma-separated list.
+- If the strict cascade returns nothing on a long natural-language query, search retries with progressive relaxation (stopword pruning → OR composition → trigram on the strongest token). Relaxed hits are tagged `[relaxed]` in the CLI and web UI, and the JSON/MCP response carries `relaxed: true` with a `relaxationTier`. Quoted phrases and short queries skip relaxation.
 
 ### `read`
 
@@ -274,8 +275,9 @@ Available sources:
 
 For the `packages` source:
 
-- A full sync needs a GitHub token (`GITHUB_TOKEN` or `GH_TOKEN`).
-- Set `APPLE_DOCS_PACKAGES_LIMIT=<n>` to grab a small unauthenticated sample.
+- The default `official` scope indexes a curated allowlist of apple/* and swiftlang/* repositories using raw GitHub README files only — no authentication required.
+- Set `APPLE_DOCS_PACKAGES_SCOPE=full` with a GitHub token (`GITHUB_TOKEN` or `GH_TOKEN`) to index the entire SwiftPackageIndex catalog (curated allowlist is always included). Requesting `full` without a token falls back to `official` with a warning.
+- Set `APPLE_DOCS_PACKAGES_LIMIT=<n>` to cap discovery for the active scope.
 
 ### `update`
 
@@ -528,9 +530,10 @@ GitHub access:
 
 | Variable | Used by | Description |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | `setup`, `status`, `packages` | Preferred GitHub token |
+| `GITHUB_TOKEN` | `setup`, `status`, `packages` (full scope) | GitHub token; required only for `APPLE_DOCS_PACKAGES_SCOPE=full` |
 | `GH_TOKEN` | Same as above | Fallback token name |
-| `APPLE_DOCS_PACKAGES_LIMIT` | `packages` source | Cap package discovery when running unauthenticated |
+| `APPLE_DOCS_PACKAGES_SCOPE` | `packages` source | `official` (default, curated apple/swiftlang list, no auth) or `full` (entire SwiftPackageIndex catalog, requires a token). Explicit `full` without a token downgrades to `official` with a warning. |
+| `APPLE_DOCS_PACKAGES_LIMIT` | `packages` source | Cap package discovery for the active scope |
 
 Logging:
 

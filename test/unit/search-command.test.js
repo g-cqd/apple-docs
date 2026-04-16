@@ -177,4 +177,129 @@ describe('search command', () => {
     expect(result.results).toHaveLength(1)
     expect(result.results[0].path).toBe('foundation/urlsession')
   })
+
+  test('relaxes a long natural-language query when the strict cascade is empty', async () => {
+    const calls = []
+    const ctx = makeCtx(calls)
+    let call = 0
+    ctx.db.searchPages = (_ftsQuery, _rawQuery, opts) => {
+      calls.push({ ftsQuery: _ftsQuery, opts })
+      call += 1
+      if (call === 1) return [] // strict pass
+      return [
+        { path: 'swiftui/sheet', title: 'Sheet', role_heading: 'Article', role: 'article', framework: 'SwiftUI', source_type: 'apple-docc', url_depth: 2 },
+      ]
+    }
+
+    const result = await search({
+      query: 'how do I present a sheet in SwiftUI',
+      fuzzy: false,
+      noDeep: true,
+    }, ctx)
+
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0].matchQuality).toBe('relaxed')
+    expect(result.relaxed).toBe(true)
+    expect(result.relaxationTier).toBe('pruned')
+  })
+
+  test('falls through to OR relaxation when the pruned AND pass still returns nothing', async () => {
+    const ctx = makeCtx([])
+    const queries = []
+    let call = 0
+    ctx.db.searchPages = (ftsQuery, _rawQuery) => {
+      queries.push(ftsQuery)
+      call += 1
+      if (call <= 2) return [] // strict + pruned AND empty
+      return [
+        { path: 'swift/actors', title: 'Actors', role_heading: 'Article', role: 'article', framework: 'Swift', source_type: 'apple-docc', url_depth: 2 },
+      ]
+    }
+
+    const result = await search({
+      query: 'what is the difference between actor and class',
+      fuzzy: false,
+      noDeep: true,
+    }, ctx)
+
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0].matchQuality).toBe('relaxed-or')
+    expect(result.relaxed).toBe(true)
+    expect(result.relaxationTier).toBe('pruned-or')
+    // The last query should be an OR composition.
+    expect(queries.at(-1)).toMatch(/ OR /)
+  })
+
+  test('falls through to trigram relaxation on a single signal token', async () => {
+    const ctx = makeCtx([])
+    ctx.db.searchPages = () => []
+    const trigramQueries = []
+    // The strict T2 trigram pass runs with the full raw query; relaxation runs
+    // with a single high-signal token. Only return hits for the token form.
+    ctx.db.searchTrigram = (query) => {
+      trigramQueries.push(query)
+      if (query === 'NavigationStack') {
+        return [
+          { path: 'swiftui/navigationstack', title: 'NavigationStack', role_heading: 'Structure', role: 'symbol', framework: 'SwiftUI', source_type: 'apple-docc', url_depth: 2 },
+        ]
+      }
+      return []
+    }
+
+    const result = await search({
+      query: 'how do I push a new screen with NavigationStack today',
+      fuzzy: false,
+      noDeep: true,
+    }, ctx)
+
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0].matchQuality).toBe('relaxed-token')
+    expect(result.relaxationTier).toBe('trigram')
+    expect(trigramQueries).toContain('NavigationStack')
+  })
+
+  test('does not relax when strict results are present', async () => {
+    const ctx = makeCtx([])
+    ctx.db.searchPages = () => ([
+      { path: 'swiftui/view', title: 'View', role_heading: 'Protocol', role: 'symbol', framework: 'SwiftUI', source_type: 'apple-docc', url_depth: 1 },
+    ])
+
+    const result = await search({
+      query: 'how do I use View',
+      fuzzy: false,
+      noDeep: true,
+    }, ctx)
+
+    expect(result.relaxed).toBeFalsy()
+    expect(result.relaxationTier).toBeUndefined()
+    expect(result.results.some(r => String(r.matchQuality).startsWith('relaxed'))).toBe(false)
+  })
+
+  test('skips relaxation for short queries', async () => {
+    const ctx = makeCtx([])
+    ctx.db.searchPages = () => []
+
+    const result = await search({
+      query: 'View',
+      fuzzy: false,
+      noDeep: true,
+    }, ctx)
+
+    expect(result.relaxed).toBeFalsy()
+    expect(result.relaxationTier).toBeUndefined()
+  })
+
+  test('skips relaxation for explicit quoted phrases', async () => {
+    const ctx = makeCtx([])
+    ctx.db.searchPages = () => []
+
+    const result = await search({
+      query: '"sheet dismiss swiftui"',
+      fuzzy: false,
+      noDeep: true,
+    }, ctx)
+
+    expect(result.relaxed).toBeFalsy()
+    expect(result.relaxationTier).toBeUndefined()
+  })
 })

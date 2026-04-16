@@ -2,6 +2,7 @@ import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 import { renderSnippet } from '../content/render-snippet.js'
 import { detectIntent } from '../search/intent.js'
 import { rerank } from '../search/ranking.js'
+import { tokenize, pruneStopwords, pickHighSignalToken } from '../search/relaxation.js'
 
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 const ROLE_KIND_FILTERS = new Set(['symbol', 'article', 'collection', 'overview', 'tutorial', 'samplecode', 'sample_code', 'sample-project', 'sampleproject'])
@@ -172,6 +173,64 @@ export async function search(opts, ctx) {
     }
   }
 
+  // Progressive relaxation: only runs when the strict cascade produced nothing
+  // and the query is a multi-word natural-language phrase (no explicit quoted
+  // phrase). Emits results tagged with a `relaxed*` matchQuality so downstream
+  // surfaces can render a best-effort hint.
+  let relaxationTier = null
+  if (results.length === 0 && q.length >= 4 && !q.includes('"')) {
+    const tokens = tokenize(q)
+    if (tokens.length >= 3) {
+      const pruned = pruneStopwords(tokens)
+
+      // R1 — pruned AND: keep only high-signal tokens and re-run FTS5.
+      if (pruned.length >= 1) {
+        const prunedQuery = buildFtsQuery(pruned.join(' '))
+        const r1 = []
+        try {
+          for (const fw of frameworks) {
+            r1.push(...ctx.db.searchPages(prunedQuery, q, { ...filterOpts, framework: fw }))
+          }
+        } catch {}
+        const before = results.length
+        addResults(r1, 'relaxed')
+        if (results.length > before) relaxationTier = 'pruned'
+      }
+
+      // R2 — pruned OR: join the pruned tokens with OR so any single hit wins.
+      if (results.length === 0 && pruned.length >= 2) {
+        const orQuery = pruned.map(t => `"${t.toLowerCase().replace(/"/g, '')}"`).join(' OR ')
+        const r2 = []
+        try {
+          for (const fw of frameworks) {
+            r2.push(...ctx.db.searchPages(orQuery, q, { ...filterOpts, framework: fw }))
+          }
+        } catch {}
+        const before = results.length
+        addResults(r2, 'relaxed-or')
+        if (results.length > before) relaxationTier = 'pruned-or'
+      }
+
+      // R3 — trigram on a single high-signal token. Prefer a CamelCase token
+      // so `NavigationStack` still drives the lookup when nothing else matched.
+      if (results.length === 0) {
+        const pool = pruned.length > 0 ? pruned : tokens
+        const signal = pickHighSignalToken(pool)
+        if (signal && signal.length >= 3) {
+          const r3 = []
+          try {
+            for (const fw of frameworks) {
+              r3.push(...ctx.db.searchTrigram(signal, { ...filterOpts, framework: fw }))
+            }
+          } catch {}
+          const before = results.length
+          addResults(r3, 'relaxed-token')
+          if (results.length > before) relaxationTier = 'trigram'
+        }
+      }
+    }
+  }
+
   // Intent detection + source-aware reranking
   const intent = detectIntent(q)
   rerank(results, q, intent)
@@ -200,6 +259,7 @@ export async function search(opts, ctx) {
     total: results.length,
     query,
     intent,
+    ...(relaxationTier != null ? { relaxed: true, relaxationTier } : {}),
     tier: ctx.db.getTier(),
     trigramAvailable: ctx.db.hasTable('documents_trigram'),
     bodyIndexAvailable: hasBody,

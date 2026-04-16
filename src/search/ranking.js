@@ -6,6 +6,11 @@ const BASE_SCORES = {
   substring: 30,
   fuzzy: 20,
   body: 10,
+  // Relaxed tiers run only when the strict cascade returns nothing; kept
+  // below `body` so they never outrank any strict hit if both are present.
+  relaxed: 9,
+  'relaxed-or': 7,
+  'relaxed-token': 5,
 }
 
 const SYMBOL_KINDS = new Set([
@@ -130,7 +135,7 @@ export function rerank(results, query, intent) {
   }
 
   // Stable sort: by score descending, then by original match quality order for ties
-  const qualityOrder = { exact: 0, prefix: 1, contains: 2, match: 3, substring: 4, fuzzy: 5, body: 6 }
+  const qualityOrder = { exact: 0, prefix: 1, contains: 2, match: 3, substring: 4, fuzzy: 5, body: 6, relaxed: 7, 'relaxed-or': 8, 'relaxed-token': 9 }
   results.sort((a, b) => {
     const scoreDiff = b.score - a.score
     if (Math.abs(scoreDiff) > 0.001) return scoreDiff

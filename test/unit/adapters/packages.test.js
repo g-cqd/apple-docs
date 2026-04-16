@@ -5,6 +5,7 @@ const originalFetch = globalThis.fetch
 const originalToken = process.env.GITHUB_TOKEN
 const originalGhToken = process.env.GH_TOKEN
 const originalLimit = process.env.APPLE_DOCS_PACKAGES_LIMIT
+const originalScope = process.env.APPLE_DOCS_PACKAGES_SCOPE
 
 function makeCtx() {
   return {
@@ -40,6 +41,9 @@ describe('PackagesAdapter', () => {
     process.env.GITHUB_TOKEN = 'test-token'
     Reflect.deleteProperty(process.env, 'GH_TOKEN')
     Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_LIMIT')
+    // Default to the legacy `full` scope so the pre-existing tests keep
+    // exercising the GitHub REST path. New tests flip to `official` explicitly.
+    process.env.APPLE_DOCS_PACKAGES_SCOPE = 'full'
 
     fetchImpl = mock(async () => new Response('Not found', { status: 404 }))
     globalThis.fetch = mock((url, opts) => fetchImpl(url, opts))
@@ -56,6 +60,9 @@ describe('PackagesAdapter', () => {
 
     if (originalLimit == null) Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_LIMIT')
     else process.env.APPLE_DOCS_PACKAGES_LIMIT = originalLimit
+
+    if (originalScope == null) Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_SCOPE')
+    else process.env.APPLE_DOCS_PACKAGES_SCOPE = originalScope
   })
 
   test('has correct static properties', () => {
@@ -82,7 +89,10 @@ describe('PackagesAdapter', () => {
 
     expect(result.keys).toContain('packages/apple/swift-argument-parser')
     expect(result.keys).toContain('packages/pointfreeco/swift-composable-architecture')
-    expect(result.keys).toHaveLength(2)
+    // Full scope always seeds the curated apple/swiftlang allowlist, then unions
+    // in anything else the SwiftPackageIndex PackageList exposes.
+    expect(result.keys).toContain('packages/swiftlang/swift')
+    expect(result.keys.length).toBeGreaterThan(2)
     expect(result.roots).toEqual([{ id: 1, slug: 'packages', source_type: 'packages' }])
   })
 
@@ -102,31 +112,39 @@ describe('PackagesAdapter', () => {
     expect(ctx.db.upsertRoot).toHaveBeenCalledWith('packages', 'Swift Package Catalog', 'collection', 'packages')
   })
 
-  test('discover requires GitHub auth for full syncs', async () => {
+  test('explicit full scope without a token warns and downgrades to official', async () => {
     Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
-
-    await expect(adapter.discover(makeCtx())).rejects.toThrow('packages source requires GITHUB_TOKEN or GH_TOKEN')
-  })
-
-  test('discover allows a limited unauthenticated sample', async () => {
-    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
-    process.env.APPLE_DOCS_PACKAGES_LIMIT = '1'
-
-    fetchImpl.mockImplementation(async (url) => {
-      if (String(url).includes('raw.githubusercontent.com/SwiftPackageIndex/PackageList/main/packages.json')) {
-        return textResponse(JSON.stringify([
-          'https://github.com/apple/swift-argument-parser',
-          'https://github.com/pointfreeco/swift-composable-architecture',
-        ]))
-      }
-      return new Response('Not found', { status: 404 })
-    })
+    process.env.APPLE_DOCS_PACKAGES_SCOPE = 'full'
 
     const ctx = makeCtx()
     const result = await adapter.discover(ctx)
 
-    expect(result.keys).toEqual(['packages/apple/swift-argument-parser'])
+    // Downgraded to official — should yield the curated allowlist.
+    expect(result.keys.length).toBeGreaterThan(0)
+    expect(result.keys).toContain('packages/apple/swift-argument-parser')
     expect(ctx.logger.warn).toHaveBeenCalled()
+  })
+
+  test('default scope without a token resolves to official with no warning', async () => {
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+    Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_SCOPE')
+
+    const ctx = makeCtx()
+    const result = await adapter.discover(ctx)
+
+    expect(result.keys).toContain('packages/apple/swift-argument-parser')
+    expect(result.keys).toContain('packages/swiftlang/swift-syntax')
+    expect(ctx.logger.warn).not.toHaveBeenCalled()
+  })
+
+  test('official scope caps keys at APPLE_DOCS_PACKAGES_LIMIT', async () => {
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+    process.env.APPLE_DOCS_PACKAGES_SCOPE = 'official'
+    process.env.APPLE_DOCS_PACKAGES_LIMIT = '3'
+
+    const result = await adapter.discover(makeCtx())
+
+    expect(result.keys).toHaveLength(3)
   })
 
   test('fetch combines repo metadata and README content', async () => {
@@ -157,6 +175,7 @@ describe('PackagesAdapter', () => {
     expect(result.payload.repo.full_name).toBe('apple/swift-argument-parser')
     expect(result.payload.readme.path).toBe('README.md')
     expect(JSON.parse(result.etag)).toEqual({
+      source: 'api',
       repo: '"repo"',
       readme: '"readme"',
       branch: 'main',
@@ -271,6 +290,139 @@ describe('PackagesAdapter', () => {
     )
     expect(result.sections.find(section => section.heading === 'Usage')).toBeTruthy()
     expect(result.sections.find(section => section.heading === 'Package Metadata')).toBeTruthy()
+  })
+
+  test('official-scope fetch pulls README directly from raw GitHub with no API call', async () => {
+    process.env.APPLE_DOCS_PACKAGES_SCOPE = 'official'
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+
+    const urlsSeen = []
+    fetchImpl.mockImplementation(async (url) => {
+      const urlStr = String(url)
+      urlsSeen.push(urlStr)
+      if (urlStr === 'https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md') {
+        return textResponse('# Swift Argument Parser\n\nBuild CLIs in Swift.', 200, { etag: '"readme-etag"' })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
+
+    expect(result.payload.repo.full_name).toBe('apple/swift-argument-parser')
+    expect(result.payload.repo.description).toBe('Build CLIs in Swift.')
+    expect(result.payload.repo.stargazers_count).toBeNull()
+    expect(result.payload.readme.path).toBe('README.md')
+    const etag = JSON.parse(result.etag)
+    expect(etag.source).toBe('raw')
+    expect(etag.repo).toBeNull()
+    expect(etag.readmeFilename).toBe('README.md')
+    expect(etag.branch).toBe('main')
+    // No api.github.com / swiftpackageindex.com traffic in official scope.
+    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
+    expect(urlsSeen.some(u => u.includes('swiftpackageindex.com'))).toBe(false)
+  })
+
+  test('official-scope fetch falls back through README filename variants', async () => {
+    process.env.APPLE_DOCS_PACKAGES_SCOPE = 'official'
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+
+    fetchImpl.mockImplementation(async (url) => {
+      const urlStr = String(url)
+      if (urlStr.endsWith('/main/README.md')) return new Response('', { status: 404 })
+      if (urlStr.endsWith('/main/readme.md')) return textResponse('# swift-collections', 200, { etag: '"readme"' })
+      return new Response('Not found', { status: 404 })
+    })
+
+    const result = await adapter.fetch('packages/apple/swift-collections', makeCtx())
+
+    expect(result.payload.readme.path).toBe('readme.md')
+    expect(JSON.parse(result.etag).readmeFilename).toBe('readme.md')
+  })
+
+  test('official-scope fetch falls back to master when main has no README', async () => {
+    process.env.APPLE_DOCS_PACKAGES_SCOPE = 'official'
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+
+    fetchImpl.mockImplementation(async (url) => {
+      const urlStr = String(url)
+      if (urlStr.includes('/main/')) return new Response('', { status: 404 })
+      if (urlStr === 'https://raw.githubusercontent.com/apple/swift-foo/master/README.md') {
+        return textResponse('# swift-foo', 200, { etag: '"readme"' })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const result = await adapter.fetch('packages/apple/swift-foo', makeCtx())
+
+    expect(result.payload.readme.path).toBe('README.md')
+    expect(JSON.parse(result.etag).branch).toBe('master')
+  })
+
+  test('official-scope fetch synthesizes markdown when no README variant exists', async () => {
+    process.env.APPLE_DOCS_PACKAGES_SCOPE = 'official'
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+
+    fetchImpl.mockImplementation(async () => new Response('', { status: 404 }))
+
+    const result = await adapter.fetch('packages/apple/swift-foundation', makeCtx())
+
+    expect(result.payload.readme).toBeNull()
+    expect(JSON.parse(result.etag).readmeFilename).toBeNull()
+  })
+
+  test('check branches on the stored source discriminator (raw path)', async () => {
+    process.env.APPLE_DOCS_PACKAGES_SCOPE = 'official'
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+
+    const calledUrls = []
+    fetchImpl.mockImplementation(async (url, opts) => {
+      const urlStr = String(url)
+      if (opts?.method === 'HEAD') calledUrls.push(urlStr)
+      if (opts?.method === 'HEAD' && urlStr === 'https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md') {
+        return new Response('', { status: 304 })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const result = await adapter.check(
+      'packages/apple/swift-argument-parser',
+      {
+        etag: JSON.stringify({
+          source: 'raw',
+          repo: null,
+          readme: '"readme"',
+          branch: 'main',
+          readmeFilename: 'README.md',
+        }),
+      },
+      makeCtx(),
+    )
+
+    expect(result.status).toBe('unchanged')
+    expect(calledUrls).toContain('https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md')
+    // The raw-scope check never hits api.github.com.
+    expect(calledUrls.some(u => u.includes('api.github.com'))).toBe(false)
+  })
+
+  test('check treats legacy etag without source as the GitHub API path', async () => {
+    fetchImpl.mockImplementation(async (url, opts) => {
+      const urlStr = String(url)
+      if (opts?.method === 'HEAD' && urlStr === 'https://api.github.com/repos/apple/swift-argument-parser') {
+        return new Response('', { status: 304 })
+      }
+      if (opts?.method === 'HEAD' && urlStr === 'https://api.github.com/repos/apple/swift-argument-parser/readme?ref=main') {
+        return new Response('', { status: 304 })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const result = await adapter.check(
+      'packages/apple/swift-argument-parser',
+      { etag: JSON.stringify({ repo: '"repo"', readme: '"readme"', branch: 'main' }) },
+      makeCtx(),
+    )
+
+    expect(result.status).toBe('unchanged')
   })
 
   test('normalize falls back to synthesized content when a repository has no README', () => {

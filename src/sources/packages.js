@@ -2,12 +2,14 @@ import {
   fetchRawGitHub,
   fetchGitHubRepo,
   fetchGitHubReadme,
+  checkRawGitHub,
   checkGitHubRepo,
   checkGitHubReadme,
   hasGitHubToken,
 } from '../lib/github.js'
 import { parseMarkdownToSections } from '../content/parse-markdown.js'
 import { SourceAdapter } from './base.js'
+import { OFFICIAL_PACKAGES } from './packages-official.js'
 
 const PACKAGE_LIST_OWNER = 'SwiftPackageIndex'
 const PACKAGE_LIST_REPO = 'PackageList'
@@ -15,11 +17,47 @@ const PACKAGE_LIST_BRANCH = 'main'
 const PACKAGE_LIST_PATH = 'packages.json'
 const ROOT_SLUG = 'packages'
 
+const README_FILENAMES = ['README.md', 'readme.md', 'README.markdown']
+const DEFAULT_BRANCHES = ['main', 'master']
+
 function packageSyncLimit() {
   const raw = process.env.APPLE_DOCS_PACKAGES_LIMIT
   if (!raw) return null
   const parsed = Number.parseInt(raw, 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+/**
+ * Resolve the packages scope for this run.
+ *
+ * Precedence:
+ *   - `APPLE_DOCS_PACKAGES_SCOPE=official|full` when set.
+ *   - Otherwise `full` if a GitHub token is available, else `official`.
+ *
+ * If the caller explicitly requests `full` but no token is configured, we warn
+ * via the logger and degrade to `official` — the curated list works without
+ * auth, whereas `full` would hit the 60 req/hr anonymous GitHub API limit
+ * within a handful of packages.
+ *
+ * @param {{ logger?: { warn?: Function } }} [ctx]
+ * @returns {'official'|'full'}
+ */
+export function packagesScope(ctx) {
+  const raw = (process.env.APPLE_DOCS_PACKAGES_SCOPE ?? '').trim().toLowerCase()
+  const hasToken = hasGitHubToken()
+
+  if (raw === 'full') {
+    if (!hasToken) {
+      ctx?.logger?.warn?.(
+        'APPLE_DOCS_PACKAGES_SCOPE=full requires GITHUB_TOKEN or GH_TOKEN; ' +
+        'falling back to the official curated scope.',
+      )
+      return 'official'
+    }
+    return 'full'
+  }
+  if (raw === 'official') return 'official'
+  return hasToken ? 'full' : 'official'
 }
 
 function packageKey(owner, repo) {
@@ -44,16 +82,19 @@ function parsePackageKey(key) {
 }
 
 function parseCompositeEtag(value) {
-  if (!value) return { repo: null, readme: null, branch: null }
+  if (!value) return { source: 'api', repo: null, readme: null, branch: null, readmeFilename: null }
   try {
     const parsed = JSON.parse(value)
+    const source = parsed?.source === 'raw' ? 'raw' : 'api'
     return {
+      source,
       repo: typeof parsed?.repo === 'string' ? parsed.repo : null,
       readme: typeof parsed?.readme === 'string' ? parsed.readme : null,
       branch: typeof parsed?.branch === 'string' ? parsed.branch : null,
+      readmeFilename: typeof parsed?.readmeFilename === 'string' ? parsed.readmeFilename : null,
     }
   } catch {
-    return { repo: value, readme: null, branch: null }
+    return { source: 'api', repo: value, readme: null, branch: null, readmeFilename: null }
   }
 }
 
@@ -137,6 +178,104 @@ function appendMetadataSection(sections, repo, readme) {
   ])
 }
 
+/**
+ * Try README filename variants on raw.githubusercontent.com against a given
+ * branch, stopping at the first 200. Returns the README shaped like the GitHub
+ * /readme API payload, or `null` if all variants 404.
+ */
+async function fetchRawReadmeOnBranch(owner, repo, branch, rateLimiter) {
+  for (const filename of README_FILENAMES) {
+    try {
+      const result = await fetchRawGitHub(owner, repo, branch, filename, rateLimiter)
+      return {
+        text: result.text ?? '',
+        path: filename,
+        sha: null,
+        htmlUrl: `https://github.com/${owner}/${repo}/blob/${branch}/${filename}`,
+        downloadUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filename}`,
+        etag: result.etag ?? null,
+        lastModified: result.lastModified ?? null,
+        branch,
+      }
+    } catch (error) {
+      if (error?.status === 404) continue
+      throw error
+    }
+  }
+  return null
+}
+
+/**
+ * Look up a README by trying common default branches (main, master) and every
+ * README filename variant. Returns the first match or null if nothing was
+ * found across all permutations.
+ */
+async function discoverRawReadme(owner, repo, preferredBranch, rateLimiter) {
+  const branches = []
+  if (preferredBranch) branches.push(preferredBranch)
+  for (const b of DEFAULT_BRANCHES) {
+    if (!branches.includes(b)) branches.push(b)
+  }
+  for (const branch of branches) {
+    const readme = await fetchRawReadmeOnBranch(owner, repo, branch, rateLimiter)
+    if (readme) return readme
+  }
+  return null
+}
+
+/**
+ * Extract a short abstract from raw README markdown — prefers the first
+ * non-empty line after the first H1, skipping badges and HTML-only lines.
+ */
+function extractAbstractFromMarkdown(markdown) {
+  if (!markdown) return null
+  const lines = markdown.split(/\r?\n/)
+  let seenH1 = false
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) continue
+    if (!seenH1) {
+      if (line.startsWith('# ')) { seenH1 = true; continue }
+      // Some READMEs start directly with a paragraph — accept that too.
+      if (!line.startsWith('<') && !line.startsWith('[![') && !line.startsWith('![')) {
+        return line.replace(/\s+/g, ' ').slice(0, 280)
+      }
+      continue
+    }
+    if (line.startsWith('#')) continue
+    if (line.startsWith('<') || line.startsWith('[![') || line.startsWith('![')) continue
+    return line.replace(/\s+/g, ' ').slice(0, 280)
+  }
+  return null
+}
+
+/**
+ * Build a minimal GitHub-repo-shaped object for the curated no-auth path.
+ * Fields beyond owner/repo/default_branch/description are intentionally null
+ * since we don't call the GitHub REST API in this scope.
+ */
+function synthesizeRepoShape({ owner, repo }, { branch, description }) {
+  return {
+    name: repo,
+    full_name: `${owner}/${repo}`,
+    html_url: `https://github.com/${owner}/${repo}`,
+    description: description ?? null,
+    language: null,
+    stargazers_count: null,
+    forks_count: null,
+    open_issues_count: null,
+    topics: [],
+    homepage: null,
+    default_branch: branch ?? 'main',
+    archived: false,
+    fork: false,
+    owner: { login: owner },
+    license: null,
+    pushed_at: null,
+    updated_at: null,
+  }
+}
+
 export class PackagesAdapter extends SourceAdapter {
   static type = 'packages'
   static displayName = 'Swift Package Catalog'
@@ -147,15 +286,32 @@ export class PackagesAdapter extends SourceAdapter {
       ctx.db.upsertRoot(ROOT_SLUG, 'Swift Package Catalog', 'collection', ROOT_SLUG)
     }
 
+    const scope = packagesScope(ctx)
+    const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
     const limit = packageSyncLimit()
+
+    if (scope === 'official') {
+      const keySet = new Set()
+      for (const { owner, repo } of OFFICIAL_PACKAGES) {
+        keySet.add(packageKey(owner, repo))
+        if (limit != null && keySet.size >= limit) break
+      }
+      return this.validateDiscoveryResult({
+        keys: [...keySet],
+        roots: root ? [root] : undefined,
+      })
+    }
+
+    // full scope: union the curated apple/swiftlang allowlist with the
+    // SwiftPackageIndex catalog so the official repos are always included.
     if (!hasGitHubToken() && limit == null) {
       throw new Error(
         'packages source requires GITHUB_TOKEN or GH_TOKEN for a full sync. ' +
-        'Set APPLE_DOCS_PACKAGES_LIMIT to try a smaller unauthenticated sample.',
+        'Set APPLE_DOCS_PACKAGES_SCOPE=official (default without a token) or ' +
+        'APPLE_DOCS_PACKAGES_LIMIT to try a smaller unauthenticated sample.',
       )
     }
 
-    const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
     const { text } = await fetchRawGitHub(
       PACKAGE_LIST_OWNER,
       PACKAGE_LIST_REPO,
@@ -170,11 +326,15 @@ export class PackagesAdapter extends SourceAdapter {
     }
 
     const keySet = new Set()
+    for (const { owner, repo } of OFFICIAL_PACKAGES) {
+      keySet.add(packageKey(owner, repo))
+      if (limit != null && keySet.size >= limit) break
+    }
     for (const url of packageUrls) {
+      if (limit != null && keySet.size >= limit) break
       const parsed = parsePackageUrl(url)
       if (!parsed) continue
       keySet.add(packageKey(parsed.owner, parsed.repo))
-      if (limit != null && keySet.size >= limit) break
     }
 
     if (!hasGitHubToken() && limit != null) {
@@ -192,6 +352,33 @@ export class PackagesAdapter extends SourceAdapter {
 
   async fetch(key, ctx) {
     const { owner, repo } = parsePackageKey(key)
+    const scope = packagesScope(ctx)
+
+    if (scope === 'official') {
+      // No-auth path: fetch README from raw.githubusercontent.com only.
+      // Metadata beyond owner/repo/description is unavailable here.
+      const readme = await discoverRawReadme(owner, repo, 'main', ctx.rateLimiter)
+      const branch = readme?.branch ?? 'main'
+      const description = extractAbstractFromMarkdown(readme?.text ?? null)
+      const repoData = synthesizeRepoShape({ owner, repo }, { branch, description })
+
+      return this.validateFetchResult({
+        key,
+        payload: {
+          repo: repoData,
+          readme,
+        },
+        etag: JSON.stringify({
+          source: 'raw',
+          repo: null,
+          readme: readme?.etag ?? null,
+          branch,
+          readmeFilename: readme?.path ?? null,
+        }),
+        lastModified: readme?.lastModified ?? null,
+      })
+    }
+
     const repoResult = await fetchGitHubRepo(owner, repo, ctx.rateLimiter)
     const branch = repoResult.data?.default_branch ?? 'main'
 
@@ -209,6 +396,7 @@ export class PackagesAdapter extends SourceAdapter {
         readme,
       },
       etag: JSON.stringify({
+        source: 'api',
         repo: repoResult.etag ?? null,
         readme: readme?.etag ?? null,
         branch,
@@ -220,6 +408,24 @@ export class PackagesAdapter extends SourceAdapter {
   async check(key, previousState, ctx) {
     const { owner, repo } = parsePackageKey(key)
     const state = parseCompositeEtag(previousState?.etag ?? null)
+    const branch = state.branch ?? 'main'
+
+    if (state.source === 'raw') {
+      // No-auth path: README ETag is the sole change signal.
+      const readmeFilename = state.readmeFilename ?? README_FILENAMES[0]
+      const readmeStatus = await checkRawGitHub(owner, repo, branch, readmeFilename, state.readme, ctx.rateLimiter)
+
+      if (readmeStatus.status === 'deleted' && state.readme == null) {
+        return this.validateCheckResult({ status: 'unchanged', changed: false })
+      }
+      if (readmeStatus.status === 'deleted' || readmeStatus.status === 'modified') {
+        return this.validateCheckResult({ status: 'modified', changed: true })
+      }
+      if (readmeStatus.status === 'error') {
+        return this.validateCheckResult({ status: 'error', changed: false })
+      }
+      return this.validateCheckResult({ status: 'unchanged', changed: false })
+    }
 
     const repoStatus = await checkGitHubRepo(owner, repo, state.repo, ctx.rateLimiter)
     if (repoStatus.status === 'deleted') {
@@ -236,7 +442,6 @@ export class PackagesAdapter extends SourceAdapter {
       return this.validateCheckResult({ status: 'modified', changed: true })
     }
 
-    const branch = state.branch ?? 'main'
     const readmeStatus = await checkGitHubReadme(owner, repo, branch, state.readme, ctx.rateLimiter)
 
     if (readmeStatus.status === 'deleted' && state.readme == null) {
@@ -259,8 +464,15 @@ export class PackagesAdapter extends SourceAdapter {
     }
 
     const readme = rawPayload?.readme ?? null
+    const scope = (process.env.APPLE_DOCS_PACKAGES_SCOPE ?? '').trim().toLowerCase() === 'official'
+      ? 'official'
+      : (hasGitHubToken() ? 'full' : 'official')
+    const source = scope === 'official' ? 'raw' : 'github-api'
+
     const sourceMetadata = {
       package: true,
+      scope,
+      source,
       owner: repo.owner?.login ?? null,
       repo: repo.name ?? null,
       fullName: repo.full_name ?? null,

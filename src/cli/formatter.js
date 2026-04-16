@@ -10,15 +10,28 @@ function formatBytes(bytes) {
   return `${bytes} B`
 }
 
+const RELAXED_QUALITIES = new Set(['relaxed', 'relaxed-or', 'relaxed-token'])
+
+function qualityBadge(quality, distance) {
+  if (quality === 'match') return ''
+  if (quality === 'fuzzy') return dim(` [fuzzy d=${distance}]`)
+  if (RELAXED_QUALITIES.has(quality)) return dim(' [relaxed]')
+  return dim(` [${quality}]`)
+}
+
 export function formatSearchResults(result) {
   if (result.results.length === 0) {
     return `No results for "${result.query}"`
   }
 
   const lines = []
+  if (result.relaxed) {
+    lines.push(dim('Showing best-effort matches (query relaxed).'))
+    lines.push('')
+  }
   for (const r of result.results) {
     const quality = r.matchQuality ?? 'match'
-    const tag = quality === 'match' ? '' : quality === 'fuzzy' ? dim(` [fuzzy d=${r.distance}]`) : dim(` [${quality}]`)
+    const tag = qualityBadge(quality, r.distance)
     const sourceLabel = r.sourceType ? `${r.sourceType} / ` : ''
     lines.push(`  ${dim(`${sourceLabel + r.framework} / ${r.kind ?? ''}`)}${tag}`)
     lines.push(`  ${bold(r.title)}`)
