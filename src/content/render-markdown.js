@@ -1,5 +1,6 @@
 import { toFrontMatter } from '../lib/yaml.js'
 import { renderContentNodesToText } from './normalize.js'
+import { safeJson } from './safe-json.js'
 
 const LINK_SECTION_TITLES = {
   topics: 'Topics',
@@ -189,11 +190,6 @@ function coerceSection(section) {
     contentJson: section?.contentJson ?? section?.content_json ?? null,
     sortOrder: section?.sortOrder ?? section?.sort_order ?? 0,
   }
-}
-
-function safeJson(value) {
-  if (!value || typeof value !== 'string') return value ?? null
-  try { return JSON.parse(value) } catch { return null }
 }
 
 function compactObject(input) {

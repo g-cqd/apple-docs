@@ -12,32 +12,41 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+function acquireRateLimit(rateLimiter, url) {
+  return rateLimiter.acquire(url)
+}
+
 /**
  * Calculate retry delay from Retry-After header or exponential backoff.
  * @param {Response|null} res
  * @param {number} attempt - zero-based attempt index
+ * @param {number} jitterMs
  * @returns {number} delay in milliseconds
  */
-function retryDelayMs(res, attempt) {
+function retryDelayMs(res, attempt, jitterMs) {
   const retryAfter = res?.headers?.get?.('retry-after')
+  const baseDelay = Math.min(1000 * (2 ** attempt), 8000)
+  let retryAfterDelay = 0
   if (retryAfter != null) {
     const seconds = Number.parseInt(retryAfter, 10)
-    if (!Number.isNaN(seconds)) return seconds * 1000
+    if (!Number.isNaN(seconds)) retryAfterDelay = seconds * 1000
   }
-  return Math.min(1000 * (2 ** attempt), 8000)
+  const jitter = jitterMs > 0 ? Math.random() * jitterMs : 0
+  return Math.max(retryAfterDelay, baseDelay) + jitter
 }
 
 /**
  * Perform a fetch with automatic retry on retriable status codes or network errors.
  *
  * @param {string} url
- * @param {{ acquire(): Promise<void> }} rateLimiter
+ * @param {{ acquire(url?: string): Promise<void> }} rateLimiter
  * @param {{
  *   headers?: Record<string, string>,
  *   parseAs?: 'json'|'text',
  *   retryableStatuses?: number[],
  *   maxRetries?: number,
- *   timeout?: number,
+  *   timeout?: number,
+ *   jitterMs?: number,
  *   notFoundAs?: 'not-found'|'http-error',
  *   _attempt?: number,
  * }} [opts]
@@ -53,11 +62,12 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
     retryableStatuses = [408, 429, 500, 502, 503, 504],
     maxRetries = 3,
     timeout = 30000,
+    jitterMs = 250,
     notFoundAs = 'not-found',
     _attempt = 0,
   } = opts
 
-  await rateLimiter.acquire()
+  await acquireRateLimit(rateLimiter, url)
 
   let res
   try {
@@ -67,14 +77,14 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
     })
   } catch (error) {
     if (_attempt < maxRetries) {
-      await sleep(retryDelayMs(null, _attempt))
+      await sleep(retryDelayMs(null, _attempt, jitterMs))
       return fetchWithRetry(url, rateLimiter, { ...opts, _attempt: _attempt + 1 })
     }
     throw error
   }
 
   if (retryableStatuses.includes(res.status) && _attempt < maxRetries) {
-    await sleep(retryDelayMs(res, _attempt))
+    await sleep(retryDelayMs(res, _attempt, jitterMs))
     return fetchWithRetry(url, rateLimiter, { ...opts, _attempt: _attempt + 1 })
   }
 
@@ -104,7 +114,7 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
  *
  * @param {string} url
  * @param {string|null} previousEtag
- * @param {{ acquire(): Promise<void> }} rateLimiter
+ * @param {{ acquire(url?: string): Promise<void> }} rateLimiter
  * @param {{
  *   headers?: Record<string, string>,
  *   timeout?: number,
@@ -114,7 +124,7 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
 export async function checkResourceEtag(url, previousEtag, rateLimiter, opts = {}) {
   const { headers = {}, timeout = 30000 } = opts
 
-  await rateLimiter.acquire()
+  await acquireRateLimit(rateLimiter, url)
 
   try {
     const res = await fetch(url, {

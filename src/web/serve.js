@@ -5,7 +5,7 @@ import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { search } from '../commands/search.js'
 import { fetchDocPage } from '../apple/api.js'
 import { persistFetchedDocPage } from '../pipeline/persist.js'
-import { RateLimiter } from '../lib/rate-limiter.js'
+import { createHostBucketedLimiter } from '../lib/per-host-rate-limiter.js'
 import { sha256 } from '../lib/hash.js'
 import { initHighlighter } from '../content/highlight.js'
 
@@ -31,10 +31,15 @@ export async function startDevServer(opts, ctx) {
     buildDate: new Date().toISOString().split('T')[0],
   }
 
-  await initHighlighter()
+  void initHighlighter().catch((err) => {
+    logger.warn('Syntax highlighter unavailable:', err.message)
+  })
 
   const srcWebDir = dirname(new URL(import.meta.url).pathname)
-  const rateLimiter = new RateLimiter(5, 2)
+  const rateLimiter = createHostBucketedLimiter({
+    defaults: { rate: 5, burst: 2 },
+    primary: { rate: 5, burst: 2 },
+  })
 
   // Lazy-built known keys set for declaration type linking
   let knownKeys = null

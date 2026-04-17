@@ -127,7 +127,7 @@ Resumable: if interrupted, re-run the same command to continue where you left of
 Options:
   --roots <a,b,c>      Only sync specific roots (comma-separated)
   --sources <a,b,c>    Only sync specific source types (apple-docc,hig,guidelines,...,packages)
-  --full               Sync all discovered roots
+  --full               Sync all discovered roots and expand sources to their full catalog
   --parallel <n>       Crawl N frameworks simultaneously (default: 1)
   --concurrency <n>    Max total in-flight fetches across all roots (default: 5)
   --rate <n>           Max requests per second across all roots (default: 5)
@@ -140,7 +140,8 @@ Examples:
   apple-docs sync --sources guidelines                      # sync only App Store Review Guidelines
   apple-docs sync --roots app-store-review                  # sync App Store Review Guidelines
   apple-docs sync --sources packages                        # sync curated apple/swiftlang packages (no auth)
-  APPLE_DOCS_PACKAGES_SCOPE=full GITHUB_TOKEN=... apple-docs sync --sources packages  # full catalog (requires token)
+  apple-docs sync --full --sources packages                # full package catalog; uses raw README fallbacks without auth
+  APPLE_DOCS_PACKAGES_SCOPE=full GITHUB_TOKEN=... apple-docs sync --sources packages  # full catalog with GitHub metadata
   apple-docs sync --full --parallel 5 --rate 10             # 5 roots at once, 10 req/s
   apple-docs sync --roots uikit --concurrency 10 --rate 10  # fast single root
   apple-docs sync --retry-failed                            # retry 404s/timeouts

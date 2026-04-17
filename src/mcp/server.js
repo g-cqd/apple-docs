@@ -6,7 +6,7 @@ import { z } from 'zod'
 // It handles JSON-RPC 2.0, schema validation, transport negotiation,
 // and protocol compliance — replacing the hand-rolled server.
 
-import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
+import { disposeHighlighter } from '../content/highlight.js'
 import { search } from '../commands/search.js'
 import { lookup } from '../commands/lookup.js'
 import { frameworks } from '../commands/frameworks.js'
@@ -275,20 +275,18 @@ export function createServer(ctx) {
 /**
  * Start the MCP server, connecting via stdio transport.
  */
-export async function startServer(ctx) {
+export async function startServer(ctx, opts = {}) {
   const { logger } = ctx
+  const createServerImpl = opts.createServer ?? createServer
+  const createTransport = opts.createTransport ?? (() => new StdioServerTransport())
+  const disposeHighlighterImpl = opts.disposeHighlighter ?? disposeHighlighter
   logger.info('MCP server starting (SDK)...')
-  try {
-    await initHighlighter()
-  } catch (err) {
-    logger.warn('Syntax highlighter unavailable:', err.message)
-  }
-  const server = createServer(ctx)
-  const transport = new StdioServerTransport()
+  const server = createServerImpl(ctx)
+  const transport = createTransport()
   await server.connect(transport)
 
   // Clean up highlighter when transport closes
-  transport.onclose = () => disposeHighlighter()
+  transport.onclose = () => disposeHighlighterImpl()
 }
 
 function sanitizeDocumentPayload(payload) {

@@ -1,6 +1,7 @@
 import { coerceDocument as _coerceDocument, coerceSection as _coerceSection } from './coercion.js'
 import { normalizeIdentifier } from '../apple/normalizer.js'
 import { highlightCode } from './highlight.js'
+import { safeJson } from './safe-json.js'
 
 const LINK_SECTION_TITLES = {
   topics: 'Topics',
@@ -823,11 +824,6 @@ function coerceDocument(document) {
 
 function coerceSection(section) {
   return _coerceSection(section, { includeContentJson: true })
-}
-
-function safeJson(value) {
-  if (!value || typeof value !== 'string') return value ?? null
-  try { return JSON.parse(value) } catch { return null }
 }
 
 function isSafeHref(href) {

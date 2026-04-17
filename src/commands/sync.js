@@ -7,7 +7,7 @@ import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress }
 import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
 import { getAdapter, getAllAdapters } from '../sources/registry.js'
-import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, selectRootsForAdapter, filterPages } from './command-helpers.js'
+import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, selectRootsForAdapter, filterPages, discoverAdaptersInParallel } from './command-helpers.js'
 
 /**
  * Full sync pipeline: discover roots -> crawl (parallel) -> convert remaining.
@@ -22,10 +22,15 @@ export async function sync(opts, ctx) {
 
   validateRequestedSources(requestedSources)
 
-  const adapters = requestedSources
-    ? requestedSources.map(getAdapter)
-    : getAllAdapters()
-  const adapterCtx = { ...ctx, rootCatalogReady: false }
+  const adapters = ctx.adapters ?? (
+    requestedSources
+      ? requestedSources.map(getAdapter)
+      : getAllAdapters()
+  )
+  const concurrency = ctx.semaphore?.max ?? opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
+  const parallel = opts.parallel ?? 1
+  const semaphore = ctx.semaphore ?? new Semaphore(concurrency)
+  const adapterCtx = { ...ctx, rootCatalogReady: false, semaphore, fullSync: !!opts.full }
 
   db.setActivity('sync', opts.roots ?? null)
 
@@ -35,20 +40,25 @@ export async function sync(opts, ctx) {
       adapterCtx.rootCatalogReady = true
     }
 
-    const concurrency = opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
-    const parallel = opts.parallel ?? 1
-    const semaphore = new Semaphore(concurrency)
     const crawlOpts = { retryFailed: !!opts.retryFailed, semaphore }
     const crawlResults = {}
     const failedSources = []
     let guidelinesResult = null
     let rootsCrawled = 0
+    const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } = await discoverAdaptersInParallel(adapters, adapterCtx)
 
     for (const adapter of adapters) {
       logger.info(`Syncing ${adapter.constructor.displayName}...`)
 
       try {
-        const discovery = await adapter.discover(adapterCtx)
+        const discoveryError = discoveryErrorsBySource.get(adapter.constructor.type)
+        if (discoveryError) {
+          logger.error(`Source ${adapter.constructor.type} failed`, { error: discoveryError.message })
+          failedSources.push({ source: adapter.constructor.type, error: discoveryError.message })
+          continue
+        }
+
+        const discovery = discoveriesBySource.get(adapter.constructor.type)
         const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
 
         switch (adapter.constructor.syncMode) {
@@ -85,13 +95,13 @@ export async function sync(opts, ctx) {
 
     const activeSourceTypes = adapters.map(adapter => adapter.constructor.type)
     const filters = { roots: requestedRoots, sources: activeSourceTypes }
-    const dlResult = await downloadMissing(db, dataDir, rateLimiter, logger, null, filters)
+    const dlResult = await downloadMissing(db, dataDir, rateLimiter, logger, null, filters, { semaphore })
 
     const pendingConversions = filterPages(db.getUnconvertedPages(), requestedRoots, activeSourceTypes)
     let cvResult = { converted: 0, total: 0 }
     if (pendingConversions.length > 0) {
       logger.info(`Converting ${pendingConversions.length} remaining pages to Markdown...`)
-      cvResult = await convertAll(db, dataDir, logger, null, filters)
+      cvResult = await convertAll(db, dataDir, logger, null, filters, { semaphore })
     }
 
     let bodyIndexed = 0
@@ -173,15 +183,9 @@ async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
   for (const root of roots) {
     let processed = 0
     let skipped = 0
-    const existingKeys = new Set()
+    const existingKeys = db.getActivePathsIn(keys)
 
     logger.info(`Syncing ${adapter.constructor.displayName} (${keys.length} keys)...`)
-
-    for (const key of keys) {
-      if (db.getPageByPath(key)?.status === 'active') {
-        existingKeys.add(key)
-      }
-    }
     seedFlatSourceProgress(db, root.slug, keys, existingKeys)
 
     await pool(keys, concurrency, async (key) => {
@@ -221,4 +225,3 @@ async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
 
   return results
 }
-

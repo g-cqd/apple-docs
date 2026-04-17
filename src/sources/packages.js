@@ -28,36 +28,36 @@ function packageSyncLimit() {
 }
 
 /**
- * Resolve the packages scope for this run.
+ * Resolve the package catalog scope for this run.
  *
  * Precedence:
  *   - `APPLE_DOCS_PACKAGES_SCOPE=official|full` when set.
+ *   - `sync --full` (threaded as `ctx.fullSync`) requests the full catalog.
  *   - Otherwise `full` if a GitHub token is available, else `official`.
  *
- * If the caller explicitly requests `full` but no token is configured, we warn
- * via the logger and degrade to `official` — the curated list works without
- * auth, whereas `full` would hit the 60 req/hr anonymous GitHub API limit
- * within a handful of packages.
- *
- * @param {{ logger?: { warn?: Function } }} [ctx]
+ * @param {{ fullSync?: boolean }} [ctx]
  * @returns {'official'|'full'}
  */
-function packagesScope(ctx) {
+function packageCatalogScope(ctx) {
   const raw = (process.env.APPLE_DOCS_PACKAGES_SCOPE ?? '').trim().toLowerCase()
-  const hasToken = hasGitHubToken()
-
-  if (raw === 'full') {
-    if (!hasToken) {
-      ctx?.logger?.warn?.(
-        'APPLE_DOCS_PACKAGES_SCOPE=full requires GITHUB_TOKEN or GH_TOKEN; ' +
-        'falling back to the official curated scope.',
-      )
-      return 'official'
-    }
-    return 'full'
-  }
+  if (raw === 'full') return 'full'
   if (raw === 'official') return 'official'
-  return hasToken ? 'full' : 'official'
+  if (ctx?.fullSync) return 'full'
+  return hasGitHubToken() ? 'full' : 'official'
+}
+
+/**
+ * Resolve how package metadata should be fetched for this run.
+ * Full catalog discovery can still fall back to public raw README fetches
+ * when no GitHub token is available.
+ *
+ * @param {{ fullSync?: boolean }} [ctx]
+ * @returns {'raw'|'api'}
+ */
+function packageFetchMode(ctx) {
+  const scope = packageCatalogScope(ctx)
+  if (scope === 'official') return 'raw'
+  return hasGitHubToken() ? 'api' : 'raw'
 }
 
 function packageKey(owner, repo) {
@@ -286,7 +286,7 @@ export class PackagesAdapter extends SourceAdapter {
       ctx.db.upsertRoot(ROOT_SLUG, 'Swift Package Catalog', 'collection', ROOT_SLUG)
     }
 
-    const scope = packagesScope(ctx)
+    const scope = packageCatalogScope(ctx)
     const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
     const limit = packageSyncLimit()
 
@@ -304,11 +304,10 @@ export class PackagesAdapter extends SourceAdapter {
 
     // full scope: union the curated apple/swiftlang allowlist with the
     // SwiftPackageIndex catalog so the official repos are always included.
-    if (!hasGitHubToken() && limit == null) {
-      throw new Error(
-        'packages source requires GITHUB_TOKEN or GH_TOKEN for a full sync. ' +
-        'Set APPLE_DOCS_PACKAGES_SCOPE=official (default without a token) or ' +
-        'APPLE_DOCS_PACKAGES_LIMIT to try a smaller unauthenticated sample.',
+    if (!hasGitHubToken()) {
+      ctx.logger?.warn?.(
+        'Syncing the full packages catalog without GitHub auth; ' +
+        'package metadata will use public README-only fallbacks.',
       )
     }
 
@@ -352,9 +351,10 @@ export class PackagesAdapter extends SourceAdapter {
 
   async fetch(key, ctx) {
     const { owner, repo } = parsePackageKey(key)
-    const scope = packagesScope(ctx)
+    const scope = packageCatalogScope(ctx)
+    const fetchMode = packageFetchMode(ctx)
 
-    if (scope === 'official') {
+    if (fetchMode === 'raw') {
       // No-auth path: fetch README from raw.githubusercontent.com only.
       // Metadata beyond owner/repo/description is unavailable here.
       const readme = await discoverRawReadme(owner, repo, 'main', ctx.rateLimiter)
@@ -367,6 +367,8 @@ export class PackagesAdapter extends SourceAdapter {
         payload: {
           repo: repoData,
           readme,
+          syncScope: scope,
+          fetchMode,
         },
         etag: JSON.stringify({
           source: 'raw',
@@ -394,6 +396,8 @@ export class PackagesAdapter extends SourceAdapter {
       payload: {
         repo: repoResult.data,
         readme,
+        syncScope: scope,
+        fetchMode,
       },
       etag: JSON.stringify({
         source: 'api',
@@ -464,10 +468,17 @@ export class PackagesAdapter extends SourceAdapter {
     }
 
     const readme = rawPayload?.readme ?? null
-    const scope = (process.env.APPLE_DOCS_PACKAGES_SCOPE ?? '').trim().toLowerCase() === 'official'
-      ? 'official'
-      : (hasGitHubToken() ? 'full' : 'official')
-    const source = scope === 'official' ? 'raw' : 'github-api'
+    const scope = rawPayload?.syncScope === 'full'
+      ? 'full'
+      : rawPayload?.syncScope === 'official'
+        ? 'official'
+        : packageCatalogScope({})
+    const fetchMode = rawPayload?.fetchMode === 'api'
+      ? 'api'
+      : rawPayload?.fetchMode === 'raw'
+        ? 'raw'
+        : packageFetchMode({})
+    const source = fetchMode === 'raw' ? 'raw' : 'github-api'
 
     const sourceMetadata = {
       package: true,

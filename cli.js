@@ -6,7 +6,7 @@ import { showHelp } from './src/cli/help.js'
 import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile, formatWebBuild, formatWebDeploy } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
-import { RateLimiter } from './src/lib/rate-limiter.js'
+import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
 
 import { search } from './src/commands/search.js'
 import { lookup } from './src/commands/lookup.js'
@@ -28,7 +28,10 @@ const logLevel = flags.verbose ? 'debug' : 'info'
 const logger = createLogger(logLevel)
 const rate = Number.parseInt(flags.rate ?? process.env.APPLE_DOCS_RATE ?? '5', 10)
 const burst = Math.max(rate, Number.parseInt(process.env.APPLE_DOCS_BURST ?? '2', 10))
-const rateLimiter = new RateLimiter(rate, burst)
+const rateLimiter = createHostBucketedLimiter({
+  defaults: { rate, burst },
+  primary: { rate, burst },
+})
 
 const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
 const ctx = { db, dataDir, rateLimiter, logger }

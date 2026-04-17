@@ -5,7 +5,7 @@ import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress }
 import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
 import { getAdapter, getAllAdapters } from '../sources/registry.js'
-import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, selectRootsForAdapter, filterPagesByRoots } from './command-helpers.js'
+import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, selectRootsForAdapter, filterPagesByRoots, discoverAdaptersInParallel } from './command-helpers.js'
 
 /**
  * Check for documentation updates and pull changes.
@@ -15,18 +15,20 @@ import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, sel
 export async function update(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const startMs = Date.now()
-  const concurrency = opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
+  const concurrency = ctx.semaphore?.max ?? opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
   const parallel = opts.parallel ?? 1
-  const semaphore = new Semaphore(concurrency)
+  const semaphore = ctx.semaphore ?? new Semaphore(concurrency)
   const requestedSources = normalizeList(opts.sources)
   const requestedRoots = normalizeList(opts.roots)
 
   validateRequestedSources(requestedSources)
 
-  const adapters = requestedSources
-    ? requestedSources.map(getAdapter)
-    : getAllAdapters()
-  const adapterCtx = { ...ctx, rootCatalogReady: false }
+  const adapters = ctx.adapters ?? (
+    requestedSources
+      ? requestedSources.map(getAdapter)
+      : getAllAdapters()
+  )
+  const adapterCtx = { ...ctx, rootCatalogReady: false, semaphore }
 
   db.setActivity('update', opts.roots ?? null)
 
@@ -46,18 +48,28 @@ export async function update(opts, ctx) {
       }
     }
 
+    const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } = await discoverAdaptersInParallel(adapters, adapterCtx)
+
     for (const adapter of adapters) {
       try {
+        const discoveryError = discoveryErrorsBySource.get(adapter.constructor.type)
+        if (discoveryError) {
+          errCount++
+          logger.warn(`Discovery failed for source: ${adapter.constructor.type}`, { error: discoveryError.message })
+          continue
+        }
+
+        const discovery = discoveriesBySource.get(adapter.constructor.type)
         let counts
         switch (adapter.constructor.syncMode) {
           case 'snapshot':
-            counts = await updateGuidelinesSource(adapter, requestedRoots, adapterCtx)
+            counts = await updateGuidelinesSource(adapter, discovery, requestedRoots, adapterCtx)
             break
           case 'flat':
-            counts = await updateFlatSource(adapter, requestedRoots, concurrency, semaphore, adapterCtx)
+            counts = await updateFlatSource(adapter, discovery, requestedRoots, concurrency, semaphore, adapterCtx)
             break
           default:
-            counts = await updateDoccSource(adapter, requestedRoots, concurrency, parallel, semaphore, adapterCtx)
+            counts = await updateDoccSource(adapter, discovery, requestedRoots, concurrency, parallel, semaphore, adapterCtx)
             break
         }
 
@@ -93,7 +105,7 @@ export async function update(opts, ctx) {
   }
 }
 
-async function updateDoccSource(adapter, requestedRoots, concurrency, parallel, semaphore, ctx) {
+async function updateDoccSource(adapter, discovery, requestedRoots, concurrency, parallel, semaphore, ctx) {
   const { db, dataDir, logger } = ctx
   const pages = filterPagesByRoots(db.getPagesBySourceType(adapter.constructor.type), requestedRoots)
   const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0 }
@@ -174,7 +186,6 @@ async function updateDoccSource(adapter, requestedRoots, concurrency, parallel, 
     counts.delCount++
   }
 
-  const discovery = await adapter.discover(ctx)
   const newRoots = selectRootsForAdapter(adapter, discovery, db, requestedRoots).filter(root => {
     const stats = db.getCrawlStats(root.slug)
     return stats.processed === 0 && stats.pending === 0
@@ -215,10 +226,9 @@ async function updateDoccSource(adapter, requestedRoots, concurrency, parallel, 
   return counts
 }
 
-async function updateFlatSource(adapter, requestedRoots, _concurrency, semaphore, ctx) {
+async function updateFlatSource(adapter, discovery, requestedRoots, _concurrency, semaphore, ctx) {
   const { db, dataDir, logger } = ctx
   const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0 }
-  const discovery = await adapter.discover(ctx)
   const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
   const root = roots[0] ?? null
   const pages = filterPagesByRoots(db.getPagesBySourceType(adapter.constructor.type), requestedRoots)
@@ -366,10 +376,9 @@ async function updateFlatSource(adapter, requestedRoots, _concurrency, semaphore
   return counts
 }
 
-async function updateGuidelinesSource(adapter, requestedRoots, ctx) {
+async function updateGuidelinesSource(adapter, discovery, requestedRoots, ctx) {
   const { db, dataDir, logger } = ctx
   const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0 }
-  const discovery = await adapter.discover(ctx)
   const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
 
   if (roots.length === 0) {

@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { buildStaticSite, minifyCSS } from '../../src/web/build.js'
@@ -160,6 +161,62 @@ describe('buildStaticSite (P7-D)', () => {
     expect(html).toContain('core.js')
     expect(html).not.toContain('search.js')
     expect(html).not.toContain('page-toc.js')
+  })
+
+  test('builds through a staging directory and cleans temp siblings after success', async () => {
+    await buildStaticSite({ out: outDir }, ctx)
+
+    const siblings = readdirSync(tmpDir)
+    expect(siblings).toContain('web')
+    expect(siblings.some(name => name.startsWith('web.tmp-'))).toBe(false)
+    expect(siblings.some(name => name.startsWith('web.prev-'))).toBe(false)
+  })
+
+  test('preserves the existing output directory when a staged build fails', async () => {
+    mkdirSync(outDir, { recursive: true })
+    writeFileSync(join(outDir, 'marker.txt'), 'keep me')
+
+    const failingCtx = {
+      db: {
+        getRoots() {
+          throw new Error('boom')
+        },
+      },
+      dataDir: tmpDir,
+      logger: { info() {}, warn() {}, error() {} },
+    }
+
+    await expect(buildStaticSite({ out: outDir }, failingCtx)).rejects.toThrow('boom')
+
+    expect(readFileSync(join(outDir, 'marker.txt'), 'utf8')).toBe('keep me')
+    const siblings = readdirSync(tmpDir)
+    expect(siblings).toContain('web')
+    expect(siblings.some(name => name.startsWith('web.tmp-'))).toBe(false)
+    expect(siblings.some(name => name.startsWith('web.prev-'))).toBe(false)
+  })
+
+  test('restores the previous output if publish fails after moving it aside', async () => {
+    mkdirSync(outDir, { recursive: true })
+    writeFileSync(join(outDir, 'marker.txt'), 'keep me')
+
+    let renameCalls = 0
+    const fsOps = {
+      async rename(from, to) {
+        renameCalls += 1
+        if (renameCalls === 2) {
+          throw new Error('publish failed')
+        }
+        return rename(from, to)
+      },
+      rm,
+    }
+
+    await expect(buildStaticSite({ out: outDir, fsOps }, ctx)).rejects.toThrow('publish failed')
+
+    expect(readFileSync(join(outDir, 'marker.txt'), 'utf8')).toBe('keep me')
+    const siblings = readdirSync(tmpDir)
+    expect(siblings).toContain('web')
+    expect(siblings.some(name => name.startsWith('web.tmp-'))).toBe(false)
   })
 })
 

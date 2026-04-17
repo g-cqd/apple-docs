@@ -1,6 +1,18 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { sync } from '../../src/commands/sync.js'
 import { normalizeList, validateRequestedSources, filterPages, filterPagesByRoots } from '../../src/commands/command-helpers.js'
+import { DocsDatabase } from '../../src/storage/database.js'
+
+const tempDirs = []
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
 
 describe('sync command', () => {
   test('rejects unknown source filters before running discovery', async () => {
@@ -23,6 +35,82 @@ describe('sync command', () => {
       rateLimiter: null,
       logger: { info() {}, warn() {}, error() {} },
     })).rejects.toThrow('fake-one')
+  })
+
+  test('continues syncing other adapters when one discovery fails', async () => {
+    const dataDir = join(tmpdir(), `apple-docs-sync-test-${crypto.randomUUID()}`)
+    tempDirs.push(dataDir)
+    mkdirSync(join(dataDir, 'raw-json'), { recursive: true })
+    mkdirSync(join(dataDir, 'markdown'), { recursive: true })
+
+    const db = new DocsDatabase(':memory:')
+    db.upsertRoot('good-root', 'Good Root', 'collection', 'test')
+    const goodRoot = db.getRootBySlug('good-root')
+
+    try {
+      const result = await sync({}, {
+        db,
+        dataDir,
+        rateLimiter: { rate: 5, acquire: async () => {} },
+        logger: { info() {}, warn() {}, error() {} },
+        adapters: [
+          {
+            constructor: { type: 'bad-source', displayName: 'Bad Source', syncMode: 'flat' },
+            async discover() {
+              throw new Error('discover boom')
+            },
+            validateNormalizeResult() {},
+          },
+          {
+            constructor: { type: 'good-source', displayName: 'Good Source', syncMode: 'flat' },
+            async discover() {
+              return { roots: [{ ...goodRoot, source_type: 'good-source' }], keys: [] }
+            },
+            validateNormalizeResult() {},
+          },
+        ],
+      })
+
+      expect(result.failedSources).toEqual([
+        { source: 'bad-source', error: 'discover boom' },
+      ])
+      expect(result.crawlResults['good-root']).toEqual({ processed: 0, total: 0, skipped: 0 })
+    } finally {
+      db.close()
+    }
+  })
+
+  test('passes the full-sync hint to adapters during discovery', async () => {
+    const dataDir = join(tmpdir(), `apple-docs-sync-test-${crypto.randomUUID()}`)
+    tempDirs.push(dataDir)
+    mkdirSync(join(dataDir, 'raw-json'), { recursive: true })
+    mkdirSync(join(dataDir, 'markdown'), { recursive: true })
+
+    const db = new DocsDatabase(':memory:')
+    let fullSyncSeen = false
+
+    try {
+      await sync({ full: true }, {
+        db,
+        dataDir,
+        rateLimiter: { rate: 5, acquire: async () => {} },
+        logger: { info() {}, warn() {}, error() {} },
+        adapters: [
+          {
+            constructor: { type: 'packages', displayName: 'Swift Package Catalog', syncMode: 'flat' },
+            async discover(ctx) {
+              fullSyncSeen = ctx.fullSync
+              return { roots: [], keys: [] }
+            },
+            validateNormalizeResult() {},
+          },
+        ],
+      })
+
+      expect(fullSyncSeen).toBe(true)
+    } finally {
+      db.close()
+    }
   })
 })
 

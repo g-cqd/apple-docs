@@ -6,6 +6,9 @@ import { DocsDatabase } from '../../src/storage/database.js'
 import { consolidate, verifyCorpusIntegrity } from '../../src/commands/consolidate.js'
 import { createMockLogger, createMockRateLimiter } from '../helpers/mocks.js'
 
+const fixture = await Bun.file(new URL('../fixtures/swiftui-view.json', import.meta.url)).json()
+const originalFetch = globalThis.fetch
+
 let db
 let dataDir
 let logger
@@ -21,6 +24,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  globalThis.fetch = originalFetch
   db.close()
   rmSync(dataDir, { recursive: true, force: true })
 })
@@ -67,6 +71,61 @@ describe('consolidate', () => {
     const result = await consolidate({ minify: true }, { db, dataDir, rateLimiter, logger })
     expect(result.minified).toBe(1)
     expect(result.minifySaved).toBeGreaterThan(0)
+  })
+
+  test('retries resolved paths with pooled concurrency', async () => {
+    db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'apple-docc')
+    db.seedCrawlIfNew('swiftui/old-a', 'swiftui', 1)
+    db.seedCrawlIfNew('swiftui/old-b', 'swiftui', 1)
+    db.setCrawlState('swiftui/old-a', 'failed', 'swiftui', 1, 'Not found')
+    db.setCrawlState('swiftui/old-b', 'failed', 'swiftui', 1, 'Not found')
+    writeFileSync(join(dataDir, 'raw-json', 'swiftui.json'), JSON.stringify({
+      references: {
+        'swiftui/old-a': { url: 'swiftui/new-a', title: 'New A' },
+        'swiftui/old-b': { url: 'swiftui/new-b', title: 'New B' },
+      },
+    }))
+
+    let active = 0
+    let maxActive = 0
+    let releaseFetches
+    const fetchGate = new Promise((resolve) => {
+      releaseFetches = resolve
+    })
+
+    globalThis.fetch = async () => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      await fetchGate
+      active--
+      return new Response(JSON.stringify(fixture), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          etag: '"test-etag"',
+          'last-modified': 'Mon, 01 Jan 2024 00:00:00 GMT',
+        },
+      })
+    }
+
+    const runPromise = consolidate({}, {
+      db,
+      dataDir,
+      rateLimiter,
+      logger,
+      semaphore: { max: 2 },
+    })
+
+    for (let attempt = 0; attempt < 100 && maxActive < 2; attempt++) {
+      await Bun.sleep(1)
+    }
+    releaseFetches()
+    const result = await runPromise
+
+    expect(maxActive).toBe(2)
+    expect(result.resolved).toBe(2)
+    expect(result.retried).toBe(2)
+    expect(result.retriedOk).toBe(2)
   })
 })
 

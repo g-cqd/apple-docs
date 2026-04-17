@@ -44,4 +44,28 @@ describe('flat-source progress helpers', () => {
     expect(stats.failed).toBe(1)
     expect(stats.pending).toBe(0)
   })
+
+  test('seedFlatSourceProgress rolls back if seeding fails mid-transaction', () => {
+    db.setCrawlState('swift-evolution/existing', 'failed', 'swift-evolution', 0, 'timeout')
+
+    const originalSetCrawlState = db.setCrawlState.bind(db)
+    let calls = 0
+    db.setCrawlState = (...args) => {
+      calls++
+      if (calls === 2) throw new Error('boom')
+      return originalSetCrawlState(...args)
+    }
+
+    expect(() => seedFlatSourceProgress(
+      db,
+      'swift-evolution',
+      ['swift-evolution/0001', 'swift-evolution/0002'],
+      new Set(['swift-evolution/0001']),
+    )).toThrow('boom')
+
+    const stats = db.getCrawlStats('swift-evolution')
+    expect(stats.failed).toBe(1)
+    expect(stats.processed).toBe(0)
+    expect(stats.pending).toBe(0)
+  })
 })

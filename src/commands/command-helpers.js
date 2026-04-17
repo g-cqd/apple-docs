@@ -79,3 +79,44 @@ export function filterPagesByRoots(pages, requestedRoots) {
   const requestedRootSet = new Set(requestedRoots)
   return pages.filter(page => requestedRootSet.has(page.root_slug))
 }
+
+/**
+ * Run adapter discovery in parallel and return results keyed by source type.
+ * @param {object[]} adapters
+ * @param {object} ctx
+ * @returns {Promise<{ discoveries: Map<string, object>, errors: Map<string, Error> }>}
+ */
+export async function discoverAdaptersInParallel(adapters, ctx) {
+  const settled = await Promise.all(
+    adapters.map(async (adapter) => {
+      try {
+        return {
+          type: adapter.constructor.type,
+          discovery: await adapter.discover(ctx),
+          error: null,
+        }
+      } catch (error) {
+        return {
+          type: adapter.constructor.type,
+          discovery: null,
+          error,
+        }
+      }
+    }),
+  )
+
+  const discoveries = new Map()
+  const errors = new Map()
+
+  for (const result of settled) {
+    if (!result.error) {
+      const { type, discovery } = result
+      discoveries.set(type, discovery)
+      continue
+    }
+
+    errors.set(result.type, result.error)
+  }
+
+  return { discoveries, errors }
+}

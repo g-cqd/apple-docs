@@ -211,6 +211,45 @@ describe('DocsDatabase', () => {
     expect(packagesRow.source_type).toBe('packages')
   })
 
+  test('tx commits writes and returns the callback result', () => {
+    const rootId = db.tx(() => db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test').id)
+
+    expect(rootId).toBeGreaterThan(0)
+    expect(db.getRootBySlug('swiftui')).not.toBeNull()
+  })
+
+  test('tx rolls back writes when the callback throws', () => {
+    expect(() => db.tx(() => {
+      db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+      throw new Error('boom')
+    })).toThrow('boom')
+
+    expect(db.getRootBySlug('swiftui')).toBeNull()
+  })
+
+  test('getActivePathsIn batches large key lists and only returns active paths', () => {
+    const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+    const keys = Array.from({ length: 905 }, (_, index) => `swiftui/item-${index}`)
+
+    for (const key of [keys[0], keys[450], keys[904]]) {
+      db.upsertPage({
+        rootId: root.id,
+        path: key,
+        url: `https://developer.apple.com/documentation/${key}`,
+        title: key,
+        role: 'symbol',
+      })
+    }
+    db.markPageDeleted(keys[450])
+
+    const activePaths = db.getActivePathsIn(keys)
+
+    expect(activePaths.has(keys[0])).toBe(true)
+    expect(activePaths.has(keys[450])).toBe(false)
+    expect(activePaths.has(keys[904])).toBe(true)
+    expect(activePaths.size).toBe(2)
+  })
+
   test('migrates legacy flat-source roots out of apple-docc on open', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'apple-docs-db-'))
     const dbPath = join(tempDir, 'apple-docs.db')

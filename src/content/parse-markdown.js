@@ -7,6 +7,17 @@
 
 import { createDocumentTemplate } from './document-template.js'
 
+const headingScanRegexCache = new Map()
+
+function getHeadingScanRegex(level) {
+  if (!headingScanRegexCache.has(level)) {
+    const prefix = '#'.repeat(level)
+    headingScanRegexCache.set(level, new RegExp(`^(${prefix}(?!#) +(.+))$`, 'mg'))
+  }
+
+  return headingScanRegexCache.get(level)
+}
+
 // ---------------------------------------------------------------------------
 // extractFrontmatter
 // ---------------------------------------------------------------------------
@@ -153,39 +164,21 @@ function unquoteYaml(value) {
 export function splitByHeadings(body, level = 2) {
   if (typeof body !== 'string') return []
 
-  const prefix = '#'.repeat(level)
-  // Match ATX headings of exactly `level` hashes followed by a space
-  // The regex captures the heading text and the boundary between sections
-  const _headingRe = new RegExp(`^${prefix}(?!#) +(.+)$`, 'm')
-
   const sections = []
-
-  /**
-   * @param {string|null} heading
-   * @param {string} content
-   */
-  const _pushSection = (heading, content) => {
-    const trimmed = content.trim()
-    if (trimmed !== '' || heading !== null) {
-      sections.push({ heading, content: trimmed })
-    }
-  }
-
-  // Split on each occurrence of the heading pattern
-  const splitRe = new RegExp(`^(${prefix}(?!#) +.+)$`, 'mg')
-  const _lastIndex = 0
-  const _lastHeading = null
-  let _match
-
-  const _preText = []
-  splitRe.lastIndex = 0
 
   // Collect all heading positions
   const headingMatches = []
-  let m
-  const scanRe = new RegExp(`^(${prefix}(?!#) +(.+))$`, 'mg')
-  while ((m = scanRe.exec(body)) !== null) {
-    headingMatches.push({ index: m.index, full: m[1], text: m[2], end: m.index + m[0].length })
+  const scanRe = getHeadingScanRegex(level)
+  scanRe.lastIndex = 0
+
+  let match
+  while ((match = scanRe.exec(body)) !== null) {
+    headingMatches.push({
+      index: match.index,
+      full: match[1],
+      text: match[2],
+      end: match.index + match[0].length,
+    })
   }
 
   if (headingMatches.length === 0) {

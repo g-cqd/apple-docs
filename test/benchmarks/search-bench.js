@@ -49,11 +49,12 @@ async function main() {
   console.log(`  p99: ${p99.toFixed(2)}ms`)
 
   if (shouldRecord) {
+    const comparison = compareToPrevious('search-p50', p50)
+
     recordBenchmark('search-p50', { value: p50, unit: 'ms' })
     recordBenchmark('search-p95', { value: p95, unit: 'ms' })
     recordBenchmark('search-p99', { value: p99, unit: 'ms' })
 
-    const comparison = compareToPrevious('search-p50', p50)
     if (comparison.regressed) {
       console.log(`WARNING REGRESSION: p50 is ${comparison.changePercent}% slower than previous (${comparison.previousValue.toFixed(2)}ms -> ${p50.toFixed(2)}ms)`)
     } else if (comparison.previousValue) {

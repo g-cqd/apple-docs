@@ -1,10 +1,13 @@
+import { existsSync } from 'node:fs'
+import { rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { extractReferences } from '../apple/extractor.js'
 import { renderPage } from '../apple/renderer.js'
 import { normalize } from '../content/normalize.js'
 import { renderMarkdown } from '../content/render-markdown.js'
+import { discardAtomicWrite, promoteAtomicWrite, stageTextAtomic } from '../lib/atomic-write.js'
 import { sha256 } from '../lib/hash.js'
-import { stableStringify, writeJSON, writeText } from '../storage/files.js'
+import { stableStringify } from '../storage/files.js'
 
 /**
  * Persist a fetched DocC JSON payload into raw storage, legacy page rows,
@@ -19,30 +22,57 @@ export async function persistFetchedDocPage({
   json,
   etag = null,
   lastModified = null,
+  renderPageFn = renderPage,
 }) {
-  const jsonStr = await writeJSON(join(dataDir, 'raw-json', `${path}.json`), json)
+  const jsonStr = stableStringify(json)
   const rawPayloadHash = sha256(jsonStr)
   const normalized = normalize(json, path, sourceType)
   const normalizedHash = sha256(stableStringify(normalized))
   const doc = normalized.document
   const downloadedAt = new Date().toISOString()
+  const markdown = renderPageFn(json, path)
+  const rawPath = join(dataDir, 'raw-json', `${path}.json`)
+  const markdownPath = join(dataDir, 'markdown', `${path}.md`)
+  const rawTempPath = await stageTextAtomic(rawPath, jsonStr)
+  const markdownTempPath = await stageTextAtomic(markdownPath, markdown)
 
-  const page = upsertPageFromDocument(db, rootId, path, doc, {
-    etag,
-    lastModified,
-    rawPayloadHash,
-    downloadedAt,
-    defaultUrl: defaultDoccUrl(path),
-  })
+  let page
+  let rawBackupPath = null
+  let markdownBackupPath = null
+  try {
+    rawBackupPath = await promoteWithBackup(rawTempPath, rawPath)
+    markdownBackupPath = await promoteWithBackup(markdownTempPath, markdownPath)
 
-  db.upsertNormalizedDocument(normalized, {
-    contentHash: normalizedHash,
-    rawPayloadHash,
-  })
+    db.tx(() => {
+      page = upsertPageFromDocument(db, rootId, path, doc, {
+        etag,
+        lastModified,
+        rawPayloadHash,
+        downloadedAt,
+        defaultUrl: defaultDoccUrl(path),
+      })
 
-  const markdown = renderPage(json, path)
-  await writeText(join(dataDir, 'markdown', `${path}.md`), markdown)
-  db.markConverted(path)
+      db.upsertNormalizedDocument(normalized, {
+        contentHash: normalizedHash,
+        rawPayloadHash,
+      })
+
+      db.markConverted(path)
+    })
+
+    await Promise.all([
+      discardAtomicWrite(rawBackupPath),
+      discardAtomicWrite(markdownBackupPath),
+    ])
+  } catch (error) {
+    await Promise.all([
+      discardAtomicWrite(rawTempPath),
+      discardAtomicWrite(markdownTempPath),
+      rollbackPromotedWrite(rawPath, rawBackupPath),
+      rollbackPromotedWrite(markdownPath, markdownBackupPath),
+    ])
+    throw error
+  }
 
   return {
     page,
@@ -68,34 +98,60 @@ export async function persistNormalizedPage({
   normalized,
   etag = null,
   lastModified = null,
+  renderMarkdownFn = renderMarkdown,
 }) {
   // Always store as valid JSON so downstream tools (minify, readJSON) work uniformly.
   // String payloads (Markdown, HTML) from flat sources are wrapped in a JSON envelope.
   const isStringPayload = typeof rawPayload === 'string'
   const rawObj = isStringPayload ? { _raw: rawPayload, _format: 'text' } : rawPayload
   const rawStr = stableStringify(rawObj)
-  await writeJSON(join(dataDir, 'raw-json', `${path}.json`), rawObj)
   const rawPayloadHash = sha256(rawStr)
   const normalizedHash = sha256(stableStringify(normalized))
   const doc = normalized.document
   const downloadedAt = new Date().toISOString()
+  const markdown = renderMarkdownFn(doc, normalized.sections)
+  const rawPath = join(dataDir, 'raw-json', `${path}.json`)
+  const markdownPath = join(dataDir, 'markdown', `${path}.md`)
+  const rawTempPath = await stageTextAtomic(rawPath, rawStr)
+  const markdownTempPath = await stageTextAtomic(markdownPath, markdown)
 
-  const page = upsertPageFromDocument(db, rootId, path, doc, {
-    etag,
-    lastModified,
-    rawPayloadHash,
-    downloadedAt,
-    sourceTypeFallback: sourceType,
-  })
+  let page
+  let rawBackupPath = null
+  let markdownBackupPath = null
+  try {
+    rawBackupPath = await promoteWithBackup(rawTempPath, rawPath)
+    markdownBackupPath = await promoteWithBackup(markdownTempPath, markdownPath)
 
-  db.upsertNormalizedDocument(normalized, {
-    contentHash: normalizedHash,
-    rawPayloadHash,
-  })
+    db.tx(() => {
+      page = upsertPageFromDocument(db, rootId, path, doc, {
+        etag,
+        lastModified,
+        rawPayloadHash,
+        downloadedAt,
+        sourceTypeFallback: sourceType,
+      })
 
-  const markdown = renderMarkdown(doc, normalized.sections)
-  await writeText(join(dataDir, 'markdown', `${path}.md`), markdown)
-  db.markConverted(path)
+      db.upsertNormalizedDocument(normalized, {
+        contentHash: normalizedHash,
+        rawPayloadHash,
+      })
+
+      db.markConverted(path)
+    })
+
+    await Promise.all([
+      discardAtomicWrite(rawBackupPath),
+      discardAtomicWrite(markdownBackupPath),
+    ])
+  } catch (error) {
+    await Promise.all([
+      discardAtomicWrite(rawTempPath),
+      discardAtomicWrite(markdownTempPath),
+      rollbackPromotedWrite(rawPath, rawBackupPath),
+      rollbackPromotedWrite(markdownPath, markdownBackupPath),
+    ])
+    throw error
+  }
 
   return { page, normalized, rawPayloadHash, normalizedHash }
 }
@@ -135,4 +191,36 @@ function defaultDoccUrl(path) {
     return `https://developer.apple.com/${path}`
   }
   return `https://developer.apple.com/documentation/${path}`
+}
+
+function createBackupPath(filePath) {
+  return `${filePath}.bak-${process.pid}-${Math.random().toString(16).slice(2)}`
+}
+
+async function promoteWithBackup(tempPath, filePath) {
+  let backupPath = null
+  if (existsSync(filePath)) {
+    backupPath = createBackupPath(filePath)
+    await rename(filePath, backupPath)
+  }
+
+  try {
+    await promoteAtomicWrite(tempPath, filePath)
+    return backupPath
+  } catch (error) {
+    if (backupPath && existsSync(backupPath) && !existsSync(filePath)) {
+      await rename(backupPath, filePath)
+    }
+    throw error
+  }
+}
+
+async function rollbackPromotedWrite(filePath, backupPath) {
+  try {
+    await unlink(filePath)
+  } catch {}
+
+  if (backupPath && existsSync(backupPath)) {
+    await rename(backupPath, filePath)
+  }
 }

@@ -459,6 +459,28 @@ export class DocsDatabase {
   }
 
   /**
+   * Run a synchronous unit of work inside a transaction.
+   * Rolls back on error and returns the callback result on success.
+   * @template T
+   * @param {(db: DocsDatabase) => T} fn
+   * @returns {T}
+   */
+  tx(fn) {
+    this.db.run('BEGIN IMMEDIATE')
+    try {
+      const result = fn(this)
+      if (result && typeof result.then === 'function') {
+        throw new Error('DocsDatabase.tx() callback must be synchronous')
+      }
+      this.db.run('COMMIT')
+      return result
+    } catch (error) {
+      this.db.run('ROLLBACK')
+      throw error
+    }
+  }
+
+  /**
    * Return the snapshot tier (lite/standard/full) or null for non-snapshot databases.
    * Reads from snapshot_meta, falls back to capability probing.
    * @returns {string|null}
@@ -1046,6 +1068,30 @@ export class DocsDatabase {
 
   getPageByPath(path) {
     return this._getPage.get(path, 'active')
+  }
+
+  getActivePathsIn(keys) {
+    if (!keys || keys.length === 0) return new Set()
+
+    const activePaths = new Set()
+    const chunkSize = 900
+
+    for (let index = 0; index < keys.length; index += chunkSize) {
+      const chunk = keys.slice(index, index + chunkSize)
+      const placeholders = chunk.map(() => '?').join(',')
+      const rows = this.db.query(`
+        SELECT path
+        FROM pages
+        WHERE status = 'active'
+          AND path IN (${placeholders})
+      `).all(...chunk)
+
+      for (const row of rows) {
+        activePaths.add(row.path)
+      }
+    }
+
+    return activePaths
   }
 
   getDocumentSections(key) {

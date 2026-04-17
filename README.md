@@ -261,7 +261,7 @@ apple-docs sync --full --parallel 10 --concurrency 50 --rate 100 --index
 | --- | --- |
 | `--roots <a,b,c>` | Limit sync to specific frameworks |
 | `--sources <a,b,c>` | Limit sync to specific sources |
-| `--full` | Fetch everything the sources expose |
+| `--full` | Fetch everything the sources expose, including the full packages catalog |
 | `--parallel <n>` | Work on up to `n` frameworks at once |
 | `--concurrency <n>` | Cap simultaneous network requests |
 | `--rate <n>` | Cap requests per second |
@@ -276,7 +276,8 @@ Available sources:
 For the `packages` source:
 
 - The default `official` scope indexes a curated allowlist of apple/* and swiftlang/* repositories using raw GitHub README files only — no authentication required.
-- Set `APPLE_DOCS_PACKAGES_SCOPE=full` with a GitHub token (`GITHUB_TOKEN` or `GH_TOKEN`) to index the entire SwiftPackageIndex catalog (curated allowlist is always included). Requesting `full` without a token falls back to `official` with a warning.
+- `apple-docs sync --full` now requests the full SwiftPackageIndex catalog automatically. Without a GitHub token it still works, but package metadata falls back to public README-only data.
+- Set `APPLE_DOCS_PACKAGES_SCOPE=full` with a GitHub token (`GITHUB_TOKEN` or `GH_TOKEN`) when you want the full catalog with GitHub repository metadata (stars, issues, topics, license, and so on).
 - Set `APPLE_DOCS_PACKAGES_LIMIT=<n>` to cap discovery for the active scope.
 
 ### `update`
@@ -530,9 +531,9 @@ GitHub access:
 
 | Variable | Used by | Description |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | `setup`, `status`, `packages` (full scope) | GitHub token; required only for `APPLE_DOCS_PACKAGES_SCOPE=full` |
+| `GITHUB_TOKEN` | `setup`, `status`, `packages` | GitHub token; optional for package syncs, but enables GitHub metadata and avoids rate limits |
 | `GH_TOKEN` | Same as above | Fallback token name |
-| `APPLE_DOCS_PACKAGES_SCOPE` | `packages` source | `official` (default, curated apple/swiftlang list, no auth) or `full` (entire SwiftPackageIndex catalog, requires a token). Explicit `full` without a token downgrades to `official` with a warning. |
+| `APPLE_DOCS_PACKAGES_SCOPE` | `packages` source | `official` (default, curated apple/swiftlang list, no auth) or `full` (entire SwiftPackageIndex catalog). `sync --full` also requests the full catalog unless this variable overrides it. Without a token, full scope still works in README-only mode. |
 | `APPLE_DOCS_PACKAGES_LIMIT` | `packages` source | Cap package discovery for the active scope |
 
 Logging:

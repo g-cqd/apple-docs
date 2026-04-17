@@ -112,16 +112,25 @@ describe('PackagesAdapter', () => {
     expect(ctx.db.upsertRoot).toHaveBeenCalledWith('packages', 'Swift Package Catalog', 'collection', 'packages')
   })
 
-  test('explicit full scope without a token warns and downgrades to official', async () => {
+  test('explicit full scope without a token keeps the full catalog in raw mode', async () => {
     Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
     process.env.APPLE_DOCS_PACKAGES_SCOPE = 'full'
+
+    fetchImpl.mockImplementation(async (url) => {
+      if (String(url).includes('raw.githubusercontent.com/SwiftPackageIndex/PackageList/main/packages.json')) {
+        return textResponse(JSON.stringify([
+          'https://github.com/pointfreeco/swift-composable-architecture',
+        ]))
+      }
+      return new Response('Not found', { status: 404 })
+    })
 
     const ctx = makeCtx()
     const result = await adapter.discover(ctx)
 
-    // Downgraded to official — should yield the curated allowlist.
     expect(result.keys.length).toBeGreaterThan(0)
     expect(result.keys).toContain('packages/apple/swift-argument-parser')
+    expect(result.keys).toContain('packages/pointfreeco/swift-composable-architecture')
     expect(ctx.logger.warn).toHaveBeenCalled()
   })
 
@@ -135,6 +144,27 @@ describe('PackagesAdapter', () => {
     expect(result.keys).toContain('packages/apple/swift-argument-parser')
     expect(result.keys).toContain('packages/swiftlang/swift-syntax')
     expect(ctx.logger.warn).not.toHaveBeenCalled()
+  })
+
+  test('full sync without a token uses the full package catalog with a warning', async () => {
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+    Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_SCOPE')
+
+    fetchImpl.mockImplementation(async (url) => {
+      if (String(url).includes('raw.githubusercontent.com/SwiftPackageIndex/PackageList/main/packages.json')) {
+        return textResponse(JSON.stringify([
+          'https://github.com/pointfreeco/swift-composable-architecture',
+        ]))
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const ctx = makeCtx()
+    ctx.fullSync = true
+    const result = await adapter.discover(ctx)
+
+    expect(result.keys).toContain('packages/pointfreeco/swift-composable-architecture')
+    expect(ctx.logger.warn).toHaveBeenCalled()
   })
 
   test('official scope caps keys at APPLE_DOCS_PACKAGES_LIMIT', async () => {
@@ -322,6 +352,29 @@ describe('PackagesAdapter', () => {
     expect(urlsSeen.some(u => u.includes('swiftpackageindex.com'))).toBe(false)
   })
 
+  test('full-catalog fetch without a token falls back to raw README mode', async () => {
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+    Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_SCOPE')
+
+    const urlsSeen = []
+    fetchImpl.mockImplementation(async (url) => {
+      const urlStr = String(url)
+      urlsSeen.push(urlStr)
+      if (urlStr === 'https://raw.githubusercontent.com/pointfreeco/swift-composable-architecture/main/README.md') {
+        return textResponse('# swift-composable-architecture\n\nComposable architecture.', 200, { etag: '"readme-etag"' })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const ctx = makeCtx()
+    ctx.fullSync = true
+    const result = await adapter.fetch('packages/pointfreeco/swift-composable-architecture', ctx)
+
+    expect(result.payload.syncScope).toBe('full')
+    expect(result.payload.fetchMode).toBe('raw')
+    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
+  })
+
   test('official-scope fetch falls back through README filename variants', async () => {
     process.env.APPLE_DOCS_PACKAGES_SCOPE = 'official'
     Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
@@ -445,5 +498,32 @@ describe('PackagesAdapter', () => {
     expect(result.document.title).toBe('pointfreeco/swift-dependencies')
     expect(result.sections.find(section => section.sectionKind === 'abstract')).toBeTruthy()
     expect(result.sections.find(section => section.heading === 'Package Metadata')).toBeTruthy()
+  })
+
+  test('normalize preserves full catalog scope with raw fallback metadata', () => {
+    const result = adapter.normalize('packages/pointfreeco/swift-composable-architecture', {
+      repo: {
+        name: 'swift-composable-architecture',
+        full_name: 'pointfreeco/swift-composable-architecture',
+        html_url: 'https://github.com/pointfreeco/swift-composable-architecture',
+        description: 'Composable architecture.',
+        language: null,
+        owner: { login: 'pointfreeco' },
+        default_branch: 'main',
+        topics: [],
+        archived: false,
+        fork: false,
+      },
+      readme: {
+        text: '# swift-composable-architecture\n\nComposable architecture.\n',
+        path: 'README.md',
+      },
+      syncScope: 'full',
+      fetchMode: 'raw',
+    })
+
+    const meta = JSON.parse(result.document.sourceMetadata)
+    expect(meta.scope).toBe('full')
+    expect(meta.source).toBe('raw')
   })
 })

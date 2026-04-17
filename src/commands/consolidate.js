@@ -3,6 +3,7 @@ import { fetchDocPage } from '../apple/api.js'
 import { extractMetadata, extractReferences } from '../apple/extractor.js'
 import { renderPage } from '../apple/renderer.js'
 import { sha256 } from '../lib/hash.js'
+import { pool } from '../lib/pool.js'
 import { readJSON, writeJSON, writeText, stableStringify } from '../storage/files.js'
 import { join } from 'node:path'
 import { existsSync, readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs'
@@ -84,8 +85,12 @@ export async function consolidate(opts, ctx) {
   // Phase 3: retry resolved paths (unless dry-run)
   if (!dryRun && resolvedPaths.length > 0) {
     logger.info(`Retrying ${resolvedPaths.length} resolved paths...`)
+    const concurrency = Math.max(
+      1,
+      ctx.semaphore?.max ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10),
+    )
 
-    for (const { oldPath, newPath, root } of resolvedPaths) {
+    await pool(resolvedPaths, concurrency, async ({ oldPath, newPath, root }) => {
       // Remove the old failed entry
       db.db.run("DELETE FROM crawl_state WHERE path = ?", [oldPath])
 
@@ -94,7 +99,7 @@ export async function consolidate(opts, ctx) {
       if (existing) {
         retried++
         retriedOk++
-        continue
+        return
       }
 
       // Fetch the correct URL
@@ -148,7 +153,7 @@ export async function consolidate(opts, ctx) {
         retried++
         logger.warn(`Retry failed: ${newPath}`, { error: e.message })
       }
-    }
+    })
   }
 
   // Count what's left

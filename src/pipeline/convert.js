@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { renderPage } from '../apple/renderer.js'
+import { pool } from '../lib/pool.js'
 import { readJSON, writeText } from '../storage/files.js'
 
 /**
@@ -9,7 +10,7 @@ import { readJSON, writeText } from '../storage/files.js'
  * @param {import('../lib/logger.js').Logger} logger
  * @param {function} [onProgress]
  */
-export async function convertAll(db, dataDir, logger, onProgress, filters = {}) {
+export async function convertAll(db, dataDir, logger, onProgress, filters = {}, opts = {}) {
   let pages = db.getUnconvertedPages()
   const rootSet = filters.roots ? new Set(filters.roots.map(root => root.toLowerCase())) : null
   const sourceSet = filters.sources ? new Set(filters.sources.map(source => source.toLowerCase())) : null
@@ -22,16 +23,18 @@ export async function convertAll(db, dataDir, logger, onProgress, filters = {}) 
   }
 
   let done = 0
+  const concurrency = Math.max(1, opts.semaphore?.max ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10))
+  const convertPageImpl = opts.convertPage ?? convertPage
 
-  for (const { path } of pages) {
+  await pool(pages, concurrency, async ({ path }) => {
     try {
-      const ok = await convertPage(db, dataDir, path)
+      const ok = await convertPageImpl(db, dataDir, path)
       if (ok !== false) done++
       onProgress?.({ done, total: pages.length, path })
     } catch (e) {
       logger.warn(`Convert failed: ${path}`, { error: e.message })
     }
-  }
+  })
 
   return { converted: done, total: pages.length }
 }

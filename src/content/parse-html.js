@@ -23,6 +23,50 @@ const BLOCK_TAGS = new Set([
 
 /** Elements to strip entirely (including their content). */
 const STRIP_ELEMENTS = ['nav', 'header', 'footer', 'script', 'style', 'noscript']
+const stripNestedElementRegexCache = new Map()
+const stripSingleElementRegexCache = new Map()
+const selectorIdRegexCache = new Map()
+const selectorClassRegexCache = new Map()
+const openTagRegexCache = new Map()
+const SECTION_SPLIT_REGEX_BY_TAG = {
+  h2: /(<h2[\s>][\s\S]*?<\/h2>)/gi,
+  h3: /(<h3[\s>][\s\S]*?<\/h3>)/gi,
+}
+
+function getStripNestedElementRegex(tag) {
+  if (!stripNestedElementRegexCache.has(tag)) {
+    stripNestedElementRegexCache.set(tag, new RegExp(`<${tag}(\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'gi'))
+  }
+  return stripNestedElementRegexCache.get(tag)
+}
+
+function getStripSingleElementRegex(tag) {
+  if (!stripSingleElementRegexCache.has(tag)) {
+    stripSingleElementRegexCache.set(tag, new RegExp(`<${tag}(\\s[^>]*)?\\s*/?>`, 'gi'))
+  }
+  return stripSingleElementRegexCache.get(tag)
+}
+
+function getSelectorIdRegex(id) {
+  if (!selectorIdRegexCache.has(id)) {
+    selectorIdRegexCache.set(id, new RegExp(`\\bid\\s*=\\s*["']${escapeRegex(id)}["']`))
+  }
+  return selectorIdRegexCache.get(id)
+}
+
+function getSelectorClassRegex(className) {
+  if (!selectorClassRegexCache.has(className)) {
+    selectorClassRegexCache.set(className, new RegExp(`\\bclass\\s*=\\s*["'][^"']*\\b${escapeRegex(className)}\\b[^"']*["']`))
+  }
+  return selectorClassRegexCache.get(className)
+}
+
+function getOpenTagRegex(tagPattern) {
+  if (!openTagRegexCache.has(tagPattern)) {
+    openTagRegexCache.set(tagPattern, new RegExp(`<(${tagPattern})(\\s[^>]*)?>`, 'gi'))
+  }
+  return openTagRegexCache.get(tagPattern)
+}
 
 // ---------------------------------------------------------------------------
 // Entity decoding
@@ -152,17 +196,20 @@ export function extractMetaInfo(html) {
 function stripElements(html, tags) {
   let result = html
   for (const tag of tags) {
+    const nestedPattern = getStripNestedElementRegex(tag)
+    const singlePattern = getStripSingleElementRegex(tag)
+
     // Iteratively strip to handle nesting
     let prev
     do {
       prev = result
-      result = result.replace(
-        new RegExp(`<${tag}(\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'gi'),
-        '',
-      )
+      nestedPattern.lastIndex = 0
+      result = result.replace(nestedPattern, '')
     } while (result !== prev)
+
     // Also strip self-closing or unclosed tags
-    result = result.replace(new RegExp(`<${tag}(\\s[^>]*)?\\s*/?>`, 'gi'), '')
+    singlePattern.lastIndex = 0
+    result = result.replace(singlePattern, '')
   }
   return result
 }
@@ -187,24 +234,24 @@ function extractBySelector(html, selector) {
     const tag = idMatch[1] || '\\w+'
     const id = idMatch[2]
     tagPattern = tag
-    attrFilter = new RegExp(`\\bid\\s*=\\s*["']${escapeRegex(id)}["']`)
+    attrFilter = getSelectorIdRegex(id)
   } else if (classMatch) {
     const tag = classMatch[1] || '\\w+'
     const cls = classMatch[2]
     tagPattern = tag
-    attrFilter = new RegExp(`\\bclass\\s*=\\s*["'][^"']*\\b${escapeRegex(cls)}\\b[^"']*["']`)
+    attrFilter = getSelectorClassRegex(cls)
   } else {
     tagPattern = escapeRegex(selector)
   }
 
   // Find the first opening tag that matches
-  const openTagRe = new RegExp(`<(${tagPattern})(\\s[^>]*)?>`, 'gi')
+  const openTagRe = getOpenTagRegex(tagPattern)
+  openTagRe.lastIndex = 0
   let match
   while ((match = openTagRe.exec(html)) !== null) {
     if (attrFilter && !attrFilter.test(match[0])) continue
 
     const actualTag = match[1]
-    const _startIndex = match.index + match[0].length
 
     // Extract balanced inner HTML
     const inner = extractBalancedInner(html, actualTag, match.index)
@@ -319,7 +366,8 @@ export function extractHtmlContent(html, opts = {}) {
 
   const hasH2 = /<h2[\s>]/i.test(clean)
   const splitTag = hasH2 ? 'h2' : 'h3'
-  const splitRe = new RegExp(`(<${splitTag}[\\s>][\\s\\S]*?<\\/${splitTag}>)`, 'gi')
+  const splitRe = SECTION_SPLIT_REGEX_BY_TAG[splitTag]
+  splitRe.lastIndex = 0
 
   const parts = clean.split(splitRe)
 

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { Semaphore } from '../../src/lib/semaphore.js'
+import { BackpressureError, Semaphore } from '../../src/lib/semaphore.js'
 
 describe('Semaphore', () => {
   test('acquire resolves immediately when under limit', async () => {
@@ -91,6 +91,35 @@ describe('Semaphore', () => {
     ])
 
     expect(maxConcurrent).toBe(2)
+    expect(sem.active).toBe(0)
+  })
+
+  test('acquire throws BackpressureError when maxWaiters is exceeded', async () => {
+    const sem = new Semaphore(1, { maxWaiters: 1 })
+    await sem.acquire()
+
+    const firstWaiter = sem.acquire()
+    await expect(sem.acquire()).rejects.toBeInstanceOf(BackpressureError)
+
+    sem.release()
+    await firstWaiter
+    sem.release()
+  })
+
+  test('defaults to an unbounded waiter queue when maxWaiters is omitted', async () => {
+    const sem = new Semaphore(1)
+    await sem.acquire()
+
+    const waiters = [sem.acquire(), sem.acquire(), sem.acquire()]
+
+    sem.release()
+    await waiters[0]
+    sem.release()
+    await waiters[1]
+    sem.release()
+    await waiters[2]
+    sem.release()
+
     expect(sem.active).toBe(0)
   })
 })
