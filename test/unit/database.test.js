@@ -18,7 +18,7 @@ afterEach(() => {
 describe('DocsDatabase', () => {
   test('creates schema on init', () => {
     const row = db.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
-    expect(row.value).toBe('7')
+    expect(row.value).toBe('8')
   })
 
   test('upsertRoot inserts and returns id', () => {
@@ -172,7 +172,7 @@ describe('DocsDatabase', () => {
     expect(db.getRefsBySource(page.id).length).toBe(0)
   })
 
-  test('schema v7 keeps source metadata and normalized tables available', () => {
+  test('schema v8 keeps source metadata, normalized tables, and sync checkpoints available', () => {
     // Check roots has source_type column
     const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
     const rootRow = db.db.query('SELECT source_type FROM roots WHERE slug = ?').get('swiftui')
@@ -209,6 +209,8 @@ describe('DocsDatabase', () => {
     const packagesRoot = db.upsertRoot('packages', 'Swift Package Catalog', 'collection', 'test')
     const packagesRow = db.db.query('SELECT source_type FROM roots WHERE id = ?').get(packagesRoot.id)
     expect(packagesRow.source_type).toBe('packages')
+
+    expect(db.db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sync_checkpoint'").get()).toBeTruthy()
   })
 
   test('tx commits writes and returns the callback result', () => {
@@ -369,6 +371,17 @@ describe('DocsDatabase', () => {
     expect(db.getSnapshotMeta('snapshot_tier')).toBe('full')
   })
 
+  test('setSyncCheckpoint + getSyncCheckpoint round-trips structured values', () => {
+    db.setSyncCheckpoint('body-index:full', { indexed: 12, lastDocumentId: 99 })
+    expect(db.getSyncCheckpoint('body-index:full')).toEqual({ indexed: 12, lastDocumentId: 99 })
+  })
+
+  test('clearSyncCheckpoint removes saved checkpoint state', () => {
+    db.setSyncCheckpoint('body-index:full', { indexed: 12 })
+    db.clearSyncCheckpoint('body-index:full')
+    expect(db.getSyncCheckpoint('body-index:full')).toBeNull()
+  })
+
   test('getTier prefers snapshot_meta when present', () => {
     db.setSnapshotMeta('snapshot_tier', 'full')
     expect(db.getTier()).toBe('full')
@@ -394,7 +407,7 @@ describe('DocsDatabase', () => {
   })
 
   test('getSchemaVersion returns current schema version', () => {
-    expect(db.getSchemaVersion()).toBe(7)
+    expect(db.getSchemaVersion()).toBe(8)
   })
 
   test('getStats returns aggregate data', () => {

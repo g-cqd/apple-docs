@@ -83,7 +83,7 @@ export async function rebuildBody(_opts, ctx) {
 
   // Delegate to existing full index builder
   const { indexBodyFull } = await import('../pipeline/index-body.js')
-  return indexBodyFull(db, dataDir, logger)
+  return indexBodyFull(db, dataDir, logger, ctx.onProgress)
 }
 
 /**

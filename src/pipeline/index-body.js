@@ -23,34 +23,56 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
     return { indexed: 0, total: 0, errors: 0 }
   }
 
-  const documents = since
-    ? db.db.query(`
-      SELECT id, key, title, abstract_text, declaration_text, headings, source_type
-      FROM documents
-      WHERE updated_at > ?
-      ORDER BY id
-    `).all(since)
-    : db.db.query(`
-      SELECT id, key, title, abstract_text, declaration_text, headings, source_type
-      FROM documents
-      ORDER BY id
-    `).all()
+  const checkpointKey = since ? 'body-index:incremental' : 'body-index:full'
+  const checkpoint = db.getSyncCheckpoint(checkpointKey)
+  const resumeSince = checkpoint?.since ?? since
+  const total = checkpoint?.total ?? db.db.query(
+    resumeSince
+      ? 'SELECT COUNT(*) as c FROM documents WHERE updated_at > ?'
+      : 'SELECT COUNT(*) as c FROM documents'
+  ).get(...(resumeSince ? [resumeSince] : [])).c
 
-  if (documents.length === 0) {
-    logger.info(since ? 'Body index is up to date' : 'No normalized documents to index')
+  if (total === 0) {
+    logger.info(resumeSince ? 'Body index is up to date' : 'No normalized documents to index')
+    db.clearSyncCheckpoint(checkpointKey)
     return { indexed: 0, total: 0, errors: 0 }
   }
 
-  logger.info(`${since ? 'Updating' : 'Building'} normalized body index for ${documents.length} documents...`)
-  if (!since) {
+  let indexed = checkpoint?.indexed ?? 0
+  let errors = checkpoint?.errors ?? 0
+  let lastDocumentId = checkpoint?.lastDocumentId ?? 0
+  const batchSize = 500
+
+  logger.info(
+    checkpoint
+      ? `Resuming normalized body index at ${indexed}/${total} documents...`
+      : `${resumeSince ? 'Updating' : 'Building'} normalized body index for ${total} documents...`
+  )
+
+  if (!resumeSince && !checkpoint) {
     db.clearBodyIndex()
   }
 
-  let indexed = 0
-  let errors = 0
+  while (true) {
+    const documents = resumeSince
+      ? db.db.query(`
+        SELECT id, key, title, abstract_text, declaration_text, headings, source_type
+        FROM documents
+        WHERE updated_at > ? AND id > ?
+        ORDER BY id
+        LIMIT ?
+      `).all(resumeSince, lastDocumentId, batchSize)
+      : db.db.query(`
+        SELECT id, key, title, abstract_text, declaration_text, headings, source_type
+        FROM documents
+        WHERE id > ?
+        ORDER BY id
+        LIMIT ?
+      `).all(lastDocumentId, batchSize)
 
-  db.db.run('BEGIN')
-  try {
+    if (documents.length === 0) break
+
+    const inserts = []
     for (const document of documents) {
       try {
         let sections = db.db.query(`
@@ -73,29 +95,44 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
 
         const body = renderPlainText(document, sections)
         if (body.length > 0) {
-          db.insertBody(document.id, body)
+          inserts.push({ id: document.id, body })
           indexed++
         }
       } catch {
         errors++
       }
+      lastDocumentId = document.id
+    }
 
-      if (indexed % 500 === 0 && indexed > 0) {
+    if (inserts.length > 0) {
+      db.db.run('BEGIN')
+      try {
+        for (const insert of inserts) {
+          db.insertBody(insert.id, insert.body)
+        }
         db.db.run('COMMIT')
-        db.db.run('BEGIN')
-      }
-      if (indexed % 5000 === 0 && indexed > 0) {
-        onProgress?.({ indexed, total: documents.length, errors })
-        logger.info(`Indexed ${indexed}/${documents.length} documents...`)
+      } catch (error) {
+        db.db.run('ROLLBACK')
+        throw error
       }
     }
-    db.db.run('COMMIT')
-  } catch (error) {
-    db.db.run('ROLLBACK')
-    throw error
+
+    db.setSyncCheckpoint(checkpointKey, {
+      since: resumeSince,
+      total,
+      indexed,
+      errors,
+      lastDocumentId,
+    })
+
+    onProgress?.({ indexed, total, errors, resumed: !!checkpoint, lastDocumentId })
+    if (indexed % 5000 === 0 || documents.length < batchSize) {
+      logger.info(`Indexed ${indexed}/${total} documents...`)
+    }
   }
 
   db.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('body_indexed_at', ?)", [new Date().toISOString()])
+  db.clearSyncCheckpoint(checkpointKey)
   logger.info(`Body index complete: ${indexed} documents indexed, ${errors} errors`)
-  return { indexed, total: documents.length, errors }
+  return { indexed, total, errors }
 }

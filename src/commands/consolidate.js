@@ -8,6 +8,13 @@ import { readJSON, writeJSON, writeText, stableStringify } from '../storage/file
 import { join } from 'node:path'
 import { existsSync, readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs'
 
+const CONSOLIDATE_RETRY_CHECKPOINT = 'consolidate:retry-resolved'
+
+function isInvalidFailedPath(path) {
+  const renorm = normalizeIdentifier(path)
+  return renorm === null || path.includes('#') || (renorm !== path && renorm !== null)
+}
+
 /**
  * Consolidate command: analyze and fix failed crawl entries.
  *
@@ -23,187 +30,220 @@ export async function consolidate(opts, ctx) {
   const dryRun = opts.dryRun ?? false
 
   db.setActivity('consolidate')
+  try {
+    let analyzed = 0
+    let cleaned = 0
+    let resolved = 0
+    let retried = 0
+    let retriedOk = 0
+    let resolvedPaths = []
 
-  const all = db.db.query("SELECT path, root_slug, error FROM crawl_state WHERE status = 'failed'").all()
-  logger.info(`Analyzing ${all.length} failed entries...`)
+    const retryCheckpoint = dryRun ? null : db.getSyncCheckpoint(CONSOLIDATE_RETRY_CHECKPOINT)
+    if (retryCheckpoint) {
+      analyzed = retryCheckpoint.analyzed ?? 0
+      cleaned = retryCheckpoint.cleaned ?? 0
+      resolved = retryCheckpoint.resolved ?? 0
+      retried = retryCheckpoint.retried ?? 0
+      retriedOk = retryCheckpoint.retriedOk ?? 0
+      resolvedPaths = retryCheckpoint.resolvedPaths ?? []
+      logger.info(`Resuming ${resolvedPaths.length - (retryCheckpoint.nextIndex ?? 0)} resolved retries from checkpoint...`)
+    } else {
+      const all = db.db.query("SELECT path, root_slug, error FROM crawl_state WHERE status = 'failed'").all()
+      analyzed = all.length
+      logger.info(`Analyzing ${all.length} failed entries...`)
 
-  let cleaned = 0
-  let resolved = 0
-  let retried = 0
-  let retriedOk = 0
-  const _genuine = 0
-  const resolvedPaths = [] // { oldPath, newPath, root }
-
-  // Phase 1: clean up entries that are not valid standalone pages
-  for (const f of all) {
-    const renorm = normalizeIdentifier(f.path)
-    // Remove if: normalizer rejects it, path contains fragment, or normalized form differs (was mangled)
-    const isInvalid = renorm === null || f.path.includes('#') || (renorm !== f.path && renorm !== null)
-    if (isInvalid) {
-      if (!dryRun) {
-        db.db.run("DELETE FROM crawl_state WHERE path = ?", [f.path])
-      }
-      cleaned++
-    }
-  }
-  logger.info(`Cleaned ${cleaned} invalid entries (fragments, dot-operators, bad URLs)`)
-
-  // Phase 2: for remaining failures, check parent pages for correct URL
-  const remaining = db.db.query("SELECT path, root_slug, error FROM crawl_state WHERE status = 'failed'").all()
-
-  for (const f of remaining) {
-    const segments = f.path.split('/')
-    if (segments.length < 2) continue
-
-    const parentPath = segments.slice(0, -1).join('/')
-
-    // Read parent's raw JSON to find the correct reference URL
-    const parentJson = await readJSON(join(dataDir, 'raw-json', `${parentPath}.json`))
-    if (!parentJson) continue
-
-    const _lastSeg = segments[segments.length - 1]
-
-    // Search references for one whose identifier matches this failed path
-    for (const [id, ref] of Object.entries(parentJson.references ?? {})) {
-      const normId = normalizeIdentifier(id)
-      if (normId !== f.path) continue
-
-      // Found the reference — check if its url field gives a different path
-      if (ref.url) {
-        const urlPath = normalizeIdentifier(ref.url)
-        if (urlPath && urlPath !== f.path) {
-          resolvedPaths.push({ oldPath: f.path, newPath: urlPath, root: f.root_slug, title: ref.title })
-          resolved++
-          break
+      // Phase 1: clean up entries that are not valid standalone pages
+      for (const failed of all) {
+        if (!isInvalidFailedPath(failed.path)) continue
+        if (!dryRun) {
+          db.db.run("DELETE FROM crawl_state WHERE path = ?", [failed.path])
         }
+        cleaned++
       }
-    }
-  }
+      logger.info(`Cleaned ${cleaned} invalid entries (fragments, dot-operators, bad URLs)`)
 
-  logger.info(`Resolved ${resolved} paths to correct URLs`)
+      // Phase 2: for remaining failures, check parent pages for correct URL
+      const remaining = dryRun
+        ? all.filter(failed => !isInvalidFailedPath(failed.path))
+        : db.db.query("SELECT path, root_slug, error FROM crawl_state WHERE status = 'failed'").all()
 
-  // Phase 3: retry resolved paths (unless dry-run)
-  if (!dryRun && resolvedPaths.length > 0) {
-    logger.info(`Retrying ${resolvedPaths.length} resolved paths...`)
-    const concurrency = Math.max(
-      1,
-      ctx.semaphore?.max ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10),
-    )
+      for (const failed of remaining) {
+        const segments = failed.path.split('/')
+        if (segments.length < 2) continue
 
-    await pool(resolvedPaths, concurrency, async ({ oldPath, newPath, root }) => {
-      // Remove the old failed entry
-      db.db.run("DELETE FROM crawl_state WHERE path = ?", [oldPath])
+        const parentPath = segments.slice(0, -1).join('/')
+        const parentJson = await readJSON(join(dataDir, 'raw-json', `${parentPath}.json`))
+        if (!parentJson) continue
 
-      // Check if the new path is already known
-      const existing = db.getPage(newPath)
-      if (existing) {
-        retried++
-        retriedOk++
-        return
-      }
+        for (const [id, ref] of Object.entries(parentJson.references ?? {})) {
+          const normId = normalizeIdentifier(id)
+          if (normId !== failed.path || !ref.url) continue
 
-      // Fetch the correct URL
-      try {
-        const { json, etag, lastModified } = await fetchDocPage(newPath, rateLimiter)
-        const jsonStr = await writeJSON(join(dataDir, 'raw-json', `${newPath}.json`), json)
-        const contentHash = sha256(jsonStr)
-        const meta = extractMetadata(json)
-        const rootSlug = extractRootSlug(newPath)
-        const rootEntry = db.getRootBySlug(rootSlug ?? root)
-
-        if (rootEntry) {
-          db.upsertPage({
-            rootId: rootEntry.id,
-            path: newPath,
-            url: `https://developer.apple.com/tutorials/data/documentation/${newPath}.json`,
-            title: meta.title,
-            role: meta.role,
-            roleHeading: meta.roleHeading,
-            abstract: meta.abstract,
-            platforms: meta.platforms,
-            declaration: meta.declaration,
-            etag,
-            lastModified,
-            contentHash,
-            downloadedAt: new Date().toISOString(),
-          })
-
-          // Convert to markdown
-          try {
-            const markdown = renderPage(json, newPath)
-            await writeText(join(dataDir, 'markdown', `${newPath}.md`), markdown)
-            db.markConverted(newPath)
-          } catch {}
-
-          // Seed new references
-          const refs = extractReferences(json)
-          for (const refPath of refs) {
-            const refRoot = extractRootSlug(refPath)
-            if (refRoot === rootSlug) {
-              db.seedCrawlIfNew(refPath, rootSlug, 0)
-            }
+          const urlPath = normalizeIdentifier(ref.url)
+          if (urlPath && urlPath !== failed.path) {
+            resolvedPaths.push({ oldPath: failed.path, newPath: urlPath, root: failed.root_slug, title: ref.title })
+            resolved++
+            break
           }
         }
-
-        db.setCrawlState(newPath, 'processed', root, 0)
-        retried++
-        retriedOk++
-      } catch (e) {
-        db.setCrawlState(newPath, 'failed', root, 0, e.message)
-        retried++
-        logger.warn(`Retry failed: ${newPath}`, { error: e.message })
       }
-    })
-  }
 
-  // Count what's left
-  const stillFailed = db.db.query("SELECT COUNT(*) as c FROM crawl_state WHERE status = 'failed'").get().c
+      logger.info(`Resolved ${resolved} paths to correct URLs`)
 
-  // Phase 4: minify existing JSON files if requested
-  let minified = 0
-  let minifySaved = 0
+      if (!dryRun && resolvedPaths.length > 0) {
+        db.setSyncCheckpoint(CONSOLIDATE_RETRY_CHECKPOINT, {
+          analyzed,
+          cleaned,
+          resolved,
+          retried,
+          retriedOk,
+          nextIndex: 0,
+          resolvedPaths,
+        })
+      }
+    }
 
-  if (opts.minify && !dryRun) {
-    const rawDir = join(dataDir, 'raw-json')
-    logger.info('Minifying JSON files...')
-    const result = minifyDir(rawDir, logger)
-    minified = result.count
-    minifySaved = result.saved
-    logger.info(`Minified ${minified} files, saved ${(minifySaved / 1e6).toFixed(1)} MB`)
-  }
+    // Phase 3: retry resolved paths (unless dry-run)
+    if (!dryRun && resolvedPaths.length > 0) {
+      logger.info(`Retrying ${resolvedPaths.length} resolved paths...`)
+      const concurrency = Math.max(
+        1,
+        ctx.semaphore?.max ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10),
+      )
+      let nextIndex = retryCheckpoint?.nextIndex ?? 0
 
-  // Phase 5: rebuild body index if requested
-  let bodyIndexed = 0
-  if (opts.indexBody && !dryRun) {
-    const { indexBodyFull } = await import('../pipeline/index-body.js')
-    const idxResult = await indexBodyFull(db, dataDir, logger)
-    bodyIndexed = idxResult.indexed
-  }
+      while (nextIndex < resolvedPaths.length) {
+        const batch = resolvedPaths.slice(nextIndex, nextIndex + concurrency)
+        await pool(batch, concurrency, async ({ oldPath, newPath, root }) => {
+          const existing = db.getPage(newPath)
+          if (existing) {
+            db.db.run("DELETE FROM crawl_state WHERE path = ?", [oldPath])
+            retried++
+            retriedOk++
+            return
+          }
 
-  // Phase 6: verify snapshot/corpus integrity (if requested)
-  let snapshotVerification = null
-  let corpusIntegrity = null
-  if (opts.verify) {
-    snapshotVerification = verifySnapshot(db, logger)
-    corpusIntegrity = verifyCorpusIntegrity(db, dataDir, logger)
-  }
+          try {
+            const { json, etag, lastModified } = await fetchDocPage(newPath, rateLimiter)
+            const jsonStr = await writeJSON(join(dataDir, 'raw-json', `${newPath}.json`), json)
+            const contentHash = sha256(jsonStr)
+            const meta = extractMetadata(json)
+            const rootSlug = extractRootSlug(newPath)
+            const rootEntry = db.getRootBySlug(rootSlug ?? root)
 
-  db.clearActivity()
+            if (rootEntry) {
+              db.upsertPage({
+                rootId: rootEntry.id,
+                path: newPath,
+                url: `https://developer.apple.com/tutorials/data/documentation/${newPath}.json`,
+                title: meta.title,
+                role: meta.role,
+                roleHeading: meta.roleHeading,
+                abstract: meta.abstract,
+                platforms: meta.platforms,
+                declaration: meta.declaration,
+                etag,
+                lastModified,
+                contentHash,
+                downloadedAt: new Date().toISOString(),
+              })
 
-  return {
-    analyzed: all.length,
-    cleaned,
-    resolved,
-    retried,
-    retriedOk,
-    genuine: stillFailed,
-    minified,
-    minifySaved,
-    bodyIndexed,
-    snapshotVerification,
-    corpusIntegrity,
-    resolvedPaths: dryRun ? resolvedPaths : undefined,
-    dryRun,
+              try {
+                const markdown = renderPage(json, newPath)
+                await writeText(join(dataDir, 'markdown', `${newPath}.md`), markdown)
+                db.markConverted(newPath)
+              } catch {}
+
+              const refs = extractReferences(json)
+              for (const refPath of refs) {
+                const refRoot = extractRootSlug(refPath)
+                if (refRoot === rootSlug) {
+                  db.seedCrawlIfNew(refPath, rootSlug, 0)
+                }
+              }
+            }
+
+            db.setCrawlState(newPath, 'processed', root, 0)
+            db.db.run("DELETE FROM crawl_state WHERE path = ?", [oldPath])
+            retried++
+            retriedOk++
+          } catch (error) {
+            db.setCrawlState(oldPath, 'failed', root, 0, error.message)
+            retried++
+            logger.warn(`Retry failed: ${newPath}`, { error: error.message })
+          }
+        })
+
+        nextIndex += batch.length
+        db.setSyncCheckpoint(CONSOLIDATE_RETRY_CHECKPOINT, {
+          analyzed,
+          cleaned,
+          resolved,
+          retried,
+          retriedOk,
+          nextIndex,
+          resolvedPaths,
+        })
+        ctx.onProgress?.({
+          phase: 'consolidate-retry',
+          completed: nextIndex,
+          total: resolvedPaths.length,
+          retried,
+          retriedOk,
+        })
+      }
+
+      db.clearSyncCheckpoint(CONSOLIDATE_RETRY_CHECKPOINT)
+    }
+
+    const stillFailed = db.db.query("SELECT COUNT(*) as c FROM crawl_state WHERE status = 'failed'").get().c
+
+    // Phase 4: minify existing JSON files if requested
+    let minified = 0
+    let minifySaved = 0
+
+    if (opts.minify && !dryRun) {
+      const rawDir = join(dataDir, 'raw-json')
+      logger.info('Minifying JSON files...')
+      const result = minifyDir(rawDir, logger)
+      minified = result.count
+      minifySaved = result.saved
+      logger.info(`Minified ${minified} files, saved ${(minifySaved / 1e6).toFixed(1)} MB`)
+    }
+
+    // Phase 5: rebuild body index if requested
+    let bodyIndexed = 0
+    if (opts.indexBody && !dryRun) {
+      const { indexBodyFull } = await import('../pipeline/index-body.js')
+      const idxResult = await indexBodyFull(db, dataDir, logger)
+      bodyIndexed = idxResult.indexed
+    }
+
+    // Phase 6: verify snapshot/corpus integrity (if requested)
+    let snapshotVerification = null
+    let corpusIntegrity = null
+    if (opts.verify) {
+      snapshotVerification = verifySnapshot(db, logger)
+      corpusIntegrity = verifyCorpusIntegrity(db, dataDir, logger)
+    }
+
+    return {
+      analyzed,
+      cleaned,
+      resolved,
+      retried,
+      retriedOk,
+      genuine: stillFailed,
+      minified,
+      minifySaved,
+      bodyIndexed,
+      snapshotVerification,
+      corpusIntegrity,
+      resolvedPaths: dryRun ? resolvedPaths : undefined,
+      dryRun,
+    }
+  } finally {
+    db.clearActivity()
   }
 }
 

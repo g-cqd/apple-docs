@@ -6,8 +6,6 @@ import { Database } from 'bun:sqlite'
 import { sha256 } from '../lib/hash.js'
 import { ensureDir, writeJSON } from '../storage/files.js'
 
-const SCHEMA_VERSION = 7
-
 const LITE_DROP = [
   'document_sections',
   'documents_body_fts',
@@ -47,6 +45,7 @@ export async function snapshotBuild(opts, ctx) {
   const tier = opts.tier ?? 'standard'
   const outDir = opts.out ?? 'dist'
   const tag = opts.tag ?? `snapshot-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
+  const schemaVersion = db.getSchemaVersion()
 
   if (!['lite', 'standard', 'full'].includes(tier)) {
     throw new Error(`Invalid tier "${tier}". Must be one of: lite, standard, full`)
@@ -96,7 +95,7 @@ export async function snapshotBuild(opts, ctx) {
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_version', tag])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_tier', tier])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_created_at', new Date().toISOString()])
-      copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_schema_version', String(SCHEMA_VERSION)])
+      copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_schema_version', String(schemaVersion)])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_document_count', String(documentCount)])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_page_count', String(pageCount)])
 
@@ -113,7 +112,7 @@ export async function snapshotBuild(opts, ctx) {
     // 6. Build manifest
     const manifest = {
       version: tag,
-      schemaVersion: SCHEMA_VERSION,
+      schemaVersion,
       tier,
       createdAt: new Date().toISOString(),
       documentCount,

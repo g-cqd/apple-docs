@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite'
 import { mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-const SCHEMA_VERSION = 7
+const SCHEMA_VERSION = 8
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -111,6 +111,12 @@ CREATE TABLE IF NOT EXISTS update_log (
   del_count   INTEGER NOT NULL DEFAULT 0,
   err_count   INTEGER NOT NULL DEFAULT 0,
   duration_ms INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS sync_checkpoint (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 `
 
@@ -440,6 +446,13 @@ export class DocsDatabase {
             WHERE key = ? OR key LIKE ?
           `, [sourceType, slug, `${slug}/%`])
         }
+      }
+      if (current < 8) {
+        this.db.run(`CREATE TABLE IF NOT EXISTS sync_checkpoint (
+          key        TEXT PRIMARY KEY,
+          value      TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )`)
       }
       this.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)", [String(SCHEMA_VERSION)])
       this.db.run('COMMIT')
@@ -897,6 +910,9 @@ export class DocsDatabase {
 
     this._getSnapshotMeta = this.db.query('SELECT value FROM snapshot_meta WHERE key = ?')
     this._setSnapshotMeta = this.db.query('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)')
+    this._getSyncCheckpoint = this.db.query('SELECT value FROM sync_checkpoint WHERE key = ?')
+    this._setSyncCheckpoint = this.db.query('INSERT OR REPLACE INTO sync_checkpoint (key, value, updated_at) VALUES (?, ?, ?)')
+    this._clearSyncCheckpoint = this.db.query('DELETE FROM sync_checkpoint WHERE key = ?')
   }
 
   upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
@@ -1407,6 +1423,25 @@ export class DocsDatabase {
     if (key === 'snapshot_tier') {
       this._tier = undefined
     }
+  }
+
+  getSyncCheckpoint(key) {
+    const row = this._getSyncCheckpoint.get(key)
+    if (!row) return null
+    try {
+      return JSON.parse(row.value)
+    } catch {
+      return row.value
+    }
+  }
+
+  setSyncCheckpoint(key, value) {
+    const serialized = typeof value === 'string' ? value : JSON.stringify(value)
+    this._setSyncCheckpoint.run(key, serialized, new Date().toISOString())
+  }
+
+  clearSyncCheckpoint(key) {
+    this._clearSyncCheckpoint.run(key)
   }
 
   /**
