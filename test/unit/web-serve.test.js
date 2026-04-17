@@ -173,10 +173,24 @@ describe('Dev Server (P7-E)', () => {
     const res = await fetch(`${serverInfo.url}/data/search/search-manifest.json`)
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toContain('no-cache')
+    expect(res.headers.get('etag')).toBeTruthy()
     const manifest = await res.json()
     expect(manifest.version).toBe(2)
     expect(manifest.files).toBeDefined()
     expect(manifest.files['title-index']).toMatch(/^title-index\.[0-9a-f]{10}\.json$/)
+  })
+
+  test('search manifest endpoint returns 304 for matching If-None-Match', async () => {
+    const first = await fetch(`${serverInfo.url}/data/search/search-manifest.json`)
+    const etag = first.headers.get('etag')
+
+    const second = await fetch(`${serverInfo.url}/data/search/search-manifest.json`, {
+      headers: { 'If-None-Match': etag },
+    })
+
+    expect(etag).toBeTruthy()
+    expect(second.status).toBe(304)
+    expect(second.headers.get('etag')).toBe(etag)
   })
 
   test('content-hashed search file returns immutable cache headers', async () => {
@@ -187,8 +201,30 @@ describe('Dev Server (P7-E)', () => {
     const res = await fetch(`${serverInfo.url}/data/search/${titleFile}`)
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toContain('immutable')
+    expect(res.headers.get('etag')).toBeTruthy()
     const data = await res.json()
     expect(data.v).toBe(2)
+  })
+
+  test('document pages return gzip and stable etags when requested', async () => {
+    const first = await fetch(`${serverInfo.url}/docs/documentation/swiftui/view`, {
+      headers: { 'Accept-Encoding': 'gzip' },
+    })
+    const etag = first.headers.get('etag')
+
+    expect(first.status).toBe(200)
+    expect(first.headers.get('content-encoding')).toBe('gzip')
+    expect(etag).toBeTruthy()
+
+    const second = await fetch(`${serverInfo.url}/docs/documentation/swiftui/view`, {
+      headers: {
+        'Accept-Encoding': 'gzip',
+        'If-None-Match': etag,
+      },
+    })
+
+    expect(second.status).toBe(304)
+    expect(second.headers.get('etag')).toBe(etag)
   })
 
   test('serves search page at /search', async () => {

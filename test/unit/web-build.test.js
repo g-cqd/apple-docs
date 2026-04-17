@@ -158,9 +158,35 @@ describe('buildStaticSite (P7-D)', () => {
   test('bundled build references core.js in HTML', async () => {
     await buildStaticSite({ out: outDir }, ctx)
     const html = readFileSync(join(outDir, 'docs', 'documentation', 'swiftui', 'view', 'index.html'), 'utf8')
-    expect(html).toContain('core.js')
+    expect(html.match(/core\.js/g)).toHaveLength(1)
     expect(html).not.toContain('search.js')
     expect(html).not.toContain('page-toc.js')
+    expect(html).not.toContain('theme.js')
+  })
+
+  test('bundled framework listing references listing.js instead of per-feature scripts', async () => {
+    await buildStaticSite({ out: outDir }, ctx)
+    const html = readFileSync(join(outDir, 'docs', 'swiftui', 'index.html'), 'utf8')
+    expect(html).toContain('listing.js')
+    expect(html).not.toContain('collection-filters.js')
+    expect(html).not.toContain('tree-view.js')
+  })
+
+  test('bundled search page references core.js once and keeps search-page.js standalone', async () => {
+    await buildStaticSite({ out: outDir }, ctx)
+    const html = readFileSync(join(outDir, 'search', 'index.html'), 'utf8')
+    expect(html.match(/core\.js/g)).toHaveLength(1)
+    expect(html).not.toContain('theme.js')
+    expect(html).toContain('search-page.js')
+  })
+
+  test('bundled build does not emit duplicate per-file assets', async () => {
+    await buildStaticSite({ out: outDir }, ctx)
+    expect(existsSync(join(outDir, 'assets', 'theme.js'))).toBe(false)
+    expect(existsSync(join(outDir, 'assets', 'search.js'))).toBe(false)
+    expect(existsSync(join(outDir, 'assets', 'page-toc.js'))).toBe(false)
+    expect(existsSync(join(outDir, 'assets', 'collection-filters.js'))).toBe(false)
+    expect(existsSync(join(outDir, 'assets', 'tree-view.js'))).toBe(false)
   })
 
   test('builds through a staging directory and cleans temp siblings after success', async () => {

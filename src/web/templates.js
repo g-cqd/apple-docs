@@ -143,7 +143,7 @@ function buildHead({ title, description, siteConfig }) {
   const escapedTitle = escapeAttr(title)
   const escapedDesc = escapeAttr(description ?? '')
   const cssHref = `${siteConfig.baseUrl}/assets/style.css`
-  const themeHref = `${siteConfig.baseUrl}/assets/theme.js`
+  const headScriptHref = `${siteConfig.baseUrl}/assets/${siteConfig.bundled ? 'core.js' : 'theme.js'}`
   return `<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -151,7 +151,7 @@ function buildHead({ title, description, siteConfig }) {
   ${escapedDesc ? `<meta name="description" content="${escapedDesc}">` : ''}
   <link rel="preload" href="${escapeAttr(cssHref)}" as="style">
   <link rel="stylesheet" href="${escapeAttr(cssHref)}">
-  <script src="${escapeAttr(themeHref)}" defer></script>
+  <script src="${escapeAttr(headScriptHref)}" defer></script>
 </head>`
 }
 
@@ -198,10 +198,13 @@ const BUNDLES = {
 function buildScripts(siteConfig, groups) {
   const base = siteConfig.baseUrl
   if (siteConfig.bundled) {
-    return groups.map(g => {
-      const file = BUNDLES[g] ? `${g}.js` : `${g}.js`
-      return `<script src="${escapeAttr(`${base}/assets/${file}`)}" defer></script>`
-    }).join('\n')
+    return groups
+      .filter(g => g !== 'core')
+      .map(g => {
+        const file = BUNDLES[g] ? `${g}.js` : `${g}.js`
+        return `<script src="${escapeAttr(`${base}/assets/${file}`)}" defer></script>`
+      })
+      .join('\n')
   }
   // Dev mode — emit individual files
   const files = []

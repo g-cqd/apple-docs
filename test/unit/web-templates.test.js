@@ -246,6 +246,7 @@ describe('renderDocumentPage', () => {
     const config = { ...siteConfig, bundled: true }
     const page = renderDocumentPage(mockDoc, mockSections, config)
     expect(page).toContain('/assets/core.js')
+    expect(page).not.toContain('/assets/theme.js')
     expect(page).not.toContain('/assets/search.js')
     expect(page).not.toContain('/assets/page-toc.js')
   })

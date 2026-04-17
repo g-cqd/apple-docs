@@ -3,6 +3,7 @@ import { rename, rm } from 'node:fs/promises'
 import { readFileSync, existsSync } from 'node:fs'
 import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage } from './templates.js'
 import { generateSearchArtifacts } from './search-artifacts.js'
+import { createWebRenderCache } from './render-cache.js'
 import { ensureDir } from '../storage/files.js'
 import { pool } from '../lib/pool.js'
 import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
@@ -62,18 +63,10 @@ export async function buildStaticSite(opts, ctx) {
     await Bun.write(join(buildDir, 'assets', 'core.js'), coreBundle)
     await Bun.write(join(buildDir, 'assets', 'listing.js'), listingBundle)
 
-    // Standalone scripts
+    // Standalone scripts that are still referenced outside the shared bundles.
     for (const file of ['search-page.js', 'lang-toggle.js']) {
       const src = join(srcWebDir, 'assets', file)
       if (existsSync(src)) {
-        await Bun.write(join(buildDir, 'assets', file), readFileSync(src, 'utf8'))
-      }
-    }
-
-    // Also emit individual files for dev compatibility
-    for (const file of ['style.css', 'theme.js', 'search.js', 'search-page.js', 'collection-filters.js', 'page-toc.js', 'tree-view.js', 'lang-toggle.js']) {
-      const src = join(srcWebDir, 'assets', file)
-      if (existsSync(src) && file !== 'style.css') {
         await Bun.write(join(buildDir, 'assets', file), readFileSync(src, 'utf8'))
       }
     }
@@ -93,19 +86,8 @@ export async function buildStaticSite(opts, ctx) {
     await Bun.write(join(buildDir, 'search', 'index.html'), searchHtml)
 
     // 5. Build document pages in batches
-    const knownKeys = new Set(
-      db.db.query('SELECT key FROM documents').all().map(r => r.key)
-    )
-
-    // Pre-build lookup caches to avoid N+1 queries per document
-    const ancestorTitleCache = new Map()
-    const roleHeadingCache = new Map()
-    for (const row of db.db.query('SELECT key, title FROM documents').all()) {
-      ancestorTitleCache.set(row.key, row.title)
-    }
-    for (const row of db.db.query('SELECT key, role_heading FROM documents WHERE role_heading IS NOT NULL').all()) {
-      roleHeadingCache.set(row.key, row.role_heading)
-    }
+    const renderCache = createWebRenderCache(db)
+    const knownKeys = renderCache.getKnownKeys()
 
     const totalDocs = db.db.query('SELECT COUNT(*) as count FROM documents').get().count
     const batchSize = 500
@@ -127,28 +109,10 @@ export async function buildStaticSite(opts, ctx) {
             ).all(doc.id)
             : []
 
-          // Resolve ancestor titles for breadcrumbs from pre-built cache
-          const ancestorTitles = new Map()
-          if (doc.key) {
-            const segs = doc.key.split('/').filter(Boolean)
-            for (let i = 1; i < segs.length - 1; i++) {
-              const partialKey = segs.slice(0, i + 1).join('/')
-              const title = ancestorTitleCache.get(partialKey)
-              if (title) ancestorTitles.set(partialKey, title)
-            }
-          }
-
           const html = renderDocumentPage(doc, sections, siteConfig, {
             knownKeys,
-            ancestorTitles,
-            resolveRoleHeadings: (keys) => {
-              const map = new Map()
-              for (const key of keys) {
-                const rh = roleHeadingCache.get(key)
-                if (rh) map.set(key, rh)
-              }
-              return map
-            }
+            ancestorTitles: renderCache.getAncestorTitles(doc.key),
+            resolveRoleHeadings: (keys) => renderCache.getRoleHeadings(keys),
           })
           const filePath = join(buildDir, 'docs', doc.key, 'index.html')
           ensureDir(dirname(filePath))
