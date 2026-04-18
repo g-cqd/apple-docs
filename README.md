@@ -159,6 +159,66 @@ and these resources:
 - `apple-docs://doc/{key}`
 - `apple-docs://framework/{slug}`
 
+### Remote MCP over HTTP
+
+For shared or remote access, run the MCP server as a Streamable HTTP endpoint instead of stdio:
+
+```bash
+apple-docs mcp serve --port 3031 --host 127.0.0.1 \
+  --allow-origin https://mcp.example.com
+```
+
+- `--port` defaults to `3031`
+- `--host` defaults to `127.0.0.1` — keep it bound to loopback and expose it via a reverse proxy or tunnel (Cloudflare, Tailscale, WireGuard) rather than binding to `0.0.0.0`
+- `--allow-origin` restricts the browser `Origin` header (comma-separated list); omit to allow all origins
+
+The server has **no built-in authentication**. Put access control at the edge (e.g. Cloudflare Access, Tailscale ACLs) or keep the endpoint private.
+
+It speaks the Streamable HTTP transport from the 2025-03-26 MCP protocol revision. Endpoints:
+
+| Path | Method | Purpose |
+| --- | --- | --- |
+| `/mcp` | `POST` | JSON-RPC requests |
+| `/mcp` | `GET` | Server-initiated SSE stream |
+| `/mcp` | `DELETE` | Terminate a session |
+| `/healthz` | `GET` | Liveness probe |
+
+Print a client config for a remote endpoint:
+
+```bash
+apple-docs mcp install --http https://mcp.example.com/mcp
+```
+
+That emits both the native Streamable HTTP config and an `mcp-remote` stdio fallback for clients without native HTTP support.
+
+Example Claude Desktop / Cursor config:
+
+```json
+{
+  "mcpServers": {
+    "apple-docs": {
+      "transport": {
+        "type": "streamable-http",
+        "url": "https://mcp.example.com/mcp"
+      }
+    }
+  }
+}
+```
+
+Fallback via `mcp-remote` for older clients:
+
+```json
+{
+  "mcpServers": {
+    "apple-docs": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.example.com/mcp"]
+    }
+  }
+}
+```
+
 ## What the corpus covers
 
 | Source type | Coverage |

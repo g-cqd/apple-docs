@@ -18,6 +18,7 @@ Commands:
   snapshot build       Build snapshot archive from current corpus
 
   mcp start            Start MCP stdio server
+  mcp serve            Start MCP Streamable HTTP server
   mcp install          Show MCP configuration instructions
 
   web serve            Start local dev server
@@ -222,17 +223,32 @@ Options:
 `.trim(),
 
   mcp: `
-Usage: apple-docs mcp <subcommand>
+Usage: apple-docs mcp <subcommand> [options]
 
 MCP (Model Context Protocol) server commands.
 
 Subcommands:
   start                Start MCP stdio server for AI assistants
+  serve                Start MCP Streamable HTTP server (for remote access)
   install              Show MCP configuration for Claude, Cursor, etc.
 
+Serve options:
+  --port <n>           Port number (default: 3031)
+  --host <addr>        Bind address (default: 127.0.0.1)
+  --allow-origin <url> Allowed browser Origin header(s); comma-separated.
+                       Omit to allow all origins (defaults open — intended
+                       to run behind a private network boundary).
+
+Install options:
+  --http <url>         Print configuration for a remote Streamable HTTP
+                       endpoint instead of the default local stdio config.
+
 Examples:
-  apple-docs mcp start            # start server (used by MCP clients)
-  apple-docs mcp install          # print configuration JSON
+  apple-docs mcp start
+  apple-docs mcp serve                                    # 127.0.0.1:3031/mcp
+  apple-docs mcp serve --port 3031 --allow-origin https://apple-docs-mcp.everest.mt
+  apple-docs mcp install
+  apple-docs mcp install --http https://apple-docs-mcp.everest.mt/mcp
 `.trim(),
 
   setup: `

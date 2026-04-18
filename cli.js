@@ -181,7 +181,46 @@ try {
           await new Promise(() => {})
           break
         }
+        case 'serve': {
+          const { startHttpServer } = await import('./src/mcp/http-server.js')
+          const port = flags.port ? Number.parseInt(flags.port, 10) : 3031
+          const host = flags.host ?? '127.0.0.1'
+          const allowedOrigins = flags['allow-origin']
+            ? String(flags['allow-origin']).split(',').map(s => s.trim()).filter(Boolean)
+            : []
+          const handle = await startHttpServer({ port, host, allowedOrigins }, ctx)
+          console.log(`MCP HTTP server running at ${handle.url}`)
+          console.log('Press Ctrl+C to stop')
+          // Keep process alive — process signal handlers at the top of this file
+          // close the DB; Bun releases sockets on exit.
+          await new Promise(() => {})
+          break
+        }
         case 'install': {
+          if (flags.http) {
+            const endpoint = typeof flags.http === 'string'
+              ? flags.http
+              : 'https://apple-docs-mcp.example.com/mcp'
+            console.log('MCP (Streamable HTTP) client configuration for apple-docs:\n')
+            console.log(JSON.stringify({
+              mcpServers: {
+                'apple-docs': {
+                  transport: { type: 'streamable-http', url: endpoint },
+                },
+              },
+            }, null, 2))
+            console.log('\nFallback for clients without native Streamable HTTP support (via mcp-remote):')
+            console.log(JSON.stringify({
+              mcpServers: {
+                'apple-docs': {
+                  command: 'npx',
+                  args: ['mcp-remote', endpoint],
+                },
+              },
+            }, null, 2))
+            process.exit(0)
+            break
+          }
           console.log("MCP server configuration for apple-docs:\n")
           console.log(JSON.stringify({
             mcpServers: {
