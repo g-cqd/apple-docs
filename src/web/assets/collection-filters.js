@@ -429,13 +429,17 @@
       }
     }
 
+    // Hide the TOC block when filtering leaves fewer than 2 sections.
+    // If the TOC is the sidebar's only block, hide the whole sidebar too.
     const sidebar = document.querySelector('.doc-sidebar')
     const mainContent = document.querySelector('.main-content')
-    if (sidebar && sidebar.children.length === 1 && sidebar.querySelector(':scope > .page-toc')) {
-      sidebar.hidden = sections.length < 2
-      if (mainContent) {
-        mainContent.classList.toggle('has-sidebar', sections.length >= 2)
-      }
+    if (sidebar) {
+      const tocBlock = sidebar.querySelector('.sidebar-block:has(> .page-toc)')
+      if (tocBlock) tocBlock.hidden = sections.length < 2
+      const visibleBlocks = Array.from(sidebar.querySelectorAll(':scope > .sidebar-block')).filter(el => !el.hidden)
+      const hasSidebarVisible = visibleBlocks.length > 0
+      sidebar.hidden = !hasSidebarVisible
+      if (mainContent) mainContent.classList.toggle('has-sidebar', hasSidebarVisible)
     }
 
     document.dispatchEvent(new CustomEvent('page-toc:refresh'))

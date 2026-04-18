@@ -278,6 +278,50 @@ export function buildBreadcrumbs(key, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Original-resource link helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive the upstream URL for a root/framework record. Documents carry a
+ * per-page `url` column, but framework landing pages don't — we synthesize
+ * from source_type + slug.
+ */
+function frameworkOriginalUrl(root) {
+  if (!root) return null
+  if (root.url) return root.url
+  const slug = root.slug ?? ''
+  switch (root.source_type) {
+    case 'hig': return 'https://developer.apple.com/design/human-interface-guidelines'
+    case 'guidelines': return 'https://developer.apple.com/app-store/review/guidelines/'
+    case 'wwdc': return 'https://developer.apple.com/videos/'
+    case 'sample-code': return 'https://developer.apple.com/sample-code/'
+    case 'swift-evolution': return 'https://www.swift.org/swift-evolution/'
+    case 'swift-book': return 'https://docs.swift.org/swift-book/'
+    case 'swift-org': return 'https://www.swift.org/'
+    case 'apple-archive': return 'https://developer.apple.com/library/archive/'
+    case 'packages': return 'https://swiftpackageindex.com/'
+    default: return slug ? `https://developer.apple.com/documentation/${slug}` : null
+  }
+}
+
+/** Short hostname label ("developer.apple.com") used in the link text. */
+function hostLabel(url) {
+  try { return new URL(url).host } catch { return '' }
+}
+
+/**
+ * Render the "Original resource" sidebar block. Returns an empty string when
+ * no upstream URL is available.
+ */
+function buildOriginalResourceBlock(url) {
+  if (!url) return ''
+  const host = hostLabel(url)
+  return `<div class="sidebar-block sidebar-source">
+  <a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" class="sidebar-source-link">Open on ${escapeAttr(host || 'source')}</a>
+</div>`
+}
+
+// ---------------------------------------------------------------------------
 // Badge helpers
 // ---------------------------------------------------------------------------
 
@@ -524,28 +568,35 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   // Build doc meta (badges + platforms)
   const docMeta = buildDocMeta(doc)
 
-  // Compose sidebar: language toggle, meta badges, TOC, then relationships
+  // Compose sidebar as a stack of discrete blocks:
+  // Original-resource → meta → language toggle → TOC → relationships.
   const sidebarParts = []
+  const originalBlock = buildOriginalResourceBlock(doc.url)
+  if (originalBlock) sidebarParts.push(originalBlock)
+  if (docMeta) {
+    sidebarParts.push(`<div class="sidebar-block sidebar-meta">${docMeta}</div>`)
+  }
   if (hasLangToggle) {
-    sidebarParts.push(`<div class="lang-toggle" role="group" aria-label="Language">
-  <button class="lang-btn active" data-lang="swift" aria-pressed="true">Swift</button>
-  <button class="lang-btn" data-lang="occ" aria-pressed="false">ObjC</button>
+    sidebarParts.push(`<div class="sidebar-block">
+  <div class="lang-toggle" role="group" aria-label="Language">
+    <button class="lang-btn active" data-lang="swift" aria-pressed="true">Swift</button>
+    <button class="lang-btn" data-lang="occ" aria-pressed="false">ObjC</button>
+  </div>
 </div>`)
   }
-  if (docMeta) sidebarParts.push(`<div class="sidebar-meta">${docMeta}</div>`)
   if (hasSidebar) {
-    sidebarParts.push(renderTocHtml(tocItems, false))
+    sidebarParts.push(`<div class="sidebar-block">${renderTocHtml(tocItems, false)}</div>`)
   }
   if (relationshipSection) {
     const relJson = relationshipSection.contentJson ?? relationshipSection.content_json ?? ''
     if (typeof relJson === 'string' ? hasRenderableItems(relJson) : true) {
-      sidebarParts.push(buildRelationshipContent(relationshipSection))
+      sidebarParts.push(`<div class="sidebar-block">${buildRelationshipContent(relationshipSection)}</div>`)
     }
   }
 
   const sidebar = sidebarParts.length > 0
     ? `<aside class="doc-sidebar">${sidebarParts.join('\n')}</aside>`
-    : (docMeta ? `<aside class="doc-sidebar"><div class="sidebar-meta">${docMeta}</div></aside>` : '')
+    : ''
 
   const hasSidebarFinal = sidebar.length > 0
 
@@ -663,7 +714,7 @@ export function renderIndexPage(frameworks, siteConfig) {
   const tocItems = [...byKind.keys()].map(kind => ({ id: slugify(kind), label: kind }))
   const hasSidebar = tocItems.length >= 2
   const sidebar = hasSidebar
-    ? `<aside class="doc-sidebar">${renderTocHtml(tocItems, false)}</aside>`
+    ? `<aside class="doc-sidebar"><div class="sidebar-block">${renderTocHtml(tocItems, false)}</div></aside>`
     : ''
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
 
@@ -770,11 +821,15 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
 
   const breadcrumbs = `<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${escapeAttr(fwName)}</span></nav>`
 
-  // Build sidebar TOC from role groups
+  // Build sidebar: original-resource block + TOC of role groups.
   const tocItems = [...byRole.keys()].map(role => ({ id: slugify(role), label: role }))
   const hasSidebar = tocItems.length >= 2
-  const sidebar = hasSidebar
-    ? `<aside class="doc-sidebar">${renderTocHtml(tocItems, false)}</aside>`
+  const sidebarBlocks = []
+  const originalBlock = buildOriginalResourceBlock(frameworkOriginalUrl(framework))
+  if (originalBlock) sidebarBlocks.push(originalBlock)
+  if (hasSidebar) sidebarBlocks.push(`<div class="sidebar-block">${renderTocHtml(tocItems, false)}</div>`)
+  const sidebar = sidebarBlocks.length > 0
+    ? `<aside class="doc-sidebar">${sidebarBlocks.join('\n')}</aside>`
     : ''
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
 
@@ -832,7 +887,7 @@ ${buildHead({ title: pageTitle, description: `${fwName} documentation index.`, s
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
-<main id="main-content" class="main-content${hasSidebar ? ' has-sidebar' : ''} listing">
+<main id="main-content" class="main-content${sidebar ? ' has-sidebar' : ''} listing">
   ${breadcrumbs}
   <h1>${escapeAttr(fwName)}${viewToggle}</h1>
   ${mobileToc}

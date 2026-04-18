@@ -336,6 +336,37 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('</body>')
     expect(page).toContain('</head>')
   })
+
+  test('sidebar splits its content into sidebar-block cards', () => {
+    const sections = [
+      { sectionKind: 'abstract', contentText: 'text', sortOrder: 0 },
+      { sectionKind: 'declaration', contentText: 'code', contentJson: JSON.stringify([{ tokens: [{ text: 'x' }], languages: ['swift'] }]), sortOrder: 1 },
+      { sectionKind: 'discussion', heading: 'Overview', contentText: 'x', contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'x' }] }]), sortOrder: 2 },
+    ]
+    const page = renderDocumentPage(mockDoc, sections, siteConfig)
+    // At least two blocks: meta + TOC
+    const blockCount = (page.match(/class="sidebar-block[^"]*"/g) ?? []).length
+    expect(blockCount).toBeGreaterThanOrEqual(2)
+  })
+
+  test('adds a single-line Original resource link to the upstream Apple URL', () => {
+    const docWithUrl = { ...mockDoc, url: 'https://developer.apple.com/documentation/swiftui/view' }
+    const page = renderDocumentPage(docWithUrl, mockSections, siteConfig)
+    expect(page).toContain('class="sidebar-block sidebar-source"')
+    expect(page).toContain('href="https://developer.apple.com/documentation/swiftui/view"')
+    expect(page).toContain('target="_blank"')
+    expect(page).toContain('rel="noopener noreferrer"')
+    expect(page).toContain('Open on developer.apple.com')
+    // No secondary heading or host label — the link is the only content
+    expect(page).not.toContain('<h2>Original resource</h2>')
+    expect(page).not.toContain('sidebar-source-host')
+    expect(page).not.toContain('sidebar-source-label')
+  })
+
+  test('omits the Original resource block when the document has no url', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, siteConfig)
+    expect(page).not.toContain('sidebar-source')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -569,6 +600,27 @@ describe('renderFrameworkPage', () => {
     expect(page).not.toContain('data-deferred')
     expect(page).toContain('class="role-group"')
     expect(page).toContain('class="doc-list"')
+  })
+
+  test('adds Original resource block for apple-docc framework', () => {
+    const fw = { slug: 'swiftui', name: 'SwiftUI', kind: 'framework', source_type: 'apple-docc' }
+    const page = renderFrameworkPage(fw, mockDocuments, siteConfig)
+    expect(page).toContain('class="sidebar-block sidebar-source"')
+    expect(page).toContain('href="https://developer.apple.com/documentation/swiftui"')
+  })
+
+  test('derives upstream URL per source type for framework listings', () => {
+    const cases = [
+      { fw: { slug: 'design', source_type: 'hig' }, expected: 'https://developer.apple.com/design/human-interface-guidelines' },
+      { fw: { slug: 'app-store-review', source_type: 'guidelines' }, expected: 'https://developer.apple.com/app-store/review/guidelines/' },
+      { fw: { slug: 'wwdc', source_type: 'wwdc' }, expected: 'https://developer.apple.com/videos/' },
+      { fw: { slug: 'swift-book', source_type: 'swift-book' }, expected: 'https://docs.swift.org/swift-book/' },
+      { fw: { slug: 'packages', source_type: 'packages' }, expected: 'https://swiftpackageindex.com/' },
+    ]
+    for (const { fw, expected } of cases) {
+      const page = renderFrameworkPage(fw, mockDocuments, siteConfig)
+      expect(page).toContain(`href="${expected}"`)
+    }
   })
 })
 
