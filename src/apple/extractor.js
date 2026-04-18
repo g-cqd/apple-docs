@@ -1,5 +1,10 @@
 import { normalizeIdentifier } from './normalizer.js'
 
+// Identifiers with this prefix point to symbols defined outside the current
+// framework (Swift stdlib, other modules). Apple renders a link with a `url`
+// field but doesn't serve a real DocC JSON page for them, so fetching 404s.
+const EXTERNAL_ID_PREFIX = 'doc://com.externally.resolved.symbol/'
+
 /**
  * Extract all referenced documentation paths from an Apple JSON doc page.
  * Prefers the `url` field from the references map over raw identifiers,
@@ -10,8 +15,10 @@ export function extractReferences(json) {
   const ids = new Set()
   const refs = json.references ?? {}
 
-  // Helper: resolve an identifier to its best URL using the references map
+  // Helper: resolve an identifier to its best URL using the references map.
+  // Returns null for externally-resolved symbols, which have no DocC JSON page.
   const resolve = (id) => {
+    if (typeof id === 'string' && id.startsWith(EXTERNAL_ID_PREFIX)) return null
     const ref = refs[id]
     // Prefer the url field — it points to the actual page path
     if (ref?.url) {
@@ -47,7 +54,8 @@ export function extractReferences(json) {
   }
 
   // references that are documentation topics (catch any not in sections)
-  for (const [, ref] of Object.entries(refs)) {
+  for (const [id, ref] of Object.entries(refs)) {
+    if (id.startsWith(EXTERNAL_ID_PREFIX)) continue
     if (ref.type === 'topic' && ref.url?.includes('/documentation/')) {
       const norm = normalizeIdentifier(ref.url)
       if (norm) ids.add(norm)

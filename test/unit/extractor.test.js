@@ -25,6 +25,34 @@ describe('extractReferences', () => {
   test('returns empty for empty json', () => {
     expect(extractReferences({})).toEqual([])
   })
+
+  test('skips externally-resolved symbols (no DocC JSON page exists)', () => {
+    // Apple lists Swift stdlib / cross-module symbols via references with a
+    // url field, but the endpoints 404. The identifier prefix flags them.
+    const json = {
+      topicSections: [
+        {
+          identifiers: [
+            'doc://com.apple.tabletopkit/documentation/TabletopKit/Player/id',
+            'doc://com.externally.resolved.symbol/s:11TabletopKit6PlayerV2IDa',
+          ],
+        },
+      ],
+      references: {
+        'doc://com.apple.tabletopkit/documentation/TabletopKit/Player/id': {
+          url: '/documentation/tabletopkit/player/id',
+          type: 'topic',
+        },
+        'doc://com.externally.resolved.symbol/s:11TabletopKit6PlayerV2IDa': {
+          url: '/documentation/TabletopKit/Player/ID-swift.typealias',
+          type: 'topic',
+        },
+      },
+    }
+    const refs = extractReferences(json)
+    expect(refs).toContain('tabletopkit/player/id')
+    expect(refs).not.toContain('tabletopkit/player/id-swift.typealias')
+  })
 })
 
 describe('extractMetadata', () => {
