@@ -1,8 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "test/benchmarks/search-bench.js"
-  ],
   "project": [
     "src/**/*.js",
     "test/**/*.js",

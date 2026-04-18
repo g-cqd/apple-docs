@@ -65,10 +65,3 @@ export function disposeHighlighter() {
   }
   _highlighterPromise = null
 }
-
-export function getHighlighterState() {
-  return {
-    ready: _highlighter != null,
-    warming: _highlighterPromise != null,
-  }
-}

@@ -103,7 +103,3 @@ export function projectStatus(result) {
   const { dataDir: _dataDir, ...rest } = result
   return rest
 }
-
-export function projectTaxonomy(result) {
-  return result
-}
