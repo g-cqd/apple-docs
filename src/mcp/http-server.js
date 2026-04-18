@@ -31,8 +31,16 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   const host = opts.host ?? '127.0.0.1'
   const allowedOrigins = Array.isArray(opts.allowedOrigins) ? opts.allowedOrigins : []
   const createServerImpl = deps.createServer ?? createServer
+  // Stateless transport; enableJsonResponse so POSTs return plain
+  // application/json instead of a one-event text/event-stream. The SSE
+  // framing confuses some Streamable HTTP clients (notably rmcp/Codex),
+  // and we never push server-initiated messages for a POST request, so
+  // the stream offers no benefit here.
   const createTransport = deps.createTransport ?? (() =>
-    new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined }))
+    new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    }))
   const disposeHighlighterImpl = deps.disposeHighlighter ?? disposeHighlighter
   const serveImpl = deps.serve ?? ((cfg) => Bun.serve(cfg))
 
