@@ -128,9 +128,9 @@ Options:
   --roots <a,b,c>      Only sync specific roots (comma-separated)
   --sources <a,b,c>    Only sync specific source types (apple-docc,hig,guidelines,...,packages)
   --full               Sync all discovered roots and expand sources to their full catalog
-  --parallel <n>       Crawl N frameworks simultaneously (default: 1)
-  --concurrency <n>    Max total in-flight fetches across all roots (default: 5)
-  --rate <n>           Max requests per second across all roots (default: 5)
+  --parallel <n>       Crawl N frameworks simultaneously (default: 10)
+  --concurrency <n>    Max total in-flight fetches across all roots (default: 500)
+  --rate <n>           Max requests per second across all roots (default: 500)
   --retry-failed       Retry pages that previously failed (404, timeout, etc)
   --index              Build body search index after sync
   --json               Output summary as JSON
@@ -142,8 +142,8 @@ Examples:
   apple-docs sync --sources packages                        # sync curated apple/swiftlang packages (no auth)
   apple-docs sync --full --sources packages                # full package catalog; uses raw README fallbacks without auth
   APPLE_DOCS_PACKAGES_SCOPE=full GITHUB_TOKEN=... apple-docs sync --sources packages  # full catalog with GitHub metadata
-  apple-docs sync --full --parallel 5 --rate 10             # 5 roots at once, 10 req/s
-  apple-docs sync --roots uikit --concurrency 10 --rate 10  # fast single root
+  apple-docs sync --full --parallel 10 --rate 500             # aggressive full crawl
+  apple-docs sync --roots uikit --concurrency 100 --rate 100  # tuned single-root crawl
   apple-docs sync --retry-failed                            # retry 404s/timeouts
 `.trim(),
 
@@ -155,9 +155,9 @@ Check for documentation updates and pull changes.
 Options:
   --roots <a,b,c>      Only check specific roots
   --sources <a,b,c>    Only check specific source types (apple-docc,hig,guidelines,...,packages)
-  --concurrency <n>    Max concurrent HEAD checks / fetches (default: 5)
-  --rate <n>           Max requests per second (default: 5)
-  --parallel <n>       Crawl N new roots simultaneously (default: 1)
+  --concurrency <n>    Max concurrent HEAD checks / fetches (default: 500)
+  --rate <n>           Max requests per second (default: 500)
+  --parallel <n>       Crawl N new roots simultaneously (default: 10)
   --index              Update body search index after pulling changes
   --json               Output summary as JSON
 

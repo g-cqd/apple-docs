@@ -15,8 +15,8 @@ import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, sel
 export async function update(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const startMs = Date.now()
-  const concurrency = ctx.semaphore?.max ?? opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
-  const parallel = opts.parallel ?? 1
+  const concurrency = ctx.semaphore?.max ?? opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '500', 10)
+  const parallel = opts.parallel ?? 10
   const semaphore = ctx.semaphore ?? new Semaphore(concurrency)
   const requestedSources = normalizeList(opts.sources)
   const requestedRoots = normalizeList(opts.roots)

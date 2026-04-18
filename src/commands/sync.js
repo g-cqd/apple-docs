@@ -27,8 +27,8 @@ export async function sync(opts, ctx) {
       ? requestedSources.map(getAdapter)
       : getAllAdapters()
   )
-  const concurrency = ctx.semaphore?.max ?? opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10)
-  const parallel = opts.parallel ?? 1
+  const concurrency = ctx.semaphore?.max ?? opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '500', 10)
+  const parallel = opts.parallel ?? 10
   const semaphore = ctx.semaphore ?? new Semaphore(concurrency)
   const adapterCtx = { ...ctx, rootCatalogReady: false, semaphore, fullSync: !!opts.full }
 

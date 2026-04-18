@@ -26,8 +26,11 @@ if (flags.help || !command) {
 const dataDir = flags.home ?? process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
 const logLevel = flags.verbose ? 'debug' : 'info'
 const logger = createLogger(logLevel)
-const rate = Number.parseInt(flags.rate ?? process.env.APPLE_DOCS_RATE ?? '5', 10)
-const burst = Math.max(rate, Number.parseInt(process.env.APPLE_DOCS_BURST ?? '2', 10))
+const isCrawlCommand = command === 'sync' || command === 'update'
+const defaultRate = isCrawlCommand ? '500' : '5'
+const defaultBurst = isCrawlCommand ? '500' : '2'
+const rate = Number.parseInt(flags.rate ?? process.env.APPLE_DOCS_RATE ?? defaultRate, 10)
+const burst = Math.max(rate, Number.parseInt(process.env.APPLE_DOCS_BURST ?? defaultBurst, 10))
 const rateLimiter = createHostBucketedLimiter({
   defaults: { rate, burst },
   primary: { rate, burst },
