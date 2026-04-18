@@ -31,14 +31,10 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   const host = opts.host ?? '127.0.0.1'
   const allowedOrigins = Array.isArray(opts.allowedOrigins) ? opts.allowedOrigins : []
   const createServerImpl = deps.createServer ?? createServer
-  const createTransport = deps.createTransport ?? ((sessionIdGenerator) =>
-    new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator }))
+  const createTransport = deps.createTransport ?? (() =>
+    new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined }))
   const disposeHighlighterImpl = deps.disposeHighlighter ?? disposeHighlighter
   const serveImpl = deps.serve ?? ((cfg) => Bun.serve(cfg))
-
-  const mcpServer = createServerImpl(ctx)
-  const transport = createTransport(() => crypto.randomUUID())
-  await mcpServer.connect(transport)
 
   function originOk(request) {
     const origin = request.headers.get('origin')
@@ -96,6 +92,12 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       )
     }
 
+    // Per MCP SDK (webStandardStreamableHttp.js): in stateless mode each request
+    // must use a fresh transport. Instantiate per-request so every client can
+    // initialize independently.
+    const mcpServer = createServerImpl(ctx)
+    const transport = createTransport()
+    await mcpServer.connect(transport)
     return transport.handleRequest(request)
   }
 
@@ -123,7 +125,6 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   logger?.info?.(`MCP HTTP server listening at ${url}`)
 
   async function close() {
-    try { await transport.close() } catch {}
     try { server?.stop?.(true) } catch {}
     try { disposeHighlighterImpl() } catch {}
   }

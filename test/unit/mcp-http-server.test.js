@@ -43,10 +43,23 @@ async function bootHarness({ allowedOrigins = [], handleRequest } = {}) {
 }
 
 describe('startHttpServer', () => {
-  test('connects the MCP server to a single HTTP transport', async () => {
+  test('exposes the advertised MCP URL without connecting until a request arrives', async () => {
     const { handle, events } = await bootHarness()
-    expect(events[0][0]).toBe('connect')
     expect(handle.url).toBe('http://127.0.0.1:31337/mcp')
+    expect(events.map(e => e[0])).not.toContain('connect')
+  })
+
+  test('instantiates a fresh server + transport per MCP request (stateless mode)', async () => {
+    const { fetch, events } = await bootHarness()
+    const req = () => fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    }))
+    await req()
+    await req()
+    const connects = events.filter(e => e[0] === 'connect')
+    expect(connects.length).toBe(2)
   })
 
   test('healthz returns 200 without going through transport', async () => {
@@ -183,11 +196,10 @@ describe('startHttpServer', () => {
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
   })
 
-  test('close() shuts down transport, server, and highlighter', async () => {
+  test('close() shuts down server and highlighter', async () => {
     const { handle, events } = await bootHarness()
     await handle.close()
     const kinds = events.map(e => e[0])
-    expect(kinds).toContain('transport-close')
     expect(kinds).toContain('server-stop')
     expect(kinds).toContain('dispose')
   })
