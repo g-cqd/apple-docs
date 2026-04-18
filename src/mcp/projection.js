@@ -88,23 +88,20 @@ export function projectFrameworks(result) {
 
 function projectRoot(root) {
   if (!root || typeof root !== 'object') return root
-  const out = { ...root }
-  delete out.lastSeen
-  return out
+  const { lastSeen: _lastSeen, ...rest } = root
+  return rest
 }
 
 export function projectBrowse(result) {
   if (!result || typeof result !== 'object') return result
-  const out = { ...result }
-  delete out.slug
-  return out
+  const { slug: _slug, ...rest } = result
+  return rest
 }
 
 export function projectStatus(result) {
   if (!result || typeof result !== 'object') return result
-  const out = { ...result }
-  delete out.dataDir
-  return out
+  const { dataDir: _dataDir, ...rest } = result
+  return rest
 }
 
 export function projectTaxonomy(result) {

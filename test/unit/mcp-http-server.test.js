@@ -11,7 +11,7 @@ function makeLogger() {
   }
 }
 
-async function bootHarness({ allowedOrigins = [], handleRequest } = {}) {
+async function bootHarness({ allowedOrigins = [], handleRequest, cacheRegistry } = {}) {
   const events = []
   const mcpServer = {
     async connect(transport) { events.push(['connect', transport]) },
@@ -25,16 +25,18 @@ async function bootHarness({ allowedOrigins = [], handleRequest } = {}) {
     port: 31337,
     stop: () => { events.push(['server-stop']) },
   }
+  const createServerCalls = []
   const handle = await startHttpServer(
     { port: 3031, host: '127.0.0.1', allowedOrigins },
     { logger: makeLogger() },
     {
-      createServer: () => mcpServer,
+      createServer: (ctx, deps) => { createServerCalls.push({ ctx, deps }); return mcpServer },
       createTransport: () => fakeTransport,
       serve: (cfg) => { serveConfig = cfg; return fakeServer },
+      ...(cacheRegistry ? { cacheRegistry } : {}),
     },
   )
-  return { handle, events, fetch: (req) => serveConfig.fetch(req), fakeTransport }
+  return { handle, events, fetch: (req) => serveConfig.fetch(req), fakeTransport, createServerCalls }
 }
 
 describe('startHttpServer', () => {
@@ -195,5 +197,50 @@ describe('startHttpServer', () => {
     const { handle, events } = await bootHarness()
     await handle.close()
     expect(events.map(e => e[0])).toContain('server-stop')
+  })
+
+  test('shares one cache registry across every MCP request', async () => {
+    const fakeRegistry = { stats: () => ({ marker: 'shared' }) }
+    const { fetch, createServerCalls } = await bootHarness({ cacheRegistry: fakeRegistry })
+    const req = () => fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    }))
+    await req()
+    await req()
+    await req()
+    const nonHealth = createServerCalls.filter(c => c.deps?.cacheRegistry)
+    expect(nonHealth.length).toBe(3)
+    for (const call of nonHealth) {
+      expect(call.deps.cacheRegistry).toBe(fakeRegistry)
+    }
+  })
+
+  test('/healthz omits cache stats by default', async () => {
+    const { fetch } = await bootHarness({ cacheRegistry: { stats: () => ({ marker: 'should-not-leak' }) } })
+    const res = await fetch(new Request('http://127.0.0.1:3031/healthz'))
+    const body = await res.json()
+    expect(body).toEqual({ ok: true, service: 'apple-docs-mcp' })
+    expect(body.cache).toBeUndefined()
+  })
+
+  test('/healthz exposes cache stats when APPLE_DOCS_MCP_CACHE_STATS=1', async () => {
+    const prev = process.env.APPLE_DOCS_MCP_CACHE_STATS
+    process.env.APPLE_DOCS_MCP_CACHE_STATS = '1'
+    try {
+      const { fetch } = await bootHarness({
+        cacheRegistry: { stats: () => ({ totalHits: 4, totalMisses: 1, hitRatio: 0.8 }) },
+      })
+      const res = await fetch(new Request('http://127.0.0.1:3031/healthz'))
+      const body = await res.json()
+      expect(body.ok).toBe(true)
+      expect(body.cache).toEqual({ totalHits: 4, totalMisses: 1, hitRatio: 0.8 })
+    } finally {
+      // Restore the env exactly — Reflect.deleteProperty because `delete` trips
+      // the lint rule and `= undefined` would coerce to the string "undefined".
+      if (prev === undefined) Reflect.deleteProperty(process.env, 'APPLE_DOCS_MCP_CACHE_STATS')
+      else process.env.APPLE_DOCS_MCP_CACHE_STATS = prev
+    }
   })
 })

@@ -8,12 +8,17 @@ import { join } from 'node:path'
  * Scope: process-local. No external backing store (corpus is a single-user
  * SQLite file; a shared cache would cost complexity without payoff).
  *
+ * Lifetime: one registry per MCP process. In stdio mode the registry is
+ * created once inside `createServer`. In HTTP mode `startHttpServer` creates
+ * one registry at boot and injects it into every per-request `createServer`
+ * call so hits survive across HTTP requests.
+ *
  * Key shape: sha256([tool, stableJson(args), corpusStamp].join('\0'))
  *   - `stableJson` sorts object keys so reordered args collide, but *does not*
  *     normalize string values — two queries that differ only by whitespace or
  *     casing stay distinct on purpose (we do not want to pretend "View" and
  *     "view" are the same search).
- *   - `corpusStamp = `${schemaVersion}:${dbMtimeMs}`` refreshed every 30s so
+ *   - `corpusStamp = `${schemaVersion}:${dbMtimeMs}`` refreshed every 5s so
  *     `apple-docs update` invalidates transparently without a callback.
  *
  * Per-tool sizes (items, not bytes):
@@ -36,14 +41,19 @@ const DEFAULT_SIZES = {
   list_taxonomy: 16,
 }
 
-const STAMP_TTL_MS = 30_000
+// Short enough that an ad-hoc `apple-docs update` is visible within seconds;
+// `statSync` is sub-millisecond on APFS, so the per-request overhead is
+// negligible even at peak agent fan-out.
+const STAMP_TTL_MS = 5_000
 
 export function createCacheRegistry(ctx, opts = {}) {
   const enabled = opts.enabled ?? (process.env.APPLE_DOCS_MCP_CACHE !== 'off')
   const sizes = { ...DEFAULT_SIZES, ...(opts.sizes ?? {}) }
   const caches = new Map()
+  const counters = new Map()
   for (const [tool, size] of Object.entries(sizes)) {
     caches.set(tool, new LruCache(size))
+    counters.set(tool, { hits: 0, misses: 0 })
   }
   const stamper = createStamper(ctx, opts)
 
@@ -52,15 +62,41 @@ export function createCacheRegistry(ctx, opts = {}) {
     wrap(tool, handler) {
       if (!enabled || !caches.has(tool)) return handler
       const cache = caches.get(tool)
+      const counter = counters.get(tool)
       return async (args) => {
         const key = cacheKey(tool, args, stamper.get())
         const hit = cache.get(key)
-        if (hit !== undefined) return hit
+        if (hit !== undefined) {
+          counter.hits++
+          return hit
+        }
+        counter.misses++
         const value = await handler(args)
         cache.set(key, value)
         return value
       }
     },
+    stats() {
+      const tools = {}
+      let totalHits = 0
+      let totalMisses = 0
+      for (const [tool, cache] of caches) {
+        const c = counters.get(tool)
+        tools[tool] = { size: cache.size, capacity: cache.capacity, hits: c.hits, misses: c.misses }
+        totalHits += c.hits
+        totalMisses += c.misses
+      }
+      const total = totalHits + totalMisses
+      return {
+        enabled,
+        stamp: stamper.get(),
+        totalHits,
+        totalMisses,
+        hitRatio: total === 0 ? 0 : totalHits / total,
+        tools,
+      }
+    },
+    // Legacy shape used by older tests — returns per-tool LRU size only.
     _stats() {
       const out = {}
       for (const [tool, cache] of caches) out[tool] = cache.size
@@ -68,6 +104,7 @@ export function createCacheRegistry(ctx, opts = {}) {
     },
     invalidate() {
       for (const cache of caches.values()) cache.clear()
+      for (const counter of counters.values()) { counter.hits = 0; counter.misses = 0 }
       stamper.refresh()
     },
   }

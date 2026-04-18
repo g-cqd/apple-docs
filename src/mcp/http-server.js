@@ -1,5 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { createServer } from './server.js'
+import { createCacheRegistry } from './cache.js'
 
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -42,6 +43,12 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     }))
   const serveImpl = deps.serve ?? ((cfg) => Bun.serve(cfg))
 
+  // One cache registry for the lifetime of the HTTP process. Each request
+  // instantiates a fresh McpServer (required by the stateless SDK transport)
+  // but reuses the same registry, so hits survive across requests.
+  const cacheRegistry = deps.cacheRegistry ?? createCacheRegistry(ctx)
+  const exposeCacheStats = process.env.APPLE_DOCS_MCP_CACHE_STATS === '1'
+
   function originOk(request) {
     const origin = request.headers.get('origin')
     if (!origin) return true // native/non-browser clients omit Origin
@@ -82,7 +89,9 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     const url = new URL(request.url)
 
     if (url.pathname === '/healthz') {
-      return Response.json({ ok: true, service: 'apple-docs-mcp' })
+      const body = { ok: true, service: 'apple-docs-mcp' }
+      if (exposeCacheStats) body.cache = cacheRegistry.stats()
+      return Response.json(body)
     }
 
     if (url.pathname !== '/mcp') {
@@ -99,9 +108,9 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     }
 
     // Per MCP SDK (webStandardStreamableHttp.js): in stateless mode each request
-    // must use a fresh transport. Instantiate per-request so every client can
-    // initialize independently.
-    const mcpServer = createServerImpl(ctx)
+    // must use a fresh transport + server. The shared cacheRegistry injected
+    // here is what makes the LRU effective across requests.
+    const mcpServer = createServerImpl(ctx, { cacheRegistry })
     const transport = createTransport()
     await mcpServer.connect(transport)
     return transport.handleRequest(request)

@@ -35,14 +35,20 @@ const paginatedPage = z.number().int().min(1)
 /**
  * Create an MCP server instance with all tools and resources registered.
  * Separated from startServer() so tests can create a server without stdio.
+ *
+ * @param {object} ctx - shared command context ({ db, dataDir, logger, ... })
+ * @param {object} [deps] - optional injection points
+ * @param {object} [deps.cacheRegistry] - pre-built cache registry. HTTP mode
+ *   passes one shared registry so cache hits survive across requests; stdio
+ *   mode omits it and we create one per process.
  */
-export function createServer(ctx) {
+export function createServer(ctx, deps = {}) {
   const server = new McpServer(
     { name: 'apple-docs', version: '1.0.0' },
     { capabilities: { resources: {}, tools: {} } },
   )
 
-  const cache = createCacheRegistry(ctx)
+  const cache = deps.cacheRegistry ?? createCacheRegistry(ctx)
 
   // --- Tools ---
 

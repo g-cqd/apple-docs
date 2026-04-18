@@ -109,6 +109,36 @@ describe('createCacheRegistry', () => {
     expect(calls).toBe(2)
   })
 
+  test('stats() reports per-tool hits, misses, size and aggregate hit ratio', async () => {
+    const registry = createCacheRegistry(fakeCtx())
+    const handler = registry.wrap('search_docs', async (args) => args)
+    await handler({ q: 'a' }) // miss
+    await handler({ q: 'a' }) // hit
+    await handler({ q: 'b' }) // miss
+    await handler({ q: 'a' }) // hit
+    const stats = registry.stats()
+    expect(stats.enabled).toBe(true)
+    expect(stats.tools.search_docs.hits).toBe(2)
+    expect(stats.tools.search_docs.misses).toBe(2)
+    expect(stats.tools.search_docs.size).toBe(2)
+    expect(stats.tools.search_docs.capacity).toBe(100)
+    expect(stats.totalHits).toBe(2)
+    expect(stats.totalMisses).toBe(2)
+    expect(stats.hitRatio).toBe(0.5)
+  })
+
+  test('invalidate() resets hit/miss counters alongside entries', async () => {
+    const registry = createCacheRegistry(fakeCtx())
+    const handler = registry.wrap('search_docs', async (args) => args)
+    await handler({ q: 'a' })
+    await handler({ q: 'a' })
+    registry.invalidate()
+    const stats = registry.stats()
+    expect(stats.totalHits).toBe(0)
+    expect(stats.totalMisses).toBe(0)
+    expect(stats.tools.search_docs.size).toBe(0)
+  })
+
   test('LRU evicts oldest entry at capacity', async () => {
     const registry = createCacheRegistry(fakeCtx(), { sizes: { search_docs: 2 } })
     let calls = 0
