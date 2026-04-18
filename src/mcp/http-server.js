@@ -1,6 +1,5 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { createServer } from './server.js'
-import { disposeHighlighter } from '../content/highlight.js'
 
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -41,7 +40,6 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     }))
-  const disposeHighlighterImpl = deps.disposeHighlighter ?? disposeHighlighter
   const serveImpl = deps.serve ?? ((cfg) => Bun.serve(cfg))
 
   function originOk(request) {
@@ -113,12 +111,19 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     port,
     hostname: host,
     async fetch(request) {
+      const started = Date.now()
+      const url = new URL(request.url)
+      const ua = request.headers.get('user-agent') ?? '-'
+      const cfRay = request.headers.get('cf-ray') ?? '-'
+      const accept = request.headers.get('accept') ?? '-'
       try {
         const response = await handle(request)
         applyCorsHeaders(request, response)
-        return applySecurityHeaders(response)
+        applySecurityHeaders(response)
+        logger?.info?.(`${request.method} ${url.pathname} -> ${response.status} ${Date.now() - started}ms ua="${ua}" cf-ray=${cfRay} accept="${accept}"`)
+        return response
       } catch (err) {
-        logger?.error?.('MCP HTTP request failed', { err: err?.message, stack: err?.stack })
+        logger?.error?.(`${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms err="${err?.message}" ua="${ua}" cf-ray=${cfRay}`, { stack: err?.stack })
         const response = Response.json(
           { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' } },
           { status: 500 },
@@ -134,7 +139,6 @@ export async function startHttpServer(opts, ctx, deps = {}) {
 
   async function close() {
     try { server?.stop?.(true) } catch {}
-    try { disposeHighlighterImpl() } catch {}
   }
 
   return { server, url, close }

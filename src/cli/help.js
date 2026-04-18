@@ -8,6 +8,7 @@ Commands:
   read <path>          Read a specific page or symbol
   frameworks           List known documentation roots
   browse <framework>   Browse topic tree for a framework
+  kinds                List distinct kind/role/docKind/sourceType values with counts
   sync                 Discover, download, and index documentation
   update               Check for and pull documentation updates
   index                Build full-body search index
@@ -64,6 +65,7 @@ Options:
   --min-visionos <ver> Only show docs available on visionOS >= version
   --year <n>           Filter WWDC sessions by year (e.g. 2024)
   --track <name>       Filter WWDC sessions by track (e.g. SwiftUI, Accessibility)
+  --deprecated <mode>  Deprecated filter: include (default), exclude, only
   --limit <n>          Max results (default: 100)
   --no-fuzzy           Disable typo-tolerant matching
   --no-deep            Disable full-body search entirely
@@ -116,6 +118,19 @@ Browse the documentation tree for a framework.
 Options:
   --path <path>        Show children of a specific page
   --limit <n>          Max pages to return (default: all)
+  --json               Output raw JSON
+`.trim(),
+
+  kinds: `
+Usage: apple-docs kinds [options]
+
+List distinct taxonomy values found across the corpus with counts.
+Useful for discovering valid --kind values for search, and seeing the shape
+of the indexed documentation at a glance.
+
+Options:
+  --field <name>       Limit output to one field: kind, role, docKind,
+                       roleHeading, sourceType (default: all)
   --json               Output raw JSON
 `.trim(),
 

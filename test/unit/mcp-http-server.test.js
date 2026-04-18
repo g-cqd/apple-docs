@@ -1,9 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { disposeHighlighter } from '../../src/content/highlight.js'
+import { describe, expect, test } from 'bun:test'
 import { startHttpServer } from '../../src/mcp/http-server.js'
-
-beforeEach(() => { disposeHighlighter() })
-afterEach(() => { disposeHighlighter() })
 
 function makeLogger() {
   const calls = []
@@ -35,7 +31,6 @@ async function bootHarness({ allowedOrigins = [], handleRequest } = {}) {
     {
       createServer: () => mcpServer,
       createTransport: () => fakeTransport,
-      disposeHighlighter: () => { events.push(['dispose']) },
       serve: (cfg) => { serveConfig = cfg; return fakeServer },
     },
   )
@@ -196,11 +191,9 @@ describe('startHttpServer', () => {
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
   })
 
-  test('close() shuts down server and highlighter', async () => {
+  test('close() shuts down the Bun server', async () => {
     const { handle, events } = await bootHarness()
     await handle.close()
-    const kinds = events.map(e => e[0])
-    expect(kinds).toContain('server-stop')
-    expect(kinds).toContain('dispose')
+    expect(events.map(e => e[0])).toContain('server-stop')
   })
 })

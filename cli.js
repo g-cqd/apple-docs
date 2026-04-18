@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile, formatWebBuild, formatWebDeploy } from './src/cli/formatter.js'
+import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile, formatWebBuild, formatWebDeploy, formatTaxonomy } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
@@ -14,6 +14,7 @@ import { frameworks } from './src/commands/frameworks.js'
 import { browse } from './src/commands/browse.js'
 import { sync } from './src/commands/sync.js'
 import { status } from './src/commands/status.js'
+import { taxonomy } from './src/commands/taxonomy.js'
 import { paginateCliContent } from './src/cli/paginate.js'
 
 const { command, subcommand, positional, flags } = parseArgs(process.argv)
@@ -69,6 +70,7 @@ try {
         minVisionos: flags['min-visionos'],
         year: flags.year ? Number.parseInt(flags.year) : undefined,
         track: flags.track,
+        deprecated: flags.deprecated,
       }, ctx)
       if (flags.read) {
         if (result.results.length === 0) {
@@ -118,6 +120,12 @@ try {
       if (!fw) { showHelp('browse'); process.exit(1) }
       result = await browse({ framework: fw, path: flags.path, limit: flags.limit ? Number.parseInt(flags.limit) : undefined }, ctx)
       formatter = formatBrowse
+      break
+    }
+
+    case 'kinds': {
+      result = await taxonomy({ field: flags.field }, ctx)
+      formatter = formatTaxonomy
       break
     }
 

@@ -151,6 +151,7 @@ The MCP server exposes:
 - `search_docs`
 - `read_doc`
 - `list_frameworks`
+- `list_taxonomy`
 - `browse`
 - `status`
 
@@ -219,6 +220,22 @@ Fallback via `mcp-remote` for older clients:
 }
 ```
 
+Codex CLI (`~/.codex/config.toml`) — use the `mcp-remote` bridge, since the current `rmcp` HTTP client does not interoperate cleanly with every Streamable HTTP origin:
+
+```toml
+[mcp_servers.apple-docs]
+command = "npx"
+args = ["mcp-remote", "https://mcp.example.com/mcp"]
+```
+
+For a local stdio setup (no tunnel), Codex can call the binary directly:
+
+```toml
+[mcp_servers.apple-docs]
+command = "apple-docs"
+args = ["mcp", "start"]
+```
+
 ## What the corpus covers
 
 | Source type | Coverage |
@@ -242,6 +259,7 @@ Fallback via `mcp-remote` for older clients:
 | `read <path-or-symbol>` | Read one page |
 | `frameworks` | List documentation roots |
 | `browse <framework>` | Explore a framework or subtree |
+| `kinds` | List distinct kind/role/docKind/sourceType values with counts |
 | `setup` | Install a snapshot |
 | `sync` | Crawl/build a corpus locally |
 | `update` | Pull incremental changes |
@@ -264,6 +282,8 @@ apple-docs search "Publsher"
 apple-docs search "Observation" --min-ios 17.0
 apple-docs search "Accessibility" --source wwdc --track accessibility
 apple-docs search "dismiss sheet" --no-eager
+apple-docs search "UIImagePickerController" --deprecated exclude
+apple-docs kinds --field roleHeading
 ```
 
 ### Sync only part of the world

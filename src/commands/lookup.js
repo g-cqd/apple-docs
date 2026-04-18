@@ -80,7 +80,6 @@ export async function lookup(opts, ctx) {
     title: page.title,
     framework: page.framework,
     rootSlug: page.root_slug,
-    role: page.role,
     roleHeading: page.role_heading,
     abstract: page.abstract,
     platforms: page.platforms
@@ -88,8 +87,8 @@ export async function lookup(opts, ctx) {
       : [],
     declaration: page.declaration,
     path: page.path,
-    downloadedAt: page.downloaded_at,
-    convertedAt: page.converted_at,
+    ...(page.is_deprecated ? { isDeprecated: true } : {}),
+    ...(page.is_beta ? { isBeta: true } : {}),
   }
 
   // Section extraction: return a specific section by heading, sectionKind, or content match

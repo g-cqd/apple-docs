@@ -202,11 +202,11 @@ afterEach(async () => {
 })
 
 describe('MCP contract — tools', () => {
-  test('lists all 5 tools', async () => {
+  test('lists all 6 tools', async () => {
     const result = await client.listTools()
     const names = result.tools.map((t) => t.name).sort()
     expect(names).toEqual([
-      'browse', 'list_frameworks', 'read_doc', 'search_docs', 'status',
+      'browse', 'list_frameworks', 'list_taxonomy', 'read_doc', 'search_docs', 'status',
     ])
   })
 
@@ -227,7 +227,9 @@ describe('MCP contract — tools', () => {
     expect(parsed.results).toBeArray()
     expect(parsed.results.length).toBeGreaterThan(0)
     expect(parsed.tier).toBe('standard')
-    expect(parsed.trigramAvailable).toBe(true)
+    // MCP projection strips trigramAvailable/bodyIndexAvailable from responses.
+    expect(parsed.trigramAvailable).toBeUndefined()
+    expect(parsed.bodyIndexAvailable).toBeUndefined()
   })
 
   test('search_docs supports source filtering', async () => {
@@ -411,12 +413,12 @@ describe('MCP contract — tools', () => {
       arguments: {
         path: 'swiftui/long-article',
         match: 'Observation',
-        maxChars: 1200,
+        maxChars: 1000,
         maxMatches: 2,
       },
     })
     expect(result.isError).toBeFalsy()
-    expect(result.content[0].text.length).toBeLessThanOrEqual(1200)
+    expect(result.content[0].text.length).toBeLessThanOrEqual(1000)
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.matches.length).toBeGreaterThan(0)
     expect(parsed.pageInfo.strategy).toBe('matches')

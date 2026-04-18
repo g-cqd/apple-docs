@@ -707,7 +707,7 @@ export class DocsDatabase {
              d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
-             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language,
+             d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language,
              bm25(documents_fts, 10.0, 5.0, 3.0, 2.0, 1.0) as rank,
              CASE
                WHEN LOWER(d.title) = LOWER($raw) THEN 0
@@ -743,7 +743,7 @@ export class DocsDatabase {
              d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
-             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language
+             d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language
       FROM documents_trigram
       JOIN documents d ON documents_trigram.rowid = d.id
       LEFT JOIN roots r ON r.slug = d.framework
@@ -770,7 +770,7 @@ export class DocsDatabase {
              d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
-             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language,
+             d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language,
              bm25(documents_body_fts, 1.0) as rank
       FROM documents_body_fts
       JOIN documents d ON documents_body_fts.rowid = d.id
@@ -825,7 +825,7 @@ export class DocsDatabase {
              d.declaration_text as declaration, d.platforms_json as platforms,
              COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
              d.source_type as source_type, d.source_metadata as source_metadata,
-             d.url_depth, d.is_release_notes, d.kind as doc_kind, d.language,
+             d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language,
              d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos
       FROM documents d
       LEFT JOIN roots r ON r.slug = d.framework

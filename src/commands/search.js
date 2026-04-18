@@ -51,11 +51,13 @@ export async function search(opts, ctx) {
   // --platform shorthand: ensure the platform column is non-null (available on that platform)
   const platform = opts.platform ?? null
   const platformFilters = buildPlatformFilters(platform, { minIos, minMacos, minWatchos, minTvos, minVisionos })
+  const deprecated = normalizeDeprecatedFilter(opts.deprecated)
   const hasJsPostFilters = sourceTypes?.size > 1
     || !!kind
     || !!opts.year
     || !!opts.track
     || Object.values(platformFilters).some(Boolean)
+    || deprecated !== 'include'
   const searchLimit = hasJsPostFilters ? Math.min(Math.max(requestedWindow * 10, 200), 1000) : requestedWindow
 
   if (!query?.trim()) return { results: [], total: 0, query: '' }
@@ -75,7 +77,7 @@ export async function search(opts, ctx) {
   // Push single source_type to SQL for efficient filtering; multi-source stays as JS post-filter
   const sqlSourceType = sourceTypes?.size === 1 ? [...sourceTypes][0] : null
   const filterOpts = { limit: searchLimit, language, sourceType: sqlSourceType }
-  const activeFilters = { frameworks, sourceTypes, kind, language, platformFilters, year: opts.year, track: opts.track }
+  const activeFilters = { frameworks, sourceTypes, kind, language, platformFilters, year: opts.year, track: opts.track, deprecated }
 
   const results = []
   const seen = new Set()
@@ -280,13 +282,9 @@ function formatResult(r) {
     declaration: r.declaration,
     urlDepth: r.url_depth ?? 0,
     isReleaseNotes: !!(r.is_release_notes),
-    docKind: r.doc_kind ?? null,
     language: r.language ?? null,
-    minIos: r.min_ios ?? null,
-    minMacos: r.min_macos ?? null,
-    minWatchos: r.min_watchos ?? null,
-    minTvos: r.min_tvos ?? null,
-    minVisionos: r.min_visionos ?? null,
+    ...(r.is_deprecated ? { isDeprecated: true } : {}),
+    ...(r.is_beta ? { isBeta: true } : {}),
   }
 }
 
@@ -312,6 +310,22 @@ function matchesSearchFilters(row, filters) {
     && matchesLanguageFilter(row, filters.language)
     && matchesPlatformFilters(row, filters.platformFilters)
     && matchesMetadataFilters(row, filters.year, filters.track)
+    && matchesDeprecatedFilter(row, filters.deprecated)
+}
+
+function normalizeDeprecatedFilter(value) {
+  if (value == null || value === '') return 'include'
+  const v = String(value).trim().toLowerCase()
+  if (v === 'exclude' || v === 'only' || v === 'include') return v
+  return 'include'
+}
+
+function matchesDeprecatedFilter(row, mode) {
+  if (!mode || mode === 'include') return true
+  const deprecated = !!(row?.is_deprecated ?? row?.isDeprecated)
+  if (mode === 'exclude') return !deprecated
+  if (mode === 'only') return deprecated
+  return true
 }
 
 function matchesFrameworkFilter(row, frameworks) {

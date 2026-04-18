@@ -6,12 +6,12 @@ import { z } from 'zod'
 // It handles JSON-RPC 2.0, schema validation, transport negotiation,
 // and protocol compliance — replacing the hand-rolled server.
 
-import { disposeHighlighter } from '../content/highlight.js'
 import { search } from '../commands/search.js'
 import { lookup } from '../commands/lookup.js'
 import { frameworks } from '../commands/frameworks.js'
 import { browse } from '../commands/browse.js'
 import { status } from '../commands/status.js'
+import { taxonomy } from '../commands/taxonomy.js'
 import {
   MIN_PAGINATED_MAX_CHARS,
   buildMatchedDocumentPayload,
@@ -20,6 +20,14 @@ import {
   paginateDocumentPayload,
 } from './pagination.js'
 import { coerceSection } from '../content/coercion.js'
+import {
+  projectSearchResult,
+  projectReadDoc,
+  projectFrameworks,
+  projectBrowse,
+  projectStatus,
+} from './projection.js'
+import { createCacheRegistry } from './cache.js'
 
 const paginatedMaxChars = z.number().int().min(MIN_PAGINATED_MAX_CHARS)
 const paginatedPage = z.number().int().min(1)
@@ -33,6 +41,8 @@ export function createServer(ctx) {
     { name: 'apple-docs', version: '1.0.0' },
     { capabilities: { resources: {}, tools: {} } },
   )
+
+  const cache = createCacheRegistry(ctx)
 
   // --- Tools ---
 
@@ -58,6 +68,7 @@ export function createServer(ctx) {
       read: z.boolean().optional().describe('Return the full Markdown content of the top search result instead of the result list'),
       year: z.number().optional().describe('Filter WWDC sessions by year (e.g. 2024)'),
       track: z.string().optional().describe('Filter WWDC sessions by track (e.g. SwiftUI, Accessibility)'),
+      deprecated: z.enum(['include', 'exclude', 'only']).optional().describe('Deprecation filter. Default "include" returns everything with an `isDeprecated: true` flag on deprecated hits. For code-writing tasks set "exclude" to hide deprecated APIs. "only" returns just deprecated hits.'),
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
       match: z.string().optional().describe('Return focused match excerpts from the top read result instead of the full page content.'),
@@ -65,7 +76,7 @@ export function createServer(ctx) {
       maxMatches: z.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
       caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
-    async (args) => {
+    cache.wrap('search_docs', async (args) => {
       validatePaginationArgs(args)
       const result = await search({
         ...args,
@@ -105,7 +116,10 @@ export function createServer(ctx) {
             document: page.metadata,
           })
         }
-        return createMcpTextResult(readResult)
+        const projectedRead = projectReadDoc(readResult, {
+          full: args.match != null || args.maxChars != null,
+        })
+        return createMcpTextResult(projectedRead)
       }
       const payload = args.maxChars != null
         ? paginateArrayField(result, 'results', {
@@ -114,8 +128,8 @@ export function createServer(ctx) {
             strategy: 'items',
           })
         : result
-      return createMcpTextResult(payload)
-    },
+      return createMcpTextResult(projectSearchResult(payload))
+    }),
   )
 
   server.tool(
@@ -133,7 +147,7 @@ export function createServer(ctx) {
       maxMatches: z.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
       caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
-    async (args) => {
+    cache.wrap('read_doc', async (args) => {
       validatePaginationArgs(args)
       const result = await lookup({
         ...args,
@@ -155,8 +169,9 @@ export function createServer(ctx) {
           document: result.metadata,
         })
       }
-      return createMcpTextResult(payload)
-    },
+      const full = args.section != null || args.match != null || args.maxChars != null
+      return createMcpTextResult(projectReadDoc(payload, { full }))
+    }),
   )
 
   server.tool(
@@ -167,7 +182,7 @@ export function createServer(ctx) {
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
-    async (args) => {
+    cache.wrap('list_frameworks', async (args) => {
       validatePaginationArgs(args)
       const result = await frameworks(args, ctx)
       const payload = args.maxChars != null
@@ -177,8 +192,8 @@ export function createServer(ctx) {
             strategy: 'items',
           })
         : result
-      return createMcpTextResult(payload)
-    },
+      return createMcpTextResult(projectFrameworks(payload))
+    }),
   )
 
   server.tool(
@@ -191,11 +206,11 @@ export function createServer(ctx) {
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
-    async (args) => {
+    cache.wrap('browse', async (args) => {
       validatePaginationArgs(args)
       const result = await browse(args, ctx)
       if (args.maxChars == null) {
-        return createMcpTextResult(result)
+        return createMcpTextResult(projectBrowse(result))
       }
       const fieldName = args.path ? 'children' : 'pages'
       const payload = paginateArrayField(result, fieldName, {
@@ -203,8 +218,20 @@ export function createServer(ctx) {
         page: args.page,
         strategy: 'items',
       })
-      return createMcpTextResult(payload)
+      return createMcpTextResult(projectBrowse(payload))
+    }),
+  )
+
+  server.tool(
+    'list_taxonomy',
+    'List distinct taxonomy values (kind, role, docKind, roleHeading, sourceType) across the corpus with counts. Use this before calling search_docs when you need to pick a valid `kind` filter or understand what shapes of documentation are indexed. Static between `apple-docs update` runs.',
+    {
+      field: z.enum(['kind', 'role', 'docKind', 'roleHeading', 'sourceType']).optional().describe('Return a single field instead of all five.'),
     },
+    cache.wrap('list_taxonomy', async (args) => {
+      const result = await taxonomy(args, ctx)
+      return createMcpTextResult(result)
+    }),
   )
 
   server.tool(
@@ -213,7 +240,7 @@ export function createServer(ctx) {
     {},
     async () => {
       const result = await status({ skipUpdateCheck: true }, ctx)
-      return createMcpTextResult(result)
+      return createMcpTextResult(projectStatus(result))
     },
   )
 
@@ -225,10 +252,14 @@ export function createServer(ctx) {
     { description: 'Read a documentation page by key', mimeType: 'text/markdown' },
     async (uri, { key }) => {
       const result = await lookup({ path: key }, ctx)
+      const projected = projectReadDoc(sanitizeDocumentPayload(result), { full: false })
+      const text = projected.found === false
+        ? (projected.note ?? 'Not found')
+        : (result.content ?? result.note ?? 'Not found')
       return {
         contents: [{
           uri: uri.href,
-          text: result.content ?? result.note ?? 'Not found',
+          text,
           mimeType: 'text/markdown',
         }],
       }
@@ -239,7 +270,7 @@ export function createServer(ctx) {
     'framework',
     new ResourceTemplate('apple-docs://framework/{slug}', {
       list: async () => {
-        const result = await frameworks({}, ctx)
+        const result = projectFrameworks(await frameworks({}, ctx))
         return {
           resources: result.roots.map((r) => ({
             uri: `apple-docs://framework/${r.slug}`,
@@ -262,7 +293,7 @@ export function createServer(ctx) {
       return {
         contents: [{
           uri: uri.href,
-          text: JSON.stringify(payload, null, 2),
+          text: JSON.stringify(projectBrowse(payload), null, 2),
           mimeType: 'application/json',
         }],
       }
@@ -279,14 +310,10 @@ export async function startServer(ctx, opts = {}) {
   const { logger } = ctx
   const createServerImpl = opts.createServer ?? createServer
   const createTransport = opts.createTransport ?? (() => new StdioServerTransport())
-  const disposeHighlighterImpl = opts.disposeHighlighter ?? disposeHighlighter
   logger.info('MCP server starting (SDK)...')
   const server = createServerImpl(ctx)
   const transport = createTransport()
   await server.connect(transport)
-
-  // Clean up highlighter when transport closes
-  transport.onclose = () => disposeHighlighterImpl()
 }
 
 function sanitizeDocumentPayload(payload) {
@@ -344,11 +371,11 @@ function compactSearchHit(hit, opts = {}) {
     result.declaration = hit?.declaration ?? null
     result.urlDepth = hit?.urlDepth ?? 0
     result.isReleaseNotes = hit?.isReleaseNotes ?? false
-    result.docKind = hit?.docKind ?? null
     result.language = hit?.language ?? null
-    result.score = hit?.score ?? null
     result.snippet = hit?.snippet ?? null
     result.relatedCount = hit?.relatedCount ?? null
+    if (hit?.isDeprecated) result.isDeprecated = true
+    if (hit?.isBeta) result.isBeta = true
   }
 
   return result

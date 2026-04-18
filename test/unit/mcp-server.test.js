@@ -1,17 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { disposeHighlighter, getHighlighterState } from '../../src/content/highlight.js'
+import { describe, expect, test } from 'bun:test'
 import { startServer } from '../../src/mcp/server.js'
 
-beforeEach(() => {
-  disposeHighlighter()
-})
-
-afterEach(() => {
-  disposeHighlighter()
-})
-
 describe('startServer', () => {
-  test('connects without starting syntax highlighter warmup', async () => {
+  test('connects the provided transport to the MCP server', async () => {
     const events = []
     const fakeTransport = {}
     const fakeServer = {
@@ -19,8 +10,6 @@ describe('startServer', () => {
         events.push(['connect', transport])
       },
     }
-
-    expect(getHighlighterState()).toEqual({ ready: false, warming: false })
 
     await startServer(
       {
@@ -37,21 +26,9 @@ describe('startServer', () => {
         createTransport() {
           return fakeTransport
         },
-        disposeHighlighter() {
-          events.push(['dispose'])
-        },
       },
     )
 
-    expect(getHighlighterState()).toEqual({ ready: false, warming: false })
     expect(events).toEqual([['connect', fakeTransport]])
-    expect(typeof fakeTransport.onclose).toBe('function')
-
-    fakeTransport.onclose()
-
-    expect(events).toEqual([
-      ['connect', fakeTransport],
-      ['dispose'],
-    ])
   })
 })

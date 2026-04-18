@@ -33,7 +33,11 @@ export function formatSearchResults(result) {
     const quality = r.matchQuality ?? 'match'
     const tag = qualityBadge(quality, r.distance)
     const sourceLabel = r.sourceType ? `${r.sourceType} / ` : ''
-    lines.push(`  ${dim(`${sourceLabel + r.framework} / ${r.kind ?? ''}`)}${tag}`)
+    const flags = [
+      r.isDeprecated ? dim('[deprecated]') : '',
+      r.isBeta ? dim('[beta]') : '',
+    ].filter(Boolean).join(' ')
+    lines.push(`  ${dim(`${sourceLabel + r.framework} / ${r.kind ?? ''}`)}${tag}${flags ? ' ' + flags : ''}`)
     lines.push(`  ${bold(r.title)}`)
     if (r.abstract) lines.push(`  ${r.abstract}`)
     if (r.snippet && r.snippet !== r.abstract) lines.push(`  ${dim(r.snippet)}`)
@@ -81,6 +85,11 @@ export function formatLookup(result) {
     if (m) {
       lines.push(bold(m.title))
       if (m.roleHeading) lines.push(dim(m.roleHeading))
+      const lookupFlags = [
+        m.isDeprecated ? dim('[deprecated]') : '',
+        m.isBeta ? dim('[beta]') : '',
+      ].filter(Boolean).join(' ')
+      if (lookupFlags) lines.push(lookupFlags)
       if (m.framework) lines.push(`Framework: ${m.framework}`)
       if (m.abstract) lines.push(`\n${m.abstract}`)
       if (m.declaration) lines.push(`\n${dim('Declaration:')} ${m.declaration}`)
@@ -158,6 +167,22 @@ export function formatBrowse(result) {
   }
   lines.push(`\n${result.total} pages`)
   return lines.join('\n')
+}
+
+export function formatTaxonomy(result) {
+  const sections = result.field && result.values
+    ? [[result.field, result.values]]
+    : Object.entries(result)
+  const lines = []
+  for (const [label, values] of sections) {
+    if (!Array.isArray(values) || values.length === 0) continue
+    lines.push(bold(`${label} (${values.length})`))
+    for (const row of values) {
+      lines.push(`  ${row.value} ${dim(`(${row.count})`)}`)
+    }
+    lines.push('')
+  }
+  return lines.join('\n').trimEnd()
 }
 
 export function formatStatus(result) {
