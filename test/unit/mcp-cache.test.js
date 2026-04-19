@@ -85,10 +85,10 @@ describe('createCacheRegistry', () => {
     expect(calls).toBe(2)
   })
 
-  test('status is never wrapped (not in the registry)', async () => {
+  test('unknown tool names bypass the cache (passthrough)', async () => {
     const registry = createCacheRegistry(fakeCtx())
     let calls = 0
-    const handler = registry.wrap('status', async () => {
+    const handler = registry.wrap('unknown_tool', async () => {
       calls++
       return {}
     })

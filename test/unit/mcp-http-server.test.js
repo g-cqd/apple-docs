@@ -485,9 +485,9 @@ describe('classifyRpcPayload', () => {
     }))).toBe('heavy')
   })
 
-  test('tools/call on status (non-heavy) is light', () => {
+  test('tools/call on list_frameworks (non-heavy) is light', () => {
     expect(classifyRpcPayload(JSON.stringify({
-      jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'status' },
+      jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_frameworks' },
     }))).toBe('light')
   })
 

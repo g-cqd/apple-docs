@@ -202,11 +202,11 @@ afterEach(async () => {
 })
 
 describe('MCP contract — tools', () => {
-  test('lists all 6 tools', async () => {
+  test('lists all 5 tools', async () => {
     const result = await client.listTools()
     const names = result.tools.map((t) => t.name).sort()
     expect(names).toEqual([
-      'browse', 'list_frameworks', 'list_taxonomy', 'read_doc', 'search_docs', 'status',
+      'browse', 'list_frameworks', 'list_taxonomy', 'read_doc', 'search_docs',
     ])
   })
 
@@ -318,15 +318,6 @@ describe('MCP contract — tools', () => {
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.children).toBeArray()
     expect(parsed.children.length).toBeGreaterThan(0)
-  })
-
-  test('status returns corpus info', async () => {
-    const result = await client.callTool({ name: 'status', arguments: {} })
-    expect(result.isError).toBeFalsy()
-    const parsed = JSON.parse(result.content[0].text)
-    expect(parsed).toBeDefined()
-    expect(parsed.tier).toBe('standard')
-    expect(parsed.capabilities).toBeDefined()
   })
 
   test('search_docs with year filters WWDC sessions by source metadata', async () => {

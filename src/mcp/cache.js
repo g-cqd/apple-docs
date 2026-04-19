@@ -27,7 +27,6 @@ import { join } from 'node:path'
  *   browse        100
  *   list_frameworks 16
  *   list_taxonomy  16
- *   status         — never cached (live corpus health signal)
  *
  * Escape hatch: `APPLE_DOCS_MCP_CACHE=off` disables the cache entirely so a
  * debugger can see raw projection output.

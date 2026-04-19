@@ -153,7 +153,6 @@ The MCP server exposes:
 - `list_frameworks`
 - `list_taxonomy`
 - `browse`
-- `status`
 
 and these resources:
 

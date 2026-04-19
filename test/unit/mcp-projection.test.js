@@ -5,7 +5,6 @@ import {
   projectReadDoc,
   projectFrameworks,
   projectBrowse,
-  projectStatus,
 } from '../../src/mcp/projection.js'
 
 describe('projectSearchResult', () => {
@@ -115,13 +114,5 @@ describe('projectBrowse', () => {
     const out = projectBrowse({ framework: 'SwiftUI', slug: 'swiftui', pages: [] })
     expect(out.slug).toBeUndefined()
     expect(out.framework).toBe('SwiftUI')
-  })
-})
-
-describe('projectStatus', () => {
-  test('drops dataDir', () => {
-    const out = projectStatus({ dataDir: '/home/x/.apple-docs', tier: 'standard' })
-    expect(out.dataDir).toBeUndefined()
-    expect(out.tier).toBe('standard')
   })
 })

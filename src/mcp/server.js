@@ -10,7 +10,6 @@ import { search } from '../commands/search.js'
 import { lookup } from '../commands/lookup.js'
 import { frameworks } from '../commands/frameworks.js'
 import { browse } from '../commands/browse.js'
-import { status } from '../commands/status.js'
 import { taxonomy } from '../commands/taxonomy.js'
 import {
   MIN_PAGINATED_MAX_CHARS,
@@ -25,7 +24,6 @@ import {
   projectReadDoc,
   projectFrameworks,
   projectBrowse,
-  projectStatus,
 } from './projection.js'
 import { createCacheRegistry } from './cache.js'
 
@@ -238,16 +236,6 @@ export function createServer(ctx, deps = {}) {
       const result = await taxonomy(args, ctx)
       return createMcpTextResult(result)
     }),
-  )
-
-  server.tool(
-    'status',
-    'Show corpus health: total pages, frameworks by kind, disk usage, crawl progress, and last sync time.',
-    {},
-    async () => {
-      const result = await status({ skipUpdateCheck: true }, ctx)
-      return createMcpTextResult(projectStatus(result))
-    },
   )
 
   // --- Resources ---

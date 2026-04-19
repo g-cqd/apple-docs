@@ -1,9 +1,9 @@
 /**
  * MCP payload projection.
  *
- * The command layer (search, lookup, browse, frameworks, status) emits fat
- * payloads that carry everything web and CLI consumers need. MCP callers are
- * LLMs paying by the token — they see the projected shape instead. This module
+ * The command layer (search, lookup, browse, frameworks) emits fat payloads
+ * that carry everything web and CLI consumers need. MCP callers are LLMs
+ * paying by the token — they see the projected shape instead. This module
  * strips MCP-only noise, collapses the `found: false` scaffolding, and turns
  * full-doc reads into a lightweight section skeleton unless the caller asked
  * for a specific slice.
@@ -95,11 +95,5 @@ function projectRoot(root) {
 export function projectBrowse(result) {
   if (!result || typeof result !== 'object') return result
   const { slug: _slug, ...rest } = result
-  return rest
-}
-
-export function projectStatus(result) {
-  if (!result || typeof result !== 'object') return result
-  const { dataDir: _dataDir, ...rest } = result
   return rest
 }
