@@ -195,7 +195,20 @@ try {
           const allowedOrigins = flags['allow-origin']
             ? String(flags['allow-origin']).split(',').map(s => s.trim()).filter(Boolean)
             : []
-          const handle = await startHttpServer({ port, host, allowedOrigins }, ctx)
+          const heavyConcurrency = flags.concurrency != null
+            ? Number.parseInt(flags.concurrency, 10) || undefined
+            : undefined
+          const heavyQueue = flags.queue != null
+            ? Number.parseInt(flags.queue, 10)
+            : undefined
+          const handle = await startHttpServer(
+            { port, host, allowedOrigins },
+            ctx,
+            {
+              ...(heavyConcurrency != null ? { heavyConcurrency } : {}),
+              ...(heavyQueue != null && Number.isFinite(heavyQueue) ? { heavyQueue } : {}),
+            },
+          )
           console.log(`MCP HTTP server running at ${handle.url}`)
           console.log('Press Ctrl+C to stop')
           // Keep process alive — process signal handlers at the top of this file

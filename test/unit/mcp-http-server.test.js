@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { startHttpServer } from '../../src/mcp/http-server.js'
+import { classifyRpcPayload, startHttpServer } from '../../src/mcp/http-server.js'
 
 function makeLogger() {
   const calls = []
@@ -11,15 +11,30 @@ function makeLogger() {
   }
 }
 
-async function bootHarness({ allowedOrigins = [], handleRequest, cacheRegistry } = {}) {
+async function bootHarness({
+  allowedOrigins = [],
+  handleRequest,
+  cacheRegistry,
+  heavyConcurrency,
+  heavyQueue,
+  heavySemaphore,
+  perRequestTransport = false,
+} = {}) {
   const events = []
   const mcpServer = {
     async connect(transport) { events.push(['connect', transport]) },
+    async close() { events.push(['server-close']) },
   }
-  const fakeTransport = {
-    handleRequest: handleRequest ?? (async () => Response.json({ jsonrpc: '2.0', id: 1, result: {} })),
-    close: async () => { events.push(['transport-close']) },
+  const transports = []
+  const makeTransport = () => {
+    const t = {
+      handleRequest: handleRequest ?? (async () => Response.json({ jsonrpc: '2.0', id: 1, result: {} })),
+      close: async () => { events.push(['transport-close']) },
+    }
+    transports.push(t)
+    return t
   }
+  const firstTransport = makeTransport()
   let serveConfig = null
   const fakeServer = {
     port: 31337,
@@ -31,13 +46,28 @@ async function bootHarness({ allowedOrigins = [], handleRequest, cacheRegistry }
     { logger: makeLogger() },
     {
       createServer: (ctx, deps) => { createServerCalls.push({ ctx, deps }); return mcpServer },
-      createTransport: () => fakeTransport,
+      createTransport: perRequestTransport ? makeTransport : () => firstTransport,
       serve: (cfg) => { serveConfig = cfg; return fakeServer },
       ...(cacheRegistry ? { cacheRegistry } : {}),
+      ...(heavyConcurrency != null ? { heavyConcurrency } : {}),
+      ...(heavyQueue != null ? { heavyQueue } : {}),
+      ...(heavySemaphore != null ? { heavySemaphore } : {}),
     },
   )
-  return { handle, events, fetch: (req) => serveConfig.fetch(req), fakeTransport, createServerCalls }
+  return {
+    handle,
+    events,
+    fetch: (req) => serveConfig.fetch(req),
+    fakeTransport: firstTransport,
+    transports,
+    createServerCalls,
+  }
 }
+
+const rpcBody = (method, params) =>
+  JSON.stringify({ jsonrpc: '2.0', id: 1, method, ...(params ? { params } : {}) })
+
+const callBody = (toolName, args = {}) => rpcBody('tools/call', { name: toolName, arguments: args })
 
 describe('startHttpServer', () => {
   test('exposes the advertised MCP URL without connecting until a request arrives', async () => {
@@ -225,6 +255,175 @@ describe('startHttpServer', () => {
     expect(body.cache).toBeUndefined()
   })
 
+  test('closes the per-request McpServer and transport after handleRequest', async () => {
+    const { fetch, events } = await bootHarness()
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: rpcBody('initialize'),
+    }))
+    expect(res.status).toBe(200)
+    // Both lifecycle hooks fire exactly once for the single request.
+    expect(events.filter(e => e[0] === 'server-close')).toHaveLength(1)
+    expect(events.filter(e => e[0] === 'transport-close')).toHaveLength(1)
+  })
+
+  test('cheap protocol methods bypass the heavy-tool semaphore', async () => {
+    // Zero permits and zero queue would reject any gated request; initialize
+    // and tools/list must still go through because they are classified light.
+    const { fetch } = await bootHarness({ heavyConcurrency: 1, heavyQueue: 0 })
+    const cheap = [
+      rpcBody('initialize', { protocolVersion: '2024-11-05', capabilities: {} }),
+      rpcBody('ping'),
+      rpcBody('tools/list'),
+      rpcBody('resources/list'),
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/cancelled' }),
+    ]
+    for (const body of cheap) {
+      const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      }))
+      expect(res.status).toBe(200)
+    }
+  })
+
+  test('heavy tool calls serialise through the semaphore', async () => {
+    let firstResolve
+    const firstHandled = new Promise((resolve) => { firstResolve = resolve })
+    let handleCalls = 0
+    const { fetch } = await bootHarness({
+      heavyConcurrency: 1,
+      heavyQueue: 8,
+      handleRequest: async () => {
+        handleCalls++
+        if (handleCalls === 1) await firstHandled
+        return Response.json({ jsonrpc: '2.0', id: 1, result: { ok: true } })
+      },
+    })
+    const post = () => fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: callBody('search_docs', { query: 'view' }),
+    }))
+    const p1 = post()
+    const p2 = post()
+    // Let the first grab the permit and the second queue behind it.
+    await new Promise((r) => setTimeout(r, 5))
+    expect(handleCalls).toBe(1)
+    firstResolve()
+    const [r1, r2] = await Promise.all([p1, p2])
+    expect(r1.status).toBe(200)
+    expect(r2.status).toBe(200)
+    expect(handleCalls).toBe(2)
+  })
+
+  test('heavy overflow returns HTTP 503 with JSON-RPC -32003 and Retry-After', async () => {
+    let release
+    const block = new Promise((resolve) => { release = resolve })
+    const { fetch } = await bootHarness({
+      heavyConcurrency: 1,
+      heavyQueue: 0,
+      handleRequest: async () => {
+        await block
+        return Response.json({ jsonrpc: '2.0', id: 1, result: {} })
+      },
+    })
+    const post = () => fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: callBody('read_doc', { path: 'swiftui/view' }),
+    }))
+    const holding = post() // grabs the single permit
+    await new Promise((r) => setTimeout(r, 5))
+    const rejected = await post() // queue=0 → BackpressureError
+    expect(rejected.status).toBe(503)
+    expect(rejected.headers.get('Retry-After')).toBe('1')
+    const body = await rejected.json()
+    expect(body.error.code).toBe(-32003)
+    expect(body.error.message).toMatch(/busy/i)
+    release()
+    const held = await holding
+    expect(held.status).toBe(200)
+  })
+
+  test('cheap methods stay available even when heavy permits are exhausted', async () => {
+    let release
+    const block = new Promise((resolve) => { release = resolve })
+    // Block only the heavy body; initialize (cheap) must resolve immediately.
+    const { fetch } = await bootHarness({
+      heavyConcurrency: 1,
+      heavyQueue: 0,
+      handleRequest: async (req) => {
+        const text = await req.text()
+        if (text.includes('"search_docs"')) await block
+        return Response.json({ jsonrpc: '2.0', id: 1, result: {} })
+      },
+    })
+    const heavy = fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: callBody('search_docs', { query: 'view' }),
+    }))
+    await new Promise((r) => setTimeout(r, 5))
+    // This initialize must not hang on the heavy permit.
+    const cheap = fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: rpcBody('initialize'),
+    }))
+    const cheapRes = await Promise.race([
+      cheap,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('initialize was blocked')), 250)),
+    ])
+    expect(cheapRes.status).toBe(200)
+    release()
+    await heavy
+  })
+
+  test('forwards the original JSON-RPC body to the transport after classification', async () => {
+    let seenBody = null
+    const { fetch } = await bootHarness({
+      handleRequest: async (req) => {
+        seenBody = await req.text()
+        return Response.json({ jsonrpc: '2.0', id: 7, result: { ok: true } })
+      },
+    })
+    const payload = callBody('search_docs', { query: 'NavigationStack', limit: 3 })
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: payload,
+    }))
+    expect(res.status).toBe(200)
+    expect(seenBody).toBe(payload)
+  })
+
+  test('/healthz reports concurrency stats when cache stats are exposed', async () => {
+    const prev = process.env.APPLE_DOCS_MCP_CACHE_STATS
+    process.env.APPLE_DOCS_MCP_CACHE_STATS = '1'
+    try {
+      const { fetch } = await bootHarness({
+        cacheRegistry: { stats: () => ({ totalHits: 0, totalMisses: 0, hitRatio: 0 }) },
+        heavyConcurrency: 2,
+        heavyQueue: 7,
+      })
+      const res = await fetch(new Request('http://127.0.0.1:3031/healthz'))
+      const body = await res.json()
+      expect(body.concurrency).toEqual({
+        heavyMax: 2,
+        heavyQueue: 7,
+        active: 0,
+        waiting: 0,
+        rejected: 0,
+      })
+    } finally {
+      if (prev === undefined) Reflect.deleteProperty(process.env, 'APPLE_DOCS_MCP_CACHE_STATS')
+      else process.env.APPLE_DOCS_MCP_CACHE_STATS = prev
+    }
+  })
+
   test('/healthz exposes cache stats when APPLE_DOCS_MCP_CACHE_STATS=1', async () => {
     const prev = process.env.APPLE_DOCS_MCP_CACHE_STATS
     process.env.APPLE_DOCS_MCP_CACHE_STATS = '1'
@@ -242,5 +441,44 @@ describe('startHttpServer', () => {
       if (prev === undefined) Reflect.deleteProperty(process.env, 'APPLE_DOCS_MCP_CACHE_STATS')
       else process.env.APPLE_DOCS_MCP_CACHE_STATS = prev
     }
+  })
+})
+
+describe('classifyRpcPayload', () => {
+  test('tools/call on a heavy tool is heavy', () => {
+    expect(classifyRpcPayload(JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name: 'search_docs', arguments: { query: 'view' } },
+    }))).toBe('heavy')
+    expect(classifyRpcPayload(JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read_doc' },
+    }))).toBe('heavy')
+  })
+
+  test('tools/call on status (non-heavy) is light', () => {
+    expect(classifyRpcPayload(JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'status' },
+    }))).toBe('light')
+  })
+
+  test('initialize / ping / tools/list / notifications / resources are light', () => {
+    for (const method of ['initialize', 'ping', 'tools/list', 'resources/list', 'notifications/cancelled']) {
+      expect(classifyRpcPayload(JSON.stringify({ jsonrpc: '2.0', id: 1, method }))).toBe('light')
+    }
+  })
+
+  test('JSON-RPC batch is heavy if any sub-call is heavy', () => {
+    const batch = [
+      { jsonrpc: '2.0', id: 1, method: 'ping' },
+      { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'search_docs' } },
+    ]
+    expect(classifyRpcPayload(JSON.stringify(batch))).toBe('heavy')
+  })
+
+  test('malformed bodies fall back to light (transport will error)', () => {
+    expect(classifyRpcPayload('')).toBe('light')
+    expect(classifyRpcPayload('not json')).toBe('light')
+    expect(classifyRpcPayload('null')).toBe('light')
+    expect(classifyRpcPayload('123')).toBe('light')
   })
 })

@@ -253,6 +253,14 @@ Serve options:
   --allow-origin <url> Allowed browser Origin header(s); comma-separated.
                        Omit to allow all origins (defaults open — intended
                        to run behind a private network boundary).
+  --concurrency <n>    Max in-flight heavy tool calls (default: 4, also
+                       APPLE_DOCS_MCP_CONCURRENCY). Caps search_docs /
+                       read_doc / browse / list_frameworks / list_taxonomy so
+                       initialize/ping/tools/list stay responsive.
+  --queue <n>          Max queued heavy calls beyond --concurrency before
+                       rejecting with HTTP 503 (default: 32, also
+                       APPLE_DOCS_MCP_QUEUE). 0 means reject immediately once
+                       permits are exhausted.
 
 Install options:
   --http <url>         Print configuration for a remote Streamable HTTP

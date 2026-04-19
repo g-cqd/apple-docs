@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { createServer } from './server.js'
 import { createCacheRegistry } from './cache.js'
+import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -12,6 +13,21 @@ const SECURITY_HEADERS = {
 const CORS_ALLOWED_HEADERS = 'content-type, mcp-session-id, mcp-protocol-version, last-event-id'
 const CORS_EXPOSE_HEADERS = 'mcp-session-id'
 const CORS_METHODS = 'GET, POST, DELETE, OPTIONS'
+
+// Tool names whose handlers can saturate the Bun event loop (FTS + ranking +
+// SQLite reads + projection). Gated through a bounded semaphore so that
+// cheap protocol traffic (initialize, ping, tools/list) never waits behind
+// a burst of heavy calls from another client.
+const HEAVY_TOOLS = new Set([
+  'search_docs',
+  'read_doc',
+  'browse',
+  'list_frameworks',
+  'list_taxonomy',
+])
+
+const DEFAULT_HEAVY_CONCURRENCY = 4
+const DEFAULT_HEAVY_QUEUE = 32
 
 /**
  * Start an MCP server exposing the corpus over Streamable HTTP.
@@ -49,6 +65,20 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   const cacheRegistry = deps.cacheRegistry ?? createCacheRegistry(ctx)
   const exposeCacheStats = process.env.APPLE_DOCS_MCP_CACHE_STATS === '1'
 
+  // Bound in-flight heavy-tool work so a burst from one client can't starve
+  // the event loop and block cheap protocol messages (initialize, ping,
+  // tools/list) from any other client. Overflow returns JSON-RPC -32003 +
+  // HTTP 503 so the caller can retry rather than hanging on a silent queue.
+  const heavyMax = deps.heavyConcurrency
+    ?? parsePositiveInt(process.env.APPLE_DOCS_MCP_CONCURRENCY)
+    ?? DEFAULT_HEAVY_CONCURRENCY
+  const heavyQueue = deps.heavyQueue
+    ?? parseNonNegativeInt(process.env.APPLE_DOCS_MCP_QUEUE)
+    ?? DEFAULT_HEAVY_QUEUE
+  const heavySemaphore = deps.heavySemaphore
+    ?? new Semaphore(heavyMax, { maxWaiters: heavyQueue })
+  const concurrencyStats = { rejected: 0 }
+
   function originOk(request) {
     const origin = request.headers.get('origin')
     if (!origin) return true // native/non-browser clients omit Origin
@@ -85,12 +115,21 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     return new Response(null, { status: allowed ? 204 : 403, headers })
   }
 
-  async function handle(request) {
+  async function handle(request, meta) {
     const url = new URL(request.url)
 
     if (url.pathname === '/healthz') {
       const body = { ok: true, service: 'apple-docs-mcp' }
-      if (exposeCacheStats) body.cache = cacheRegistry.stats()
+      if (exposeCacheStats) {
+        body.cache = cacheRegistry.stats()
+        body.concurrency = {
+          heavyMax,
+          heavyQueue,
+          active: heavySemaphore.active,
+          waiting: heavySemaphore._queue.length,
+          rejected: concurrencyStats.rejected,
+        }
+      }
       return Response.json(body)
     }
 
@@ -107,13 +146,77 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       )
     }
 
-    // Per MCP SDK (webStandardStreamableHttp.js): in stateless mode each request
-    // must use a fresh transport + server. The shared cacheRegistry injected
-    // here is what makes the LRU effective across requests.
-    const mcpServer = createServerImpl(ctx, { cacheRegistry })
-    const transport = createTransport()
-    await mcpServer.connect(transport)
-    return transport.handleRequest(request)
+    // Peek JSON-RPC method so heavy tool calls can be gated without making
+    // initialize/ping/tools/list/notifications/resources wait behind them.
+    // Body is buffered once and forwarded to the transport via a cloned
+    // Request so the SDK still sees the same payload.
+    let forwardRequest = request
+    let priority = 'light'
+    if (request.method === 'POST') {
+      const bodyText = await request.text()
+      priority = classifyRpcPayload(bodyText)
+      forwardRequest = new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: bodyText,
+      })
+    }
+
+    meta.priority = priority
+
+    const dispatch = async () => {
+      // Per MCP SDK (webStandardStreamableHttp.js): in stateless mode each
+      // request must use a fresh transport + server. The shared cacheRegistry
+      // injected here is what makes the LRU effective across requests.
+      const mcpServer = createServerImpl(ctx, { cacheRegistry })
+      const transport = createTransport()
+      await mcpServer.connect(transport)
+      try {
+        return await transport.handleRequest(forwardRequest)
+      } finally {
+        // Close both to release event-listener and memory from the
+        // per-request spawn. Swallow errors — logging them per-request
+        // at info level would flood the access log on normal shutdowns.
+        try { await mcpServer.close?.() } catch {}
+        try { await transport.close?.() } catch {}
+      }
+    }
+
+    if (priority !== 'heavy') return dispatch()
+
+    const waitStart = Date.now()
+    try {
+      return await heavySemaphore.run(async () => {
+        meta.waitMs = Date.now() - waitStart
+        const holdStart = Date.now()
+        try {
+          return await dispatch()
+        } finally {
+          meta.holdMs = Date.now() - holdStart
+        }
+      })
+    } catch (err) {
+      if (err instanceof BackpressureError) {
+        concurrencyStats.rejected++
+        meta.rejected = true
+        return busyResponse()
+      }
+      throw err
+    }
+  }
+
+  function busyResponse() {
+    return Response.json(
+      {
+        jsonrpc: '2.0',
+        error: {
+          code: -32003,
+          message: 'Server busy: too many concurrent tool calls. Retry shortly.',
+        },
+        id: null,
+      },
+      { status: 503, headers: { 'Retry-After': '1' } },
+    )
   }
 
   const server = serveImpl({
@@ -125,11 +228,13 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       const ua = request.headers.get('user-agent') ?? '-'
       const cfRay = request.headers.get('cf-ray') ?? '-'
       const accept = request.headers.get('accept') ?? '-'
+      const meta = {}
       try {
-        const response = await handle(request)
+        const response = await handle(request, meta)
         applyCorsHeaders(request, response)
         applySecurityHeaders(response)
-        logger?.info?.(`${request.method} ${url.pathname} -> ${response.status} ${Date.now() - started}ms ua="${ua}" cf-ray=${cfRay} accept="${accept}"`)
+        const tag = buildPriorityTag(meta)
+        logger?.info?.(`${request.method} ${url.pathname} -> ${response.status} ${Date.now() - started}ms${tag} ua="${ua}" cf-ray=${cfRay} accept="${accept}"`)
         return response
       } catch (err) {
         logger?.error?.(`${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms err="${err?.message}" ua="${ua}" cf-ray=${cfRay}`, { stack: err?.stack })
@@ -151,4 +256,50 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   }
 
   return { server, url, close }
+}
+
+/**
+ * Classify a JSON-RPC POST payload as 'heavy' (a tools/call that may saturate
+ * the event loop) or 'light' (everything else: initialize, ping, tools/list,
+ * resources/*, notifications/*, malformed). Unknown or unparseable payloads
+ * are treated as light — the transport will produce the right error, and we
+ * would rather not throttle on data we can't interpret.
+ */
+export function classifyRpcPayload(bodyText) {
+  if (!bodyText) return 'light'
+  let parsed
+  try { parsed = JSON.parse(bodyText) } catch { return 'light' }
+  if (Array.isArray(parsed)) {
+    // JSON-RPC batch: throttle if any sub-call is heavy.
+    return parsed.some(item => isHeavyRpc(item)) ? 'heavy' : 'light'
+  }
+  return isHeavyRpc(parsed) ? 'heavy' : 'light'
+}
+
+function isHeavyRpc(message) {
+  if (!message || typeof message !== 'object') return false
+  if (message.method !== 'tools/call') return false
+  const name = message?.params?.name
+  return typeof name === 'string' && HEAVY_TOOLS.has(name)
+}
+
+function buildPriorityTag(meta) {
+  const parts = []
+  if (meta.priority === 'heavy') {
+    parts.push(`prio=heavy wait=${meta.waitMs ?? 0}ms hold=${meta.holdMs ?? 0}ms`)
+    if (meta.rejected) parts.push('rejected=1')
+  }
+  return parts.length === 0 ? '' : ` ${parts.join(' ')}`
+}
+
+function parsePositiveInt(value) {
+  if (value == null) return null
+  const n = Number.parseInt(value, 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+function parseNonNegativeInt(value) {
+  if (value == null) return null
+  const n = Number.parseInt(value, 10)
+  return Number.isFinite(n) && n >= 0 ? n : null
 }
