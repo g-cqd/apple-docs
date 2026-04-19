@@ -15,15 +15,18 @@ const CORS_EXPOSE_HEADERS = 'mcp-session-id'
 const CORS_METHODS = 'GET, POST, DELETE, OPTIONS'
 
 // Tool names whose handlers can saturate the Bun event loop (FTS + ranking +
-// SQLite reads + projection). Gated through a bounded semaphore so that
-// cheap protocol traffic (initialize, ping, tools/list) never waits behind
-// a burst of heavy calls from another client.
+// SQLite reads + markdown hydration). Gated through a bounded semaphore so
+// that cheap protocol traffic (initialize, ping, tools/list) never waits
+// behind a burst of heavy calls from another client.
+//
+// `list_frameworks` and `list_taxonomy` are intentionally NOT heavy: they are
+// cache-wrapped with static/near-static payloads (taxonomy is invalidated
+// only on `apple-docs update`) and their uncached miss path is a small bulk
+// SQL read, not CPU-bound ranking work.
 const HEAVY_TOOLS = new Set([
   'search_docs',
   'read_doc',
   'browse',
-  'list_frameworks',
-  'list_taxonomy',
 ])
 
 const DEFAULT_HEAVY_CONCURRENCY = 4
@@ -171,15 +174,18 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       const mcpServer = createServerImpl(ctx, { cacheRegistry })
       const transport = createTransport()
       await mcpServer.connect(transport)
-      try {
-        return await transport.handleRequest(forwardRequest)
-      } finally {
-        // Close both to release event-listener and memory from the
-        // per-request spawn. Swallow errors — logging them per-request
-        // at info level would flood the access log on normal shutdowns.
+      const response = await transport.handleRequest(forwardRequest)
+      // Safe to close only when the Response is buffered end-to-end, i.e. a
+      // POST handled with enableJsonResponse:true or a DELETE (status-only
+      // body). GET returns a live text/event-stream ReadableStream; closing
+      // the transport here would tear the stream down before the client
+      // reads a single event. We accept the pre-existing leak on GET for
+      // now — GET SSE is rarely used with stateless transports.
+      if (forwardRequest.method === 'POST' || forwardRequest.method === 'DELETE') {
         try { await mcpServer.close?.() } catch {}
         try { await transport.close?.() } catch {}
       }
+      return response
     }
 
     if (priority !== 'heavy') return dispatch()

@@ -255,7 +255,7 @@ describe('startHttpServer', () => {
     expect(body.cache).toBeUndefined()
   })
 
-  test('closes the per-request McpServer and transport after handleRequest', async () => {
+  test('closes the per-request McpServer and transport after a POST', async () => {
     const { fetch, events } = await bootHarness()
     const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
       method: 'POST',
@@ -266,6 +266,36 @@ describe('startHttpServer', () => {
     // Both lifecycle hooks fire exactly once for the single request.
     expect(events.filter(e => e[0] === 'server-close')).toHaveLength(1)
     expect(events.filter(e => e[0] === 'transport-close')).toHaveLength(1)
+  })
+
+  test('closes per-request McpServer and transport after a DELETE', async () => {
+    const { fetch, events } = await bootHarness({
+      handleRequest: async () => new Response(null, { status: 200 }),
+    })
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', { method: 'DELETE' }))
+    expect(res.status).toBe(200)
+    expect(events.filter(e => e[0] === 'server-close')).toHaveLength(1)
+    expect(events.filter(e => e[0] === 'transport-close')).toHaveLength(1)
+  })
+
+  test('GET /mcp does NOT close the transport (SSE stream must stay open)', async () => {
+    // Regression guard: the SDK returns a live text/event-stream ReadableStream
+    // from GET /mcp. Calling transport.close() after handleRequest resolves
+    // would EOF the stream before any event could flow.
+    const { fetch, events } = await bootHarness({
+      handleRequest: async () => new Response(
+        new ReadableStream({ start(ctrl) { /* keep open */ void ctrl } }),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
+    })
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'GET',
+      headers: { accept: 'text/event-stream' },
+    }))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/event-stream')
+    expect(events.filter(e => e[0] === 'server-close')).toHaveLength(0)
+    expect(events.filter(e => e[0] === 'transport-close')).toHaveLength(0)
   })
 
   test('cheap protocol methods bypass the heavy-tool semaphore', async () => {
