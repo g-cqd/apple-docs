@@ -184,9 +184,8 @@ try {
       switch (subcommand) {
         case 'start': {
           const { startServer } = await import('./src/mcp/server.js')
-          await startServer(ctx)
-          // Keep process alive — server uses stdio transport, exits on disconnect
-          await new Promise(() => {})
+          const handle = await startServer(ctx)
+          await handle.closed
           break
         }
         case 'serve': {

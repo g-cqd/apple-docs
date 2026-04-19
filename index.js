@@ -39,7 +39,8 @@ process.on('SIGINT', () => { cleanup(); process.exit(130) })
 process.on('SIGTERM', () => { cleanup(); process.exit(143) })
 
 try {
-  await startServer(ctx)
+  const handle = await startServer(ctx)
+  await handle.closed
 } finally {
   cleanup()
 }

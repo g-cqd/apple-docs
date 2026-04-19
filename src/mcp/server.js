@@ -316,10 +316,79 @@ export async function startServer(ctx, opts = {}) {
   const { logger } = ctx
   const createServerImpl = opts.createServer ?? createServer
   const createTransport = opts.createTransport ?? (() => new StdioServerTransport())
+  const stdin = opts.stdin ?? process.stdin
+  const stdout = opts.stdout ?? process.stdout
+  const stderr = opts.stderr ?? process.stderr
   logger.info('MCP server starting (SDK)...')
   const server = createServerImpl(ctx)
   const transport = createTransport()
-  await server.connect(transport)
+
+  let closedResolve = null
+  const closed = new Promise(resolve => { closedResolve = resolve })
+  let closePromise = null
+
+  const detachListeners = () => {
+    stdin.off?.('end', onStdinEnd)
+    stdin.off?.('close', onStdinClose)
+    stdout.off?.('error', onStdoutError)
+    stderr.off?.('error', onStderrError)
+  }
+
+  const close = (reason = 'shutdown') => {
+    if (closePromise) return closePromise
+    detachListeners()
+    closePromise = (async () => {
+      try {
+        if (typeof server.close === 'function') {
+          await server.close()
+        } else {
+          await transport.close?.()
+        }
+      } catch (error) {
+        logger?.warn?.(`MCP server close failed: ${error?.message ?? error}`)
+        try {
+          await transport.close?.()
+        } catch (transportError) {
+          logger?.warn?.(`MCP transport close failed: ${transportError?.message ?? transportError}`)
+        }
+      }
+      return reason
+    })()
+    closePromise.finally(() => { closedResolve?.(reason) })
+    return closePromise
+  }
+
+  const closeOnPipeEnd = (reason) => {
+    logger?.info?.(`MCP stdio disconnected (${reason})`)
+    void close(reason)
+  }
+
+  const closeOnPipeError = (streamName, error) => {
+    if (error?.code === 'EPIPE' || error?.code === 'ERR_STREAM_DESTROYED') {
+      closeOnPipeEnd(`${streamName}:${error.code}`)
+      return
+    }
+    logger?.error?.(`MCP ${streamName} stream error: ${error?.message ?? error}`, { stack: error?.stack })
+  }
+
+  const onStdinEnd = () => closeOnPipeEnd('stdin:end')
+  const onStdinClose = () => closeOnPipeEnd('stdin:close')
+  const onStdoutError = (error) => closeOnPipeError('stdout', error)
+  const onStderrError = (error) => closeOnPipeError('stderr', error)
+
+  stdin.on?.('end', onStdinEnd)
+  stdin.on?.('close', onStdinClose)
+  stdout.on?.('error', onStdoutError)
+  stderr.on?.('error', onStderrError)
+
+  try {
+    await server.connect(transport)
+  } catch (error) {
+    detachListeners()
+    throw error
+  }
+
+  return { server, transport, close, closed }
 }
 
 function sanitizeDocumentPayload(payload) {
