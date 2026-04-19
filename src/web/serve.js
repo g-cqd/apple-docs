@@ -31,6 +31,7 @@ export async function startDevServer(opts, ctx) {
     baseUrl: opts.baseUrl || '',
     siteName: opts.siteName || 'Apple Developer Docs',
     buildDate: new Date().toISOString().split('T')[0],
+    assetVersion: Date.now().toString(36),
   }
 
   void initHighlighter().catch((err) => {
@@ -82,6 +83,10 @@ export async function startDevServer(opts, ctx) {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
+  }
+  const devAssetCacheHeaders = {
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'CDN-Cache-Control': 'no-store',
   }
 
   const COMPRESSIBLE = new Set(['text/html', 'text/css', 'text/javascript', 'application/json'])
@@ -238,7 +243,7 @@ export async function startDevServer(opts, ctx) {
         return new Response(bunFile, {
           headers: {
             'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-            'Cache-Control': 'public, max-age=3600',
+            ...devAssetCacheHeaders,
           },
         })
       }
@@ -255,7 +260,7 @@ export async function startDevServer(opts, ctx) {
         return new Response(bunFile, {
           headers: {
             'Content-Type': 'text/javascript; charset=utf-8',
-            'Cache-Control': 'public, max-age=3600',
+            ...devAssetCacheHeaders,
           },
         })
       }

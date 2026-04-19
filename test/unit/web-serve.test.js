@@ -150,6 +150,8 @@ describe('Dev Server (P7-E)', () => {
     const res = await fetch(`${serverInfo.url}/assets/style.css`)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('text/css')
+    expect(res.headers.get('cache-control')).toContain('no-store')
+    expect(res.headers.get('cdn-cache-control')).toContain('no-store')
   })
 
   test('live search API works', async () => {

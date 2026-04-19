@@ -242,6 +242,14 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('/apple-docs/assets/search.js')
   })
 
+  test('assetVersion adds cache-busting query params to document assets', () => {
+    const config = { ...siteConfig, assetVersion: 'deploy-123' }
+    const page = renderDocumentPage(mockDoc, mockSections, config)
+    expect(page).toContain('/assets/style.css?v=deploy-123')
+    expect(page).toContain('/assets/theme.js?v=deploy-123')
+    expect(page).toContain('/assets/search.js?v=deploy-123')
+  })
+
   test('bundled mode emits core.js instead of individual scripts', () => {
     const config = { ...siteConfig, bundled: true }
     const page = renderDocumentPage(mockDoc, mockSections, config)
@@ -702,5 +710,12 @@ describe('renderSearchPage', () => {
     const page = renderSearchPage(config)
     expect(page).toContain('/apple-docs/assets/search-page.js')
     expect(page).toContain('/apple-docs/assets/style.css')
+  })
+
+  test('applies assetVersion to search page assets', () => {
+    const page = renderSearchPage({ ...siteConfig, assetVersion: 'deploy-123' })
+    expect(page).toContain('/assets/search-page.js?v=deploy-123')
+    expect(page).toContain('/assets/style.css?v=deploy-123')
+    expect(page).toContain('/assets/theme.js?v=deploy-123')
   })
 })

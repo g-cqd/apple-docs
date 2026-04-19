@@ -116,7 +116,7 @@ ${buildHeader(siteConfig)}
   <button id="search-load-more" class="load-more" hidden aria-label="Load more search results">Load more results</button>
 </main>
 ${buildFooter(siteConfig)}
-<script src="${escapeAttr(`${siteConfig.baseUrl}/assets/search-page.js`)}" defer></script>
+<script src="${escapeAttr(assetUrl(siteConfig, 'search-page.js'))}" defer></script>
 </body>
 </html>`
 }
@@ -135,6 +135,12 @@ function escapeAttr(value) {
     .replaceAll("'", '&#39;')
 }
 
+function assetUrl(siteConfig, file) {
+  const base = `${siteConfig.baseUrl}/assets/${file}`
+  if (!siteConfig.assetVersion) return base
+  return `${base}?v=${encodeURIComponent(siteConfig.assetVersion)}`
+}
+
 // ---------------------------------------------------------------------------
 // Shared page-level fragments
 // ---------------------------------------------------------------------------
@@ -142,8 +148,8 @@ function escapeAttr(value) {
 function buildHead({ title, description, siteConfig }) {
   const escapedTitle = escapeAttr(title)
   const escapedDesc = escapeAttr(description ?? '')
-  const cssHref = `${siteConfig.baseUrl}/assets/style.css`
-  const headScriptHref = `${siteConfig.baseUrl}/assets/${siteConfig.bundled ? 'core.js' : 'theme.js'}`
+  const cssHref = assetUrl(siteConfig, 'style.css')
+  const headScriptHref = assetUrl(siteConfig, siteConfig.bundled ? 'core.js' : 'theme.js')
   return `<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -196,13 +202,12 @@ const BUNDLES = {
 }
 
 function buildScripts(siteConfig, groups) {
-  const base = siteConfig.baseUrl
   if (siteConfig.bundled) {
     return groups
       .filter(g => g !== 'core')
       .map(g => {
         const file = BUNDLES[g] ? `${g}.js` : `${g}.js`
-        return `<script src="${escapeAttr(`${base}/assets/${file}`)}" defer></script>`
+        return `<script src="${escapeAttr(assetUrl(siteConfig, file))}" defer></script>`
       })
       .join('\n')
   }
@@ -216,7 +221,7 @@ function buildScripts(siteConfig, groups) {
     }
   }
   return files.map(f =>
-    `<script src="${escapeAttr(`${base}/assets/${f}`)}" defer></script>`
+    `<script src="${escapeAttr(assetUrl(siteConfig, f))}" defer></script>`
   ).join('\n')
 }
 
