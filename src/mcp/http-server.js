@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { createServer } from './server.js'
 import { createCacheRegistry } from './cache.js'
+import { createMarkdownCache } from './markdown-cache.js'
 import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 
 const SECURITY_HEADERS = {
@@ -76,6 +77,11 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   // instantiates a fresh McpServer (required by the stateless SDK transport)
   // but reuses the same registry, so hits survive across requests.
   const cacheRegistry = deps.cacheRegistry ?? createCacheRegistry(ctx)
+  // Separate LRU keyed by page path alone, so read_doc variants that differ
+  // only by section/maxChars/match share a single `renderMarkdown()` run.
+  // Plumbed through `ctx.markdownCache` — lookup() consults it when present.
+  const markdownCache = deps.markdownCache ?? createMarkdownCache(ctx)
+  const ctxWithCaches = { ...ctx, markdownCache }
   const exposeCacheStats = process.env.APPLE_DOCS_MCP_CACHE_STATS === '1'
 
   // Bound in-flight heavy-tool work so a burst from one client can't starve
@@ -135,6 +141,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       const body = { ok: true, service: 'apple-docs-mcp' }
       if (exposeCacheStats) {
         body.cache = cacheRegistry.stats()
+        body.markdownCache = markdownCache.stats?.()
         body.concurrency = {
           heavyMax,
           heavyQueue,
@@ -181,7 +188,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       // Per MCP SDK (webStandardStreamableHttp.js): in stateless mode each
       // request must use a fresh transport + server. The shared cacheRegistry
       // injected here is what makes the LRU effective across requests.
-      const mcpServer = createServerImpl(ctx, { cacheRegistry })
+      const mcpServer = createServerImpl(ctxWithCaches, { cacheRegistry })
       const transport = createTransport()
       await mcpServer.connect(transport)
       const response = await transport.handleRequest(forwardRequest)

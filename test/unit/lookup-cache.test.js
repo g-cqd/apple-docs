@@ -82,4 +82,35 @@ describe('Lookup cache (P8-D)', () => {
     const result = await lookup({ path: 'nonexistent/path' }, ctx)
     expect(result.found).toBe(false)
   })
+
+  test('reuses ctx.markdownCache across variant args on the same page', async () => {
+    setProfile(db, 'raw-only') // disable filesystem caching so we isolate the in-memory cache
+    const gets = []
+    const sets = []
+    const markdownCache = {
+      get(path) { gets.push(path); return undefined },
+      set(path, payload) { sets.push({ path, payload }) },
+    }
+    const ctxWithCache = { ...ctx, markdownCache }
+    await lookup({ path: 'documentation/swiftui/view' }, ctxWithCache)
+    // First call: miss → populates the cache.
+    expect(gets).toEqual(['documentation/swiftui/view'])
+    expect(sets).toHaveLength(1)
+    expect(sets[0].path).toBe('documentation/swiftui/view')
+    expect(sets[0].payload.content).toBeTruthy()
+
+    // Second call with a different arg shape: cache should be consulted and
+    // the render path skipped. Swap the cache for one that actually answers.
+    const storedContent = sets[0].payload.content
+    const storedSections = sets[0].payload.sections
+    const hitMarkdownCache = {
+      get() { return { content: storedContent, sections: storedSections, fallback: true } },
+      set() { throw new Error('set() must not be called on a hit') },
+    }
+    const r2 = await lookup(
+      { path: 'documentation/swiftui/view', includeSections: true },
+      { ...ctx, markdownCache: hitMarkdownCache },
+    )
+    expect(r2.content).toBe(storedContent)
+  })
 })

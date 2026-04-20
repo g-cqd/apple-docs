@@ -124,7 +124,7 @@ export function createCacheRegistry(ctx, opts = {}) {
   }
 }
 
-function createStamper(ctx, opts = {}) {
+export function createStamper(ctx, opts = {}) {
   const dataDir = ctx?.dataDir
   const dbPath = opts.dbPath ?? (dataDir ? join(dataDir, 'apple-docs.db') : null)
   const schemaVersion = safeSchemaVersion(ctx)

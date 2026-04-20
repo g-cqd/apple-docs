@@ -13,7 +13,6 @@ import { getProfile, getProfileConfig } from '../storage/profiles.js'
 export async function lookup(opts, ctx) {
   const { db, dataDir } = ctx
   let page = null
-  let sections = []
   const includeSections = opts.includeSections === true || opts.section != null
 
   if (opts.path) {
@@ -26,13 +25,22 @@ export async function lookup(opts, ctx) {
     return { found: false, path: opts.path ?? opts.symbol }
   }
 
+  // Short-circuit: if a previous lookup of this page rendered Markdown
+  // successfully, reuse it. Different section/match/maxChars args produce
+  // distinct tool-cache keys but all want the same rendered body — caching
+  // here amortizes `renderMarkdown()` across those variants.
+  const markdownCache = ctx.markdownCache
+  const cached = markdownCache?.get(page.path)
+  let content = cached?.content ?? null
+  let sections = cached?.sections ?? []
+  let fallback = cached?.fallback ?? false
+
   // Read markdown content — try persisted file first, then render on-demand from raw JSON
   const mdPath = join(dataDir, 'markdown', `${page.path}.md`)
-  let content = await readText(mdPath)
-  let fallback = false
+  if (!content) content = await readText(mdPath)
 
   // If section extraction is requested, always load sections from DB
-  if (includeSections && content) {
+  if (includeSections && content && sections.length === 0) {
     sections = db.getDocumentSections(page.path)
   }
 
@@ -61,6 +69,13 @@ export async function lookup(opts, ctx) {
         // Render failed — content stays null
       }
     }
+  }
+
+  // Populate the markdown cache after any render path succeeds. Intentionally
+  // skipped on cache-hit (nothing new to store) and when content is null
+  // (negative results are handled at the tool-cache layer with CACHE_NEGATIVE).
+  if (!cached && content && markdownCache) {
+    markdownCache.set(page.path, { content, sections, fallback })
   }
 
   // Cache on-demand rendered content if the active profile supports it
