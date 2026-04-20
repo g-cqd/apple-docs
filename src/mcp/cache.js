@@ -45,9 +45,21 @@ const DEFAULT_SIZES = {
 // negligible even at peak agent fan-out.
 const STAMP_TTL_MS = 5_000
 
+// How long to cache empty/negative results (zero-hit searches, 404 lookups).
+// Much shorter than the positive-result lifetime so typos and fuzz don't
+// poison the cache, but long enough to absorb a burst from a stuck agent.
+const DEFAULT_NEGATIVE_TTL_MS = 30_000
+
+// Symbol key tool handlers can set on their return value to signal "this is a
+// negative result, apply the short TTL". Using a Symbol means the marker is
+// invisible to JSON.stringify and never leaks into MCP responses.
+export const CACHE_NEGATIVE = Symbol('apple-docs.cache.negative')
+
 export function createCacheRegistry(ctx, opts = {}) {
   const enabled = opts.enabled ?? (process.env.APPLE_DOCS_MCP_CACHE !== 'off')
   const sizes = { ...DEFAULT_SIZES, ...(opts.sizes ?? {}) }
+  const negativeTtlMs = opts.negativeTtlMs ?? DEFAULT_NEGATIVE_TTL_MS
+  const now = opts.now ?? (() => Date.now())
   const caches = new Map()
   const counters = new Map()
   for (const [tool, size] of Object.entries(sizes)) {
@@ -64,14 +76,17 @@ export function createCacheRegistry(ctx, opts = {}) {
       const counter = counters.get(tool)
       return async (args) => {
         const key = cacheKey(tool, args, stamper.get())
-        const hit = cache.get(key)
+        const hit = cache.get(key, now())
         if (hit !== undefined) {
           counter.hits++
           return hit
         }
         counter.misses++
         const value = await handler(args)
-        cache.set(key, value)
+        const expiresAt = value?.[CACHE_NEGATIVE] === true
+          ? now() + negativeTtlMs
+          : null
+        cache.set(key, value, expiresAt)
         return value
       }
     },
@@ -162,19 +177,25 @@ export function stableJson(value) {
 class LruCache {
   constructor(capacity) {
     this.capacity = Math.max(1, capacity | 0)
+    // Map<key, { value, expiresAt: number | null }>
     this.map = new Map()
   }
   get size() { return this.map.size }
-  get(key) {
+  get(key, nowMs = Date.now()) {
     if (!this.map.has(key)) return undefined
-    const value = this.map.get(key)
+    const entry = this.map.get(key)
+    if (entry.expiresAt != null && entry.expiresAt <= nowMs) {
+      // Expired: evict and treat as miss. The next set() rewrites freshly.
+      this.map.delete(key)
+      return undefined
+    }
     this.map.delete(key)
-    this.map.set(key, value)
-    return value
+    this.map.set(key, entry)
+    return entry.value
   }
-  set(key, value) {
+  set(key, value, expiresAt = null) {
     if (this.map.has(key)) this.map.delete(key)
-    this.map.set(key, value)
+    this.map.set(key, { value, expiresAt })
     while (this.map.size > this.capacity) {
       const oldest = this.map.keys().next().value
       this.map.delete(oldest)

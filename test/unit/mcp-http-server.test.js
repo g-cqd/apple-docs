@@ -454,6 +454,29 @@ describe('startHttpServer', () => {
     }
   })
 
+  test('default concurrency is 8 permits / 64 queue when no override is set', async () => {
+    const prev = process.env.APPLE_DOCS_MCP_CACHE_STATS
+    const prevConc = process.env.APPLE_DOCS_MCP_CONCURRENCY
+    const prevQueue = process.env.APPLE_DOCS_MCP_QUEUE
+    process.env.APPLE_DOCS_MCP_CACHE_STATS = '1'
+    Reflect.deleteProperty(process.env, 'APPLE_DOCS_MCP_CONCURRENCY')
+    Reflect.deleteProperty(process.env, 'APPLE_DOCS_MCP_QUEUE')
+    try {
+      const { fetch } = await bootHarness({
+        cacheRegistry: { stats: () => ({ totalHits: 0, totalMisses: 0, hitRatio: 0 }) },
+      })
+      const res = await fetch(new Request('http://127.0.0.1:3031/healthz'))
+      const body = await res.json()
+      expect(body.concurrency.heavyMax).toBe(8)
+      expect(body.concurrency.heavyQueue).toBe(64)
+    } finally {
+      if (prev === undefined) Reflect.deleteProperty(process.env, 'APPLE_DOCS_MCP_CACHE_STATS')
+      else process.env.APPLE_DOCS_MCP_CACHE_STATS = prev
+      if (prevConc !== undefined) process.env.APPLE_DOCS_MCP_CONCURRENCY = prevConc
+      if (prevQueue !== undefined) process.env.APPLE_DOCS_MCP_QUEUE = prevQueue
+    }
+  })
+
   test('/healthz exposes cache stats when APPLE_DOCS_MCP_CACHE_STATS=1', async () => {
     const prev = process.env.APPLE_DOCS_MCP_CACHE_STATS
     process.env.APPLE_DOCS_MCP_CACHE_STATS = '1'

@@ -164,8 +164,32 @@ export class DocsDatabase {
     this.db.run('PRAGMA cache_size = -64000')
     this.db.run('PRAGMA temp_store = MEMORY')
     this.db.run('PRAGMA busy_timeout = 5000')
+    // 10 GB virtual address space for memory-mapped I/O. SQLite caps this at
+    // both the compiled SQLITE_MAX_MMAP_SIZE and the actual DB file size, so
+    // a small corpus simply maps the whole file. Pages are demand-paged via
+    // the OS unified page cache — no physical RAM is reserved up front.
+    // Biggest win is on FTS5 index scans: zero syscalls and no double-buffer
+    // through SQLite's page cache.
+    this.db.run('PRAGMA mmap_size = 10737418240')
+    // Write-side: let the WAL grow to ~8 MB (with 4 KB pages) before
+    // auto-checkpointing. Reduces checkpoint churn during `apple-docs
+    // update` without affecting concurrent readers under WAL.
+    this.db.run('PRAGMA wal_autocheckpoint = 2000')
+    // Read back the effective mmap size — if the Bun SQLite build caps
+    // lower than requested, operators will see it in diagnostics via
+    // `getEffectiveMmapSize()` rather than silently running without mmap.
+    try {
+      const row = this.db.query('PRAGMA mmap_size').get()
+      this._effectiveMmapSize = row ? Number(row.mmap_size ?? Object.values(row)[0] ?? 0) : 0
+    } catch {
+      this._effectiveMmapSize = 0
+    }
     this._migrate()
     this._prepareStatements()
+  }
+
+  getEffectiveMmapSize() {
+    return this._effectiveMmapSize ?? 0
   }
 
   _migrate() {

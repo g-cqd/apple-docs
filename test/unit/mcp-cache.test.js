@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { cacheKey, createCacheRegistry, stableJson } from '../../src/mcp/cache.js'
+import { CACHE_NEGATIVE, cacheKey, createCacheRegistry, stableJson } from '../../src/mcp/cache.js'
 
 describe('stableJson', () => {
   test('sorts object keys recursively', () => {
@@ -153,5 +153,46 @@ describe('createCacheRegistry', () => {
     expect(calls).toBe(4)
     await handler({ q: 'c' }) // still in cache
     expect(calls).toBe(4)
+  })
+
+  test('negative results use the short TTL and are re-fetched after expiry', async () => {
+    let clock = 1_000_000
+    const registry = createCacheRegistry(fakeCtx(), {
+      negativeTtlMs: 30_000,
+      now: () => clock,
+    })
+    let calls = 0
+    const handler = registry.wrap('search_docs', async () => {
+      calls++
+      const value = { results: [] }
+      value[CACHE_NEGATIVE] = true
+      return value
+    })
+    await handler({ q: 'nope' })
+    await handler({ q: 'nope' }) // hit — still within TTL
+    expect(calls).toBe(1)
+    clock += 29_999
+    await handler({ q: 'nope' }) // still within TTL
+    expect(calls).toBe(1)
+    clock += 2 // now past 30_000 ms
+    await handler({ q: 'nope' }) // miss — expired
+    expect(calls).toBe(2)
+  })
+
+  test('positive results ignore the negative TTL and live until corpus stamp changes', async () => {
+    let clock = 0
+    const registry = createCacheRegistry(fakeCtx(), {
+      negativeTtlMs: 1, // aggressive; positives must not be affected
+      now: () => clock,
+    })
+    let calls = 0
+    const handler = registry.wrap('search_docs', async () => {
+      calls++
+      return { results: [{ id: 1 }] }
+    })
+    await handler({ q: 'hit' })
+    clock += 60_000
+    await handler({ q: 'hit' })
+    expect(calls).toBe(1)
   })
 })

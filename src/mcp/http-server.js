@@ -29,8 +29,18 @@ const HEAVY_TOOLS = new Set([
   'browse',
 ])
 
-const DEFAULT_HEAVY_CONCURRENCY = 4
-const DEFAULT_HEAVY_QUEUE = 32
+// Active permits. Without a worker pool, heavy SQL work blocks the single
+// Bun event loop regardless of permit count, so raising this buys you queued
+// requests rather than parallelism. 8 is a small bump that absorbs typical
+// burst fan-out while still serializing predictably. Scales up meaningfully
+// only once a reader-worker pool lands (see reader-pool / Phase 4).
+const DEFAULT_HEAVY_CONCURRENCY = 8
+// Waiting room depth before 503 backpressure kicks in. 64 is generous on
+// purpose: most bursts drain in well under a second, and the cost of an
+// oversize queue is only memory, while the cost of a 503 is a visible error
+// to the caller. Tune down via APPLE_DOCS_MCP_QUEUE if upstream latency SLOs
+// require shedding load sooner.
+const DEFAULT_HEAVY_QUEUE = 64
 
 /**
  * Start an MCP server exposing the corpus over Streamable HTTP.

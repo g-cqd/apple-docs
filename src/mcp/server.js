@@ -25,7 +25,7 @@ import {
   projectFrameworks,
   projectBrowse,
 } from './projection.js'
-import { createCacheRegistry } from './cache.js'
+import { CACHE_NEGATIVE, createCacheRegistry } from './cache.js'
 
 const paginatedMaxChars = z.number().int().min(MIN_PAGINATED_MAX_CHARS)
 const paginatedPage = z.number().int().min(1)
@@ -132,7 +132,12 @@ export function createServer(ctx, deps = {}) {
             strategy: 'items',
           })
         : result
-      return createMcpTextResult(projectSearchResult(payload))
+      const out = createMcpTextResult(projectSearchResult(payload))
+      // Empty-result queries re-run the full 4-tier cascade + progressive
+      // relaxation on every call. Cache misses briefly so mistypes and fuzz
+      // can't burn the cascade in a tight loop.
+      if (result.results.length === 0) out[CACHE_NEGATIVE] = true
+      return out
     }),
   )
 
@@ -174,7 +179,12 @@ export function createServer(ctx, deps = {}) {
         })
       }
       const full = args.section != null || args.match != null || args.maxChars != null
-      return createMcpTextResult(projectReadDoc(payload, { full }))
+      const out = createMcpTextResult(projectReadDoc(payload, { full }))
+      // 404-style lookups (typo'd path/symbol) are re-scanned on every call;
+      // short-TTL cache them so pathological clients don't keep burning the
+      // disk/DB path.
+      if (result?.found === false) out[CACHE_NEGATIVE] = true
+      return out
     }),
   )
 
