@@ -264,9 +264,6 @@ export function __defaultReaderPoolSize() {
   return resolveDefaultSize()
 }
 
-// Re-exported so callers can wire their own path resolution if needed.
-export const DEFAULT_WORKER_PATH = fileURLToPath(WORKER_URL)
-
 /**
  * Thin routing helper: when `ctx.readerPool` is present, dispatches `op` to a
  * worker; otherwise calls `ctx.db[op](...args)` directly. Always returns a
