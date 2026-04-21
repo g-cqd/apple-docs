@@ -159,6 +159,29 @@ and these resources:
 - `apple-docs://doc/{key}`
 - `apple-docs://framework/{slug}`
 
+### Use the public MCP instance
+
+There's a best-effort public deployment at `https://apple-docs-mcp.everest.mt/mcp`.
+It runs on a home server with no uptime SLA — fine for casual use, not for
+anything load-bearing. For production or privacy-sensitive work, self-host.
+
+Claude Code:
+
+```bash
+claude mcp add -s user --transport http apple-docs https://apple-docs-mcp.everest.mt/mcp
+```
+
+Codex CLI (via the `mcp-remote` stdio bridge, which every MCP client supports):
+
+```bash
+codex mcp add apple-docs -- bunx mcp-remote https://apple-docs-mcp.everest.mt/mcp
+```
+
+For Claude Desktop, Cursor, and other clients, the corresponding JSON is the
+standard Streamable HTTP config pointing at the same URL, or an `mcp-remote`
+stdio fallback. Run `apple-docs mcp install --http https://apple-docs-mcp.everest.mt/mcp`
+to print ready-to-paste snippets.
+
 ### Remote MCP over HTTP
 
 For shared or remote access, run the MCP server as a Streamable HTTP endpoint instead of stdio:
@@ -168,13 +191,7 @@ apple-docs mcp serve --port 3031 --host 127.0.0.1 \
   --allow-origin https://mcp.example.com
 ```
 
-- `--port` defaults to `3031`
-- `--host` defaults to `127.0.0.1` — keep it bound to loopback and expose it via a reverse proxy or tunnel (Cloudflare, Tailscale, WireGuard) rather than binding to `0.0.0.0`
-- `--allow-origin` restricts the browser `Origin` header (comma-separated list); omit to allow all origins
-
-The server has **no built-in authentication**. Put access control at the edge (e.g. Cloudflare Access, Tailscale ACLs) or keep the endpoint private.
-
-It speaks the Streamable HTTP transport from the 2025-03-26 MCP protocol revision. Endpoints:
+Endpoints:
 
 | Path | Method | Purpose |
 | --- | --- | --- |
@@ -183,6 +200,11 @@ It speaks the Streamable HTTP transport from the 2025-03-26 MCP protocol revisio
 | `/mcp` | `DELETE` | Terminate a session |
 | `/healthz` | `GET` | Liveness probe |
 
+The server has **no built-in authentication**; keep it on loopback and put
+access control at the edge. For a full self-hosting guide — reverse proxy,
+tunnels, launchd/systemd, tuning knobs, observability — see
+[`docs/self-hosting.md`](docs/self-hosting.md).
+
 Print a client config for a remote endpoint:
 
 ```bash
@@ -190,50 +212,6 @@ apple-docs mcp install --http https://mcp.example.com/mcp
 ```
 
 That emits both the native Streamable HTTP config and an `mcp-remote` stdio fallback for clients without native HTTP support.
-
-Example Claude Desktop / Cursor config:
-
-```json
-{
-  "mcpServers": {
-    "apple-docs": {
-      "transport": {
-        "type": "streamable-http",
-        "url": "https://mcp.example.com/mcp"
-      }
-    }
-  }
-}
-```
-
-Fallback via `mcp-remote` for older clients:
-
-```json
-{
-  "mcpServers": {
-    "apple-docs": {
-      "command": "npx",
-      "args": ["mcp-remote", "https://mcp.example.com/mcp"]
-    }
-  }
-}
-```
-
-Codex CLI (`~/.codex/config.toml`) — use the `mcp-remote` bridge, since the current `rmcp` HTTP client does not interoperate cleanly with every Streamable HTTP origin:
-
-```toml
-[mcp_servers.apple-docs]
-command = "npx"
-args = ["mcp-remote", "https://mcp.example.com/mcp"]
-```
-
-For a local stdio setup (no tunnel), Codex can call the binary directly:
-
-```toml
-[mcp_servers.apple-docs]
-command = "apple-docs"
-args = ["mcp", "start"]
-```
 
 ## What the corpus covers
 
