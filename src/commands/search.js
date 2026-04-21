@@ -3,6 +3,7 @@ import { renderSnippet } from '../content/render-snippet.js'
 import { detectIntent } from '../search/intent.js'
 import { rerank } from '../search/ranking.js'
 import { tokenize, pruneStopwords, pickHighSignalToken } from '../search/relaxation.js'
+import { runRead } from '../storage/reader-pool.js'
 
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 const ROLE_KIND_FILTERS = new Set(['symbol', 'article', 'collection', 'overview', 'tutorial', 'samplecode', 'sample_code', 'sample-project', 'sampleproject'])
@@ -93,55 +94,56 @@ export async function search(opts, ctx) {
 
   // --- Fast phase: run T1 (FTS5) and T2 (trigram) concurrently ---
 
-  // Tier 1: FTS5 tiered search
-  const runFts = () => {
-    const ftsResults = []
+  // Tier 1: FTS5 tiered search. Routes through `ctx.readerPool` when present
+  // (each worker thread runs its own bun:sqlite handle), otherwise calls
+  // the main-thread handle directly. `Promise.all` across frameworks gives
+  // the pool a chance to fan out; without the pool the calls serialize
+  // identically to the pre-pool loop.
+  const runFts = async () => {
     try {
-      for (const fw of frameworks) {
-        ftsResults.push(...ctx.db.searchPages(ftsQuery, q, { ...filterOpts, framework: fw }))
-      }
+      const parts = await Promise.all(
+        frameworks.map(fw => runRead(ctx, 'searchPages', [ftsQuery, q, { ...filterOpts, framework: fw }])),
+      )
+      return parts.flat()
     } catch {
       // FTS5 query syntax error — try simpler query
       try {
         const simple = `"${q.replace(/"/g, '')}"*`
-        for (const fw of frameworks) {
-          ftsResults.push(...ctx.db.searchPages(simple, q, { ...filterOpts, framework: fw }))
-        }
-      } catch {}
+        const parts = await Promise.all(
+          frameworks.map(fw => runRead(ctx, 'searchPages', [simple, q, { ...filterOpts, framework: fw }])),
+        )
+        return parts.flat()
+      } catch { return [] }
     }
-    return ftsResults
   }
 
   // Tier 2: Trigram substring (only if query >= 3 chars)
-  const runTrigram = () => {
+  const runTrigram = async () => {
     if (q.length < 3) return []
-    const triResults = []
     try {
-      for (const fw of frameworks) {
-        triResults.push(...ctx.db.searchTrigram(q, { ...filterOpts, framework: fw }))
-      }
-    } catch {}
-    return triResults
+      const parts = await Promise.all(
+        frameworks.map(fw => runRead(ctx, 'searchTrigram', [q, { ...filterOpts, framework: fw }])),
+      )
+      return parts.flat()
+    } catch { return [] }
   }
 
-  // Tier 4: Body search
+  // Tier 4: Body search. Metadata check stays on main thread — one cheap call.
   const hasBody = !noDeep && ctx.db.getBodyIndexCount() > 0
-  const runBody = () => {
+  const runBody = async () => {
     if (!hasBody) return []
     try {
-      const bodyResults = []
-      for (const fw of frameworks) {
-        bodyResults.push(...ctx.db.searchBody(ftsQuery, { ...filterOpts, framework: fw }))
-      }
-      return bodyResults
+      const parts = await Promise.all(
+        frameworks.map(fw => runRead(ctx, 'searchBody', [ftsQuery, { ...filterOpts, framework: fw }])),
+      )
+      return parts.flat()
     } catch { return [] }
   }
 
   // Run the fast tiers first so the web/CLI search path can return promptly.
-  const [ftsResults, triResults] = await Promise.all([
-    Promise.resolve().then(runFts),
-    Promise.resolve().then(runTrigram),
-  ])
+  // With a reader pool, runFts and runTrigram actually execute in parallel
+  // on different workers; without it they serialize on the main thread.
+  const [ftsResults, triResults] = await Promise.all([runFts(), runTrigram()])
 
   // Merge T1 results with tier labels
   for (const r of ftsResults) {
@@ -156,9 +158,15 @@ export async function search(opts, ctx) {
 
   // Tier 3: Levenshtein fuzzy (only if T1+T2 combined < 5 and query >= 4 chars)
   if (results.length < 5 && q.length >= 4 && fuzzy) {
+    // Levenshtein scan stays on the main thread for now — the candidate set
+    // is bounded and the routine is CPU-bound; a Worker hop per call would
+    // dominate. The per-id record fetches that follow, though, are worth
+    // parallelizing when a pool is present.
     const fuzzyMatches = fuzzyMatchTitles(q, ctx.db, { framework, kind, limit: searchLimit })
-    for (const fm of fuzzyMatches) {
-      const record = ctx.db.getSearchRecordById(fm.id)
+    const fuzzyRecords = await Promise.all(
+      fuzzyMatches.map(fm => runRead(ctx, 'getSearchRecordById', [fm.id]).then(record => ({ fm, record }))),
+    )
+    for (const { fm, record } of fuzzyRecords) {
       if (!record) continue
       if (!matchesSearchFilters(record, activeFilters)) continue
       if (seen.has(record.path)) continue
@@ -170,7 +178,7 @@ export async function search(opts, ctx) {
   // Body search: merge results or discard if we already have enough
   if (hasBody) {
     if (results.length < requestedWindow || noEager) {
-      const bodyResults = await Promise.resolve().then(runBody)
+      const bodyResults = await runBody()
       addResults(bodyResults, 'body')
     }
   }

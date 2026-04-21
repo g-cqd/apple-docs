@@ -133,6 +133,10 @@ export async function sync(opts, ctx) {
     }
   } finally {
     db.clearActivity()
+    // Mirror update.js: recycle any embedded reader-pool so post-sync queries
+    // see a clean set of prepared statements. No-op in the normal CLI path
+    // where the pool is absent.
+    try { await ctx.readerPool?.recycle?.() } catch {}
   }
 }
 

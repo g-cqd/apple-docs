@@ -1,7 +1,9 @@
+import { join } from 'node:path'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { createServer } from './server.js'
 import { createCacheRegistry } from './cache.js'
 import { createMarkdownCache } from './markdown-cache.js'
+import { createReaderPool } from '../storage/reader-pool.js'
 import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 
 const SECURITY_HEADERS = {
@@ -81,7 +83,14 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   // only by section/maxChars/match share a single `renderMarkdown()` run.
   // Plumbed through `ctx.markdownCache` — lookup() consults it when present.
   const markdownCache = deps.markdownCache ?? createMarkdownCache(ctx)
-  const ctxWithCaches = { ...ctx, markdownCache }
+  // Worker-thread reader pool. Off by default for this rollout — enable with
+  // APPLE_DOCS_MCP_READERS=on. When active, heavy read-only SQL work routes
+  // to dedicated worker threads each holding their own bun:sqlite handle,
+  // genuinely parallelizing the FTS/trigram/body search paths. When absent,
+  // `runRead()` falls through to the main-thread handle identically to the
+  // pre-pool behavior.
+  const readerPool = await resolveReaderPool(ctx, opts, deps, logger)
+  const ctxWithCaches = { ...ctx, markdownCache, ...(readerPool ? { readerPool } : {}) }
   const exposeCacheStats = process.env.APPLE_DOCS_MCP_CACHE_STATS === '1'
 
   // Bound in-flight heavy-tool work so a burst from one client can't starve
@@ -149,6 +158,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
           waiting: heavySemaphore._queue.length,
           rejected: concurrencyStats.rejected,
         }
+        if (readerPool) body.readerPool = readerPool.stats?.()
       }
       return Response.json(body)
     }
@@ -276,6 +286,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
 
   async function close() {
     try { server?.stop?.(true) } catch {}
+    try { await readerPool?.close?.() } catch {}
   }
 
   return { server, url, close }
@@ -313,6 +324,48 @@ function buildPriorityTag(meta) {
     if (meta.rejected) parts.push('rejected=1')
   }
   return parts.length === 0 ? '' : ` ${parts.join(' ')}`
+}
+
+/**
+ * Resolve an optional reader-thread pool for this HTTP server.
+ *
+ * Returns:
+ *   - `deps.readerPool` verbatim when tests inject one (null-safe: `null`
+ *     means "explicitly disabled", `undefined` means "fall through to env").
+ *   - `null` when `APPLE_DOCS_MCP_READERS !== 'on'`. Default OFF so the pool
+ *     is opt-in during rollout.
+ *   - `null` when `ctx.dataDir` is missing or the DB is in-memory. Workers
+ *     need a real file path; `:memory:` handles do not survive a thread
+ *     boundary.
+ *   - A started pool instance otherwise.
+ *
+ * Errors during `start()` are logged and downgraded to `null` — the HTTP
+ * server stays usable on the main-thread handle rather than failing to boot.
+ */
+async function resolveReaderPool(ctx, _opts, deps, logger) {
+  if (deps && 'readerPool' in deps) return deps.readerPool ?? null
+  if (process.env.APPLE_DOCS_MCP_READERS !== 'on') return null
+  const dataDir = ctx?.dataDir
+  if (!dataDir) {
+    logger?.warn?.('reader-pool: ctx.dataDir missing, skipping')
+    return null
+  }
+  const dbPath = join(dataDir, 'apple-docs.db')
+  const size = parsePositiveInt(process.env.APPLE_DOCS_MCP_READER_WORKERS) ?? undefined
+  try {
+    const pool = createReaderPool({
+      dbPath,
+      size,
+      log: (level, msg) => logger?.[level]?.(`reader-pool: ${msg}`),
+    })
+    await pool.start()
+    const snap = pool.stats()
+    logger?.info?.(`reader-pool: ready size=${snap.size} spawns=${snap.spawns}`)
+    return pool
+  } catch (err) {
+    logger?.error?.(`reader-pool: failed to start (${err?.message ?? err}); falling back to main-thread reads`)
+    return null
+  }
 }
 
 function parsePositiveInt(value) {

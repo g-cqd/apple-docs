@@ -102,6 +102,11 @@ export async function update(opts, ctx) {
     return { newCount, modCount, unchangedCount, delCount, errCount, durationMs }
   } finally {
     db.clearActivity()
+    // Safety belt for the rare case where update runs in the same process as
+    // an active reader pool (e.g. embedded tests): respawn workers so any
+    // prepared statements reload against the post-write schema. WAL would
+    // usually cover us without this; recycle is cheap when the pool is idle.
+    try { await ctx.readerPool?.recycle?.() } catch {}
   }
 }
 
