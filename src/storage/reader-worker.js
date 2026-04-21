@@ -53,11 +53,6 @@ parentPort.postMessage({ type: 'ready' })
 
 parentPort.on('message', (msg) => {
   if (!msg || typeof msg !== 'object') return
-  if (msg.type === 'close') {
-    try { db?.close?.() } catch {}
-    process.exit(0)
-    return
-  }
   if (msg.type !== 'call') return
   const { id, op, args } = msg
   if (!READ_OPS.has(op)) {

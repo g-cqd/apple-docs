@@ -192,6 +192,13 @@ export function createReaderPool(opts = {}) {
   async function close() {
     if (closed) return
     closed = true
+    // Use `terminate()` exclusively — the one-shot way to reap a worker in both
+    // Node and Bun. Earlier revisions also posted a `{type:'close'}` message so
+    // the worker could `db.close(); process.exit(0)` itself, but that races
+    // with `terminate()` (both paths tear down the thread simultaneously) and
+    // produced a `workers_spawned != workers_terminated` leak on Bun 1.3.13,
+    // which segfaulted during test-harness shutdown. Read-only SQLite handles
+    // don't need graceful flushing; the OS reclaims them when the worker dies.
     const promises = []
     for (let i = 0; i < size; i++) {
       const slot = slots[i]
@@ -201,9 +208,6 @@ export function createReaderPool(opts = {}) {
       }
       slot.pending.clear()
       slot.alive = false
-      try {
-        slot.worker.postMessage({ type: 'close' })
-      } catch {}
       promises.push(slot.worker.terminate?.() ?? Promise.resolve())
       slots[i] = null
     }
@@ -213,7 +217,9 @@ export function createReaderPool(opts = {}) {
   async function recycle() {
     if (closed) return
     // Close every slot and respawn. Spawn happens eagerly so the caller sees
-    // the post-recycle pool already warm.
+    // the post-recycle pool already warm. Same `terminate()`-only rationale as
+    // `close()` — no `postMessage({type:'close'})` race with the worker's own
+    // `process.exit(0)`.
     const oldSlots = slots.slice()
     for (let i = 0; i < size; i++) slots[i] = null
     for (const slot of oldSlots) {
@@ -223,7 +229,6 @@ export function createReaderPool(opts = {}) {
       }
       slot.pending.clear()
       slot.alive = false
-      try { slot.worker.postMessage({ type: 'close' }) } catch {}
       try { await slot.worker.terminate?.() } catch {}
     }
     for (let i = 0; i < size; i++) spawn(i)
