@@ -12,13 +12,20 @@ import { createReaderPool } from '../../src/storage/reader-pool.js'
 
 let dbPath
 let tmpDir
+// Keep a main-thread handle open for the lifetime of the test file. Without
+// it, SQLite tears down the WAL/SHM files when the seeding connection closes
+// and then a burst of concurrent worker opens can race on WAL re-creation,
+// producing transient `malformed database schema (sqlite_master)` fatals on
+// x86 Darwin. Holding a single connection open is the canonical fix and
+// matches production behavior (the MCP server has a long-lived writer).
+let mainDb
 
 beforeAll(() => {
   tmpDir = mkdtempSync(join(tmpdir(), 'apple-docs-reader-pool-'))
   dbPath = join(tmpDir, 'apple-docs.db')
-  const db = new DocsDatabase(dbPath)
-  const root = db.upsertRoot('testfw', 'TestFramework', 'framework', 'test')
-  db.upsertPage({
+  mainDb = new DocsDatabase(dbPath)
+  const root = mainDb.upsertRoot('testfw', 'TestFramework', 'framework', 'test')
+  mainDb.upsertPage({
     rootId: root.id,
     path: 'documentation/testfw/hello',
     url: 'u',
@@ -28,7 +35,7 @@ beforeAll(() => {
     abstract: 'A minimal test symbol',
     declaration: 'struct Hello',
   })
-  db.upsertPage({
+  mainDb.upsertPage({
     rootId: root.id,
     path: 'documentation/testfw/world',
     url: 'u',
@@ -38,10 +45,10 @@ beforeAll(() => {
     abstract: 'Another minimal symbol',
     declaration: 'struct World',
   })
-  db.close()
 })
 
 afterAll(() => {
+  try { mainDb?.close?.() } catch {}
   rmSync(tmpDir, { recursive: true, force: true })
 })
 
@@ -53,9 +60,7 @@ describe('reader-pool (integration, real workers)', () => {
       const viaPool = await pool.run('getPage', ['documentation/testfw/hello'])
       expect(viaPool?.title).toBe('Hello')
 
-      const direct = new DocsDatabase(dbPath)
-      const viaMain = direct.getPage('documentation/testfw/hello')
-      direct.close()
+      const viaMain = mainDb.getPage('documentation/testfw/hello')
       expect(viaPool?.title).toBe(viaMain?.title)
       expect(viaPool?.path).toBe(viaMain?.path)
     } finally {
