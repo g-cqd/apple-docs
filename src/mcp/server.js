@@ -27,8 +27,13 @@ import {
 } from './projection.js'
 import { CACHE_NEGATIVE, createCacheRegistry } from './cache.js'
 
-const paginatedMaxChars = z.number().int().min(MIN_PAGINATED_MAX_CHARS)
-const paginatedPage = z.number().int().min(1)
+// Use `z.coerce.number()` rather than `z.number()` so clients that hand-
+// serialize JSON-RPC args as strings (observed: claude-code CLI sending
+// `"limit": "5"`) don't trip validation. The JSON Schema exposed to the
+// client is still `{ type: "number" }`; coercion only kicks in when the
+// argument arrives as a numeric string.
+const paginatedMaxChars = z.coerce.number().int().min(MIN_PAGINATED_MAX_CHARS)
+const paginatedPage = z.coerce.number().int().min(1)
 
 /**
  * Create an MCP server instance with all tools and resources registered.
@@ -65,19 +70,19 @@ export function createServer(ctx, deps = {}) {
       min_watchos: z.string().optional().describe('Minimum watchOS version'),
       min_tvos: z.string().optional().describe('Minimum tvOS version'),
       min_visionos: z.string().optional().describe('Minimum visionOS version'),
-      limit: z.number().optional().describe('Max results (default 100)'),
+      limit: z.coerce.number().optional().describe('Max results (default 100)'),
       fuzzy: z.boolean().optional().describe('Enable typo-tolerant fuzzy matching (default true)'),
       noDeep: z.boolean().optional().describe('Disable background full-body search (default false)'),
       noEager: z.boolean().optional().describe('Wait for full-body search to complete instead of returning early (default false)'),
       read: z.boolean().optional().describe('Return the full Markdown content of the top search result instead of the result list'),
-      year: z.number().optional().describe('Filter WWDC sessions by year (e.g. 2024)'),
+      year: z.coerce.number().optional().describe('Filter WWDC sessions by year (e.g. 2024)'),
       track: z.string().optional().describe('Filter WWDC sessions by track (e.g. SwiftUI, Accessibility)'),
       deprecated: z.enum(['include', 'exclude', 'only']).optional().describe('Deprecation filter. Default "include" returns everything with an `isDeprecated: true` flag on deprecated hits. For code-writing tasks set "exclude" to hide deprecated APIs. "only" returns just deprecated hits.'),
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
       match: z.string().optional().describe('Return focused match excerpts from the top read result instead of the full page content.'),
-      contextChars: z.number().int().min(20).max(2000).optional().describe('Context window around each match excerpt (default 140 characters).'),
-      maxMatches: z.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
+      contextChars: z.coerce.number().int().min(20).max(2000).optional().describe('Context window around each match excerpt (default 140 characters).'),
+      maxMatches: z.coerce.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
       caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
     cache.wrap('search_docs', async (args) => {
@@ -152,8 +157,8 @@ export function createServer(ctx, deps = {}) {
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
       match: z.string().optional().describe('Return focused match excerpts instead of the full document.'),
-      contextChars: z.number().int().min(20).max(2000).optional().describe('Context window around each match excerpt (default 140 characters).'),
-      maxMatches: z.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
+      contextChars: z.coerce.number().int().min(20).max(2000).optional().describe('Context window around each match excerpt (default 140 characters).'),
+      maxMatches: z.coerce.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
       caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
     cache.wrap('read_doc', async (args) => {
@@ -216,7 +221,7 @@ export function createServer(ctx, deps = {}) {
     {
       framework: z.string().describe('Framework slug (e.g. swiftui, combine, design, app-store-review)'),
       path: z.string().optional().describe('Page path to show children of (e.g. swiftui/view, design/human-interface-guidelines/components)'),
-      limit: z.number().optional().describe('Max pages to return when listing a full framework (default: all)'),
+      limit: z.coerce.number().optional().describe('Max pages to return when listing a full framework (default: all)'),
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
