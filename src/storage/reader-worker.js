@@ -16,6 +16,10 @@ const READ_OPS = new Set([
   'searchByTitle',
   'getTier',
   'getSchemaVersion',
+  // CPU-bound title matching. Cost dominated by Levenshtein over the trigram
+  // pre-filter bucket; routing it through a worker lets it overlap with the
+  // FTS/trigram tiers rather than tail-appending to them on the main thread.
+  'fuzzyMatchTitles',
 ])
 
 if (!parentPort) {

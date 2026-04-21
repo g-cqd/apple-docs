@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 
 const SCHEMA_VERSION = 8
 
@@ -1250,6 +1251,18 @@ export class DocsDatabase {
 
   getAllTitlesForFuzzy() {
     return this._getAllTitlesForFuzzy.all()
+  }
+
+  /**
+   * Thin wrapper so the reader-pool can route fuzzy matching through a worker
+   * by op name. Keeps the trigram/Levenshtein routine identical — only the
+   * call surface changes. Off the main thread, this lets a long fuzzy scan
+   * run in parallel with other search tiers rather than blocking the event
+   * loop. The `_trigramCache` lives in the lib module, so each worker builds
+   * its own cache once per process lifetime (cost: O(titles × avg_trigrams)).
+   */
+  fuzzyMatchTitles(query, opts = {}) {
+    return fuzzyMatchTitles(query, this, opts)
   }
 
   searchByTitle(title, framework = null) {

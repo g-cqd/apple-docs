@@ -92,6 +92,21 @@ describe('reader-pool (integration, real workers)', () => {
     }
   })
 
+  test('fuzzyMatchTitles runs inside a worker and returns Levenshtein matches', async () => {
+    const pool = createReaderPool({ dbPath, size: 1 })
+    await pool.start()
+    try {
+      // 'Hellp' → 'Hello' → Levenshtein distance 1. With only 'Hello' and
+      // 'World' in the corpus, the worker should pick Hello as the sole match.
+      const matches = await pool.run('fuzzyMatchTitles', ['Hellp', { limit: 5 }])
+      expect(Array.isArray(matches)).toBe(true)
+      const titles = matches.map(m => m.title)
+      expect(titles).toContain('Hello')
+    } finally {
+      await pool.close()
+    }
+  })
+
   test('recycle reopens workers against the same DB file', async () => {
     const pool = createReaderPool({ dbPath, size: 2 })
     await pool.start()

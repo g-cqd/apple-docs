@@ -1,25 +1,31 @@
 import { describe, expect, test } from 'bun:test'
 import { search } from '../../src/commands/search.js'
+import { fuzzyMatchTitles } from '../../src/lib/fuzzy.js'
 
 function makeCtx(calls) {
-  return {
-    db: {
-      resolveRoot: () => null,
-      getFrameworkSynonyms: () => [],
-      getBodyIndexCount: () => 1,
-      searchPages: (_ftsQuery, _rawQuery, opts) => {
-        calls.push(opts)
-        return []
-      },
-      searchTrigram: () => [],
-      searchBody: () => [],
-      getAllTitlesForFuzzy: () => [],
-      getSearchRecordById: () => null,
-      hasTable: () => false,
-      getTier: () => 'standard',
-      getDocumentSnippetData: () => new Map(),
-      getRelatedDocCounts: () => new Map(),
+  const db = {
+    resolveRoot: () => null,
+    getFrameworkSynonyms: () => [],
+    getBodyIndexCount: () => 1,
+    searchPages: (_ftsQuery, _rawQuery, opts) => {
+      calls.push(opts)
+      return []
     },
+    searchTrigram: () => [],
+    searchBody: () => [],
+    getAllTitlesForFuzzy: () => [],
+    getSearchRecordById: () => null,
+    hasTable: () => false,
+    getTier: () => 'standard',
+    getDocumentSnippetData: () => new Map(),
+    getRelatedDocCounts: () => new Map(),
+  }
+  // Mirror DocsDatabase.fuzzyMatchTitles — just delegates to the lib with
+  // `this` as the db. Wired as a function so tests can override
+  // getAllTitlesForFuzzy and see the change reflected.
+  db.fuzzyMatchTitles = (query, opts) => fuzzyMatchTitles(query, db, opts)
+  return {
+    db,
     dataDir: '/tmp',
     logger: { debug() {}, info() {}, warn() {}, error() {} },
   }

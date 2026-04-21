@@ -1,4 +1,3 @@
-import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 import { renderSnippet } from '../content/render-snippet.js'
 import { detectIntent } from '../search/intent.js'
 import { rerank } from '../search/ranking.js'
@@ -158,11 +157,12 @@ export async function search(opts, ctx) {
 
   // Tier 3: Levenshtein fuzzy (only if T1+T2 combined < 5 and query >= 4 chars)
   if (results.length < 5 && q.length >= 4 && fuzzy) {
-    // Levenshtein scan stays on the main thread for now — the candidate set
-    // is bounded and the routine is CPU-bound; a Worker hop per call would
-    // dominate. The per-id record fetches that follow, though, are worth
-    // parallelizing when a pool is present.
-    const fuzzyMatches = fuzzyMatchTitles(q, ctx.db, { framework, kind, limit: searchLimit })
+    // With a pool, the fuzzy scan runs in a worker concurrently with the
+    // earlier tiers' DB fan-out; without one, `runRead` falls through to
+    // `ctx.db.fuzzyMatchTitles` on the main thread identically to the
+    // pre-pool call shape. Per-id record fetches are parallelized in either
+    // case so the pool actually gets to fan them out.
+    const fuzzyMatches = await runRead(ctx, 'fuzzyMatchTitles', [q, { framework, kind, limit: searchLimit }])
     const fuzzyRecords = await Promise.all(
       fuzzyMatches.map(fm => runRead(ctx, 'getSearchRecordById', [fm.id]).then(record => ({ fm, record }))),
     )
@@ -194,13 +194,17 @@ export async function search(opts, ctx) {
       const pruned = pruneStopwords(tokens)
 
       // R1 — pruned AND: keep only high-signal tokens and re-run FTS5.
+      // Parallelized per-framework via runRead so the pool can overlap
+      // synonym fan-out; with no pool, runRead degrades to a direct
+      // main-thread call (equivalent to the prior serial loop).
       if (pruned.length >= 1) {
         const prunedQuery = buildFtsQuery(pruned.join(' '))
-        const r1 = []
+        let r1 = []
         try {
-          for (const fw of frameworks) {
-            r1.push(...ctx.db.searchPages(prunedQuery, q, { ...filterOpts, framework: fw }))
-          }
+          const parts = await Promise.all(
+            frameworks.map(fw => runRead(ctx, 'searchPages', [prunedQuery, q, { ...filterOpts, framework: fw }])),
+          )
+          r1 = parts.flat()
         } catch {}
         const before = results.length
         addResults(r1, 'relaxed')
@@ -210,11 +214,12 @@ export async function search(opts, ctx) {
       // R2 — pruned OR: join the pruned tokens with OR so any single hit wins.
       if (results.length === 0 && pruned.length >= 2) {
         const orQuery = pruned.map(t => `"${t.toLowerCase().replace(/"/g, '')}"`).join(' OR ')
-        const r2 = []
+        let r2 = []
         try {
-          for (const fw of frameworks) {
-            r2.push(...ctx.db.searchPages(orQuery, q, { ...filterOpts, framework: fw }))
-          }
+          const parts = await Promise.all(
+            frameworks.map(fw => runRead(ctx, 'searchPages', [orQuery, q, { ...filterOpts, framework: fw }])),
+          )
+          r2 = parts.flat()
         } catch {}
         const before = results.length
         addResults(r2, 'relaxed-or')
@@ -224,14 +229,15 @@ export async function search(opts, ctx) {
       // R3 — trigram on a single high-signal token. Prefer a CamelCase token
       // so `NavigationStack` still drives the lookup when nothing else matched.
       if (results.length === 0) {
-        const pool = pruned.length > 0 ? pruned : tokens
-        const signal = pickHighSignalToken(pool)
+        const tokenPool = pruned.length > 0 ? pruned : tokens
+        const signal = pickHighSignalToken(tokenPool)
         if (signal && signal.length >= 3) {
-          const r3 = []
+          let r3 = []
           try {
-            for (const fw of frameworks) {
-              r3.push(...ctx.db.searchTrigram(signal, { ...filterOpts, framework: fw }))
-            }
+            const parts = await Promise.all(
+              frameworks.map(fw => runRead(ctx, 'searchTrigram', [signal, { ...filterOpts, framework: fw }])),
+            )
+            r3 = parts.flat()
           } catch {}
           const before = results.length
           addResults(r3, 'relaxed-token')
