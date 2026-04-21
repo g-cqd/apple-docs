@@ -135,9 +135,17 @@ export function createReaderPool(opts = {}) {
     // loop doesn't thrash. Next `run()` will respawn this index.
   }
 
-  function start() {
-    for (let i = 0; i < size; i++) spawn(i)
-    return Promise.all(slots.map((s) => s?.ready).filter(Boolean))
+  async function start() {
+    // Spawn serially: N workers opening the same SQLite file simultaneously
+    // races on WAL / SHM bring-up on some platforms (observed on x86 Darwin:
+    // "database disk image is malformed" / "malformed sqlite_master" fatals
+    // at worker boot). The cost is one-time startup latency on the order of
+    // N × ~10-30ms; trivial against process lifetime, eliminates the race.
+    for (let i = 0; i < size; i++) {
+      spawn(i)
+      const slot = slots[i]
+      if (slot?.ready) await slot.ready
+    }
   }
 
   function pickSlot() {
