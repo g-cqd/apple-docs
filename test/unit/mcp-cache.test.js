@@ -179,6 +179,34 @@ describe('createCacheRegistry', () => {
     expect(calls).toBe(2)
   })
 
+  test('scale multiplies every default tool capacity uniformly', () => {
+    const registry = createCacheRegistry(fakeCtx(), { scale: 5 })
+    const stats = registry.stats()
+    // Defaults: search_docs 100, read_doc 200, browse 100, list_* 16.
+    expect(stats.tools.search_docs.capacity).toBe(500)
+    expect(stats.tools.read_doc.capacity).toBe(1000)
+    expect(stats.tools.browse.capacity).toBe(500)
+    expect(stats.tools.list_frameworks.capacity).toBe(80)
+    expect(stats.tools.list_taxonomy.capacity).toBe(80)
+  })
+
+  test('explicit sizes override scale for named tools', () => {
+    const registry = createCacheRegistry(fakeCtx(), {
+      scale: 10,
+      sizes: { search_docs: 50 }, // pin one despite scale
+    })
+    const stats = registry.stats()
+    expect(stats.tools.search_docs.capacity).toBe(50)
+    expect(stats.tools.read_doc.capacity).toBe(2000) // still scaled
+  })
+
+  test('invalid scale values fall back to 1 (no amplification)', () => {
+    for (const bad of [0, -1, Number.NaN, 'abc', null]) {
+      const registry = createCacheRegistry(fakeCtx(), { scale: bad })
+      expect(registry.stats().tools.search_docs.capacity).toBe(100)
+    }
+  })
+
   test('positive results ignore the negative TTL and live until corpus stamp changes', async () => {
     let clock = 0
     const registry = createCacheRegistry(fakeCtx(), {

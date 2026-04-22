@@ -22,11 +22,17 @@ import { createStamper } from './cache.js'
  * @param {object} ctx - shared command context ({ db, dataDir, ... })
  * @param {object} [opts]
  * @param {number} [opts.capacity=512]
+ * @param {number} [opts.scale=1] - multiplier applied to the default capacity
+ *   when `opts.capacity` is not set. Shared convention with the tool cache
+ *   registry so one env var (`APPLE_DOCS_MCP_CACHE_SCALE`) scales both.
  * @param {() => number} [opts.now] - injectable clock (tests only)
  * @param {string}   [opts.dbPath] - override (tests only)
  */
 export function createMarkdownCache(ctx, opts = {}) {
-  const capacity = Math.max(1, opts.capacity ?? 512)
+  const scale = opts.scale != null && Number.isFinite(opts.scale) && opts.scale > 0
+    ? opts.scale
+    : 1
+  const capacity = Math.max(1, opts.capacity ?? Math.ceil(512 * scale))
   const stamper = opts.stamper ?? createStamper(ctx, opts)
   // Map<path, { content, sections, fallback, stamp }>; Map iteration is
   // insertion-ordered, so the first key is the LRU-oldest.

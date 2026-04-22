@@ -321,6 +321,7 @@ respawned).
 | `APPLE_DOCS_MCP_READERS` | unset (off) | Set to `on` to enable the worker-thread reader pool. Heavy read-only SQL runs on dedicated threads, each with its own `bun:sqlite` handle, instead of blocking the main Bun event loop. |
 | `APPLE_DOCS_MCP_READER_WORKERS` | auto (`availableParallelism() − 2`, capped at 12) | Explicit worker count when the pool is on. Match it to `APPLE_DOCS_MCP_CONCURRENCY` so a saturating burst fits exactly. |
 | `APPLE_DOCS_MCP_CACHE` | unset (on) | Set to `off` to disable the response cache (debugging only). |
+| `APPLE_DOCS_MCP_CACHE_SCALE` | `1` | Uniform multiplier applied to every default cache capacity (response cache + markdown cache). `1` keeps the laptop-sized defaults (~40 MB steady state). `5` is a sensible starting point for a dedicated server (~200 MB, covers multi-agent long-tail traffic). Fractional values accepted. |
 | `APPLE_DOCS_MCP_CACHE_STATS` | unset | Set to `1` to surface cache + concurrency + reader-pool stats on `/healthz`. |
 
 CLI flags (`--port`, `--host`, `--allow-origin`, `--concurrency`, `--queue`)

@@ -75,4 +75,21 @@ describe('createMarkdownCache', () => {
     cache.get('b') // miss
     expect(cache.stats().hitRatio).toBeCloseTo(2 / 3, 5)
   })
+
+  test('scale multiplies the default capacity when capacity is not overridden', () => {
+    const cache = createMarkdownCache({}, { scale: 4, stamper: stubStamper() })
+    expect(cache.stats().capacity).toBe(2048) // 512 * 4
+  })
+
+  test('explicit capacity wins over scale', () => {
+    const cache = createMarkdownCache({}, { capacity: 10, scale: 100, stamper: stubStamper() })
+    expect(cache.stats().capacity).toBe(10)
+  })
+
+  test('invalid scale falls back to 1', () => {
+    for (const bad of [0, -2, Number.NaN]) {
+      const cache = createMarkdownCache({}, { scale: bad, stamper: stubStamper() })
+      expect(cache.stats().capacity).toBe(512)
+    }
+  })
 })

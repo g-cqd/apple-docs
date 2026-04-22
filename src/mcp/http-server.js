@@ -75,14 +75,19 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     }))
   const serveImpl = deps.serve ?? ((cfg) => Bun.serve(cfg))
 
+  // `APPLE_DOCS_MCP_CACHE_SCALE` uniformly multiplies every default cache
+  // capacity (response cache + markdown cache). Default 1 keeps the laptop
+  // footprint unchanged. Public instances with headroom typically run 5–10.
+  // Parses as a positive float; anything invalid falls back to 1.
+  const cacheScale = parsePositiveNumber(process.env.APPLE_DOCS_MCP_CACHE_SCALE) ?? 1
   // One cache registry for the lifetime of the HTTP process. Each request
   // instantiates a fresh McpServer (required by the stateless SDK transport)
   // but reuses the same registry, so hits survive across requests.
-  const cacheRegistry = deps.cacheRegistry ?? createCacheRegistry(ctx)
+  const cacheRegistry = deps.cacheRegistry ?? createCacheRegistry(ctx, { scale: cacheScale })
   // Separate LRU keyed by page path alone, so read_doc variants that differ
   // only by section/maxChars/match share a single `renderMarkdown()` run.
   // Plumbed through `ctx.markdownCache` — lookup() consults it when present.
-  const markdownCache = deps.markdownCache ?? createMarkdownCache(ctx)
+  const markdownCache = deps.markdownCache ?? createMarkdownCache(ctx, { scale: cacheScale })
   // Worker-thread reader pool. Off by default for this rollout — enable with
   // APPLE_DOCS_MCP_READERS=on. When active, heavy read-only SQL work routes
   // to dedicated worker threads each holding their own bun:sqlite handle,
@@ -378,4 +383,12 @@ function parseNonNegativeInt(value) {
   if (value == null) return null
   const n = Number.parseInt(value, 10)
   return Number.isFinite(n) && n >= 0 ? n : null
+}
+
+// Cache scale accepts fractional values (e.g. "2.5") so operators can dial in
+// capacity without flipping each default.
+function parsePositiveNumber(value) {
+  if (value == null) return null
+  const n = Number.parseFloat(value)
+  return Number.isFinite(n) && n > 0 ? n : null
 }
