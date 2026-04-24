@@ -3,6 +3,8 @@ import {
   checkRawGitHub,
   fetchGitHubTree,
   fetchRawGitHub,
+  setResolvedGitHubToken,
+  getGitHubToken,
 } from '../../src/lib/github.js'
 
 const originalFetch = globalThis.fetch
@@ -10,6 +12,7 @@ const originalEnv = { ...process.env }
 
 afterEach(() => {
   globalThis.fetch = originalFetch
+  setResolvedGitHubToken(null)
   // Restore env vars touched by tests
   for (const key of ['GITHUB_TOKEN', 'GH_TOKEN']) {
     if (key in originalEnv) {
@@ -211,6 +214,60 @@ describe('token authentication', () => {
 
     await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
 
+    expect(capturedHeaders.Authorization).toBeUndefined()
+  })
+
+  test('uses resolved token when no env var is set', async () => {
+    // biome-ignore lint/performance/noDelete: env vars require delete
+    delete process.env.GITHUB_TOKEN
+    // biome-ignore lint/performance/noDelete: env vars require delete
+    delete process.env.GH_TOKEN
+    setResolvedGitHubToken('resolved_from_gh')
+
+    let capturedHeaders
+    globalThis.fetch = async (_url, options) => {
+      capturedHeaders = options?.headers ?? {}
+      return Response.json({ tree: [] })
+    }
+
+    await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
+
+    expect(capturedHeaders.Authorization).toBe('Bearer resolved_from_gh')
+    expect(getGitHubToken()).toBe('resolved_from_gh')
+  })
+
+  test('env GITHUB_TOKEN wins over resolved token', async () => {
+    process.env.GITHUB_TOKEN = 'env_wins'
+    // biome-ignore lint/performance/noDelete: env vars require delete
+    delete process.env.GH_TOKEN
+    setResolvedGitHubToken('resolved_loses')
+
+    let capturedHeaders
+    globalThis.fetch = async (_url, options) => {
+      capturedHeaders = options?.headers ?? {}
+      return Response.json({ tree: [] })
+    }
+
+    await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
+
+    expect(capturedHeaders.Authorization).toBe('Bearer env_wins')
+  })
+
+  test('setResolvedGitHubToken(null) clears the fallback', async () => {
+    // biome-ignore lint/performance/noDelete: env vars require delete
+    delete process.env.GITHUB_TOKEN
+    // biome-ignore lint/performance/noDelete: env vars require delete
+    delete process.env.GH_TOKEN
+    setResolvedGitHubToken('temp')
+    setResolvedGitHubToken(null)
+
+    let capturedHeaders
+    globalThis.fetch = async (_url, options) => {
+      capturedHeaders = options?.headers ?? {}
+      return Response.json({ tree: [] })
+    }
+
+    await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
     expect(capturedHeaders.Authorization).toBeUndefined()
   })
 

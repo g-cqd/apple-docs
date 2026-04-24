@@ -149,7 +149,16 @@ Options:
   --rate <n>           Max requests per second across all roots (default: 500)
   --retry-failed       Retry pages that previously failed (404, timeout, etc)
   --index              Build body search index after sync
+  --use-git-auth       Reuse a GitHub token from the local gh CLI or git
+                       credential helper. No prompt. Env vars still take
+                       precedence.
+  --skip-git-auth      Skip all local-credential detection for this run.
   --json               Output summary as JSON
+
+On a TTY with no GITHUB_TOKEN set, sync prompts before using local credentials
+and can remember the choice with "always". Persisted preference lives at
+~/.apple-docs/config.json. Set APPLE_DOCS_NO_GIT_AUTH=1 to disable detection
+globally (recommended for CI).
 
 Examples:
   apple-docs sync --roots swiftui,combine                   # sync two frameworks
@@ -175,6 +184,9 @@ Options:
   --rate <n>           Max requests per second (default: 500)
   --parallel <n>       Crawl N new roots simultaneously (default: 10)
   --index              Update body search index after pulling changes
+  --use-git-auth       Reuse a GitHub token from the local gh CLI or git
+                       credential helper (same behavior as sync).
+  --skip-git-auth      Skip local-credential detection for this run.
   --json               Output summary as JSON
 
 Examples:
@@ -269,9 +281,9 @@ Install options:
 Examples:
   apple-docs mcp start
   apple-docs mcp serve                                    # 127.0.0.1:3031/mcp
-  apple-docs mcp serve --port 3031 --allow-origin https://apple-docs-mcp.everest.mt
+  apple-docs mcp serve --port 3031 --allow-origin https://apple-docs-mcp.example.com
   apple-docs mcp install
-  apple-docs mcp install --http https://apple-docs-mcp.everest.mt/mcp
+  apple-docs mcp install --http https://apple-docs-mcp.example.com/mcp
 `.trim(),
 
   setup: `
@@ -284,6 +296,9 @@ Options:
   --tier <name>    Snapshot tier: lite, standard, full (default: standard)
   --force          Overwrite existing corpus
   --downgrade      Allow replacing a higher tier with a lower tier
+  --use-git-auth   Reuse a GitHub token from the local gh CLI or git
+                   credential helper to authenticate release downloads.
+  --skip-git-auth  Skip local-credential detection for this run.
   --json           Output results as JSON
 `.trim(),
 

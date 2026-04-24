@@ -45,6 +45,12 @@ const cleanup = () => { try { db.close() } catch {} }
 process.on('SIGINT', () => { cleanup(); process.exit(130) })
 process.on('SIGTERM', () => { cleanup(); process.exit(143) })
 
+// Commands that hit the GitHub API benefit from local credentials.
+if (command === 'sync' || command === 'update' || command === 'setup') {
+  const { resolveGitHubAuth } = await import('./src/lib/git-auth-resolve.js')
+  await resolveGitHubAuth({ flags, env: process.env, logger })
+}
+
 try {
   let result
   let formatter

@@ -4,6 +4,7 @@ import { rmSync } from 'node:fs'
 import { sha256 } from '../lib/hash.js'
 import { ensureDir } from '../storage/files.js'
 import { DocsDatabase } from '../storage/database.js'
+import { getGitHubToken } from '../lib/github.js'
 
 const GITHUB_REPO = 'g-cqd/apple-docs'
 const USER_AGENT = 'apple-docs/2.0'
@@ -195,7 +196,7 @@ export async function setup(opts, ctx) {
  * Fetch the latest release from GitHub.
  */
 async function fetchLatestRelease() {
-  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? null
+  const token = getGitHubToken()
   const headers = {
     'User-Agent': USER_AGENT,
     Accept: 'application/vnd.github+json',

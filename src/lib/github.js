@@ -8,11 +8,28 @@ const DEFAULT_TIMEOUT = Number.parseInt(process.env.APPLE_DOCS_GITHUB_TIMEOUT ??
 const MAX_RETRIES = 3
 
 /**
- * Returns the GitHub token from the environment, if available.
+ * Token resolved at runtime (e.g. via `gh auth token` or git credential helper).
+ * Used as a fallback when no GITHUB_TOKEN / GH_TOKEN env var is set.
+ * @type {string|null}
+ */
+let _resolvedToken = null
+
+/**
+ * Record a token resolved at runtime. Env vars still take precedence.
+ * Pass `null` to clear.
+ * @param {string|null} token
+ */
+export function setResolvedGitHubToken(token) {
+  _resolvedToken = token && token.length > 0 ? token : null
+}
+
+/**
+ * Returns the GitHub token from the environment, or the resolved token set via
+ * `setResolvedGitHubToken`, if available.
  * @returns {string|null}
  */
-function getGitHubToken() {
-  return process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? null
+export function getGitHubToken() {
+  return process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? _resolvedToken
 }
 
 export function hasGitHubToken() {

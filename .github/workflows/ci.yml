@@ -51,6 +51,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      APPLE_DOCS_NO_GIT_AUTH: '1'
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
@@ -77,6 +79,8 @@ jobs:
 
   mutation:
     runs-on: ubuntu-latest
+    env:
+      APPLE_DOCS_NO_GIT_AUTH: '1'
     steps:
       - uses: actions/checkout@v5
         with:

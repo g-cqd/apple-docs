@@ -6,6 +6,7 @@ import { DocsDatabase } from '../../src/storage/database.js'
 import { snapshotBuild } from '../../src/commands/snapshot.js'
 import { setup } from '../../src/commands/setup.js'
 import { createLogger } from '../../src/lib/logger.js'
+import { setResolvedGitHubToken } from '../../src/lib/github.js'
 
 let dataDir
 let db
@@ -194,6 +195,42 @@ describe('setup', () => {
     await expect(
       setup({ tier: 'mega' }, { db, dataDir, logger })
     ).rejects.toThrow('Invalid tier')
+  })
+
+  test('uses setResolvedGitHubToken fallback for release lookups', async () => {
+    const originalEnv = { ...process.env }
+    // biome-ignore lint/performance/noDelete: env vars require delete
+    delete process.env.GITHUB_TOKEN
+    // biome-ignore lint/performance/noDelete: env vars require delete
+    delete process.env.GH_TOKEN
+    setResolvedGitHubToken('resolved_setup_token')
+
+    const originalFetch = globalThis.fetch
+    let seenAuth = null
+    globalThis.fetch = async (url, opts) => {
+      if (String(url).includes('/releases/latest')) {
+        seenAuth = opts?.headers?.Authorization ?? null
+        // Fail gracefully after we capture the header.
+        return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 })
+      }
+      return new Response('nope', { status: 404 })
+    }
+
+    try {
+      await expect(
+        setup({ tier: 'standard', force: true }, { db, dataDir, logger })
+      ).rejects.toThrow()
+    } finally {
+      globalThis.fetch = originalFetch
+      setResolvedGitHubToken(null)
+      for (const k of ['GITHUB_TOKEN', 'GH_TOKEN']) {
+        if (k in originalEnv) process.env[k] = originalEnv[k]
+        // biome-ignore lint/performance/noDelete: env vars require delete
+        else delete process.env[k]
+      }
+    }
+
+    expect(seenAuth).toBe('Bearer resolved_setup_token')
   })
 
   test('rejects downgrades without --downgrade', async () => {

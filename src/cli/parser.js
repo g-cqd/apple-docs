@@ -5,6 +5,32 @@
 const COMMAND_FAMILIES = new Set(['mcp', 'web', 'storage', 'snapshot', 'index'])
 
 /**
+ * Flags that never consume the next positional argument as their value.
+ * Without this, `--skip-git-auth some-positional` would set
+ * `flags['skip-git-auth'] = 'some-positional'` and drop the positional.
+ */
+const BOOLEAN_FLAGS = new Set([
+  'help',
+  'verbose',
+  'json',
+  'full',
+  'force',
+  'downgrade',
+  'verify',
+  'minify',
+  'dry-run',
+  'index',
+  'read',
+  'retry-failed',
+  'no-vacuum',
+  'no-deep',
+  'no-eager',
+  'no-fuzzy',
+  'use-git-auth',
+  'skip-git-auth',
+])
+
+/**
  * Minimal argv parser. Returns { command, subcommand, positional, flags }.
  * Handles: --key value, --bool, positional args, -- separator, 2-level commands.
  */
@@ -32,6 +58,10 @@ export function parseArgs(argv) {
     }
     if (args[i].startsWith('--')) {
       const key = args[i].slice(2)
+      if (BOOLEAN_FLAGS.has(key)) {
+        flags[key] = true
+        continue
+      }
       // Check if next arg is a value (not a flag)
       const next = args[i + 1]
       if (next !== undefined && !next.startsWith('--')) {
