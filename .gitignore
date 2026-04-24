@@ -27,6 +27,9 @@ plans/
 # Environment
 .env
 .env.*
+# The `.env.*` rule above would otherwise drop committed `.env.example`
+# templates. Keep those tracked so operators have a reference to copy from.
+!**/.env.example
 
 # ops/ reference deployment — operator-local files and rendered templates
 ops/.env

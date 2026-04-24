@@ -36,3 +36,12 @@ export LABEL_WEB="${LABEL_PREFIX}.web"
 export LABEL_MCP="${LABEL_PREFIX}.mcp"
 export LABEL_TUNNEL_WEB="${LABEL_PREFIX}.cloudflared.web"
 export LABEL_TUNNEL_MCP="${LABEL_PREFIX}.cloudflared.mcp"
+
+# Optional tuning variables. Defaults are laptop-sized; bump on dedicated
+# hardware. See ops/.env.example for guidance.
+export APPLE_DOCS_MCP_CACHE_SCALE="${APPLE_DOCS_MCP_CACHE_SCALE:-1}"
+
+# Optional: comma-separated list of legacy launchd labels to bootout+remove
+# before installing the new daemons. Useful when a previous deployment used a
+# different label scheme (e.g. migrating from an external ops directory).
+export LEGACY_LAUNCHD_LABELS="${LEGACY_LAUNCHD_LABELS:-}"

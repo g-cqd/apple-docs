@@ -59,6 +59,23 @@ for plist in "${APP_DAEMONS[@]}"; do
   /bin/launchctl bootout "system/${label}" 2>/dev/null || true
 done
 
+# Optional legacy-label cleanup. Comma-separated list of system labels from
+# a previous deployment using a different naming scheme. We bootout each and
+# remove its plist before installing the new daemons so the box isn't left
+# serving duplicate copies of the same role under two different labels.
+if [ -n "${LEGACY_LAUNCHD_LABELS}" ]; then
+  echo ""
+  echo "=== removing legacy launchd labels ==="
+  IFS=',' read -r -a LEGACY_ARR <<< "${LEGACY_LAUNCHD_LABELS}"
+  for legacy in "${LEGACY_ARR[@]}"; do
+    legacy_trimmed="$(echo "$legacy" | tr -d '[:space:]')"
+    [ -z "$legacy_trimmed" ] && continue
+    echo "  legacy: ${legacy_trimmed}"
+    /bin/launchctl bootout "system/${legacy_trimmed}" 2>/dev/null || true
+    rm -f "/Library/LaunchDaemons/${legacy_trimmed}.plist"
+  done
+fi
+
 echo ""
 echo "=== installing plists to /Library/LaunchDaemons ==="
 for plist in "${DAEMONS[@]}"; do
@@ -118,6 +135,25 @@ echo ""
 echo "=== smoke tests ==="
 if ! sudo -u "$USER_NAME" "$OPS/bin/smoke-test.sh"; then
   echo "WARN: one or more smoke tests failed" >&2
+fi
+
+# Optional cleanup of compatibility symlinks used during a sibling-directory
+# migration. Only removes a path if it is (a) a symlink and (b) resolves to
+# the new OPS dir — so running this twice or on a fresh install is a no-op.
+if [ -n "${COMPAT_SYMLINKS:-}" ]; then
+  echo ""
+  echo "=== cleaning up compatibility symlinks ==="
+  IFS=',' read -r -a COMPAT_ARR <<< "${COMPAT_SYMLINKS}"
+  for link in "${COMPAT_ARR[@]}"; do
+    link_trimmed="$(echo "$link" | tr -d '[:space:]')"
+    [ -z "$link_trimmed" ] && continue
+    if [ -L "$link_trimmed" ] && [ "$(readlink "$link_trimmed")" = "$OPS" ]; then
+      echo "  removing: ${link_trimmed} -> $OPS"
+      rm "$link_trimmed"
+    elif [ -e "$link_trimmed" ]; then
+      echo "  skip: ${link_trimmed} exists but is not a symlink to $OPS"
+    fi
+  done
 fi
 
 echo ""

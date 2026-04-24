@@ -67,6 +67,12 @@
              for ops probes. -->
         <key>APPLE_DOCS_MCP_CACHE_STATS</key>
         <string>1</string>
+        <!-- Scale every default MCP cache capacity by this multiplier. `1`
+             keeps the laptop-sized defaults (~40 MB steady state). `5` or
+             `10` suits a dedicated server with generous RAM. Configure via
+             APPLE_DOCS_MCP_CACHE_SCALE in ops/.env; unset defaults to 1. -->
+        <key>APPLE_DOCS_MCP_CACHE_SCALE</key>
+        <string>${APPLE_DOCS_MCP_CACHE_SCALE}</string>
     </dict>
 </dict>
 </plist>
