@@ -85,7 +85,7 @@ jobs:
 
             **Install:**
             ```bash
-            apple-docs setup --tier standard
+            apple-docs setup --tier full
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -221,7 +221,7 @@ export function formatStatus(result) {
     caps.push(`read: ${c.readContent ? 'yes' : 'metadata only'}`)
     lines.push(`  Capabilities:    ${caps.join(', ')}`)
     if (result.tier === 'lite') {
-      lines.push(dim("  Hint:            Run 'apple-docs setup --tier standard --force' to upgrade"))
+      lines.push(dim("  Hint:            Run 'apple-docs setup --tier full --force' to upgrade"))
     }
   }
 

@@ -42,7 +42,7 @@ const OPERATIONAL_TRUNCATE = [
  */
 export async function snapshotBuild(opts, ctx) {
   const { db, dataDir, logger } = ctx
-  const tier = opts.tier ?? 'standard'
+  const tier = opts.tier ?? 'full'
   const outDir = opts.out ?? 'dist'
   const tag = opts.tag ?? `snapshot-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
   const schemaVersion = db.getSchemaVersion()

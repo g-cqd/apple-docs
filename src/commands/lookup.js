@@ -134,7 +134,7 @@ export async function lookup(opts, ctx) {
       tierLimitation = {
         tier: 'lite',
         reason: 'The lite snapshot includes metadata only — document sections and raw content are not included.',
-        upgrade: "Run 'apple-docs setup --tier standard --force' to upgrade and get full document content.",
+        upgrade: "Run 'apple-docs setup --tier full --force' to upgrade and get full document content.",
       }
     } else {
       note = 'No content available. Run apple-docs sync first.'

@@ -17,7 +17,7 @@ const USER_AGENT = 'apple-docs/2.0'
  */
 export async function setup(opts, ctx) {
   const { db, dataDir, logger } = ctx
-  const tier = opts.tier ?? 'standard'
+  const tier = opts.tier ?? 'full'
   const force = opts.force ?? false
   const downgrade = opts.downgrade ?? false
 

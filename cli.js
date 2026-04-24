@@ -281,7 +281,7 @@ try {
         case 'build': {
           const { snapshotBuild } = await import('./src/commands/snapshot.js')
           result = await snapshotBuild({
-            tier: flags.tier ?? 'standard',
+            tier: flags.tier ?? 'full',
             out: flags.out ?? 'dist',
             tag: flags.tag,
           }, ctx)
@@ -298,7 +298,7 @@ try {
     case 'setup': {
       const { setup: setupCmd } = await import('./src/commands/setup.js')
       result = await setupCmd({
-        tier: flags.tier ?? 'standard',
+        tier: flags.tier ?? 'full',
         force: !!flags.force,
         downgrade: !!flags.downgrade,
       }, ctx)

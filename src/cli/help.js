@@ -293,7 +293,7 @@ Download a pre-built documentation snapshot for instant access.
 No crawling required — ready in under 60 seconds.
 
 Options:
-  --tier <name>    Snapshot tier: lite, standard, full (default: standard)
+  --tier <name>    Snapshot tier: lite, standard, full (default: full)
   --force          Overwrite existing corpus
   --downgrade      Allow replacing a higher tier with a lower tier
   --use-git-auth   Reuse a GitHub token from the local gh CLI or git
@@ -311,7 +311,7 @@ Subcommands:
   build            Build a snapshot archive from the current corpus
 
 Build options:
-  --tier <name>    Snapshot tier: lite, standard, full (default: standard)
+  --tier <name>    Snapshot tier: lite, standard, full (default: full)
   --out <dir>      Output directory (default: dist)
   --tag <name>     Version tag for the archive filename
   --json           Output results as JSON

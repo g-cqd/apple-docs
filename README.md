@@ -32,7 +32,7 @@ git clone https://github.com/g-cqd/apple-docs.git
 cd apple-docs
 bun install
 bun link
-apple-docs setup --tier standard
+apple-docs setup --tier full
 ```
 
 This downloads a prebuilt corpus and is the best default for most people.
@@ -337,8 +337,8 @@ Snapshot tiers:
 | Tier | Includes | Best for |
 | --- | --- | --- |
 | `lite` | Titles, declarations, browse, metadata | Fastest install, smallest footprint |
-| `standard` | `lite` plus full page content for `read` | Recommended default |
-| `full` | `standard` plus raw JSON and pre-rendered files on disk | Offline-heavy use, publishing, site builds |
+| `standard` | `lite` plus full page content for `read` | Lightweight installs that still need `read` |
+| `full` | `standard` plus raw JSON and pre-rendered files on disk | Recommended default; offline-heavy use, publishing, site builds |
 
 ## Configuration
 
