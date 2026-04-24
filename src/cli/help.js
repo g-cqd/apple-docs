@@ -164,9 +164,9 @@ Examples:
   apple-docs sync --roots swiftui,combine                   # sync two frameworks
   apple-docs sync --sources guidelines                      # sync only App Store Review Guidelines
   apple-docs sync --roots app-store-review                  # sync App Store Review Guidelines
-  apple-docs sync --sources packages                        # sync curated apple/swiftlang packages (no auth)
-  apple-docs sync --full --sources packages                # full package catalog; uses raw README fallbacks without auth
-  APPLE_DOCS_PACKAGES_SCOPE=full GITHUB_TOKEN=... apple-docs sync --sources packages  # full catalog with GitHub metadata
+  apple-docs sync --sources packages                        # sync curated apple/swiftlang packages
+  apple-docs sync --full --sources packages                 # full package catalog via raw.githubusercontent.com (no auth)
+  APPLE_DOCS_PACKAGES_FETCH=api GITHUB_TOKEN=... apple-docs sync --full --sources packages  # rich GitHub REST metadata (stars, license, …)
   apple-docs sync --full --parallel 10 --rate 500             # aggressive full crawl
   apple-docs sync --roots uikit --concurrency 100 --rate 100  # tuned single-root crawl
   apple-docs sync --retry-failed                            # retry 404s/timeouts

@@ -33,7 +33,11 @@ function packageSyncLimit() {
  * Precedence:
  *   - `APPLE_DOCS_PACKAGES_SCOPE=official|full` when set.
  *   - `sync --full` (threaded as `ctx.fullSync`) requests the full catalog.
- *   - Otherwise `full` if a GitHub token is available, else `official`.
+ *   - Otherwise the curated `official` allowlist.
+ *
+ * Scope no longer depends on token presence: raw.githubusercontent.com covers
+ * the full SwiftPackageIndex catalog without a quota, so callers who want
+ * every package simply opt in via `--full` or the env var.
  *
  * @param {{ fullSync?: boolean }} [ctx]
  * @returns {'official'|'full'}
@@ -43,21 +47,26 @@ function packageCatalogScope(ctx) {
   if (raw === 'full') return 'full'
   if (raw === 'official') return 'official'
   if (ctx?.fullSync) return 'full'
-  return hasGitHubToken() ? 'full' : 'official'
+  return 'official'
 }
 
 /**
  * Resolve how package metadata should be fetched for this run.
- * Full catalog discovery can still fall back to public raw README fetches
- * when no GitHub token is available.
  *
- * @param {{ fullSync?: boolean }} [ctx]
+ * The default is `raw` (README-only via raw.githubusercontent.com) because it
+ * has no per-user quota and is sufficient for the rendered documents. Callers
+ * who want the richer GitHub REST metadata (stars, license, topics, …) opt in
+ * with `APPLE_DOCS_PACKAGES_FETCH=api`, which also requires a GitHub token;
+ * if none is available the request silently degrades back to `raw` to avoid
+ * burning an IP-level 60/hr quota.
+ *
  * @returns {'raw'|'api'}
  */
-function packageFetchMode(ctx) {
-  const scope = packageCatalogScope(ctx)
-  if (scope === 'official') return 'raw'
-  return hasGitHubToken() ? 'api' : 'raw'
+function packageFetchMode(_ctx) {
+  const override = (process.env.APPLE_DOCS_PACKAGES_FETCH ?? '').trim().toLowerCase()
+  if (override === 'raw') return 'raw'
+  if (override === 'api') return hasGitHubToken() ? 'api' : 'raw'
+  return 'raw'
 }
 
 function packageKey(owner, repo) {
@@ -304,13 +313,6 @@ export class PackagesAdapter extends SourceAdapter {
 
     // full scope: union the curated apple/swiftlang allowlist with the
     // SwiftPackageIndex catalog so the official repos are always included.
-    if (!hasGitHubToken()) {
-      ctx.logger?.warn?.(
-        'Syncing the full packages catalog without GitHub auth; ' +
-        'package metadata will use public README-only fallbacks.',
-      )
-    }
-
     const { text } = await fetchRawGitHub(
       PACKAGE_LIST_OWNER,
       PACKAGE_LIST_REPO,
@@ -334,13 +336,6 @@ export class PackagesAdapter extends SourceAdapter {
       const parsed = parsePackageUrl(url)
       if (!parsed) continue
       keySet.add(packageKey(parsed.owner, parsed.repo))
-    }
-
-    if (!hasGitHubToken() && limit != null) {
-      ctx.logger?.warn?.(
-        `Syncing only the first ${keySet.size} packages without GitHub auth. ` +
-        'Set GITHUB_TOKEN or GH_TOKEN for the full catalog.',
-      )
     }
 
     return this.validateDiscoveryResult({

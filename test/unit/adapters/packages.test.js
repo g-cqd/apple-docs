@@ -6,6 +6,7 @@ const originalToken = process.env.GITHUB_TOKEN
 const originalGhToken = process.env.GH_TOKEN
 const originalLimit = process.env.APPLE_DOCS_PACKAGES_LIMIT
 const originalScope = process.env.APPLE_DOCS_PACKAGES_SCOPE
+const originalFetchMode = process.env.APPLE_DOCS_PACKAGES_FETCH
 
 function makeCtx() {
   return {
@@ -41,9 +42,14 @@ describe('PackagesAdapter', () => {
     process.env.GITHUB_TOKEN = 'test-token'
     Reflect.deleteProperty(process.env, 'GH_TOKEN')
     Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_LIMIT')
-    // Default to the legacy `full` scope so the pre-existing tests keep
-    // exercising the GitHub REST path. New tests flip to `official` explicitly.
+    // Default to the `full` scope so pre-existing tests exercise the full
+    // SwiftPackageIndex union path. New tests flip to `official` explicitly.
     process.env.APPLE_DOCS_PACKAGES_SCOPE = 'full'
+    // The adapter now defaults to README-only raw fetches. Pre-existing tests
+    // that inspect the GitHub REST payload (`stargazers_count`, `/repos` etag
+    // output, …) opt in to the api path explicitly via the env override; new
+    // tests for the raw-by-default behaviour delete it.
+    process.env.APPLE_DOCS_PACKAGES_FETCH = 'api'
 
     fetchImpl = mock(async () => new Response('Not found', { status: 404 }))
     globalThis.fetch = mock((url, opts) => fetchImpl(url, opts))
@@ -63,6 +69,9 @@ describe('PackagesAdapter', () => {
 
     if (originalScope == null) Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_SCOPE')
     else process.env.APPLE_DOCS_PACKAGES_SCOPE = originalScope
+
+    if (originalFetchMode == null) Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_FETCH')
+    else process.env.APPLE_DOCS_PACKAGES_FETCH = originalFetchMode
   })
 
   test('has correct static properties', () => {
@@ -131,7 +140,8 @@ describe('PackagesAdapter', () => {
     expect(result.keys.length).toBeGreaterThan(0)
     expect(result.keys).toContain('packages/apple/swift-argument-parser')
     expect(result.keys).toContain('packages/pointfreeco/swift-composable-architecture')
-    expect(ctx.logger.warn).toHaveBeenCalled()
+    // Raw is the default fetch path now — no "syncing without auth" warning.
+    expect(ctx.logger.warn).not.toHaveBeenCalled()
   })
 
   test('default scope without a token resolves to official with no warning', async () => {
@@ -146,7 +156,7 @@ describe('PackagesAdapter', () => {
     expect(ctx.logger.warn).not.toHaveBeenCalled()
   })
 
-  test('full sync without a token uses the full package catalog with a warning', async () => {
+  test('full sync (ctx.fullSync) expands to the full package catalog silently', async () => {
     Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
     Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_SCOPE')
 
@@ -164,7 +174,7 @@ describe('PackagesAdapter', () => {
     const result = await adapter.discover(ctx)
 
     expect(result.keys).toContain('packages/pointfreeco/swift-composable-architecture')
-    expect(ctx.logger.warn).toHaveBeenCalled()
+    expect(ctx.logger.warn).not.toHaveBeenCalled()
   })
 
   test('official scope caps keys at APPLE_DOCS_PACKAGES_LIMIT', async () => {
@@ -355,6 +365,7 @@ describe('PackagesAdapter', () => {
   test('full-catalog fetch without a token falls back to raw README mode', async () => {
     Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
     Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_SCOPE')
+    Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_FETCH')
 
     const urlsSeen = []
     fetchImpl.mockImplementation(async (url) => {
@@ -371,6 +382,96 @@ describe('PackagesAdapter', () => {
     const result = await adapter.fetch('packages/pointfreeco/swift-composable-architecture', ctx)
 
     expect(result.payload.syncScope).toBe('full')
+    expect(result.payload.fetchMode).toBe('raw')
+    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
+  })
+
+  test('default fetch path uses raw.githubusercontent.com even when a token is set', async () => {
+    // GITHUB_TOKEN is set in beforeEach; delete only the fetch-mode override
+    // to exercise the "raw is the default" guarantee.
+    Reflect.deleteProperty(process.env, 'APPLE_DOCS_PACKAGES_FETCH')
+
+    const urlsSeen = []
+    fetchImpl.mockImplementation(async (url) => {
+      const urlStr = String(url)
+      urlsSeen.push(urlStr)
+      if (urlStr === 'https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md') {
+        return textResponse('# swift-argument-parser\n\nArgument parsing.', 200, { etag: '"readme-etag"' })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
+
+    expect(result.payload.fetchMode).toBe('raw')
+    // Stars/forks are null because no /repos call is made.
+    expect(result.payload.repo.stargazers_count).toBeNull()
+    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
+    const etag = JSON.parse(result.etag)
+    expect(etag.source).toBe('raw')
+  })
+
+  test('APPLE_DOCS_PACKAGES_FETCH=api with a token uses the GitHub REST path', async () => {
+    process.env.APPLE_DOCS_PACKAGES_FETCH = 'api'
+
+    const urlsSeen = []
+    fetchImpl.mockImplementation(async (url) => {
+      const urlStr = String(url)
+      urlsSeen.push(urlStr)
+      if (urlStr === 'https://api.github.com/repos/apple/swift-argument-parser') {
+        return jsonResponse({ full_name: 'apple/swift-argument-parser', default_branch: 'main' }, 200, { etag: '"repo"' })
+      }
+      if (urlStr === 'https://api.github.com/repos/apple/swift-argument-parser/readme?ref=main') {
+        return jsonResponse({
+          path: 'README.md',
+          content: Buffer.from('# swift-argument-parser\n').toString('base64'),
+          encoding: 'base64',
+        }, 200, { etag: '"readme"' })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
+
+    expect(result.payload.fetchMode).toBe('api')
+    expect(urlsSeen.some(u => u.includes('api.github.com/repos/apple/swift-argument-parser'))).toBe(true)
+  })
+
+  test('APPLE_DOCS_PACKAGES_FETCH=api without a token degrades to raw mode', async () => {
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
+    process.env.APPLE_DOCS_PACKAGES_FETCH = 'api'
+
+    const urlsSeen = []
+    fetchImpl.mockImplementation(async (url) => {
+      const urlStr = String(url)
+      urlsSeen.push(urlStr)
+      if (urlStr === 'https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md') {
+        return textResponse('# swift-argument-parser\n', 200, { etag: '"readme"' })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
+
+    expect(result.payload.fetchMode).toBe('raw')
+    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
+  })
+
+  test('APPLE_DOCS_PACKAGES_FETCH=raw overrides any opt-in, even with a token', async () => {
+    process.env.APPLE_DOCS_PACKAGES_FETCH = 'raw'
+
+    const urlsSeen = []
+    fetchImpl.mockImplementation(async (url) => {
+      const urlStr = String(url)
+      urlsSeen.push(urlStr)
+      if (urlStr === 'https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md') {
+        return textResponse('# swift-argument-parser\n', 200, { etag: '"readme"' })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
+
     expect(result.payload.fetchMode).toBe('raw')
     expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
   })

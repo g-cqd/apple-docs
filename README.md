@@ -295,26 +295,32 @@ The retry phase is checkpointed too, so rerunning `doctor` continues where it le
 
 ## Packages source notes
 
-The `packages` source has two modes:
+The `packages` source has two independent dimensions:
 
-- **default / official**: curated Apple and Swift ecosystem packages, no auth required
-- **full catalog**: the full SwiftPackageIndex catalog
+- **Scope** (`APPLE_DOCS_PACKAGES_SCOPE` / `--full`): `official` covers the
+  curated Apple + Swift ecosystem allowlist, `full` unions the full
+  SwiftPackageIndex catalog on top.
+- **Fetch mode** (`APPLE_DOCS_PACKAGES_FETCH`): defaults to `raw`, which pulls
+  README-only data from `raw.githubusercontent.com` — no GitHub quota at all.
+  Set `APPLE_DOCS_PACKAGES_FETCH=api` (and export `GITHUB_TOKEN`/`GH_TOKEN`) to
+  use the richer GitHub REST metadata (stars, forks, license, topics). The
+  `api` path silently degrades to `raw` if no token is available so it never
+  burns the 60/hr unauthenticated IP quota.
 
 Useful commands:
 
 ```bash
-apple-docs sync --sources packages
-apple-docs sync --full
-APPLE_DOCS_PACKAGES_SCOPE=full GITHUB_TOKEN=... apple-docs sync --sources packages
+apple-docs sync --sources packages              # curated, raw, no auth
+apple-docs sync --full --sources packages       # full catalog, raw, no auth
+APPLE_DOCS_PACKAGES_FETCH=api GITHUB_TOKEN=... apple-docs sync --full --sources packages  # full catalog + rich metadata
 ```
 
 Useful environment variables:
 
 - `APPLE_DOCS_PACKAGES_SCOPE=official|full`
+- `APPLE_DOCS_PACKAGES_FETCH=raw|api` (default `raw`)
 - `APPLE_DOCS_PACKAGES_LIMIT=<n>`
-- `GITHUB_TOKEN` or `GH_TOKEN`
-
-Without a GitHub token, full package sync still works, but it falls back to public README-focused data.
+- `GITHUB_TOKEN` or `GH_TOKEN` (only required for `APPLE_DOCS_PACKAGES_FETCH=api`)
 
 ## Snapshots
 

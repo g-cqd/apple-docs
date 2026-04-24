@@ -313,8 +313,9 @@ respawned).
 | `APPLE_DOCS_GITHUB_TIMEOUT` | `45000` (or `APPLE_DOCS_TIMEOUT`) | GitHub-specific timeout override |
 | `APPLE_DOCS_API_BASE` | Apple tutorial data URL | Override Apple's DocC API base (for testing / mirrors) |
 | `APPLE_DOCS_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
-| `GITHUB_TOKEN` / `GH_TOKEN` | none | Auth for package sync; falls back to anonymous metadata without it |
+| `GITHUB_TOKEN` / `GH_TOKEN` | none | Only required when `APPLE_DOCS_PACKAGES_FETCH=api`. Default `raw` path uses `raw.githubusercontent.com` and needs no token. |
 | `APPLE_DOCS_PACKAGES_SCOPE` | `official` | `official` (curated) or `full` (SwiftPackageIndex catalog) |
+| `APPLE_DOCS_PACKAGES_FETCH` | `raw` | `raw` = README-only via raw.githubusercontent.com (no quota). `api` = GitHub REST with token (adds stars, license, topics). Degrades to `raw` if no token. |
 | `APPLE_DOCS_PACKAGES_LIMIT` | unset | Cap total packages fetched in `full` scope |
 
 ### MCP HTTP server
