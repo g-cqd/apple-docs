@@ -27,3 +27,12 @@ plans/
 # Environment
 .env
 .env.*
+
+# ops/ reference deployment — operator-local files and rendered templates
+ops/.env
+ops/logs/
+ops/launchd/*.plist
+ops/launchd/sudoers.apple-docs-launchctl
+ops/caddy/Caddyfile
+ops/cloudflared/config.yml
+ops/cloudflared/config-mcp.yml

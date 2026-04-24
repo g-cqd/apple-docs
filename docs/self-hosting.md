@@ -12,6 +12,11 @@ The examples below come from the actual setup that runs the public instance
 translates directly to Linux + systemd, a container runtime, or whatever
 you prefer.
 
+If you want a working starting point with all the scripts already wired up,
+see [`ops/`](../ops/README.md) — templated launchd plists, a Caddyfile,
+cloudflared configs, and deploy scripts that render against an
+operator-edited `.env`.
+
 ---
 
 ## Contents
