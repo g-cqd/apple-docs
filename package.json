@@ -35,9 +35,9 @@
   ],
   "license": "MIT",
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --isolate",
     "bench": "bun test/benchmarks/search-bench.js --record && bun test/benchmarks/highlight-bench.js --record && bun test/benchmarks/pipeline-bench.js --record && bun test/benchmarks/seed-bench.js --record",
-    "test:coverage": "bun test --coverage",
+    "test:coverage": "bun test --coverage --isolate",
     "start": "bun run index.js",
     "typecheck": "bun x tsc --noEmit",
     "lint": "biome check --diagnostic-level=error ./src ./test ./cli.js ./index.js",
@@ -45,12 +45,12 @@
     "lint:unused": "bunx knip",
     "lint:unused:fix": "bunx knip --fix",
     "lint:duplication": "bunx jscpd src/ cli.js index.js",
-    "test:web": "bun test test/unit/web-serve.test.js test/unit/web-templates.test.js test/unit/web-search-client.test.js test/unit/web-search-artifacts.test.js test/unit/web-build.test.js",
+    "test:web": "bun test --isolate test/unit/web-serve.test.js test/unit/web-templates.test.js test/unit/web-search-client.test.js test/unit/web-search-artifacts.test.js test/unit/web-build.test.js",
     "audit": "bun run lint && bun run typecheck && bun run lint:unused && bun run lint:duplication && bun run test:coverage",
     "audit:report": "mkdir -p reports && bun run lint && bun run typecheck && bunx knip --reporter json > reports/knip.json; bunx jscpd src/ cli.js index.js; bun run test:coverage",
     "test:mutate": "npx stryker run",
     "test:mutate:changed": "npx stryker run --incremental",
-    "ci": "bun run lint && bun run typecheck && bun test"
+    "ci": "bun run lint && bun run typecheck && bun test --isolate"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",

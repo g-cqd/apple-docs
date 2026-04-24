@@ -56,7 +56,7 @@ jobs:
       - uses: ./.github/actions/setup
 
       - name: Run tests with coverage
-        run: bun test --coverage
+        run: bun test --coverage --isolate
 
       - name: Upload coverage artifact
         if: matrix.os == 'ubuntu-latest'

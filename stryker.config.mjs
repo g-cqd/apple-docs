@@ -1,7 +1,7 @@
 /** @type {import('@stryker-mutator/core').PartialStrykerOptions} */
 export default {
   testRunner: 'command',
-  commandRunner: { command: 'bun test' },
+  commandRunner: { command: 'bun test --isolate' },
   coverageAnalysis: 'off',
   disableTypeChecks: '**/*.{js,ts,jsx,tsx,mjs}',
   mutate: [
