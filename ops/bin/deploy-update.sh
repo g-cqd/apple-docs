@@ -103,7 +103,7 @@ if run "$OPS/bin/render-all.sh"; then
   fi
 
   plist_drift=0
-  for label in "${LABEL_PROXY}" "${LABEL_WEB}" "${LABEL_MCP}" "${LABEL_TUNNEL_WEB}" "${LABEL_TUNNEL_MCP}"; do
+  for label in "${LABEL_PROXY}" "${LABEL_WEB}" "${LABEL_MCP}" "${LABEL_WATCHDOG}" "${LABEL_TUNNEL_WEB}" "${LABEL_TUNNEL_MCP}"; do
     rendered="$OPS/launchd/${label}.plist"
     installed="/Library/LaunchDaemons/${label}.plist"
     [ -f "$rendered" ] || continue
@@ -126,9 +126,15 @@ run "$BUN" run "$REPO/cli.js" update            || say "(update returned $?)"
 run "$BUN" run "$REPO/cli.js" sync --retry-failed || say "(sync --retry-failed returned $?)"
 run "$BUN" run "$REPO/cli.js" doctor            || say "(doctor returned $?)"
 
-# 7. Cut over to the refreshed code + corpus
-for label in "${LABEL_WEB}" "${LABEL_MCP}"; do
-  plist="/Library/LaunchDaemons/${label}.plist"
+# 7. Cut over to the refreshed code + corpus.
+#
+#    Order matters: web/mcp first, then a short pause, then the watchdog.
+#    Otherwise a `kickstart -k` of the watchdog can interrupt an in-flight
+#    web/mcp kickstart it just initiated, leaving cooldown state stale and
+#    extending the user-visible blip.
+cutover_one() {
+  local label="$1"
+  local plist="/Library/LaunchDaemons/${label}.plist"
   if /usr/bin/sudo -n /bin/launchctl print "system/$label" >/dev/null 2>&1; then
     say "kickstarting $label for cutover"
     /usr/bin/sudo -n /bin/launchctl kickstart -k "system/$label" 2>&1 | tee -a "$LOG" || say "ERROR: kickstart failed for $label"
@@ -141,7 +147,16 @@ for label in "${LABEL_WEB}" "${LABEL_MCP}"; do
       /usr/bin/sudo -n /bin/launchctl kickstart -k "system/$label" 2>&1 | tee -a "$LOG" || say "ERROR: kickstart failed for $label"
     fi
   fi
+}
+
+for label in "${LABEL_WEB}" "${LABEL_MCP}"; do
+  cutover_one "$label"
 done
+
+# Let web/mcp settle before bouncing the watchdog so its first probe after
+# restart sees the freshly-spawned backends, not the SIGKILLed ones.
+sleep 3
+cutover_one "${LABEL_WATCHDOG}"
 
 # 8. Smoke tests
 sleep 3

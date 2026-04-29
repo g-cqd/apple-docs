@@ -36,6 +36,7 @@ export LABEL_WEB="${LABEL_PREFIX}.web"
 export LABEL_MCP="${LABEL_PREFIX}.mcp"
 export LABEL_TUNNEL_WEB="${LABEL_PREFIX}.cloudflared.web"
 export LABEL_TUNNEL_MCP="${LABEL_PREFIX}.cloudflared.mcp"
+export LABEL_WATCHDOG="${LABEL_PREFIX}.watchdog"
 
 # Optional tuning variables. Defaults are laptop-sized; bump on dedicated
 # hardware. See ops/.env.example for guidance.

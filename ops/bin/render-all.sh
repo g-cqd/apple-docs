@@ -26,6 +26,7 @@ plist_output_for() {
     apple-docs.proxy.plist.tpl)          echo "${LABEL_PROXY}.plist" ;;
     apple-docs.web.plist.tpl)            echo "${LABEL_WEB}.plist" ;;
     apple-docs.mcp.plist.tpl)            echo "${LABEL_MCP}.plist" ;;
+    apple-docs.watchdog.plist.tpl)       echo "${LABEL_WATCHDOG}.plist" ;;
     cloudflared.apple-docs.plist.tpl)    echo "${LABEL_TUNNEL_WEB}.plist" ;;
     cloudflared.apple-docs-mcp.plist.tpl) echo "${LABEL_TUNNEL_MCP}.plist" ;;
     *) return 1 ;;

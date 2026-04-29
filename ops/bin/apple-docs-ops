@@ -15,7 +15,7 @@ Usage:
   apple-docs-ops status
   apple-docs-ops render
   apple-docs-ops proxy <run|validate|reload|status>
-  apple-docs-ops service <start|stop|restart|status> <proxy|web|mcp|tunnel-web|tunnel-mcp|all>
+  apple-docs-ops service <start|stop|restart|status> <proxy|web|mcp|watchdog|tunnel-web|tunnel-mcp|all>
 EOF
 }
 
@@ -24,6 +24,7 @@ label_for() {
     proxy) echo "${LABEL_PROXY}" ;;
     web) echo "${LABEL_WEB}" ;;
     mcp) echo "${LABEL_MCP}" ;;
+    watchdog) echo "${LABEL_WATCHDOG}" ;;
     tunnel-web|cloudflared-web) echo "${LABEL_TUNNEL_WEB}" ;;
     tunnel-mcp|cloudflared-mcp) echo "${LABEL_TUNNEL_MCP}" ;;
     *)
@@ -41,7 +42,7 @@ plist_for() {
 
 service_targets() {
   case "${1:-}" in
-    all) printf '%s\n' proxy web mcp tunnel-web tunnel-mcp ;;
+    all) printf '%s\n' proxy web mcp watchdog tunnel-web tunnel-mcp ;;
     *) printf '%s\n' "$1" ;;
   esac
 }
@@ -91,7 +92,7 @@ aggregate_status() {
   local service
 
   echo "== launchd services =="
-  for service in proxy web mcp tunnel-web tunnel-mcp; do
+  for service in proxy web mcp watchdog tunnel-web tunnel-mcp; do
     service_status "$service" || true
     echo ""
   done

@@ -30,6 +30,7 @@ DAEMONS=(
   "${LABEL_PROXY}.plist"
   "${LABEL_WEB}.plist"
   "${LABEL_MCP}.plist"
+  "${LABEL_WATCHDOG}.plist"
   "${LABEL_TUNNEL_WEB}.plist"
   "${LABEL_TUNNEL_MCP}.plist"
 )
@@ -37,6 +38,7 @@ APP_DAEMONS=(
   "${LABEL_PROXY}.plist"
   "${LABEL_WEB}.plist"
   "${LABEL_MCP}.plist"
+  "${LABEL_WATCHDOG}.plist"
 )
 
 echo ""

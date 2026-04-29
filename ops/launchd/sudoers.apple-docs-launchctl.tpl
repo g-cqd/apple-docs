@@ -15,21 +15,25 @@ Cmnd_Alias APPLE_DOCS_LAUNCHCTL = \
     /bin/launchctl bootstrap system /Library/LaunchDaemons/${LABEL_PREFIX}.proxy.plist, \
     /bin/launchctl bootstrap system /Library/LaunchDaemons/${LABEL_PREFIX}.web.plist, \
     /bin/launchctl bootstrap system /Library/LaunchDaemons/${LABEL_PREFIX}.mcp.plist, \
+    /bin/launchctl bootstrap system /Library/LaunchDaemons/${LABEL_PREFIX}.watchdog.plist, \
     /bin/launchctl bootstrap system /Library/LaunchDaemons/${LABEL_PREFIX}.cloudflared.web.plist, \
     /bin/launchctl bootstrap system /Library/LaunchDaemons/${LABEL_PREFIX}.cloudflared.mcp.plist, \
     /bin/launchctl bootout system/${LABEL_PREFIX}.proxy, \
     /bin/launchctl bootout system/${LABEL_PREFIX}.web, \
     /bin/launchctl bootout system/${LABEL_PREFIX}.mcp, \
+    /bin/launchctl bootout system/${LABEL_PREFIX}.watchdog, \
     /bin/launchctl bootout system/${LABEL_PREFIX}.cloudflared.web, \
     /bin/launchctl bootout system/${LABEL_PREFIX}.cloudflared.mcp, \
     /bin/launchctl kickstart -k system/${LABEL_PREFIX}.proxy, \
     /bin/launchctl kickstart -k system/${LABEL_PREFIX}.web, \
     /bin/launchctl kickstart -k system/${LABEL_PREFIX}.mcp, \
+    /bin/launchctl kickstart -k system/${LABEL_PREFIX}.watchdog, \
     /bin/launchctl kickstart -k system/${LABEL_PREFIX}.cloudflared.web, \
     /bin/launchctl kickstart -k system/${LABEL_PREFIX}.cloudflared.mcp, \
     /bin/launchctl print system/${LABEL_PREFIX}.proxy, \
     /bin/launchctl print system/${LABEL_PREFIX}.web, \
     /bin/launchctl print system/${LABEL_PREFIX}.mcp, \
+    /bin/launchctl print system/${LABEL_PREFIX}.watchdog, \
     /bin/launchctl print system/${LABEL_PREFIX}.cloudflared.web, \
     /bin/launchctl print system/${LABEL_PREFIX}.cloudflared.mcp
 
