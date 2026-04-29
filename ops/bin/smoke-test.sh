@@ -9,9 +9,9 @@ OPS=$(cd -- "$BIN_DIR/.." && pwd)
 status=0
 
 for target in \
-  "local web|http://127.0.0.1:${WEB_PORT}/" \
+  "local web|http://127.0.0.1:${WEB_PORT}/healthz" \
   "local mcp|http://127.0.0.1:${MCP_PORT}/healthz" \
-  "edge  web|https://${PUBLIC_WEB_HOST}/" \
+  "edge  web|https://${PUBLIC_WEB_HOST}/healthz" \
   "edge  mcp|https://${PUBLIC_MCP_HOST}/healthz"; do
   name="${target%%|*}"
   url="${target##*|}"

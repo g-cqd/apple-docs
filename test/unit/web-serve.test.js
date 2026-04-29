@@ -119,6 +119,23 @@ describe('Dev Server (P7-E)', () => {
     expect(html).toContain('swiftui')
   })
 
+  test('/healthz returns 200 without touching the database', async () => {
+    const closedDb = new DocsDatabase(':memory:')
+    closedDb.db.close()
+    const local = await startDevServer(
+      { port: 0 },
+      { db: closedDb, dataDir: '/tmp/apple-docs-test', logger: { info() {}, warn() {} } },
+    )
+    try {
+      const res = await fetch(`${local.url}/healthz`)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      expect(await res.json()).toEqual({ ok: true, service: 'apple-docs-web' })
+    } finally {
+      local.server.stop(true)
+    }
+  })
+
   test('serves document page at /docs/{key}', async () => {
     const res = await fetch(`${serverInfo.url}/docs/documentation/swiftui/view`)
     expect(res.status).toBe(200)

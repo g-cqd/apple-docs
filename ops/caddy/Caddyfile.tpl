@@ -8,12 +8,19 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 
 	reverse_proxy 127.0.0.1:${WEB_BACKEND_PORT} {
 		header_up Accept-Encoding identity
-		health_uri /
+		# Use a dedicated /healthz that does not touch the DB or render any
+		# page — when the event loop is wedged on a heavy request, probes
+		# against `/` time out and we 503 every visitor. /healthz responds
+		# from a static handler, so it stays green as long as accept() runs.
+		health_uri /healthz
 		health_interval 5s
-		health_timeout 2s
+		health_timeout 5s
 		health_passes 2
-		health_fails 2
-		fail_duration 10s
+		health_fails 3
+		# Hold the upstream out for at least one full probe cycle (3 fails ×
+		# 5s) before retrying — otherwise we flap a wedged origin back into
+		# rotation between consecutive fails.
+		fail_duration 30s
 		max_fails 1
 	}
 }

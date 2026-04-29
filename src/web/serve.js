@@ -172,6 +172,16 @@ export async function startDevServer(opts, ctx) {
     const url = new URL(request.url)
     const pathname = url.pathname
 
+    // Liveness probe: must not touch the DB or any cache so a stuck
+    // request handler does not also fail the upstream health check.
+    // `no-store` so a cached 200 cannot mask a wedged origin.
+    if (pathname === '/healthz') {
+      return jsonResponse(
+        { ok: true, service: 'apple-docs-web' },
+        { headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+
     // API: live search
     if (pathname === '/api/search') {
       const query = url.searchParams.get('q')
