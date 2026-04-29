@@ -79,6 +79,47 @@ else
   say "deps unchanged — skipping bun install"
 fi
 
+# 3b. Re-render templates, reload Caddy if its rendered config changed, and
+# warn loudly if any installed plist drifted from its rendered template.
+#
+# Caddy reads its config straight from $OPS/caddy/Caddyfile, so a hash diff
+# before/after rendering plus `caddy reload` is enough to ship template-only
+# Caddyfile changes — `kickstart` of web/mcp does not touch Caddy.
+#
+# launchd plists are different: `kickstart -k` (used in step 7) sends SIGKILL
+# and re-exec's the existing job WITHOUT re-reading the plist from disk. To
+# pick up plist .tpl changes we'd need bootout + install (root-only) +
+# bootstrap, which this script intentionally does not have rights to do.
+# Surface the drift loudly so the operator can run `apple-docs-ops install`.
+CADDYFILE="$OPS/caddy/Caddyfile"
+PRE_CADDY_HASH=$(/usr/bin/shasum -a 256 "$CADDYFILE" 2>/dev/null | /usr/bin/awk '{print $1}' || echo "")
+if run "$OPS/bin/render-all.sh"; then
+  POST_CADDY_HASH=$(/usr/bin/shasum -a 256 "$CADDYFILE" 2>/dev/null | /usr/bin/awk '{print $1}' || echo "")
+  if [ "$PRE_CADDY_HASH" != "$POST_CADDY_HASH" ]; then
+    say "Caddyfile changed — reloading caddy"
+    run "$OPS/bin/proxy-reload.sh" || say "WARN: caddy reload failed"
+  else
+    say "Caddyfile unchanged — skipping caddy reload"
+  fi
+
+  plist_drift=0
+  for label in "${LABEL_PROXY}" "${LABEL_WEB}" "${LABEL_MCP}" "${LABEL_TUNNEL_WEB}" "${LABEL_TUNNEL_MCP}"; do
+    rendered="$OPS/launchd/${label}.plist"
+    installed="/Library/LaunchDaemons/${label}.plist"
+    [ -f "$rendered" ] || continue
+    [ -f "$installed" ] || { say "WARN: ${installed} not yet installed — run apple-docs-ops install"; plist_drift=1; continue; }
+    if ! /usr/bin/cmp -s "$rendered" "$installed"; then
+      say "WARN: plist drift for ${label} — rendered ${rendered} differs from installed copy"
+      plist_drift=1
+    fi
+  done
+  if [ "$plist_drift" = "1" ]; then
+    say "WARN: one or more plists changed; kickstart will NOT pick them up. Run \`apple-docs-ops install\` to apply."
+  fi
+else
+  say "WARN: render-all.sh failed; continuing with stale rendered config"
+fi
+
 # 4-6. Run ops commands. These can take a while; output streams to the log.
 export PATH="$(dirname -- "$BUN"):$PATH"
 run "$BUN" run "$REPO/cli.js" update            || say "(update returned $?)"
