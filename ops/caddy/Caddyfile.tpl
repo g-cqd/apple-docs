@@ -67,10 +67,14 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 		}
 	}
 
-	# /docs/* misses fall through to Bun's on-demand fetch path. New Apple
-	# docs that aren't in the prebuilt corpus yet keep working — Bun fetches,
-	# persists, and responds, then the next `apple-docs web build
-	# --incremental` materialises a static copy.
+	# /docs/* and /data/frameworks/*/tree.* misses fall through to Bun.
+	#
+	# /docs/*  — on-demand renderer for newly-published Apple docs not yet
+	#            in the prebuilt corpus, and (in --skip-docs mode) every
+	#            framework / symbol page.
+	# /data/   — Bun's in-memory framework tree-data cache; the immutable
+	#            URLs are emitted by the framework HTML render so they have
+	#            to be reachable through the same vhost.
 	@docs_miss {
 		path /docs/*
 		not file {
@@ -78,6 +82,16 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 		}
 	}
 	handle @docs_miss {
+		reverse_proxy 127.0.0.1:${WEB_BACKEND_PORT} {
+			header_up Accept-Encoding identity
+		}
+	}
+
+	@bun_data {
+		path_regexp /data/frameworks/[^/]+/tree\.[0-9a-f]{10}\.json
+		not file
+	}
+	handle @bun_data {
 		reverse_proxy 127.0.0.1:${WEB_BACKEND_PORT} {
 			header_up Accept-Encoding identity
 		}
