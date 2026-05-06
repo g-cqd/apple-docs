@@ -1,26 +1,72 @@
 ;(() => {
-  const dataEl = document.getElementById('tree-data')
-  if (!dataEl) return
-
-  let treeData
-  try {
-    // The JSON is HTML-escaped in the attribute; the textContent gives us
-    // the decoded value since the content is placed inside the tag as escaped text.
-    const raw = dataEl.textContent || dataEl.innerText
-    treeData = JSON.parse(raw)
-  } catch {
-    return
-  }
-
-  const { edges, docs } = treeData
-  if (!edges || !docs) return
-
   const treeContainer = document.getElementById('tree-container')
   const listContainer = document.getElementById('list-container')
   if (!treeContainer || !listContainer) return
 
   const collectionControls = document.getElementById('collection-controls')
 
+  // Tree data may live in one of two places:
+  //   1. Inline `<script type="application/json" id="tree-data">…</script>`
+  //      — emitted by Bun's on-demand `/docs/<key>/` fallback so the
+  //      framework page is self-contained when a static prebuild is missing.
+  //   2. External hashed file referenced by `data-tree-src` on
+  //      `#tree-container` — emitted by the static build, so the framework
+  //      HTML stays small (~50 KB instead of 800 KB on Swift stdlib) and
+  //      the JSON is fetched lazily.
+  let treeData = null
+  let treeDataPromise = null
+
+  function readInlineTreeData() {
+    const dataEl = document.getElementById('tree-data')
+    if (!dataEl) return null
+    try {
+      return JSON.parse(dataEl.textContent || dataEl.innerText)
+    } catch {
+      return null
+    }
+  }
+
+  function fetchExternalTreeData() {
+    const src = treeContainer.getAttribute('data-tree-src')
+    if (!src) return Promise.resolve(null)
+    return fetch(src, { credentials: 'omit' })
+      .then(res => res.ok ? res.json() : null)
+      .catch(() => null)
+  }
+
+  function loadTreeData() {
+    if (treeData) return Promise.resolve(treeData)
+    if (treeDataPromise) return treeDataPromise
+    const inline = readInlineTreeData()
+    if (inline) {
+      treeData = inline
+      return Promise.resolve(treeData)
+    }
+    treeDataPromise = fetchExternalTreeData().then(data => {
+      if (data) treeData = data
+      return treeData
+    })
+    return treeDataPromise
+  }
+
+  // Bail out early if no tree data exists at all (legacy frameworks without
+  // DocC `topics` relationships) — the list HTML is already rendered
+  // server-side in that case.
+  if (!readInlineTreeData() && !treeContainer.getAttribute('data-tree-src')) {
+    return
+  }
+
+  // ---- Escape HTML ----
+  function esc(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+
+  // ---- View toggle (sync; data load is gated downstream by the
+  // ensureTreeBuilt / ensureListBuilt entry points) ----
   function setViewMode(mode) {
     if (mode === 'tree') {
       listContainer.classList.add('hidden')
@@ -35,49 +81,6 @@
     }
   }
 
-  // ---- Deferred list rendering ----
-  // When the server skips rendering the list HTML (data-deferred), build it
-  // client-side from the roleGroups data in the tree JSON.
-  let listBuilt = !listContainer.hasAttribute('data-deferred')
-
-  function ensureListBuilt() {
-    if (listBuilt) return
-    listBuilt = true
-    listContainer.removeAttribute('data-deferred')
-
-    const groups = treeData.roleGroups
-    if (!groups || groups.length === 0) {
-      listContainer.innerHTML = '<p>No documents found for this framework.</p>'
-      return
-    }
-
-    const html = groups.map(group => {
-      const items = group.docs.map(doc => {
-        const titleHtml = doc.symbol ? `<code>${esc(doc.title)}</code>` : esc(doc.title)
-        const meta = doc.role_heading ? `<span class="doc-item-meta">${esc(doc.role_heading)}</span>` : ''
-        const abstractText = doc.abstract
-        const abstract = abstractText
-          ? `<span class="doc-item-meta">— ${esc(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
-          : ''
-        const deprecatedAttr = doc.deprecated ? ' data-deprecated="true"' : ''
-        return `<li data-filter-kind="${esc(doc.role_heading)}"${deprecatedAttr}><a href="/docs/${esc(doc.key)}/">${titleHtml}</a>${meta}${abstract}</li>`
-      }).join('\n      ')
-
-      return `<section id="${esc(group.id)}" class="role-group" data-filter-kind="${esc(group.role)}">
-    <h2 class="role-heading">${esc(group.role)}</h2>
-    <ul class="doc-list">
-      ${items}
-    </ul>
-  </section>`
-    }).join('\n  ')
-
-    listContainer.innerHTML = html
-
-    // Notify collection-filters that the list is now available
-    document.dispatchEvent(new CustomEvent('list-container:ready'))
-  }
-
-  // ---- View toggle logic ----
   const viewToggle = document.querySelector('.view-toggle')
   if (viewToggle) {
     viewToggle.addEventListener('click', (e) => {
@@ -96,76 +99,94 @@
     })
   }
 
-  // ---- Tree data structures ----
+  // ---- Deferred list rendering ----
+  // When the server skips the list HTML (data-deferred), build it client-
+  // side from the `roleGroups` array in the tree JSON.
+  let listBuilt = !listContainer.hasAttribute('data-deferred')
 
-  // Build adjacency list: parent -> [children]
-  const children = new Map()
-  const childSet = new Set()
+  function ensureListBuilt() {
+    if (listBuilt) return
+    listBuilt = true
+    listContainer.removeAttribute('data-deferred')
+    listContainer.innerHTML = '<p class="loading">Loading…</p>'
+    loadTreeData().then(data => {
+      if (!data || !data.roleGroups || data.roleGroups.length === 0) {
+        listContainer.innerHTML = '<p>No documents found for this framework.</p>'
+        return
+      }
 
-  for (const { from_key, to_key } of edges) {
-    if (!children.has(from_key)) children.set(from_key, [])
-    children.get(from_key).push(to_key)
-    childSet.add(to_key)
-  }
+      const html = data.roleGroups.map(group => {
+        const items = group.docs.map(doc => {
+          const titleHtml = doc.symbol ? `<code>${esc(doc.title)}</code>` : esc(doc.title)
+          const meta = doc.role_heading ? `<span class="doc-item-meta">${esc(doc.role_heading)}</span>` : ''
+          const abstractText = doc.abstract
+          const abstract = abstractText
+            ? `<span class="doc-item-meta">— ${esc(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
+            : ''
+          const deprecatedAttr = doc.deprecated ? ' data-deprecated="true"' : ''
+          return `<li data-filter-kind="${esc(doc.role_heading)}"${deprecatedAttr}><a href="/docs/${esc(doc.key)}/">${titleHtml}</a>${meta}${abstract}</li>`
+        }).join('\n      ')
 
-  // Root nodes: appear as parent but never as child
-  const allParents = new Set(children.keys())
-  const rootKeys = []
-  for (const key of allParents) {
-    if (!childSet.has(key)) rootKeys.push(key)
-  }
+        return `<section id="${esc(group.id)}" class="role-group" data-filter-kind="${esc(group.role)}">
+    <h2 class="role-heading">${esc(group.role)}</h2>
+    <ul class="doc-list">
+      ${items}
+    </ul>
+  </section>`
+      }).join('\n  ')
 
-  // Also include docs that appear as children but have their own children
-  // (they'll be reached through traversal)
-
-  // Sort children alphabetically within each parent by title
-  for (const [, kids] of children) {
-    kids.sort((a, b) => {
-      const ta = (docs[a]?.title ?? a).toLowerCase()
-      const tb = (docs[b]?.title ?? b).toLowerCase()
-      return ta < tb ? -1 : ta > tb ? 1 : 0
+      listContainer.innerHTML = html
+      document.dispatchEvent(new CustomEvent('list-container:ready'))
     })
   }
 
-  // Sort root nodes alphabetically
-  rootKeys.sort((a, b) => {
-    const ta = (docs[a]?.title ?? a).toLowerCase()
-    const tb = (docs[b]?.title ?? b).toLowerCase()
-    return ta < tb ? -1 : ta > tb ? 1 : 0
-  })
+  // ---- Tree state (lazy-initialised once data arrives) ----
+  let treeBuilt = false
+  let inflight = false
 
-  // ---- Disambiguate overloads ----
-  // Items that share the same title get a parent prefix for clarity
-  function disambiguateChildren(parentKey, childKeys) {
-    const titleCounts = new Map()
-    for (const key of childKeys) {
-      const t = docs[key]?.title ?? key
-      titleCounts.set(t, (titleCounts.get(t) || 0) + 1)
-    }
-    // For duplicate titles, add the parent prefix
-    const parentTitle = docs[parentKey]?.title ?? parentKey
-    const result = new Map()
-    for (const key of childKeys) {
-      const t = docs[key]?.title ?? key
-      if (titleCounts.get(t) > 1) {
-        result.set(key, parentTitle + '.' + t)
-      }
-    }
-    return result
-  }
-
-  // ---- Escape HTML ----
-  function esc(s) {
-    return String(s || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-  }
-
-  // ---- Count all descendants (memoized) ----
+  // These refs are populated by `initTreeStateFrom(data)` and used by every
+  // tree-rendering helper below. Until then the helpers are unreachable
+  // because `ensureTreeBuilt` is the only entry point.
+  let docs = null
+  let children = null
+  let rootKeys = null
   const descendantCounts = new Map()
-  function computeDescendantCounts() {
+
+  function initTreeStateFrom(data) {
+    docs = data.docs
+    const edges = data.edges
+    children = new Map()
+    const childSet = new Set()
+    for (const { from_key, to_key } of edges) {
+      let kids = children.get(from_key)
+      if (!kids) {
+        kids = []
+        children.set(from_key, kids)
+      }
+      kids.push(to_key)
+      childSet.add(to_key)
+    }
+
+    // Root nodes appear as parent but never as child.
+    const allParents = [...children.keys()]
+    rootKeys = allParents.filter(k => !childSet.has(k))
+
+    // Sort children alphabetically within each parent by title.
+    const titleOf = (k) => (docs[k]?.title ?? k).toLowerCase()
+    for (const [, kids] of children) {
+      kids.sort((a, b) => {
+        const ta = titleOf(a)
+        const tb = titleOf(b)
+        return ta < tb ? -1 : ta > tb ? 1 : 0
+      })
+    }
+    rootKeys.sort((a, b) => {
+      const ta = titleOf(a)
+      const tb = titleOf(b)
+      return ta < tb ? -1 : ta > tb ? 1 : 0
+    })
+
+    // Memoised descendant counts for the badges next to each tree node.
     const visited = new Set()
     function count(key) {
       if (visited.has(key)) return 0
@@ -180,12 +201,26 @@
     for (const key of rootKeys) count(key)
     for (const key of children.keys()) if (!visited.has(key)) count(key)
   }
-  computeDescendantCounts()
 
-  // ---- Chain compaction ----
-  // Walk down single-child chains and return the compacted label + terminal key.
-  // E.g. P256 -> Signing (only child) -> PrivateKey becomes "P256.Signing" with
-  // the terminal key being the Signing node (which has multiple children).
+  // ---- Disambiguate overloads: items sharing a title get a parent prefix ----
+  function disambiguateChildren(parentKey, childKeys) {
+    const titleCounts = new Map()
+    for (const key of childKeys) {
+      const t = docs[key]?.title ?? key
+      titleCounts.set(t, (titleCounts.get(t) || 0) + 1)
+    }
+    const parentTitle = docs[parentKey]?.title ?? parentKey
+    const result = new Map()
+    for (const key of childKeys) {
+      const t = docs[key]?.title ?? key
+      if (titleCounts.get(t) > 1) {
+        result.set(key, `${parentTitle}.${t}`)
+      }
+    }
+    return result
+  }
+
+  // ---- Chain compaction: walk down single-child chains to one label ----
   function compactChain(key) {
     const parts = [docs[key]?.title || key]
     const seen = new Set([key])
@@ -194,9 +229,8 @@
       const kids = children.get(cur)
       if (!kids || kids.length !== 1) break
       const onlyChild = kids[0]
-      if (seen.has(onlyChild)) break // cycle guard
+      if (seen.has(onlyChild)) break
       const childKids = children.get(onlyChild)
-      // Only compact if the single child also has children (i.e., it's an intermediate node)
       if (!childKids || childKids.length === 0) break
       parts.push(docs[onlyChild]?.title || onlyChild)
       seen.add(onlyChild)
@@ -205,10 +239,8 @@
     return { label: parts.join('.'), terminalKey: cur }
   }
 
-  // ---- Render a tree node ----
-  // depth: current depth. maxDepth: how many levels to render eagerly.
   function renderNode(key, depth, maxDepth, visited, displayTitle = null) {
-    if (visited.has(key)) return '' // cycle guard
+    if (visited.has(key)) return ''
     visited.add(key)
 
     const info = docs[key]
@@ -223,13 +255,11 @@
       return `<li class="tree-leaf" data-filter-kind="${filterKind}" data-tree-key="${esc(key)}"><a href="${esc(info.href)}">${esc(title)}</a><span class="tree-meta">${esc(info.role_heading)}</span></li>`
     }
 
-    // Compact single-child chains (unless a display override was provided)
     let renderKey = key
     let renderTitle = title
     if (!displayTitle) {
       const { label, terminalKey } = compactChain(key)
       if (terminalKey !== key) {
-        // Mark intermediate nodes as visited
         let cur = key
         while (cur !== terminalKey) {
           visited.add(cur)
@@ -246,12 +276,10 @@
     const desc = descendantCounts.get(renderKey) ?? 0
     const isOpen = depth < 2 ? ' open' : ''
 
-    // Disambiguate children with identical titles
     const overrides = renderKids ? disambiguateChildren(renderKey, renderKids) : new Map()
 
     let childHtml
     if (depth >= maxDepth) {
-      // Lazy placeholder
       childHtml = `<ul class="tree-children" data-lazy-parent="${esc(renderKey)}"></ul>`
     } else {
       const items = (renderKids || []).map(k => {
@@ -267,7 +295,6 @@
 </details>`
   }
 
-  // ---- Lazy expansion ----
   function expandLazy(parentKey) {
     const placeholder = treeContainer.querySelector(`[data-lazy-parent="${CSS.escape(parentKey)}"]`)
     if (!placeholder) return
@@ -287,88 +314,84 @@
 
   treeContainer.addEventListener('toggle', (e) => {
     const details = e.target.closest('details.tree-node')
-    if (!details || !details.open) return
+    if (!details || !details.open || !children) return
     const lazyUl = details.querySelector(':scope > ul[data-lazy-parent]')
     if (lazyUl) {
       expandLazy(lazyUl.getAttribute('data-lazy-parent'))
     }
   }, true)
 
-  // ---- Build tree once ----
-  let treeBuilt = false
-
   function ensureTreeBuilt() {
-    if (treeBuilt) return
-    treeBuilt = true
+    if (treeBuilt || inflight) return
+    inflight = true
+    treeContainer.innerHTML = '<p class="loading">Loading tree…</p>'
+    loadTreeData().then(data => {
+      inflight = false
+      if (!data) {
+        treeContainer.innerHTML = '<p>Failed to load tree data.</p>'
+        return
+      }
+      initTreeStateFrom(data)
+      treeBuilt = true
 
-    const parts = []
-
-    // Tree action buttons
-    parts.push(`<div class="tree-actions">
+      const parts = []
+      parts.push(`<div class="tree-actions">
   <button id="tree-expand-all" type="button">Expand all</button>
   <button id="tree-collapse-all" type="button">Collapse all</button>
 </div>`)
 
-    // Render root nodes
-    const visited = new Set()
-    for (const key of rootKeys) {
-      parts.push(renderNode(key, 0, 2, visited))
-    }
-
-    // Also render orphan docs that have children but weren't reached
-    // (in case some nodes only appear as from_key but not in rootKeys)
-    for (const key of children.keys()) {
-      if (!visited.has(key)) {
+      const visited = new Set()
+      for (const key of rootKeys) {
         parts.push(renderNode(key, 0, 2, visited))
       }
-    }
-
-    treeContainer.innerHTML = parts.join('\n')
-
-    // Wire up expand/collapse all buttons
-    const expandAllBtn = document.getElementById('tree-expand-all')
-    const collapseAllBtn = document.getElementById('tree-collapse-all')
-
-    if (expandAllBtn) {
-      expandAllBtn.addEventListener('click', async () => {
-        expandAllBtn.disabled = true
-        expandAllBtn.textContent = 'Expanding…'
-        // Expand lazy nodes in batches to avoid freezing the UI
-        while (true) {
-          const lazyEls = treeContainer.querySelectorAll('[data-lazy-parent]')
-          if (lazyEls.length === 0) break
-          const batch = [...lazyEls].slice(0, 20)
-          for (const el of batch) expandLazy(el.getAttribute('data-lazy-parent'))
-          await new Promise(r => requestAnimationFrame(r))
+      // Orphans that have children but aren't reached from any root.
+      for (const key of children.keys()) {
+        if (!visited.has(key)) {
+          parts.push(renderNode(key, 0, 2, visited))
         }
-        // Open all details in chunks
-        const allDetails = [...treeContainer.querySelectorAll('details.tree-node')]
-        for (let i = 0; i < allDetails.length; i += 100) {
-          for (let j = i; j < Math.min(i + 100, allDetails.length); j++) {
-            allDetails[j].open = true
+      }
+
+      treeContainer.innerHTML = parts.join('\n')
+
+      const expandAllBtn = document.getElementById('tree-expand-all')
+      const collapseAllBtn = document.getElementById('tree-collapse-all')
+
+      if (expandAllBtn) {
+        expandAllBtn.addEventListener('click', async () => {
+          expandAllBtn.disabled = true
+          expandAllBtn.textContent = 'Expanding…'
+          while (true) {
+            const lazyEls = treeContainer.querySelectorAll('[data-lazy-parent]')
+            if (lazyEls.length === 0) break
+            const batch = [...lazyEls].slice(0, 20)
+            for (const el of batch) expandLazy(el.getAttribute('data-lazy-parent'))
+            await new Promise(r => requestAnimationFrame(r))
           }
-          await new Promise(r => requestAnimationFrame(r))
-        }
-        expandAllBtn.disabled = false
-        expandAllBtn.textContent = 'Expand all'
-      })
-    }
+          const allDetails = [...treeContainer.querySelectorAll('details.tree-node')]
+          for (let i = 0; i < allDetails.length; i += 100) {
+            for (let j = i; j < Math.min(i + 100, allDetails.length); j++) {
+              allDetails[j].open = true
+            }
+            await new Promise(r => requestAnimationFrame(r))
+          }
+          expandAllBtn.disabled = false
+          expandAllBtn.textContent = 'Expand all'
+        })
+      }
 
-    if (collapseAllBtn) {
-      collapseAllBtn.addEventListener('click', () => {
-        for (const d of treeContainer.querySelectorAll('details.tree-node')) {
-          d.open = false
-        }
-      })
-    }
+      if (collapseAllBtn) {
+        collapseAllBtn.addEventListener('click', () => {
+          for (const d of treeContainer.querySelectorAll('details.tree-node')) {
+            d.open = false
+          }
+        })
+      }
 
-    // Apply current filters if any are active
-    applyTreeFilters()
+      applyTreeFilters()
+    })
   }
 
   // ---- Integration with collection-filters ----
-  // Listen for filter changes dispatched by collection-filters.js
-  // We also poll the filter bar state since collection-filters.js doesn't emit events.
   function getActiveFilters() {
     const bar = document.querySelector('.collection-filter-bar')
     if (!bar) return new Set()
@@ -385,26 +408,20 @@
     const active = getActiveFilters()
     const showAll = active.size === 0
 
-    // Show/hide tree items based on filter
     for (const el of treeContainer.querySelectorAll('[data-filter-kind]')) {
       const kind = el.getAttribute('data-filter-kind')
-      if (showAll || active.has(kind)) {
-        el.style.display = ''
-      } else {
-        el.style.display = 'none'
-      }
+      el.style.display = (showAll || active.has(kind)) ? '' : 'none'
     }
   }
 
-  // Observe filter chip clicks
   const filterBar = document.querySelector('.collection-filter-bar')
   if (filterBar) {
     filterBar.addEventListener('click', () => {
-      // Defer to let collection-filters.js update first
       requestAnimationFrame(applyTreeFilters)
     })
   }
 
-  // Tree is the default view — build immediately and hide list controls
+  // Tree is the default view — kick off the build (and the data load if
+  // external) immediately.
   setViewMode('tree')
 })()

@@ -12,10 +12,29 @@ import { renderHtml, slugify } from '../content/render-html.js'
  */
 export function renderSearchPage(siteConfig) {
   const pageTitle = `Search — ${siteConfig.siteName}`
+  const canonical = `${siteConfig.baseUrl || ''}/search`
+  const description = 'Search Apple developer documentation with filters.'
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
-${buildHead({ title: pageTitle, description: 'Search Apple developer documentation with filters.', siteConfig })}
+${buildHead({
+  title: pageTitle,
+  description,
+  siteConfig,
+  canonical,
+  ogType: 'website',
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: siteConfig.siteName,
+    url: `${siteConfig.baseUrl || ''}/`,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${siteConfig.baseUrl || ''}/search?q={query}`,
+      'query-input': 'required name=query',
+    },
+  },
+})}
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
@@ -145,16 +164,81 @@ function assetUrl(siteConfig, file) {
 // Shared page-level fragments
 // ---------------------------------------------------------------------------
 
-function buildHead({ title, description, siteConfig }) {
+/**
+ * Escape a JSON-LD blob so it cannot break out of `<script type="application/ld+json">`.
+ * Only `<` and `>` need escaping — `application/ld+json` is parsed as JSON,
+ * not JavaScript, so the rest of the string is safe — but tags inside JSON
+ * keys/values would still terminate the script element.
+ */
+function escapeJsonLd(value) {
+  return JSON.stringify(value)
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e')
+    .replaceAll('&', '\\u0026')
+}
+
+/**
+ * Build the SEO meta block: canonical, alternate, OpenGraph, Twitter Card,
+ * JSON-LD, and `<meta name="robots">`. Returns an empty string when the
+ * caller hasn't provided enough context (e.g. legacy template paths that
+ * don't pass `canonical`); doc/framework/index/search templates always pass
+ * the right shape.
+ */
+function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots }) {
+  if (!canonical) return ''
+  const lines = []
+  lines.push(`<link rel="canonical" href="${escapeAttr(canonical)}">`)
+  if (alternate) {
+    let altHost = ''
+    try { altHost = new URL(alternate).host } catch { /* alternate may be relative */ }
+    lines.push(`<link rel="alternate" href="${escapeAttr(alternate)}"${altHost ? ` title="Original on ${escapeAttr(altHost)}"` : ''}>`)
+  }
+  lines.push(`<meta name="robots" content="${escapeAttr(robots ?? 'index, follow, max-image-preview:large')}">`)
+
+  // OpenGraph + Twitter Card. Both consume the same title/description; we
+  // don't ship og:image because Apple's docs don't have a standard hero
+  // image we can mirror without licensing concerns.
+  const og = {
+    'og:type': ogType ?? 'website',
+    'og:title': ogTitle ?? siteConfig.siteName,
+    'og:url': canonical,
+    'og:site_name': siteConfig.siteName,
+  }
+  if (ogDesc) og['og:description'] = ogDesc
+  for (const [property, content] of Object.entries(og)) {
+    lines.push(`<meta property="${escapeAttr(property)}" content="${escapeAttr(content)}">`)
+  }
+  lines.push(`<meta name="twitter:card" content="summary">`)
+  lines.push(`<meta name="twitter:title" content="${escapeAttr(ogTitle ?? siteConfig.siteName)}">`)
+  if (ogDesc) lines.push(`<meta name="twitter:description" content="${escapeAttr(ogDesc)}">`)
+
+  if (jsonLd) {
+    lines.push(`<script type="application/ld+json">${escapeJsonLd(jsonLd)}</script>`)
+  }
+  return lines.map(l => `  ${l}`).join('\n')
+}
+
+function buildHead({ title, description, siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots }) {
   const escapedTitle = escapeAttr(title)
   const escapedDesc = escapeAttr(description ?? '')
   const cssHref = assetUrl(siteConfig, 'style.css')
   const headScriptHref = assetUrl(siteConfig, siteConfig.bundled ? 'core.js' : 'theme.js')
+  const seo = buildSeoBlock({
+    siteConfig,
+    canonical,
+    alternate,
+    ogType,
+    ogTitle: ogTitle ?? title,
+    ogDesc: ogDesc ?? description,
+    jsonLd,
+    robots,
+  })
   return `<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapedTitle}</title>
   ${escapedDesc ? `<meta name="description" content="${escapedDesc}">` : ''}
+${seo}
   <link rel="preload" href="${escapeAttr(cssHref)}" as="style">
   <link rel="stylesheet" href="${escapeAttr(cssHref)}">
   <script src="${escapeAttr(headScriptHref)}" defer></script>
@@ -607,9 +691,46 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
 
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
 
+  const canonical = doc.key ? `${siteConfig.baseUrl || ''}/docs/${doc.key}/` : null
+  const docDescription = doc.abstract_text || `${doc.title ?? ''} — Apple developer documentation`.trim()
+  const platforms = parsePlatformsJson(doc.platforms_json) || {}
+  const platformNames = Object.keys(platforms).filter(k => platforms[k]).map(k => ({
+    ios: 'iOS', macos: 'macOS', watchos: 'watchOS', tvos: 'tvOS', visionos: 'visionOS',
+    maccatalyst: 'Mac Catalyst', ipados: 'iPadOS',
+  }[k] ?? k))
+  const programmingLanguage = (doc.language === 'occ' || doc.language === 'objc') ? 'Objective-C' : 'Swift'
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: doc.title ?? 'Untitled',
+    inLanguage: 'en',
+    isAccessibleForFree: true,
+    mainEntityOfPage: canonical,
+    publisher: {
+      '@type': 'Organization',
+      name: siteConfig.siteName,
+      url: `${siteConfig.baseUrl || ''}/`,
+    },
+    ...(docDescription ? { description: docDescription } : {}),
+    ...(siteConfig.buildDate ? { dateModified: siteConfig.buildDate } : {}),
+    ...(doc.url ? { isBasedOn: doc.url } : {}),
+    ...(programmingLanguage ? { programmingLanguage } : {}),
+    ...(platformNames.length > 0 ? { audience: { '@type': 'Audience', audienceType: 'Developers' }, applicationSuite: platformNames.join(', ') } : {}),
+  }
+
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
-${buildHead({ title: pageTitle, description: doc.abstract_text, siteConfig })}
+${buildHead({
+  title: pageTitle,
+  description: doc.abstract_text,
+  siteConfig,
+  canonical,
+  alternate: doc.url || null,
+  ogType: 'article',
+  ogTitle: doc.title ?? pageTitle,
+  ogDesc: docDescription,
+  jsonLd,
+})}
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
@@ -723,9 +844,30 @@ export function renderIndexPage(frameworks, siteConfig) {
     : ''
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
 
+  const description = 'Apple developer documentation, indexed locally.'
+  const canonical = `${siteConfig.baseUrl || ''}/`
+
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
-${buildHead({ title: pageTitle, description: 'Apple developer documentation, indexed locally.', siteConfig })}
+${buildHead({
+  title: pageTitle,
+  description,
+  siteConfig,
+  canonical,
+  ogType: 'website',
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: siteConfig.siteName,
+    url: canonical,
+    description,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${siteConfig.baseUrl || ''}/search?q={query}`,
+      'query-input': 'required name=query',
+    },
+  },
+})}
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
@@ -741,6 +883,75 @@ ${buildFooter(siteConfig)}
 ${buildScripts(siteConfig, ['core', 'listing'])}
 </body>
 </html>`
+}
+
+/**
+ * Compute the framework tree-view JSON ahead of rendering. Build.js uses this
+ * to write a hashed, externally-cacheable `tree.<hash>.json` file and pass
+ * back the URL via `opts.treeDataUrl` to `renderFrameworkPage`. Keeping this
+ * exported lets us assert framework-page weight in tests without re-running
+ * the entire page render.
+ *
+ * @param {object} framework
+ * @param {Array}  documents
+ * @param {Array<{from_key: string, to_key: string}>} treeEdges
+ * @param {object} siteConfig
+ * @returns {{ json: string, hasTree: boolean }} `json` is empty when the
+ *   framework has no tree edges (and so no tree-view).
+ */
+export function buildFrameworkTreeData(framework, documents, treeEdges, siteConfig) {
+  if (!treeEdges || treeEdges.length === 0) return { json: '', hasTree: false }
+
+  const docList = documents ?? []
+  const docLookup = {}
+  for (const doc of docList) {
+    const docKey = doc.key ?? doc.path ?? ''
+    docLookup[docKey] = {
+      title: doc.title ?? docKey,
+      role_heading: doc.role_heading ?? doc.role ?? 'Other',
+      href: `${siteConfig.baseUrl ?? ''}/docs/${docKey}/`,
+    }
+  }
+
+  // Same role grouping the inline path emits when deferList is on (which is
+  // always true when hasTree is true).
+  const ROLE_LABELS = {
+    symbol: 'Symbols', collection: 'Collections', collectionGroup: 'Collection Groups',
+    sampleCode: 'Sample Code', article: 'Articles', dictionarySymbol: 'Dictionary Symbols',
+    overview: 'Overview', pseudoSymbol: 'Pseudo Symbols',
+    restRequestSymbol: 'REST Requests', link: 'Links',
+  }
+  const byRole = new Map()
+  for (const doc of docList) {
+    const rawRole = doc.role ?? doc.role_heading ?? 'Other'
+    const role = ROLE_LABELS[rawRole] ?? rawRole
+    if (!byRole.has(role)) byRole.set(role, [])
+    byRole.get(role).push(doc)
+  }
+  const roleGroups = []
+  for (const [role, roleDocs] of byRole) {
+    roleGroups.push({
+      role,
+      id: slugify(role),
+      docs: roleDocs.map(doc => {
+        const docKey = doc.key ?? doc.path ?? ''
+        const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
+        return {
+          key: docKey,
+          title: doc.title ?? docKey,
+          role_heading: doc.role_heading ?? doc.role ?? 'Other',
+          abstract: doc.abstract_text ?? doc.abstract ?? '',
+          deprecated: /\bDeprecated\b/i.test(doc.abstract_text ?? doc.abstract ?? ''),
+          symbol: isSymbol,
+        }
+      }),
+    })
+  }
+
+  return {
+    json: JSON.stringify({ edges: treeEdges, docs: docLookup, roleGroups }),
+    hasTree: true,
+  }
 }
 
 /**
@@ -872,12 +1083,18 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     }
   }
 
-  // Serialize tree data as JSON — escape HTML-significant chars to prevent </script> breakout
-  const treeDataJson = JSON.stringify({ edges: treeEdges, docs: docLookup, ...(deferList ? { roleGroups } : {}) })
+  // Plain JSON for the tree data. When the caller provides
+  // `opts.treeDataUrl`, the framework page emits an external reference
+  // instead of inlining this — see the `<div id="tree-container">` below
+  // and `tree-view.js`. Inline emission still escapes HTML-significant
+  // characters to prevent `</script>` breakout.
+  const treeDataObj = { edges: treeEdges, docs: docLookup, ...(deferList ? { roleGroups } : {}) }
+  const treeDataJsonInline = JSON.stringify(treeDataObj)
     .replaceAll('<', '\\u003c')
     .replaceAll('>', '\\u003e')
     .replaceAll('/', '\\u002f')
     .replaceAll('&', '\\u0026')
+  const externalTreeDataUrl = opts.treeDataUrl ?? null
 
   const viewToggle = hasTree
     ? `<div class="view-toggle" role="group" aria-label="View mode">
@@ -886,9 +1103,35 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   </div>`
     : ''
 
+  const description = `${fwName} documentation index.`
+  const canonical = framework?.slug ? `${siteConfig.baseUrl || ''}/docs/${framework.slug}/` : null
+  const originalUrl = frameworkOriginalUrl(framework)
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'APIReference',
+    name: fwName,
+    inLanguage: 'en',
+    description,
+    isAccessibleForFree: true,
+    ...(canonical ? { mainEntityOfPage: canonical } : {}),
+    ...(siteConfig.buildDate ? { dateModified: siteConfig.buildDate } : {}),
+    ...(originalUrl ? { isBasedOn: originalUrl } : {}),
+    programmingLanguage: 'Swift',
+  }
+
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
-${buildHead({ title: pageTitle, description: `${fwName} documentation index.`, siteConfig })}
+${buildHead({
+  title: pageTitle,
+  description,
+  siteConfig,
+  canonical,
+  alternate: originalUrl,
+  ogType: 'website',
+  ogTitle: fwName,
+  ogDesc: description,
+  jsonLd,
+})}
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 ${buildHeader(siteConfig)}
@@ -901,8 +1144,8 @@ ${buildHeader(siteConfig)}
   <div id="list-container"${hasTree ? ' class="hidden"' : ''}${deferList ? ' data-deferred' : ''}>
   ${deferList ? '' : mainContent}
   </div>
-  <div id="tree-container"></div>
-  ${hasTree ? `<script type="application/json" id="tree-data">${treeDataJson}</script>` : ''}
+  <div id="tree-container"${externalTreeDataUrl ? ` data-tree-src="${escapeAttr(externalTreeDataUrl)}"` : ''}></div>
+  ${hasTree && !externalTreeDataUrl ? `<script type="application/json" id="tree-data">${treeDataJsonInline}</script>` : ''}
   </article>
   ${sidebar}
 </main>
