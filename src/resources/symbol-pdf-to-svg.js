@@ -400,46 +400,42 @@ function assembleSvg(fills, opts) {
   const vbW = (maxX - minX) + pad * 2
   const vbH = (maxY - minY) + pad * 2
 
-  // Group consecutive visible (alpha>0) fills as a "layer", then any
-  // immediately-following alpha=0 fills as that layer's cut-out mask. A new
-  // visible fill after a cut-out starts a fresh layer drawn ON TOP — its
-  // strokes are not affected by the earlier cut. Painting order matches the
-  // PDF stream, so the SVG composes identically to Apple's bitmap output.
-  const layers = []
-  for (const fill of fills) {
-    if (fill.alpha > 0) {
-      layers.push({ visible: fill, cuts: [] })
-    } else {
-      const last = layers[layers.length - 1]
-      if (last) last.cuts.push(fill)
-    }
-  }
-
+  // Walk fills in painting order, building an SVG tree that mirrors Apple's
+  // destination-out compositing exactly. Each visible (alpha>0) fill paints
+  // on top of whatever's already in the tree. Each alpha=0 fill is a
+  // destination-out blend — it carves pixels from *every* visible layer
+  // painted so far, regardless of which visible layer drew them. We model
+  // that by wrapping the entire current tree in a `<g mask="...">` at every
+  // cut; subsequent visible layers are appended outside that wrapper, so
+  // they correctly escape earlier cuts but become subject to any later one.
+  // Examples:
+  //   [V1]           → V1
+  //   [V1, C1]       → <g mask=C1>V1</g>
+  //   [V1, C1, V2]   → <g mask=C1>V1</g>, V2
+  //   [V1, C1, V2, C2] → <g mask=C2><g mask=C1>V1</g>, V2</g>
   const fillColor = String(color)
   const escapedName = escape(name)
   const idBase = `m${(Math.random().toString(36).slice(2, 8))}`
   let defs = ''
-  let body = ''
-  layers.forEach((layer, idx) => {
-    const visiblePathD = subpathsToD(layer.visible.subpaths, flipX, flipY)
-    const ruleAttr = layer.visible.subpaths.some(sp => sp.fillRule === 'evenodd') ? ' fill-rule="evenodd"' : ''
-    if (layer.cuts.length === 0) {
-      body += `<path d="${visiblePathD}" fill="${fillColor}"${ruleAttr}/>`
-      return
+  let nodes = []
+  fills.forEach((fill, idx) => {
+    if (fill.alpha > 0) {
+      const d = subpathsToD(fill.subpaths, flipX, flipY)
+      const ruleAttr = fill.subpaths.some(sp => sp.fillRule === 'evenodd') ? ' fill-rule="evenodd"' : ''
+      nodes.push(`<path d="${d}" fill="${fillColor}"${ruleAttr}/>`)
+    } else {
+      if (nodes.length === 0) return
+      const maskId = `${idBase}_${idx}`
+      const cutD = subpathsToD(fill.subpaths, flipX, flipY)
+      const cutRule = fill.subpaths.some(sp => sp.fillRule === 'evenodd') ? ' fill-rule="evenodd"' : ''
+      defs += `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}">`
+        + `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="white"/>`
+        + `<path d="${cutD}" fill="black"${cutRule}/>`
+        + `</mask>`
+      nodes = [`<g mask="url(#${maskId})">${nodes.join('')}</g>`]
     }
-    const maskId = `${idBase}_${idx}`
-    let cutPaths = ''
-    for (const cut of layer.cuts) {
-      const d = subpathsToD(cut.subpaths, flipX, flipY)
-      const cutRule = cut.subpaths.some(sp => sp.fillRule === 'evenodd') ? ' fill-rule="evenodd"' : ''
-      cutPaths += `<path d="${d}" fill="black"${cutRule}/>`
-    }
-    defs += `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}">`
-      + `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="white"/>`
-      + cutPaths
-      + `</mask>`
-    body += `<path d="${visiblePathD}" fill="${fillColor}"${ruleAttr} mask="url(#${maskId})"/>`
   })
+  const body = nodes.join('')
 
   const bgRect = background
     ? `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="${escape(background)}"/>`
