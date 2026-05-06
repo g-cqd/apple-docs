@@ -40,6 +40,14 @@ log() {
   printf '[%s] %s\n' "$(/bin/date -Iseconds)" "$*"
 }
 
+# The /healthz probe targets the *backend* port directly (bypassing Caddy)
+# for two reasons:
+#   1. Caddy now serves the prebuilt static site for /docs/* and /assets/* —
+#      a wedged Bun process would still respond 200 through Caddy for those
+#      paths. Probing Bun's port catches the API wedge specifically.
+#   2. /healthz on Bun is implemented in src/web/serve.js with `Cache-Control:
+#      no-store` and never touches the DB, so a healthy probe means accept()
+#      is alive without conflating it with a slow DB query.
 # Map a short name to (label, healthz URL, optional RSS limit, ps pattern).
 # The ps pattern uses the absolute REPO_DIR path so it cannot match an
 # unprivileged local user that runs `bun cli.js web serve` out of /tmp.

@@ -84,9 +84,13 @@ export async function startDevServer(opts, ctx) {
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
   }
-  const devAssetCacheHeaders = {
-    'Cache-Control': 'no-store, no-cache, must-revalidate',
-    'CDN-Cache-Control': 'no-store',
+  // In production Caddy serves /assets/* and /worker/* directly from disk
+  // with `Cache-Control: public, max-age=31536000, immutable` (configured in
+  // Caddyfile.tpl). Bun's copies are only hit by `apple-docs web serve` for
+  // local previews — but those benefit from cacheable headers too, since
+  // `?v=<assetVersion>` busts the cache on every server restart.
+  const assetCacheHeaders = {
+    'Cache-Control': 'public, max-age=31536000, immutable',
   }
 
   const COMPRESSIBLE = new Set(['text/html', 'text/css', 'text/javascript', 'application/json'])
@@ -253,7 +257,7 @@ export async function startDevServer(opts, ctx) {
         return new Response(bunFile, {
           headers: {
             'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-            ...devAssetCacheHeaders,
+            ...assetCacheHeaders,
           },
         })
       }
@@ -270,7 +274,7 @@ export async function startDevServer(opts, ctx) {
         return new Response(bunFile, {
           headers: {
             'Content-Type': 'text/javascript; charset=utf-8',
-            ...devAssetCacheHeaders,
+            ...assetCacheHeaders,
           },
         })
       }

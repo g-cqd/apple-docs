@@ -58,67 +58,101 @@ export function buildAliasMap(db) {
   return aliasMap
 }
 
+/** Body characters retained per document in the per-letter shards. */
+const BODY_PREVIEW_CHARS = 500
+/** Doc-id chunk size for the streaming sections fetch. */
+const BODY_SHARD_BATCH = 5_000
+
 /**
  * Split document body text into alphabetical shard files and write them to
  * `${outputDir}/shards/`. Each shard is keyed by the first letter of the
  * document's framework (a–z), with `_` used for documents that have no
  * framework. Body text is truncated to 500 characters per document.
  *
- * Returns an array of `{ letter, hash }` for each shard written, so the
- * caller can build the manifest mapping.
+ * The previous implementation used `group_concat(ds.content_text, ' ')` over
+ * the entire corpus, which forced SQLite to buffer the full per-document body
+ * (often many KB) and JS to hold the full result set (hundreds of MB peak)
+ * before slicing each row to 500 chars. With 346 K documents that broke the
+ * memory budget on the production box.
+ *
+ * The streaming form fetches doc metadata once, then iterates the corpus in
+ * `BODY_SHARD_BATCH`-sized doc-id windows and pulls sections only for that
+ * window — accumulating in JS until each doc reaches `BODY_PREVIEW_CHARS`,
+ * then short-circuiting. Peak working set is one batch of section rows.
  *
  * @param {import('../storage/database.js').DocsDatabase} db
  * @param {string} outputDir
- * @returns {Promise<Array<{ letter: string, hash: string }>>} Shard metadata
+ * @returns {Promise<Array<{ letter: string, hash: string }>>}
  */
 export async function buildBodyShards(db, outputDir) {
   const hasSections = db.hasTable('document_sections')
-  const rows = db.db.query(hasSections ? `
-    SELECT
-      d.key,
-      d.framework,
-      group_concat(ds.content_text, ' ') AS body_text
-    FROM documents d
-    LEFT JOIN document_sections ds ON ds.document_id = d.id
-    GROUP BY d.id
-    ORDER BY d.key
-  ` : `
-    SELECT d.key, d.framework, NULL AS body_text
-    FROM documents d
-    ORDER BY d.key
-  `).all()
 
   /** @type {Map<string, Record<string, string>>} */
   const shards = new Map()
+  const ensureShard = (letter) => {
+    let s = shards.get(letter)
+    if (!s) {
+      s = {}
+      shards.set(letter, s)
+    }
+    return s
+  }
+  const letterFor = (framework) => (
+    framework ? framework.charAt(0).toLowerCase().replace(/[^a-z]/, '_') : '_'
+  )
 
-  for (const row of rows) {
-    const letter = row.framework
-      ? row.framework.charAt(0).toLowerCase().replace(/[^a-z]/, '_')
-      : '_'
+  if (hasSections) {
+    const docs = db.db.query('SELECT id, key, framework FROM documents ORDER BY id').all()
 
-    if (!shards.has(letter)) shards.set(letter, {})
+    for (let offset = 0; offset < docs.length; offset += BODY_SHARD_BATCH) {
+      const batch = docs.slice(offset, offset + BODY_SHARD_BATCH)
+      const ids = batch.map(d => d.id)
+      const placeholders = ids.map(() => '?').join(',')
 
-    const body = (row.body_text || '').trim()
-    if (body.length > 0) {
-      shards.get(letter)[row.key] = body.slice(0, 500)
+      // Pull sections for this batch, ordered so we can short-circuit per doc
+      // as soon as we've accumulated BODY_PREVIEW_CHARS.
+      const sectionRows = db.db.query(
+        `SELECT document_id, content_text
+         FROM document_sections
+         WHERE document_id IN (${placeholders})
+         ORDER BY document_id, sort_order, id`
+      ).all(...ids)
+
+      const bodyByDoc = new Map()
+      for (const row of sectionRows) {
+        const existing = bodyByDoc.get(row.document_id) ?? ''
+        if (existing.length >= BODY_PREVIEW_CHARS) continue
+        const piece = row.content_text ?? ''
+        if (!piece) continue
+        bodyByDoc.set(row.document_id, existing ? `${existing} ${piece}` : piece)
+      }
+
+      for (const doc of batch) {
+        const body = (bodyByDoc.get(doc.id) ?? '').trim()
+        if (body.length === 0) continue
+        ensureShard(letterFor(doc.framework))[doc.key] = body.slice(0, BODY_PREVIEW_CHARS)
+      }
+    }
+  } else {
+    // Lite tier: no body text. Touch every shard letter so the manifest is
+    // stable, but emit no per-doc entries.
+    for (const row of db.db.query('SELECT framework FROM documents').all()) {
+      ensureShard(letterFor(row.framework))
     }
   }
 
   const shardsDir = join(outputDir, 'shards')
   ensureDir(shardsDir)
 
-  const writeOps = []
   /** @type {Array<{ letter: string, hash: string }>} */
   const shardMeta = []
-
+  const writeOps = []
   for (const [letter, shard] of shards) {
     const json = JSON.stringify(shard)
     const hash = contentHash(json)
-    const filePath = join(shardsDir, `${letter}.${hash}.json`)
-    writeOps.push(Bun.write(filePath, json))
+    writeOps.push(Bun.write(join(shardsDir, `${letter}.${hash}.json`), json))
     shardMeta.push({ letter, hash })
   }
-
   await Promise.all(writeOps)
 
   return shardMeta

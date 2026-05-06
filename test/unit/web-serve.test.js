@@ -163,12 +163,16 @@ describe('Dev Server (P7-E)', () => {
     expect(res.status).toBe(404)
   })
 
-  test('serves CSS from /assets/', async () => {
+  test('serves CSS from /assets/ with immutable cache headers', async () => {
+    // Asset URLs are versioned (`?v=<assetVersion>`), so the response is safe
+    // to cache for a year. In production Caddy serves these from disk and
+    // overrides the header anyway; this assertion locks in the value Bun
+    // sends when running standalone via `apple-docs web serve`.
     const res = await fetch(`${serverInfo.url}/assets/style.css`)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('text/css')
-    expect(res.headers.get('cache-control')).toContain('no-store')
-    expect(res.headers.get('cdn-cache-control')).toContain('no-store')
+    expect(res.headers.get('cache-control')).toContain('immutable')
+    expect(res.headers.get('cache-control')).toContain('max-age=31536000')
   })
 
   test('live search API works', async () => {

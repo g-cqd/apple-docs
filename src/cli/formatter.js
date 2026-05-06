@@ -464,13 +464,18 @@ export function formatStorageMaterialize(result) {
 }
 
 export function formatWebBuild(result) {
-  return [
+  const lines = [
     bold('Static site built'),
-    `  Pages:       ${result.pagesBuilt}`,
-    `  Frameworks:  ${result.frameworksBuilt}`,
-    `  Output:      ${result.outputDir}`,
-    `  Duration:    ${(result.durationMs / 1000).toFixed(1)}s`,
-  ].join('\n')
+    `  Pages built:   ${result.pagesBuilt}`,
+  ]
+  if (result.pagesSkipped) lines.push(`  Pages skipped: ${result.pagesSkipped}`)
+  if (result.pagesFailed) lines.push(`  Pages failed:  ${result.pagesFailed}`)
+  lines.push(
+    `  Frameworks:    ${result.frameworksBuilt}`,
+    `  Output:        ${result.outputDir}`,
+    `  Duration:      ${(result.durationMs / 1000).toFixed(1)}s`,
+  )
+  return lines.join('\n')
 }
 
 export function formatWebDeploy(result) {

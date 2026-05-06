@@ -38,6 +38,10 @@ export LABEL_TUNNEL_WEB="${LABEL_PREFIX}.cloudflared.web"
 export LABEL_TUNNEL_MCP="${LABEL_PREFIX}.cloudflared.mcp"
 export LABEL_WATCHDOG="${LABEL_PREFIX}.watchdog"
 
+# Where Caddy serves the prebuilt static site from. Defaults to
+# ${REPO_DIR}/dist/web; override in .env to point elsewhere.
+export STATIC_DIR="${STATIC_DIR:-${REPO_DIR}/dist/web}"
+
 # Optional tuning variables. Defaults are laptop-sized; bump on dedicated
 # hardware. See ops/.env.example for guidance.
 export APPLE_DOCS_MCP_CACHE_SCALE="${APPLE_DOCS_MCP_CACHE_SCALE:-1}"

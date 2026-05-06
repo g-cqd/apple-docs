@@ -335,6 +335,10 @@ Build options:
   --out <dir>          Output directory (default: dist/web)
   --base-url <url>     Base URL prefix for links
   --site-name <name>   Site title
+  --incremental        Skip docs whose render fingerprint matches the last build (writes in place; resumable)
+  --full               Force a full rebuild (clears the per-doc render index, rewrites via staging dir)
+  --frameworks <a,b>   Restrict the build to these framework slugs (escape hatch for memory pressure on giant frameworks)
+  --concurrency <n>    Per-framework render concurrency (default: ncpu - 2, min 2)
 
 Serve options:
   --port <n>           Port number (default: 3000)
@@ -348,7 +352,9 @@ Deploy platforms:
 
 Examples:
   apple-docs web serve
-  apple-docs web build --out dist/web
+  apple-docs web build --out dist/web                                 # full build via staging
+  apple-docs web build --incremental --out dist/web                   # skip unchanged pages, write in place
+  apple-docs web build --frameworks kernel,matter,swift --concurrency 2  # one big framework at a time
   apple-docs web deploy github-pages
 `.trim(),
 

@@ -126,6 +126,24 @@ run "$BUN" run "$REPO/cli.js" update            || say "(update returned $?)"
 run "$BUN" run "$REPO/cli.js" sync --retry-failed || say "(sync --retry-failed returned $?)"
 run "$BUN" run "$REPO/cli.js" doctor            || say "(doctor returned $?)"
 
+# 6b. Rebuild the static site. Caddy serves ${STATIC_DIR} directly via
+# `file_server`; this step is what makes the deploy actually visible to
+# users. Incremental + resumable, so a partial run is safe and a re-run
+# picks up where it left off (see src/web/build.js).
+#
+# Set REBUILD_STATIC_FULL=1 to force a full rebuild (clears the per-doc
+# render index and writes via the staging directory).
+if [ "${REBUILD_STATIC_FULL:-0}" = "1" ]; then
+  run "$BUN" run "$REPO/cli.js" web build --full --out "$STATIC_DIR" --base-url "https://${PUBLIC_WEB_HOST}" || {
+    say "ERROR: full static build failed — keeping existing ${STATIC_DIR}"
+    exit 4
+  }
+else
+  run "$BUN" run "$REPO/cli.js" web build --incremental --out "$STATIC_DIR" --base-url "https://${PUBLIC_WEB_HOST}" || {
+    say "WARN: incremental static build failed — Caddy will keep serving the previous tree"
+  }
+fi
+
 # 7. Cut over to the refreshed code + corpus.
 #
 #    Order matters: web/mcp first, then a short pause, then the watchdog.
