@@ -367,7 +367,12 @@ try {
             ? flags.frameworks.split(',').map(s => s.trim()).filter(Boolean)
             : undefined
           const concurrency = flags.concurrency ? Math.max(1, Number.parseInt(flags.concurrency, 10) || 0) : undefined
-          const onProgress = process.stdout.isTTY ? makeProgressReporter() : null
+          const workers = flags.workers ? Math.max(1, Number.parseInt(flags.workers, 10) || 0) : undefined
+          // Suppress the per-doc TTY rotor when this Bun is itself a build
+          // worker — its stdout is inherited by the orchestrator and the
+          // rotor lines from N workers would otherwise overwrite each other.
+          const isWorker = process.env.APPLE_DOCS_BUILD_WORKER === '1'
+          const onProgress = (process.stdout.isTTY && !isWorker) ? makeProgressReporter() : null
           result = await buildStaticSite({
             out: flags.out,
             baseUrl: flags['base-url'],
@@ -376,6 +381,7 @@ try {
             full: !!flags.full,
             frameworks,
             concurrency,
+            workers,
             onProgress,
           }, ctx)
           if (onProgress) onProgress.done()

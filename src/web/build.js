@@ -60,7 +60,8 @@ const CHECKPOINT_EVERY = 1_000
  * @param {boolean} [opts.incremental=false]  Skip unchanged docs; write in place.
  * @param {boolean} [opts.full=false]         Force a full rebuild (clears render index).
  * @param {string[]} [opts.frameworks]        Restrict the build to these framework slugs (escape hatch for memory pressure on giant frameworks).
- * @param {number} [opts.concurrency]         Per-framework render concurrency (default: ncpu - 2, min 2).
+ * @param {number} [opts.concurrency]         Per-process render concurrency (default: ncpu, min 2). Sync-CPU rendering doesn't benefit much above 2–4 — for real parallelism use --workers.
+ * @param {number} [opts.workers]             Number of subprocesses to fan out across (default: 1 = inline). Each subprocess opens its own SQLite handle, runs initHighlighter once, and renders a partition of the framework list. With WAL mode, multiple writers serialise on render-index upserts but throughput still scales near-linearly with cores up to `ncpu`.
  * @param {{ rename: typeof rename, rm: typeof rm }} [opts.fsOps]  Test-only override for atomic-swap.
  * @param {(progress: { built: number, skipped: number, failed: number, total: number, framework: string|null, rss: number }) => void} [opts.onProgress]  Progress callback (fires per page).
  * @param {object} ctx
@@ -77,7 +78,9 @@ export async function buildStaticSite(opts, ctx) {
   const frameworkFilter = Array.isArray(opts.frameworks) && opts.frameworks.length > 0
     ? new Set(opts.frameworks)
     : null
-  const concurrency = Math.max(2, opts.concurrency ?? Math.max(2, (availableParallelism?.() ?? 4) - 2))
+  const ncpu = availableParallelism?.() ?? 4
+  const concurrency = Math.max(1, opts.concurrency ?? Math.max(2, ncpu - 2))
+  const workers = Math.max(1, opts.workers ?? 1)
   const onProgress = opts.onProgress ?? null
 
   // Staging directory is only used for full builds (preserves "no partial
@@ -205,14 +208,46 @@ export async function buildStaticSite(opts, ctx) {
     const searchHtml = renderSearchPage(siteConfig)
     await Bun.write(join(buildDir, 'search', 'index.html'), searchHtml)
 
-    // 5. Build document pages, iterating per-framework so we can batch the
-    // sections query and bound peak memory.
+    // 5. Build document pages.
+    //
+    // Two execution modes:
+    //
+    //   - workers > 1: this process is an orchestrator. Partition the
+    //     framework list across N child Bun subprocesses, each of which
+    //     re-enters buildStaticSite with `--workers 1 --frameworks <slugs>
+    //     --incremental`. Each subprocess opens its own SQLite handle (WAL
+    //     allows concurrent readers + serialised writers; render-index
+    //     upserts contend briefly but the cost is negligible vs. the
+    //     synchronous shiki-bound render itself).
+    //
+    //   - workers == 1: render the per-framework loop in-process with the
+    //     async pool. Sync-CPU work means raising `concurrency` past ~2-4
+    //     gives diminishing returns inside one process — that's why
+    //     `--workers` exists.
+    //
+    // Worker children carry `--frameworks <chunk>` so they skip the global
+    // steps (sitemap, search artifacts, manifest) — those run in the
+    // orchestrator after every child exits cleanly.
     const renderCache = createWebRenderCache(db)
     const knownKeys = renderCache.getKnownKeys()
 
     const failuresPath = join(buildDir, 'build-failures.jsonl')
 
-    for (const root of roots) {
+    if (workers > 1 && !frameworkFilter) {
+      const stats = await runWorkerBuilds({
+        roots,
+        opts,
+        siteConfig,
+        workers,
+        concurrency,
+        outDir,
+        db,
+        logger,
+      })
+      pagesBuilt += stats.pagesBuilt
+      pagesSkipped += stats.pagesSkipped
+      pagesFailed += stats.pagesFailed
+    } else for (const root of roots) {
       const docs = db.db.query(
         `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework,
                 d.abstract_text, d.source_type, d.language, d.url,
@@ -552,6 +587,107 @@ function renderWithTimeout(fn, ms) {
     timer = setTimeout(() => reject(new Error(`render timeout after ${ms}ms`)), ms)
   })
   return Promise.race([renderPromise, timeoutPromise]).finally(() => clearTimeout(timer))
+}
+
+/**
+ * Partition a framework list across N workers, balancing by document count
+ * via greedy bin-packing (largest framework first into the smallest bin).
+ * Apple's distribution is heavy-tailed (kernel = 39 K docs, swift-evolution
+ * = 553), so a naive round-robin would leave one worker rendering swift +
+ * uikit while five sit idle. This balances within ~5 % of optimal.
+ */
+function partitionFrameworksByDocCount(roots, db, n) {
+  const counts = roots.map(root => ({
+    root,
+    count: db.db.query('SELECT COUNT(*) as c FROM documents WHERE framework = ?').get(root.slug).c,
+  }))
+  counts.sort((a, b) => b.count - a.count)
+  const bins = Array.from({ length: n }, () => ({ slugs: [], total: 0 }))
+  for (const { root, count } of counts) {
+    if (count === 0) continue
+    const smallest = bins.reduce((acc, b) => (b.total < acc.total ? b : acc), bins[0])
+    smallest.slugs.push(root.slug)
+    smallest.total += count
+  }
+  return bins.filter(b => b.slugs.length > 0)
+}
+
+/**
+ * Spawn N child Bun processes, each running `apple-docs web build` on its
+ * partition of the framework list. Returns aggregated counts after every
+ * child exits.
+ *
+ * Children inherit stdio so progress / failure log lines surface
+ * immediately. The orchestrator does NOT render anything itself in this
+ * mode; framework-listing pages (step 6) and the global steps (search
+ * artifacts, sitemap, manifest) still run in the orchestrator after the
+ * children finish.
+ *
+ * @param {object} args
+ * @param {Array}  args.roots          Filtered framework list to fan out across.
+ * @param {object} args.opts           Original `buildStaticSite` opts (forwarded selectively).
+ * @param {object} args.siteConfig
+ * @param {number} args.workers        Number of subprocesses to spawn.
+ * @param {number} args.concurrency    Per-process pool concurrency.
+ * @param {string} args.outDir
+ * @param {import('../storage/database.js').DocsDatabase} args.db  For doc-count partitioning.
+ * @param {object} [args.logger]
+ */
+async function runWorkerBuilds({ roots, opts, siteConfig, workers, concurrency, outDir, db, logger }) {
+  const bins = partitionFrameworksByDocCount(roots, db, workers)
+  if (bins.length === 0) {
+    return { pagesBuilt: 0, pagesSkipped: 0, pagesFailed: 0 }
+  }
+  const totalDocs = bins.reduce((s, b) => s + b.total, 0)
+  logger?.info?.(
+    `Fan-out: ${bins.length} workers × ${concurrency} concurrency · ${totalDocs.toLocaleString('en-US')} docs partitioned across ${bins.map(b => b.total.toLocaleString('en-US')).join(', ')}`
+  )
+
+  // Resolve the CLI entrypoint relative to this module so worker processes
+  // run the same checkout (no PATH lookup, no system-wide CLI surprises).
+  const here = dirname(new URL(import.meta.url).pathname)
+  const cliJs = join(here, '..', '..', 'cli.js')
+  const bunBin = process.execPath || Bun.argv?.[0] || 'bun'
+
+  const procs = bins.map((bin, i) => {
+    const args = [
+      'run', cliJs, 'web', 'build',
+      '--out', outDir,
+      '--frameworks', bin.slugs.join(','),
+      '--concurrency', String(concurrency),
+      '--workers', '1',
+      '--incremental',
+    ]
+    if (siteConfig.baseUrl) { args.push('--base-url', siteConfig.baseUrl) }
+    if (siteConfig.siteName) { args.push('--site-name', siteConfig.siteName) }
+    if (opts.full) { args.push('--full') }
+    logger?.info?.(`worker[${i + 1}/${bins.length}] starting (${bin.slugs.length} frameworks, ${bin.total.toLocaleString('en-US')} docs): ${bin.slugs.slice(0, 4).join(', ')}${bin.slugs.length > 4 ? '…' : ''}`)
+    return Bun.spawn([bunBin, ...args], {
+      stdout: 'inherit',
+      stderr: 'inherit',
+      env: { ...process.env, APPLE_DOCS_BUILD_WORKER: '1' },
+    })
+  })
+
+  const exits = await Promise.all(procs.map(p => p.exited))
+  const failedCount = exits.filter(c => c !== 0).length
+  if (failedCount > 0) {
+    throw new Error(`${failedCount}/${exits.length} build worker(s) exited non-zero`)
+  }
+
+  // Re-read counts from the render-index for an honest aggregate. We don't
+  // attempt to recover a per-worker breakdown — the children already
+  // streamed their summaries to stdout.
+  const counts = db.db.query(
+    `SELECT COUNT(*) AS built FROM document_render_index ri
+     JOIN documents d ON d.id = ri.doc_id
+     WHERE d.framework IN (${bins.flatMap(b => b.slugs).map(() => '?').join(',')})`
+  ).get(...bins.flatMap(b => b.slugs))
+  return {
+    pagesBuilt: counts?.built ?? 0,
+    pagesSkipped: 0,
+    pagesFailed: 0,
+  }
 }
 
 /**
