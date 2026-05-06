@@ -379,6 +379,7 @@ try {
             siteName: flags['site-name'],
             incremental: !!flags.incremental,
             full: !!flags.full,
+            skipDocs: !!flags['skip-docs'],
             frameworks,
             concurrency,
             workers,

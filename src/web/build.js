@@ -91,6 +91,7 @@ const CHECKPOINT_EVERY = 1_000
  * @param {string[]} [opts.frameworks]        Restrict the build to these framework slugs (escape hatch for memory pressure on giant frameworks).
  * @param {number} [opts.concurrency]         Per-process render concurrency (default: ncpu, min 2). Sync-CPU rendering doesn't benefit much above 2–4 — for real parallelism use --workers.
  * @param {number} [opts.workers]             Number of subprocesses to fan out across (default: 1 = inline). Each subprocess opens its own SQLite handle, runs initHighlighter once, and renders a partition of the framework list. With WAL mode, multiple writers serialise on render-index upserts but throughput still scales near-linearly with cores up to `ncpu`.
+ * @param {boolean} [opts.skipDocs=false]     Build only the site essentials (homepage, search page, public/ static files, sitemap-index, search artifacts, manifest, framework metadata) and skip every per-document and per-framework HTML page. Caddy's `try_files {path} {path}/index.html` falls through to Bun for `/docs/*`, where the existing on-demand renderer + the new `Cache-Control: public, max-age=86400, stale-while-revalidate=604800` header makes Cloudflare cache each doc after first visit. Compromise mode for getting the deploy live without first burning hours on a full corpus build.
  * @param {{ rename: typeof rename, rm: typeof rm }} [opts.fsOps]  Test-only override for atomic-swap.
  * @param {(progress: { built: number, skipped: number, failed: number, total: number, framework: string|null, rss: number }) => void} [opts.onProgress]  Progress callback (fires per page).
  * @param {object} ctx
@@ -110,6 +111,7 @@ export async function buildStaticSite(opts, ctx) {
   const ncpu = availableParallelism?.() ?? 4
   const concurrency = Math.max(1, opts.concurrency ?? Math.max(2, ncpu - 2))
   const workers = Math.max(1, opts.workers ?? 1)
+  const skipDocs = opts.skipDocs === true
   const onProgress = opts.onProgress ?? null
 
   // Staging directory is only used for full builds (preserves "no partial
@@ -264,7 +266,9 @@ export async function buildStaticSite(opts, ctx) {
 
     // Worker fan-out kicks in for any multi-framework run, including
     // explicit `--frameworks a,b,c` subsets — useful for sizing tests.
-    if (workers > 1 && roots.length > 1) {
+    if (skipDocs) {
+      logger?.info?.('--skip-docs: per-document HTML render skipped; Caddy will fall through to Bun for /docs/*')
+    } else if (workers > 1 && roots.length > 1) {
       const stats = await runWorkerBuilds({
         roots,
         opts,
@@ -369,7 +373,7 @@ export async function buildStaticSite(opts, ctx) {
     // to a content-hashed sibling file under /data/frameworks/<slug>/, which
     // CF caches indefinitely (`?v=…` is the hash itself), and the framework
     // HTML carries only a `data-tree-src` reference.
-    for (const root of roots) {
+    if (!skipDocs) for (const root of roots) {
       const docs = db.db.query(
         'SELECT key, title, kind, role, role_heading, abstract_text FROM documents WHERE framework = ? ORDER BY title'
       ).all(root.slug)
@@ -632,21 +636,21 @@ function renderWithTimeout(fn, ms) {
  * full body is unavailable.
  */
 function renderSkiplistPlaceholder(doc, siteConfig) {
-  const escape = (s) => String(s ?? '')
+  const esc = (s) => String(s ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
-  const title = escape(doc.title ?? doc.key)
-  const description = escape(doc.abstract_text ?? `${doc.title ?? doc.key} — Apple developer documentation`)
-  const canonical = `${siteConfig.baseUrl || ''}/docs/${escape(doc.key)}/`
-  const upstream = doc.url ? escape(doc.url) : null
+  const title = esc(doc.title ?? doc.key)
+  const description = esc(doc.abstract_text ?? `${doc.title ?? doc.key} — Apple developer documentation`)
+  const canonical = `${siteConfig.baseUrl || ''}/docs/${esc(doc.key)}/`
+  const upstream = doc.url ? esc(doc.url) : null
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} — ${escape(siteConfig.siteName)}</title>
+  <title>${title} — ${esc(siteConfig.siteName)}</title>
   <meta name="description" content="${description}">
   <link rel="canonical" href="${canonical}">
   ${upstream ? `<link rel="alternate" href="${upstream}">` : ''}
