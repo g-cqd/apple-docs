@@ -337,6 +337,24 @@ function renderTypeTokens(tokens, knownKeys) {
   }).join('')
 }
 
+/**
+ * Maximum size of a content_text discussion section we run through
+ * markdownToHtml. Above this, we render as `<pre><code class="markdown">…</code></pre>`
+ * (escaped, no inline syntax processing).
+ *
+ * Why: the home-grown markdown parser in this file (markdownToHtml +
+ * inlineMarkdown) is fast in isolation but blows up on certain swift-
+ * evolution proposals (e.g. swift-evolution/0253-callable, section 2 at
+ * 9 KB) — the JS thread pins for hours with no event-loop turn to fire a
+ * timeout. The exact regex / interaction has not been root-caused; this
+ * threshold is the operational cap that lets the full corpus build to
+ * completion. Override via APPLE_DOCS_MD_MAX_BYTES.
+ */
+const MARKDOWN_MAX_BYTES = Math.max(
+  512,
+  Number.parseInt(process.env.APPLE_DOCS_MD_MAX_BYTES ?? '', 10) || 6 * 1024,
+)
+
 function renderDiscussionHtml(section) {
   const heading = section.heading ?? 'Overview'
   const sectionId = slugify(heading)
@@ -350,9 +368,15 @@ function renderDiscussionHtml(section) {
     return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2>${body}</section>`
   }
 
-  // Fallback: render markdown/plain text content as HTML
-  if (!section.contentText?.trim()) return ''
-  const body = markdownToHtml(section.contentText.trim())
+  // Fallback: render markdown/plain text content as HTML — but only when
+  // the content is small enough to be safe under markdownToHtml. Above
+  // MARKDOWN_MAX_BYTES we emit a plain pre/code block instead of risking
+  // the parser wedging on the page.
+  const text = section.contentText?.trim() ?? ''
+  if (!text) return ''
+  const body = text.length > MARKDOWN_MAX_BYTES
+    ? `<pre class="markdown-fallback"><code>${escapeHtml(text)}</code></pre>`
+    : markdownToHtml(text)
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2>${body}</section>`
 }
 
