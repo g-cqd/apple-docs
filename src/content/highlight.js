@@ -17,6 +17,26 @@ const LANG_MAP = {
 const THEMES = ['github-light', 'github-dark']
 const LANGS = [...new Set(Object.values(LANG_MAP))]
 
+/**
+ * Maximum code-block size we will run through shiki. Above this we fall
+ * through to a plain `<pre><code>` wrap.
+ *
+ * Why: shiki's TextMate grammars are prone to catastrophic backtracking on
+ * pathological input (long string literals, deeply nested generics,
+ * malformed snippets in proposals). The full static build of swift-evolution
+ * has hit this empirically — a single 13 KB Swift block pinned a worker's
+ * JS thread for minutes, blocking the `Promise.race` timeout from ever
+ * firing because there was no event-loop turn to schedule the timer in.
+ *
+ * 8 KB covers the long tail of real code blocks while reliably sidestepping
+ * the slowdowns. Override via `APPLE_DOCS_HIGHLIGHT_MAX` if you need to
+ * chase a specific case.
+ */
+const HIGHLIGHT_MAX_BYTES = Math.max(
+  256,
+  Number.parseInt(process.env.APPLE_DOCS_HIGHLIGHT_MAX ?? '', 10) || 8 * 1024,
+)
+
 let _highlighter = null
 let _highlighterPromise = null
 const _highlightCache = createLru({ max: 1000 })
@@ -43,6 +63,12 @@ export function highlightCode(code, lang) {
     if (_highlighterPromise == null) {
       void initHighlighter().catch(() => {})
     }
+    return null
+  }
+
+  // Bail before invoking shiki on pathologically large blocks — see the
+  // HIGHLIGHT_MAX_BYTES comment for the exact failure mode this guards.
+  if (typeof code === 'string' && code.length > HIGHLIGHT_MAX_BYTES) {
     return null
   }
 
