@@ -215,10 +215,16 @@ export async function buildStaticSite(opts, ctx) {
     }
 
     // 2c. Copy the static public/ tree (robots.txt, llms.txt, security.txt,
-    // and any other site-wide text files). Always overwritten so a content
-    // change to e.g. robots.txt ships with the next build.
+    // and any other site-wide text files). Only the orchestrator writes
+    // these — workers running with `--frameworks <chunk>` would re-do the
+    // copy needlessly, and the bigger problem is that `index.html` and the
+    // search page below are *partition-specific* when frameworkFilter is set.
+    // Letting six workers race to overwrite them ends with the last-finished
+    // worker's partition replacing the full corpus index (the bug that
+    // shipped a 59-framework homepage on 2026-05-06).
+    const isOrchestratorRun = !frameworkFilter
     const publicSrc = join(srcWebDir, 'public')
-    if (existsSync(publicSrc)) {
+    if (isOrchestratorRun && existsSync(publicSrc)) {
       await copyDirRecursive(publicSrc, buildDir)
     }
 
@@ -233,11 +239,16 @@ export async function buildStaticSite(opts, ctx) {
     // lifecycle (clear-on-full, persist initial checkpoint).
     initRenderIndexIfNeeded()
 
-    // 4. Landing page + search page (cheap; rebuild every run).
-    const indexHtml = renderIndexPage(roots, siteConfig)
-    await Bun.write(join(buildDir, 'index.html'), indexHtml)
-    const searchHtml = renderSearchPage(siteConfig)
-    await Bun.write(join(buildDir, 'search', 'index.html'), searchHtml)
+    // 4. Landing page + search page. Same orchestrator-only guard as the
+    // public/ copy: `roots` reflects the filtered partition inside a
+    // worker, and the homepage iterates `roots` to enumerate every kind →
+    // letting workers write here would publish a partition-only homepage.
+    if (isOrchestratorRun) {
+      const indexHtml = renderIndexPage(roots, siteConfig)
+      await Bun.write(join(buildDir, 'index.html'), indexHtml)
+      const searchHtml = renderSearchPage(siteConfig)
+      await Bun.write(join(buildDir, 'search', 'index.html'), searchHtml)
+    }
 
     // 5. Build document pages.
     //
