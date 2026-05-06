@@ -233,7 +233,9 @@ export async function buildStaticSite(opts, ctx) {
 
     const failuresPath = join(buildDir, 'build-failures.jsonl')
 
-    if (workers > 1 && !frameworkFilter) {
+    // Worker fan-out kicks in for any multi-framework run, including
+    // explicit `--frameworks a,b,c` subsets — useful for sizing tests.
+    if (workers > 1 && roots.length > 1) {
       const stats = await runWorkerBuilds({
         roots,
         opts,
