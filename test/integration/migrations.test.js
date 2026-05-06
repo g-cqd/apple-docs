@@ -9,7 +9,7 @@ describe('Migration E2E (P8-G)', () => {
   test('fresh DB creates all tables at current schema version', () => {
     const db = new DocsDatabase(':memory:')
     const version = db.getSchemaVersion()
-    expect(version).toBe(8)
+    expect(version).toBe(9)
 
     const tables = db.db
       .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
@@ -38,6 +38,8 @@ describe('Migration E2E (P8-G)', () => {
     expect(tableNames).toContain('snapshot_meta')
     // Added in v8
     expect(tableNames).toContain('sync_checkpoint')
+    // Added in v9
+    expect(tableNames).toContain('document_render_index')
 
     db.close()
   })
@@ -66,7 +68,7 @@ describe('Migration E2E (P8-G)', () => {
   test('migration is idempotent — schema version stays stable after construction', () => {
     const db = new DocsDatabase(':memory:')
     const v1 = db.getSchemaVersion()
-    expect(v1).toBe(8)
+    expect(v1).toBe(9)
 
     // Reading version again must return the same value — no spurious increment
     const v2 = db.getSchemaVersion()
@@ -113,7 +115,7 @@ describe('Migration E2E (P8-G)', () => {
       expect(caught).not.toBeNull()
       // The error should mention both the DB version and the supported version
       expect(caught.message).toMatch(/42/)
-      expect(caught.message).toMatch(/8/)
+      expect(caught.message).toMatch(/9/)
     } finally {
       rmSync(tmpDir, { recursive: true, force: true })
     }
@@ -230,7 +232,7 @@ describe('Migration E2E (P8-G)', () => {
       .query("SELECT value FROM schema_meta WHERE key = 'schema_version'")
       .get()
     expect(row).not.toBeNull()
-    expect(row.value).toBe('8')
+    expect(row.value).toBe('9')
 
     db.close()
   })
@@ -255,7 +257,7 @@ describe('Migration E2E (P8-G)', () => {
   test('getSchemaVersion() matches the constant embedded in the source', () => {
     const db = new DocsDatabase(':memory:')
     // The public accessor must agree with what _migrate() wrote
-    expect(db.getSchemaVersion()).toBe(8)
+    expect(db.getSchemaVersion()).toBe(9)
     db.close()
   })
 })

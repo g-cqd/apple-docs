@@ -18,7 +18,7 @@ afterEach(() => {
 describe('DocsDatabase', () => {
   test('creates schema on init', () => {
     const row = db.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
-    expect(row.value).toBe('8')
+    expect(row.value).toBe('9')
   })
 
   test('upsertRoot inserts and returns id', () => {
@@ -407,7 +407,7 @@ describe('DocsDatabase', () => {
   })
 
   test('getSchemaVersion returns current schema version', () => {
-    expect(db.getSchemaVersion()).toBe(8)
+    expect(db.getSchemaVersion()).toBe(9)
   })
 
   test('getStats returns aggregate data', () => {

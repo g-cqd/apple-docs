@@ -3,7 +3,7 @@ import { mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 
-const SCHEMA_VERSION = 8
+const SCHEMA_VERSION = 9
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -118,6 +118,14 @@ CREATE TABLE IF NOT EXISTS sync_checkpoint (
   key        TEXT PRIMARY KEY,
   value      TEXT NOT NULL,
   updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS document_render_index (
+  doc_id           INTEGER PRIMARY KEY,
+  sections_digest  TEXT    NOT NULL,
+  template_version TEXT    NOT NULL,
+  html_hash        TEXT    NOT NULL,
+  updated_at       INTEGER NOT NULL
 );
 `
 
@@ -477,6 +485,15 @@ export class DocsDatabase {
           key        TEXT PRIMARY KEY,
           value      TEXT NOT NULL,
           updated_at TEXT NOT NULL
+        )`)
+      }
+      if (current < 9) {
+        this.db.run(`CREATE TABLE IF NOT EXISTS document_render_index (
+          doc_id           INTEGER PRIMARY KEY,
+          sections_digest  TEXT    NOT NULL,
+          template_version TEXT    NOT NULL,
+          html_hash        TEXT    NOT NULL,
+          updated_at       INTEGER NOT NULL
         )`)
       }
       this.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)", [String(SCHEMA_VERSION)])
@@ -938,6 +955,14 @@ export class DocsDatabase {
     this._getSyncCheckpoint = this.db.query('SELECT value FROM sync_checkpoint WHERE key = ?')
     this._setSyncCheckpoint = this.db.query('INSERT OR REPLACE INTO sync_checkpoint (key, value, updated_at) VALUES (?, ?, ?)')
     this._clearSyncCheckpoint = this.db.query('DELETE FROM sync_checkpoint WHERE key = ?')
+
+    this._getRenderIndexEntry = this.db.query(
+      'SELECT doc_id, sections_digest, template_version, html_hash, updated_at FROM document_render_index WHERE doc_id = ?'
+    )
+    this._upsertRenderIndexEntry = this.db.query(
+      'INSERT OR REPLACE INTO document_render_index (doc_id, sections_digest, template_version, html_hash, updated_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    this._clearRenderIndex = this.db.query('DELETE FROM document_render_index')
   }
 
   upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
@@ -1479,6 +1504,50 @@ export class DocsDatabase {
 
   clearSyncCheckpoint(key) {
     this._clearSyncCheckpoint.run(key)
+  }
+
+  /**
+   * Singleton checkpoint for the static web build, stored in sync_checkpoint
+   * under the key 'web_build'. Holds the run id, last persisted doc id,
+   * counts (built/skipped/failed), and the resolved output directory so a
+   * killed build can resume against the same target.
+   * @returns {object|null}
+   */
+  getWebBuildCheckpoint() {
+    return this.getSyncCheckpoint('web_build')
+  }
+
+  setWebBuildCheckpoint(state) {
+    this.setSyncCheckpoint('web_build', state)
+  }
+
+  clearWebBuildCheckpoint() {
+    this.clearSyncCheckpoint('web_build')
+  }
+
+  /**
+   * Per-document render fingerprint used by the incremental build to skip
+   * documents whose inputs (sections_digest) and template surface
+   * (template_version) match the last successful render.
+   * @param {number} docId
+   * @returns {{ doc_id: number, sections_digest: string, template_version: string, html_hash: string, updated_at: number }|null}
+   */
+  getRenderIndexEntry(docId) {
+    return this._getRenderIndexEntry.get(docId) ?? null
+  }
+
+  upsertRenderIndexEntry({ docId, sectionsDigest, templateVersion, htmlHash }) {
+    this._upsertRenderIndexEntry.run(
+      docId,
+      sectionsDigest,
+      templateVersion,
+      htmlHash,
+      Math.floor(Date.now() / 1000),
+    )
+  }
+
+  clearRenderIndex() {
+    this._clearRenderIndex.run()
   }
 
   /**
