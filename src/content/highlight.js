@@ -37,6 +37,23 @@ const HIGHLIGHT_MAX_BYTES = Math.max(
   Number.parseInt(process.env.APPLE_DOCS_HIGHLIGHT_MAX ?? '', 10) || 8 * 1024,
 )
 
+/**
+ * Hard kill-switch: when set (e.g. `APPLE_DOCS_NO_HIGHLIGHT=1` for the
+ * first full static build) we never invoke shiki. Every call returns null
+ * and the call site falls back to plain `<pre><code class="language-…">`.
+ *
+ * The size guard above is a backstop; this is the operator's "I want this
+ * build to finish, period" lever. The first full build of the corpus on
+ * mm18.local needed it to traverse swift-evolution/0253-callable and a
+ * handful of similar proposals where even modest blocks hit the bad
+ * grammar path — symptom: a single render call pinned the JS thread for
+ * hours with no event-loop turn to fire the per-page timeout. After the
+ * first build, the per-doc render-index skips unchanged docs, so leaving
+ * the switch on for a permanent deploy is fine; the cost is ungenerated
+ * syntax colors.
+ */
+const HIGHLIGHT_DISABLED = process.env.APPLE_DOCS_NO_HIGHLIGHT === '1'
+
 let _highlighter = null
 let _highlighterPromise = null
 const _highlightCache = createLru({ max: 1000 })
@@ -57,6 +74,7 @@ export function initHighlighter() {
 }
 
 export function highlightCode(code, lang) {
+  if (HIGHLIGHT_DISABLED) return null
   const grammar = LANG_MAP[lang?.toLowerCase()] ?? null
   if (!grammar) return null
   if (!_highlighter) {
