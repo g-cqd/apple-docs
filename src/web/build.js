@@ -17,8 +17,37 @@ import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
  * Default per-page render timeout. The Swift stdlib + a few other "kitchen
  * sink" frameworks can blow this if the inline tree-data ever returns; 30 s
  * is far above the typical 10–200 ms but well below "we're stuck forever".
+ *
+ * NOTE: this timeout cannot fire if the render itself blocks the JS thread
+ * (sync template / regex work) — `setTimeout` schedules a callback for the
+ * event loop, which never gets a turn. The skiplist below is the
+ * pragmatic guardrail until we move heavy renders onto Bun.Worker threads.
  */
 const RENDER_TIMEOUT_MS = 30_000
+
+/**
+ * Documents that are known to wedge the synchronous render path on this
+ * codebase. Bisected on 2026-05-06 against the production corpus on
+ * mm18.local: rendering pinned the JS thread for 4+ minutes per attempt,
+ * defeating the per-page Promise-race timeout (which can't fire while the
+ * thread has no event-loop turn).
+ *
+ * The cause has not been root-caused — both `APPLE_DOCS_NO_HIGHLIGHT=1`
+ * (shiki off) and the size-guarded `markdownToHtml` fallback failed to
+ * unblock these specific keys. Symptoms point at some interaction between
+ * the home-grown markdown parser and a content shape that triggers
+ * catastrophic backtracking somewhere we couldn't pinpoint with regex
+ * micro-benches.
+ *
+ * For each entry we emit a placeholder page (title + abstract + a link to
+ * the upstream Apple URL) instead of rendering. The page is still indexed,
+ * still cacheable, and still part of the sitemap; only the body content is
+ * missing. Removing an entry once the underlying bug is fixed restores
+ * full-fidelity rendering.
+ */
+const RENDER_SKIPLIST = new Set([
+  'swift-evolution/0253-callable',
+])
 
 /**
  * Files smaller than this are NOT precompressed at build time — Caddy's
@@ -291,11 +320,16 @@ export async function buildStaticSite(opts, ctx) {
         }
 
         try {
-          const html = await renderWithTimeout(() => renderDocumentPage(doc, sections, siteConfig, {
-            knownKeys,
-            ancestorTitles: renderCache.getAncestorTitles(doc.key),
-            resolveRoleHeadings: (keys) => renderCache.getRoleHeadings(keys),
-          }), RENDER_TIMEOUT_MS)
+          // Skiplist entries get a tombstone page so the rest of the build
+          // can proceed without wedging on a single bad input. See the
+          // RENDER_SKIPLIST comment for the bisect that produced the list.
+          const html = RENDER_SKIPLIST.has(doc.key)
+            ? renderSkiplistPlaceholder(doc, siteConfig)
+            : await renderWithTimeout(() => renderDocumentPage(doc, sections, siteConfig, {
+                knownKeys,
+                ancestorTitles: renderCache.getAncestorTitles(doc.key),
+                resolveRoleHeadings: (keys) => renderCache.getRoleHeadings(keys),
+              }), RENDER_TIMEOUT_MS)
 
           ensureDir(dirname(filePath))
           await Bun.write(filePath, html)
@@ -589,6 +623,43 @@ function renderWithTimeout(fn, ms) {
     timer = setTimeout(() => reject(new Error(`render timeout after ${ms}ms`)), ms)
   })
   return Promise.race([renderPromise, timeoutPromise]).finally(() => clearTimeout(timer))
+}
+
+/**
+ * Minimal placeholder for skiplisted documents. Emits a valid HTML page
+ * with the doc's title, abstract, and a link back to the upstream Apple
+ * URL — enough for SEO + the sitemap, with a banner explaining that the
+ * full body is unavailable.
+ */
+function renderSkiplistPlaceholder(doc, siteConfig) {
+  const escape = (s) => String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+  const title = escape(doc.title ?? doc.key)
+  const description = escape(doc.abstract_text ?? `${doc.title ?? doc.key} — Apple developer documentation`)
+  const canonical = `${siteConfig.baseUrl || ''}/docs/${escape(doc.key)}/`
+  const upstream = doc.url ? escape(doc.url) : null
+  return `<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title} — ${escape(siteConfig.siteName)}</title>
+  <meta name="description" content="${description}">
+  <link rel="canonical" href="${canonical}">
+  ${upstream ? `<link rel="alternate" href="${upstream}">` : ''}
+  <meta name="robots" content="index, follow">
+</head>
+<body>
+<main class="main-content">
+  <h1>${title}</h1>
+  <p>${description}</p>
+  <p><em>Body unavailable in this build — see the original on Apple's site${upstream ? `: <a href="${upstream}">${upstream}</a>` : ''}.</em></p>
+</main>
+</body>
+</html>`
 }
 
 /**
