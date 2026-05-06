@@ -1,6 +1,6 @@
 import { join, dirname } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage } from './templates.js'
+import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, buildFrameworkTreeData } from './templates.js'
 import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { createWebRenderCache } from './render-cache.js'
 import { search } from '../commands/search.js'
@@ -49,6 +49,13 @@ export async function startDevServer(opts, ctx) {
   let cachedTitleIndex = null
   let cachedAliasMap = null
   let cachedSearchManifest = null
+  // Framework tree-view JSON cache. Each framework page render computes the
+  // tree JSON, hashes it, and stores it here keyed by `<slug>:<hash>`. The
+  // /data/frameworks/<slug>/tree.<hash>.json route reads from this map so we
+  // never re-render or re-hash on the cacheable path. Memory footprint is
+  // bounded by `frameworkTreeMax`; LRU eviction keeps it small.
+  const frameworkTreeCache = createLru({ max: 64 })
+  const frameworkTreeBySlug = new Map()
   function getTitleIndex() { return cachedTitleIndex ??= buildTitleIndex(db) }
   function getAliasMap() { return cachedAliasMap ??= buildAliasMap(db) }
   function invalidateDocumentCaches() {
@@ -311,6 +318,39 @@ export async function startDevServer(opts, ctx) {
     if (pathname === '/data/search/title-index.json') {
       return jsonResponse(getTitleIndex())
     }
+
+    // Framework tree-view JSON. Filled by the framework-page render above.
+    // If the cache misses (cold start, eviction, or a bot probing a stale
+    // hash), we re-render the framework's tree JSON from the DB so the URL
+    // is always satisfiable. Hashed responses are immutable to Cloudflare.
+    {
+      const treeMatch = pathname.match(/^\/data\/frameworks\/([^/]+)\/tree\.([0-9a-f]{10})\.json$/)
+      if (treeMatch) {
+        const [, slug, hash] = treeMatch
+        const cacheKey = `${slug}:${hash}`
+        let json = frameworkTreeCache.get(cacheKey)
+        if (json === undefined) {
+          const root = db.getRootBySlug(slug)
+          if (!root) return new Response('Not Found', { status: 404 })
+          const docs = db.getPagesByRoot(root.slug)
+          const treeEdges = db.getFrameworkTree(root.slug)
+          const fresh = buildFrameworkTreeData(root, docs, treeEdges, siteConfig)
+          if (!fresh.hasTree) return new Response('Not Found', { status: 404 })
+          // Surface the freshly-computed JSON regardless of hash mismatch:
+          // the requested URL has the hash baked in, so there's no risk of
+          // serving the wrong content under a different cache key.
+          json = fresh.json
+          frameworkTreeCache.set(`${slug}:${sha256(fresh.json).slice(0, 10)}`, fresh.json)
+        }
+        return new Response(json, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        })
+      }
+    }
     if (pathname === '/data/search/aliases.json') {
       return jsonResponse(getAliasMap())
     }
@@ -327,7 +367,26 @@ export async function startDevServer(opts, ctx) {
         const isSelfRef = docs.length <= 1 && docs[0]?.path === key
         if (!isSelfRef && docs.length > 0) {
           const treeEdges = db.getFrameworkTree(root.slug)
-          const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges })
+          // Externalise the tree-view JSON: hash the payload, stash it in
+          // the in-memory cache, and pass `treeDataUrl` so the rendered
+          // HTML emits a `data-tree-src` reference (~50 KB) instead of an
+          // ~5 MB inline `<script type="application/json">`. The JSON is
+          // served by the /data/frameworks/<slug>/tree.<hash>.json route
+          // below with `Cache-Control: immutable`, so Cloudflare caches
+          // both the HTML and the JSON for a year (the hash invalidates
+          // on rebuild).
+          const tree = buildFrameworkTreeData(root, docs, treeEdges, siteConfig)
+          let treeDataUrl = null
+          if (tree.hasTree) {
+            const hash = sha256(tree.json).slice(0, 10)
+            const cacheKey = `${root.slug}:${hash}`
+            frameworkTreeCache.set(cacheKey, tree.json)
+            // Also stash the latest hash per slug so the URL we emit in
+            // HTML always matches whatever the route can satisfy.
+            frameworkTreeBySlug.set(root.slug, hash)
+            treeDataUrl = `${siteConfig.baseUrl || ''}/data/frameworks/${root.slug}/tree.${hash}.json`
+          }
+          const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl })
           return textResponse(html, { contentType: 'text/html; charset=utf-8', hashable: true })
         }
       }

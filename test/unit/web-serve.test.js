@@ -149,7 +149,10 @@ describe('Dev Server (P7-E)', () => {
     expect(res.status).toBe(200)
     const html = await res.text()
     expect(html).toContain('View')
-    expect(html).toContain('id="tree-data"')
+    // The framework page now externalises the tree-view JSON: HTML
+    // carries a `data-tree-src=…/tree.<hash>.json` reference and the
+    // /data/frameworks/<slug>/tree.<hash>.json route serves the JSON.
+    expect(html).toMatch(/data-tree-src="[^"]*\/data\/frameworks\/swiftui\/tree\.[0-9a-f]{10}\.json"/)
     expect(html).toContain('class="view-toggle"')
   })
 
