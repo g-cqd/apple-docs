@@ -26,28 +26,21 @@ import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
 const RENDER_TIMEOUT_MS = 30_000
 
 /**
- * Documents that are known to wedge the synchronous render path on this
- * codebase. Bisected on 2026-05-06 against the production corpus on
- * mm18.local: rendering pinned the JS thread for 4+ minutes per attempt,
- * defeating the per-page Promise-race timeout (which can't fire while the
- * thread has no event-loop turn).
+ * Documents that wedge the synchronous render path. Kept as an explicit
+ * escape hatch — populate when bisect lands on a doc whose render pins the
+ * JS thread, defeating the per-page Promise-race timeout (which can't fire
+ * while the thread has no event-loop turn).
  *
- * The cause has not been root-caused — both `APPLE_DOCS_NO_HIGHLIGHT=1`
- * (shiki off) and the size-guarded `markdownToHtml` fallback failed to
- * unblock these specific keys. Symptoms point at some interaction between
- * the home-grown markdown parser and a content shape that triggers
- * catastrophic backtracking somewhere we couldn't pinpoint with regex
- * micro-benches.
+ * The original entry (swift-evolution/0253-callable) was traced to an
+ * infinite loop in markdownToHtml on lines like `### ` (empty heading)
+ * and fixed in src/content/render-html.js; the skiplist is empty again.
  *
- * For each entry we emit a placeholder page (title + abstract + a link to
- * the upstream Apple URL) instead of rendering. The page is still indexed,
- * still cacheable, and still part of the sitemap; only the body content is
- * missing. Removing an entry once the underlying bug is fixed restores
- * full-fidelity rendering.
+ * For each entry we emit a placeholder page (title + abstract + alternate
+ * link to the upstream Apple URL) instead of rendering. The page is still
+ * indexed, still cacheable, and still in the sitemap; only the body
+ * content is missing.
  */
-const RENDER_SKIPLIST = new Set([
-  'swift-evolution/0253-callable',
-])
+const RENDER_SKIPLIST = new Set()
 
 /**
  * Files smaller than this are NOT precompressed at build time — Caddy's
