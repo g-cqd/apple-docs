@@ -27,11 +27,25 @@ const MIME_TYPES = {
 export async function startDevServer(opts, ctx) {
   const port = opts.port ?? 3000
   const { db, dataDir, logger } = ctx
+  // `bundled: true` so the rendered HTML references `/assets/core.js` and
+  // `/assets/listing.js` — the same filenames the static `web build` writes.
+  // In production behind Caddy, `file_server` serves those bundles from
+  // `dist/web/assets/`; the request never reaches Bun. For local preview
+  // (`apple-docs web serve` standalone, no dist on disk) the /assets/ route
+  // below synthesises the bundles on the fly from `src/web/assets/`.
   const siteConfig = {
     baseUrl: opts.baseUrl || '',
     siteName: opts.siteName || 'Apple Developer Docs',
     buildDate: new Date().toISOString().split('T')[0],
     assetVersion: Date.now().toString(36),
+    bundled: true,
+  }
+
+  // Bundle definitions: must mirror src/web/build.js so on-the-fly bundling
+  // produces byte-identical output to the built version.
+  const ASSET_BUNDLES = {
+    'core.js': ['theme.js', 'search.js', 'page-toc.js'],
+    'listing.js': ['collection-filters.js', 'tree-view.js'],
   }
 
   void initHighlighter().catch((err) => {
@@ -257,6 +271,30 @@ export async function startDevServer(opts, ctx) {
     if (pathname.startsWith('/assets/')) {
       const file = pathname.replace('/assets/', '')
       if (file.includes('..') || file.includes('\0')) return new Response('Forbidden', { status: 403 })
+
+      // Synthesise the named bundles (`core.js`, `listing.js`) on the fly
+      // when requested directly. The built dist serves them statically;
+      // this branch keeps standalone `apple-docs web serve` working without
+      // a prior build, and also rescues any case where Caddy falls through
+      // to Bun for /assets/* (e.g. an old asset URL no longer on disk).
+      if (Object.prototype.hasOwnProperty.call(ASSET_BUNDLES, file)) {
+        const parts = []
+        for (const member of ASSET_BUNDLES[file]) {
+          const memberPath = join(srcWebDir, 'assets', member)
+          const memberFile = Bun.file(memberPath)
+          if (await memberFile.exists()) {
+            parts.push(await memberFile.text())
+          }
+        }
+        if (parts.length === 0) return new Response('Not Found', { status: 404 })
+        return new Response(parts.join('\n'), {
+          headers: {
+            'Content-Type': 'text/javascript; charset=utf-8',
+            ...assetCacheHeaders,
+          },
+        })
+      }
+
       const filePath = join(srcWebDir, 'assets', file)
       const bunFile = Bun.file(filePath)
       if (await bunFile.exists()) {
