@@ -4,6 +4,7 @@ import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from
 import { homedir, tmpdir } from 'node:os'
 import { sha256 } from '../lib/hash.js'
 import { ensureDir } from '../storage/files.js'
+import { symbolPdfToSvg } from './symbol-pdf-to-svg.js'
 
 export const APPLE_FONT_FAMILIES = [
   { id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg', match: /^SF-Pro(?:-|\.|$)|^SFNS/i },
@@ -203,7 +204,7 @@ export function searchSfSymbols(query, opts, ctx) {
   return { results: ctx.db.searchSfSymbols(query, opts), query: query ?? '', scope: opts.scope ?? null }
 }
 
-export const SYMBOL_RENDERER_VERSION = 4
+export const SYMBOL_RENDERER_VERSION = 5
 export const SYMBOL_DEFAULT_RENDER_SIZE = 128
 
 export function getPrerenderedSymbolPath(ctx, scope, name) {
@@ -474,8 +475,12 @@ export async function renderSfSymbol(opts, ctx) {
     //        XOR/exclusion → tray.badge.sparkles renders as a blob)
     //   - 4: canonical pipeline — vectorGlyph.drawInContext: into a 2048pt
     //        PDF page, then pdftocairo → SVG, then strip the clipPath
-    //        wrapper and recompute viewBox from path data. Pixel-perfect.
-    renderer: 4,
+    //        wrapper and recompute viewBox from path data. Lost cut-out
+    //        layers on .fill symbols (xmark.bin.circle.fill, health.fill).
+    //   - 5: same Swift PDF emitter, but parse the PDF in JS and convert
+    //        `/ca 0` ExtGState fills into SVG `<mask>` cut-outs. True
+    //        vector fidelity for every layer-cutout symbol.
+    renderer: 5,
     type: 'sf-symbol',
     scope,
     name: opts.name,
@@ -794,141 +799,16 @@ async function renderSymbolToPdfBytes({ name, scope }) {
 }
 
 /**
- * Convert a single-page SF Symbol PDF into a clean SVG. The pipeline:
- *   PDF → pdftocairo → raw SVG → strip clipPath wrapper → recompute viewBox
- *   from path data → swap fill colors → optionally inject a background rect.
- *
- * pdftocairo always emits pure-vector output for Apple's symbol PDFs (no
- * raster fallbacks) because `vectorGlyph.drawInContext:` uses native
- * CGContext path operations. The reason we post-process: pdftocairo wraps
- * the page content in a `<clipPath>` sized to the PDF mediaBox, which clips
- * the symbol's natural drawing extent. Once the wrapper is gone, we can
- * size the viewBox to the actual coordinate range.
+ * Convert a single-page SF Symbol PDF into a clean vector SVG. We parse the
+ * content stream ourselves (see symbol-pdf-to-svg.js) instead of shelling
+ * out to pdftocairo, because Apple encodes layer cut-outs (xmark.bin.circle.fill,
+ * health.fill, circle.slash, …) as `/ca 0` ExtGState fills — which any
+ * spec-compliant PDF renderer correctly skips, dropping the cut-out geometry
+ * we need. Our parser preserves those alpha-0 fills and emits them as SVG
+ * `<mask>` cut-outs against the preceding visible layer.
  */
 async function finalizeSvgFromPdf(pdfBytes, { name, pointSize, color, background }) {
-  const pdfPath = join(tmpdir(), `apple-docs-sym-${process.pid}-${Math.random().toString(36).slice(2, 8)}.pdf`)
-  const svgPath = `${pdfPath}.svg`
-  await Bun.write(pdfPath, pdfBytes)
-  try {
-    const proc = Bun.spawn(['pdftocairo', '-svg', pdfPath, svgPath], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
-    const [stderr, code] = await Promise.all([
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code !== 0) {
-      throw new Error(`pdftocairo failed: ${stderr.trim() || `exit ${code}`}. Install with \`brew install poppler\`.`)
-    }
-    let raw = await Bun.file(svgPath).text()
-    return cleanSymbolSvg(raw, { name, pointSize, color, background })
-  } finally {
-    await rm(pdfPath, { force: true }).catch(() => {})
-    await rm(svgPath, { force: true }).catch(() => {})
-  }
-}
-
-/**
- * Strip pdftocairo's clip wrapper, recompute viewBox from path coords, and
- * apply our color tokens. Pure-string transform — no DOM parser needed.
- */
-export function cleanSymbolSvg(raw, { name, pointSize, color, background } = {}) {
-  let svg = String(raw)
-  // 1) drop <defs>...<clipPath>...</defs>
-  svg = svg.replace(/<defs>[\s\S]*?<\/defs>/g, '')
-  // 2) drop the <g clip-path="url(#...)"> wrapper opening tag
-  svg = svg.replace(/<g\s+clip-path="url\([^)]*\)">/g, '')
-  // 3) drop the matching </g> just before </svg>
-  svg = svg.replace(/<\/g>\s*<\/svg>/g, '</svg>')
-
-  // 4) walk every `d="..."` and extract the absolute coords. We only need
-  //    pairs (x, y) — for SVG curve command tokens the count is always
-  //    even, with x/y interleaved. We treat command letters as separators.
-  const points = []
-  for (const dMatch of svg.matchAll(/\sd="([^"]+)"/g)) {
-    const tokens = dMatch[1].match(/-?\d+(?:\.\d+)?/g)
-    if (!tokens) continue
-    const nums = tokens.map(Number)
-    for (let i = 0; i + 1 < nums.length; i += 2) {
-      points.push([nums[i], nums[i + 1]])
-    }
-  }
-  if (points.length === 0) {
-    throw new Error('symbol PDF→SVG produced no path data')
-  }
-  const xs = points.map(p => p[0])
-  const ys = points.map(p => p[1])
-  const minX = Math.min(...xs), maxX = Math.max(...xs)
-  const minY = Math.min(...ys), maxY = Math.max(...ys)
-  const span = Math.max(maxX - minX, maxY - minY) || 1
-  const pad = span * 0.06
-
-  // Normalise every path coordinate to a (0..N) viewBox. Chromium's
-  // mask-image renderer mishandles SVGs whose viewBox has a large positive
-  // origin (which our raw pdftocairo output has — Y goes up to ~2020 in
-  // PDF user-space) and ends up producing zero-alpha masks. Normalising
-  // both viewBox AND path coords keeps the masked tiles visible while
-  // preserving full vector fidelity.
-  const offsetX = minX - pad
-  const offsetY = minY - pad
-  const vbW = maxX - minX + pad * 2
-  const vbH = maxY - minY + pad * 2
-  svg = svg.replace(/(\sd=")([^"]+)(")/g, (_, before, data, after) => {
-    const tokens = data.match(/[A-Za-z]|-?\d+(?:\.\d+)?/g) ?? []
-    const out = []
-    let coordIndex = 0
-    for (const token of tokens) {
-      if (/^[A-Za-z]$/.test(token)) {
-        out.push(token)
-        coordIndex = 0
-        continue
-      }
-      // Alternate x/y based on position from the most recent command letter.
-      const value = Number(token)
-      const adjusted = coordIndex % 2 === 0 ? value - offsetX : value - offsetY
-      out.push(adjusted.toFixed(3).replace(/\.?0+$/, ''))
-      coordIndex++
-    }
-    // Re-emit with single spaces between tokens.
-    let pretty = ''
-    for (const token of out) {
-      if (/^[A-Za-z]$/.test(token)) pretty += (pretty && !pretty.endsWith(' ') ? ' ' : '') + token + ' '
-      else pretty += token + ' '
-    }
-    return `${before}${pretty.trim()}${after}`
-  })
-
-  const vb = `0 0 ${vbW.toFixed(2)} ${vbH.toFixed(2)}`
-  const renderedFill = String(color ?? 'currentColor')
-
-  // 5) rewrite the <svg ...> opening tag so we control width/height/viewBox.
-  const escapedName = (name ?? '').replace(/[<>&"']/g, c => ({
-    '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;',
-  }[c]))
-  svg = svg.replace(
-    /<svg[^>]*>/,
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${pointSize}" height="${pointSize}" viewBox="${vb}" role="img" aria-label="${escapedName}">`,
-  )
-
-  // 6) replace pdftocairo's fill colors with the requested foreground.
-  svg = svg
-    .replace(/fill="rgb\(0%,\s*0%,\s*0%\)"/g, `fill="${renderedFill}"`)
-    .replace(/fill-opacity="1"/g, '')
-    .replace(/\s+xmlns:xlink="[^"]*"/, '')
-    .replace(/\s{2,}/g, ' ')
-
-  // 7) optional background rect inserted just inside the <svg> opening.
-  if (background) {
-    const bgRect = `<rect x="0" y="0" width="${vbW.toFixed(2)}" height="${vbH.toFixed(2)}" fill="${background}"/>`
-    svg = svg.replace(/(<svg[^>]*>)/, `$1${bgRect}`)
-  }
-
-  // 8) prepend an XML declaration if missing.
-  if (!svg.startsWith('<?xml')) {
-    svg = `<?xml version="1.0" encoding="UTF-8"?>\n${svg.trimStart()}`
-  }
-  return svg
+  return symbolPdfToSvg(pdfBytes, { name, pointSize, color, background })
 }
 
 const SYMBOL_PDF_SCRIPT = `
