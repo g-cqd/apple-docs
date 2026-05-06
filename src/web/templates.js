@@ -140,6 +140,196 @@ ${buildFooter(siteConfig)}
 </html>`
 }
 
+export function renderFontsPage(siteConfig, data = {}) {
+  const pageTitle = `Fonts — ${siteConfig.siteName}`
+  const canonical = `${siteConfig.baseUrl || ''}/fonts`
+  const description = 'Browse, preview, and download Apple typography (SF Pro, SF Mono, New York, …).'
+  const families = Array.isArray(data.families) ? data.families : []
+  const familiesJson = JSON.stringify(families).replace(/</g, '\\u003c')
+  const baseUrl = siteConfig.baseUrl || ''
+
+  const familyMarkup = families.map(family => {
+    const variableCount = family.files.filter(f => f.is_variable).length
+    const remoteCount = family.files.filter(f => f.source === 'remote').length
+    const systemCount = family.files.filter(f => f.source === 'system').length
+    const meta = [
+      `${family.files.length} file${family.files.length === 1 ? '' : 's'}`,
+      variableCount > 0 ? `${variableCount} variable` : null,
+      remoteCount > 0 ? `${remoteCount} remote` : null,
+      systemCount > 0 ? `${systemCount} system` : null,
+    ].filter(Boolean).join(' · ')
+    const categoryLabel = formatFontCategory(family.category)
+    const categoryBadge = categoryLabel
+      ? `<span class="font-family__badge" data-category="${escapeAttr(family.category)}">${escapeAttr(categoryLabel)}</span>`
+      : ''
+    const familyZip = (subset) => `${baseUrl}/api/fonts/family/${encodeURIComponent(family.id)}.zip${subset && subset !== 'all' ? `?subset=${encodeURIComponent(subset)}` : ''}`
+    const downloadButtons = [
+      `<a class="font-family__download" href="${escapeAttr(familyZip('all'))}" download>Download all</a>`,
+      variableCount > 0
+        ? `<a class="font-family__download font-family__download--alt" href="${escapeAttr(familyZip('variable'))}" download>Variable only</a>`
+        : '',
+      family.files.length - variableCount > 0
+        ? `<a class="font-family__download font-family__download--alt" href="${escapeAttr(familyZip('static'))}" download>Static only</a>`
+        : '',
+    ].filter(Boolean).join('')
+    return `
+    <article class="font-family" data-family-id="${escapeAttr(family.id)}">
+      <header class="font-family__header">
+        <div class="font-family__title-row">
+          <h2 class="font-family__title">${escapeAttr(family.display_name)}</h2>
+          ${categoryBadge}
+        </div>
+        <p class="font-family__meta">${escapeAttr(meta)}</p>
+        <div class="font-family__downloads">${downloadButtons}</div>
+      </header>
+      <div class="font-family__variants" data-variants></div>
+      <div class="font-family__preview" data-preview></div>
+    </article>`
+  }).join('')
+
+  return `<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+${buildHead({
+  title: pageTitle,
+  description,
+  siteConfig,
+  canonical,
+  ogType: 'website',
+})}
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+${buildHeader(siteConfig)}
+<main id="main-content" class="main-content fonts-page">
+  <header class="fonts-page__header">
+    <h1>Apple Fonts</h1>
+    <p class="fonts-page__lede">Live preview every family with its real files. Pick a variant + weight, toggle italic, drag the slider, and grab a ZIP — all weights, just the variable single-file, or just the statics.</p>
+  </header>
+
+  <section class="fonts-tester" aria-label="Font preview controls">
+    <label class="fonts-tester__field">
+      <span class="fonts-tester__label">Sample text</span>
+      <textarea id="fonts-sample" class="fonts-tester__sample" rows="2" aria-label="Sample text">The quick brown fox jumps over the lazy dog 0123456789</textarea>
+    </label>
+    <div class="fonts-tester__row">
+      <label class="fonts-tester__field fonts-tester__field--size">
+        <span class="fonts-tester__label">Size <span id="fonts-size-value">48</span>px</span>
+        <input id="fonts-size" type="range" min="12" max="144" value="48" aria-label="Preview size in pixels">
+      </label>
+    </div>
+  </section>
+
+  <section class="font-family-grid" id="font-family-grid">${familyMarkup}</section>
+
+  <script id="fonts-data" type="application/json">${familiesJson}</script>
+</main>
+${buildFooter(siteConfig)}
+<script src="${escapeAttr(assetUrl(siteConfig, 'fonts-page.js'))}" defer></script>
+</body>
+</html>`
+}
+
+function formatFontCategory(category) {
+  switch (category) {
+    case 'sans-serif': return 'Sans-serif'
+    case 'serif': return 'Serif'
+    case 'monospace': return 'Monospace'
+    default: return null
+  }
+}
+
+export function renderSymbolsPage(siteConfig, data = {}) {
+  const pageTitle = `Symbols — ${siteConfig.siteName}`
+  const canonical = `${siteConfig.baseUrl || ''}/symbols`
+  const description = 'Browse, search, and download SF Symbols. Customize size and colors before exporting SVG or PNG.'
+  const totals = Array.isArray(data.totals) ? data.totals : []
+  const totalCount = totals.reduce((sum, row) => sum + (row.count ?? 0), 0)
+  const publicCount = totals.find(row => row.scope === 'public')?.count ?? 0
+  const privateCount = totals.find(row => row.scope === 'private')?.count ?? 0
+
+  return `<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+${buildHead({
+  title: pageTitle,
+  description,
+  siteConfig,
+  canonical,
+  ogType: 'website',
+})}
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+${buildHeader(siteConfig)}
+<main id="main-content" class="main-content symbols-page">
+  <header class="symbols-page__header">
+    <h1>SF Symbols</h1>
+    <p class="symbols-page__lede"><span id="symbols-count">${totalCount.toLocaleString('en-US')}</span> symbols indexed (${publicCount.toLocaleString('en-US')} public, ${privateCount.toLocaleString('en-US')} private). Search, click a tile, then download SVG or PNG with your own colors.</p>
+  </header>
+
+  <div class="symbols-toolbar" role="search">
+    <input id="symbols-q" class="symbols-search" type="search" placeholder="Search symbols (e.g. pencil, sparkles, sf.symbol.fill)…" aria-label="Search symbols" autocomplete="off">
+    <select id="symbols-scope" class="symbols-scope" aria-label="Scope">
+      <option value="">All scopes</option>
+      <option value="public">Public</option>
+      <option value="private">Private</option>
+    </select>
+    <span id="symbols-status" class="symbols-status" role="status" aria-live="polite"></span>
+  </div>
+
+  <div class="symbols-layout">
+    <div id="symbols-scroller" class="symbols-scroller" tabindex="0" aria-label="Symbol grid">
+      <div id="symbols-spacer" class="symbols-spacer">
+        <div id="symbols-viewport" class="symbols-viewport"></div>
+      </div>
+    </div>
+
+    <aside id="symbols-detail" class="symbols-detail" hidden aria-label="Symbol detail">
+      <button id="symbols-detail-close" class="symbols-detail__close" type="button" aria-label="Close detail">&times;</button>
+      <div class="symbols-detail__preview-wrap">
+        <img id="symbols-detail-preview" class="symbols-detail__preview" alt="" decoding="async">
+      </div>
+      <h2 id="symbols-detail-name" class="symbols-detail__name"></h2>
+      <p id="symbols-detail-scope" class="symbols-detail__scope"></p>
+
+      <section class="symbols-detail__controls" aria-label="Render options">
+        <label class="symbols-detail__field">
+          <span>Size <span id="symbols-detail-size-value">128</span>px</span>
+          <input id="symbols-detail-size" type="range" min="16" max="512" value="128">
+        </label>
+        <label class="symbols-detail__field">
+          <span>Foreground</span>
+          <span class="symbols-detail__color">
+            <input id="symbols-detail-fg" type="color" value="#000000" aria-label="Foreground color">
+            <input id="symbols-detail-fg-hex" type="text" value="#000000" pattern="^#[0-9a-fA-F]{6}$" maxlength="7" aria-label="Foreground hex">
+          </span>
+        </label>
+        <label class="symbols-detail__field">
+          <span>Background</span>
+          <span class="symbols-detail__color">
+            <input id="symbols-detail-bg" type="color" value="#ffffff" aria-label="Background color">
+            <input id="symbols-detail-bg-hex" type="text" value="" placeholder="transparent" pattern="^(?:|#[0-9a-fA-F]{6})$" maxlength="7" aria-label="Background hex">
+            <label class="symbols-detail__transparent">
+              <input id="symbols-detail-bg-transparent" type="checkbox" checked> Transparent
+            </label>
+          </span>
+        </label>
+      </section>
+
+      <section class="symbols-detail__downloads" aria-label="Downloads">
+        <a id="symbols-detail-download-svg" class="symbols-detail__download" href="#" download>Download SVG</a>
+        <a id="symbols-detail-download-png" class="symbols-detail__download" href="#" download>Download PNG</a>
+      </section>
+
+      <section class="symbols-detail__metadata" aria-label="Metadata">
+        <dl id="symbols-detail-meta"></dl>
+      </section>
+    </aside>
+  </div>
+</main>
+${buildFooter(siteConfig)}
+<script src="${escapeAttr(assetUrl(siteConfig, 'symbols-page.js'))}" defer></script>
+</body>
+</html>`
+}
+
 // ---------------------------------------------------------------------------
 // Escaping
 // ---------------------------------------------------------------------------
@@ -247,9 +437,15 @@ ${seo}
 
 function buildHeader(siteConfig) {
   const homeHref = `${siteConfig.baseUrl}/`
+  const fontsHref = `${siteConfig.baseUrl}/fonts`
+  const symbolsHref = `${siteConfig.baseUrl}/symbols`
   return `<header class="site-header">
   <nav class="site-nav">
     <a class="site-name" href="${escapeAttr(homeHref)}">${escapeAttr(siteConfig.siteName)}</a>
+    <div class="site-links">
+      <a class="site-link" href="${escapeAttr(fontsHref)}">Fonts</a>
+      <a class="site-link" href="${escapeAttr(symbolsHref)}">Symbols</a>
+    </div>
     <div class="search-container">
       <input class="search-input" type="search" placeholder="Search…" aria-label="Search documentation" autocomplete="off" aria-expanded="false" aria-controls="search-listbox" aria-activedescendant="" aria-autocomplete="list">
       <button class="search-clear" type="button" aria-label="Clear search" hidden>&times;</button>
@@ -801,7 +997,7 @@ function enrichTopicItems(sections, resolveRoleHeadings) {
  * @param {object} siteConfig - { baseUrl, siteName, buildDate }
  * @returns {string} Complete HTML page string
  */
-export function renderIndexPage(frameworks, siteConfig) {
+export function renderIndexPage(frameworks, siteConfig, opts = {}) {
   const pageTitle = siteConfig.siteName
   const frameworkList = frameworks ?? []
 
@@ -813,10 +1009,19 @@ export function renderIndexPage(frameworks, siteConfig) {
     byKind.get(kind).push(fw)
   }
 
+  // Extras hook — synthetic entries (e.g. /fonts, /symbols inside Design)
+  // that aren't real corpus roots. They render as normal list items with
+  // a custom href.
+  const extrasByKind = opts.extras ?? {}
+  for (const [kind, extras] of Object.entries(extrasByKind)) {
+    if (!byKind.has(kind)) byKind.set(kind, [])
+    byKind.get(kind).push(...extras)
+  }
+
   const sections = []
   for (const [kind, items] of byKind) {
     const itemsHtml = items.map(fw => {
-      const href = `${siteConfig.baseUrl}/docs/${escapeAttr(fw.slug)}/`
+      const href = fw.href ?? `${siteConfig.baseUrl}/docs/${escapeAttr(fw.slug)}/`
       const countBadge = fw.doc_count != null
         ? ` <span class="badge badge-count">${escapeAttr(String(fw.doc_count))}</span>`
         : ''

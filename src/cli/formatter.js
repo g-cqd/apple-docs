@@ -486,6 +486,59 @@ export function formatWebDeploy(result) {
   return lines.join('\n')
 }
 
+export function formatFonts(result) {
+  if (result.action === 'sync') {
+    return [
+      bold('Apple fonts synced'),
+      `  Font families:     ${result.families}`,
+      `  Font files:        ${result.files}`,
+      `  Font DMGs:         ${result.downloaded} downloaded, ${result.extracted} extracted`,
+    ].join('\n')
+  }
+  if (result.action === 'list') {
+    const lines = [bold('Apple Fonts')]
+    for (const family of result.families) {
+      lines.push(`  ${family.display_name} (${family.id}) — ${family.files.length} files`)
+    }
+    return lines.join('\n')
+  }
+  return JSON.stringify(result, null, 2)
+}
+
+export function formatSymbols(result) {
+  if (result.action === 'sync') {
+    const lines = [
+      bold('SF Symbols synced'),
+      `  Public symbols:    ${result.counts.public ?? 0}`,
+      `  Private symbols:   ${result.counts.private ?? 0}`,
+    ]
+    if (result.render) {
+      lines.push(
+        `  Pre-rendered SVGs: ${result.render.rendered} (skipped ${result.render.skipped}, failed ${result.render.failed})`,
+      )
+    }
+    return lines.join('\n')
+  }
+  if (result.action === 'render') {
+    return [
+      bold('SF Symbols pre-rendered'),
+      `  Total:    ${result.total}`,
+      `  Rendered: ${result.rendered}`,
+      `  Skipped:  ${result.skipped}`,
+      `  Failed:   ${result.failed}`,
+    ].join('\n')
+  }
+  if (result.action === 'search') {
+    const lines = [bold('SF Symbols')]
+    for (const symbol of result.results) {
+      const tags = [symbol.scope, ...symbol.categories.slice(0, 2)].filter(Boolean).join(', ')
+      lines.push(`  ${symbol.name}${tags ? ` — ${tags}` : ''}`)
+    }
+    return lines.join('\n')
+  }
+  return JSON.stringify(result, null, 2)
+}
+
 export function formatStorageProfile(result) {
   if (result.action === 'set') {
     return [

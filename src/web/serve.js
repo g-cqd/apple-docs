@@ -1,6 +1,6 @@
-import { join, dirname } from 'node:path'
+import { join, dirname, extname } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, buildFrameworkTreeData } from './templates.js'
+import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, buildFrameworkTreeData } from './templates.js'
 import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { createWebRenderCache } from './render-cache.js'
 import { search } from '../commands/search.js'
@@ -10,12 +10,21 @@ import { createHostBucketedLimiter } from '../lib/per-host-rate-limiter.js'
 import { sha256 } from '../lib/hash.js'
 import { initHighlighter } from '../content/highlight.js'
 import { createLru } from '../lib/lru.js'
+import { getPrerenderedSymbolPath, listAppleFonts, renderFontText, renderSfSymbol, searchSfSymbols } from '../resources/apple-assets.js'
+import { buildStoreZip } from '../lib/zip.js'
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml; charset=utf-8',
+  '.png': 'image/png',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.ttc': 'font/collection',
+  '.dfont': 'application/octet-stream',
+  '.zip': 'application/zip',
 }
 
 /**
@@ -247,9 +256,170 @@ export async function startDevServer(opts, ctx) {
       return jsonResponse({ frameworks, kinds })
     }
 
+    if (pathname === '/api/fonts') {
+      return jsonResponse(listAppleFonts(ctx), { hashable: true })
+    }
+
+    {
+      const fileMatch = pathname.match(/^\/api\/fonts\/file\/([^/]+)$/)
+      if (fileMatch) {
+        const font = db.getAppleFontFile(decodeURIComponent(fileMatch[1]))
+        if (!font) return new Response('Not Found', { status: 404 })
+        const file = Bun.file(font.file_path)
+        if (!await file.exists()) return new Response('Not Found', { status: 404 })
+        const ext = extname(font.file_path).toLowerCase()
+        return new Response(file, {
+          headers: {
+            'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${font.file_name.replaceAll('"', '')}"`,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        })
+      }
+    }
+
+    {
+      const familyMatch = pathname.match(/^\/api\/fonts\/family\/([^/]+)\.zip$/)
+      if (familyMatch) {
+        const familyId = decodeURIComponent(familyMatch[1])
+        const subset = String(url.searchParams.get('subset') ?? 'all').toLowerCase()
+        const families = db.listAppleFonts()
+        const family = families.find(f => f.id === familyId)
+        if (!family || family.files.length === 0) return new Response('Not Found', { status: 404 })
+        const filtered = family.files.filter(file => {
+          switch (subset) {
+            case 'variable': return !!file.is_variable
+            case 'static': return !file.is_variable
+            case 'remote': return file.source === 'remote'
+            case 'system': return file.source === 'system'
+            default: return true
+          }
+        })
+        if (filtered.length === 0) return new Response('Not Found', { status: 404 })
+        // Dedupe by file_name as a defensive belt; the schema upgrade in v12
+        // already enforces this at insert time.
+        const entries = []
+        const seen = new Set()
+        for (const fontFile of filtered) {
+          if (seen.has(fontFile.file_name)) continue
+          const file = Bun.file(fontFile.file_path)
+          if (!await file.exists()) continue
+          const bytes = new Uint8Array(await file.arrayBuffer())
+          entries.push({ name: fontFile.file_name, data: bytes })
+          seen.add(fontFile.file_name)
+        }
+        if (entries.length === 0) return new Response('Not Found', { status: 404 })
+        const zip = buildStoreZip(entries)
+        const fileNameSuffix = subset !== 'all' ? `-${subset}` : ''
+        return new Response(zip, {
+          headers: {
+            'Content-Type': 'application/zip',
+            'Content-Disposition': `attachment; filename="${familyId}${fileNameSuffix}.zip"`,
+            'Content-Length': String(zip.byteLength),
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        })
+      }
+    }
+
+    if (pathname === '/api/symbols/index.json') {
+      const catalog = db.listSfSymbolsCatalog()
+      return jsonResponse({ count: catalog.length, symbols: catalog }, { hashable: true })
+    }
+
+    if (pathname === '/api/symbols/search') {
+      return jsonResponse(searchSfSymbols(
+        url.searchParams.get('q') ?? '',
+        {
+          scope: url.searchParams.get('scope') || undefined,
+          limit: url.searchParams.get('limit') || undefined,
+        },
+        ctx,
+      ), { hashable: true })
+    }
+
+    if (pathname === '/api/fonts/text.svg') {
+      try {
+        const render = await renderFontText({
+          fontId: url.searchParams.get('fontId'),
+          text: url.searchParams.get('text') ?? 'Typography',
+          size: url.searchParams.get('size') ?? undefined,
+        }, ctx)
+        return textResponse(render.content, {
+          contentType: render.mimeType,
+          headers: { 'Cache-Control': 'public, max-age=86400' },
+          hashable: true,
+        })
+      } catch {
+        return new Response('Not Found', { status: 404 })
+      }
+    }
+
+    {
+      const symbolMatch = pathname.match(/^\/api\/symbols\/(public|private)\/(.+)\.(svg|png)$/)
+      if (symbolMatch) {
+        const [, scope, encodedName, format] = symbolMatch
+        const decodedName = decodeURIComponent(encodedName)
+        const fgParam = url.searchParams.get('fg') ?? url.searchParams.get('color')
+        const bgParam = url.searchParams.get('bg')
+        const sizeParam = url.searchParams.get('size')
+        // Fast path: when the request asks for the canonical theme-neutral
+        // SVG (no fg/bg/size overrides), serve the pre-rendered file from
+        // disk. The render is keyed off the SF Symbols bundle version; the
+        // tile mask URLs in the symbols-page UI hit this path so the grid
+        // never blocks on Swift.
+        if (format === 'svg' && !fgParam && !bgParam && !sizeParam) {
+          const cached = getPrerenderedSymbolPath(ctx, scope, decodedName)
+          const cachedFile = Bun.file(cached)
+          if (await cachedFile.exists()) {
+            return new Response(cachedFile, {
+              headers: {
+                'Content-Type': 'image/svg+xml; charset=utf-8',
+                'Cache-Control': 'public, max-age=31536000, immutable',
+              },
+            })
+          }
+        }
+        try {
+          const render = await renderSfSymbol({
+            scope,
+            name: decodedName,
+            format,
+            size: sizeParam ?? undefined,
+            color: fgParam ?? undefined,
+            background: bgParam ?? undefined,
+          }, ctx)
+          const file = Bun.file(render.file_path)
+          if (!await file.exists()) return new Response('Not Found', { status: 404 })
+          return new Response(file, {
+            headers: {
+              'Content-Type': render.mime_type,
+              'Cache-Control': 'public, max-age=31536000, immutable',
+            },
+          })
+        } catch {
+          return new Response('Not Found', { status: 404 })
+        }
+      }
+    }
+
     // Search page
     if (pathname === '/search' || pathname === '/search/') {
       const html = renderSearchPage(siteConfig)
+      return textResponse(html, { contentType: 'text/html; charset=utf-8' })
+    }
+
+    if (pathname === '/fonts' || pathname === '/fonts/') {
+      const families = db.listAppleFonts()
+      const html = renderFontsPage(siteConfig, { families })
+      return textResponse(html, { contentType: 'text/html; charset=utf-8' })
+    }
+
+    if (pathname === '/symbols' || pathname === '/symbols/') {
+      const totals = db.db.query(
+        "SELECT scope, COUNT(*) as count FROM sf_symbols GROUP BY scope",
+      ).all()
+      const html = renderSymbolsPage(siteConfig, { totals })
       return textResponse(html, { contentType: 'text/html; charset=utf-8' })
     }
 
@@ -263,7 +433,7 @@ export async function startDevServer(opts, ctx) {
         }
         return true
       })
-      const html = renderIndexPage(roots, siteConfig)
+      const html = renderIndexPage(roots, siteConfig, { extras: buildHomepageExtras(siteConfig) })
       return textResponse(html, { contentType: 'text/html; charset=utf-8' })
     }
 
@@ -525,4 +695,24 @@ export async function startDevServer(opts, ctx) {
   if (logger) logger.info(`Dev server running at ${serverUrl}`)
 
   return { server, url: serverUrl }
+}
+
+export function buildHomepageExtras(siteConfig) {
+  const baseUrl = siteConfig.baseUrl ?? ''
+  return {
+    design: [
+      {
+        slug: 'fonts',
+        display_name: 'Apple Fonts',
+        kind: 'design',
+        href: `${baseUrl}/fonts`,
+      },
+      {
+        slug: 'symbols',
+        display_name: 'SF Symbols',
+        kind: 'design',
+        href: `${baseUrl}/symbols`,
+      },
+    ],
+  }
 }

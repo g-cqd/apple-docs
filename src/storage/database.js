@@ -3,7 +3,7 @@ import { mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 
-const SCHEMA_VERSION = 9
+const SCHEMA_VERSION = 12
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -126,6 +126,80 @@ CREATE TABLE IF NOT EXISTS document_render_index (
   template_version TEXT    NOT NULL,
   html_hash        TEXT    NOT NULL,
   updated_at       INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS apple_font_families (
+  id              TEXT PRIMARY KEY,
+  display_name    TEXT NOT NULL,
+  source_url      TEXT,
+  source_sha256   TEXT,
+  source_size     INTEGER,
+  source_path     TEXT,
+  extracted_path  TEXT,
+  status          TEXT NOT NULL DEFAULT 'available',
+  category        TEXT,
+  updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS apple_font_files (
+  id             TEXT PRIMARY KEY,
+  family_id      TEXT NOT NULL REFERENCES apple_font_families(id) ON DELETE CASCADE,
+  file_name      TEXT NOT NULL,
+  file_path      TEXT NOT NULL,
+  postscript_name TEXT,
+  style_name     TEXT,
+  weight         TEXT,
+  variant        TEXT,
+  italic         INTEGER NOT NULL DEFAULT 0,
+  format         TEXT,
+  source         TEXT NOT NULL DEFAULT 'remote' CHECK(source IN ('remote', 'system')),
+  is_variable    INTEGER NOT NULL DEFAULT 0,
+  axes_json      TEXT,
+  sha256         TEXT,
+  size           INTEGER,
+  updated_at     TEXT NOT NULL,
+  UNIQUE(family_id, file_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_apple_font_files_family ON apple_font_files(family_id);
+
+CREATE TABLE IF NOT EXISTS sf_symbols (
+  name              TEXT NOT NULL,
+  scope             TEXT NOT NULL CHECK(scope IN ('public', 'private')),
+  categories_json   TEXT,
+  keywords_json     TEXT,
+  aliases_json      TEXT,
+  availability_json TEXT,
+  order_index       INTEGER,
+  bundle_path       TEXT,
+  bundle_version    TEXT,
+  updated_at        TEXT NOT NULL,
+  PRIMARY KEY (scope, name)
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS sf_symbols_fts USING fts5(
+  name,
+  keywords,
+  categories,
+  aliases,
+  tokenize='porter unicode61'
+);
+
+CREATE TABLE IF NOT EXISTS sf_symbol_renders (
+  cache_key    TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  scope        TEXT NOT NULL,
+  format       TEXT NOT NULL,
+  mode         TEXT,
+  weight       TEXT,
+  symbol_scale TEXT,
+  point_size   INTEGER,
+  color        TEXT,
+  file_path    TEXT NOT NULL,
+  mime_type    TEXT NOT NULL,
+  sha256       TEXT,
+  size         INTEGER,
+  updated_at   TEXT NOT NULL
 );
 `
 
@@ -495,6 +569,157 @@ export class DocsDatabase {
           html_hash        TEXT    NOT NULL,
           updated_at       INTEGER NOT NULL
         )`)
+      }
+      if (current < 10) {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS apple_font_families (
+            id              TEXT PRIMARY KEY,
+            display_name    TEXT NOT NULL,
+            source_url      TEXT,
+            source_sha256   TEXT,
+            source_size     INTEGER,
+            source_path     TEXT,
+            extracted_path  TEXT,
+            status          TEXT NOT NULL DEFAULT 'available',
+            updated_at      TEXT NOT NULL
+          );
+
+          CREATE TABLE IF NOT EXISTS apple_font_files (
+            id              TEXT PRIMARY KEY,
+            family_id       TEXT NOT NULL REFERENCES apple_font_families(id) ON DELETE CASCADE,
+            file_name       TEXT NOT NULL,
+            file_path       TEXT NOT NULL,
+            postscript_name TEXT,
+            style_name      TEXT,
+            weight          TEXT,
+            format          TEXT,
+            sha256          TEXT,
+            size            INTEGER,
+            updated_at      TEXT NOT NULL,
+            UNIQUE(family_id, file_path)
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_apple_font_files_family ON apple_font_files(family_id);
+
+          CREATE TABLE IF NOT EXISTS sf_symbols (
+            name              TEXT NOT NULL,
+            scope             TEXT NOT NULL CHECK(scope IN ('public', 'private')),
+            categories_json   TEXT,
+            keywords_json     TEXT,
+            aliases_json      TEXT,
+            availability_json TEXT,
+            order_index       INTEGER,
+            bundle_path       TEXT,
+            bundle_version    TEXT,
+            updated_at        TEXT NOT NULL,
+            PRIMARY KEY (scope, name)
+          );
+
+          CREATE VIRTUAL TABLE IF NOT EXISTS sf_symbols_fts USING fts5(
+            name,
+            keywords,
+            categories,
+            aliases,
+            tokenize='porter unicode61'
+          );
+
+          CREATE TABLE IF NOT EXISTS sf_symbol_renders (
+            cache_key    TEXT PRIMARY KEY,
+            name         TEXT NOT NULL,
+            scope        TEXT NOT NULL,
+            format       TEXT NOT NULL,
+            mode         TEXT,
+            weight       TEXT,
+            symbol_scale TEXT,
+            point_size   INTEGER,
+            color        TEXT,
+            file_path    TEXT NOT NULL,
+            mime_type    TEXT NOT NULL,
+            sha256       TEXT,
+            size         INTEGER,
+            updated_at   TEXT NOT NULL
+          );
+        `)
+      }
+      if (current < 11) {
+        this.db.exec(`
+          DROP TABLE IF EXISTS sf_symbols_fts;
+          CREATE VIRTUAL TABLE sf_symbols_fts USING fts5(
+            name,
+            keywords,
+            categories,
+            aliases,
+            tokenize='porter unicode61'
+          );
+          INSERT INTO sf_symbols_fts(rowid, name, keywords, categories, aliases)
+          SELECT rowid, name, COALESCE(keywords_json, ''), COALESCE(categories_json, ''), COALESCE(aliases_json, '')
+          FROM sf_symbols;
+        `)
+      }
+      if (current < 12) {
+        // Add typography classification columns. The unique constraint on
+        // apple_font_files moves from (family_id, file_path) to
+        // (family_id, file_name) — the same physical font discovered in
+        // multiple disk locations is now one row, with `source` recording
+        // which copy we kept (preferring 'remote' = downloaded DMG over
+        // 'system' = /Library/Fonts).
+        try { this.db.run('ALTER TABLE apple_font_families ADD COLUMN category TEXT') } catch {}
+        try { this.db.run("ALTER TABLE apple_font_files ADD COLUMN source TEXT NOT NULL DEFAULT 'remote'") } catch {}
+        try { this.db.run('ALTER TABLE apple_font_files ADD COLUMN is_variable INTEGER NOT NULL DEFAULT 0') } catch {}
+        try { this.db.run('ALTER TABLE apple_font_files ADD COLUMN axes_json TEXT') } catch {}
+        try { this.db.run('ALTER TABLE apple_font_files ADD COLUMN variant TEXT') } catch {}
+        try { this.db.run('ALTER TABLE apple_font_files ADD COLUMN italic INTEGER NOT NULL DEFAULT 0') } catch {}
+        // Drop legacy duplicates (same family + file_name across multiple
+        // disk paths) before tightening the constraint. Keep the row whose
+        // path lives under the user's apple-docs data dir so the cached
+        // download stays canonical.
+        this.db.run(`
+          DELETE FROM apple_font_files
+          WHERE rowid NOT IN (
+            SELECT MIN(rowid)
+            FROM apple_font_files
+            GROUP BY family_id, file_name
+            ORDER BY CASE WHEN file_path LIKE '%/.apple-docs/resources/fonts/extracted/%' THEN 0 ELSE 1 END
+          )
+        `)
+        // Rebuild apple_font_files with the new UNIQUE(family_id, file_name)
+        // constraint. SQLite cannot DROP/ADD UNIQUE in place, so go via a
+        // shadow table.
+        this.db.exec(`
+          CREATE TABLE apple_font_files_v12 (
+            id             TEXT PRIMARY KEY,
+            family_id      TEXT NOT NULL REFERENCES apple_font_families(id) ON DELETE CASCADE,
+            file_name      TEXT NOT NULL,
+            file_path      TEXT NOT NULL,
+            postscript_name TEXT,
+            style_name     TEXT,
+            weight         TEXT,
+            variant        TEXT,
+            italic         INTEGER NOT NULL DEFAULT 0,
+            format         TEXT,
+            source         TEXT NOT NULL DEFAULT 'remote' CHECK(source IN ('remote', 'system')),
+            is_variable    INTEGER NOT NULL DEFAULT 0,
+            axes_json      TEXT,
+            sha256         TEXT,
+            size           INTEGER,
+            updated_at     TEXT NOT NULL,
+            UNIQUE(family_id, file_name)
+          );
+          INSERT INTO apple_font_files_v12 (
+            id, family_id, file_name, file_path, postscript_name, style_name,
+            weight, variant, italic, format, source, is_variable, axes_json,
+            sha256, size, updated_at
+          )
+          SELECT
+            id, family_id, file_name, file_path, postscript_name, style_name,
+            weight, variant, COALESCE(italic, 0), format,
+            COALESCE(source, 'remote'), COALESCE(is_variable, 0), axes_json,
+            sha256, size, updated_at
+          FROM apple_font_files;
+          DROP TABLE apple_font_files;
+          ALTER TABLE apple_font_files_v12 RENAME TO apple_font_files;
+          CREATE INDEX IF NOT EXISTS idx_apple_font_files_family ON apple_font_files(family_id);
+        `)
       }
       this.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)", [String(SCHEMA_VERSION)])
       this.db.run('COMMIT')
@@ -1567,6 +1792,259 @@ export class DocsDatabase {
     `).all(framework)
   }
 
+  upsertAppleFontFamily(params) {
+    const now = new Date().toISOString()
+    this.db.query(`
+      INSERT INTO apple_font_families (
+        id, display_name, source_url, source_sha256, source_size,
+        source_path, extracted_path, status, category, updated_at
+      )
+      VALUES (
+        $id, $display_name, $source_url, $source_sha256, $source_size,
+        $source_path, $extracted_path, $status, $category, $updated_at
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        display_name = excluded.display_name,
+        source_url = COALESCE(excluded.source_url, apple_font_families.source_url),
+        source_sha256 = COALESCE(excluded.source_sha256, apple_font_families.source_sha256),
+        source_size = COALESCE(excluded.source_size, apple_font_families.source_size),
+        source_path = COALESCE(excluded.source_path, apple_font_families.source_path),
+        extracted_path = COALESCE(excluded.extracted_path, apple_font_families.extracted_path),
+        status = excluded.status,
+        category = COALESCE(excluded.category, apple_font_families.category),
+        updated_at = excluded.updated_at
+    `).run({
+      $id: params.id,
+      $display_name: params.displayName,
+      $source_url: params.sourceUrl ?? null,
+      $source_sha256: params.sourceSha256 ?? null,
+      $source_size: params.sourceSize ?? null,
+      $source_path: params.sourcePath ?? null,
+      $extracted_path: params.extractedPath ?? null,
+      $status: params.status ?? 'available',
+      $category: params.category ?? null,
+      $updated_at: now,
+    })
+  }
+
+  upsertAppleFontFile(params) {
+    const now = new Date().toISOString()
+    this.db.query(`
+      INSERT INTO apple_font_files (
+        id, family_id, file_name, file_path, postscript_name,
+        style_name, weight, variant, italic, format,
+        source, is_variable, axes_json, sha256, size, updated_at
+      )
+      VALUES (
+        $id, $family_id, $file_name, $file_path, $postscript_name,
+        $style_name, $weight, $variant, $italic, $format,
+        $source, $is_variable, $axes_json, $sha256, $size, $updated_at
+      )
+      ON CONFLICT(family_id, file_name) DO UPDATE SET
+        file_path = excluded.file_path,
+        postscript_name = COALESCE(excluded.postscript_name, apple_font_files.postscript_name),
+        style_name = COALESCE(excluded.style_name, apple_font_files.style_name),
+        weight = COALESCE(excluded.weight, apple_font_files.weight),
+        variant = COALESCE(excluded.variant, apple_font_files.variant),
+        italic = excluded.italic,
+        format = COALESCE(excluded.format, apple_font_files.format),
+        source = excluded.source,
+        is_variable = excluded.is_variable,
+        axes_json = COALESCE(excluded.axes_json, apple_font_files.axes_json),
+        sha256 = COALESCE(excluded.sha256, apple_font_files.sha256),
+        size = COALESCE(excluded.size, apple_font_files.size),
+        updated_at = excluded.updated_at
+    `).run({
+      $id: params.id,
+      $family_id: params.familyId,
+      $file_name: params.fileName,
+      $file_path: params.filePath,
+      $postscript_name: params.postscriptName ?? null,
+      $style_name: params.styleName ?? null,
+      $weight: params.weight ?? null,
+      $variant: params.variant ?? null,
+      $italic: params.italic ? 1 : 0,
+      $format: params.format ?? null,
+      $source: params.source ?? 'remote',
+      $is_variable: params.isVariable ? 1 : 0,
+      $axes_json: params.axes ? JSON.stringify(params.axes) : null,
+      $sha256: params.sha256 ?? null,
+      $size: params.size ?? null,
+      $updated_at: now,
+    })
+  }
+
+  listAppleFonts() {
+    const families = this.db.query('SELECT * FROM apple_font_families ORDER BY display_name').all()
+    const files = this.db.query('SELECT * FROM apple_font_files ORDER BY family_id, file_name').all()
+    const byFamily = new Map()
+    for (const file of files) {
+      const list = byFamily.get(file.family_id) ?? []
+      list.push(normalizeAppleFontFile(file))
+      byFamily.set(file.family_id, list)
+    }
+    return families.map(family => ({
+      ...family,
+      files: byFamily.get(family.id) ?? [],
+    }))
+  }
+
+  getAppleFontFile(id) {
+    const row = this.db.query(`
+      SELECT f.*, fam.display_name as family_display_name, fam.category as family_category
+      FROM apple_font_files f
+      JOIN apple_font_families fam ON fam.id = f.family_id
+      WHERE f.id = ?
+    `).get(id)
+    return row ? normalizeAppleFontFile(row) : null
+  }
+
+  upsertSfSymbol(params) {
+    const now = new Date().toISOString()
+    const categories = JSON.stringify(params.categories ?? [])
+    const keywords = JSON.stringify(params.keywords ?? [])
+    const aliases = JSON.stringify(params.aliases ?? [])
+    const availability = JSON.stringify(params.availability ?? null)
+    this.db.query(`
+      INSERT INTO sf_symbols (
+        name, scope, categories_json, keywords_json, aliases_json,
+        availability_json, order_index, bundle_path, bundle_version, updated_at
+      )
+      VALUES (
+        $name, $scope, $categories_json, $keywords_json, $aliases_json,
+        $availability_json, $order_index, $bundle_path, $bundle_version, $updated_at
+      )
+      ON CONFLICT(scope, name) DO UPDATE SET
+        categories_json = excluded.categories_json,
+        keywords_json = excluded.keywords_json,
+        aliases_json = excluded.aliases_json,
+        availability_json = excluded.availability_json,
+        order_index = excluded.order_index,
+        bundle_path = excluded.bundle_path,
+        bundle_version = excluded.bundle_version,
+        updated_at = excluded.updated_at
+    `).run({
+      $name: params.name,
+      $scope: params.scope,
+      $categories_json: categories,
+      $keywords_json: keywords,
+      $aliases_json: aliases,
+      $availability_json: availability,
+      $order_index: params.orderIndex ?? null,
+      $bundle_path: params.bundlePath ?? null,
+      $bundle_version: params.bundleVersion ?? null,
+      $updated_at: now,
+    })
+    this.db.query('DELETE FROM sf_symbols_fts WHERE rowid = (SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?)').run(params.scope, params.name)
+    const rowid = this.db.query('SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?').get(params.scope, params.name)?.rowid
+    if (rowid != null) {
+      this.db.query('INSERT INTO sf_symbols_fts(rowid, name, keywords, categories, aliases) VALUES (?, ?, ?, ?, ?)').run(
+        rowid,
+        params.name,
+        (params.keywords ?? []).join(' '),
+        (params.categories ?? []).join(' '),
+        (params.aliases ?? []).join(' '),
+      )
+    }
+  }
+
+  getSfSymbol(scope, name) {
+    const row = this.db.query('SELECT * FROM sf_symbols WHERE scope = ? AND name = ?').get(scope, name)
+    return row ? normalizeSfSymbolRow(row) : null
+  }
+
+  /**
+   * Lightweight catalog of every indexed symbol — name, scope, categories,
+   * keywords. Powers the /api/symbols/index.json endpoint that feeds the
+   * client-side virtualized grid + search. Avoids shipping the JSON blobs
+   * we don't need (availability, aliases, bundle metadata) so the gzipped
+   * payload stays small even with ~10k entries.
+   */
+  listSfSymbolsCatalog() {
+    const rows = this.db.query(`
+      SELECT name, scope, categories_json, keywords_json
+      FROM sf_symbols
+      ORDER BY scope, COALESCE(order_index, 999999), name
+    `).all()
+    return rows.map(row => ({
+      name: row.name,
+      scope: row.scope,
+      categories: parseJsonArray(row.categories_json),
+      keywords: parseJsonArray(row.keywords_json),
+    }))
+  }
+
+  searchSfSymbols(query = '', opts = {}) {
+    const limit = Math.min(Math.max(Number.parseInt(opts.limit ?? 100, 10) || 100, 1), 500)
+    const scope = opts.scope ?? null
+    const q = String(query ?? '').trim()
+    const parseRows = rows => rows.map(normalizeSfSymbolRow)
+    if (!q) {
+      return parseRows(this.db.query(`
+        SELECT * FROM sf_symbols
+        WHERE ($scope IS NULL OR scope = $scope)
+        ORDER BY scope, COALESCE(order_index, 999999), name
+        LIMIT $limit
+      `).all({ $scope: scope, $limit: limit }))
+    }
+    try {
+      return parseRows(this.db.query(`
+        SELECT s.*
+        FROM sf_symbols_fts f
+        JOIN sf_symbols s ON s.rowid = f.rowid
+        WHERE sf_symbols_fts MATCH $query
+          AND ($scope IS NULL OR s.scope = $scope)
+        ORDER BY bm25(sf_symbols_fts), COALESCE(s.order_index, 999999), s.name
+        LIMIT $limit
+      `).all({ $query: buildResourceFtsQuery(q), $scope: scope, $limit: limit }))
+    } catch {
+      return parseRows(this.db.query(`
+        SELECT * FROM sf_symbols
+        WHERE ($scope IS NULL OR scope = $scope)
+          AND (
+            LOWER(name) LIKE $like OR LOWER(COALESCE(keywords_json, '')) LIKE $like
+            OR LOWER(COALESCE(categories_json, '')) LIKE $like
+            OR LOWER(COALESCE(aliases_json, '')) LIKE $like
+          )
+        ORDER BY scope, COALESCE(order_index, 999999), name
+        LIMIT $limit
+      `).all({ $scope: scope, $like: `%${q.toLowerCase()}%`, $limit: limit }))
+    }
+  }
+
+  upsertSfSymbolRender(params) {
+    const now = new Date().toISOString()
+    this.db.query(`
+      INSERT OR REPLACE INTO sf_symbol_renders (
+        cache_key, name, scope, format, mode, weight, symbol_scale,
+        point_size, color, file_path, mime_type, sha256, size, updated_at
+      )
+      VALUES (
+        $cache_key, $name, $scope, $format, $mode, $weight, $symbol_scale,
+        $point_size, $color, $file_path, $mime_type, $sha256, $size, $updated_at
+      )
+    `).run({
+      $cache_key: params.cacheKey,
+      $name: params.name,
+      $scope: params.scope,
+      $format: params.format,
+      $mode: params.mode ?? null,
+      $weight: params.weight ?? null,
+      $symbol_scale: params.symbolScale ?? null,
+      $point_size: params.pointSize ?? null,
+      $color: params.color ?? null,
+      $file_path: params.filePath,
+      $mime_type: params.mimeType,
+      $sha256: params.sha256 ?? null,
+      $size: params.size ?? null,
+      $updated_at: now,
+    })
+  }
+
+  getSfSymbolRender(cacheKey) {
+    return this.db.query('SELECT * FROM sf_symbol_renders WHERE cache_key = ?').get(cacheKey) ?? null
+  }
+
   getSchemaVersion() {
     const row = this.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
     return row ? Number.parseInt(row.value, 10) : 0
@@ -1587,4 +2065,43 @@ export class DocsDatabase {
   close() {
     this.db.close()
   }
+}
+
+function normalizeAppleFontFile(row) {
+  return {
+    ...row,
+    italic: row.italic === 1 || row.italic === true,
+    is_variable: row.is_variable === 1 || row.is_variable === true,
+    axes: parseJsonArray(row.axes_json),
+  }
+}
+
+function normalizeSfSymbolRow(row) {
+  return {
+    ...row,
+    categories: parseJsonArray(row.categories_json),
+    keywords: parseJsonArray(row.keywords_json),
+    aliases: parseJsonArray(row.aliases_json),
+    availability: parseJsonValue(row.availability_json),
+  }
+}
+
+function parseJsonArray(value) {
+  const parsed = parseJsonValue(value)
+  return Array.isArray(parsed) ? parsed : []
+}
+
+function parseJsonValue(value) {
+  if (value == null) return null
+  try { return JSON.parse(value) } catch { return null }
+}
+
+function buildResourceFtsQuery(query) {
+  const terms = String(query)
+    .toLowerCase()
+    .split(/[^a-z0-9_.-]+/i)
+    .map(term => term.trim())
+    .filter(Boolean)
+    .slice(0, 8)
+  return terms.map(term => `"${term.replaceAll('"', '""')}"*`).join(' OR ') || '""'
 }

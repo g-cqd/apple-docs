@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile, formatWebBuild, formatWebDeploy, formatTaxonomy } from './src/cli/formatter.js'
+import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile, formatWebBuild, formatWebDeploy, formatTaxonomy, formatFonts, formatSymbols } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
@@ -356,6 +356,63 @@ try {
         downgrade: !!flags.downgrade,
       }, ctx)
       formatter = formatSetup
+      break
+    }
+
+    case 'fonts': {
+      const { fonts: fontsCmd } = await import('./src/commands/fonts.js')
+      switch (subcommand ?? 'list') {
+        case 'sync':
+          result = await fontsCmd({ action: 'sync', download: !!flags.download }, ctx)
+          formatter = formatFonts
+          break
+        case 'list':
+          result = await fontsCmd({ action: 'list' }, ctx)
+          formatter = formatFonts
+          break
+        default:
+          showHelp('fonts')
+          process.exit(subcommand ? 1 : 0)
+      }
+      break
+    }
+
+    case 'symbols': {
+      const { symbols: symbolsCmd } = await import('./src/commands/symbols.js')
+      switch (subcommand ?? 'search') {
+        case 'sync':
+          result = await symbolsCmd({
+            action: 'sync',
+            includePrivate: !flags['exclude-private'],
+            excludePrivate: !!flags['exclude-private'],
+            render: !!flags.render,
+            concurrency: flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined,
+            resetCache: !!flags['reset-cache'],
+          }, ctx)
+          formatter = formatSymbols
+          break
+        case 'render':
+          result = await symbolsCmd({
+            action: 'render',
+            scope: flags.scope,
+            concurrency: flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined,
+            resetCache: !!flags['reset-cache'],
+          }, ctx)
+          formatter = formatSymbols
+          break
+        case 'search':
+          result = await symbolsCmd({
+            action: 'search',
+            query: positional.join(' '),
+            scope: flags.scope,
+            limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined,
+          }, ctx)
+          formatter = formatSymbols
+          break
+        default:
+          showHelp('symbols')
+          process.exit(subcommand ? 1 : 0)
+      }
       break
     }
 

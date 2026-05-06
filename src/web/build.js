@@ -4,7 +4,8 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
 import { appendFile } from 'node:fs/promises'
 import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
-import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, buildFrameworkTreeData } from './templates.js'
+import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, buildFrameworkTreeData } from './templates.js'
+import { buildHomepageExtras } from './serve.js'
 import { generateSearchArtifacts } from './search-artifacts.js'
 import { generateSitemaps } from './sitemap.js'
 import { createWebRenderCache } from './render-cache.js'
@@ -175,7 +176,7 @@ export async function buildStaticSite(opts, ctx) {
 
     // 1. Create directory structure (always — incremental builds may target a
     // partially populated dir, but the subdirs must exist either way).
-    for (const sub of ['assets', 'docs', 'data/search', 'data/frameworks', 'worker', 'search']) {
+    for (const sub of ['assets', 'docs', 'data/search', 'data/frameworks', 'worker', 'search', 'fonts', 'symbols']) {
       ensureDir(join(buildDir, sub))
     }
 
@@ -196,7 +197,7 @@ export async function buildStaticSite(opts, ctx) {
     const listingBundle = [readAsset('collection-filters.js'), readAsset('tree-view.js')].join('\n')
     await Bun.write(join(buildDir, 'assets', 'core.js'), coreBundle)
     await Bun.write(join(buildDir, 'assets', 'listing.js'), listingBundle)
-    for (const file of ['search-page.js', 'lang-toggle.js']) {
+    for (const file of ['search-page.js', 'fonts-page.js', 'symbols-page.js', 'lang-toggle.js']) {
       const src = join(srcWebDir, 'assets', file)
       if (existsSync(src)) {
         await Bun.write(join(buildDir, 'assets', file), readFileSync(src, 'utf8'))
@@ -237,10 +238,18 @@ export async function buildStaticSite(opts, ctx) {
     // worker, and the homepage iterates `roots` to enumerate every kind →
     // letting workers write here would publish a partition-only homepage.
     if (isOrchestratorRun) {
-      const indexHtml = renderIndexPage(roots, siteConfig)
+      const indexHtml = renderIndexPage(roots, siteConfig, { extras: buildHomepageExtras(siteConfig) })
       await Bun.write(join(buildDir, 'index.html'), indexHtml)
       const searchHtml = renderSearchPage(siteConfig)
       await Bun.write(join(buildDir, 'search', 'index.html'), searchHtml)
+      const families = db.listAppleFonts()
+      const fontsHtml = renderFontsPage(siteConfig, { families })
+      await Bun.write(join(buildDir, 'fonts', 'index.html'), fontsHtml)
+      const symbolTotals = db.db.query(
+        "SELECT scope, COUNT(*) as count FROM sf_symbols GROUP BY scope",
+      ).all()
+      const symbolsHtml = renderSymbolsPage(siteConfig, { totals: symbolTotals })
+      await Bun.write(join(buildDir, 'symbols', 'index.html'), symbolsHtml)
     }
 
     // 5. Build document pages.

@@ -2,7 +2,7 @@
  * Commands that accept a second-level subcommand (e.g. `mcp start`, `web serve`).
  * For these, the next non-flag argument after the command is consumed as `subcommand`.
  */
-const COMMAND_FAMILIES = new Set(['mcp', 'web', 'storage', 'snapshot', 'index'])
+const COMMAND_FAMILIES = new Set(['mcp', 'web', 'storage', 'snapshot', 'index', 'fonts', 'symbols'])
 
 /**
  * Flags that never consume the next positional argument as their value.
@@ -30,6 +30,11 @@ const BOOLEAN_FLAGS = new Set([
   'skip-git-auth',
   'incremental',
   'skip-docs',
+  'download',
+  'include-private',
+  'exclude-private',
+  'render',
+  'reset-cache',
 ])
 
 /**

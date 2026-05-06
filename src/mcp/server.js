@@ -11,6 +11,7 @@ import { lookup } from '../commands/lookup.js'
 import { frameworks } from '../commands/frameworks.js'
 import { browse } from '../commands/browse.js'
 import { taxonomy } from '../commands/taxonomy.js'
+import { listAppleFonts, renderFontText, renderSfSymbol, searchSfSymbols } from '../resources/apple-assets.js'
 import {
   MIN_PAGINATED_MAX_CHARS,
   buildMatchedDocumentPayload,
@@ -253,6 +254,65 @@ export function createServer(ctx, deps = {}) {
     }),
   )
 
+  server.tool(
+    'search_sf_symbols',
+    'Search indexed public and private SF Symbols by symbol name, category, alias, or keyword. Run `apple-docs symbols sync` first if no symbols are indexed.',
+    {
+      query: z.string().optional().describe('Symbol name or keyword query. Empty returns ordered symbols.'),
+      scope: z.enum(['public', 'private']).optional().describe('Limit search to public or private symbols.'),
+      limit: z.coerce.number().int().min(1).max(500).optional().describe('Max results (default 100).'),
+    },
+    cache.wrap('search_sf_symbols', async (args) => {
+      return createMcpTextResult(searchSfSymbols(args.query ?? '', args, ctx))
+    }),
+  )
+
+  server.tool(
+    'list_apple_fonts',
+    'List indexed Apple font families and font files, including download-ready file identifiers. Run `apple-docs fonts sync` first if no fonts are indexed.',
+    {},
+    cache.wrap('list_apple_fonts', async () => {
+      return createMcpTextResult(listAppleFonts(ctx))
+    }),
+  )
+
+  server.tool(
+    'render_sf_symbol',
+    'Render an indexed SF Symbol to SVG or PNG and return the generated asset metadata. SVG is text; PNG bytes are available from the returned file path or resource URI.',
+    {
+      name: z.string().describe('SF Symbol name, e.g. pencil.and.sparkles'),
+      scope: z.enum(['public', 'private']).optional().describe('Symbol scope (default public).'),
+      format: z.enum(['svg', 'png']).optional().describe('Output format (default png).'),
+      size: z.coerce.number().int().min(8).max(1024).optional().describe('Square output size in points/pixels depending on format.'),
+      color: z.string().optional().describe('Foreground hex color such as #000000. SVG also accepts the literal "currentColor" so the rendered path inherits the host page CSS color.'),
+      background: z.string().optional().describe('Background hex color such as #ffffff, or "transparent"/empty for no background fill. Default: transparent.'),
+    },
+    async (args) => {
+      const render = await renderSfSymbol(args, ctx)
+      const payload = {
+        ...render,
+        resourceUri: `apple-docs://sf-symbol/${render.scope}/${encodeURIComponent(render.name)}.${render.format}`,
+      }
+      if (render.format === 'svg') {
+        payload.svg = await Bun.file(render.file_path).text()
+      }
+      return createMcpTextResult(payload)
+    },
+  )
+
+  server.tool(
+    'render_font_text',
+    'Render a text preview using an indexed Apple font file. Returns SVG markup.',
+    {
+      fontId: z.string().describe('Font file id from list_apple_fonts.'),
+      text: z.string().optional().describe('Text to render.'),
+      size: z.coerce.number().int().min(8).max(512).optional().describe('Point size.'),
+    },
+    async (args) => {
+      return createMcpTextResult(await renderFontText(args, ctx))
+    },
+  )
+
   // --- Resources ---
 
   server.resource(
@@ -304,6 +364,52 @@ export function createServer(ctx, deps = {}) {
           uri: uri.href,
           text: JSON.stringify(projectBrowse(payload), null, 2),
           mimeType: 'application/json',
+        }],
+      }
+    },
+  )
+
+  server.resource(
+    'sf-symbol',
+    new ResourceTemplate('apple-docs://sf-symbol/{scope}/{name}.{format}', { list: undefined }),
+    { description: 'Read or render an SF Symbol asset', mimeType: 'application/octet-stream' },
+    async (uri, { scope, name, format }) => {
+      const requestedFormat = String(format) === 'svg' ? 'svg' : 'png'
+      const render = await renderSfSymbol({
+        scope: String(scope),
+        name: decodeURIComponent(String(name)),
+        format: requestedFormat,
+        size: uri.searchParams.get('size') ?? undefined,
+        color: uri.searchParams.get('color') ?? uri.searchParams.get('fg') ?? undefined,
+        background: uri.searchParams.get('background') ?? uri.searchParams.get('bg') ?? undefined,
+      }, ctx)
+      const file = Bun.file(render.file_path)
+      const content = requestedFormat === 'svg'
+        ? { text: await file.text(), mimeType: render.mime_type }
+        : { blob: Buffer.from(await file.arrayBuffer()).toString('base64'), mimeType: render.mime_type }
+      return {
+        contents: [{
+          uri: uri.href,
+          ...content,
+        }],
+      }
+    },
+  )
+
+  server.resource(
+    'font',
+    new ResourceTemplate('apple-docs://font/{id}', { list: undefined }),
+    { description: 'Read an indexed Apple font file', mimeType: 'application/octet-stream' },
+    async (uri, { id }) => {
+      const font = ctx.db.getAppleFontFile(String(id))
+      if (!font) throw new Error(`Font file not found: ${id}`)
+      const file = Bun.file(font.file_path)
+      if (!await file.exists()) throw new Error(`Font file missing on disk: ${font.file_path}`)
+      return {
+        contents: [{
+          uri: uri.href,
+          blob: Buffer.from(await file.arrayBuffer()).toString('base64'),
+          mimeType: font.format === 'ttf' ? 'font/ttf' : font.format === 'otf' ? 'font/otf' : 'application/octet-stream',
         }],
       }
     },

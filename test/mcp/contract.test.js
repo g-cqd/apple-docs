@@ -182,6 +182,14 @@ beforeEach(async () => {
     db.upsertRoot(`extra-root-${i}`, `Extra Root ${i}`, 'framework', 'test')
   }
 
+  db.upsertSfSymbol({
+    name: 'pencil.and.sparkles',
+    scope: 'private',
+    categories: ['editing'],
+    keywords: ['pencil', 'sparkles', 'write'],
+    orderIndex: 0,
+  })
+
   const logger = createLogger('error')
   const ctx = { db, dataDir: '/tmp/apple-docs-test', logger }
 
@@ -202,11 +210,19 @@ afterEach(async () => {
 })
 
 describe('MCP contract — tools', () => {
-  test('lists all 5 tools', async () => {
+  test('lists all tools', async () => {
     const result = await client.listTools()
     const names = result.tools.map((t) => t.name).sort()
     expect(names).toEqual([
-      'browse', 'list_frameworks', 'list_taxonomy', 'read_doc', 'search_docs',
+      'browse',
+      'list_apple_fonts',
+      'list_frameworks',
+      'list_taxonomy',
+      'read_doc',
+      'render_font_text',
+      'render_sf_symbol',
+      'search_docs',
+      'search_sf_symbols',
     ])
   })
 
@@ -230,6 +246,17 @@ describe('MCP contract — tools', () => {
     // MCP projection strips trigramAvailable/bodyIndexAvailable from responses.
     expect(parsed.trigramAvailable).toBeUndefined()
     expect(parsed.bodyIndexAvailable).toBeUndefined()
+  })
+
+  test('search_sf_symbols returns indexed private symbols', async () => {
+    const result = await client.callTool({
+      name: 'search_sf_symbols',
+      arguments: { query: 'sparkles', scope: 'private' },
+    })
+    expect(result.isError).toBeFalsy()
+    const payload = JSON.parse(result.content[0].text)
+    expect(payload.results[0].name).toBe('pencil.and.sparkles')
+    expect(payload.results[0].scope).toBe('private')
   })
 
   test('search_docs supports source filtering', async () => {

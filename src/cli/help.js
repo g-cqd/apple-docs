@@ -26,6 +26,11 @@ Commands:
   web build            Build static documentation site
   web deploy           Show deployment instructions
 
+  fonts sync           Index Apple font families and files (--download to fetch DMGs)
+  fonts list           List indexed Apple fonts
+  symbols sync         Index public and private SF Symbols
+  symbols search       Search indexed SF Symbols
+
   storage stats        Show disk usage breakdown
   storage gc           Garbage collect cached files
   storage materialize  Force-render markdown or HTML
@@ -300,6 +305,54 @@ Options:
                    credential helper to authenticate release downloads.
   --skip-git-auth  Skip local-credential detection for this run.
   --json           Output results as JSON
+`.trim(),
+
+  fonts: `
+Usage: apple-docs fonts <subcommand> [options]
+
+Manage Apple typography (SF Pro, SF Mono, New York, …).
+
+Subcommands:
+  sync                 Index Apple font families and font files
+  list                 List indexed Apple font families (default)
+
+Sync options:
+  --download           Download Apple font DMGs before indexing local files
+
+Examples:
+  apple-docs fonts sync --download
+  apple-docs fonts list
+`.trim(),
+
+  symbols: `
+Usage: apple-docs symbols <subcommand> [options]
+
+Manage SF Symbols (public and private).
+
+Subcommands:
+  sync                 Index public and private SF Symbols from local CoreGlyphs bundles
+  render               Pre-render every indexed symbol to SVG on disk (uses Apple's vector PDF pipeline + pdftocairo)
+  search [query]       Search indexed SF Symbols (default)
+
+Sync options:
+  --exclude-private    Skip the private CoreGlyphs bundle
+  --render             Pre-render SVGs after indexing (chains symbols sync + symbols render)
+  --concurrency <n>    Parallel Swift workers (default: 4)
+  --reset-cache        Delete the existing SVG cache before rendering
+
+Render options:
+  --scope <scope>      Render only public or private (default: both)
+  --concurrency <n>    Parallel Swift workers (default: 4)
+  --reset-cache        Delete the existing SVG cache before rendering
+
+Search options:
+  --scope <scope>      public or private
+  --limit <n>          Max results (default: 100)
+
+Examples:
+  apple-docs symbols sync --render --concurrency 8
+  apple-docs symbols render --scope public
+  apple-docs symbols search "pencil sparkles" --scope private
 `.trim(),
 
   snapshot: `

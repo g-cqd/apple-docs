@@ -101,6 +101,43 @@ beforeEach(async () => {
     })
   }
 
+  const fontPath = `/tmp/apple-docs-web-test-font-${process.pid}.ttf`
+  const variableFontPath = `/tmp/apple-docs-web-test-font-${process.pid}-vf.ttf`
+  await Bun.write(fontPath, 'fake-font')
+  await Bun.write(variableFontPath, 'fake-variable-font')
+  db.upsertAppleFontFamily({ id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif' })
+  db.upsertAppleFontFile({
+    id: 'font-web-test',
+    familyId: 'sf-pro',
+    fileName: 'SF-Pro-Display-Bold.ttf',
+    filePath: fontPath,
+    format: 'ttf',
+    size: 9,
+    source: 'remote',
+    variant: 'Display',
+    weight: 'Bold',
+    italic: false,
+    isVariable: false,
+  })
+  db.upsertAppleFontFile({
+    id: 'font-web-test-vf',
+    familyId: 'sf-pro',
+    fileName: 'SF-Pro.ttf',
+    filePath: variableFontPath,
+    format: 'ttf',
+    size: 18,
+    source: 'remote',
+    isVariable: true,
+    axes: [{ tag: 'wght', min: 100, default: 400, max: 900 }],
+  })
+  db.upsertSfSymbol({
+    name: 'pencil.and.sparkles',
+    scope: 'private',
+    categories: ['editing'],
+    keywords: ['sparkles', 'write'],
+    orderIndex: 0,
+  })
+
   ctx = { db, dataDir: '/tmp', logger: { info() {}, warn() {}, error() {} } }
   serverInfo = await startDevServer({ port: 0 }, ctx)
 })
@@ -265,6 +302,78 @@ describe('Dev Server (P7-E)', () => {
   test('serves search page at /search/', async () => {
     const res = await fetch(`${serverInfo.url}/search/`)
     expect(res.status).toBe(200)
+  })
+
+  test('serves /fonts page and font APIs', async () => {
+    const page = await fetch(`${serverInfo.url}/fonts`)
+    expect(page.status).toBe(200)
+    expect(await page.text()).toContain('Apple Fonts')
+
+    const fonts = await fetch(`${serverInfo.url}/api/fonts`)
+    expect(fonts.status).toBe(200)
+    const fontsJson = await fonts.json()
+    expect(fontsJson.families[0].files[0].id).toBe('font-web-test')
+
+    const fontFile = await fetch(`${serverInfo.url}/api/fonts/file/font-web-test`)
+    expect(fontFile.status).toBe(200)
+    expect(fontFile.headers.get('content-type')).toContain('font/ttf')
+    expect(await fontFile.text()).toBe('fake-font')
+
+    const textSvg = await fetch(`${serverInfo.url}/api/fonts/text.svg?fontId=font-web-test&text=SF`)
+    expect(textSvg.status).toBe(200)
+    expect(textSvg.headers.get('content-type')).toContain('image/svg+xml')
+    expect(await textSvg.text()).toContain('<svg')
+
+    const familyZip = await fetch(`${serverInfo.url}/api/fonts/family/sf-pro.zip`)
+    expect(familyZip.status).toBe(200)
+    expect(familyZip.headers.get('content-type')).toBe('application/zip')
+    const buf = new Uint8Array(await familyZip.arrayBuffer())
+    // PK\x03\x04 local file header magic
+    expect(buf[0]).toBe(0x50)
+    expect(buf[1]).toBe(0x4b)
+    expect(buf[2]).toBe(0x03)
+    expect(buf[3]).toBe(0x04)
+
+    // Variable subset must contain only the VF entry, not the static one.
+    const variableZip = await fetch(`${serverInfo.url}/api/fonts/family/sf-pro.zip?subset=variable`)
+    expect(variableZip.status).toBe(200)
+    const variableBytes = new Uint8Array(await variableZip.arrayBuffer())
+    const variableText = new TextDecoder('latin1').decode(variableBytes)
+    expect(variableText).toContain('SF-Pro.ttf')
+    expect(variableText).not.toContain('SF-Pro-Display-Bold.ttf')
+
+    const staticZip = await fetch(`${serverInfo.url}/api/fonts/family/sf-pro.zip?subset=static`)
+    expect(staticZip.status).toBe(200)
+    const staticText = new TextDecoder('latin1').decode(new Uint8Array(await staticZip.arrayBuffer()))
+    expect(staticText).toContain('SF-Pro-Display-Bold.ttf')
+    expect(staticText).not.toContain('SF-Pro.ttf"')
+  })
+
+  test('home page surfaces fonts and symbols inside the design section', async () => {
+    const res = await fetch(`${serverInfo.url}/`)
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('id="design"')
+    expect(html).toMatch(/<a href="\/fonts">Apple Fonts<\/a>/)
+    expect(html).toMatch(/<a href="\/symbols">SF Symbols<\/a>/)
+  })
+
+  test('serves /symbols page and symbol APIs', async () => {
+    const page = await fetch(`${serverInfo.url}/symbols`)
+    expect(page.status).toBe(200)
+    expect(await page.text()).toContain('SF Symbols')
+
+    const index = await fetch(`${serverInfo.url}/api/symbols/index.json`)
+    expect(index.status).toBe(200)
+    const indexJson = await index.json()
+    expect(Array.isArray(indexJson.symbols)).toBe(true)
+    expect(indexJson.count).toBe(indexJson.symbols.length)
+    expect(indexJson.symbols.find(s => s.name === 'pencil.and.sparkles')).toBeTruthy()
+
+    const search = await fetch(`${serverInfo.url}/api/symbols/search?q=sparkles&scope=private`)
+    expect(search.status).toBe(200)
+    const searchJson = await search.json()
+    expect(searchJson.results[0].name).toBe('pencil.and.sparkles')
   })
 
   test('/api/search accepts kind filter', async () => {

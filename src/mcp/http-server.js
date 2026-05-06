@@ -30,6 +30,9 @@ const HEAVY_TOOLS = new Set([
   'search_docs',
   'read_doc',
   'browse',
+  'search_sf_symbols',
+  'render_sf_symbol',
+  'render_font_text',
 ])
 
 // Active permits. Without a worker pool, heavy SQL work blocks the single
