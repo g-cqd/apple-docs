@@ -318,16 +318,30 @@ export async function buildStaticSite(opts, ctx) {
         const sectionsDigest = computeSectionsDigest(sections)
         const filePath = join(buildDir, 'docs', doc.key, 'index.html')
 
-        // Incremental skip: render-index entry matches and the on-disk file
-        // still exists. The existsSync guard catches the case where someone
-        // wiped `dist/web` but left the DB intact.
-        if (incremental) {
+        // Incremental skip. Two-tier:
+        //   1. The render-index says nothing changed since the last
+        //      successful render *and* the on-disk file is there → skip.
+        //   2. The render-index is stale or missing but the on-disk file is
+        //      still there and the sections haven't changed → also skip.
+        //      Template-version churn alone (e.g. tweaking a copy line in
+        //      templates.js between deploys) doesn't justify re-rendering
+        //      346 K pages each time. `--full` is the explicit lever for
+        //      that case.
+        //
+        // Either path persists the matching render-index entry under the
+        // current template version so subsequent incremental runs hit the
+        // fast path 1.
+        if (incremental && existsSync(filePath)) {
           const cached = db.getRenderIndexEntry(doc.id)
-          if (cached
-            && cached.sections_digest === sectionsDigest
-            && cached.template_version === templateVersion
-            && existsSync(filePath)
-          ) {
+          if (cached?.sections_digest === sectionsDigest) {
+            if (cached.template_version !== templateVersion) {
+              db.upsertRenderIndexEntry({
+                docId: doc.id,
+                sectionsDigest,
+                templateVersion,
+                htmlHash: cached.html_hash,
+              })
+            }
             pagesSkipped++
             tickProgress()
             return
