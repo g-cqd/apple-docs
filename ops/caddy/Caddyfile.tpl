@@ -21,7 +21,11 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 	bind 127.0.0.1
 
 	root * ${STATIC_DIR}
-	encode zstd br gzip
+	# Stock Caddy 2.x ships gzip + zstd; brotli requires a custom build with
+	# the `caddyserver/cache-handler` / `dunglas/caddy-cbrotli` plugin. We
+	# pre-compress `.br` sidecars at build time and Cloudflare re-compresses
+	# at the edge anyway, so on-the-fly `br` here is unnecessary.
+	encode zstd gzip
 
 	log {
 		output file ${OPS_DIR}/logs/caddy-access.log {
@@ -81,6 +85,11 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 
 	# Default route: serve from disk. `try_files` resolves clean URLs like
 	# `/docs/swiftui/` to `/docs/swiftui/index.html`.
+	#
+	# `precompressed` accepts `br` even though stock Caddy can't *encode*
+	# brotli: it just ships the `.br` sidecar verbatim when the client
+	# advertises `br` in Accept-Encoding. Brotli decoding is universal in
+	# every modern client; only the encoder requires a plugin.
 	handle {
 		try_files {path} {path}/index.html
 		file_server {
