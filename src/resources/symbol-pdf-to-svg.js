@@ -405,19 +405,25 @@ function assembleSvg(fills, opts) {
   // on top of whatever's already in the tree. Each alpha=0 fill is a
   // destination-out blend — it carves pixels from *every* visible layer
   // painted so far, regardless of which visible layer drew them. We model
-  // that by wrapping the entire current tree in a `<g mask="...">` at every
-  // cut; subsequent visible layers are appended outside that wrapper, so
-  // they correctly escape earlier cuts but become subject to any later one.
-  // Examples:
-  //   [V1]           → V1
-  //   [V1, C1]       → <g mask=C1>V1</g>
-  //   [V1, C1, V2]   → <g mask=C1>V1</g>, V2
-  //   [V1, C1, V2, C2] → <g mask=C2><g mask=C1>V1</g>, V2</g>
+  // that by wrapping the entire current tree in a `<g clip-path="…">` at
+  // every cut; subsequent visible layers are appended outside that wrapper
+  // so they correctly escape earlier cuts but become subject to any later
+  // one. Examples:
+  //   [V1]             → V1
+  //   [V1, C1]         → <g clip-path=C1>V1</g>
+  //   [V1, C1, V2]     → <g clip-path=C1>V1</g>, V2
+  //   [V1, C1, V2, C2] → <g clip-path=C2><g clip-path=C1>V1</g>, V2</g>
+  //
+  // We use clip-path instead of `<mask>` because clip-paths are purely
+  // geometric: identical results whether the SVG is rendered inline,
+  // through `<img>`, or as a CSS `mask-image` source. Masks rely on alpha
+  // vs. luminance interpretation, which differs by context.
   const fillColor = String(color)
   const escapedName = escape(name)
-  const idBase = `m${(Math.random().toString(36).slice(2, 8))}`
+  const idBase = `c${(Math.random().toString(36).slice(2, 8))}`
   let defs = ''
   let nodes = []
+  const vbRect = `M0 0H${formatNumber(vbW)}V${formatNumber(vbH)}H0Z`
   fills.forEach((fill, idx) => {
     if (fill.alpha > 0) {
       const d = subpathsToD(fill.subpaths, flipX, flipY)
@@ -425,14 +431,16 @@ function assembleSvg(fills, opts) {
       nodes.push(`<path d="${d}" fill="${fillColor}"${ruleAttr}/>`)
     } else {
       if (nodes.length === 0) return
-      const maskId = `${idBase}_${idx}`
+      const clipId = `${idBase}_${idx}`
       const cutD = subpathsToD(fill.subpaths, flipX, flipY)
-      const cutRule = fill.subpaths.some(sp => sp.fillRule === 'evenodd') ? ' fill-rule="evenodd"' : ''
-      defs += `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}">`
-        + `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="white"/>`
-        + `<path d="${cutD}" fill="black"${cutRule}/>`
-        + `</mask>`
-      nodes = [`<g mask="url(#${maskId})">${nodes.join('')}</g>`]
+      // clip-rule="evenodd" + (viewBox rect ∪ cut shape) = inside-the-rect
+      // minus inside-the-cut. The rect covers the whole canvas so any
+      // subsequent visible layer it wraps survives the clip outside the
+      // cut shape.
+      defs += `<clipPath id="${clipId}" clipPathUnits="userSpaceOnUse">`
+        + `<path d="${vbRect} ${cutD}" clip-rule="evenodd"/>`
+        + `</clipPath>`
+      nodes = [`<g clip-path="url(#${clipId})">${nodes.join('')}</g>`]
     }
   })
   const body = nodes.join('')
