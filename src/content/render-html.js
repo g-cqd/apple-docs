@@ -687,11 +687,21 @@ function markdownToHtml(md) {
       continue
     }
 
-    // ATX Heading
-    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/)
+    // ATX Heading. `.*` (not `.+`) on the trailing capture so a line like
+    // `### ` (hashes + space + nothing) still matches and advances `i`.
+    // Without it, the line is rejected by the heading regex but matched by
+    // the paragraph-skip regex `^#{1,6}\s`, which leaves the outer loop
+    // spinning on the same line forever — the JS thread pins, the per-page
+    // timeout can't fire (no event-loop turn to schedule it), and the build
+    // wedges. Bisected on packages/417-72ki/stubnetworkkit + several swift-
+    // evolution proposals on 2026-05-06.
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/)
     if (headingMatch) {
       const level = Math.min(headingMatch[1].length + 1, 6) // bump by 1 since h2 is section heading
-      out.push(`<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`)
+      const headingText = headingMatch[2].trim()
+      if (headingText) {
+        out.push(`<h${level}>${inlineMarkdown(headingText)}</h${level}>`)
+      }
       i++
       continue
     }
@@ -751,6 +761,14 @@ function markdownToHtml(md) {
     }
     if (paraLines.length > 0) {
       out.push(`<p>${inlineMarkdown(paraLines.join(' '))}</p>`)
+    } else {
+      // Defense-in-depth: if no other branch consumed the line and the
+      // paragraph collector rejected it (e.g. an `> ` blockquote followed
+      // by something that fails every guard, or a future regex tweak that
+      // introduces a new gap), advance `i` anyway so the outer loop cannot
+      // hang. Dropping the rare unparseable line is preferable to wedging
+      // a worker for hours.
+      i++
     }
   }
 
