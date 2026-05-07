@@ -2689,15 +2689,15 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
      1024+ (post-220px rail) → 60px, 12px gap (10 cols)
      1440+ (post-rail+inspector) → 64px, 16px gap (12 cols)
 
-   `content-visibility: auto` + `contain-intrinsic-size` per Phosphor’s
-   pattern lets the browser skip layout/paint for offscreen rows. We
-   apply it at the grid level since rows are implicit (auto-fill). */
+   `content-visibility: auto` is applied PER TILE (not on the grid as a
+   whole) — at ~10k tiles in a single grid, container-level opt-in
+   would only skip the entire grid when scrolled past, missing the
+   point. Per-tile lets the browser skip layout/paint for every
+   off-viewport tile, keeping render flat regardless of tile count. */
 .symbols-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
   gap: 6px;
-  content-visibility: auto;
-  contain-intrinsic-size: 96px;
 }
 
 @media (min-width: 30em) {
@@ -2735,6 +2735,12 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-family: inherit;
   padding: 0;
   /* No always-on label — pure glyph (research §6.3, Lucide pattern). */
+  /* Skip layout/paint for tiles that aren't in view. Each tile is
+     square (`aspect-ratio: 1/1`) so a 64px intrinsic size is a safe
+     placeholder across all breakpoints — the actual rendered tile
+     adopts whatever the grid column width yields. */
+  content-visibility: auto;
+  contain-intrinsic-size: 64px 64px;
 }
 
 .symbol-tile:hover,
