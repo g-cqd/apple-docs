@@ -379,7 +379,17 @@ describe('Dev Server (P7-E)', () => {
   test('serves /symbols page and symbol APIs', async () => {
     const page = await fetch(`${serverInfo.url}/symbols`)
     expect(page.status).toBe(200)
-    expect(await page.text()).toContain('SF Symbols')
+    const html = await page.text()
+    expect(html).toContain('SF Symbols')
+    // P7 redesign: pure-glyph grid + sticky global toolbar + Phosphor
+    // pattern customizer (no always-on labels). Lock in the contract.
+    expect(html).toContain('symbols-grid')
+    expect(html).toContain('symbols-toolbar')
+    expect(html).toMatch(/aria-label="Search symbols"/)
+    expect(html).toContain('symbols-categories')
+    // Mobile category select is part of the page so the toolbar stays
+    // composable with desktop rail filtering.
+    expect(html).toContain('id="symbols-category-mobile"')
 
     const index = await fetch(`${serverInfo.url}/api/symbols/index.json`)
     expect(index.status).toBe(200)
@@ -392,6 +402,51 @@ describe('Dev Server (P7-E)', () => {
     expect(search.status).toBe(200)
     const searchJson = await search.json()
     expect(searchJson.results[0].name).toBe('pencil.and.sparkles')
+  })
+
+  test('/symbols/<name> serves the same shell so client-side routing works', async () => {
+    // Mobile detail UX is a route, not a drawer (research §6.5). The
+    // server returns the canonical /symbols HTML and symbols-page.js
+    // detects the path and pre-opens the inspector. No 404.
+    const res = await fetch(`${serverInfo.url}/symbols/pencil.and.sparkles`)
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('SF Symbols')
+    expect(html).toContain('symbols-grid')
+  })
+
+  test('header omits /fonts and /symbols nav links', async () => {
+    // P7: /fonts and /symbols moved out of the global header nav into
+    // the home-page Design section to fix the ≤480px overflow that the
+    // research synthesis (§2 #1) flagged. The home test above already
+    // asserts they remain reachable from /; this test pins the inverse
+    // — they are NOT in the chrome on every page.
+    const res = await fetch(`${serverInfo.url}/`)
+    const html = await res.text()
+    // Site-wide header markup — no <a href="/fonts"> or <a href="/symbols">
+    // inside the .site-header element.
+    const headerMatch = html.match(/<header class="site-header">[\s\S]*?<\/header>/)
+    expect(headerMatch).toBeTruthy()
+    expect(headerMatch[0]).not.toContain('href="/fonts"')
+    expect(headerMatch[0]).not.toContain('href="/symbols"')
+    expect(headerMatch[0]).not.toContain('class="site-link"')
+  })
+
+  test('stylesheet locks in the symbols + fonts redesign contract', async () => {
+    // The research synthesis (§10) calls out the explicit stylesheet
+    // contract: sticky toolbar, content-visibility on the grid,
+    // CSS custom props (`--symbol-color`/`-size`/`-weight`/`-scale`,
+    // `--sample-text`), `repeat(auto-fill, minmax(...))` for tile cols.
+    const res = await fetch(`${serverInfo.url}/assets/style.css`)
+    expect(res.status).toBe(200)
+    const css = await res.text()
+    expect(css).toContain('--symbol-color')
+    expect(css).toContain('--symbol-size')
+    expect(css).toContain('--symbol-weight')
+    expect(css).toContain('--symbol-scale')
+    expect(css).toContain('content-visibility: auto')
+    expect(css).toMatch(/\.symbols-toolbar\s*\{[^}]*position:\s*sticky/)
+    expect(css).toMatch(/grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(/)
   })
 
   test('/api/search accepts kind filter', async () => {

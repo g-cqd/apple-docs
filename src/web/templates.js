@@ -148,6 +148,15 @@ export function renderFontsPage(siteConfig, data = {}) {
   const familiesJson = JSON.stringify(families).replace(/</g, '\\u003c')
   const baseUrl = siteConfig.baseUrl || ''
 
+  // Tag inventory — surface category counts. Even a thin taxonomy lets
+  // us render a chip strip on mobile and a checklist rail on desktop.
+  const categoryCounts = new Map()
+  for (const f of families) {
+    const cat = f.category ?? 'other'
+    categoryCounts.set(cat, (categoryCounts.get(cat) ?? 0) + 1)
+  }
+  const categoryEntries = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])
+
   const familyMarkup = families.map(family => {
     const variableCount = family.files.filter(f => f.is_variable).length
     const remoteCount = family.files.filter(f => f.source === 'remote').length
@@ -173,7 +182,7 @@ export function renderFontsPage(siteConfig, data = {}) {
         : '',
     ].filter(Boolean).join('')
     return `
-    <article class="font-family" data-family-id="${escapeAttr(family.id)}">
+    <article class="font-family" data-family-id="${escapeAttr(family.id)}" data-family-category="${escapeAttr(family.category ?? 'other')}">
       <header class="font-family__header">
         <div class="font-family__title-row">
           <h2 class="font-family__title">${escapeAttr(family.display_name)}</h2>
@@ -186,6 +195,16 @@ export function renderFontsPage(siteConfig, data = {}) {
       <div class="font-family__preview" data-preview></div>
     </article>`
   }).join('')
+
+  // Mobile chip strip + desktop rail markup. Categories are radio-style
+  // (single-select); JS toggles `[data-active]` on the chosen chip.
+  const allCategoriesChip = `<button type="button" class="font-chip" data-category="" data-active="true">All <span class="font-chip__count">${families.length.toLocaleString('en-US')}</span></button>`
+  const categoryChips = categoryEntries
+    .map(([cat, count]) => {
+      const label = formatFontCategory(cat) ?? cat
+      return `<button type="button" class="font-chip font-chip--${escapeAttr(cat)}" data-category="${escapeAttr(cat)}">${escapeAttr(label)} <span class="font-chip__count">${count.toLocaleString('en-US')}</span></button>`
+    })
+    .join('')
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
@@ -208,7 +227,7 @@ ${buildHeader(siteConfig)}
   <section class="fonts-tester" aria-label="Font preview controls">
     <label class="fonts-tester__field">
       <span class="fonts-tester__label">Sample text</span>
-      <textarea id="fonts-sample" class="fonts-tester__sample" rows="2" aria-label="Sample text">The quick brown fox jumps over the lazy dog 0123456789</textarea>
+      <input id="fonts-sample" class="fonts-tester__sample" type="text" aria-label="Sample text" value="Reading Apple docs in good type." enterkeyhint="done">
     </label>
     <div class="fonts-tester__row">
       <label class="fonts-tester__field fonts-tester__field--size">
@@ -216,9 +235,30 @@ ${buildHeader(siteConfig)}
         <input id="fonts-size" type="range" min="12" max="144" value="48" aria-label="Preview size in pixels">
       </label>
     </div>
+    <div class="fonts-tester__chips" id="fonts-chips" role="radiogroup" aria-label="Filter by category">
+      ${allCategoriesChip}${categoryChips}
+    </div>
   </section>
 
-  <section class="font-family-grid" id="font-family-grid">${familyMarkup}</section>
+  <div class="fonts-shell">
+    <aside class="fonts-rail" aria-label="Filter">
+      <h2 class="fonts-rail__title">Categories</h2>
+      <ul class="fonts-rail__list" id="fonts-rail-list">
+        ${[`<li><button type="button" class="fonts-rail__btn" data-category="" data-active="true">All <span>${families.length.toLocaleString('en-US')}</span></button></li>`]
+          .concat(categoryEntries.map(([cat, count]) => {
+            const label = formatFontCategory(cat) ?? cat
+            return `<li><button type="button" class="fonts-rail__btn" data-category="${escapeAttr(cat)}">${escapeAttr(label)} <span>${count.toLocaleString('en-US')}</span></button></li>`
+          })).join('')}
+      </ul>
+    </aside>
+
+    <section class="font-family-grid" id="font-family-grid">${familyMarkup}</section>
+  </div>
+
+  <div class="fonts-bottom-bar" id="fonts-bottom-bar">
+    <a class="fonts-bottom-bar__cta" href="#" id="fonts-bottom-bar-cta" download hidden>Download family</a>
+    <a class="fonts-bottom-bar__cta fonts-bottom-bar__cta--all" href="#" id="fonts-bottom-bar-all">Jump to family list</a>
+  </div>
 
   <script id="fonts-data" type="application/json">${familiesJson}</script>
 </main>
@@ -246,6 +286,16 @@ export function renderSymbolsPage(siteConfig, data = {}) {
   const publicCount = totals.find(row => row.scope === 'public')?.count ?? 0
   const privateCount = totals.find(row => row.scope === 'private')?.count ?? 0
 
+  // Layout (research/fonts-symbols-ux.md §6):
+  //   - global sticky toolbar at top: search · scope · category(mobile) ·
+  //     weight · scale · color · size. Values flow into CSS custom props
+  //     (`--symbol-color`, `--symbol-size`, `--symbol-weight`,
+  //     `--symbol-scale`) so re-styling never touches per-tile DOM.
+  //   - 3-column shell on desktop (≥1024): 220px category rail · grid ·
+  //     320px inspector. Container-query rules swap column counts when
+  //     the inspector opens. <1024 the rail collapses behind a native
+  //     <select>, the inspector becomes a dedicated `/symbols/<name>`
+  //     route handled in symbols-page.js.
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({
@@ -261,24 +311,65 @@ ${buildHeader(siteConfig)}
 <main id="main-content" class="main-content symbols-page">
   <header class="symbols-page__header">
     <h1>SF Symbols</h1>
-    <p class="symbols-page__lede"><span id="symbols-count">${totalCount.toLocaleString('en-US')}</span> symbols indexed (${publicCount.toLocaleString('en-US')} public, ${privateCount.toLocaleString('en-US')} private). Search, click a tile, then download SVG or PNG with your own colors.</p>
+    <p class="symbols-page__lede"><span id="symbols-count">${totalCount.toLocaleString('en-US')}</span> symbols indexed (${publicCount.toLocaleString('en-US')} public, ${privateCount.toLocaleString('en-US')} private). Tap a tile to open it; customize size, weight, and color in the toolbar.</p>
   </header>
 
-  <div class="symbols-toolbar" role="search">
-    <input id="symbols-q" class="symbols-search" type="search" placeholder="Search symbols (e.g. pencil, sparkles, sf.symbol.fill)…" aria-label="Search symbols" autocomplete="off">
-    <select id="symbols-scope" class="symbols-scope" aria-label="Scope">
-      <option value="">All scopes</option>
-      <option value="public">Public</option>
-      <option value="private">Private</option>
-    </select>
-    <span id="symbols-status" class="symbols-status" role="status" aria-live="polite"></span>
+  <div class="symbols-toolbar" role="search" aria-label="Symbol toolbar">
+    <div class="symbols-toolbar__row symbols-toolbar__row--search">
+      <input id="symbols-q" class="symbols-search" type="search" placeholder="Search symbols (⌘K)…" aria-label="Search symbols" autocomplete="off" enterkeyhint="search">
+      <select id="symbols-scope" class="symbols-scope" aria-label="Scope">
+        <option value="">All scopes</option>
+        <option value="public">Public</option>
+        <option value="private">Private</option>
+      </select>
+      <select id="symbols-category-mobile" class="symbols-category-mobile" aria-label="Category">
+        <option value="">All categories</option>
+      </select>
+    </div>
+    <div class="symbols-toolbar__row symbols-toolbar__row--customize">
+      <fieldset class="symbols-control symbols-control--weight" aria-label="Weight">
+        <legend class="symbols-control__legend">Weight</legend>
+        <div class="symbols-control__pills" role="radiogroup" aria-label="Weight">
+          <button type="button" class="symbols-pill" role="radio" data-weight="ultralight" aria-checked="false">UL</button>
+          <button type="button" class="symbols-pill" role="radio" data-weight="light" aria-checked="false">L</button>
+          <button type="button" class="symbols-pill" role="radio" data-weight="regular" aria-checked="true">R</button>
+          <button type="button" class="symbols-pill" role="radio" data-weight="medium" aria-checked="false">M</button>
+          <button type="button" class="symbols-pill" role="radio" data-weight="bold" aria-checked="false">B</button>
+          <button type="button" class="symbols-pill" role="radio" data-weight="black" aria-checked="false">Bk</button>
+        </div>
+      </fieldset>
+      <fieldset class="symbols-control symbols-control--scale" aria-label="Scale">
+        <legend class="symbols-control__legend">Scale</legend>
+        <div class="symbols-control__pills" role="radiogroup" aria-label="Scale">
+          <button type="button" class="symbols-pill" role="radio" data-scale="small" aria-checked="false">S</button>
+          <button type="button" class="symbols-pill" role="radio" data-scale="medium" aria-checked="true">M</button>
+          <button type="button" class="symbols-pill" role="radio" data-scale="large" aria-checked="false">L</button>
+        </div>
+      </fieldset>
+      <label class="symbols-control symbols-control--color">
+        <span class="symbols-control__legend">Color</span>
+        <span class="symbols-color">
+          <input id="symbols-color" type="color" value="#000000" aria-label="Symbol color">
+          <input id="symbols-color-hex" type="text" value="#000000" pattern="^#[0-9a-fA-F]{6}$" maxlength="7" aria-label="Symbol color hex">
+        </span>
+      </label>
+      <label class="symbols-control symbols-control--size">
+        <span class="symbols-control__legend">Size <span id="symbols-size-value">48</span>px</span>
+        <input id="symbols-size" type="range" min="24" max="120" value="48" aria-label="Tile size in pixels">
+      </label>
+      <span id="symbols-status" class="symbols-status" role="status" aria-live="polite"></span>
+    </div>
   </div>
 
-  <div class="symbols-layout">
+  <div class="symbols-layout" id="symbols-layout">
+    <aside class="symbols-categories" id="symbols-categories" aria-label="Categories">
+      <h2 class="symbols-categories__title">Categories</h2>
+      <ul class="symbols-categories__list" id="symbols-categories-list" role="listbox" aria-label="Filter by category"></ul>
+    </aside>
+
     <div id="symbols-scroller" class="symbols-scroller" tabindex="0" aria-label="Symbol grid">
-      <div id="symbols-spacer" class="symbols-spacer">
-        <div id="symbols-viewport" class="symbols-viewport"></div>
-      </div>
+      <p id="symbols-typing-hint" class="symbols-typing-hint" hidden></p>
+      <div id="symbols-grid" class="symbols-grid" role="grid"></div>
     </div>
 
     <aside id="symbols-detail" class="symbols-detail" hidden aria-label="Symbol detail">
@@ -289,31 +380,16 @@ ${buildHeader(siteConfig)}
       <h2 id="symbols-detail-name" class="symbols-detail__name"></h2>
       <p id="symbols-detail-scope" class="symbols-detail__scope"></p>
 
-      <section class="symbols-detail__controls" aria-label="Render options">
-        <label class="symbols-detail__field">
-          <span>Size <span id="symbols-detail-size-value">128</span>px</span>
-          <input id="symbols-detail-size" type="range" min="16" max="512" value="128">
-        </label>
-        <label class="symbols-detail__field">
-          <span>Foreground</span>
-          <span class="symbols-detail__color">
-            <input id="symbols-detail-fg" type="color" value="#000000" aria-label="Foreground color">
-            <input id="symbols-detail-fg-hex" type="text" value="#000000" pattern="^#[0-9a-fA-F]{6}$" maxlength="7" aria-label="Foreground hex">
-          </span>
-        </label>
-        <label class="symbols-detail__field">
-          <span>Background</span>
-          <span class="symbols-detail__color">
-            <input id="symbols-detail-bg" type="color" value="#ffffff" aria-label="Background color">
-            <input id="symbols-detail-bg-hex" type="text" value="" placeholder="transparent" pattern="^(?:|#[0-9a-fA-F]{6})$" maxlength="7" aria-label="Background hex">
-            <label class="symbols-detail__transparent">
-              <input id="symbols-detail-bg-transparent" type="checkbox" checked> Transparent
-            </label>
-          </span>
-        </label>
+      <section class="symbols-detail__variable" id="symbols-detail-variable" aria-label="Variable axes" hidden>
+        <p class="symbols-detail__variable-hint">Variable axes — values from the global toolbar apply.</p>
+        <dl class="symbols-detail__variable-readout">
+          <dt>Weight</dt><dd id="symbols-detail-weight-readout">Regular</dd>
+          <dt>Scale</dt><dd id="symbols-detail-scale-readout">Medium</dd>
+        </dl>
       </section>
 
       <section class="symbols-detail__downloads" aria-label="Downloads">
+        <button id="symbols-detail-copy-svg" class="symbols-detail__download symbols-detail__download--primary" type="button">Copy SVG</button>
         <a id="symbols-detail-download-svg" class="symbols-detail__download" href="#" download>Download SVG</a>
         <a id="symbols-detail-download-png" class="symbols-detail__download" href="#" download>Download PNG</a>
       </section>
@@ -322,6 +398,12 @@ ${buildHeader(siteConfig)}
         <dl id="symbols-detail-meta"></dl>
       </section>
     </aside>
+  </div>
+
+  <div class="symbols-mobile-bar" id="symbols-mobile-bar" hidden>
+    <button id="symbols-mobile-back" type="button" class="symbols-mobile-bar__back" aria-label="Back to grid">&larr;</button>
+    <span id="symbols-mobile-name" class="symbols-mobile-bar__name"></span>
+    <button id="symbols-mobile-copy" type="button" class="symbols-mobile-bar__cta">Copy SVG</button>
   </div>
 </main>
 ${buildFooter(siteConfig)}
@@ -437,15 +519,13 @@ ${seo}
 
 function buildHeader(siteConfig) {
   const homeHref = `${siteConfig.baseUrl}/`
-  const fontsHref = `${siteConfig.baseUrl}/fonts`
-  const symbolsHref = `${siteConfig.baseUrl}/symbols`
+  // /fonts and /symbols deliberately removed from the global header nav —
+  // they remain reachable from the home page's Design section. Keeping them
+  // out of the header avoids overflow ≤480px (P2 finding #1) and shortens
+  // the visual weight of the chrome on every page.
   return `<header class="site-header">
   <nav class="site-nav">
     <a class="site-name" href="${escapeAttr(homeHref)}">${escapeAttr(siteConfig.siteName)}</a>
-    <div class="site-links">
-      <a class="site-link" href="${escapeAttr(fontsHref)}">Fonts</a>
-      <a class="site-link" href="${escapeAttr(symbolsHref)}">Symbols</a>
-    </div>
     <div class="search-container">
       <input class="search-input" type="search" placeholder="Search…" aria-label="Search documentation" autocomplete="off" aria-expanded="false" aria-controls="search-listbox" aria-activedescendant="" aria-autocomplete="list">
       <button class="search-clear" type="button" aria-label="Clear search" hidden>&times;</button>

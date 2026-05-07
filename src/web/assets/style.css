@@ -168,6 +168,12 @@
 html {
   font-size: 16px;
   text-rendering: optimizeLegibility;
+  /* Hard guard against header-induced horizontal scroll on phones. The
+     research synthesis (§9 acceptance) requires
+     `document.body.scrollWidth === viewport.width` at 360 / 480.
+     Containing the body width is a belt-and-braces fix on top of the
+     header-reflow rules above. */
+  overflow-x: hidden;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -263,6 +269,12 @@ a:hover {
   max-width: 1100px;
   margin: 0 auto;
   padding: 0.75rem 1rem;
+  /* Allow the search input to drop to a second row at narrow widths
+     instead of overflowing horizontally. Combined with the
+     `.search-container` reflow below this is what kills the
+     `scrollWidth=485` regression flagged in research/fonts-symbols-ux.md
+     §2 #1 / §5.1. */
+  flex-wrap: wrap;
 }
 
 .site-name {
@@ -281,6 +293,7 @@ a:hover {
 @media (min-width: 768px) {
   .site-nav {
     padding: 0.75rem 2rem;
+    flex-wrap: nowrap;
   }
 }
 
@@ -290,9 +303,20 @@ a:hover {
 
 .search-container {
   position: relative;
-  flex: 1;
+  flex: 1 1 100%;
   max-width: 480px;
   margin-left: auto;
+  /* Below 30em (~480px) the search input drops onto a row of its own
+     and stretches full-width — `flex-basis: 100%` forces the wrap.
+     Above 30em we override with the wider rule below. */
+  order: 3;
+}
+
+@media (min-width: 30em) {
+  .search-container {
+    flex: 1 1 auto;
+    order: 0;
+  }
 }
 
 .search-input {
@@ -436,6 +460,17 @@ a:hover {
   margin: 0;
   gap: 2px;
   background: var(--code-bg);
+  margin-left: auto;
+}
+
+/* Below 30em (~480px) the switcher is hidden to keep the header on a
+   single row alongside the brand mark; users on phones can still flip
+   themes via system preferences (auto theme). See research synthesis
+   §5.1 — collapse `.theme-switcher` below `30em`. */
+@media (max-width: 29.99em) {
+  .theme-switcher {
+    display: none;
+  }
 }
 
 .theme-option {
@@ -1716,28 +1751,9 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--accent);
 }
 
-/* -- Header nav links -------------------------------------------------- */
-.site-links {
-  display: flex;
-  gap: 1rem;
-  margin-right: auto;
-  margin-left: 0.5rem;
-}
-
-.site-link {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--secondary-fg);
-  text-decoration: none;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-}
-
-.site-link:hover,
-.site-link:focus-visible {
-  color: var(--accent);
-  background-color: var(--code-bg);
-}
+/* -- (removed) header nav links: /fonts and /symbols are now reachable
+      only from the home page Design section. See templates.js
+      buildHeader and research/fonts-symbols-ux.md §5.1. ---------------- */
 
 /* -- Fonts page -------------------------------------------------------- */
 .fonts-page {
@@ -2010,12 +2026,301 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   line-height: 1.2;
   word-break: break-word;
   min-height: 1em;
+  outline: none;
+  border-radius: 4px;
 }
 
-/* -- Symbols page ------------------------------------------------------ */
+.font-preview-line:focus-visible {
+  background: var(--code-bg);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* -- Fonts page filter rail + chip strip (P7 §5.5) -- */
+.fonts-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.fonts-rail {
+  display: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  padding: 0.75rem 0.5rem;
+}
+
+.fonts-rail__title {
+  margin: 0 0.5rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--secondary-fg);
+}
+
+.fonts-rail__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fonts-rail__btn {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--fg);
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.fonts-rail__btn:hover {
+  background: var(--code-bg);
+}
+
+.fonts-rail__btn[data-active="true"] {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.fonts-rail__btn span {
+  font-size: 0.75rem;
+  color: var(--secondary-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.fonts-rail__btn[data-active="true"] span {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+@media (min-width: 64em) {
+  .fonts-shell {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .fonts-rail {
+    display: block;
+  }
+  /* On desktop, the inline chip strip is redundant with the rail. */
+  .fonts-tester__chips {
+    display: none;
+  }
+}
+
+/* Chip strip (mobile): horizontal-scroll, single-line. */
+.fonts-tester__chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.25rem 0;
+  scrollbar-width: thin;
+}
+
+.font-chip {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+/* Tag chips render in their own visual style — Adobe pattern (research
+   §5.5). "Sans-serif" is set in a system sans face by default; "Serif"
+   in serif; "Monospace" in mono. */
+.font-chip--serif {
+  font-family: ui-serif, "Charter", "Iowan Old Style", "Times New Roman", serif;
+}
+.font-chip--monospace {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+.font-chip--sans-serif,
+.font-chip--other {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+}
+
+.font-chip[data-active="true"] {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.font-chip__count {
+  font-size: 0.75rem;
+  color: var(--secondary-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.font-chip[data-active="true"] .font-chip__count {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Variable-axis sliders. */
+.font-variant__axes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.font-axis {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--secondary-fg);
+}
+
+.font-axis__label {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.font-axis__value {
+  color: var(--secondary-fg);
+  font-variant-numeric: tabular-nums;
+  margin-left: 0.25rem;
+}
+
+.font-axis input[type="range"] {
+  width: 100%;
+  min-height: 28px;
+}
+
+/* iOS-style switch for italic — visual upgrade over the default
+   checkbox. Native `role="switch"` already on the markup. */
+.font-variant__italic {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.font-variant__italic input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 36px;
+  height: 22px;
+  background: var(--border);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.font-variant__italic input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--bg);
+  border-radius: 50%;
+  transition: transform 120ms ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.font-variant__italic input[type="checkbox"]:checked {
+  background: var(--accent);
+}
+
+.font-variant__italic input[type="checkbox"]:checked::after {
+  transform: translateX(14px);
+}
+
+/* -- Fonts mobile sticky bottom CTA bar (P7 §5.6) -- */
+.fonts-bottom-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--header-bg);
+  border-top: 1px solid var(--border);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  margin: 1rem -1rem -1rem;
+  z-index: 50;
+}
+
+.fonts-bottom-bar__cta {
+  flex: 1;
+  text-align: center;
+  text-decoration: none;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fonts-bottom-bar__cta--all {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+@media (min-width: 64em) {
+  .fonts-bottom-bar {
+    display: none;
+  }
+}
+
+/* -- Symbols page (P7) -------------------------------------------------- */
+/*
+ * Single-source layout: 220px sidebar (≥1024) · CSS-Grid grid · 320px
+ * inspector (≥1024 when a symbol is selected). Mobile collapses to one
+ * column and replaces the rail with a native <select>; the inspector
+ * becomes a `/symbols/<name>` route handled by symbols-page.js.
+ *
+ * Customizer (Phosphor pattern): values from the global toolbar set
+ * CSS custom props on `.symbols-page`:
+ *   --symbol-color  → tile foreground (mask + currentColor)
+ *   --symbol-size   → tile glyph size
+ *   --symbol-weight → semantic axis (visual hint only — backend renders
+ *                     the canonical mask, the toolbar is currently a
+ *                     UI-only readout for axis values)
+ *   --symbol-scale  → ditto
+ * No per-tile re-render needed.
+ */
 .symbols-page {
   max-width: none;
   width: 100%;
+  /* Default values for the customizer custom props. JS overwrites these
+     when the toolbar fires. Re-asserting them on the page root means a
+     fresh DOM doesn't flash an unstyled state. */
+  --symbol-color: currentColor;
+  --symbol-size: 48px;
+  --symbol-weight: regular;
+  --symbol-scale: medium;
 }
 
 .symbols-page__header {
@@ -2026,27 +2331,48 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--secondary-fg);
 }
 
+/* -- Sticky global toolbar -- */
 .symbols-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--header-bg);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+
+.symbols-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
+}
+
+.symbols-toolbar__row--customize {
+  gap: 0.6rem 1rem;
 }
 
 .symbols-search {
-  flex: 1;
-  min-width: 220px;
+  flex: 1 1 220px;
+  min-width: 200px;
   font-family: inherit;
   font-size: 1rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
   color: var(--fg);
 }
 
-.symbols-scope {
+.symbols-scope,
+.symbols-category-mobile {
   font-family: inherit;
   font-size: 0.875rem;
   padding: 0.5rem 0.75rem;
@@ -2056,92 +2382,332 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--fg);
 }
 
+/* The desktop rail provides category selection at ≥1024; below that the
+   `<select>` does the work. Hide them in the inverse mode. */
+@media (min-width: 1024px) {
+  .symbols-category-mobile {
+    display: none;
+  }
+}
+
 .symbols-status {
+  font-size: 0.8125rem;
+  color: var(--secondary-fg);
+  margin-left: auto;
+}
+
+.symbols-typing-hint {
+  margin: 0 0 0.5rem 0;
   font-size: 0.8125rem;
   color: var(--secondary-fg);
 }
 
+.symbols-control {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.symbols-control__legend {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--secondary-fg);
+  padding: 0;
+}
+
+.symbols-control__pills {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.symbols-pill {
+  border: none;
+  background: transparent;
+  color: var(--secondary-fg);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 26px;
+  min-height: 28px;
+  padding: 0 0.45rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.symbols-pill:hover {
+  color: var(--fg);
+}
+
+.symbols-pill[aria-checked="true"] {
+  background: var(--bg);
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.symbols-color {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.symbols-color input[type="color"] {
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.symbols-color input[type="text"] {
+  width: 84px;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.symbols-control--size {
+  flex: 1 1 160px;
+}
+
+.symbols-control--size input[type="range"] {
+  width: 100%;
+  min-width: 120px;
+}
+
+/* -- Layout shell -- */
 .symbols-layout {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
+  align-items: start;
 }
 
-@media (min-width: 960px) {
-  .symbols-layout {
-    grid-template-columns: minmax(0, 1fr) 360px;
-    align-items: start;
-  }
-}
-
-.symbols-scroller {
-  position: relative;
-  height: 70vh;
-  min-height: 480px;
-  overflow: auto;
+.symbols-categories {
+  display: none;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg);
+  padding: 0.75rem 0.5rem;
 }
 
-.symbols-spacer {
-  position: relative;
+.symbols-categories__title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--secondary-fg);
+  margin: 0 0.5rem 0.5rem;
+}
+
+.symbols-categories__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.symbols-category {
   width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--fg);
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
-.symbols-viewport {
-  position: absolute;
-  inset: 0;
+.symbols-category:hover {
+  background: var(--code-bg);
+}
+
+.symbols-category[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.symbols-category__count {
+  font-size: 0.75rem;
+  color: var(--secondary-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.symbols-category[aria-pressed="true"] .symbols-category__count {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+@media (min-width: 1024px) {
+  .symbols-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .symbols-categories {
+    display: block;
+  }
+  .symbols-layout--detail-open {
+    grid-template-columns: 220px minmax(0, 1fr) 320px;
+  }
+}
+
+/* On mobile (<1024) the detail role is filled by the route, not an
+   in-page panel. When the detail-open class is set on .symbols-layout,
+   hide the grid shell + sibling toolbar so the route looks like a
+   dedicated page rather than a stacked panel below the grid. The
+   toolbar collapses to just the sticky bottom action bar. Reverting
+   the class restores the grid. The toolbar is a sibling of the
+   layout, so reach it via `:has()` on the parent. */
+@media (max-width: 63.99em) {
+  body:has(.symbols-layout--detail-open) .symbols-toolbar {
+    display: none;
+  }
+  .symbols-layout--detail-open .symbols-categories,
+  .symbols-layout--detail-open .symbols-scroller {
+    display: none;
+  }
+  .symbols-layout--detail-open .symbols-detail {
+    margin-top: 0;
+  }
+}
+
+/* -- Tile grid -- */
+.symbols-scroller {
+  position: relative;
+  min-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  padding: 0.5rem;
+}
+
+/* `auto-fill, minmax()` recipe — research/fonts-symbols-ux.md §6.2.
+   Tile mins at each breakpoint:
+     360 → 52px, 6px gap     (5 cols)
+     480 → 56px, 8px gap     (6 cols)
+     768 → 60px, 12px gap    (8–9 cols)
+     1024+ (post-220px rail) → 60px, 12px gap (10 cols)
+     1440+ (post-rail+inspector) → 64px, 16px gap (12 cols)
+
+   `content-visibility: auto` + `contain-intrinsic-size` per Phosphor’s
+   pattern lets the browser skip layout/paint for offscreen rows. We
+   apply it at the grid level since rows are implicit (auto-fill). */
+.symbols-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+  content-visibility: auto;
+  contain-intrinsic-size: 96px;
+}
+
+@media (min-width: 30em) {
+  .symbols-grid {
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+    gap: 8px;
+  }
+}
+
+@media (min-width: 48em) {
+  .symbols-grid {
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (min-width: 90em) {
+  .symbols-grid {
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 16px;
+  }
 }
 
 .symbol-tile {
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  gap: 0.25rem;
-  padding: 0.5rem 0.25rem;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
   color: var(--fg);
   cursor: pointer;
   font-family: inherit;
-  overflow: hidden;
+  padding: 0;
+  /* No always-on label — pure glyph (research §6.3, Lucide pattern). */
 }
 
 .symbol-tile:hover,
 .symbol-tile:focus-visible {
   border-color: var(--accent);
   background: var(--code-bg);
+  outline: none;
+}
+
+.symbol-tile:focus-visible,
+.symbol-tile[aria-pressed="true"] {
+  /* 2px ring on selection / focus (Lucide §6.3). */
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .symbol-tile__icon {
-  width: 48px;
-  height: 48px;
-  background-color: currentColor;
+  width: var(--symbol-size, 48px);
+  height: var(--symbol-size, 48px);
+  max-width: 100%;
+  max-height: 100%;
+  background-color: var(--symbol-color, currentColor);
   mask-size: contain;
   mask-repeat: no-repeat;
   mask-position: center;
   -webkit-mask-size: contain;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
+  pointer-events: none;
 }
 
-.symbol-tile__label {
-  font-size: 0.625rem;
-  color: var(--secondary-fg);
-  text-align: center;
+.symbol-tile__tooltip {
+  position: absolute;
+  bottom: -1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 0.6875rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-  line-height: 1.2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 5;
 }
 
+.symbol-tile:hover .symbol-tile__tooltip,
+.symbol-tile:focus-visible .symbol-tile__tooltip,
+.symbol-tile:focus-within .symbol-tile__tooltip {
+  opacity: 1;
+}
+
+/* -- Inspector (≥1024 only by default; mobile gets a route) -- */
 .symbols-detail {
   position: sticky;
   top: 1rem;
@@ -2152,6 +2718,22 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+/* `display: flex` above wins over the user-agent `[hidden]` rule, so
+   the inspector renders as a phantom panel below the grid until JS
+   touches it. Re-honor the attribute explicitly. */
+.symbols-detail[hidden] {
+  display: none;
+}
+
+@media (max-width: 63.99em) {
+  .symbols-detail {
+    /* On mobile the inspector role is filled by the route + sticky
+       bottom action bar. Hide the in-page panel to avoid duplication. */
+    position: static;
+    margin-top: 1rem;
+  }
 }
 
 .symbols-detail__close {
@@ -2193,82 +2775,72 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 0.8125rem;
 }
 
-.symbols-detail__controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.symbols-detail__variable {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  background: var(--code-bg);
 }
 
-.symbols-detail__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.8125rem;
+.symbols-detail__variable-hint {
+  margin: 0 0 0.4rem;
+  font-size: 0.75rem;
   color: var(--secondary-fg);
 }
 
-.symbols-detail__field input[type="range"] {
-  width: 100%;
-}
-
-.symbols-detail__color {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.symbols-detail__color input[type="color"] {
-  width: 36px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-}
-
-.symbols-detail__color input[type="text"] {
-  flex: 1;
-  min-width: 90px;
-  font-family: var(--font-mono);
+.symbols-detail__variable-readout {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0;
   font-size: 0.8125rem;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--fg);
 }
 
-.symbols-detail__transparent {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.75rem;
-  color: var(--fg);
+.symbols-detail__variable-readout dt {
+  color: var(--secondary-fg);
+}
+
+.symbols-detail__variable-readout dd {
+  margin: 0;
+  font-weight: 500;
 }
 
 .symbols-detail__downloads {
   display: flex;
-  gap: 0.5rem;
   flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .symbols-detail__download {
-  flex: 1;
+  flex: 1 1 auto;
   text-align: center;
   font-size: 0.8125rem;
   font-weight: 500;
   text-decoration: none;
-  padding: 0.5rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   border: 1px solid var(--accent);
   border-radius: 8px;
   color: var(--accent);
+  font-family: inherit;
+  background: transparent;
+  cursor: pointer;
+  min-height: 44px;
 }
 
 .symbols-detail__download:hover,
 .symbols-detail__download:focus-visible {
   background: var(--accent);
   color: var(--bg);
+}
+
+.symbols-detail__download--primary {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.symbols-detail__download--primary:hover,
+.symbols-detail__download--primary:focus-visible {
+  filter: brightness(0.92);
 }
 
 .symbols-detail__metadata dl {
@@ -2286,4 +2858,60 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .symbols-detail__metadata dd {
   margin: 0;
   word-break: break-word;
+}
+
+/* -- Mobile sticky bottom action bar (detail route, <1024) -- */
+.symbols-mobile-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--header-bg);
+  border-top: 1px solid var(--border);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+}
+
+@media (min-width: 64em) {
+  .symbols-mobile-bar {
+    display: none;
+  }
+}
+
+.symbols-mobile-bar__back {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.symbols-mobile-bar__name {
+  flex: 1;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.symbols-mobile-bar__cta {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  min-height: 44px;
 }

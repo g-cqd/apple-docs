@@ -465,7 +465,12 @@ export async function startDevServer(opts, ctx) {
       return textResponse(html, { contentType: 'text/html; charset=utf-8' })
     }
 
-    if (pathname === '/symbols' || pathname === '/symbols/') {
+    // /symbols and /symbols/<name>: same HTML shell, the client-side
+    // symbols-page.js detects the URL and opens the inspector route on
+    // load. The mobile experience uses this route shape so back-button
+    // restores the grid; on desktop, history.replaceState keeps the
+    // URL canonical while inspector state is in-page.
+    if (pathname === '/symbols' || pathname === '/symbols/' || pathname.startsWith('/symbols/')) {
       const totals = db.db.query(
         "SELECT scope, COUNT(*) as count FROM sf_symbols GROUP BY scope",
       ).all()
