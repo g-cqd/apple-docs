@@ -221,7 +221,7 @@ ${buildHeader(siteConfig)}
 <main id="main-content" class="main-content fonts-page">
   <header class="fonts-page__header">
     <h1>Apple Fonts</h1>
-    <p class="fonts-page__lede">Live preview every family with its real files. Pick a variant + weight, toggle italic, drag the slider, and grab a ZIP — all weights, just the variable single-file, or just the statics.</p>
+    <p class="fonts-page__lede">Live preview every family with its real files. Set the sample, size, weight, and italic once — every preview on the page follows. Grab a ZIP per family: all weights, just variable, or just statics.</p>
   </header>
 
   <section class="fonts-tester" aria-label="Font preview controls">
@@ -233,6 +233,17 @@ ${buildHeader(siteConfig)}
       <label class="fonts-tester__field fonts-tester__field--size">
         <span class="fonts-tester__label">Size <span id="fonts-size-value">48</span>px</span>
         <input id="fonts-size" type="range" min="12" max="144" value="48" aria-label="Preview size in pixels">
+      </label>
+      <label class="fonts-tester__field fonts-tester__field--weight">
+        <span class="fonts-tester__label">Weight <span id="fonts-weight-value">400</span></span>
+        <input id="fonts-weight" type="range" min="100" max="900" step="100" value="400" aria-label="Font weight, 100 to 900">
+      </label>
+      <label class="fonts-tester__field fonts-tester__field--italic">
+        <span class="fonts-tester__label">Italic</span>
+        <span class="fonts-tester__switch">
+          <input id="fonts-italic" type="checkbox" role="switch" aria-label="Italic">
+          <span class="fonts-tester__switch-track" aria-hidden="true"></span>
+        </span>
       </label>
     </div>
     <div class="fonts-tester__chips" id="fonts-chips" role="radiogroup" aria-label="Filter by category">

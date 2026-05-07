@@ -149,17 +149,21 @@
         return false
       })
 
-    // 600-tile cap with "keep typing" hint until query length >= 2.
+    // Tile cap exists to keep the no-filter "browse all 9k symbols" case
+    // cheap on first render — without `content-visibility` doing all the
+    // heavy lifting alone. Once the user has narrowed the view (any
+    // category, scope, or non-empty query), show every match — capping a
+    // selected category to 600 was hiding ~half the symbols in large
+    // categories like "objectsandtools". Only the unfiltered firehose is
+    // capped, with a hint suggesting how to narrow.
     const total = next.length
-    const overCap = total > TILE_CAP
+    const isUnfiltered = !q && !scope && !cat
+    const overCap = isUnfiltered && total > TILE_CAP
     filtered = overCap ? next.slice(0, TILE_CAP) : next
 
-    if (overCap && q.length < 2) {
+    if (overCap) {
       TYPING_HINT.hidden = false
-      TYPING_HINT.textContent = `showing ${TILE_CAP.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} — keep typing`
-    } else if (overCap) {
-      TYPING_HINT.hidden = false
-      TYPING_HINT.textContent = `showing ${TILE_CAP.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`
+      TYPING_HINT.textContent = `showing ${TILE_CAP.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} — pick a category or search to narrow`
     } else {
       TYPING_HINT.hidden = true
       TYPING_HINT.textContent = ''
@@ -295,13 +299,29 @@
   }
 
   // Color picker (paired hex/colour input).
+  //
+  // Default behaviour: leave `--symbol-color` unset so the CSS fallback
+  // `var(--symbol-color, currentColor)` resolves to the page's text
+  // colour — automatically dark on light theme, light on dark theme.
+  // Only override once the user actually touches the picker. We can't
+  // tell apart "user picked black" from "browser default black" via the
+  // input value alone, so we set a `data-touched` flag on the first
+  // input event and key off that.
   if (COLOR && COLOR_HEX) {
-    bindColorPair(COLOR, COLOR_HEX, () => {
-      const v = normaliseHex(COLOR_HEX.value || COLOR.value) || '#000000'
-      root.style.setProperty('--symbol-color', v)
-    })
-    // Initial sync.
-    root.style.setProperty('--symbol-color', COLOR.value)
+    let touched = false
+    const apply = () => {
+      if (!touched) return
+      const v = normaliseHex(COLOR_HEX.value || COLOR.value)
+      if (v) root.style.setProperty('--symbol-color', v)
+    }
+    const markTouched = () => {
+      if (touched) return
+      touched = true
+      apply()
+    }
+    COLOR.addEventListener('input', markTouched)
+    COLOR_HEX.addEventListener('input', markTouched)
+    bindColorPair(COLOR, COLOR_HEX, apply)
   }
 
   // Size slider.
@@ -368,7 +388,14 @@
   function refreshDetail() {
     if (!activeSymbol) return
     const base = `/api/symbols/${encodeURIComponent(activeSymbol.scope)}/${encodeURIComponent(activeSymbol.name)}`
-    const fg = readVar('--symbol-color') || '#000000'
+    // The inspector preview is an `<img>` element: <img src> is rendered
+    // by the browser image decoder and does NOT inherit `currentColor`
+    // from its parent the way an inline SVG would. To honour the active
+    // theme automatically, resolve the page's computed text colour
+    // (light theme → near-black, dark theme → near-white) and pass it
+    // as `fg` when the user hasn't picked an override.
+    const userColor = readVar('--symbol-color')
+    const fg = userColor || resolvedThemeFg()
     const params = new URLSearchParams()
     params.set('size', '256')
     params.set('fg', fg)
@@ -407,7 +434,12 @@
   async function copySvg() {
     if (!activeSymbol) return
     try {
-      const url = `/api/symbols/${encodeURIComponent(activeSymbol.scope)}/${encodeURIComponent(activeSymbol.name)}.svg?fg=${encodeURIComponent(readVar('--symbol-color') || '#000000')}`
+      const fg = readVar('--symbol-color')
+      const base = `/api/symbols/${encodeURIComponent(activeSymbol.scope)}/${encodeURIComponent(activeSymbol.name)}.svg`
+      // No user-set colour → copy the theme-neutral prerendered SVG
+      // (currentColor-friendly). Once the user has picked a colour,
+      // bake it into the copied bytes via the live render path.
+      const url = fg ? `${base}?fg=${encodeURIComponent(fg)}` : base
       const res = await fetch(url)
       const text = await res.text()
       await navigator.clipboard.writeText(text)
@@ -502,6 +534,19 @@
     const match = raw.match(/^#?([0-9a-fA-F]{6})$/)
     if (!match) return null
     return `#${match[1].toLowerCase()}`
+  }
+
+  // Snap the page's computed text colour to a hex string suitable for
+  // the symbol-render API. The browser returns `rgb(r, g, b)` /
+  // `rgba(...)` from getComputedStyle even when CSS used a named
+  // colour, so a small parser handles both. Falls back to `#000000` if
+  // the format is unexpected (e.g. `oklch()` on very new browsers).
+  function resolvedThemeFg() {
+    const raw = getComputedStyle(document.body).color || ''
+    const m = raw.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
+    if (!m) return '#000000'
+    const hex = (n) => Number(n).toString(16).padStart(2, '0')
+    return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`
   }
 
   function capitalize(s) {
