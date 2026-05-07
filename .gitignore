@@ -24,6 +24,12 @@ test/benchmarks/*.jsonl
 # Internal planning artifacts (see commits bb99fa3, b1fcb74)
 plans/
 
+# Orchestration / research scratch — large screenshot trees and per-run
+# probe outputs. Markdown notes + the synthesis report under
+# docs/research/ are checked in; the screenshot binaries are not.
+tmp/
+docs/research/screenshots/
+
 # Environment
 .env
 .env.*
