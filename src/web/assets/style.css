@@ -1827,6 +1827,22 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   flex: 0 0 auto;
 }
 
+.fonts-tester__field--style {
+  flex: 1 1 200px;
+  min-width: 180px;
+}
+
+.fonts-tester__style {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
 /* iOS-style toggle for italic. Native checkbox stays visually hidden but
    keyboard-focusable; the track/thumb are drawn from the sibling span. */
 .fonts-tester__switch {
@@ -2380,13 +2396,12 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .symbols-page {
   max-width: none;
   width: 100%;
-  /* Default values for the customizer custom props. JS overwrites these
-     when the toolbar fires. Re-asserting them on the page root means a
-     fresh DOM doesn't flash an unstyled state. */
-  --symbol-color: currentColor;
+  /* Only set defaults for props the toolbar exposes globally. Color is
+     deliberately unset so consumers fall back to `currentColor` and
+     auto-adapt to the active theme until the user picks an override.
+     Weight + scale are inspector-only — they go via URL params on the
+     inspector preview, not as CSS vars on the page root. */
   --symbol-size: 48px;
-  --symbol-weight: regular;
-  --symbol-scale: medium;
 }
 
 .symbols-page__header {

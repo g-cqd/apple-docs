@@ -52,9 +52,6 @@
     preview: document.getElementById('symbols-detail-preview'),
     name: document.getElementById('symbols-detail-name'),
     scope: document.getElementById('symbols-detail-scope'),
-    variable: document.getElementById('symbols-detail-variable'),
-    weightReadout: document.getElementById('symbols-detail-weight-readout'),
-    scaleReadout: document.getElementById('symbols-detail-scale-readout'),
     copyBtn: document.getElementById('symbols-detail-copy-svg'),
     downloadSvg: document.getElementById('symbols-detail-download-svg'),
     downloadPng: document.getElementById('symbols-detail-download-png'),
@@ -270,32 +267,36 @@
   }
 
   // ---------------------------------------------------------------------
-  // 4. Customizer — wire to CSS custom props on .symbols-page.
+  // 4. Customizer — color + tile size are page-wide (CSS custom props on
+  //    the page). Weight + scale are inspector-only because the grid
+  //    serves prerendered SVGs at the default configuration; rerunning
+  //    the Swift renderer for every visible tile on every weight change
+  //    is prohibitively expensive (~thousand requests). The inspector's
+  //    `<img>` re-fetches with the new params, which is cheap.
   // ---------------------------------------------------------------------
   const root = document.querySelector('.symbols-page')
-  // Weight / scale: per-radiogroup pill clicks set CSS vars and aria-checked.
+  const detailWeight = { value: 'regular' }
+  const detailScale = { value: 'medium' }
+
   document.querySelectorAll('.symbols-control--weight .symbols-pill').forEach(pill => {
     pill.addEventListener('click', () => {
-      pickPill(pill, '.symbols-control--weight .symbols-pill', 'weight')
-      const w = pill.dataset.weight
-      root.style.setProperty('--symbol-weight', w)
-      if (detail.weightReadout) detail.weightReadout.textContent = capitalize(w)
+      pickPill(pill, '.symbols-control--weight .symbols-pill')
+      detailWeight.value = pill.dataset.weight
+      refreshDetail()
     })
   })
   document.querySelectorAll('.symbols-control--scale .symbols-pill').forEach(pill => {
     pill.addEventListener('click', () => {
-      pickPill(pill, '.symbols-control--scale .symbols-pill', 'scale')
-      const s = pill.dataset.scale
-      root.style.setProperty('--symbol-scale', s)
-      if (detail.scaleReadout) detail.scaleReadout.textContent = capitalize(s)
+      pickPill(pill, '.symbols-control--scale .symbols-pill')
+      detailScale.value = pill.dataset.scale
+      refreshDetail()
     })
   })
 
-  function pickPill(activePill, selector, axis) {
+  function pickPill(activePill, selector) {
     document.querySelectorAll(selector).forEach(p => {
       p.setAttribute('aria-checked', p === activePill ? 'true' : 'false')
     })
-    void axis
   }
 
   // Color picker (paired hex/colour input).
@@ -356,14 +357,40 @@
     if (detail.name) detail.name.textContent = symbol.name
     if (detail.scope) detail.scope.textContent =
       symbol.scope === 'private' ? 'Private CoreGlyphs' : 'Public SF Symbol'
-    if (detail.variable) detail.variable.hidden = false
+    // Surface the "weight/scale apply to public only" hint when looking
+    // at a private symbol — withSymbolConfiguration is a no-op there.
+    const axesHint = document.getElementById('symbols-detail-axes-hint')
+    if (axesHint) axesHint.hidden = symbol.scope !== 'private'
     refreshDetail()
+    fetchMetadata(symbol).then(meta => {
+      if (activeSymbol === symbol) renderMetadata(meta)
+    })
     if (mobileBar.root) {
       mobileBar.root.hidden = DESKTOP_MQ.matches
       if (mobileBar.name) mobileBar.name.textContent = symbol.name
     }
     if (LAYOUT) LAYOUT.classList.add('symbols-layout--detail-open')
     void opts
+  }
+
+  // Catalog payload only carries name + scope + categories + keywords —
+  // aliases and availability live in the per-symbol JSON endpoint and
+  // are fetched lazily on inspector open. Cached in-memory so revisiting
+  // a symbol doesn't re-hit the API.
+  const metadataCache = new Map()
+  async function fetchMetadata(symbol) {
+    const key = `${symbol.scope}/${symbol.name}`
+    if (metadataCache.has(key)) return metadataCache.get(key)
+    try {
+      const res = await fetch(`/api/symbols/${encodeURIComponent(symbol.scope)}/${encodeURIComponent(symbol.name)}.json`)
+      if (!res.ok) return symbol
+      const full = await res.json()
+      const merged = { ...symbol, ...full }
+      metadataCache.set(key, merged)
+      return merged
+    } catch {
+      return symbol
+    }
   }
 
   function closeDetail() {
@@ -390,15 +417,16 @@
     const base = `/api/symbols/${encodeURIComponent(activeSymbol.scope)}/${encodeURIComponent(activeSymbol.name)}`
     // The inspector preview is an `<img>` element: <img src> is rendered
     // by the browser image decoder and does NOT inherit `currentColor`
-    // from its parent the way an inline SVG would. To honour the active
-    // theme automatically, resolve the page's computed text colour
-    // (light theme → near-black, dark theme → near-white) and pass it
-    // as `fg` when the user hasn't picked an override.
+    // from its parent the way an inline SVG would. Resolve the active
+    // text colour to a hex so the rendered preview honours the theme,
+    // and only override when the user has explicitly picked a colour.
     const userColor = readVar('--symbol-color')
     const fg = userColor || resolvedThemeFg()
     const params = new URLSearchParams()
     params.set('size', '256')
     params.set('fg', fg)
+    if (detailWeight.value !== 'regular') params.set('weight', detailWeight.value)
+    if (detailScale.value !== 'medium') params.set('scale', detailScale.value)
     const svgUrl = `${base}.svg?${params.toString()}`
     const pngUrl = `${base}.png?${params.toString()}`
     if (detail.preview) {
@@ -413,16 +441,30 @@
       detail.downloadPng.href = pngUrl
       detail.downloadPng.download = `${activeSymbol.name}.png`
     }
-    renderMetadata(activeSymbol)
   }
 
+  // Render only the metadata fields that have content. The catalog has a
+  // long tail of symbols with empty keywords / no aliases / no availability
+  // overrides — surfacing every field as a dt/dd pair makes near-empty
+  // metadata blocks look identical across symbols. Skip empties and
+  // expose the structural pieces of the symbol name (variant + base)
+  // as a "Composition" row so each symbol shows something distinctive.
   function renderMetadata(symbol) {
     if (!detail.meta) return
     detail.meta.replaceChildren()
     const rows = []
-    rows.push(['Scope', symbol.scope])
+    rows.push(['Scope', symbol.scope === 'private' ? 'Private CoreGlyphs' : 'Public SF Symbols'])
+    const composition = describeComposition(symbol.name)
+    if (composition) rows.push(['Composition', composition])
     if ((symbol.categories || []).length) rows.push(['Categories', symbol.categories.join(', ')])
     if ((symbol.keywords || []).length) rows.push(['Keywords', symbol.keywords.join(', ')])
+    const aliases = formatAliases(symbol.aliases)
+    if (aliases) rows.push(['Aliases', aliases])
+    const availability = formatAvailability(symbol.availability)
+    if (availability) rows.push(['Availability', availability])
+    if (symbol.bundle_version || symbol.bundleVersion) {
+      rows.push(['Bundle', symbol.bundle_version ?? symbol.bundleVersion])
+    }
     for (const [k, v] of rows) {
       const dt = document.createElement('dt'); dt.textContent = k
       const dd = document.createElement('dd'); dd.textContent = v
@@ -536,6 +578,45 @@
     return `#${match[1].toLowerCase()}`
   }
 
+  // Many symbols share the same categories/keywords payload (e.g. every
+  // ".badge" variant of "person" carries the same {human} category). To
+  // give the metadata block something distinctive per symbol, decompose
+  // the dotted name into base + modifiers ("circle.fill" → base "circle"
+  // with modifier "fill"; "person.2.badge.app.3.stack.3d.fill" → "person",
+  // "2", "badge", "app", "3", "stack", "3d", "fill"). The display string
+  // emphasises the stem and lists the modifiers in stack order.
+  function describeComposition(name) {
+    if (!name) return ''
+    const parts = name.split('.').filter(Boolean)
+    if (parts.length === 1) return ''
+    const stem = parts[0]
+    const modifiers = parts.slice(1)
+    return `${stem} → ${modifiers.join(' → ')}`
+  }
+
+  function formatAliases(aliases) {
+    if (!aliases) return ''
+    if (Array.isArray(aliases)) return aliases.length ? aliases.join(', ') : ''
+    if (typeof aliases === 'object') {
+      const keys = Object.keys(aliases)
+      return keys.length ? keys.join(', ') : ''
+    }
+    return ''
+  }
+
+  // Availability is shipped as `{ "iOS": "18.0", "macOS": "15.0", … }`.
+  // Render in OS order, omit unset platforms.
+  function formatAvailability(availability) {
+    if (!availability || typeof availability !== 'object') return ''
+    const platformOrder = ['iOS', 'iPadOS', 'macOS', 'watchOS', 'tvOS', 'visionOS']
+    const seen = new Set(platformOrder)
+    const ordered = [...platformOrder.filter(p => availability[p]), ...Object.keys(availability).filter(p => !seen.has(p))]
+    const parts = ordered
+      .map(p => availability[p] ? `${p} ${availability[p]}` : null)
+      .filter(Boolean)
+    return parts.join(', ')
+  }
+
   // Snap the page's computed text colour to a hex string suitable for
   // the symbol-render API. The browser returns `rgb(r, g, b)` /
   // `rgba(...)` from getComputedStyle even when CSS used a named
@@ -549,7 +630,4 @@
     return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`
   }
 
-  function capitalize(s) {
-    return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
-  }
 })()

@@ -39,6 +39,7 @@
   const weightEl = document.getElementById('fonts-weight')
   const weightValueEl = document.getElementById('fonts-weight-value')
   const italicEl = document.getElementById('fonts-italic')
+  const styleEl = document.getElementById('fonts-style')
   const chipsEl = document.getElementById('fonts-chips')
   const railListEl = document.getElementById('fonts-rail-list')
   const grid = document.getElementById('font-family-grid')
@@ -50,6 +51,7 @@
   const globals = {
     weight: weightEl ? Number.parseInt(weightEl.value, 10) || 400 : 400,
     italic: !!italicEl?.checked,
+    style: styleEl?.value || 'auto',
   }
 
   // ---------------------------------------------------------------------
@@ -165,6 +167,11 @@
     applyGlobals()
   }
 
+  function applyStyle() {
+    globals.style = styleEl?.value || 'auto'
+    applyGlobals()
+  }
+
   applySample()
   applySize()
   applyGlobals()
@@ -172,6 +179,7 @@
   sizeEl?.addEventListener('input', applySize)
   weightEl?.addEventListener('input', applyWeight)
   italicEl?.addEventListener('change', applyItalic)
+  styleEl?.addEventListener('change', applyStyle)
 
   // Mark per-row overrides so applySample skips them on subsequent
   // typing in the global input.
@@ -259,14 +267,24 @@
 
   // Pick the file that best matches the global state for a given family.
   // Strategy:
-  //   1. Pick a variant: prefer Text → Default → Display → first.
-  //   2. Within that variant, prefer a single variable file (it covers
-  //      every weight via `wght`). Otherwise pick the static file whose
-  //      weight is closest to the requested numeric weight, matching
-  //      italic when available.
+  //   1. Pick a variant. If the user picked a specific style and the
+  //      family has it, use it. Otherwise auto-fallback in the order
+  //      Text → Default → Display → Rounded → Large → Medium → Small
+  //      → ExtraLarge.
+  //   2. Variable file always wins within the chosen variant — it
+  //      covers every weight via the `wght` axis (and optical-size via
+  //      `opsz` for families that ship that axis).
+  //   3. Static files: pick the file whose weight is nearest to the
+  //      requested numeric weight, preferring italic when the toggle
+  //      is on (fall back to upright if no italic ships).
   function pickFileForGlobals(_family, groups, state) {
-    const variantPriority = ['Text', '__default__', 'Display', 'Rounded', 'Large', 'Medium', 'Small', 'ExtraLarge']
-    const variant = variantPriority.find(v => groups.has(v)) ?? VARIANT_ORDER.find(v => groups.has(v))
+    const autoPriority = ['Text', '__default__', 'Display', 'Rounded', 'Large', 'Medium', 'Small', 'ExtraLarge']
+    let variant
+    if (state.style && state.style !== 'auto' && groups.has(state.style)) {
+      variant = state.style
+    } else {
+      variant = autoPriority.find(v => groups.has(v)) ?? VARIANT_ORDER.find(v => groups.has(v))
+    }
     const files = variant ? groups.get(variant) : []
     if (files.length === 0) return null
 

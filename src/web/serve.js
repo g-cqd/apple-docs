@@ -400,6 +400,17 @@ export async function startDevServer(opts, ctx) {
     }
 
     {
+      const metaMatch = pathname.match(/^\/api\/symbols\/(public|private)\/(.+)\.json$/)
+      if (metaMatch) {
+        const [, scope, encodedName] = metaMatch
+        const decodedName = decodeURIComponent(encodedName)
+        const row = db.getSfSymbol(scope, decodedName)
+        if (!row) return new Response('Not Found', { status: 404 })
+        return jsonResponse(row, { hashable: true })
+      }
+    }
+
+    {
       const symbolMatch = pathname.match(/^\/api\/symbols\/(public|private)\/(.+)\.(svg|png)$/)
       if (symbolMatch) {
         const [, scope, encodedName, format] = symbolMatch
@@ -407,19 +418,17 @@ export async function startDevServer(opts, ctx) {
         const fgParam = url.searchParams.get('fg') ?? url.searchParams.get('color')
         const bgParam = url.searchParams.get('bg')
         const sizeParam = url.searchParams.get('size')
+        const weightParam = url.searchParams.get('weight')
+        const scaleParam = url.searchParams.get('scale')
         // Fast path: when the request asks for the canonical theme-neutral
-        // SVG (no fg/bg/size overrides), serve the pre-rendered file from
-        // disk. The render is keyed off the SF Symbols bundle version; the
-        // tile mask URLs in the symbols-page UI hit this path so the grid
-        // never blocks on Swift.
-        if (format === 'svg' && !fgParam && !bgParam && !sizeParam) {
+        // SVG (no overrides), serve the pre-rendered file from disk. The
+        // tile mask URLs in the grid hit this path so the grid never blocks
+        // on Swift. Any customisation (fg/bg/size/weight/scale) routes to
+        // the live renderer below.
+        if (format === 'svg' && !fgParam && !bgParam && !sizeParam && !weightParam && !scaleParam) {
           const cached = getPrerenderedSymbolPath(ctx, scope, decodedName)
           const cachedFile = Bun.file(cached)
           if (await cachedFile.exists()) {
-            // The prerendered SVG is regenerated whenever the renderer or
-            // CoreGlyphs bundle bumps. URL is stable, so we can't use
-            // `immutable` — issue an ETag tied to mtime+size and let the
-            // browser revalidate on day-old caches.
             return await fileResponseRevalidated(request, cachedFile, {
               contentType: 'image/svg+xml; charset=utf-8',
               maxAge: 86400,
@@ -434,6 +443,8 @@ export async function startDevServer(opts, ctx) {
             size: sizeParam ?? undefined,
             color: fgParam ?? undefined,
             background: bgParam ?? undefined,
+            weight: weightParam ?? undefined,
+            scale: scaleParam ?? undefined,
           }, ctx)
           const file = Bun.file(render.file_path)
           // Live renders are keyed off (renderer, scope, name, format,

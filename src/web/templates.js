@@ -245,6 +245,19 @@ ${buildHeader(siteConfig)}
           <span class="fonts-tester__switch-track" aria-hidden="true"></span>
         </span>
       </label>
+      <label class="fonts-tester__field fonts-tester__field--style">
+        <span class="fonts-tester__label">Style</span>
+        <select id="fonts-style" class="fonts-tester__style" aria-label="Optical-size variant">
+          <option value="auto" selected>Auto (best fit)</option>
+          <option value="Display">Display</option>
+          <option value="Text">Text</option>
+          <option value="Rounded">Rounded</option>
+          <option value="Small">Small</option>
+          <option value="Medium">Medium</option>
+          <option value="Large">Large</option>
+          <option value="ExtraLarge">Extra Large</option>
+        </select>
+      </label>
     </div>
     <div class="fonts-tester__chips" id="fonts-chips" role="radiogroup" aria-label="Filter by category">
       ${allCategoriesChip}${categoryChips}
@@ -338,25 +351,6 @@ ${buildHeader(siteConfig)}
       </select>
     </div>
     <div class="symbols-toolbar__row symbols-toolbar__row--customize">
-      <fieldset class="symbols-control symbols-control--weight" aria-label="Weight">
-        <legend class="symbols-control__legend">Weight</legend>
-        <div class="symbols-control__pills" role="radiogroup" aria-label="Weight">
-          <button type="button" class="symbols-pill" role="radio" data-weight="ultralight" aria-checked="false">UL</button>
-          <button type="button" class="symbols-pill" role="radio" data-weight="light" aria-checked="false">L</button>
-          <button type="button" class="symbols-pill" role="radio" data-weight="regular" aria-checked="true">R</button>
-          <button type="button" class="symbols-pill" role="radio" data-weight="medium" aria-checked="false">M</button>
-          <button type="button" class="symbols-pill" role="radio" data-weight="bold" aria-checked="false">B</button>
-          <button type="button" class="symbols-pill" role="radio" data-weight="black" aria-checked="false">Bk</button>
-        </div>
-      </fieldset>
-      <fieldset class="symbols-control symbols-control--scale" aria-label="Scale">
-        <legend class="symbols-control__legend">Scale</legend>
-        <div class="symbols-control__pills" role="radiogroup" aria-label="Scale">
-          <button type="button" class="symbols-pill" role="radio" data-scale="small" aria-checked="false">S</button>
-          <button type="button" class="symbols-pill" role="radio" data-scale="medium" aria-checked="true">M</button>
-          <button type="button" class="symbols-pill" role="radio" data-scale="large" aria-checked="false">L</button>
-        </div>
-      </fieldset>
       <label class="symbols-control symbols-control--color">
         <span class="symbols-control__legend">Color</span>
         <span class="symbols-color">
@@ -365,7 +359,7 @@ ${buildHeader(siteConfig)}
         </span>
       </label>
       <label class="symbols-control symbols-control--size">
-        <span class="symbols-control__legend">Size <span id="symbols-size-value">48</span>px</span>
+        <span class="symbols-control__legend">Tile size <span id="symbols-size-value">48</span>px</span>
         <input id="symbols-size" type="range" min="24" max="120" value="48" aria-label="Tile size in pixels">
       </label>
       <span id="symbols-status" class="symbols-status" role="status" aria-live="polite"></span>
@@ -391,12 +385,30 @@ ${buildHeader(siteConfig)}
       <h2 id="symbols-detail-name" class="symbols-detail__name"></h2>
       <p id="symbols-detail-scope" class="symbols-detail__scope"></p>
 
-      <section class="symbols-detail__variable" id="symbols-detail-variable" aria-label="Variable axes" hidden>
-        <p class="symbols-detail__variable-hint">Variable axes — values from the global toolbar apply.</p>
-        <dl class="symbols-detail__variable-readout">
-          <dt>Weight</dt><dd id="symbols-detail-weight-readout">Regular</dd>
-          <dt>Scale</dt><dd id="symbols-detail-scale-readout">Medium</dd>
-        </dl>
+      <section class="symbols-detail__axes" aria-label="Variable axes">
+        <fieldset class="symbols-control symbols-control--weight">
+          <legend class="symbols-control__legend">Weight</legend>
+          <div class="symbols-control__pills" role="radiogroup" aria-label="Weight" data-axis="weight">
+            <button type="button" class="symbols-pill" role="radio" data-weight="ultralight" aria-checked="false" title="Ultralight">UL</button>
+            <button type="button" class="symbols-pill" role="radio" data-weight="thin" aria-checked="false" title="Thin">T</button>
+            <button type="button" class="symbols-pill" role="radio" data-weight="light" aria-checked="false" title="Light">L</button>
+            <button type="button" class="symbols-pill" role="radio" data-weight="regular" aria-checked="true" title="Regular">R</button>
+            <button type="button" class="symbols-pill" role="radio" data-weight="medium" aria-checked="false" title="Medium">M</button>
+            <button type="button" class="symbols-pill" role="radio" data-weight="semibold" aria-checked="false" title="Semibold">SB</button>
+            <button type="button" class="symbols-pill" role="radio" data-weight="bold" aria-checked="false" title="Bold">B</button>
+            <button type="button" class="symbols-pill" role="radio" data-weight="heavy" aria-checked="false" title="Heavy">H</button>
+            <button type="button" class="symbols-pill" role="radio" data-weight="black" aria-checked="false" title="Black">Bk</button>
+          </div>
+        </fieldset>
+        <fieldset class="symbols-control symbols-control--scale">
+          <legend class="symbols-control__legend">Scale</legend>
+          <div class="symbols-control__pills" role="radiogroup" aria-label="Scale" data-axis="scale">
+            <button type="button" class="symbols-pill" role="radio" data-scale="small" aria-checked="false" title="Small">S</button>
+            <button type="button" class="symbols-pill" role="radio" data-scale="medium" aria-checked="true" title="Medium">M</button>
+            <button type="button" class="symbols-pill" role="radio" data-scale="large" aria-checked="false" title="Large">L</button>
+          </div>
+        </fieldset>
+        <p class="symbols-detail__axes-hint" id="symbols-detail-axes-hint" hidden>Weight + scale apply to public SF Symbols only — private CoreGlyphs are bitmap-derived.</p>
       </section>
 
       <section class="symbols-detail__downloads" aria-label="Downloads">

@@ -433,10 +433,19 @@ while let line = readLine(strippingNewline: true) {
 // Stryker restore all
 
 
+const SYMBOL_WEIGHTS = ['ultralight', 'thin', 'light', 'regular', 'medium', 'semibold', 'bold', 'heavy', 'black']
+const SYMBOL_SCALES = ['small', 'medium', 'large']
+
 export async function renderSfSymbol(opts, ctx) {
   const scope = opts.scope === 'private' ? 'private' : 'public'
   const format = opts.format === 'svg' ? 'svg' : 'png'
   const pointSize = clampInteger(opts.size ?? opts.pointSize ?? 64, 8, 1024)
+  const weight = SYMBOL_WEIGHTS.includes(String(opts.weight ?? '').toLowerCase())
+    ? String(opts.weight).toLowerCase()
+    : 'regular'
+  const scale = SYMBOL_SCALES.includes(String(opts.scale ?? '').toLowerCase())
+    ? String(opts.scale).toLowerCase()
+    : 'medium'
   // SVG accepts the literal string "currentColor" so it inherits the page's
   // CSS color. PNG cannot — Apple's renderer needs a concrete sRGB value, so
   // we fall back to black for PNG when "currentColor" is requested.
@@ -458,12 +467,16 @@ export async function renderSfSymbol(opts, ctx) {
     //   - 5: same Swift PDF emitter, but parse the PDF in JS and convert
     //        `/ca 0` ExtGState fills into SVG `<mask>` cut-outs. True
     //        vector fidelity for every layer-cutout symbol.
-    renderer: 5,
+    //   - 6: weight + scale plumbed through to NSSymbolConfiguration so
+    //        the inspector controls actually re-render the preview.
+    renderer: 6,
     type: 'sf-symbol',
     scope,
     name: opts.name,
     format,
     pointSize,
+    weight,
+    scale,
     color,
     background,
   })).slice(0, 32)
@@ -479,13 +492,13 @@ export async function renderSfSymbol(opts, ctx) {
   let data
   if (format === 'svg') {
     try {
-      data = await renderSymbolSvgCurves({ name: opts.name, scope, pointSize, color, background })
+      data = await renderSymbolSvgCurves({ name: opts.name, scope, pointSize, weight, scale, color, background })
     } catch (error) {
       ctx.logger?.warn?.(`SF Symbol SVG outline render failed for ${scope}/${opts.name}: ${error.message}`)
       data = renderSymbolSvgFallback({ name: opts.name, scope, pointSize, color, background })
     }
   } else {
-    data = await renderSymbolPng({ name: opts.name, scope, pointSize, color, background })
+    data = await renderSymbolPng({ name: opts.name, scope, pointSize, weight, scale, color, background })
   }
   await Bun.write(filePath, data)
   const bytes = await Bun.file(filePath).arrayBuffer()
@@ -796,7 +809,7 @@ async function readBundleVersion(contentsDir) {
   return info?.CFBundleVersion ?? null
 }
 
-async function renderSymbolPng({ name, scope, pointSize, color, background }) {
+async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
   // Stryker disable all
   const script = `
 import AppKit
@@ -807,6 +820,28 @@ let pointSize = CGFloat(Double(CommandLine.arguments[3]) ?? 64)
 let color = NSColor(hex: CommandLine.arguments[4]) ?? .labelColor
 let backgroundArg = CommandLine.arguments.count > 5 ? CommandLine.arguments[5] : ""
 let background: NSColor? = backgroundArg.isEmpty ? nil : NSColor(hex: backgroundArg)
+let weightArg = CommandLine.arguments.count > 6 ? CommandLine.arguments[6] : "regular"
+let scaleArg = CommandLine.arguments.count > 7 ? CommandLine.arguments[7] : "medium"
+func parseWeight(_ s: String) -> NSFont.Weight {
+  switch s.lowercased() {
+  case "ultralight": return .ultraLight
+  case "thin": return .thin
+  case "light": return .light
+  case "medium": return .medium
+  case "semibold": return .semibold
+  case "bold": return .bold
+  case "heavy": return .heavy
+  case "black": return .black
+  default: return .regular
+  }
+}
+func parseScale(_ s: String) -> NSImage.SymbolScale {
+  switch s.lowercased() {
+  case "small": return .small
+  case "large": return .large
+  default: return .medium
+  }
+}
 let image: NSImage?
 if scope == "private" {
   let paths = [
@@ -818,8 +853,11 @@ if scope == "private" {
   image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
 }
 guard let base = image else { FileHandle.standardError.write(Data("symbol not found".utf8)); exit(2) }
+// withSymbolConfiguration only honours weight/scale for system symbols.
+// Private bundle images are plain NSImages — applying the configuration
+// returns them unchanged.
 let configured = scope == "public"
-  ? (base.withSymbolConfiguration(.init(pointSize: pointSize, weight: .regular, scale: .medium)) ?? base)
+  ? (base.withSymbolConfiguration(.init(pointSize: pointSize, weight: parseWeight(weightArg), scale: parseScale(scaleArg))) ?? base)
   : base
 let px = Int((pointSize * 2).rounded())
 guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { exit(3) }
@@ -865,7 +903,7 @@ extension NSColor {
   await Bun.write(scriptPath, script)
   try {
     const proc = Bun.spawn(
-      ['swift', scriptPath, name, scope, String(pointSize), color, background ?? ''],
+      ['swift', scriptPath, name, scope, String(pointSize), color, background ?? '', weight, scale],
       { stdout: 'pipe', stderr: 'pipe' },
     )
     const [stdout, stderr, code] = await Promise.all([
@@ -896,8 +934,8 @@ function renderSymbolSvgFallback({ name, scope, pointSize, color, background }) 
 </svg>`
 }
 
-async function renderSymbolSvgCurves({ name, scope, pointSize, color, background }) {
-  const pdfBytes = await renderSymbolToPdfBytes({ name, scope })
+async function renderSymbolSvgCurves({ name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
+  const pdfBytes = await renderSymbolToPdfBytes({ name, scope, weight, scale })
   return finalizeSvgFromPdf(pdfBytes, { name, pointSize, color, background })
 }
 
@@ -908,14 +946,14 @@ async function renderSymbolSvgCurves({ name, scope, pointSize, color, background
  * sparkles inside a badge cut-out, etc.) — what we miss when reading
  * `outlinePath` directly. PDF bytes flow back on stdout.
  *
- * @param {{ name: string, scope: string }} args
+ * @param {{ name: string, scope: string, weight?: string, scale?: string }} args
  * @returns {Promise<Uint8Array>}
  */
-async function renderSymbolToPdfBytes({ name, scope }) {
+async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale = 'medium' }) {
   const scriptPath = join(tmpdir(), `apple-docs-symbol-pdf-${process.pid}.swift`)
   await Bun.write(scriptPath, SYMBOL_PDF_SCRIPT)
   try {
-    const proc = Bun.spawn(['swift', scriptPath, name, scope], {
+    const proc = Bun.spawn(['swift', scriptPath, name, scope, weight, scale], {
       stdout: 'pipe',
       stderr: 'pipe',
     })
@@ -963,9 +1001,32 @@ import CoreGraphics
 
 let name = CommandLine.arguments[1]
 let scope = CommandLine.arguments[2]
+let weightArg = CommandLine.arguments.count > 3 ? CommandLine.arguments[3] : "regular"
+let scaleArg = CommandLine.arguments.count > 4 ? CommandLine.arguments[4] : "medium"
+
+func parseWeight(_ s: String) -> NSFont.Weight {
+  switch s.lowercased() {
+  case "ultralight": return .ultraLight
+  case "thin": return .thin
+  case "light": return .light
+  case "medium": return .medium
+  case "semibold": return .semibold
+  case "bold": return .bold
+  case "heavy": return .heavy
+  case "black": return .black
+  default: return .regular
+  }
+}
+func parseScale(_ s: String) -> NSImage.SymbolScale {
+  switch s.lowercased() {
+  case "small": return .small
+  case "large": return .large
+  default: return .medium
+  }
+}
 
 let publicProvider: (String) -> NSImage? = { name in
-  let cfg = NSImage.SymbolConfiguration(pointSize: 256, weight: .regular, scale: .medium)
+  let cfg = NSImage.SymbolConfiguration(pointSize: 256, weight: parseWeight(weightArg), scale: parseScale(scaleArg))
   return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(cfg)
 }
 let privateBundles = [
