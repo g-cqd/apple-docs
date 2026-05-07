@@ -131,6 +131,15 @@ export async function setup(opts, ctx) {
       join(dataDir, 'manifest.json'),
       join(dataDir, 'raw-json'),
       join(dataDir, 'markdown'),
+      // Pre-rendered SF Symbols and extracted Apple fonts ship inside the
+      // full-tier archive. Wipe them before extraction so renamed/removed
+      // symbols or replaced font files don't leave orphans behind.
+      join(dataDir, 'resources', 'symbols'),
+      join(dataDir, 'resources', 'fonts', 'extracted'),
+      // Per-symbol parameterised render cache is keyed off the renderer
+      // version that produced the prerender. A snapshot install is also
+      // a renderer cutover, so flush the cache and let it rehydrate.
+      join(dataDir, 'resources', 'symbol-renders'),
     ]
     for (const target of installPaths) {
       if (existsSync(target)) {

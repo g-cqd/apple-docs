@@ -132,6 +132,42 @@ export async function startDevServer(opts, ctx) {
     return response
   }
 
+  /**
+   * Build a 304-aware response for a Bun.file backed asset whose URL is
+   * stable but whose contents may change (e.g. pre-rendered symbol SVGs,
+   * extracted font files, family ZIPs). The ETag is composed from the
+   * on-disk mtime + size — far cheaper than hashing the bytes, and
+   * sufficient for our case because every regeneration path either
+   * rewrites the file or replaces it atomically.
+   */
+  async function fileResponseRevalidated(request, file, {
+    contentType,
+    contentDisposition,
+    maxAge = 86400,
+  }) {
+    let stat
+    try {
+      stat = await file.stat()
+    } catch {
+      return new Response('Not Found', { status: 404 })
+    }
+    const etag = `"${Math.round(stat.mtimeMs).toString(36)}-${stat.size.toString(36)}"`
+    const headers = new Headers({
+      'Content-Type': contentType,
+      'ETag': etag,
+      // Allow shared caches (Caddy / Cloudflare / browser) to keep the
+      // bytes for `maxAge` seconds, but require a conditional GET after
+      // that so we never pin a stale render once the prerender cache or
+      // the on-disk font is rewritten.
+      'Cache-Control': `public, max-age=${maxAge}, must-revalidate`,
+    })
+    if (contentDisposition) headers.set('Content-Disposition', contentDisposition)
+    if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) {
+      return new Response(null, { status: 304, headers })
+    }
+    return new Response(file, { status: 200, headers })
+  }
+
   function textResponse(body, { contentType = 'text/plain; charset=utf-8', headers = {}, status = 200, hashable = false } = {}) {
     const response = new Response(body, {
       status,
@@ -268,12 +304,12 @@ export async function startDevServer(opts, ctx) {
         const file = Bun.file(font.file_path)
         if (!await file.exists()) return new Response('Not Found', { status: 404 })
         const ext = extname(font.file_path).toLowerCase()
-        return new Response(file, {
-          headers: {
-            'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-            'Content-Disposition': `attachment; filename="${font.file_name.replaceAll('"', '')}"`,
-            'Cache-Control': 'public, max-age=31536000, immutable',
-          },
+        return await fileResponseRevalidated(request, file, {
+          contentType: MIME_TYPES[ext] || 'application/octet-stream',
+          contentDisposition: `attachment; filename="${font.file_name.replaceAll('"', '')}"`,
+          // Apple ships new font versions on macOS releases. URL is stable
+          // (font id), so revalidate via ETag instead of pinning forever.
+          maxAge: 86400,
         })
       }
     }
@@ -311,14 +347,22 @@ export async function startDevServer(opts, ctx) {
         if (entries.length === 0) return new Response('Not Found', { status: 404 })
         const zip = buildStoreZip(entries)
         const fileNameSuffix = subset !== 'all' ? `-${subset}` : ''
-        return new Response(zip, {
-          headers: {
-            'Content-Type': 'application/zip',
-            'Content-Disposition': `attachment; filename="${familyId}${fileNameSuffix}.zip"`,
-            'Content-Length': String(zip.byteLength),
-            'Cache-Control': 'public, max-age=31536000, immutable',
-          },
+        // ETag derived from the SHA-1 of the zip bytes — STORE-method
+        // archives are deterministic enough that identical inputs produce
+        // identical bytes, so the ETag changes if and only if the family
+        // contents change (or we add/remove subsets).
+        const etag = `"${sha256(zip).slice(0, 16)}"`
+        const headers = new Headers({
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${familyId}${fileNameSuffix}.zip"`,
+          'Content-Length': String(zip.byteLength),
+          'ETag': etag,
+          'Cache-Control': 'public, max-age=86400, must-revalidate',
         })
+        if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) {
+          return new Response(null, { status: 304, headers })
+        }
+        return new Response(zip, { status: 200, headers })
       }
     }
 
@@ -372,11 +416,13 @@ export async function startDevServer(opts, ctx) {
           const cached = getPrerenderedSymbolPath(ctx, scope, decodedName)
           const cachedFile = Bun.file(cached)
           if (await cachedFile.exists()) {
-            return new Response(cachedFile, {
-              headers: {
-                'Content-Type': 'image/svg+xml; charset=utf-8',
-                'Cache-Control': 'public, max-age=31536000, immutable',
-              },
+            // The prerendered SVG is regenerated whenever the renderer or
+            // CoreGlyphs bundle bumps. URL is stable, so we can't use
+            // `immutable` — issue an ETag tied to mtime+size and let the
+            // browser revalidate on day-old caches.
+            return await fileResponseRevalidated(request, cachedFile, {
+              contentType: 'image/svg+xml; charset=utf-8',
+              maxAge: 86400,
             })
           }
         }
@@ -390,12 +436,16 @@ export async function startDevServer(opts, ctx) {
             background: bgParam ?? undefined,
           }, ctx)
           const file = Bun.file(render.file_path)
-          if (!await file.exists()) return new Response('Not Found', { status: 404 })
-          return new Response(file, {
-            headers: {
-              'Content-Type': render.mime_type,
-              'Cache-Control': 'public, max-age=31536000, immutable',
-            },
+          // Live renders are keyed off (renderer, scope, name, format,
+          // size, color, background) — same parameters always yield the
+          // same on-disk file. The URL captures every dimension, so a
+          // bumped renderer produces a new cache row + new file path. We
+          // still issue an ETag instead of `immutable` so that a renderer
+          // bump on the *server* side flushes browser caches even when
+          // the URL hasn't changed (older clients with the same params).
+          return await fileResponseRevalidated(request, file, {
+            contentType: render.mime_type,
+            maxAge: 86400,
           })
         } catch {
           return new Response('Not Found', { status: 404 })

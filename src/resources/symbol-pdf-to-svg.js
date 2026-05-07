@@ -125,7 +125,6 @@ function parseDictionary(text) {
     while (i < text.length && !/[\s/<>\[\]]/.test(text[i])) i++
     const key = text.slice(keyStart, i)
     skipWs(text, i, value => { i = value })
-    const valueStart = i
     if (text.startsWith('<<', i)) {
       const endNested = findMatching(text, i, '<<', '>>')
       out[key] = parseDictionary(text.slice(i, endNested + 2))
@@ -304,11 +303,11 @@ function parseContentStream(buffer, alphaByName) {
         appendCommand({ op: 'Z' })
         break
       case 'f': case 'F': case 'f*':
-        if (op === 'f*' && path.length > 0) path.forEach(sp => sp.fillRule = 'evenodd')
+        if (op === 'f*') for (const sp of path) sp.fillRule = 'evenodd'
         closeFill()
         break
       case 'B': case 'B*': case 'b': case 'b*':
-        if (op.includes('*') && path.length > 0) path.forEach(sp => sp.fillRule = 'evenodd')
+        if (op.includes('*')) for (const sp of path) sp.fillRule = 'evenodd'
         if (op === 'b' || op === 'b*') appendCommand({ op: 'Z' })
         closeFill()
         break
@@ -419,7 +418,7 @@ function assembleSvg(fills, opts) {
   // through `<img>`, or as a CSS `mask-image` source. Masks rely on alpha
   // vs. luminance interpretation, which differs by context.
   const fillColor = String(color)
-  const escapedName = escape(name)
+  const escapedName = escapeXml(name)
   const idBase = `c${(Math.random().toString(36).slice(2, 8))}`
   let defs = ''
   let nodes = []
@@ -446,7 +445,7 @@ function assembleSvg(fills, opts) {
   const body = nodes.join('')
 
   const bgRect = background
-    ? `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="${escape(background)}"/>`
+    ? `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="${escapeXml(background)}"/>`
     : ''
   const defsBlock = defs ? `<defs>${defs}</defs>` : ''
   const viewBox = `0 0 ${formatNumber(vbW)} ${formatNumber(vbH)}`
@@ -481,7 +480,7 @@ function formatNumber(n) {
   return s.replace(/\.?0+$/, '') || '0'
 }
 
-function escape(value) {
+function escapeXml(value) {
   return String(value).replace(/[<>&"']/g, c => (
     { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]
   ))

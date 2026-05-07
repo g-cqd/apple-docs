@@ -19,8 +19,14 @@ permissions:
 
 jobs:
   build-snapshot:
-    runs-on: macos-latest
-    timeout-minutes: 180
+    # macOS 26 gives us the latest CoreGlyphs / CoreGlyphsPrivate bundles so
+    # the full-tier snapshot ships every SF Symbol Apple has shipped to date.
+    # The Swift toolchain on macOS 26 also exposes `vectorGlyph.drawInContext:`
+    # which our private-API SVG renderer depends on (see src/resources/
+    # symbol-pdf-to-svg.js). Older runners would silently produce a smaller
+    # symbol catalog.
+    runs-on: macos-26
+    timeout-minutes: 240
     permissions:
       contents: write
     steps:
@@ -32,6 +38,24 @@ jobs:
 
       - name: Sync corpus
         run: bun run cli.js sync --concurrency 500 --rate 500 --full --parallel 20 --retry-failed --index
+        timeout-minutes: 30
+
+      # Apple typography assets — DMG/PKG download + extraction. ~30s per
+      # family on a warm runner, dominated by `hdiutil attach` latency.
+      - name: Sync Apple fonts (download + extract)
+        run: bun run cli.js fonts sync --download
+        timeout-minutes: 30
+
+      # SF Symbols catalog (public + private) from the system bundles. The
+      # plist-driven sync is fast — ~3s for ~10k symbols.
+      - name: Sync SF Symbols catalog
+        run: bun run cli.js symbols sync
+
+      # Pre-render every indexed symbol to a theme-neutral SVG via our
+      # in-process PDF parser. This is the work the snapshot is meant to
+      # save end users from running themselves — bake it into the archive.
+      - name: Pre-render SF Symbols
+        run: bun run cli.js symbols render --concurrency 8
         timeout-minutes: 30
 
       - name: Determine tag
@@ -81,7 +105,7 @@ jobs:
             **Tiers:**
             - `lite` — Metadata + FTS5 title/abstract index
             - `standard` — + trigram index + body FTS5 + normalized sections
-            - `full` — Standard + raw JSON + Markdown files
+            - `full` — Standard + raw JSON + Markdown + every Apple font + every pre-rendered SF Symbol SVG
 
             **Install:**
             ```bash

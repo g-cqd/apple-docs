@@ -120,11 +120,57 @@ else
   say "WARN: render-all.sh failed; continuing with stale rendered config"
 fi
 
-# 4-6. Run ops commands. These can take a while; output streams to the log.
+# 4-6. Refresh the corpus.
+#
+# Two modes:
+#   USE_SNAPSHOT=1 (default when the GH snapshot release tag is newer than
+#       what's locally applied): hand off to pull-snapshot.sh which
+#       downloads the latest release, verifies its SHA-256, and runs
+#       `apple-docs setup --tier full --force --downgrade` to swap the DB
+#       and resource directories in one go. Cheap on CPU/network, captures
+#       the canonical SF-Symbols + fonts pre-render done by the macos-26
+#       runner.
+#   USE_SNAPSHOT=0: original crawl-on-this-host workflow (apple-docs update,
+#       sync --retry-failed, doctor). Slower but doesn't depend on GH.
+#
+# Operator can force a mode by exporting USE_SNAPSHOT=0/1; the default is
+# auto-detection based on the GH release tag.
 export PATH="$(dirname -- "$BUN"):$PATH"
-run "$BUN" run "$REPO/cli.js" update            || say "(update returned $?)"
-run "$BUN" run "$REPO/cli.js" sync --retry-failed || say "(sync --retry-failed returned $?)"
-run "$BUN" run "$REPO/cli.js" doctor            || say "(doctor returned $?)"
+
+USE_SNAPSHOT="${USE_SNAPSHOT:-auto}"
+if [ "$USE_SNAPSHOT" = "auto" ]; then
+  applied_tag=""
+  if [ -f "$OPS/state/applied-snapshot" ]; then
+    applied_tag=$(/bin/cat "$OPS/state/applied-snapshot")
+  fi
+  latest_tag=$(/usr/bin/curl --fail --silent --show-error --max-time 30 \
+    --header 'Accept: application/vnd.github+json' \
+    --header 'User-Agent: apple-docs-ops/1.0' \
+    "https://api.github.com/repos/${GITHUB_REPO_SLUG:-g-cqd/apple-docs}/releases/latest" \
+    2>>"$LOG" \
+    | /usr/bin/python3 -c 'import json,sys; print((json.load(sys.stdin) or {}).get("tag_name") or "", end="")' 2>>"$LOG" \
+    || true)
+  if [ -n "$latest_tag" ] && [ "$latest_tag" != "$applied_tag" ]; then
+    USE_SNAPSHOT=1
+    say "auto-detected new GH snapshot ${latest_tag} (was ${applied_tag:-<none>}) — using snapshot mode"
+  else
+    USE_SNAPSHOT=0
+    say "no newer GH snapshot found — using crawl-on-host mode"
+  fi
+fi
+
+if [ "$USE_SNAPSHOT" = "1" ]; then
+  if ! run "$OPS/bin/pull-snapshot.sh"; then
+    say "ERROR: pull-snapshot.sh failed; falling back to crawl-on-host refresh"
+    run "$BUN" run "$REPO/cli.js" update            || say "(update returned $?)"
+    run "$BUN" run "$REPO/cli.js" sync --retry-failed || say "(sync --retry-failed returned $?)"
+    run "$BUN" run "$REPO/cli.js" doctor            || say "(doctor returned $?)"
+  fi
+else
+  run "$BUN" run "$REPO/cli.js" update            || say "(update returned $?)"
+  run "$BUN" run "$REPO/cli.js" sync --retry-failed || say "(sync --retry-failed returned $?)"
+  run "$BUN" run "$REPO/cli.js" doctor            || say "(doctor returned $?)"
+fi
 
 # 6b. Rebuild the static site. Caddy serves ${STATIC_DIR} directly via
 # `file_server`; this step is what makes the deploy actually visible to

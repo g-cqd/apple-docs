@@ -533,11 +533,23 @@ export async function renderFontText(opts, ctx) {
   const text = String(opts.text ?? 'Typography')
   const pointSize = clampInteger(opts.size ?? 96, 8, 512)
   let content
-  try {
-    content = await renderFontTextSvgCurves({ fontPath: font.file_path, text, pointSize })
-  } catch (error) {
-    ctx.logger?.warn?.(`CoreText outline render failed for ${font.file_name}: ${error.message}`)
+  // CoreText / CTFontManagerRegisterFontsForURL behaviour on a non-SFNT
+  // file is "undefined" in practice — observed to either segfault, register
+  // a phantom descriptor, or stall indefinitely on macOS CI runners (the
+  // last case wedges the request handler and the server eventually drops
+  // listening for the test fetch). Probe the magic header up-front so test
+  // fixtures and corrupt downloads short-circuit straight to the placeholder
+  // SVG without spawning Swift.
+  const valid = await isLikelySfnt(font.file_path)
+  if (!valid) {
     content = renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize })
+  } else {
+    try {
+      content = await renderFontTextSvgCurves({ fontPath: font.file_path, text, pointSize })
+    } catch (error) {
+      ctx.logger?.warn?.(`CoreText outline render failed for ${font.file_name}: ${error.message}`)
+      content = renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize })
+    }
   }
   return {
     font,
@@ -1083,6 +1095,33 @@ async function run(args) {
 async function hashFile(path) {
   const bytes = await Bun.file(path).arrayBuffer()
   return sha256(bytes)
+}
+
+/**
+ * Return true if the file at `path` exists and starts with one of the
+ * known SFNT (font-container) magic numbers. Used to gate Swift/CoreText
+ * spawns: passing a non-font file to CTFontManager is undefined behaviour
+ * and observed to wedge the parent process on CI runners.
+ *
+ * Magic numbers: 0x00010000 (TrueType), `OTTO` (OpenType+CFF), `ttcf`
+ * (TrueType Collection), `wOFF` (WOFF), `wOF2` (WOFF2).
+ */
+async function isLikelySfnt(path) {
+  try {
+    const fd = openSync(path, 'r')
+    try {
+      const buf = Buffer.alloc(4)
+      const read = readSync(fd, buf, 0, 4, 0)
+      if (read < 4) return false
+      const tag = buf.toString('ascii')
+      if (tag === 'OTTO' || tag === 'ttcf' || tag === 'wOFF' || tag === 'wOF2') return true
+      return buf[0] === 0x00 && buf[1] === 0x01 && buf[2] === 0x00 && buf[3] === 0x00
+    } finally {
+      closeSync(fd)
+    }
+  } catch {
+    return false
+  }
 }
 
 function normalizeStringArray(value) {

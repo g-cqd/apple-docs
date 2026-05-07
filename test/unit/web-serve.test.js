@@ -318,7 +318,25 @@ describe('Dev Server (P7-E)', () => {
     expect(fontFile.status).toBe(200)
     expect(fontFile.headers.get('content-type')).toContain('font/ttf')
     expect(await fontFile.text()).toBe('fake-font')
+    // Cache contract: stable URL + revalidation-friendly ETag, NOT
+    // `immutable` — Apple ships new font versions every macOS cycle and
+    // `immutable` would pin browser caches across upgrades.
+    expect(fontFile.headers.get('etag')).toBeTruthy()
+    expect(fontFile.headers.get('cache-control')).toContain('must-revalidate')
+    expect(fontFile.headers.get('cache-control')).not.toContain('immutable')
 
+    // Conditional GET round-trip — server should answer 304 when the
+    // ETag matches the on-disk mtime+size pair.
+    const conditional = await fetch(`${serverInfo.url}/api/fonts/file/font-web-test`, {
+      headers: { 'If-None-Match': fontFile.headers.get('etag') },
+    })
+    expect(conditional.status).toBe(304)
+
+    // The fixture writes literal "fake-font" bytes to disk. CTFontManager
+    // on macOS CI runners can stall on a non-SFNT file, so the route guards
+    // against it by sniffing the magic header up-front and falling straight
+    // to the placeholder SVG. The 200 + SVG body assertions below pass on
+    // both the curve renderer (real font) and the placeholder (test fixture).
     const textSvg = await fetch(`${serverInfo.url}/api/fonts/text.svg?fontId=font-web-test&text=SF`)
     expect(textSvg.status).toBe(200)
     expect(textSvg.headers.get('content-type')).toContain('image/svg+xml')
