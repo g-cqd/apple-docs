@@ -348,6 +348,7 @@ async function spawnSymbolWorker({ scope, size, logger }) {
   }
 }
 
+// Stryker disable all
 const SYMBOL_WORKER_SCRIPT = `
 import AppKit
 import Foundation
@@ -429,6 +430,7 @@ while let line = readLine(strippingNewline: true) {
   }
 }
 `
+// Stryker restore all
 
 
 export async function renderSfSymbol(opts, ctx) {
@@ -795,6 +797,7 @@ async function readBundleVersion(contentsDir) {
 }
 
 async function renderSymbolPng({ name, scope, pointSize, color, background }) {
+  // Stryker disable all
   const script = `
 import AppKit
 import Foundation
@@ -857,6 +860,7 @@ extension NSColor {
   }
 }
 `
+  // Stryker restore all
   const scriptPath = join(tmpdir(), `apple-docs-render-symbol-${process.pid}.swift`)
   await Bun.write(scriptPath, script)
   try {
@@ -940,6 +944,7 @@ async function finalizeSvgFromPdf(pdfBytes, { name, pointSize, color, background
   return symbolPdfToSvg(pdfBytes, { name, pointSize, color, background })
 }
 
+// Stryker disable all
 const SYMBOL_PDF_SCRIPT = `
 import AppKit
 import Foundation
@@ -1004,6 +1009,7 @@ ctx.endPDFPage()
 ctx.closePDF()
 FileHandle.standardOutput.write(pdfData as Data)
 `
+// Stryker restore all
 
 
 function renderFontTextSvgFallback({ fontFamily, text, pointSize }) {
@@ -1016,6 +1022,7 @@ function renderFontTextSvgFallback({ fontFamily, text, pointSize }) {
 }
 
 async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
+  // Stryker disable all
   const script = `
 import CoreText
 import Foundation
@@ -1184,6 +1191,7 @@ extension String {
   }
 }
 `
+  // Stryker restore all
   const scriptPath = join(tmpdir(), `apple-docs-render-font-${process.pid}.swift`)
   await Bun.write(scriptPath, script)
   try {

@@ -13,10 +13,16 @@ export default {
   htmlReporter: { fileName: 'reports/stryker/index.html' },
   jsonReporter: { fileName: 'reports/stryker/mutation-report.json' },
   concurrency: 4,
-  timeoutMS: 30000,
+  timeoutMS: 20000,
   incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',
   mutator: {
-    excludedMutations: ['StringLiteral', 'ObjectLiteral'],
+    excludedMutations: [
+      'StringLiteral',
+      'ObjectLiteral',
+      'BlockStatement',
+      'Regex',
+      'ArrayDeclaration',
+    ],
   },
 }

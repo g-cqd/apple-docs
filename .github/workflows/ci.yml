@@ -83,6 +83,7 @@ jobs:
 
   mutation:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
       APPLE_DOCS_NO_GIT_AUTH: '1'
     steps:
