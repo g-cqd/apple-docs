@@ -53,13 +53,26 @@ export function extractReferences(json) {
     }
   }
 
-  // references that are documentation topics (catch any not in sections)
+  // Catch-all for cross-references that aren't part of any structured section
+  // (topicSections / relationshipsSections / seeAlsoSections). Apple's
+  // references map carries one entry per inline mention in the body, so this
+  // sweep picks up legitimate links to other pages elsewhere in the corpus.
+  //
+  // It also picks up Apple's stale duplicate entries: when a child symbol gets
+  // promoted to a standalone page (e.g. AppStoreServerAPI/hasMore), the
+  // references map keeps the old nested URL for backwards compatibility
+  // (AppStoreServerAPI/NotificationHistoryResponse/hasMore) but Apple stopped
+  // publishing the data file, so following the URL 404s. Empirically the
+  // ghost entries always have an empty `abstract` while genuine cross-refs
+  // carry real prose — use that as the signal to skip them.
   for (const [id, ref] of Object.entries(refs)) {
     if (id.startsWith(EXTERNAL_ID_PREFIX)) continue
-    if (ref.type === 'topic' && ref.url?.includes('/documentation/')) {
-      const norm = normalizeIdentifier(ref.url)
-      if (norm) ids.add(norm)
-    }
+    if (ref.type !== 'topic') continue
+    if (!ref.url?.includes('/documentation/')) continue
+    const abstract = ref.abstract
+    if (!Array.isArray(abstract) || abstract.length === 0) continue
+    const norm = normalizeIdentifier(ref.url)
+    if (norm) ids.add(norm)
   }
 
   return [...ids]

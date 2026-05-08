@@ -26,6 +26,55 @@ describe('extractReferences', () => {
     expect(extractReferences({})).toEqual([])
   })
 
+  test('skips ghost cross-references (empty abstract, not in any structured section)', () => {
+    // When Apple promotes a child symbol to a standalone page, the parent's
+    // references map keeps both URLs: the canonical one (with content) and a
+    // legacy nested one (empty abstract, points to a 404). The ghost only
+    // appears via the catch-all loop — empty abstract is the discriminator.
+    const json = {
+      topicSections: [
+        {
+          identifiers: [
+            'doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/hasMore',
+          ],
+        },
+      ],
+      references: {
+        'doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/hasMore': {
+          url: '/documentation/appstoreserverapi/hasmore',
+          type: 'topic',
+          abstract: [{ type: 'text', text: 'A Boolean value indicating ...' }],
+        },
+        'doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/NotificationHistoryResponse/hasMore': {
+          url: '/documentation/appstoreserverapi/notificationhistoryresponse/hasmore',
+          type: 'topic',
+          abstract: [],
+        },
+      },
+    }
+    const refs = extractReferences(json)
+    expect(refs).toContain('appstoreserverapi/hasmore')
+    expect(refs).not.toContain('appstoreserverapi/notificationhistoryresponse/hasmore')
+  })
+
+  test('keeps inline cross-refs that have prose abstracts (real legitimate links)', () => {
+    // Refs that aren't in topicSections / relationshipsSections / seeAlso
+    // but have a real abstract are legitimate inline mentions — keep them
+    // so the breadth-first crawl can pick up cross-framework symbols.
+    const json = {
+      topicSections: [],
+      references: {
+        'doc://com.apple.swiftui/documentation/SwiftUI/View': {
+          url: '/documentation/swiftui/view',
+          type: 'topic',
+          abstract: [{ type: 'text', text: 'A type that represents part of your app.' }],
+        },
+      },
+    }
+    const refs = extractReferences(json)
+    expect(refs).toContain('swiftui/view')
+  })
+
   test('skips externally-resolved symbols (no DocC JSON page exists)', () => {
     // Apple lists Swift stdlib / cross-module symbols via references with a
     // url field, but the endpoints 404. The identifier prefix flags them.
