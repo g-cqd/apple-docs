@@ -1,8 +1,7 @@
 import { join, dirname, extname } from 'node:path'
-import { gzipSync } from 'node:zlib'
 import { createHash } from 'node:crypto'
 import { existsSync, statSync } from 'node:fs'
-import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, renderNotFoundPage, buildFrameworkTreeData } from './templates.js'
+import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, buildFrameworkTreeData } from './templates.js'
 import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { createWebRenderCache } from './render-cache.js'
 import { search } from '../commands/search.js'
@@ -16,6 +15,15 @@ import { createLru } from '../lib/lru.js'
 import { getPrerenderedSymbolPath, listAppleFonts, renderFontText, renderSfSymbol, searchSfSymbols } from '../resources/apple-assets.js'
 import { buildStoreZip } from '../lib/zip.js'
 import { ASSET_BUNDLES } from './assets-manifest.js'
+import {
+  MIME_TYPES,
+  jsonResponse,
+  textResponse,
+  notFoundResponse,
+  matchesIfNoneMatch,
+  fileResponseRevalidated,
+  finalizeResponse,
+} from './responses.js'
 
 // Cache directive for JSON endpoints whose result is a pure function of the
 // current corpus (`/api/search`, `/api/filters`). Cloudflare's default policy
@@ -25,20 +33,6 @@ import { ASSET_BUNDLES } from './assets-manifest.js'
 // CF cache purge after every deploy (ops/bin/cf-purge.sh) gives instant
 // coherence without staleness drift.
 const API_CORPUS_CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=3600'
-
-const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml; charset=utf-8',
-  '.png': 'image/png',
-  '.ttf': 'font/ttf',
-  '.otf': 'font/otf',
-  '.ttc': 'font/collection',
-  '.dfont': 'application/octet-stream',
-  '.zip': 'application/zip',
-}
 
 /**
  * Start a local dev server for previewing documentation.
@@ -135,132 +129,7 @@ export async function startDevServer(opts, ctx) {
     'Cache-Control': 'public, max-age=31536000, immutable',
   }
 
-  const COMPRESSIBLE = new Set(['text/html', 'text/css', 'text/javascript', 'application/json'])
   const gzipCache = createLru({ max: 256 })
-
-  function jsonResponse(data, { headers = {}, status = 200, hashable = false } = {}) {
-    const response = Response.json(data, { status, headers })
-    if (hashable) response.headers.set('x-apple-docs-hashable', '1')
-    return response
-  }
-
-  /**
-   * Build a 304-aware response for a Bun.file backed asset whose URL is
-   * stable but whose contents may change (e.g. pre-rendered symbol SVGs,
-   * extracted font files, family ZIPs). The ETag is composed from the
-   * on-disk mtime + size — far cheaper than hashing the bytes, and
-   * sufficient for our case because every regeneration path either
-   * rewrites the file or replaces it atomically.
-   */
-  async function fileResponseRevalidated(request, file, {
-    contentType,
-    contentDisposition,
-    maxAge = 86400,
-  }) {
-    let stat
-    try {
-      stat = await file.stat()
-    } catch {
-      return new Response('Not Found', { status: 404 })
-    }
-    const etag = `"${Math.round(stat.mtimeMs).toString(36)}-${stat.size.toString(36)}"`
-    const headers = new Headers({
-      'Content-Type': contentType,
-      'ETag': etag,
-      // Allow shared caches (Caddy / Cloudflare / browser) to keep the
-      // bytes for `maxAge` seconds, but require a conditional GET after
-      // that so we never pin a stale render once the prerender cache or
-      // the on-disk font is rewritten.
-      'Cache-Control': `public, max-age=${maxAge}, must-revalidate`,
-    })
-    if (contentDisposition) headers.set('Content-Disposition', contentDisposition)
-    if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) {
-      return new Response(null, { status: 304, headers })
-    }
-    return new Response(file, { status: 200, headers })
-  }
-
-  function textResponse(body, { contentType = 'text/plain; charset=utf-8', headers = {}, status = 200, hashable = false } = {}) {
-    const response = new Response(body, {
-      status,
-      headers: {
-        'Content-Type': contentType,
-        ...headers,
-      },
-    })
-    if (hashable) response.headers.set('x-apple-docs-hashable', '1')
-    return response
-  }
-
-  /**
-   * Render the corpus-aware 404 page. The HTML's inline JS reads
-   * window.location to derive a search query from the requested URL, so
-   * users land on the search page pre-filled with what they were looking for.
-   */
-  function notFoundResponse(cfg) {
-    return new Response(renderNotFoundPage(cfg), {
-      status: 404,
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    })
-  }
-
-  function matchesIfNoneMatch(headerValue, etag) {
-    if (!headerValue) return false
-    const value = headerValue.trim()
-    if (value === '*') return true
-    return value.split(',').map(part => part.trim()).includes(etag)
-  }
-
-  async function finalizeResponse(request, response) {
-    const accept = request.headers.get('accept-encoding') || ''
-    const hashable = response.headers.get('x-apple-docs-hashable') === '1'
-    response.headers.delete('x-apple-docs-hashable')
-
-    const contentType = response.headers.get('content-type') || ''
-    const mimeBase = contentType.split(';')[0].trim()
-
-    if (hashable) {
-      const body = await response.text()
-      const etag = `"${sha256(body).slice(0, 16)}"`
-      const headers = new Headers(response.headers)
-      headers.set('ETag', etag)
-
-      if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) {
-        headers.delete('Content-Encoding')
-        headers.delete('Content-Length')
-        headers.delete('Content-Type')
-        return new Response(null, { status: 304, headers })
-      }
-
-      if (accept.includes('gzip') && COMPRESSIBLE.has(mimeBase)) {
-        let compressed = gzipCache.get(etag)
-        if (!compressed) {
-          compressed = gzipSync(Buffer.from(body))
-          gzipCache.set(etag, compressed)
-        }
-        headers.set('Content-Encoding', 'gzip')
-        headers.set('Content-Length', String(compressed.length))
-        return new Response(compressed, { status: response.status, headers })
-      }
-
-      return new Response(body, { status: response.status, headers })
-    }
-
-    if (accept.includes('gzip') && COMPRESSIBLE.has(mimeBase)) {
-      const body = await response.arrayBuffer()
-      const compressed = gzipSync(Buffer.from(body))
-      return new Response(compressed, {
-        status: response.status,
-        headers: {
-          ...Object.fromEntries(response.headers.entries()),
-          'Content-Encoding': 'gzip',
-          'Content-Length': String(compressed.length),
-        },
-      })
-    }
-
-    return response
-  }
 
   async function handleRequest(request) {
     const url = new URL(request.url)
@@ -795,7 +664,7 @@ export async function startDevServer(opts, ctx) {
     async fetch(request) {
       const response = await handleRequest(request)
       for (const [k, v] of Object.entries(securityHeaders)) response.headers.set(k, v)
-      return finalizeResponse(request, response)
+      return finalizeResponse(request, response, { gzipCache })
     },
   })
 
