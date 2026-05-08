@@ -164,9 +164,17 @@ export function htmlToPlainText(html) {
  * @param {string} html
  * @returns {string} Markdown source
  */
-export function htmlToMarkdown(html) {
+/**
+ * @param {string} html
+ * @param {object} [opts]
+ * @param {(href: string) => string|null} [opts.linkResolver] Rewrite each
+ *   `<a href="…">` URL. Returns the new URL, the original if no rewrite is
+ *   needed, or `null` to drop the link wrapper (keep the inner text).
+ */
+export function htmlToMarkdown(html, opts = {}) {
   if (!html) return ''
 
+  const linkResolver = typeof opts.linkResolver === 'function' ? opts.linkResolver : null
   let s = html
 
   s = s.replace(/<\?[^?]*\?>/g, '')
@@ -201,11 +209,19 @@ export function htmlToMarkdown(html) {
     return text ? `\`${text}\`` : ''
   })
 
-  // <a href="X">Y</a> — markdown link
+  // <a href="X">Y</a> — markdown link.
+  // The linkResolver gets first crack at every URL: it may rewrite (return a
+  // new URL), keep (return the original or undefined), or unwrap (return null).
   s = s.replace(/<a\s[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, txt) => {
     const text = decodeEntities(stripInlineTags(txt)).trim()
     if (!text) return ''
-    return `[${text}](${href})`
+    let resolved = href
+    if (linkResolver) {
+      const result = linkResolver(href)
+      if (result === null) return text
+      if (typeof result === 'string') resolved = result
+    }
+    return `[${text}](${resolved})`
   })
 
   // <strong>/<b>/<em>/<i>
@@ -495,7 +511,9 @@ export function extractHtmlContent(html, opts = {}) {
   if (!html) return { title: null, description: null, sections: [] }
 
   const meta = extractMetaInfo(html)
-  const renderText = opts.preserveStructure ? htmlToMarkdown : htmlToPlainText
+  const renderText = opts.preserveStructure
+    ? (frag) => htmlToMarkdown(frag, { linkResolver: opts.linkResolver })
+    : htmlToPlainText
 
   // ── Locate content container ───────────────────────────────────────────────
 
@@ -648,6 +666,7 @@ export function parseHtmlToNormalized(html, key, opts = {}) {
   const extracted = extractHtmlContent(html, {
     containerSelector: opts.containerSelector,
     preserveStructure: opts.preserveStructure,
+    linkResolver: opts.linkResolver,
   })
 
   const { title, description, sections: htmlSections } = extracted

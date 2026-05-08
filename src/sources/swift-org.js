@@ -82,6 +82,85 @@ const CURATED_PATHS = [
   'openapi',
 ]
 
+/**
+ * Set of curated path strings (e.g. `documentation/api-design-guidelines`,
+ * `getting-started/cli-swiftpm`) for fast O(1) lookup during link rewriting.
+ * Trailing slashes and leading `/` are normalized away first.
+ */
+const CURATED_PATH_SET = new Set(CURATED_PATHS)
+
+/**
+ * swift.org URLs that no longer point at swift-org content but at one of the
+ * external DocC archives served by the `swift-docc` adapter. Map them to
+ * their corpus-internal equivalents so links don't break or redirect.
+ */
+const SWIFT_ORG_REDIRECTS = {
+  'documentation/concurrency':       'swift-migration-guide/documentation/migrationguide',
+  'documentation/concurrency/':      'swift-migration-guide/documentation/migrationguide',
+  'documentation/package-manager':   'swift-package-manager/documentation/packagemanagerdocs',
+  'documentation/package-manager/':  'swift-package-manager/documentation/packagemanagerdocs',
+  'documentation/tspl':              'swift-book/The-Swift-Programming-Language',
+  'documentation/tspl/':             'swift-book/The-Swift-Programming-Language',
+}
+
+/**
+ * Build a link resolver that rewrites swift.org URLs to corpus-internal
+ * `/docs/...` routes when the target is in our corpus, and absolutizes
+ * relative URLs otherwise so they survive the move off `swift.org`.
+ *
+ * @param {string} sourceUrl Absolute URL of the page being parsed.
+ * @returns {(href: string) => string|null}
+ */
+function makeSwiftOrgLinkResolver(sourceUrl) {
+  let base
+  try { base = new URL(sourceUrl) } catch { base = null }
+
+  return (rawHref) => {
+    if (!rawHref || typeof rawHref !== 'string') return rawHref
+    // Mailto, tel, javascript, fragments, data — leave alone.
+    if (/^(?:mailto:|tel:|javascript:|data:|#)/i.test(rawHref)) return rawHref
+
+    let abs
+    try {
+      abs = base ? new URL(rawHref, base) : new URL(rawHref)
+    } catch {
+      return rawHref
+    }
+
+    // Map to corpus-internal route only when the target is on swift.org.
+    const isSwiftOrg = abs.hostname === 'swift.org' || abs.hostname === 'www.swift.org'
+    if (isSwiftOrg) {
+      const path = abs.pathname.replace(/^\/+/, '')
+      const noTrail = path.replace(/\/+$/, '')
+      const redirect = SWIFT_ORG_REDIRECTS[path] ?? SWIFT_ORG_REDIRECTS[`${noTrail}/`]
+      if (redirect) {
+        return `/docs/${redirect}/${abs.hash}`
+      }
+      // Direct match in swift-org curated list (with or without trailing slash).
+      if (CURATED_PATH_SET.has(noTrail)) {
+        return `/docs/${ROOT_SLUG}/${noTrail}/${abs.hash}`
+      }
+      if (CURATED_PATH_SET.has(path)) {
+        return `/docs/${ROOT_SLUG}/${path}/${abs.hash}`
+      }
+      // Strip trailing slash variant when the curated path includes the .html suffix.
+      if (CURATED_PATH_SET.has(`${noTrail}.html`)) {
+        return `/docs/${ROOT_SLUG}/${noTrail}.html/${abs.hash}`
+      }
+    }
+
+    // docs.swift.org/swift-book/* → /docs/swift-book/* — TSPL chapters live there.
+    if (abs.hostname === 'docs.swift.org' && abs.pathname.startsWith('/swift-book/')) {
+      return `/docs/swift-book${abs.pathname.replace(/^\/swift-book/, '')}${abs.hash}`
+    }
+
+    // Otherwise return the absolute URL — it's external content. The
+    // important fix is that relative `/install` becomes
+    // `https://swift.org/install` instead of resolving against our host.
+    return abs.toString()
+  }
+}
+
 export class SwiftOrgAdapter extends SourceAdapter {
   static type = 'swift-org'
   static displayName = 'Swift.org Documentation'
@@ -135,6 +214,7 @@ export class SwiftOrgAdapter extends SourceAdapter {
       framework: ROOT_SLUG,
       url,
       preserveStructure: true,
+      linkResolver: makeSwiftOrgLinkResolver(url),
     })
 
     // Swift.org HTML titles end with " | Swift.org"; strip the brand suffix.

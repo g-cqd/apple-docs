@@ -275,6 +275,84 @@ describe('SwiftOrgAdapter', () => {
       const topics = result.sections.find(s => s.heading === 'Related Documentation')
       expect(topics).toBeUndefined()
     })
+  })
+
+  describe('link rewriting', () => {
+    test('rewrites curated swift.org paths to internal /docs/swift-org/...', () => {
+      const html = `<html><body><main>
+        <h1>Getting started</h1>
+        <h2>Section</h2>
+        <p>See <a href="/install">install</a> and <a href="/getting-started/cli-swiftpm">the CLI guide</a>.</p>
+      </main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/getting-started', html)
+      const sec = result.sections.find(s => s.heading === 'Section')
+      expect(sec.contentText).toContain('](/docs/swift-org/install/)')
+      expect(sec.contentText).toContain('](/docs/swift-org/getting-started/cli-swiftpm/)')
+      expect(sec.contentText).not.toMatch(/]\(\/install\)/)
+    })
+
+    test('rewrites swift.org redirect paths to their swift-docc archive home', () => {
+      const html = `<html><body><main>
+        <h1>Docs</h1>
+        <h2>Section</h2>
+        <p>Use <a href="/documentation/package-manager/">SwiftPM</a> and <a href="/documentation/concurrency">migrate</a>.</p>
+      </main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation', html)
+      const sec = result.sections.find(s => s.heading === 'Section')
+      expect(sec.contentText).toContain('/docs/swift-package-manager/documentation/packagemanagerdocs/')
+      expect(sec.contentText).toContain('/docs/swift-migration-guide/documentation/migrationguide/')
+    })
+
+    test('rewrites docs.swift.org/swift-book/* → /docs/swift-book/*', () => {
+      const html = `<html><body><main>
+        <h1>X</h1>
+        <h2>S</h2>
+        <p><a href="https://docs.swift.org/swift-book/documentation/the-swift-programming-language/guidedtour/">Guided tour</a></p>
+      </main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/getting-started', html)
+      const sec = result.sections.find(s => s.heading === 'S')
+      expect(sec.contentText).toContain('/docs/swift-book/documentation/the-swift-programming-language/guidedtour/')
+    })
+
+    test('absolutizes non-curated relative paths against swift.org', () => {
+      const html = `<html><body><main>
+        <h1>X</h1>
+        <h2>S</h2>
+        <p><a href="/LICENSE.txt">LICENSE</a> | <a href="/blog/something">blog</a></p>
+      </main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/about', html)
+      const sec = result.sections.find(s => s.heading === 'S')
+      expect(sec.contentText).toContain('](https://swift.org/LICENSE.txt)')
+      expect(sec.contentText).toContain('](https://swift.org/blog/something)')
+    })
+
+    test('leaves external https URLs untouched', () => {
+      const html = `<html><body><main>
+        <h1>X</h1>
+        <h2>S</h2>
+        <p><a href="https://github.com/apple/swift">repo</a></p>
+      </main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/about', html)
+      const sec = result.sections.find(s => s.heading === 'S')
+      expect(sec.contentText).toContain('](https://github.com/apple/swift)')
+    })
+
+    test('preserves URL fragments on rewritten links', () => {
+      const html = `<html><body><main>
+        <h1>X</h1>
+        <h2>S</h2>
+        <p><a href="/contributing/#reporting-bugs">report</a></p>
+      </main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/about', html)
+      const sec = result.sections.find(s => s.heading === 'S')
+      expect(sec.contentText).toContain('/docs/swift-org/contributing/#reporting-bugs')
+    })
 
     test('extracts abstract from meta description', () => {
       const adapter = new SwiftOrgAdapter()
