@@ -354,21 +354,33 @@ Gate:
 - No framework work starts until current behavior is executable and diffable.
 - Search architecture stays on SQLite only if optimized SQLite reaches p99 < 25 ms (cache on) for the default search path at agreed target concurrency. Otherwise the Tantivy spike starts before broad UI migration work.
 
-### Phase 1: Modularize Without Framework Changes
+### Phase 1: Modularize Without Framework Changes — **shipped**
 
-LoE: 3-5 days.
+Landed across eight focused slices, each one commit, tests green at every boundary. `src/web/serve.js` shrank from ~800 lines to **117 lines** (boot + dispatch only); the route handlers now live in 11 per-file modules under `src/web/routes/`, the per-server state is named in a single typed `WebContext` factory, and view-model builders shared between `build.js` (static) and the dev server eliminate the homepage drift that previously shipped slightly different HTML between the two paths.
 
-Deliverables:
+| Slice | Commit | What it did |
+|-------|--------|-------------|
+| A | `5822da6` | `src/web/assets-manifest.js` as single source of truth for `ASSET_BUNDLES` / `STANDALONE_ASSETS` / `WORKER_ASSETS` (was duplicated across `serve.js` + `build.js`). |
+| B | `f58cf03` | `src/web/responses.js` lifts `jsonResponse`, `textResponse`, `notFoundResponse`, `matchesIfNoneMatch`, `fileResponseRevalidated`, `finalizeResponse`, `MIME_TYPES`, `COMPRESSIBLE`, `API_CORPUS_CACHE_CONTROL` out of the closure; +16 unit tests. |
+| C | `eb53d61` | `src/web/context.js` defines `createWebContext(opts, ctx)` returning a typed `WebContext` (`db`, `searchCtx`, `searchCache`, `corpusStamp`, `renderCache`, `frameworkTreeCache`, `gzipCache`, …). `createCorpusStamp` and `resolveWebReaderPool` move with it. |
+| D | `88c92cd` | `src/web/route-registry.js` (exact + pattern dispatch) plus three pilot routes: `/healthz`, `/api/filters`, `/api/symbols/index.json`. |
+| E | `634deb6` | All remaining routes moved to per-file modules: `search`, `search-data`, `fonts`, `symbols`, `pages` (homepage + `/search` + `/fonts` + `/symbols`), `assets` + `worker`, `framework-tree`, `docs`. `serve.js` reduces to context-build + register + `Bun.serve`. |
+| F | `8889077` | `src/web/view-models/{homepage,fonts-page,symbols-page}.viewmodel.js` so build and serve share prop builders and the homepage filter. |
+| G | `6d31055` | `src/web/asset-bundler.js` wraps `Bun.build` for per-file minification + bundle concat. `core.js` drops 49 % (~9.5 kB → 4.9 kB) without source changes. |
+| H | this | This status update + close-out. |
 
-- Extract response helpers, cache/ETag helpers, asset bundle config, and API route handlers out of `serve.js`.
-- Extract page view-model builders from `templates.js`.
-- Create a shared `web/assets-manifest.js` used by both `build.js` and `serve.js` so bundle definitions are not duplicated.
-- Keep string templates in place, but make them consume explicit view models.
+Outcome:
 
-Gate:
+- `bun run lint`, `bun run typecheck`, `bun test --isolate`: clean at every slice boundary; final test count 1332 / 0 (was 1316 / 0 before the slice + the 16 new `web-responses.test.js` cases).
+- Route handlers depend on a single named `WebContext` instead of 12 closure references; opening a new route is now one new file under `src/web/routes/` plus one `registry.register(...)` line.
+- Build and serve consume the same view-model props, so HTML output is byte-equivalent between live and static paths (corrected the pre-existing homepage filter drift the `web-build.test.js` fixture was masking).
+- Asset bundling goes through `Bun.build` with no Vite dependency adopted; the dev preview path keeps plain text concat for zero startup overhead per request.
 
-- Output HTML diffs are either identical or reviewed/accepted.
-- `bun run test:web`, `bun run lint:web`, and at least one static build fixture pass.
+### Phase 1 follow-ups (deferred, not blocking)
+
+- Convert `src/web/assets/*.js` to ES modules so `Bun.build` does real bundling (Phase 2). Until then, `asset-bundler.js` per-file minification is the right shape.
+- Add `view-models/{document,framework}.viewmodel.js` if `build.js`'s document-render loop ever drifts from `routes/docs.route.js`. Currently both call `renderDocumentPage` / `renderFrameworkPage` directly with the same prop shape, so the duplication is small and not yet worth a new module.
+- Type-check the `WebContext` typedef against actual usage with `ts-check` once enough JSDoc lands (Phase 7 item).
 
 ### Phase 2: Native Client Modules And Vite Asset Pipeline
 
