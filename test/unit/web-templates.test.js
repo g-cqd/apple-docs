@@ -95,8 +95,9 @@ describe('buildBreadcrumbs', () => {
   test('renders unknown intermediate segments as plain text instead of dangling links', () => {
     // swift-book chapter keys nest under a directory (LanguageGuide) that is
     // not itself a page — its breadcrumb should be plain text, not a link.
+    // The framework root (swift-book) always resolves via the framework
+    // landing page so it stays a link even if not in knownKeys.
     const knownKeys = new Set([
-      'swift-book',
       'swift-book/LanguageGuide/TheBasics',
     ])
     const html = buildBreadcrumbs('swift-book/LanguageGuide/TheBasics', {

@@ -743,9 +743,13 @@ export function buildBreadcrumbs(key, opts = {}) {
       label = segments[i]
     }
 
+    // The root segment (`/docs/<framework>/`) always resolves: it's served
+    // either by a stored doc page or by renderFrameworkPage at the
+    // framework slug. Don't gate it through knownKeys.
+    const isFrameworkRoot = i === 0
     if (isLast) {
       parts.push(`<span aria-current="page">${escapeAttr(label)}</span>`)
-    } else if (knownKeys && !knownKeys.has(partialKey)) {
+    } else if (knownKeys && !isFrameworkRoot && !knownKeys.has(partialKey)) {
       // Intermediate hop has no corresponding page — keep the label visible
       // for context but don't dangle a 404 link off it.
       parts.push(`<span>${escapeAttr(label)}</span>`)
