@@ -1,17 +1,18 @@
 /**
- * `apple-docs links audit` — scan every rendered HTML doc for `<a href>`
- * targets, classify each, and report counts + top broken patterns.
- *
- * Reads the built static site rather than the normalized DB content because
- * (a) breadcrumbs and chrome links are added at render time, not normalize
- * time; (b) many sources keep raw HTML in DB sections and only the final
- * rendered output reflects the link layout users actually click.
+ * `apple-docs links audit`        — scan every rendered HTML doc for `<a href>`
+ *                                    targets, classify each, and report counts
+ *                                    + top broken patterns.
+ * `apple-docs links consolidate`  — re-apply the cross-source link resolver
+ *                                    to the stored `document_sections.content_json`
+ *                                    payloads. Migrates already-synced corpora
+ *                                    so existing references gain `_resolvedKey`
+ *                                    without re-fetching from origin.
  */
 
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
-import { classifyLink } from '../lib/link-resolver.js'
+import { classifyLink, mapUrlToKey } from '../lib/link-resolver.js'
 
 const HREF_REGEX = /<a\s[^>]*href\s*=\s*"([^"]+)"/gi
 
@@ -187,4 +188,179 @@ export async function linksAudit(opts, ctx) {
     topRelativeBroken: finalize(stats.relativeBroken),
     topExternalResolvable: finalize(stats.externalResolvable),
   }
+}
+
+/**
+ * Walk a content-node tree and rewrite `_resolvedKey` on `reference` and
+ * `link` nodes whose destination URL maps to a corpus key. Validates the
+ * candidate against the supplied `knownKeys` set; mismatches clear the
+ * field so render-time falls back to the external destination.
+ *
+ * Mutates the input nodes in place and returns whether anything changed.
+ *
+ * @param {object} node
+ * @param {Set<string>} knownKeys
+ * @returns {{ added: number, removed: number, kept: number }}
+ */
+function consolidateNode(node, knownKeys) {
+  const stats = { added: 0, removed: 0, kept: 0 }
+  if (!node || typeof node !== 'object') return stats
+
+  if (node.type === 'reference' && typeof node._resolvedKey === 'string') {
+    if (!knownKeys.has(node._resolvedKey)) {
+      delete node._resolvedKey
+      stats.removed++
+    } else {
+      stats.kept++
+    }
+  }
+
+  if (node.type === 'link') {
+    const existing = node._resolvedKey
+    let candidate = null
+    if (typeof node.destination === 'string') {
+      candidate = mapUrlToKey(node.destination)
+    }
+    if (candidate && knownKeys.has(candidate)) {
+      if (existing !== candidate) {
+        node._resolvedKey = candidate
+        stats.added++
+      } else {
+        stats.kept++
+      }
+    } else if (existing) {
+      delete node._resolvedKey
+      stats.removed++
+    }
+  }
+
+  // Same logic for `links` block items (each item carries its own _resolvedKey).
+  if (node.type === 'links' && Array.isArray(node.items)) {
+    for (const item of node.items) {
+      if (typeof item._resolvedKey === 'string' && !knownKeys.has(item._resolvedKey)) {
+        delete item._resolvedKey
+        stats.removed++
+      } else if (item._resolvedKey) {
+        stats.kept++
+      }
+    }
+  }
+
+  // Recurse into the standard child arrays.
+  for (const key of ['inlineContent', 'content']) {
+    const arr = node[key]
+    if (Array.isArray(arr)) {
+      for (const child of arr) {
+        const sub = consolidateNode(child, knownKeys)
+        stats.added += sub.added
+        stats.removed += sub.removed
+        stats.kept += sub.kept
+      }
+    }
+  }
+  if (Array.isArray(node.items) && node.type !== 'links') {
+    for (const item of node.items) {
+      if (item?.content) {
+        for (const child of item.content) {
+          const sub = consolidateNode(child, knownKeys)
+          stats.added += sub.added
+          stats.removed += sub.removed
+          stats.kept += sub.kept
+        }
+      }
+    }
+  }
+  // termList items
+  if (node.type === 'termList' && Array.isArray(node.items)) {
+    for (const item of node.items) {
+      const term = item?.term
+      const def = item?.definition
+      if (term?.inlineContent) {
+        for (const child of term.inlineContent) {
+          const sub = consolidateNode(child, knownKeys)
+          stats.added += sub.added
+          stats.removed += sub.removed
+          stats.kept += sub.kept
+        }
+      }
+      if (def?.content) {
+        for (const child of def.content) {
+          const sub = consolidateNode(child, knownKeys)
+          stats.added += sub.added
+          stats.removed += sub.removed
+          stats.kept += sub.kept
+        }
+      }
+    }
+  }
+
+  return stats
+}
+
+/**
+ * Rewrite stored `document_sections.content_json` so every external URL that
+ * maps to a corpus page gains a `_resolvedKey`, and stale entries are
+ * scrubbed. Idempotent: re-running on already-consolidated data is a no-op.
+ *
+ * @param {object} opts
+ * @param {boolean} [opts.dryRun]
+ * @param {{ db, logger }} ctx
+ * @returns {Promise<{ documentsScanned, sectionsTouched, _resolvedKeyAdded, _resolvedKeyRemoved, _resolvedKeyKept }>}
+ */
+export async function linksConsolidate(opts, ctx) {
+  const { db, logger } = ctx
+  const dryRun = opts.dryRun === true
+
+  const knownKeys = new Set(
+    db.db.query("SELECT path FROM pages WHERE status != 'deleted'").all().map(r => r.path),
+  )
+  logger?.info?.(`Consolidating links against ${knownKeys.size.toLocaleString('en-US')} corpus keys${dryRun ? ' (dry run)' : ''}...`)
+
+  const sections = db.db.query(
+    'SELECT id, document_id, content_json FROM document_sections WHERE content_json IS NOT NULL AND content_json != \'\''
+  ).all()
+
+  const totals = { documentsScanned: 0, sectionsTouched: 0, added: 0, removed: 0, kept: 0 }
+  const docsTouched = new Set()
+  const updateStmt = db.db.prepare('UPDATE document_sections SET content_json = ? WHERE id = ?')
+
+  let processed = 0
+  for (const row of sections) {
+    let payload
+    try { payload = JSON.parse(row.content_json) } catch { continue }
+    if (!payload) continue
+
+    let added = 0
+    let removed = 0
+    let kept = 0
+    const visit = (node) => {
+      const sub = consolidateNode(node, knownKeys)
+      added += sub.added
+      removed += sub.removed
+      kept += sub.kept
+    }
+
+    if (Array.isArray(payload)) {
+      for (const child of payload) visit(child)
+    } else if (typeof payload === 'object') {
+      visit(payload)
+    }
+
+    if (added + removed > 0) {
+      totals.sectionsTouched++
+      docsTouched.add(row.document_id)
+      if (!dryRun) updateStmt.run(JSON.stringify(payload), row.id)
+    }
+    totals.added += added
+    totals.removed += removed
+    totals.kept += kept
+
+    processed++
+    if (processed % 50000 === 0) {
+      logger?.info?.(`  scanned ${processed.toLocaleString('en-US')} sections — added ${totals.added.toLocaleString('en-US')}, removed ${totals.removed.toLocaleString('en-US')}`)
+    }
+  }
+
+  totals.documentsScanned = docsTouched.size
+  return totals
 }

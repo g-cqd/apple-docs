@@ -624,3 +624,14 @@ export function formatLinksAudit(result) {
   }
   return lines.join('\n')
 }
+
+export function formatLinksConsolidate(result) {
+  return [
+    bold(`Links consolidate${result.dryRun ? ' (dry run)' : ''}`),
+    `  Documents touched: ${(result.documentsScanned ?? 0).toLocaleString('en-US')}`,
+    `  Sections touched:  ${(result.sectionsTouched ?? 0).toLocaleString('en-US')}`,
+    `  Resolved links added:   ${(result.added ?? 0).toLocaleString('en-US')}`,
+    `  Resolved links removed: ${(result.removed ?? 0).toLocaleString('en-US')}`,
+    `  Resolved links kept:    ${(result.kept ?? 0).toLocaleString('en-US')}`,
+  ].join('\n')
+}

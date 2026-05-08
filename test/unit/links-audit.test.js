@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'
-import { linksAudit } from '../../src/commands/links.js'
+import { linksAudit, linksConsolidate } from '../../src/commands/links.js'
 
 const tempDirs = []
 
@@ -111,6 +111,119 @@ describe('linksAudit', () => {
     await expect(
       linksAudit({ outDir: '/nonexistent/path' }, { db, logger: { info() {} } }),
     ).rejects.toThrow(/does not exist/)
+    db.close()
+  })
+})
+
+function seedDoc(db, { key, sourceType = 'apple-docc', framework, contentJson }) {
+  const root = db.getRootBySlug(framework) ?? db.upsertRoot(framework, framework, 'framework', sourceType)
+  db.upsertPage({
+    rootId: root.id,
+    path: key,
+    url: `https://developer.apple.com/documentation/${key}`,
+    title: key.split('/').pop(),
+    sourceType,
+  })
+  db.upsertNormalizedDocument({
+    document: {
+      sourceType,
+      key,
+      title: key.split('/').pop(),
+      kind: 'article',
+      framework,
+      url: `https://developer.apple.com/documentation/${key}`,
+    },
+    sections: [
+      {
+        sectionKind: 'discussion',
+        heading: 'Overview',
+        contentText: 'placeholder',
+        contentJson,
+        sortOrder: 0,
+      },
+    ],
+    relationships: [],
+  })
+}
+
+describe('linksConsolidate', () => {
+  test('adds _resolvedKey to link nodes whose destination maps to a known key', async () => {
+    const db = new DocsDatabase(':memory:')
+    seedDoc(db, {
+      key: 'wwdc/wwdc2024-10001',
+      sourceType: 'wwdc',
+      framework: 'wwdc',
+      contentJson: JSON.stringify([{
+        type: 'paragraph',
+        inlineContent: [
+          { type: 'link', destination: 'https://developer.apple.com/videos/play/wwdc2024/10001/', title: 'Session' },
+          { type: 'link', destination: 'https://forums.swift.org/t/123', title: 'External' },
+        ],
+      }]),
+    })
+
+    const result = await linksConsolidate({}, { db, logger: { info() {} } })
+    expect(result.added).toBe(1)
+    expect(result.removed).toBe(0)
+    expect(result.sectionsTouched).toBe(1)
+
+    const stored = db.db.query('SELECT content_json FROM document_sections').get().content_json
+    const parsed = JSON.parse(stored)
+    expect(parsed[0].inlineContent[0]._resolvedKey).toBe('wwdc/wwdc2024-10001')
+    expect(parsed[0].inlineContent[1]._resolvedKey).toBeUndefined()
+    db.close()
+  })
+
+  test('removes _resolvedKey when the target no longer exists in the corpus', async () => {
+    const db = new DocsDatabase(':memory:')
+    seedDoc(db, {
+      key: 'orphan',
+      framework: 'orphan',
+      contentJson: JSON.stringify([{
+        type: 'paragraph',
+        inlineContent: [{ type: 'reference', identifier: 'foo', _resolvedKey: 'missing/page' }],
+      }]),
+    })
+
+    const result = await linksConsolidate({}, { db, logger: { info() {} } })
+    expect(result.removed).toBe(1)
+    const parsed = JSON.parse(db.db.query('SELECT content_json FROM document_sections').get().content_json)
+    expect(parsed[0].inlineContent[0]._resolvedKey).toBeUndefined()
+    db.close()
+  })
+
+  test('--dry-run reports counts without writing to the DB', async () => {
+    const db = new DocsDatabase(':memory:')
+    seedDoc(db, {
+      key: 'swiftui/view',
+      framework: 'swiftui',
+      contentJson: JSON.stringify([{
+        type: 'link', destination: 'https://developer.apple.com/documentation/swiftui/view',
+      }]),
+    })
+
+    const result = await linksConsolidate({ dryRun: true }, { db, logger: { info() {} } })
+    expect(result.added).toBe(1)
+    const stored = JSON.parse(db.db.query('SELECT content_json FROM document_sections').get().content_json)
+    expect(stored[0]._resolvedKey).toBeUndefined() // not written in dry-run mode
+    db.close()
+  })
+
+  test('idempotent — re-running produces no further changes', async () => {
+    const db = new DocsDatabase(':memory:')
+    seedDoc(db, {
+      key: 'swiftui/view',
+      framework: 'swiftui',
+      contentJson: JSON.stringify([{
+        type: 'link', destination: 'https://developer.apple.com/documentation/swiftui/view',
+      }]),
+    })
+
+    await linksConsolidate({}, { db, logger: { info() {} } })
+    const second = await linksConsolidate({}, { db, logger: { info() {} } })
+    expect(second.added).toBe(0)
+    expect(second.removed).toBe(0)
+    expect(second.sectionsTouched).toBe(0)
     db.close()
   })
 })

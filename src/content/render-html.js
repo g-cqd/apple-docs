@@ -584,7 +584,11 @@ function renderInlineNodeToHtml(node) {
     }
 
     case 'link': {
-      const rawHref = node.destination ?? '#'
+      // Prefer the corpus-internal route when normalize.js mapped the
+      // destination (e.g. https://developer.apple.com/library/archive/...
+      // → apple-archive/...) so the user stays on this site.
+      const internalKey = node._resolvedKey
+      const rawHref = internalKey ? `/docs/${internalKey}/` : (node.destination ?? '#')
       const href = isSafeHref(rawHref) ? rawHref : '#'
       const title = node.title ?? (renderInlineNodesToHtml(node.inlineContent ?? []) || href)
       return `<a href="${escapeHtml(href)}">${typeof title === 'string' ? escapeHtml(title) : title}</a>`

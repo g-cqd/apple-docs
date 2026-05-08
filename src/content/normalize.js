@@ -1,4 +1,5 @@
 import { normalizeIdentifier } from '../apple/normalizer.js'
+import { mapUrlToKey } from '../lib/link-resolver.js'
 
 const identity = (v) => v
 
@@ -731,14 +732,27 @@ function normalizeLinkSections(sections, refs, mapKey = identity) {
 }
 
 /**
- * Resolve a DocC identifier to its canonical key via the references map,
- * then via normalizeIdentifier directly.
+ * Resolve a DocC identifier to its canonical corpus key.
+ *
+ * Tries three sources in order:
+ *   1. The references map's `url` field via `normalizeIdentifier` (handles
+ *      relative paths like `/documentation/swiftui/view`).
+ *   2. The references map's `url` field via `mapUrlToKey` (handles absolute
+ *      URLs like `https://developer.apple.com/library/archive/...` or
+ *      `https://developer.apple.com/videos/play/wwdc2024/10001` — anything
+ *      our cross-source link rules know about).
+ *   3. The identifier itself via `normalizeIdentifier`.
  */
 function resolveRefKey(id, refs) {
   const ref = refs?.[id]
   if (ref?.url) {
     const norm = normalizeIdentifier(ref.url)
     if (norm) return norm
+    // Full https URL — try the cross-source pattern map. This is what catches
+    // archive guide refs, WWDC video refs, and swift.org/docs.swift.org refs
+    // that DocC emits as external links instead of `doc://` identifiers.
+    const mapped = mapUrlToKey(ref.url)
+    if (mapped) return mapped
   }
   return normalizeIdentifier(id)
 }
@@ -776,6 +790,18 @@ function resolveNodeRefs(node, refs, mapKey = identity) {
       return { identifier: id, _resolvedTitle: title, _resolvedKey: key }
     })
     return { ...node, items: resolvedItems }
+  }
+
+  // Inline `link` node — DocC emits these for free-form anchors like
+  // `<a href="https://developer.apple.com/...">`. The destination is a raw
+  // URL with no `_resolvedKey`; check whether it maps to a corpus key so the
+  // render layer can emit `/docs/<key>/` directly when present.
+  if (node.type === 'link' && typeof node.destination === 'string') {
+    const candidate = mapUrlToKey(node.destination)
+    if (candidate) {
+      const key = mapKey(candidate)
+      if (key) return { ...node, _resolvedKey: key }
+    }
   }
 
   // Recurse into child content

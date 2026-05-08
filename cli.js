@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile, formatWebBuild, formatWebDeploy, formatTaxonomy, formatFonts, formatSymbols, formatLinksAudit } from './src/cli/formatter.js'
+import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile, formatWebBuild, formatWebDeploy, formatTaxonomy, formatFonts, formatSymbols, formatLinksAudit, formatLinksConsolidate } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
@@ -496,7 +496,7 @@ try {
     }
 
     case 'links': {
-      const { linksAudit } = await import('./src/commands/links.js')
+      const { linksAudit, linksConsolidate } = await import('./src/commands/links.js')
       switch (subcommand ?? 'audit') {
         case 'audit':
           result = await linksAudit({
@@ -504,6 +504,12 @@ try {
             json: !!flags.json,
           }, ctx)
           formatter = formatLinksAudit
+          break
+        case 'consolidate':
+          result = await linksConsolidate({
+            dryRun: !!flags['dry-run'],
+          }, ctx)
+          formatter = formatLinksConsolidate
           break
         default:
           showHelp('links')

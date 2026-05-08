@@ -401,3 +401,113 @@ describe('normalize — unknown section fallback', () => {
     expect(discussion.contentText).toContain('Future content')
   })
 })
+
+describe('normalize — cross-source link resolution', () => {
+  test('reference with full developer.apple.com archive URL → _resolvedKey', () => {
+    const json = {
+      schemaVersion: { major: 0, minor: 3, patch: 0 },
+      identifier: { url: 'doc://com.apple.foo/documentation/foo/bar' },
+      metadata: { title: 'Bar', role: 'article' },
+      kind: 'article',
+      abstract: [],
+      sections: [],
+      primaryContentSections: [
+        {
+          kind: 'content',
+          content: [
+            {
+              type: 'paragraph',
+              inlineContent: [
+                { type: 'reference', identifier: 'apple-archive-ref' },
+              ],
+            },
+          ],
+        },
+      ],
+      topicSections: [],
+      seeAlsoSections: [],
+      references: {
+        'apple-archive-ref': {
+          identifier: 'apple-archive-ref',
+          title: 'GameplayKit Programming Guide',
+          type: 'topic',
+          url: 'https://developer.apple.com/library/archive/documentation/General/Conceptual/GameplayKit_Guide/index.html',
+        },
+      },
+    }
+    const { sections } = normalize(json, 'foo/bar', 'apple-docc')
+    const discussion = sections.find(s => s.sectionKind === 'discussion')
+    const nodes = JSON.parse(discussion.contentJson)
+    const refNode = nodes[0].inlineContent[0]
+    expect(refNode._resolvedKey).toBe('apple-archive/documentation/General/Conceptual/GameplayKit_Guide')
+  })
+
+  test('inline link with developer.apple.com URL gets _resolvedKey for internal route', () => {
+    const json = {
+      schemaVersion: { major: 0, minor: 3, patch: 0 },
+      identifier: { url: 'doc://x/documentation/x' },
+      metadata: { title: 'X' },
+      kind: 'article',
+      abstract: [],
+      sections: [],
+      primaryContentSections: [
+        {
+          kind: 'content',
+          content: [
+            {
+              type: 'paragraph',
+              inlineContent: [
+                {
+                  type: 'link',
+                  destination: 'https://developer.apple.com/videos/play/wwdc2024/10001/',
+                  title: 'Session 10001',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      topicSections: [],
+      seeAlsoSections: [],
+      references: {},
+    }
+    const { sections } = normalize(json, 'x', 'apple-docc')
+    const discussion = sections.find(s => s.sectionKind === 'discussion')
+    const nodes = JSON.parse(discussion.contentJson)
+    const linkNode = nodes[0].inlineContent[0]
+    expect(linkNode._resolvedKey).toBe('wwdc/wwdc2024-10001')
+    expect(linkNode.destination).toBe('https://developer.apple.com/videos/play/wwdc2024/10001/')
+  })
+
+  test('inline link with truly external URL does NOT get a _resolvedKey', () => {
+    const json = {
+      schemaVersion: { major: 0, minor: 3, patch: 0 },
+      identifier: { url: 'doc://x/documentation/x' },
+      metadata: { title: 'X' },
+      kind: 'article',
+      abstract: [],
+      sections: [],
+      primaryContentSections: [
+        {
+          kind: 'content',
+          content: [
+            {
+              type: 'paragraph',
+              inlineContent: [
+                { type: 'link', destination: 'https://forums.swift.org/t/123', title: 'Forum thread' },
+              ],
+            },
+          ],
+        },
+      ],
+      topicSections: [],
+      seeAlsoSections: [],
+      references: {},
+    }
+    const { sections } = normalize(json, 'x', 'apple-docc')
+    const discussion = sections.find(s => s.sectionKind === 'discussion')
+    const nodes = JSON.parse(discussion.contentJson)
+    const linkNode = nodes[0].inlineContent[0]
+    expect(linkNode._resolvedKey).toBeUndefined()
+  })
+})

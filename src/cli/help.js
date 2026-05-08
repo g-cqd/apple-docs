@@ -32,6 +32,7 @@ Commands:
   symbols search       Search indexed SF Symbols
 
   links audit          Audit cross-references across the rendered static site
+  links consolidate    Internalize external-resolvable links in stored sections
 
   storage stats        Show disk usage breakdown
   storage gc           Garbage collect cached files
@@ -437,21 +438,28 @@ Examples:
   links: `
 Usage: apple-docs links <subcommand> [options]
 
-Audit cross-references in the rendered static site.
+Audit and consolidate cross-references across the corpus.
 
 Subcommands:
   audit               Walk dist/web/docs/**/*.html, classify every <a href>
                       and report counts + top broken patterns
+  consolidate         Re-apply the cross-source link resolver to stored
+                      document_sections.content_json, populating
+                      _resolvedKey on reference/link nodes whose URL maps
+                      to a corpus key. Idempotent. Run after sync.
 
 Options (audit):
   --out <dir>         Built static site directory (default: dist/web)
   --json              Output raw stats as JSON for downstream analysis
 
-Categories reported:
+Options (consolidate):
+  --dry-run           Show counts without writing to the DB
+
+Categories reported by audit:
   internal_ok         /docs/<key>/ where the key resolves
   internal_broken     /docs/<key>/ where the key is not in the corpus
   external_resolvable Absolute URL with a known internal equivalent
-                      (these should ideally be rewritten at parse time)
+                      (run \`apple-docs links consolidate\` to internalize)
   external            Absolute URL with no internal equivalent
   fragment            #anchor — page-local
   relative_broken     Relative path that doesn't resolve
@@ -459,6 +467,8 @@ Categories reported:
 Examples:
   apple-docs links audit                          # full audit
   apple-docs links audit --json > /tmp/links.json # JSON for analysis
+  apple-docs links consolidate --dry-run          # preview rewrites
+  apple-docs links consolidate                    # apply rewrites in DB
 `.trim(),
 
   storage: `
