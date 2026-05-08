@@ -1,5 +1,7 @@
 import { normalizeIdentifier } from '../apple/normalizer.js'
 
+const identity = (v) => v
+
 // ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
@@ -10,24 +12,30 @@ import { normalizeIdentifier } from '../apple/normalizer.js'
  *
  * @param {object} rawPayload - Raw JSON/object payload as fetched or parsed.
  * @param {string} key        - Canonical path key, e.g. 'swiftui/view'.
- * @param {string} sourceType - One of: 'apple-docc', 'hig', 'guidelines'.
+ * @param {string} sourceType - One of: 'apple-docc', 'hig', 'guidelines', 'swift-docc'.
+ * @param {object} [opts]
+ * @param {(key: string) => string|null} [opts.urlBuilder] - Override the rendered URL.
+ * @param {(internalKey: string) => string} [opts.keyMapper] - Remap resolved reference keys.
+ *        DocC `references[].url` values normalize to e.g. `diagnostics/foo`; supplying a
+ *        keyMapper rewrites these to whatever prefix the host adapter uses for storage.
  * @returns {{ document: object, sections: object[], relationships: object[] }}
  */
-export function normalize(rawPayload, key, sourceType) {
+export function normalize(rawPayload, key, sourceType, opts = {}) {
   if (sourceType === 'guidelines') {
     return normalizeGuidelines(rawPayload, key)
   }
-  // 'apple-docc' and 'hig' share the same DocC JSON format
-  return normalizeDocC(rawPayload, key, sourceType)
+  // 'apple-docc', 'hig', and 'swift-docc' share the same DocC JSON format
+  return normalizeDocC(rawPayload, key, sourceType, opts)
 }
 
 // ---------------------------------------------------------------------------
 // Apple DocC normalizer ('apple-docc' | 'hig')
 // ---------------------------------------------------------------------------
 
-function normalizeDocC(json, key, sourceType) {
+function normalizeDocC(json, key, sourceType, opts = {}) {
   const meta = json?.metadata ?? {}
   const refs = json?.references ?? {}
+  const mapKey = opts.keyMapper ?? identity
 
   // ── Document ──────────────────────────────────────────────────────────────
 
@@ -38,11 +46,13 @@ function normalizeDocC(json, key, sourceType) {
 
   const kind = resolveKind(json)
 
-  const url = key
-    ? ((sourceType === 'hig' || key.startsWith('design/'))
-      ? `https://developer.apple.com/${key}`
-      : `https://developer.apple.com/documentation/${key}`)
-    : null
+  const url = opts.urlBuilder
+    ? (opts.urlBuilder(key) ?? null)
+    : (key
+      ? ((sourceType === 'hig' || key.startsWith('design/'))
+        ? `https://developer.apple.com/${key}`
+        : `https://developer.apple.com/documentation/${key}`)
+      : null)
 
   // Language: prefer module name, fall back to scanning declaration languages
   const language = resolveLanguage(json)
@@ -121,7 +131,7 @@ function normalizeDocC(json, key, sourceType) {
   // 2. Declaration (sortOrder 1)
   const declarationSection = findSection(json?.primaryContentSections, 'declarations')
   if (declarationSection) {
-    const enrichedDeclarations = enrichDeclarationTokens(declarationSection.declarations ?? [], refs)
+    const enrichedDeclarations = enrichDeclarationTokens(declarationSection.declarations ?? [], refs, mapKey)
     const tokens = enrichedDeclarations[0]?.tokens ?? []
     sections.push({
       sectionKind: 'declaration',
@@ -159,8 +169,8 @@ function normalizeDocC(json, key, sourceType) {
   if (propertiesSection?.items?.length) {
     const items = propertiesSection.items.map(item => ({
       name: item.name ?? null,
-      type: enrichTypeTokens(item.type ?? [], refs),
-      content: resolveContentReferences(item.content ?? [], refs),
+      type: enrichTypeTokens(item.type ?? [], refs, mapKey),
+      content: resolveContentReferences(item.content ?? [], refs, mapKey),
       required: item.required ?? false,
       attributes: item.attributes ?? [],
       introducedVersion: item.introducedVersion ?? null,
@@ -202,8 +212,8 @@ function normalizeDocC(json, key, sourceType) {
   for (const paramSection of restParamSections) {
     const items = (paramSection.items ?? []).map(item => ({
       name: item.name ?? null,
-      type: enrichTypeTokens(item.type ?? [], refs),
-      content: resolveContentReferences(item.content ?? [], refs),
+      type: enrichTypeTokens(item.type ?? [], refs, mapKey),
+      content: resolveContentReferences(item.content ?? [], refs, mapKey),
       required: item.required ?? false,
       source: paramSection.source ?? null,
       attributes: item.attributes ?? [],
@@ -228,8 +238,8 @@ function normalizeDocC(json, key, sourceType) {
       status: item.status ?? null,
       reason: item.reason ?? null,
       mimeType: item.mimeType ?? null,
-      type: enrichTypeTokens(item.type ?? [], refs),
-      content: resolveContentReferences(item.content ?? [], refs),
+      type: enrichTypeTokens(item.type ?? [], refs, mapKey),
+      content: resolveContentReferences(item.content ?? [], refs, mapKey),
     }))
     const contentText = items.map(r =>
       `${r.status ?? ''} ${r.reason ?? ''}: ${r.content ? renderContentNodesToText(r.content, refs) : ''}`.trim()
@@ -248,7 +258,7 @@ function normalizeDocC(json, key, sourceType) {
   if (possibleValuesSection?.values?.length) {
     const values = possibleValuesSection.values.map(v => ({
       name: v.name ?? null,
-      content: resolveContentReferences(v.content ?? [], refs),
+      content: resolveContentReferences(v.content ?? [], refs, mapKey),
     }))
     const contentText = values.map(v => {
       const desc = v.content ? renderContentNodesToText(v.content, refs) : ''
@@ -268,7 +278,7 @@ function normalizeDocC(json, key, sourceType) {
   if (mentionsSection?.mentions?.length) {
     const items = mentionsSection.mentions.map(id => ({
       identifier: id,
-      key: resolveRefKey(id, refs),
+      key: mapKey(resolveRefKey(id, refs)),
       title: refs?.[id]?.title ?? normalizeIdentifier(id) ?? id,
     }))
     const contentText = items.map(m => m.title).join('\n') || null
@@ -290,7 +300,7 @@ function normalizeDocC(json, key, sourceType) {
       sectionKind: 'discussion',
       heading,
       contentText: renderContentNodesToText(nodes, refs) || null,
-      contentJson: JSON.stringify(resolveContentReferences(nodes, refs)),
+      contentJson: JSON.stringify(resolveContentReferences(nodes, refs, mapKey)),
       sortOrder: order++,
     })
   }
@@ -307,7 +317,7 @@ function normalizeDocC(json, key, sourceType) {
       sectionKind: 'discussion',
       heading,
       contentText: renderContentNodesToText(nodes, refs) || null,
-      contentJson: JSON.stringify(resolveContentReferences(nodes, refs)),
+      contentJson: JSON.stringify(resolveContentReferences(nodes, refs, mapKey)),
       sortOrder: order++,
     })
   }
@@ -319,7 +329,7 @@ function normalizeDocC(json, key, sourceType) {
       sectionKind: 'topics',
       heading: 'Topics',
       contentText,
-      contentJson: JSON.stringify(normalizeLinkSections(json.topicSections, refs)),
+      contentJson: JSON.stringify(normalizeLinkSections(json.topicSections, refs, mapKey)),
       sortOrder: order++,
     })
   }
@@ -331,7 +341,7 @@ function normalizeDocC(json, key, sourceType) {
       sectionKind: 'relationships',
       heading: 'Relationships',
       contentText,
-      contentJson: JSON.stringify(normalizeLinkSections(json.relationshipsSections, refs)),
+      contentJson: JSON.stringify(normalizeLinkSections(json.relationshipsSections, refs, mapKey)),
       sortOrder: order++,
     })
   }
@@ -343,7 +353,7 @@ function normalizeDocC(json, key, sourceType) {
       sectionKind: 'see_also',
       heading: 'See Also',
       contentText,
-      contentJson: JSON.stringify(normalizeLinkSections(json.seeAlsoSections, refs)),
+      contentJson: JSON.stringify(normalizeLinkSections(json.seeAlsoSections, refs, mapKey)),
       sortOrder: order++,
     })
   }
@@ -356,7 +366,7 @@ function normalizeDocC(json, key, sourceType) {
   // Topics → 'child' relations
   for (const section of json?.topicSections ?? []) {
     for (const id of section.identifiers ?? []) {
-      const toKey = resolveRefKey(id, refs)
+      const toKey = mapKey(resolveRefKey(id, refs))
       if (toKey) {
         relationships.push({
           fromKey: key,
@@ -378,7 +388,7 @@ function normalizeDocC(json, key, sourceType) {
   for (const section of json?.relationshipsSections ?? []) {
     const relationType = relationTypeMap[section.type] ?? section.type ?? 'related'
     for (const id of section.identifiers ?? []) {
-      const toKey = resolveRefKey(id, refs)
+      const toKey = mapKey(resolveRefKey(id, refs))
       if (toKey) {
         relationships.push({
           fromKey: key,
@@ -394,7 +404,7 @@ function normalizeDocC(json, key, sourceType) {
   // See Also → 'see_also' relations
   for (const section of json?.seeAlsoSections ?? []) {
     for (const id of section.identifiers ?? []) {
-      const toKey = resolveRefKey(id, refs)
+      const toKey = mapKey(resolveRefKey(id, refs))
       if (toKey) {
         relationships.push({
           fromKey: key,
@@ -532,7 +542,7 @@ function resolveKind(json) {
  * (doc:// URL) via the references map, or fall back to matching the token
  * text against reference titles. Stores resolved path as `_resolvedKey`.
  */
-function enrichDeclarationTokens(declarations, refs) {
+function enrichDeclarationTokens(declarations, refs, mapKey = identity) {
   if (!Array.isArray(declarations) || declarations.length === 0) return declarations
 
   // Build a title → canonical key lookup from references
@@ -545,7 +555,7 @@ function enrichDeclarationTokens(declarations, refs) {
       if (!key || !ref.title) continue
       // Only map type-like entries (not methods with parentheses)
       if (ref.title.includes('(')) continue
-      titleToKey.set(ref.title, key)
+      titleToKey.set(ref.title, mapKey(key))
     }
   }
 
@@ -558,7 +568,7 @@ function enrichDeclarationTokens(declarations, refs) {
 
       // 1. Direct identifier resolution (doc:// URL on the token)
       if (token.identifier) {
-        const key = resolveRefKey(token.identifier, refs)
+        const key = mapKey(resolveRefKey(token.identifier, refs))
         if (key) return { ...token, _resolvedKey: key }
       }
 
@@ -578,12 +588,12 @@ function enrichDeclarationTokens(declarations, refs) {
  * Enrich type tokens (from properties, restParameters, restResponses)
  * with resolved keys for linking, similar to declaration tokens.
  */
-function enrichTypeTokens(tokens, refs) {
+function enrichTypeTokens(tokens, refs, mapKey = identity) {
   if (!Array.isArray(tokens) || tokens.length === 0) return tokens
   return tokens.map(token => {
     if (token.kind !== 'typeIdentifier') return token
     if (token.identifier) {
-      const key = resolveRefKey(token.identifier, refs)
+      const key = mapKey(resolveRefKey(token.identifier, refs))
       if (key) return { ...token, _resolvedKey: key }
     }
     return token
@@ -705,7 +715,7 @@ function renderLinkSectionsToText(sections, refs) {
   return lines.join('\n') || null
 }
 
-function normalizeLinkSections(sections, refs) {
+function normalizeLinkSections(sections, refs, mapKey = identity) {
   return (sections ?? []).map(section => ({
     title: section.title ?? null,
     type: section.type ?? null,
@@ -713,7 +723,7 @@ function normalizeLinkSections(sections, refs) {
       const ref = refs?.[id]
       return {
         identifier: id,
-        key: resolveRefKey(id, refs),
+        key: mapKey(resolveRefKey(id, refs)),
         title: ref?.title ?? normalizeIdentifier(id) ?? id,
       }
     }),
@@ -741,18 +751,18 @@ function resolveRefKey(id, refs) {
  * Deep-clone content nodes and resolve all reference identifiers to include
  * human-readable titles and canonical keys for HTML rendering.
  */
-function resolveContentReferences(nodes, refs) {
+function resolveContentReferences(nodes, refs, mapKey = identity) {
   if (!Array.isArray(nodes)) return nodes
-  return nodes.map(node => resolveNodeRefs(node, refs))
+  return nodes.map(node => resolveNodeRefs(node, refs, mapKey))
 }
 
-function resolveNodeRefs(node, refs) {
+function resolveNodeRefs(node, refs, mapKey = identity) {
   if (!node || typeof node !== 'object') return node
 
   // Reference inline node — embed title and key
   if (node.type === 'reference') {
     const ref = refs?.[node.identifier]
-    const key = resolveRefKey(node.identifier, refs)
+    const key = mapKey(resolveRefKey(node.identifier, refs))
     const title = ref?.title ?? node.title ?? null
     return { ...node, _resolvedTitle: title, _resolvedKey: key }
   }
@@ -761,7 +771,7 @@ function resolveNodeRefs(node, refs) {
   if (node.type === 'links' && Array.isArray(node.items)) {
     const resolvedItems = node.items.map(id => {
       const ref = refs?.[id]
-      const key = resolveRefKey(id, refs)
+      const key = mapKey(resolveRefKey(id, refs))
       const title = ref?.title ?? null
       return { identifier: id, _resolvedTitle: title, _resolvedKey: key }
     })
@@ -771,14 +781,14 @@ function resolveNodeRefs(node, refs) {
   // Recurse into child content
   const clone = { ...node }
   if (Array.isArray(clone.inlineContent)) {
-    clone.inlineContent = clone.inlineContent.map(child => resolveNodeRefs(child, refs))
+    clone.inlineContent = clone.inlineContent.map(child => resolveNodeRefs(child, refs, mapKey))
   }
   if (Array.isArray(clone.content)) {
-    clone.content = clone.content.map(child => resolveNodeRefs(child, refs))
+    clone.content = clone.content.map(child => resolveNodeRefs(child, refs, mapKey))
   }
   if (Array.isArray(clone.items)) {
     clone.items = clone.items.map(item => {
-      if (item?.content) return { ...item, content: item.content.map(child => resolveNodeRefs(child, refs)) }
+      if (item?.content) return { ...item, content: item.content.map(child => resolveNodeRefs(child, refs, mapKey)) }
       return item
     })
   }
@@ -787,10 +797,10 @@ function resolveNodeRefs(node, refs) {
     clone.items = clone.items.map(item => {
       const resolved = { ...item }
       if (resolved.term?.inlineContent) {
-        resolved.term = { ...resolved.term, inlineContent: resolved.term.inlineContent.map(child => resolveNodeRefs(child, refs)) }
+        resolved.term = { ...resolved.term, inlineContent: resolved.term.inlineContent.map(child => resolveNodeRefs(child, refs, mapKey)) }
       }
       if (resolved.definition?.content) {
-        resolved.definition = { ...resolved.definition, content: resolved.definition.content.map(child => resolveNodeRefs(child, refs)) }
+        resolved.definition = { ...resolved.definition, content: resolved.definition.content.map(child => resolveNodeRefs(child, refs, mapKey)) }
       }
       return resolved
     })

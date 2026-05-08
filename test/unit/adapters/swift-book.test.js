@@ -11,7 +11,36 @@ mock.module('../../../src/lib/github.js', () => ({
   checkRawGitHub: mockCheckRawGitHub,
 }))
 
-const { SwiftBookAdapter } = await import('../../../src/sources/swift-book.js')
+const { SwiftBookAdapter, parseBookTopics } = await import('../../../src/sources/swift-book.js')
+
+const SAMPLE_ROOT_TOC = `# The Swift Programming Language (6.3 beta)
+
+@Metadata {
+  @TechnologyRoot
+}
+
+## Topics
+
+### Welcome to Swift
+
+- <doc:AboutSwift>
+- <doc:Compatibility>
+- <doc:GuidedTour>
+
+### Language Guide
+
+- <doc:TheBasics>
+- <doc:StringsAndCharacters>
+
+### Language Reference
+
+- <doc:LexicalStructure>
+- <doc:Types>
+
+### Revision History
+
+- <doc:RevisionHistory>
+`
 
 const SAMPLE_CHAPTER = `# The Basics
 
@@ -61,10 +90,10 @@ describe('SwiftBookAdapter', () => {
 
   test('discover filters TSPL.docc markdown files', async () => {
     mockFetchGitHubTree.mockResolvedValue([
-      { path: 'TSPL.docc/TheBasics.md', type: 'blob' },
+      { path: 'TSPL.docc/The-Swift-Programming-Language.md', type: 'blob' }, // included — root TOC
+      { path: 'TSPL.docc/LanguageGuide/TheBasics.md', type: 'blob' },
       { path: 'TSPL.docc/LanguageGuide/StringsAndCharacters.md', type: 'blob' },
       { path: 'TSPL.docc/ReferenceManual/Types.md', type: 'blob' },
-      { path: 'TSPL.docc/TSPL.md', type: 'blob' }, // excluded — root file
       { path: 'TSPL.docc/Snippets/TheBasics.swift', type: 'blob' }, // excluded — Snippets dir
       { path: 'README.md', type: 'blob' }, // excluded — not under TSPL.docc/
       { path: 'TSPL.docc/', type: 'tree' }, // excluded — not blob
@@ -73,10 +102,10 @@ describe('SwiftBookAdapter', () => {
     const ctx = makeCtx()
     const result = await adapter.discover(ctx)
 
-    expect(result.keys).toContain('swift-book/TheBasics')
+    expect(result.keys).toContain('swift-book/The-Swift-Programming-Language')
+    expect(result.keys).toContain('swift-book/LanguageGuide/TheBasics')
     expect(result.keys).toContain('swift-book/LanguageGuide/StringsAndCharacters')
     expect(result.keys).toContain('swift-book/ReferenceManual/Types')
-    expect(result.keys).not.toContain('swift-book/TSPL')
     expect(result.keys.some(k => k.includes('Snippets'))).toBe(false)
     expect(result.keys.some(k => k === 'swift-book/README')).toBe(false)
   })
@@ -142,5 +171,93 @@ describe('SwiftBookAdapter', () => {
     const result = adapter.normalize('swift-book/StringsAndCharacters', noTitle)
 
     expect(result.document.title).toBe('Strings And Characters')
+  })
+
+  test('normalize tags chapters with their book section group', () => {
+    const result = adapter.normalize('swift-book/LanguageGuide/TheBasics', SAMPLE_CHAPTER)
+    const meta = JSON.parse(result.document.sourceMetadata ?? '{}')
+    expect(meta.bookSection).toBe('Language Guide')
+    expect(meta.bookSectionDir).toBe('LanguageGuide')
+  })
+
+  test('normalize on root TOC emits a topics section grouped by ### headings', async () => {
+    mockFetchGitHubTree.mockResolvedValue([
+      { path: 'TSPL.docc/The-Swift-Programming-Language.md', type: 'blob' },
+      { path: 'TSPL.docc/GuidedTour/AboutSwift.md', type: 'blob' },
+      { path: 'TSPL.docc/GuidedTour/Compatibility.md', type: 'blob' },
+      { path: 'TSPL.docc/GuidedTour/GuidedTour.md', type: 'blob' },
+      { path: 'TSPL.docc/LanguageGuide/TheBasics.md', type: 'blob' },
+      { path: 'TSPL.docc/LanguageGuide/StringsAndCharacters.md', type: 'blob' },
+      { path: 'TSPL.docc/ReferenceManual/LexicalStructure.md', type: 'blob' },
+      { path: 'TSPL.docc/ReferenceManual/Types.md', type: 'blob' },
+      { path: 'TSPL.docc/RevisionHistory/RevisionHistory.md', type: 'blob' },
+    ])
+    await adapter.discover(makeCtx())
+
+    const result = adapter.normalize('swift-book/The-Swift-Programming-Language', SAMPLE_ROOT_TOC)
+    const topics = result.sections.find(s => s.sectionKind === 'topics')
+    expect(topics).toBeDefined()
+    const linkSections = JSON.parse(topics.contentJson)
+    expect(linkSections.map(s => s.title)).toEqual([
+      'Welcome to Swift',
+      'Language Guide',
+      'Language Reference',
+      'Revision History',
+    ])
+    const guideItems = linkSections.find(s => s.title === 'Language Guide').items
+    expect(guideItems.find(i => i.title === 'The Basics').key).toBe('swift-book/LanguageGuide/TheBasics')
+  })
+
+  test('normalize on root TOC emits child relationships in TOC order', async () => {
+    mockFetchGitHubTree.mockResolvedValue([
+      { path: 'TSPL.docc/The-Swift-Programming-Language.md', type: 'blob' },
+      { path: 'TSPL.docc/GuidedTour/AboutSwift.md', type: 'blob' },
+      { path: 'TSPL.docc/GuidedTour/Compatibility.md', type: 'blob' },
+      { path: 'TSPL.docc/GuidedTour/GuidedTour.md', type: 'blob' },
+      { path: 'TSPL.docc/LanguageGuide/TheBasics.md', type: 'blob' },
+      { path: 'TSPL.docc/LanguageGuide/StringsAndCharacters.md', type: 'blob' },
+      { path: 'TSPL.docc/ReferenceManual/LexicalStructure.md', type: 'blob' },
+      { path: 'TSPL.docc/ReferenceManual/Types.md', type: 'blob' },
+      { path: 'TSPL.docc/RevisionHistory/RevisionHistory.md', type: 'blob' },
+    ])
+    await adapter.discover(makeCtx())
+
+    const result = adapter.normalize('swift-book/The-Swift-Programming-Language', SAMPLE_ROOT_TOC)
+    const childKeys = result.relationships.filter(r => r.relationType === 'child').map(r => r.toKey)
+    expect(childKeys[0]).toBe('swift-book/GuidedTour/AboutSwift')
+    expect(childKeys).toContain('swift-book/LanguageGuide/TheBasics')
+    expect(childKeys).toContain('swift-book/ReferenceManual/Types')
+    expect(childKeys).toContain('swift-book/RevisionHistory/RevisionHistory')
+  })
+
+  test('normalize on root TOC kind is collection', async () => {
+    mockFetchGitHubTree.mockResolvedValue([
+      { path: 'TSPL.docc/The-Swift-Programming-Language.md', type: 'blob' },
+      { path: 'TSPL.docc/LanguageGuide/TheBasics.md', type: 'blob' },
+    ])
+    await adapter.discover(makeCtx())
+    const result = adapter.normalize('swift-book/The-Swift-Programming-Language', SAMPLE_ROOT_TOC)
+    expect(result.document.kind).toBe('collection')
+    expect(result.document.url).toBe('https://docs.swift.org/swift-book/documentation/the-swift-programming-language/')
+  })
+})
+
+describe('parseBookTopics', () => {
+  test('returns empty array when no Topics section is present', () => {
+    expect(parseBookTopics('# Title\n\nIntro paragraph.\n')).toEqual([])
+  })
+
+  test('parses grouped <doc:> references under ### subheadings', () => {
+    const md = `## Topics\n\n### A\n\n- <doc:Foo>\n- <doc:Bar>\n\n### B\n\n- <doc:Baz>\n`
+    expect(parseBookTopics(md)).toEqual([
+      { title: 'A', items: ['Foo', 'Bar'] },
+      { title: 'B', items: ['Baz'] },
+    ])
+  })
+
+  test('does not bleed into sibling ## sections', () => {
+    const md = `## Topics\n\n### A\n\n- <doc:Foo>\n\n## Other\n\n### Z\n\n- <doc:Nope>\n`
+    const groups = parseBookTopics(md)
+    expect(groups).toEqual([{ title: 'A', items: ['Foo'] }])
   })
 })

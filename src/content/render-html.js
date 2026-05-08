@@ -79,10 +79,15 @@ function renderAbstractHtml(section) {
   if (Array.isArray(nodes) && nodes.length > 0) {
     return `<p>${renderInlineNodesToHtml(nodes)}</p>`
   }
-  if (section.contentText?.trim()) {
-    return `<p>${escapeHtml(section.contentText)}</p>`
-  }
-  return ''
+  const text = section.contentText?.trim() ?? ''
+  if (!text) return ''
+  // HTML-source abstracts (swift-org articles, apple-archive) capture the
+  // entire intro before the first <h2>, which may contain multiple paragraphs,
+  // markdown emphasis, inline code, and links. Route through markdownToHtml so
+  // those render as structured HTML instead of one escaped blob.
+  return text.length > MARKDOWN_MAX_BYTES
+    ? `<p>${escapeHtml(text)}</p>`
+    : markdownToHtml(text)
 }
 
 function renderDeclarationHtml(section, opts = {}) {
@@ -338,21 +343,15 @@ function renderTypeTokens(tokens, knownKeys) {
 }
 
 /**
- * Maximum size of a content_text discussion section we run through
- * markdownToHtml. Above this, we render as `<pre><code class="markdown">…</code></pre>`
- * (escaped, no inline syntax processing).
- *
- * Why: the home-grown markdown parser in this file (markdownToHtml +
- * inlineMarkdown) is fast in isolation but blows up on certain swift-
- * evolution proposals (e.g. swift-evolution/0253-callable, section 2 at
- * 9 KB) — the JS thread pins for hours with no event-loop turn to fire a
- * timeout. The exact regex / interaction has not been root-caused; this
- * threshold is the operational cap that lets the full corpus build to
- * completion. Override via APPLE_DOCS_MD_MAX_BYTES.
+ * Defensive cap on `markdownToHtml` input size: above this, render the raw
+ * source in a `<pre><code>` block instead. The home-grown parser is O(n) per
+ * line in normal cases but historically had a wedge on certain pages (since
+ * fixed at the ATX-heading regex). The cap stays as belt-and-braces — large
+ * enough to render the entire corpus correctly. Override via APPLE_DOCS_MD_MAX_BYTES.
  */
 const MARKDOWN_MAX_BYTES = Math.max(
   512,
-  Number.parseInt(process.env.APPLE_DOCS_MD_MAX_BYTES ?? '', 10) || 6 * 1024,
+  Number.parseInt(process.env.APPLE_DOCS_MD_MAX_BYTES ?? '', 10) || 256 * 1024,
 )
 
 function renderDiscussionHtml(section) {
@@ -682,8 +681,30 @@ function markdownToHtml(md) {
       }
       i++ // skip closing fence
       const fencedCode = codeLines.join('\n')
-      const highlighted = highlightCode(fencedCode, lang)
-      out.push(highlighted ?? `<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(fencedCode)}</code></pre>`)
+
+      // DocC placeholder substitution inside code blocks. Shiki tokenizes
+      // `<#name#>` across span boundaries (e.g. `&#x3C;`, `#name`, `#`, `>`),
+      // so a post-Shiki regex over `&lt;#name#&gt;` can't match.
+      // Replace placeholders with identifier-safe tokens BEFORE highlighting,
+      // then swap them back to styled spans on the highlighted output.
+      const placeholders = []
+      const codeWithTokens = fencedCode.replace(/<#([^#>\n]+?)#>/g, (_m, name) => {
+        const idx = placeholders.length
+        placeholders.push(name)
+        return `DoccPh${idx}DoccPh`
+      })
+
+      const highlighted = highlightCode(codeWithTokens, lang)
+      let block = highlighted ?? `<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(codeWithTokens)}</code></pre>`
+
+      // Restore placeholders as styled spans. The token survives as plain text
+      // even if Shiki wraps it in highlighting spans.
+      block = block.replace(/DoccPh(\d+)DoccPh/g, (_m, idx) => {
+        const name = placeholders[Number(idx)] ?? ''
+        return `<span class="placeholder">${escapeHtml(name)}</span>`
+      })
+
+      out.push(block)
       continue
     }
 
@@ -789,6 +810,13 @@ function inlineMarkdown(text) {
   })
 
   let s = escapeHtml(pre)
+
+  // DocC fill-in placeholder syntax: <#name#>. After escapeHtml the source
+  // form is `&lt;#name#&gt;`. Render as a styled span so it visually
+  // distinguishes from surrounding code, matching docc-render's behavior.
+  s = s.replace(/&lt;#([^#]+?)#&gt;/g, (_m, name) =>
+    `<span class="placeholder">${name}</span>`,
+  )
   // Images: ![alt](url) — render alt text only (no images in docs)
   s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt) => alt ? `<em>[${alt}]</em>` : '')
   // Remove empty image/link brackets: ![] or []

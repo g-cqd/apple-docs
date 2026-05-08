@@ -1,9 +1,11 @@
 import { describe, test, expect } from 'bun:test'
 import {
   htmlToPlainText,
+  htmlToMarkdown,
   extractMetaInfo,
   extractHtmlContent,
   parseHtmlToNormalized,
+  detectRedirectStub,
 } from '../../src/content/parse-html.js'
 
 // ---------------------------------------------------------------------------
@@ -521,5 +523,196 @@ describe('parseHtmlToNormalized', () => {
     expect(Array.isArray(sections)).toBe(true)
     expect(Array.isArray(relationships)).toBe(true)
     expect(relationships.length).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// detectRedirectStub
+// ---------------------------------------------------------------------------
+
+describe('detectRedirectStub', () => {
+  test('returns canonical URL from a Hugo-style redirect stub', () => {
+    const html = `<!DOCTYPE html>
+<html lang="en-US">
+  <meta charset="utf-8">
+  <title>Redirecting&hellip;</title>
+  <link rel="canonical" href="https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/">
+  <meta http-equiv="refresh" content="0; url=https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/">
+  <h1>Redirecting&hellip;</h1>
+</html>`
+    expect(detectRedirectStub(html)).toBe('https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/')
+  })
+
+  test('falls back to meta-refresh URL when canonical is missing', () => {
+    const html = '<title>Redirecting…</title><meta http-equiv="refresh" content="0; url=https://example.com/new">'
+    expect(detectRedirectStub(html)).toBe('https://example.com/new')
+  })
+
+  test('returns null for normal content pages', () => {
+    const html = '<title>About Swift</title><body><p>Real content here.</p></body>'
+    expect(detectRedirectStub(html)).toBeNull()
+  })
+
+  test('returns null for large pages even if title contains "redirect"', () => {
+    const big = 'x'.repeat(5000)
+    expect(detectRedirectStub(`<title>Redirecting</title>${big}`)).toBeNull()
+  })
+
+  test('recognizes the bare "Document Has Moved" HTTP-server stub', () => {
+    const html = '<HTML><HEAD><TITLE>Document Has Moved</TITLE></HEAD><BODY><A HREF="https://example.com/new">here</A></BODY></HTML>'
+    expect(detectRedirectStub(html)).toBe('https://example.com/new')
+  })
+
+  test('returns null for non-string input', () => {
+    expect(detectRedirectStub(null)).toBeNull()
+    expect(detectRedirectStub(undefined)).toBeNull()
+  })
+})
+
+describe('parseHtmlToNormalized — redirect stub handling', () => {
+  test('emits a "Page Moved" notice section when fed a redirect stub', () => {
+    const html = '<title>Redirecting…</title><link rel="canonical" href="https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/">'
+    const { document, sections } = parseHtmlToNormalized(html, 'swift-org/documentation/package-manager', {
+      sourceType: 'swift-org',
+      framework: 'swift-org',
+    })
+    expect(document.url).toBe('https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/')
+    expect(document.kind).toBe('redirect')
+    expect(sections.length).toBe(1)
+    expect(sections[0].heading).toBe('Page Moved')
+    expect(sections[0].contentText).toContain('https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// htmlToMarkdown
+// ---------------------------------------------------------------------------
+
+describe('htmlToMarkdown', () => {
+  test('renders inline <code> with backticks', () => {
+    const md = htmlToMarkdown('<p>Use <code>foo()</code> here.</p>')
+    expect(md).toContain('`foo()`')
+  })
+
+  test('renders <a href> as markdown link', () => {
+    const md = htmlToMarkdown('<p>See <a href="https://example.com">site</a>.</p>')
+    expect(md).toContain('[site](https://example.com)')
+  })
+
+  test('renders <strong>/<b> as bold and <em>/<i> as italic', () => {
+    expect(htmlToMarkdown('<p><strong>bold</strong></p>')).toContain('**bold**')
+    expect(htmlToMarkdown('<p><b>bold</b></p>')).toContain('**bold**')
+    expect(htmlToMarkdown('<p><em>italic</em></p>')).toContain('*italic*')
+    expect(htmlToMarkdown('<p><i>italic</i></p>')).toContain('*italic*')
+  })
+
+  test('renders <ul><li> as unordered list', () => {
+    const md = htmlToMarkdown('<ul><li>one</li><li>two</li><li>three</li></ul>')
+    expect(md).toContain('- one')
+    expect(md).toContain('- two')
+    expect(md).toContain('- three')
+  })
+
+  test('renders <ol><li> as ordered list with sequential numbers', () => {
+    const md = htmlToMarkdown('<ol><li>first</li><li>second</li></ol>')
+    expect(md).toContain('1. first')
+    expect(md).toContain('2. second')
+  })
+
+  test('renders h3-h6 as nested markdown headings', () => {
+    const md = htmlToMarkdown('<h3>A</h3><h4>B</h4><h5>C</h5><h6>D</h6>')
+    expect(md).toContain('### A')
+    expect(md).toContain('#### B')
+    expect(md).toContain('##### C')
+    expect(md).toContain('###### D')
+  })
+
+  test('preserves <pre> code as fenced block with original indentation', () => {
+    const md = htmlToMarkdown('<pre>if (x) {\n    foo();\n}</pre>')
+    expect(md).toContain('```')
+    expect(md).toContain('if (x) {')
+    expect(md).toContain('    foo();')
+  })
+
+  test('joins apple-archive multi-row codesample tables into a single fenced block', () => {
+    const html = `<div class="codesample clear"><table>
+      <tr><td><pre>line one</pre></td></tr>
+      <tr><td><pre>    line two indented</pre></td></tr>
+      <tr><td><pre>line three</pre></td></tr>
+    </table></div>`
+    const md = htmlToMarkdown(html)
+    const fence = md.match(/```\n([\s\S]+?)\n```/)
+    expect(fence).not.toBeNull()
+    expect(fence[1]).toBe('line one\n    line two indented\nline three')
+  })
+
+  test('renders <dl> with bold terms separated by em-dash', () => {
+    const html = '<dl><dt>Foo</dt><dd>The foo type.</dd><dt>Bar</dt><dd>The bar type.</dd></dl>'
+    const md = htmlToMarkdown(html)
+    expect(md).toContain('**Foo** — The foo type.')
+    expect(md).toContain('**Bar** — The bar type.')
+  })
+
+  test('apple-archive <dl class="termdef"> with embedded <h5> term names is recognized', () => {
+    const html = '<dl class="termdef"><h5>ProtocolName</h5><dt></dt><dd>Defined in <code>Header.h</code>.</dd></dl>'
+    const md = htmlToMarkdown(html)
+    expect(md).toContain('**ProtocolName**')
+    expect(md).toContain('`Header.h`')
+  })
+
+  test('strips legacy named anchors (<a name="..." title="...">) but keeps inner content', () => {
+    const md = htmlToMarkdown('<a name="anchor1" title="Anchor"><h2>Section</h2></a><p>Body.</p>')
+    expect(md).not.toContain('anchor1')
+    expect(md).not.toContain('<a')
+  })
+
+  test('strips script/style/nav/header/footer chrome', () => {
+    const html = '<header>Site nav</header><main><p>Content.</p></main><footer>©</footer>'
+    const md = htmlToMarkdown(html)
+    expect(md).toContain('Content.')
+    expect(md).not.toContain('Site nav')
+    expect(md).not.toContain('©')
+  })
+
+  test('handles nested inline <code> inside list items', () => {
+    const html = '<ul><li>Use <code>foo</code> here.</li><li>And <code>bar</code> there.</li></ul>'
+    const md = htmlToMarkdown(html)
+    expect(md).toContain('- Use `foo` here.')
+    expect(md).toContain('- And `bar` there.')
+  })
+
+  test('returns empty string for empty input', () => {
+    expect(htmlToMarkdown('')).toBe('')
+    expect(htmlToMarkdown(null)).toBe('')
+  })
+})
+
+describe('extractHtmlContent — preserveStructure option', () => {
+  test('emits markdown-formatted section content when preserveStructure is true', () => {
+    const html = `<html><body><main>
+      <h1>Title</h1>
+      <h2>Section A</h2>
+      <p>Use <code>foo()</code> in this <strong>place</strong>.</p>
+      <ul><li>one</li><li>two</li></ul>
+    </main></body></html>`
+    const { sections } = extractHtmlContent(html, { preserveStructure: true })
+    const sec = sections.find(s => s.heading === 'Section A')
+    expect(sec.content).toContain('`foo()`')
+    expect(sec.content).toContain('**place**')
+    expect(sec.content).toContain('- one')
+    expect(sec.content).toContain('- two')
+  })
+
+  test('plain-text mode (default) collapses inline structure', () => {
+    const html = `<html><body><main>
+      <h1>Title</h1>
+      <h2>Section A</h2>
+      <p>Use <code>foo()</code> here.</p>
+      <ul><li>one</li><li>two</li></ul>
+    </main></body></html>`
+    const { sections } = extractHtmlContent(html)
+    const sec = sections.find(s => s.heading === 'Section A')
+    expect(sec.content).not.toContain('`foo()`')
+    expect(sec.content).not.toContain('- one')
   })
 })

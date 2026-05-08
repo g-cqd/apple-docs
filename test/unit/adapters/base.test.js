@@ -17,7 +17,8 @@ describe('SourceAdapter base + registry', () => {
     expect(types).toContain('wwdc')
     expect(types).toContain('sample-code')
     expect(types).toContain('packages')
-    expect(types.length).toBe(10)
+    expect(types).toContain('swift-docc')
+    expect(types.length).toBe(11)
 
     expect(getAdapter('apple-docc').constructor.type).toBe('apple-docc')
     expect(getAdapter('swift-evolution').constructor.type).toBe('swift-evolution')

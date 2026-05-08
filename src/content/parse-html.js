@@ -145,6 +145,174 @@ export function htmlToPlainText(html) {
 }
 
 // ---------------------------------------------------------------------------
+// htmlToMarkdown
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert an HTML fragment to a Markdown-flavored plain string while
+ * preserving structural elements that `htmlToPlainText` would discard:
+ * code blocks, inline code, links, lists, sub-headings, and emphasis.
+ *
+ * Designed for legacy archive HTML (apple-archive) that uses heterogeneous
+ * patterns (e.g. multi-row `<div class="codesample"><table>` for code blocks,
+ * `<dl class="termdef">` term lists, anchor-only `<a name="">` tags).
+ *
+ * The output is fed back through `markdownToHtml` at render time, so the
+ * format only needs to be valid CommonMark + the few extensions our renderer
+ * supports.
+ *
+ * @param {string} html
+ * @returns {string} Markdown source
+ */
+export function htmlToMarkdown(html) {
+  if (!html) return ''
+
+  let s = html
+
+  s = s.replace(/<\?[^?]*\?>/g, '')
+  s = s.replace(/<svg[\s\S]*?<\/svg>/gi, '')
+  s = stripElements(s, STRIP_ELEMENTS)
+
+  // Apple-archive code samples: <div class="codesample"><table>...<tr><td><pre>line</pre></td></tr>...
+  // Concatenate every <pre> cell into a single fenced code block.
+  s = s.replace(/<div[^>]+class=["'][^"']*codesample[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi, (_m, inner) => {
+    const cellLines = []
+    inner.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_, code) => {
+      cellLines.push(decodeEntities(stripInlineTags(code)))
+      return ''
+    })
+    if (cellLines.length === 0) return ''
+    return `\n\n@@FENCE\n${cellLines.join('\n')}\n@@/FENCE\n\n`
+  })
+
+  // Strip legacy named anchors (no href, only `name`/`title`) — they were used
+  // for cross-doc links in the old archive format and add only noise now.
+  s = s.replace(/<a\s[^>]*\bname\s*=\s*["'][^"']*["'][^>]*>([\s\S]*?)<\/a>/gi, '$1')
+
+  // Standalone <pre> blocks → fenced code (after codesample handling above).
+  s = s.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_m, inner) => {
+    const code = decodeEntities(stripInlineTags(inner))
+    return `\n\n@@FENCE\n${code.replace(/^\n+|\n+$/g, '')}\n@@/FENCE\n\n`
+  })
+
+  // Inline <code>X</code>
+  s = s.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, (_m, inner) => {
+    const text = decodeEntities(stripInlineTags(inner)).replace(/`/g, "'")
+    return text ? `\`${text}\`` : ''
+  })
+
+  // <a href="X">Y</a> — markdown link
+  s = s.replace(/<a\s[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, txt) => {
+    const text = decodeEntities(stripInlineTags(txt)).trim()
+    if (!text) return ''
+    return `[${text}](${href})`
+  })
+
+  // <strong>/<b>/<em>/<i>
+  s = s.replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_m, _t, inner) => {
+    const text = decodeEntities(stripInlineTags(inner))
+    return text ? `**${text}**` : ''
+  })
+  s = s.replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_m, _t, inner) => {
+    const text = decodeEntities(stripInlineTags(inner))
+    return text ? `*${text}*` : ''
+  })
+
+  // Lists — process before <dl> so list items nested inside <dd> survive.
+  s = s.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_m, inner) => listToMarkdown(inner, false))
+  s = s.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_m, inner) => listToMarkdown(inner, true))
+
+  // Definition lists (<dl><dt>term</dt><dd>def</dd>) — render as paragraphs
+  // with bold terms. Apple archive uses these heavily for protocol descriptions
+  // and additionally uses <h5> as the term inside <dl class="termdef">.
+  // Run BEFORE the h3-h6 transform so the dl handler can see embedded headings.
+  s = s.replace(/<dl[^>]*>([\s\S]*?)<\/dl>/gi, (_m, inner) => {
+    const termRe = /<(dt|h[3-6])[^>]*>([\s\S]*?)<\/\1>/gi
+    const ddRe = /<dd[^>]*>([\s\S]*?)<\/dd>/gi
+    const terms = []
+    const defs = []
+    let m
+    while ((m = termRe.exec(inner)) !== null) {
+      const text = decodeEntities(stripInlineTags(m[2])).trim()
+      if (text) terms.push(text)
+    }
+    while ((m = ddRe.exec(inner)) !== null) {
+      const text = stripInlineTags(m[1]).trim()
+      if (text) defs.push(text)
+    }
+    const out = []
+    const len = Math.max(terms.length, defs.length)
+    for (let i = 0; i < len; i++) {
+      const t = terms[i]
+      const d = defs[i]
+      if (t && d) out.push(`**${t}** — ${decodeEntities(d)}`)
+      else if (t) out.push(`**${t}**`)
+      else if (d) out.push(decodeEntities(d))
+    }
+    return out.length ? `\n\n${out.join('\n\n')}\n\n` : ''
+  })
+
+  // Sub-headings inside the section body. h1 + h2 are extracted by the section
+  // splitter upstream; render h3-h6 as nested markdown headings.
+  for (let level = 3; level <= 6; level++) {
+    const re = new RegExp(`<h${level}[^>]*>([\\s\\S]*?)<\\/h${level}>`, 'gi')
+    const prefix = '#'.repeat(level)
+    s = s.replace(re, (_m, inner) => {
+      const text = decodeEntities(stripInlineTags(inner)).trim()
+      return text ? `\n\n${prefix} ${text}\n\n` : ''
+    })
+  }
+
+  // Convert remaining block tags to paragraph breaks; collapse all other tags to a space.
+  s = s.replace(/<(\/?)(\w+)[^>]*>/g, (_match, _slash, tag) => {
+    const lower = tag.toLowerCase()
+    return BLOCK_TAGS.has(lower) ? '\n\n' : ' '
+  })
+
+  s = decodeEntities(s)
+
+  // Stash fenced code content in opaque sentinels so whitespace normalization
+  // below cannot collapse leading indentation inside code blocks.
+  const fences = []
+  s = s.replace(/@@FENCE\n([\s\S]*?)\n@@\/FENCE/g, (_m, code) => {
+    fences.push(code)
+    return `@@FENCE_SLOT_${fences.length - 1}@@`
+  })
+
+  // Whitespace normalization: collapse runs of spaces/tabs *within* prose lines,
+  // trim trailing whitespace, collapse 3+ blank lines to 2.
+  const lines = s.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim())
+  s = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+
+  // Restore fenced code blocks last, preserving their original indentation.
+  s = s.replace(/@@FENCE_SLOT_(\d+)@@/g, (_m, idx) => {
+    const code = fences[Number(idx)] ?? ''
+    return `\n\n\`\`\`\n${code}\n\`\`\`\n\n`
+  })
+
+  return s.trim()
+}
+
+function stripInlineTags(s) {
+  return s.replace(/<[^>]+>/g, '')
+}
+
+function listToMarkdown(inner, ordered) {
+  const items = []
+  const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi
+  let m
+  let n = 1
+  while ((m = liRe.exec(inner)) !== null) {
+    const text = decodeEntities(stripInlineTags(m[1])).replace(/\s+/g, ' ').trim()
+    if (text) {
+      items.push(ordered ? `${n}. ${text}` : `- ${text}`)
+      n++
+    }
+  }
+  return items.length ? `\n\n${items.join('\n')}\n\n` : ''
+}
+
+// ---------------------------------------------------------------------------
 // extractMetaInfo
 // ---------------------------------------------------------------------------
 
@@ -327,6 +495,7 @@ export function extractHtmlContent(html, opts = {}) {
   if (!html) return { title: null, description: null, sections: [] }
 
   const meta = extractMetaInfo(html)
+  const renderText = opts.preserveStructure ? htmlToMarkdown : htmlToPlainText
 
   // ── Locate content container ───────────────────────────────────────────────
 
@@ -374,7 +543,7 @@ export function extractHtmlContent(html, opts = {}) {
   // parts[0] is content before first heading; subsequent pairs are [heading, content]
   const sections = []
 
-  const leadContent = htmlToPlainText(parts[0]).trim()
+  const leadContent = renderText(parts[0]).trim()
   if (leadContent) {
     sections.push({ heading: null, content: leadContent })
   }
@@ -384,7 +553,7 @@ export function extractHtmlContent(html, opts = {}) {
     const headingHtml = parts[i]
     const bodyHtml = parts[i + 1] ?? ''
     const heading = htmlToPlainText(headingHtml).trim() || null
-    const content = htmlToPlainText(bodyHtml).trim()
+    const content = renderText(bodyHtml).trim()
     if (heading || content) {
       sections.push({ heading, content })
     }
@@ -392,7 +561,7 @@ export function extractHtmlContent(html, opts = {}) {
 
   // If no sections were produced, return a single section with all content
   if (sections.length === 0) {
-    const allContent = htmlToPlainText(clean).trim()
+    const allContent = renderText(clean).trim()
     sections.push({ heading: null, content: allContent })
   }
 
@@ -418,8 +587,68 @@ export function extractHtmlContent(html, opts = {}) {
  * @param {object|null} [opts.sourceMetadata]
  * @returns {{ document: object, sections: object[], relationships: [] }}
  */
+/**
+ * Detect a redirect-stub HTML page (e.g. swift.org legacy URLs that now point
+ * at docs.swift.org). Returns the canonical destination URL, or null.
+ *
+ * Recognizes both the modern Hugo-style stub
+ *   <title>Redirecting…</title>
+ *   <link rel="canonical" href="…">
+ *   <meta http-equiv="refresh" content="0; url=…">
+ * and the bare HTTP-server "Document Has Moved" page.
+ */
+export function detectRedirectStub(html) {
+  if (typeof html !== 'string') return null
+  // Quick reject: must be small (<2KB) — real content pages are larger.
+  if (html.length > 2048) return null
+  // Either the title says "Redirecting" or the body says "Document Has Moved".
+  const isStub = /<title[^>]*>\s*(Redirecting|Document Has Moved|Moved Permanently)/i.test(html)
+  if (!isStub) return null
+  // Prefer canonical link; fall back to meta-refresh URL; then any first href.
+  const canonicalMatch = html.match(/<link[^>]+rel\s*=\s*["']canonical["'][^>]+href\s*=\s*["']([^"']+)["']/i)
+  if (canonicalMatch) return canonicalMatch[1]
+  const refreshMatch = html.match(/<meta[^>]+http-equiv\s*=\s*["']refresh["'][^>]+content\s*=\s*["'][^"']*url\s*=\s*([^"';]+)/i)
+  if (refreshMatch) return refreshMatch[1].trim()
+  const hrefMatch = html.match(/<a[^>]+href\s*=\s*["']([^"']+)["']/i)
+  return hrefMatch ? hrefMatch[1] : null
+}
+
 export function parseHtmlToNormalized(html, key, opts = {}) {
-  const extracted = extractHtmlContent(html, { containerSelector: opts.containerSelector })
+  const redirectTarget = detectRedirectStub(html)
+  if (redirectTarget) {
+    const document = createDocumentTemplate(
+      key,
+      opts.title ?? `Moved to ${redirectTarget}`,
+      `This page has moved. The current location is ${redirectTarget}.`,
+      null,
+      {
+        sourceType: opts.sourceType,
+        kind: opts.kind ?? 'redirect',
+        framework: opts.framework,
+        url: redirectTarget,
+        language: opts.language,
+        sourceMetadata: opts.sourceMetadata,
+      },
+    )
+    return {
+      document,
+      sections: [
+        {
+          sectionKind: 'discussion',
+          heading: 'Page Moved',
+          contentText: `This page is no longer maintained at its original location. The current canonical location is:\n\n[${redirectTarget}](${redirectTarget})`,
+          contentJson: null,
+          sortOrder: 0,
+        },
+      ],
+      relationships: [],
+    }
+  }
+
+  const extracted = extractHtmlContent(html, {
+    containerSelector: opts.containerSelector,
+    preserveStructure: opts.preserveStructure,
+  })
 
   const { title, description, sections: htmlSections } = extracted
 

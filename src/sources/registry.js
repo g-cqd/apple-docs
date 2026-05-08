@@ -6,6 +6,7 @@ import { PackagesAdapter } from './packages.js'
 import { HigAdapter } from './hig.js'
 import { SampleCodeAdapter } from './sample-code.js'
 import { SwiftBookAdapter } from './swift-book.js'
+import { SwiftDoccAdapter } from './swift-docc.js'
 import { SwiftEvolutionAdapter } from './swift-evolution.js'
 import { SwiftOrgAdapter } from './swift-org.js'
 import { WwdcAdapter } from './wwdc.js'
@@ -43,6 +44,7 @@ registerAdapter(GuidelinesAdapter)
 // Phase 4 adapters
 registerAdapter(SwiftEvolutionAdapter)
 registerAdapter(SwiftBookAdapter)
+registerAdapter(SwiftDoccAdapter)
 registerAdapter(SwiftOrgAdapter)
 registerAdapter(AppleArchiveAdapter)
 registerAdapter(WwdcAdapter)

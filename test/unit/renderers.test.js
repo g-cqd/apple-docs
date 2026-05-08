@@ -435,6 +435,62 @@ describe('renderHtml markdown fallback', () => {
     expect(html).toContain('<section id="overview">')
     expect(html).toContain('<p>A paragraph.</p>')
   })
+
+  test('renders DocC placeholder syntax as styled span (inline)', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Overview',
+      contentJson: null,
+      contentText: 'Replace <#name#> with the actual identifier.',
+      sortOrder: 0,
+    }])
+    expect(html).toContain('<span class="placeholder">name</span>')
+    expect(html).not.toContain('&lt;#name#&gt;')
+  })
+
+  test('renders DocC placeholder inside fenced code blocks', () => {
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Overview',
+      contentJson: null,
+      contentText: '```swift\nlet <#constant#>: <#type#> = <#expression#>\n```',
+      sortOrder: 0,
+    }])
+    expect(html).toContain('<span class="placeholder">constant</span>')
+    expect(html).toContain('<span class="placeholder">type</span>')
+    expect(html).toContain('<span class="placeholder">expression</span>')
+  })
+
+  test('processes guideline-sized markdown (12KB) without falling back to <pre>', () => {
+    const big = '## Section\n\n' + '**bold** *italic* `code` text. '.repeat(400)
+    expect(big.length).toBeGreaterThan(10_000)
+    const html = renderHtml({ title: 'Big' }, [{
+      sectionKind: 'discussion',
+      heading: 'Overview',
+      contentJson: null,
+      contentText: big,
+      sortOrder: 0,
+    }])
+    expect(html).not.toContain('class="markdown-fallback"')
+    expect(html).toContain('<strong>bold</strong>')
+    expect(html).toContain('<em>italic</em>')
+    expect(html).toContain('<code>code</code>')
+  })
+
+  test('strips multi-line HTML comments (DocC swifttest annotations)', () => {
+    const md = '## Example\n\nIntro.\n\n<!--\n  - test: `foo`\n  ```swifttest\n  -> let x = 1\n  ```\n-->\n\nAfter the comment.'
+    const html = renderHtml({ title: 'T' }, [{
+      sectionKind: 'discussion',
+      heading: 'Overview',
+      contentJson: null,
+      contentText: md,
+      sortOrder: 0,
+    }])
+    expect(html).not.toContain('swifttest')
+    expect(html).not.toContain('-> let x')
+    expect(html).toContain('Intro.')
+    expect(html).toContain('After the comment.')
+  })
 })
 
 describe('renderPlainText', () => {

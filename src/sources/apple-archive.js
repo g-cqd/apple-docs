@@ -270,6 +270,7 @@ export class AppleArchiveAdapter extends SourceAdapter {
       url,
       sourceMetadata: entry?.sourceMetadata ?? null,
       containerSelector: '#contents',
+      preserveStructure: true,
     })
 
     return this.validateNormalizeResult(result)

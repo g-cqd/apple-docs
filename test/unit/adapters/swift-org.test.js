@@ -82,13 +82,40 @@ describe('SwiftOrgAdapter', () => {
 
       const result = await adapter.discover(ctx)
 
-      expect(result.keys).toContain('swift-org/documentation/concurrency')
       expect(result.keys).toContain('swift-org/documentation/api-design-guidelines')
       expect(result.keys).toContain('swift-org/getting-started')
       expect(result.keys).toContain('swift-org/documentation/articles/value-and-reference-types.html')
-      expect(result.keys).toContain('swift-org/documentation/package-manager')
       expect(result.keys).toContain('swift-org/documentation/core-libraries')
       expect(result.keys).toContain('swift-org/documentation/docc')
+      // New coverage from the audit
+      expect(result.keys).toContain('swift-org/documentation/swift-compiler')
+      expect(result.keys).toContain('swift-org/documentation/lldb')
+      expect(result.keys).toContain('swift-org/documentation/server/guides/passkeys')
+      expect(result.keys).toContain('swift-org/documentation/articles/wasm-getting-started.html')
+      expect(result.keys).toContain('swift-org/install/macos')
+      expect(result.keys).toContain('swift-org/getting-started/swiftui')
+      expect(result.keys).toContain('swift-org/sswg')
+      expect(result.keys).toContain('swift-org/code-of-conduct')
+    })
+
+    test('drops paths now handled by the swift-docc adapter', async () => {
+      let root = null
+      const adapter = new SwiftOrgAdapter()
+      const ctx = {
+        db: {
+          getRootBySlug() { return root },
+          upsertRoot(slug, displayName, kind, source) {
+            root = { slug, display_name: displayName, kind, source }
+            return root
+          },
+        },
+      }
+
+      const result = await adapter.discover(ctx)
+
+      // Both URLs are now redirects to DocC archives — handled by swift-docc, not swift-org.
+      expect(result.keys).not.toContain('swift-org/documentation/concurrency')
+      expect(result.keys).not.toContain('swift-org/documentation/package-manager')
     })
 
     test('registers root in DB when not present', async () => {
@@ -189,6 +216,61 @@ describe('SwiftOrgAdapter', () => {
       const result = adapter.normalize('swift-org/documentation/concurrency', HTML_FIXTURE)
 
       expect(result.document.title).toContain('Concurrency')
+    })
+
+    test('strips the " | Swift.org" suffix from the title', () => {
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation/concurrency', HTML_FIXTURE)
+
+      expect(result.document.title).toBe('Concurrency')
+      expect(result.document.title).not.toContain('Swift.org')
+    })
+
+    test('preserves inline structure (preserveStructure: true)', () => {
+      const html = `<!DOCTYPE html><html><head><title>Demo | Swift.org</title></head><body><main>
+        <h1>Demo</h1>
+        <h2>Section</h2>
+        <p>Use <code>swift --version</code> to check.</p>
+        <pre><code class="language-swift">let x = 1</code></pre>
+      </main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/getting-started/cli-swiftpm', html)
+      const sec = result.sections.find(s => s.heading === 'Section')
+      expect(sec.contentText).toContain('`swift --version`')
+      expect(sec.contentText).toContain('```')
+      expect(sec.contentText).toContain('let x = 1')
+    })
+
+    test('injects a "Related Documentation" topics section on /documentation', () => {
+      const html = `<html><body><main><h1>Documentation</h1><p>Welcome.</p></main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation', html)
+
+      const topics = result.sections.find(s => s.sectionKind === 'topics' && s.heading === 'Related Documentation')
+      expect(topics).toBeDefined()
+      const items = JSON.parse(topics.contentJson)[0].items
+      const keys = items.map(i => i.key)
+      expect(keys).toContain('swift-compiler/documentation/diagnostics')
+      expect(keys).toContain('swift-package-manager/documentation/packagemanagerdocs')
+      expect(keys).toContain('swift-migration-guide/documentation/migrationguide')
+      expect(keys).toContain('swift-book/The-Swift-Programming-Language')
+    })
+
+    test('emits see_also relationships for archive cross-links', () => {
+      const html = `<html><body><main><h1>Documentation</h1></main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/documentation', html)
+      const seeAlso = result.relationships.filter(r => r.relationType === 'see_also')
+      expect(seeAlso.length).toBeGreaterThanOrEqual(4)
+      expect(seeAlso.map(r => r.toKey)).toContain('swift-compiler/documentation/diagnostics')
+    })
+
+    test('does not inject cross-links on unrelated pages', () => {
+      const html = `<html><body><main><h1>Concurrency</h1></main></body></html>`
+      const adapter = new SwiftOrgAdapter()
+      const result = adapter.normalize('swift-org/about', html)
+      const topics = result.sections.find(s => s.heading === 'Related Documentation')
+      expect(topics).toBeUndefined()
     })
 
     test('extracts abstract from meta description', () => {

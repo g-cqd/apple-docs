@@ -3,6 +3,14 @@
  * @typedef {{ key: string, payload: object, etag?: string|null, lastModified?: string|null }} FetchResult
  * @typedef {{ status: 'unchanged'|'modified'|'deleted'|'error', changed: boolean, newState?: object, deleted?: boolean }} CheckResult
  * @typedef {{ document: object, sections: object[], relationships: object[] }} NormalizeResult
+ *
+ * @typedef {object} EntryPoint
+ * @property {string} slug      The owning root slug (e.g. 'swift-compiler').
+ * @property {string} key       Storage key of the page that should be linked TO.
+ * @property {string} title     Human-readable title shown in the link list.
+ * @property {string} [summary] One-paragraph description for hover/excerpt text.
+ * @property {string[]} parents Storage keys of pages that should display a
+ *                              "Related Documentation" link to this entry.
  */
 
 export class SourceAdapter {
@@ -11,6 +19,14 @@ export class SourceAdapter {
   static requiresNetwork = true
   /** @type {'crawl'|'flat'|'snapshot'} */
   static syncMode = 'crawl'
+
+  /**
+   * Optional cross-source entry points this adapter contributes. Listed here
+   * so any page may opt in to surfacing them. The pipeline (or another adapter)
+   * is responsible for injecting matching entries on the declared parent pages.
+   * @type {EntryPoint[]}
+   */
+  static entryPoints = []
 
   async discover(_ctx) {
     throw new Error('Not implemented')
