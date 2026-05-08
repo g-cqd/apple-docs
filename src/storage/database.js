@@ -234,6 +234,96 @@ function deriveRootSourceType(slug, kind) {
   return 'apple-docc'
 }
 
+// Shared filter clause for every search tier. The framework predicate is
+// emitted in two shapes — see the comment at the prepared-statement site
+// for the EXPLAIN QUERY PLAN difference. All other filters keep OR-NULL.
+function searchFilterClauses(frameworkBound) {
+  return [
+    frameworkBound ? 'd.framework = $framework' : '($framework IS NULL OR d.framework = $framework)',
+    '($source_type IS NULL OR d.source_type = $source_type)',
+    `(
+      $kind IS NULL
+      OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
+      OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
+      OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
+    )`,
+    "($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')",
+    '($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)',
+    '($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)',
+    '($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)',
+    '($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)',
+    '($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)',
+  ].join('\n        AND ')
+}
+
+const SEARCH_DOCUMENT_COLUMNS = `d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
+       d.declaration_text as declaration, d.platforms_json as platforms,
+       d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
+       COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
+       d.source_type as source_type, d.source_metadata as source_metadata,
+       d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language`
+
+function buildFtsSearchSql({ frameworkBound }) {
+  return `
+    SELECT ${SEARCH_DOCUMENT_COLUMNS},
+           bm25(documents_fts, 10.0, 5.0, 3.0, 2.0, 1.0) as rank,
+           CASE
+             WHEN LOWER(d.title) = LOWER($raw) THEN 0
+             WHEN LOWER(d.key) = LOWER($raw) THEN 0
+             WHEN LOWER(d.title) LIKE LOWER($raw) || '%' THEN 1
+             WHEN INSTR(LOWER(d.title), LOWER($raw)) > 0 THEN 2
+             ELSE 3
+           END as tier
+    FROM documents_fts
+    JOIN documents d ON documents_fts.rowid = d.id
+    LEFT JOIN roots r ON r.slug = d.framework
+    WHERE documents_fts MATCH $query
+      AND ${searchFilterClauses(frameworkBound)}
+    ORDER BY tier, rank
+    LIMIT $limit
+  `
+}
+
+function buildTitleExactSearchSql({ frameworkBound }) {
+  return `
+    SELECT ${SEARCH_DOCUMENT_COLUMNS},
+           0 as rank,
+           0 as tier
+    FROM documents d
+    LEFT JOIN roots r ON r.slug = d.framework
+    WHERE d.title = $raw COLLATE NOCASE
+      AND ${searchFilterClauses(frameworkBound)}
+    ORDER BY tier, CASE WHEN d.role = 'symbol' OR d.kind = 'symbol' THEN 0 ELSE 1 END, length(d.key)
+    LIMIT $limit
+  `
+}
+
+function buildTrigramSearchSql({ frameworkBound }) {
+  return `
+    SELECT ${SEARCH_DOCUMENT_COLUMNS}
+    FROM documents_trigram
+    JOIN documents d ON documents_trigram.rowid = d.id
+    LEFT JOIN roots r ON r.slug = d.framework
+    WHERE documents_trigram MATCH $query
+      AND ${searchFilterClauses(frameworkBound)}
+    LIMIT $limit
+  `
+}
+
+function buildBodySearchSql({ frameworkBound }) {
+  return `
+    SELECT ${SEARCH_DOCUMENT_COLUMNS},
+           bm25(documents_body_fts, 1.0) as rank
+    FROM documents_body_fts
+    JOIN documents d ON documents_body_fts.rowid = d.id
+    LEFT JOIN roots r ON r.slug = d.framework
+    WHERE documents_body_fts MATCH $query
+      AND ${searchFilterClauses(frameworkBound)}
+    ORDER BY rank
+    LIMIT $limit
+  `
+}
+
 export class DocsDatabase {
   constructor(dbPath) {
     if (dbPath !== ':memory:') {
@@ -974,127 +1064,38 @@ export class DocsDatabase {
         section = $section,
         sort_order = $sort_order
     `)
-    this._searchDocuments = this.db.query(`
-      SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
-             d.declaration_text as declaration, d.platforms_json as platforms,
-             d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
-             COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
-             d.source_type as source_type, d.source_metadata as source_metadata,
-             d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language,
-             bm25(documents_fts, 10.0, 5.0, 3.0, 2.0, 1.0) as rank,
-             CASE
-               WHEN LOWER(d.title) = LOWER($raw) THEN 0
-               WHEN LOWER(d.key) = LOWER($raw) THEN 0
-               WHEN LOWER(d.title) LIKE LOWER($raw) || '%' THEN 1
-               WHEN INSTR(LOWER(d.title), LOWER($raw)) > 0 THEN 2
-               ELSE 3
-             END as tier
-      FROM documents_fts
-      JOIN documents d ON documents_fts.rowid = d.id
-      LEFT JOIN roots r ON r.slug = d.framework
-      WHERE documents_fts MATCH $query
-        AND ($framework IS NULL OR d.framework = $framework)
-        AND ($source_type IS NULL OR d.source_type = $source_type)
-        AND (
-          $kind IS NULL
-          OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
-          OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
-          OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
-        )
-        AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
-        AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
-        AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
-        AND ($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)
-        AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
-        AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
-      ORDER BY tier, rank
-      LIMIT $limit
-    `)
-    this._searchDocumentsTitleExact = this.db.query(`
-      SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
-             d.declaration_text as declaration, d.platforms_json as platforms,
-             d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
-             COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
-             d.source_type as source_type, d.source_metadata as source_metadata,
-             d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language,
-             0 as rank,
-             0 as tier
-      FROM documents d
-      LEFT JOIN roots r ON r.slug = d.framework
-      WHERE d.title = $raw COLLATE NOCASE
-        AND ($framework IS NULL OR d.framework = $framework)
-        AND ($source_type IS NULL OR d.source_type = $source_type)
-        AND (
-          $kind IS NULL
-          OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
-          OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
-          OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
-        )
-        AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
-        AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
-        AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
-        AND ($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)
-        AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
-        AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
-      ORDER BY tier, CASE WHEN d.role = 'symbol' OR d.kind = 'symbol' THEN 0 ELSE 1 END, length(d.key)
-      LIMIT $limit
-    `)
-    this._searchDocumentsTrigram = hasTrigram ? this.db.query(`
-      SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
-             d.declaration_text as declaration, d.platforms_json as platforms,
-             d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
-             COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
-             d.source_type as source_type, d.source_metadata as source_metadata,
-             d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language
-      FROM documents_trigram
-      JOIN documents d ON documents_trigram.rowid = d.id
-      LEFT JOIN roots r ON r.slug = d.framework
-      WHERE documents_trigram MATCH $query
-        AND ($framework IS NULL OR d.framework = $framework)
-        AND ($source_type IS NULL OR d.source_type = $source_type)
-        AND (
-          $kind IS NULL
-          OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
-          OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
-          OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
-        )
-        AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
-        AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
-        AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
-        AND ($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)
-        AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
-        AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
-      LIMIT $limit
-    `) : null
-    this._searchDocumentsBody = hasBodyFts ? this.db.query(`
-      SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
-             d.declaration_text as declaration, d.platforms_json as platforms,
-             d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
-             COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
-             d.source_type as source_type, d.source_metadata as source_metadata,
-             d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language,
-             bm25(documents_body_fts, 1.0) as rank
-      FROM documents_body_fts
-      JOIN documents d ON documents_body_fts.rowid = d.id
-      LEFT JOIN roots r ON r.slug = d.framework
-      WHERE documents_body_fts MATCH $query
-        AND ($framework IS NULL OR d.framework = $framework)
-        AND ($source_type IS NULL OR d.source_type = $source_type)
-        AND (
-          $kind IS NULL
-          OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
-          OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
-          OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
-        )
-        AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
-        AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
-        AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
-        AND ($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)
-        AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
-        AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
-      ORDER BY rank
-      LIMIT $limit
-    `) : null
+    // Two prepared statements per search tier: one with the framework
+    // predicate as `($framework IS NULL OR d.framework = $framework)` for
+    // unfiltered queries, one with `d.framework = $framework` for filtered
+    // queries. The OR-NULL idiom looks innocent but blocks predicate
+    // pushdown — SQLite scans the FTS virtual table over the whole corpus
+    // and post-filters on the JOINed framework column. With a direct
+    // equality binding the planner instead seeks `idx_documents_framework`
+    // first and runs FTS only over the framework's rows. EXPLAIN QUERY
+    // PLAN confirms the difference; on mm18 the swap drops cold-path
+    // framework-filter p95 from ~33 ms (c=1) into the same band as the
+    // unfiltered case.
+    //
+    // Other filter columns (kind, source_type, language, platform mins)
+    // keep the OR-NULL pattern — they are bound less often and the index
+    // selectivity wins are smaller, so the doubled prepared-statement cost
+    // would not pay back.
+    this._searchDocuments = this.db.query(buildFtsSearchSql({ frameworkBound: false }))
+    this._searchDocumentsFw = this.db.query(buildFtsSearchSql({ frameworkBound: true }))
+    this._searchDocumentsTitleExact = this.db.query(buildTitleExactSearchSql({ frameworkBound: false }))
+    this._searchDocumentsTitleExactFw = this.db.query(buildTitleExactSearchSql({ frameworkBound: true }))
+    this._searchDocumentsTrigram = hasTrigram
+      ? this.db.query(buildTrigramSearchSql({ frameworkBound: false }))
+      : null
+    this._searchDocumentsTrigramFw = hasTrigram
+      ? this.db.query(buildTrigramSearchSql({ frameworkBound: true }))
+      : null
+    this._searchDocumentsBody = hasBodyFts
+      ? this.db.query(buildBodySearchSql({ frameworkBound: false }))
+      : null
+    this._searchDocumentsBodyFw = hasBodyFts
+      ? this.db.query(buildBodySearchSql({ frameworkBound: true }))
+      : null
     this._documentsBodyIndexCount = hasBodyFts ? this.db.query('SELECT COUNT(*) as c FROM documents_body_fts') : null
     this._insertDocumentBody = hasBodyFts ? this.db.query('INSERT OR REPLACE INTO documents_body_fts(rowid, body) VALUES ($id, $body)') : null
     this._clearDocumentBody = hasBodyFts ? this.db.query("DELETE FROM documents_body_fts") : null
@@ -1443,27 +1444,31 @@ export class DocsDatabase {
 
   searchPages(ftsQuery, rawQuery, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
     const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
-    return this._searchDocuments.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
+    const stmt = framework ? this._searchDocumentsFw : this._searchDocuments
+    return stmt.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
   }
 
   searchTitleExact(rawQuery, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
     const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
-    return this._searchDocumentsTitleExact.all({ $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
+    const stmt = framework ? this._searchDocumentsTitleExactFw : this._searchDocumentsTitleExact
+    return stmt.all({ $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
   }
 
   searchTrigram(query, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
-    if (!this._searchDocumentsTrigram) return []
+    const stmt = framework ? this._searchDocumentsTrigramFw : this._searchDocumentsTrigram
+    if (!stmt) return []
     const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
-      return this._searchDocumentsTrigram.all({ $query: query, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
+      return stmt.all({ $query: query, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
     } catch { return [] }
   }
 
   searchBody(ftsQuery, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
-    if (!this._searchDocumentsBody) return []
+    const stmt = framework ? this._searchDocumentsBodyFw : this._searchDocumentsBody
+    if (!stmt) return []
     const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     try {
-      return this._searchDocumentsBody.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
+      return stmt.all({ $query: ftsQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
     } catch { return [] }
   }
 
