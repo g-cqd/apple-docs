@@ -26,7 +26,13 @@ export default {
   reporters: ['html', 'clear-text', 'progress', 'json'],
   htmlReporter: { fileName: 'reports/stryker/index.html' },
   jsonReporter: { fileName: 'reports/stryker/mutation-report.json' },
-  concurrency: 4,
+  // GitHub-hosted Ubuntu runners are 4 vCPU / 16 GB. Each mutant boots a
+  // fresh `bun test` process; the work is dominated by interpreter/test
+  // startup rather than CPU cycles, so over-subscribing the cores is the
+  // cheapest way to widen the throughput. 8 keeps the box busy without
+  // tipping memory: Bun's per-process RSS for our test suite is well
+  // under 1 GB. Drop back to 4 if OOM kills resurface.
+  concurrency: 8,
   timeoutMS: 20000,
   // Bumped from the 5-min default. The dry-run baseline locally is
   // ~14s; a cold sandbox start on CI can spike higher. 10 min is
