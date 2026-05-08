@@ -163,10 +163,12 @@ export async function linksAudit(opts, ctx) {
         if (entry.sources.size < 5) entry.sources.add(fromPath)
         stats.externalResolvable.set(result.internalKey, entry)
       }
+    }
 
-      if (stats.filesScanned % 5000 === 0 && stats.filesScanned > 0) {
-        logger?.info?.(`  scanned ${stats.filesScanned} files, ${stats.linksTotal} links classified...`)
-      }
+    // Progress is reported per-file (not per-link) so the log line fires once
+    // per chunk instead of once per link in that chunk.
+    if (stats.filesScanned % 5000 === 0) {
+      logger?.info?.(`  scanned ${stats.filesScanned} files, ${stats.linksTotal} links classified...`)
     }
   }
 
