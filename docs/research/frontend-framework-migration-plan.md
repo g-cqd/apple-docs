@@ -122,15 +122,25 @@ Current Phase 0 status:
 - Items 1 through 6 are implemented and shipped on `main` as of `bffddc1`.
 - Verified on `mm18.local` (Intel i5-8500B, 6 cores, 64 GiB, macOS 15.6) against the live corpus of 347,675 documents, 4 reader workers, 200 iterations × 5 default SLO cases per concurrency tier:
 
-  Cache **off** (cold-path worst case):
+  Cache **off** (cold-path worst case), after the Phase 0.5 cascade tweak (commit `28cd404`):
 
   | concurrency | p50    | p95     | p99     | max     | SLO (p99<25ms) |
   | ----------- | ------ | ------- | ------- | ------- | -------------- |
-  | 1           | 4.07ms | 24.46ms | 34.04ms | 39.92ms | miss           |
-  | 2           | 3.30ms | 16.63ms | 30.92ms | 35.42ms | miss           |
-  | 4           | 4.98ms | 16.49ms | 20.21ms | 22.03ms | pass           |
-  | 8           | 11.50ms| 29.04ms | 36.93ms | 37.60ms | miss           |
-  | 16          | 20.96ms| 45.60ms | 51.83ms | 52.03ms | miss           |
+  | 1           | 2.18ms | 5.10ms  | 5.95ms  | 14.43ms | pass           |
+  | 2           | 2.31ms | 5.39ms  | 7.37ms  | 7.66ms  | pass           |
+  | 4           | 4.16ms | 8.83ms  | 23.09ms | 24.27ms | pass           |
+  | 8           | 6.96ms | 13.63ms | 17.47ms | 18.79ms | pass           |
+  | 16          | 14.63ms| 27.01ms | 31.20ms | 36.90ms | miss           |
+
+  For reference, the pre-tweak numbers (before commit `28cd404`):
+
+  | concurrency | p50    | p95     | p99     | verdict |
+  | ----------- | ------ | ------- | ------- | ------- |
+  | 1           | 4.07ms | 24.46ms | 34.04ms | miss    |
+  | 2           | 3.30ms | 16.63ms | 30.92ms | miss    |
+  | 4           | 4.98ms | 16.49ms | 20.21ms | pass    |
+  | 8           | 11.50ms| 29.04ms | 36.93ms | miss    |
+  | 16          | 20.96ms| 45.60ms | 51.83ms | miss    |
 
   Cache **on** (production configuration, gates the SLO):
 
@@ -149,7 +159,11 @@ Phase 0 next-step decision:
 
 - **SQLite track is sufficient** for the production SLO. Phase 1 (route/service/view-model boundaries with JSDoc/TS contracts; `Bun.build` as the asset pipeline; no Vite, no framework runtime yet) opens.
 - **Tantivy spike does not open as a blocking dependency.** It moves from a planned decision branch to a watchlist item, triggered only if (a) cache-on p99 ever regresses past 25 ms on the deployment target, or (b) cache-hit rate drops materially in production telemetry (e.g. due to a fingerprinted-URL change that invalidates the LRU keys).
-- **Cold-path follow-up** stays open as a small investigation, not a blocking gate: the `framework-filter` case being the *worst* cold case is suspicious — narrowing by framework should cheapen the query, not slow it. Likely the framework predicate is applied after the FTS scan rather than before. A targeted fix here would lift the cache-off worst case without any new infrastructure. Tracked as a Phase 0.5 spike, ungated.
+- **Cold-path follow-up resolved (Phase 0.5, commit `28cd404`).** Initial diagnosis was wrong — the `OR-NULL` predicate idiom in the SQL is actually the right plan for FTS5 (FTS-first, post-filter on a small result set). The earlier "predicate pushdown" attempt (commit reverted in `a0433e8`) actually pessimized FTS plans by 200 ms+ because forcing the framework index seek caused per-row FTS rowid-constrained scans, which aren't cheap.
+
+  The real cause of the cold-path gap was in the cascade itself, not the SQL: under a framework / kind / source filter, FTS naturally returns fewer rows and never fills the requested window, so the existing `ftsResults.length < requestedWindow` condition fired trigram unconditionally — adding work that did not improve relevance. The fix skips trigram when `userNarrowedScope && (titleExact + FTS) > 0`. Trigram still fires when a narrowed query returns zero hits, so typo recovery still has a path.
+
+  Per-case `framework-filter` p95 c=1: 32.93 ms → 2.78 ms (12×). The cold-path table above replaces the pre-fix one for the doc record.
 
 Public-surface verification (apple-docs.everest.mt, end-to-end through Cloudflare → Tunnel → Caddy → Bun):
 
