@@ -6,6 +6,7 @@ import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
 import { getAdapter, getAllAdapters } from '../sources/registry.js'
 import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, selectRootsForAdapter, filterPagesByRoots, discoverAdaptersInParallel } from './command-helpers.js'
+import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
 
 /**
  * Check for documentation updates and pull changes.
@@ -89,6 +90,30 @@ export async function update(opts, ctx) {
       await indexBodyIncremental(db, dataDir, logger)
     }
 
+    // Refresh resource indexes (fonts, SF Symbols) on whole-corpus update runs.
+    // Same gating as sync: skipped when the run is restricted via --roots/--sources.
+    const restrictedRun = !!(requestedSources || requestedRoots)
+    let fontsResult = null
+    let symbolsResult = null
+    if (!restrictedRun && opts.skipFonts !== true) {
+      try {
+        fontsResult = await syncAppleFonts({ downloadFonts: !!opts.downloadFonts }, ctx)
+      } catch (e) {
+        logger.warn('Font refresh failed', { error: e.message })
+      }
+    }
+    if (!restrictedRun && opts.skipSymbols !== true) {
+      try {
+        const counts = { public: 0, private: 0 }
+        for (const scope of ['public', 'private']) {
+          counts[scope] = await syncSfSymbols({ scope }, ctx)
+        }
+        symbolsResult = counts
+      } catch (e) {
+        logger.warn('SF Symbols refresh failed', { error: e.message })
+      }
+    }
+
     const durationMs = Date.now() - startMs
     db.addUpdateLog({
       action: 'update',
@@ -99,7 +124,7 @@ export async function update(opts, ctx) {
       durationMs,
     })
 
-    return { newCount, modCount, unchangedCount, delCount, errCount, durationMs }
+    return { newCount, modCount, unchangedCount, delCount, errCount, fonts: fontsResult, symbols: symbolsResult, durationMs }
   } finally {
     db.clearActivity()
     // Safety belt for the rare case where update runs in the same process as

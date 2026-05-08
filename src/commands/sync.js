@@ -8,6 +8,7 @@ import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
 import { getAdapter, getAllAdapters } from '../sources/registry.js'
 import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, selectRootsForAdapter, filterPages, discoverAdaptersInParallel } from './command-helpers.js'
+import { syncAppleFonts, syncSfSymbols, prerenderSfSymbols } from '../resources/apple-assets.js'
 
 /**
  * Full sync pipeline: discover roots -> crawl (parallel) -> convert remaining.
@@ -111,6 +112,45 @@ export async function sync(opts, ctx) {
       bodyIndexed = idxResult.indexed
     }
 
+    // Apple typography + SF Symbols are first-class resources alongside the
+    // doc roots; sync them in the same pass unless the caller explicitly
+    // restricted the run via --sources or --roots, or opted out via the
+    // skip flags. DMG download and symbol prerender are heavy; both stay
+    // off unless the caller asks.
+    const restrictedRun = !!(requestedSources || requestedRoots)
+    let fontsResult = null
+    let symbolsResult = null
+    let symbolsRenderResult = null
+    if (!restrictedRun && opts.skipFonts !== true) {
+      try {
+        logger.info(`Syncing Apple typography${opts.downloadFonts ? ' (downloading DMGs)' : ''}...`)
+        fontsResult = await syncAppleFonts({ downloadFonts: !!opts.downloadFonts }, ctx)
+        logger.info(`Synced ${fontsResult.families} font families, ${fontsResult.files} font files`)
+      } catch (e) {
+        logger.warn('Font sync failed', { error: e.message })
+        failedSources.push({ source: 'apple-fonts', error: e.message })
+      }
+    }
+    if (!restrictedRun && opts.skipSymbols !== true) {
+      try {
+        logger.info('Syncing SF Symbols...')
+        const counts = { public: 0, private: 0 }
+        for (const scope of ['public', 'private']) {
+          counts[scope] = await syncSfSymbols({ scope }, ctx)
+        }
+        symbolsResult = counts
+        logger.info(`Synced ${counts.public} public + ${counts.private} private SF Symbols`)
+        if (opts.renderSymbols) {
+          logger.info('Pre-rendering SF Symbols (this can take several minutes)...')
+          symbolsRenderResult = await prerenderSfSymbols({ concurrency: opts.symbolsConcurrency }, ctx)
+          logger.info(`Pre-rendered ${symbolsRenderResult.rendered ?? 0} symbol variants`)
+        }
+      } catch (e) {
+        logger.warn('SF Symbols sync failed', { error: e.message })
+        failedSources.push({ source: 'sf-symbols', error: e.message })
+      }
+    }
+
     const durationMs = Date.now() - startMs
     const totalProcessed = Object.values(crawlResults).reduce((sum, result) => sum + (result.processed ?? 0), 0)
 
@@ -129,6 +169,9 @@ export async function sync(opts, ctx) {
       downloaded: dlResult.downloaded,
       bodyIndexed,
       converted: cvResult.converted,
+      fonts: fontsResult,
+      symbols: symbolsResult,
+      symbolsRender: symbolsRenderResult,
       durationMs,
     }
   } finally {

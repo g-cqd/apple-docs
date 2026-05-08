@@ -193,7 +193,24 @@ try {
       const sources = flags.sources ? flags.sources.split(',').map(s => s.trim()) : undefined
       const concurrency = flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined
       const parallel = flags.parallel ? Number.parseInt(flags.parallel, 10) : undefined
-      result = await sync({ roots, sources, full: !!flags.full, retryFailed: !!flags['retry-failed'], concurrency, parallel, indexBody: !!flags.index }, ctx)
+      const symbolsConcurrency = flags['symbols-concurrency']
+        ? Number.parseInt(flags['symbols-concurrency'], 10)
+        : undefined
+      result = await sync({
+        roots,
+        sources,
+        full: !!flags.full,
+        retryFailed: !!flags['retry-failed'],
+        concurrency,
+        parallel,
+        indexBody: !!flags.index,
+        // Resource sync defaults: light steps run alongside doc sync.
+        skipFonts: !!flags['skip-fonts'],
+        skipSymbols: !!flags['skip-symbols'],
+        downloadFonts: !!flags['download-fonts'],
+        renderSymbols: !!flags['render-symbols'],
+        symbolsConcurrency,
+      }, ctx)
       formatter = formatSync
       break
     }
@@ -204,7 +221,16 @@ try {
       const sources = flags.sources ? flags.sources.split(',').map(s => s.trim()) : undefined
       const concurrency = flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined
       const parallel = flags.parallel ? Number.parseInt(flags.parallel, 10) : undefined
-      result = await update({ roots, sources, concurrency, parallel, indexBody: !!flags.index }, ctx)
+      result = await update({
+        roots,
+        sources,
+        concurrency,
+        parallel,
+        indexBody: !!flags.index,
+        skipFonts: !!flags['skip-fonts'],
+        skipSymbols: !!flags['skip-symbols'],
+        downloadFonts: !!flags['download-fonts'],
+      }, ctx)
       formatter = formatUpdate
       break
     }
@@ -354,6 +380,7 @@ try {
         tier: flags.tier ?? 'full',
         force: !!flags.force,
         downgrade: !!flags.downgrade,
+        skipResources: !!flags['skip-resources'],
       }, ctx)
       formatter = formatSetup
       break

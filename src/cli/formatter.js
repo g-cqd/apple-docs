@@ -293,26 +293,48 @@ export function formatStatus(result) {
 }
 
 export function formatSync(result) {
-  return [
+  const lines = [
     bold('Sync complete'),
     `  Roots discovered: ${result.rootsDiscovered}`,
     `  Roots crawled:    ${result.rootsCrawled}`,
     `  Downloaded:       ${result.downloaded}`,
     `  Converted:        ${result.converted}`,
-    `  Duration:         ${(result.durationMs / 1000).toFixed(1)}s`,
-  ].join('\n')
+  ]
+  if (result.fonts) {
+    const f = result.fonts
+    lines.push(`  Fonts:            ${f.families} families, ${f.files} files (${f.system} system, ${f.remote} bundled${f.downloaded ? `, ${f.downloaded} downloaded` : ''})`)
+  }
+  if (result.symbols) {
+    const s = result.symbols
+    lines.push(`  SF Symbols:       ${s.public} public, ${s.private} private`)
+  }
+  if (result.symbolsRender) {
+    const r = result.symbolsRender
+    lines.push(`  Symbol prerender: ${r.rendered ?? 0} rendered`)
+  }
+  lines.push(`  Duration:         ${(result.durationMs / 1000).toFixed(1)}s`)
+  return lines.join('\n')
 }
 
 export function formatUpdate(result) {
-  return [
+  const lines = [
     bold('Update complete'),
     `  New:        ${result.newCount}`,
     `  Modified:   ${result.modCount}`,
     `  Unchanged:  ${result.unchangedCount}`,
     `  Deleted:    ${result.delCount}`,
     `  Errors:     ${result.errCount}`,
-    `  Duration:   ${(result.durationMs / 1000).toFixed(1)}s`,
-  ].join('\n')
+  ]
+  if (result.fonts) {
+    const f = result.fonts
+    lines.push(`  Fonts:      ${f.families} families, ${f.files} files`)
+  }
+  if (result.symbols) {
+    const s = result.symbols
+    lines.push(`  SF Symbols: ${s.public} public, ${s.private} private`)
+  }
+  lines.push(`  Duration:   ${(result.durationMs / 1000).toFixed(1)}s`)
+  return lines.join('\n')
 }
 
 export function formatConsolidate(result) {

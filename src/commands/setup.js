@@ -5,6 +5,7 @@ import { sha256 } from '../lib/hash.js'
 import { ensureDir } from '../storage/files.js'
 import { DocsDatabase } from '../storage/database.js'
 import { getGitHubToken } from '../lib/github.js'
+import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
 
 const GITHUB_REPO = 'g-cqd/apple-docs'
 const USER_AGENT = 'apple-docs/2.0'
@@ -163,6 +164,30 @@ export async function setup(opts, ctx) {
     try {
       const schemaVersion = verifyDb.getSchemaVersion()
       const documentCount = verifyDb.db.query('SELECT COUNT(*) as c FROM documents').get().c
+
+      // 7b. Index local Apple typography + SF Symbols. The full-tier
+      // snapshot already extracted resources/symbols and
+      // resources/fonts/extracted, but the DB index still needs to point
+      // at this host's font files (system fonts vary by macOS version) and
+      // confirm the symbols framework version matches. lite/standard tiers
+      // ship without bundled resources, so this step ensures every install
+      // ends with a usable fonts/symbols state regardless of tier.
+      // Both calls are upserts, fast (~seconds), and degrade gracefully on
+      // non-macOS hosts where the SF Symbols framework isn't present.
+      if (opts.skipResources !== true) {
+        try {
+          await syncAppleFonts({ downloadFonts: false }, { db: verifyDb, dataDir, logger })
+        } catch (e) {
+          logger?.warn?.(`Font index refresh skipped: ${e.message}`)
+        }
+        try {
+          for (const scope of ['public', 'private']) {
+            await syncSfSymbols({ scope }, { db: verifyDb, dataDir, logger })
+          }
+        } catch (e) {
+          logger?.warn?.(`SF Symbols refresh skipped: ${e.message}`)
+        }
+      }
 
       // 8. Store installation metadata
       verifyDb.setSnapshotMeta('snapshot_tag', release.tag)

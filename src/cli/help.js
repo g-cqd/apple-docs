@@ -154,11 +154,26 @@ Options:
   --rate <n>           Max requests per second across all roots (default: 500)
   --retry-failed       Retry pages that previously failed (404, timeout, etc)
   --index              Build body search index after sync
+  --skip-fonts         Skip Apple typography indexing (default: indexed)
+  --skip-symbols       Skip SF Symbols indexing (default: indexed; macOS only)
+  --download-fonts     Download SF Pro/Compact/Mono/etc DMGs from Apple CDN
+                       and extract them. Off by default — large files (~500MB)
+                       and only needed if the host doesn't already have them
+                       installed in ~/Library/Fonts or /Library/Fonts.
+  --render-symbols     Pre-render every SF Symbol to SVG. Off by default —
+                       takes several minutes; rendering happens lazily on
+                       first request otherwise. Implies --skip-symbols=false.
   --use-git-auth       Reuse a GitHub token from the local gh CLI or git
                        credential helper. No prompt. Env vars still take
                        precedence.
   --skip-git-auth      Skip all local-credential detection for this run.
   --json               Output summary as JSON
+
+Resource sync (fonts + SF Symbols) runs by default unless the caller passes
+--roots or --sources, in which case the run is treated as a targeted sync
+of those sources only. Use --skip-fonts / --skip-symbols on a full sync
+to opt out, or --download-fonts / --render-symbols to enable the heavier
+steps.
 
 On a TTY with no GITHUB_TOKEN set, sync prompts before using local credentials
 and can remember the choice with "always". Persisted preference lives at
@@ -166,7 +181,8 @@ and can remember the choice with "always". Persisted preference lives at
 globally (recommended for CI).
 
 Examples:
-  apple-docs sync --roots swiftui,combine                   # sync two frameworks
+  apple-docs sync                                           # sync everything (docs + fonts + symbols)
+  apple-docs sync --roots swiftui,combine                   # sync two frameworks (no fonts/symbols)
   apple-docs sync --sources guidelines                      # sync only App Store Review Guidelines
   apple-docs sync --roots app-store-review                  # sync App Store Review Guidelines
   apple-docs sync --sources packages                        # sync curated apple/swiftlang packages
@@ -175,6 +191,7 @@ Examples:
   apple-docs sync --full --parallel 10 --rate 500             # aggressive full crawl
   apple-docs sync --roots uikit --concurrency 100 --rate 100  # tuned single-root crawl
   apple-docs sync --retry-failed                            # retry 404s/timeouts
+  apple-docs sync --download-fonts --render-symbols         # also pull DMG fonts and prerender symbol SVGs
 `.trim(),
 
   update: `

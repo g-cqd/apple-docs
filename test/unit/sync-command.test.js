@@ -80,6 +80,84 @@ describe('sync command', () => {
     }
   })
 
+  test('runs fonts + symbols sync on a whole-corpus sync', async () => {
+    const dataDir = join(tmpdir(), `apple-docs-sync-test-${crypto.randomUUID()}`)
+    tempDirs.push(dataDir)
+    mkdirSync(join(dataDir, 'raw-json'), { recursive: true })
+    mkdirSync(join(dataDir, 'markdown'), { recursive: true })
+
+    const db = new DocsDatabase(':memory:')
+    try {
+      const result = await sync({}, {
+        db,
+        dataDir,
+        rateLimiter: { rate: 5, acquire: async () => {} },
+        logger: { info() {}, warn() {}, error() {} },
+        adapters: [],
+      })
+
+      // Fonts always index family metadata even with no DMG download.
+      expect(result.fonts).toBeDefined()
+      expect(result.fonts.families).toBeGreaterThan(0)
+      // Symbols may or may not be available depending on host, but the
+      // result key must be present so callers can inspect it.
+      expect(result).toHaveProperty('symbols')
+    } finally {
+      db.close()
+    }
+  })
+
+  test('skips fonts + symbols when sync is restricted via --sources', async () => {
+    const dataDir = join(tmpdir(), `apple-docs-sync-test-${crypto.randomUUID()}`)
+    tempDirs.push(dataDir)
+    mkdirSync(join(dataDir, 'raw-json'), { recursive: true })
+    mkdirSync(join(dataDir, 'markdown'), { recursive: true })
+
+    const db = new DocsDatabase(':memory:')
+    try {
+      const result = await sync({ sources: ['packages'] }, {
+        db,
+        dataDir,
+        rateLimiter: { rate: 5, acquire: async () => {} },
+        logger: { info() {}, warn() {}, error() {} },
+        adapters: [
+          {
+            constructor: { type: 'packages', displayName: 'Swift Package Catalog', syncMode: 'flat' },
+            async discover() { return { roots: [], keys: [] } },
+            validateNormalizeResult() {},
+          },
+        ],
+      })
+
+      expect(result.fonts).toBeNull()
+      expect(result.symbols).toBeNull()
+    } finally {
+      db.close()
+    }
+  })
+
+  test('skipFonts + skipSymbols flags opt out of resource sync on whole-corpus runs', async () => {
+    const dataDir = join(tmpdir(), `apple-docs-sync-test-${crypto.randomUUID()}`)
+    tempDirs.push(dataDir)
+    mkdirSync(join(dataDir, 'raw-json'), { recursive: true })
+    mkdirSync(join(dataDir, 'markdown'), { recursive: true })
+
+    const db = new DocsDatabase(':memory:')
+    try {
+      const result = await sync({ skipFonts: true, skipSymbols: true }, {
+        db,
+        dataDir,
+        rateLimiter: { rate: 5, acquire: async () => {} },
+        logger: { info() {}, warn() {}, error() {} },
+        adapters: [],
+      })
+      expect(result.fonts).toBeNull()
+      expect(result.symbols).toBeNull()
+    } finally {
+      db.close()
+    }
+  })
+
   test('passes the full-sync hint to adapters during discovery', async () => {
     const dataDir = join(tmpdir(), `apple-docs-sync-test-${crypto.randomUUID()}`)
     tempDirs.push(dataDir)
