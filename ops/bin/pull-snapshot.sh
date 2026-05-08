@@ -159,18 +159,7 @@ if [ "$setup_status" != "0" ]; then
   exit 2
 fi
 
-# 3b'. Pre-render any missing SF Symbols. The full-tier snapshot tarball
-# is supposed to ship resources/symbols/, but older snapshots predate the
-# render step in .github/workflows/snapshot.yml, and `apple-docs setup
-# --force` removes resources/symbols before extracting — so a tier that
-# doesn't include the directory leaves the grid serving 503s.
-# `symbols render` is idempotent (skips files already present), so it's
-# a cheap no-op on a snapshot that did include them.
-SYMBOLS_RENDER_CONCURRENCY="${SYMBOLS_RENDER_CONCURRENCY:-8}"
-run "$BUN" run "$REPO/cli.js" symbols render --concurrency "$SYMBOLS_RENDER_CONCURRENCY" \
-  || say "WARN: symbols render returned $? — grid may serve degraded SVGs"
-
-# 3c. Rebuild the static site against the freshly-installed corpus.
+# 3b. Rebuild the static site against the freshly-installed corpus.
 # Incremental keeps the existing dist/ directory online if the rebuild
 # fails — caddy won't 404 mid-deploy.
 run "$BUN" run "$REPO/cli.js" web build --incremental \
@@ -178,7 +167,7 @@ run "$BUN" run "$REPO/cli.js" web build --incremental \
   --base-url "https://${PUBLIC_WEB_HOST}" \
   || say "WARN: incremental static build failed — Caddy keeps the previous tree"
 
-# 3d. Bring services back. Order matters (web first, watchdog last) for
+# 3c. Bring services back. Order matters (web first, watchdog last) for
 # the same reason as deploy-update.sh.
 for label in "${LABEL_WEB}" "${LABEL_MCP}"; do
   start_one "$label"
@@ -186,14 +175,14 @@ done
 sleep 3
 start_one "${LABEL_WATCHDOG}" || say "WARN: watchdog didn't restart"
 
-# 3e. Smoke. If the test fails we don't roll back automatically — the new
+# 3d. Smoke. If the test fails we don't roll back automatically — the new
 # corpus is already on disk and a manual reinstall via --force is cheap.
 sleep 3
 if ! "$OPS/bin/smoke-test.sh" 2>&1 | tee -a "$LOG"; then
   say "WARN: smoke test reported failures — investigate before declaring success"
 fi
 
-# 3f. Stamp the applied tag so the next run is a no-op.
+# 3e. Stamp the applied tag so the next run is a no-op.
 echo "$latest_tag" > "$APPLIED_FILE"
 say "stamped applied-snapshot=${latest_tag}"
 
