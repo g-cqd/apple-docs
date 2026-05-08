@@ -14,6 +14,7 @@ import { pool } from '../lib/pool.js'
 import { sha256 } from '../lib/hash.js'
 import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
 import { linksAudit } from '../commands/links.js'
+import { ASSET_BUNDLES, STANDALONE_ASSETS, WORKER_ASSETS } from './assets-manifest.js'
 
 /**
  * Default per-page render timeout. The Swift stdlib + a few other "kitchen
@@ -189,24 +190,28 @@ export async function buildStaticSite(opts, ctx) {
     const rawCSS = readFileSync(join(srcWebDir, 'assets', 'style.css'), 'utf8')
     await Bun.write(join(buildDir, 'assets', 'style.css'), minifyCSS(rawCSS))
 
-    // 2b. Bundle JS into logical groups to reduce HTTP requests
+    // 2b. Bundle JS into logical groups to reduce HTTP requests. Bundle
+    // membership lives in src/web/assets-manifest.js so serve.js sees the
+    // same definition for its on-the-fly /assets/<name> synthesis.
     const readAsset = (f) => {
       const p = join(srcWebDir, 'assets', f)
       return existsSync(p) ? readFileSync(p, 'utf8') : ''
     }
-    const coreBundle = [readAsset('theme.js'), readAsset('search.js'), readAsset('page-toc.js')].join('\n')
-    const listingBundle = [readAsset('collection-filters.js'), readAsset('tree-view.js')].join('\n')
-    await Bun.write(join(buildDir, 'assets', 'core.js'), coreBundle)
-    await Bun.write(join(buildDir, 'assets', 'listing.js'), listingBundle)
-    for (const file of ['search-page.js', 'fonts-page.js', 'symbols-page.js', 'lang-toggle.js']) {
+    for (const [bundleName, sources] of Object.entries(ASSET_BUNDLES)) {
+      const concatenated = sources.map(readAsset).join('\n')
+      await Bun.write(join(buildDir, 'assets', bundleName), concatenated)
+    }
+    for (const file of STANDALONE_ASSETS) {
       const src = join(srcWebDir, 'assets', file)
       if (existsSync(src)) {
         await Bun.write(join(buildDir, 'assets', file), readFileSync(src, 'utf8'))
       }
     }
-    const workerSrc = join(srcWebDir, 'worker', 'search-worker.js')
-    if (existsSync(workerSrc)) {
-      await Bun.write(join(buildDir, 'worker', 'search-worker.js'), readFileSync(workerSrc, 'utf8'))
+    for (const file of WORKER_ASSETS) {
+      const src = join(srcWebDir, 'worker', file)
+      if (existsSync(src)) {
+        await Bun.write(join(buildDir, 'worker', file), readFileSync(src, 'utf8'))
+      }
     }
 
     // 2c. Copy the static public/ tree (robots.txt, llms.txt, security.txt,

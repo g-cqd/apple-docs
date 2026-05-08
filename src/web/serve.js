@@ -15,6 +15,7 @@ import { initHighlighter } from '../content/highlight.js'
 import { createLru } from '../lib/lru.js'
 import { getPrerenderedSymbolPath, listAppleFonts, renderFontText, renderSfSymbol, searchSfSymbols } from '../resources/apple-assets.js'
 import { buildStoreZip } from '../lib/zip.js'
+import { ASSET_BUNDLES } from './assets-manifest.js'
 
 // Cache directive for JSON endpoints whose result is a pure function of the
 // current corpus (`/api/search`, `/api/filters`). Cloudflare's default policy
@@ -60,13 +61,6 @@ export async function startDevServer(opts, ctx) {
     buildDate: new Date().toISOString().split('T')[0],
     assetVersion: Date.now().toString(36),
     bundled: true,
-  }
-
-  // Bundle definitions: must mirror src/web/build.js so on-the-fly bundling
-  // produces byte-identical output to the built version.
-  const ASSET_BUNDLES = {
-    'core.js': ['theme.js', 'search.js', 'page-toc.js'],
-    'listing.js': ['collection-filters.js', 'tree-view.js'],
   }
 
   void initHighlighter().catch((err) => {
