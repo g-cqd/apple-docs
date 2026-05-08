@@ -17,6 +17,7 @@ import { sha256 } from '../lib/hash.js'
 import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
 import { linksAudit } from '../commands/links.js'
 import { ASSET_BUNDLES, STANDALONE_ASSETS, WORKER_ASSETS } from './assets-manifest.js'
+import { minifyJs, buildJsBundle } from './asset-bundler.js'
 
 /**
  * Default per-page render timeout. The Swift stdlib + a few other "kitchen
@@ -195,18 +196,20 @@ export async function buildStaticSite(opts, ctx) {
     // 2b. Bundle JS into logical groups to reduce HTTP requests. Bundle
     // membership lives in src/web/assets-manifest.js so serve.js sees the
     // same definition for its on-the-fly /assets/<name> synthesis.
-    const readAsset = (f) => {
-      const p = join(srcWebDir, 'assets', f)
-      return existsSync(p) ? readFileSync(p, 'utf8') : ''
-    }
+    //
+    // Minification is via Bun.build (target: browser, minify: true). The
+    // asset sources are IIFE-wrapped standalone scripts with no imports
+    // between them, so Bun.build acts as a per-file minifier and the
+    // bundler concatenates the minified outputs. Switching to ES modules
+    // and letting Bun.build do real bundling is a Phase 2+ change.
     for (const [bundleName, sources] of Object.entries(ASSET_BUNDLES)) {
-      const concatenated = sources.map(readAsset).join('\n')
-      await Bun.write(join(buildDir, 'assets', bundleName), concatenated)
+      const bundled = await buildJsBundle({ srcWebDir, members: sources })
+      await Bun.write(join(buildDir, 'assets', bundleName), bundled)
     }
     for (const file of STANDALONE_ASSETS) {
       const src = join(srcWebDir, 'assets', file)
       if (existsSync(src)) {
-        await Bun.write(join(buildDir, 'assets', file), readFileSync(src, 'utf8'))
+        await Bun.write(join(buildDir, 'assets', file), await minifyJs(src))
       }
     }
     for (const file of WORKER_ASSETS) {
