@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { SwiftOrgAdapter } from '../../../src/sources/swift-org.js'
+// Side-effect: register cross-source entry points used by the cross-link tests.
+import '../../../src/sources/swift-docc.js'
+import '../../../src/sources/swift-book.js'
 
 const originalFetch = globalThis.fetch
 
@@ -90,7 +93,7 @@ describe('SwiftOrgAdapter', () => {
       // New coverage from the audit
       expect(result.keys).toContain('swift-org/documentation/swift-compiler')
       expect(result.keys).toContain('swift-org/documentation/lldb')
-      expect(result.keys).toContain('swift-org/documentation/server/guides/passkeys')
+      expect(result.keys).toContain('swift-org/documentation/server/guides/passkeys.html')
       expect(result.keys).toContain('swift-org/documentation/articles/wasm-getting-started.html')
       expect(result.keys).toContain('swift-org/install/macos')
       expect(result.keys).toContain('swift-org/getting-started/swiftui')

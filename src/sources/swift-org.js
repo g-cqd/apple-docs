@@ -29,18 +29,18 @@ const CURATED_PATHS = [
   'documentation/source-compatibility',
   'documentation/monthly-non-darwin-release',
 
-  // Server guides
-  'documentation/server/guides/allocations',
-  'documentation/server/guides/building',
-  'documentation/server/guides/deployment',
-  'documentation/server/guides/llvm-sanitizers',
-  'documentation/server/guides/memory-leaks-and-usage',
-  'documentation/server/guides/packaging',
-  'documentation/server/guides/passkeys',
-  'documentation/server/guides/performance',
-  'documentation/server/guides/testing',
-  'documentation/server/guides/libraries/concurrency-adoption-guidelines',
-  'documentation/server/guides/libraries/log-levels',
+  // Server guides — note .html suffix is required by swift.org
+  'documentation/server/guides/allocations.html',
+  'documentation/server/guides/building.html',
+  'documentation/server/guides/deployment.html',
+  'documentation/server/guides/llvm-sanitizers.html',
+  'documentation/server/guides/memory-leaks-and-usage.html',
+  'documentation/server/guides/packaging.html',
+  'documentation/server/guides/passkeys.html',
+  'documentation/server/guides/performance.html',
+  'documentation/server/guides/testing.html',
+  'documentation/server/guides/libraries/concurrency-adoption-guidelines.html',
+  'documentation/server/guides/libraries/log-levels.html',
 
   // Articles
   'documentation/articles/value-and-reference-types.html',
