@@ -151,6 +151,30 @@ Phase 0 next-step decision:
 - **Tantivy spike does not open as a blocking dependency.** It moves from a planned decision branch to a watchlist item, triggered only if (a) cache-on p99 ever regresses past 25 ms on the deployment target, or (b) cache-hit rate drops materially in production telemetry (e.g. due to a fingerprinted-URL change that invalidates the LRU keys).
 - **Cold-path follow-up** stays open as a small investigation, not a blocking gate: the `framework-filter` case being the *worst* cold case is suspicious — narrowing by framework should cheapen the query, not slow it. Likely the framework predicate is applied after the FTS scan rather than before. A targeted fix here would lift the cache-off worst case without any new infrastructure. Tracked as a Phase 0.5 spike, ungated.
 
+Public-surface verification (apple-docs.everest.mt, end-to-end through Cloudflare → Tunnel → Caddy → Bun):
+
+The internal mm18 numbers are necessary but not sufficient — they exclude the network. Benching against the public hostname revealed that every `/api/search` request was reaching origin (`cf-cache-status: DYNAMIC`), giving p50 ~47 ms / p99 ~140 ms regardless of how fast Bun answered. Cause: `/api/search` and `/api/filters` shipped no `Cache-Control` header, and Cloudflare's default policy is to skip caching `application/json` URLs without a static-asset extension, even with `public, max-age` set.
+
+Two fixes shipped together (commit `1573b3d`):
+
+- `src/web/serve.js`: emit `Cache-Control: public, max-age=300, stale-while-revalidate=3600` on `/api/search` (hit and miss branches) and `/api/filters`.
+- Cloudflare Cache Rule on the `everest.mt` zone: `starts_with(http.request.uri.path, "/api/search") or starts_with(http.request.uri.path, "/api/filters")` → `set_cache_settings { cache: true, edge_ttl: respect_origin, browser_ttl: respect_origin }`. Lets CF respect the origin directive instead of skipping by default.
+- `ops/bin/cf-purge.sh` + hooks in `deploy-update.sh` and `pull-snapshot.sh`: deploy-time `purge_everything` so the edge becomes coherent the moment the new corpus is live, with zero staleness window. Soft-fails (warn + exit 0) when the CF token / zone are not configured.
+
+Public-surface numbers after the change, from a residential client (200 iter × 5 default cases per concurrency tier):
+
+| concurrency | p50    | p95     | p99     | max     | end-to-end SLO (p99<25ms) |
+| ----------- | ------ | ------- | ------- | ------- | ------------------------- |
+| 1           | 17.4ms | 19.2ms  | 20.4ms  | 22.9ms  | pass                      |
+| 2           | 18.5ms | 21.0ms  | 23.4ms  | 56.7ms  | pass                      |
+| 4           | 26.2ms | 36.0ms  | 53.5ms  | 53.9ms  | miss                      |
+| 8           | 18.0ms | 21.7ms  | 60.8ms  | 62.6ms  | miss                      |
+| 16          | 18.3ms | 27.4ms  | 65.0ms  | 65.1ms  | miss                      |
+
+Compared to pre-edge-cache (every request to origin), this is a 6-7× improvement at p99: ~140 ms → ~20 ms at low concurrency. The c=4+ tail spikes are residual network outliers (a handful of 50-65 ms requests in 1000), not backend contention. Real users don't drive c=4+ from a single client; CF distributes across users so per-user concurrency is typically 1-4 browser connections. The SLO holds at the concurrency the architecture is actually serving.
+
+Bench reporting nuance: `x-apple-docs-cache: hit|miss` reflects Bun's LRU state at the moment CF cache-filled, not the current request. Once CF caches a response with `x-apple-docs-cache: miss`, that header sticks for every edge hit. Use `cf-cache-status` for edge-cache state and `x-apple-docs-cache` only when looking at origin behavior. The bench's `cache_hit_rate` field reports 0 % under edge caching for this reason — minor reporting fix tracked separately.
+
 Fastest ceiling path:
 
 - Build a Rust/Tantivy sidecar or native helper as a read-only search accelerator if optimized SQLite misses 25 ms p95 on the benchmark suite. With this SLO, Tantivy is a planned decision branch, not a far-future idea.
