@@ -34,12 +34,10 @@ def main() -> int:
             # /fonts ------------------------------------------------------
             page.goto(f"{URL}/fonts")
             page.wait_for_selector(".font-preview-line")
-            page.wait_for_function(
-                "() => document.querySelectorAll('.font-pill').length > 0",
-                timeout=10_000,
-            )
+            # Per-family weight pills were collapsed into a single global
+            # weight slider in commit 3eef406. Wait on the slider instead.
+            page.wait_for_selector("#fonts-weight", timeout=10_000)
             family_count = page.locator(".font-family").count()
-            pill_count = page.locator(".font-pill").count()
             face_rules = page.evaluate(
                 "() => document.getElementById('fonts-page-faces')?.sheet?.cssRules?.length ?? 0"
             )
@@ -47,8 +45,6 @@ def main() -> int:
             page.screenshot(path=str(OUT / "fonts.png"), full_page=True)
             if family_count < 1:
                 failures.append("/fonts: no family cards rendered")
-            if pill_count < 1:
-                failures.append("/fonts: no weight pills rendered")
             if face_rules < 10:
                 failures.append(f"/fonts: only {face_rules} @font-face rules injected")
             if badges < 1:

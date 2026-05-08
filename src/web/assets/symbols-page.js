@@ -159,30 +159,80 @@
     render()
   }
 
+  // Chunked progressive rendering. Mounting all 10k tiles up-front makes
+  // the DOM and the initial layout pass huge even with content-visibility.
+  // Instead we mount CHUNK_SIZE tiles, then mount the next chunk lazily
+  // when an end-sentinel scrolls into view. The grid stays scrollable
+  // within its bounded container; DOM only grows as the user actually
+  // scrolls past the current window.
+  const CHUNK_SIZE = 480
+  let renderedCount = 0
+  let endSentinel = null
+  let chunkObserver = null
+
+  function buildTile(symbol) {
+    const tile = document.createElement('button')
+    tile.type = 'button'
+    tile.className = 'symbol-tile'
+    tile.dataset.symbolName = symbol.name
+    tile.dataset.symbolScope = symbol.scope
+    tile.setAttribute('role', 'gridcell')
+    tile.setAttribute('aria-label', symbol.name)
+    const url = `/api/symbols/${encodeURIComponent(symbol.scope)}/${encodeURIComponent(symbol.name)}.svg`
+    const icon = document.createElement('span')
+    icon.className = 'symbol-tile__icon'
+    icon.style.maskImage = `url(${url})`
+    icon.style.webkitMaskImage = `url(${url})`
+    const tip = document.createElement('span')
+    tip.className = 'symbol-tile__tooltip'
+    tip.textContent = symbol.name
+    tile.append(icon, tip)
+    tile.addEventListener('click', () => onTileClick(symbol, tile))
+    return tile
+  }
+
   function render() {
-    const frag = document.createDocumentFragment()
-    for (const symbol of filtered) {
-      const tile = document.createElement('button')
-      tile.type = 'button'
-      tile.className = 'symbol-tile'
-      tile.dataset.symbolName = symbol.name
-      tile.dataset.symbolScope = symbol.scope
-      tile.setAttribute('role', 'gridcell')
-      tile.setAttribute('aria-label', symbol.name)
-      const url = `/api/symbols/${encodeURIComponent(symbol.scope)}/${encodeURIComponent(symbol.name)}.svg`
-      const icon = document.createElement('span')
-      icon.className = 'symbol-tile__icon'
-      icon.style.maskImage = `url(${url})`
-      icon.style.webkitMaskImage = `url(${url})`
-      const tip = document.createElement('span')
-      tip.className = 'symbol-tile__tooltip'
-      tip.textContent = symbol.name
-      tile.append(icon, tip)
-      tile.addEventListener('click', () => onTileClick(symbol, tile))
-      frag.appendChild(tile)
+    if (chunkObserver) {
+      chunkObserver.disconnect()
+      chunkObserver = null
     }
-    GRID.replaceChildren(frag)
+    GRID.replaceChildren()
+    renderedCount = 0
+    endSentinel = document.createElement('div')
+    endSentinel.className = 'symbols-grid__sentinel'
+    endSentinel.setAttribute('aria-hidden', 'true')
+    GRID.appendChild(endSentinel)
+
+    chunkObserver = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          renderNextChunk()
+          break
+        }
+      }
+    }, { root: SCROLLER, rootMargin: '600px 0px 600px 0px' })
+    chunkObserver.observe(endSentinel)
+
+    renderNextChunk()
     SCROLLER.scrollTop = 0
+  }
+
+  function renderNextChunk() {
+    if (renderedCount >= filtered.length) {
+      if (chunkObserver) {
+        chunkObserver.disconnect()
+        chunkObserver = null
+      }
+      if (endSentinel) endSentinel.remove()
+      return
+    }
+    const end = Math.min(renderedCount + CHUNK_SIZE, filtered.length)
+    const frag = document.createDocumentFragment()
+    for (let i = renderedCount; i < end; i++) {
+      frag.appendChild(buildTile(filtered[i]))
+    }
+    GRID.insertBefore(frag, endSentinel)
+    renderedCount = end
   }
 
   // ---------------------------------------------------------------------
@@ -404,30 +454,35 @@
   function refreshDetail() {
     if (!activeSymbol) return
     const base = `/api/symbols/${encodeURIComponent(activeSymbol.scope)}/${encodeURIComponent(activeSymbol.name)}`
-    // The inspector preview is an `<img>` element: <img src> is rendered
-    // by the browser image decoder and does NOT inherit `currentColor`
-    // from its parent the way an inline SVG would. Resolve the active
-    // text colour to a hex so the rendered preview honours the theme,
-    // and only override when the user has explicitly picked a colour.
+    // The preview is a <span> with `mask-image` (same recipe as the grid
+    // tile). When weight/scale are at their defaults, point the mask at
+    // the unparameterized URL so the bytes already cached by the grid
+    // tile are reused — no re-fetch, no Swift live-render. Color comes
+    // from `--symbol-color` / `currentColor` automatically.
+    const previewParams = new URLSearchParams()
+    if (detailWeight.value !== 'regular') previewParams.set('weight', detailWeight.value)
+    if (detailScale.value !== 'medium') previewParams.set('scale', detailScale.value)
+    const previewQs = previewParams.toString()
+    const previewUrl = previewQs ? `${base}.svg?${previewQs}` : `${base}.svg`
+    if (detail.preview) {
+      detail.preview.style.maskImage = `url(${previewUrl})`
+      detail.preview.style.webkitMaskImage = `url(${previewUrl})`
+      detail.preview.setAttribute('aria-label', activeSymbol.name)
+    }
+    // Downloads bake the active color so the saved file is self-contained.
     const userColor = readVar('--symbol-color')
     const fg = userColor || resolvedThemeFg()
-    const params = new URLSearchParams()
-    params.set('size', '256')
-    params.set('fg', fg)
-    if (detailWeight.value !== 'regular') params.set('weight', detailWeight.value)
-    if (detailScale.value !== 'medium') params.set('scale', detailScale.value)
-    const svgUrl = `${base}.svg?${params.toString()}`
-    const pngUrl = `${base}.png?${params.toString()}`
-    if (detail.preview) {
-      detail.preview.src = svgUrl
-      detail.preview.alt = activeSymbol.name
-    }
+    const dlParams = new URLSearchParams(previewParams)
+    dlParams.set('size', '256')
+    dlParams.set('fg', fg)
+    const svgDl = `${base}.svg?${dlParams.toString()}`
+    const pngDl = `${base}.png?${dlParams.toString()}`
     if (detail.downloadSvg) {
-      detail.downloadSvg.href = svgUrl
+      detail.downloadSvg.href = svgDl
       detail.downloadSvg.download = `${activeSymbol.name}.svg`
     }
     if (detail.downloadPng) {
-      detail.downloadPng.href = pngUrl
+      detail.downloadPng.href = pngDl
       detail.downloadPng.download = `${activeSymbol.name}.png`
     }
   }

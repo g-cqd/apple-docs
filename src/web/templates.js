@@ -380,7 +380,7 @@ ${buildHeader(siteConfig)}
     <aside id="symbols-detail" class="symbols-detail" hidden aria-label="Symbol detail">
       <button id="symbols-detail-close" class="symbols-detail__close" type="button" aria-label="Close detail">&times;</button>
       <div class="symbols-detail__preview-wrap">
-        <img id="symbols-detail-preview" class="symbols-detail__preview" alt="" decoding="async">
+        <span id="symbols-detail-preview" class="symbols-detail__preview" role="img" aria-label=""></span>
       </div>
       <h2 id="symbols-detail-name" class="symbols-detail__name"></h2>
       <p id="symbols-detail-scope" class="symbols-detail__scope"></p>

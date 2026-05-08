@@ -2570,6 +2570,38 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   min-width: 120px;
 }
 
+/* Below 30em (≤480px) the customize row's small controls (color picker,
+   hex input, range slider, status) crammed onto one wrapping row at
+   different baselines and ended up overlapping. Stack them vertically
+   so each control gets a full-width line — color stays inline (the two
+   inputs are small enough), size slider expands, status drops below. */
+@media (max-width: 29.99em) {
+  .symbols-toolbar {
+    padding: 0.5rem;
+    gap: 0.4rem;
+  }
+  .symbols-toolbar__row--customize {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+  .symbols-toolbar__row--customize .symbols-control {
+    width: 100%;
+  }
+  .symbols-toolbar__row--customize .symbols-status {
+    margin-left: 0;
+    text-align: left;
+  }
+  .symbols-toolbar__row--search .symbols-search {
+    flex: 1 1 100%;
+  }
+  .symbols-toolbar__row--search .symbols-scope,
+  .symbols-toolbar__row--search .symbols-category-mobile {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+}
+
 /* -- Layout shell -- */
 .symbols-layout {
   display: grid;
@@ -2675,10 +2707,26 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .symbols-scroller {
   position: relative;
   min-height: 480px;
+  /* Cap to viewport so the grid scrolls inside its own container instead
+     of growing the document. The viewport-height fallback is generous on
+     desktop; the toolbar + header above eat ~200px of vertical space. */
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg);
   padding: 0.5rem;
+}
+
+/* Sentinel sits at the end of the rendered tiles. JS uses an
+   IntersectionObserver on this element (with the scroller as root) to
+   trigger the next chunk-mount as the user scrolls towards the bottom.
+   It must span the full grid width so it lands BELOW the last row. */
+.symbols-grid__sentinel {
+  grid-column: 1 / -1;
+  height: 1px;
+  pointer-events: none;
 }
 
 /* `auto-fill, minmax()` recipe — research/fonts-symbols-ux.md §6.2.
@@ -2846,8 +2894,21 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 }
 
 .symbols-detail__preview {
-  max-width: 100%;
-  height: auto;
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  aspect-ratio: 1 / 1;
+  /* Same mask-image recipe as `.symbol-tile__icon` so the inspector
+     reuses the cached prerendered SVG bytes already loaded for the grid
+     tile, and inherits theme color via `--symbol-color` / currentColor.
+     Avoids the previous img-with-fg-param live-render round-trip. */
+  background-color: var(--symbol-color, currentColor);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
 }
 
 .symbols-detail__name {
@@ -2968,6 +3029,13 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   .symbols-mobile-bar {
     display: none;
   }
+}
+
+/* `display: flex` above wins over the user-agent `[hidden]` rule, so
+   the mobile bar would render even before any tile is selected. Re-honor
+   the attribute explicitly (mirrors the `.symbols-detail[hidden]` fix). */
+.symbols-mobile-bar[hidden] {
+  display: none;
 }
 
 .symbols-mobile-bar__back {
