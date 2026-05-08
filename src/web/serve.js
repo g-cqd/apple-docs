@@ -1,6 +1,6 @@
 import { join, dirname, extname } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, buildFrameworkTreeData } from './templates.js'
+import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, renderNotFoundPage, buildFrameworkTreeData } from './templates.js'
 import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { createWebRenderCache } from './render-cache.js'
 import { search } from '../commands/search.js'
@@ -178,6 +178,18 @@ export async function startDevServer(opts, ctx) {
     })
     if (hashable) response.headers.set('x-apple-docs-hashable', '1')
     return response
+  }
+
+  /**
+   * Render the corpus-aware 404 page. The HTML's inline JS reads
+   * window.location to derive a search query from the requested URL, so
+   * users land on the search page pre-filled with what they were looking for.
+   */
+  function notFoundResponse(cfg) {
+    return new Response(renderNotFoundPage(cfg), {
+      status: 404,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    })
   }
 
   function matchesIfNoneMatch(headerValue, etag) {
@@ -459,7 +471,7 @@ export async function startDevServer(opts, ctx) {
             maxAge: 86400,
           })
         } catch {
-          return new Response('Not Found', { status: 404 })
+          return notFoundResponse(siteConfig)
         }
       }
     }
@@ -632,7 +644,7 @@ export async function startDevServer(opts, ctx) {
     // Document pages
     if (pathname.startsWith('/docs/')) {
       const key = pathname.replace('/docs/', '').replace(/\/$/, '').replace(/\/index\.html$/, '')
-      if (!key) return new Response('Not Found', { status: 404 })
+      if (!key) return notFoundResponse(siteConfig)
 
       // Try as framework listing first
       const root = db.getRootBySlug(key)
@@ -742,10 +754,10 @@ export async function startDevServer(opts, ctx) {
         return textResponse(html, { contentType: 'text/html; charset=utf-8', hashable: true })
       }
 
-      return new Response('Not Found', { status: 404 })
+      return notFoundResponse(siteConfig)
     }
 
-    return new Response('Not Found', { status: 404 })
+    return notFoundResponse(siteConfig)
   }
 
   const server = Bun.serve({

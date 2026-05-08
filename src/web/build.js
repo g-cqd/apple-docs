@@ -4,7 +4,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
 import { appendFile } from 'node:fs/promises'
 import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
-import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, buildFrameworkTreeData } from './templates.js'
+import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, renderNotFoundPage, buildFrameworkTreeData } from './templates.js'
 import { buildHomepageExtras } from './serve.js'
 import { generateSearchArtifacts } from './search-artifacts.js'
 import { generateSitemaps } from './sitemap.js'
@@ -250,6 +250,13 @@ export async function buildStaticSite(opts, ctx) {
       ).all()
       const symbolsHtml = renderSymbolsPage(siteConfig, { totals: symbolTotals })
       await Bun.write(join(buildDir, 'symbols', 'index.html'), symbolsHtml)
+
+      // 404 fallback. Caddy `handle_errors` and Bun web/serve.js both
+      // route /docs/* misses here; the inline JS pre-fills the search
+      // box with the inferred page title so the user lands somewhere
+      // useful instead of a dead end.
+      const notFoundHtml = renderNotFoundPage(siteConfig)
+      await Bun.write(join(buildDir, '404.html'), notFoundHtml)
     }
 
     // 5. Build document pages.

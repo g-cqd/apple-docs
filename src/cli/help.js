@@ -31,6 +31,8 @@ Commands:
   symbols sync         Index public and private SF Symbols
   symbols search       Search indexed SF Symbols
 
+  links audit          Audit cross-references across the rendered static site
+
   storage stats        Show disk usage breakdown
   storage gc           Garbage collect cached files
   storage materialize  Force-render markdown or HTML
@@ -430,6 +432,33 @@ Examples:
   apple-docs web build --skip-docs --out dist/web                     # essentials only; let Bun + Cloudflare handle /docs/* on demand
   apple-docs web build --frameworks kernel,matter,swift --concurrency 2  # one big framework at a time
   apple-docs web deploy github-pages
+`.trim(),
+
+  links: `
+Usage: apple-docs links <subcommand> [options]
+
+Audit cross-references in the rendered static site.
+
+Subcommands:
+  audit               Walk dist/web/docs/**/*.html, classify every <a href>
+                      and report counts + top broken patterns
+
+Options (audit):
+  --out <dir>         Built static site directory (default: dist/web)
+  --json              Output raw stats as JSON for downstream analysis
+
+Categories reported:
+  internal_ok         /docs/<key>/ where the key resolves
+  internal_broken     /docs/<key>/ where the key is not in the corpus
+  external_resolvable Absolute URL with a known internal equivalent
+                      (these should ideally be rewritten at parse time)
+  external            Absolute URL with no internal equivalent
+  fragment            #anchor — page-local
+  relative_broken     Relative path that doesn't resolve
+
+Examples:
+  apple-docs links audit                          # full audit
+  apple-docs links audit --json > /tmp/links.json # JSON for analysis
 `.trim(),
 
   storage: `

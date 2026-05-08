@@ -4,6 +4,7 @@ import {
   renderIndexPage,
   renderFrameworkPage,
   renderSearchPage,
+  renderNotFoundPage,
   buildBreadcrumbs,
 } from '../../src/web/templates.js'
 
@@ -89,6 +90,63 @@ describe('buildBreadcrumbs', () => {
   test('contains breadcrumbs nav element', () => {
     const html = buildBreadcrumbs('swiftui/view')
     expect(html).toContain('<nav class="breadcrumbs"')
+  })
+
+  test('renders unknown intermediate segments as plain text instead of dangling links', () => {
+    // swift-book chapter keys nest under a directory (LanguageGuide) that is
+    // not itself a page — its breadcrumb should be plain text, not a link.
+    const knownKeys = new Set([
+      'swift-book',
+      'swift-book/LanguageGuide/TheBasics',
+    ])
+    const html = buildBreadcrumbs('swift-book/LanguageGuide/TheBasics', {
+      title: 'The Basics',
+      framework: 'The Swift Programming Language',
+      knownKeys,
+    })
+    expect(html).toContain('<a href="/docs/swift-book/">The Swift Programming Language</a>')
+    expect(html).toContain('<span>LanguageGuide</span>')
+    expect(html).not.toContain('href="/docs/swift-book/LanguageGuide/"')
+    expect(html).toContain('<span aria-current="page">The Basics</span>')
+  })
+
+  test('treats every intermediate as a link when knownKeys is not provided (backward compat)', () => {
+    const html = buildBreadcrumbs('swift-book/LanguageGuide/TheBasics', {
+      title: 'The Basics',
+      framework: 'TSPL',
+    })
+    expect(html).toContain('href="/docs/swift-book/LanguageGuide/"')
+  })
+})
+
+describe('renderNotFoundPage', () => {
+  test('contains a search form pointing to /search', () => {
+    const html = renderNotFoundPage(siteConfig)
+    expect(html).toContain('<form')
+    expect(html).toContain('action="/search"')
+    expect(html).toContain('id="not-found-q"')
+    expect(html).toContain('name="q"')
+  })
+
+  test('marks the page as noindex so 404s don\'t show in sitemaps', () => {
+    const html = renderNotFoundPage(siteConfig)
+    expect(html).toMatch(/<meta\s+name=["']robots["'][^>]*noindex/i)
+  })
+
+  test('inlines the title-derivation script', () => {
+    const html = renderNotFoundPage(siteConfig)
+    expect(html).toContain('window.location')
+    expect(html).toContain('not-found-q')
+    // The CamelCase / kebab / .html cleanup logic must be there.
+    expect(html).toContain("[a-z0-9])([A-Z]")
+  })
+
+  test('includes navigation links to the main hubs', () => {
+    const html = renderNotFoundPage(siteConfig)
+    expect(html).toContain('href="/"')
+    expect(html).toContain('href="/search/"')
+    expect(html).toContain('href="/fonts/"')
+    expect(html).toContain('href="/symbols/"')
   })
 })
 

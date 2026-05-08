@@ -111,6 +111,16 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 			index index.html
 		}
 	}
+
+	# 404 fallback. The page's inline JS reads window.location to derive a
+	# search query from the URL the user clicked, so a dead link ends up
+	# on the search page pre-filled with the inferred title rather than a
+	# blank Caddy default page.
+	handle_errors {
+		@404 expression {http.error.status_code} == 404
+		rewrite @404 /404.html
+		file_server
+	}
 }
 
 # ----------------------------------------------------------------------------

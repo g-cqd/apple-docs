@@ -1371,6 +1371,58 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   margin-bottom: 1rem;
 }
 
+/* 404 fallback page. Mirrors search-page chrome so the user lands on a
+ * familiar layout. The inline JS pre-fills #not-found-q with a query
+ * derived from the requested URL. */
+.not-found-page {
+  max-width: 720px;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}
+.not-found-page h1 { margin-bottom: 0.75rem; }
+.not-found-lede { color: var(--text-secondary); font-size: 1.05rem; margin: 0 0 1.25rem; }
+.not-found-meta { font-size: 0.95rem; margin: 0 0 2rem; }
+.not-found-meta__label { color: var(--text-secondary); margin-right: 0.5rem; }
+.not-found-meta code {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  padding: 0.125rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+.not-found-search { margin: 2rem 0 1.5rem; }
+.not-found-search__label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+.not-found-search__row {
+  display: flex;
+  gap: 0.5rem;
+}
+.not-found-search__row input[type="search"] {
+  flex: 1;
+  padding: 0.6rem 0.85rem;
+  font-size: 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.not-found-search__row button {
+  padding: 0.6rem 1.2rem;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.not-found-search__row button:hover { filter: brightness(1.1); }
+.not-found-links {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: 1.5rem;
+}
+.not-found-links a { margin: 0 0.15rem; }
+
 .search-filters {
   display: flex;
   flex-direction: column;
@@ -2691,7 +2743,8 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
    the class restores the grid. The toolbar is a sibling of the
    layout, so reach it via `:has()` on the parent. */
 @media (max-width: 63.99em) {
-  body:has(.symbols-layout--detail-open) .symbols-toolbar {
+  body:has(.symbols-layout--detail-open) .symbols-toolbar,
+  body:has(.symbols-layout--detail-open) .symbols-page__header {
     display: none;
   }
   .symbols-layout--detail-open .symbols-categories,
@@ -2846,6 +2899,12 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .symbols-detail {
   position: sticky;
   top: 1rem;
+  /* Bound to viewport and scroll internally — without this, the metadata
+     list + downloads + axis pills made the aside taller than the
+     viewport and the whole page scrolled past the sticky position. */
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg);
@@ -2865,9 +2924,15 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 @media (max-width: 63.99em) {
   .symbols-detail {
     /* On mobile the inspector role is filled by the route + sticky
-       bottom action bar. Hide the in-page panel to avoid duplication. */
+       bottom action bar. Bound to viewport and reserve space for the
+       fixed bottom action bar (~60px) so the metadata can scroll within
+       the inspector instead of spilling under the bar. */
     position: static;
-    margin-top: 1rem;
+    margin-top: 0.5rem;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 5rem;
   }
 }
 

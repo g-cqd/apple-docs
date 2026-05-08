@@ -1,0 +1,188 @@
+/**
+ * `apple-docs links audit` — scan every rendered HTML doc for `<a href>`
+ * targets, classify each, and report counts + top broken patterns.
+ *
+ * Reads the built static site rather than the normalized DB content because
+ * (a) breadcrumbs and chrome links are added at render time, not normalize
+ * time; (b) many sources keep raw HTML in DB sections and only the final
+ * rendered output reflects the link layout users actually click.
+ */
+
+import { readFile, readdir } from 'node:fs/promises'
+import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { classifyLink } from '../lib/link-resolver.js'
+
+const HREF_REGEX = /<a\s[^>]*href\s*=\s*"([^"]+)"/gi
+
+/**
+ * Walk a directory tree and yield every regular file path.
+ *
+ * @param {string} root
+ * @returns {AsyncGenerator<string>}
+ */
+async function* walkFiles(root) {
+  const entries = await readdir(root, { withFileTypes: true })
+  for (const entry of entries) {
+    const full = join(root, entry.name)
+    if (entry.isDirectory()) {
+      yield* walkFiles(full)
+    } else if (entry.isFile()) {
+      yield full
+    }
+  }
+}
+
+/**
+ * Extract every `<a href>` URL from an HTML string, attributed to the section
+ * (article body, breadcrumb nav, sidebar aside) it appears in. Section
+ * attribution is approximate — we match the most recent `<article|nav|aside>`
+ * opening tag at each position.
+ *
+ * @param {string} html
+ * @returns {Array<{ href: string, section: string }>}
+ */
+function extractLinks(html) {
+  // Find each section open + close to slice into regions.
+  const sections = []
+  for (const m of html.matchAll(/<(article|nav|aside|header|footer)\b[^>]*?(?:class\s*=\s*"([^"]*)")?[^>]*>/gi)) {
+    sections.push({
+      tag: m[1].toLowerCase(),
+      cls: (m[2] ?? '').toLowerCase(),
+      start: m.index,
+      end: html.length, // refined below
+    })
+  }
+  // Sort by start, stamp end as next section's start (rough heuristic).
+  sections.sort((a, b) => a.start - b.start)
+  for (let i = 0; i < sections.length - 1; i++) {
+    sections[i].end = sections[i + 1].start
+  }
+
+  const labelFor = (sec) => {
+    if (!sec) return 'other'
+    if (sec.cls.includes('breadcrumb')) return 'breadcrumb'
+    if (sec.cls.includes('topics') || sec.cls.includes('see-also')) return 'related'
+    if (sec.cls.includes('symbols-detail')) return 'sidebar'
+    if (sec.tag === 'article') return 'article'
+    if (sec.tag === 'aside') return 'sidebar'
+    if (sec.tag === 'nav') return 'breadcrumb'
+    if (sec.tag === 'header') return 'chrome'
+    if (sec.tag === 'footer') return 'chrome'
+    return sec.tag
+  }
+
+  const findSection = (pos) => {
+    for (let i = sections.length - 1; i >= 0; i--) {
+      if (sections[i].start <= pos && pos < sections[i].end) return sections[i]
+    }
+    return null
+  }
+
+  const links = []
+  HREF_REGEX.lastIndex = 0
+  for (const m of html.matchAll(HREF_REGEX)) {
+    links.push({
+      href: m[1],
+      section: labelFor(findSection(m.index)),
+    })
+  }
+  return links
+}
+
+/**
+ * Walk built HTML files, classify every link, return aggregated stats.
+ *
+ * @param {object} opts
+ * @param {string} opts.outDir Path to the built static site (e.g. dist/web).
+ * @param {boolean} [opts.json] Return raw stats (otherwise default; consumed by formatter).
+ * @param {{ db, logger }} ctx
+ * @returns {Promise<object>}
+ */
+export async function linksAudit(opts, ctx) {
+  const { db, logger } = ctx
+  const outDir = opts.outDir ?? 'dist/web'
+
+  if (!existsSync(outDir)) {
+    throw new Error(`outDir does not exist: ${outDir}. Run \`apple-docs web build\` first.`)
+  }
+
+  // Build the knownKeys set from the DB. Includes every active page key
+  // regardless of source type.
+  const knownKeys = new Set(
+    db.db.query("SELECT path FROM pages WHERE status != 'deleted'").all().map(r => r.path),
+  )
+
+  logger?.info?.(`Auditing ${outDir} against ${knownKeys.size} known keys...`)
+
+  const stats = {
+    filesScanned: 0,
+    linksTotal: 0,
+    bySection: Object.create(null),
+    byCategory: Object.create(null),
+    byCategoryAndSection: Object.create(null),
+    // Top broken-internal candidates (key → count + sample source pages).
+    brokenInternalKeys: new Map(),
+    relativeBroken: new Map(),
+    externalResolvable: new Map(),
+  }
+
+  const docsRoot = join(outDir, 'docs')
+  if (!existsSync(docsRoot)) {
+    throw new Error(`No /docs directory in ${outDir}; the build may have failed.`)
+  }
+
+  for await (const file of walkFiles(docsRoot)) {
+    if (!file.endsWith('.html')) continue
+    stats.filesScanned++
+    const html = await readFile(file, 'utf8')
+    const links = extractLinks(html)
+    const fromPath = file.slice(outDir.length).replace(/\/index\.html$/, '/')
+
+    for (const { href, section } of links) {
+      stats.linksTotal++
+      stats.bySection[section] = (stats.bySection[section] ?? 0) + 1
+      const result = classifyLink(href, { knownKeys })
+      stats.byCategory[result.category] = (stats.byCategory[result.category] ?? 0) + 1
+      const ckey = `${result.category}/${section}`
+      stats.byCategoryAndSection[ckey] = (stats.byCategoryAndSection[ckey] ?? 0) + 1
+
+      if (result.category === 'internal_broken' && result.internalKey) {
+        const entry = stats.brokenInternalKeys.get(result.internalKey) ?? { count: 0, sources: new Set() }
+        entry.count++
+        if (entry.sources.size < 5) entry.sources.add(fromPath)
+        stats.brokenInternalKeys.set(result.internalKey, entry)
+      } else if (result.category === 'relative_broken') {
+        const entry = stats.relativeBroken.get(href) ?? { count: 0, sources: new Set() }
+        entry.count++
+        if (entry.sources.size < 5) entry.sources.add(fromPath)
+        stats.relativeBroken.set(href, entry)
+      } else if (result.category === 'external_resolvable' && result.internalKey) {
+        const entry = stats.externalResolvable.get(result.internalKey) ?? { count: 0, sources: new Set() }
+        entry.count++
+        if (entry.sources.size < 5) entry.sources.add(fromPath)
+        stats.externalResolvable.set(result.internalKey, entry)
+      }
+
+      if (stats.filesScanned % 5000 === 0 && stats.filesScanned > 0) {
+        logger?.info?.(`  scanned ${stats.filesScanned} files, ${stats.linksTotal} links classified...`)
+      }
+    }
+  }
+
+  const finalize = (m) => [...m.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 50)
+    .map(([k, v]) => ({ value: k, count: v.count, sources: [...v.sources] }))
+
+  return {
+    filesScanned: stats.filesScanned,
+    linksTotal: stats.linksTotal,
+    bySection: stats.bySection,
+    byCategory: stats.byCategory,
+    byCategoryAndSection: stats.byCategoryAndSection,
+    topBrokenInternal: finalize(stats.brokenInternalKeys),
+    topRelativeBroken: finalize(stats.relativeBroken),
+    topExternalResolvable: finalize(stats.externalResolvable),
+  }
+}

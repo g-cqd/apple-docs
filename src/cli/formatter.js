@@ -586,3 +586,41 @@ export function formatStorageProfile(result) {
     `  Cache on read: ${result.config.cacheOnRead}`,
   ].join('\n')
 }
+
+
+export function formatLinksAudit(result) {
+  const lines = [
+    bold("Links audit"),
+    `  Files scanned: ${result.filesScanned.toLocaleString("en-US")}`,
+    `  Links total:   ${result.linksTotal.toLocaleString("en-US")}`,
+    "",
+    bold("By category"),
+  ]
+  const cats = Object.entries(result.byCategory).sort((a, b) => b[1] - a[1])
+  for (const [cat, n] of cats) {
+    lines.push(`  ${cat.padEnd(22)} ${n.toLocaleString("en-US")}`)
+  }
+  lines.push("", bold("By section"))
+  for (const [sec, n] of Object.entries(result.bySection).sort((a, b) => b[1] - a[1])) {
+    lines.push(`  ${sec.padEnd(22)} ${n.toLocaleString("en-US")}`)
+  }
+  if (result.topBrokenInternal.length > 0) {
+    lines.push("", bold(`Top broken-internal targets (${result.topBrokenInternal.length})`))
+    for (const e of result.topBrokenInternal.slice(0, 20)) {
+      lines.push(`  ${String(e.count).padStart(6)} ${e.value}`)
+    }
+  }
+  if (result.topRelativeBroken.length > 0) {
+    lines.push("", bold(`Top relative-broken hrefs (${result.topRelativeBroken.length})`))
+    for (const e of result.topRelativeBroken.slice(0, 15)) {
+      lines.push(`  ${String(e.count).padStart(6)} ${e.value}`)
+    }
+  }
+  if (result.topExternalResolvable.length > 0) {
+    lines.push("", bold(`Top external-resolvable (could be internalized; ${result.topExternalResolvable.length})`))
+    for (const e of result.topExternalResolvable.slice(0, 15)) {
+      lines.push(`  ${String(e.count).padStart(6)} ${e.value}`)
+    }
+  }
+  return lines.join('\n')
+}
