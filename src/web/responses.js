@@ -3,6 +3,17 @@ import { sha256 } from '../lib/hash.js'
 import { renderNotFoundPage } from './templates.js'
 
 /**
+ * Cache directive for JSON endpoints whose result is a pure function of the
+ * current corpus (`/api/search`, `/api/filters`). Cloudflare's default
+ * policy is to skip caching JSON without an explicit Cache-Control
+ * directive, so these used to land at Bun on every request even though the
+ * corpus is effectively static between syncs. Pairing this directive with
+ * an explicit CF cache purge after every deploy (ops/bin/cf-purge.sh)
+ * gives instant coherence without staleness drift.
+ */
+export const API_CORPUS_CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=3600'
+
+/**
  * Filename-extension → MIME type lookup used by both the asset routes and
  * the file-response helpers. Lives at module scope so route handlers don't
  * have to import the table from a stateful context object.

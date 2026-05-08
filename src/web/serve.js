@@ -9,6 +9,7 @@ import { getPrerenderedSymbolPath, listAppleFonts, renderFontText, renderSfSymbo
 import { buildStoreZip } from '../lib/zip.js'
 import { ASSET_BUNDLES } from './assets-manifest.js'
 import {
+  API_CORPUS_CACHE_CONTROL,
   MIME_TYPES,
   jsonResponse,
   textResponse,
@@ -18,15 +19,10 @@ import {
   finalizeResponse,
 } from './responses.js'
 import { createWebContext } from './context.js'
-
-// Cache directive for JSON endpoints whose result is a pure function of the
-// current corpus (`/api/search`, `/api/filters`). Cloudflare's default policy
-// is to skip caching JSON without an explicit Cache-Control directive, so
-// these used to land at Bun on every request even though the corpus is
-// effectively static between syncs. Pairing this directive with an explicit
-// CF cache purge after every deploy (ops/bin/cf-purge.sh) gives instant
-// coherence without staleness drift.
-const API_CORPUS_CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=3600'
+import { createRouteRegistry } from './route-registry.js'
+import { healthHandler } from './routes/health.route.js'
+import { filtersHandler } from './routes/filters.route.js'
+import { symbolsIndexHandler } from './routes/symbols-index.route.js'
 
 /**
  * Start a local dev server for previewing documentation.
@@ -60,19 +56,20 @@ export async function startDevServer(opts, ctx) {
     invalidateDocumentCaches,
   } = webCtx
 
+  // Route registry for the routes that have been extracted into per-file
+  // modules. Inline if-chains in handleRequest below cover the rest until
+  // they are also moved out (see Phase 1 slice E).
+  const registry = createRouteRegistry()
+  registry.register('/healthz', healthHandler)
+  registry.register('/api/filters', filtersHandler)
+  registry.register('/api/symbols/index.json', symbolsIndexHandler)
+
   async function handleRequest(request) {
+    const dispatched = await registry.dispatch(request, webCtx)
+    if (dispatched) return dispatched
+
     const url = new URL(request.url)
     const pathname = url.pathname
-
-    // Liveness probe: must not touch the DB or any cache so a stuck
-    // request handler does not also fail the upstream health check.
-    // `no-store` so a cached 200 cannot mask a wedged origin.
-    if (pathname === '/healthz') {
-      return jsonResponse(
-        { ok: true, service: 'apple-docs-web' },
-        { headers: { 'Cache-Control': 'no-store' } },
-      )
-    }
 
     // API: live search
     if (pathname === '/api/search') {
@@ -114,19 +111,6 @@ export async function startDevServer(opts, ctx) {
       return jsonResponse(results, {
         hashable: true,
         headers: { 'x-apple-docs-cache': 'miss', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
-      })
-    }
-
-    // API: filter options for search page
-    if (pathname === '/api/filters') {
-      const frameworks = db.db.query(
-        `SELECT DISTINCT COALESCE(r.display_name, d.framework) as label, d.framework as value
-         FROM documents d LEFT JOIN roots r ON r.slug = d.framework
-         WHERE d.framework IS NOT NULL ORDER BY label`
-      ).all().map(r => ({ label: r.label, value: r.value }))
-      const kinds = db.db.query('SELECT DISTINCT role_heading FROM documents WHERE role_heading IS NOT NULL ORDER BY role_heading').all().map(r => r.role_heading)
-      return jsonResponse({ frameworks, kinds }, {
-        headers: { 'Cache-Control': API_CORPUS_CACHE_CONTROL },
       })
     }
 
@@ -202,11 +186,6 @@ export async function startDevServer(opts, ctx) {
         }
         return new Response(zip, { status: 200, headers })
       }
-    }
-
-    if (pathname === '/api/symbols/index.json') {
-      const catalog = db.listSfSymbolsCatalog()
-      return jsonResponse({ count: catalog.length, symbols: catalog }, { hashable: true })
     }
 
     if (pathname === '/api/symbols/search') {
