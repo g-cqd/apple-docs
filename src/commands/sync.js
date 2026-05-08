@@ -184,15 +184,28 @@ async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
   const results = {}
   const keys = discovery.keys ?? []
 
+  // Group keys by their owning root using the first slug segment. Adapters
+  // that publish multiple roots (e.g. swift-docc with three archive roots)
+  // emit a single mixed `keys` array; partition it so each page is persisted
+  // under the correct root_id.
+  const keysByRootSlug = new Map()
+  for (const root of roots) keysByRootSlug.set(root.slug, [])
+  for (const key of keys) {
+    const slug = key.split('/', 1)[0]
+    if (!keysByRootSlug.has(slug)) keysByRootSlug.set(slug, [])
+    keysByRootSlug.get(slug).push(key)
+  }
+
   for (const root of roots) {
     let processed = 0
     let skipped = 0
-    const existingKeys = db.getActivePathsIn(keys)
+    const rootKeys = keysByRootSlug.get(root.slug) ?? []
+    const existingKeys = db.getActivePathsIn(rootKeys)
 
-    logger.info(`Syncing ${adapter.constructor.displayName} (${keys.length} keys)...`)
-    seedFlatSourceProgress(db, root.slug, keys, existingKeys)
+    logger.info(`Syncing ${adapter.constructor.displayName} (${rootKeys.length} keys for ${root.slug})...`)
+    seedFlatSourceProgress(db, root.slug, rootKeys, existingKeys)
 
-    await pool(keys, concurrency, async (key) => {
+    await pool(rootKeys, concurrency, async (key) => {
       if (existingKeys.has(key)) {
         skipped++
         return
@@ -223,8 +236,8 @@ async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
     })
 
     db.updateRootPageCount(root.slug)
-    logger.info(`Done: ${adapter.constructor.displayName} (${processed} new, ${skipped} skipped)`)
-    results[root.slug] = { processed, total: keys.length, skipped }
+    logger.info(`Done: ${adapter.constructor.displayName} ${root.slug} (${processed} new, ${skipped} skipped)`)
+    results[root.slug] = { processed, total: rootKeys.length, skipped }
   }
 
   return results

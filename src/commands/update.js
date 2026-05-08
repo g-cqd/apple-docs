@@ -340,7 +340,10 @@ async function updateFlatSource(adapter, discovery, requestedRoots, _concurrency
 
   if (newKeys.length > 0) {
     logger.info(`Fetching ${newKeys.length} new ${adapter.constructor.displayName} pages...`)
-    const rootId = roots[0]?.id ?? null
+    // Adapters may publish multiple roots (e.g. swift-docc) — route each new
+    // page to the root whose slug matches the key's first segment.
+    const rootBySlug = new Map(roots.map(r => [r.slug, r]))
+    const fallbackRootId = roots[0]?.id ?? null
 
     await Promise.all(newKeys.map(key =>
       semaphore.run(async () => {
@@ -349,10 +352,11 @@ async function updateFlatSource(adapter, discovery, requestedRoots, _concurrency
           const normalized = adapter.normalize(key, fetchResult.payload)
           adapter.validateNormalizeResult(normalized)
 
+          const owningRoot = rootBySlug.get(key.split('/', 1)[0])
           await persistNormalizedPage({
             db,
             dataDir,
-            rootId,
+            rootId: owningRoot?.id ?? fallbackRootId,
             path: key,
             sourceType: adapter.constructor.type,
             rawPayload: fetchResult.payload,
@@ -360,8 +364,9 @@ async function updateFlatSource(adapter, discovery, requestedRoots, _concurrency
             etag: fetchResult.etag ?? null,
             lastModified: fetchResult.lastModified ?? null,
           })
-          if (root) {
-            markFlatSourceProcessed(db, root.slug, key)
+          const trackingRoot = owningRoot ?? root
+          if (trackingRoot) {
+            markFlatSourceProcessed(db, trackingRoot.slug, key)
           }
           counts.newCount++
         } catch (e) {
@@ -375,8 +380,9 @@ async function updateFlatSource(adapter, discovery, requestedRoots, _concurrency
     ))
   }
 
-  if (root) {
-    db.updateRootPageCount(root.slug)
+  // Refresh page counts for every root this adapter manages.
+  for (const r of roots) {
+    db.updateRootPageCount(r.slug)
   }
   return counts
 }
