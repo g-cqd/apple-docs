@@ -1,9 +1,12 @@
 import { join, dirname, extname } from 'node:path'
 import { gzipSync } from 'node:zlib'
+import { createHash } from 'node:crypto'
+import { existsSync, statSync } from 'node:fs'
 import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, renderNotFoundPage, buildFrameworkTreeData } from './templates.js'
 import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { createWebRenderCache } from './render-cache.js'
 import { search } from '../commands/search.js'
+import { createReaderPool } from '../storage/reader-pool.js'
 import { fetchDocPage } from '../apple/api.js'
 import { persistFetchedDocPage } from '../pipeline/persist.js'
 import { createHostBucketedLimiter } from '../lib/per-host-rate-limiter.js'
@@ -67,6 +70,10 @@ export async function startDevServer(opts, ctx) {
     primary: { rate: 5, burst: 2 },
   })
   const renderCache = createWebRenderCache(db)
+  const readerPool = await resolveWebReaderPool(ctx, opts, logger)
+  const searchCtx = readerPool ? { ...ctx, readerPool } : ctx
+  const searchCache = createLru({ max: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_SEARCH_CACHE) ?? 512 })
+  const corpusStamp = createCorpusStamp(ctx)
 
   // Cached search artifacts (invalidated when the document corpus changes)
   let cachedTitleIndex = null
@@ -83,6 +90,8 @@ export async function startDevServer(opts, ctx) {
   function getAliasMap() { return cachedAliasMap ??= buildAliasMap(db) }
   function invalidateDocumentCaches() {
     renderCache.invalidate()
+    searchCache.clear()
+    corpusStamp.refresh()
     cachedTitleIndex = null
     cachedAliasMap = null
     cachedSearchManifest = null
@@ -268,12 +277,14 @@ export async function startDevServer(opts, ctx) {
     if (pathname === '/api/search') {
       const query = url.searchParams.get('q')
       if (!query) return jsonResponse({ results: [], total: 0 })
+      const deep = url.searchParams.get('deep') === '1' || url.searchParams.get('full_text') === '1'
       const searchOpts = {
         query,
         limit: Math.min(Number.parseInt(url.searchParams.get('limit') ?? '50') || 50, 200),
-        fuzzy: url.searchParams.get('no_fuzzy') !== '1',
-        noDeep: url.searchParams.get('no_deep') === '1',
+        fuzzy: url.searchParams.get('fuzzy') === '1' && url.searchParams.get('no_fuzzy') !== '1',
+        noDeep: url.searchParams.get('no_deep') === '1' || !deep,
         noEager: url.searchParams.get('no_eager') === '1',
+        fast: url.searchParams.get('exhaustive') !== '1',
       }
       for (const key of ['framework', 'language', 'source', 'kind', 'platform']) {
         const val = url.searchParams.get(key)
@@ -289,8 +300,20 @@ export async function startDevServer(opts, ctx) {
       if (track) searchOpts.track = track
       const offset = Number.parseInt(url.searchParams.get('offset') ?? '0') || 0
       if (offset > 0) searchOpts.offset = offset
-      const results = await search(searchOpts, ctx)
-      return jsonResponse(results, { hashable: true })
+      const cacheKey = searchResponseCacheKey(searchOpts, corpusStamp.get())
+      const cached = searchCache.get(cacheKey)
+      if (cached !== undefined) {
+        return jsonResponse(cached, {
+          hashable: true,
+          headers: { 'x-apple-docs-cache': 'hit' },
+        })
+      }
+      const results = await search(searchOpts, searchCtx)
+      searchCache.set(cacheKey, results)
+      return jsonResponse(results, {
+        hashable: true,
+        headers: { 'x-apple-docs-cache': 'miss' },
+      })
     }
 
     // API: filter options for search page
@@ -707,7 +730,8 @@ export async function startDevServer(opts, ctx) {
                     COALESCE(r.display_name, d.framework) as framework_display
              FROM documents d LEFT JOIN roots r ON r.slug = d.framework WHERE d.key = ?`
           ).get(key)
-           invalidateDocumentCaches()
+          invalidateDocumentCaches()
+          try { await readerPool?.recycle?.() } catch {}
         } catch {
           // fetch failed — fall through to 404
         }
@@ -740,11 +764,12 @@ export async function startDevServer(opts, ctx) {
             sections = db.db.query(
               'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'
             ).all(doc.id)
-             invalidateDocumentCaches()
-           } catch {
-             // fetch failed — render with empty sections
-           }
-         }
+            invalidateDocumentCaches()
+            try { await readerPool?.recycle?.() } catch {}
+          } catch {
+            // fetch failed — render with empty sections
+          }
+        }
 
         const html = renderDocumentPage(doc, sections, siteConfig, {
           knownKeys: renderCache.getKnownKeys(),
@@ -772,7 +797,103 @@ export async function startDevServer(opts, ctx) {
   const serverUrl = `http://localhost:${server.port}`
   if (logger) logger.info(`Dev server running at ${serverUrl}`)
 
-  return { server, url: serverUrl }
+  const originalStop = server.stop?.bind(server)
+  if (originalStop) {
+    server.stop = (...args) => {
+      const out = originalStop(...args)
+      void readerPool?.close?.()
+      return out
+    }
+  }
+
+  async function close() {
+    try { originalStop?.(true) } catch {}
+    try { await readerPool?.close?.() } catch {}
+  }
+
+  return { server, url: serverUrl, close, readerPool }
+}
+
+async function resolveWebReaderPool(ctx, opts, logger) {
+  if (opts && 'readerPool' in opts) return opts.readerPool ?? null
+  const mode = process.env.APPLE_DOCS_WEB_READERS ?? 'auto'
+  if (['off', '0', 'false', 'no'].includes(String(mode).toLowerCase())) return null
+
+  const dbPath = ctx?.db?.dbPath
+  if (!dbPath || dbPath === ':memory:' || !existsSync(dbPath)) {
+    if (String(mode).toLowerCase() === 'on') {
+      logger?.warn?.('web reader-pool: no real database file available, skipping')
+    }
+    return null
+  }
+
+  const size = parsePositiveInt(process.env.APPLE_DOCS_WEB_READER_WORKERS) ?? undefined
+  try {
+    const pool = createReaderPool({
+      dbPath,
+      size,
+      log: (level, msg) => logger?.[level]?.(`web reader-pool: ${msg}`),
+    })
+    await pool.start()
+    const snap = pool.stats()
+    logger?.info?.(`web reader-pool: ready size=${snap.size} spawns=${snap.spawns}`)
+    return pool
+  } catch (err) {
+    logger?.error?.(`web reader-pool: failed to start (${err?.message ?? err}); falling back to main-thread reads`)
+    return null
+  }
+}
+
+function createCorpusStamp(ctx) {
+  const dbPath = ctx?.db?.dbPath
+  let cached = null
+  let refreshedAt = 0
+
+  function compute() {
+    let mtime = 0
+    try { mtime = dbPath && dbPath !== ':memory:' ? Math.floor(statSync(dbPath).mtimeMs) : 0 } catch {}
+    let schema = 0
+    try { schema = ctx?.db?.getSchemaVersion?.() ?? 0 } catch {}
+    return `${schema}:${mtime}`
+  }
+
+  return {
+    get() {
+      const now = Date.now()
+      if (cached == null || now - refreshedAt >= 5_000) {
+        cached = compute()
+        refreshedAt = now
+      }
+      return cached
+    },
+    refresh() {
+      cached = compute()
+      refreshedAt = Date.now()
+      return cached
+    },
+  }
+}
+
+function searchResponseCacheKey(searchOpts, stamp) {
+  return createHash('sha256').update(`${stableJson(searchOpts)}\0${stamp}`).digest('hex')
+}
+
+function stableJson(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`
+}
+
+function parsePositiveInt(value) {
+  if (value == null) return null
+  const parsed = Number.parseInt(String(value), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function parseNonNegativeInt(value) {
+  if (value == null) return null
+  const parsed = Number.parseInt(String(value), 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
 }
 
 export function buildHomepageExtras(siteConfig) {

@@ -222,6 +222,16 @@ describe('Dev Server (P7-E)', () => {
     expect(data.results).toBeDefined()
   })
 
+  test('live search API caches identical responses in-process', async () => {
+    const first = await fetch(`${serverInfo.url}/api/search?q=View&limit=10`)
+    const second = await fetch(`${serverInfo.url}/api/search?q=View&limit=10`)
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect(first.headers.get('x-apple-docs-cache')).toBe('miss')
+    expect(second.headers.get('x-apple-docs-cache')).toBe('hit')
+  })
+
   test('title index endpoint returns v2 columnar format', async () => {
     const res = await fetch(`${serverInfo.url}/data/search/title-index.json`)
     expect(res.status).toBe(200)

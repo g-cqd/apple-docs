@@ -94,7 +94,7 @@
     }
 
     // Checkboxes
-    for (const name of ['no_fuzzy', 'no_deep']) {
+    for (const name of ['fuzzy', 'deep']) {
       const el = form.querySelector(`[name="${name}"]`)
       if (el?.checked) params.set(name, '1')
     }
@@ -119,7 +119,7 @@
       const el = form.querySelector(`[name="${name}"]`)
       if (el?.value) params.set(name, el.value)
     }
-    for (const name of ['no_fuzzy', 'no_deep']) {
+    for (const name of ['fuzzy', 'deep']) {
       const el = form.querySelector(`[name="${name}"]`)
       if (el?.checked) params.set(name, '1')
     }
@@ -157,7 +157,7 @@
       const val = params.get(name)
       if (el && val) el.value = val
     }
-    for (const name of ['no_fuzzy', 'no_deep']) {
+    for (const name of ['fuzzy', 'deep', 'no_fuzzy', 'no_deep']) {
       const el = form.querySelector(`[name="${name}"]`)
       if (el && params.get(name) === '1') el.checked = true
     }

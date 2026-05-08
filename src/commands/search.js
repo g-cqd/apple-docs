@@ -11,13 +11,16 @@ const ROLE_KIND_FILTERS = new Set(['symbol', 'article', 'collection', 'overview'
  * Search with tiered cascade: fast title/path tiers first, deep body search only
  * when needed.
  *
- * Tiers 1 (FTS5) and 2 (trigram) run in parallel. Tier 3 (fuzzy) runs
- * sequentially only when fast tiers produce very few results. Tier 4 (body)
- * runs only when the requested result window is not already satisfied, or when
- * explicitly forced with `noEager`.
+ * Tiers 1 (FTS5) and 2 (trigram) run eagerly on the default command path.
+ * Latency-sensitive callers can set `fast: true` to try exact-title and FTS
+ * first, then trigram only if the requested window is not filled. Tier 3
+ * (fuzzy) runs sequentially only when fast tiers produce very few results.
+ * Tier 4 (body) runs only when the requested result window is not already
+ * satisfied, or when explicitly forced with `noEager`.
  *
  * @param {{ query: string, framework?: string, kind?: string, limit?: number,
  *           offset?: number, fuzzy?: boolean, noDeep?: boolean, noEager?: boolean,
+ *           fast?: boolean,
  *           source?: string, language?: string, platform?: string,
  *           minIos?: string, minMacos?: string, minWatchos?: string,
  *           minTvos?: string, minVisionos?: string }} opts
@@ -39,6 +42,7 @@ export async function search(opts, ctx) {
   const fuzzy = opts.fuzzy !== false
   const noDeep = !!opts.noDeep
   const noEager = !!opts.noEager
+  const fast = !!opts.fast
 
   // Language and platform version filters
   const language = opts.language ?? null
@@ -116,6 +120,16 @@ export async function search(opts, ctx) {
     }
   }
 
+  const runTitleExact = async () => {
+    if (!ctx.readerPool && typeof ctx.db?.searchTitleExact !== 'function') return []
+    try {
+      const parts = await Promise.all(
+        frameworks.map(fw => runRead(ctx, 'searchTitleExact', [q, { ...filterOpts, framework: fw }])),
+      )
+      return parts.flat()
+    } catch { return [] }
+  }
+
   // Tier 2: Trigram substring (only if query >= 3 chars)
   const runTrigram = async () => {
     if (q.length < 3) return []
@@ -140,9 +154,24 @@ export async function search(opts, ctx) {
   }
 
   // Run the fast tiers first so the web/CLI search path can return promptly.
-  // With a reader pool, runFts and runTrigram actually execute in parallel
-  // on different workers; without it they serialize on the main thread.
-  const [ftsResults, triResults] = await Promise.all([runFts(), runTrigram()])
+  // The default command path keeps the historical eager FTS+trigram fan-out.
+  // Latency-sensitive web search can pass `fast: true` to avoid spending CPU
+  // on trigram unless FTS did not fill the requested window.
+  const titleResults = await runTitleExact()
+  addResults(titleResults, 'exact')
+  let ftsResults = []
+  let triResults = []
+  if (fast && results.length >= requestedWindow) {
+    ftsResults = []
+    triResults = []
+  } else if (fast) {
+    ftsResults = await runFts()
+    triResults = ftsResults.length < requestedWindow ? await runTrigram() : []
+  } else {
+    const fastParts = await Promise.all([runFts(), runTrigram()])
+    ftsResults = fastParts[0]
+    triResults = fastParts[1]
+  }
 
   // Merge T1 results with tier labels
   for (const r of ftsResults) {

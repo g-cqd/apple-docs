@@ -32,5 +32,9 @@ export function createLru(opts) {
     get size() {
       return entries.size
     },
+
+    clear() {
+      entries.clear()
+    },
   }
 }

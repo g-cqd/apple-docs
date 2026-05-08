@@ -7,6 +7,7 @@ import { DocsDatabase } from './database.js'
 // the main-thread handle; workers are strictly readers.
 const READ_OPS = new Set([
   'searchPages',
+  'searchTitleExact',
   'searchTrigram',
   'searchBody',
   'getDocumentSections',

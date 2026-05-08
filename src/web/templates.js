@@ -120,8 +120,8 @@ ${buildHeader(siteConfig)}
         </div>
       </div>
       <div class="filter-row">
-        <label class="filter-checkbox"><input type="checkbox" name="no_fuzzy" value="1"> Disable fuzzy matching</label>
-        <label class="filter-checkbox"><input type="checkbox" name="no_deep" value="1"> Disable deep (body) search</label>
+        <label class="filter-checkbox"><input type="checkbox" name="fuzzy" value="1"> Include typo/fuzzy matching</label>
+        <label class="filter-checkbox"><input type="checkbox" name="deep" value="1"> Include full-text body search</label>
       </div>
     </details>
 

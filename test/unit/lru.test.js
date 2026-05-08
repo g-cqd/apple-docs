@@ -33,4 +33,15 @@ describe('createLru', () => {
     expect(cache.get('a')).toBeUndefined()
     expect(cache.size).toBe(0)
   })
+
+  test('clear removes all retained entries', () => {
+    const cache = createLru({ max: 2 })
+    cache.set('a', 1)
+    cache.set('b', 2)
+    cache.clear()
+
+    expect(cache.get('a')).toBeUndefined()
+    expect(cache.get('b')).toBeUndefined()
+    expect(cache.size).toBe(0)
+  })
 })

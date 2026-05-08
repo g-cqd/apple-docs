@@ -3,7 +3,7 @@ import { mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 
-const SCHEMA_VERSION = 12
+const SCHEMA_VERSION = 13
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -241,6 +241,7 @@ export class DocsDatabase {
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     }
 
+    this.dbPath = dbPath
     this.db = new Database(dbPath)
     this.db.run('PRAGMA journal_mode = WAL')
     this.db.run('PRAGMA synchronous = NORMAL')
@@ -721,6 +722,11 @@ export class DocsDatabase {
           CREATE INDEX IF NOT EXISTS idx_apple_font_files_family ON apple_font_files(family_id);
         `)
       }
+      if (current < 13) {
+        // Hot search/lookup path: exact symbol-title lookups previously scanned
+        // the whole documents table on the full corpus.
+        this.db.run('CREATE INDEX IF NOT EXISTS idx_documents_title_nocase ON documents(title COLLATE NOCASE)')
+      }
       this.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)", [String(SCHEMA_VERSION)])
       this.db.run('COMMIT')
     } catch (e) {
@@ -1004,6 +1010,35 @@ export class DocsDatabase {
       ORDER BY tier, rank
       LIMIT $limit
     `)
+    this._searchDocumentsTitleExact = this.db.query(`
+      SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
+             d.declaration_text as declaration, d.platforms_json as platforms,
+             d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
+             COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
+             d.source_type as source_type, d.source_metadata as source_metadata,
+             d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language,
+             0 as rank,
+             0 as tier
+      FROM documents d
+      LEFT JOIN roots r ON r.slug = d.framework
+      WHERE d.title = $raw COLLATE NOCASE
+        AND ($framework IS NULL OR d.framework = $framework)
+        AND ($source_type IS NULL OR d.source_type = $source_type)
+        AND (
+          $kind IS NULL
+          OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
+          OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
+          OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
+        )
+        AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
+        AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
+        AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
+        AND ($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)
+        AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
+        AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
+      ORDER BY tier, CASE WHEN d.role = 'symbol' OR d.kind = 'symbol' THEN 0 ELSE 1 END, length(d.key)
+      LIMIT $limit
+    `)
     this._searchDocumentsTrigram = hasTrigram ? this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
@@ -1074,7 +1109,7 @@ export class DocsDatabase {
       SELECT d.*, COALESCE(r.slug, d.framework) as root_slug, COALESCE(r.display_name, d.framework) as framework
       FROM documents d
       LEFT JOIN roots r ON r.slug = d.framework
-      WHERE d.title = $title
+      WHERE d.title = $title COLLATE NOCASE
         AND ($framework IS NULL OR d.framework = $framework)
       ORDER BY CASE WHEN d.role = 'symbol' OR d.kind = 'symbol' THEN 0 ELSE 1 END, length(d.key)
       LIMIT 1
@@ -1409,6 +1444,11 @@ export class DocsDatabase {
   searchPages(ftsQuery, rawQuery, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
     const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
     return this._searchDocuments.all({ $query: ftsQuery, $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
+  }
+
+  searchTitleExact(rawQuery, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
+    const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
+    return this._searchDocumentsTitleExact.all({ $raw: rawQuery, $framework: framework, $kind: kind, $limit: limit, ...filterParams })
   }
 
   searchTrigram(query, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
