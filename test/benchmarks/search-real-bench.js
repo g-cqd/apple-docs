@@ -33,14 +33,10 @@ const BODY_CASES = [
 
 async function main() {
   const flags = parseFlags(process.argv.slice(2))
-  const dbPath = resolveDbPath(flags)
-  if (!existsSync(dbPath)) {
-    throw new Error(`Database not found: ${dbPath}`)
-  }
-
-  const mode = flags.mode ?? 'api'
-  if (!['api', 'direct'].includes(mode)) {
-    throw new Error(`--mode must be "api" or "direct", got ${mode}`)
+  const remoteUrl = typeof flags.url === 'string' ? flags.url : null
+  const mode = remoteUrl ? 'remote' : (flags.mode ?? 'api')
+  if (!['api', 'direct', 'remote'].includes(mode)) {
+    throw new Error(`--mode must be "api", "direct", or "remote", got ${mode}`)
   }
   const iterations = parsePositiveInt(flags.iterations) ?? 200
   const warmup = parseNonNegativeInt(flags.warmup) ?? 24
@@ -56,7 +52,7 @@ async function main() {
     ...(includeBody ? BODY_CASES : []),
   ]
 
-  const db = new DocsDatabase(dbPath)
+  let db = null
   let readerPool = null
   let serverInfo = null
   let runner
@@ -64,31 +60,46 @@ async function main() {
   const logger = flags.verbose
     ? console
     : { info() {}, warn() {}, error: (...args) => console.error(...args) }
-  const ctx = { db, dataDir: dirnameOfDb(dbPath), logger }
 
   try {
-    if (mode === 'api') {
-      if (cacheMode === 'off') process.env.APPLE_DOCS_WEB_SEARCH_CACHE = '0'
-      if (readers === 0) process.env.APPLE_DOCS_WEB_READERS = 'off'
-      else if (readers != null) process.env.APPLE_DOCS_WEB_READER_WORKERS = String(readers)
-      serverInfo = await startDevServer({ port: 0 }, ctx)
-      runner = createApiRunner(serverInfo.url)
+    if (mode === 'remote') {
+      runner = createApiRunner(remoteUrl)
     } else {
-      if (readers && readers > 0) {
-        readerPool = createReaderPool({ dbPath, size: readers })
-        await readerPool.start()
+      const dbPath = resolveDbPath(flags)
+      if (!existsSync(dbPath)) {
+        throw new Error(`Database not found: ${dbPath}`)
       }
-      runner = createDirectRunner({ ...ctx, ...(readerPool ? { readerPool } : {}) })
+      db = new DocsDatabase(dbPath)
+      const ctx = { db, dataDir: dirnameOfDb(dbPath), logger }
+      if (mode === 'api') {
+        if (cacheMode === 'off') process.env.APPLE_DOCS_WEB_SEARCH_CACHE = '0'
+        if (readers === 0) process.env.APPLE_DOCS_WEB_READERS = 'off'
+        else if (readers != null) process.env.APPLE_DOCS_WEB_READER_WORKERS = String(readers)
+        serverInfo = await startDevServer({ port: 0 }, ctx)
+        runner = createApiRunner(serverInfo.url)
+      } else {
+        if (readers && readers > 0) {
+          readerPool = createReaderPool({ dbPath, size: readers })
+          await readerPool.start()
+        }
+        runner = createDirectRunner({ ...ctx, ...(readerPool ? { readerPool } : {}) })
+      }
     }
 
     console.log(`Real corpus search benchmark`)
     console.log(`  mode: ${mode}`)
-    console.log(`  db: ${dbPath}`)
-    console.log(`  rows: ${safeCount(db, 'documents').toLocaleString('en-US')}`)
+    if (mode === 'remote') {
+      console.log(`  url: ${remoteUrl}`)
+    } else {
+      console.log(`  db: ${resolveDbPath(flags)}`)
+      console.log(`  rows: ${safeCount(db, 'documents').toLocaleString('en-US')}`)
+    }
     console.log(`  iterations/concurrency: ${iterations}`)
     console.log(`  warmup: ${warmup}`)
-    console.log(`  readers: ${readers == null ? 'auto' : readers}`)
-    console.log(`  api cache: ${cacheMode}`)
+    if (mode !== 'remote') {
+      console.log(`  readers: ${readers == null ? 'auto' : readers}`)
+      console.log(`  api cache: ${cacheMode}`)
+    }
     console.log(`  fuzzy cases: ${includeFuzzy ? 'included as non-SLO' : 'excluded from default SLO run'}`)
     console.log(`  body cases: ${includeBody ? 'included' : 'excluded from default SLO run'}`)
 
@@ -102,7 +113,7 @@ async function main() {
   } finally {
     try { await serverInfo?.close?.() } catch {}
     try { await readerPool?.close?.() } catch {}
-    try { db.close() } catch {}
+    try { db?.close?.() } catch {}
   }
 }
 
