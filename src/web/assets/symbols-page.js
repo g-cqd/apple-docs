@@ -233,6 +233,20 @@
     }
     GRID.insertBefore(frag, endSentinel)
     renderedCount = end
+    // IntersectionObserver only fires on intersection state CHANGES. If
+    // after this insert the sentinel is still inside the rootMargin
+    // (e.g. user scrolled fast, or the chunk was small enough that the
+    // sentinel didn't get pushed far below the viewport), the observer
+    // won't fire again and chunk-loading would stall. Re-check on the
+    // next frame and recurse if the sentinel is still within reach.
+    requestAnimationFrame(() => {
+      if (!endSentinel || renderedCount >= filtered.length) return
+      const r = endSentinel.getBoundingClientRect()
+      const sr = SCROLLER.getBoundingClientRect()
+      if (r.top <= sr.bottom + 600) {
+        renderNextChunk()
+      }
+    })
   }
 
   // ---------------------------------------------------------------------
