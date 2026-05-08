@@ -157,6 +157,15 @@ export async function search(opts, ctx) {
   // The default command path keeps the historical eager FTS+trigram fan-out.
   // Latency-sensitive web search can pass `fast: true` to avoid spending CPU
   // on trigram unless FTS did not fill the requested window.
+  //
+  // When the user narrowed the search (framework, kind, source filter) AND the
+  // strict tiers already returned at least one hit, skip trigram. With a
+  // narrowing filter the FTS hit count is naturally small and never fills the
+  // requested window, but trigram fall-through doesn't add useful results —
+  // the user explicitly scoped the search, fuzzy substring matches inside that
+  // scope are mostly noise. Cold-path measurement on mm18 attributed the
+  // ~6 ms gap between filtered and unfiltered queries to this fall-through.
+  const userNarrowedScope = !!framework || !!kind || !!sqlSourceType
   const titleResults = await runTitleExact()
   addResults(titleResults, 'exact')
   let ftsResults = []
@@ -166,7 +175,9 @@ export async function search(opts, ctx) {
     triResults = []
   } else if (fast) {
     ftsResults = await runFts()
-    triResults = ftsResults.length < requestedWindow ? await runTrigram() : []
+    const filledWindow = ftsResults.length >= requestedWindow
+    const trustNarrowedHits = userNarrowedScope && (results.length + ftsResults.length) > 0
+    triResults = (filledWindow || trustNarrowedHits) ? [] : await runTrigram()
   } else {
     const fastParts = await Promise.all([runFts(), runTrigram()])
     ftsResults = fastParts[0]
