@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatUpdate, formatConsolidate, formatIndex, formatSnapshot, formatSetup, formatStorageStats, formatStorageGc, formatStorageMaterialize, formatStorageProfile, formatWebBuild, formatWebDeploy, formatTaxonomy, formatFonts, formatSymbols, formatLinksAudit, formatLinksConsolidate } from './src/cli/formatter.js'
+import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatSetup, formatStorageStats, formatStorageGc, formatWebBuild, formatWebDeploy, formatTaxonomy } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
@@ -80,7 +80,7 @@ if (flags.help || !command) {
 const dataDir = flags.home ?? process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
 const logLevel = flags.verbose ? 'debug' : 'info'
 const logger = createLogger(logLevel)
-const isCrawlCommand = command === 'sync' || command === 'update'
+const isCrawlCommand = command === 'sync'
 const defaultRate = isCrawlCommand ? '500' : '5'
 const defaultBurst = isCrawlCommand ? '500' : '2'
 const rate = Number.parseInt(flags.rate ?? process.env.APPLE_DOCS_RATE ?? defaultRate, 10)
@@ -99,7 +99,7 @@ process.on('SIGINT', () => { cleanup(); process.exit(130) })
 process.on('SIGTERM', () => { cleanup(); process.exit(143) })
 
 // Commands that hit the GitHub API benefit from local credentials.
-if (command === 'sync' || command === 'update' || command === 'setup') {
+if (command === 'sync' || command === 'setup') {
   const { resolveGitHubAuth } = await import('./src/lib/git-auth-resolve.js')
   await resolveGitHubAuth({ flags, env: process.env, logger })
 }
@@ -189,79 +189,14 @@ try {
     }
 
     case 'sync': {
-      const roots = flags.roots ? flags.roots.split(',').map(s => s.trim()) : undefined
-      const sources = flags.sources ? flags.sources.split(',').map(s => s.trim()) : undefined
-      const concurrency = flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined
-      const parallel = flags.parallel ? Number.parseInt(flags.parallel, 10) : undefined
-      const symbolsConcurrency = flags['symbols-concurrency']
-        ? Number.parseInt(flags['symbols-concurrency'], 10)
-        : undefined
-      result = await sync({
-        roots,
-        sources,
-        full: !!flags.full,
-        retryFailed: !!flags['retry-failed'],
-        concurrency,
-        parallel,
-        indexBody: !!flags.index,
-        // Resource sync defaults: light steps run alongside doc sync.
-        skipFonts: !!flags['skip-fonts'],
-        skipSymbols: !!flags['skip-symbols'],
-        downloadFonts: !!flags['download-fonts'],
-        renderSymbols: !!flags['render-symbols'],
-        symbolsConcurrency,
-      }, ctx)
+      result = await sync({ full: !!flags.full }, ctx)
       formatter = formatSync
-      break
-    }
-
-    case 'update': {
-      const { update } = await import('./src/commands/update.js')
-      const roots = flags.roots ? flags.roots.split(',').map(s => s.trim()) : undefined
-      const sources = flags.sources ? flags.sources.split(',').map(s => s.trim()) : undefined
-      const concurrency = flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined
-      const parallel = flags.parallel ? Number.parseInt(flags.parallel, 10) : undefined
-      result = await update({
-        roots,
-        sources,
-        concurrency,
-        parallel,
-        indexBody: !!flags.index,
-        skipFonts: !!flags['skip-fonts'],
-        skipSymbols: !!flags['skip-symbols'],
-        downloadFonts: !!flags['download-fonts'],
-      }, ctx)
-      formatter = formatUpdate
       break
     }
 
     case 'status': {
       result = await status({}, ctx)
       formatter = formatStatus
-      break
-    }
-
-    case 'index': {
-      if (subcommand === 'rebuild-trigram') {
-        const { rebuildTrigram } = await import('./src/commands/index-rebuild.js')
-        result = await rebuildTrigram({}, ctx)
-        formatter = formatIndex
-      } else if (subcommand === 'rebuild-body') {
-        const { rebuildBody } = await import('./src/commands/index-rebuild.js')
-        result = await rebuildBody({ full: !!flags.full }, ctx)
-        formatter = formatIndex
-      } else {
-        const { index: indexCmd } = await import('./src/commands/index.js')
-        result = await indexCmd({ full: !!flags.full }, ctx)
-        formatter = formatIndex
-      }
-      break
-    }
-
-    case 'doctor': {
-      const { consolidate } = await import('./src/commands/consolidate.js')
-      result = await consolidate({ dryRun: !!flags['dry-run'], minify: !!flags.minify, indexBody: !!flags.index, verify: !!flags.verify }, ctx)
-      formatter = formatConsolidate
       break
     }
 
@@ -355,25 +290,6 @@ try {
       break
     }
 
-    case 'snapshot': {
-      switch (subcommand) {
-        case 'build': {
-          const { snapshotBuild } = await import('./src/commands/snapshot.js')
-          result = await snapshotBuild({
-            tier: flags.tier ?? 'full',
-            out: flags.out ?? 'dist',
-            tag: flags.tag,
-          }, ctx)
-          formatter = formatSnapshot
-          break
-        }
-        default:
-          showHelp('snapshot')
-          process.exit(subcommand ? 1 : 0)
-      }
-      break
-    }
-
     case 'setup': {
       const { setup: setupCmd } = await import('./src/commands/setup.js')
       result = await setupCmd({
@@ -383,63 +299,6 @@ try {
         skipResources: !!flags['skip-resources'],
       }, ctx)
       formatter = formatSetup
-      break
-    }
-
-    case 'fonts': {
-      const { fonts: fontsCmd } = await import('./src/commands/fonts.js')
-      switch (subcommand ?? 'list') {
-        case 'sync':
-          result = await fontsCmd({ action: 'sync', download: !!flags.download }, ctx)
-          formatter = formatFonts
-          break
-        case 'list':
-          result = await fontsCmd({ action: 'list' }, ctx)
-          formatter = formatFonts
-          break
-        default:
-          showHelp('fonts')
-          process.exit(subcommand ? 1 : 0)
-      }
-      break
-    }
-
-    case 'symbols': {
-      const { symbols: symbolsCmd } = await import('./src/commands/symbols.js')
-      switch (subcommand ?? 'search') {
-        case 'sync':
-          result = await symbolsCmd({
-            action: 'sync',
-            includePrivate: !flags['exclude-private'],
-            excludePrivate: !!flags['exclude-private'],
-            render: !!flags.render,
-            concurrency: flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined,
-            resetCache: !!flags['reset-cache'],
-          }, ctx)
-          formatter = formatSymbols
-          break
-        case 'render':
-          result = await symbolsCmd({
-            action: 'render',
-            scope: flags.scope,
-            concurrency: flags.concurrency ? Number.parseInt(flags.concurrency, 10) : undefined,
-            resetCache: !!flags['reset-cache'],
-          }, ctx)
-          formatter = formatSymbols
-          break
-        case 'search':
-          result = await symbolsCmd({
-            action: 'search',
-            query: positional.join(' '),
-            scope: flags.scope,
-            limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined,
-          }, ctx)
-          formatter = formatSymbols
-          break
-        default:
-          showHelp('symbols')
-          process.exit(subcommand ? 1 : 0)
-      }
       break
     }
 
@@ -468,6 +327,7 @@ try {
             concurrency,
             workers,
             onProgress,
+            json: !!flags.json,
           }, ctx)
           if (onProgress) onProgress.done()
           formatter = formatWebBuild
@@ -495,29 +355,6 @@ try {
       break
     }
 
-    case 'links': {
-      const { linksAudit, linksConsolidate } = await import('./src/commands/links.js')
-      switch (subcommand ?? 'audit') {
-        case 'audit':
-          result = await linksAudit({
-            outDir: flags.out ?? 'dist/web',
-            json: !!flags.json,
-          }, ctx)
-          formatter = formatLinksAudit
-          break
-        case 'consolidate':
-          result = await linksConsolidate({
-            dryRun: !!flags['dry-run'],
-          }, ctx)
-          formatter = formatLinksConsolidate
-          break
-        default:
-          showHelp('links')
-          process.exit(subcommand ? 1 : 0)
-      }
-      break
-    }
-
     case 'storage': {
       switch (subcommand) {
         case 'stats': {
@@ -532,28 +369,6 @@ try {
           const olderThan = flags['older-than'] ? Number.parseInt(flags['older-than'], 10) : undefined
           result = await storageGc({ drop, olderThan, vacuum: !flags['no-vacuum'] }, ctx)
           formatter = formatStorageGc
-          break
-        }
-        case 'materialize': {
-          const { storageMaterialize } = await import('./src/commands/storage.js')
-          const format = positional[0] || 'markdown'
-          const roots = flags.roots ? flags.roots.split(',').map(s => s.trim()) : undefined
-          result = await storageMaterialize({ format, roots }, ctx)
-          formatter = formatStorageMaterialize
-          break
-        }
-        case 'profile': {
-          const { getProfile, setProfile, getProfileConfig, listProfiles } = await import('./src/storage/profiles.js')
-          if (positional[0] === 'set' && positional[1]) {
-            setProfile(db, positional[1])
-            result = { action: 'set', name: positional[1], config: getProfileConfig(positional[1]) }
-          } else if (positional[0] === 'list') {
-            result = { action: 'list', profiles: listProfiles() }
-          } else {
-            const name = getProfile(db)
-            result = { action: 'get', name, config: getProfileConfig(name) }
-          }
-          formatter = formatStorageProfile
           break
         }
         default:

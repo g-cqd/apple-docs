@@ -293,13 +293,20 @@ export function formatStatus(result) {
 }
 
 export function formatSync(result) {
-  const lines = [
-    bold('Sync complete'),
+  const lines = [bold('Sync complete')]
+  const u = result.update
+  if (u) {
+    lines.push(
+      `  Update phase:     ${u.newCount ?? 0} new, ${u.modCount ?? 0} modified, ${u.unchangedCount ?? 0} unchanged, ${u.delCount ?? 0} deleted, ${u.errCount ?? 0} errors`,
+    )
+  }
+  lines.push(
     `  Roots discovered: ${result.rootsDiscovered}`,
     `  Roots crawled:    ${result.rootsCrawled}`,
     `  Downloaded:       ${result.downloaded}`,
     `  Converted:        ${result.converted}`,
-  ]
+    `  Body indexed:     ${result.bodyIndexed ?? 0}`,
+  )
   if (result.fonts) {
     const f = result.fonts
     lines.push(`  Fonts:            ${f.families} families, ${f.files} files (${f.system} system, ${f.remote} bundled${f.downloaded ? `, ${f.downloaded} downloaded` : ''})`)
@@ -310,30 +317,23 @@ export function formatSync(result) {
   }
   if (result.symbolsRender) {
     const r = result.symbolsRender
-    lines.push(`  Symbol prerender: ${r.rendered ?? 0} rendered`)
+    lines.push(`  Symbol prerender: ${r.rendered ?? 0} rendered, ${r.skipped ?? 0} skipped, ${r.failed ?? 0} failed`)
+  }
+  if (result.doctor) {
+    const d = result.doctor
+    const parts = [
+      `cleaned ${d.cleaned ?? 0}`,
+      `resolved ${d.resolved ?? 0}`,
+      `retried ${d.retried ?? 0}/${d.retriedOk ?? 0} ok`,
+      `${d.genuine ?? 0} still missing`,
+    ]
+    if (d.minified) parts.push(`minified ${d.minified} files (${formatBytes(d.minifySaved ?? 0)})`)
+    lines.push(`  Doctor:           ${parts.join(', ')}`)
+  }
+  if (Array.isArray(result.failedSources) && result.failedSources.length > 0) {
+    lines.push(`  Failed sources:   ${result.failedSources.map(f => f.source).join(', ')}`)
   }
   lines.push(`  Duration:         ${(result.durationMs / 1000).toFixed(1)}s`)
-  return lines.join('\n')
-}
-
-export function formatUpdate(result) {
-  const lines = [
-    bold('Update complete'),
-    `  New:        ${result.newCount}`,
-    `  Modified:   ${result.modCount}`,
-    `  Unchanged:  ${result.unchangedCount}`,
-    `  Deleted:    ${result.delCount}`,
-    `  Errors:     ${result.errCount}`,
-  ]
-  if (result.fonts) {
-    const f = result.fonts
-    lines.push(`  Fonts:      ${f.families} families, ${f.files} files`)
-  }
-  if (result.symbols) {
-    const s = result.symbols
-    lines.push(`  SF Symbols: ${s.public} public, ${s.private} private`)
-  }
-  lines.push(`  Duration:   ${(result.durationMs / 1000).toFixed(1)}s`)
   return lines.join('\n')
 }
 
@@ -400,18 +400,6 @@ export function formatConsolidate(result) {
   return lines.join('\n')
 }
 
-export function formatSnapshot(result) {
-  return [
-    bold('Snapshot built'),
-    `  Tier:       ${result.tier}`,
-    `  Tag:        ${result.tag}`,
-    `  Documents:  ${result.documentCount}`,
-    `  DB size:    ${formatBytes(result.dbSize)}`,
-    `  Archive:    ${result.archivePath} (${formatBytes(result.archiveSize)})`,
-    `  Checksum:   ${result.archiveChecksum.slice(0, 16)}...`,
-  ].join('\n')
-}
-
 export function formatSetup(result) {
   if (result.status === 'exists') {
     const lines = [`Corpus already exists at ${result.dataDir} (${result.pages} pages)`]
@@ -433,21 +421,6 @@ export function formatSetup(result) {
   }
   lines.push('', 'Run `apple-docs search <query>` to start searching.')
   return lines.join('\n')
-}
-
-export function formatIndex(result) {
-  if (result.status === 'error') {
-    return result.message
-  }
-  if (result.status === 'ok' && result.total === undefined) {
-    return `${bold('Index rebuilt')}\n  Indexed:  ${result.indexed} entries`
-  }
-  return [
-    bold('Index complete'),
-    `  Indexed:  ${result.indexed} pages`,
-    `  Total:    ${result.total}`,
-    `  Errors:   ${result.errors}`,
-  ].join('\n')
 }
 
 export function formatStorageStats(result) {
@@ -477,14 +450,6 @@ export function formatStorageGc(result) {
   return lines.join('\n')
 }
 
-export function formatStorageMaterialize(result) {
-  return [
-    bold('Materialize complete'),
-    `  Format:       ${result.format}`,
-    `  Materialized: ${result.materialized} documents`,
-  ].join('\n')
-}
-
 export function formatWebBuild(result) {
   const lines = [
     bold('Static site built'),
@@ -497,6 +462,18 @@ export function formatWebBuild(result) {
     `  Output:        ${result.outputDir}`,
     `  Duration:      ${(result.durationMs / 1000).toFixed(1)}s`,
   )
+  if (result.linksAudit) {
+    const a = result.linksAudit
+    const ok = a.byCategory?.internal_ok ?? 0
+    const broken = a.byCategory?.internal_broken ?? 0
+    const externalResolvable = a.byCategory?.external_resolvable ?? 0
+    const relativeBroken = a.byCategory?.relative_broken ?? 0
+    lines.push(
+      `  Links:         ${a.linksTotal?.toLocaleString('en-US') ?? 0} total · ` +
+      `${ok.toLocaleString('en-US')} ok, ${broken.toLocaleString('en-US')} broken, ` +
+      `${externalResolvable.toLocaleString('en-US')} external_resolvable, ${relativeBroken.toLocaleString('en-US')} relative_broken`,
+    )
+  }
   return lines.join('\n')
 }
 
@@ -508,130 +485,3 @@ export function formatWebDeploy(result) {
   return lines.join('\n')
 }
 
-export function formatFonts(result) {
-  if (result.action === 'sync') {
-    return [
-      bold('Apple fonts synced'),
-      `  Font families:     ${result.families}`,
-      `  Font files:        ${result.files}`,
-      `  Font DMGs:         ${result.downloaded} downloaded, ${result.extracted} extracted`,
-    ].join('\n')
-  }
-  if (result.action === 'list') {
-    const lines = [bold('Apple Fonts')]
-    for (const family of result.families) {
-      lines.push(`  ${family.display_name} (${family.id}) — ${family.files.length} files`)
-    }
-    return lines.join('\n')
-  }
-  return JSON.stringify(result, null, 2)
-}
-
-export function formatSymbols(result) {
-  if (result.action === 'sync') {
-    const lines = [
-      bold('SF Symbols synced'),
-      `  Public symbols:    ${result.counts.public ?? 0}`,
-      `  Private symbols:   ${result.counts.private ?? 0}`,
-    ]
-    if (result.render) {
-      lines.push(
-        `  Pre-rendered SVGs: ${result.render.rendered} (skipped ${result.render.skipped}, failed ${result.render.failed})`,
-      )
-    }
-    return lines.join('\n')
-  }
-  if (result.action === 'render') {
-    return [
-      bold('SF Symbols pre-rendered'),
-      `  Total:    ${result.total}`,
-      `  Rendered: ${result.rendered}`,
-      `  Skipped:  ${result.skipped}`,
-      `  Failed:   ${result.failed}`,
-    ].join('\n')
-  }
-  if (result.action === 'search') {
-    const lines = [bold('SF Symbols')]
-    for (const symbol of result.results) {
-      const tags = [symbol.scope, ...symbol.categories.slice(0, 2)].filter(Boolean).join(', ')
-      lines.push(`  ${symbol.name}${tags ? ` — ${tags}` : ''}`)
-    }
-    return lines.join('\n')
-  }
-  return JSON.stringify(result, null, 2)
-}
-
-export function formatStorageProfile(result) {
-  if (result.action === 'set') {
-    return [
-      bold(`Storage profile set to: ${result.name}`),
-      `  ${result.config.description}`,
-    ].join('\n')
-  }
-  if (result.action === 'list') {
-    const lines = [bold('Available Storage Profiles')]
-    for (const p of result.profiles) {
-      lines.push(`  ${bold(p.name)}`)
-      lines.push(`    ${p.description}`)
-      lines.push(`    Persist markdown: ${p.persistMarkdown}, HTML: ${p.persistHtml}, Cache on read: ${p.cacheOnRead}`)
-      lines.push('')
-    }
-    return lines.join('\n')
-  }
-  return [
-    bold(`Current profile: ${result.name}`),
-    `  ${result.config.description}`,
-    `  Persist markdown: ${result.config.persistMarkdown}`,
-    `  Persist HTML: ${result.config.persistHtml}`,
-    `  Cache on read: ${result.config.cacheOnRead}`,
-  ].join('\n')
-}
-
-
-export function formatLinksAudit(result) {
-  const lines = [
-    bold("Links audit"),
-    `  Files scanned: ${result.filesScanned.toLocaleString("en-US")}`,
-    `  Links total:   ${result.linksTotal.toLocaleString("en-US")}`,
-    "",
-    bold("By category"),
-  ]
-  const cats = Object.entries(result.byCategory).sort((a, b) => b[1] - a[1])
-  for (const [cat, n] of cats) {
-    lines.push(`  ${cat.padEnd(22)} ${n.toLocaleString("en-US")}`)
-  }
-  lines.push("", bold("By section"))
-  for (const [sec, n] of Object.entries(result.bySection).sort((a, b) => b[1] - a[1])) {
-    lines.push(`  ${sec.padEnd(22)} ${n.toLocaleString("en-US")}`)
-  }
-  if (result.topBrokenInternal.length > 0) {
-    lines.push("", bold(`Top broken-internal targets (${result.topBrokenInternal.length})`))
-    for (const e of result.topBrokenInternal.slice(0, 20)) {
-      lines.push(`  ${String(e.count).padStart(6)} ${e.value}`)
-    }
-  }
-  if (result.topRelativeBroken.length > 0) {
-    lines.push("", bold(`Top relative-broken hrefs (${result.topRelativeBroken.length})`))
-    for (const e of result.topRelativeBroken.slice(0, 15)) {
-      lines.push(`  ${String(e.count).padStart(6)} ${e.value}`)
-    }
-  }
-  if (result.topExternalResolvable.length > 0) {
-    lines.push("", bold(`Top external-resolvable (could be internalized; ${result.topExternalResolvable.length})`))
-    for (const e of result.topExternalResolvable.slice(0, 15)) {
-      lines.push(`  ${String(e.count).padStart(6)} ${e.value}`)
-    }
-  }
-  return lines.join('\n')
-}
-
-export function formatLinksConsolidate(result) {
-  return [
-    bold(`Links consolidate${result.dryRun ? ' (dry run)' : ''}`),
-    `  Documents touched: ${(result.documentsScanned ?? 0).toLocaleString('en-US')}`,
-    `  Sections touched:  ${(result.sectionsTouched ?? 0).toLocaleString('en-US')}`,
-    `  Resolved links added:   ${(result.added ?? 0).toLocaleString('en-US')}`,
-    `  Resolved links removed: ${(result.removed ?? 0).toLocaleString('en-US')}`,
-    `  Resolved links kept:    ${(result.kept ?? 0).toLocaleString('en-US')}`,
-  ].join('\n')
-}

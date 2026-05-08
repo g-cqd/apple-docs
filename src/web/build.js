@@ -13,6 +13,7 @@ import { ensureDir } from '../storage/files.js'
 import { pool } from '../lib/pool.js'
 import { sha256 } from '../lib/hash.js'
 import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
+import { linksAudit } from '../commands/links.js'
 
 /**
  * Default per-page render timeout. The Swift stdlib + a few other "kitchen
@@ -522,6 +523,20 @@ export async function buildStaticSite(opts, ctx) {
       })
     }
 
+    // 11. Walk the rendered HTML and classify every link. Cheap relative to
+    // the build itself, surfaces internal_broken / external_resolvable /
+    // relative_broken hot spots so they show up in the build summary.
+    // Skipped on partial builds (--frameworks subset / --skip-docs) since
+    // the audit needs the full /docs tree to be meaningful.
+    let linksAuditResult = null
+    if (buildingAll && !skipDocs) {
+      try {
+        linksAuditResult = await linksAudit({ outDir }, { db, logger })
+      } catch (err) {
+        logger?.warn?.(`Links audit skipped: ${err.message}`)
+      }
+    }
+
     const durationMs = Math.round(performance.now() - start)
     logger?.info?.(
       `Static site built: ${outDir} ` +
@@ -529,7 +544,7 @@ export async function buildStaticSite(opts, ctx) {
       `${frameworksBuilt} frameworks in ${durationMs}ms)`
     )
 
-    return { pagesBuilt, pagesSkipped, pagesFailed, frameworksBuilt, durationMs, outputDir: outDir, searchArtifacts }
+    return { pagesBuilt, pagesSkipped, pagesFailed, frameworksBuilt, durationMs, outputDir: outDir, searchArtifacts, linksAudit: linksAuditResult }
   } catch (error) {
     if (!incremental) {
       // Clean up the staging directory if a full build aborted before the swap.

@@ -3,41 +3,31 @@ apple-docs - Apple Developer Documentation search and management
 
 Usage: apple-docs <command> [options]
 
-Commands:
+Read / query:
   search <query>       Search documentation by term or symbol
   read <path>          Read a specific page or symbol
   frameworks           List known documentation roots
   browse <framework>   Browse topic tree for a framework
-  kinds                List distinct kind/role/docKind/sourceType values with counts
-  sync                 Discover, download, and index documentation
-  update               Check for and pull documentation updates
-  index                Build full-body search index
-  doctor               Diagnose and repair corpus
   status               Show corpus statistics
-  setup                Download pre-built documentation snapshot
 
-  snapshot build       Build snapshot archive from current corpus
+Operator:
+  sync                 Refresh the entire corpus end-to-end
+                       (HEAD-check existing pages, crawl new pages, convert,
+                       index, sync fonts + SF Symbols, pre-render symbols,
+                       run schema migrations / minify / cleanup)
+  setup                Download a pre-built documentation snapshot
 
+Build / serve:
+  web build            Build static documentation site
+  web serve            Start local dev server
+  web deploy           Show deployment instructions
   mcp start            Start MCP stdio server
   mcp serve            Start MCP Streamable HTTP server
   mcp install          Show MCP configuration instructions
 
-  web serve            Start local dev server
-  web build            Build static documentation site
-  web deploy           Show deployment instructions
-
-  fonts sync           Index Apple font families and files (--download to fetch DMGs)
-  fonts list           List indexed Apple fonts
-  symbols sync         Index public and private SF Symbols
-  symbols search       Search indexed SF Symbols
-
-  links audit          Audit cross-references across the rendered static site
-  links consolidate    Internalize external-resolvable links in stored sections
-
+Storage:
   storage stats        Show disk usage breakdown
   storage gc           Garbage collect cached files
-  storage materialize  Force-render markdown or HTML
-  storage profile      Show or change storage profile
 
 Global options:
   --json               Output raw JSON (for scripting)
@@ -129,54 +119,37 @@ Options:
   --json               Output raw JSON
 `.trim(),
 
-  kinds: `
-Usage: apple-docs kinds [options]
-
-List distinct taxonomy values found across the corpus with counts.
-Useful for discovering valid --kind values for search, and seeing the shape
-of the indexed documentation at a glance.
-
-Options:
-  --field <name>       Limit output to one field: kind, role, docKind,
-                       roleHeading, sourceType (default: all)
-  --json               Output raw JSON
-`.trim(),
-
   sync: `
 Usage: apple-docs sync [options]
 
-Discover, download, and convert Apple documentation.
-Resumable: if interrupted, re-run the same command to continue where you left off.
+Refresh the entire Apple documentation corpus end-to-end. Single command,
+full coverage — no scope flags, no skip flags. Resumable: if interrupted,
+re-run the same command to continue where you left off.
+
+Stages, in order:
+  1. HEAD-check every existing page across every source for upstream changes
+  2. Discover roots and adapter pages (catalog + flat sources)
+  3. Crawl new pages, retrying any previously-failed entries
+  4. Download missing raw payloads, convert to Markdown
+  5. Build / refresh the body search index
+  6. Sync Apple typography (downloads SF Pro / Compact / Mono / etc DMGs)
+  7. Sync SF Symbols (public + private) and pre-render every variant to SVG
+  8. Run schema migrations, clean invalid entries, re-resolve failures,
+     minify raw JSON
 
 Options:
-  --roots <a,b,c>      Only sync specific roots (comma-separated)
-  --sources <a,b,c>    Only sync specific source types (apple-docc,hig,guidelines,...,packages)
-  --full               Sync all discovered roots and expand sources to their full catalog
-  --parallel <n>       Crawl N frameworks simultaneously (default: 10)
-  --concurrency <n>    Max total in-flight fetches across all roots (default: 500)
+  --full               Force a clean rebuild: rebuild the body index from
+                       scratch and treat every page as if it were new. Use
+                       after a major schema change or to recover from a
+                       corrupted incremental state.
   --rate <n>           Max requests per second across all roots (default: 500)
-  --retry-failed       Retry pages that previously failed (404, timeout, etc)
-  --index              Build body search index after sync
-  --skip-fonts         Skip Apple typography indexing (default: indexed)
-  --skip-symbols       Skip SF Symbols indexing (default: indexed; macOS only)
-  --download-fonts     Download SF Pro/Compact/Mono/etc DMGs from Apple CDN
-                       and extract them. Off by default — large files (~500MB)
-                       and only needed if the host doesn't already have them
-                       installed in ~/Library/Fonts or /Library/Fonts.
-  --render-symbols     Pre-render every SF Symbol to SVG. Off by default —
-                       takes several minutes; rendering happens lazily on
-                       first request otherwise. Implies --skip-symbols=false.
+  --json               Output the full pipeline report as JSON
+
+GitHub auth:
   --use-git-auth       Reuse a GitHub token from the local gh CLI or git
                        credential helper. No prompt. Env vars still take
                        precedence.
   --skip-git-auth      Skip all local-credential detection for this run.
-  --json               Output summary as JSON
-
-Resource sync (fonts + SF Symbols) runs by default unless the caller passes
---roots or --sources, in which case the run is treated as a targeted sync
-of those sources only. Use --skip-fonts / --skip-symbols on a full sync
-to opt out, or --download-fonts / --render-symbols to enable the heavier
-steps.
 
 On a TTY with no GITHUB_TOKEN set, sync prompts before using local credentials
 and can remember the choice with "always". Persisted preference lives at
@@ -184,85 +157,9 @@ and can remember the choice with "always". Persisted preference lives at
 globally (recommended for CI).
 
 Examples:
-  apple-docs sync                                           # sync everything (docs + fonts + symbols)
-  apple-docs sync --roots swiftui,combine                   # sync two frameworks (no fonts/symbols)
-  apple-docs sync --sources guidelines                      # sync only App Store Review Guidelines
-  apple-docs sync --roots app-store-review                  # sync App Store Review Guidelines
-  apple-docs sync --sources packages                        # sync curated apple/swiftlang packages
-  apple-docs sync --full --sources packages                 # full package catalog via raw.githubusercontent.com (no auth)
-  APPLE_DOCS_PACKAGES_FETCH=api GITHUB_TOKEN=... apple-docs sync --full --sources packages  # rich GitHub REST metadata (stars, license, …)
-  apple-docs sync --full --parallel 10 --rate 500             # aggressive full crawl
-  apple-docs sync --roots uikit --concurrency 100 --rate 100  # tuned single-root crawl
-  apple-docs sync --retry-failed                            # retry 404s/timeouts
-  apple-docs sync --download-fonts --render-symbols         # also pull DMG fonts and prerender symbol SVGs
-`.trim(),
-
-  update: `
-Usage: apple-docs update [options]
-
-Check for documentation updates and pull changes.
-
-Options:
-  --roots <a,b,c>      Only check specific roots
-  --sources <a,b,c>    Only check specific source types (apple-docc,hig,guidelines,...,packages)
-  --concurrency <n>    Max concurrent HEAD checks / fetches (default: 500)
-  --rate <n>           Max requests per second (default: 500)
-  --parallel <n>       Crawl N new roots simultaneously (default: 10)
-  --index              Update body search index after pulling changes
-  --use-git-auth       Reuse a GitHub token from the local gh CLI or git
-                       credential helper (same behavior as sync).
-  --skip-git-auth      Skip local-credential detection for this run.
-  --json               Output summary as JSON
-
-Examples:
-  apple-docs update --concurrency 50 --rate 100    # fast update check
-  apple-docs update --roots swiftui,combine         # check specific roots
-  apple-docs update --sources guidelines            # check only App Store Review Guidelines
-  apple-docs update --sources packages              # refresh package catalog entries
-`.trim(),
-
-  index: `
-Usage: apple-docs index [subcommand] [options]
-
-Build or update search indexes.
-
-Subcommands:
-  (none)               Build or update the full-body search index
-  rebuild-trigram      Rebuild trigram index from document titles (fuzzy search)
-  rebuild-body         Rebuild body index from document sections (deep search)
-
-Options:
-  --full               Rebuild the entire index from scratch
-  --json               Output results as JSON
-
-The rebuild subcommands are useful for lower-tier snapshots that ship without
-certain indexes. rebuild-trigram works on any tier (uses titles).
-rebuild-body requires document_sections (standard tier or above).
-
-Examples:
-  apple-docs index                    # build/update body index
-  apple-docs index --full             # full rebuild
-  apple-docs index rebuild-trigram    # add fuzzy search to a lite snapshot
-  apple-docs index rebuild-body      # add deep search (requires standard tier)
-`.trim(),
-
-  doctor: `
-Usage: apple-docs doctor [options]
-
-Diagnose and repair the documentation corpus:
-  - Upgrades the database to the latest schema version
-  - Cleans up invalid crawl entries (fragments, dot-operators)
-  - Re-resolves failures by checking parent pages for correct URLs
-  - Retries re-resolved paths
-  - Optionally minifies raw JSON files to save disk space
-  - Optionally rebuilds the body search index
-
-Options:
-  --dry-run            Show what would be fixed without changing anything
-  --minify             Minify all existing JSON files (sorted keys, no whitespace)
-  --index              Rebuild the full-body search index
-  --verify             Verify snapshot integrity (if installed from snapshot)
-  --json               Output results as JSON
+  apple-docs sync                # full refresh, idempotent
+  apple-docs sync --full         # clean rebuild from scratch
+  apple-docs sync --json         # pipeline report as JSON
 `.trim(),
 
   status: `
@@ -327,73 +224,6 @@ Options:
   --json           Output results as JSON
 `.trim(),
 
-  fonts: `
-Usage: apple-docs fonts <subcommand> [options]
-
-Manage Apple typography (SF Pro, SF Mono, New York, …).
-
-Subcommands:
-  sync                 Index Apple font families and font files
-  list                 List indexed Apple font families (default)
-
-Sync options:
-  --download           Download Apple font DMGs before indexing local files
-
-Examples:
-  apple-docs fonts sync --download
-  apple-docs fonts list
-`.trim(),
-
-  symbols: `
-Usage: apple-docs symbols <subcommand> [options]
-
-Manage SF Symbols (public and private).
-
-Subcommands:
-  sync                 Index public and private SF Symbols from local CoreGlyphs bundles
-  render               Pre-render every indexed symbol to SVG on disk (uses Apple's vector PDF pipeline + pdftocairo)
-  search [query]       Search indexed SF Symbols (default)
-
-Sync options:
-  --exclude-private    Skip the private CoreGlyphs bundle
-  --render             Pre-render SVGs after indexing (chains symbols sync + symbols render)
-  --concurrency <n>    Parallel Swift workers (default: 4)
-  --reset-cache        Delete the existing SVG cache before rendering
-
-Render options:
-  --scope <scope>      Render only public or private (default: both)
-  --concurrency <n>    Parallel Swift workers (default: 4)
-  --reset-cache        Delete the existing SVG cache before rendering
-
-Search options:
-  --scope <scope>      public or private
-  --limit <n>          Max results (default: 100)
-
-Examples:
-  apple-docs symbols sync --render --concurrency 8
-  apple-docs symbols render --scope public
-  apple-docs symbols search "pencil sparkles" --scope private
-`.trim(),
-
-  snapshot: `
-Usage: apple-docs snapshot <subcommand> [options]
-
-Build and manage documentation snapshots.
-
-Subcommands:
-  build            Build a snapshot archive from the current corpus
-
-Build options:
-  --tier <name>    Snapshot tier: lite, standard, full (default: full)
-  --out <dir>      Output directory (default: dist)
-  --tag <name>     Version tag for the archive filename
-  --json           Output results as JSON
-
-Examples:
-  apple-docs snapshot build --tier lite --out dist/
-  apple-docs snapshot build --tier full --tag snapshot-20260413
-`.trim(),
-
   web: `
 Usage: apple-docs web <subcommand> [options]
 
@@ -414,6 +244,11 @@ Build options:
   --concurrency <n>    Per-process render concurrency (default: ncpu - 2). Sync-CPU rendering doesn't benefit much above 2-4 within one Bun process; for real parallelism see --workers.
   --workers <n>        Fan out across N child Bun subprocesses, each rendering a partition of the framework list (default: 1 = inline). Use ncpu (e.g. 6) for the first full build to scale near-linearly with cores.
   --skip-docs          Build only the site essentials (homepage, search page, public files, sitemap-index, search artifacts, manifest, framework metadata) and skip every per-document and per-framework HTML page. Caddy falls through to Bun for /docs/*, where the on-demand renderer + Cache-Control headers let Cloudflare cache each doc after first visit. The fastest path to a working deploy.
+  --json               Emit the build summary plus the full link-audit report as JSON
+
+After every build, the link auditor walks the rendered HTML tree and prints a
+one-line summary (e.g. "links: 12345 ok, 3 broken, 27 external_unresolvable").
+Pass --json for the full breakdown.
 
 Serve options:
   --port <n>           Port number (default: 3000)
@@ -435,75 +270,24 @@ Examples:
   apple-docs web deploy github-pages
 `.trim(),
 
-  links: `
-Usage: apple-docs links <subcommand> [options]
-
-Audit and consolidate cross-references across the corpus.
-
-Subcommands:
-  audit               Walk dist/web/docs/**/*.html, classify every <a href>
-                      and report counts + top broken patterns
-  consolidate         Re-apply the cross-source link resolver to stored
-                      document_sections.content_json, populating
-                      _resolvedKey on reference/link nodes whose URL maps
-                      to a corpus key. Idempotent. Run after sync.
-
-Options (audit):
-  --out <dir>         Built static site directory (default: dist/web)
-  --json              Output raw stats as JSON for downstream analysis
-
-Options (consolidate):
-  --dry-run           Show counts without writing to the DB
-
-Categories reported by audit:
-  internal_ok         /docs/<key>/ where the key resolves
-  internal_broken     /docs/<key>/ where the key is not in the corpus
-  external_resolvable Absolute URL with a known internal equivalent
-                      (run \`apple-docs links consolidate\` to internalize)
-  external            Absolute URL with no internal equivalent
-  fragment            #anchor — page-local
-  relative_broken     Relative path that doesn't resolve
-
-Examples:
-  apple-docs links audit                          # full audit
-  apple-docs links audit --json > /tmp/links.json # JSON for analysis
-  apple-docs links consolidate --dry-run          # preview rewrites
-  apple-docs links consolidate                    # apply rewrites in DB
-`.trim(),
-
   storage: `
 Usage: apple-docs storage <subcommand> [options]
 
-Manage on-disk storage: profiles, materialization, and garbage collection.
+Disk usage inspection and cache cleanup.
 
 Subcommands:
-  profile [set <name>]    Show or change the active storage profile
-  profile list            List all available profiles
   stats                   Show disk usage breakdown by category
-  materialize <format>    Force-render markdown or HTML for all documents
   gc                      Garbage collect cached materializations
-
-Profile subcommand:
-  apple-docs storage profile                    Show current profile
-  apple-docs storage profile set raw-only       Switch to minimal disk usage
-  apple-docs storage profile set balanced       Switch to cache-on-read (default)
-  apple-docs storage profile set prebuilt       Switch to full materialization
-  apple-docs storage profile list               List all profiles with descriptions
 
 GC options:
   --drop <types>       Categories to drop: markdown, html (comma-separated)
   --older-than <days>  Remove activity records older than this many days before cleanup
   --no-vacuum          Skip database VACUUM after cleanup
 
-Materialize options:
-  --roots <a,b,c>      Only materialize specific frameworks
-
 Examples:
   apple-docs storage stats
   apple-docs storage gc --drop markdown,html
   apple-docs storage gc --older-than 30 --no-vacuum
-  apple-docs storage materialize markdown --roots swiftui
-  apple-docs storage profile set raw-only
 `.trim(),
 }
 

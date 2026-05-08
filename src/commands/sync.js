@@ -6,48 +6,78 @@ import { applyGuidelinesSnapshot } from '../pipeline/sync-guidelines.js'
 import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress } from '../lib/flat-source-progress.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
-import { getAdapter, getAllAdapters } from '../sources/registry.js'
-import { ROOT_CATALOG_SOURCE_TYPES, normalizeList, validateRequestedSources, selectRootsForAdapter, filterPages, discoverAdaptersInParallel } from './command-helpers.js'
+import { getAllAdapters } from '../sources/registry.js'
+import { ROOT_CATALOG_SOURCE_TYPES, selectRootsForAdapter, filterPages, discoverAdaptersInParallel } from './command-helpers.js'
 import { syncAppleFonts, syncSfSymbols, prerenderSfSymbols } from '../resources/apple-assets.js'
+import { update } from './update.js'
+import { consolidate } from './consolidate.js'
+import { indexBodyFull, indexBodyIncremental } from '../pipeline/index-body.js'
 
 /**
- * Full sync pipeline: discover roots -> crawl (parallel) -> convert remaining.
- * @param {{ roots?: string[], sources?: string[], full?: boolean, concurrency?: number, parallel?: number, retryFailed?: boolean }} opts
+ * Full corpus pipeline. Single entry point for refreshing everything end-to-end:
+ *
+ *   1. Detect changed pages on every existing source via HEAD checks (was `update`)
+ *   2. Discover roots (catalog sources) and adapter pages
+ *   3. Crawl each adapter, retrying any previously-failed entries
+ *   4. Download missing raw payloads, convert to Markdown
+ *   5. Index body content (FTS) incrementally
+ *   6. Sync Apple typography (DMG download + extract) and SF Symbols (public + private)
+ *   7. Pre-render every SF Symbol to SVG (idempotent — skips already-rendered ones)
+ *   8. Run schema migrations, clean invalid entries, re-resolve failures, minify raw JSON (was `doctor`)
+ *
+ * Always full coverage. The only flag is `--full`, which forces a clean re-crawl
+ * (resets failed entries everywhere, ignores incremental shortcuts) instead of
+ * a normal resumable refresh.
+ *
+ * @param {{ full?: boolean }} opts
  * @param {{ db, dataDir, rateLimiter, logger }} ctx
  */
 export async function sync(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const startMs = Date.now()
-  const requestedSources = normalizeList(opts.sources)
-  const requestedRoots = normalizeList(opts.roots)
-
-  validateRequestedSources(requestedSources)
-
-  const adapters = ctx.adapters ?? (
-    requestedSources
-      ? requestedSources.map(getAdapter)
-      : getAllAdapters()
-  )
-  const concurrency = ctx.semaphore?.max ?? opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '500', 10)
-  const parallel = opts.parallel ?? 10
+  const fullRebuild = !!opts.full
+  const concurrency = ctx.semaphore?.max
+    ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '500', 10)
+  const parallel = Number.parseInt(process.env.APPLE_DOCS_PARALLEL ?? '10', 10)
   const semaphore = ctx.semaphore ?? new Semaphore(concurrency)
-  const adapterCtx = { ...ctx, rootCatalogReady: false, semaphore, fullSync: !!opts.full }
 
-  db.setActivity('sync', opts.roots ?? null)
+  const adapters = ctx.adapters ?? getAllAdapters()
+  const adapterCtx = { ...ctx, rootCatalogReady: false, semaphore, fullSync: fullRebuild }
 
+  db.setActivity('sync', null)
+
+  let updateResult = null
   try {
+    // 1. HEAD-check existing pages on every source for upstream modifications.
+    //    Pulls changed pages in place; deleted pages are tombstoned. Flat sources
+    //    detect added/removed keys at the same time. Resource sync (fonts +
+    //    symbols) is suppressed here — sync owns it as its own dedicated step
+    //    further down so the work doesn't run twice.
+    try {
+      updateResult = await update(
+        { skipFonts: true, skipSymbols: true },
+        { ...ctx, semaphore, adapters },
+      )
+      db.setActivity('sync', null)
+    } catch (e) {
+      logger.warn('Update phase failed; continuing with crawl', { error: e.message })
+      db.setActivity('sync', null)
+    }
+
+    // 2. Root discovery for catalog-driven sources (apple-docc et al).
     if (adapters.some(adapter => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
       await discoverRoots(db, rateLimiter, logger)
       adapterCtx.rootCatalogReady = true
     }
 
-    const crawlOpts = { retryFailed: !!opts.retryFailed, semaphore }
+    const crawlOpts = { retryFailed: true, semaphore }
     const crawlResults = {}
     const failedSources = []
     let guidelinesResult = null
     let rootsCrawled = 0
     const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } = await discoverAdaptersInParallel(adapters, adapterCtx)
 
+    // 3. Crawl every adapter end-to-end.
     for (const adapter of adapters) {
       logger.info(`Syncing ${adapter.constructor.displayName}...`)
 
@@ -60,7 +90,7 @@ export async function sync(opts, ctx) {
         }
 
         const discovery = discoveriesBySource.get(adapter.constructor.type)
-        const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
+        const roots = selectRootsForAdapter(adapter, discovery, db, null)
 
         switch (adapter.constructor.syncMode) {
           case 'snapshot': {
@@ -95,43 +125,56 @@ export async function sync(opts, ctx) {
     }
 
     const activeSourceTypes = adapters.map(adapter => adapter.constructor.type)
-    const filters = { roots: requestedRoots, sources: activeSourceTypes }
+    const filters = { roots: null, sources: activeSourceTypes }
+
+    // 4. Backfill any missing raw payloads + materialize Markdown.
     const dlResult = await downloadMissing(db, dataDir, rateLimiter, logger, null, filters, { semaphore })
 
-    const pendingConversions = filterPages(db.getUnconvertedPages(), requestedRoots, activeSourceTypes)
+    const pendingConversions = filterPages(db.getUnconvertedPages(), null, activeSourceTypes)
     let cvResult = { converted: 0, total: 0 }
     if (pendingConversions.length > 0) {
       logger.info(`Converting ${pendingConversions.length} remaining pages to Markdown...`)
       cvResult = await convertAll(db, dataDir, logger, null, filters, { semaphore })
     }
 
-    let bodyIndexed = 0
-    if (opts.indexBody) {
-      const { indexBodyIncremental } = await import('../pipeline/index-body.js')
-      const idxResult = await indexBodyIncremental(db, dataDir, logger)
-      bodyIndexed = idxResult.indexed
-    }
+    // 5. Body index. `--full` triggers a clean rebuild from scratch; otherwise
+    // we update only the rows whose content fingerprint changed since the
+    // last index pass.
+    logger.info(fullRebuild ? 'Rebuilding body index...' : 'Indexing body content...')
+    const idxResult = fullRebuild
+      ? await indexBodyFull(db, dataDir, logger)
+      : await indexBodyIncremental(db, dataDir, logger)
+    const bodyIndexed = idxResult.indexed
 
-    // Apple typography + SF Symbols are first-class resources alongside the
-    // doc roots; sync them in the same pass unless the caller explicitly
-    // restricted the run via --sources or --roots, or opted out via the
-    // skip flags. DMG download and symbol prerender are heavy; both stay
-    // off unless the caller asks.
-    const restrictedRun = !!(requestedSources || requestedRoots)
+    // 6. Resource sync — Apple typography + SF Symbols. Both are first-class
+    // corpus citizens; a corpus-wide refresh implies full asset coverage.
+    //
+    // Two opt-out / opt-in switches:
+    //   APPLE_DOCS_SKIP_RESOURCES=1   — bypass the entire resource pass
+    //                                    (used by the unit tests so they
+    //                                    don't spawn Swift workers / mount
+    //                                    DMGs against a tmpdir corpus).
+    //   APPLE_DOCS_DOWNLOAD_FONTS=1   — also fetch + extract Apple's font
+    //                                    DMGs. Off by default; the snapshot
+    //                                    CI sets it so the published
+    //                                    archive ships every Apple font.
     let fontsResult = null
     let symbolsResult = null
     let symbolsRenderResult = null
-    if (!restrictedRun && opts.skipFonts !== true) {
+
+    if (process.env.APPLE_DOCS_SKIP_RESOURCES === '1') {
+      logger.info('APPLE_DOCS_SKIP_RESOURCES=1 — skipping fonts + SF Symbols sync')
+    } else {
+      const downloadFonts = process.env.APPLE_DOCS_DOWNLOAD_FONTS === '1'
       try {
-        logger.info(`Syncing Apple typography${opts.downloadFonts ? ' (downloading DMGs)' : ''}...`)
-        fontsResult = await syncAppleFonts({ downloadFonts: !!opts.downloadFonts }, ctx)
+        logger.info(`Syncing Apple typography${downloadFonts ? ' (downloading DMGs)' : ''}...`)
+        fontsResult = await syncAppleFonts({ downloadFonts }, ctx)
         logger.info(`Synced ${fontsResult.families} font families, ${fontsResult.files} font files`)
       } catch (e) {
         logger.warn('Font sync failed', { error: e.message })
         failedSources.push({ source: 'apple-fonts', error: e.message })
       }
-    }
-    if (!restrictedRun && opts.skipSymbols !== true) {
+
       try {
         logger.info('Syncing SF Symbols...')
         const counts = { public: 0, private: 0 }
@@ -140,15 +183,27 @@ export async function sync(opts, ctx) {
         }
         symbolsResult = counts
         logger.info(`Synced ${counts.public} public + ${counts.private} private SF Symbols`)
-        if (opts.renderSymbols) {
-          logger.info('Pre-rendering SF Symbols (this can take several minutes)...')
-          symbolsRenderResult = await prerenderSfSymbols({ concurrency: opts.symbolsConcurrency }, ctx)
-          logger.info(`Pre-rendered ${symbolsRenderResult.rendered ?? 0} symbol variants`)
-        }
+
+        // 7. Pre-render every symbol. Idempotent: skips any SVG already on disk
+        // with non-zero size. Cheap when up-to-date, ~30s cold for ~9k symbols
+        // at concurrency 8 — far cheaper than the 503 storm you get when the
+        // grid serves SVGs lazily under load.
+        logger.info('Pre-rendering SF Symbols...')
+        symbolsRenderResult = await prerenderSfSymbols({}, ctx)
+        logger.info(`Pre-rendered ${symbolsRenderResult.rendered ?? 0} symbol variants (${symbolsRenderResult.skipped ?? 0} skipped)`)
       } catch (e) {
         logger.warn('SF Symbols sync failed', { error: e.message })
         failedSources.push({ source: 'sf-symbols', error: e.message })
       }
+    }
+
+    // 8. Schema migrations + invalid-entry cleanup + parent-ref re-resolution +
+    // raw JSON minification. Idempotent and cheap when there's nothing to do.
+    let doctorResult = null
+    try {
+      doctorResult = await consolidate({ minify: true }, { ...ctx, semaphore })
+    } catch (e) {
+      logger.warn('Doctor pass failed', { error: e.message })
     }
 
     const durationMs = Date.now() - startMs
@@ -169,16 +224,15 @@ export async function sync(opts, ctx) {
       downloaded: dlResult.downloaded,
       bodyIndexed,
       converted: cvResult.converted,
+      update: updateResult,
       fonts: fontsResult,
       symbols: symbolsResult,
       symbolsRender: symbolsRenderResult,
+      doctor: doctorResult,
       durationMs,
     }
   } finally {
     db.clearActivity()
-    // Mirror update.js: recycle any embedded reader-pool so post-sync queries
-    // see a clean set of prepared statements. No-op in the normal CLI path
-    // where the pool is absent.
     try { await ctx.readerPool?.recycle?.() } catch {}
   }
 }

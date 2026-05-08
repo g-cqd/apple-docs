@@ -36,27 +36,22 @@ jobs:
       - name: Set data directory
         run: echo "APPLE_DOCS_HOME=${{ runner.temp }}/apple-docs" >> "$GITHUB_ENV"
 
+      # Single command refreshes the entire corpus end-to-end:
+      # HEAD-check existing pages, crawl new ones, convert, index, sync
+      # Apple typography (DMG download + extract) and SF Symbols (public +
+      # private), pre-render every symbol to SVG, and run schema migrations
+      # / failure cleanup / JSON minify. Idempotent and resumable.
+      #
+      # APPLE_DOCS_DOWNLOAD_FONTS=1 enables Apple's font DMG download +
+      # extraction so the snapshot ships every font Apple distributes,
+      # including those not pre-installed on the macos-26 runner. Local
+      # `apple-docs sync` runs leave this off — most workstations already
+      # have SF Pro / Compact / Mono installed and the DMG fetch is slow.
       - name: Sync corpus
-        run: bun run cli.js sync --concurrency 500 --rate 500 --full --parallel 20 --retry-failed --index
-        timeout-minutes: 30
-
-      # Apple typography assets — DMG/PKG download + extraction. ~30s per
-      # family on a warm runner, dominated by `hdiutil attach` latency.
-      - name: Sync Apple fonts (download + extract)
-        run: bun run cli.js fonts sync --download
-        timeout-minutes: 30
-
-      # SF Symbols catalog (public + private) from the system bundles. The
-      # plist-driven sync is fast — ~3s for ~10k symbols.
-      - name: Sync SF Symbols catalog
-        run: bun run cli.js symbols sync
-
-      # Pre-render every indexed symbol to a theme-neutral SVG via our
-      # in-process PDF parser. This is the work the snapshot is meant to
-      # save end users from running themselves — bake it into the archive.
-      - name: Pre-render SF Symbols
-        run: bun run cli.js symbols render --concurrency 8
-        timeout-minutes: 30
+        env:
+          APPLE_DOCS_DOWNLOAD_FONTS: '1'
+        run: bun run cli.js sync --full
+        timeout-minutes: 120
 
       - name: Determine tag
         id: tag
@@ -74,15 +69,15 @@ jobs:
 
       - name: Build lite snapshot
         if: steps.tiers.outputs.build_lite == 'true'
-        run: bun run cli.js snapshot build --tier lite --out dist/ --tag ${{ steps.tag.outputs.tag }}
+        run: bun run scripts/build-snapshot.js --tier lite --out dist/ --tag ${{ steps.tag.outputs.tag }}
 
       - name: Build standard snapshot
         if: steps.tiers.outputs.build_standard == 'true'
-        run: bun run cli.js snapshot build --tier standard --out dist/ --tag ${{ steps.tag.outputs.tag }}
+        run: bun run scripts/build-snapshot.js --tier standard --out dist/ --tag ${{ steps.tag.outputs.tag }}
 
       - name: Build full snapshot
         if: steps.tiers.outputs.build_full == 'true'
-        run: bun run cli.js snapshot build --tier full --out dist/ --tag ${{ steps.tag.outputs.tag }}
+        run: bun run scripts/build-snapshot.js --tier full --out dist/ --tag ${{ steps.tag.outputs.tag }}
 
       - name: Corpus stats
         run: bun run cli.js status --json > dist/status.json

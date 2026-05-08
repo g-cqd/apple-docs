@@ -3,11 +3,12 @@
 #   1. Keep web + mcp serving while the repo and corpus refresh happen
 #   2. Drop any uncommitted changes that are already on origin, fast-forward pull
 #   3. bun install if lockfile or package.json changed
-#   4. apple-docs update                  (pick up new roots / document changes)
-#   5. apple-docs sync --retry-failed     (retry previously-failed crawl entries)
-#   6. apple-docs doctor                  (schema migrations, re-resolve failures)
-#   7. Cut over with a short restart/kickstart to pick up new code + fresh caches
-#   8. Smoke test local + cloudflare edges
+#   4. apple-docs sync          (single full-corpus refresh: HEAD-check, crawl,
+#                                convert, index, fonts, symbols, prerender,
+#                                schema migrations, JSON minify)
+#   5. apple-docs web build     (rebuild the static site from the refreshed corpus)
+#   6. Cut over with a short restart/kickstart to pick up new code + fresh caches
+#   7. Smoke test local + cloudflare edges
 #
 # Safe to re-run. Requires the sudoers drop-in from install-daemons.sh.
 set -euo pipefail
@@ -120,7 +121,7 @@ else
   say "WARN: render-all.sh failed; continuing with stale rendered config"
 fi
 
-# 4-6. Refresh the corpus.
+# 4. Refresh the corpus.
 #
 # Two modes:
 #   USE_SNAPSHOT=1 (default when the GH snapshot release tag is newer than
@@ -130,8 +131,11 @@ fi
 #       and resource directories in one go. Cheap on CPU/network, captures
 #       the canonical SF-Symbols + fonts pre-render done by the macos-26
 #       runner.
-#   USE_SNAPSHOT=0: original crawl-on-this-host workflow (apple-docs update,
-#       sync --retry-failed, doctor). Slower but doesn't depend on GH.
+#   USE_SNAPSHOT=0: crawl-on-this-host workflow. A single `apple-docs sync`
+#       runs the entire pipeline end-to-end (HEAD-check existing pages,
+#       crawl new ones, convert, index, sync fonts + SF Symbols, pre-render
+#       symbols, schema migrations, JSON minify). Slower than snapshot mode
+#       but doesn't depend on GH.
 #
 # Operator can force a mode by exporting USE_SNAPSHOT=0/1; the default is
 # auto-detection based on the GH release tag.
@@ -162,33 +166,13 @@ fi
 if [ "$USE_SNAPSHOT" = "1" ]; then
   if ! run "$OPS/bin/pull-snapshot.sh"; then
     say "ERROR: pull-snapshot.sh failed; falling back to crawl-on-host refresh"
-    run "$BUN" run "$REPO/cli.js" update            || say "(update returned $?)"
-    run "$BUN" run "$REPO/cli.js" sync --retry-failed || say "(sync --retry-failed returned $?)"
-    run "$BUN" run "$REPO/cli.js" doctor            || say "(doctor returned $?)"
+    run "$BUN" run "$REPO/cli.js" sync || say "(sync returned $?)"
   fi
 else
-  run "$BUN" run "$REPO/cli.js" update            || say "(update returned $?)"
-  run "$BUN" run "$REPO/cli.js" sync --retry-failed || say "(sync --retry-failed returned $?)"
-  run "$BUN" run "$REPO/cli.js" doctor            || say "(doctor returned $?)"
+  run "$BUN" run "$REPO/cli.js" sync || say "(sync returned $?)"
 fi
 
-# 6a. Ensure SF Symbols are pre-rendered. The web grid serves
-# `~/.apple-docs/resources/symbols/<scope>/<name>.svg` as a static file
-# from this directory; a missing file forces the request to fall through
-# to the live Swift renderer, and at ~480 grid tiles requesting
-# concurrently the proxy times out and returns 503 to the browser.
-#
-# `apple-docs symbols render` is idempotent: it skips any symbol whose
-# .svg already exists with non-zero size. Cost when up-to-date is a
-# directory scan + skip (seconds). Cost on a cold install (no snapshot,
-# or snapshot tarball without resources/symbols) is ~30s for ~9k
-# symbols at concurrency 8. Either way, run it unconditionally after
-# the corpus refresh — far cheaper than a 503 storm.
-SYMBOLS_RENDER_CONCURRENCY="${SYMBOLS_RENDER_CONCURRENCY:-8}"
-run "$BUN" run "$REPO/cli.js" symbols render --concurrency "$SYMBOLS_RENDER_CONCURRENCY" \
-  || say "WARN: symbols render returned $? — grid may serve degraded SVGs until next run"
-
-# 6b. Rebuild the static site. Caddy serves ${STATIC_DIR} directly via
+# 5. Rebuild the static site. Caddy serves ${STATIC_DIR} directly via
 # `file_server`; this step is what makes the deploy actually visible to
 # users. Incremental + resumable, so a partial run is safe and a re-run
 # picks up where it left off (see src/web/build.js).
@@ -206,7 +190,7 @@ else
   }
 fi
 
-# 7. Cut over to the refreshed code + corpus.
+# 6. Cut over to the refreshed code + corpus.
 #
 #    Order matters: web/mcp first, then a short pause, then the watchdog.
 #    Otherwise a `kickstart -k` of the watchdog can interrupt an in-flight
@@ -238,7 +222,7 @@ done
 sleep 3
 cutover_one "${LABEL_WATCHDOG}"
 
-# 8. Smoke tests
+# 7. Smoke tests
 sleep 3
 say "=== smoke tests ==="
 if ! "$OPS/bin/smoke-test.sh" 2>&1 | tee -a "$LOG"; then
