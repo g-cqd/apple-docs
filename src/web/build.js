@@ -282,13 +282,18 @@ export async function buildStaticSite(opts, ctx) {
     if (skipDocs) {
       logger?.info?.('--skip-docs: per-document HTML render skipped; Caddy will fall through to Bun for /docs/*')
     } else if (workers > 1 && roots.length > 1) {
+      // Workers must write into the orchestrator's `buildDir`, NOT `outDir`,
+      // otherwise the orchestrator's atomic swap of buildDir over outDir at
+      // step 10 clobbers everything the workers wrote. (And under `--full`,
+      // each worker also tries to atomic-swap its own staging dir over
+      // outDir, which racily replaces the previous worker's output.)
       const stats = await runWorkerBuilds({
         roots,
         opts,
         siteConfig,
         workers,
         concurrency,
-        outDir,
+        outDir: buildDir,
         db,
         logger,
       })
@@ -764,7 +769,11 @@ async function runWorkerBuilds({ roots, opts, siteConfig, workers, concurrency, 
     ]
     if (siteConfig.baseUrl) { args.push('--base-url', siteConfig.baseUrl) }
     if (siteConfig.siteName) { args.push('--site-name', siteConfig.siteName) }
-    if (opts.full) { args.push('--full') }
+    // Don't pass `--full` to workers. The orchestrator already cleared the
+    // render index. Workers must run in incremental mode so they write
+    // directly to the shared `outDir` (= the orchestrator's staging dir)
+    // instead of each spinning up its own staging dir + atomic swap, which
+    // would race-replace the orchestrator's output.
     logger?.info?.(`worker[${i + 1}/${bins.length}] starting (${bin.slugs.length} frameworks, ${bin.total.toLocaleString('en-US')} docs): ${bin.slugs.slice(0, 4).join(', ')}${bin.slugs.length > 4 ? '…' : ''}`)
     return Bun.spawn([bunBin, ...args], {
       stdout: 'inherit',
