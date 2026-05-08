@@ -121,7 +121,8 @@ function createDirectRunner(ctx) {
   return async (benchCase) => {
     const result = await search({ query: benchCase.query, ...benchCase.opts }, ctx)
     return {
-      cache: 'n/a',
+      origin: 'n/a',
+      edge: 'n/a',
       paths: result.results?.slice(0, 5).map(r => r.path) ?? [],
     }
   }
@@ -134,8 +135,18 @@ function createApiRunner(baseUrl) {
     const response = await fetch(url)
     if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`)
     const payload = await response.json()
+    // Two cache layers, two headers:
+    //   x-apple-docs-cache  -> Bun's response LRU at fill time. Once CF
+    //                          stores a response with `miss`, that string
+    //                          sticks for every subsequent edge hit because
+    //                          CF caches the entire response, headers and all.
+    //                          Useful only for direct-to-origin runs.
+    //   cf-cache-status     -> Cloudflare's per-request decision (HIT, MISS,
+    //                          DYNAMIC, EXPIRED, REVALIDATED, …). The
+    //                          authoritative signal for edge cache behavior.
     return {
-      cache: response.headers.get('x-apple-docs-cache') ?? 'n/a',
+      origin: (response.headers.get('x-apple-docs-cache') ?? 'n/a').toLowerCase(),
+      edge: (response.headers.get('cf-cache-status') ?? 'n/a').toLowerCase(),
       paths: payload.results?.slice(0, 5).map(r => r.path) ?? [],
     }
   }
@@ -180,7 +191,8 @@ async function runConcurrency({ runner, cases, iterations, concurrency }) {
   const latencies = []
   const sloLatencies = []
   const caseStats = new Map()
-  const cache = { hit: 0, miss: 0, other: 0 }
+  const origin = { hit: 0, miss: 0, other: 0 }
+  const edge = { hit: 0, miss: 0, other: 0 }
   const cpuStart = process.cpuUsage()
   const wallStart = performance.now()
 
@@ -194,9 +206,8 @@ async function runConcurrency({ runner, cases, iterations, concurrency }) {
       latencies.push(elapsed)
       if (benchCase.slo !== false) sloLatencies.push(elapsed)
       addCaseStat(caseStats, benchCase, elapsed, result.paths)
-      if (result.cache === 'hit') cache.hit++
-      else if (result.cache === 'miss') cache.miss++
-      else cache.other++
+      bumpCacheCounter(origin, result.origin)
+      bumpCacheCounter(edge, result.edge)
     }
   }
 
@@ -210,9 +221,16 @@ async function runConcurrency({ runner, cases, iterations, concurrency }) {
     cpuMs: (cpu.user + cpu.system) / 1000,
     all: summarize(latencies),
     slo: summarize(sloLatencies),
-    cache,
+    origin,
+    edge,
     cases: [...caseStats.values()].map(finalizeCaseStat),
   }
+}
+
+function bumpCacheCounter(counter, value) {
+  if (value === 'hit') counter.hit++
+  else if (value === 'miss') counter.miss++
+  else counter.other++
 }
 
 function addCaseStat(caseStats, benchCase, elapsed, paths) {
@@ -252,15 +270,25 @@ function percentile(sorted, p) {
 }
 
 function printResult(result) {
-  const cacheTotal = result.cache.hit + result.cache.miss
-  const hitRate = cacheTotal > 0 ? result.cache.hit / cacheTotal : 0
   console.log(`\nconcurrency=${result.concurrency} iterations=${result.iterations}`)
-  console.log(`  SLO cases: p50=${fmt(result.slo.p50)} p95=${fmt(result.slo.p95)} p99=${fmt(result.slo.p99)} max=${fmt(result.slo.max)} target_p95=25.00ms`)
+  console.log(`  SLO cases: p50=${fmt(result.slo.p50)} p95=${fmt(result.slo.p95)} p99=${fmt(result.slo.p99)} max=${fmt(result.slo.max)} target_p99=25.00ms`)
   console.log(`  all cases: p50=${fmt(result.all.p50)} p95=${fmt(result.all.p95)} p99=${fmt(result.all.p99)} max=${fmt(result.all.max)}`)
-  console.log(`  wall=${fmt(result.wallMs)} cpu=${fmt(result.cpuMs)} avg_cpu/op=${fmt(result.cpuMs / result.iterations)} cache_hit_rate=${(hitRate * 100).toFixed(1)}%`)
+  console.log(`  wall=${fmt(result.wallMs)} cpu=${fmt(result.cpuMs)} avg_cpu/op=${fmt(result.cpuMs / result.iterations)}`)
+  console.log(`  origin cache: ${formatCacheCounter(result.origin)}`)
+  console.log(`  edge cache:   ${formatCacheCounter(result.edge)}`)
   for (const entry of result.cases) {
     console.log(`  case ${entry.name}${entry.slo ? '' : ' (non-SLO)'}: p95=${fmt(entry.p95)} top=${entry.samplePaths[0] ?? '-'}`)
   }
+}
+
+function formatCacheCounter(c) {
+  const total = c.hit + c.miss + c.other
+  if (total === 0) return 'n/a'
+  // Hit rate is over (hit + miss) — `other` covers DYNAMIC, EXPIRED, n/a, …
+  // and would distort the rate if folded into the denominator.
+  const decided = c.hit + c.miss
+  const rate = decided > 0 ? (c.hit / decided) * 100 : 0
+  return `${rate.toFixed(1)}% hit (hit=${c.hit} miss=${c.miss} other=${c.other})`
 }
 
 function recordResult(result, meta) {
