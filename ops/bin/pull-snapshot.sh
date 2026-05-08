@@ -167,6 +167,12 @@ run "$BUN" run "$REPO/cli.js" web build --incremental \
   --base-url "https://${PUBLIC_WEB_HOST}" \
   || say "WARN: incremental static build failed — Caddy keeps the previous tree"
 
+# 3b-bis. Wipe Cloudflare's edge cache so /api/search and /api/filters
+# (now Cache-Control: public, max-age=300, stale-while-revalidate=3600)
+# don't briefly serve stale corpus data after a deploy. Soft-fails if the
+# CF token / zone is not configured.
+run "$OPS/bin/cf-purge.sh" || say "WARN: cf-purge.sh exited non-zero — edge cache may be stale"
+
 # 3c. Bring services back. Order matters (web first, watchdog last) for
 # the same reason as deploy-update.sh.
 for label in "${LABEL_WEB}" "${LABEL_MCP}"; do

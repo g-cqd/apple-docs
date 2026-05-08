@@ -16,6 +16,15 @@ import { createLru } from '../lib/lru.js'
 import { getPrerenderedSymbolPath, listAppleFonts, renderFontText, renderSfSymbol, searchSfSymbols } from '../resources/apple-assets.js'
 import { buildStoreZip } from '../lib/zip.js'
 
+// Cache directive for JSON endpoints whose result is a pure function of the
+// current corpus (`/api/search`, `/api/filters`). Cloudflare's default policy
+// is to skip caching JSON without an explicit Cache-Control directive, so
+// these used to land at Bun on every request even though the corpus is
+// effectively static between syncs. Pairing this directive with an explicit
+// CF cache purge after every deploy (ops/bin/cf-purge.sh) gives instant
+// coherence without staleness drift.
+const API_CORPUS_CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=3600'
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -305,14 +314,14 @@ export async function startDevServer(opts, ctx) {
       if (cached !== undefined) {
         return jsonResponse(cached, {
           hashable: true,
-          headers: { 'x-apple-docs-cache': 'hit' },
+          headers: { 'x-apple-docs-cache': 'hit', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
         })
       }
       const results = await search(searchOpts, searchCtx)
       searchCache.set(cacheKey, results)
       return jsonResponse(results, {
         hashable: true,
-        headers: { 'x-apple-docs-cache': 'miss' },
+        headers: { 'x-apple-docs-cache': 'miss', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
       })
     }
 
@@ -324,7 +333,9 @@ export async function startDevServer(opts, ctx) {
          WHERE d.framework IS NOT NULL ORDER BY label`
       ).all().map(r => ({ label: r.label, value: r.value }))
       const kinds = db.db.query('SELECT DISTINCT role_heading FROM documents WHERE role_heading IS NOT NULL ORDER BY role_heading').all().map(r => r.role_heading)
-      return jsonResponse({ frameworks, kinds })
+      return jsonResponse({ frameworks, kinds }, {
+        headers: { 'Cache-Control': API_CORPUS_CACHE_CONTROL },
+      })
     }
 
     if (pathname === '/api/fonts') {

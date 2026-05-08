@@ -232,6 +232,22 @@ describe('Dev Server (P7-E)', () => {
     expect(second.headers.get('x-apple-docs-cache')).toBe('hit')
   })
 
+  test('/api/search advertises shared-cache directives so Cloudflare can store responses', async () => {
+    const miss = await fetch(`${serverInfo.url}/api/search?q=View&limit=10&framework=cache-test-framework-x`)
+    const hit = await fetch(`${serverInfo.url}/api/search?q=View&limit=10&framework=cache-test-framework-x`)
+    expect(miss.headers.get('cache-control')).toContain('public')
+    expect(miss.headers.get('cache-control')).toContain('max-age=300')
+    expect(miss.headers.get('cache-control')).toContain('stale-while-revalidate')
+    expect(hit.headers.get('cache-control')).toBe(miss.headers.get('cache-control'))
+  })
+
+  test('/api/filters advertises shared-cache directives', async () => {
+    const res = await fetch(`${serverInfo.url}/api/filters`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toContain('public')
+    expect(res.headers.get('cache-control')).toContain('max-age=300')
+  })
+
   test('title index endpoint returns v2 columnar format', async () => {
     const res = await fetch(`${serverInfo.url}/data/search/title-index.json`)
     expect(res.status).toBe(200)

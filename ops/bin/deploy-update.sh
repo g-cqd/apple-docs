@@ -190,6 +190,12 @@ else
   }
 fi
 
+# 5b. Wipe Cloudflare's edge cache so /api/search and /api/filters
+# (now Cache-Control: public, max-age=300, stale-while-revalidate=3600)
+# don't briefly serve stale corpus data after a deploy. Soft-fails if the
+# CF token / zone is not configured.
+run "$OPS/bin/cf-purge.sh" || say "WARN: cf-purge.sh exited non-zero — edge cache may be stale"
+
 # 6. Cut over to the refreshed code + corpus.
 #
 #    Order matters: web/mcp first, then a short pause, then the watchdog.
