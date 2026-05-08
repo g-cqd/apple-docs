@@ -1,6 +1,8 @@
 import { renderSearchPage, renderFontsPage, renderSymbolsPage, renderIndexPage } from '../templates.js'
 import { textResponse } from '../responses.js'
-import { buildHomepageExtras } from '../homepage-extras.js'
+import { buildHomepageProps } from '../view-models/homepage.viewmodel.js'
+import { buildFontsPageProps } from '../view-models/fonts-page.viewmodel.js'
+import { buildSymbolsPageProps } from '../view-models/symbols-page.viewmodel.js'
 
 const HTML = { contentType: 'text/html; charset=utf-8' }
 
@@ -20,8 +22,8 @@ export function searchPageHandler(_request, ctx) {
  * @type {import('../route-registry.js').RouteHandler}
  */
 export function fontsPageHandler(_request, ctx) {
-  const families = ctx.db.listAppleFonts()
-  return textResponse(renderFontsPage(ctx.siteConfig, { families }), HTML)
+  const props = buildFontsPageProps(ctx)
+  return textResponse(renderFontsPage(ctx.siteConfig, props), HTML)
 }
 
 /**
@@ -37,10 +39,8 @@ export function symbolsPageHandler(_request, ctx, url) {
   if (url.pathname !== '/symbols' && url.pathname !== '/symbols/' && !url.pathname.startsWith('/symbols/')) {
     return null
   }
-  const totals = ctx.db.db.query(
-    "SELECT scope, COUNT(*) as count FROM sf_symbols GROUP BY scope",
-  ).all()
-  return textResponse(renderSymbolsPage(ctx.siteConfig, { totals }), HTML)
+  const props = buildSymbolsPageProps(ctx)
+  return textResponse(renderSymbolsPage(ctx.siteConfig, props), HTML)
 }
 
 /**
@@ -51,14 +51,7 @@ export function symbolsPageHandler(_request, ctx, url) {
  * @type {import('../route-registry.js').RouteHandler}
  */
 export function homepageHandler(_request, ctx) {
-  const { db, siteConfig } = ctx
-  const roots = db.getRoots().filter(r => {
-    if (r.page_count <= 1) {
-      const pages = db.getPagesByRoot(r.slug)
-      if (pages.length <= 1 && (!pages[0] || pages[0].path === r.slug)) return false
-    }
-    return true
-  })
-  const html = renderIndexPage(roots, siteConfig, { extras: buildHomepageExtras(siteConfig) })
+  const { roots, extras } = buildHomepageProps(ctx)
+  const html = renderIndexPage(roots, ctx.siteConfig, { extras })
   return textResponse(html, HTML)
 }

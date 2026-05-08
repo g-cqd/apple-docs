@@ -5,7 +5,9 @@ import { availableParallelism } from 'node:os'
 import { appendFile } from 'node:fs/promises'
 import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, renderNotFoundPage, buildFrameworkTreeData } from './templates.js'
-import { buildHomepageExtras } from './homepage-extras.js'
+import { buildHomepageProps } from './view-models/homepage.viewmodel.js'
+import { buildFontsPageProps } from './view-models/fonts-page.viewmodel.js'
+import { buildSymbolsPageProps } from './view-models/symbols-page.viewmodel.js'
 import { generateSearchArtifacts } from './search-artifacts.js'
 import { generateSitemaps } from './sitemap.js'
 import { createWebRenderCache } from './render-cache.js'
@@ -244,17 +246,20 @@ export async function buildStaticSite(opts, ctx) {
     // worker, and the homepage iterates `roots` to enumerate every kind →
     // letting workers write here would publish a partition-only homepage.
     if (isOrchestratorRun) {
-      const indexHtml = renderIndexPage(roots, siteConfig, { extras: buildHomepageExtras(siteConfig) })
+      // Same view-models the dev server's page routes use, so a static
+      // build and a live render of `/`, `/fonts`, `/symbols` cannot drift
+      // on filtering or DB query shape. The homepage's `roots` argument
+      // inside this branch still uses the orchestrator's full root set —
+      // the view-model props re-derive it from the DB to keep the contract
+      // closed; iterators below this block continue to use `roots`.
+      const homepageProps = buildHomepageProps({ db, siteConfig })
+      const indexHtml = renderIndexPage(homepageProps.roots, siteConfig, { extras: homepageProps.extras })
       await Bun.write(join(buildDir, 'index.html'), indexHtml)
       const searchHtml = renderSearchPage(siteConfig)
       await Bun.write(join(buildDir, 'search', 'index.html'), searchHtml)
-      const families = db.listAppleFonts()
-      const fontsHtml = renderFontsPage(siteConfig, { families })
+      const fontsHtml = renderFontsPage(siteConfig, buildFontsPageProps({ db }))
       await Bun.write(join(buildDir, 'fonts', 'index.html'), fontsHtml)
-      const symbolTotals = db.db.query(
-        "SELECT scope, COUNT(*) as count FROM sf_symbols GROUP BY scope",
-      ).all()
-      const symbolsHtml = renderSymbolsPage(siteConfig, { totals: symbolTotals })
+      const symbolsHtml = renderSymbolsPage(siteConfig, buildSymbolsPageProps({ db }))
       await Bun.write(join(buildDir, 'symbols', 'index.html'), symbolsHtml)
 
       // 404 fallback. Caddy `handle_errors` and Bun web/serve.js both

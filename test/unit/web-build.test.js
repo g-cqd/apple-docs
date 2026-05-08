@@ -26,6 +26,16 @@ beforeEach(() => {
   db.db.run(`INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
     VALUES ('apple-docc', 'documentation/swiftui/text', 'Text', 'symbol', 'symbol', 'Structure', 'swiftui', 'A view that displays text', ?, ?)`, [now, now])
 
+  // Seed pages so the homepage view-model's "non-empty root" filter recognises
+  // the framework. The filter (pages > 1 OR not self-ref) used to live only in
+  // serve.js; build.js skipped it and quietly emitted an unfiltered listing.
+  // Phase 1 unified both paths through view-models/homepage.viewmodel.js, so
+  // tests now have to reflect production page state.
+  const swiftuiRoot = db.getRootBySlug('swiftui')
+  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'swiftui/view', '/documentation/swiftui/view', 'View', 'active')`, [swiftuiRoot.id])
+  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'swiftui/text', '/documentation/swiftui/text', 'Text', 'active')`, [swiftuiRoot.id])
+  db.updateRootPageCount('swiftui')
+
   // Seed sections
   const viewId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
   db.db.run(`INSERT INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`, [viewId])
