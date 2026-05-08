@@ -159,6 +159,17 @@ if [ "$setup_status" != "0" ]; then
   exit 2
 fi
 
+# 3b'. Pre-render any missing SF Symbols. The full-tier snapshot tarball
+# is supposed to ship resources/symbols/, but older snapshots predate the
+# render step in .github/workflows/snapshot.yml, and `apple-docs setup
+# --force` removes resources/symbols before extracting — so a tier that
+# doesn't include the directory leaves the grid serving 503s.
+# `symbols render` is idempotent (skips files already present), so it's
+# a cheap no-op on a snapshot that did include them.
+SYMBOLS_RENDER_CONCURRENCY="${SYMBOLS_RENDER_CONCURRENCY:-8}"
+run "$BUN" run "$REPO/cli.js" symbols render --concurrency "$SYMBOLS_RENDER_CONCURRENCY" \
+  || say "WARN: symbols render returned $? — grid may serve degraded SVGs"
+
 # 3c. Rebuild the static site against the freshly-installed corpus.
 # Incremental keeps the existing dist/ directory online if the rebuild
 # fails — caddy won't 404 mid-deploy.

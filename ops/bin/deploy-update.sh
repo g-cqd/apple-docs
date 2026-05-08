@@ -172,6 +172,22 @@ else
   run "$BUN" run "$REPO/cli.js" doctor            || say "(doctor returned $?)"
 fi
 
+# 6a. Ensure SF Symbols are pre-rendered. The web grid serves
+# `~/.apple-docs/resources/symbols/<scope>/<name>.svg` as a static file
+# from this directory; a missing file forces the request to fall through
+# to the live Swift renderer, and at ~480 grid tiles requesting
+# concurrently the proxy times out and returns 503 to the browser.
+#
+# `apple-docs symbols render` is idempotent: it skips any symbol whose
+# .svg already exists with non-zero size. Cost when up-to-date is a
+# directory scan + skip (seconds). Cost on a cold install (no snapshot,
+# or snapshot tarball without resources/symbols) is ~30s for ~9k
+# symbols at concurrency 8. Either way, run it unconditionally after
+# the corpus refresh — far cheaper than a 503 storm.
+SYMBOLS_RENDER_CONCURRENCY="${SYMBOLS_RENDER_CONCURRENCY:-8}"
+run "$BUN" run "$REPO/cli.js" symbols render --concurrency "$SYMBOLS_RENDER_CONCURRENCY" \
+  || say "WARN: symbols render returned $? — grid may serve degraded SVGs until next run"
+
 # 6b. Rebuild the static site. Caddy serves ${STATIC_DIR} directly via
 # `file_server`; this step is what makes the deploy actually visible to
 # users. Incremental + resumable, so a partial run is safe and a re-run
