@@ -168,7 +168,7 @@ describe('setup release smoke', () => {
 
     releases.setCurrentTier('lite')
     let setupCtx = openCtx(installDir)
-    const liteSetup = await setup({ tier: 'lite' }, setupCtx)
+    const liteSetup = await setup({ tier: 'lite', skipResources: true }, setupCtx)
     expect(liteSetup.status).toBe('ok')
     expect(liteSetup.tier).toBe('lite')
 
@@ -197,7 +197,7 @@ describe('setup release smoke', () => {
 
     releases.setCurrentTier('standard')
     setupCtx = openCtx(installDir)
-    const standardSetup = await setup({ tier: 'standard', force: true }, setupCtx)
+    const standardSetup = await setup({ tier: 'standard', force: true, skipResources: true }, setupCtx)
     expect(standardSetup.status).toBe('ok')
     expect(standardSetup.transition).toEqual({ from: 'lite', to: 'standard' })
 
@@ -219,13 +219,13 @@ describe('setup release smoke', () => {
 
     setupCtx = openCtx(installDir)
     await expect(
-      setup({ tier: 'lite', force: true }, setupCtx),
+      setup({ tier: 'lite', force: true, skipResources: true }, setupCtx),
     ).rejects.toThrow('Refusing to downgrade from standard to lite without --downgrade')
     setupCtx.db.close()
 
     releases.setCurrentTier('lite')
     setupCtx = openCtx(installDir)
-    const downgradedSetup = await setup({ tier: 'lite', force: true, downgrade: true }, setupCtx)
+    const downgradedSetup = await setup({ tier: 'lite', force: true, downgrade: true, skipResources: true }, setupCtx)
     expect(downgradedSetup.status).toBe('ok')
     expect(downgradedSetup.transition).toEqual({ from: 'standard', to: 'lite' })
 
@@ -247,7 +247,7 @@ describe('setup release smoke', () => {
 
     releases.setCurrentTier('full')
     const setupCtx = openCtx(installDir)
-    const result = await setup({ tier: 'full' }, setupCtx)
+    const result = await setup({ tier: 'full', skipResources: true }, setupCtx)
     expect(result.status).toBe('ok')
     expect(result.tier).toBe('full')
 
