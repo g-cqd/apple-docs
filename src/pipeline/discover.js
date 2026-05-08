@@ -98,7 +98,19 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
       if (results[i].status === 'fulfilled') {
         processed++
       } else {
-        logger.warn(`Failed: ${batch[i].path}`, { error: results[i].reason?.message })
+        // Upstream 404 / 403 churn dominates a cold-corpus crawl: Apple's
+        // parent pages list dictionary-key children (`is_in_intro_offer_
+        // period`, `expires_date_ms`, …) that aren't served as standalone
+        // URLs, plus a handful of properties named `composer` and a few
+        // deprecated WebKit selectors that 403 consistently. The doctor
+        // pass already cleans these up via parent-page re-resolution, so
+        // demote them to debug — the failed-state row in the DB is the
+        // canonical record. Anything else (network, parse, filesystem) is
+        // still surfaced loudly so we notice it.
+        const message = results[i].reason?.message ?? ''
+        const isUpstreamMiss = message.startsWith('Not found:') || message.startsWith('HTTP 403')
+        const log = isUpstreamMiss ? logger.debug : logger.warn
+        log.call(logger, `Failed: ${batch[i].path}`, { error: message })
       }
     }
 
