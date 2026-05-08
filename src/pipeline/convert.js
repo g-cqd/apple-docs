@@ -1,6 +1,6 @@
-import { join } from 'node:path'
 import { renderPage } from '../apple/renderer.js'
 import { pool } from '../lib/pool.js'
+import { keyPath } from '../lib/safe-path.js'
 import { readJSON, writeText } from '../storage/files.js'
 
 /**
@@ -43,8 +43,8 @@ export async function convertAll(db, dataDir, logger, onProgress, filters = {}, 
  * Convert a single page from raw JSON to Markdown.
  */
 async function convertPage(db, dataDir, pagePath) {
-  const jsonPath = join(dataDir, 'raw-json', `${pagePath}.json`)
-  const mdPath = join(dataDir, 'markdown', `${pagePath}.md`)
+  const jsonPath = keyPath(dataDir, 'raw-json', pagePath, '.json')
+  const mdPath = keyPath(dataDir, 'markdown', pagePath, '.md')
 
   const json = await readJSON(jsonPath)
   if (!json) return false

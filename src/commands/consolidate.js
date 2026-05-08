@@ -4,6 +4,7 @@ import { extractMetadata, extractReferences } from '../apple/extractor.js'
 import { renderPage } from '../apple/renderer.js'
 import { sha256 } from '../lib/hash.js'
 import { pool } from '../lib/pool.js'
+import { keyPath } from '../lib/safe-path.js'
 import { readJSON, writeJSON, writeText, stableStringify } from '../storage/files.js'
 import { join } from 'node:path'
 import { existsSync, readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs'
@@ -72,7 +73,7 @@ export async function consolidate(opts, ctx) {
         if (segments.length < 2) continue
 
         const parentPath = segments.slice(0, -1).join('/')
-        const parentJson = await readJSON(join(dataDir, 'raw-json', `${parentPath}.json`))
+        const parentJson = await readJSON(keyPath(dataDir, 'raw-json', parentPath, '.json'))
         if (!parentJson) continue
 
         for (const [id, ref] of Object.entries(parentJson.references ?? {})) {
@@ -125,7 +126,7 @@ export async function consolidate(opts, ctx) {
 
           try {
             const { json, etag, lastModified } = await fetchDocPage(newPath, rateLimiter)
-            const jsonStr = await writeJSON(join(dataDir, 'raw-json', `${newPath}.json`), json)
+            const jsonStr = await writeJSON(keyPath(dataDir, 'raw-json', newPath, '.json'), json)
             const contentHash = sha256(jsonStr)
             const meta = extractMetadata(json)
             const rootSlug = extractRootSlug(newPath)
@@ -150,7 +151,7 @@ export async function consolidate(opts, ctx) {
 
               try {
                 const markdown = renderPage(json, newPath)
-                await writeText(join(dataDir, 'markdown', `${newPath}.md`), markdown)
+                await writeText(keyPath(dataDir, 'markdown', newPath, '.md'), markdown)
                 db.markConverted(newPath)
               } catch {}
 

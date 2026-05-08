@@ -4,6 +4,7 @@ import { dirSize, fileCount, ensureDir, writeText } from '../storage/files.js'
 import { renderMarkdown } from '../content/render-markdown.js'
 import { renderHtml } from '../content/render-html.js'
 import { pool } from '../lib/pool.js'
+import { keyPath } from '../lib/safe-path.js'
 
 /**
  * Returns a storage breakdown: DB file size, rendered output dirs, raw JSON,
@@ -177,10 +178,10 @@ export async function storageMaterialize(opts, ctx) {
 
     if (format === 'html') {
       content = renderHtml(doc, sections)
-      outPath = join(dataDir, 'html', `${doc.key}.html`)
+      outPath = keyPath(dataDir, 'html', doc.key, '.html')
     } else {
       content = renderMarkdown(doc, sections)
-      outPath = join(dataDir, 'markdown', `${doc.key}.md`)
+      outPath = keyPath(dataDir, 'markdown', doc.key, '.md')
     }
 
     try {

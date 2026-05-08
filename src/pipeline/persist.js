@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs'
 import { rename, unlink } from 'node:fs/promises'
-import { join } from 'node:path'
 import { extractReferences } from '../apple/extractor.js'
 import { renderPage } from '../apple/renderer.js'
 import { normalize } from '../content/normalize.js'
 import { renderMarkdown } from '../content/render-markdown.js'
 import { discardAtomicWrite, promoteAtomicWrite, stageTextAtomic } from '../lib/atomic-write.js'
 import { sha256 } from '../lib/hash.js'
+import { keyPath } from '../lib/safe-path.js'
 import { stableStringify } from '../storage/files.js'
 
 /**
@@ -31,8 +31,8 @@ export async function persistFetchedDocPage({
   const doc = normalized.document
   const downloadedAt = new Date().toISOString()
   const markdown = renderPageFn(json, path)
-  const rawPath = join(dataDir, 'raw-json', `${path}.json`)
-  const markdownPath = join(dataDir, 'markdown', `${path}.md`)
+  const rawPath = keyPath(dataDir, 'raw-json', path, '.json')
+  const markdownPath = keyPath(dataDir, 'markdown', path, '.md')
   const rawTempPath = await stageTextAtomic(rawPath, jsonStr)
   const markdownTempPath = await stageTextAtomic(markdownPath, markdown)
 
@@ -110,8 +110,8 @@ export async function persistNormalizedPage({
   const doc = normalized.document
   const downloadedAt = new Date().toISOString()
   const markdown = renderMarkdownFn(doc, normalized.sections)
-  const rawPath = join(dataDir, 'raw-json', `${path}.json`)
-  const markdownPath = join(dataDir, 'markdown', `${path}.md`)
+  const rawPath = keyPath(dataDir, 'raw-json', path, '.json')
+  const markdownPath = keyPath(dataDir, 'markdown', path, '.md')
   const rawTempPath = await stageTextAtomic(rawPath, rawStr)
   const markdownTempPath = await stageTextAtomic(markdownPath, markdown)
 

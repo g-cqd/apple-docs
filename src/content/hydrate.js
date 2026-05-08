@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { parseGuidelinesHtml, ROOT_SLUG } from '../apple/guidelines-parser.js'
 import { sha256 } from '../lib/hash.js'
+import { keyPath } from '../lib/safe-path.js'
 import { readJSON, readText, stableStringify } from '../storage/files.js'
 import { normalize } from './normalize.js'
 
@@ -16,7 +17,7 @@ export async function ensureNormalizedDocument(db, dataDir, key, sourceType = 'a
     return hydrateGuidelines(db, dataDir, key)
   }
 
-  const rawJson = await readJSON(join(dataDir, 'raw-json', `${key}.json`))
+  const rawJson = await readJSON(keyPath(dataDir, 'raw-json', key, '.json'))
   if (!rawJson) return false
 
   const normalized = normalize(rawJson, key, sourceType)
