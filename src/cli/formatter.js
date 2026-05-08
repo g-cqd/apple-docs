@@ -337,69 +337,6 @@ export function formatSync(result) {
   return lines.join('\n')
 }
 
-export function formatConsolidate(result) {
-  const lines = [
-    bold(result.dryRun ? 'Consolidate (dry run)' : 'Consolidate complete'),
-    `  Analyzed:        ${result.analyzed} failed entries`,
-    `  Cleaned:         ${result.cleaned} (fragments, dot-operators, bad URLs)`,
-    `  Resolved:        ${result.resolved} (found correct URL via parent page)`,
-  ]
-
-  if (!result.dryRun) {
-    lines.push(`  Retried:         ${result.retried} (${result.retriedOk} succeeded)`)
-  }
-
-  lines.push(`  Remaining:       ${result.genuine} genuinely missing pages`)
-
-  if (result.minified > 0) {
-    lines.push(`  Minified:        ${result.minified} JSON files (saved ${formatBytes(result.minifySaved)})`)
-  }
-
-  if (result.snapshotVerification) {
-    const sv = result.snapshotVerification
-    lines.push('')
-    if (!sv.installed) {
-      lines.push(`  Snapshot:        ${sv.message}`)
-    } else {
-      lines.push(bold('  Snapshot Verification'))
-      lines.push(`    Tier:          ${sv.tier}`)
-      lines.push(`    Tag:           ${sv.tag ?? 'unknown'}`)
-      lines.push(`    Installed:     ${sv.installedAt ?? 'unknown'}`)
-      for (const c of sv.checks) {
-        const icon = c.ok ? 'ok' : 'FAIL'
-        const detail = c.ok ? '' : ` (expected ${c.expected}, got ${c.actual})`
-        lines.push(`    ${c.name}: ${icon}${detail}`)
-      }
-      lines.push(`    Overall:       ${sv.ok ? 'healthy' : 'issues found'}`)
-    }
-  }
-
-  if (result.corpusIntegrity) {
-    const ci = result.corpusIntegrity
-    lines.push('')
-    lines.push(bold('  Corpus Integrity'))
-    for (const c of ci.checks) {
-      const icon = c.ok ? 'ok' : 'FAIL'
-      lines.push(`    ${c.name}: ${icon}${c.detail ? ` (${c.detail})` : ''}`)
-    }
-    lines.push(`    Overall:       ${ci.allOk ? 'healthy' : 'issues found'}`)
-  }
-
-  if (result.dryRun && result.resolvedPaths?.length > 0) {
-    lines.push('')
-    lines.push(bold('  Would retry:'))
-    for (const r of result.resolvedPaths.slice(0, 20)) {
-      lines.push(dim(`    ${r.oldPath}`))
-      lines.push(`    → ${r.newPath}`)
-    }
-    if (result.resolvedPaths.length > 20) {
-      lines.push(dim(`    ... and ${result.resolvedPaths.length - 20} more`))
-    }
-  }
-
-  return lines.join('\n')
-}
-
 export function formatSetup(result) {
   if (result.status === 'exists') {
     const lines = [`Corpus already exists at ${result.dataDir} (${result.pages} pages)`]
