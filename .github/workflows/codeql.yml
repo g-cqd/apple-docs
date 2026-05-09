@@ -1,0 +1,46 @@
+name: CodeQL
+
+# A17: GitHub-hosted SAST. Runs on every PR + push to main, plus a
+# weekly cron so a newly-published advisory against an already-merged
+# pattern surfaces without a code change. The matrix expands when we
+# add languages CodeQL covers (e.g. Swift in src/resources/apple-symbols/).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 06:17 UTC — off-peak, off-hour to avoid coalescing with
+    # weekday spikes.
+    - cron: '17 6 * * 1'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # `security-and-quality` is the recommended baseline; the
+          # `security-extended` suite adds extra precision-3 queries.
+          queries: security-and-quality
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'

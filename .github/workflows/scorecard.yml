@@ -1,0 +1,46 @@
+name: Scorecard supply-chain security
+
+# A17: OpenSSF Scorecard reports on the project's supply-chain hygiene
+# (branch protection, signed releases, dependency-update tooling, ...).
+# Runs weekly + on push to main; results upload to GitHub's code-scanning
+# UI and to OpenSSF's public dashboard via `publish_results`.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Tuesdays 06:31 UTC.
+    - cron: '31 6 * * 2'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run analysis
+        uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
