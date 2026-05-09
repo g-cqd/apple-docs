@@ -103,6 +103,30 @@ export function notFoundResponse(siteConfig) {
 }
 
 /**
+ * Build a JSON 5xx error response with stack-trace stripping in production.
+ *
+ * Audit A27: development logs benefit from full stack traces in the
+ * response body, but production deployments leak file paths, function
+ * names, and sometimes captured argument values when an error surfaces
+ * to an unauthenticated client. NODE_ENV=production strips the stack;
+ * the structured log line via lib/logger.js still keeps everything.
+ *
+ * @param {Error|string} error
+ * @param {{ status?: number, exposeStack?: boolean }} [opts]
+ */
+export function errorResponse(error, opts = {}) {
+  const status = opts.status ?? 500
+  const exposeStack = opts.exposeStack ?? (process.env.NODE_ENV !== 'production')
+  const message = typeof error === 'string' ? error : (error?.message ?? 'Internal error')
+  const body = { error: message }
+  if (exposeStack && error?.stack) body.stack = String(error.stack)
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+/**
  * Loose If-None-Match parser per RFC 7232. Accepts the `*` wildcard, a
  * single tag, or a comma-separated list. Strong/weak prefix is preserved
  * verbatim for comparison — callers are expected to use strong tags.

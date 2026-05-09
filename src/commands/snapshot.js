@@ -45,6 +45,14 @@ export async function snapshotBuild(opts, ctx) {
   const tier = opts.tier ?? 'full'
   const outDir = opts.out ?? 'dist'
   const tag = opts.tag ?? `snapshot-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
+  // A22: tag is interpolated into archive / checksum / manifest filenames.
+  // Without a strict allowlist, a tag like `../../etc/passwd` or one
+  // containing shell-significant characters would land outside `outDir`.
+  // The format we accept matches valid filename stems on every fs we
+  // ship to (including SMB/NTFS mounts via Caddy mirroring).
+  if (!/^[a-z0-9._-]{1,64}$/i.test(tag)) {
+    throw new Error(`Invalid --tag "${tag}": must match [a-z0-9._-]{1,64}`)
+  }
   const schemaVersion = db.getSchemaVersion()
 
   if (!['lite', 'standard', 'full'].includes(tier)) {

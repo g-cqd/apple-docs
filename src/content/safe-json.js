@@ -1,4 +1,7 @@
+import { ParseError } from '../lib/errors.js'
 import { createLru } from '../lib/lru.js'
+
+const FREEZE_MAX_DEPTH = 64
 
 const parsedJsonCache = createLru({ max: 2000 })
 
@@ -21,16 +24,41 @@ export function safeJson(value) {
   }
 }
 
+/**
+ * Iterative deep freeze with bounded depth.
+ *
+ * Audit A28: the previous recursive implementation could blow the stack
+ * on adversarial JSON (arrays nested >10k deep) and didn't surface the
+ * depth violation as a typed error. Walk the value with an explicit work
+ * stack instead; cap depth at FREEZE_MAX_DEPTH so a malicious payload
+ * cannot exhaust resources before throwing.
+ */
 function freezeJsonValue(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value
 
-  if (Array.isArray(value)) {
-    for (const item of value) freezeJsonValue(item)
-    return Object.freeze(value)
+  // Each frame is [container, currentDepth]. We walk depth-first, freezing
+  // children before their parent so the final Object.freeze on the root sees
+  // an already-frozen subtree.
+  const stack = [[value, 0]]
+  const toFreeze = []
+  while (stack.length > 0) {
+    const [node, depth] = stack.pop()
+    if (!node || typeof node !== 'object' || Object.isFrozen(node)) continue
+    if (depth > FREEZE_MAX_DEPTH) {
+      throw new ParseError(`JSON value exceeds max freeze depth (${FREEZE_MAX_DEPTH})`, { source: 'safe-json' })
+    }
+    toFreeze.push(node)
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        if (item && typeof item === 'object') stack.push([item, depth + 1])
+      }
+    } else {
+      for (const child of Object.values(node)) {
+        if (child && typeof child === 'object') stack.push([child, depth + 1])
+      }
+    }
   }
-
-  for (const nestedValue of Object.values(value)) {
-    freezeJsonValue(nestedValue)
-  }
-  return Object.freeze(value)
+  // Freeze in reverse-discovery order so children are frozen before parents.
+  for (let i = toFreeze.length - 1; i >= 0; i--) Object.freeze(toFreeze[i])
+  return value
 }

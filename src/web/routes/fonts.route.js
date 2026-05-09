@@ -1,6 +1,7 @@
 import { extname } from 'node:path'
 import { listAppleFonts, renderFontText } from '../../resources/apple-assets.js'
 import { sha256 } from '../../lib/hash.js'
+import { contentDispositionAttachment } from '../../lib/http-content-disposition.js'
 import { buildStoreZip } from '../../lib/zip.js'
 import {
   MIME_TYPES,
@@ -36,7 +37,7 @@ export async function fontFileHandler(request, ctx, _url, match) {
   const ext = extname(font.file_path).toLowerCase()
   return await fileResponseRevalidated(request, file, {
     contentType: MIME_TYPES[ext] || 'application/octet-stream',
-    contentDisposition: `attachment; filename="${font.file_name.replaceAll('"', '')}"`,
+    contentDisposition: contentDispositionAttachment(font.file_name),
     maxAge: 86400,
   })
 }
@@ -86,7 +87,7 @@ export async function fontFamilyZipHandler(request, ctx, url, match) {
   const etag = `"${sha256(zip).slice(0, 16)}"`
   const headers = new Headers({
     'Content-Type': 'application/zip',
-    'Content-Disposition': `attachment; filename="${familyId}${fileNameSuffix}.zip"`,
+    'Content-Disposition': contentDispositionAttachment(`${familyId}${fileNameSuffix}.zip`),
     'Content-Length': String(zip.byteLength),
     'ETag': etag,
     'Cache-Control': 'public, max-age=86400, must-revalidate',
