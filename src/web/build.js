@@ -16,8 +16,8 @@ import { pool } from '../lib/pool.js'
 import { sha256 } from '../lib/hash.js'
 import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
 import { linksAudit } from '../commands/links.js'
-import { ASSET_BUNDLES, STANDALONE_ASSETS, WORKER_ASSETS } from './assets-manifest.js'
-import { minifyJs, buildJsBundle } from './asset-bundler.js'
+import { ENTRY_BUNDLES, STANDALONE_ASSETS, WORKER_ASSETS } from './assets-manifest.js'
+import { minifyJs } from './asset-bundler.js'
 
 /**
  * Default per-page render timeout. The Swift stdlib + a few other "kitchen
@@ -193,18 +193,16 @@ export async function buildStaticSite(opts, ctx) {
     const rawCSS = readFileSync(join(srcWebDir, 'assets', 'style.css'), 'utf8')
     await Bun.write(join(buildDir, 'assets', 'style.css'), minifyCSS(rawCSS))
 
-    // 2b. Bundle JS into logical groups to reduce HTTP requests. Bundle
-    // membership lives in src/web/assets-manifest.js so serve.js sees the
-    // same definition for its on-the-fly /assets/<name> synthesis.
-    //
-    // Minification is via Bun.build (target: browser, minify: true). The
-    // asset sources are IIFE-wrapped standalone scripts with no imports
-    // between them, so Bun.build acts as a per-file minifier and the
-    // bundler concatenates the minified outputs. Switching to ES modules
-    // and letting Bun.build do real bundling is a Phase 2+ change.
-    for (const [bundleName, sources] of Object.entries(ASSET_BUNDLES)) {
-      const bundled = await buildJsBundle({ srcWebDir, members: sources })
-      await Bun.write(join(buildDir, 'assets', bundleName), bundled)
+    // 2b. Bundle JS into logical groups to reduce HTTP requests. Each
+    // entry in ENTRY_BUNDLES points at a `src/web/assets/entries/*.entry.js`
+    // file that imports the bundle members in the right side-effect order.
+    // Bun.build resolves the entry, inlines the members (each a top-level
+    // IIFE), and emits one minified IIFE-wrapped output. format='iife' is
+    // set inside asset-bundler.js so the result runs from a regular
+    // <script src=...> tag (not a module script).
+    for (const [bundleName, entryRel] of Object.entries(ENTRY_BUNDLES)) {
+      const entryPath = join(srcWebDir, 'assets', entryRel)
+      await Bun.write(join(buildDir, 'assets', bundleName), await minifyJs(entryPath))
     }
     for (const file of STANDALONE_ASSETS) {
       const src = join(srcWebDir, 'assets', file)

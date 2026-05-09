@@ -1,5 +1,3 @@
-import { join } from 'node:path'
-
 /**
  * Build a single browser-targeted JS entrypoint via `Bun.build` and return
  * the minified source text.
@@ -9,6 +7,10 @@ import { join } from 'node:path'
  * required) and the module's top-level statements run on load. Without
  * this, Bun emits ESM with `export` statements that browsers refuse to
  * execute outside a module script tag.
+ *
+ * Used by both `src/web/build.js` (static rendering) and
+ * `src/web/routes/assets.route.js` (live dev preview), which keeps the
+ * minified bytes identical between the two paths.
  *
  * @param {string} entrypoint Absolute path to a .js file.
  * @returns {Promise<string>} Minified source text.
@@ -27,18 +29,4 @@ export async function minifyJs(entrypoint) {
   const output = result.outputs?.[0]
   if (!output) throw new Error(`Bun.build produced no output for ${entrypoint}`)
   return await output.text()
-}
-
-/**
- * Minify and concatenate a named bundle (e.g. `core.js`) from its source
- * member list.
- *
- * @param {{ srcWebDir: string, members: string[] }} args
- * @returns {Promise<string>}
- */
-export async function buildJsBundle({ srcWebDir, members }) {
-  const minified = await Promise.all(
-    members.map(member => minifyJs(join(srcWebDir, 'assets', member))),
-  )
-  return minified.join('\n')
 }

@@ -10,13 +10,19 @@
  */
 
 /**
- * Bundles emitted to /assets/<name> in the build tree. Order within each
- * array determines concatenation order — the first entry runs first in the
- * browser, which matters for theme.js / search.js initialization.
+ * Bundles emitted to /assets/<name>. Each entry points at a single
+ * `entries/*.entry.js` file that imports the bundle members in the
+ * correct execution order. Bun.build resolves the entry, inlines the
+ * members, and emits one minified IIFE-wrapped output per bundle.
+ *
+ * Both `src/web/build.js` (static rendering) and `src/web/serve.js`
+ * (dev preview) read this map; with the entries the two paths share
+ * one toolchain (Bun.build) instead of having serve.js fall back to
+ * string concatenation against the raw source files.
  */
-export const ASSET_BUNDLES = {
-  'core.js': ['theme.js', 'search.js', 'page-toc.js'],
-  'listing.js': ['collection-filters.js', 'tree-view.js'],
+export const ENTRY_BUNDLES = {
+  'core.js': 'core.bundle.js',
+  'listing.js': 'listing.bundle.js',
 }
 
 /**
