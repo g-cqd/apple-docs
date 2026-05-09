@@ -1,12 +1,18 @@
-import { safeCall } from '../lib/safe-call.js'
 import { renderSnippet } from '../content/render-snippet.js'
 import { detectIntent } from '../search/intent.js'
 import { rerank } from '../search/ranking.js'
-import { tokenize, pruneStopwords, pickHighSignalToken } from '../search/relaxation.js'
+import { buildCascadeRunners, runRelaxationCascade } from '../search/cascade.js'
+import {
+  buildPlatformFilters,
+  matchesSearchFilters,
+  normalizeDeprecatedFilter,
+  normalizeSourceFilter,
+} from '../search/filters.js'
+import { formatResult } from '../search/format.js'
+import { buildFtsQuery } from '../search/fts-query-builder.js'
 import { runRead } from '../storage/reader-pool.js'
 
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
-const ROLE_KIND_FILTERS = new Set(['symbol', 'article', 'collection', 'overview', 'tutorial', 'samplecode', 'sample_code', 'sample-project', 'sampleproject'])
 
 /**
  * Search with tiered cascade: fast title/path tiers first, deep body search only
@@ -53,7 +59,6 @@ export async function search(opts, ctx) {
   const minTvos = opts.minTvos ?? opts['min-tvos'] ?? null
   const minVisionos = opts.minVisionos ?? opts['min-visionos'] ?? null
 
-  // --platform shorthand: ensure the platform column is non-null (available on that platform)
   const platform = opts.platform ?? null
   const platformFilters = buildPlatformFilters(platform, { minIos, minMacos, minWatchos, minTvos, minVisionos })
   const deprecated = normalizeDeprecatedFilter(opts.deprecated)
@@ -96,85 +101,25 @@ export async function search(opts, ctx) {
     }
   }
 
-  // --- Fast phase: run T1 (FTS5) and T2 (trigram) concurrently ---
-
-  // Tier 1: FTS5 tiered search. Routes through `ctx.readerPool` when present
-  // (each worker thread runs its own bun:sqlite handle), otherwise calls
-  // the main-thread handle directly. `Promise.all` across frameworks gives
-  // the pool a chance to fan out; without the pool the calls serialize
-  // identically to the pre-pool loop.
-  const runFts = async () => {
-    const flat = await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchPages', [ftsQuery, q, { ...filterOpts, framework: fw }])),
-      )).flat(),
-      { default: null, log: 'warn-once', label: 'search.cascade.fts' },
-    )
-    if (flat !== null) return flat
-    // FTS5 parser error on the user's quoted query — retry with a sanitized
-    // simple-prefix variant before giving up.
-    const simple = `"${q.replace(/"/g, '')}"*`
-    return await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchPages', [simple, q, { ...filterOpts, framework: fw }])),
-      )).flat(),
-      { default: [], log: 'warn-once', label: 'search.cascade.fts.fallback' },
-    )
-  }
-
-  const runTitleExact = async () => {
-    if (!ctx.readerPool && typeof ctx.db?.searchTitleExact !== 'function') return []
-    return await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchTitleExact', [q, { ...filterOpts, framework: fw }])),
-      )).flat(),
-      { default: [], log: 'warn-once', label: 'search.cascade.titleExact' },
-    )
-  }
-
-  // Tier 2: Trigram substring (only if query >= 3 chars)
-  const runTrigram = async () => {
-    if (q.length < 3) return []
-    return await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchTrigram', [q, { ...filterOpts, framework: fw }])),
-      )).flat(),
-      { default: [], log: 'warn-once', label: 'search.cascade.trigram' },
-    )
-  }
-
-  // Tier 4: Body search. Metadata check stays on main thread — one cheap call.
+  // Tier 4 metadata check stays on main thread — one cheap call.
   const hasBody = !noDeep && ctx.db.getBodyIndexCount() > 0
-  const runBody = async () => {
-    if (!hasBody) return []
-    return await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchBody', [ftsQuery, { ...filterOpts, framework: fw }])),
-      )).flat(),
-      { default: [], log: 'warn-once', label: 'search.cascade.body' },
-    )
-  }
+  const { runFts, runTitleExact, runTrigram, runBody } = buildCascadeRunners({
+    ctx, q, ftsQuery, frameworks, filterOpts, hasBody,
+  })
 
-  // Run the fast tiers first so the web/CLI search path can return promptly.
-  // The default command path keeps the historical eager FTS+trigram fan-out.
-  // Latency-sensitive web search can pass `fast: true` to avoid spending CPU
-  // on trigram unless FTS did not fill the requested window.
+  // --- Fast phase: T1 (FTS5) and T2 (trigram) ---
   //
-  // When the user narrowed the search (framework, kind, source filter) AND the
-  // strict tiers already returned at least one hit, skip trigram. With a
-  // narrowing filter the FTS hit count is naturally small and never fills the
-  // requested window, but trigram fall-through doesn't add useful results —
-  // the user explicitly scoped the search, fuzzy substring matches inside that
-  // scope are mostly noise. Cold-path measurement on mm18 attributed the
-  // ~6 ms gap between filtered and unfiltered queries to this fall-through.
+  // When the user narrowed the search (framework / kind / source) AND the
+  // strict tiers already returned at least one hit, skip trigram. Inside a
+  // narrowing scope the FTS hit count is naturally small and never fills
+  // the requested window, but trigram fall-through doesn't add useful
+  // results — fuzzy substring matches inside that scope are mostly noise.
   const userNarrowedScope = !!framework || !!kind || !!sqlSourceType
-  const titleResults = await runTitleExact()
-  addResults(titleResults, 'exact')
+  addResults(await runTitleExact(), 'exact')
   let ftsResults = []
   let triResults = []
   if (fast && results.length >= requestedWindow) {
-    ftsResults = []
-    triResults = []
+    // Already filled — skip both fast tiers.
   } else if (fast) {
     ftsResults = await runFts()
     const filledWindow = ftsResults.length >= requestedWindow
@@ -186,7 +131,7 @@ export async function search(opts, ctx) {
     triResults = fastParts[1]
   }
 
-  // Merge T1 results with tier labels
+  // Merge T1 (FTS) results with tier labels.
   for (const r of ftsResults) {
     if (!matchesSearchFilters(r, activeFilters)) continue
     if (seen.has(r.path)) continue
@@ -194,16 +139,13 @@ export async function search(opts, ctx) {
     results.push({ ...formatResult(r), matchQuality: TIER_LABELS[r.tier] ?? 'match' })
   }
 
-  // Merge T2 results (skipping already-seen from T1)
+  // Merge T2 (trigram) results, skipping already-seen.
   addResults(triResults, 'substring')
 
-  // Tier 3: Levenshtein fuzzy (only if T1+T2 combined < 5 and query >= 4 chars)
+  // Tier 3: Levenshtein fuzzy (only if T1+T2 combined < 5 and query >= 4 chars).
+  // The fuzzy scan can run in a reader-pool worker concurrently; per-id
+  // record fetches are parallelized so the pool fans them out.
   if (results.length < 5 && q.length >= 4 && fuzzy) {
-    // With a pool, the fuzzy scan runs in a worker concurrently with the
-    // earlier tiers' DB fan-out; without one, `runRead` falls through to
-    // `ctx.db.fuzzyMatchTitles` on the main thread identically to the
-    // pre-pool call shape. Per-id record fetches are parallelized in either
-    // case so the pool actually gets to fan them out.
     const fuzzyMatches = await runRead(ctx, 'fuzzyMatchTitles', [q, { framework, kind, limit: searchLimit }])
     const fuzzyRecords = await Promise.all(
       fuzzyMatches.map(fm => runRead(ctx, 'getSearchRecordById', [fm.id]).then(record => ({ fm, record }))),
@@ -217,74 +159,16 @@ export async function search(opts, ctx) {
     }
   }
 
-  // Body search: merge results or discard if we already have enough
-  if (hasBody) {
-    if (results.length < requestedWindow || noEager) {
-      const bodyResults = await runBody()
-      addResults(bodyResults, 'body')
-    }
+  // Body search: merge or discard if we already have enough.
+  if (hasBody && (results.length < requestedWindow || noEager)) {
+    addResults(await runBody(), 'body')
   }
 
-  // Progressive relaxation: only runs when the strict cascade produced nothing
-  // and the query is a multi-word natural-language phrase (no explicit quoted
-  // phrase). Emits results tagged with a `relaxed*` matchQuality so downstream
-  // surfaces can render a best-effort hint.
-  let relaxationTier = null
-  if (results.length === 0 && q.length >= 4 && !q.includes('"')) {
-    const tokens = tokenize(q)
-    if (tokens.length >= 3) {
-      const pruned = pruneStopwords(tokens)
-
-      // R1 — pruned AND: keep only high-signal tokens and re-run FTS5.
-      // Parallelized per-framework via runRead so the pool can overlap
-      // synonym fan-out; with no pool, runRead degrades to a direct
-      // main-thread call (equivalent to the prior serial loop).
-      if (pruned.length >= 1) {
-        const prunedQuery = buildFtsQuery(pruned.join(' '))
-        const r1 = await safeCall(
-          async () => (await Promise.all(
-            frameworks.map(fw => runRead(ctx, 'searchPages', [prunedQuery, q, { ...filterOpts, framework: fw }])),
-          )).flat(),
-          { default: [], log: 'warn-once', label: 'search.relax.pruned' },
-        )
-        const before = results.length
-        addResults(r1, 'relaxed')
-        if (results.length > before) relaxationTier = 'pruned'
-      }
-
-      // R2 — pruned OR: join the pruned tokens with OR so any single hit wins.
-      if (results.length === 0 && pruned.length >= 2) {
-        const orQuery = pruned.map(t => `"${t.toLowerCase().replace(/"/g, '')}"`).join(' OR ')
-        const r2 = await safeCall(
-          async () => (await Promise.all(
-            frameworks.map(fw => runRead(ctx, 'searchPages', [orQuery, q, { ...filterOpts, framework: fw }])),
-          )).flat(),
-          { default: [], log: 'warn-once', label: 'search.relax.prunedOr' },
-        )
-        const before = results.length
-        addResults(r2, 'relaxed-or')
-        if (results.length > before) relaxationTier = 'pruned-or'
-      }
-
-      // R3 — trigram on a single high-signal token. Prefer a CamelCase token
-      // so `NavigationStack` still drives the lookup when nothing else matched.
-      if (results.length === 0) {
-        const tokenPool = pruned.length > 0 ? pruned : tokens
-        const signal = pickHighSignalToken(tokenPool)
-        if (signal && signal.length >= 3) {
-          const r3 = await safeCall(
-            async () => (await Promise.all(
-              frameworks.map(fw => runRead(ctx, 'searchTrigram', [signal, { ...filterOpts, framework: fw }])),
-            )).flat(),
-            { default: [], log: 'warn-once', label: 'search.relax.trigramToken' },
-          )
-          const before = results.length
-          addResults(r3, 'relaxed-token')
-          if (results.length > before) relaxationTier = 'trigram'
-        }
-      }
-    }
-  }
+  // Progressive relaxation: only runs when the strict cascade produced
+  // nothing and the query is a multi-word natural-language phrase.
+  const relaxationTier = await runRelaxationCascade({
+    ctx, q, frameworks, filterOpts, results, addResults,
+  })
 
   // Intent detection + source-aware reranking
   const intent = detectIntent(q)
@@ -292,21 +176,21 @@ export async function search(opts, ctx) {
 
   const sliced = results.slice(offset, offset + limit)
 
-  // Batch-fetch snippet data and related counts for final results
+  // Batch-fetch snippet data and related counts for final results.
+  // Snippet/related enrichment is non-critical — best-effort, swallow
+  // failures so a missing sections table on the lite tier doesn't sink
+  // the whole response.
   try {
     const resultKeys = sliced.map(r => r.path)
     const snippetData = ctx.db.getDocumentSnippetData(resultKeys)
     const relatedCounts = ctx.db.getRelatedDocCounts(resultKeys)
-
     for (const r of sliced) {
       const data = snippetData.get(r.path)
-      if (data) {
-        r.snippet = renderSnippet(data.document, data.sections, q)
-      }
+      if (data) r.snippet = renderSnippet(data.document, data.sections, q)
       r.relatedCount = relatedCounts.get(r.path) ?? 0
     }
   } catch {
-    // Snippet/related enrichment is non-critical
+    // Best-effort: snippet failure shouldn't sink the response.
   }
 
   return {
@@ -319,240 +203,4 @@ export async function search(opts, ctx) {
     trigramAvailable: ctx.db.hasTable('documents_trigram'),
     bodyIndexAvailable: hasBody,
   }
-}
-
-function formatResult(r) {
-  return {
-    title: r.title,
-    framework: r.framework,
-    rootSlug: r.root_slug,
-    sourceType: r.source_type ?? null,
-    sourceMetadata: r.source_metadata ?? null,
-    kind: r.role_heading ?? r.role,
-    abstract: r.abstract,
-    path: r.path,
-    platforms: r.platforms ? (typeof r.platforms === 'string' ? JSON.parse(r.platforms) : r.platforms) : [],
-    declaration: r.declaration,
-    urlDepth: r.url_depth ?? 0,
-    isReleaseNotes: !!(r.is_release_notes),
-    language: r.language ?? null,
-    ...(r.is_deprecated ? { isDeprecated: true } : {}),
-    ...(r.is_beta ? { isBeta: true } : {}),
-  }
-}
-
-function normalizeSourceFilter(source) {
-  if (!source) return null
-  const values = Array.isArray(source) ? source : String(source).split(',')
-  const normalized = values
-    .map(value => value.trim().toLowerCase())
-    .filter(Boolean)
-  return normalized.length > 0 ? new Set(normalized) : null
-}
-
-function matchesSourceFilter(row, sourceTypes) {
-  if (!sourceTypes) return true
-  const sourceType = String(row?.source_type ?? row?.sourceType ?? '').toLowerCase()
-  return sourceTypes.has(sourceType)
-}
-
-function matchesSearchFilters(row, filters) {
-  return matchesSourceFilter(row, filters.sourceTypes)
-    && matchesFrameworkFilter(row, filters.frameworks)
-    && matchesKindFilter(row, filters.kind)
-    && matchesLanguageFilter(row, filters.language)
-    && matchesPlatformFilters(row, filters.platformFilters)
-    && matchesMetadataFilters(row, filters.year, filters.track)
-    && matchesDeprecatedFilter(row, filters.deprecated)
-}
-
-function normalizeDeprecatedFilter(value) {
-  if (value == null || value === '') return 'include'
-  const v = String(value).trim().toLowerCase()
-  if (v === 'exclude' || v === 'only' || v === 'include') return v
-  return 'include'
-}
-
-function matchesDeprecatedFilter(row, mode) {
-  if (!mode || mode === 'include') return true
-  const deprecated = !!(row?.is_deprecated ?? row?.isDeprecated)
-  if (mode === 'exclude') return !deprecated
-  if (mode === 'only') return deprecated
-  return true
-}
-
-function matchesFrameworkFilter(row, frameworks) {
-  const candidates = (frameworks ?? []).filter(Boolean).map(normalizeFilterValue)
-  if (candidates.length === 0) return true
-
-  const rowValues = [
-    normalizeFilterValue(row?.root_slug ?? row?.rootSlug),
-    normalizeFilterValue(row?.framework),
-  ].filter(Boolean)
-
-  return rowValues.some(value => candidates.includes(value))
-}
-
-function matchesKindFilter(row, kind) {
-  if (!kind) return true
-  const target = normalizeFilterValue(kind)
-  if (!target) return true
-
-  const displayedKind = normalizeFilterValue(row?.role_heading ?? row?.roleHeading)
-  const looksLikeDisplayedKind = String(kind) !== String(kind).toLowerCase()
-  if (looksLikeDisplayedKind) return displayedKind === target
-
-  const roleCandidates = [
-    row?.role,
-    row?.doc_kind,
-    row?.docKind,
-    row?.kind,
-  ].map(normalizeFilterValue).filter(Boolean)
-
-  if (ROLE_KIND_FILTERS.has(target)) {
-    return roleCandidates.includes(target)
-  }
-
-  return displayedKind === target
-}
-
-function matchesLanguageFilter(row, language) {
-  if (!language) return true
-  const normalizedLanguage = normalizeFilterValue(language)
-  const value = normalizeFilterValue(row?.language)
-  return !value || value === normalizedLanguage || value === 'both'
-}
-
-function matchesPlatformFilters(row, platformFilters) {
-  const platforms = parsePlatforms(row?.platforms)
-  return [
-    ['minIos', 'ios', row?.min_ios ?? row?.minIos],
-    ['minMacos', 'macos', row?.min_macos ?? row?.minMacos],
-    ['minWatchos', 'watchos', row?.min_watchos ?? row?.minWatchos],
-    ['minTvos', 'tvos', row?.min_tvos ?? row?.minTvos],
-    ['minVisionos', 'visionos', row?.min_visionos ?? row?.minVisionos],
-  ].every(([filterKey, platformKey, actual]) =>
-    matchesPlatformVersion(actual ?? platforms?.[platformKey] ?? null, platformFilters[filterKey], {
-      platformKey,
-      platforms,
-    }),
-  )
-}
-
-function matchesPlatformVersion(actual, requested, opts = {}) {
-  if (!requested) return true
-  if (requested === '0') {
-    if (actual) return true
-    const explicitPlatforms = opts.platforms ? Object.keys(opts.platforms) : []
-    if (explicitPlatforms.length === 0) return true
-    return explicitPlatforms.includes(opts.platformKey)
-  }
-  if (!actual) return true
-  return compareVersions(actual, requested) <= 0
-}
-
-function matchesMetadataFilters(row, year, track) {
-  if (!year && !track) return true
-
-  let metadata = null
-  try {
-    metadata = row?.source_metadata ?? row?.sourceMetadata
-    metadata = typeof metadata === 'string' ? JSON.parse(metadata) : metadata
-  } catch {
-    metadata = null
-  }
-
-  if (!metadata) return false
-  if (year && metadata.year !== year) return false
-  if (track) {
-    const metadataTrack = normalizeFilterValue(metadata.track)
-    if (!metadataTrack || !metadataTrack.includes(normalizeFilterValue(track))) return false
-  }
-  return true
-}
-
-function normalizeFilterValue(value) {
-  return String(value ?? '').trim().toLowerCase()
-}
-
-function compareVersions(left, right) {
-  const leftParts = parseVersionParts(left)
-  const rightParts = parseVersionParts(right)
-  const length = Math.max(leftParts.length, rightParts.length)
-
-  for (let i = 0; i < length; i++) {
-    const leftPart = leftParts[i] ?? 0
-    const rightPart = rightParts[i] ?? 0
-    if (leftPart !== rightPart) return leftPart - rightPart
-  }
-
-  return 0
-}
-
-function parseVersionParts(version) {
-  return String(version ?? '')
-    .match(/\d+/g)
-    ?.map(part => Number.parseInt(part, 10))
-    .filter(Number.isFinite) ?? []
-}
-
-function parsePlatforms(platforms) {
-  if (!platforms) return null
-  if (typeof platforms === 'string') {
-    try {
-      return JSON.parse(platforms)
-    } catch {
-      return null
-    }
-  }
-  return typeof platforms === 'object' ? platforms : null
-}
-
-/**
- * Map --platform shorthand to specific min_* filters.
- * If --platform ios is given without --min-ios, set minIos to '0' (meaning "available on iOS at all").
- */
-function buildPlatformFilters(platform, explicit) {
-  const filters = {
-    minIos: explicit.minIos ?? null,
-    minMacos: explicit.minMacos ?? null,
-    minWatchos: explicit.minWatchos ?? null,
-    minTvos: explicit.minTvos ?? null,
-    minVisionos: explicit.minVisionos ?? null,
-  }
-  if (platform) {
-    const key = {
-      ios: 'minIos', macos: 'minMacos', watchos: 'minWatchos',
-      tvos: 'minTvos', visionos: 'minVisionos',
-    }[platform.toLowerCase()]
-    if (key && !filters[key]) filters[key] = '0'
-  }
-  return filters
-}
-
-/**
- * Build FTS5 query with CamelCase expansion.
- */
-function buildFtsQuery(q) {
-  if (/\b(AND|OR|NOT)\b/.test(q) || q.includes('"')) return q
-
-  const terms = q.trim().split(/\s+/).filter(Boolean)
-  if (terms.length === 0) return '""'
-
-  // CamelCase expansion: "NavigationStack" → also search "navigation" "stack"
-  const expanded = []
-  for (const term of terms) {
-    expanded.push(term)
-    const split = term.replace(/([a-z])([A-Z])/g, '$1 $2').split(' ')
-    if (split.length > 1) expanded.push(...split)
-  }
-
-  const unique = [...new Set(expanded.map(t => t.toLowerCase()))]
-
-  if (unique.length === 1) {
-    return `"${unique[0]}"*`
-  }
-
-  // All terms with prefix on last
-  return `${unique.slice(0, -1).map(t => `"${t}"`).join(' ')} "${unique.at(-1)}"*`
 }

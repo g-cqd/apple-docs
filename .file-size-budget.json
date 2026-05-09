@@ -13,7 +13,6 @@
     { "path": "src/sources/wwdc.js", "lines": 714 },
     { "path": "src/web/assets/symbols-page.js", "lines": 696 },
     { "path": "src/mcp/server.js", "lines": 570 },
-    { "path": "src/commands/search.js", "lines": 559 },
     { "path": "src/mcp/pagination.js", "lines": 534 },
     { "path": "src/sources/packages.js", "lines": 522 },
     { "path": "src/resources/symbol-pdf-to-svg.js", "lines": 487 },
