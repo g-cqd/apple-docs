@@ -403,10 +403,18 @@ Outcome:
 - The four standalone JS files (`search-page.js`, `fonts-page.js`, `symbols-page.js`, `lang-toggle.js`) ship as plain `<script src=...>` — only `lang-toggle.js` was converted to ESM during the slice 2.1 proof. The other three remain IIFE-wrapped because there's no entry-file consumer for them, so the explicit-mount-point pattern wouldn't change behavior. They route through `Bun.build` for minification just like the bundle members.
 - `bun run lint`, `bun run typecheck`, `bun run lint:unused`, `bun test --isolate`: 1332 / 0 across every slice.
 
-### Phase 2 follow-ups (small, optional)
+### Phase 2 follow-ups — **shipped**
 
-- Convert the three remaining standalone files (`search-page.js`, `fonts-page.js`, `symbols-page.js`) to ESM-without-export-without-IIFE for consistency with `lang-toggle.js`. No behavior change — purely a cleanup pass.
-- Rename `*.bundle.js` to `*.entry.js` and move into a sibling `entries/` subdirectory once the bun:test resolver bug with `../`-traversal in test isolates is fixed upstream. Today the bundle entries are colocated with the members they import to sidestep the bug.
+- `search-page.js`, `fonts-page.js`, `symbols-page.js` converted to the `function init() { ... } init()` pattern (the pre-existing IIFE wrappers were redundant — `Bun.build`'s `format: 'iife'` adds the outer scope shield in the minified output anyway). Source-level diff is the wrapper swap only; bundle bytes unchanged.
+- `bundleCache` moved from module scope to per-server `WebContext` so two `startDevServer` instances in the same process can never read each other's bytes (matches the `gzipCache` / `searchCache` scope pattern). The cache stores either resolved text or in-flight Promises so parallel requests for the same bundle dedupe onto one `Bun.build` call.
+- `asset-bundler.js` wraps `Bun.build` so missing-entry throws and unresolved-import `result.success: false` both surface a single descriptive error shape (`"Bun.build failed for <path>: …"`).
+- Test coverage on `src/web/routes/`: assets 80 → 100 %, framework-tree 0 → 100 %, search-data 75 → 100 %, symbols 33 → 67 % (the live render path stays uncovered — it requires a Swift toolchain). New `test/unit/web-asset-bundler.test.js` covers the bundler end-to-end (entry + side-effect import + named-export import + missing-file + missing-import).
+
+### Phase 2 deferred (need infrastructure)
+
+- Rename `*.bundle.js` to `entries/*.entry.js` once the `bun:test` resolver bug with `../`-traversal in test isolates is fixed upstream. Today the bundle entries are colocated with their members to sidestep the bug.
+- `docs.route.js` on-demand-fetch coverage (66 % → ?). Tests need an HTTP mock for `fetchDocPage` against Apple's API.
+- `symbols.route.js` render-path coverage (32 % line). Tests need the Swift symbol renderer toolchain.
 
 ### Phase 3: Framework Island Pilot
 
