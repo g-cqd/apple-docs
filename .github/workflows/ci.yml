@@ -40,6 +40,9 @@ jobs:
       - name: File-size budget
         run: bun run lint:size
 
+      - name: Dependency audit
+        run: bun audit
+
       - name: Upload quality reports
         if: always()
         uses: actions/upload-artifact@v6

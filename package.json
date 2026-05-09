@@ -55,15 +55,20 @@
     "ci": "bun run lint && bun run typecheck && bun test --isolate"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.12",
+    "@biomejs/biome": "^2.4.15",
     "@stryker-mutator/core": "^9.6.1",
-    "@types/bun": "^1.2.0",
-    "jscpd": "^4.0.9",
-    "knip": "^6.4.1",
-    "typescript": "^6.0.2"
+    "@types/bun": "^1.3.13",
+    "jscpd": "^4.1.0",
+    "knip": "^6.12.2",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "shiki": "^4.0.2"
+  },
+  "overrides": {
+    "fast-uri": "^3.1.2",
+    "hono": "^4.12.18",
+    "ip-address": "^10.2.0"
   }
 }
