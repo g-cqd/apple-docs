@@ -122,4 +122,57 @@ describe('Semaphore', () => {
 
     expect(sem.active).toBe(0)
   })
+
+  describe('AbortSignal (P2.8)', () => {
+    test('rejects immediately if signal is already aborted at acquire-time', async () => {
+      const sem = new Semaphore(1)
+      const controller = new AbortController()
+      controller.abort(new Error('boom'))
+      await expect(sem.acquire({ signal: controller.signal })).rejects.toThrow('boom')
+    })
+
+    test('a queued waiter is rejected and removed when its signal aborts', async () => {
+      const sem = new Semaphore(1)
+      await sem.acquire()                    // permit held by main
+      const controller = new AbortController()
+      const queued = sem.acquire({ signal: controller.signal })
+      // Microtask flush so the waiter is in _queue
+      await Promise.resolve()
+      expect(sem._queue.length).toBe(1)
+      controller.abort(new Error('cancelled'))
+      await expect(queued).rejects.toThrow('cancelled')
+      expect(sem._queue.length).toBe(0)
+      // Releasing should not blow up — no pending waiter to resolve.
+      sem.release()
+      expect(sem.active).toBe(0)
+    })
+
+    test('run() forwards the signal to acquire and surfaces the abort', async () => {
+      const sem = new Semaphore(1)
+      await sem.acquire()
+      const controller = new AbortController()
+      let ranBody = false
+      const promise = sem.run(async () => { ranBody = true }, { signal: controller.signal })
+      await Promise.resolve()
+      controller.abort()
+      await expect(promise).rejects.toThrow()
+      expect(ranBody).toBe(false)
+    })
+
+    test('aborting one waiter does not affect a sibling', async () => {
+      const sem = new Semaphore(1)
+      await sem.acquire()
+      const a = new AbortController()
+      const queuedA = sem.acquire({ signal: a.signal })
+      const queuedB = sem.acquire()
+      await Promise.resolve()
+      expect(sem._queue.length).toBe(2)
+      a.abort()
+      await expect(queuedA).rejects.toThrow()
+      // Sibling still queued
+      expect(sem._queue.length).toBe(1)
+      sem.release()
+      await queuedB // resolves
+    })
+  })
 })

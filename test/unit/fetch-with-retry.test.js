@@ -107,4 +107,50 @@ describe('fetch-with-retry', () => {
     expect(result.data).toEqual({ ok: true })
     expect(calls).toBe(1)
   })
+
+  describe('AbortSignal (P2.8)', () => {
+    test('rejects immediately when the caller signal is already aborted', async () => {
+      const limiter = { async acquire() {} }
+      const controller = new AbortController()
+      controller.abort(new Error('user-cancelled'))
+      let fetched = 0
+      globalThis.fetch = async () => { fetched += 1; return jsonResponse({}) }
+      await expect(
+        fetchWithRetry('https://example.test/x', limiter, { signal: controller.signal }),
+      ).rejects.toThrow('user-cancelled')
+      expect(fetched).toBe(0)
+    })
+
+    test('does not retry after an in-flight abort', async () => {
+      const limiter = { async acquire() {} }
+      const controller = new AbortController()
+      let attempts = 0
+      globalThis.fetch = async (_url, opts) => {
+        attempts += 1
+        // Trip the caller signal between attempts
+        controller.abort(new Error('mid-flight'))
+        throw Object.assign(new Error('aborted'), { name: 'AbortError' })
+      }
+      await expect(
+        fetchWithRetry('https://example.test/x', limiter, { signal: controller.signal, maxRetries: 5, jitterMs: 0 }),
+      ).rejects.toThrow('mid-flight')
+      expect(attempts).toBe(1)
+    })
+
+    test('passes a combined signal that fires on caller abort', async () => {
+      const limiter = { async acquire() {} }
+      const controller = new AbortController()
+      let observedSignal = null
+      globalThis.fetch = async (_url, opts) => {
+        observedSignal = opts?.signal
+        return jsonResponse({ ok: true })
+      }
+      await fetchWithRetry('https://example.test/x', limiter, { signal: controller.signal })
+      expect(observedSignal).toBeInstanceOf(AbortSignal)
+      expect(observedSignal.aborted).toBe(false)
+      controller.abort()
+      // The combined signal should now report aborted.
+      expect(observedSignal.aborted).toBe(true)
+    })
+  })
 })

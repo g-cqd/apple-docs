@@ -35,19 +35,41 @@ function retryDelayMs(res, attempt, jitterMs) {
   return Math.max(retryAfterDelay, baseDelay) + jitter
 }
 
+/** Combine an optional caller signal with the per-attempt timeout signal,
+ *  so an abort from either source aborts the in-flight request. */
+function combineSignals(callerSignal, timeoutMs) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  if (!callerSignal) return timeoutSignal
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([callerSignal, timeoutSignal])
+  // Polyfill fallback (bun ≥ 1.1 has AbortSignal.any natively): tie the
+  // two together with a controller that aborts when either does.
+  const controller = new AbortController()
+  const onAbort = (sig) => () => controller.abort(sig.reason)
+  if (callerSignal.aborted) controller.abort(callerSignal.reason)
+  else callerSignal.addEventListener('abort', onAbort(callerSignal), { once: true })
+  if (timeoutSignal.aborted) controller.abort(timeoutSignal.reason)
+  else timeoutSignal.addEventListener('abort', onAbort(timeoutSignal), { once: true })
+  return controller.signal
+}
+
 /**
  * Perform a fetch with automatic retry on retriable status codes or network errors.
  *
+ * P2.8: caller can pass `signal` to abort the request (and any pending
+ * retry sleeps). An aborted request does NOT retry — propagation is the
+ * point — so the caller's AbortError surfaces to the await site.
+ *
  * @param {string} url
- * @param {{ acquire(url?: string): Promise<void> }} rateLimiter
+ * @param {{ acquire(url?: string, opts?: { signal?: AbortSignal }): Promise<void> }} rateLimiter
  * @param {{
  *   headers?: Record<string, string>,
  *   parseAs?: 'json'|'text',
  *   retryableStatuses?: number[],
  *   maxRetries?: number,
-  *   timeout?: number,
+ *   timeout?: number,
  *   jitterMs?: number,
  *   notFoundAs?: 'not-found'|'http-error',
+ *   signal?: AbortSignal,
  *   _attempt?: number,
  * }} [opts]
  * @returns {Promise<
@@ -64,18 +86,23 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
     timeout = 30000,
     jitterMs = 250,
     notFoundAs = 'not-found',
+    signal,
     _attempt = 0,
   } = opts
 
+  if (signal?.aborted) throw signal.reason ?? new DOMException('aborted', 'AbortError')
   await acquireRateLimit(rateLimiter, url)
+  if (signal?.aborted) throw signal.reason ?? new DOMException('aborted', 'AbortError')
 
   let res
   try {
     res = await fetch(url, {
       headers,
-      signal: AbortSignal.timeout(timeout),
+      signal: combineSignals(signal, timeout),
     })
   } catch (error) {
+    // Caller-initiated abort: surface as-is, never retry.
+    if (signal?.aborted) throw signal.reason ?? error
     if (_attempt < maxRetries) {
       await sleep(retryDelayMs(null, _attempt, jitterMs))
       return fetchWithRetry(url, rateLimiter, { ...opts, _attempt: _attempt + 1 })
@@ -85,6 +112,7 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
 
   if (retryableStatuses.includes(res.status) && _attempt < maxRetries) {
     await sleep(retryDelayMs(res, _attempt, jitterMs))
+    if (signal?.aborted) throw signal.reason ?? new DOMException('aborted', 'AbortError')
     return fetchWithRetry(url, rateLimiter, { ...opts, _attempt: _attempt + 1 })
   }
 
