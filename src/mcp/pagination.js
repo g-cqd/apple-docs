@@ -1,17 +1,39 @@
-import { renderMarkdown } from '../content/render-markdown.js'
+/**
+ * MCP response pagination.
+ *
+ * Public entry points:
+ *   - createMcpTextResult       — wraps a payload as the MCP `content` array.
+ *   - paginateArrayField        — generic array paginator for tools whose
+ *                                  response is `{ field: [...] }`.
+ *   - paginateDocumentPayload   — document-shaped paginator: dispatches to
+ *                                  matched-mode, text-window, or section-
+ *                                  bucketing depending on payload shape.
+ *   - buildMatchedDocumentPayload — narrow a doc to a substring's match
+ *                                   excerpts before pagination.
+ *
+ * Phase B decomposition: text-shaping helpers live in pagination/text-utils.js,
+ * page-plan / fragment builders in pagination/page-builder.js. This module
+ * is the strategy-dispatch layer.
+ */
+
+import {
+  PaginationItemTooLargeError,
+  PAGINATION_LIMITS,
+  buildArrayPages,
+  buildArrayPaginationPlan,
+  buildDocumentPagePayload,
+  buildTextPaginationPlan,
+  splitOversizedSection,
+  withDocumentPageInfo,
+} from './pagination/page-builder.js'
+import {
+  excerptAroundMatch,
+  serializePayload,
+} from './pagination/text-utils.js'
 
 export const MIN_PAGINATED_MAX_CHARS = 512
 
-const MAX_PLAN_ITERATIONS = 12
-const MIN_SECTION_FRAGMENT_CHARS = 160
-
-class PaginationItemTooLargeError extends Error {
-  constructor(message, itemIndex) {
-    super(message)
-    this.name = 'PaginationItemTooLargeError'
-    this.itemIndex = itemIndex
-  }
-}
+const { MAX_PLAN_ITERATIONS } = PAGINATION_LIMITS
 
 export function createMcpTextResult(payload) {
   const text = serializePayload(payload)
@@ -58,10 +80,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
   if (maxChars == null) return payload
 
   const sections = Array.isArray(payload?.sections) ? payload.sections : []
-  const sanitizedBase = {
-    ...payload,
-    sections: [],
-  }
+  const sanitizedBase = { ...payload, sections: [] }
 
   const singlePage = withDocumentPageInfo(sanitizedBase, {
     page: 1,
@@ -87,6 +106,10 @@ export function paginateDocumentPayload(payload, opts = {}) {
     return paginateTextWindowPayload(payload, { maxChars, page })
   }
 
+  // Section-bucket strategy: bin-pack sections under maxChars. When a
+  // single section overflows on its own, recursively split it along
+  // paragraph / line / character-window boundaries until each fragment
+  // fits. Bail to text-window mode if even the smallest unit overflows.
   const units = sections.map(section => ({
     ...section,
     contentText: section?.contentText ?? section?.content_text ?? '',
@@ -103,8 +126,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
         totalPages: assumedTotalPages,
         maxChars,
         buildPayload: (slice, pageIndex, totalPages) => buildDocumentPagePayload({
-          payload,
-          document,
+          payload, document,
           pageSections: slice,
           page: pageIndex,
           totalPages,
@@ -123,7 +145,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
       const split = splitOversizedSection(
         oversized,
         Math.max(
-          MIN_SECTION_FRAGMENT_CHARS,
+          PAGINATION_LIMITS.MIN_SECTION_FRAGMENT_CHARS,
           Math.min(Math.floor(currentLength / 2), Math.floor(maxChars * 0.75)),
         ),
       )
@@ -249,286 +271,4 @@ function paginateMatchedDocumentPayload(payload, opts) {
   }
 
   return pages[page - 1]
-}
-
-function buildDocumentPagePayload({
-  payload,
-  document,
-  pageSections,
-  page,
-  totalPages,
-  maxChars,
-  strategy,
-  totalSectionUnits,
-}) {
-  const content = renderMarkdown(document ?? payload?.metadata ?? {}, pageSections, {
-    includeFrontMatter: page === 1,
-    includeTitle: page === 1,
-  })
-
-  return withDocumentPageInfo({
-    ...payload,
-    note: undefined,
-    content,
-    sections: [],
-  }, {
-    page,
-    totalPages,
-    maxChars,
-    strategy,
-    totalSections: totalSectionUnits,
-    pageSections: pageSections.length,
-  })
-}
-
-function withDocumentPageInfo(payload, pageInfo) {
-  return {
-    ...payload,
-    pageInfo: {
-      page: pageInfo.page,
-      totalPages: pageInfo.totalPages,
-      maxChars: pageInfo.maxChars,
-      hasNextPage: pageInfo.page < pageInfo.totalPages,
-      hasPreviousPage: pageInfo.page > 1,
-      strategy: pageInfo.strategy,
-      totalSections: pageInfo.totalSections,
-      pageSections: pageInfo.pageSections,
-    },
-  }
-}
-
-function buildArrayPaginationPlan({ items, maxChars, initialTotalPages, buildPayload }) {
-  let assumedTotalPages = initialTotalPages
-  let pages = []
-
-  for (let i = 0; i < MAX_PLAN_ITERATIONS; i++) {
-    pages = buildArrayPages({ items, totalPages: assumedTotalPages, maxChars, buildPayload })
-    if (pages.length === assumedTotalPages) break
-    assumedTotalPages = pages.length
-  }
-
-  return { pages, totalPages: pages.length }
-}
-
-function buildArrayPages({ items, totalPages, maxChars, buildPayload }) {
-  if (items.length === 0) {
-    const empty = buildPayload([], 1, 1)
-    ensureFits(empty, maxChars, 0)
-    return [empty]
-  }
-
-  const pages = []
-  let start = 0
-  let pageIndex = 1
-
-  while (start < items.length) {
-    let low = start + 1
-    let high = items.length
-    let best = start
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2)
-      const candidate = buildPayload(items.slice(start, mid), pageIndex, totalPages)
-      const length = serializePayload(candidate).length
-      if (length <= maxChars) {
-        best = mid
-        low = mid + 1
-      } else {
-        high = mid - 1
-      }
-    }
-
-    if (best === start) {
-      throw new PaginationItemTooLargeError(
-        `A single item exceeds the maxChars budget (${maxChars}). Increase maxChars or narrow the query.`,
-        start,
-      )
-    }
-
-    pages.push(buildPayload(items.slice(start, best), pageIndex, totalPages))
-    start = best
-    pageIndex++
-  }
-
-  return pages
-}
-
-function buildTextPaginationPlan({ text, maxChars, buildPayload }) {
-  let assumedTotalPages = 1
-  let pages = []
-
-  for (let i = 0; i < MAX_PLAN_ITERATIONS; i++) {
-    pages = buildTextPages({ text, totalPages: assumedTotalPages, maxChars, buildPayload })
-    if (pages.length === assumedTotalPages) break
-    assumedTotalPages = pages.length
-  }
-
-  return { pages, totalPages: pages.length }
-}
-
-function buildTextPages({ text, totalPages, maxChars, buildPayload }) {
-  if (!text) {
-    const empty = buildPayload('', 1, 1)
-    ensureFits(empty, maxChars, 0)
-    return [empty]
-  }
-
-  const pages = []
-  let start = 0
-  let pageIndex = 1
-
-  while (start < text.length) {
-    start = skipWhitespace(text, start)
-    if (start >= text.length) break
-
-    let low = start + 1
-    let high = text.length
-    let best = start
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2)
-      const slice = sliceTextAtBoundary(text, start, mid)
-      const candidate = buildPayload(slice.text, pageIndex, totalPages)
-      const length = serializePayload(candidate).length
-      if (length <= maxChars) {
-        best = slice.end
-        low = mid + 1
-      } else {
-        high = mid - 1
-      }
-    }
-
-    if (best === start) {
-      throw new Error(`The requested maxChars budget (${maxChars}) is too small to return any content.`)
-    }
-
-    pages.push(buildPayload(text.slice(start, best).trim(), pageIndex, totalPages))
-    start = best
-    pageIndex++
-  }
-
-  return pages
-}
-
-function ensureFits(payload, maxChars, itemIndex) {
-  if (serializePayload(payload).length > maxChars) {
-    throw new PaginationItemTooLargeError(
-      `A single page exceeds the maxChars budget (${maxChars}). Increase maxChars.`,
-      itemIndex,
-    )
-  }
-}
-
-function splitOversizedSection(section, targetChars) {
-  const text = section?.contentText ?? section?.content_text ?? ''
-  if (!text || text.length <= MIN_SECTION_FRAGMENT_CHARS) return [section]
-  const effectiveTarget = Math.max(MIN_SECTION_FRAGMENT_CHARS, Math.min(targetChars, Math.max(text.length - 1, 1)))
-
-  const pieces = groupChunks(splitText(text), effectiveTarget)
-  if (pieces.length <= 1) {
-    return splitByCharacterWindow(text, effectiveTarget).map(contentText => ({
-      ...section,
-      contentText,
-      contentJson: null,
-    }))
-  }
-
-  return pieces.map(contentText => ({
-    ...section,
-    contentText,
-    contentJson: null,
-  }))
-}
-
-function splitText(text) {
-  const paragraphs = text.split(/\n{2,}/).map(part => part.trim()).filter(Boolean)
-  if (paragraphs.length > 1) return paragraphs
-
-  const lines = text.split('\n').map(part => part.trim()).filter(Boolean)
-  if (lines.length > 1) return lines
-
-  return [text.trim()]
-}
-
-function groupChunks(chunks, targetChars) {
-  const groups = []
-  let buffer = []
-  let bufferLength = 0
-
-  for (const chunk of chunks) {
-    const separator = buffer.length > 0 ? 2 : 0
-    if (bufferLength + separator + chunk.length <= targetChars || buffer.length === 0) {
-      buffer.push(chunk)
-      bufferLength += separator + chunk.length
-      continue
-    }
-
-    groups.push(buffer.join('\n\n'))
-    buffer = [chunk]
-    bufferLength = chunk.length
-  }
-
-  if (buffer.length > 0) groups.push(buffer.join('\n\n'))
-  return groups
-}
-
-function splitByCharacterWindow(text, targetChars) {
-  const parts = []
-  let start = 0
-  while (start < text.length) {
-    start = skipWhitespace(text, start)
-    if (start >= text.length) break
-    const end = Math.min(text.length, start + targetChars)
-    const slice = sliceTextAtBoundary(text, start, end)
-    parts.push(slice.text)
-    start = slice.end
-  }
-  return parts.filter(Boolean)
-}
-
-function sliceTextAtBoundary(text, start, end) {
-  if (end >= text.length) {
-    return {
-      text: text.slice(start).trim(),
-      end: text.length,
-    }
-  }
-
-  const slice = text.slice(start, end)
-  const boundary = Math.max(
-    slice.lastIndexOf('\n\n'),
-    slice.lastIndexOf('\n'),
-    slice.lastIndexOf(' '),
-  )
-
-  if (boundary <= Math.min(24, Math.floor(slice.length / 4))) {
-    return {
-      text: slice.trim(),
-      end,
-    }
-  }
-
-  return {
-    text: slice.slice(0, boundary).trim(),
-    end: start + boundary,
-  }
-}
-
-function excerptAroundMatch(text, index, matchLength, contextChars) {
-  const start = Math.max(0, index - contextChars)
-  const end = Math.min(text.length, index + matchLength + contextChars)
-  const excerpt = text.slice(start, end).trim()
-  const prefix = start > 0 ? '...' : ''
-  const suffix = end < text.length ? '...' : ''
-  return `${prefix}${excerpt}${suffix}`
-}
-
-function serializePayload(payload) {
-  return JSON.stringify(payload, null, 2)
-}
-
-function skipWhitespace(text, start) {
-  let index = start
-  while (index < text.length && /\s/.test(text[index])) index++
-  return index
 }

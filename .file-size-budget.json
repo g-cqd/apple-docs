@@ -9,7 +9,6 @@
     { "path": "src/web/build.js", "lines": 619 },
     { "path": "src/content/parse-html.js", "lines": 781 },
     { "path": "src/sources/wwdc.js", "lines": 714 },
-    { "path": "src/mcp/server.js", "lines": 570 },
-    { "path": "src/mcp/pagination.js", "lines": 534 }
+    { "path": "src/mcp/server.js", "lines": 570 }
   ]
 }
