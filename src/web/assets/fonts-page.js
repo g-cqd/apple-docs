@@ -16,7 +16,9 @@
 // Tag chips render in their own visual style (Adobe pattern): the
 // "Sans-serif" chip is set in a sans face, "Serif" in serif, etc.
 
-(function () {
+// Phase 2 cleanup: replaced source-level IIFE with a named init()
+// (see search-page.js for rationale).
+function init() {
   const VARIANT_ORDER = ['Display', 'Text', 'Rounded', 'ExtraLarge', 'Large', 'Medium', 'Small', '__default__']
   const WEIGHT_NUMERIC = {
     Ultralight: 100, Thin: 200, Light: 300, Regular: 400, Medium: 500,
@@ -316,4 +318,6 @@
       default: return ''
     }
   }
-})()
+}
+
+init()

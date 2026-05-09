@@ -3,18 +3,11 @@ import { ENTRY_BUNDLES } from '../assets-manifest.js'
 import { MIME_TYPES } from '../responses.js'
 import { minifyJs } from '../asset-bundler.js'
 
-// Per-server cache of bundled JS responses. Bun.build is cheap (~4 ms for
-// the core bundle locally) but rerunning it on every request adds avoidable
-// latency. The cache is invalidated implicitly via assetVersion in the
-// rendered HTML — every server boot mints a new querystring suffix, so a
-// stale bundle is never linked from a fresh page.
-const bundleCache = new Map()
-
-async function getBundledJs(bundleName, entryRel, srcWebDir) {
-  const cached = bundleCache.get(bundleName)
+async function getBundledJs(ctx, bundleName, entryRel) {
+  const cached = ctx.bundleCache.get(bundleName)
   if (cached) return cached
-  const code = await minifyJs(join(srcWebDir, 'assets', entryRel))
-  bundleCache.set(bundleName, code)
+  const code = await minifyJs(join(ctx.srcWebDir, 'assets', entryRel))
+  ctx.bundleCache.set(bundleName, code)
   return code
 }
 
@@ -34,7 +27,7 @@ export async function assetsHandler(_request, ctx, url) {
   if (file.includes('..') || file.includes('\0')) return new Response('Forbidden', { status: 403 })
 
   if (Object.prototype.hasOwnProperty.call(ENTRY_BUNDLES, file)) {
-    const code = await getBundledJs(file, ENTRY_BUNDLES[file], ctx.srcWebDir)
+    const code = await getBundledJs(ctx, file, ENTRY_BUNDLES[file])
     return new Response(code, {
       headers: {
         'Content-Type': 'text/javascript; charset=utf-8',
@@ -50,7 +43,7 @@ export async function assetsHandler(_request, ctx, url) {
     if (ext === '.js') {
       // Standalone JS files run through the same bundler so dev preview
       // matches production minified bytes exactly.
-      return new Response(await getBundledJs(file, file, ctx.srcWebDir), {
+      return new Response(await getBundledJs(ctx, file, file), {
         headers: {
           'Content-Type': 'text/javascript; charset=utf-8',
           ...ctx.assetCacheHeaders,

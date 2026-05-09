@@ -1,4 +1,9 @@
-;(() => {
+// Phase 2 cleanup: replaced the source-level IIFE wrapper with a
+// named `init()` function. Bun.build's `format: 'iife'` adds the
+// outer scope shield in the minified output, so the source-level
+// IIFE was redundant. Early-return bails (`if (!form) return`)
+// stay intact because the body still lives inside a function.
+function init() {
   const form = document.getElementById('search-form')
   const queryInput = document.getElementById('search-q')
   const statusEl = document.getElementById('search-status')
@@ -336,4 +341,6 @@
   if (hasInitialQuery) {
     doSearch(0)
   }
-})()
+}
+
+init()

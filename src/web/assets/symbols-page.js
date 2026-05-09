@@ -17,7 +17,9 @@
 // is `var(--symbol-color)`. The clip-path-based SVGs (xmark.bin.circle.fill
 // etc.) keep working unchanged — they're still consumed as masks.
 
-(function () {
+// Phase 2 cleanup: replaced source-level IIFE with a named init()
+// (see search-page.js for rationale).
+function init() {
   const GRID = document.getElementById('symbols-grid')
   const SCROLLER = document.getElementById('symbols-scroller')
   const QUERY = document.getElementById('symbols-q')
@@ -688,4 +690,6 @@
     return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`
   }
 
-})()
+}
+
+init()

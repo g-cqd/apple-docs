@@ -26,6 +26,7 @@ import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
  * @property {Record<string, string>} securityHeaders Default headers applied to every page response.
  * @property {Record<string, string>} assetCacheHeaders Default headers for /assets/* + /worker/*.
  * @property {object} gzipCache LRU of pre-compressed response bodies keyed by ETag.
+ * @property {Map<string, string>} bundleCache Per-server cache of synthesised /assets/<name>.js bundles.
  * @property {() => object} getTitleIndex
  * @property {() => object} getAliasMap
  * @property {() => object} getSearchManifest
@@ -134,6 +135,15 @@ export async function createWebContext(opts, ctx) {
 
   const gzipCache = createLru({ max: 256 })
 
+  // Per-server cache of synthesised /assets/<name>.js bundles. Bun.build
+  // is fast (~4 ms locally) but rerunning it on every request still adds
+  // avoidable latency; the cache flips that to amortised zero. Lives on
+  // the context so two servers in the same process can never read each
+  // other's bytes (matches gzipCache / searchCache / corpusStamp scope).
+  // Implicit invalidation: assetVersion in rendered HTML cycles on every
+  // server boot, so a stale bundle is never linked from a fresh page.
+  const bundleCache = new Map()
+
   return {
     db,
     dataDir,
@@ -151,6 +161,7 @@ export async function createWebContext(opts, ctx) {
     securityHeaders,
     assetCacheHeaders,
     gzipCache,
+    bundleCache,
     getTitleIndex,
     getAliasMap,
     getSearchManifest,
