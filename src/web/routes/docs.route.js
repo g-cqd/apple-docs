@@ -2,6 +2,7 @@ import { renderDocumentPage, renderFrameworkPage, buildFrameworkTreeData } from 
 import { sha256 } from '../../lib/hash.js'
 import { fetchDocPage } from '../../apple/api.js'
 import { persistFetchedDocPage } from '../../pipeline/persist.js'
+import { coalesceByKey } from '../../pipeline/coalesce.js'
 import { textResponse, notFoundResponse } from '../responses.js'
 
 const HTML_HASHABLE = { contentType: 'text/html; charset=utf-8', hashable: true }
@@ -58,18 +59,24 @@ export async function docsHandler(_request, ctx, url) {
   // Try as document page.
   let doc = db.db.query(DOC_BASE_QUERY).get(key)
 
-  // On-demand fetch from Apple if not in database.
+  // On-demand fetch from Apple if not in database. Coalesce concurrent
+  // requests for the same cold key so the upstream sees one fetch and the
+  // DB sees one write — second/third callers wait on the same promise.
   if (!doc && /^[a-z][a-z0-9_-]*(?:\/[a-z0-9_-]+)*$/i.test(key)) {
     try {
-      const { json, etag, lastModified } = await fetchDocPage(key, rateLimiter)
-      const framework = key.split('/')[0]
-      const rootRow = db.getRootBySlug(framework)
-      await persistFetchedDocPage({
-        db, dataDir,
-        rootId: rootRow?.id ?? null,
-        path: key,
-        sourceType: 'apple-docc',
-        json, etag, lastModified,
+      await coalesceByKey(`docs:${key}`, async () => {
+        // Re-check inside the lock — a coalesced peer may have just persisted.
+        if (db.db.query(DOC_BASE_QUERY).get(key)) return
+        const { json, etag, lastModified } = await fetchDocPage(key, rateLimiter)
+        const framework = key.split('/')[0]
+        const rootRow = db.getRootBySlug(framework)
+        await persistFetchedDocPage({
+          db, dataDir,
+          rootId: rootRow?.id ?? null,
+          path: key,
+          sourceType: 'apple-docc',
+          json, etag, lastModified,
+        })
       })
       doc = db.db.query(DOC_BASE_QUERY).get(key)
       invalidateDocumentCaches({ key, title: doc?.title, roleHeading: doc?.role_heading })
@@ -88,15 +95,19 @@ export async function docsHandler(_request, ctx, url) {
     if (sections.length === 0 && doc.source_type === 'apple-docc') {
       try {
         db.ensureSectionsTable()
-        const { json, etag, lastModified } = await fetchDocPage(doc.key, rateLimiter)
-        const framework = doc.key.split('/')[0]
-        const rootRow = db.getRootBySlug(framework)
-        await persistFetchedDocPage({
-          db, dataDir,
-          rootId: rootRow?.id ?? null,
-          path: doc.key,
-          sourceType: 'apple-docc',
-          json, etag, lastModified,
+        await coalesceByKey(`sections:${doc.key}`, async () => {
+          const existing = db.db.query(DOC_SECTIONS_QUERY).all(doc.id)
+          if (existing.length > 0) return
+          const { json, etag, lastModified } = await fetchDocPage(doc.key, rateLimiter)
+          const framework = doc.key.split('/')[0]
+          const rootRow = db.getRootBySlug(framework)
+          await persistFetchedDocPage({
+            db, dataDir,
+            rootId: rootRow?.id ?? null,
+            path: doc.key,
+            sourceType: 'apple-docc',
+            json, etag, lastModified,
+          })
         })
         sections = db.db.query(DOC_SECTIONS_QUERY).all(doc.id)
         invalidateDocumentCaches({ key: doc.key, title: doc.title, roleHeading: doc.role_heading })
