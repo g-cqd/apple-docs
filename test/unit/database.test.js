@@ -18,7 +18,7 @@ afterEach(() => {
 describe('DocsDatabase', () => {
   test('creates schema on init', () => {
     const row = db.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
-    expect(row.value).toBe('15')
+    expect(row.value).toBe('16')
   })
 
   test('upsertRoot inserts and returns id', () => {
@@ -67,6 +67,39 @@ describe('DocsDatabase', () => {
     const swiftOnly = db.searchPages('"view"*', 'view', { framework: 'swiftui' })
     expect(swiftOnly.length).toBe(1)
     expect(swiftOnly[0].path).toBe('swiftui/view')
+  })
+
+  test('v15a: searchPages compares min_ios numerically (iOS 9 vs iOS 10)', () => {
+    const r = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+    db.upsertPage({ rootId: r.id, path: 'swiftui/legacy', url: 'u1', title: 'Legacy View', role: 'symbol' })
+    db.upsertPage({ rootId: r.id, path: 'swiftui/mid', url: 'u2', title: 'Mid View', role: 'symbol' })
+    db.upsertPage({ rootId: r.id, path: 'swiftui/new', url: 'u3', title: 'New View', role: 'symbol' })
+
+    db.upsertNormalizedDocument({
+      document: { key: 'swiftui/legacy', title: 'Legacy View', sourceType: 'apple-docc', framework: 'swiftui', minIos: '9.0' },
+      sections: [], relationships: [],
+    })
+    db.upsertNormalizedDocument({
+      document: { key: 'swiftui/mid', title: 'Mid View', sourceType: 'apple-docc', framework: 'swiftui', minIos: '10.0' },
+      sections: [], relationships: [],
+    })
+    db.upsertNormalizedDocument({
+      document: { key: 'swiftui/new', title: 'New View', sourceType: 'apple-docc', framework: 'swiftui', minIos: '17.0' },
+      sections: [], relationships: [],
+    })
+
+    // Filter "minIos: 9.0" — symbols requiring iOS ≤ 9.0. Lexicographic
+    // compare would have wrongly admitted the iOS-10 row too.
+    const ios9 = db.searchPages('view', 'view', { minIos: '9.0' })
+    expect(ios9.map(row => row.path).sort()).toEqual(['swiftui/legacy'])
+
+    // "minIos: 10.0" includes 9.0 + 10.0, excludes 17.0
+    const ios10 = db.searchPages('view', 'view', { minIos: '10.0' })
+    expect(ios10.map(row => row.path).sort()).toEqual(['swiftui/legacy', 'swiftui/mid'])
+
+    // "minIos: 17.0" includes everything ≤ 17.0
+    const ios17 = db.searchPages('view', 'view', { minIos: '17.0' })
+    expect(ios17.map(row => row.path).sort()).toEqual(['swiftui/legacy', 'swiftui/mid', 'swiftui/new'])
   })
 
   test('FTS5 updates on page update', () => {
@@ -400,7 +433,7 @@ describe('DocsDatabase', () => {
   })
 
   test('getSchemaVersion returns current schema version', () => {
-    expect(db.getSchemaVersion()).toBe(15)
+    expect(db.getSchemaVersion()).toBe(16)
   })
 
   test('getStats returns aggregate data', () => {

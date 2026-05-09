@@ -8,6 +8,7 @@
  * empty/no-op when the table is absent.
  */
 
+import { encodeVersion } from '../../lib/version-encode.js'
 import { parseJsonValue } from '../_helpers.js'
 import { coerceSourceType } from '../source-types.js'
 
@@ -29,6 +30,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       source_type, key, title, kind, role, role_heading, framework, url, language,
       abstract_text, declaration_text, headings, platforms_json,
       min_ios, min_macos, min_watchos, min_tvos, min_visionos,
+      min_ios_num, min_macos_num, min_watchos_num, min_tvos_num, min_visionos_num,
       is_deprecated, is_beta, is_release_notes, url_depth,
       source_metadata, content_hash, raw_payload_hash, created_at, updated_at
     )
@@ -36,6 +38,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       $source_type, $key, $title, $kind, $role, $role_heading, $framework, $url, $language,
       $abstract_text, $declaration_text, $headings, $platforms_json,
       $min_ios, $min_macos, $min_watchos, $min_tvos, $min_visionos,
+      $min_ios_num, $min_macos_num, $min_watchos_num, $min_tvos_num, $min_visionos_num,
       $is_deprecated, $is_beta, $is_release_notes, $url_depth,
       $source_metadata, $content_hash, $raw_payload_hash, $now, $now
     )
@@ -57,6 +60,11 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       min_watchos = COALESCE($min_watchos, documents.min_watchos),
       min_tvos = COALESCE($min_tvos, documents.min_tvos),
       min_visionos = COALESCE($min_visionos, documents.min_visionos),
+      min_ios_num = COALESCE($min_ios_num, documents.min_ios_num),
+      min_macos_num = COALESCE($min_macos_num, documents.min_macos_num),
+      min_watchos_num = COALESCE($min_watchos_num, documents.min_watchos_num),
+      min_tvos_num = COALESCE($min_tvos_num, documents.min_tvos_num),
+      min_visionos_num = COALESCE($min_visionos_num, documents.min_visionos_num),
       is_deprecated = COALESCE($is_deprecated, documents.is_deprecated),
       is_beta = COALESCE($is_beta, documents.is_beta),
       is_release_notes = COALESCE($is_release_notes, documents.is_release_notes),
@@ -167,6 +175,11 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
         $min_watchos: params.minWatchos ?? null,
         $min_tvos: params.minTvos ?? null,
         $min_visionos: params.minVisionos ?? null,
+        $min_ios_num: encodeVersion(params.minIos),
+        $min_macos_num: encodeVersion(params.minMacos),
+        $min_watchos_num: encodeVersion(params.minWatchos),
+        $min_tvos_num: encodeVersion(params.minTvos),
+        $min_visionos_num: encodeVersion(params.minVisionos),
         $is_deprecated: params.isDeprecated == null ? null : (params.isDeprecated ? 1 : 0),
         $is_beta: params.isBeta == null ? null : (params.isBeta ? 1 : 0),
         $is_release_notes: params.isReleaseNotes == null ? null : (params.isReleaseNotes ? 1 : 0),

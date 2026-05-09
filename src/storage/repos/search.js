@@ -22,6 +22,7 @@
  */
 
 import { safeCall } from '../../lib/safe-call.js'
+import { encodeVersion } from '../../lib/version-encode.js'
 
 // Column projection shared across the four search variants. Bundled here
 // so a future schema column addition only has to land in one place.
@@ -45,11 +46,11 @@ const FILTER_PREDICATES = `
     OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
   )
   AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
-  AND ($min_ios IS NULL OR d.min_ios IS NULL OR d.min_ios <= $min_ios)
-  AND ($min_macos IS NULL OR d.min_macos IS NULL OR d.min_macos <= $min_macos)
-  AND ($min_watchos IS NULL OR d.min_watchos IS NULL OR d.min_watchos <= $min_watchos)
-  AND ($min_tvos IS NULL OR d.min_tvos IS NULL OR d.min_tvos <= $min_tvos)
-  AND ($min_visionos IS NULL OR d.min_visionos IS NULL OR d.min_visionos <= $min_visionos)
+  AND ($min_ios IS NULL OR d.min_ios_num IS NULL OR d.min_ios_num <= $min_ios)
+  AND ($min_macos IS NULL OR d.min_macos_num IS NULL OR d.min_macos_num <= $min_macos)
+  AND ($min_watchos IS NULL OR d.min_watchos_num IS NULL OR d.min_watchos_num <= $min_watchos)
+  AND ($min_tvos IS NULL OR d.min_tvos_num IS NULL OR d.min_tvos_num <= $min_tvos)
+  AND ($min_visionos IS NULL OR d.min_visionos_num IS NULL OR d.min_visionos_num <= $min_visionos)
 `
 
 function buildFilterParams({
@@ -61,11 +62,15 @@ function buildFilterParams({
     $kind: kind,
     $language: language,
     $source_type: sourceType,
-    $min_ios: minIos,
-    $min_macos: minMacos,
-    $min_watchos: minWatchos,
-    $min_tvos: minTvos,
-    $min_visionos: minVisionos,
+    // v15a: filter predicates compare numeric companions; encode the
+    // user-supplied "17.4"-style strings to integers up front so SQLite
+    // doesn't collate text. encodeVersion('') / null both → null which
+    // the predicate treats as "no filter".
+    $min_ios: encodeVersion(minIos),
+    $min_macos: encodeVersion(minMacos),
+    $min_watchos: encodeVersion(minWatchos),
+    $min_tvos: encodeVersion(minTvos),
+    $min_visionos: encodeVersion(minVisionos),
   }
 }
 
