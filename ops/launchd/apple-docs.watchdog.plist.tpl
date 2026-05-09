@@ -17,9 +17,17 @@
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <!-- Restart on crash; let a clean exit stay down. The watchdog is
+             expected to run continuously, so a clean exit is operator intent. -->
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>ThrottleInterval</key>
     <integer>30</integer>
+    <!-- Watchdog uses small bash subprocesses; 15 s is enough for a clean exit. -->
+    <key>ExitTimeOut</key>
+    <integer>15</integer>
     <key>ProcessType</key>
     <string>Background</string>
     <key>StandardOutPath</key>

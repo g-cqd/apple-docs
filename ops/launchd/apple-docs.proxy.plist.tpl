@@ -17,9 +17,17 @@
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <!-- Restart on crash, but not after a clean exit (operator-initiated
+             unload or signaled shutdown). -->
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>ThrottleInterval</key>
     <integer>10</integer>
+    <!-- Give Caddy time to finish in-flight responses before SIGKILL. -->
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
     <key>ProcessType</key>
     <string>Background</string>
     <key>StandardOutPath</key>

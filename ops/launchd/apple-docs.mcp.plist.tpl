@@ -27,9 +27,20 @@
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <!-- Restart on crash, but not after a clean graceful drain
+             (SIGTERM-triggered exit 0). The Phase-1 lifecycle helper drains
+             in-flight MCP calls and exits 0 on success; we don't want launchd
+             to respawn during operator-initiated shutdowns. -->
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>ThrottleInterval</key>
     <integer>10</integer>
+    <!-- Allow up to 30 s for graceful drain after SIGTERM before launchd
+         escalates to SIGKILL. Matches gracefulShutdown's 30 s deadline. -->
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
     <key>ProcessType</key>
     <string>Background</string>
     <key>StandardOutPath</key>
