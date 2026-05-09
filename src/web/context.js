@@ -2,6 +2,7 @@ import { dirname } from 'node:path'
 import { existsSync, statSync } from 'node:fs'
 import { createReaderPool } from '../storage/reader-pool.js'
 import { createHostBucketedLimiter } from '../lib/per-host-rate-limiter.js'
+import { Semaphore } from '../lib/semaphore.js'
 import { createOnDemandGate } from './middleware/on-demand-gate.js'
 import { sha256 } from '../lib/hash.js'
 import { initHighlighter } from '../content/highlight.js'
@@ -72,6 +73,13 @@ export async function createWebContext(opts, ctx) {
   const renderCache = createWebRenderCache(db)
   // A7: composite gate for the on-demand /docs/<key> fetch path.
   const onDemandGate = createOnDemandGate({})
+  // A1: cap concurrent native-render work (Swift symbols / fonts) so a
+  // burst of renders can't pin every CPU. maxWaiters bounds the queue
+  // depth — past that we shed load with 503 + Retry-After: 1.
+  const renderSemaphore = new Semaphore(
+    parsePositiveInt(process.env.APPLE_DOCS_WEB_RENDER_CONCURRENCY) ?? 4,
+    { maxWaiters: 8 },
+  )
   const readerPool = await resolveWebReaderPool(ctx, opts, logger)
   const searchCtx = readerPool ? { ...ctx, readerPool } : ctx
   const searchCache = createLru({ max: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_SEARCH_CACHE) ?? 512 })
@@ -174,6 +182,7 @@ export async function createWebContext(opts, ctx) {
     srcWebDir,
     rateLimiter,
     onDemandGate,
+    renderSemaphore,
     renderCache,
     readerPool,
     searchCtx,

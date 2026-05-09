@@ -1,5 +1,6 @@
 import { extname } from 'node:path'
 import { listAppleFonts, renderFontText } from '../../resources/apple-assets.js'
+import { BackpressureError } from '../../lib/errors.js'
 import { sha256 } from '../../lib/hash.js'
 import { contentDispositionAttachment } from '../../lib/http-content-disposition.js'
 import { buildStoreZip } from '../../lib/zip.js'
@@ -107,6 +108,17 @@ export async function fontTextSvgHandler(_request, ctx, url) {
   const textCheck = validateFontText(url.searchParams.get('text'))
   if (!textCheck.ok) return jsonResponse({ error: textCheck.error }, { status: 400 })
   try {
+    await ctx.renderSemaphore?.acquire()
+  } catch (err) {
+    if (err instanceof BackpressureError) {
+      return new Response('Render queue full. Retry after 1s.\n', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '1' },
+      })
+    }
+    throw err
+  }
+  try {
     const render = await renderFontText({
       fontId: url.searchParams.get('fontId'),
       text: textCheck.value,
@@ -119,5 +131,7 @@ export async function fontTextSvgHandler(_request, ctx, url) {
     })
   } catch {
     return new Response('Not Found', { status: 404 })
+  } finally {
+    ctx.renderSemaphore?.release()
   }
 }

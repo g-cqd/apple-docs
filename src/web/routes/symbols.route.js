@@ -1,4 +1,5 @@
 import { getPrerenderedSymbolPath, renderSfSymbol, searchSfSymbols } from '../../resources/apple-assets.js'
+import { BackpressureError } from '../../lib/errors.js'
 import { jsonResponse, fileResponseRevalidated, notFoundResponse } from '../responses.js'
 import { validateSymbolParams } from './render-validation.js'
 
@@ -73,6 +74,21 @@ export async function symbolRenderHandler(request, ctx, url, match) {
       })
     }
   }
+  // A1: render through the per-server concurrency cap so a burst of cold
+  // requests can't pin every Swift process. Backpressure overflow → 503
+  // with a brief Retry-After so clients back off instead of retrying
+  // immediately.
+  try {
+    await ctx.renderSemaphore?.acquire()
+  } catch (err) {
+    if (err instanceof BackpressureError) {
+      return new Response('Render queue full. Retry after 1s.\n', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '1' },
+      })
+    }
+    throw err
+  }
   try {
     const render = await renderSfSymbol({
       scope,
@@ -94,5 +110,7 @@ export async function symbolRenderHandler(request, ctx, url, match) {
     })
   } catch {
     return notFoundResponse(ctx.siteConfig)
+  } finally {
+    ctx.renderSemaphore?.release()
   }
 }
