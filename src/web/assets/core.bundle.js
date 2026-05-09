@@ -1,16 +1,17 @@
 // Bundle entry for /assets/core.js — loaded on every page.
 //
-// Order matters: `initTheme` sets the data-theme attribute before
-// search.js / page-toc.js paint any chrome, so the bundle never flashes
-// an inverted palette. search.js / page-toc.js are still IIFE-side-effect
-// modules pending Phase 2 conversions; once they expose `init()` we
-// switch each to an explicit call here.
+// Order matters: theme.js's data-theme write happens at module
+// evaluation time (before initTheme() is called) so the bundle can never
+// flash an inverted palette. The init() calls then wire DOM listeners
+// and observers in document order.
 //
-// Bun.build inlines the bundle members inside an outer IIFE
-// (`format: 'iife'` in asset-bundler.js). The named export from theme.js
-// is folded directly into bundle scope — no ESM-export shim emitted.
+// Bun.build inlines the named exports directly inside the bundle's
+// outer IIFE (`format: 'iife'` in asset-bundler.js). No __esModule
+// shim is emitted because nothing outside the bundle imports these.
 import { init as initTheme } from './theme.js'
-import './search.js'
-import './page-toc.js'
+import { init as initSearch } from './search.js'
+import { init as initPageToc } from './page-toc.js'
 
 initTheme()
+initSearch()
+initPageToc()

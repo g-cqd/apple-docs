@@ -1,4 +1,14 @@
-;(() => {
+// Header quick-search controller. Debounces /api/search calls, renders
+// the dropdown of hits, handles keyboard navigation (arrow keys, Enter,
+// Escape, `/` shortcut), and announces result counts via an aria-live
+// region.
+//
+// Phase 2: native ES module with explicit init() called from
+// core.bundle.js. The internal scope is preserved by keeping all state
+// and helpers inside init() — the IIFE-to-function conversion is
+// mechanical (replace `;(() => { ... })()` with
+// `export function init() { ... }`).
+export function init() {
   const input = document.querySelector('.search-input')
   const dropdown = document.querySelector('.search-dropdown')
   const clearBtn = document.querySelector('.search-clear')
@@ -206,4 +216,4 @@
 
   // Initialize clear button state
   updateClearButton()
-})()
+}

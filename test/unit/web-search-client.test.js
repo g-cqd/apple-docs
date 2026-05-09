@@ -2,6 +2,16 @@ import { describe, test, expect } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+// Bun.Transpiler accepts ESM (export/import) and async syntax; `new Function`
+// rejects ESM because the constructed function is a non-module body. Use
+// the transpiler to validate the file parses; module syntax-only files
+// (the Phase 2 ES module conversions) would otherwise fail the legacy
+// `new Function(code)` check even though they're valid JS.
+const transpiler = new Bun.Transpiler({ loader: 'js' })
+function expectParses(code) {
+  expect(() => transpiler.scan(code)).not.toThrow()
+}
+
 describe('Client-Side Search Assets', () => {
   const assetsDir = join(import.meta.dir, '../../src/web/assets')
   const workerDir = join(import.meta.dir, '../../src/web/worker')
@@ -10,8 +20,7 @@ describe('Client-Side Search Assets', () => {
     test('is valid JavaScript', () => {
       const code = readFileSync(join(assetsDir, 'search.js'), 'utf8')
       expect(code.length).toBeGreaterThan(100)
-      // Verify it parses
-      expect(() => new Function(code)).not.toThrow()
+      expectParses(code)
     })
 
     test('contains debounce implementation', () => {
@@ -50,7 +59,7 @@ describe('Client-Side Search Assets', () => {
     test('is valid JavaScript', () => {
       const code = readFileSync(join(assetsDir, 'search-page.js'), 'utf8')
       expect(code.length).toBeGreaterThan(100)
-      expect(() => new Function(code)).not.toThrow()
+      expectParses(code)
     })
 
     test('preserves results while showing a loading state', () => {
@@ -66,7 +75,7 @@ describe('Client-Side Search Assets', () => {
     test('is valid JavaScript', () => {
       const code = readFileSync(join(workerDir, 'search-worker.js'), 'utf8')
       expect(code.length).toBeGreaterThan(100)
-      expect(() => new Function(code)).not.toThrow()
+      expectParses(code)
     })
 
     test('contains search scoring logic', () => {
