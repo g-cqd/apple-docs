@@ -1149,7 +1149,17 @@ ${buildScripts(siteConfig, ['core', ...(hasLangToggle ? ['lang-toggle'] : [])])}
 </html>`
 }
 
-/** Batch-enrich topics section items with _resolvedRoleHeading from DB. */
+/** Batch-enrich topics section items with _resolvedRoleHeading from DB.
+ *
+ *  P3.3: deep-clones the parsed JSON before mutation. The previous code
+ *  aliased `section.contentJson` directly when the upstream had already
+ *  parsed it (the typeof-object branch). build.js batches sectionsByDoc
+ *  per-root and reuses section rows across renders; a second render of
+ *  the same doc would have seen pre-enriched JSON with the
+ *  `_resolvedRoleHeading` markers baked in. Currently dormant (single
+ *  render per doc per build) but a real correctness hazard if anything
+ *  ever retries a render.
+ */
 function enrichTopicItems(sections, resolveRoleHeadings) {
   for (const section of sections) {
     const kind = section.sectionKind ?? section.section_kind
@@ -1159,8 +1169,9 @@ function enrichTopicItems(sections, resolveRoleHeadings) {
     let contentJson = null
     if (typeof raw === 'string') {
       try { contentJson = JSON.parse(raw) } catch { continue }
-    } else if (typeof raw === 'object') {
-      contentJson = raw
+    } else if (typeof raw === 'object' && raw !== null) {
+      // Defensive clone — never mutate a shared upstream object.
+      try { contentJson = structuredClone(raw) } catch { continue }
     }
     if (!Array.isArray(contentJson)) continue
 
