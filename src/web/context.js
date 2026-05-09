@@ -82,7 +82,13 @@ export async function createWebContext(opts, ctx) {
   )
   const readerPool = await resolveWebReaderPool(ctx, opts, logger)
   const searchCtx = readerPool ? { ...ctx, readerPool } : ctx
-  const searchCache = createLru({ max: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_SEARCH_CACHE) ?? 512 })
+  // A20: searchCache had a count cap (default 512) but no byte cap, so a
+  // burst of long-tail queries could push it past tens of MB on a tier
+  // with rich snippets. Add a 64 MB byte cap on top of the count cap.
+  const searchCache = createLru({
+    max: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_SEARCH_CACHE) ?? 512,
+    maxBytes: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_SEARCH_CACHE_BYTES) ?? (64 * 1024 * 1024),
+  })
   const corpusStamp = createCorpusStamp(ctx)
 
   // Framework tree-view JSON cache. Each framework page render computes the

@@ -53,7 +53,7 @@ export function registerDocTools(server, ctx, cache) {
       min_watchos: z.string().optional().describe('Minimum watchOS version'),
       min_tvos: z.string().optional().describe('Minimum tvOS version'),
       min_visionos: z.string().optional().describe('Minimum visionOS version'),
-      limit: z.coerce.number().optional().describe('Max results (default 100)'),
+      limit: z.coerce.number().int().min(1).max(100).optional().describe('Max results (default 50, hard cap 100)'),
       fuzzy: z.boolean().optional().describe('Enable typo-tolerant fuzzy matching (default true)'),
       noDeep: z.boolean().optional().describe('Disable background full-body search (default false)'),
       noEager: z.boolean().optional().describe('Wait for full-body search to complete instead of returning early (default false)'),
@@ -204,7 +204,7 @@ export function registerDocTools(server, ctx, cache) {
     {
       framework: z.string().describe('Framework slug (e.g. swiftui, combine, design, app-store-review)'),
       path: z.string().optional().describe('Page path to show children of (e.g. swiftui/view, design/human-interface-guidelines/components)'),
-      limit: z.coerce.number().optional().describe('Max pages to return when listing a full framework (default: all)'),
+      limit: z.coerce.number().int().min(1).max(200).optional().describe('Max pages to return when listing a full framework (hard cap 200; default: all)'),
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
