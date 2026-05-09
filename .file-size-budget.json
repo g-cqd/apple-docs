@@ -19,7 +19,6 @@
     { "path": "src/web/assets/collection-filters.js", "lines": 469 },
     { "path": "src/commands/consolidate.js", "lines": 438 },
     { "path": "src/web/assets/tree-view.js", "lines": 435 },
-    { "path": "src/cli/formatter.js", "lines": 424 },
     { "path": "src/apple/guidelines-parser.js", "lines": 417 }
   ]
 }
