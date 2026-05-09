@@ -18,7 +18,7 @@ afterEach(() => {
 describe('DocsDatabase', () => {
   test('creates schema on init', () => {
     const row = db.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
-    expect(row.value).toBe('14')
+    expect(row.value).toBe('15')
   })
 
   test('upsertRoot inserts and returns id', () => {
@@ -158,18 +158,11 @@ describe('DocsDatabase', () => {
     expect(stats.pending).toBe(0)
   })
 
-  test('refs operations', () => {
-    const root = db.upsertRoot('test', 'Test', 'framework', 'test')
-    const page = db.upsertPage({ rootId: root.id, path: 'test/a', url: 'u', title: 'A' })
-
-    db.addRef(page.id, 'test/b', 'B', 'topics')
-    db.addRef(page.id, 'test/c', 'C', 'seeAlso')
-
-    const refs = db.getRefsBySource(page.id)
-    expect(refs.length).toBe(2)
-
-    db.deleteRefsBySource(page.id)
-    expect(db.getRefsBySource(page.id).length).toBe(0)
+  test('v15 dropped the legacy refs table', () => {
+    const row = db.db
+      .query("SELECT name FROM sqlite_master WHERE type='table' AND name='refs'")
+      .get()
+    expect(row).toBeNull()
   })
 
   test('schema v8 keeps source metadata, normalized tables, and sync checkpoints available', () => {
@@ -407,7 +400,7 @@ describe('DocsDatabase', () => {
   })
 
   test('getSchemaVersion returns current schema version', () => {
-    expect(db.getSchemaVersion()).toBe(14)
+    expect(db.getSchemaVersion()).toBe(15)
   })
 
   test('getStats returns aggregate data', () => {

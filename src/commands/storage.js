@@ -53,7 +53,6 @@ export function storageStats(_opts, ctx) {
     pages: db.db.query('SELECT COUNT(*) as count FROM pages').get().count,
     roots: db.db.query('SELECT COUNT(*) as count FROM roots').get().count,
     crawl_state: db.db.query('SELECT COUNT(*) as count FROM crawl_state').get().count,
-    refs: db.db.query('SELECT COUNT(*) as count FROM refs').get().count,
   }
 
   const total = dbSize + rawJson.size + markdown.size + html.size
@@ -103,10 +102,6 @@ export function storageGc(opts, ctx) {
   db.db.run('DELETE FROM crawl_state WHERE root_slug NOT IN (SELECT slug FROM roots)')
   let orphansCleaned = db.db.query('SELECT changes() as c').get().c
 
-  // Remove orphan refs (source page deleted or missing)
-  db.db.run("DELETE FROM refs WHERE source_id NOT IN (SELECT id FROM pages WHERE status = 'active')")
-  orphansCleaned += db.db.query('SELECT changes() as c').get().c
-
   // Remove stale activity records
   if (olderThan != null) {
     db.db.run("DELETE FROM activity WHERE timestamp < datetime('now', '-' || ? || ' days')", [Math.max(1, Math.floor(olderThan))])
@@ -130,8 +125,8 @@ export function storageGc(opts, ctx) {
  *
  * Combines:
  *   1. Engine-level `PRAGMA foreign_key_check` — hits the declared FKs
- *      (pages.root_id → roots.id; refs.source_id → pages.id; the asset
- *      cascades; document_sections etc).
+ *      (pages.root_id → roots.id; the asset cascades; document_sections
+ *      etc).
  *   2. A handful of semantic orphans not modeled as FKs (e.g. documents
  *      keyed by path that are no longer in pages).
  *
@@ -146,9 +141,6 @@ export function storageCheckOrphans(_opts, ctx) {
   const semanticOrphans = {
     crawlStateMissingRoot: db.db
       .query('SELECT COUNT(*) AS count FROM crawl_state WHERE root_slug NOT IN (SELECT slug FROM roots)')
-      .get().count,
-    refsMissingSourcePage: db.db
-      .query("SELECT COUNT(*) AS count FROM refs WHERE source_id NOT IN (SELECT id FROM pages WHERE status = 'active')")
       .get().count,
     documentsMissingPage: db.hasTable('documents')
       ? db.db.query('SELECT COUNT(*) AS count FROM documents WHERE key NOT IN (SELECT path FROM pages)').get().count

@@ -88,7 +88,7 @@ describe('storageStats', () => {
     expect(stats.tables).toHaveProperty('pages')
     expect(stats.tables).toHaveProperty('roots')
     expect(stats.tables).toHaveProperty('crawl_state')
-    expect(stats.tables).toHaveProperty('refs')
+    expect(stats.tables).not.toHaveProperty('refs') // dropped in v15
   })
 })
 

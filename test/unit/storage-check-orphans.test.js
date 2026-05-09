@@ -23,7 +23,6 @@ describe('storageCheckOrphans', () => {
     const result = storageCheckOrphans({}, { db })
     expect(result.fkViolations).toEqual([])
     expect(result.semanticOrphans.crawlStateMissingRoot).toBe(0)
-    expect(result.semanticOrphans.refsMissingSourcePage).toBe(0)
     expect(result.semanticOrphans.documentsMissingPage).toBe(0)
   })
 

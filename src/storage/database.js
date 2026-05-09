@@ -10,7 +10,6 @@ import { createCrawlRepo } from './repos/crawl.js'
 import { createDocumentsRepo } from './repos/documents.js'
 import { createOperationsRepo } from './repos/operations.js'
 import { createPagesRepo } from './repos/pages.js'
-import { createRefsRepo } from './repos/refs.js'
 import { createRootsRepo } from './repos/roots.js'
 import { createSearchRepo } from './repos/search.js'
 function deriveFrameworkFromPath(path) {
@@ -38,7 +37,6 @@ export class DocsDatabase {
     this.assetsFonts = createAssetsFontsRepo(this.db)
     this.assetsSymbols = createAssetsSymbolsRepo(this.db)
     this.roots = createRootsRepo(this.db)
-    this.refs = createRefsRepo(this.db)
     this.pages = createPagesRepo(this.db)
     this.documents = createDocumentsRepo(this.db, { hasSectionsTable: this.hasTable('document_sections') })
     this.search = createSearchRepo(this.db, {
@@ -255,10 +253,6 @@ export class DocsDatabase {
   getRoots(kind = null) { return this.roots.getRoots(kind) }
   getRootBySlug(slug) { return this.roots.getRootBySlug(slug) }
   resolveRoot(input) { return this.roots.resolveRoot(input) }
-
-  addRef(sourceId, targetPath, anchorText, section) { this.refs.addRef(sourceId, targetPath, anchorText, section) }
-  deleteRefsBySource(sourceId) { this.refs.deleteRefsBySource(sourceId) }
-  getRefsBySource(sourceId) { return this.refs.getRefsBySource(sourceId) }
 
   setCrawlState(path, status, rootSlug, depth = 0, error = null) {
     this.crawl.setCrawlState(path, status, rootSlug, depth, error)

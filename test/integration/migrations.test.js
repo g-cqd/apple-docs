@@ -9,7 +9,7 @@ describe('Migration E2E (P8-G)', () => {
   test('fresh DB creates all tables at current schema version', () => {
     const db = new DocsDatabase(':memory:')
     const version = db.getSchemaVersion()
-    expect(version).toBe(14)
+    expect(version).toBe(15)
 
     const tables = db.db
       .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
@@ -20,10 +20,11 @@ describe('Migration E2E (P8-G)', () => {
     expect(tableNames).toContain('schema_meta')
     expect(tableNames).toContain('roots')
     expect(tableNames).toContain('pages')
-    expect(tableNames).toContain('refs')
     expect(tableNames).toContain('crawl_state')
     expect(tableNames).toContain('activity')
     expect(tableNames).toContain('update_log')
+    // v15 dropped the legacy refs table.
+    expect(tableNames).not.toContain('refs')
 
     // Added in v4
     expect(tableNames).toContain('pages_body_fts')
@@ -75,7 +76,7 @@ describe('Migration E2E (P8-G)', () => {
   test('migration is idempotent — schema version stays stable after construction', () => {
     const db = new DocsDatabase(':memory:')
     const v1 = db.getSchemaVersion()
-    expect(v1).toBe(14)
+    expect(v1).toBe(15)
 
     // Reading version again must return the same value — no spurious increment
     const v2 = db.getSchemaVersion()
@@ -129,7 +130,7 @@ describe('Migration E2E (P8-G)', () => {
       expect(caught).not.toBeNull()
       // The error should mention both the DB version and the supported version
       expect(caught.message).toMatch(/42/)
-      expect(caught.message).toMatch(/14/)
+      expect(caught.message).toMatch(/15/)
     } finally {
       rmSync(tmpDir, { recursive: true, force: true })
     }
@@ -246,7 +247,7 @@ describe('Migration E2E (P8-G)', () => {
       .query("SELECT value FROM schema_meta WHERE key = 'schema_version'")
       .get()
     expect(row).not.toBeNull()
-    expect(row.value).toBe('14')
+    expect(row.value).toBe('15')
 
     db.close()
   })
@@ -271,7 +272,7 @@ describe('Migration E2E (P8-G)', () => {
   test('getSchemaVersion() matches the constant embedded in the source', () => {
     const db = new DocsDatabase(':memory:')
     // The public accessor must agree with what _migrate() wrote
-    expect(db.getSchemaVersion()).toBe(14)
+    expect(db.getSchemaVersion()).toBe(15)
     db.close()
   })
 })

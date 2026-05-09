@@ -82,16 +82,9 @@ export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
 
     db.markConverted(section.path)
 
-    // Add parent→child refs for browse support
-    if (page && section.children.length > 0) {
-      db.deleteRefsBySource(page.id)
-      for (const childPath of section.children) {
-        const child = sections.find(s => s.path === childPath)
-        if (child) {
-          db.addRef(page.id, childPath, child.title, 'Topics')
-        }
-      }
-    }
+    // Note: parent→child relationships are emitted by the DocC
+    // normalizer into document_relationships (relation_type='child').
+    // The legacy refs-table mirror was dropped in v15.
   }
 
   db.updateRootPageCount(ROOT_SLUG)
