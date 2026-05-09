@@ -1,0 +1,29 @@
+{
+  "max_lines": 400,
+  "soft_target": 300,
+  "exempt_expires_phase": "P4",
+  "_doc": "See docs/plans/phase-3-quality-and-audit-remediation.md. Exempt entries record the LOC at the time the budget was seeded; CI fails if any exempt file grows past its baseline. Phase 1-4 plan deletes entries from this list as god modules get decomposed.",
+  "exempt": [
+    { "path": "cli.js", "lines": 401 },
+    { "path": "src/storage/database.js", "lines": 2147 },
+    { "path": "src/web/templates.js", "lines": 1566 },
+    { "path": "src/resources/apple-assets.js", "lines": 1501 },
+    { "path": "src/content/normalize.js", "lines": 964 },
+    { "path": "src/content/render-html.js", "lines": 918 },
+    { "path": "src/web/build.js", "lines": 896 },
+    { "path": "src/content/parse-html.js", "lines": 732 },
+    { "path": "src/sources/wwdc.js", "lines": 714 },
+    { "path": "src/web/assets/symbols-page.js", "lines": 696 },
+    { "path": "src/mcp/server.js", "lines": 566 },
+    { "path": "src/commands/search.js", "lines": 559 },
+    { "path": "src/mcp/pagination.js", "lines": 534 },
+    { "path": "src/sources/packages.js", "lines": 522 },
+    { "path": "src/resources/symbol-pdf-to-svg.js", "lines": 487 },
+    { "path": "src/commands/update.js", "lines": 475 },
+    { "path": "src/web/assets/collection-filters.js", "lines": 469 },
+    { "path": "src/commands/consolidate.js", "lines": 438 },
+    { "path": "src/web/assets/tree-view.js", "lines": 435 },
+    { "path": "src/cli/formatter.js", "lines": 424 },
+    { "path": "src/apple/guidelines-parser.js", "lines": 417 }
+  ]
+}

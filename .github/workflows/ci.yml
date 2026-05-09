@@ -37,6 +37,9 @@ jobs:
           mkdir -p reports
           bun run lint:duplication
 
+      - name: File-size budget
+        run: bun run lint:size
+
       - name: Upload quality reports
         if: always()
         uses: actions/upload-artifact@v6
