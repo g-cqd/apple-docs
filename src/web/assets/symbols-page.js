@@ -1,25 +1,17 @@
 // Symbols page (P7) — Phosphor-style global toolbar + Lucide-style
-// label-less tile grid. The grid uses CSS Grid `auto-fill`/`minmax()` so
-// the column count comes out of CSS, not JS. JS only:
-//   - filters (search · scope · category) with ~80ms debounce, AND-composed
-//   - URL state `?q=&scope=&cat=` so back-button restores
-//   - 600-tile cap until query length >= 2 (cheaper than virtualisation —
-//     research/fonts-symbols-ux.md §6.4, Iconify pattern)
-//   - the global customizer wires Weight / Scale / Color / Size onto CSS
-//     custom props (`--symbol-color`, `--symbol-size`, `--symbol-weight`,
-//     `--symbol-scale`) so changing color recolors every visible tile
-//     without a re-render (Phosphor pattern)
-//   - desktop (≥1024) inspector vs mobile route `/symbols/<name>` is
-//     decided via matchMedia and intercepts back/forward navigation
+// label-less tile grid.
 //
-// The mask-image contract from src/resources/symbol-pdf-to-svg.js is
-// preserved — tiles set `mask-image` on a span whose `background-color`
-// is `var(--symbol-color)`. The SVGs may contain internal masks for native
-// destination-out layers; the final rendered image is still consumed as the
-// tile mask.
+// Phase B decomposition: pure formatters in symbols-page/format.js, URL
+// state in symbols-page/url-state.js, the chunked grid renderer in
+// symbols-page/grid.js, and the inspector / mobile-route detail panel in
+// symbols-page/detail-panel.js. This module owns the boot flow, the
+// filter compose, the customizer wire-up, and history routing.
 
-// Phase 2 cleanup: replaced source-level IIFE with a named init()
-// (see search-page.js for rationale).
+import { bindColorPair, normaliseHex } from './symbols-page/format.js'
+import { parseDetailRoute, readUrlState, writeUrlState } from './symbols-page/url-state.js'
+import { createGridRenderer } from './symbols-page/grid.js'
+import { createDetailPanel } from './symbols-page/detail-panel.js'
+
 function init() {
   const GRID = document.getElementById('symbols-grid')
   const SCROLLER = document.getElementById('symbols-scroller')
@@ -39,15 +31,15 @@ function init() {
   if (!GRID || !SCROLLER) return
 
   const DESKTOP_MQ = window.matchMedia('(min-width: 1024px)')
+  const root = document.querySelector('.symbols-page')
 
   let allSymbols = []
-  let filtered = []
-  let categories = new Map() // name -> count
+  let categories = new Map()
   let currentCat = ''
-  let activeSymbol = null
-  let lastClickedTile = null
 
-  // Detail (inspector) DOM refs
+  function setStatus(text) { if (STATUS) STATUS.textContent = text }
+
+  // ---- Detail panel ----
   const detail = {
     root: document.getElementById('symbols-detail'),
     closeBtn: document.getElementById('symbols-detail-close'),
@@ -65,21 +57,32 @@ function init() {
     name: document.getElementById('symbols-mobile-name'),
     copy: document.getElementById('symbols-mobile-copy'),
   }
+  const panel = createDetailPanel({
+    detail, mobileBar, layout: LAYOUT, root, setStatus,
+    isDesktop: () => DESKTOP_MQ.matches,
+  })
 
-  // ---------------------------------------------------------------------
-  // 1. Boot — read URL state, then fetch the catalog.
-  // ---------------------------------------------------------------------
+  // ---- Tile click → inspector (desktop) or route (mobile) ----
+  function onTileClick(symbol, tile) {
+    if (DESKTOP_MQ.matches) {
+      panel.open(symbol, tile)
+    } else {
+      const url = `/symbols/${encodeURIComponent(symbol.name)}${window.location.search}`
+      history.pushState({ symbolName: symbol.name }, '', url)
+      panel.open(symbol, tile)
+    }
+  }
+  const grid = createGridRenderer({ grid: GRID, scroller: SCROLLER, onTileClick })
+
+  // ---- Boot ----
   const initial = readUrlState()
   if (QUERY) QUERY.value = initial.q
   if (SCOPE) SCOPE.value = initial.scope
   currentCat = initial.cat
 
-  status('Loading symbols…')
+  setStatus('Loading symbols…')
   fetch('/api/symbols/index.json', { credentials: 'same-origin' })
-    .then(res => {
-      if (!res.ok) throw new Error('HTTP ' + res.status)
-      return res.json()
-    })
+    .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() })
     .then(data => {
       allSymbols = Array.isArray(data.symbols) ? data.symbols : []
       if (COUNT) COUNT.textContent = allSymbols.length.toLocaleString('en-US')
@@ -90,47 +93,12 @@ function init() {
       const routeName = parseDetailRoute(window.location.pathname)
       if (routeName) {
         const sym = allSymbols.find(s => s.name === routeName)
-        if (sym) openDetail(sym, null, { skipPush: true })
+        if (sym) panel.open(sym, null)
       }
     })
-    .catch(error => {
-      status('Unable to load symbols: ' + error.message)
-    })
+    .catch(error => setStatus(`Unable to load symbols: ${error.message}`))
 
-  // ---------------------------------------------------------------------
-  // 2. Filter + render.
-  // ---------------------------------------------------------------------
-  let filterTimer = 0
-  if (QUERY) {
-    QUERY.addEventListener('input', () => {
-      clearTimeout(filterTimer)
-      filterTimer = setTimeout(() => {
-        applyFilters()
-        writeUrlState()
-      }, 80)
-    })
-  }
-  if (SCOPE) {
-    SCOPE.addEventListener('change', () => { applyFilters(); writeUrlState() })
-  }
-  if (CATEGORY_MOBILE) {
-    CATEGORY_MOBILE.addEventListener('change', () => {
-      currentCat = CATEGORY_MOBILE.value
-      reflectCategory()
-      applyFilters()
-      writeUrlState()
-    })
-  }
-
-  // Cmd-K / Ctrl-K focuses the search.
-  window.addEventListener('keydown', e => {
-    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
-      e.preventDefault()
-      QUERY?.focus()
-      QUERY?.select()
-    }
-  })
-
+  // ---- Filter compose ----
   function applyFilters() {
     const q = (QUERY?.value ?? '').trim().toLowerCase()
     const scope = SCOPE?.value ?? ''
@@ -147,114 +115,42 @@ function init() {
         if ((s.keywords || []).some(v => v.toLowerCase().includes(q))) return true
         return false
       })
-
-    // Render every match. With ~10k symbols and `content-visibility: auto`
-    // + `contain-intrinsic-size` on the grid, offscreen rows are skipped
-    // by the browser's layout/paint pipeline — first render stays under
-    // ~150ms on a Retina iPhone profile and scrolling stays smooth.
-    // Mask-image fetches are kicked off lazily as rows scroll into view.
-    const total = next.length
-    filtered = next
-    TYPING_HINT.hidden = true
-    TYPING_HINT.textContent = ''
-
-    status(`${total.toLocaleString('en-US')} matching symbol${total === 1 ? '' : 's'}`)
-    render()
+    if (TYPING_HINT) { TYPING_HINT.hidden = true; TYPING_HINT.textContent = '' }
+    setStatus(`${next.length.toLocaleString('en-US')} matching symbol${next.length === 1 ? '' : 's'}`)
+    grid.render(next)
   }
 
-  // Chunked progressive rendering. Mounting all 10k tiles up-front makes
-  // the DOM and the initial layout pass huge even with content-visibility.
-  // Instead we mount CHUNK_SIZE tiles, then mount the next chunk lazily
-  // when an end-sentinel scrolls into view. The grid stays scrollable
-  // within its bounded container; DOM only grows as the user actually
-  // scrolls past the current window.
-  const CHUNK_SIZE = 480
-  let renderedCount = 0
-  let endSentinel = null
-  let chunkObserver = null
-
-  function buildTile(symbol) {
-    const tile = document.createElement('button')
-    tile.type = 'button'
-    tile.className = 'symbol-tile'
-    tile.dataset.symbolName = symbol.name
-    tile.dataset.symbolScope = symbol.scope
-    tile.setAttribute('role', 'gridcell')
-    tile.setAttribute('aria-label', symbol.name)
-    const url = `/api/symbols/${encodeURIComponent(symbol.scope)}/${encodeURIComponent(symbol.name)}.svg`
-    const icon = document.createElement('span')
-    icon.className = 'symbol-tile__icon'
-    icon.style.maskImage = `url(${url})`
-    icon.style.webkitMaskImage = `url(${url})`
-    const tip = document.createElement('span')
-    tip.className = 'symbol-tile__tooltip'
-    tip.textContent = symbol.name
-    tile.append(icon, tip)
-    tile.addEventListener('click', () => onTileClick(symbol, tile))
-    return tile
+  let filterTimer = 0
+  if (QUERY) {
+    QUERY.addEventListener('input', () => {
+      clearTimeout(filterTimer)
+      filterTimer = setTimeout(() => { applyFilters(); writeUrlStateNow() }, 80)
+    })
   }
-
-  function render() {
-    if (chunkObserver) {
-      chunkObserver.disconnect()
-      chunkObserver = null
-    }
-    GRID.replaceChildren()
-    renderedCount = 0
-    endSentinel = document.createElement('div')
-    endSentinel.className = 'symbols-grid__sentinel'
-    endSentinel.setAttribute('aria-hidden', 'true')
-    GRID.appendChild(endSentinel)
-
-    chunkObserver = new IntersectionObserver(entries => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          renderNextChunk()
-          break
-        }
-      }
-    }, { root: SCROLLER, rootMargin: '600px 0px 600px 0px' })
-    chunkObserver.observe(endSentinel)
-
-    renderNextChunk()
-    SCROLLER.scrollTop = 0
-  }
-
-  function renderNextChunk() {
-    if (renderedCount >= filtered.length) {
-      if (chunkObserver) {
-        chunkObserver.disconnect()
-        chunkObserver = null
-      }
-      if (endSentinel) endSentinel.remove()
-      return
-    }
-    const end = Math.min(renderedCount + CHUNK_SIZE, filtered.length)
-    const frag = document.createDocumentFragment()
-    for (let i = renderedCount; i < end; i++) {
-      frag.appendChild(buildTile(filtered[i]))
-    }
-    GRID.insertBefore(frag, endSentinel)
-    renderedCount = end
-    // IntersectionObserver only fires on intersection state CHANGES. If
-    // after this insert the sentinel is still inside the rootMargin
-    // (e.g. user scrolled fast, or the chunk was small enough that the
-    // sentinel didn't get pushed far below the viewport), the observer
-    // won't fire again and chunk-loading would stall. Re-check on the
-    // next frame and recurse if the sentinel is still within reach.
-    requestAnimationFrame(() => {
-      if (!endSentinel || renderedCount >= filtered.length) return
-      const r = endSentinel.getBoundingClientRect()
-      const sr = SCROLLER.getBoundingClientRect()
-      if (r.top <= sr.bottom + 600) {
-        renderNextChunk()
-      }
+  if (SCOPE) SCOPE.addEventListener('change', () => { applyFilters(); writeUrlStateNow() })
+  if (CATEGORY_MOBILE) {
+    CATEGORY_MOBILE.addEventListener('change', () => {
+      currentCat = CATEGORY_MOBILE.value
+      reflectCategory()
+      applyFilters()
+      writeUrlStateNow()
     })
   }
 
-  // ---------------------------------------------------------------------
-  // 3. Category facet.
-  // ---------------------------------------------------------------------
+  function writeUrlStateNow() {
+    writeUrlState({ q: QUERY?.value || '', scope: SCOPE?.value || '', cat: currentCat })
+  }
+
+  // Cmd-K / Ctrl-K focuses the search.
+  window.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault()
+      QUERY?.focus()
+      QUERY?.select()
+    }
+  })
+
+  // ---- Category facet ----
   function buildCategoryFacet() {
     categories = new Map()
     for (const s of allSymbols) {
@@ -264,7 +160,6 @@ function init() {
     }
     const entries = [...categories.entries()].sort((a, b) => a[0].localeCompare(b[0]))
 
-    // Desktop rail
     if (CATEGORY_RAIL) {
       CATEGORY_RAIL.replaceChildren()
       CATEGORY_RAIL.appendChild(catRailItem('', 'All', allSymbols.length))
@@ -273,7 +168,6 @@ function init() {
       }
     }
 
-    // Mobile select
     if (CATEGORY_MOBILE) {
       CATEGORY_MOBILE.replaceChildren()
       const all = document.createElement('option')
@@ -305,7 +199,7 @@ function init() {
       currentCat = currentCat === value ? '' : value
       reflectCategory()
       applyFilters()
-      writeUrlState()
+      writeUrlStateNow()
     })
     li.appendChild(btn)
     return li
@@ -322,30 +216,20 @@ function init() {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // 4. Customizer — color + tile size are page-wide (CSS custom props on
-  //    the page). Weight + scale are inspector-only because the grid
-  //    serves prerendered SVGs at the default configuration; rerunning
-  //    the Swift renderer for every visible tile on every weight change
-  //    is prohibitively expensive (~thousand requests). The inspector's
-  //    `<img>` re-fetches with the new params, which is cheap.
-  // ---------------------------------------------------------------------
-  const root = document.querySelector('.symbols-page')
-  const detailWeight = { value: 'regular' }
-  const detailScale = { value: 'medium' }
-
+  // ---- Customizer (color + size are page-wide CSS custom props) ----
+  // Default behaviour: leave `--symbol-color` unset so the CSS fallback
+  // resolves to the page's text colour. Only override once the user
+  // touches the picker.
   document.querySelectorAll('.symbols-control--weight .symbols-pill').forEach(pill => {
     pill.addEventListener('click', () => {
       pickPill(pill, '.symbols-control--weight .symbols-pill')
-      detailWeight.value = pill.dataset.weight
-      refreshDetail()
+      panel.setWeight(pill.dataset.weight)
     })
   })
   document.querySelectorAll('.symbols-control--scale .symbols-pill').forEach(pill => {
     pill.addEventListener('click', () => {
       pickPill(pill, '.symbols-control--scale .symbols-pill')
-      detailScale.value = pill.dataset.scale
-      refreshDetail()
+      panel.setScale(pill.dataset.scale)
     })
   })
 
@@ -355,15 +239,6 @@ function init() {
     })
   }
 
-  // Color picker (paired hex/colour input).
-  //
-  // Default behaviour: leave `--symbol-color` unset so the CSS fallback
-  // `var(--symbol-color, currentColor)` resolves to the page's text
-  // colour — automatically dark on light theme, light on dark theme.
-  // Only override once the user actually touches the picker. We can't
-  // tell apart "user picked black" from "browser default black" via the
-  // input value alone, so we set a `data-touched` flag on the first
-  // input event and key off that.
   if (COLOR && COLOR_HEX) {
     let touched = false
     const apply = () => {
@@ -371,17 +246,12 @@ function init() {
       const v = normaliseHex(COLOR_HEX.value || COLOR.value)
       if (v) root.style.setProperty('--symbol-color', v)
     }
-    const markTouched = () => {
-      if (touched) return
-      touched = true
-      apply()
-    }
+    const markTouched = () => { if (touched) return; touched = true; apply() }
     COLOR.addEventListener('input', markTouched)
     COLOR_HEX.addEventListener('input', markTouched)
     bindColorPair(COLOR, COLOR_HEX, apply)
   }
 
-  // Size slider.
   if (SIZE && SIZE_VAL) {
     SIZE.addEventListener('input', () => {
       const px = Number.parseInt(SIZE.value, 10) || 48
@@ -391,200 +261,18 @@ function init() {
     root.style.setProperty('--symbol-size', `${SIZE.value}px`)
   }
 
-  // ---------------------------------------------------------------------
-  // 5. Tile click → inspector (desktop) or route (mobile).
-  // ---------------------------------------------------------------------
-  function onTileClick(symbol, tile) {
-    if (DESKTOP_MQ.matches) {
-      openDetail(symbol, tile)
-    } else {
-      // Mobile: navigate to `/symbols/<name>` so back-button restores
-      // the grid + scroll position.
-      const url = `/symbols/${encodeURIComponent(symbol.name)}${window.location.search}`
-      history.pushState({ symbolName: symbol.name }, '', url)
-      openDetail(symbol, tile, { skipPush: true })
-    }
-  }
-
-  function openDetail(symbol, tile, opts = {}) {
-    activeSymbol = symbol
-    lastClickedTile = tile
-    if (detail.root) detail.root.hidden = false
-    if (detail.name) detail.name.textContent = symbol.name
-    if (detail.scope) detail.scope.textContent =
-      symbol.scope === 'private' ? 'Private CoreGlyphs' : 'Public SF Symbol'
-    // Surface the "weight/scale apply to public only" hint when looking
-    // at a private symbol — withSymbolConfiguration is a no-op there.
-    const axesHint = document.getElementById('symbols-detail-axes-hint')
-    if (axesHint) axesHint.hidden = symbol.scope !== 'private'
-    refreshDetail()
-    fetchMetadata(symbol).then(meta => {
-      if (activeSymbol === symbol) renderMetadata(meta)
-    })
-    if (mobileBar.root) {
-      mobileBar.root.hidden = DESKTOP_MQ.matches
-      if (mobileBar.name) mobileBar.name.textContent = symbol.name
-    }
-    if (LAYOUT) LAYOUT.classList.add('symbols-layout--detail-open')
-    void opts
-  }
-
-  // Catalog payload only carries name + scope + categories + keywords —
-  // aliases and availability live in the per-symbol JSON endpoint and
-  // are fetched lazily on inspector open. Cached in-memory so revisiting
-  // a symbol doesn't re-hit the API.
-  const metadataCache = new Map()
-  async function fetchMetadata(symbol) {
-    const key = `${symbol.scope}/${symbol.name}`
-    if (metadataCache.has(key)) return metadataCache.get(key)
-    try {
-      const res = await fetch(`/api/symbols/${encodeURIComponent(symbol.scope)}/${encodeURIComponent(symbol.name)}.json`)
-      if (!res.ok) return symbol
-      const full = await res.json()
-      const merged = { ...symbol, ...full }
-      metadataCache.set(key, merged)
-      return merged
-    } catch {
-      return symbol
-    }
-  }
-
-  function closeDetail() {
-    activeSymbol = null
-    if (detail.root) detail.root.hidden = true
-    if (mobileBar.root) mobileBar.root.hidden = true
-    if (LAYOUT) LAYOUT.classList.remove('symbols-layout--detail-open')
-    if (lastClickedTile) lastClickedTile.focus()
-    // If we're at /symbols/<name>, pop back to /symbols.
-    const routeName = parseDetailRoute(window.location.pathname)
-    if (routeName) {
-      history.pushState({}, '', `/symbols${window.location.search}`)
-    }
-  }
-
-  detail.closeBtn?.addEventListener('click', closeDetail)
+  // ---- Detail wire-up ----
+  detail.closeBtn?.addEventListener('click', () => {
+    if (panel.close()) history.pushState({}, '', `/symbols${window.location.search}`)
+  })
   mobileBar.back?.addEventListener('click', () => history.back())
   SCROLLER.addEventListener('keydown', event => {
-    if (event.key === 'Escape') closeDetail()
+    if (event.key === 'Escape') panel.close()
   })
+  detail.copyBtn?.addEventListener('click', () => panel.copySvg())
+  mobileBar.copy?.addEventListener('click', () => panel.copySvg())
 
-  function refreshDetail() {
-    if (!activeSymbol) return
-    const base = `/api/symbols/${encodeURIComponent(activeSymbol.scope)}/${encodeURIComponent(activeSymbol.name)}`
-    // The preview is a <span> with `mask-image` (same recipe as the grid
-    // tile). When weight/scale are at their defaults, point the mask at
-    // the unparameterized URL so the bytes already cached by the grid
-    // tile are reused — no re-fetch, no Swift live-render. Color comes
-    // from `--symbol-color` / `currentColor` automatically.
-    const previewParams = new URLSearchParams()
-    if (detailWeight.value !== 'regular') previewParams.set('weight', detailWeight.value)
-    if (detailScale.value !== 'medium') previewParams.set('scale', detailScale.value)
-    const previewQs = previewParams.toString()
-    const previewUrl = previewQs ? `${base}.svg?${previewQs}` : `${base}.svg`
-    if (detail.preview) {
-      detail.preview.style.maskImage = `url(${previewUrl})`
-      detail.preview.style.webkitMaskImage = `url(${previewUrl})`
-      detail.preview.setAttribute('aria-label', activeSymbol.name)
-    }
-    // Downloads bake the active color so the saved file is self-contained.
-    const userColor = readVar('--symbol-color')
-    const fg = userColor || resolvedThemeFg()
-    const dlParams = new URLSearchParams(previewParams)
-    dlParams.set('size', '256')
-    dlParams.set('fg', fg)
-    const svgDl = `${base}.svg?${dlParams.toString()}`
-    const pngDl = `${base}.png?${dlParams.toString()}`
-    if (detail.downloadSvg) {
-      detail.downloadSvg.href = svgDl
-      detail.downloadSvg.download = `${activeSymbol.name}.svg`
-    }
-    if (detail.downloadPng) {
-      detail.downloadPng.href = pngDl
-      detail.downloadPng.download = `${activeSymbol.name}.png`
-    }
-  }
-
-  // Render only the metadata fields that have content. The catalog has a
-  // long tail of symbols with empty keywords / no aliases / no availability
-  // overrides — surfacing every field as a dt/dd pair makes near-empty
-  // metadata blocks look identical across symbols. Skip empties and
-  // expose the structural pieces of the symbol name (variant + base)
-  // as a "Composition" row so each symbol shows something distinctive.
-  function renderMetadata(symbol) {
-    if (!detail.meta) return
-    detail.meta.replaceChildren()
-    const rows = []
-    rows.push(['Scope', symbol.scope === 'private' ? 'Private CoreGlyphs' : 'Public SF Symbols'])
-    const composition = describeComposition(symbol.name)
-    if (composition) rows.push(['Composition', composition])
-    if ((symbol.categories || []).length) rows.push(['Categories', symbol.categories.join(', ')])
-    if ((symbol.keywords || []).length) rows.push(['Keywords', symbol.keywords.join(', ')])
-    const aliases = formatAliases(symbol.aliases)
-    if (aliases) rows.push(['Aliases', aliases])
-    const availability = formatAvailability(symbol.availability)
-    if (availability) rows.push(['Availability', availability])
-    if (symbol.bundle_version || symbol.bundleVersion) {
-      rows.push(['Bundle', symbol.bundle_version ?? symbol.bundleVersion])
-    }
-    for (const [k, v] of rows) {
-      const dt = document.createElement('dt'); dt.textContent = k
-      const dd = document.createElement('dd'); dd.textContent = v
-      detail.meta.append(dt, dd)
-    }
-  }
-
-  // Copy SVG button (inspector + mobile bar).
-  async function copySvg() {
-    if (!activeSymbol) return
-    try {
-      const fg = readVar('--symbol-color')
-      const base = `/api/symbols/${encodeURIComponent(activeSymbol.scope)}/${encodeURIComponent(activeSymbol.name)}.svg`
-      // No user-set colour → copy the theme-neutral prerendered SVG
-      // (currentColor-friendly). Once the user has picked a colour,
-      // bake it into the copied bytes via the live render path.
-      const url = fg ? `${base}?fg=${encodeURIComponent(fg)}` : base
-      const res = await fetch(url)
-      const text = await res.text()
-      await navigator.clipboard.writeText(text)
-      status('SVG copied to clipboard')
-    } catch (err) {
-      status('Copy failed: ' + err.message)
-    }
-  }
-  detail.copyBtn?.addEventListener('click', copySvg)
-  mobileBar.copy?.addEventListener('click', copySvg)
-
-  // ---------------------------------------------------------------------
-  // 6. URL state — `?q=&scope=&cat=` plus `/symbols/<name>` route.
-  // ---------------------------------------------------------------------
-  function readUrlState() {
-    const params = new URLSearchParams(window.location.search)
-    return {
-      q: params.get('q') || '',
-      scope: params.get('scope') || '',
-      cat: params.get('cat') || '',
-    }
-  }
-
-  function writeUrlState() {
-    const params = new URLSearchParams()
-    if (QUERY?.value) params.set('q', QUERY.value)
-    if (SCOPE?.value) params.set('scope', SCOPE.value)
-    if (currentCat) params.set('cat', currentCat)
-    const qs = params.toString()
-    const detailName = parseDetailRoute(window.location.pathname)
-    const path = detailName ? `/symbols/${encodeURIComponent(detailName)}` : '/symbols'
-    const next = qs ? `${path}?${qs}` : path
-    if (next !== `${window.location.pathname}${window.location.search}`) {
-      history.replaceState(history.state, '', next)
-    }
-  }
-
-  function parseDetailRoute(pathname) {
-    const m = pathname.match(/^\/symbols\/(.+?)\/?$/)
-    return m ? decodeURIComponent(m[1]) : null
-  }
-
+  // ---- Popstate ----
   window.addEventListener('popstate', () => {
     const state = readUrlState()
     if (QUERY) QUERY.value = state.q
@@ -595,102 +283,11 @@ function init() {
     const routeName = parseDetailRoute(window.location.pathname)
     if (routeName) {
       const sym = allSymbols.find(s => s.name === routeName)
-      if (sym) openDetail(sym, null, { skipPush: true })
+      if (sym) panel.open(sym, null)
     } else {
-      closeDetailNoNav()
+      panel.closeNoNav()
     }
   })
-
-  function closeDetailNoNav() {
-    activeSymbol = null
-    if (detail.root) detail.root.hidden = true
-    if (mobileBar.root) mobileBar.root.hidden = true
-    if (LAYOUT) LAYOUT.classList.remove('symbols-layout--detail-open')
-  }
-
-  // ---------------------------------------------------------------------
-  // helpers
-  // ---------------------------------------------------------------------
-  function status(text) {
-    if (STATUS) STATUS.textContent = text
-  }
-
-  function readVar(name) {
-    return getComputedStyle(root).getPropertyValue(name).trim()
-  }
-
-  function bindColorPair(picker, hex, onChange) {
-    picker.addEventListener('input', () => {
-      hex.value = picker.value
-      onChange()
-    })
-    hex.addEventListener('input', () => {
-      const norm = normaliseHex(hex.value)
-      if (norm) picker.value = norm
-      onChange()
-    })
-  }
-
-  function normaliseHex(value) {
-    const raw = String(value || '').trim()
-    if (!raw) return ''
-    const match = raw.match(/^#?([0-9a-fA-F]{6})$/)
-    if (!match) return null
-    return `#${match[1].toLowerCase()}`
-  }
-
-  // Many symbols share the same categories/keywords payload (e.g. every
-  // ".badge" variant of "person" carries the same {human} category). To
-  // give the metadata block something distinctive per symbol, decompose
-  // the dotted name into base + modifiers ("circle.fill" → base "circle"
-  // with modifier "fill"; "person.2.badge.app.3.stack.3d.fill" → "person",
-  // "2", "badge", "app", "3", "stack", "3d", "fill"). The display string
-  // emphasises the stem and lists the modifiers in stack order.
-  function describeComposition(name) {
-    if (!name) return ''
-    const parts = name.split('.').filter(Boolean)
-    if (parts.length === 1) return ''
-    const stem = parts[0]
-    const modifiers = parts.slice(1)
-    return `${stem} → ${modifiers.join(' → ')}`
-  }
-
-  function formatAliases(aliases) {
-    if (!aliases) return ''
-    if (Array.isArray(aliases)) return aliases.length ? aliases.join(', ') : ''
-    if (typeof aliases === 'object') {
-      const keys = Object.keys(aliases)
-      return keys.length ? keys.join(', ') : ''
-    }
-    return ''
-  }
-
-  // Availability is shipped as `{ "iOS": "18.0", "macOS": "15.0", … }`.
-  // Render in OS order, omit unset platforms.
-  function formatAvailability(availability) {
-    if (!availability || typeof availability !== 'object') return ''
-    const platformOrder = ['iOS', 'iPadOS', 'macOS', 'watchOS', 'tvOS', 'visionOS']
-    const seen = new Set(platformOrder)
-    const ordered = [...platformOrder.filter(p => availability[p]), ...Object.keys(availability).filter(p => !seen.has(p))]
-    const parts = ordered
-      .map(p => availability[p] ? `${p} ${availability[p]}` : null)
-      .filter(Boolean)
-    return parts.join(', ')
-  }
-
-  // Snap the page's computed text colour to a hex string suitable for
-  // the symbol-render API. The browser returns `rgb(r, g, b)` /
-  // `rgba(...)` from getComputedStyle even when CSS used a named
-  // colour, so a small parser handles both. Falls back to `#000000` if
-  // the format is unexpected (e.g. `oklch()` on very new browsers).
-  function resolvedThemeFg() {
-    const raw = getComputedStyle(document.body).color || ''
-    const m = raw.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
-    if (!m) return '#000000'
-    const hex = (n) => Number(n).toString(16).padStart(2, '0')
-    return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`
-  }
-
 }
 
 init()
