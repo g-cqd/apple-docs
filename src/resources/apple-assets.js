@@ -15,6 +15,14 @@ import {
 } from './apple-fonts/sfnt.js'
 import { renderFontText } from './apple-fonts/render.js'
 import {
+  discoverAppleFontFiles,
+  downloadFileIfNeeded,
+  extractDmgFonts,
+  hashFile,
+  readBundleVersion,
+  readStringsMap,
+} from './apple-fonts/sync.js'
+import {
   getPrerenderedSymbolPath,
   normalizeSymbolScale,
   normalizeSymbolWeight,
@@ -27,6 +35,7 @@ import {
   customizePrerenderedSymbolSvg,
   renderSymbolSvgFallback,
 } from './apple-symbols/svg-helpers.js'
+import { renderSfSymbol, SYMBOL_RENDERER_VERSION } from './apple-symbols/render.js'
 import {
   clampInteger,
   escapeXml,
@@ -39,6 +48,7 @@ import {
 export { inspectSfntFile, parseFontFilename }
 export { SYMBOL_WEIGHTS, SYMBOL_SCALES, getPrerenderedSymbolPath }
 export { renderFontText }
+export { renderSfSymbol }
 
 const APPLE_FONT_FAMILIES = [
   { id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg', match: /^SF-Pro(?:-|\.|$)|^SFNS/i },
@@ -214,7 +224,6 @@ export function searchSfSymbols(query, opts, ctx) {
   return { results: ctx.db.searchSfSymbols(query, opts), query: query ?? '', scope: opts.scope ?? null }
 }
 
-const SYMBOL_RENDERER_VERSION = 8
 const SYMBOL_DEFAULT_RENDER_SIZE = 128
 
 /**
@@ -418,448 +427,6 @@ async function spawnSymbolWorker({ scope, logger }) {
 
 
 
-export async function renderSfSymbol(opts, ctx) {
-  const scope = opts.scope === 'private' ? 'private' : 'public'
-  const format = opts.format === 'svg' ? 'svg' : 'png'
-  const pointSize = clampInteger(opts.size ?? opts.pointSize ?? 64, 8, 1024)
-  const requestedWeight = normalizeSymbolWeight(opts.weight)
-  const requestedScale = normalizeSymbolScale(opts.scale)
-  const weight = scope === 'public' ? requestedWeight : 'regular'
-  const scale = scope === 'public' ? requestedScale : 'medium'
-  // SVG accepts the literal string "currentColor" so it inherits the page's
-  // CSS color. PNG cannot — Apple's renderer needs a concrete sRGB value, so
-  // we fall back to black for PNG when "currentColor" is requested.
-  const rawColor = opts.color ?? '#000000'
-  const color = format === 'svg' && String(rawColor).toLowerCase() === 'currentcolor'
-    ? 'currentColor'
-    : normalizeColor(rawColor)
-  const background = normalizeBackground(opts.background ?? opts.bg)
-  const cacheKey = sha256(JSON.stringify({
-    // Bumping `renderer` invalidates every cached SVG/PNG so the next
-    // request refreshes against the current snapshot/live renderer contract.
-    //   - 2: tried `_vectorGlyph` without flip + forced evenodd (broke many)
-    //   - 3: switched to `outlinePath` (single flat path; loses per-layer
-    //        XOR/exclusion → tray.badge.sparkles renders as a blob)
-    //   - 4: canonical pipeline — vectorGlyph.drawInContext: into a 2048pt
-    //        PDF page, then pdftocairo → SVG, then strip the clipPath
-    //        wrapper and recompute viewBox from path data. Lost cut-out
-    //        layers on .fill symbols (xmark.bin.circle.fill, health.fill).
-    //   - 5: same Swift PDF emitter, but parse the PDF in JS and convert
-    //        `/ca 0` ExtGState fills into SVG `<mask>` cut-outs. True
-    //        vector fidelity for every layer-cutout symbol.
-    //   - 6: weight + scale plumbed through to NSSymbolConfiguration so
-    //        the inspector controls actually re-render the preview.
-    //   - 7: alpha-zero cut layers now emit fill-rule-preserving internal
-    //        SVG masks instead of the old even-odd clip subtraction shortcut.
-    //   - 8: runtime renders derive from snapshot SVG geometry first; live
-    //        CoreGlyphs/AppKit rendering is fallback only.
-    renderer: SYMBOL_RENDERER_VERSION,
-    type: 'sf-symbol',
-    scope,
-    name: opts.name,
-    format,
-    pointSize,
-    weight,
-    scale,
-    color,
-    background,
-  })).slice(0, 32)
-  const cached = ctx.db.getSfSymbolRender(cacheKey)
-  if (cached && existsSync(cached.file_path)) return cached
-
-  const symbol = ctx.db.getSfSymbol(scope, opts.name)
-  if (!symbol) throw new Error(`SF Symbol not found: ${scope}/${opts.name}`)
-
-  const renderDir = join(ctx.dataDir, 'resources', 'symbol-renders', scope)
-  ensureDir(renderDir)
-  const filePath = join(renderDir, `${sanitizeFileName(opts.name)}.${cacheKey}.${format}`)
-  let data
-  let mode = 'live'
-  const snapshotSvg = await renderSymbolSvgFromSnapshot({
-    name: opts.name,
-    scope,
-    pointSize,
-    weight,
-    scale,
-    color,
-    background,
-  }, ctx)
-  if (snapshotSvg) {
-    if (format === 'svg') {
-      data = snapshotSvg
-      mode = 'snapshot'
-    } else {
-      try {
-        data = await renderPngFromSvg(snapshotSvg, { pointSize })
-        mode = 'snapshot'
-      } catch (error) {
-        ctx.logger?.warn?.(`SF Symbol snapshot PNG rasterization failed for ${scope}/${opts.name}: ${error.message}`)
-      }
-    }
-  }
-  if (!data) {
-    if (format === 'svg') {
-      try {
-        data = await renderSymbolSvgCurves({ name: opts.name, scope, pointSize, weight, scale, color, background })
-      } catch (error) {
-        ctx.logger?.warn?.(`SF Symbol SVG outline render failed for ${scope}/${opts.name}: ${error.message}`)
-        data = renderSymbolSvgFallback({ name: opts.name, scope, pointSize, color, background })
-      }
-    } else {
-      data = await renderSymbolPng({ name: opts.name, scope, pointSize, weight, scale, color, background })
-    }
-  }
-  await Bun.write(filePath, data)
-  const bytes = await Bun.file(filePath).arrayBuffer()
-  const row = {
-    cacheKey,
-    name: opts.name,
-    scope,
-    format,
-    mode,
-    weight,
-    symbolScale: scale,
-    pointSize,
-    color,
-    filePath,
-    mimeType: format === 'svg' ? 'image/svg+xml; charset=utf-8' : 'image/png',
-    sha256: sha256(bytes),
-    size: bytes.byteLength,
-  }
-  ctx.db.upsertSfSymbolRender(row)
-  return ctx.db.getSfSymbolRender(cacheKey)
-}
-
-
-function discoverAppleFontFiles(dirs) {
-  const files = []
-  const seen = new Set()
-  for (const dir of dirs) {
-    if (!existsSync(dir)) continue
-    walkFiles(dir, (filePath) => {
-      const ext = extname(filePath).toLowerCase()
-      if (!FONT_EXTENSIONS.has(ext)) return
-      const resolved = resolve(filePath)
-      if (seen.has(resolved)) return
-      seen.add(resolved)
-      files.push({ fileName: basename(filePath), filePath: resolved })
-    })
-  }
-  return files
-}
-
-function walkFiles(dir, visit) {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      if (entry.name === '__MACOSX') continue
-      walkFiles(full, visit)
-    } else if (entry.isFile()) {
-      visit(full)
-    }
-  }
-}
-
-async function downloadFileIfNeeded(url, filePath) {
-  if (existsSync(filePath) && statSync(filePath).size > 0) return false
-  ensureDir(dirname(filePath))
-  const tmpPath = `${filePath}.${process.pid}.tmp`
-  const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(300_000) })
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} downloading ${url}`)
-  const sink = Bun.file(tmpPath).writer()
-  const reader = res.body.getReader()
-  let ended = false
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      sink.write(value)
-    }
-    await sink.end()
-    ended = true
-    await rename(tmpPath, filePath)
-  } finally {
-    if (!ended) await sink.end().catch(() => {})
-    await rm(tmpPath, { force: true }).catch(() => {})
-  }
-  return true
-}
-
-async function extractDmgFonts(dmgPath, destinationDir, logger) {
-  ensureDir(destinationDir)
-  const mountDir = await mkdtemp(join(tmpdir(), 'apple-docs-font-dmg-'))
-  const expandedDir = await mkdtemp(join(tmpdir(), 'apple-docs-font-pkg-'))
-  try {
-    await run(['hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mountDir, dmgPath])
-    for (const pkg of findByExtension(mountDir, '.pkg')) {
-      const out = join(expandedDir, sanitizeFileName(basename(pkg)))
-      await run(['pkgutil', '--expand-full', pkg, out]).catch(error => {
-        logger?.warn?.(`pkgutil failed for ${pkg}: ${error.message}`)
-      })
-    }
-    const extracted = []
-    for (const source of discoverAppleFontFiles([mountDir, expandedDir])) {
-      const target = join(destinationDir, source.fileName)
-      await copyFile(source.filePath, target)
-      extracted.push(target)
-    }
-    return extracted
-  } finally {
-    await run(['hdiutil', 'detach', mountDir]).catch(() => {})
-    await rm(mountDir, { recursive: true, force: true }).catch(() => {})
-    await rm(expandedDir, { recursive: true, force: true }).catch(() => {})
-  }
-}
-
-function findByExtension(dir, extension) {
-  const out = []
-  if (!existsSync(dir)) return out
-  walkFiles(dir, (filePath) => {
-    if (extname(filePath).toLowerCase() === extension) out.push(filePath)
-  })
-  return out
-}
-
-
-/**
- * Minimal XML-plist parser. Handles the dialect Apple ships under
- * CoreGlyphs.bundle and the fixtures in test/unit/symbols.test.js:
- *   <dict>, <array>, <key>, <string>, <integer>, <real>, <true/>, <false/>,
- *   <data>, <date>.
- *
- * Comments, CDATA, and DOCTYPE are tolerated and skipped. Binary plists
- * fall through with a plain throw — the caller already knows to escalate
- * to plutil in that case.
- */
-async function readStringsMap(path) {
-  const value = await readPlist(path).catch(() => null)
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  const aliases = {}
-  for (const [alias, canonical] of Object.entries(value)) {
-    if (typeof canonical !== 'string') continue
-    aliases[canonical] = [...(aliases[canonical] ?? []), alias]
-  }
-  return aliases
-}
-
-async function readBundleVersion(contentsDir) {
-  const info = await readPlist(join(contentsDir, 'Info.plist')).catch(() => null)
-  return info?.CFBundleVersion ?? null
-}
-
-async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
-  // Stryker disable all
-  const script = `
-import AppKit
-import Foundation
-let name = CommandLine.arguments[1]
-let scope = CommandLine.arguments[2]
-let pointSize = CGFloat(Double(CommandLine.arguments[3]) ?? 64)
-let color = NSColor(hex: CommandLine.arguments[4]) ?? .labelColor
-let backgroundArg = CommandLine.arguments.count > 5 ? CommandLine.arguments[5] : ""
-let background: NSColor? = backgroundArg.isEmpty ? nil : NSColor(hex: backgroundArg)
-let weightArg = CommandLine.arguments.count > 6 ? CommandLine.arguments[6] : "regular"
-let scaleArg = CommandLine.arguments.count > 7 ? CommandLine.arguments[7] : "medium"
-func parseWeight(_ s: String) -> NSFont.Weight {
-  switch s.lowercased() {
-  case "ultralight": return .ultraLight
-  case "thin": return .thin
-  case "light": return .light
-  case "medium": return .medium
-  case "semibold": return .semibold
-  case "bold": return .bold
-  case "heavy": return .heavy
-  case "black": return .black
-  default: return .regular
-  }
-}
-func parseScale(_ s: String) -> NSImage.SymbolScale {
-  switch s.lowercased() {
-  case "small": return .small
-  case "large": return .large
-  default: return .medium
-  }
-}
-let image: NSImage?
-if scope == "private" {
-  let paths = [
-    "/System/Library/CoreServices/CoreGlyphsPrivate.bundle",
-    "/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphsPrivate.bundle"
-  ]
-  image = paths.lazy.compactMap { Bundle(path: $0)?.image(forResource: name) }.first
-} else {
-  image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
-}
-guard let base = image else { FileHandle.standardError.write(Data("symbol not found".utf8)); exit(2) }
-// withSymbolConfiguration only honours weight/scale for system symbols.
-// Private bundle images are plain NSImages — applying the configuration
-// returns them unchanged.
-let configured = scope == "public"
-  ? (base.withSymbolConfiguration(.init(pointSize: pointSize, weight: parseWeight(weightArg), scale: parseScale(scaleArg))) ?? base)
-  : base
-let px = Int((pointSize * 2).rounded())
-guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { exit(3) }
-rep.size = NSSize(width: pointSize, height: pointSize)
-NSGraphicsContext.saveGraphicsState()
-NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-if let bg = background {
-  bg.setFill()
-} else {
-  NSColor.clear.setFill()
-}
-NSRect(x: 0, y: 0, width: pointSize, height: pointSize).fill()
-color.set()
-let fit = min(pointSize / configured.size.width, pointSize / configured.size.height)
-let draw = NSRect(x: (pointSize - configured.size.width * fit) / 2, y: (pointSize - configured.size.height * fit) / 2, width: configured.size.width * fit, height: configured.size.height * fit)
-configured.draw(in: draw, from: .zero, operation: .sourceOver, fraction: 1)
-NSGraphicsContext.restoreGraphicsState()
-guard let data = rep.representation(using: .png, properties: [:]) else { exit(4) }
-FileHandle.standardOutput.write(data)
-extension NSColor {
-  convenience init?(hex: String) {
-    var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-    if s.hasPrefix("#") { s.removeFirst() }
-    guard s.count == 6 || s.count == 8, let v = UInt64(s, radix: 16) else { return nil }
-    let r, g, b, a: CGFloat
-    if s.count == 8 {
-      r = CGFloat((v >> 24) & 0xff) / 255
-      g = CGFloat((v >> 16) & 0xff) / 255
-      b = CGFloat((v >> 8) & 0xff) / 255
-      a = CGFloat(v & 0xff) / 255
-    } else {
-      r = CGFloat((v >> 16) & 0xff) / 255
-      g = CGFloat((v >> 8) & 0xff) / 255
-      b = CGFloat(v & 0xff) / 255
-      a = 1
-    }
-    self.init(srgbRed: r, green: g, blue: b, alpha: a)
-  }
-}
-`
-  // Stryker restore all
-  const scriptPath = join(tmpdir(), `apple-docs-render-symbol-${process.pid}-${tempSuffix()}.swift`)
-  await Bun.write(scriptPath, script)
-  try {
-    const proc = Bun.spawn(
-      ['swift', scriptPath, name, scope, String(pointSize), color, background ?? '', weight, scale],
-      { stdout: 'pipe', stderr: 'pipe' },
-    )
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).arrayBuffer(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code !== 0) throw new Error(stderr.trim() || `swift exited ${code}`)
-    return stdout
-  } finally {
-    await rm(scriptPath, { force: true }).catch(() => {})
-  }
-}
-
-async function renderSymbolSvgCurves({ name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
-  const pdfBytes = await renderSymbolToPdfBytes({ name, scope, weight, scale })
-  return finalizeSvgFromPdf(pdfBytes, { name, pointSize, color, background })
-}
-
-/**
- * Spawn Swift to render an SF Symbol via Apple's canonical
- * `vectorGlyph.drawInContext:` path into a 2048pt PDF page. The PDF preserves
- * Apple's full multi-layer rendering (per-layer fill rules, exclusion of
- * sparkles inside a badge cut-out, etc.) — what we miss when reading
- * `outlinePath` directly. PDF bytes flow back on stdout.
- *
- * @param {{ name: string, scope: string, weight?: string, scale?: string }} args
- * @returns {Promise<Uint8Array>}
- */
-async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale = 'medium' }) {
-  const scriptPath = join(tmpdir(), `apple-docs-symbol-pdf-${process.pid}-${tempSuffix()}.swift`)
-  await Bun.write(scriptPath, SYMBOL_PDF_SCRIPT)
-  try {
-    const proc = Bun.spawn(['swift', scriptPath, name, scope, weight, scale], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).arrayBuffer(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code !== 0) throw new Error(stderr.trim() || `swift exited ${code}`)
-    return new Uint8Array(stdout)
-  } finally {
-    await rm(scriptPath, { force: true }).catch(() => {})
-  }
-}
-
-/**
- * Convert a single-page SF Symbol PDF into a clean vector SVG. We parse the
- * content stream ourselves (see symbol-pdf-to-svg.js) instead of shelling
- * out to pdftocairo, because Apple encodes layer cut-outs (xmark.bin.circle.fill,
- * health.fill, circle.slash, …) as `/ca 0` ExtGState fills — which any
- * spec-compliant PDF renderer correctly skips, dropping the cut-out geometry
- * we need. Our parser preserves those alpha-0 fills and emits them as SVG
- * `<mask>` cut-outs against the preceding visible layer.
- */
-async function finalizeSvgFromPdf(pdfBytes, { name, pointSize, color, background }) {
-  return symbolPdfToSvg(pdfBytes, { name, pointSize, color, background })
-}
-
-async function renderSymbolSvgFromSnapshot({ name, scope, pointSize, weight, scale, color, background }, ctx) {
-  const filePath = getPrerenderedSymbolPath(ctx, scope, name, { weight, scale })
-  const file = Bun.file(filePath)
-  if (!await file.exists()) return null
-  try {
-    const svg = await file.text()
-    return customizePrerenderedSymbolSvg(svg, { pointSize, color, background })
-  } catch (error) {
-    ctx.logger?.warn?.(`SF Symbol snapshot SVG read failed for ${scope}/${name}: ${error.message}`)
-    return null
-  }
-}
-
-async function renderPngFromSvg(svg, { pointSize }) {
-  const dir = await mkdtemp(join(tmpdir(), 'apple-docs-symbol-snapshot-'))
-  const svgPath = join(dir, 'symbol.svg')
-  const pngPath = join(dir, 'symbol.png')
-  const errors = []
-  try {
-    await Bun.write(svgPath, svg)
-    const rsvg = await runRasterCommand(['rsvg-convert', '-w', String(pointSize), '-h', String(pointSize), svgPath, '-o', pngPath])
-    if (rsvg.ok) return await readRasterizedPng(pngPath)
-    errors.push(`rsvg-convert: ${rsvg.error}`)
-
-    await rm(pngPath, { force: true }).catch(() => {})
-    const sips = await runRasterCommand(['/usr/bin/sips', '-s', 'format', 'png', svgPath, '--out', pngPath])
-    if (sips.ok) return await readRasterizedPng(pngPath)
-    errors.push(`sips: ${sips.error}`)
-
-    throw new Error(errors.join('; '))
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
-}
-
-async function readRasterizedPng(path) {
-  if (!existsSync(path) || statSync(path).size === 0) {
-    throw new Error('rasterizer did not produce a PNG')
-  }
-  return await Bun.file(path).arrayBuffer()
-}
-
-async function runRasterCommand(args) {
-  try {
-    const proc = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' })
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code !== 0) return { ok: false, error: stderr.trim() || stdout.trim() || `exited ${code}` }
-    return { ok: true, error: null }
-  } catch (error) {
-    return { ok: false, error: error.message }
-  }
-}
 
 async function getSymbolRenderProvenance() {
   return {
@@ -915,11 +482,6 @@ async function run(args) {
     proc.exited,
   ])
   if (code !== 0) throw new Error(`${args[0]} exited ${code}: ${stderr.trim()}`)
-}
-
-async function hashFile(path) {
-  const bytes = await Bun.file(path).arrayBuffer()
-  return sha256(bytes)
 }
 
 
