@@ -4,6 +4,7 @@ import { dirname } from 'node:path'
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 import { runMigrations } from './migrations/index.js'
 import { applyPragmas, enableForeignKeys } from './pragmas.js'
+import { createCrawlRepo } from './repos/crawl.js'
 import { createOperationsRepo } from './repos/operations.js'
 import { deriveRootSourceType } from './source-types.js'
 
@@ -33,6 +34,7 @@ export class DocsDatabase {
     this._migrate()
     this._prepareStatements()
     this.operations = createOperationsRepo(this.db)
+    this.crawl = createCrawlRepo(this.db)
     enableForeignKeys(this.db)
   }
 
@@ -455,17 +457,6 @@ export class DocsDatabase {
     this._getRefsBySource = this.db.query('SELECT target_path, anchor_text, section FROM refs WHERE source_id = ? ORDER BY section, anchor_text')
     this._deleteRefsBySource = this.db.query('DELETE FROM refs WHERE source_id = ?')
 
-    this._setCrawlState = this.db.query(`
-      INSERT INTO crawl_state (path, status, root_slug, depth, error)
-      VALUES ($path, $status, $root_slug, $depth, $error)
-      ON CONFLICT(path) DO UPDATE SET status = $status, error = $error
-    `)
-    this._getPendingCrawl = this.db.query("SELECT path, depth FROM crawl_state WHERE status = 'pending' AND root_slug = ? LIMIT ?")
-    this._resetFailedCrawl = this.db.query("UPDATE crawl_state SET status = 'pending', error = NULL WHERE status = 'failed' AND root_slug = ?")
-    this._countFailed = this.db.query("SELECT COUNT(*) as count FROM crawl_state WHERE status = 'failed' AND root_slug = ?")
-    this._countCrawlState = this.db.query('SELECT status, COUNT(*) as count FROM crawl_state WHERE root_slug = ? GROUP BY status')
-    this._clearCrawlState = this.db.query('DELETE FROM crawl_state WHERE root_slug = ?')
-
     this._updatePageConverted = this.db.query("UPDATE pages SET converted_at = ? WHERE path = ?")
     this._getUnconvertedPages = this.db.query(`
       SELECT p.path, r.slug as root_slug, COALESCE(p.source_type, r.source_type) as source_type
@@ -488,25 +479,6 @@ export class DocsDatabase {
     `)
     this._markPageDeleted = this.db.query("UPDATE pages SET status = 'deleted' WHERE path = ?")
     this._updatePageEtag = this.db.query("UPDATE pages SET etag = $etag, last_modified = $last_modified, content_hash = $content_hash, downloaded_at = $downloaded_at WHERE path = $path")
-
-    // Per-root crawl progress
-    this._crawlProgressByRoot = this.db.query(`
-      SELECT root_slug,
-             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-             SUM(CASE WHEN status = 'processed' THEN 1 ELSE 0 END) as processed,
-             SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
-      FROM crawl_state
-      GROUP BY root_slug
-      ORDER BY root_slug
-    `)
-    this._crawlProgressAll = this.db.query(`
-      SELECT
-        COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pending,
-        COALESCE(SUM(CASE WHEN status = 'processed' THEN 1 ELSE 0 END), 0) as processed,
-        COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed,
-        COUNT(*) as total
-      FROM crawl_state
-    `)
 
   }
 
@@ -887,41 +859,14 @@ export class DocsDatabase {
   }
 
   setCrawlState(path, status, rootSlug, depth = 0, error = null) {
-    this._setCrawlState.run({ $path: path, $status: status, $root_slug: rootSlug, $depth: depth, $error: error })
+    this.crawl.setCrawlState(path, status, rootSlug, depth, error)
   }
-
-  seedCrawlIfNew(path, rootSlug, depth = 0) {
-    // Only insert if not already known
-    const existing = this.db.query('SELECT 1 FROM crawl_state WHERE path = ?').get(path)
-    if (!existing) {
-      this.setCrawlState(path, 'pending', rootSlug, depth)
-      return true
-    }
-    return false
-  }
-
-  getPendingCrawl(rootSlug, limit = 10) {
-    return this._getPendingCrawl.all(rootSlug, limit)
-  }
-
-  resetFailedCrawl(rootSlug) {
-    return this._resetFailedCrawl.run(rootSlug)
-  }
-
-  countFailed(rootSlug) {
-    return this._countFailed.get(rootSlug).count
-  }
-
-  getCrawlStats(rootSlug) {
-    const rows = this._countCrawlState.all(rootSlug)
-    const stats = { pending: 0, processed: 0, failed: 0 }
-    for (const row of rows) stats[row.status] = row.count
-    return stats
-  }
-
-  clearCrawlState(rootSlug) {
-    this._clearCrawlState.run(rootSlug)
-  }
+  seedCrawlIfNew(path, rootSlug, depth = 0) { return this.crawl.seedCrawlIfNew(path, rootSlug, depth) }
+  getPendingCrawl(rootSlug, limit = 10) { return this.crawl.getPendingCrawl(rootSlug, limit) }
+  resetFailedCrawl(rootSlug) { return this.crawl.resetFailedCrawl(rootSlug) }
+  countFailed(rootSlug) { return this.crawl.countFailed(rootSlug) }
+  getCrawlStats(rootSlug) { return this.crawl.getCrawlStats(rootSlug) }
+  clearCrawlState(rootSlug) { this.crawl.clearCrawlState(rootSlug) }
 
   addUpdateLog(params) { this.operations.addUpdateLog(params) }
   getLastUpdateLog() { return this.operations.getLastUpdateLog() }
@@ -980,13 +925,8 @@ export class DocsDatabase {
   clearActivity() { this.operations.clearActivity() }
   getActivity() { return this.operations.getActivity() }
 
-  getCrawlProgressByRoot() {
-    return this._crawlProgressByRoot.all()
-  }
-
-  getCrawlProgressAll() {
-    return this._crawlProgressAll.get() ?? { pending: 0, processed: 0, failed: 0, total: 0 }
-  }
+  getCrawlProgressByRoot() { return this.crawl.getCrawlProgressByRoot() }
+  getCrawlProgressAll() { return this.crawl.getCrawlProgressAll() }
 
   getSnapshotMeta(key) { return this.operations.getSnapshotMeta(key) }
   setSnapshotMeta(key, value) {
