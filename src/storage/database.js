@@ -7,14 +7,11 @@ import { applyPragmas, enableForeignKeys } from './pragmas.js'
 import { createAssetsFontsRepo } from './repos/assets-fonts.js'
 import { createAssetsSymbolsRepo } from './repos/assets-symbols.js'
 import { createCrawlRepo } from './repos/crawl.js'
+import { createDocumentsRepo } from './repos/documents.js'
 import { createOperationsRepo } from './repos/operations.js'
+import { createPagesRepo } from './repos/pages.js'
 import { createRefsRepo } from './repos/refs.js'
 import { createRootsRepo } from './repos/roots.js'
-function serializePlatforms(value) {
-  if (value == null) return null
-  return typeof value === 'string' ? value : JSON.stringify(value)
-}
-
 function deriveFrameworkFromPath(path) {
   if (!path) return null
   const parts = path.split('/').filter(Boolean)
@@ -41,6 +38,8 @@ export class DocsDatabase {
     this.assetsSymbols = createAssetsSymbolsRepo(this.db)
     this.roots = createRootsRepo(this.db)
     this.refs = createRefsRepo(this.db)
+    this.pages = createPagesRepo(this.db)
+    this.documents = createDocumentsRepo(this.db, { hasSectionsTable: this.hasTable('document_sections') })
     enableForeignKeys(this.db)
   }
 
@@ -123,156 +122,17 @@ export class DocsDatabase {
     )`)
     this.db.run('CREATE INDEX IF NOT EXISTS idx_sections_doc ON document_sections(document_id)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_sections_kind ON document_sections(section_kind)')
-    this._deleteDocumentSections = this.db.query('DELETE FROM document_sections WHERE document_id = ?')
-    this._insertDocumentSection = this.db.query(`
-      INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order)
-      VALUES ($document_id, $section_kind, $heading, $content_text, $content_json, $sort_order)
-      ON CONFLICT(document_id, section_kind, sort_order) DO UPDATE SET
-        heading = $heading,
-        content_text = $content_text,
-        content_json = $content_json
-    `)
+    // Rebuild the documents repo so its section-related prepared statements
+    // pick up the freshly-created table.
+    this.documents = createDocumentsRepo(this.db, { hasSectionsTable: true })
   }
 
   _prepareStatements() {
-    // Detect available tier-optional tables once
-    const hasSections = this.hasTable('document_sections')
+    // Detect tier-optional tables once. (hasSections lives on the
+    // documents repo now; only the search-side flags stay here until P2.4.)
     const hasTrigram = this.hasTable('documents_trigram')
     const hasBodyFts = this.hasTable('documents_body_fts')
 
-    this._upsertPage = this.db.query(`
-      INSERT INTO pages (
-        root_id, path, url, title, role, role_heading, abstract, platforms, declaration,
-        etag, last_modified, content_hash, downloaded_at, status,
-        source_type, language, is_release_notes, url_depth, doc_kind, source_metadata,
-        min_ios, min_macos, min_watchos, min_tvos, min_visionos
-      )
-      VALUES (
-        $root_id, $path, $url, $title, $role, $role_heading, $abstract, $platforms, $declaration,
-        $etag, $last_modified, $content_hash, $downloaded_at, 'active',
-        $source_type, $language, $is_release_notes, $url_depth, $doc_kind, $source_metadata,
-        $min_ios, $min_macos, $min_watchos, $min_tvos, $min_visionos
-      )
-      ON CONFLICT(path) DO UPDATE SET
-        title = COALESCE($title, pages.title),
-        role = COALESCE($role, pages.role),
-        role_heading = COALESCE($role_heading, pages.role_heading),
-        abstract = COALESCE($abstract, pages.abstract),
-        platforms = COALESCE($platforms, pages.platforms),
-        declaration = COALESCE($declaration, pages.declaration),
-        etag = COALESCE($etag, pages.etag),
-        last_modified = COALESCE($last_modified, pages.last_modified),
-        content_hash = COALESCE($content_hash, pages.content_hash),
-        downloaded_at = COALESCE($downloaded_at, pages.downloaded_at),
-        source_type = COALESCE($source_type, pages.source_type),
-        language = COALESCE($language, pages.language),
-        is_release_notes = COALESCE($is_release_notes, pages.is_release_notes),
-        url_depth = COALESCE($url_depth, pages.url_depth),
-        doc_kind = COALESCE($doc_kind, pages.doc_kind),
-        source_metadata = COALESCE($source_metadata, pages.source_metadata),
-        min_ios = COALESCE($min_ios, pages.min_ios),
-        min_macos = COALESCE($min_macos, pages.min_macos),
-        min_watchos = COALESCE($min_watchos, pages.min_watchos),
-        min_tvos = COALESCE($min_tvos, pages.min_tvos),
-        min_visionos = COALESCE($min_visionos, pages.min_visionos),
-        status = 'active'
-      RETURNING id
-    `)
-
-    this._getPage = this.db.query('SELECT p.*, r.slug as root_slug, r.display_name as framework FROM pages p JOIN roots r ON p.root_id = r.id WHERE p.path = ? AND p.status = ?')
-
-    this._getDocumentsByRoot = this.db.query(`
-      SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract
-      FROM documents d
-      JOIN pages p ON p.path = d.key
-      JOIN roots r ON p.root_id = r.id
-      WHERE r.slug = ? AND p.status = 'active'
-      ORDER BY d.key
-    `)
-
-    this._upsertDocument = this.db.query(`
-      INSERT INTO documents (
-        source_type, key, title, kind, role, role_heading, framework, url, language,
-        abstract_text, declaration_text, headings, platforms_json,
-        min_ios, min_macos, min_watchos, min_tvos, min_visionos,
-        is_deprecated, is_beta, is_release_notes, url_depth,
-        source_metadata, content_hash, raw_payload_hash, created_at, updated_at
-      )
-      VALUES (
-        $source_type, $key, $title, $kind, $role, $role_heading, $framework, $url, $language,
-        $abstract_text, $declaration_text, $headings, $platforms_json,
-        $min_ios, $min_macos, $min_watchos, $min_tvos, $min_visionos,
-        $is_deprecated, $is_beta, $is_release_notes, $url_depth,
-        $source_metadata, $content_hash, $raw_payload_hash, $now, $now
-      )
-      ON CONFLICT(key) DO UPDATE SET
-        source_type = COALESCE($source_type, documents.source_type),
-        title = COALESCE($title, documents.title),
-        kind = COALESCE($kind, documents.kind),
-        role = COALESCE($role, documents.role),
-        role_heading = COALESCE($role_heading, documents.role_heading),
-        framework = COALESCE($framework, documents.framework),
-        url = COALESCE($url, documents.url),
-        language = COALESCE($language, documents.language),
-        abstract_text = COALESCE($abstract_text, documents.abstract_text),
-        declaration_text = COALESCE($declaration_text, documents.declaration_text),
-        headings = COALESCE($headings, documents.headings),
-        platforms_json = COALESCE($platforms_json, documents.platforms_json),
-        min_ios = COALESCE($min_ios, documents.min_ios),
-        min_macos = COALESCE($min_macos, documents.min_macos),
-        min_watchos = COALESCE($min_watchos, documents.min_watchos),
-        min_tvos = COALESCE($min_tvos, documents.min_tvos),
-        min_visionos = COALESCE($min_visionos, documents.min_visionos),
-        is_deprecated = COALESCE($is_deprecated, documents.is_deprecated),
-        is_beta = COALESCE($is_beta, documents.is_beta),
-        is_release_notes = COALESCE($is_release_notes, documents.is_release_notes),
-        url_depth = COALESCE($url_depth, documents.url_depth),
-        source_metadata = COALESCE($source_metadata, documents.source_metadata),
-        content_hash = COALESCE($content_hash, documents.content_hash),
-        raw_payload_hash = COALESCE($raw_payload_hash, documents.raw_payload_hash),
-        updated_at = $now
-      RETURNING id
-    `)
-    this._getDocument = this.db.query(`
-      SELECT d.*, COALESCE(r.slug, d.framework) as root_slug, COALESCE(r.display_name, d.framework) as framework_display
-      FROM documents d
-      LEFT JOIN roots r ON r.slug = d.framework
-      WHERE d.key = ?
-    `)
-    this._getDocumentSections = hasSections ? this.db.query(`
-      SELECT section_kind, heading, content_text, content_json, sort_order
-      FROM document_sections
-      WHERE document_id = ?
-      ORDER BY sort_order, id
-    `) : null
-    this._getDocumentIdByKey = this.db.query('SELECT id FROM documents WHERE key = ?')
-    this._getDocumentRelationshipsBySource = this.db.query(`
-      SELECT dr.to_key as target_path,
-             COALESCE(td.title, dr.to_key) as anchor_text,
-             COALESCE(dr.section, dr.relation_type) as section
-      FROM document_relationships dr
-      LEFT JOIN documents td ON td.key = dr.to_key
-      WHERE dr.from_key = ?
-      ORDER BY dr.sort_order, dr.to_key
-    `)
-    this._deleteDocumentSections = hasSections ? this.db.query('DELETE FROM document_sections WHERE document_id = ?') : null
-    this._insertDocumentSection = hasSections ? this.db.query(`
-      INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order)
-      VALUES ($document_id, $section_kind, $heading, $content_text, $content_json, $sort_order)
-      ON CONFLICT(document_id, section_kind, sort_order) DO UPDATE SET
-        heading = $heading,
-        content_text = $content_text,
-        content_json = $content_json
-    `) : null
-    this._deleteDocumentRelationships = this.db.query('DELETE FROM document_relationships WHERE from_key = ?')
-    this._deleteDocumentRelationshipsByKey = this.db.query('DELETE FROM document_relationships WHERE from_key = ? OR to_key = ?')
-    this._insertDocumentRelationship = this.db.query(`
-      INSERT INTO document_relationships (from_key, to_key, relation_type, section, sort_order)
-      VALUES ($from_key, $to_key, $relation_type, $section, $sort_order)
-      ON CONFLICT(from_key, to_key, relation_type) DO UPDATE SET
-        section = $section,
-        sort_order = $sort_order
-    `)
     this._searchDocuments = this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
@@ -413,14 +273,6 @@ export class DocsDatabase {
       ORDER BY CASE WHEN d.role = 'symbol' OR d.kind = 'symbol' THEN 0 ELSE 1 END, length(d.key)
       LIMIT 1
     `)
-    this._getDocumentsByRole = this.db.query(`
-      SELECT d.key, d.key as path, d.title, d.role,
-             COALESCE(r.slug, d.framework) as root_slug, d.source_type as source_type
-      FROM documents d
-      LEFT JOIN roots r ON r.slug = d.framework
-      WHERE d.role = ?
-      ORDER BY d.key
-    `)
     this._getDocumentSearchRecordById = this.db.query(`
       SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
              d.declaration_text as declaration, d.platforms_json as platforms,
@@ -432,7 +284,6 @@ export class DocsDatabase {
       LEFT JOIN roots r ON r.slug = d.framework
       WHERE d.id = ?
     `)
-    this._deleteDocumentByKey = this.db.query('DELETE FROM documents WHERE key = ?')
     this._getAllTitlesForFuzzy = this.db.query('SELECT id, title FROM documents WHERE title IS NOT NULL')
 
     this._getFrameworkSynonyms = this.db.query(`
@@ -441,28 +292,6 @@ export class DocsDatabase {
       SELECT canonical FROM framework_synonyms WHERE alias = ?
     `)
 
-
-    this._updatePageConverted = this.db.query("UPDATE pages SET converted_at = ? WHERE path = ?")
-    this._getUnconvertedPages = this.db.query(`
-      SELECT p.path, r.slug as root_slug, COALESCE(p.source_type, r.source_type) as source_type
-      FROM pages p
-      JOIN roots r ON p.root_id = r.id
-      WHERE p.converted_at IS NULL
-        AND p.downloaded_at IS NOT NULL
-        AND p.status = 'active'
-    `)
-    this._getAllPagesWithEtag = this.db.query("SELECT path, etag FROM pages WHERE etag IS NOT NULL AND status = 'active'")
-    this._getPagesBySourceType = this.db.query(`
-      SELECT p.path, p.root_id, p.etag, p.last_modified, p.content_hash,
-             r.slug as root_slug, COALESCE(p.source_type, r.source_type) as source_type
-      FROM pages p
-      JOIN roots r ON p.root_id = r.id
-      WHERE p.status = 'active'
-        AND COALESCE(p.source_type, r.source_type) = ?
-      ORDER BY p.path
-    `)
-    this._markPageDeleted = this.db.query("UPDATE pages SET status = 'deleted' WHERE path = ?")
-    this._updatePageEtag = this.db.query("UPDATE pages SET etag = $etag, last_modified = $last_modified, content_hash = $content_hash, downloaded_at = $downloaded_at WHERE path = $path")
 
   }
 
@@ -475,35 +304,10 @@ export class DocsDatabase {
     const sourceType = params.sourceType ?? root?.source_type ?? 'apple-docc'
     const urlDepth = params.urlDepth ?? Math.max(0, (params.path?.split('/').length ?? 1) - 1)
 
-    const page = this._upsertPage.get({
-      $root_id: params.rootId,
-      $path: params.path,
-      $url: params.url,
-      $title: params.title ?? null,
-      $role: params.role ?? null,
-      $role_heading: params.roleHeading ?? null,
-      $abstract: params.abstract ?? null,
-      $platforms: serializePlatforms(params.platforms),
-      $declaration: params.declaration ?? null,
-      $etag: params.etag ?? null,
-      $last_modified: params.lastModified ?? null,
-      $content_hash: params.contentHash ?? null,
-      $downloaded_at: params.downloadedAt ?? null,
-      $source_type: sourceType,
-      $language: params.language ?? null,
-      $is_release_notes: params.isReleaseNotes == null ? 0 : (params.isReleaseNotes ? 1 : 0),
-      $url_depth: urlDepth,
-      $doc_kind: params.docKind ?? params.role ?? null,
-      $source_metadata: params.sourceMetadata == null ? null : (typeof params.sourceMetadata === 'string' ? params.sourceMetadata : JSON.stringify(params.sourceMetadata)),
-      $min_ios: params.minIos ?? null,
-      $min_macos: params.minMacos ?? null,
-      $min_watchos: params.minWatchos ?? null,
-      $min_tvos: params.minTvos ?? null,
-      $min_visionos: params.minVisionos ?? null,
-    })
+    const page = this.pages.upsertPageRow({ ...params, sourceType, urlDepth })
 
     if (params.skipDocumentSync !== true) {
-      this.upsertDocument({
+      this.documents.upsertDocument({
         sourceType,
         key: params.path,
         title: params.title ?? params.path,
@@ -516,7 +320,7 @@ export class DocsDatabase {
         abstractText: params.abstract ?? null,
         declarationText: params.declaration ?? null,
         headings: params.headings ?? null,
-        platformsJson: serializePlatforms(params.platforms),
+        platformsJson: params.platforms,
         minIos: params.minIos ?? null,
         minMacos: params.minMacos ?? null,
         minWatchos: params.minWatchos ?? null,
@@ -535,80 +339,26 @@ export class DocsDatabase {
     return page
   }
 
-  upsertDocument(params) {
-    const now = new Date().toISOString()
-    return this._upsertDocument.get({
-      $source_type: params.sourceType ?? 'apple-docc',
-      $key: params.key,
-      $title: params.title ?? params.key,
-      $kind: params.kind ?? null,
-      $role: params.role ?? null,
-      $role_heading: params.roleHeading ?? null,
-      $framework: params.framework ?? deriveFrameworkFromPath(params.key),
-      $url: params.url ?? null,
-      $language: params.language ?? null,
-      $abstract_text: params.abstractText ?? null,
-      $declaration_text: params.declarationText ?? null,
-      $headings: params.headings ?? null,
-      $platforms_json: serializePlatforms(params.platformsJson),
-      $min_ios: params.minIos ?? null,
-      $min_macos: params.minMacos ?? null,
-      $min_watchos: params.minWatchos ?? null,
-      $min_tvos: params.minTvos ?? null,
-      $min_visionos: params.minVisionos ?? null,
-      $is_deprecated: params.isDeprecated == null ? null : (params.isDeprecated ? 1 : 0),
-      $is_beta: params.isBeta == null ? null : (params.isBeta ? 1 : 0),
-      $is_release_notes: params.isReleaseNotes == null ? null : (params.isReleaseNotes ? 1 : 0),
-      $url_depth: params.urlDepth ?? null,
-      $source_metadata: params.sourceMetadata == null ? null : (typeof params.sourceMetadata === 'string' ? params.sourceMetadata : JSON.stringify(params.sourceMetadata)),
-      $content_hash: params.contentHash ?? null,
-      $raw_payload_hash: params.rawPayloadHash ?? null,
-      $now: now,
-    })
-  }
-
-  replaceDocumentSections(documentId, sections) {
-    if (!this._deleteDocumentSections || !this._insertDocumentSection) return
-    this._deleteDocumentSections.run(documentId)
-    for (const section of sections ?? []) {
-      this._insertDocumentSection.run({
-        $document_id: documentId,
-        $section_kind: section.sectionKind ?? section.section_kind,
-        $heading: section.heading ?? null,
-        $content_text: section.contentText ?? section.content_text ?? '',
-        $content_json: section.contentJson ?? section.content_json ?? null,
-        $sort_order: section.sortOrder ?? section.sort_order ?? 0,
-      })
-    }
-  }
-
-  replaceDocumentRelationships(fromKey, relationships) {
-    this._deleteDocumentRelationships.run(fromKey)
-    for (const relationship of relationships ?? []) {
-      this._insertDocumentRelationship.run({
-        $from_key: relationship.fromKey ?? relationship.from_key ?? fromKey,
-        $to_key: relationship.toKey ?? relationship.to_key,
-        $relation_type: relationship.relationType ?? relationship.relation_type,
-        $section: relationship.section ?? null,
-        $sort_order: relationship.sortOrder ?? relationship.sort_order ?? 0,
-      })
-    }
-  }
+  upsertDocument(params) { return this.documents.upsertDocument(params) }
+  replaceDocumentSections(documentId, sections) { this.documents.replaceSections(documentId, sections) }
+  replaceDocumentRelationships(fromKey, relationships) { this.documents.replaceRelationships(fromKey, relationships) }
 
   upsertNormalizedDocument(normalized, hashes = {}) {
-    const documentId = this.upsertDocument({
+    const documentId = this.documents.upsertDocument({
       ...normalized.document,
       contentHash: hashes.contentHash ?? null,
       rawPayloadHash: hashes.rawPayloadHash ?? null,
     }).id
-
-    this.replaceDocumentSections(documentId, normalized.sections)
-    this.replaceDocumentRelationships(normalized.document.key, normalized.relationships)
+    this.documents.replaceSections(documentId, normalized.sections)
+    this.documents.replaceRelationships(normalized.document.key, normalized.relationships)
     return documentId
   }
 
+  /** Backwards-compat shape: documents-row first (with the legacy field
+   *  aliases callers still expect), falling back to the pages row when no
+   *  document has been normalized yet. */
   getPage(path) {
-    const document = this._getDocument.get(path)
+    const document = this.documents.getDocumentByKey(path)
     if (document) {
       return {
         ...document,
@@ -621,57 +371,14 @@ export class DocsDatabase {
         converted_at: null,
       }
     }
-    return this._getPage.get(path, 'active')
+    return this.pages.getActivePage(path)
   }
 
-  getPageByPath(path) {
-    return this._getPage.get(path, 'active')
-  }
-
-  getActivePathsIn(keys) {
-    if (!keys || keys.length === 0) return new Set()
-
-    const activePaths = new Set()
-    const chunkSize = 900
-
-    for (let index = 0; index < keys.length; index += chunkSize) {
-      const chunk = keys.slice(index, index + chunkSize)
-      const placeholders = chunk.map(() => '?').join(',')
-      const rows = this.db.query(`
-        SELECT path
-        FROM pages
-        WHERE status = 'active'
-          AND path IN (${placeholders})
-      `).all(...chunk)
-
-      for (const row of rows) {
-        activePaths.add(row.path)
-      }
-    }
-
-    return activePaths
-  }
-
-  getDocumentSections(key) {
-    if (!this._getDocumentSections) return []
-    const document = this._getDocument.get(key)
-    if (!document) return []
-    return this._getDocumentSections.all(document.id).map(section => ({
-      sectionKind: section.section_kind,
-      heading: section.heading,
-      contentText: section.content_text,
-      contentJson: section.content_json,
-      sortOrder: section.sort_order,
-    }))
-  }
-
-  getDocumentRelationships(key) {
-    return this._getDocumentRelationshipsBySource.all(key)
-  }
-
-  getPagesByRoot(rootSlug) {
-    return this._getDocumentsByRoot.all(rootSlug)
-  }
+  getPageByPath(path) { return this.pages.getActivePage(path) }
+  getActivePathsIn(keys) { return this.pages.getActivePathsIn(keys) }
+  getDocumentSections(key) { return this.documents.getSections(key) }
+  getDocumentRelationships(key) { return this.documents.getRelationships(key) }
+  getPagesByRoot(rootSlug) { return this.documents.getDocumentsByRoot(rootSlug) }
 
   searchPages(ftsQuery, rawQuery, { framework = null, kind = null, limit = 100, language = null, sourceType = null, minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null } = {}) {
     const filterParams = { $language: language, $source_type: sourceType, $min_ios: minIos, $min_macos: minMacos, $min_watchos: minWatchos, $min_tvos: minTvos, $min_visionos: minVisionos }
@@ -705,49 +412,8 @@ export class DocsDatabase {
     return this._getFrameworkSynonyms.all(normalized, normalized).map(r => r.alias ?? r.canonical)
   }
 
-  getDocumentSnippetData(keys) {
-    if (!keys || keys.length === 0) return new Map()
-    const placeholders = keys.map(() => '?').join(',')
-    const docs = this.db.query(`
-      SELECT id, key, title, abstract_text, declaration_text, headings
-      FROM documents WHERE key IN (${placeholders})
-    `).all(...keys)
-    const docMap = new Map()
-    const idToKey = new Map()
-    for (const d of docs) {
-      idToKey.set(d.id, d.key)
-      docMap.set(d.key, { document: d, sections: [] })
-    }
-    if (idToKey.size > 0 && this.hasTable('document_sections')) {
-      const ids = [...idToKey.keys()]
-      const sPlaceholders = ids.map(() => '?').join(',')
-      const sections = this.db.query(`
-        SELECT document_id, section_kind, heading, content_text, sort_order
-        FROM document_sections WHERE document_id IN (${sPlaceholders})
-        ORDER BY sort_order
-      `).all(...ids)
-      for (const s of sections) {
-        const key = idToKey.get(s.document_id)
-        if (key && docMap.has(key)) {
-          docMap.get(key).sections.push(s)
-        }
-      }
-    }
-    return docMap
-  }
-
-  getRelatedDocCounts(keys) {
-    if (!keys || keys.length === 0) return new Map()
-    const placeholders = keys.map(() => '?').join(',')
-    const rows = this.db.query(`
-      SELECT from_key, COUNT(*) as count
-      FROM document_relationships WHERE from_key IN (${placeholders})
-      GROUP BY from_key
-    `).all(...keys)
-    const map = new Map()
-    for (const r of rows) map.set(r.from_key, r.count)
-    return map
-  }
+  getDocumentSnippetData(keys) { return this.documents.getDocumentSnippetData(keys) }
+  getRelatedDocCounts(keys) { return this.documents.getRelatedDocCounts(keys) }
 
   getBodyIndexCount() {
     if (!this._documentsBodyIndexCount) return 0
@@ -816,52 +482,29 @@ export class DocsDatabase {
   addUpdateLog(params) { this.operations.addUpdateLog(params) }
   getLastUpdateLog() { return this.operations.getLastUpdateLog() }
 
-  markConverted(path) {
-    this._updatePageConverted.run(new Date().toISOString(), path)
-  }
-
-  getUnconvertedPages() {
-    return this._getUnconvertedPages.all()
-  }
-
+  markConverted(path) { this.pages.markConverted(path) }
+  getUnconvertedPages() { return this.pages.getUnconvertedPages() }
   updateRootPageCount(slug) { this.roots.updateRootPageCount(slug) }
-
-  getAllPagesWithEtag() {
-    return this._getAllPagesWithEtag.all()
-  }
-
-  getPagesBySourceType(sourceType) {
-    return this._getPagesBySourceType.all(sourceType)
-  }
-
-  getPagesByRole(role) {
-    return this._getDocumentsByRole.all(role)
-  }
+  getAllPagesWithEtag() { return this.pages.getAllPagesWithEtag() }
+  getPagesBySourceType(sourceType) { return this.pages.getPagesBySourceType(sourceType) }
+  getPagesByRole(role) { return this.documents.getDocumentsByRole(role) }
 
   markPageDeleted(path) {
-    this._markPageDeleted.run(path)
+    this.pages.markPageDeleted(path)
     this.deleteNormalizedDocument(path)
   }
 
   deleteNormalizedDocument(key) {
-    const document = this._getDocumentIdByKey.get(key)
+    const document = this.documents.getDocumentIdByKey(key)
     if (!document) return false
-
     if (this._deleteDocumentBody) this._deleteDocumentBody.run(document.id)
-    if (this._deleteDocumentSections) this._deleteDocumentSections.run(document.id)
-    this._deleteDocumentRelationshipsByKey.run(key, key)
-    this._deleteDocumentByKey.run(key)
+    this.documents.deleteSectionsByDocId(document.id)
+    this.documents.deleteDocumentByKey(key)
     return true
   }
 
   updatePageAfterDownload(path, etag, lastModified, contentHash) {
-    this._updatePageEtag.run({
-      $path: path,
-      $etag: etag,
-      $last_modified: lastModified,
-      $content_hash: contentHash,
-      $downloaded_at: new Date().toISOString(),
-    })
+    this.pages.updatePageAfterDownload(path, etag, lastModified, contentHash)
   }
 
   setActivity(action, roots = null) { this.operations.setActivity(action, roots) }
@@ -920,14 +563,9 @@ export class DocsDatabase {
    * @returns {Array<{from_key: string, to_key: string}>}
    */
   getFrameworkTree(framework) {
-    if (!this.hasTable('document_relationships')) return []
-    return this.db.query(`
-      SELECT dr.from_key, dr.to_key
-      FROM document_relationships dr
-      JOIN documents d ON d.key = dr.from_key
-      WHERE d.framework = ? AND dr.relation_type = 'child'
-      ORDER BY dr.sort_order
-    `).all(framework)
+    return this.documents.getFrameworkTree(framework, {
+      hasRelationshipsTable: this.hasTable('document_relationships'),
+    })
   }
 
   upsertAppleFontFamily(params) { this.assetsFonts.upsertFontFamily(params) }
