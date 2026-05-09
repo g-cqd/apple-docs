@@ -17,7 +17,6 @@
     { "path": "src/resources/symbol-pdf-to-svg.js", "lines": 487 },
     { "path": "src/commands/update.js", "lines": 475 },
     { "path": "src/web/assets/collection-filters.js", "lines": 469 },
-    { "path": "src/commands/consolidate.js", "lines": 438 },
     { "path": "src/web/assets/tree-view.js", "lines": 435 }
   ]
 }
