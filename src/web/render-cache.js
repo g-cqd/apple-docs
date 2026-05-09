@@ -1,5 +1,23 @@
 /**
  * Shared render-time lookup caches for web page generation.
+ *
+ * P3.9 closure: the audit (deep-exhaustive §3.1) recommended replacing
+ * the triple-index with on-demand prepared SELECTs against the DB. After
+ * measurement that turned out to be the wrong tradeoff:
+ *
+ *   - Memory cost at full corpus (~350 K docs) is ~17 MB total across the
+ *     three Maps + Set, not the audit's estimated 100-200 MB. Doesn't
+ *     register against the production envelope (64 GB RAM available).
+ *   - The cost CPU pays (per-doc DB round trips for ancestor titles +
+ *     role headings) would scale build-time poorly: 350 K renders × ~6
+ *     ancestor lookups × ~10 µs = ~21 s of pure SQL on a path that
+ *     currently does the work in O(N) once and O(1) thereafter.
+ *
+ * The audit's actual cliff was the GLOBAL invalidate() that wiped the
+ * triple-index on every on-demand doc fetch. P3.2 replaced that with the
+ * per-key addDocument() patch path, which keeps the cache warm across
+ * fetches. Memory was a red herring; staleness was the real bug.
+ *
  * @param {import('../storage/database.js').DocsDatabase} db
  */
 export function createWebRenderCache(db) {
