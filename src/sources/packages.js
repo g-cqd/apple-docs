@@ -10,6 +10,20 @@ import {
 import { parseMarkdownToSections } from '../content/parse-markdown.js'
 import { SourceAdapter } from './base.js'
 import { OFFICIAL_PACKAGES } from './packages-official.js'
+import { packageKey, parseCompositeEtag, parsePackageKey, parsePackageUrl } from './packages/keys.js'
+import {
+  appendMetadataSection,
+  ensureAbstractSection,
+  normalizeLanguage,
+  normalizeLicense,
+  reindexSections,
+  synthesizeMarkdown,
+  synthesizeRepoShape,
+} from './packages/markdown.js'
+import {
+  discoverRawReadme,
+  extractAbstractFromMarkdown,
+} from './packages/readme.js'
 
 const PACKAGE_LIST_OWNER = 'SwiftPackageIndex'
 const PACKAGE_LIST_REPO = 'PackageList'
@@ -18,7 +32,8 @@ const PACKAGE_LIST_PATH = 'packages.json'
 const ROOT_SLUG = 'packages'
 
 const README_FILENAMES = ['README.md', 'readme.md', 'README.markdown']
-const DEFAULT_BRANCHES = ['main', 'master']
+const _DEFAULT_BRANCHES = ['main', 'master']
+
 
 function packageSyncLimit() {
   const raw = process.env.APPLE_DOCS_PACKAGES_LIMIT
@@ -69,221 +84,6 @@ function packageFetchMode(_ctx) {
   return 'raw'
 }
 
-function packageKey(owner, repo) {
-  return `${ROOT_SLUG}/${owner.toLowerCase()}/${repo.toLowerCase()}`
-}
-
-function parsePackageUrl(url) {
-  const match = String(url ?? '').trim().match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i)
-  if (!match) return null
-  return {
-    owner: decodeURIComponent(match[1]),
-    repo: decodeURIComponent(match[2]),
-  }
-}
-
-function parsePackageKey(key) {
-  const match = String(key ?? '').match(/^packages\/([^/]+)\/([^/]+)$/)
-  if (!match) {
-    throw new Error(`Invalid package key: ${key}`)
-  }
-  return { owner: match[1], repo: match[2] }
-}
-
-function parseCompositeEtag(value) {
-  if (!value) return { source: 'api', repo: null, readme: null, branch: null, readmeFilename: null }
-  try {
-    const parsed = JSON.parse(value)
-    const source = parsed?.source === 'raw' ? 'raw' : 'api'
-    return {
-      source,
-      repo: typeof parsed?.repo === 'string' ? parsed.repo : null,
-      readme: typeof parsed?.readme === 'string' ? parsed.readme : null,
-      branch: typeof parsed?.branch === 'string' ? parsed.branch : null,
-      readmeFilename: typeof parsed?.readmeFilename === 'string' ? parsed.readmeFilename : null,
-    }
-  } catch {
-    return { source: 'api', repo: value, readme: null, branch: null, readmeFilename: null }
-  }
-}
-
-function synthesizeMarkdown(repo) {
-  const title = repo?.full_name ?? repo?.name ?? 'Swift Package'
-  const description = repo?.description?.trim() || 'Package metadata imported from GitHub.'
-  return `# ${title}\n\n${description}\n`
-}
-
-function normalizeLicense(license) {
-  if (!license) return null
-  if (license.spdx_id && license.spdx_id !== 'NOASSERTION') return license.spdx_id
-  return license.name ?? null
-}
-
-function normalizeLanguage(language) {
-  return typeof language === 'string' && language.trim() ? language.trim().toLowerCase() : null
-}
-
-function reindexSections(sections) {
-  return sections.map((section, index) => ({
-    ...section,
-    sortOrder: index,
-  }))
-}
-
-function ensureAbstractSection(sections, abstractText) {
-  if (!abstractText) return sections
-  const next = sections.map(section => ({ ...section }))
-  const index = next.findIndex(section => section.sectionKind === 'abstract')
-  if (index >= 0) {
-    next[index].contentText = abstractText
-    next[index].contentJson = null
-  } else {
-    next.unshift({
-      sectionKind: 'abstract',
-      heading: null,
-      contentText: abstractText,
-      contentJson: null,
-      sortOrder: 0,
-    })
-  }
-  return reindexSections(next)
-}
-
-function appendMetadataSection(sections, repo, readme) {
-  const fields = []
-  fields.push(`Repository: ${repo?.full_name ?? repo?.name ?? 'unknown'}`)
-
-  if (repo?.homepage) fields.push(`Homepage: ${repo.homepage}`)
-  if (repo?.stargazers_count != null) fields.push(`Stars: ${repo.stargazers_count}`)
-  if (repo?.forks_count != null) fields.push(`Forks: ${repo.forks_count}`)
-  if (repo?.open_issues_count != null) fields.push(`Open issues: ${repo.open_issues_count}`)
-  if (repo?.default_branch) fields.push(`Default branch: ${repo.default_branch}`)
-
-  const language = normalizeLanguage(repo?.language)
-  if (language) fields.push(`Primary language: ${language}`)
-
-  const license = normalizeLicense(repo?.license)
-  if (license) fields.push(`License: ${license}`)
-
-  if (Array.isArray(repo?.topics) && repo.topics.length > 0) {
-    fields.push(`Topics: ${repo.topics.join(', ')}`)
-  }
-
-  if (readme?.path) fields.push(`README: ${readme.path}`)
-  if (repo?.archived) fields.push('Archived: yes')
-  if (repo?.fork) fields.push('Fork: yes')
-
-  if (fields.length === 0) return sections
-
-  return reindexSections([
-    ...sections.map(section => ({ ...section })),
-    {
-      sectionKind: 'discussion',
-      heading: 'Package Metadata',
-      contentText: fields.join('\n\n'),
-      contentJson: null,
-      sortOrder: sections.length,
-    },
-  ])
-}
-
-/**
- * Try README filename variants on raw.githubusercontent.com against a given
- * branch, stopping at the first 200. Returns the README shaped like the GitHub
- * /readme API payload, or `null` if all variants 404.
- */
-async function fetchRawReadmeOnBranch(owner, repo, branch, rateLimiter) {
-  for (const filename of README_FILENAMES) {
-    try {
-      const result = await fetchRawGitHub(owner, repo, branch, filename, rateLimiter)
-      return {
-        text: result.text ?? '',
-        path: filename,
-        sha: null,
-        htmlUrl: `https://github.com/${owner}/${repo}/blob/${branch}/${filename}`,
-        downloadUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filename}`,
-        etag: result.etag ?? null,
-        lastModified: result.lastModified ?? null,
-        branch,
-      }
-    } catch (error) {
-      if (error?.status === 404) continue
-      throw error
-    }
-  }
-  return null
-}
-
-/**
- * Look up a README by trying common default branches (main, master) and every
- * README filename variant. Returns the first match or null if nothing was
- * found across all permutations.
- */
-async function discoverRawReadme(owner, repo, preferredBranch, rateLimiter) {
-  const branches = []
-  if (preferredBranch) branches.push(preferredBranch)
-  for (const b of DEFAULT_BRANCHES) {
-    if (!branches.includes(b)) branches.push(b)
-  }
-  for (const branch of branches) {
-    const readme = await fetchRawReadmeOnBranch(owner, repo, branch, rateLimiter)
-    if (readme) return readme
-  }
-  return null
-}
-
-/**
- * Extract a short abstract from raw README markdown — prefers the first
- * non-empty line after the first H1, skipping badges and HTML-only lines.
- */
-function extractAbstractFromMarkdown(markdown) {
-  if (!markdown) return null
-  const lines = markdown.split(/\r?\n/)
-  let seenH1 = false
-  for (const rawLine of lines) {
-    const line = rawLine.trim()
-    if (!line) continue
-    if (!seenH1) {
-      if (line.startsWith('# ')) { seenH1 = true; continue }
-      // Some READMEs start directly with a paragraph — accept that too.
-      if (!line.startsWith('<') && !line.startsWith('[![') && !line.startsWith('![')) {
-        return line.replace(/\s+/g, ' ').slice(0, 280)
-      }
-      continue
-    }
-    if (line.startsWith('#')) continue
-    if (line.startsWith('<') || line.startsWith('[![') || line.startsWith('![')) continue
-    return line.replace(/\s+/g, ' ').slice(0, 280)
-  }
-  return null
-}
-
-/**
- * Build a minimal GitHub-repo-shaped object for the curated no-auth path.
- * Fields beyond owner/repo/default_branch/description are intentionally null
- * since we don't call the GitHub REST API in this scope.
- */
-function synthesizeRepoShape({ owner, repo }, { branch, description }) {
-  return {
-    name: repo,
-    full_name: `${owner}/${repo}`,
-    html_url: `https://github.com/${owner}/${repo}`,
-    description: description ?? null,
-    language: null,
-    stargazers_count: null,
-    forks_count: null,
-    open_issues_count: null,
-    topics: [],
-    homepage: null,
-    default_branch: branch ?? 'main',
-    archived: false,
-    fork: false,
-    owner: { login: owner },
-    license: null,
-    pushed_at: null,
-    updated_at: null,
-  }
-}
 
 export class PackagesAdapter extends SourceAdapter {
   static type = 'packages'
