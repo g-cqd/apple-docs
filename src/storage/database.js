@@ -8,8 +8,8 @@ import { createAssetsFontsRepo } from './repos/assets-fonts.js'
 import { createAssetsSymbolsRepo } from './repos/assets-symbols.js'
 import { createCrawlRepo } from './repos/crawl.js'
 import { createOperationsRepo } from './repos/operations.js'
-import { deriveRootSourceType } from './source-types.js'
-
+import { createRefsRepo } from './repos/refs.js'
+import { createRootsRepo } from './repos/roots.js'
 function serializePlatforms(value) {
   if (value == null) return null
   return typeof value === 'string' ? value : JSON.stringify(value)
@@ -39,6 +39,8 @@ export class DocsDatabase {
     this.crawl = createCrawlRepo(this.db)
     this.assetsFonts = createAssetsFontsRepo(this.db)
     this.assetsSymbols = createAssetsSymbolsRepo(this.db)
+    this.roots = createRootsRepo(this.db)
+    this.refs = createRefsRepo(this.db)
     enableForeignKeys(this.db)
   }
 
@@ -138,19 +140,6 @@ export class DocsDatabase {
     const hasTrigram = this.hasTable('documents_trigram')
     const hasBodyFts = this.hasTable('documents_body_fts')
 
-    this._upsertRoot = this.db.query(`
-      INSERT INTO roots (slug, display_name, kind, status, source, seed_path, source_type, first_seen, last_seen)
-      VALUES ($slug, $display_name, $kind, 'active', $source, $seed_path, $source_type, $now, $now)
-      ON CONFLICT(slug) DO UPDATE SET
-        display_name = $display_name,
-        kind = CASE WHEN excluded.kind != 'unknown' THEN excluded.kind ELSE roots.kind END,
-        seed_path = COALESCE($seed_path, roots.seed_path),
-        last_seen = $now,
-        source = $source,
-        source_type = COALESCE($source_type, roots.source_type)
-      RETURNING id
-    `)
-
     this._upsertPage = this.db.query(`
       INSERT INTO pages (
         root_id, path, url, title, role, role_heading, abstract, platforms, declaration,
@@ -200,11 +189,6 @@ export class DocsDatabase {
       WHERE r.slug = ? AND p.status = 'active'
       ORDER BY d.key
     `)
-
-    this._getRoots = this.db.query('SELECT * FROM roots ORDER BY slug')
-    this._getRootsByKind = this.db.query('SELECT * FROM roots WHERE kind = ? ORDER BY slug')
-    this._getRootBySlug = this.db.query('SELECT * FROM roots WHERE slug = ?')
-    this._getRootById = this.db.query('SELECT * FROM roots WHERE id = ?')
 
     this._upsertDocument = this.db.query(`
       INSERT INTO documents (
@@ -457,9 +441,6 @@ export class DocsDatabase {
       SELECT canonical FROM framework_synonyms WHERE alias = ?
     `)
 
-    this._addRef = this.db.query('INSERT INTO refs (source_id, target_path, anchor_text, section) VALUES (?, ?, ?, ?)')
-    this._getRefsBySource = this.db.query('SELECT target_path, anchor_text, section FROM refs WHERE source_id = ? ORDER BY section, anchor_text')
-    this._deleteRefsBySource = this.db.query('DELETE FROM refs WHERE source_id = ?')
 
     this._updatePageConverted = this.db.query("UPDATE pages SET converted_at = ? WHERE path = ?")
     this._getUnconvertedPages = this.db.query(`
@@ -470,7 +451,6 @@ export class DocsDatabase {
         AND p.downloaded_at IS NOT NULL
         AND p.status = 'active'
     `)
-    this._updateRootPageCount = this.db.query("UPDATE roots SET page_count = (SELECT COUNT(*) FROM pages WHERE root_id = roots.id AND status = 'active') WHERE slug = ?")
     this._getAllPagesWithEtag = this.db.query("SELECT path, etag FROM pages WHERE etag IS NOT NULL AND status = 'active'")
     this._getPagesBySourceType = this.db.query(`
       SELECT p.path, p.root_id, p.etag, p.last_modified, p.content_hash,
@@ -487,20 +467,11 @@ export class DocsDatabase {
   }
 
   upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
-    const now = new Date().toISOString()
-    return this._upsertRoot.get({
-      $slug: slug,
-      $display_name: displayName,
-      $kind: kind,
-      $source: source,
-      $seed_path: seedPath,
-      $source_type: sourceType ?? deriveRootSourceType(slug, kind),
-      $now: now,
-    })
+    return this.roots.upsertRoot(slug, displayName, kind, source, seedPath, sourceType)
   }
 
   upsertPage(params) {
-    const root = params.rootId ? this._getRootById.get(params.rootId) : null
+    const root = params.rootId ? this.roots.getRootById(params.rootId) : null
     const sourceType = params.sourceType ?? root?.source_type ?? 'apple-docc'
     const urlDepth = params.urlDepth ?? Math.max(0, (params.path?.split('/').length ?? 1) - 1)
 
@@ -824,43 +795,13 @@ export class DocsDatabase {
     return this._getDocumentSearchRecordById.get(id)
   }
 
-  getRoots(kind = null) {
-    return kind ? this._getRootsByKind.all(kind) : this._getRoots.all()
-  }
+  getRoots(kind = null) { return this.roots.getRoots(kind) }
+  getRootBySlug(slug) { return this.roots.getRootBySlug(slug) }
+  resolveRoot(input) { return this.roots.resolveRoot(input) }
 
-  getRootBySlug(slug) {
-    return this._getRootBySlug.get(slug)
-  }
-
-  /**
-   * Resolve a root by exact slug, then by case-insensitive slug/display_name substring.
-   * Returns the best match or null.
-   */
-  resolveRoot(input) {
-    // Exact match first
-    const exact = this._getRootBySlug.get(input)
-    if (exact) return exact
-
-    // Fuzzy: case-insensitive match on slug or display_name
-    const lower = input.toLowerCase()
-    const all = this._getRoots.all()
-    return all.find(r => r.slug.toLowerCase() === lower)
-      ?? all.find(r => r.display_name.toLowerCase().includes(lower))
-      ?? all.find(r => r.slug.includes(lower))
-      ?? null
-  }
-
-  addRef(sourceId, targetPath, anchorText, section) {
-    this._addRef.run(sourceId, targetPath, anchorText, section)
-  }
-
-  deleteRefsBySource(sourceId) {
-    this._deleteRefsBySource.run(sourceId)
-  }
-
-  getRefsBySource(sourceId) {
-    return this._getRefsBySource.all(sourceId)
-  }
+  addRef(sourceId, targetPath, anchorText, section) { this.refs.addRef(sourceId, targetPath, anchorText, section) }
+  deleteRefsBySource(sourceId) { this.refs.deleteRefsBySource(sourceId) }
+  getRefsBySource(sourceId) { return this.refs.getRefsBySource(sourceId) }
 
   setCrawlState(path, status, rootSlug, depth = 0, error = null) {
     this.crawl.setCrawlState(path, status, rootSlug, depth, error)
@@ -883,9 +824,7 @@ export class DocsDatabase {
     return this._getUnconvertedPages.all()
   }
 
-  updateRootPageCount(slug) {
-    this._updateRootPageCount.run(slug)
-  }
+  updateRootPageCount(slug) { this.roots.updateRootPageCount(slug) }
 
   getAllPagesWithEtag() {
     return this._getAllPagesWithEtag.all()
