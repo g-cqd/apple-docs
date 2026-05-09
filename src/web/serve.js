@@ -1,6 +1,7 @@
 import { notFoundResponse, finalizeResponse } from './responses.js'
 import { createWebContext } from './context.js'
 import { createRouteRegistry } from './route-registry.js'
+import { createRateLimiter, tooManyRequestsResponse } from './middleware/rate-limit.js'
 import { healthHandler } from './routes/health.route.js'
 import { filtersHandler } from './routes/filters.route.js'
 import { symbolsIndexHandler } from './routes/symbols-index.route.js'
@@ -42,6 +43,23 @@ export async function startDevServer(opts, ctx) {
   const port = opts.port ?? 3000
   const webCtx = await createWebContext(opts, ctx)
   const { logger, siteConfig, readerPool, securityHeaders, gzipCache } = webCtx
+
+  // P3.5: per-IP token-bucket gates. Two layers — a default limiter
+  // covering every route, plus a much stricter one on the SSRF
+  // amplifier (/docs/* on-demand fetch). Defaults are tuned for "open
+  // public service" — generous bursts so legitimate users don't notice.
+  // Override via APPLE_DOCS_WEB_{RATE,BURST,DOCS_RATE,DOCS_BURST} env
+  // vars when the deployment has different load characteristics.
+  const defaultLimiter = createRateLimiter({
+    rate: parsePositiveNumber(process.env.APPLE_DOCS_WEB_RATE) ?? 60,
+    burst: parsePositiveNumber(process.env.APPLE_DOCS_WEB_BURST) ?? 120,
+    name: 'web',
+  })
+  const docsLimiter = createRateLimiter({
+    rate: parsePositiveNumber(process.env.APPLE_DOCS_WEB_DOCS_RATE) ?? 5 / 60,
+    burst: parsePositiveNumber(process.env.APPLE_DOCS_WEB_DOCS_BURST) ?? 5,
+    name: 'web.docs',
+  })
 
   const registry = createRouteRegistry()
   registry.register('/healthz', healthHandler)
@@ -87,7 +105,14 @@ export async function startDevServer(opts, ctx) {
 
   const server = Bun.serve({
     port,
-    async fetch(request) {
+    async fetch(request, srv) {
+      const defaultGate = defaultLimiter.take(request, srv)
+      if (!defaultGate.ok) return tooManyRequestsResponse(defaultGate.retryAfterMs, defaultLimiter.name)
+      const url = new URL(request.url)
+      if (url.pathname.startsWith('/docs/')) {
+        const docsGate = docsLimiter.take(request, srv)
+        if (!docsGate.ok) return tooManyRequestsResponse(docsGate.retryAfterMs, docsLimiter.name)
+      }
       const response = await handleRequest(request)
       for (const [k, v] of Object.entries(securityHeaders)) response.headers.set(k, v)
       return finalizeResponse(request, response, { gzipCache })
@@ -117,4 +142,10 @@ export async function startDevServer(opts, ctx) {
   }
 
   return { server, url: serverUrl, close, readerPool }
+}
+
+function parsePositiveNumber(value) {
+  if (value == null) return null
+  const n = Number.parseFloat(value)
+  return Number.isFinite(n) && n > 0 ? n : null
 }
