@@ -382,22 +382,28 @@ Outcome:
 - Add `view-models/{document,framework}.viewmodel.js` if `build.js`'s document-render loop ever drifts from `routes/docs.route.js`. Currently both call `renderDocumentPage` / `renderFrameworkPage` directly with the same prop shape, so the duplication is small and not yet worth a new module.
 - Type-check the `WebContext` typedef against actual usage with `ts-check` once enough JSDoc lands (Phase 7 item).
 
-### Phase 2: Native Client Modules And Vite Asset Pipeline
+### Phase 2: Native Client Modules And Asset Pipeline — **shipped (initial)**
 
-LoE: 3-5 days.
+Two slices on top of Phase 1 establish the ES module asset pipeline. Bun.build replaces Vite as the bundler — the codebase is Bun-only and `Bun.build` already gives multi-entry bundling, content-aware minification, and IIFE/ESM format selection without a second toolchain.
 
-Deliverables:
+| Slice | Commit | What it did |
+|-------|--------|-------------|
+| 2.1 | `2402309` | `lang-toggle.js` converted to a native ES module (no IIFE wrapper, named functions, top-level `init()` call). `asset-bundler.js` switched to `format: 'iife'` so the minified output runs from a plain `<script src=...>` tag. |
+| 2.2 | `a1a9bbb` | Bundle entries replace member arrays: `src/web/assets/core.bundle.js` and `listing.bundle.js` import the bundle members as side effects. `ENTRY_BUNDLES` in `assets-manifest.js` maps output name → entry file. `build.js` and `routes/assets.route.js` both call `minifyJs(entryPath)` and the dev preview caches the minified bytes per server in a `Map`. Standalone JS assets also route through the bundler so dev and static output ship identical bytes. |
 
-- Split existing browser assets into native ES module controllers with explicit mount points and pure helpers.
-- Add Vite only as a multi-entry asset pipeline after the module split is stable.
-- Configure Vite builds while preserving existing output names or adding a manifest adapter.
-- Add a server/build helper that resolves Vite assets in dev and static build modes.
-- Migrate the smallest behavior first: theme switching or language toggle, with no framework runtime.
+Outcome:
 
-Gate:
+- `apple-docs web build` and `apple-docs web serve` produce byte-identical bundles for `core.js`, `listing.js`, and every standalone (`search-page.js`, `fonts-page.js`, `symbols-page.js`, `lang-toggle.js`).
+- `Bun.build` is fast enough (~4 ms per bundle locally) that the dev server can build on first request and cache; no startup pre-build dance.
+- `lang-toggle.js` is the proof-of-pattern controller. The remaining bundle members (`theme.js`, `search.js`, `page-toc.js`, `collection-filters.js`, `tree-view.js`) stay IIFE-wrapped at the source level because Bun resolves and inlines them via the entry file's side-effect imports — so the on-the-wire shape is the same as before.
+- Asset cache-busting (`?v=<assetVersion>`), `baseUrl`, and immutable cache headers all unchanged.
+- `bun run lint`, `bun run typecheck`, `bun test --isolate`: 1332 / 0.
 
-- One native module ships through Vite in both `apple-docs web serve` and `apple-docs web build`.
-- Asset cache-busting, `baseUrl`, and immutable cache headers still work.
+### Phase 2 follow-ups (deferred to Phase 4)
+
+The migration plan's Phase 4 ("Migrate Browser Islands Or Native Controllers") owns the remaining controller-by-controller ESM conversions, in order: theme switcher, page TOC, header quick search, search page, framework filters + tree view, fonts page, symbols page. Each conversion can land independently because the Phase 2 bundle pipeline is already in place: a controller converts to a named ES module with `init()` exposed, the bundle entry calls `init()` instead of relying on side-effect imports, no other module in the same bundle has to change.
+
+That work is metric-gated — the plan calls for an island/framework spike (Phase 3) before deciding whether the controllers stay native or switch to Solid / Preact Signals / Svelte 5 — so these conversions wait until a measured comparison exists.
 
 ### Phase 3: Framework Island Pilot
 
