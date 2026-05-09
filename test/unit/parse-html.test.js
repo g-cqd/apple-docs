@@ -716,3 +716,53 @@ describe('extractHtmlContent — preserveStructure option', () => {
     expect(sec.content).not.toContain('- one')
   })
 })
+
+describe('stripElements — adversarial inputs (P4.9)', () => {
+  // extractHtmlContent runs the input through stripElements(STRIP_ELEMENTS),
+  // which is the surface we care about for adversarial parse cost. The
+  // wrapping <h1> + <h2> let extractHtmlContent emit a section so we can
+  // assert against its content.
+  function strip(inner) {
+    const html = `<html><body><h1>T</h1><h2>S</h2><div>${inner}</div></body></html>`
+    const { sections } = extractHtmlContent(html)
+    return (sections.find(s => s.heading === 'S')?.content ?? '').replace(/\s+/g, ' ').trim()
+  }
+
+  test('deeply nested same-tag elements strip in linear time', () => {
+    // Earlier do-while regex loop did O(depth) full-string rescans → O(N×depth).
+    // 5000-deep nesting on a 200 KB string took >5s before the fix.
+    const depth = 5000
+    const html = `<html><body><h1>T</h1><h2>S</h2><div>before${'<script>foo'.repeat(depth)}${'bar</script>'.repeat(depth)}after</div></body></html>`
+    const start = performance.now()
+    const { sections } = extractHtmlContent(html)
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeLessThan(2000)
+    const content = sections.find(s => s.heading === 'S')?.content ?? ''
+    expect(content).toContain('before')
+    expect(content).toContain('after')
+    expect(content).not.toContain('foo')
+    expect(content).not.toContain('bar')
+  })
+
+  test('multiple top-level script tags are all stripped', () => {
+    const result = strip('a<script>x</script>b<script>y</script>c')
+    expect(result).not.toContain('x')
+    expect(result).not.toContain('y')
+    expect(result).toContain('a')
+    expect(result).toContain('b')
+    expect(result).toContain('c')
+  })
+
+  test('self-closing script tag is dropped', () => {
+    const result = strip('a<script/>b')
+    expect(result).toContain('a')
+    expect(result).toContain('b')
+    expect(result).not.toContain('script')
+  })
+
+  test('unmatched opening script tag — content remains', () => {
+    // Unclosed <script> means we strip just the tag; the trailing text is
+    // preserved (matches the previous regex-based behavior).
+    expect(strip('a<script>b')).toContain('a')
+  })
+})
