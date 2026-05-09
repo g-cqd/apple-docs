@@ -14,6 +14,18 @@ import {
 } from '../../resources/apple-assets.js'
 import { createMcpTextResult } from '../pagination.js'
 
+// D.1: asset tools are read-only and idempotent. Render tools have a
+// disk side-effect (sf_symbol_renders cache) but produce deterministic
+// output for the same args, so idempotentHint stays true. None reach
+// out to a network beyond the local DB / spawned helper binaries, so
+// openWorldHint is false.
+const READ_ONLY_HINTS = {
+  readOnlyHint: true,
+  idempotentHint: true,
+  destructiveHint: false,
+  openWorldHint: false,
+}
+
 export function registerAssetTools(server, ctx, cache) {
   server.tool(
     'search_sf_symbols',
@@ -23,6 +35,7 @@ export function registerAssetTools(server, ctx, cache) {
       scope: z.enum(['public', 'private']).optional().describe('Limit search to public or private symbols.'),
       limit: z.coerce.number().int().min(1).max(500).optional().describe('Max results (default 100).'),
     },
+    READ_ONLY_HINTS,
     cache.wrap('search_sf_symbols', async (args) => {
       return createMcpTextResult(searchSfSymbols(args.query ?? '', args, ctx))
     }),
@@ -32,6 +45,7 @@ export function registerAssetTools(server, ctx, cache) {
     'list_apple_fonts',
     'List indexed Apple font families and font files, including download-ready file identifiers. Run `apple-docs fonts sync` first if no fonts are indexed.',
     {},
+    READ_ONLY_HINTS,
     cache.wrap('list_apple_fonts', async () => {
       return createMcpTextResult(listAppleFonts(ctx))
     }),
@@ -50,6 +64,7 @@ export function registerAssetTools(server, ctx, cache) {
       weight: z.enum(SYMBOL_WEIGHTS).optional().describe('Public symbol weight variant. Private symbols ignore weight.'),
       scale: z.enum(SYMBOL_SCALES).optional().describe('Public symbol scale variant. Private symbols ignore scale.'),
     },
+    READ_ONLY_HINTS,
     async (args) => {
       const render = await renderSfSymbol(args, ctx)
       const payload = {
@@ -71,6 +86,7 @@ export function registerAssetTools(server, ctx, cache) {
       text: z.string().optional().describe('Text to render.'),
       size: z.coerce.number().int().min(8).max(512).optional().describe('Point size.'),
     },
+    READ_ONLY_HINTS,
     async (args) => {
       return createMcpTextResult(await renderFontText(args, ctx))
     },

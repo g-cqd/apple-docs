@@ -234,6 +234,17 @@ describe('MCP contract — tools', () => {
     }
   })
 
+  test('D.1: every tool ships read-only annotations', async () => {
+    const result = await client.listTools()
+    for (const tool of result.tools) {
+      expect(tool.annotations).toBeDefined()
+      expect(tool.annotations.readOnlyHint).toBe(true)
+      expect(tool.annotations.idempotentHint).toBe(true)
+      expect(tool.annotations.destructiveHint).toBe(false)
+      expect(tool.annotations.openWorldHint).toBe(false)
+    }
+  })
+
   test('search_docs returns results for a known query', async () => {
     const result = await client.callTool({ name: 'search_docs', arguments: { query: 'View' } })
     expect(result.isError).toBeFalsy()

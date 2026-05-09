@@ -37,6 +37,18 @@ import {
 const paginatedMaxChars = z.coerce.number().int().min(MIN_PAGINATED_MAX_CHARS)
 const paginatedPage = z.coerce.number().int().min(1)
 
+// D.1: every doc tool is read-only and idempotent — same args produce
+// the same response (modulo a corpus update). MCP clients use these
+// hints to decide whether to display a confirmation prompt or to allow
+// retries. `openWorldHint: false` records that the tools never reach
+// out to a network beyond the local DB.
+const READ_ONLY_HINTS = {
+  readOnlyHint: true,
+  idempotentHint: true,
+  destructiveHint: false,
+  openWorldHint: false,
+}
+
 export function registerDocTools(server, ctx, cache) {
   server.tool(
     'search_docs',
@@ -68,6 +80,7 @@ export function registerDocTools(server, ctx, cache) {
       maxMatches: z.coerce.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
       caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
+    READ_ONLY_HINTS,
     cache.wrap('search_docs', async (args) => {
       validatePaginationArgs(args)
       const result = await search({
@@ -144,6 +157,7 @@ export function registerDocTools(server, ctx, cache) {
       maxMatches: z.coerce.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
       caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
+    READ_ONLY_HINTS,
     cache.wrap('read_doc', async (args) => {
       validatePaginationArgs(args)
       const result = await lookup({
@@ -184,6 +198,7 @@ export function registerDocTools(server, ctx, cache) {
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
+    READ_ONLY_HINTS,
     cache.wrap('list_frameworks', async (args) => {
       validatePaginationArgs(args)
       const result = await frameworks(args, ctx)
@@ -208,6 +223,7 @@ export function registerDocTools(server, ctx, cache) {
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
+    READ_ONLY_HINTS,
     cache.wrap('browse', async (args) => {
       validatePaginationArgs(args)
       const result = await browse(args, ctx)
@@ -230,6 +246,7 @@ export function registerDocTools(server, ctx, cache) {
     {
       field: z.enum(['kind', 'role', 'docKind', 'roleHeading', 'sourceType']).optional().describe('Return a single field instead of all five.'),
     },
+    READ_ONLY_HINTS,
     cache.wrap('list_taxonomy', async (args) => {
       const result = await taxonomy(args, ctx)
       return createMcpTextResult(result)
