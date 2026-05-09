@@ -22,6 +22,7 @@ import { up as v10Up } from './v10-fonts-symbols-tables.js'
 import { up as v11Up } from './v11-symbols-fts-rebuild.js'
 import { up as v12Up } from './v12-fonts-classification.js'
 import { up as v13Up } from './v13-documents-title-index.js'
+import { up as v14Up } from './v14-trigram-external-content.js'
 
 export const MIGRATIONS = Object.freeze([
   { version: 1, up: v1Up },
@@ -37,6 +38,7 @@ export const MIGRATIONS = Object.freeze([
   { version: 11, up: v11Up },
   { version: 12, up: v12Up },
   { version: 13, up: v13Up },
+  { version: 14, up: v14Up },
 ])
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version
