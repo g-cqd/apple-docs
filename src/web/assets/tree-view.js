@@ -1,4 +1,12 @@
-;(() => {
+// Tree-view controller for framework listing pages. Loads the
+// hierarchical JSON (inline or via /data/frameworks/<slug>/tree.<hash>.json),
+// builds the lazy tree DOM, and switches between flat-list and tree
+// modes. Emits `list-container:ready` so collection-filters.js knows when
+// to re-bind handlers against the rebuilt list.
+//
+// Phase 2: native ES module with explicit init() called from
+// listing.bundle.js. Body unchanged — IIFE -> function rename only.
+export function init() {
   const treeContainer = document.getElementById('tree-container')
   const listContainer = document.getElementById('list-container')
   if (!treeContainer || !listContainer) return
@@ -424,4 +432,4 @@
   // Tree is the default view — kick off the build (and the data load if
   // external) immediately.
   setViewMode('tree')
-})()
+}

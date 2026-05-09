@@ -1,4 +1,11 @@
-;(() => {
+// Framework-listing filter UI: kind chips, fuzzy text filter, deep-link
+// state via the URL hash. Watches `list-container:ready` so it reuses
+// the original markup the tree-view controller swapped out when the
+// user toggles back to the flat list.
+//
+// Phase 2: native ES module with explicit init() called from
+// listing.bundle.js. Body unchanged — IIFE -> function rename only.
+export function init() {
   // Find all elements with data-filter-kind.
   // When the list container is deferred (tree view default), there may be no
   // filterable items yet — we still need to initialise the filter UI so it's
@@ -459,4 +466,4 @@
 
   restoreFromHash()
   syncToc()
-})()
+}
