@@ -137,11 +137,14 @@ describe('verifyCorpusIntegrity', () => {
   })
 
   test('detects orphan sections', () => {
-    // Insert a section referencing a non-existent document
+    // Plant a section referencing a non-existent document. Foreign keys are
+    // enforced from P1.8 onward, so bypass them just for this fixture.
+    db.db.run('PRAGMA foreign_keys = OFF')
     db.db.run(
       "INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
       [99999, 'overview', 'Test', 'text', null, 0]
     )
+    db.db.run('PRAGMA foreign_keys = ON')
 
     const result = verifyCorpusIntegrity(db, dataDir, logger)
     const orphanCheck = result.checks.find(c => c.name === 'orphan_sections')

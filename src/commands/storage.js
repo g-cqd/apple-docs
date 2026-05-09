@@ -124,6 +124,41 @@ export function storageGc(opts, ctx) {
 }
 
 /**
+ * Read-only orphan / FK-violation report. Used as the operator gate before
+ * trusting the new PRAGMA foreign_keys=ON to enforce on writes — surfaces
+ * pre-existing violations in old corpora without auto-deleting anything.
+ *
+ * Combines:
+ *   1. Engine-level `PRAGMA foreign_key_check` — hits the declared FKs
+ *      (pages.root_id → roots.id; refs.source_id → pages.id; the asset
+ *      cascades; document_sections etc).
+ *   2. A handful of semantic orphans not modeled as FKs (e.g. documents
+ *      keyed by path that are no longer in pages).
+ *
+ * @param {object} _opts unused
+ * @param {{ db: import('../storage/database.js').DocsDatabase }} ctx
+ * @returns {{ fkViolations: object[], semanticOrphans: object }}
+ */
+export function storageCheckOrphans(_opts, ctx) {
+  const { db } = ctx
+  const fkViolations = db.db.query('PRAGMA foreign_key_check').all()
+
+  const semanticOrphans = {
+    crawlStateMissingRoot: db.db
+      .query('SELECT COUNT(*) AS count FROM crawl_state WHERE root_slug NOT IN (SELECT slug FROM roots)')
+      .get().count,
+    refsMissingSourcePage: db.db
+      .query("SELECT COUNT(*) AS count FROM refs WHERE source_id NOT IN (SELECT id FROM pages WHERE status = 'active')")
+      .get().count,
+    documentsMissingPage: db.hasTable('documents')
+      ? db.db.query('SELECT COUNT(*) AS count FROM documents WHERE key NOT IN (SELECT path FROM pages)').get().count
+      : 0,
+  }
+
+  return { fkViolations, semanticOrphans }
+}
+
+/**
  * Force-materialize rendered files (Markdown or HTML) for all documents or a
  * filtered subset.
  *

@@ -283,6 +283,7 @@ Disk usage inspection and cache cleanup.
 Subcommands:
   stats                   Show disk usage breakdown by category
   gc                      Garbage collect cached materializations
+  check-orphans           Report foreign-key violations and semantic orphans
 
 GC options:
   --drop <types>       Categories to drop: markdown, html (comma-separated)
@@ -293,6 +294,7 @@ Examples:
   apple-docs storage stats
   apple-docs storage gc --drop markdown,html
   apple-docs storage gc --older-than 30 --no-vacuum
+  apple-docs storage check-orphans      # read-only; surfaces FK violations
 `.trim(),
 
   snapshot: `

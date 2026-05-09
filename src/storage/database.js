@@ -270,6 +270,12 @@ export class DocsDatabase {
     }
     this._migrate()
     this._prepareStatements()
+    // Enforce foreign-key constraints AFTER migrations finish: ALTER TABLE
+    // and other migration ops are easier to reason about with FK checks off,
+    // and pre-existing violations in old corpora shouldn't block startup.
+    // From here on, every insert/update/delete is FK-checked. Use
+    // `apple-docs storage check-orphans` to surface any latent violations.
+    this.db.run('PRAGMA foreign_keys = ON')
   }
 
   getEffectiveMmapSize() {
