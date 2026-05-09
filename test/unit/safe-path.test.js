@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { keyPath, safeFilename } from '../../src/lib/safe-path.js'
+import { ValidationError } from '../../src/lib/errors.js'
+import { keyPath, safeFilename, validateStorageKey } from '../../src/lib/safe-path.js'
 
 describe('safeFilename', () => {
   test('returns the input verbatim when the result fits the temp-suffix budget', () => {
@@ -65,5 +66,48 @@ describe('keyPath', () => {
     expect(result).toContain('/avfoundation/avvideocomposition/configuration/')
     // Leaf is hash-tagged.
     expect(result).toMatch(/~[0-9a-f]{12}\.json$/)
+  })
+
+  test('rejects keys that resolve outside dataDir even after validation', () => {
+    // Belt-and-braces: validateStorageKey already catches `..` segments,
+    // but the post-resolve invariant is the second line of defense.
+    expect(() => keyPath('/data', 'raw-json', '../escape', '.json')).toThrow(ValidationError)
+  })
+})
+
+describe('validateStorageKey — A4 traversal vectors', () => {
+  const traversal = [
+    ['empty string', ''],
+    ['single dot', '.'],
+    ['double dot', '..'],
+    ['leading slash (POSIX absolute)', '/etc/passwd'],
+    ['tilde (home)', '~/escape'],
+    ['Windows drive', 'C:\\Windows\\System32'],
+    ['Windows drive with forward slash', 'C:/Windows/System32'],
+    ['embedded ..', 'a/../b'],
+    ['traversal at end', 'a/b/..'],
+    ['traversal at start', '../escape'],
+    ['empty segment from leading slash variant', 'a//b'],
+    ['trailing slash', 'a/'],
+    ['embedded backslash', 'a\\b'],
+    ['NUL byte', 'a\0b'],
+  ]
+  for (const [label, key] of traversal) {
+    test(`rejects ${label}: ${JSON.stringify(key)}`, () => {
+      expect(() => validateStorageKey(key)).toThrow(ValidationError)
+    })
+  }
+
+  test('non-string input throws', () => {
+    expect(() => validateStorageKey(null)).toThrow(ValidationError)
+    expect(() => validateStorageKey(undefined)).toThrow(ValidationError)
+    expect(() => validateStorageKey(42)).toThrow(ValidationError)
+  })
+
+  test('accepts well-formed keys and returns them unchanged', () => {
+    expect(validateStorageKey('swiftui/view')).toBe('swiftui/view')
+    expect(validateStorageKey('a')).toBe('a')
+    expect(validateStorageKey('a/b/c/d')).toBe('a/b/c/d')
+    expect(validateStorageKey('init(foo:bar:)')).toBe('init(foo:bar:)')
   })
 })

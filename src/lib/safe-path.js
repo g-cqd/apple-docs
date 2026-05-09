@@ -1,5 +1,6 @@
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { createHash } from 'node:crypto'
+import { ValidationError } from './errors.js'
 
 /**
  * Maximum filename component length supported by APFS / ext4 / common
@@ -58,6 +59,57 @@ export function safeFilename(basename, ext) {
 }
 
 /**
+ * Reject storage keys that would let an attacker escape `dataDir` via
+ * traversal segments (`..`), absolute roots (`/`, `~`, `C:\`), embedded
+ * NULs, or backslash separators we don't otherwise interpret. Throws
+ * ValidationError on first violation; returns the original key on success
+ * so callers can chain.
+ *
+ * Audit A4: previously each writer trusted upstream `path` strings — a
+ * malicious sourceMetadata could land an absolute or traversal path in
+ * `documents.key` and slip through keyPath unchecked. validateStorageKey
+ * is now the single boundary that every writer calls before resolving.
+ *
+ * @param {string} rawKey
+ * @returns {string} the validated key (unchanged)
+ */
+export function validateStorageKey(rawKey) {
+  if (typeof rawKey !== 'string' || rawKey.length === 0) {
+    throw new ValidationError('Storage key must be a non-empty string', {
+      field: 'key', value: rawKey,
+    })
+  }
+  if (rawKey.startsWith('/') || rawKey.startsWith('~')) {
+    throw new ValidationError(`Storage key must be relative, got absolute: ${rawKey}`, {
+      field: 'key', value: rawKey,
+    })
+  }
+  if (/^[A-Za-z]:[\\/]/.test(rawKey)) {
+    throw new ValidationError(`Storage key must be relative, got Windows root: ${rawKey}`, {
+      field: 'key', value: rawKey,
+    })
+  }
+  const segments = rawKey.split('/')
+  for (const seg of segments) {
+    if (seg === '' || seg === '.' || seg === '..') {
+      throw new ValidationError(`Invalid path segment "${seg}" in storage key: ${rawKey}`, {
+        field: 'key', value: rawKey,
+      })
+    }
+    // Backslashes are not separators on POSIX but they're a common smuggling
+    // vector when the same key is later interpreted by Windows code or by a
+    // tool that normalizes them; rejecting at the boundary keeps the contract
+    // OS-agnostic. NUL bytes terminate C strings — universal nope.
+    if (seg.includes('\\') || seg.includes('\0')) {
+      throw new ValidationError(`Storage key contains forbidden character: ${rawKey}`, {
+        field: 'key', value: rawKey,
+      })
+    }
+  }
+  return rawKey
+}
+
+/**
  * Build an on-disk filesystem path for a corpus key (e.g. an Apple doc
  * identifier) whose leaf component may be too long for the underlying
  * filesystem. Intermediate path components are passed through verbatim
@@ -67,6 +119,10 @@ export function safeFilename(basename, ext) {
  * Reads and writes both go through this helper, so as long as the
  * caller hands us the same `key`, the same on-disk path is produced.
  *
+ * Validates the key first (A4) and asserts the resolved result lives
+ * under `dataDir` — a belt-and-braces guard against a future regex bug
+ * in validateStorageKey (e.g. unicode normalization corner cases).
+ *
  * @param {string} dataDir
  * @param {string} subdir e.g. 'raw-json' or 'markdown'
  * @param {string} key    corpus key (slash-separated, no trailing slash)
@@ -74,10 +130,23 @@ export function safeFilename(basename, ext) {
  * @returns {string}
  */
 export function keyPath(dataDir, subdir, key, ext) {
+  validateStorageKey(key)
   const segments = key.split('/')
   const basename = segments.pop() ?? ''
   const safe = safeFilename(basename, ext)
-  return join(dataDir, subdir, ...segments, safe)
+  const result = join(dataDir, subdir, ...segments, safe)
+
+  // Containment invariant. resolve() canonicalizes both sides so symlink-
+  // free traversal (`a/b/../../escape`) cannot slip through.
+  const resolvedRoot = resolve(dataDir) + sep
+  const resolvedResult = resolve(result)
+  if (!resolvedResult.startsWith(resolvedRoot) && resolvedResult !== resolve(dataDir)) {
+    throw new ValidationError(
+      `Storage path escapes dataDir: ${result}`,
+      { field: 'key', value: key },
+    )
+  }
+  return result
 }
 
 /**
