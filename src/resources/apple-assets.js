@@ -13,6 +13,7 @@ import {
   normalizeStringArray,
   parseFontFilename,
 } from './apple-fonts/sfnt.js'
+import { renderFontText } from './apple-fonts/render.js'
 import {
   getPrerenderedSymbolPath,
   normalizeSymbolScale,
@@ -32,10 +33,12 @@ import {
   normalizeBackground,
   normalizeColor,
   sanitizeFileName,
+  tempSuffix,
 } from './apple-assets-helpers.js'
 
 export { inspectSfntFile, parseFontFilename }
 export { SYMBOL_WEIGHTS, SYMBOL_SCALES, getPrerenderedSymbolPath }
+export { renderFontText }
 
 const APPLE_FONT_FAMILIES = [
   { id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg', match: /^SF-Pro(?:-|\.|$)|^SFNS/i },
@@ -51,14 +54,6 @@ const APPLE_FONT_FAMILIES = [
 const SYMBOL_BUNDLES = {
   public: '/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphs.bundle/Contents/Resources',
   private: '/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphsPrivate.bundle/Contents/Resources',
-}
-
-/** Per-call random suffix for Swift temp script paths. PID alone is
- *  predictable on a shared host — appending randomness rules out the
- *  symlink-race-then-clobber attack surface flagged in the audit
- *  (deep-exhaustive §2.1, P3.4). */
-function tempSuffix() {
-  return Math.random().toString(36).slice(2, 10)
 }
 
 const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.dfont'])
@@ -535,38 +530,6 @@ export async function renderSfSymbol(opts, ctx) {
   return ctx.db.getSfSymbolRender(cacheKey)
 }
 
-export async function renderFontText(opts, ctx) {
-  const font = ctx.db.getAppleFontFile(opts.fontId)
-  if (!font) throw new Error(`Font file not found: ${opts.fontId}`)
-  const text = String(opts.text ?? 'Typography')
-  const pointSize = clampInteger(opts.size ?? 96, 8, 512)
-  let content
-  // CoreText / CTFontManagerRegisterFontsForURL behaviour on a non-SFNT
-  // file is "undefined" in practice — observed to either segfault, register
-  // a phantom descriptor, or stall indefinitely on macOS CI runners (the
-  // last case wedges the request handler and the server eventually drops
-  // listening for the test fetch). Probe the magic header up-front so test
-  // fixtures and corrupt downloads short-circuit straight to the placeholder
-  // SVG without spawning Swift.
-  const valid = await isLikelySfnt(font.file_path)
-  if (!valid) {
-    content = renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize })
-  } else {
-    try {
-      content = await renderFontTextSvgCurves({ fontPath: font.file_path, text, pointSize })
-    } catch (error) {
-      ctx.logger?.warn?.(`CoreText outline render failed for ${font.file_name}: ${error.message}`)
-      content = renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize })
-    }
-  }
-  return {
-    font,
-    text,
-    format: 'svg',
-    mimeType: 'image/svg+xml; charset=utf-8',
-    content,
-  }
-}
 
 function discoverAppleFontFiles(dirs) {
   const files = []
@@ -942,204 +905,6 @@ async function readMacOSVersion() {
     }
   } catch {
     return null
-  }
-}
-
-
-
-function renderFontTextSvgFallback({ fontFamily, text, pointSize }) {
-  const height = Math.ceil(pointSize * 1.6)
-  const width = Math.max(240, Math.ceil(text.length * pointSize * 0.62))
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(text)}">
-  <text x="0" y="${Math.ceil(pointSize * 1.1)}" font-family="${escapeXml(fontFamily)}" font-size="${pointSize}" fill="black">${escapeXml(text)}</text>
-</svg>`
-}
-
-async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
-  // Stryker disable all
-  const script = `
-import CoreText
-import Foundation
-import CoreGraphics
-
-let fontPath = CommandLine.arguments[1]
-let text = CommandLine.arguments[2]
-let pointSize = CGFloat(Double(CommandLine.arguments[3]) ?? 96)
-let url = URL(fileURLWithPath: fontPath)
-var error: Unmanaged<CFError>?
-CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
-guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
-      let descriptor = descriptors.first,
-      let fontName = CTFontDescriptorCopyAttribute(descriptor, kCTFontNameAttribute) as? String
-else {
-  FileHandle.standardError.write(Data("unable to load font descriptors".utf8))
-  exit(2)
-}
-let font = CTFontCreateWithName(fontName as CFString, pointSize, nil)
-let attr = NSAttributedString(string: text, attributes: [kCTFontAttributeName as NSAttributedString.Key: font])
-let line = CTLineCreateWithAttributedString(attr)
-let runs = CTLineGetGlyphRuns(line) as! [CTRun]
-
-struct Shape {
-  let d: String
-  let bounds: CGRect
-}
-
-var shapes: [Shape] = []
-var overall = CGRect.null
-
-func fmt(_ value: CGFloat) -> String {
-  let raw = String(format: "%.3f", Double(value))
-  var out = raw
-  while out.contains(".") && out.hasSuffix("0") { out.removeLast() }
-  if out.hasSuffix(".") { out.removeLast() }
-  return out
-}
-
-func convert(_ p: CGPoint, bounds: CGRect) -> CGPoint {
-  CGPoint(x: p.x - bounds.minX, y: bounds.maxY - p.y)
-}
-
-for run in runs {
-  let runFont = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName] as! CTFont
-  let count = CTRunGetGlyphCount(run)
-  var glyphs = Array(repeating: CGGlyph(), count: count)
-  var positions = Array(repeating: CGPoint.zero, count: count)
-  CTRunGetGlyphs(run, CFRange(location: 0, length: count), &glyphs)
-  CTRunGetPositions(run, CFRange(location: 0, length: count), &positions)
-  for index in 0..<count {
-    guard let path = CTFontCreatePathForGlyph(runFont, glyphs[index], nil) else { continue }
-    let offset = positions[index]
-    var transform = CGAffineTransform(translationX: offset.x, y: offset.y)
-    let translated = path.copy(using: &transform) ?? path
-    let bounds = translated.boundingBoxOfPath
-    if bounds.isNull || bounds.isEmpty { continue }
-    overall = overall.union(bounds)
-    var d = ""
-    translated.applyWithBlock { elementPointer in
-      let element = elementPointer.pointee
-      switch element.type {
-      case .moveToPoint:
-        let p = element.points[0]
-        d += "M\\(fmt(p.x)) \\(fmt(p.y)) "
-      case .addLineToPoint:
-        let p = element.points[0]
-        d += "L\\(fmt(p.x)) \\(fmt(p.y)) "
-      case .addQuadCurveToPoint:
-        let c = element.points[0]
-        let p = element.points[1]
-        d += "Q\\(fmt(c.x)) \\(fmt(c.y)) \\(fmt(p.x)) \\(fmt(p.y)) "
-      case .addCurveToPoint:
-        let c1 = element.points[0]
-        let c2 = element.points[1]
-        let p = element.points[2]
-        d += "C\\(fmt(c1.x)) \\(fmt(c1.y)) \\(fmt(c2.x)) \\(fmt(c2.y)) \\(fmt(p.x)) \\(fmt(p.y)) "
-      case .closeSubpath:
-        d += "Z "
-      @unknown default:
-        break
-      }
-    }
-    shapes.append(Shape(d: d, bounds: bounds))
-  }
-}
-
-guard !overall.isNull, !shapes.isEmpty else {
-  FileHandle.standardError.write(Data("no glyph outlines".utf8))
-  exit(3)
-}
-
-let padding = max(4, pointSize * 0.08)
-let width = ceil(overall.width + padding * 2)
-let height = ceil(overall.height + padding * 2)
-var output = "<?xml version=\\"1.0\\" encoding=\\"UTF-8\\"?>\\n"
-output += "<svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"\\(fmt(width))\\" height=\\"\\(fmt(height))\\" viewBox=\\"0 0 \\(fmt(width)) \\(fmt(height))\\">\\n"
-output += "  <title>\\(text.xmlEscaped)</title>\\n"
-output += "  <g fill=\\"black\\">\\n"
-for shape in shapes {
-  var normalized = ""
-  let scanner = PathNormalizer(d: shape.d, bounds: overall, padding: padding, height: height)
-  normalized = scanner.normalized()
-  output += "    <path d=\\"\\(normalized)\\"/>\\n"
-}
-output += "  </g>\\n</svg>\\n"
-FileHandle.standardOutput.write(Data(output.utf8))
-
-final class PathNormalizer {
-  let tokens: [String]
-  let bounds: CGRect
-  let padding: CGFloat
-  let height: CGFloat
-  init(d: String, bounds: CGRect, padding: CGFloat, height: CGFloat) {
-    self.tokens = d.split(separator: " ").map(String.init)
-    self.bounds = bounds
-    self.padding = padding
-    self.height = height
-  }
-  func normalized() -> String {
-    var out: [String] = []
-    var index = 0
-    while index < tokens.count {
-      let op = tokens[index]
-      index += 1
-      if op == "Z" {
-        out.append("Z")
-        continue
-      }
-      let command = String(op.prefix(1))
-      let firstNumber = String(op.dropFirst())
-      var nums: [CGFloat] = []
-      if let n = Double(firstNumber) { nums.append(CGFloat(n)) }
-      let needed: Int
-      switch command {
-      case "M", "L": needed = 2
-      case "Q": needed = 4
-      case "C": needed = 6
-      default: needed = 0
-      }
-      while nums.count < needed && index < tokens.count {
-        if let n = Double(tokens[index]) { nums.append(CGFloat(n)) }
-        index += 1
-      }
-      var converted: [String] = []
-      for i in stride(from: 0, to: nums.count, by: 2) {
-        let x = nums[i] - bounds.minX + padding
-        let y = height - (nums[i + 1] - bounds.minY + padding)
-        converted.append(fmt(x))
-        converted.append(fmt(y))
-      }
-      out.append("\\(command)\\(converted.joined(separator: " "))")
-    }
-    return out.joined(separator: " ")
-  }
-}
-
-extension String {
-  var xmlEscaped: String {
-    self
-      .replacingOccurrences(of: "&", with: "&amp;")
-      .replacingOccurrences(of: "<", with: "&lt;")
-      .replacingOccurrences(of: ">", with: "&gt;")
-      .replacingOccurrences(of: "\\"", with: "&quot;")
-      .replacingOccurrences(of: "'", with: "&apos;")
-  }
-}
-`
-  // Stryker restore all
-  const scriptPath = join(tmpdir(), `apple-docs-render-font-${process.pid}-${tempSuffix()}.swift`)
-  await Bun.write(scriptPath, script)
-  try {
-    const proc = Bun.spawn(['swift', scriptPath, fontPath, text, String(pointSize)], { stdout: 'pipe', stderr: 'pipe' })
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code !== 0) throw new Error(stderr.trim() || `swift exited ${code}`)
-    return stdout
-  } finally {
-    await rm(scriptPath, { force: true }).catch(() => {})
   }
 }
 

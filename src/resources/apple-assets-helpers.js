@@ -4,6 +4,16 @@
  * extracted modules don't pull in the full file just for one helper.
  */
 
+/**
+ * Per-call random suffix for Swift temp script paths. PID alone is
+ * predictable on a shared host — appending randomness rules out the
+ * symlink-race-then-clobber attack surface flagged in the audit
+ * (deep-exhaustive §2.1, P3.4).
+ */
+export function tempSuffix() {
+  return Math.random().toString(36).slice(2, 10)
+}
+
 export function sanitizeFileName(value) {
   return String(value).replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-+|-+$/g, '') || 'asset'
 }
