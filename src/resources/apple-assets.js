@@ -22,6 +22,14 @@ const SYMBOL_BUNDLES = {
   private: '/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphsPrivate.bundle/Contents/Resources',
 }
 
+/** Per-call random suffix for Swift temp script paths. PID alone is
+ *  predictable on a shared host — appending randomness rules out the
+ *  symlink-race-then-clobber attack surface flagged in the audit
+ *  (deep-exhaustive §2.1, P3.4). */
+function tempSuffix() {
+  return Math.random().toString(36).slice(2, 10)
+}
+
 const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.dfont'])
 const DEFAULT_FONT_DIRS = [
   '/Library/Fonts',
@@ -1024,7 +1032,7 @@ extension NSColor {
 }
 `
   // Stryker restore all
-  const scriptPath = join(tmpdir(), `apple-docs-render-symbol-${process.pid}.swift`)
+  const scriptPath = join(tmpdir(), `apple-docs-render-symbol-${process.pid}-${tempSuffix()}.swift`)
   await Bun.write(scriptPath, script)
   try {
     const proc = Bun.spawn(
@@ -1075,7 +1083,7 @@ async function renderSymbolSvgCurves({ name, scope, pointSize, weight = 'regular
  * @returns {Promise<Uint8Array>}
  */
 async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale = 'medium' }) {
-  const scriptPath = join(tmpdir(), `apple-docs-symbol-pdf-${process.pid}.swift`)
+  const scriptPath = join(tmpdir(), `apple-docs-symbol-pdf-${process.pid}-${tempSuffix()}.swift`)
   await Bun.write(scriptPath, SYMBOL_PDF_SCRIPT)
   try {
     const proc = Bun.spawn(['swift', scriptPath, name, scope, weight, scale], {
@@ -1546,7 +1554,7 @@ extension String {
 }
 `
   // Stryker restore all
-  const scriptPath = join(tmpdir(), `apple-docs-render-font-${process.pid}.swift`)
+  const scriptPath = join(tmpdir(), `apple-docs-render-font-${process.pid}-${tempSuffix()}.swift`)
   await Bun.write(scriptPath, script)
   try {
     const proc = Bun.spawn(['swift', scriptPath, fontPath, text, String(pointSize)], { stdout: 'pipe', stderr: 'pipe' })
