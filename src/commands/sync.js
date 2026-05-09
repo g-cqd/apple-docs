@@ -36,8 +36,22 @@ export async function sync(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const startMs = Date.now()
   const fullRebuild = !!opts.full
+  // A25: bound the default in-flight fetch concurrency to 100. The
+  // previous default (500) saturates Apple's per-IP rate limit instantly
+  // and is friendly only on first-time bulk syncs. Operators who want
+  // the old behavior pass --aggressive (or set APPLE_DOCS_CONCURRENCY
+  // explicitly).
+  const DEFAULT_CONCURRENCY = 100
+  const AGGRESSIVE_CONCURRENCY = 500
+  const envConcurrency = process.env.APPLE_DOCS_CONCURRENCY != null
+    ? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY, 10)
+    : null
   const concurrency = ctx.semaphore?.max
-    ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '500', 10)
+    ?? envConcurrency
+    ?? (opts.aggressive ? AGGRESSIVE_CONCURRENCY : DEFAULT_CONCURRENCY)
+  if (concurrency > 100 && !opts.aggressive && envConcurrency == null) {
+    throw new Error(`--concurrency ${concurrency} > 100 requires --aggressive (or set APPLE_DOCS_CONCURRENCY explicitly)`)
+  }
   const parallel = Number.parseInt(process.env.APPLE_DOCS_PARALLEL ?? '10', 10)
   const semaphore = ctx.semaphore ?? new Semaphore(concurrency)
 

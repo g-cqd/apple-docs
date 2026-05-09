@@ -193,7 +193,10 @@ try {
     }
 
     case 'sync': {
-      result = await sync({ full: !!flags.full }, ctx)
+      // A25: --aggressive opts back into the legacy 500-in-flight default.
+      // Without it, sync caps at 100 concurrent fetches (Apple's per-IP
+      // limit absorbs that comfortably; 500 was an unfriendly default).
+      result = await sync({ full: !!flags.full, aggressive: !!flags.aggressive }, ctx)
       formatter = formatSync
       break
     }
