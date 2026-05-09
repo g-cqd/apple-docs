@@ -92,7 +92,20 @@ export async function search(opts, ctx) {
   const results = []
   const seen = new Set()
 
+  // P2.7: parse platforms_json once per row at arrival. Both
+  // matchesSearchFilters' platform-version predicate and formatResult
+  // accept already-parsed values gracefully, so this turns the per-row
+  // double-parse + cross-tier re-parse pattern into a single parse.
+  const parseRowPlatforms = (rows) => {
+    for (const r of rows) {
+      if (typeof r.platforms === 'string') {
+        try { r.platforms = JSON.parse(r.platforms) } catch { r.platforms = null }
+      }
+    }
+  }
+
   const addResults = (rows, quality) => {
+    parseRowPlatforms(rows)
     for (const r of rows) {
       if (!matchesSearchFilters(r, activeFilters)) continue
       if (seen.has(r.path)) continue
@@ -131,7 +144,10 @@ export async function search(opts, ctx) {
     triResults = fastParts[1]
   }
 
-  // Merge T1 (FTS) results with tier labels.
+  // Merge T1 (FTS) results with tier labels. Tier labels come from the
+  // SQL CASE in repos/search.js, so we can't use addResults' uniform
+  // 'matchQuality' — the platforms pre-parse runs inline instead.
+  parseRowPlatforms(ftsResults)
   for (const r of ftsResults) {
     if (!matchesSearchFilters(r, activeFilters)) continue
     if (seen.has(r.path)) continue
@@ -150,6 +166,7 @@ export async function search(opts, ctx) {
     const fuzzyRecords = await Promise.all(
       fuzzyMatches.map(fm => runRead(ctx, 'getSearchRecordById', [fm.id]).then(record => ({ fm, record }))),
     )
+    parseRowPlatforms(fuzzyRecords.map(({ record }) => record).filter(Boolean))
     for (const { fm, record } of fuzzyRecords) {
       if (!record) continue
       if (!matchesSearchFilters(record, activeFilters)) continue
