@@ -4,11 +4,27 @@ import { MIME_TYPES } from '../responses.js'
 import { minifyJs } from '../asset-bundler.js'
 
 async function getBundledJs(ctx, bundleName, entryRel) {
+  // Returns either the resolved bundle text or the in-flight Promise of a
+  // build already in progress. Storing the Promise (not just the resolved
+  // text) collapses parallel requests for the same bundle onto one
+  // Bun.build call — without this, two concurrent /assets/core.js hits
+  // before the first cache write would each run a build, doubling
+  // startup cost and racing on the Map.set.
   const cached = ctx.bundleCache.get(bundleName)
   if (cached) return cached
-  const code = await minifyJs(join(ctx.srcWebDir, 'assets', entryRel))
-  ctx.bundleCache.set(bundleName, code)
-  return code
+  const pending = minifyJs(join(ctx.srcWebDir, 'assets', entryRel))
+  ctx.bundleCache.set(bundleName, pending)
+  try {
+    const code = await pending
+    ctx.bundleCache.set(bundleName, code)
+    return code
+  } catch (err) {
+    // Don't pin the rejection in the cache — the next request retries.
+    if (ctx.bundleCache.get(bundleName) === pending) {
+      ctx.bundleCache.delete(bundleName)
+    }
+    throw err
+  }
 }
 
 /**

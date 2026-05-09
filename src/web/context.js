@@ -26,7 +26,7 @@ import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
  * @property {Record<string, string>} securityHeaders Default headers applied to every page response.
  * @property {Record<string, string>} assetCacheHeaders Default headers for /assets/* + /worker/*.
  * @property {object} gzipCache LRU of pre-compressed response bodies keyed by ETag.
- * @property {Map<string, string>} bundleCache Per-server cache of synthesised /assets/<name>.js bundles.
+ * @property {Map<string, string | Promise<string>>} bundleCache Per-server cache of synthesised /assets/<name>.js bundles. The Promise variant is the in-flight build that parallel requests should await rather than racing each other into Bun.build.
  * @property {() => object} getTitleIndex
  * @property {() => object} getAliasMap
  * @property {() => object} getSearchManifest
