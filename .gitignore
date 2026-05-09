@@ -21,8 +21,11 @@ stryker.log
 # Benchmark history
 test/benchmarks/*.jsonl
 
-# Internal planning artifacts (see commits bb99fa3, b1fcb74)
+# Internal planning artifacts (see commits bb99fa3, b1fcb74).
+# `docs/plans/` is the structured project-plan home and stays tracked.
 plans/
+!docs/plans/
+!docs/plans/**
 
 # Orchestration / research scratch — large screenshot trees and per-run
 # probe outputs. Markdown notes + the synthesis report under
