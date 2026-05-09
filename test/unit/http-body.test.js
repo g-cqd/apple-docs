@@ -2,6 +2,7 @@ import { describe, test, expect } from 'bun:test'
 import {
   BodyTooLargeError,
   DEFAULT_MAX_BODY_BYTES,
+  isLoopbackOrigin,
   readBodyCapped,
   readJsonRpcBodyCapped,
 } from '../../src/lib/http-body.js'
@@ -74,5 +75,46 @@ describe('readJsonRpcBodyCapped', () => {
     const result = await readJsonRpcBodyCapped(req, 1024)
     expect(result.ok).toBe(false)
     expect(result.response.status).toBe(413)
+  })
+})
+
+describe('isLoopbackOrigin', () => {
+  test('accepts http://localhost', () => {
+    expect(isLoopbackOrigin('http://localhost')).toBe(true)
+  })
+
+  test('accepts http://localhost with port', () => {
+    expect(isLoopbackOrigin('http://localhost:5173')).toBe(true)
+  })
+
+  test('accepts http://127.0.0.1', () => {
+    expect(isLoopbackOrigin('http://127.0.0.1:8080')).toBe(true)
+  })
+
+  test('accepts IPv6 [::1]', () => {
+    expect(isLoopbackOrigin('http://[::1]:3000')).toBe(true)
+  })
+
+  test('accepts https variants', () => {
+    expect(isLoopbackOrigin('https://localhost')).toBe(true)
+    expect(isLoopbackOrigin('https://127.0.0.1')).toBe(true)
+  })
+
+  test('rejects non-loopback hostnames', () => {
+    expect(isLoopbackOrigin('https://evil.example')).toBe(false)
+    expect(isLoopbackOrigin('http://localhost.evil.example')).toBe(false)
+    expect(isLoopbackOrigin('http://192.168.1.1')).toBe(false)
+    expect(isLoopbackOrigin('http://127.0.0.2')).toBe(false)
+  })
+
+  test('rejects non-http schemes', () => {
+    expect(isLoopbackOrigin('file://localhost')).toBe(false)
+    expect(isLoopbackOrigin('javascript:alert(1)')).toBe(false)
+    expect(isLoopbackOrigin('chrome-extension://abcdef')).toBe(false)
+  })
+
+  test('rejects invalid origins', () => {
+    expect(isLoopbackOrigin('not-a-url')).toBe(false)
+    expect(isLoopbackOrigin('')).toBe(false)
   })
 })

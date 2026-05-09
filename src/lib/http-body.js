@@ -1,14 +1,15 @@
 /**
- * Bounded request-body reader for HTTP handlers that previously called
- * `await request.text()` without any size cap. The MCP HTTP server in
- * particular is publicly reachable and was a trivial memory-DoS vector
- * (Bun.serve's default body limit is 128 MiB). See P1.6 in
- * docs/plans/phase-3-quality-and-audit-remediation.md.
+ * HTTP boundary helpers for handlers that previously called
+ * `await request.text()` with no size cap and accepted every browser Origin
+ * by default. The MCP HTTP server is publicly reachable; both surfaces are
+ * trivial DoS / cross-site abuse vectors without these guards.
  *
- * Two enforcement layers:
- *   1. Cheap: reject up front if `Content-Length` already exceeds the cap.
- *   2. Streaming: for chunked or unknown-length bodies, read the stream and
- *      abort the moment the running total crosses the cap.
+ * P1.6 (body cap): readBodyCapped + readJsonRpcBodyCapped enforce a hard
+ * byte ceiling first via Content-Length, then via a streaming early-abort.
+ * P1.7 (origin policy): isLoopbackOrigin lets the MCP server default-deny
+ * non-loopback browser origins when no --allow-origin is configured.
+ *
+ * See docs/plans/phase-3-quality-and-audit-remediation.md.
  */
 
 /** Hard cap for JSON-RPC POST bodies. Payloads in MCP-style traffic are
@@ -107,4 +108,19 @@ export async function readJsonRpcBodyCapped(request, maxBytes = DEFAULT_MAX_BODY
     }
     throw err
   }
+}
+
+/** Loopback origins always allowed when no explicit --allow-origin policy
+ *  is set: http(s)://localhost, http(s)://127.0.0.1, http(s)://[::1] — any
+ *  port. Anything else (including non-http schemes) is rejected. */
+export function isLoopbackOrigin(origin) {
+  let url
+  try {
+    url = new URL(origin)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+  const host = url.hostname
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]'
 }

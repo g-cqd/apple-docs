@@ -5,7 +5,7 @@ import { createCacheRegistry } from './cache.js'
 import { createMarkdownCache } from './markdown-cache.js'
 import { createReaderPool } from '../storage/reader-pool.js'
 import { BackpressureError, Semaphore } from '../lib/semaphore.js'
-import { readJsonRpcBodyCapped } from '../lib/http-body.js'
+import { isLoopbackOrigin, readJsonRpcBodyCapped } from '../lib/http-body.js'
 
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -116,11 +116,12 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     ?? new Semaphore(heavyMax, { maxWaiters: heavyQueue })
   const concurrencyStats = { rejected: 0 }
 
+  // P1.7: when no --allow-origin is set, deny browser origins except loopback.
   function originOk(request) {
     const origin = request.headers.get('origin')
-    if (!origin) return true // native/non-browser clients omit Origin
-    if (allowedOrigins.length === 0) return true
-    return allowedOrigins.includes(origin)
+    if (!origin) return true
+    if (allowedOrigins.length > 0) return allowedOrigins.includes(origin)
+    return isLoopbackOrigin(origin)
   }
 
   function applySecurityHeaders(response) {

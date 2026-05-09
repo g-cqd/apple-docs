@@ -118,7 +118,7 @@ describe('startHttpServer', () => {
     expect(res.headers.get('Cache-Control')).toBe('no-store')
   })
 
-  test('delegates POST /mcp to the transport when no allowlist is configured', async () => {
+  test('without --allow-origin, native clients (no Origin) pass through', async () => {
     const seen = []
     const { fetch } = await bootHarness({
       handleRequest: async (req) => {
@@ -128,11 +128,58 @@ describe('startHttpServer', () => {
     })
     const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', origin: 'https://any.example' },
+      headers: { 'content-type': 'application/json' },
       body: '{}',
     }))
     expect(res.status).toBe(200)
-    expect(seen).toEqual([{ method: 'POST', origin: 'https://any.example' }])
+    expect(seen).toEqual([{ method: 'POST', origin: null }])
+  })
+
+  test('without --allow-origin, browser Origin from non-loopback host is rejected with 403 (P1.7)', async () => {
+    const { fetch, fakeTransport } = await bootHarness()
+    let reached = false
+    fakeTransport.handleRequest = async () => { reached = true; return new Response('') }
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
+      body: '{}',
+    }))
+    expect(res.status).toBe(403)
+    expect(reached).toBe(false)
+  })
+
+  test('without --allow-origin, loopback browser origins still pass', async () => {
+    const seen = []
+    const { fetch } = await bootHarness({
+      handleRequest: async (req) => {
+        seen.push(req.headers.get('origin'))
+        return new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } })
+      },
+    })
+    for (const origin of ['http://localhost:5173', 'http://127.0.0.1:8080', 'http://[::1]']) {
+      const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin },
+        body: '{}',
+      }))
+      expect(res.status).toBe(200)
+    }
+    expect(seen).toEqual(['http://localhost:5173', 'http://127.0.0.1:8080', 'http://[::1]'])
+  })
+
+  test('explicit --allow-origin policy does NOT auto-add loopback', async () => {
+    const { fetch, fakeTransport } = await bootHarness({
+      allowedOrigins: ['https://apple-docs-mcp.everest.mt'],
+    })
+    let reached = false
+    fakeTransport.handleRequest = async () => { reached = true; return new Response('') }
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:5173' },
+      body: '{}',
+    }))
+    expect(res.status).toBe(403)
+    expect(reached).toBe(false)
   })
 
   test('rejects browser Origin outside the allowlist with 403', async () => {
