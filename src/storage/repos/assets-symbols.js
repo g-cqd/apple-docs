@@ -89,6 +89,22 @@ export function createAssetsSymbolsRepo(db) {
   `)
   const getRenderStmt = db.query('SELECT * FROM sf_symbol_renders WHERE cache_key = ?')
 
+  // A1: render-cache prune support. The render cache grows monotonically
+  // unless something prunes it; on a long-running public server with
+  // millions of distinct (size, color, weight, scale) combinations, that's
+  // an unbounded disk-fill hazard. Two prune strategies, callable from a
+  // serve-side cron in src/web/serve.js.
+  const renderCacheStatsStmt = db.query(
+    'SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as bytes FROM sf_symbol_renders',
+  )
+  const olderThanStmt = db.query(
+    'SELECT cache_key, file_path FROM sf_symbol_renders WHERE updated_at < ?',
+  )
+  const oldestForQuotaStmt = db.query(
+    'SELECT cache_key, file_path, size FROM sf_symbol_renders ORDER BY updated_at ASC, cache_key ASC',
+  )
+  const deleteRenderStmt = db.query('DELETE FROM sf_symbol_renders WHERE cache_key = ?')
+
   return {
     upsertSymbol(params) {
       upsertSymbolStmt.run({
@@ -174,6 +190,45 @@ export function createAssetsSymbolsRepo(db) {
     },
     getRender(cacheKey) {
       return getRenderStmt.get(cacheKey) ?? null
+    },
+    /** Total render-cache footprint, used by the prune cron + diagnostics. */
+    renderCacheStats() {
+      return renderCacheStatsStmt.get()
+    },
+    /**
+     * Delete render-cache rows whose updated_at is older than the cutoff.
+     * Returns `{ removed, paths }` so callers can rm the files. Does not
+     * touch the filesystem itself — the route layer / cron handles IO so
+     * the repo stays sync-safe.
+     *
+     * @param {string} cutoffIso ISO timestamp; rows with updated_at < cutoffIso are removed.
+     * @returns {{ removed: number, paths: string[] }}
+     */
+    pruneRendersOlderThan(cutoffIso) {
+      const rows = olderThanStmt.all(cutoffIso)
+      for (const row of rows) deleteRenderStmt.run(row.cache_key)
+      return { removed: rows.length, paths: rows.map(r => r.file_path).filter(Boolean) }
+    },
+    /**
+     * Trim the render cache to a byte quota by removing oldest rows first.
+     * No-op when current bytes ≤ maxBytes. Returns the same shape as
+     * pruneRendersOlderThan so callers can rm the files.
+     */
+    pruneRendersToBytesQuota(maxBytes) {
+      const stats = renderCacheStatsStmt.get()
+      if ((stats?.bytes ?? 0) <= maxBytes) return { removed: 0, paths: [] }
+      const rows = oldestForQuotaStmt.all()
+      const paths = []
+      let bytes = stats.bytes
+      let removed = 0
+      for (const row of rows) {
+        if (bytes <= maxBytes) break
+        deleteRenderStmt.run(row.cache_key)
+        bytes -= row.size ?? 0
+        if (row.file_path) paths.push(row.file_path)
+        removed++
+      }
+      return { removed, paths }
     },
   }
 }

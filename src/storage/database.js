@@ -370,6 +370,9 @@ export class DocsDatabase {
   searchSfSymbols(query = '', opts = {}) { return this.assetsSymbols.searchSymbols(query, opts) }
   upsertSfSymbolRender(params) { this.assetsSymbols.upsertRender(params) }
   getSfSymbolRender(cacheKey) { return this.assetsSymbols.getRender(cacheKey) }
+  sfSymbolRenderCacheStats() { return this.assetsSymbols.renderCacheStats() }
+  pruneSfSymbolRendersOlderThan(cutoffIso) { return this.assetsSymbols.pruneRendersOlderThan(cutoffIso) }
+  pruneSfSymbolRendersToBytesQuota(maxBytes) { return this.assetsSymbols.pruneRendersToBytesQuota(maxBytes) }
 
   getSchemaVersion() {
     const row = this.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()

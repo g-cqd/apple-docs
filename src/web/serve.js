@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises'
 import { notFoundResponse, finalizeResponse } from './responses.js'
 import { createWebContext } from './context.js'
 import { createRouteRegistry } from './route-registry.js'
@@ -116,6 +117,35 @@ export async function startDevServer(opts, ctx) {
   const serverUrl = `http://localhost:${server.port}`
   if (logger) logger.info(`Dev server running at ${serverUrl}`)
 
+  // A1: render-cache prune cron. Runs every PRUNE_INTERVAL_MS so an
+  // unbounded set of (size,color,weight,scale) param combinations on a
+  // long-running server doesn't fill the disk. Both the TTL trim and the
+  // byte-quota trim are best-effort — failures are logged once and the
+  // next interval retries.
+  const ttlDays = parsePositiveNumber(process.env.APPLE_DOCS_RENDER_CACHE_TTL_DAYS) ?? 30
+  const quotaBytes = parsePositiveNumber(process.env.APPLE_DOCS_RENDER_CACHE_BYTES) ?? (5 * 1024 * 1024 * 1024)
+  const pruneIntervalMs = 30 * 60 * 1000
+  const pruneTimer = setInterval(() => { void pruneRenderCache() }, pruneIntervalMs)
+  pruneTimer.unref?.()
+
+  async function pruneRenderCache() {
+    try {
+      const cutoffIso = new Date(Date.now() - ttlDays * 86_400_000).toISOString()
+      const ttlPrune = ctx.db.pruneSfSymbolRendersOlderThan(cutoffIso)
+      const quotaPrune = ctx.db.pruneSfSymbolRendersToBytesQuota(quotaBytes)
+      const allPaths = [...ttlPrune.paths, ...quotaPrune.paths]
+      for (const filePath of allPaths) {
+        await rm(filePath, { force: true }).catch(() => { /* best-effort */ })
+      }
+      const removed = ttlPrune.removed + quotaPrune.removed
+      if (removed > 0) {
+        logger?.info?.(`render-cache prune: removed ${removed} (ttl=${ttlPrune.removed}, quota=${quotaPrune.removed})`)
+      }
+    } catch (err) {
+      logger?.warn?.(`render-cache prune failed: ${err.message}`)
+    }
+  }
+
   const originalStop = server.stop?.bind(server)
   if (originalStop) {
     server.stop = (...args) => {
@@ -126,6 +156,7 @@ export async function startDevServer(opts, ctx) {
   }
 
   async function close(deadlineMs) {
+    clearInterval(pruneTimer)
     try { originalStop?.(true) } catch {}
     try {
       // Forward the parent shutdown deadline as a soft-drain budget so the
