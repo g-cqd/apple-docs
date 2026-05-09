@@ -16,12 +16,21 @@
  * @returns {Promise<string>} Minified source text.
  */
 export async function minifyJs(entrypoint) {
-  const result = await Bun.build({
-    entrypoints: [entrypoint],
-    target: 'browser',
-    minify: true,
-    format: 'iife',
-  })
+  // Bun.build's failure modes are split between throw and result.success
+  // depending on the cause (missing entry throws AggregateError; an
+  // unresolved import inside the entry returns success:false). Wrap both
+  // so callers always see one message shape with the entrypoint named.
+  let result
+  try {
+    result = await Bun.build({
+      entrypoints: [entrypoint],
+      target: 'browser',
+      minify: true,
+      format: 'iife',
+    })
+  } catch (err) {
+    throw new Error(`Bun.build failed for ${entrypoint}: ${err?.message ?? err}`)
+  }
   if (!result.success) {
     const message = result.logs?.map(l => l.message ?? String(l)).join('\n') ?? 'build failed'
     throw new Error(`Bun.build failed for ${entrypoint}: ${message}`)
