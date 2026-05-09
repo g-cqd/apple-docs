@@ -29,6 +29,11 @@ Storage:
   storage stats        Show disk usage breakdown
   storage gc           Garbage collect cached files
 
+Maintenance:
+  snapshot build       Build a release snapshot archive (lite/standard/full)
+  consolidate          Repair failed crawl entries and re-resolve URLs
+  index rebuild <kind> Rebuild a search index from existing data (body|trigram)
+
 Global options:
   --json               Output raw JSON (for scripting)
   --home <path>        Override data directory (default: ~/.apple-docs)
@@ -288,6 +293,64 @@ Examples:
   apple-docs storage stats
   apple-docs storage gc --drop markdown,html
   apple-docs storage gc --older-than 30 --no-vacuum
+`.trim(),
+
+  snapshot: `
+Usage: apple-docs snapshot <subcommand> [options]
+
+Build a release snapshot archive of the corpus.
+
+Subcommands:
+  build                Materialize the corpus to a tarball + .sha256 + manifest
+
+Build options:
+  --tier <name>        Snapshot tier: lite, standard, full (default: full)
+  --out <dir>          Output directory (default: dist)
+  --tag <tag>          Archive tag (default: snapshot-YYYYMMDD)
+
+The build runs VACUUM INTO on the live database, drops per-tier tables, writes
+the tarball under <out>/<tag>/, and emits both a SHA-256 sidecar and a JSON
+manifest. Used by the release pipeline (scripts/build-snapshot.js) and the
+operator who wants a portable copy.
+
+Examples:
+  apple-docs snapshot build --tier full --out dist
+  apple-docs snapshot build --tier lite --tag snapshot-2026-05-09
+`.trim(),
+
+  consolidate: `
+Usage: apple-docs consolidate [options]
+
+Repair failed crawl entries and re-resolve URLs that became reachable after
+the original failure (e.g. typos fixed, fragments rewritten, redirects).
+
+Steps:
+  1. Drop entries the normalizer now rejects (fragments, dot-ops, etc).
+  2. Inspect parents of remaining failures to find correct URLs.
+  3. Retry resolved paths, persisting checkpoints between batches.
+
+Options:
+  --dry-run            Report what would change without persisting.
+  --minify             Trim raw-JSON payloads in place after consolidation.
+  --json               Output raw JSON.
+
+Resumable: re-run after interruption to continue from the last checkpoint.
+`.trim(),
+
+  index: `
+Usage: apple-docs index <subcommand> [target] [options]
+
+Rebuild a search index from existing data. Useful after restoring from a
+lower-tier snapshot (which ships without optional indexes) or to recover
+from a corrupted FTS5 / trigram table.
+
+Subcommands:
+  rebuild body         Rebuild the full-body FTS5 index from documents.
+  rebuild trigram      Rebuild the trigram FTS5 index from document titles.
+
+Examples:
+  apple-docs index rebuild body
+  apple-docs index rebuild trigram
 `.trim(),
 }
 

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatSetup, formatStorageStats, formatStorageGc, formatWebBuild, formatWebDeploy, formatTaxonomy } from './src/cli/formatter.js'
+import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatSetup, formatWebBuild, formatWebDeploy, formatTaxonomy } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
@@ -16,6 +16,7 @@ import { sync } from './src/commands/sync.js'
 import { status } from './src/commands/status.js'
 import { taxonomy } from './src/commands/taxonomy.js'
 import { paginateCliContent } from './src/cli/paginate.js'
+import { dispatchMaintenance, MAINTENANCE_COMMANDS } from './src/cli/maintenance.js'
 
 const { command, subcommand, positional, flags } = parseArgs(process.argv)
 
@@ -355,30 +356,12 @@ try {
       break
     }
 
-    case 'storage': {
-      switch (subcommand) {
-        case 'stats': {
-          const { storageStats } = await import('./src/commands/storage.js')
-          result = await storageStats({}, ctx)
-          formatter = formatStorageStats
-          break
-        }
-        case 'gc': {
-          const { storageGc } = await import('./src/commands/storage.js')
-          const drop = flags.drop ? flags.drop.split(',').map(s => s.trim()) : []
-          const olderThan = flags['older-than'] ? Number.parseInt(flags['older-than'], 10) : undefined
-          result = await storageGc({ drop, olderThan, vacuum: !flags['no-vacuum'] }, ctx)
-          formatter = formatStorageGc
-          break
-        }
-        default:
-          showHelp('storage')
-          process.exit(subcommand ? 1 : 0)
-      }
-      break
-    }
-
     default:
+      if (MAINTENANCE_COMMANDS.includes(command)) {
+        const dispatched = await dispatchMaintenance(command, subcommand, positional, flags, ctx)
+        if (dispatched) ({ result, formatter } = dispatched)
+        break
+      }
       console.error(`Unknown command: ${command}`)
       showHelp()
       process.exit(1)

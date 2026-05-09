@@ -60,7 +60,7 @@ Small, surgical, no architectural moves. Every item here is high-severity-low-ef
 | `snapshot.js` | **Wire as `apple-docs snapshot build`** | Used by `scripts/build-snapshot.js` and `commands/setup.js`. Currently CLI-invisible despite being the release pipeline. Wire + document. |
 | `consolidate.js` | **Wire as `apple-docs consolidate`** | Called by setup-smoke + checkpoint-resume tests; presumably also by sync flow internally. Wire + document. |
 | `index-rebuild.js` | **Wire as `apple-docs index rebuild [body\|trigram]`** | Used by setup-smoke. Operators need this when an FTS index gets corrupted. |
-| `update.js` | **Retire** | No internal callers, only its own tests. Functionality (incremental refresh) is what `sync` already does. Delete the file and its 2 tests; saves 475 LOC. |
+| `update.js` | **Keep as internal helper** | *Initial brief said "retire"; revised after grep miss.* `src/commands/sync.js:12` imports `./update.js` for the HEAD-check phase. Not a CLI-orphan in the same sense as the other three — it's a private module that just happens to have its own tests. No CLI surface, no rename. |
 
 ### Security/reliability bundle
 1. **Process lifecycle** — install `process.on('unhandledRejection'|'uncaughtException')` in `cli.js` and `index.js`. Wire SIGINT/SIGTERM through a single `gracefulShutdown(reason, deadlineMs)` helper that drains: HTTP `server.stop(false)` → reader-pool fan-out join → DB `WAL_CHECKPOINT(TRUNCATE)`. 30 s deadline, then `process.exit(1)`.

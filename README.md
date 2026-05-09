@@ -238,10 +238,9 @@ That emits both the native Streamable HTTP config and an `mcp-remote` stdio fall
 | `browse <framework>` | Explore a framework or subtree |
 | `kinds` | List distinct kind/role/docKind/sourceType values with counts |
 | `setup` | Install a snapshot |
-| `sync` | Crawl/build a corpus locally |
-| `update` | Pull incremental changes |
-| `index` | Build or rebuild search indexes |
-| `doctor` | Repair and verify the corpus |
+| `sync` | Crawl/build a corpus locally (resumable; idempotent re-runs) |
+| `index rebuild <kind>` | Rebuild a search index from existing data (`body` or `trigram`) |
+| `consolidate` | Repair failed crawl entries and re-resolve URLs |
 | `status` | Show health, progress, and storage |
 | `web serve` | Run the local website |
 | `web build` | Build a static site |
@@ -274,10 +273,8 @@ apple-docs sync --sources packages
 ### Build or repair indexes
 
 ```bash
-apple-docs index
-apple-docs index --full
-apple-docs index rebuild-trigram
-apple-docs index rebuild-body
+apple-docs index rebuild body
+apple-docs index rebuild trigram
 ```
 
 Long body-index runs checkpoint their progress and resume automatically after interruption.
@@ -285,13 +282,12 @@ Long body-index runs checkpoint their progress and resume automatically after in
 ### Repair a broken corpus
 
 ```bash
-apple-docs doctor
-apple-docs doctor --dry-run
-apple-docs doctor --minify
-apple-docs doctor --verify
+apple-docs consolidate
+apple-docs consolidate --dry-run
+apple-docs consolidate --minify
 ```
 
-The retry phase is checkpointed too, so rerunning `doctor` continues where it left off.
+The retry phase is checkpointed, so rerunning `consolidate` continues where it left off.
 
 ## Packages source notes
 
