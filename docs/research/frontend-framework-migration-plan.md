@@ -382,28 +382,31 @@ Outcome:
 - Add `view-models/{document,framework}.viewmodel.js` if `build.js`'s document-render loop ever drifts from `routes/docs.route.js`. Currently both call `renderDocumentPage` / `renderFrameworkPage` directly with the same prop shape, so the duplication is small and not yet worth a new module.
 - Type-check the `WebContext` typedef against actual usage with `ts-check` once enough JSDoc lands (Phase 7 item).
 
-### Phase 2: Native Client Modules And Asset Pipeline — **shipped (initial)**
+### Phase 2: Native Client Modules And Asset Pipeline — **shipped**
 
-Two slices on top of Phase 1 establish the ES module asset pipeline. Bun.build replaces Vite as the bundler — the codebase is Bun-only and `Bun.build` already gives multi-entry bundling, content-aware minification, and IIFE/ESM format selection without a second toolchain.
+Five slices on top of Phase 1 establish the ES module asset pipeline and convert every bundle member from IIFE wrappers to native ES modules with explicit `init()` mount points. Bun.build replaces Vite as the bundler — the codebase is Bun-only and `Bun.build` already gives multi-entry bundling, content-aware minification, and IIFE/ESM format selection without a second toolchain. Phase 3 (the island/framework spike) was skipped per operator decision; native controllers remain the production path.
 
 | Slice | Commit | What it did |
 |-------|--------|-------------|
-| 2.1 | `2402309` | `lang-toggle.js` converted to a native ES module (no IIFE wrapper, named functions, top-level `init()` call). `asset-bundler.js` switched to `format: 'iife'` so the minified output runs from a plain `<script src=...>` tag. |
-| 2.2 | `a1a9bbb` | Bundle entries replace member arrays: `src/web/assets/core.bundle.js` and `listing.bundle.js` import the bundle members as side effects. `ENTRY_BUNDLES` in `assets-manifest.js` maps output name → entry file. `build.js` and `routes/assets.route.js` both call `minifyJs(entryPath)` and the dev preview caches the minified bytes per server in a `Map`. Standalone JS assets also route through the bundler so dev and static output ship identical bytes. |
+| 2.1 | `2402309` | `lang-toggle.js` to native ES module (no IIFE wrapper, named functions, top-level `init()` call). `asset-bundler.js` switched to `format: 'iife'` so the minified output runs from a plain `<script src=...>` tag. |
+| 2.2 | `a1a9bbb` | Bundle entries replace member arrays: `src/web/assets/core.bundle.js` and `listing.bundle.js` import the bundle members. `ENTRY_BUNDLES` in `assets-manifest.js` maps output name → entry file. `build.js` and `routes/assets.route.js` both call `minifyJs(entryPath)`; the dev preview caches the minified bytes per server in a `Map`. |
+| 2.3 | `afae71c` | `theme.js` to native ES module. Flash-prevention split out from `init()` and runs as a top-level side effect on module evaluation, so `data-theme` is set before any sibling member's IIFE — verified by inspecting bundle byte offsets. `init()` only handles button wiring. |
+| 2.4 | `e030e6c` | `page-toc.js` and `search.js` to native ES modules. `core.bundle.js` calls `initTheme()`, `initSearch()`, `initPageToc()` explicitly. `test/unit/web-search-client.test.js` updated to use `Bun.Transpiler.scan()` for the parse check (the previous `new Function(code)` rejected ESM `export` statements). |
+| 2.5 | `0301ea9` | `collection-filters.js` and `tree-view.js` to native ES modules. `listing.bundle.js` calls `initFilters()` then `initTree()` (filter restores URL hash state before tree-view reads it). |
 
 Outcome:
 
-- `apple-docs web build` and `apple-docs web serve` produce byte-identical bundles for `core.js`, `listing.js`, and every standalone (`search-page.js`, `fonts-page.js`, `symbols-page.js`, `lang-toggle.js`).
-- `Bun.build` is fast enough (~4 ms per bundle locally) that the dev server can build on first request and cache; no startup pre-build dance.
-- `lang-toggle.js` is the proof-of-pattern controller. The remaining bundle members (`theme.js`, `search.js`, `page-toc.js`, `collection-filters.js`, `tree-view.js`) stay IIFE-wrapped at the source level because Bun resolves and inlines them via the entry file's side-effect imports — so the on-the-wire shape is the same as before.
+- All five bundle members (`theme.js`, `search.js`, `page-toc.js`, `collection-filters.js`, `tree-view.js`) are native ES modules with explicit `export function init()` mount points. The bundle entries call each `init()` directly — no implicit side-effect ordering.
+- `apple-docs web build` and `apple-docs web serve` produce byte-identical bundles. `Bun.build` is fast enough (~4 ms per bundle locally) that the dev server can build on first request and cache; no startup pre-build dance.
+- Bundle sizes after the full conversion: `core.js` 4922 bytes (was 4904 pre-Phase-2), `listing.js` 13491 bytes (was 13489). The handful-of-bytes growth is the explicit `init()` calls; no `__esModule` shim is emitted because nothing outside each bundle imports from these modules.
 - Asset cache-busting (`?v=<assetVersion>`), `baseUrl`, and immutable cache headers all unchanged.
-- `bun run lint`, `bun run typecheck`, `bun test --isolate`: 1332 / 0.
+- The four standalone JS files (`search-page.js`, `fonts-page.js`, `symbols-page.js`, `lang-toggle.js`) ship as plain `<script src=...>` — only `lang-toggle.js` was converted to ESM during the slice 2.1 proof. The other three remain IIFE-wrapped because there's no entry-file consumer for them, so the explicit-mount-point pattern wouldn't change behavior. They route through `Bun.build` for minification just like the bundle members.
+- `bun run lint`, `bun run typecheck`, `bun run lint:unused`, `bun test --isolate`: 1332 / 0 across every slice.
 
-### Phase 2 follow-ups (deferred to Phase 4)
+### Phase 2 follow-ups (small, optional)
 
-The migration plan's Phase 4 ("Migrate Browser Islands Or Native Controllers") owns the remaining controller-by-controller ESM conversions, in order: theme switcher, page TOC, header quick search, search page, framework filters + tree view, fonts page, symbols page. Each conversion can land independently because the Phase 2 bundle pipeline is already in place: a controller converts to a named ES module with `init()` exposed, the bundle entry calls `init()` instead of relying on side-effect imports, no other module in the same bundle has to change.
-
-That work is metric-gated — the plan calls for an island/framework spike (Phase 3) before deciding whether the controllers stay native or switch to Solid / Preact Signals / Svelte 5 — so these conversions wait until a measured comparison exists.
+- Convert the three remaining standalone files (`search-page.js`, `fonts-page.js`, `symbols-page.js`) to ESM-without-export-without-IIFE for consistency with `lang-toggle.js`. No behavior change — purely a cleanup pass.
+- Rename `*.bundle.js` to `*.entry.js` and move into a sibling `entries/` subdirectory once the bun:test resolver bug with `../`-traversal in test isolates is fixed upstream. Today the bundle entries are colocated with the members they import to sidestep the bug.
 
 ### Phase 3: Framework Island Pilot
 
