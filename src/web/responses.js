@@ -211,18 +211,22 @@ export async function finalizeResponse(request, response, { gzipCache }) {
     return new Response(body, { status: response.status, headers })
   }
 
-  if (accept.includes('gzip') && COMPRESSIBLE.has(mimeBase)) {
-    const body = await response.arrayBuffer()
-    const compressed = gzipSync(Buffer.from(body))
-    return new Response(compressed, {
-      status: response.status,
-      headers: {
-        ...Object.fromEntries(response.headers.entries()),
-        'Content-Encoding': 'gzip',
-        'Content-Length': String(compressed.length),
-      },
-    })
-  }
+  // P3.1: dropped the non-hashable sync gzipSync path. It was the single
+  // largest TTFB pessimization on the response path: Bun.serve had to
+  // buffer the whole body, copy it to a Buffer, run gzipSync (event-loop
+  // blocking for ~10-50 ms on 1 MB payloads), and wrap the compressed
+  // bytes in a fresh Response. Every dynamic response paid this cost on
+  // every call because there was no cache.
+  //
+  // The hashable path above keeps its cached gzip — those bodies are
+  // deterministic functions of their inputs (search results, doc HTML)
+  // and the LRU amortizes the compress cost across requests. The
+  // non-hashable path was only hit by one-off responses (errors,
+  // redirects, ad-hoc payloads) where uncompressed bandwidth is
+  // negligible AND the deployment is expected to be CDN-fronted (Caddy
+  // / Cloudflare handle compression at the edge for free). Direct-served
+  // dev instances pay marginally more bytes; CPU is the constrained
+  // resource so this is the right tradeoff.
 
   return response
 }
