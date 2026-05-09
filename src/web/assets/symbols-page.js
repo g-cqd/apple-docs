@@ -14,8 +14,9 @@
 //
 // The mask-image contract from src/resources/symbol-pdf-to-svg.js is
 // preserved — tiles set `mask-image` on a span whose `background-color`
-// is `var(--symbol-color)`. The clip-path-based SVGs (xmark.bin.circle.fill
-// etc.) keep working unchanged — they're still consumed as masks.
+// is `var(--symbol-color)`. The SVGs may contain internal masks for native
+// destination-out layers; the final rendered image is still consumed as the
+// tile mask.
 
 // Phase 2 cleanup: replaced source-level IIFE with a named init()
 // (see search-page.js for rationale).

@@ -12,8 +12,8 @@ import { inflateSync } from 'node:zlib'
  * fills. PDF-to-SVG converters (pdftocairo, mutool) correctly skip alpha-0
  * fills — but for our purposes those fills *are* the cut-out geometry, and
  * we need them. We parse the PDF ourselves, treat every alpha-0 fill as a
- * destination-out cut-out against the previously-painted layer, and emit
- * SVG using `<mask>` elements. The output is pure vector at any size.
+ * destination-out cut-out against the previously-painted layers, and emit
+ * SVG using internal `<mask>` elements. The output is pure vector at any size.
  *
  * The PDF subset we handle is exactly what Apple's CGContext PDF writer
  * emits: q/Q, cs, sc, gs, m/l/c/h, f. No text, no images, no shading, no
@@ -224,9 +224,9 @@ function parseContentStream(buffer, alphaByName) {
   const stack = [{ alpha: 1 }]
   const top = () => stack[stack.length - 1]
 
-  const closeFill = () => {
+  const closeFill = (fillRule = 'nonzero') => {
     if (path.length === 0) return
-    fills.push({ subpaths: path, alpha: top().alpha })
+    fills.push({ subpaths: path, alpha: top().alpha, fillRule })
     path = []
   }
   const startSubpath = (x, y) => {
@@ -303,13 +303,11 @@ function parseContentStream(buffer, alphaByName) {
         appendCommand({ op: 'Z' })
         break
       case 'f': case 'F': case 'f*':
-        if (op === 'f*') for (const sp of path) sp.fillRule = 'evenodd'
-        closeFill()
+        closeFill(op === 'f*' ? 'evenodd' : 'nonzero')
         break
       case 'B': case 'B*': case 'b': case 'b*':
-        if (op.includes('*')) for (const sp of path) sp.fillRule = 'evenodd'
         if (op === 'b' || op === 'b*') appendCommand({ op: 'Z' })
-        closeFill()
+        closeFill(op.includes('*') ? 'evenodd' : 'nonzero')
         break
       case 'n': case 'S': case 's':
         // Stroke-only or no-paint: drop the path.
@@ -400,46 +398,42 @@ function assembleSvg(fills, opts) {
   const vbH = (maxY - minY) + pad * 2
 
   // Walk fills in painting order, building an SVG tree that mirrors Apple's
-  // destination-out compositing exactly. Each visible (alpha>0) fill paints
-  // on top of whatever's already in the tree. Each alpha=0 fill is a
-  // destination-out blend — it carves pixels from *every* visible layer
-  // painted so far, regardless of which visible layer drew them. We model
-  // that by wrapping the entire current tree in a `<g clip-path="…">` at
-  // every cut; subsequent visible layers are appended outside that wrapper
+  // destination-out compositing. Each visible (alpha>0) fill paints on top
+  // of whatever's already in the tree. Each alpha=0 fill carves pixels from
+  // every visible layer painted so far, using the same fill rule Apple wrote
+  // into the PDF content stream. We model that by wrapping the current tree
+  // in a luminance mask: white keeps the previous tree, black removes the
+  // cut geometry. Subsequent visible layers are appended outside that wrapper
   // so they correctly escape earlier cuts but become subject to any later
   // one. Examples:
   //   [V1]             → V1
-  //   [V1, C1]         → <g clip-path=C1>V1</g>
-  //   [V1, C1, V2]     → <g clip-path=C1>V1</g>, V2
-  //   [V1, C1, V2, C2] → <g clip-path=C2><g clip-path=C1>V1</g>, V2</g>
+  //   [V1, C1]         → <g mask=C1>V1</g>
+  //   [V1, C1, V2]     → <g mask=C1>V1</g>, V2
+  //   [V1, C1, V2, C2] → <g mask=C2><g mask=C1>V1</g>, V2</g>
   //
-  // We use clip-path instead of `<mask>` because clip-paths are purely
-  // geometric: identical results whether the SVG is rendered inline,
-  // through `<img>`, or as a CSS `mask-image` source. Masks rely on alpha
-  // vs. luminance interpretation, which differs by context.
+  // The older clip-path implementation encoded every cut as
+  // `viewBoxRect ∪ cutPath` with even-odd parity. That is only correct for
+  // even-odd cuts. Nonzero cuts with overlapping or nested contours can
+  // accidentally re-add pixels, so masks are the more faithful primitive.
   const fillColor = String(color)
   const escapedName = escapeXml(name)
   const idBase = `c${(Math.random().toString(36).slice(2, 8))}`
   let defs = ''
   let nodes = []
-  const vbRect = `M0 0H${formatNumber(vbW)}V${formatNumber(vbH)}H0Z`
   fills.forEach((fill, idx) => {
     if (fill.alpha > 0) {
       const d = subpathsToD(fill.subpaths, flipX, flipY)
-      const ruleAttr = fill.subpaths.some(sp => sp.fillRule === 'evenodd') ? ' fill-rule="evenodd"' : ''
+      const ruleAttr = fillRuleAttr(fill.fillRule)
       nodes.push(`<path d="${d}" fill="${fillColor}"${ruleAttr}/>`)
     } else {
       if (nodes.length === 0) return
-      const clipId = `${idBase}_${idx}`
+      const maskId = `${idBase}_${idx}`
       const cutD = subpathsToD(fill.subpaths, flipX, flipY)
-      // clip-rule="evenodd" + (viewBox rect ∪ cut shape) = inside-the-rect
-      // minus inside-the-cut. The rect covers the whole canvas so any
-      // subsequent visible layer it wraps survives the clip outside the
-      // cut shape.
-      defs += `<clipPath id="${clipId}" clipPathUnits="userSpaceOnUse">`
-        + `<path d="${vbRect} ${cutD}" clip-rule="evenodd"/>`
-        + `</clipPath>`
-      nodes = [`<g clip-path="url(#${clipId})">${nodes.join('')}</g>`]
+      defs += `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" mask-type="luminance" style="mask-type:luminance">`
+        + `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="#fff"/>`
+        + `<path d="${cutD}" fill="#000"${fillRuleAttr(fill.fillRule)}/>`
+        + `</mask>`
+      nodes = [`<g mask="url(#${maskId})">${nodes.join('')}</g>`]
     }
   })
   const body = nodes.join('')
@@ -480,8 +474,14 @@ function formatNumber(n) {
   return s.replace(/\.?0+$/, '') || '0'
 }
 
+function fillRuleAttr(fillRule) {
+  return fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''
+}
+
 function escapeXml(value) {
   return String(value).replace(/[<>&"']/g, c => (
     { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]
   ))
 }
+
+export const _test = { parseContentStream, assembleSvg }

@@ -180,7 +180,7 @@ export function searchSfSymbols(query, opts, ctx) {
   return { results: ctx.db.searchSfSymbols(query, opts), query: query ?? '', scope: opts.scope ?? null }
 }
 
-const SYMBOL_RENDERER_VERSION = 5
+const SYMBOL_RENDERER_VERSION = 6
 const SYMBOL_DEFAULT_RENDER_SIZE = 128
 
 export function getPrerenderedSymbolPath(ctx, scope, name) {
@@ -469,7 +469,9 @@ export async function renderSfSymbol(opts, ctx) {
     //        vector fidelity for every layer-cutout symbol.
     //   - 6: weight + scale plumbed through to NSSymbolConfiguration so
     //        the inspector controls actually re-render the preview.
-    renderer: 6,
+    //   - 7: alpha-zero cut layers now emit fill-rule-preserving internal
+    //        SVG masks instead of the old even-odd clip subtraction shortcut.
+    renderer: 7,
     type: 'sf-symbol',
     scope,
     name: opts.name,
