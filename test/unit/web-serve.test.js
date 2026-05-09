@@ -193,6 +193,34 @@ describe('Dev Server (P7-E)', () => {
     expect(html).toContain('class="view-toggle"')
   })
 
+  test('serves /data/search/search-manifest.json + the hashed artifacts it points at', async () => {
+    const manifestRes = await fetch(`${serverInfo.url}/data/search/search-manifest.json`)
+    expect(manifestRes.status).toBe(200)
+    expect(manifestRes.headers.get('cache-control')).toContain('no-cache')
+    const manifest = await manifestRes.json()
+    expect(manifest.version).toBe(2)
+    expect(manifest.files['title-index']).toMatch(/^title-index\.[0-9a-f]{10}\.json$/)
+    expect(manifest.files['aliases']).toMatch(/^aliases\.[0-9a-f]{10}\.json$/)
+
+    // Both hashed artifacts must respond with immutable Cache-Control.
+    const titleRes = await fetch(`${serverInfo.url}/data/search/${manifest.files['title-index']}`)
+    expect(titleRes.status).toBe(200)
+    expect(titleRes.headers.get('cache-control')).toContain('immutable')
+    const titleJson = await titleRes.json()
+    expect(titleJson).toBeDefined()
+
+    const aliasRes = await fetch(`${serverInfo.url}/data/search/${manifest.files['aliases']}`)
+    expect(aliasRes.status).toBe(200)
+    expect(aliasRes.headers.get('cache-control')).toContain('immutable')
+    expect(await aliasRes.json()).toBeDefined()
+
+    // Legacy unhashed paths still serve for backward compatibility.
+    const legacyTitle = await fetch(`${serverInfo.url}/data/search/title-index.json`)
+    expect(legacyTitle.status).toBe(200)
+    const legacyAlias = await fetch(`${serverInfo.url}/data/search/aliases.json`)
+    expect(legacyAlias.status).toBe(200)
+  })
+
   test('serves the externalised framework tree JSON via the data route', async () => {
     // First render the framework page so the tree JSON is computed and
     // cached under the URL the HTML emits.
@@ -486,6 +514,19 @@ describe('Dev Server (P7-E)', () => {
     expect(search.status).toBe(200)
     const searchJson = await search.json()
     expect(searchJson.results[0].name).toBe('pencil.and.sparkles')
+  })
+
+  test('/api/symbols/<scope>/<name>.json returns metadata or 404', async () => {
+    // Round-trip the seeded symbol through the per-symbol metadata route.
+    const ok = await fetch(`${serverInfo.url}/api/symbols/private/pencil.and.sparkles.json`)
+    expect(ok.status).toBe(200)
+    const meta = await ok.json()
+    expect(meta.name).toBe('pencil.and.sparkles')
+    expect(meta.scope).toBe('private')
+
+    // Unknown name 404s — exercises the not-found branch of the handler.
+    const missing = await fetch(`${serverInfo.url}/api/symbols/private/does.not.exist.json`)
+    expect(missing.status).toBe(404)
   })
 
   test('/symbols/<name> serves the same shell so client-side routing works', async () => {
