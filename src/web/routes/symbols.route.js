@@ -1,5 +1,6 @@
 import { getPrerenderedSymbolPath, renderSfSymbol, searchSfSymbols } from '../../resources/apple-assets.js'
 import { jsonResponse, fileResponseRevalidated, notFoundResponse } from '../responses.js'
+import { validateSymbolParams } from './render-validation.js'
 
 /**
  * `/api/symbols/search` — keyword search across the SF Symbols catalog.
@@ -60,16 +61,20 @@ export async function symbolRenderHandler(request, ctx, url, match) {
       })
     }
   }
+  const validated = validateSymbolParams({
+    size: sizeParam,
+    color: fgParam,
+    background: bgParam,
+    weight: weightParam,
+    scale: scaleParam,
+  })
+  if (!validated.ok) return jsonResponse({ error: validated.error }, { status: 400 })
   try {
     const render = await renderSfSymbol({
       scope,
       name: decodedName,
       format,
-      size: sizeParam ?? undefined,
-      color: fgParam ?? undefined,
-      background: bgParam ?? undefined,
-      weight: weightParam ?? undefined,
-      scale: scaleParam ?? undefined,
+      ...validated.value,
     }, ctx)
     const file = Bun.file(render.file_path)
     // Live renders are keyed off (renderer, scope, name, format, size,

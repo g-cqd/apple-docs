@@ -9,6 +9,7 @@ import {
   fileResponseRevalidated,
   matchesIfNoneMatch,
 } from '../responses.js'
+import { validateFontText } from './render-validation.js'
 
 /**
  * `/api/fonts` — list every Apple font family the corpus has cataloged.
@@ -102,10 +103,12 @@ export async function fontFamilyZipHandler(request, ctx, url, match) {
  * @type {import('../route-registry.js').RouteHandler}
  */
 export async function fontTextSvgHandler(_request, ctx, url) {
+  const textCheck = validateFontText(url.searchParams.get('text'))
+  if (!textCheck.ok) return jsonResponse({ error: textCheck.error }, { status: 400 })
   try {
     const render = await renderFontText({
       fontId: url.searchParams.get('fontId'),
-      text: url.searchParams.get('text') ?? 'Typography',
+      text: textCheck.value,
       size: url.searchParams.get('size') ?? undefined,
     }, ctx)
     return textResponse(render.content, {

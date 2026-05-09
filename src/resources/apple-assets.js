@@ -180,11 +180,16 @@ export function searchSfSymbols(query, opts, ctx) {
   return { results: ctx.db.searchSfSymbols(query, opts), query: query ?? '', scope: opts.scope ?? null }
 }
 
-const SYMBOL_RENDERER_VERSION = 6
+const SYMBOL_RENDERER_VERSION = 7
 const SYMBOL_DEFAULT_RENDER_SIZE = 128
 
-export function getPrerenderedSymbolPath(ctx, scope, name) {
+export function getPrerenderedSymbolPath(ctx, scope, name, opts = {}) {
   const cleanScope = scope === 'private' ? 'private' : 'public'
+  const weight = normalizeSymbolWeight(opts.weight)
+  const scale = normalizeSymbolScale(opts.scale)
+  if (cleanScope === 'public' && (weight !== 'regular' || scale !== 'medium')) {
+    return join(ctx.dataDir, 'resources', 'symbols', cleanScope, `${weight}-${scale}`, `${sanitizeFileName(name)}.svg`)
+  }
   return join(ctx.dataDir, 'resources', 'symbols', cleanScope, `${sanitizeFileName(name)}.svg`)
 }
 
@@ -201,7 +206,6 @@ export function getPrerenderedSymbolPath(ctx, scope, name) {
 export async function prerenderSfSymbols(opts, ctx) {
   const { dataDir, logger } = ctx
   const concurrency = Math.max(1, Math.min(opts.concurrency ?? 4, 16))
-  const size = clampInteger(opts.size ?? SYMBOL_DEFAULT_RENDER_SIZE, 16, 512)
   const scopeFilter = opts.scope === 'public' || opts.scope === 'private' ? opts.scope : null
   const baseDir = join(dataDir, 'resources', 'symbols')
   if (opts.resetCache) {
@@ -210,7 +214,7 @@ export async function prerenderSfSymbols(opts, ctx) {
   ensureDir(baseDir)
   const symbols = ctx.db.listSfSymbolsCatalog()
     .filter(symbol => !scopeFilter || symbol.scope === scopeFilter)
-  const result = { rendered: 0, skipped: 0, failed: 0, total: symbols.length, failures: [] }
+  const result = { rendered: 0, skipped: 0, failed: 0, total: 0, symbols: symbols.length, failures: [] }
 
   // Cluster work by scope so each worker only handles one bundle path.
   const buckets = { public: [], private: [] }
@@ -219,11 +223,13 @@ export async function prerenderSfSymbols(opts, ctx) {
     if (!buckets[scope].length) continue
     const scopeDir = join(baseDir, scope)
     ensureDir(scopeDir)
+    const variants = symbolVariantMatrix(scope)
+    result.total += buckets[scope].length * variants.length
     await renderScopeBucket({
       scope,
       symbols: buckets[scope],
-      scopeDir,
-      size,
+      variants,
+      dataDir,
       concurrency,
       logger,
       onProgress: opts.onProgress,
@@ -233,37 +239,46 @@ export async function prerenderSfSymbols(opts, ctx) {
 
   await Bun.write(join(baseDir, 'meta.json'), JSON.stringify({
     rendererVersion: SYMBOL_RENDERER_VERSION,
-    pointSize: size,
+    pointSize: SYMBOL_DEFAULT_RENDER_SIZE,
+    variants: {
+      public: symbolVariantMatrix('public'),
+      private: symbolVariantMatrix('private'),
+    },
+    provenance: await getSymbolRenderProvenance(),
     builtAt: new Date().toISOString(),
     counts: result,
   }, null, 2))
   return result
 }
 
-async function renderScopeBucket({ scope, symbols, scopeDir, size, concurrency, logger, onProgress, result }) {
-  const queue = symbols.slice()
+async function renderScopeBucket({ scope, symbols, variants, dataDir, concurrency, logger, onProgress, result }) {
+  const queue = []
+  for (const symbol of symbols) {
+    for (const variant of variants) queue.push({ symbol, ...variant })
+  }
   const workers = []
-  const startWorker = () => spawnSymbolWorker({ scope, size, logger })
+  const startWorker = () => spawnSymbolWorker({ scope, logger })
   for (let i = 0; i < concurrency; i++) {
     const worker = await startWorker()
-    workers.push(processSymbolQueue({ worker, queue, scopeDir, scope, result, onProgress, logger, restart: startWorker }))
+    workers.push(processSymbolQueue({ worker, queue, dataDir, scope, result, onProgress, logger, restart: startWorker }))
   }
   await Promise.all(workers)
 }
 
-async function processSymbolQueue({ worker, queue, scopeDir, scope, result, onProgress, logger, restart }) {
+async function processSymbolQueue({ worker, queue, dataDir, scope, result, onProgress, logger, restart }) {
   let activeWorker = worker
   while (queue.length > 0) {
-    const symbol = queue.shift()
-    if (!symbol) break
-    const filePath = join(scopeDir, `${sanitizeFileName(symbol.name)}.svg`)
+    const item = queue.shift()
+    if (!item) break
+    const { symbol, weight, scale } = item
+    const filePath = getPrerenderedSymbolPath({ dataDir }, scope, symbol.name, { weight, scale })
     if (existsSync(filePath) && statSync(filePath).size > 0) {
       result.skipped++
       onProgress?.(result)
       continue
     }
     try {
-      const pdfBytes = await activeWorker.render(symbol.name)
+      const pdfBytes = await activeWorker.render(symbol.name, weight, scale)
       // Pre-rendered SVGs are used both as <img src> targets (where
       // currentColor would resolve correctly) AND as CSS `mask-image`
       // sources for the symbols-grid tiles (where the browser only reads
@@ -277,12 +292,13 @@ async function processSymbolQueue({ worker, queue, scopeDir, scope, result, onPr
         color: '#000000',
         background: null,
       })
+      ensureDir(dirname(filePath))
       await Bun.write(filePath, svg)
       result.rendered++
     } catch (error) {
-      logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name}: ${error.message}`)
+      logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name} (${weight}/${scale}): ${error.message}`)
       result.failed++
-      result.failures.push({ scope, name: symbol.name, error: error.message })
+      result.failures.push({ scope, name: symbol.name, weight, scale, error: error.message })
       // The worker may have died; restart it.
       try { activeWorker.close() } catch {}
       activeWorker = await restart()
@@ -292,10 +308,10 @@ async function processSymbolQueue({ worker, queue, scopeDir, scope, result, onPr
   try { activeWorker.close() } catch {}
 }
 
-async function spawnSymbolWorker({ scope, size, logger }) {
+async function spawnSymbolWorker({ scope, logger }) {
   const scriptPath = join(tmpdir(), `apple-docs-symbol-worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}.swift`)
   await Bun.write(scriptPath, SYMBOL_WORKER_SCRIPT)
-  const proc = Bun.spawn(['swift', scriptPath, scope, String(size)], {
+  const proc = Bun.spawn(['swift', scriptPath, scope], {
     stdout: 'pipe',
     stderr: 'pipe',
     stdin: 'pipe',
@@ -326,9 +342,9 @@ async function spawnSymbolWorker({ scope, size, logger }) {
   }
 
   return {
-    async render(name) {
+    async render(name, weight = 'regular', scale = 'medium') {
       // Bun's proc.stdin is a FileSink with sync write() + flush().
-      proc.stdin.write(`${name}\n`)
+      proc.stdin.write(`${name}\t${weight}\t${scale}\n`)
       await proc.stdin.flush()
       const header = await readBytes(8)
       const view = new DataView(header.buffer, header.byteOffset, header.byteLength)
@@ -365,8 +381,29 @@ import CoreGraphics
 
 let scope = CommandLine.arguments[1]
 
-let publicProvider: (String) -> NSImage? = { name in
-  let cfg = NSImage.SymbolConfiguration(pointSize: 256, weight: .regular, scale: .medium)
+func parseWeight(_ s: String) -> NSFont.Weight {
+  switch s.lowercased() {
+  case "ultralight": return .ultraLight
+  case "thin": return .thin
+  case "light": return .light
+  case "medium": return .medium
+  case "semibold": return .semibold
+  case "bold": return .bold
+  case "heavy": return .heavy
+  case "black": return .black
+  default: return .regular
+  }
+}
+func parseScale(_ s: String) -> NSImage.SymbolScale {
+  switch s.lowercased() {
+  case "small": return .small
+  case "large": return .large
+  default: return .medium
+  }
+}
+
+let publicProvider: (String, String, String) -> NSImage? = { name, weight, scale in
+  let cfg = NSImage.SymbolConfiguration(pointSize: 256, weight: parseWeight(weight), scale: parseScale(scale))
   return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(cfg)
 }
 let privateBundles = [
@@ -376,10 +413,14 @@ let privateBundles = [
 let privateProvider: (String) -> NSImage? = { name in
   privateBundles.lazy.compactMap { $0.image(forResource: name) }.first
 }
-let provider = scope == "private" ? privateProvider : publicProvider
 
-func renderPdf(_ name: String) throws -> Data {
-  guard let image = provider(name), let rep = image.representations.first else {
+func resolveImage(_ name: String, weight: String, scale: String) -> NSImage? {
+  if scope == "private" { return privateProvider(name) }
+  return publicProvider(name, weight, scale)
+}
+
+func renderPdf(_ name: String, weight: String, scale: String) throws -> Data {
+  guard let image = resolveImage(name, weight: weight, scale: scale), let rep = image.representations.first else {
     throw NSError(domain: "apple-docs", code: 1, userInfo: [NSLocalizedDescriptionKey: "symbol not found"])
   }
   let vgSel = NSSelectorFromString("vectorGlyph")
@@ -421,8 +462,12 @@ func writeFrame(status: UInt32, payload: Data) {
 
 while let line = readLine(strippingNewline: true) {
   if line.isEmpty { continue }
+  let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+  let name = parts.count > 0 ? parts[0] : ""
+  let weight = parts.count > 1 ? parts[1] : "regular"
+  let scale = parts.count > 2 ? parts[2] : "medium"
   do {
-    let pdf = try renderPdf(line)
+    let pdf = try renderPdf(name, weight: weight, scale: scale)
     writeFrame(status: 0, payload: pdf)
   } catch {
     let message = (error as NSError).localizedDescription
@@ -433,8 +478,8 @@ while let line = readLine(strippingNewline: true) {
 // Stryker restore all
 
 
-const SYMBOL_WEIGHTS = ['ultralight', 'thin', 'light', 'regular', 'medium', 'semibold', 'bold', 'heavy', 'black']
-const SYMBOL_SCALES = ['small', 'medium', 'large']
+export const SYMBOL_WEIGHTS = ['ultralight', 'thin', 'light', 'regular', 'medium', 'semibold', 'bold', 'heavy', 'black']
+export const SYMBOL_SCALES = ['small', 'medium', 'large']
 
 export async function renderSfSymbol(opts, ctx) {
   const scope = opts.scope === 'private' ? 'private' : 'public'
