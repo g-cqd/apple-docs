@@ -1,9 +1,6 @@
 {
   "max_lines": 400,
   "soft_target": 300,
-  "exempt_expires_phase": "P4",
-  "_doc": "See docs/plans/phase-3-quality-and-audit-remediation.md. Exempt entries record the LOC at the time the budget was seeded; CI fails if any exempt file grows past its baseline. Phase 1-4 plan deletes entries from this list as god modules get decomposed.",
-  "exempt": [
-    { "path": "src/content/render-html.js", "lines": 918 }
-  ]
+  "_doc": "Phase B drained every offender from the exempt list. The check now hard-fails on any source file > max_lines.",
+  "exempt": []
 }
