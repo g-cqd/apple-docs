@@ -1,9 +1,7 @@
 import { join, dirname } from 'node:path'
-import { rename, rm } from 'node:fs/promises'
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
+import { rename, rm, appendFile } from 'node:fs/promises'
+import { readFileSync, existsSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
-import { appendFile } from 'node:fs/promises'
-import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 import { renderDocumentPage, renderIndexPage, renderFrameworkPage, renderSearchPage, renderFontsPage, renderSymbolsPage, renderNotFoundPage, buildFrameworkTreeData } from './templates.js'
 import { buildHomepageProps } from './view-models/homepage.viewmodel.js'
 import { buildFontsPageProps } from './view-models/fonts-page.viewmodel.js'
@@ -18,6 +16,14 @@ import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
 import { linksAudit } from '../commands/links.js'
 import { ENTRY_BUNDLES, STANDALONE_ASSETS, WORKER_ASSETS } from './assets-manifest.js'
 import { minifyJs } from './asset-bundler.js'
+import {
+  batchFetchSections,
+  computeSectionsDigest,
+  computeTemplateVersion,
+} from './build/checkpoint.js'
+import { renderSkiplistPlaceholder, renderWithTimeout } from './build/render-helpers.js'
+import { copyDirRecursive, maybePrecompress, PRECOMPRESS_THRESHOLD } from './build/io.js'
+import { runWorkerBuilds } from './build/worker-fanout.js'
 
 /**
  * Default per-page render timeout. The Swift stdlib + a few other "kitchen
@@ -49,17 +55,8 @@ const RENDER_TIMEOUT_MS = 30_000
 const RENDER_SKIPLIST = new Set()
 
 /**
- * Files smaller than this are NOT precompressed at build time — Caddy's
- * runtime `encode` directive compresses them quickly enough at request time
- * and the brotli-quality-11 cost would dominate the build. Picked to keep
- * the dist/ tree from doubling on the long tail of small symbol pages,
- * while still capturing every framework landing and tree-data JSON.
- */
-const PRECOMPRESS_THRESHOLD = 16 * 1024
-
-/**
  * How often to flush the build checkpoint to the DB. Each flush is one tiny
- * `UPDATE`; the cost is negligible but the write still hits the WAL, so we
+ * UPDATE; the cost is negligible but the write still hits the WAL, so we
  * avoid doing it per-document.
  */
 const CHECKPOINT_EVERY = 1_000
@@ -611,280 +608,6 @@ export async function buildStaticSite(opts, ctx) {
  * Batched sections fetch: returns a `Map<docId, sections[]>`.
  * Chunks doc-id IN-lists at `chunkSize` to keep individual queries small.
  */
-function batchFetchSections(db, docIds, chunkSize) {
-  const result = new Map()
-  for (let i = 0; i < docIds.length; i += chunkSize) {
-    const chunk = docIds.slice(i, i + chunkSize)
-    const placeholders = chunk.map(() => '?').join(',')
-    const rows = db.db.query(
-      `SELECT document_id, section_kind, heading, content_text, content_json, sort_order
-       FROM document_sections
-       WHERE document_id IN (${placeholders})
-       ORDER BY document_id, sort_order, id`
-    ).all(...chunk)
-    for (const row of rows) {
-      let arr = result.get(row.document_id)
-      if (!arr) {
-        arr = []
-        result.set(row.document_id, arr)
-      }
-      arr.push(row)
-    }
-  }
-  return result
-}
-
-/**
- * Cheap fingerprint of a doc's sections for the incremental skip path. We
- * deliberately don't hash the full content — only the shape (kinds + lengths)
- * — because the goal is "did this doc change since the render was cached?",
- * not "is the rendered HTML byte-identical?". A full content hash would more
- * than double the per-doc CPU cost during the digest phase, which is hot.
- */
-function computeSectionsDigest(sections) {
-  if (!sections || sections.length === 0) return 'empty'
-  const parts = []
-  for (const s of sections) {
-    parts.push(s.section_kind)
-    parts.push(String((s.content_text ?? '').length))
-    const json = s.content_json
-    parts.push(typeof json === 'string' ? String(json.length) : json ? '1' : '0')
-    parts.push(String(s.sort_order ?? 0))
-  }
-  return sha256(parts.join('|')).slice(0, 16)
-}
-
-/**
- * Hash of the template surface — bumping any of these files invalidates the
- * render index. Keep the list tight: anything that contributes HTML output
- * during `renderDocumentPage` must be included.
- */
-function computeTemplateVersion() {
-  const here = dirname(new URL(import.meta.url).pathname)
-  const files = [
-    join(here, 'templates.js'),
-    join(here, '..', 'content', 'render-html.js'),
-    join(here, 'assets', 'style.css'),
-  ]
-  const hasher = new Bun.CryptoHasher('sha256')
-  for (const f of files) {
-    try {
-      hasher.update(readFileSync(f))
-    } catch {
-      // file missing — fold its absence into the hash so a removed file still
-      // rotates the version
-      hasher.update(`missing:${f}`)
-    }
-  }
-  return hasher.digest('hex').slice(0, 16)
-}
-
-/**
- * Run a synchronous render inside a `Promise.race` against a hard timeout.
- * The render is wrapped in `Promise.resolve().then(...)` so that if it throws
- * we get a rejected promise rather than an uncaught synchronous error. The
- * timer is cleared on either path to keep the event loop tidy.
- */
-function renderWithTimeout(fn, ms) {
-  let timer
-  const renderPromise = Promise.resolve().then(fn)
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`render timeout after ${ms}ms`)), ms)
-  })
-  return Promise.race([renderPromise, timeoutPromise]).finally(() => clearTimeout(timer))
-}
-
-/**
- * Minimal placeholder for skiplisted documents. Emits a valid HTML page
- * with the doc's title, abstract, and a link back to the upstream Apple
- * URL — enough for SEO + the sitemap, with a banner explaining that the
- * full body is unavailable.
- */
-function renderSkiplistPlaceholder(doc, siteConfig) {
-  const esc = (s) => String(s ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-  const title = esc(doc.title ?? doc.key)
-  const description = esc(doc.abstract_text ?? `${doc.title ?? doc.key} — Apple developer documentation`)
-  const canonical = `${siteConfig.baseUrl || ''}/docs/${esc(doc.key)}/`
-  const upstream = doc.url ? esc(doc.url) : null
-  return `<!DOCTYPE html>
-<html lang="en" data-theme="auto">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} — ${esc(siteConfig.siteName)}</title>
-  <meta name="description" content="${description}">
-  <link rel="canonical" href="${canonical}">
-  ${upstream ? `<link rel="alternate" href="${upstream}">` : ''}
-  <meta name="robots" content="index, follow">
-</head>
-<body>
-<main class="main-content">
-  <h1>${title}</h1>
-  <p>${description}</p>
-  <p><em>Body unavailable in this build — see the original on Apple's site${upstream ? `: <a href="${upstream}">${upstream}</a>` : ''}.</em></p>
-</main>
-</body>
-</html>`
-}
-
-/**
- * Partition a framework list across N workers, balancing by document count
- * via greedy bin-packing (largest framework first into the smallest bin).
- * Apple's distribution is heavy-tailed (kernel = 39 K docs, swift-evolution
- * = 553), so a naive round-robin would leave one worker rendering swift +
- * uikit while five sit idle. This balances within ~5 % of optimal.
- */
-function partitionFrameworksByDocCount(roots, db, n) {
-  const counts = roots.map(root => ({
-    root,
-    count: db.db.query('SELECT COUNT(*) as c FROM documents WHERE framework = ?').get(root.slug).c,
-  }))
-  counts.sort((a, b) => b.count - a.count)
-  const bins = Array.from({ length: n }, () => ({ slugs: [], total: 0 }))
-  for (const { root, count } of counts) {
-    if (count === 0) continue
-    const smallest = bins.reduce((acc, b) => (b.total < acc.total ? b : acc), bins[0])
-    smallest.slugs.push(root.slug)
-    smallest.total += count
-  }
-  return bins.filter(b => b.slugs.length > 0)
-}
-
-/**
- * Spawn N child Bun processes, each running `apple-docs web build` on its
- * partition of the framework list. Returns aggregated counts after every
- * child exits.
- *
- * Children inherit stdio so progress / failure log lines surface
- * immediately. The orchestrator does NOT render anything itself in this
- * mode; framework-listing pages (step 6) and the global steps (search
- * artifacts, sitemap, manifest) still run in the orchestrator after the
- * children finish.
- *
- * @param {object} args
- * @param {Array}  args.roots          Filtered framework list to fan out across.
- * @param {object} args.opts           Original `buildStaticSite` opts (forwarded selectively).
- * @param {object} args.siteConfig
- * @param {number} args.workers        Number of subprocesses to spawn.
- * @param {number} args.concurrency    Per-process pool concurrency.
- * @param {string} args.outDir
- * @param {import('../storage/database.js').DocsDatabase} args.db  For doc-count partitioning.
- * @param {object} [args.logger]
- */
-async function runWorkerBuilds({ roots, opts, siteConfig, workers, concurrency, outDir, db, logger }) {
-  const bins = partitionFrameworksByDocCount(roots, db, workers)
-  if (bins.length === 0) {
-    return { pagesBuilt: 0, pagesSkipped: 0, pagesFailed: 0 }
-  }
-  const totalDocs = bins.reduce((s, b) => s + b.total, 0)
-  logger?.info?.(
-    `Fan-out: ${bins.length} workers × ${concurrency} concurrency · ${totalDocs.toLocaleString('en-US')} docs partitioned across ${bins.map(b => b.total.toLocaleString('en-US')).join(', ')}`
-  )
-
-  // Resolve the CLI entrypoint relative to this module so worker processes
-  // run the same checkout (no PATH lookup, no system-wide CLI surprises).
-  const here = dirname(new URL(import.meta.url).pathname)
-  const cliJs = join(here, '..', '..', 'cli.js')
-  const bunBin = process.execPath || Bun.argv?.[0] || 'bun'
-
-  const procs = bins.map((bin, i) => {
-    const args = [
-      'run', cliJs, 'web', 'build',
-      '--out', outDir,
-      '--frameworks', bin.slugs.join(','),
-      '--concurrency', String(concurrency),
-      '--workers', '1',
-      '--incremental',
-    ]
-    if (siteConfig.baseUrl) { args.push('--base-url', siteConfig.baseUrl) }
-    if (siteConfig.siteName) { args.push('--site-name', siteConfig.siteName) }
-    // Don't pass `--full` to workers. The orchestrator already cleared the
-    // render index. Workers must run in incremental mode so they write
-    // directly to the shared `outDir` (= the orchestrator's staging dir)
-    // instead of each spinning up its own staging dir + atomic swap, which
-    // would race-replace the orchestrator's output.
-    logger?.info?.(`worker[${i + 1}/${bins.length}] starting (${bin.slugs.length} frameworks, ${bin.total.toLocaleString('en-US')} docs): ${bin.slugs.slice(0, 4).join(', ')}${bin.slugs.length > 4 ? '…' : ''}`)
-    return Bun.spawn([bunBin, ...args], {
-      stdout: 'inherit',
-      stderr: 'inherit',
-      env: { ...process.env, APPLE_DOCS_BUILD_WORKER: '1' },
-    })
-  })
-
-  const exits = await Promise.all(procs.map(p => p.exited))
-  const failedCount = exits.filter(c => c !== 0).length
-  if (failedCount > 0) {
-    throw new Error(`${failedCount}/${exits.length} build worker(s) exited non-zero`)
-  }
-
-  // Re-read counts from the render-index for an honest aggregate. We don't
-  // attempt to recover a per-worker breakdown — the children already
-  // streamed their summaries to stdout.
-  const counts = db.db.query(
-    `SELECT COUNT(*) AS built FROM document_render_index ri
-     JOIN documents d ON d.id = ri.doc_id
-     WHERE d.framework IN (${bins.flatMap(b => b.slugs).map(() => '?').join(',')})`
-  ).get(...bins.flatMap(b => b.slugs))
-  return {
-    pagesBuilt: counts?.built ?? 0,
-    pagesSkipped: 0,
-    pagesFailed: 0,
-  }
-}
-
-/**
- * Brotli-precompress an output file when it crosses the size threshold, so
- * Caddy's `precompressed br` mode can ship the sidecar directly without
- * repeating brotli at request time.
- *
- * Quality 11 is the maximum and gives 3–10 % smaller outputs than runtime
- * `encode` (which defaults to ~quality 4). The build cost is acceptable
- * because every page either misses the threshold (skipped) or is rendered
- * at most once per deploy thanks to the incremental render index.
- */
-async function maybePrecompress(filePath, body) {
-  const len = typeof body === 'string' ? Buffer.byteLength(body) : body.length
-  if (len < PRECOMPRESS_THRESHOLD) return
-  const buf = typeof body === 'string' ? Buffer.from(body) : body
-  const br = brotliCompressSync(buf, {
-    params: {
-      [zlibConstants.BROTLI_PARAM_QUALITY]: 11,
-      [zlibConstants.BROTLI_PARAM_SIZE_HINT]: len,
-    },
-  })
-  await Bun.write(`${filePath}.br`, br)
-}
-
-/**
- * Recursively copy `src` into `dst`, overwriting existing files. Used to
- * stage the static `public/` tree (robots.txt, llms.txt, security.txt) into
- * the build output. Doesn't follow symlinks.
- */
-async function copyDirRecursive(src, dst) {
-  ensureDir(dst)
-  for (const entry of readdirSync(src, { withFileTypes: true })) {
-    const from = join(src, entry.name)
-    const to = join(dst, entry.name)
-    if (entry.isDirectory()) {
-      await copyDirRecursive(from, to)
-    } else if (entry.isFile()) {
-      // Bun.write accepts a path source via Bun.file(...) and is faster than
-      // readFileSync + writeFileSync because it streams; size check just so
-      // we don't accidentally inflate the build with a stray multi-GB blob.
-      const size = statSync(from).size
-      if (size > 16 * 1024 * 1024) {
-        throw new Error(`refusing to copy ${from} (${size} bytes) into static public dir`)
-      }
-      await Bun.write(to, Bun.file(from))
-    }
-  }
-}
-
-/** Minify CSS by stripping comments, collapsing whitespace, and removing unnecessary characters. */
 export function minifyCSS(css) {
   return css
     .replace(/\/\*[\s\S]*?\*\//g, '')     // strip block comments

@@ -7,7 +7,7 @@
     { "path": "src/resources/apple-assets.js", "lines": 1809 },
     { "path": "src/content/normalize.js", "lines": 964 },
     { "path": "src/content/render-html.js", "lines": 918 },
-    { "path": "src/web/build.js", "lines": 896 },
+    { "path": "src/web/build.js", "lines": 619 },
     { "path": "src/content/parse-html.js", "lines": 732 },
     { "path": "src/sources/wwdc.js", "lines": 714 },
     { "path": "src/web/assets/symbols-page.js", "lines": 696 },
