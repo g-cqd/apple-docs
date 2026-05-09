@@ -72,7 +72,7 @@ export async function docsHandler(_request, ctx, url) {
         json, etag, lastModified,
       })
       doc = db.db.query(DOC_BASE_QUERY).get(key)
-      invalidateDocumentCaches()
+      invalidateDocumentCaches({ key, title: doc?.title, roleHeading: doc?.role_heading })
       try { await readerPool?.recycle?.() } catch {}
     } catch {
       // fetch failed — fall through to 404
@@ -99,7 +99,7 @@ export async function docsHandler(_request, ctx, url) {
           json, etag, lastModified,
         })
         sections = db.db.query(DOC_SECTIONS_QUERY).all(doc.id)
-        invalidateDocumentCaches()
+        invalidateDocumentCaches({ key: doc.key, title: doc.title, roleHeading: doc.role_heading })
         try { await readerPool?.recycle?.() } catch {}
       } catch {
         // fetch failed — render with empty sections

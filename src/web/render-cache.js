@@ -60,6 +60,25 @@ export function createWebRenderCache(db) {
       }
       return headings
     },
+    /**
+     * P3.2: incremental upsert. The audit flagged the global invalidate as
+     * a UX cliff — every on-demand doc fetch wiped the triple-index for
+     * everyone (~100-200 MB rebuild on the next request). When we know
+     * which doc was just persisted we can patch the indexes in place
+     * rather than throwing them away.
+     *
+     * No-ops when the indexes haven't been built yet (the first request
+     * builds them; until then there's nothing to patch).
+     *
+     * @param {{ key: string, title?: string|null, roleHeading?: string|null }} entry
+     */
+    addDocument(entry) {
+      const key = entry?.key
+      if (!key) return
+      if (knownKeys) knownKeys.add(key)
+      if (ancestorTitleIndex && entry.title) ancestorTitleIndex.set(key, entry.title)
+      if (roleHeadingIndex && entry.roleHeading) roleHeadingIndex.set(key, entry.roleHeading)
+    },
     invalidate() {
       knownKeys = null
       ancestorTitleIndex = null

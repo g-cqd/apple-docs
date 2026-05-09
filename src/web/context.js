@@ -89,8 +89,27 @@ export async function createWebContext(opts, ctx) {
 
   function getTitleIndex() { return cachedTitleIndex ??= buildTitleIndex(db) }
   function getAliasMap() { return cachedAliasMap ??= buildAliasMap(db) }
-  function invalidateDocumentCaches() {
-    renderCache.invalidate()
+  /**
+   * Invalidate the document-derived caches after a corpus mutation.
+   *
+   * P3.2: when the caller knows which document just changed (the
+   * on-demand-fetch path always does), pass it as `entry` and the
+   * render-cache's triple-index gets incrementally patched instead of
+   * thrown away — saves the ~100-200 MB rebuild that would otherwise
+   * stall the next request.
+   *
+   * The other caches (searchCache, title/alias index, search manifest)
+   * still clear on every call. They're smaller, get rebuilt lazily, and
+   * the audit's complaint was specifically about the render-cache cliff.
+   *
+   * @param {{ key: string, title?: string|null, roleHeading?: string|null }} [entry]
+   */
+  function invalidateDocumentCaches(entry) {
+    if (entry) {
+      renderCache.addDocument(entry)
+    } else {
+      renderCache.invalidate()
+    }
     searchCache.clear()
     corpusStamp.refresh()
     cachedTitleIndex = null
