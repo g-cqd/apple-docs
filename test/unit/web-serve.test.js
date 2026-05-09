@@ -101,8 +101,12 @@ beforeEach(async () => {
     })
   }
 
-  const fontPath = `/tmp/apple-docs-web-test-font-${process.pid}.ttf`
-  const variableFontPath = `/tmp/apple-docs-web-test-font-${process.pid}-vf.ttf`
+  // A6: fonts must live under one of the approved roots (system dirs or
+  // dataDir/resources/fonts/extracted). The test ctx uses dataDir='/tmp',
+  // so the fixtures land under /tmp/resources/fonts/extracted/.
+  const fontDir = `/tmp/resources/fonts/extracted/sf-pro`
+  const fontPath = `${fontDir}/apple-docs-web-test-font-${process.pid}.ttf`
+  const variableFontPath = `${fontDir}/apple-docs-web-test-font-${process.pid}-vf.ttf`
   await Bun.write(fontPath, 'fake-font')
   await Bun.write(variableFontPath, 'fake-variable-font')
   db.upsertAppleFontFamily({ id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif' })

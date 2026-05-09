@@ -1,6 +1,7 @@
 import { extname } from 'node:path'
 import { listAppleFonts, renderFontText } from '../../resources/apple-assets.js'
-import { BackpressureError } from '../../lib/errors.js'
+import { assertFontPathContained } from '../../resources/apple-fonts/safe-font-path.js'
+import { BackpressureError, ValidationError } from '../../lib/errors.js'
 import { sha256 } from '../../lib/hash.js'
 import { contentDispositionAttachment } from '../../lib/http-content-disposition.js'
 import { buildStoreZip } from '../../lib/zip.js'
@@ -33,9 +34,22 @@ export function listFontsHandler(_request, ctx) {
 export async function fontFileHandler(request, ctx, _url, match) {
   const font = ctx.db.getAppleFontFile(decodeURIComponent(match[1]))
   if (!font) return new Response('Not Found', { status: 404 })
-  const file = Bun.file(font.file_path)
+  // A6: refuse to serve any font whose stored file_path resolves outside
+  // the approved roots (system font dirs + dataDir/resources/fonts/extracted).
+  // This is the read-side of the containment invariant.
+  let safePath
+  try {
+    safePath = assertFontPathContained(font.file_path, ctx.dataDir)
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      ctx.logger?.warn?.(`fontFileHandler: refused unsafe path for ${font.id}: ${err.message}`)
+      return new Response('Not Found', { status: 404 })
+    }
+    throw err
+  }
+  const file = Bun.file(safePath)
   if (!(await file.exists())) return new Response('Not Found', { status: 404 })
-  const ext = extname(font.file_path).toLowerCase()
+  const ext = extname(safePath).toLowerCase()
   return await fileResponseRevalidated(request, file, {
     contentType: MIME_TYPES[ext] || 'application/octet-stream',
     contentDisposition: contentDispositionAttachment(font.file_name),
@@ -67,12 +81,23 @@ export async function fontFamilyZipHandler(request, ctx, url, match) {
   })
   if (filtered.length === 0) return new Response('Not Found', { status: 404 })
   // Dedupe by file_name as a defensive belt; the schema upgrade in v12
-  // already enforces this at insert time.
+  // already enforces this at insert time. A6: assert each file_path
+  // resolves under an approved root before reading bytes.
   const entries = []
   const seen = new Set()
   for (const fontFile of filtered) {
     if (seen.has(fontFile.file_name)) continue
-    const file = Bun.file(fontFile.file_path)
+    let safePath
+    try {
+      safePath = assertFontPathContained(fontFile.file_path, ctx.dataDir)
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        ctx.logger?.warn?.(`fontFamilyZipHandler: skipped unsafe path for ${fontFile.id}: ${err.message}`)
+        continue
+      }
+      throw err
+    }
+    const file = Bun.file(safePath)
     if (!(await file.exists())) continue
     const bytes = new Uint8Array(await file.arrayBuffer())
     entries.push({ name: fontFile.file_name, data: bytes })

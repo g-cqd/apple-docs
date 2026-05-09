@@ -19,6 +19,7 @@ import {
   tempSuffix,
 } from '../apple-assets-helpers.js'
 import { isLikelySfnt } from './sfnt.js'
+import { assertFontPathContained } from './safe-font-path.js'
 import { FONT_TEXT_SCRIPT } from '../swift-templates.js'
 
 export async function renderFontText(opts, ctx) {
@@ -27,6 +28,20 @@ export async function renderFontText(opts, ctx) {
   const text = String(opts.text ?? 'Typography')
   const pointSize = clampInteger(opts.size ?? 96, 8, 512)
   let content
+  // A6: refuse to feed a non-allowlisted path to CoreText / Swift.
+  // Surfaces as a placeholder SVG so the user sees a clean fallback
+  // rather than a 500.
+  let safeFontPath
+  try {
+    safeFontPath = assertFontPathContained(font.file_path, ctx.dataDir)
+  } catch (error) {
+    ctx.logger?.warn?.(`renderFontText: refused unsafe path for ${font.id}: ${error.message}`)
+    return {
+      font, text, format: 'svg',
+      mimeType: 'image/svg+xml; charset=utf-8',
+      content: renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize }),
+    }
+  }
   // CoreText / CTFontManagerRegisterFontsForURL behaviour on a non-SFNT
   // file is "undefined" in practice — observed to either segfault, register
   // a phantom descriptor, or stall indefinitely on macOS CI runners (the
@@ -34,12 +49,12 @@ export async function renderFontText(opts, ctx) {
   // listening for the test fetch). Probe the magic header up-front so test
   // fixtures and corrupt downloads short-circuit straight to the placeholder
   // SVG without spawning Swift.
-  const valid = await isLikelySfnt(font.file_path)
+  const valid = await isLikelySfnt(safeFontPath)
   if (!valid) {
     content = renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize })
   } else {
     try {
-      content = await renderFontTextSvgCurves({ fontPath: font.file_path, text, pointSize })
+      content = await renderFontTextSvgCurves({ fontPath: safeFontPath, text, pointSize })
     } catch (error) {
       ctx.logger?.warn?.(`CoreText outline render failed for ${font.file_name}: ${error.message}`)
       content = renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize })
