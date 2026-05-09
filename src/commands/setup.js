@@ -6,6 +6,7 @@ import { ensureDir } from '../storage/files.js'
 import { DocsDatabase } from '../storage/database.js'
 import { getGitHubToken } from '../lib/github.js'
 import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
+import { validateArchive } from './setup/validate-archive.js'
 
 const GITHUB_REPO = 'g-cqd/apple-docs'
 const USER_AGENT = 'apple-docs/2.0'
@@ -66,7 +67,17 @@ export async function setup(opts, ctx) {
     throw new Error(`No ${tier} snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
   }
 
+  // P1.5: checksum is mandatory. Previously we silently skipped verification
+  // when the .sha256 sidecar was missing; the audits flagged that as a
+  // supply-chain hole (compromised release flow could omit the sidecar
+  // and still ship arbitrary bytes).
   const checksumAsset = release.assets.find(a => a.name.includes(`-${tier}-`) && a.name.endsWith('.sha256'))
+  if (!checksumAsset) {
+    throw new Error(
+      `Refusing to install: release ${release.tag} ships ${archiveAsset.name} without a matching .sha256 sidecar. ` +
+      'Snapshot integrity cannot be verified.',
+    )
+  }
 
   // 4. Download archive to temp file
   const tmpPath = join(dataDir, '.setup-download.tar.gz')
@@ -100,24 +111,32 @@ export async function setup(opts, ctx) {
     }
     logger.info('Download complete.')
 
-    // 5. Verify checksum
-    if (checksumAsset) {
-      logger.info('Verifying checksum...')
-      const checksumRes = await fetch(checksumAsset.downloadUrl, {
-        headers: { 'User-Agent': USER_AGENT },
-        redirect: 'follow',
-      })
-      if (checksumRes.ok) {
-        const checksumText = await checksumRes.text()
-        const expectedHash = checksumText.trim().split(/\s+/)[0]
-        const archiveBytes = await Bun.file(tmpPath).arrayBuffer()
-        const actualHash = sha256(new Uint8Array(archiveBytes))
-        if (actualHash !== expectedHash) {
-          throw new Error(`Checksum mismatch! Expected ${expectedHash.slice(0, 16)}..., got ${actualHash.slice(0, 16)}...`)
-        }
-        logger.info('Checksum verified.')
-      }
+    // 5. Verify checksum (mandatory per P1.5 — see above).
+    logger.info('Verifying checksum...')
+    const checksumRes = await fetch(checksumAsset.downloadUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+      redirect: 'follow',
+    })
+    if (!checksumRes.ok) {
+      throw new Error(`Checksum download failed: HTTP ${checksumRes.status}`)
     }
+    const checksumText = await checksumRes.text()
+    const expectedHash = checksumText.trim().split(/\s+/)[0]
+    const archiveBytes = await Bun.file(tmpPath).arrayBuffer()
+    const actualHash = sha256(new Uint8Array(archiveBytes))
+    if (actualHash !== expectedHash) {
+      throw new Error(`Checksum mismatch! Expected ${expectedHash.slice(0, 16)}..., got ${actualHash.slice(0, 16)}...`)
+    }
+    logger.info('Checksum verified.')
+
+    // 5b. Pre-flight tar member validation (P1.5). Walks every entry via
+    // `tar -tvzf` and rejects symlinks, hardlinks, absolute paths, or
+    // anything that escapes dataDir after canonicalization. Run BEFORE
+    // wiping the install dir — a hostile archive should never cause data
+    // loss; we either install cleanly or leave the previous corpus intact.
+    logger.info('Validating archive members...')
+    const validation = await validateArchive(tmpPath, dataDir)
+    logger.info(`Archive validated (${validation.entries.length} entries).`)
 
     // 6. Close current DB and extract
     db.close()
@@ -148,10 +167,17 @@ export async function setup(opts, ctx) {
       }
     }
 
-    const proc = Bun.spawn(['tar', '-xzf', tmpPath, '-C', dataDir], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
+    // --no-same-owner / --no-same-permissions: defensive belts on top of
+    // the pre-flight validator. Even if the validator misses a hostile
+    // entry, these flags keep tar from chmod'ing / chown'ing files into a
+    // privileged state. (--no-overwrite-dir is GNU-only and not portable
+    // to bsdtar, which is what macOS ships; the install flow nukes the
+    // target dirs before extraction so the protection it provides is moot
+    // here anyway.)
+    const proc = Bun.spawn(
+      ['tar', '--no-same-owner', '--no-same-permissions', '-xzf', tmpPath, '-C', dataDir],
+      { stdout: 'pipe', stderr: 'pipe' },
+    )
     const exitCode = await proc.exited
     if (exitCode !== 0) {
       const stderr = await new Response(proc.stderr).text()

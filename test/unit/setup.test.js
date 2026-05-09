@@ -248,4 +248,33 @@ describe('setup', () => {
       setup({ tier: 'standard', force: true }, { db, dataDir, logger })
     ).rejects.toThrow('Refusing to downgrade from full to standard without --downgrade')
   })
+
+  test('refuses install when checksum sidecar is missing (P1.5)', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = mock(async (url) => {
+      const urlStr = String(url)
+      if (urlStr.includes('/releases/latest')) {
+        return new Response(JSON.stringify({
+          tag_name: 'test-release-no-checksum',
+          published_at: '2026-04-13T00:00:00Z',
+          assets: [
+            {
+              name: 'apple-docs-standard-test-release-no-checksum.tar.gz',
+              size: 100,
+              browser_download_url: 'https://fake.github.com/archive.tar.gz',
+            },
+            // intentionally NO .sha256 asset
+          ],
+        }), { status: 200 })
+      }
+      throw new Error(`unexpected url ${urlStr}`)
+    })
+    try {
+      await expect(
+        setup({ tier: 'standard', force: true }, { db, dataDir, logger })
+      ).rejects.toThrow(/without a matching \.sha256/)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
