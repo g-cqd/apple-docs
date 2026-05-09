@@ -1,4 +1,3 @@
-import { renderHtml, slugify } from '../content/render-html.js'
 
 // Page-level templates have been extracted to per-page files in
 // src/web/templates/. Each imports the shared helpers below from this
@@ -7,6 +6,7 @@ export { renderSearchPage } from './templates/search.js'
 export { renderNotFoundPage } from './templates/not-found.js'
 export { renderFontsPage } from './templates/fonts.js'
 export { renderSymbolsPage } from './templates/symbols.js'
+
 
 export function escapeAttr(value) {
   return String(value ?? '')
@@ -33,7 +33,7 @@ export function assetUrl(siteConfig, file) {
  * not JavaScript, so the rest of the string is safe — but tags inside JSON
  * keys/values would still terminate the script element.
  */
-function escapeJsonLd(value) {
+export function escapeJsonLd(value) {
   return JSON.stringify(value)
     .replaceAll('<', '\\u003c')
     .replaceAll('>', '\\u003e')
@@ -47,7 +47,7 @@ function escapeJsonLd(value) {
  * don't pass `canonical`); doc/framework/index/search templates always pass
  * the right shape.
  */
-function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots }) {
+export function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots }) {
   if (!canonical) return ''
   const lines = []
   lines.push(`<link rel="canonical" href="${escapeAttr(canonical)}">`)
@@ -152,7 +152,7 @@ const BUNDLES = {
   listing: ['collection-filters.js', 'tree-view.js'],
 }
 
-function buildScripts(siteConfig, groups) {
+export function buildScripts(siteConfig, groups) {
   if (siteConfig.bundled) {
     return groups
       .filter(g => g !== 'core')
@@ -256,7 +256,7 @@ export function buildBreadcrumbs(key, opts = {}) {
  * per-page `url` column, but framework landing pages don't — we synthesize
  * from source_type + slug.
  */
-function frameworkOriginalUrl(root) {
+export function frameworkOriginalUrl(root) {
   if (!root) return null
   if (root.url) return root.url
   const slug = root.slug ?? ''
@@ -275,7 +275,7 @@ function frameworkOriginalUrl(root) {
 }
 
 /** Short hostname label ("developer.apple.com") used in the link text. */
-function hostLabel(url) {
+export function hostLabel(url) {
   try { return new URL(url).host } catch { return '' }
 }
 
@@ -283,7 +283,7 @@ function hostLabel(url) {
  * Render the "Original resource" sidebar block. Returns an empty string when
  * no upstream URL is available.
  */
-function buildOriginalResourceBlock(url) {
+export function buildOriginalResourceBlock(url) {
   if (!url) return ''
   const host = hostLabel(url)
   return `<div class="sidebar-block sidebar-source">
@@ -295,7 +295,7 @@ function buildOriginalResourceBlock(url) {
 // Badge helpers
 // ---------------------------------------------------------------------------
 
-function buildDocMeta(doc) {
+export function buildDocMeta(doc) {
   const badges = []
   const frameworkLabel = doc.framework_display ?? doc.framework
   if (frameworkLabel) {
@@ -322,14 +322,14 @@ function buildDocMeta(doc) {
 }
 
 /** Parse platforms_json from DB (string or object). */
-function parsePlatformsJson(platformsJson) {
+export function parsePlatformsJson(platformsJson) {
   if (!platformsJson) return null
   if (typeof platformsJson === 'object') return platformsJson
   try { return JSON.parse(platformsJson) } catch { return null }
 }
 
 /** Build a platform availability line from a platforms map. */
-function buildPlatformBadges(platforms) {
+export function buildPlatformBadges(platforms) {
   if (!platforms || typeof platforms !== 'object') return ''
   const platformNames = {
     ios: 'iOS', macos: 'macOS', watchos: 'watchOS', tvos: 'tvOS',
@@ -350,143 +350,14 @@ function buildPlatformBadges(platforms) {
 // ---------------------------------------------------------------------------
 
 /** Returns the inner HTML content of the relationships sidebar (without the wrapping <aside>). */
-function buildRelationshipContent(section) {
-  const contentJson = section?.content_json ?? section?.contentJson ?? null
-  let groups = null
-  if (contentJson && typeof contentJson === 'string') {
-    try { groups = JSON.parse(contentJson) } catch { /* ignore */ }
-  } else if (contentJson && typeof contentJson === 'object') {
-    groups = contentJson
-  }
-
-  const parts = ['<h2>Relationships</h2>']
-
-  if (Array.isArray(groups) && groups.length > 0) {
-    for (const group of groups) {
-      if (group?.title) {
-        parts.push(`<h3 class="sidebar-group-title">${escapeAttr(group.title)}</h3>`)
-      }
-      const items = (group?.items ?? [])
-        .map(item => {
-          if (item?.key) {
-            return `<li><a href="/docs/${escapeAttr(item.key)}/"><code>${escapeAttr(item.title ?? item.key)}</code></a></li>`
-          }
-          return `<li>${escapeAttr(item?.title ?? item?.identifier ?? '')}</li>`
-        })
-        .join('')
-      if (items) {
-        parts.push(`<ul class="sidebar-list">${items}</ul>`)
-      }
-    }
-  } else {
-    parts.push('<p class="sidebar-hint">See relationships section in the article.</p>')
-  }
-
-  return parts.join('\n  ')
-}
-
-// ---------------------------------------------------------------------------
-// Page TOC (Table of Contents)
-// ---------------------------------------------------------------------------
-
-/** Build TOC item list from ordered sections. Skips abstract and empty sections. */
-function buildPageToc(sections) {
-  const items = []
-  for (const section of sections ?? []) {
-    const kind = section.sectionKind ?? section.section_kind
-    if (kind === 'abstract') continue
-
-    // Skip sections that have no renderable content
-    const text = section.contentText ?? section.content_text ?? ''
-    const json = section.contentJson ?? section.content_json ?? null
-    const hasText = typeof text === 'string' && text.trim().length > 0
-    const hasJson = json != null && (typeof json === 'string' ? json.trim().length > 0 : true)
-    if (!hasText && !hasJson) continue
-
-    // For link sections (topics, relationships, see_also), check if the parsed
-    // JSON actually has items — an empty group list produces no visible content
-    if (kind === 'topics' || kind === 'relationships' || kind === 'see_also') {
-      if (!hasRenderableItems(json)) continue
-    }
-
-    let id, label
-    switch (kind) {
-      case 'declaration':
-        id = 'declaration'; label = 'Declaration'; break
-      case 'parameters':
-        id = 'parameters'; label = 'Parameters'; break
-      case 'properties':
-        label = section.heading ?? 'Properties'
-        id = slugify(label)
-        break
-      case 'rest_endpoint':
-        label = section.heading ?? 'URL'
-        id = slugify(label)
-        break
-      case 'rest_parameters':
-        label = section.heading ?? 'Parameters'
-        id = slugify(label)
-        break
-      case 'rest_responses':
-        label = section.heading ?? 'Response Codes'
-        id = slugify(label)
-        break
-      case 'possible_values':
-        label = section.heading ?? 'Possible Values'
-        id = slugify(label)
-        break
-      case 'mentioned_in':
-        id = 'mentioned-in'; label = 'Mentioned in'; break
-      case 'discussion':
-        label = section.heading ?? 'Overview'
-        id = slugify(label)
-        break
-      case 'topics':
-        id = 'topics'; label = 'Topics'; break
-      case 'relationships':
-        continue // rendered in sidebar, not in article body
-      case 'see_also':
-        id = 'see-also'; label = 'See Also'; break
-      default:
-        label = section.heading ?? 'Section'
-        id = slugify(label)
-    }
-    if (id) items.push({ id, label })
-  }
-  return items
-}
-
-/** Check if a JSON content string (or parsed object) for a link section has at least one renderable item. */
-function hasRenderableItems(json) {
-  if (!json) return false
-  let groups = null
-  if (typeof json === 'string') {
-    try { groups = JSON.parse(json) } catch { return false }
-  } else if (Array.isArray(json)) {
-    groups = json
-  } else {
-    return false
-  }
-  if (!Array.isArray(groups)) return false
-  for (const group of groups) {
-    const items = group?.items ?? []
-    if (items.length > 0) return true
-  }
-  return false
-}
-
-/** Render the TOC HTML. In mobile mode, wraps in a <details> element. */
-function renderTocHtml(tocItems, mobile = false) {
-  if (tocItems.length < 2) return ''
-  const listHtml = `<ul>${tocItems.map(item =>
-    `<li><a href="#${escapeAttr(item.id)}">${escapeAttr(item.label)}</a></li>`
-  ).join('')}</ul>`
-
-  if (mobile) {
-    return `<details class="page-toc-mobile"><summary>Contents</summary><nav class="page-toc">${listHtml}</nav></details>`
-  }
-  return `<nav class="page-toc">${listHtml}</nav>`
-}
+// Doc-content helpers (relationship sidebar, page TOC, TOC HTML) live in
+// templates/_doc-content.js. Re-exported so existing call sites work.
+export {
+  buildPageToc,
+  buildRelationshipContent,
+  hasRenderableItems,
+  renderTocHtml,
+} from './templates/_doc-content.js'
 
 // ---------------------------------------------------------------------------
 // Page templates
@@ -501,562 +372,13 @@ function renderTocHtml(tocItems, mobile = false) {
  * @param {object} [opts] - { resolveRoleHeadings?: (keys: string[]) => Map<string, string> }
  * @returns {string} Complete HTML page string
  */
-export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
-  const sectionsList = sections ?? []
 
-  // Enrich topics items with role_heading from DB (if resolver provided)
-  if (opts.resolveRoleHeadings) {
-    enrichTopicItems(sectionsList, opts.resolveRoleHeadings)
-  }
+// renderDocumentPage / renderIndexPage / renderFrameworkPage +
 
-  const pageTitle = `${doc.title ?? 'Untitled'} — ${siteConfig.siteName}`
-  const renderOpts = {}
-  if (opts.knownKeys) renderOpts.knownKeys = opts.knownKeys
-  let content = renderHtml(doc, sectionsList, renderOpts)
+// buildFrameworkTreeData live in dedicated per-page files now.
 
-  // Detect multi-language declarations for language toggle
-  const hasLangToggle = content.includes('data-languages=')
-  const breadcrumbs = doc.key ? buildBreadcrumbs(doc.key, {
-    title: doc.title,
-    framework: doc.framework_display ?? doc.framework,
-    ancestorTitles: opts.ancestorTitles,
-    knownKeys: opts.knownKeys,
-  }) : ''
+export { renderDocumentPage } from './templates/document.js'
 
-  // Sort sections for TOC (same order as renderHtml uses)
-  const orderedSections = sectionsList.slice().sort((a, b) =>
-    (a.sortOrder ?? a.sort_order ?? 0) - (b.sortOrder ?? b.sort_order ?? 0)
-  )
-  const tocItems = buildPageToc(orderedSections)
+export { renderIndexPage } from './templates/index-page.js'
 
-  const relationshipSection = orderedSections.find(s =>
-    (s.sectionKind ?? s.section_kind) === 'relationships'
-  )
-
-  const hasSidebar = tocItems.length >= 2
-
-  // When sidebar renders relationships separately, mark the in-article duplicate as hidden from assistive tech
-  if (hasSidebar) {
-    content = content.replace('<section id="relationships">', '<section id="relationships" aria-hidden="true">')
-  }
-
-  // Build doc meta (badges + platforms)
-  const docMeta = buildDocMeta(doc)
-
-  // Compose sidebar as a stack of discrete blocks:
-  // Original-resource → meta → language toggle → TOC → relationships.
-  const sidebarParts = []
-  const originalBlock = buildOriginalResourceBlock(doc.url)
-  if (originalBlock) sidebarParts.push(originalBlock)
-  if (docMeta) {
-    sidebarParts.push(`<div class="sidebar-block sidebar-meta">${docMeta}</div>`)
-  }
-  if (hasLangToggle) {
-    sidebarParts.push(`<div class="sidebar-block">
-  <div class="lang-toggle" role="group" aria-label="Language">
-    <button class="lang-btn active" data-lang="swift" aria-pressed="true">Swift</button>
-    <button class="lang-btn" data-lang="occ" aria-pressed="false">ObjC</button>
-  </div>
-</div>`)
-  }
-  if (hasSidebar) {
-    sidebarParts.push(`<div class="sidebar-block">${renderTocHtml(tocItems, false)}</div>`)
-  }
-  if (relationshipSection) {
-    const relJson = relationshipSection.contentJson ?? relationshipSection.content_json ?? ''
-    if (typeof relJson === 'string' ? hasRenderableItems(relJson) : true) {
-      sidebarParts.push(`<div class="sidebar-block">${buildRelationshipContent(relationshipSection)}</div>`)
-    }
-  }
-
-  const sidebar = sidebarParts.length > 0
-    ? `<aside class="doc-sidebar">${sidebarParts.join('\n')}</aside>`
-    : ''
-
-  const hasSidebarFinal = sidebar.length > 0
-
-  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
-
-  const canonical = doc.key ? `${siteConfig.baseUrl || ''}/docs/${doc.key}/` : null
-  const docDescription = doc.abstract_text || `${doc.title ?? ''} — Apple developer documentation`.trim()
-  const platforms = parsePlatformsJson(doc.platforms_json) || {}
-  const platformNames = Object.keys(platforms).filter(k => platforms[k]).map(k => ({
-    ios: 'iOS', macos: 'macOS', watchos: 'watchOS', tvos: 'tvOS', visionos: 'visionOS',
-    maccatalyst: 'Mac Catalyst', ipados: 'iPadOS',
-  }[k] ?? k))
-  const programmingLanguage = (doc.language === 'occ' || doc.language === 'objc') ? 'Objective-C' : 'Swift'
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'TechArticle',
-    headline: doc.title ?? 'Untitled',
-    inLanguage: 'en',
-    isAccessibleForFree: true,
-    mainEntityOfPage: canonical,
-    publisher: {
-      '@type': 'Organization',
-      name: siteConfig.siteName,
-      url: `${siteConfig.baseUrl || ''}/`,
-    },
-    ...(docDescription ? { description: docDescription } : {}),
-    ...(siteConfig.buildDate ? { dateModified: siteConfig.buildDate } : {}),
-    ...(doc.url ? { isBasedOn: doc.url } : {}),
-    ...(programmingLanguage ? { programmingLanguage } : {}),
-    ...(platformNames.length > 0 ? { audience: { '@type': 'Audience', audienceType: 'Developers' }, applicationSuite: platformNames.join(', ') } : {}),
-  }
-
-  return `<!DOCTYPE html>
-<html lang="en" data-theme="auto">
-${buildHead({
-  title: pageTitle,
-  description: doc.abstract_text,
-  siteConfig,
-  canonical,
-  alternate: doc.url || null,
-  ogType: 'article',
-  ogTitle: doc.title ?? pageTitle,
-  ogDesc: docDescription,
-  jsonLd,
-})}
-<body>
-<a href="#main-content" class="skip-link">Skip to main content</a>
-${buildHeader(siteConfig)}
-<main id="main-content" class="main-content${hasSidebarFinal ? ' has-sidebar' : ''}">
-  ${breadcrumbs}
-  ${mobileToc}
-  <article class="doc-article">
-    ${content}
-  </article>
-  ${sidebar}
-</main>
-${buildFooter(siteConfig)}
-${buildScripts(siteConfig, ['core', ...(hasLangToggle ? ['lang-toggle'] : [])])}
-</body>
-</html>`
-}
-
-/** Batch-enrich topics section items with _resolvedRoleHeading from DB.
- *
- *  P3.3: deep-clones the parsed JSON before mutation. The previous code
- *  aliased `section.contentJson` directly when the upstream had already
- *  parsed it (the typeof-object branch). build.js batches sectionsByDoc
- *  per-root and reuses section rows across renders; a second render of
- *  the same doc would have seen pre-enriched JSON with the
- *  `_resolvedRoleHeading` markers baked in. Currently dormant (single
- *  render per doc per build) but a real correctness hazard if anything
- *  ever retries a render.
- */
-function enrichTopicItems(sections, resolveRoleHeadings) {
-  for (const section of sections) {
-    const kind = section.sectionKind ?? section.section_kind
-    if (kind !== 'topics') continue
-
-    const raw = section.contentJson ?? section.content_json
-    let contentJson = null
-    if (typeof raw === 'string') {
-      try { contentJson = JSON.parse(raw) } catch { continue }
-    } else if (typeof raw === 'object' && raw !== null) {
-      // Defensive clone — never mutate a shared upstream object.
-      try { contentJson = structuredClone(raw) } catch { continue }
-    }
-    if (!Array.isArray(contentJson)) continue
-
-    // Collect all item keys
-    const keys = []
-    for (const group of contentJson) {
-      for (const item of group?.items ?? []) {
-        if (item.key) keys.push(item.key)
-      }
-    }
-    if (keys.length === 0) continue
-
-    // Batch resolve
-    const roleMap = resolveRoleHeadings(keys)
-
-    // Enrich items
-    for (const group of contentJson) {
-      for (const item of group?.items ?? []) {
-        if (item.key && roleMap.has(item.key)) {
-          item._resolvedRoleHeading = roleMap.get(item.key)
-        }
-      }
-    }
-
-    // Write back serialized
-    const serialized = JSON.stringify(contentJson)
-    if (section.contentJson !== undefined) {
-      section.contentJson = serialized
-    } else {
-      section.content_json = serialized
-    }
-  }
-}
-
-/**
- * Render the index/landing page listing all frameworks grouped by kind.
- *
- * @param {Array}  frameworks - Framework records (slug, name, kind, doc_count)
- * @param {object} siteConfig - { baseUrl, siteName, buildDate }
- * @returns {string} Complete HTML page string
- */
-export function renderIndexPage(frameworks, siteConfig, opts = {}) {
-  const pageTitle = siteConfig.siteName
-  const frameworkList = frameworks ?? []
-
-  // Group frameworks by kind, preserving insertion order
-  const byKind = new Map()
-  for (const fw of frameworkList) {
-    const kind = fw.kind ?? 'other'
-    if (!byKind.has(kind)) byKind.set(kind, [])
-    byKind.get(kind).push(fw)
-  }
-
-  // Extras hook — synthetic entries (e.g. /fonts, /symbols inside Design)
-  // that aren't real corpus roots. They render as normal list items with
-  // a custom href.
-  const extrasByKind = opts.extras ?? {}
-  for (const [kind, extras] of Object.entries(extrasByKind)) {
-    if (!byKind.has(kind)) byKind.set(kind, [])
-    byKind.get(kind).push(...extras)
-  }
-
-  const sections = []
-  for (const [kind, items] of byKind) {
-    const itemsHtml = items.map(fw => {
-      const href = fw.href ?? `${siteConfig.baseUrl}/docs/${escapeAttr(fw.slug)}/`
-      const countBadge = fw.doc_count != null
-        ? ` <span class="badge badge-count">${escapeAttr(String(fw.doc_count))}</span>`
-        : ''
-      return `<li data-filter-kind="${escapeAttr(kind)}"><a href="${href}">${escapeAttr(fw.display_name ?? fw.name ?? fw.slug)}</a>${countBadge}</li>`
-    }).join('\n      ')
-
-    const kindId = slugify(kind)
-    sections.push(`<section id="${escapeAttr(kindId)}" class="framework-group" data-filter-kind="${escapeAttr(kind)}">
-    <h2 class="framework-kind">${escapeAttr(kind)}</h2>
-    <ul class="framework-list">
-      ${itemsHtml}
-    </ul>
-  </section>`)
-  }
-
-  const mainContent = sections.length > 0
-    ? sections.join('\n  ')
-    : '<p>No frameworks indexed yet.</p>'
-
-  // Build sidebar TOC from kind groups
-  const tocItems = [...byKind.keys()].map(kind => ({ id: slugify(kind), label: kind }))
-  const hasSidebar = tocItems.length >= 2
-  const sidebar = hasSidebar
-    ? `<aside class="doc-sidebar"><div class="sidebar-block">${renderTocHtml(tocItems, false)}</div></aside>`
-    : ''
-  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
-
-  const description = 'Apple developer documentation, indexed locally.'
-  const canonical = `${siteConfig.baseUrl || ''}/`
-
-  return `<!DOCTYPE html>
-<html lang="en" data-theme="auto">
-${buildHead({
-  title: pageTitle,
-  description,
-  siteConfig,
-  canonical,
-  ogType: 'website',
-  jsonLd: {
-    '@context': 'https://schema.org',
-    '@type': 'WebSite',
-    name: siteConfig.siteName,
-    url: canonical,
-    description,
-    potentialAction: {
-      '@type': 'SearchAction',
-      target: `${siteConfig.baseUrl || ''}/search?q={query}`,
-      'query-input': 'required name=query',
-    },
-  },
-})}
-<body>
-<a href="#main-content" class="skip-link">Skip to main content</a>
-${buildHeader(siteConfig)}
-<main id="main-content" class="main-content${hasSidebar ? ' has-sidebar' : ''} listing">
-  <h1>${escapeAttr(siteConfig.siteName)}</h1>
-  ${mobileToc}
-  <article class="doc-article">
-  ${mainContent}
-  </article>
-  ${sidebar}
-</main>
-${buildFooter(siteConfig)}
-${buildScripts(siteConfig, ['core', 'listing'])}
-</body>
-</html>`
-}
-
-/**
- * Compute the framework tree-view JSON ahead of rendering. Build.js uses this
- * to write a hashed, externally-cacheable `tree.<hash>.json` file and pass
- * back the URL via `opts.treeDataUrl` to `renderFrameworkPage`. Keeping this
- * exported lets us assert framework-page weight in tests without re-running
- * the entire page render.
- *
- * @param {object} framework
- * @param {Array}  documents
- * @param {Array<{from_key: string, to_key: string}>} treeEdges
- * @param {object} siteConfig
- * @returns {{ json: string, hasTree: boolean }} `json` is empty when the
- *   framework has no tree edges (and so no tree-view).
- */
-export function buildFrameworkTreeData(framework, documents, treeEdges, siteConfig) {
-  if (!treeEdges || treeEdges.length === 0) return { json: '', hasTree: false }
-
-  const docList = documents ?? []
-  const docLookup = {}
-  for (const doc of docList) {
-    const docKey = doc.key ?? doc.path ?? ''
-    docLookup[docKey] = {
-      title: doc.title ?? docKey,
-      role_heading: doc.role_heading ?? doc.role ?? 'Other',
-      href: `${siteConfig.baseUrl ?? ''}/docs/${docKey}/`,
-    }
-  }
-
-  // Same role grouping the inline path emits when deferList is on (which is
-  // always true when hasTree is true).
-  const ROLE_LABELS = {
-    symbol: 'Symbols', collection: 'Collections', collectionGroup: 'Collection Groups',
-    sampleCode: 'Sample Code', article: 'Articles', dictionarySymbol: 'Dictionary Symbols',
-    overview: 'Overview', pseudoSymbol: 'Pseudo Symbols',
-    restRequestSymbol: 'REST Requests', link: 'Links',
-  }
-  const byRole = new Map()
-  for (const doc of docList) {
-    const rawRole = doc.role ?? doc.role_heading ?? 'Other'
-    const role = ROLE_LABELS[rawRole] ?? rawRole
-    if (!byRole.has(role)) byRole.set(role, [])
-    byRole.get(role).push(doc)
-  }
-  const roleGroups = []
-  for (const [role, roleDocs] of byRole) {
-    roleGroups.push({
-      role,
-      id: slugify(role),
-      docs: roleDocs.map(doc => {
-        const docKey = doc.key ?? doc.path ?? ''
-        const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
-        return {
-          key: docKey,
-          title: doc.title ?? docKey,
-          role_heading: doc.role_heading ?? doc.role ?? 'Other',
-          abstract: doc.abstract_text ?? doc.abstract ?? '',
-          deprecated: /\bDeprecated\b/i.test(doc.abstract_text ?? doc.abstract ?? ''),
-          symbol: isSymbol,
-        }
-      }),
-    })
-  }
-
-  return {
-    json: JSON.stringify({ edges: treeEdges, docs: docLookup, roleGroups }),
-    hasTree: true,
-  }
-}
-
-/**
- * Render a framework listing page with documents grouped by role.
- *
- * @param {object} framework - Framework record (name, slug, kind)
- * @param {Array}  documents - Document records (title, key, role, role_heading)
- * @param {object} siteConfig - { baseUrl, siteName, buildDate }
- * @param {object} [opts] - { treeEdges?: Array<{from_key: string, to_key: string}> }
- * @returns {string} Complete HTML page string
- */
-export function renderFrameworkPage(framework, documents, siteConfig, opts = {}) {
-  const fwName = framework?.display_name ?? framework?.name ?? framework?.slug ?? 'Framework'
-  const pageTitle = `${fwName} — ${siteConfig.siteName}`
-  const docList = documents ?? []
-  const treeEdges = opts.treeEdges ?? []
-
-  // Human-readable labels for DocC roles
-  const ROLE_LABELS = {
-    symbol: 'Symbols',
-    collection: 'Collections',
-    collectionGroup: 'Collection Groups',
-    sampleCode: 'Sample Code',
-    article: 'Articles',
-    dictionarySymbol: 'Dictionary Symbols',
-    overview: 'Overview',
-    pseudoSymbol: 'Pseudo Symbols',
-    restRequestSymbol: 'REST Requests',
-    link: 'Links',
-  }
-
-  // Group documents by role
-  const byRole = new Map()
-  for (const doc of docList) {
-    const rawRole = doc.role ?? doc.role_heading ?? 'Other'
-    const role = ROLE_LABELS[rawRole] ?? rawRole
-    if (!byRole.has(role)) byRole.set(role, [])
-    byRole.get(role).push(doc)
-  }
-
-  const roleSections = []
-  for (const [role, docs] of byRole) {
-    const docsHtml = docs.map(doc => {
-      const docKey = doc.key ?? doc.path ?? ''
-      const href = `${siteConfig.baseUrl}/docs/${escapeAttr(docKey)}/`
-      const title = escapeAttr(doc.title ?? docKey)
-      const filterKind = escapeAttr(doc.role_heading ?? doc.role ?? 'Other')
-      // Show role_heading as metadata to distinguish duplicates (e.g. .!=(_:_:) across types)
-      const meta = doc.role_heading ? `<span class="doc-item-meta">${escapeAttr(doc.role_heading)}</span>` : ''
-      const abstractText = doc.abstract_text ?? doc.abstract ?? ''
-      const isDeprecated = /\bDeprecated\b/i.test(abstractText)
-      const abstract = abstractText
-        ? `<span class="doc-item-meta">— ${escapeAttr(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
-        : ''
-      const deprecatedAttr = isDeprecated ? ' data-deprecated="true"' : ''
-      const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
-      const titleHtml = isSymbol ? `<code>${title}</code>` : title
-      return `<li data-filter-kind="${filterKind}"${deprecatedAttr}><a href="${href}">${titleHtml}</a>${meta}${abstract}</li>`
-    }).join('\n      ')
-
-    const roleId = slugify(role)
-    roleSections.push(`<section id="${escapeAttr(roleId)}" class="role-group" data-filter-kind="${escapeAttr(role)}">
-    <h2 class="role-heading">${escapeAttr(role)}</h2>
-    <ul class="doc-list">
-      ${docsHtml}
-    </ul>
-  </section>`)
-  }
-
-  const mainContent = roleSections.length > 0
-    ? roleSections.join('\n  ')
-    : '<p>No documents found for this framework.</p>'
-
-  // View toggle only shown when we have tree edges
-  const hasTree = treeEdges.length > 0
-
-  // When tree view is default, skip rendering the full list HTML server-side.
-  // The list is hidden on load and contains thousands of <li> elements that bloat
-  // the HTML payload (e.g., Swift stdlib: 10 MB HTML, 138k DOM nodes, 53s FCP).
-  // Instead, collection-filters.js will build the list on-demand when the user
-  // switches to list view.
-  const deferList = hasTree
-
-  const breadcrumbs = `<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${escapeAttr(fwName)}</span></nav>`
-
-  // Build sidebar: original-resource block + TOC of role groups.
-  const tocItems = [...byRole.keys()].map(role => ({ id: slugify(role), label: role }))
-  const hasSidebar = tocItems.length >= 2
-  const sidebarBlocks = []
-  const originalBlock = buildOriginalResourceBlock(frameworkOriginalUrl(framework))
-  if (originalBlock) sidebarBlocks.push(originalBlock)
-  if (hasSidebar) sidebarBlocks.push(`<div class="sidebar-block">${renderTocHtml(tocItems, false)}</div>`)
-  const sidebar = sidebarBlocks.length > 0
-    ? `<aside class="doc-sidebar">${sidebarBlocks.join('\n')}</aside>`
-    : ''
-  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
-
-  // Build the doc lookup JSON for tree view (key -> {title, role_heading, href})
-  const docLookup = {}
-  for (const doc of docList) {
-    const docKey = doc.key ?? doc.path ?? ''
-    docLookup[docKey] = {
-      title: doc.title ?? docKey,
-      role_heading: doc.role_heading ?? doc.role ?? 'Other',
-      href: `${siteConfig.baseUrl}/docs/${docKey}/`,
-    }
-  }
-
-  // Build role grouping for deferred list rendering
-  const roleGroups = []
-  if (deferList) {
-    for (const [role, roleDocs] of byRole) {
-      roleGroups.push({
-        role,
-        id: slugify(role),
-        docs: roleDocs.map(doc => {
-          const docKey = doc.key ?? doc.path ?? ''
-          const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
-          return {
-            key: docKey,
-            title: doc.title ?? docKey,
-            role_heading: doc.role_heading ?? doc.role ?? 'Other',
-            abstract: doc.abstract_text ?? doc.abstract ?? '',
-            deprecated: /\bDeprecated\b/i.test(doc.abstract_text ?? doc.abstract ?? ''),
-            symbol: isSymbol,
-          }
-        }),
-      })
-    }
-  }
-
-  // Plain JSON for the tree data. When the caller provides
-  // `opts.treeDataUrl`, the framework page emits an external reference
-  // instead of inlining this — see the `<div id="tree-container">` below
-  // and `tree-view.js`. Inline emission still escapes HTML-significant
-  // characters to prevent `</script>` breakout.
-  const treeDataObj = { edges: treeEdges, docs: docLookup, ...(deferList ? { roleGroups } : {}) }
-  const treeDataJsonInline = JSON.stringify(treeDataObj)
-    .replaceAll('<', '\\u003c')
-    .replaceAll('>', '\\u003e')
-    .replaceAll('/', '\\u002f')
-    .replaceAll('&', '\\u0026')
-  const externalTreeDataUrl = opts.treeDataUrl ?? null
-
-  const viewToggle = hasTree
-    ? `<div class="view-toggle" role="group" aria-label="View mode">
-    <button data-view="list" aria-pressed="false">List</button>
-    <button class="active" data-view="tree" aria-pressed="true">Tree</button>
-  </div>`
-    : ''
-
-  const description = `${fwName} documentation index.`
-  const canonical = framework?.slug ? `${siteConfig.baseUrl || ''}/docs/${framework.slug}/` : null
-  const originalUrl = frameworkOriginalUrl(framework)
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'APIReference',
-    name: fwName,
-    inLanguage: 'en',
-    description,
-    isAccessibleForFree: true,
-    ...(canonical ? { mainEntityOfPage: canonical } : {}),
-    ...(siteConfig.buildDate ? { dateModified: siteConfig.buildDate } : {}),
-    ...(originalUrl ? { isBasedOn: originalUrl } : {}),
-    programmingLanguage: 'Swift',
-  }
-
-  return `<!DOCTYPE html>
-<html lang="en" data-theme="auto">
-${buildHead({
-  title: pageTitle,
-  description,
-  siteConfig,
-  canonical,
-  alternate: originalUrl,
-  ogType: 'website',
-  ogTitle: fwName,
-  ogDesc: description,
-  jsonLd,
-})}
-<body>
-<a href="#main-content" class="skip-link">Skip to main content</a>
-${buildHeader(siteConfig)}
-<main id="main-content" class="main-content${sidebar ? ' has-sidebar' : ''} listing">
-  ${breadcrumbs}
-  <h1>${escapeAttr(fwName)}${viewToggle}</h1>
-  ${mobileToc}
-  <article class="doc-article">
-  <div id="collection-controls"${deferList ? ' class="hidden"' : ''}></div>
-  <div id="list-container"${hasTree ? ' class="hidden"' : ''}${deferList ? ' data-deferred' : ''}>
-  ${deferList ? '' : mainContent}
-  </div>
-  <div id="tree-container"${externalTreeDataUrl ? ` data-tree-src="${escapeAttr(externalTreeDataUrl)}"` : ''}></div>
-  ${hasTree && !externalTreeDataUrl ? `<script type="application/json" id="tree-data">${treeDataJsonInline}</script>` : ''}
-  </article>
-  ${sidebar}
-</main>
-${buildFooter(siteConfig)}
-${buildScripts(siteConfig, ['core', 'listing'])}
-</body>
-</html>`
-}
+export { renderFrameworkPage, buildFrameworkTreeData } from './templates/framework.js'
