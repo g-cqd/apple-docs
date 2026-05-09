@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
 import { startServer } from './src/mcp/server.js'
+import { installCrashHandlers, lifecycle } from './src/lib/lifecycle.js'
 
 const dataDir = process.env.APPLE_DOCS_HOME
 if (!dataDir) {
@@ -34,12 +35,15 @@ const logger = createLogger(process.env.APPLE_DOCS_LOG_LEVEL ?? 'warn')
 const db = new DocsDatabase(dbPath)
 const ctx = { db, dataDir, logger }
 
+// P1.3: signal-driven graceful drain. The MCP stdio server registers itself
+// once started; the DB closes last so any drain step can still touch it.
+installCrashHandlers({ logger })
+lifecycle.register({ name: 'db', stop: () => db.close() })
 const cleanup = () => { try { db.close() } catch {} }
-process.on('SIGINT', () => { cleanup(); process.exit(130) })
-process.on('SIGTERM', () => { cleanup(); process.exit(143) })
 
 try {
   const handle = await startServer(ctx)
+  lifecycle.register({ name: 'mcp-stdio', stop: (deadlineMs) => handle.close(deadlineMs) })
   await handle.closed
 } finally {
   cleanup()

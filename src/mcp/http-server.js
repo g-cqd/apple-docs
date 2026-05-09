@@ -295,9 +295,9 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   const url = `http://${host}:${resolvedPort}/mcp`
   logger?.info?.(`MCP HTTP server listening at ${url}`)
 
-  async function close() {
+  async function close(deadlineMs) {
     try { server?.stop?.(true) } catch {}
-    try { await readerPool?.close?.() } catch {}
+    try { await readerPool?.close?.({ softDrainMs: deadlineMs ?? 0 }) } catch {}
   }
 
   return { server, url, close }

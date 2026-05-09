@@ -178,6 +178,26 @@ describe('createReaderPool', () => {
     await expect(pool.run('searchPages', [])).rejects.toThrow(/after close/)
   })
 
+  test('close({ softDrainMs }) waits for in-flight calls to settle (P1.3)', async () => {
+    // Worker that completes the call after a short delay.
+    const handler = (worker, msg) => {
+      if (msg.type !== 'call') return
+      setTimeout(() => emit(worker, { type: 'result', id: msg.id, ok: true, data: 'late-ok' }), 60)
+    }
+    const WorkerCtor = makeFakeCtor({ handler })
+    const pool = createReaderPool({ dbPath: DB_PATH, size: 1, WorkerCtor })
+    await pool.start()
+    const inflight = pool.run('searchPages', [])
+    await new Promise((resolve) => queueMicrotask(resolve))
+    expect(pool.stats().pending).toBe(1)
+
+    await pool.close({ softDrainMs: 500 })
+    // The drain loop should have noticed the pending entry clear before the
+    // worker is terminated, so the call resolves normally.
+    await expect(inflight).resolves.toBe('late-ok')
+    expect(WorkerCtor.instances.every(w => w.terminated)).toBe(true)
+  })
+
   test('recycle tears down all workers and respawns a fresh set', async () => {
     const handler = (worker, msg) => {
       if (msg.type === 'call') emit(worker, { type: 'result', id: msg.id, ok: true, data: 'ok' })

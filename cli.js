@@ -17,6 +17,7 @@ import { status } from './src/commands/status.js'
 import { taxonomy } from './src/commands/taxonomy.js'
 import { paginateCliContent } from './src/cli/paginate.js'
 import { dispatchMaintenance, MAINTENANCE_COMMANDS } from './src/cli/maintenance.js'
+import { installCrashHandlers, lifecycle } from './src/lib/lifecycle.js'
 
 const { command, subcommand, positional, flags } = parseArgs(process.argv)
 
@@ -94,10 +95,12 @@ const rateLimiter = createHostBucketedLimiter({
 const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
 const ctx = { db, dataDir, rateLimiter, logger }
 
-// Graceful shutdown
+// P1.3: signal-driven graceful drain. Each long-running server registers its
+// own stop() with the lifecycle; the DB is the last thing torn down so any
+// drain step that touches it (WAL checkpoint, etc.) runs first.
+installCrashHandlers({ logger })
+lifecycle.register({ name: 'db', stop: () => db.close() })
 const cleanup = () => { try { db.close() } catch {} }
-process.on('SIGINT', () => { cleanup(); process.exit(130) })
-process.on('SIGTERM', () => { cleanup(); process.exit(143) })
 
 // Commands that hit the GitHub API benefit from local credentials.
 if (command === 'sync' || command === 'setup') {
@@ -206,6 +209,7 @@ try {
         case 'start': {
           const { startServer } = await import('./src/mcp/server.js')
           const handle = await startServer(ctx)
+          lifecycle.register({ name: 'mcp-stdio', stop: (deadlineMs) => handle.close(deadlineMs) })
           await handle.closed
           break
         }
@@ -230,6 +234,7 @@ try {
               ...(heavyQueue != null && Number.isFinite(heavyQueue) ? { heavyQueue } : {}),
             },
           )
+          lifecycle.register({ name: 'mcp-http', stop: (deadlineMs) => handle.close(deadlineMs) })
           console.log(`MCP HTTP server running at ${handle.url}`)
           console.log('Press Ctrl+C to stop')
           // Keep process alive — process signal handlers at the top of this file
@@ -337,6 +342,7 @@ try {
         case 'serve': {
           const { startDevServer } = await import('./src/web/serve.js')
           const info = await startDevServer({ port: flags.port ? Number.parseInt(flags.port) : 3000, baseUrl: flags['base-url'] }, ctx)
+          lifecycle.register({ name: 'web', stop: (deadlineMs) => info.close(deadlineMs) })
           console.log(`Dev server running at ${info.url}`)
           console.log('Press Ctrl+C to stop')
           // Keep process alive

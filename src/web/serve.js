@@ -106,9 +106,14 @@ export async function startDevServer(opts, ctx) {
     }
   }
 
-  async function close() {
+  async function close(deadlineMs) {
     try { originalStop?.(true) } catch {}
-    try { await readerPool?.close?.() } catch {}
+    try {
+      // Forward the parent shutdown deadline as a soft-drain budget so the
+      // reader pool waits for in-flight queries to settle before terminating
+      // workers. Falsy / undefined → immediate close (legacy behavior).
+      await readerPool?.close?.({ softDrainMs: deadlineMs ?? 0 })
+    } catch {}
   }
 
   return { server, url: serverUrl, close, readerPool }

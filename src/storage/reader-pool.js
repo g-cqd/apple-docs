@@ -189,9 +189,23 @@ export function createReaderPool(opts = {}) {
     })
   }
 
-  async function close() {
+  async function close({ softDrainMs = 0 } = {}) {
     if (closed) return
     closed = true
+    // P1.3: optional soft-drain phase — let in-flight reads finish naturally
+    // up to `softDrainMs` before we reject queued work and tear workers down.
+    // Default 0 preserves the immediate-close contract existing tests assert
+    // on. The graceful-shutdown path (lifecycle in cli.js / index.js) passes
+    // a positive value derived from the shutdown deadline.
+    if (softDrainMs > 0) {
+      const start = Date.now()
+      while (Date.now() - start < softDrainMs) {
+        let pending = 0
+        for (const slot of slots) pending += slot?.pending.size ?? 0
+        if (pending === 0) break
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+    }
     // Use `terminate()` exclusively — the one-shot way to reap a worker in both
     // Node and Bun. Earlier revisions also posted a `{type:'close'}` message so
     // the worker could `db.close(); process.exit(0)` itself, but that races
