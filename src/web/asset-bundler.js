@@ -1,14 +1,16 @@
 import { join } from 'node:path'
 
 /**
- * Minify a single browser-targeted JS source file via `Bun.build`.
+ * Build a single browser-targeted JS entrypoint via `Bun.build` and return
+ * the minified source text.
  *
- * The asset sources are IIFE-wrapped standalone scripts with no imports
- * between them, so Bun.build acts as a minifier here, not a bundler in
- * the multi-file sense. Concatenation into bundle outputs (`core.js`,
- * `listing.js`) happens at the call site.
+ * `format: 'iife'` wraps the bundle in a self-executing IIFE so the
+ * output works as a plain `<script src=...>` (no `type="module"`
+ * required) and the module's top-level statements run on load. Without
+ * this, Bun emits ESM with `export` statements that browsers refuse to
+ * execute outside a module script tag.
  *
- * @param {string} entrypoint Absolute path to a single .js file.
+ * @param {string} entrypoint Absolute path to a .js file.
  * @returns {Promise<string>} Minified source text.
  */
 export async function minifyJs(entrypoint) {
@@ -16,6 +18,7 @@ export async function minifyJs(entrypoint) {
     entrypoints: [entrypoint],
     target: 'browser',
     minify: true,
+    format: 'iife',
   })
   if (!result.success) {
     const message = result.logs?.map(l => l.message ?? String(l)).join('\n') ?? 'build failed'
