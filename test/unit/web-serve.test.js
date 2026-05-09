@@ -193,6 +193,26 @@ describe('Dev Server (P7-E)', () => {
     expect(html).toContain('class="view-toggle"')
   })
 
+  test('serves the externalised framework tree JSON via the data route', async () => {
+    // First render the framework page so the tree JSON is computed and
+    // cached under the URL the HTML emits.
+    const html = await (await fetch(`${serverInfo.url}/docs/swiftui`)).text()
+    const match = html.match(/data-tree-src="([^"]*\/data\/frameworks\/swiftui\/tree\.[0-9a-f]{10}\.json)"/)
+    expect(match).not.toBeNull()
+    const treeUrl = new URL(match[1], serverInfo.url).pathname
+    const res = await fetch(`${serverInfo.url}${treeUrl}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    expect(res.headers.get('cache-control')).toContain('immutable')
+    const body = await res.json()
+    expect(body).toBeDefined()
+  })
+
+  test('framework tree route 404s on an unknown framework slug', async () => {
+    const res = await fetch(`${serverInfo.url}/data/frameworks/nope/tree.0123456789.json`)
+    expect(res.status).toBe(404)
+  })
+
   test('returns 404 for unknown document', async () => {
     const res = await fetch(`${serverInfo.url}/docs/nonexistent/path`)
     expect(res.status).toBe(404)
@@ -213,6 +233,44 @@ describe('Dev Server (P7-E)', () => {
     expect(res.headers.get('content-type')).toContain('text/css')
     expect(res.headers.get('cache-control')).toContain('immutable')
     expect(res.headers.get('cache-control')).toContain('max-age=31536000')
+  })
+
+  test('synthesises /assets/core.js as a minified IIFE bundle', async () => {
+    const res = await fetch(`${serverInfo.url}/assets/core.js`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/javascript')
+    expect(res.headers.get('cache-control')).toContain('immutable')
+    const code = await res.text()
+    expect(code.length).toBeGreaterThan(100)
+    // Bun.build with format:'iife' wraps the bundle in `(()=>{ … })()`
+    expect(code).toMatch(/^\(\(\)=>\{/)
+    // No ESM-export shim should leak into a script that loads via <script src>
+    expect(code).not.toContain('__esModule')
+    // Theme controller's data-theme write must reach the bundle
+    expect(code).toContain('data-theme')
+  })
+
+  test('synthesises /assets/listing.js as a minified IIFE bundle', async () => {
+    const res = await fetch(`${serverInfo.url}/assets/listing.js`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/javascript')
+    const code = await res.text()
+    expect(code).toMatch(/^\(\(\)=>\{/)
+    expect(code).not.toContain('__esModule')
+  })
+
+  test('serves /assets/lang-toggle.js as a minified IIFE', async () => {
+    const res = await fetch(`${serverInfo.url}/assets/lang-toggle.js`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/javascript')
+    const code = await res.text()
+    expect(code).toMatch(/^\(\(\)=>\{/)
+    expect(code).toContain('apple-docs-lang')
+  })
+
+  test('refuses asset paths that try to escape the assets directory', async () => {
+    const traversal = await fetch(`${serverInfo.url}/assets/..%2Fpackage.json`)
+    expect(traversal.status).toBe(403)
   })
 
   test('live search API works', async () => {
