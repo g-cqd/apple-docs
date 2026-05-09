@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { checkResourceEtag, fetchWithRetry } from '../../src/lib/fetch-with-retry.js'
+import {
+  checkResourceEtag,
+  classifyFetchError,
+  fetchWithRetry,
+  isRecoverableForbidden,
+} from '../../src/lib/fetch-with-retry.js'
+import { HttpError, NotFoundError } from '../../src/lib/errors.js'
 
 const originalFetch = globalThis.fetch
 const originalSetTimeout = globalThis.setTimeout
@@ -106,6 +112,108 @@ describe('fetch-with-retry', () => {
 
     expect(result.data).toEqual({ ok: true })
     expect(calls).toBe(1)
+  })
+
+  describe('retry classification (P4.14)', () => {
+    test('classifyFetchError treats bare TypeError as terminal', () => {
+      expect(classifyFetchError(new TypeError('Invalid URL'))).toBe('terminal')
+    })
+
+    test('classifyFetchError treats TypeError with a cause as retryable (network wrap)', () => {
+      const wrapped = new TypeError('fetch failed')
+      wrapped.cause = new Error('ECONNRESET')
+      expect(classifyFetchError(wrapped)).toBe('retryable')
+    })
+
+    test('classifyFetchError defaults unknown errors to retryable', () => {
+      expect(classifyFetchError(new Error('socket hang up'))).toBe('retryable')
+      expect(classifyFetchError(null)).toBe('retryable')
+    })
+
+    test('isRecoverableForbidden detects GitHub secondary rate limit (403 + remaining=0)', () => {
+      const res = new Response('', {
+        status: 403,
+        headers: { 'x-ratelimit-remaining': '0' },
+      })
+      expect(isRecoverableForbidden(res)).toBe(true)
+    })
+
+    test('isRecoverableForbidden detects 403 with retry-after', () => {
+      const res = new Response('', {
+        status: 403,
+        headers: { 'retry-after': '30' },
+      })
+      expect(isRecoverableForbidden(res)).toBe(true)
+    })
+
+    test('isRecoverableForbidden rejects plain 403 (permanent forbidden)', () => {
+      expect(isRecoverableForbidden(new Response('', { status: 403 }))).toBe(false)
+    })
+
+    test('terminal fetch errors (invalid URL) are not retried', async () => {
+      const limiter = { async acquire() {} }
+      let attempts = 0
+      globalThis.fetch = async () => {
+        attempts += 1
+        throw new TypeError('Invalid URL')
+      }
+      await expect(
+        fetchWithRetry('not-a-url', limiter, { maxRetries: 5, jitterMs: 0 }),
+      ).rejects.toThrow('Invalid URL')
+      expect(attempts).toBe(1)
+    })
+
+    test('GitHub 403 with x-ratelimit-remaining=0 is retried, then succeeds', async () => {
+      const limiter = { async acquire() {} }
+      let attempts = 0
+      globalThis.fetch = async () => {
+        attempts += 1
+        if (attempts === 1) {
+          return new Response('', {
+            status: 403,
+            headers: {
+              'x-ratelimit-remaining': '0',
+              'retry-after': '1',
+            },
+          })
+        }
+        return jsonResponse({ ok: true })
+      }
+      globalThis.setTimeout = (fn, _ms, ...args) => { fn(...args); return 0 }
+      const out = await fetchWithRetry('https://api.github.com/repos/x/y', limiter, {
+        maxRetries: 1,
+        jitterMs: 0,
+      })
+      expect(out.data).toEqual({ ok: true })
+      expect(attempts).toBe(2)
+    })
+
+    test('plain 403 surfaces as HttpError immediately (no retry)', async () => {
+      const limiter = { async acquire() {} }
+      let attempts = 0
+      globalThis.fetch = async () => {
+        attempts += 1
+        return new Response('forbidden', { status: 403 })
+      }
+      await expect(
+        fetchWithRetry('https://api.github.com/repos/private/repo', limiter, {
+          maxRetries: 3,
+          jitterMs: 0,
+        }),
+      ).rejects.toBeInstanceOf(HttpError)
+      expect(attempts).toBe(1)
+    })
+
+    test('404 with notFoundAs=not-found throws NotFoundError', async () => {
+      const limiter = { async acquire() {} }
+      globalThis.fetch = async () => new Response('', { status: 404 })
+      await expect(
+        fetchWithRetry('https://api.github.com/repos/x/missing', limiter, {
+          maxRetries: 0,
+          jitterMs: 0,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError)
+    })
   })
 
   describe('AbortSignal (P2.8)', () => {

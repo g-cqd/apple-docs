@@ -19,22 +19,70 @@ function acquireRateLimit(rateLimiter, url) {
 }
 
 /**
- * Calculate retry delay from Retry-After header or exponential backoff.
+ * GitHub returns 403 + `x-ratelimit-remaining: 0` (and sometimes a body
+ * mentioning "secondary rate limit") when the abuse detector trips. These
+ * are recoverable with a backoff — distinct from a permanent 403 (e.g.,
+ * private repo without auth).
+ * @param {Response} res
+ * @returns {boolean}
+ */
+export function isRecoverableForbidden(res) {
+  if (res.status !== 403) return false
+  const remaining = res.headers.get?.('x-ratelimit-remaining')
+  if (remaining === '0') return true
+  const retryAfter = res.headers.get?.('retry-after')
+  if (retryAfter != null) return true
+  return false
+}
+
+/**
+ * Calculate retry delay. Honors Retry-After and GitHub's `x-ratelimit-reset`
+ * (epoch seconds) over exponential backoff when either points further out.
  * @param {Response|null} res
  * @param {number} attempt - zero-based attempt index
  * @param {number} jitterMs
  * @returns {number} delay in milliseconds
  */
 function retryDelayMs(res, attempt, jitterMs) {
-  const retryAfter = res?.headers?.get?.('retry-after')
   const baseDelay = Math.min(1000 * (2 ** attempt), 8000)
-  let retryAfterDelay = 0
+  let upstreamDelay = 0
+
+  const retryAfter = res?.headers?.get?.('retry-after')
   if (retryAfter != null) {
     const seconds = Number.parseInt(retryAfter, 10)
-    if (!Number.isNaN(seconds)) retryAfterDelay = seconds * 1000
+    if (Number.isFinite(seconds) && seconds > 0) upstreamDelay = seconds * 1000
   }
+
+  const reset = res?.headers?.get?.('x-ratelimit-reset')
+  if (reset != null) {
+    const resetEpoch = Number.parseInt(reset, 10)
+    if (Number.isFinite(resetEpoch)) {
+      const ms = resetEpoch * 1000 - Date.now()
+      // Cap at 60s so a misconfigured server can't park us indefinitely;
+      // the caller's maxRetries still bounds total work.
+      if (ms > 0) upstreamDelay = Math.max(upstreamDelay, Math.min(ms, 60_000))
+    }
+  }
+
   const jitter = jitterMs > 0 ? Math.random() * jitterMs : 0
-  return Math.max(retryAfterDelay, baseDelay) + jitter
+  return Math.max(upstreamDelay, baseDelay) + jitter
+}
+
+/**
+ * Classify a fetch() rejection as retryable (transient network) or terminal
+ * (programmer error, invalid URL, scheme not supported). AbortError is
+ * handled by the caller before reaching here.
+ * @param {unknown} error
+ * @returns {'retryable'|'terminal'}
+ */
+export function classifyFetchError(error) {
+  if (!error || typeof error !== 'object') return 'retryable'
+  // TypeError from fetch() with a `cause` is the standard wrapper for
+  // underlying socket / DNS / TLS failures — those are retryable.
+  // A bare TypeError (no cause) usually means an invalid URL or unsupported
+  // protocol — that's terminal.
+  if (error.name === 'TypeError' && error.cause == null) return 'terminal'
+  return 'retryable'
 }
 
 /** Combine an optional caller signal with the per-attempt timeout signal,
@@ -105,6 +153,9 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
   } catch (error) {
     // Caller-initiated abort: surface as-is, never retry.
     if (signal?.aborted) throw signal.reason ?? error
+    // Programmer errors (invalid URL, unsupported scheme) shouldn't burn
+    // retries — surface immediately so the bug is visible.
+    if (classifyFetchError(error) === 'terminal') throw error
     if (_attempt < maxRetries) {
       await sleep(retryDelayMs(null, _attempt, jitterMs))
       return fetchWithRetry(url, rateLimiter, { ...opts, _attempt: _attempt + 1 })
@@ -112,7 +163,8 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
     throw error
   }
 
-  if (retryableStatuses.includes(res.status) && _attempt < maxRetries) {
+  const retryable = retryableStatuses.includes(res.status) || isRecoverableForbidden(res)
+  if (retryable && _attempt < maxRetries) {
     await sleep(retryDelayMs(res, _attempt, jitterMs))
     if (signal?.aborted) throw signal.reason ?? new DOMException('aborted', 'AbortError')
     return fetchWithRetry(url, rateLimiter, { ...opts, _attempt: _attempt + 1 })
