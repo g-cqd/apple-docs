@@ -4,7 +4,6 @@
   "exempt_expires_phase": "P4",
   "_doc": "See docs/plans/phase-3-quality-and-audit-remediation.md. Exempt entries record the LOC at the time the budget was seeded; CI fails if any exempt file grows past its baseline. Phase 1-4 plan deletes entries from this list as god modules get decomposed.",
   "exempt": [
-    { "path": "src/content/normalize.js", "lines": 964 },
     { "path": "src/content/render-html.js", "lines": 918 }
   ]
 }
