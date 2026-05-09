@@ -44,21 +44,16 @@ export async function startDevServer(opts, ctx) {
   const webCtx = await createWebContext(opts, ctx)
   const { logger, siteConfig, readerPool, securityHeaders, gzipCache } = webCtx
 
-  // P3.5: per-IP token-bucket gates. Two layers — a default limiter
-  // covering every route, plus a much stricter one on the SSRF
-  // amplifier (/docs/* on-demand fetch). Defaults are tuned for "open
+  // P3.5: per-IP token-bucket gate covering every route. Tuned for "open
   // public service" — generous bursts so legitimate users don't notice.
-  // Override via APPLE_DOCS_WEB_{RATE,BURST,DOCS_RATE,DOCS_BURST} env
-  // vars when the deployment has different load characteristics.
+  // Override via APPLE_DOCS_WEB_{RATE,BURST} env vars when the deployment
+  // has different load characteristics. The strict 5/min limit on the
+  // /docs/<key> on-demand-fetch path now lives inside docs.route.js
+  // (A7), so warm-path requests for already-cached docs aren't capped.
   const defaultLimiter = createRateLimiter({
     rate: parsePositiveNumber(process.env.APPLE_DOCS_WEB_RATE) ?? 60,
     burst: parsePositiveNumber(process.env.APPLE_DOCS_WEB_BURST) ?? 120,
     name: 'web',
-  })
-  const docsLimiter = createRateLimiter({
-    rate: parsePositiveNumber(process.env.APPLE_DOCS_WEB_DOCS_RATE) ?? 5 / 60,
-    burst: parsePositiveNumber(process.env.APPLE_DOCS_WEB_DOCS_BURST) ?? 5,
-    name: 'web.docs',
   })
 
   const registry = createRouteRegistry()
@@ -108,11 +103,10 @@ export async function startDevServer(opts, ctx) {
     async fetch(request, srv) {
       const defaultGate = defaultLimiter.take(request, srv)
       if (!defaultGate.ok) return tooManyRequestsResponse(defaultGate.retryAfterMs, defaultLimiter.name)
-      const url = new URL(request.url)
-      if (url.pathname.startsWith('/docs/')) {
-        const docsGate = docsLimiter.take(request, srv)
-        if (!docsGate.ok) return tooManyRequestsResponse(docsGate.retryAfterMs, docsLimiter.name)
-      }
+      // Stash srv on ctx so handlers can resolve client IP for their own
+      // gates (A7 docs on-demand). webCtx is per-server, so this is safe
+      // for the duration of the request — Bun re-enters fetch for each.
+      webCtx._server = srv
       const response = await handleRequest(request)
       for (const [k, v] of Object.entries(securityHeaders)) response.headers.set(k, v)
       return finalizeResponse(request, response, { gzipCache })

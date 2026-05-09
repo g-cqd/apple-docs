@@ -2,6 +2,7 @@ import { dirname } from 'node:path'
 import { existsSync, statSync } from 'node:fs'
 import { createReaderPool } from '../storage/reader-pool.js'
 import { createHostBucketedLimiter } from '../lib/per-host-rate-limiter.js'
+import { createOnDemandGate } from './middleware/on-demand-gate.js'
 import { sha256 } from '../lib/hash.js'
 import { initHighlighter } from '../content/highlight.js'
 import { createLru } from '../lib/lru.js'
@@ -69,6 +70,8 @@ export async function createWebContext(opts, ctx) {
     primary: { rate: 5, burst: 2 },
   })
   const renderCache = createWebRenderCache(db)
+  // A7: composite gate for the on-demand /docs/<key> fetch path.
+  const onDemandGate = createOnDemandGate({})
   const readerPool = await resolveWebReaderPool(ctx, opts, logger)
   const searchCtx = readerPool ? { ...ctx, readerPool } : ctx
   const searchCache = createLru({ max: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_SEARCH_CACHE) ?? 512 })
@@ -170,6 +173,7 @@ export async function createWebContext(opts, ctx) {
     siteConfig,
     srcWebDir,
     rateLimiter,
+    onDemandGate,
     renderCache,
     readerPool,
     searchCtx,

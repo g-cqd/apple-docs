@@ -1,8 +1,10 @@
 import { renderDocumentPage, renderFrameworkPage, buildFrameworkTreeData } from '../templates.js'
 import { sha256 } from '../../lib/hash.js'
+import { BackpressureError } from '../../lib/errors.js'
 import { fetchDocPage } from '../../apple/api.js'
 import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { coalesceByKey } from '../../pipeline/coalesce.js'
+import { tooManyRequestsResponse } from '../middleware/rate-limit.js'
 import { textResponse, notFoundResponse } from '../responses.js'
 
 const HTML_HASHABLE = { contentType: 'text/html; charset=utf-8', hashable: true }
@@ -22,8 +24,8 @@ const DOC_SECTIONS_QUERY = 'SELECT section_kind, heading, content_text, content_
  *
  * @type {import('../route-registry.js').RouteHandler}
  */
-export async function docsHandler(_request, ctx, url) {
-  const { db, dataDir, siteConfig, renderCache, rateLimiter, readerPool, frameworkTreeCache, frameworkTreeBySlug, invalidateDocumentCaches } = ctx
+export async function docsHandler(request, ctx, url) {
+  const { db, dataDir, siteConfig, renderCache, rateLimiter, readerPool, frameworkTreeCache, frameworkTreeBySlug, invalidateDocumentCaches, onDemandGate } = ctx
   const key = url.pathname.replace('/docs/', '').replace(/\/$/, '').replace(/\/index\.html$/, '')
   if (!key) return notFoundResponse(siteConfig)
 
@@ -59,30 +61,67 @@ export async function docsHandler(_request, ctx, url) {
   // Try as document page.
   let doc = db.db.query(DOC_BASE_QUERY).get(key)
 
-  // On-demand fetch from Apple if not in database. Coalesce concurrent
-  // requests for the same cold key so the upstream sees one fetch and the
-  // DB sees one write — second/third callers wait on the same promise.
+  // On-demand fetch from Apple if not in database. The cold path is the
+  // SSRF amplifier (audit A7); apply the composite gate before doing
+  // any upstream work:
+  //   1. Negative cache: 24h tombstone for keys that previously 404'd.
+  //   2. Per-IP strict bucket: 5 req/min, separate from the global limiter.
+  //   3. Bounded fetch queue: cap concurrent fetches at 8 with 16 waiters;
+  //      503 + Retry-After when the queue overflows.
+  // The coalescer below still dedupes concurrent requests for the same key.
   if (!doc && /^[a-z][a-z0-9_-]*(?:\/[a-z0-9_-]+)*$/i.test(key)) {
+    if (onDemandGate?.isNegativelyCached(key)) {
+      return notFoundResponse(siteConfig)
+    }
+    if (onDemandGate) {
+      const gate = onDemandGate.checkPerIp(request, ctx._server)
+      if (!gate.ok) return tooManyRequestsResponse(gate.retryAfterMs, 'docs.on-demand')
+    }
     try {
-      await coalesceByKey(`docs:${key}`, async () => {
-        // Re-check inside the lock — a coalesced peer may have just persisted.
-        if (db.db.query(DOC_BASE_QUERY).get(key)) return
-        const { json, etag, lastModified } = await fetchDocPage(key, rateLimiter)
-        const framework = key.split('/')[0]
-        const rootRow = db.getRootBySlug(framework)
-        await persistFetchedDocPage({
-          db, dataDir,
-          rootId: rootRow?.id ?? null,
-          path: key,
-          sourceType: 'apple-docc',
-          json, etag, lastModified,
+      const runFetch = async () => {
+        await coalesceByKey(`docs:${key}`, async () => {
+          // Re-check inside the lock — a coalesced peer may have just persisted.
+          if (db.db.query(DOC_BASE_QUERY).get(key)) return
+          const { json, etag, lastModified } = await fetchDocPage(key, rateLimiter)
+          const framework = key.split('/')[0]
+          const rootRow = db.getRootBySlug(framework)
+          await persistFetchedDocPage({
+            db, dataDir,
+            rootId: rootRow?.id ?? null,
+            path: key,
+            sourceType: 'apple-docc',
+            json, etag, lastModified,
+          })
         })
-      })
+      }
+      if (onDemandGate) {
+        await onDemandGate.withFetchPermit(runFetch)
+      } else {
+        await runFetch()
+      }
       doc = db.db.query(DOC_BASE_QUERY).get(key)
+      if (!doc) {
+        // Persisted nothing — upstream said the key doesn't exist. Tombstone
+        // so the same client (and others) skip the upstream round-trip
+        // for the next 24 h.
+        onDemandGate?.recordMiss(key)
+      }
       invalidateDocumentCaches({ key, title: doc?.title, roleHeading: doc?.role_heading })
       try { await readerPool?.recycle?.() } catch {}
-    } catch {
-      // fetch failed — fall through to 404
+    } catch (err) {
+      if (err instanceof BackpressureError) {
+        return new Response('Too many docs fetches in flight. Retry after 30s.\n', {
+          status: 503,
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Retry-After': '30',
+          },
+        })
+      }
+      // fetch failed — record a brief negative cache entry so a single bad
+      // upstream doesn't drive repeated retries from the same client.
+      onDemandGate?.recordMiss(key)
+      // fall through to 404
     }
   }
 
