@@ -180,7 +180,7 @@ export function searchSfSymbols(query, opts, ctx) {
   return { results: ctx.db.searchSfSymbols(query, opts), query: query ?? '', scope: opts.scope ?? null }
 }
 
-const SYMBOL_RENDERER_VERSION = 7
+const SYMBOL_RENDERER_VERSION = 8
 const SYMBOL_DEFAULT_RENDER_SIZE = 128
 
 export function getPrerenderedSymbolPath(ctx, scope, name, opts = {}) {
@@ -200,7 +200,7 @@ export function getPrerenderedSymbolPath(ctx, scope, name, opts = {}) {
  * per-symbol Swift cold-start cost (~200ms each); a single worker churns
  * through ~10–20 symbols/sec.
  *
- * @param {object} opts - { scope?, concurrency?, resetCache?, size?, logger?, onProgress? }
+ * @param {object} opts - { scope?, concurrency?, resetCache?, logger?, onProgress? }
  * @param {object} ctx
  */
 export async function prerenderSfSymbols(opts, ctx) {
@@ -208,7 +208,7 @@ export async function prerenderSfSymbols(opts, ctx) {
   const concurrency = Math.max(1, Math.min(opts.concurrency ?? 4, 16))
   const scopeFilter = opts.scope === 'public' || opts.scope === 'private' ? opts.scope : null
   const baseDir = join(dataDir, 'resources', 'symbols')
-  if (opts.resetCache) {
+  if (opts.resetCache || await symbolSnapshotNeedsReset(baseDir)) {
     await rm(baseDir, { recursive: true, force: true }).catch(() => {})
   }
   ensureDir(baseDir)
@@ -249,6 +249,37 @@ export async function prerenderSfSymbols(opts, ctx) {
     counts: result,
   }, null, 2))
   return result
+}
+
+async function symbolSnapshotNeedsReset(baseDir) {
+  if (!existsSync(baseDir)) return false
+  const entries = readdirSync(baseDir, { withFileTypes: true })
+    .filter(entry => entry.name !== 'meta.json')
+  if (entries.length === 0) return false
+
+  const meta = await readJsonIfExists(join(baseDir, 'meta.json'))
+  if (!meta || meta.rendererVersion !== SYMBOL_RENDERER_VERSION) return true
+  return !hasSnapshotVariantSet(meta, 'public') || !hasSnapshotVariantSet(meta, 'private')
+}
+
+async function readJsonIfExists(path) {
+  try {
+    return await Bun.file(path).json()
+  } catch {
+    return null
+  }
+}
+
+function hasSnapshotVariantSet(meta, scope) {
+  const expected = symbolVariantMatrix(scope).map(symbolVariantKey).sort()
+  const actual = Array.isArray(meta?.variants?.[scope])
+    ? meta.variants[scope].map(symbolVariantKey).sort()
+    : []
+  return expected.length === actual.length && expected.every((key, index) => key === actual[index])
+}
+
+function symbolVariantKey(variant) {
+  return `${normalizeSymbolWeight(variant?.weight)}/${normalizeSymbolScale(variant?.scale)}`
 }
 
 async function renderScopeBucket({ scope, symbols, variants, dataDir, concurrency, logger, onProgress, result }) {
@@ -481,16 +512,33 @@ while let line = readLine(strippingNewline: true) {
 export const SYMBOL_WEIGHTS = ['ultralight', 'thin', 'light', 'regular', 'medium', 'semibold', 'bold', 'heavy', 'black']
 export const SYMBOL_SCALES = ['small', 'medium', 'large']
 
+function normalizeSymbolWeight(value) {
+  const weight = String(value ?? '').toLowerCase()
+  return SYMBOL_WEIGHTS.includes(weight) ? weight : 'regular'
+}
+
+function normalizeSymbolScale(value) {
+  const scale = String(value ?? '').toLowerCase()
+  return SYMBOL_SCALES.includes(scale) ? scale : 'medium'
+}
+
+function symbolVariantMatrix(scope) {
+  if (scope === 'private') return [{ weight: 'regular', scale: 'medium' }]
+  const variants = []
+  for (const weight of SYMBOL_WEIGHTS) {
+    for (const scale of SYMBOL_SCALES) variants.push({ weight, scale })
+  }
+  return variants
+}
+
 export async function renderSfSymbol(opts, ctx) {
   const scope = opts.scope === 'private' ? 'private' : 'public'
   const format = opts.format === 'svg' ? 'svg' : 'png'
   const pointSize = clampInteger(opts.size ?? opts.pointSize ?? 64, 8, 1024)
-  const weight = SYMBOL_WEIGHTS.includes(String(opts.weight ?? '').toLowerCase())
-    ? String(opts.weight).toLowerCase()
-    : 'regular'
-  const scale = SYMBOL_SCALES.includes(String(opts.scale ?? '').toLowerCase())
-    ? String(opts.scale).toLowerCase()
-    : 'medium'
+  const requestedWeight = normalizeSymbolWeight(opts.weight)
+  const requestedScale = normalizeSymbolScale(opts.scale)
+  const weight = scope === 'public' ? requestedWeight : 'regular'
+  const scale = scope === 'public' ? requestedScale : 'medium'
   // SVG accepts the literal string "currentColor" so it inherits the page's
   // CSS color. PNG cannot — Apple's renderer needs a concrete sRGB value, so
   // we fall back to black for PNG when "currentColor" is requested.
@@ -501,7 +549,7 @@ export async function renderSfSymbol(opts, ctx) {
   const background = normalizeBackground(opts.background ?? opts.bg)
   const cacheKey = sha256(JSON.stringify({
     // Bumping `renderer` invalidates every cached SVG/PNG so the next
-    // request re-runs the (now-correct) Swift script.
+    // request refreshes against the current snapshot/live renderer contract.
     //   - 2: tried `_vectorGlyph` without flip + forced evenodd (broke many)
     //   - 3: switched to `outlinePath` (single flat path; loses per-layer
     //        XOR/exclusion → tray.badge.sparkles renders as a blob)
@@ -516,7 +564,9 @@ export async function renderSfSymbol(opts, ctx) {
     //        the inspector controls actually re-render the preview.
     //   - 7: alpha-zero cut layers now emit fill-rule-preserving internal
     //        SVG masks instead of the old even-odd clip subtraction shortcut.
-    renderer: 7,
+    //   - 8: runtime renders derive from snapshot SVG geometry first; live
+    //        CoreGlyphs/AppKit rendering is fallback only.
+    renderer: SYMBOL_RENDERER_VERSION,
     type: 'sf-symbol',
     scope,
     name: opts.name,
@@ -537,15 +587,40 @@ export async function renderSfSymbol(opts, ctx) {
   ensureDir(renderDir)
   const filePath = join(renderDir, `${sanitizeFileName(opts.name)}.${cacheKey}.${format}`)
   let data
-  if (format === 'svg') {
-    try {
-      data = await renderSymbolSvgCurves({ name: opts.name, scope, pointSize, weight, scale, color, background })
-    } catch (error) {
-      ctx.logger?.warn?.(`SF Symbol SVG outline render failed for ${scope}/${opts.name}: ${error.message}`)
-      data = renderSymbolSvgFallback({ name: opts.name, scope, pointSize, color, background })
+  let mode = 'live'
+  const snapshotSvg = await renderSymbolSvgFromSnapshot({
+    name: opts.name,
+    scope,
+    pointSize,
+    weight,
+    scale,
+    color,
+    background,
+  }, ctx)
+  if (snapshotSvg) {
+    if (format === 'svg') {
+      data = snapshotSvg
+      mode = 'snapshot'
+    } else {
+      try {
+        data = await renderPngFromSvg(snapshotSvg, { pointSize })
+        mode = 'snapshot'
+      } catch (error) {
+        ctx.logger?.warn?.(`SF Symbol snapshot PNG rasterization failed for ${scope}/${opts.name}: ${error.message}`)
+      }
     }
-  } else {
-    data = await renderSymbolPng({ name: opts.name, scope, pointSize, weight, scale, color, background })
+  }
+  if (!data) {
+    if (format === 'svg') {
+      try {
+        data = await renderSymbolSvgCurves({ name: opts.name, scope, pointSize, weight, scale, color, background })
+      } catch (error) {
+        ctx.logger?.warn?.(`SF Symbol SVG outline render failed for ${scope}/${opts.name}: ${error.message}`)
+        data = renderSymbolSvgFallback({ name: opts.name, scope, pointSize, color, background })
+      }
+    } else {
+      data = await renderSymbolPng({ name: opts.name, scope, pointSize, weight, scale, color, background })
+    }
   }
   await Bun.write(filePath, data)
   const bytes = await Bun.file(filePath).arrayBuffer()
@@ -554,6 +629,9 @@ export async function renderSfSymbol(opts, ctx) {
     name: opts.name,
     scope,
     format,
+    mode,
+    weight,
+    symbolScale: scale,
     pointSize,
     color,
     filePath,
@@ -1027,6 +1105,174 @@ async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale =
  */
 async function finalizeSvgFromPdf(pdfBytes, { name, pointSize, color, background }) {
   return symbolPdfToSvg(pdfBytes, { name, pointSize, color, background })
+}
+
+async function renderSymbolSvgFromSnapshot({ name, scope, pointSize, weight, scale, color, background }, ctx) {
+  const filePath = getPrerenderedSymbolPath(ctx, scope, name, { weight, scale })
+  const file = Bun.file(filePath)
+  if (!await file.exists()) return null
+  try {
+    const svg = await file.text()
+    return customizePrerenderedSymbolSvg(svg, { pointSize, color, background })
+  } catch (error) {
+    ctx.logger?.warn?.(`SF Symbol snapshot SVG read failed for ${scope}/${name}: ${error.message}`)
+    return null
+  }
+}
+
+function customizePrerenderedSymbolSvg(svg, { pointSize, color, background }) {
+  let output = setSvgDimensionAttributes(String(svg), pointSize)
+  output = replaceVisibleBlackFill(output, color)
+  if (background) output = insertSvgBackground(output, background)
+  return output
+}
+
+function setSvgDimensionAttributes(svg, pointSize) {
+  return svg.replace(/<svg\b([^>]*)>/i, (_match, attrs) => {
+    let nextAttrs = upsertSvgAttribute(attrs, 'width', pointSize)
+    nextAttrs = upsertSvgAttribute(nextAttrs, 'height', pointSize)
+    return `<svg${nextAttrs}>`
+  })
+}
+
+function upsertSvgAttribute(attrs, name, value) {
+  const escapedValue = escapeXml(value)
+  const attrRe = new RegExp(`\\s${name}=(["'])[^"']*\\1`, 'i')
+  if (attrRe.test(attrs)) {
+    return attrs.replace(attrRe, ` ${name}="${escapedValue}"`)
+  }
+  return `${attrs} ${name}="${escapedValue}"`
+}
+
+function replaceVisibleBlackFill(svg, color) {
+  const escapedColor = escapeXml(color)
+  const replaceFill = (chunk) => chunk.replace(/\bfill=(["'])#000000\1/gi, (_match, quote) => `fill=${quote}${escapedColor}${quote}`)
+  const maskRe = /<mask\b[\s\S]*?<\/mask>/gi
+  let output = ''
+  let cursor = 0
+  for (const match of svg.matchAll(maskRe)) {
+    output += replaceFill(svg.slice(cursor, match.index))
+    output += match[0]
+    cursor = match.index + match[0].length
+  }
+  output += replaceFill(svg.slice(cursor))
+  return output
+}
+
+function insertSvgBackground(svg, background) {
+  const rect = svgBackgroundRect(svg, background)
+  if (/<defs[\s>]/i.test(svg) && /<\/defs>/i.test(svg)) {
+    return svg.replace(/<\/defs>/i, `</defs>\n  ${rect}`)
+  }
+  return svg.replace(/<svg\b[^>]*>/i, (match) => `${match}\n  ${rect}`)
+}
+
+function svgBackgroundRect(svg, background) {
+  const box = parseSvgViewBox(svg) ?? { x: 0, y: 0, width: 100, height: 100 }
+  return `<rect x="${formatSvgNumber(box.x)}" y="${formatSvgNumber(box.y)}" width="${formatSvgNumber(box.width)}" height="${formatSvgNumber(box.height)}" fill="${escapeXml(background)}"/>`
+}
+
+function parseSvgViewBox(svg) {
+  const match = svg.match(/\bviewBox=(["'])([^"']+)\1/i)
+  if (!match) return null
+  const parts = match[2].trim().split(/[\s,]+/).map(Number)
+  if (parts.length !== 4 || parts.some(value => !Number.isFinite(value))) return null
+  return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] }
+}
+
+function formatSvgNumber(value) {
+  return Number(value).toFixed(3).replace(/\.?0+$/u, '')
+}
+
+async function renderPngFromSvg(svg, { pointSize }) {
+  const dir = await mkdtemp(join(tmpdir(), 'apple-docs-symbol-snapshot-'))
+  const svgPath = join(dir, 'symbol.svg')
+  const pngPath = join(dir, 'symbol.png')
+  const errors = []
+  try {
+    await Bun.write(svgPath, svg)
+    const rsvg = await runRasterCommand(['rsvg-convert', '-w', String(pointSize), '-h', String(pointSize), svgPath, '-o', pngPath])
+    if (rsvg.ok) return await readRasterizedPng(pngPath)
+    errors.push(`rsvg-convert: ${rsvg.error}`)
+
+    await rm(pngPath, { force: true }).catch(() => {})
+    const sips = await runRasterCommand(['/usr/bin/sips', '-s', 'format', 'png', svgPath, '--out', pngPath])
+    if (sips.ok) return await readRasterizedPng(pngPath)
+    errors.push(`sips: ${sips.error}`)
+
+    throw new Error(errors.join('; '))
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+async function readRasterizedPng(path) {
+  if (!existsSync(path) || statSync(path).size === 0) {
+    throw new Error('rasterizer did not produce a PNG')
+  }
+  return await Bun.file(path).arrayBuffer()
+}
+
+async function runRasterCommand(args) {
+  try {
+    const proc = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' })
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ])
+    if (code !== 0) return { ok: false, error: stderr.trim() || stdout.trim() || `exited ${code}` }
+    return { ok: true, error: null }
+  } catch (error) {
+    return { ok: false, error: error.message }
+  }
+}
+
+async function getSymbolRenderProvenance() {
+  return {
+    macOS: await readMacOSVersion(),
+    sources: {
+      public: await getSymbolSourceProvenance('public'),
+      private: await getSymbolSourceProvenance('private'),
+    },
+  }
+}
+
+async function getSymbolSourceProvenance(scope) {
+  const resourcesPath = SYMBOL_BUNDLES[scope]
+  const contentsPath = dirname(resourcesPath)
+  return {
+    renderer: scope === 'private'
+      ? 'Bundle.image(forResource:) from CoreGlyphsPrivate.bundle'
+      : 'NSImage(systemSymbolName:) from the system SF Symbols catalog',
+    font: null,
+    bundle: scope === 'private' ? 'CoreGlyphsPrivate.bundle' : 'CoreGlyphs.bundle',
+    resourcesPath,
+    contentsPath,
+    bundleVersion: await readBundleVersion(contentsPath).catch(() => null),
+  }
+}
+
+async function readMacOSVersion() {
+  try {
+    const proc = Bun.spawn(['/usr/bin/sw_vers'], { stdout: 'pipe', stderr: 'pipe' })
+    const [stdout, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      proc.exited,
+    ])
+    if (code !== 0) return null
+    const pairs = Object.fromEntries(stdout.trim().split('\n').map(line => {
+      const [key, ...rest] = line.split(':')
+      return [key.trim(), rest.join(':').trim()]
+    }).filter(([key]) => key))
+    return {
+      productName: pairs.ProductName ?? null,
+      productVersion: pairs.ProductVersion ?? null,
+      buildVersion: pairs.BuildVersion ?? null,
+    }
+  } catch {
+    return null
+  }
 }
 
 // Stryker disable all
@@ -1543,4 +1789,13 @@ function escapeXml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;')
+}
+
+export const _test = {
+  customizePrerenderedSymbolSvg,
+  normalizeSymbolScale,
+  normalizeSymbolWeight,
+  symbolRendererVersion: SYMBOL_RENDERER_VERSION,
+  symbolSnapshotNeedsReset,
+  symbolVariantMatrix,
 }

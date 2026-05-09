@@ -184,10 +184,9 @@ export async function sync(opts, ctx) {
         symbolsResult = counts
         logger.info(`Synced ${counts.public} public + ${counts.private} private SF Symbols`)
 
-        // 7. Pre-render every symbol. Idempotent: skips any SVG already on disk
-        // with non-zero size. Cheap when up-to-date, ~30s cold for ~9k symbols
-        // at concurrency 8 — far cheaper than the 503 storm you get when the
-        // grid serves SVGs lazily under load.
+        // 7. Pre-render every symbol geometry variant. Idempotent when the
+        // snapshot metadata matches the renderer + variant matrix; otherwise
+        // refreshes the snapshot SVGs so runtime rendering is macOS-stable.
         logger.info('Pre-rendering SF Symbols...')
         symbolsRenderResult = await prerenderSfSymbols({}, ctx)
         logger.info(`Pre-rendered ${symbolsRenderResult.rendered ?? 0} symbol variants (${symbolsRenderResult.skipped ?? 0} skipped)`)

@@ -11,7 +11,7 @@ import { lookup } from '../commands/lookup.js'
 import { frameworks } from '../commands/frameworks.js'
 import { browse } from '../commands/browse.js'
 import { taxonomy } from '../commands/taxonomy.js'
-import { listAppleFonts, renderFontText, renderSfSymbol, searchSfSymbols } from '../resources/apple-assets.js'
+import { listAppleFonts, renderFontText, renderSfSymbol, searchSfSymbols, SYMBOL_SCALES, SYMBOL_WEIGHTS } from '../resources/apple-assets.js'
 import {
   MIN_PAGINATED_MAX_CHARS,
   buildMatchedDocumentPayload,
@@ -286,6 +286,8 @@ export function createServer(ctx, deps = {}) {
       size: z.coerce.number().int().min(8).max(1024).optional().describe('Square output size in points/pixels depending on format.'),
       color: z.string().optional().describe('Foreground hex color such as #000000. SVG also accepts the literal "currentColor" so the rendered path inherits the host page CSS color.'),
       background: z.string().optional().describe('Background hex color such as #ffffff, or "transparent"/empty for no background fill. Default: transparent.'),
+      weight: z.enum(SYMBOL_WEIGHTS).optional().describe('Public symbol weight variant. Private symbols ignore weight.'),
+      scale: z.enum(SYMBOL_SCALES).optional().describe('Public symbol scale variant. Private symbols ignore scale.'),
     },
     async (args) => {
       const render = await renderSfSymbol(args, ctx)
@@ -382,6 +384,8 @@ export function createServer(ctx, deps = {}) {
         size: uri.searchParams.get('size') ?? undefined,
         color: uri.searchParams.get('color') ?? uri.searchParams.get('fg') ?? undefined,
         background: uri.searchParams.get('background') ?? uri.searchParams.get('bg') ?? undefined,
+        weight: uri.searchParams.get('weight') ?? undefined,
+        scale: uri.searchParams.get('scale') ?? undefined,
       }, ctx)
       const file = Bun.file(render.file_path)
       const content = requestedFormat === 'svg'

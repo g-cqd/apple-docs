@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../src/storage/database.js'
-import { searchSfSymbols, syncSfSymbols } from '../../src/resources/apple-assets.js'
+import {
+  _test as appleAssetsTest,
+  getPrerenderedSymbolPath,
+  renderSfSymbol,
+  searchSfSymbols,
+  syncSfSymbols,
+} from '../../src/resources/apple-assets.js'
 
 let db
 let tmp
@@ -63,6 +69,115 @@ describe('SF Symbols', () => {
     const catalog = db.listSfSymbolsCatalog()
     expect(catalog).toHaveLength(2)
     expect(catalog.find(symbol => symbol.name === 'pencil.and.sparkles')?.categories).toEqual(['editing'])
+  })
+
+  test('maps public symbol snapshot variants without multiplying private paths', () => {
+    expect(getPrerenderedSymbolPath(ctx, 'public', 'pencil.and.sparkles', {
+      weight: 'regular',
+      scale: 'medium',
+    })).toBe(join(tmp, 'resources', 'symbols', 'public', 'pencil.and.sparkles.svg'))
+    expect(getPrerenderedSymbolPath(ctx, 'public', 'pencil.and.sparkles', {
+      weight: 'bold',
+      scale: 'large',
+    })).toBe(join(tmp, 'resources', 'symbols', 'public', 'bold-large', 'pencil.and.sparkles.svg'))
+    expect(getPrerenderedSymbolPath(ctx, 'private', 'pencil.and.sparkles', {
+      weight: 'bold',
+      scale: 'large',
+    })).toBe(join(tmp, 'resources', 'symbols', 'private', 'pencil.and.sparkles.svg'))
+
+    expect(appleAssetsTest.symbolVariantMatrix('public')).toHaveLength(27)
+    expect(appleAssetsTest.symbolVariantMatrix('private')).toEqual([{ weight: 'regular', scale: 'medium' }])
+  })
+
+  test('detects stale or incomplete pre-rendered symbol snapshots', async () => {
+    const baseDir = join(tmp, 'resources', 'symbols')
+    await mkdir(join(baseDir, 'public'), { recursive: true })
+    await Bun.write(join(baseDir, 'public', 'pencil.and.sparkles.svg'), '<svg/>')
+
+    expect(await appleAssetsTest.symbolSnapshotNeedsReset(baseDir)).toBe(true)
+
+    await Bun.write(join(baseDir, 'meta.json'), JSON.stringify({
+      rendererVersion: appleAssetsTest.symbolRendererVersion,
+      variants: {
+        public: appleAssetsTest.symbolVariantMatrix('public'),
+        private: appleAssetsTest.symbolVariantMatrix('private'),
+      },
+    }))
+    expect(await appleAssetsTest.symbolSnapshotNeedsReset(baseDir)).toBe(false)
+
+    await Bun.write(join(baseDir, 'meta.json'), JSON.stringify({
+      rendererVersion: appleAssetsTest.symbolRendererVersion,
+      variants: {
+        public: appleAssetsTest.symbolVariantMatrix('public').slice(0, -1),
+        private: appleAssetsTest.symbolVariantMatrix('private'),
+      },
+    }))
+    expect(await appleAssetsTest.symbolSnapshotNeedsReset(baseDir)).toBe(true)
+  })
+
+  test('customizes snapshot SVGs without recoloring mask cut-outs', () => {
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 10 20">
+  <defs>
+    <mask id="cut">
+      <rect width="10" height="20" fill="#fff"/>
+      <path d="M0 0h1v1z" fill="#000000"/>
+    </mask>
+  </defs>
+  <path d="M1 1h8v18z" fill="#000000" mask="url(#cut)"/>
+</svg>`
+
+    const customized = appleAssetsTest.customizePrerenderedSymbolSvg(svg, {
+      pointSize: 64,
+      color: '#ff0000',
+      background: '#00ff00',
+    })
+
+    expect(customized).toContain('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 10 20">')
+    expect(customized).toContain('<path d="M0 0h1v1z" fill="#000000"/>')
+    expect(customized).toContain('<path d="M1 1h8v18z" fill="#ff0000" mask="url(#cut)"/>')
+    expect(customized).toContain('</defs>\n  <rect x="0" y="0" width="10" height="20" fill="#00ff00"/>')
+  })
+
+  test('renders SVG from snapshot geometry before live CoreGlyphs fallback', async () => {
+    db.upsertSfSymbol({
+      name: 'pencil.and.sparkles',
+      scope: 'public',
+      categories: ['editing'],
+      keywords: ['sparkles', 'write'],
+      orderIndex: 0,
+    })
+    const snapshotPath = getPrerenderedSymbolPath(ctx, 'public', 'pencil.and.sparkles', {
+      weight: 'bold',
+      scale: 'large',
+    })
+    await mkdir(dirname(snapshotPath), { recursive: true })
+    await Bun.write(snapshotPath, `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 10 20">
+  <defs><mask id="cut"><path d="M0 0h1v1z" fill="#000000"/></mask></defs>
+  <path d="M1 1h8v18z" fill="#000000" mask="url(#cut)"/>
+</svg>`)
+
+    const render = await renderSfSymbol({
+      scope: 'public',
+      name: 'pencil.and.sparkles',
+      format: 'svg',
+      size: 64,
+      color: '#ff0000',
+      background: '#00ff00',
+      weight: 'bold',
+      scale: 'large',
+    }, ctx)
+    const output = await Bun.file(render.file_path).text()
+
+    expect(render.mode).toBe('snapshot')
+    expect(render.weight).toBe('bold')
+    expect(render.symbol_scale).toBe('large')
+    expect(render.mime_type).toBe('image/svg+xml; charset=utf-8')
+    expect(output).toContain('width="64" height="64"')
+    expect(output).toContain('<path d="M0 0h1v1z" fill="#000000"/>')
+    expect(output).toContain('<path d="M1 1h8v18z" fill="#ff0000" mask="url(#cut)"/>')
+    expect(output).toContain('<rect x="0" y="0" width="10" height="20" fill="#00ff00"/>')
   })
 })
 

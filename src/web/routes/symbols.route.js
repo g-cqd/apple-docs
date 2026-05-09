@@ -35,11 +35,11 @@ export function symbolMetadataHandler(_request, ctx, _url, match) {
 }
 
 /**
- * `/api/symbols/<public|private>/<name>.{svg|png}` — render path. Falls
- * through to the on-disk pre-rendered SVG when the request is the
- * canonical theme-neutral one (no fg/bg/size/weight/scale overrides) so
- * the symbols-page grid never blocks on Swift. Any customisation routes
- * to the live renderer.
+ * `/api/symbols/<public|private>/<name>.{svg|png}` — render path. Serves
+ * pre-rendered snapshot SVG geometry directly when there are no visual
+ * overrides (fg/bg/size). Weight/scale select pre-rendered public variants;
+ * custom colours, sizes, and PNGs go through the snapshot-first renderer
+ * with live CoreGlyphs/AppKit as fallback.
  *
  * @type {import('../route-registry.js').RouteHandler}
  */
@@ -51,16 +51,6 @@ export async function symbolRenderHandler(request, ctx, url, match) {
   const sizeParam = url.searchParams.get('size')
   const weightParam = url.searchParams.get('weight')
   const scaleParam = url.searchParams.get('scale')
-  if (format === 'svg' && !fgParam && !bgParam && !sizeParam && !weightParam && !scaleParam) {
-    const cached = getPrerenderedSymbolPath(ctx, scope, decodedName)
-    const cachedFile = Bun.file(cached)
-    if (await cachedFile.exists()) {
-      return await fileResponseRevalidated(request, cachedFile, {
-        contentType: 'image/svg+xml; charset=utf-8',
-        maxAge: 86400,
-      })
-    }
-  }
   const validated = validateSymbolParams({
     size: sizeParam,
     color: fgParam,
@@ -69,6 +59,20 @@ export async function symbolRenderHandler(request, ctx, url, match) {
     scale: scaleParam,
   })
   if (!validated.ok) return jsonResponse({ error: validated.error }, { status: 400 })
+
+  if (format === 'svg' && !fgParam && !bgParam && !sizeParam) {
+    const cached = getPrerenderedSymbolPath(ctx, scope, decodedName, {
+      weight: validated.value.weight,
+      scale: validated.value.scale,
+    })
+    const cachedFile = Bun.file(cached)
+    if (await cachedFile.exists()) {
+      return await fileResponseRevalidated(request, cachedFile, {
+        contentType: 'image/svg+xml; charset=utf-8',
+        maxAge: 86400,
+      })
+    }
+  }
   try {
     const render = await renderSfSymbol({
       scope,
