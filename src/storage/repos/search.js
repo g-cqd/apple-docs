@@ -11,7 +11,17 @@
  * language / sourceType / min{Ios,Macos,…}) — the SQL fragments are kept
  * identical across variants so the cascade in commands/search.js sees a
  * uniform row shape.
+ *
+ * P2.5 (silent-catch cleanup): FTS5 parser errors, malformed user queries,
+ * and missing-table edge cases used to swallow exceptions and return
+ * empty results without any signal. They still return empty results (the
+ * cascade in commands/search.js relies on it), but every failure now
+ * goes through safeCall(log: 'warn-once') so the first occurrence per
+ * label surfaces in the JSON logger and operators can tell when the
+ * planner is silently degrading.
  */
+
+import { safeCall } from '../../lib/safe-call.js'
 
 // Column projection shared across the four search variants. Bundled here
 // so a future schema column addition only has to land in one place.
@@ -182,31 +192,33 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
     },
     searchTrigram(query, opts = {}) {
       if (!searchTrigramStmt) return []
-      try {
-        return searchTrigramStmt.all({
+      return safeCall(
+        () => searchTrigramStmt.all({
           $query: query,
           $limit: opts.limit ?? 100,
           ...buildFilterParams(opts),
-        })
-      } catch {
-        return []
-      }
+        }),
+        { default: [], log: 'warn-once', label: 'search.trigram' },
+      )
     },
     searchBody(ftsQuery, opts = {}) {
       if (!searchBodyStmt) return []
-      try {
-        return searchBodyStmt.all({
+      return safeCall(
+        () => searchBodyStmt.all({
           $query: ftsQuery,
           $limit: opts.limit ?? 100,
           ...buildFilterParams(opts),
-        })
-      } catch {
-        return []
-      }
+        }),
+        { default: [], log: 'warn-once', label: 'search.body' },
+      )
     },
     getBodyIndexCount() {
       if (!bodyCountStmt) return 0
-      try { return bodyCountStmt.get().c } catch { return 0 }
+      return safeCall(() => bodyCountStmt.get().c, {
+        default: 0,
+        log: 'warn-once',
+        label: 'search.bodyIndexCount',
+      })
     },
     insertBody(documentId, body) {
       bodyInsertStmt?.run({ $id: documentId, $body: body })
@@ -219,11 +231,11 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
     },
     getTrigramCandidates(trigram) {
       if (!trigramCandidatesStmt) return []
-      try {
-        return trigramCandidatesStmt.all({ $trigram: trigram })
-      } catch {
-        return []
-      }
+      return safeCall(() => trigramCandidatesStmt.all({ $trigram: trigram }), {
+        default: [],
+        log: 'warn-once',
+        label: 'search.trigramCandidates',
+      })
     },
     getAllTitles() {
       return allTitlesStmt.all()

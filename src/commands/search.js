@@ -1,3 +1,4 @@
+import { safeCall } from '../lib/safe-call.js'
 import { renderSnippet } from '../content/render-snippet.js'
 import { detectIntent } from '../search/intent.js'
 import { rerank } from '../search/ranking.js'
@@ -103,54 +104,55 @@ export async function search(opts, ctx) {
   // the pool a chance to fan out; without the pool the calls serialize
   // identically to the pre-pool loop.
   const runFts = async () => {
-    try {
-      const parts = await Promise.all(
+    const flat = await safeCall(
+      async () => (await Promise.all(
         frameworks.map(fw => runRead(ctx, 'searchPages', [ftsQuery, q, { ...filterOpts, framework: fw }])),
-      )
-      return parts.flat()
-    } catch {
-      // FTS5 query syntax error — try simpler query
-      try {
-        const simple = `"${q.replace(/"/g, '')}"*`
-        const parts = await Promise.all(
-          frameworks.map(fw => runRead(ctx, 'searchPages', [simple, q, { ...filterOpts, framework: fw }])),
-        )
-        return parts.flat()
-      } catch { return [] }
-    }
+      )).flat(),
+      { default: null, log: 'warn-once', label: 'search.cascade.fts' },
+    )
+    if (flat !== null) return flat
+    // FTS5 parser error on the user's quoted query — retry with a sanitized
+    // simple-prefix variant before giving up.
+    const simple = `"${q.replace(/"/g, '')}"*`
+    return await safeCall(
+      async () => (await Promise.all(
+        frameworks.map(fw => runRead(ctx, 'searchPages', [simple, q, { ...filterOpts, framework: fw }])),
+      )).flat(),
+      { default: [], log: 'warn-once', label: 'search.cascade.fts.fallback' },
+    )
   }
 
   const runTitleExact = async () => {
     if (!ctx.readerPool && typeof ctx.db?.searchTitleExact !== 'function') return []
-    try {
-      const parts = await Promise.all(
+    return await safeCall(
+      async () => (await Promise.all(
         frameworks.map(fw => runRead(ctx, 'searchTitleExact', [q, { ...filterOpts, framework: fw }])),
-      )
-      return parts.flat()
-    } catch { return [] }
+      )).flat(),
+      { default: [], log: 'warn-once', label: 'search.cascade.titleExact' },
+    )
   }
 
   // Tier 2: Trigram substring (only if query >= 3 chars)
   const runTrigram = async () => {
     if (q.length < 3) return []
-    try {
-      const parts = await Promise.all(
+    return await safeCall(
+      async () => (await Promise.all(
         frameworks.map(fw => runRead(ctx, 'searchTrigram', [q, { ...filterOpts, framework: fw }])),
-      )
-      return parts.flat()
-    } catch { return [] }
+      )).flat(),
+      { default: [], log: 'warn-once', label: 'search.cascade.trigram' },
+    )
   }
 
   // Tier 4: Body search. Metadata check stays on main thread — one cheap call.
   const hasBody = !noDeep && ctx.db.getBodyIndexCount() > 0
   const runBody = async () => {
     if (!hasBody) return []
-    try {
-      const parts = await Promise.all(
+    return await safeCall(
+      async () => (await Promise.all(
         frameworks.map(fw => runRead(ctx, 'searchBody', [ftsQuery, { ...filterOpts, framework: fw }])),
-      )
-      return parts.flat()
-    } catch { return [] }
+      )).flat(),
+      { default: [], log: 'warn-once', label: 'search.cascade.body' },
+    )
   }
 
   // Run the fast tiers first so the web/CLI search path can return promptly.
@@ -239,13 +241,12 @@ export async function search(opts, ctx) {
       // main-thread call (equivalent to the prior serial loop).
       if (pruned.length >= 1) {
         const prunedQuery = buildFtsQuery(pruned.join(' '))
-        let r1 = []
-        try {
-          const parts = await Promise.all(
+        const r1 = await safeCall(
+          async () => (await Promise.all(
             frameworks.map(fw => runRead(ctx, 'searchPages', [prunedQuery, q, { ...filterOpts, framework: fw }])),
-          )
-          r1 = parts.flat()
-        } catch {}
+          )).flat(),
+          { default: [], log: 'warn-once', label: 'search.relax.pruned' },
+        )
         const before = results.length
         addResults(r1, 'relaxed')
         if (results.length > before) relaxationTier = 'pruned'
@@ -254,13 +255,12 @@ export async function search(opts, ctx) {
       // R2 — pruned OR: join the pruned tokens with OR so any single hit wins.
       if (results.length === 0 && pruned.length >= 2) {
         const orQuery = pruned.map(t => `"${t.toLowerCase().replace(/"/g, '')}"`).join(' OR ')
-        let r2 = []
-        try {
-          const parts = await Promise.all(
+        const r2 = await safeCall(
+          async () => (await Promise.all(
             frameworks.map(fw => runRead(ctx, 'searchPages', [orQuery, q, { ...filterOpts, framework: fw }])),
-          )
-          r2 = parts.flat()
-        } catch {}
+          )).flat(),
+          { default: [], log: 'warn-once', label: 'search.relax.prunedOr' },
+        )
         const before = results.length
         addResults(r2, 'relaxed-or')
         if (results.length > before) relaxationTier = 'pruned-or'
@@ -272,13 +272,12 @@ export async function search(opts, ctx) {
         const tokenPool = pruned.length > 0 ? pruned : tokens
         const signal = pickHighSignalToken(tokenPool)
         if (signal && signal.length >= 3) {
-          let r3 = []
-          try {
-            const parts = await Promise.all(
+          const r3 = await safeCall(
+            async () => (await Promise.all(
               frameworks.map(fw => runRead(ctx, 'searchTrigram', [signal, { ...filterOpts, framework: fw }])),
-            )
-            r3 = parts.flat()
-          } catch {}
+            )).flat(),
+            { default: [], log: 'warn-once', label: 'search.relax.trigramToken' },
+          )
           const before = results.length
           addResults(r3, 'relaxed-token')
           if (results.length > before) relaxationTier = 'trigram'
