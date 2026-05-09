@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { ensureDir } from '../../storage/files.js'
 import { readPlist } from '../../lib/plist.js'
+import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
 import { sanitizeFileName } from '../apple-assets-helpers.js'
 
 export const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.dfont'])
@@ -122,12 +123,10 @@ export async function readBundleVersion(contentsDir) {
 }
 
 async function run(args) {
-  const proc = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' })
-  const [stderr, code] = await Promise.all([
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ])
-  if (code !== 0) throw new Error(stderr.trim() || `exited ${code}`)
+  // hdiutil attach / detach and pkgutil --expand-full each finish in seconds
+  // on a normal DMG; 60s is generous and bounds an OS-level hang.
+  const { stderr, exitCode } = await spawnWithDeadline(args, { deadlineMs: 60_000 })
+  if (exitCode !== 0) throw new Error(stderr.trim() || `exited ${exitCode}`)
 }
 
 export async function hashFile(path) {

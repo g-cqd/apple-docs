@@ -14,6 +14,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sha256 } from '../../lib/hash.js'
+import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
 import { ensureDir } from '../../storage/files.js'
 import {
   clampInteger,
@@ -149,16 +150,11 @@ async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', sca
   const scriptPath = join(tmpdir(), `apple-docs-render-symbol-${process.pid}-${tempSuffix()}.swift`)
   await Bun.write(scriptPath, SYMBOL_PNG_SCRIPT)
   try {
-    const proc = Bun.spawn(
+    const { stdout, stderr, exitCode } = await spawnWithDeadline(
       ['swift', scriptPath, name, scope, String(pointSize), color, background ?? '', weight, scale],
-      { stdout: 'pipe', stderr: 'pipe' },
+      { deadlineMs: 10_000 },
     )
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).arrayBuffer(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code !== 0) throw new Error(stderr.trim() || `swift exited ${code}`)
+    if (exitCode !== 0) throw new Error(stderr.trim() || `swift exited ${exitCode}`)
     return stdout
   } finally {
     await rm(scriptPath, { force: true }).catch(() => {})
@@ -174,16 +170,11 @@ async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale =
   const scriptPath = join(tmpdir(), `apple-docs-symbol-pdf-${process.pid}-${tempSuffix()}.swift`)
   await Bun.write(scriptPath, SYMBOL_PDF_SCRIPT)
   try {
-    const proc = Bun.spawn(['swift', scriptPath, name, scope, weight, scale], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).arrayBuffer(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code !== 0) throw new Error(stderr.trim() || `swift exited ${code}`)
+    const { stdout, stderr, exitCode } = await spawnWithDeadline(
+      ['swift', scriptPath, name, scope, weight, scale],
+      { deadlineMs: 10_000 },
+    )
+    if (exitCode !== 0) throw new Error(stderr.trim() || `swift exited ${exitCode}`)
     return new Uint8Array(stdout)
   } finally {
     await rm(scriptPath, { force: true }).catch(() => {})
@@ -234,13 +225,11 @@ async function readRasterizedPng(path) {
 
 async function runRasterCommand(args) {
   try {
-    const proc = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' })
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code !== 0) return { ok: false, error: stderr.trim() || stdout.trim() || `exited ${code}` }
+    const { stdout, stderr, exitCode } = await spawnWithDeadline(args, { deadlineMs: 10_000 })
+    if (exitCode !== 0) {
+      const stdoutText = new TextDecoder().decode(stdout).trim()
+      return { ok: false, error: stderr.trim() || stdoutText || `exited ${exitCode}` }
+    }
     return { ok: true, error: null }
   } catch (error) {
     return { ok: false, error: error.message }

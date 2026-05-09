@@ -17,6 +17,7 @@ import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { readPlist } from '../../lib/plist.js'
+import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
 import { ensureDir } from '../../storage/files.js'
 import { symbolPdfToSvg } from '../symbol-pdf-to-svg.js'
 import { SYMBOL_WORKER_SCRIPT } from '../swift-templates.js'
@@ -251,18 +252,33 @@ async function spawnSymbolWorker({ scope, logger }) {
 
   return {
     async render(name, weight = 'regular', scale = 'medium') {
-      // Bun's proc.stdin is a FileSink with sync write() + flush().
+      // Per-frame deadline. The worker is long-lived (one process per scope
+      // for the whole prerender), so we can't apply spawnWithDeadline here.
+      // Instead: wrap the read in a Promise.race against a 30s timeout. On
+      // timeout, the caller (processSymbolQueue) catches and restarts the
+      // worker. Generous bound — most symbols render in <100 ms; the long
+      // tail tops out around 5 s for the most complex cut-out symbols.
       proc.stdin.write(`${name}\t${weight}\t${scale}\n`)
       await proc.stdin.flush()
-      const header = await readBytes(8)
-      const view = new DataView(header.buffer, header.byteOffset, header.byteLength)
-      const status = view.getUint32(0)
-      const length = view.getUint32(4)
-      const payload = await readBytes(length)
-      if (status !== 0) {
-        throw new Error(new TextDecoder().decode(payload) || 'worker error')
-      }
-      return payload
+      return await Promise.race([
+        (async () => {
+          const header = await readBytes(8)
+          const view = new DataView(header.buffer, header.byteOffset, header.byteLength)
+          const status = view.getUint32(0)
+          const length = view.getUint32(4)
+          const payload = await readBytes(length)
+          if (status !== 0) {
+            throw new Error(new TextDecoder().decode(payload) || 'worker error')
+          }
+          return payload
+        })(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`symbol worker frame timeout after 30s for ${scope}/${name}`)),
+            30_000,
+          ),
+        ),
+      ])
     },
     close() {
       try { proc.stdin.end?.() } catch {}
@@ -299,13 +315,10 @@ async function getSymbolSourceProvenance(scope) {
 
 async function readMacOSVersion() {
   try {
-    const proc = Bun.spawn(['/usr/bin/sw_vers'], { stdout: 'pipe', stderr: 'pipe' })
-    const [stdout, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      proc.exited,
-    ])
-    if (code !== 0) return null
-    const pairs = Object.fromEntries(stdout.trim().split('\n').map(line => {
+    const { stdout, exitCode } = await spawnWithDeadline(['/usr/bin/sw_vers'], { deadlineMs: 5_000 })
+    if (exitCode !== 0) return null
+    const text = new TextDecoder().decode(stdout)
+    const pairs = Object.fromEntries(text.trim().split('\n').map(line => {
       const [key, ...rest] = line.split(':')
       return [key.trim(), rest.join(':').trim()]
     }).filter(([key]) => key))

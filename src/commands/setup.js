@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { rmSync } from 'node:fs'
 import { sha256 } from '../lib/hash.js'
+import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
 import { ensureDir } from '../storage/files.js'
 import { DocsDatabase } from '../storage/database.js'
 import { getGitHubToken } from '../lib/github.js'
@@ -174,13 +175,14 @@ export async function setup(opts, ctx) {
     // to bsdtar, which is what macOS ships; the install flow nukes the
     // target dirs before extraction so the protection it provides is moot
     // here anyway.)
-    const proc = Bun.spawn(
+    // Snapshot tarballs run from ~20 MB (lite) to ~3 GB (full). 10 min
+    // generous deadline bounds an OS-level hang without rejecting legit
+    // big-corpus extracts on slower hosts.
+    const { stderr, exitCode } = await spawnWithDeadline(
       ['tar', '--no-same-owner', '--no-same-permissions', '-xzf', tmpPath, '-C', dataDir],
-      { stdout: 'pipe', stderr: 'pipe' },
+      { deadlineMs: 10 * 60_000 },
     )
-    const exitCode = await proc.exited
     if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text()
       throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`)
     }
     logger.info('Extracted snapshot.')

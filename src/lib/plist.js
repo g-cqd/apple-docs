@@ -16,6 +16,7 @@
  */
 
 import { existsSync } from 'node:fs'
+import { spawnWithDeadline } from './spawn-with-deadline.js'
 
 export async function readPlist(path) {
   if (!existsSync(path)) return null
@@ -26,17 +27,15 @@ export async function readPlist(path) {
   // the test suite plus the actual XML plists Apple ships under
   // CoreGlyphs.bundle (symbol_search, symbol_categories, …).
   try {
-    const proc = Bun.spawn(['plutil', '-convert', 'json', '-o', '-', path], { stdout: 'pipe', stderr: 'pipe' })
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (code === 0) return JSON.parse(stdout)
+    const { stdout, stderr, exitCode } = await spawnWithDeadline(
+      ['plutil', '-convert', 'json', '-o', '-', path],
+      { deadlineMs: 10_000 },
+    )
+    if (exitCode === 0) return JSON.parse(new TextDecoder().decode(stdout))
     // Distinguish "binary not on PATH" from "plutil ran but rejected the
     // input". For the former we try the JS fallback; for the latter we
     // surface the original error so the caller can see what plutil saw.
-    if (code !== 127) throw new Error(`plutil failed for ${path}: ${stderr.trim()}`)
+    if (exitCode !== 127) throw new Error(`plutil failed for ${path}: ${stderr.trim()}`)
   } catch (error) {
     // Bun.spawn throws ENOENT when the binary isn't on PATH.
     const message = String(error?.message ?? '')

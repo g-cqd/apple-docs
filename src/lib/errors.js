@@ -65,3 +65,18 @@ export class ValidationError extends Error {
     if (value !== undefined) this.value = value
   }
 }
+
+/**
+ * A child process spawned via spawnWithDeadline exceeded its time budget and
+ * was killed. `args` and `deadlineMs` are preserved so logs/metrics show
+ * which command timed out and at what bound.
+ */
+export class SpawnTimeoutError extends Error {
+  constructor(args, deadlineMs, { stderr } = {}) {
+    super(`spawn timeout: ${args[0]} exceeded ${deadlineMs}ms`)
+    this.name = 'SpawnTimeoutError'
+    this.args = args
+    this.deadlineMs = deadlineMs
+    if (stderr) this.stderr = stderr
+  }
+}
