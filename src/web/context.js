@@ -155,10 +155,19 @@ export async function createWebContext(opts, ctx) {
     return cachedSearchManifest
   }
 
+  // A16: app-layer security headers. Caddy in production layers a CSP
+  // and HSTS in front of these (Caddyfile.tpl), but the Bun server
+  // serves directly during dev + when Caddy is bypassed, so we ship a
+  // baseline here. Permissions-Policy denies sensor / location APIs we
+  // never use; the Cross-Origin-* pair isolates document context from
+  // an embedding origin.
   const securityHeaders = {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Resource-Policy': 'same-site',
   }
   // In production Caddy serves /assets/* and /worker/* directly from disk
   // with `Cache-Control: public, max-age=31536000, immutable` (configured in

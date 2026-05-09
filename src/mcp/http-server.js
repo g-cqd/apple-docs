@@ -173,6 +173,35 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       return Response.json(body)
     }
 
+    // A32 readiness probe. 200 only when the DB is reachable + (when
+    // reader-pool is wired) ≥1 worker is alive. Distinct from /healthz:
+    // healthz says the process is up, readyz says it can serve traffic.
+    if (url.pathname === '/readyz') {
+      let dbOk = false
+      try {
+        ctx?.db?.db?.query('SELECT 1').get()
+        dbOk = true
+      } catch {}
+      let readerOk = true
+      let readerStats = null
+      if (readerPool) {
+        try {
+          readerStats = readerPool.stats?.()
+          readerOk = (readerStats?.active ?? 0) > 0
+        } catch { readerOk = false }
+      }
+      const ready = dbOk && readerOk
+      return Response.json(
+        {
+          ok: ready,
+          service: 'apple-docs-mcp',
+          db: dbOk,
+          readerPool: readerPool ? { ok: readerOk, stats: readerStats } : null,
+        },
+        { status: ready ? 200 : 503 },
+      )
+    }
+
     if (url.pathname !== '/mcp') {
       return new Response('Not Found', { status: 404 })
     }
@@ -272,21 +301,31 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       const ua = request.headers.get('user-agent') ?? '-'
       const cfRay = request.headers.get('cf-ray') ?? '-'
       const accept = request.headers.get('accept') ?? '-'
-      const meta = {}
+      // A35: correlation IDs. Echo a sane inbound X-Request-Id; mint a
+      // UUID otherwise. Logged alongside cf-ray so an Apple-docs request
+      // can be cross-referenced with the Cloudflare edge trace.
+      const incomingId = request.headers.get('x-request-id')
+      const requestId = incomingId && /^[A-Za-z0-9._:+/=-]{1,128}$/.test(incomingId)
+        ? incomingId
+        : crypto.randomUUID()
+      const meta = { requestId }
       try {
         const response = await handle(request, meta)
         applyCorsHeaders(request, response)
         applySecurityHeaders(response)
+        response.headers.set('X-Request-Id', requestId)
         const tag = buildPriorityTag(meta)
-        logger?.info?.(`${request.method} ${url.pathname} -> ${response.status} ${Date.now() - started}ms${tag} ua="${ua}" cf-ray=${cfRay} accept="${accept}"`)
+        logger?.info?.(`${request.method} ${url.pathname} -> ${response.status} ${Date.now() - started}ms${tag} req=${requestId} ua="${ua}" cf-ray=${cfRay} accept="${accept}"`)
         return response
       } catch (err) {
-        logger?.error?.(`${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms err="${err?.message}" ua="${ua}" cf-ray=${cfRay}`, { stack: err?.stack })
+        logger?.error?.(`${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms req=${requestId} err="${err?.message}" ua="${ua}" cf-ray=${cfRay}`, { stack: err?.stack })
         const response = Response.json(
           { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' } },
           { status: 500 },
         )
-        return applySecurityHeaders(response)
+        applySecurityHeaders(response)
+        response.headers.set('X-Request-Id', requestId)
+        return response
       }
     },
   })

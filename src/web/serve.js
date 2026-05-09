@@ -3,7 +3,7 @@ import { notFoundResponse, finalizeResponse } from './responses.js'
 import { createWebContext } from './context.js'
 import { createRouteRegistry } from './route-registry.js'
 import { createRateLimiter, tooManyRequestsResponse } from './middleware/rate-limit.js'
-import { healthHandler } from './routes/health.route.js'
+import { healthHandler, readinessHandler } from './routes/health.route.js'
 import { filtersHandler } from './routes/filters.route.js'
 import { symbolsIndexHandler } from './routes/symbols-index.route.js'
 import {
@@ -59,6 +59,7 @@ export async function startDevServer(opts, ctx) {
 
   const registry = createRouteRegistry()
   registry.register('/healthz', healthHandler)
+  registry.register('/readyz', readinessHandler)
   registry.register('/api/search', searchHandler)
   registry.register('/api/filters', filtersHandler)
   registry.register('/api/fonts', listFontsHandler)
@@ -108,8 +109,18 @@ export async function startDevServer(opts, ctx) {
       // gates (A7 docs on-demand). webCtx is per-server, so this is safe
       // for the duration of the request — Bun re-enters fetch for each.
       webCtx._server = srv
+      // A35: correlation IDs. Echo the inbound X-Request-Id when present
+      // (so an upstream proxy / browser-injected header survives intact);
+      // mint one with crypto.randomUUID() otherwise. Stash on webCtx for
+      // the request scope so log records can pick it up.
+      const incoming = request.headers.get('x-request-id')
+      const requestId = incoming && /^[A-Za-z0-9._:+/=-]{1,128}$/.test(incoming)
+        ? incoming
+        : crypto.randomUUID()
+      webCtx._requestId = requestId
       const response = await handleRequest(request)
       for (const [k, v] of Object.entries(securityHeaders)) response.headers.set(k, v)
+      response.headers.set('X-Request-Id', requestId)
       return finalizeResponse(request, response, { gzipCache })
     },
   })

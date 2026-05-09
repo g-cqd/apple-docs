@@ -522,6 +522,41 @@ describe('Dev Server (P7-E)', () => {
     expect(readdirSync(cacheDir).length).toBe(cacheBefore.length)
   })
 
+  test('/readyz returns 200 when DB is reachable (D.2)', async () => {
+    const res = await fetch(`${serverInfo.url}/readyz`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.db).toBe(true)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
+  test('echoes inbound X-Request-Id and mints one when absent (D.3)', async () => {
+    const minted = await fetch(`${serverInfo.url}/healthz`)
+    const mintedId = minted.headers.get('x-request-id')
+    expect(mintedId).toBeTruthy()
+    expect(mintedId.length).toBeGreaterThanOrEqual(8)
+
+    const echoed = await fetch(`${serverInfo.url}/healthz`, {
+      headers: { 'X-Request-Id': 'caller-123_AB' },
+    })
+    expect(echoed.headers.get('x-request-id')).toBe('caller-123_AB')
+
+    // Garbage inbound IDs (newlines / very long) get replaced.
+    const sanitized = await fetch(`${serverInfo.url}/healthz`, {
+      headers: { 'X-Request-Id': 'has space and weird*chars' },
+    })
+    expect(sanitized.headers.get('x-request-id')).not.toBe('has space and weird*chars')
+  })
+
+  test('responses ship the A16 security headers', async () => {
+    const res = await fetch(`${serverInfo.url}/healthz`)
+    expect(res.headers.get('permissions-policy')).toContain('camera=()')
+    expect(res.headers.get('cross-origin-opener-policy')).toBe('same-origin')
+    expect(res.headers.get('cross-origin-resource-policy')).toBe('same-site')
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+  })
+
   test('home page surfaces fonts and symbols inside the design section', async () => {
     const res = await fetch(`${serverInfo.url}/`)
     expect(res.status).toBe(200)
