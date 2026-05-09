@@ -241,6 +241,17 @@ describe('Dev Server (P7-E)', () => {
     expect(res.status).toBe(404)
   })
 
+  test('framework tree route recomputes on cache miss and serves the recomputed JSON', async () => {
+    // Cold path: a request for a hash the framework-tree cache hasn't seen.
+    // The handler must re-derive the tree from the DB and serve it; without
+    // this fallback, a bot probing a stale hash would 500 the dev server.
+    const res = await fetch(`${serverInfo.url}/data/frameworks/swiftui/tree.0000000000.json`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body).toBeDefined()
+  })
+
   test('returns 404 for unknown document', async () => {
     const res = await fetch(`${serverInfo.url}/docs/nonexistent/path`)
     expect(res.status).toBe(404)
@@ -299,6 +310,21 @@ describe('Dev Server (P7-E)', () => {
   test('refuses asset paths that try to escape the assets directory', async () => {
     const traversal = await fetch(`${serverInfo.url}/assets/..%2Fpackage.json`)
     expect(traversal.status).toBe(403)
+  })
+
+  test('serves the search worker from /worker/ and refuses traversal', async () => {
+    const ok = await fetch(`${serverInfo.url}/worker/search-worker.js`)
+    expect(ok.status).toBe(200)
+    expect(ok.headers.get('content-type')).toContain('text/javascript')
+    expect(ok.headers.get('cache-control')).toContain('immutable')
+    const code = await ok.text()
+    expect(code.length).toBeGreaterThan(100)
+
+    const traversal = await fetch(`${serverInfo.url}/worker/..%2Fpackage.json`)
+    expect(traversal.status).toBe(403)
+
+    const missing = await fetch(`${serverInfo.url}/worker/nope.js`)
+    expect(missing.status).toBe(404)
   })
 
   test('live search API works', async () => {
