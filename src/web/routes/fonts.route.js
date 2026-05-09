@@ -1,4 +1,5 @@
-import { extname } from 'node:path'
+import { existsSync, mkdirSync, renameSync } from 'node:fs'
+import { extname, join } from 'node:path'
 import { listAppleFonts, renderFontText } from '../../resources/apple-assets.js'
 import { assertFontPathContained } from '../../resources/apple-fonts/safe-font-path.js'
 import { BackpressureError, ValidationError } from '../../lib/errors.js'
@@ -62,6 +63,13 @@ export async function fontFileHandler(request, ctx, _url, match) {
  * ZIP (deterministic bytes for stable ETags). The optional `?subset=`
  * query filters by variant (variable / static / remote / system).
  *
+ * A23: persists the built archive to
+ * `<dataDir>/resources/fonts/zips/<familyId>-<subset>-<inputHash>.zip`
+ * on first request and serves subsequent requests through `Bun.file()`
+ * directly. The hash in the filename keys on family file paths + sizes
+ * + mtimes, so a font corpus update lands a different cache entry
+ * automatically — no explicit invalidation needed.
+ *
  * @type {import('../route-registry.js').RouteHandler}
  */
 export async function fontFamilyZipHandler(request, ctx, url, match) {
@@ -80,10 +88,11 @@ export async function fontFamilyZipHandler(request, ctx, url, match) {
     }
   })
   if (filtered.length === 0) return new Response('Not Found', { status: 404 })
-  // Dedupe by file_name as a defensive belt; the schema upgrade in v12
-  // already enforces this at insert time. A6: assert each file_path
-  // resolves under an approved root before reading bytes.
-  const entries = []
+
+  // Resolve safe paths once + collect input fingerprints. The fingerprint
+  // (path|size|mtime per entry) decides cache identity: any byte-level
+  // change to the source font files lands a new cache file.
+  const safeFiles = []
   const seen = new Set()
   for (const fontFile of filtered) {
     if (seen.has(fontFile.file_name)) continue
@@ -97,31 +106,72 @@ export async function fontFamilyZipHandler(request, ctx, url, match) {
       }
       throw err
     }
-    const file = Bun.file(safePath)
+    seen.add(fontFile.file_name)
+    safeFiles.push({ name: fontFile.file_name, path: safePath })
+  }
+  if (safeFiles.length === 0) return new Response('Not Found', { status: 404 })
+
+  const fingerprintParts = []
+  for (const entry of safeFiles) {
+    const file = Bun.file(entry.path)
+    if (!(await file.exists())) continue
+    fingerprintParts.push(`${entry.name}|${file.size}|${file.lastModified}`)
+  }
+  if (fingerprintParts.length === 0) return new Response('Not Found', { status: 404 })
+  const inputHash = sha256(fingerprintParts.join('\n')).slice(0, 16)
+  const fileNameSuffix = subset !== 'all' ? `-${subset}` : ''
+  const cacheDir = join(ctx.dataDir, 'resources', 'fonts', 'zips')
+  const cachePath = join(cacheDir, `${familyId}${fileNameSuffix}-${inputHash}.zip`)
+  // Cache key is content-derived, so the ETag is too. Same lifecycle:
+  // identical inputs → identical cache file → identical ETag.
+  const etag = `"${inputHash}"`
+
+  const baseHeaders = {
+    'Content-Type': 'application/zip',
+    'Content-Disposition': contentDispositionAttachment(`${familyId}${fileNameSuffix}.zip`),
+    'ETag': etag,
+    'Cache-Control': 'public, max-age=86400, must-revalidate',
+  }
+  if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) {
+    return new Response(null, { status: 304, headers: baseHeaders })
+  }
+
+  if (existsSync(cachePath)) {
+    const cached = Bun.file(cachePath)
+    return new Response(cached, {
+      status: 200,
+      headers: { ...baseHeaders, 'Content-Length': String(cached.size) },
+    })
+  }
+
+  // Cache miss: build the ZIP, persist it for subsequent requests, then
+  // serve from memory this once. Use temp-and-rename so a partial write
+  // can't be picked up by a concurrent reader.
+  const entries = []
+  for (const entry of safeFiles) {
+    const file = Bun.file(entry.path)
     if (!(await file.exists())) continue
     const bytes = new Uint8Array(await file.arrayBuffer())
-    entries.push({ name: fontFile.file_name, data: bytes })
-    seen.add(fontFile.file_name)
+    entries.push({ name: entry.name, data: bytes })
   }
   if (entries.length === 0) return new Response('Not Found', { status: 404 })
   const zip = buildStoreZip(entries)
-  const fileNameSuffix = subset !== 'all' ? `-${subset}` : ''
-  // ETag derived from the SHA-1 of the zip bytes — STORE-method archives
-  // are deterministic enough that identical inputs produce identical
-  // bytes, so the ETag changes if and only if the family contents change
-  // (or we add/remove subsets).
-  const etag = `"${sha256(zip).slice(0, 16)}"`
-  const headers = new Headers({
-    'Content-Type': 'application/zip',
-    'Content-Disposition': contentDispositionAttachment(`${familyId}${fileNameSuffix}.zip`),
-    'Content-Length': String(zip.byteLength),
-    'ETag': etag,
-    'Cache-Control': 'public, max-age=86400, must-revalidate',
-  })
-  if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) {
-    return new Response(null, { status: 304, headers })
+  try {
+    if (!existsSync(cacheDir)) mkdirSync(cacheDir, { recursive: true })
+    const tempPath = `${cachePath}.${process.pid}.${Date.now()}.tmp`
+    await Bun.write(tempPath, zip)
+    renameSync(tempPath, cachePath)
+  } catch (err) {
+    // Caching is best-effort; failing to write the disk copy must not
+    // fail the response. Surface as a warning so operators see chronic
+    // failures.
+    ctx.logger?.warn?.(`fontFamilyZipHandler: cache write failed: ${err?.message ?? err}`)
   }
-  return new Response(zip, { status: 200, headers })
+
+  return new Response(zip, {
+    status: 200,
+    headers: { ...baseHeaders, 'Content-Length': String(zip.byteLength) },
+  })
 }
 
 /**

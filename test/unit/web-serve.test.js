@@ -1,4 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { startDevServer } from '../../src/web/serve.js'
 
@@ -507,6 +509,17 @@ describe('Dev Server (P7-E)', () => {
     const staticText = new TextDecoder('latin1').decode(new Uint8Array(await staticZip.arrayBuffer()))
     expect(staticText).toContain('SF-Pro-Display-Bold.ttf')
     expect(staticText).not.toContain('SF-Pro.ttf"')
+
+    // A23: the first request persists a content-keyed cache entry; a
+    // second request must reuse the same entry and ship the same ETag.
+    const cacheDir = join('/tmp', 'resources', 'fonts', 'zips')
+    expect(existsSync(cacheDir)).toBe(true)
+    const cacheBefore = readdirSync(cacheDir)
+    expect(cacheBefore.length).toBeGreaterThanOrEqual(1)
+    const repeat = await fetch(`${serverInfo.url}/api/fonts/family/sf-pro.zip`)
+    expect(repeat.status).toBe(200)
+    expect(repeat.headers.get('etag')).toBe(familyZip.headers.get('etag'))
+    expect(readdirSync(cacheDir).length).toBe(cacheBefore.length)
   })
 
   test('home page surfaces fonts and symbols inside the design section', async () => {
