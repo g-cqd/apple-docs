@@ -17,7 +17,6 @@ import {
   ensureAbstractSection,
   normalizeLanguage,
   normalizeLicense,
-  reindexSections,
   synthesizeMarkdown,
   synthesizeRepoShape,
 } from './packages/markdown.js'

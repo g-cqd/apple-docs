@@ -23,28 +23,12 @@ const BLOCK_TAGS = new Set([
 
 /** Elements to strip entirely (including their content). */
 const STRIP_ELEMENTS = ['nav', 'header', 'footer', 'script', 'style', 'noscript']
-const stripNestedElementRegexCache = new Map()
-const stripSingleElementRegexCache = new Map()
 const selectorIdRegexCache = new Map()
 const selectorClassRegexCache = new Map()
 const openTagRegexCache = new Map()
 const SECTION_SPLIT_REGEX_BY_TAG = {
   h2: /(<h2[\s>][\s\S]*?<\/h2>)/gi,
   h3: /(<h3[\s>][\s\S]*?<\/h3>)/gi,
-}
-
-function getStripNestedElementRegex(tag) {
-  if (!stripNestedElementRegexCache.has(tag)) {
-    stripNestedElementRegexCache.set(tag, new RegExp(`<${tag}(\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'gi'))
-  }
-  return stripNestedElementRegexCache.get(tag)
-}
-
-function getStripSingleElementRegex(tag) {
-  if (!stripSingleElementRegexCache.has(tag)) {
-    stripSingleElementRegexCache.set(tag, new RegExp(`<${tag}(\\s[^>]*)?\\s*/?>`, 'gi'))
-  }
-  return stripSingleElementRegexCache.get(tag)
 }
 
 function getSelectorIdRegex(id) {
