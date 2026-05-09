@@ -5,6 +5,7 @@ import { createCacheRegistry } from './cache.js'
 import { createMarkdownCache } from './markdown-cache.js'
 import { createReaderPool } from '../storage/reader-pool.js'
 import { BackpressureError, Semaphore } from '../lib/semaphore.js'
+import { readJsonRpcBodyCapped } from '../lib/http-body.js'
 
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -186,17 +187,18 @@ export async function startHttpServer(opts, ctx, deps = {}) {
 
     // Peek JSON-RPC method so heavy tool calls can be gated without making
     // initialize/ping/tools/list/notifications/resources wait behind them.
-    // Body is buffered once and forwarded to the transport via a cloned
-    // Request so the SDK still sees the same payload.
+    // Body is buffered once (size-capped via readJsonRpcBodyCapped — P1.6)
+    // and forwarded to the transport via a cloned Request.
     let forwardRequest = request
     let priority = 'light'
     if (request.method === 'POST') {
-      const bodyText = await request.text()
-      priority = classifyRpcPayload(bodyText)
+      const result = await readJsonRpcBodyCapped(request)
+      if (!result.ok) return result.response
+      priority = classifyRpcPayload(result.body)
       forwardRequest = new Request(request.url, {
         method: request.method,
         headers: request.headers,
-        body: bodyText,
+        body: result.body,
       })
     }
 

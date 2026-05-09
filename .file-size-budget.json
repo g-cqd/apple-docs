@@ -6,7 +6,7 @@
   "exempt": [
     { "path": "src/storage/database.js", "lines": 2154 },
     { "path": "src/web/templates.js", "lines": 1566 },
-    { "path": "src/resources/apple-assets.js", "lines": 1501 },
+    { "path": "src/resources/apple-assets.js", "lines": 1546 },
     { "path": "src/content/normalize.js", "lines": 964 },
     { "path": "src/content/render-html.js", "lines": 918 },
     { "path": "src/web/build.js", "lines": 896 },

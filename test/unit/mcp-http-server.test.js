@@ -495,6 +495,23 @@ describe('startHttpServer', () => {
       else process.env.APPLE_DOCS_MCP_CACHE_STATS = prev
     }
   })
+
+  test('rejects POST with Content-Length over the body cap', async () => {
+    const { fetch, fakeTransport } = await bootHarness()
+    let reached = false
+    fakeTransport.handleRequest = async () => { reached = true; return new Response('') }
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': '2000000' },
+      body: '{}',
+    }))
+    expect(res.status).toBe(413)
+    expect(reached).toBe(false)
+    const body = await res.json()
+    expect(body.jsonrpc).toBe('2.0')
+    expect(body.error.code).toBe(-32600)
+    expect(body.error.message).toContain('too large')
+  })
 })
 
 describe('classifyRpcPayload', () => {
