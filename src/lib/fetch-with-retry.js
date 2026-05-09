@@ -3,6 +3,8 @@
  * Consolidated from src/apple/api.js and src/lib/github.js.
  */
 
+import { HttpError, NotFoundError } from './errors.js'
+
 /**
  * Simple promise-based delay.
  * @param {number} ms
@@ -117,14 +119,11 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
   }
 
   if (res.status === 404 && notFoundAs === 'not-found') {
-    throw Object.assign(new Error(`Not found: ${url}`), { status: 404 })
+    throw new NotFoundError(url)
   }
 
   if (!res.ok) {
-    throw Object.assign(
-      new Error(`HTTP ${res.status} fetching ${url}`),
-      { status: res.status },
-    )
+    throw new HttpError(res.status, url)
   }
 
   const etag = res.headers.get('etag')

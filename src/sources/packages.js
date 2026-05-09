@@ -8,6 +8,7 @@ import {
   hasGitHubToken,
 } from '../lib/github.js'
 import { parseMarkdownToSections } from '../content/parse-markdown.js'
+import { ParseError } from '../lib/errors.js'
 import { SourceAdapter } from './base.js'
 import { OFFICIAL_PACKAGES } from './packages-official.js'
 import { packageKey, parseCompositeEtag, parsePackageKey, parsePackageUrl } from './packages/keys.js'
@@ -121,9 +122,14 @@ export class PackagesAdapter extends SourceAdapter {
       ctx.rateLimiter,
     )
 
-    const packageUrls = JSON.parse(text)
+    let packageUrls
+    try {
+      packageUrls = JSON.parse(text)
+    } catch (cause) {
+      throw new ParseError('SwiftPackageIndex packages.json failed to parse', { cause, source: 'packages' })
+    }
     if (!Array.isArray(packageUrls)) {
-      throw new Error('Package list payload must be a JSON array')
+      throw new ParseError('Package list payload must be a JSON array', { source: 'packages' })
     }
 
     const keySet = new Set()
@@ -259,7 +265,7 @@ export class PackagesAdapter extends SourceAdapter {
   normalize(key, rawPayload) {
     const repo = rawPayload?.repo
     if (!repo || typeof repo !== 'object') {
-      throw new Error('Package payload is missing repository metadata')
+      throw new ParseError('Package payload is missing repository metadata', { source: 'packages' })
     }
 
     const readme = rawPayload?.readme ?? null
