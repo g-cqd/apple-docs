@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import { availableParallelism } from 'node:os'
+import { BackpressureError } from '../lib/semaphore.js'
 
 const WORKER_URL = new URL('./reader-worker.js', import.meta.url)
 
@@ -51,6 +52,9 @@ function resolveDefaultSize() {
  * @param {new (...args: any[]) => Worker} [opts.WorkerCtor] - Injectable
  *   for tests.
  */
+const DEFAULT_MAX_PENDING_PER_WORKER = 64
+const DEFAULT_DEADLINE_MS = 5_000
+
 export function createReaderPool(opts = {}) {
   const { dbPath, log } = opts
   if (!dbPath || dbPath === ':memory:') {
@@ -59,7 +63,14 @@ export function createReaderPool(opts = {}) {
   const size = Math.max(1, opts.size ?? resolveDefaultSize())
   const WorkerCtor = opts.WorkerCtor ?? Worker
 
-  const stats = { spawns: 0, errors: 0 }
+  // A15: budget knobs. maxPendingPerWorker bounds the per-slot queue so a
+  // burst can't accumulate unbounded memory; deadlineMs forces a per-call
+  // timeout so a wedged reader (long FTS, runaway query plan) doesn't
+  // pin the slot forever. Both are tunable per call via run(op, args, opts).
+  const maxPendingPerWorker = Math.max(1, opts.maxPendingPerWorker ?? DEFAULT_MAX_PENDING_PER_WORKER)
+  const defaultDeadlineMs = Math.max(0, opts.deadlineMs ?? DEFAULT_DEADLINE_MS)
+
+  const stats = { spawns: 0, errors: 0, timeouts: 0, backpressureRejects: 0 }
 
   // Each entry: { worker, pending: Map<id, {resolve,reject}>, ready: Promise,
   // readyResolve, alive: bool }
@@ -167,24 +178,63 @@ export function createReaderPool(opts = {}) {
     return best
   }
 
-  async function run(op, args = []) {
+  async function run(op, args = [], runOpts = {}) {
     if (closed) throw new Error('reader-pool: run() after close()')
     const idx = pickSlot()
     if (idx < 0) throw new Error('reader-pool: no workers available')
     const slot = slots[idx]
+
     // Wait for this particular worker to emit ready. Already-ready slots
     // resolve immediately; newly-spawned ones (after failSlot) block until
     // the DB handle opens. A rejection here means spawn failed; let it
     // propagate to the caller.
     await slot.ready
+
+    // A15: per-worker pending cap. Reject with a typed BackpressureError so
+    // the route layer can translate to 503 + Retry-After instead of letting
+    // the queue grow unbounded. Checked after `await slot.ready` so that
+    // sibling concurrent run() calls have already enrolled into
+    // slot.pending — otherwise three simultaneous run()s observed an empty
+    // pending map and all three blew past the cap.
+    if (slot.pending.size >= maxPendingPerWorker) {
+      stats.backpressureRejects++
+      throw new BackpressureError(
+        `reader-pool: worker ${idx} pending=${slot.pending.size} exceeds maxPendingPerWorker=${maxPendingPerWorker}`,
+      )
+    }
+
     const id = idCounter++
+    const deadlineMs = runOpts.deadlineMs ?? defaultDeadlineMs
+
     return new Promise((resolve, reject) => {
-      slot.pending.set(id, { resolve, reject })
+      let timer = null
+      const cleanup = () => {
+        if (timer) clearTimeout(timer)
+        slot.pending.delete(id)
+      }
+      slot.pending.set(id, {
+        resolve: (value) => { cleanup(); resolve(value) },
+        reject: (err) => { cleanup(); reject(err) },
+      })
       try {
         slot.worker.postMessage({ type: 'call', id, op, args })
       } catch (err) {
-        slot.pending.delete(id)
+        cleanup()
         reject(err)
+        return
+      }
+      // A15: per-call deadline. On expiry, reject with a timeout error;
+      // the worker keeps running its query (we can't cancel SQLite
+      // mid-statement from the parent), but the caller is unblocked and
+      // the slot frees on the next message dispatch.
+      if (deadlineMs > 0) {
+        timer = setTimeout(() => {
+          if (!slot.pending.has(id)) return
+          stats.timeouts++
+          cleanup()
+          reject(new Error(`reader-pool: op '${op}' exceeded deadline ${deadlineMs}ms`))
+        }, deadlineMs)
+        timer.unref?.()
       }
     })
   }
@@ -257,7 +307,13 @@ export function createReaderPool(opts = {}) {
       if (slot.alive) active++
       pending += slot.pending.size
     }
-    return { size, active, pending, spawns: stats.spawns, errors: stats.errors }
+    return {
+      size, active, pending,
+      spawns: stats.spawns,
+      errors: stats.errors,
+      timeouts: stats.timeouts,
+      backpressureRejects: stats.backpressureRejects,
+    }
   }
 
   return {

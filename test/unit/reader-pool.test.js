@@ -229,6 +229,48 @@ describe('createReaderPool', () => {
     await expect(pool.start()).rejects.toThrow(/db open failed|reader-worker fatal/)
     await pool.close()
   })
+
+  test('A15: per-worker pending cap rejects with BackpressureError', async () => {
+    // Hold every dispatched call open by never replying. After the cap
+    // entries land in slot.pending, the (cap+1)th run() throws.
+    const FakeCtor = makeFakeCtor({ handler: () => {} })
+    const pool = createReaderPool({
+      dbPath: DB_PATH, size: 1, WorkerCtor: FakeCtor, maxPendingPerWorker: 2, deadlineMs: 0,
+    })
+    const a = pool.run('search', ['a'])
+    const b = pool.run('search', ['b'])
+    await expect(pool.run('search', ['c'])).rejects.toThrow(/maxPendingPerWorker/)
+    expect(pool.stats().backpressureRejects).toBe(1)
+    // resolve the held calls so close() doesn't hang
+    const w = FakeCtor.instances[0]
+    for (const msg of w.postedMessages) {
+      if (msg.type === 'call') emit(w, { type: 'result', id: msg.id, ok: true, data: 'ok' })
+    }
+    await Promise.all([a, b])
+    await pool.close()
+  })
+
+  test('A15: per-call deadline rejects with timeout error', async () => {
+    const FakeCtor = makeFakeCtor({ handler: () => {} })
+    const pool = createReaderPool({
+      dbPath: DB_PATH, size: 1, WorkerCtor: FakeCtor, deadlineMs: 50,
+    })
+    await expect(pool.run('search', ['x'])).rejects.toThrow(/exceeded deadline 50ms/)
+    expect(pool.stats().timeouts).toBe(1)
+    await pool.close()
+  })
+
+  test('A15: deadlineMs=0 disables the per-call deadline', async () => {
+    const FakeCtor = makeFakeCtor({
+      handler: (worker, msg) => {
+        // reply after a short delay
+        setTimeout(() => emit(worker, { type: 'result', id: msg.id, ok: true, data: 'ok' }), 30)
+      },
+    })
+    const pool = createReaderPool({ dbPath: DB_PATH, size: 1, WorkerCtor: FakeCtor, deadlineMs: 0 })
+    await expect(pool.run('search', ['x'])).resolves.toBe('ok')
+    await pool.close()
+  })
 })
 
 describe('runRead', () => {
