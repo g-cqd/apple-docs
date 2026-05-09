@@ -36,9 +36,3 @@ export const STANDALONE_ASSETS = ['search-page.js', 'fonts-page.js', 'symbols-pa
  * main thread, so they always ship as their own files.
  */
 export const WORKER_ASSETS = ['search-worker.js']
-
-/**
- * Static CSS files served from /assets/<name>. The build pipeline minifies
- * them; the dev server serves them as-is.
- */
-export const STATIC_CSS_ASSETS = ['style.css']

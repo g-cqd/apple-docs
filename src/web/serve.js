@@ -113,5 +113,3 @@ export async function startDevServer(opts, ctx) {
 
   return { server, url: serverUrl, close, readerPool }
 }
-
-export { buildHomepageExtras } from './homepage-extras.js'

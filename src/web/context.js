@@ -167,7 +167,7 @@ export async function createWebContext(opts, ctx) {
  *
  * @param {{ db: { dbPath?: string, getSchemaVersion?: () => number } }} ctx
  */
-export function createCorpusStamp(ctx) {
+function createCorpusStamp(ctx) {
   const dbPath = ctx?.db?.dbPath
   let cached = null
   let refreshedAt = 0
@@ -204,7 +204,7 @@ export function createCorpusStamp(ctx) {
  * is disabled, the DB is in-memory, or the pool fails to start (the search
  * path falls back to the main-thread bun:sqlite handle).
  */
-export async function resolveWebReaderPool(ctx, opts, logger) {
+async function resolveWebReaderPool(ctx, opts, logger) {
   if (opts && 'readerPool' in opts) return opts.readerPool ?? null
   const mode = process.env.APPLE_DOCS_WEB_READERS ?? 'auto'
   if (['off', '0', 'false', 'no'].includes(String(mode).toLowerCase())) return null
