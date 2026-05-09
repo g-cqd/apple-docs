@@ -13,8 +13,25 @@ import {
   normalizeStringArray,
   parseFontFilename,
 } from './apple-fonts/sfnt.js'
+import {
+  getPrerenderedSymbolPath,
+  normalizeSymbolScale,
+  normalizeSymbolWeight,
+  SYMBOL_SCALES,
+  SYMBOL_WEIGHTS,
+  symbolVariantKey,
+  symbolVariantMatrix,
+} from './apple-symbols/cache-key.js'
+import {
+  clampInteger,
+  escapeXml,
+  normalizeBackground,
+  normalizeColor,
+  sanitizeFileName,
+} from './apple-assets-helpers.js'
 
 export { inspectSfntFile, parseFontFilename }
+export { SYMBOL_WEIGHTS, SYMBOL_SCALES, getPrerenderedSymbolPath }
 
 const APPLE_FONT_FAMILIES = [
   { id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg', match: /^SF-Pro(?:-|\.|$)|^SFNS/i },
@@ -201,16 +218,6 @@ export function searchSfSymbols(query, opts, ctx) {
 const SYMBOL_RENDERER_VERSION = 8
 const SYMBOL_DEFAULT_RENDER_SIZE = 128
 
-export function getPrerenderedSymbolPath(ctx, scope, name, opts = {}) {
-  const cleanScope = scope === 'private' ? 'private' : 'public'
-  const weight = normalizeSymbolWeight(opts.weight)
-  const scale = normalizeSymbolScale(opts.scale)
-  if (cleanScope === 'public' && (weight !== 'regular' || scale !== 'medium')) {
-    return join(ctx.dataDir, 'resources', 'symbols', cleanScope, `${weight}-${scale}`, `${sanitizeFileName(name)}.svg`)
-  }
-  return join(ctx.dataDir, 'resources', 'symbols', cleanScope, `${sanitizeFileName(name)}.svg`)
-}
-
 /**
  * Pre-render every indexed SF Symbol into a flat directory of theme-neutral
  * SVG files. Spawns a long-lived Swift worker that processes one symbol per
@@ -294,10 +301,6 @@ function hasSnapshotVariantSet(meta, scope) {
     ? meta.variants[scope].map(symbolVariantKey).sort()
     : []
   return expected.length === actual.length && expected.every((key, index) => key === actual[index])
-}
-
-function symbolVariantKey(variant) {
-  return `${normalizeSymbolWeight(variant?.weight)}/${normalizeSymbolScale(variant?.scale)}`
 }
 
 async function renderScopeBucket({ scope, symbols, variants, dataDir, concurrency, logger, onProgress, result }) {
@@ -415,27 +418,6 @@ async function spawnSymbolWorker({ scope, logger }) {
 
 
 
-export const SYMBOL_WEIGHTS = ['ultralight', 'thin', 'light', 'regular', 'medium', 'semibold', 'bold', 'heavy', 'black']
-export const SYMBOL_SCALES = ['small', 'medium', 'large']
-
-function normalizeSymbolWeight(value) {
-  const weight = String(value ?? '').toLowerCase()
-  return SYMBOL_WEIGHTS.includes(weight) ? weight : 'regular'
-}
-
-function normalizeSymbolScale(value) {
-  const scale = String(value ?? '').toLowerCase()
-  return SYMBOL_SCALES.includes(scale) ? scale : 'medium'
-}
-
-function symbolVariantMatrix(scope) {
-  if (scope === 'private') return [{ weight: 'regular', scale: 'medium' }]
-  const variants = []
-  for (const weight of SYMBOL_WEIGHTS) {
-    for (const scale of SYMBOL_SCALES) variants.push({ weight, scale })
-  }
-  return variants
-}
 
 export async function renderSfSymbol(opts, ctx) {
   const scope = opts.scope === 'private' ? 'private' : 'public'
@@ -1251,37 +1233,6 @@ async function hashFile(path) {
   return sha256(bytes)
 }
 
-
-function sanitizeFileName(value) {
-  return String(value).replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-+|-+$/g, '') || 'asset'
-}
-
-function clampInteger(value, min, max) {
-  const parsed = Number.parseInt(value, 10)
-  if (!Number.isFinite(parsed)) return min
-  return Math.min(Math.max(parsed, min), max)
-}
-
-function normalizeColor(value) {
-  const raw = String(value ?? '#000000').trim()
-  return /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(raw) ? raw : '#000000'
-}
-
-function normalizeBackground(value) {
-  if (value == null) return null
-  const raw = String(value).trim()
-  if (!raw || raw === 'transparent' || raw === 'none') return null
-  return /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(raw) ? raw : null
-}
-
-function escapeXml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;')
-}
 
 export const _test = {
   customizePrerenderedSymbolSvg,
