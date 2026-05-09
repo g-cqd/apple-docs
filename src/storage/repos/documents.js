@@ -9,6 +9,7 @@
  */
 
 import { parseJsonValue } from '../_helpers.js'
+import { coerceSourceType } from '../source-types.js'
 
 function deriveFrameworkFromPath(path) {
   if (!path) return null
@@ -148,7 +149,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
     upsertDocument(params) {
       const now = new Date().toISOString()
       return upsertStmt.get({
-        $source_type: params.sourceType ?? 'apple-docc',
+        $source_type: coerceSourceType(params.sourceType),
         $key: params.key,
         $title: params.title ?? params.key,
         $kind: params.kind ?? null,
