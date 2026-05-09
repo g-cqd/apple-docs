@@ -4,6 +4,7 @@ import { dirname } from 'node:path'
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 import { runMigrations } from './migrations/index.js'
 import { applyPragmas, enableForeignKeys } from './pragmas.js'
+import { createOperationsRepo } from './repos/operations.js'
 import { deriveRootSourceType } from './source-types.js'
 
 function serializePlatforms(value) {
@@ -31,6 +32,7 @@ export class DocsDatabase {
     this._effectiveMmapSize = applyPragmas(this.db)
     this._migrate()
     this._prepareStatements()
+    this.operations = createOperationsRepo(this.db)
     enableForeignKeys(this.db)
   }
 
@@ -464,12 +466,6 @@ export class DocsDatabase {
     this._countCrawlState = this.db.query('SELECT status, COUNT(*) as count FROM crawl_state WHERE root_slug = ? GROUP BY status')
     this._clearCrawlState = this.db.query('DELETE FROM crawl_state WHERE root_slug = ?')
 
-    this._addUpdateLog = this.db.query(`
-      INSERT INTO update_log (timestamp, root_slug, action, new_count, mod_count, del_count, err_count, duration_ms)
-      VALUES ($timestamp, $root_slug, $action, $new_count, $mod_count, $del_count, $err_count, $duration_ms)
-    `)
-    this._getLastUpdateLog = this.db.query("SELECT * FROM update_log ORDER BY id DESC LIMIT 1")
-
     this._updatePageConverted = this.db.query("UPDATE pages SET converted_at = ? WHERE path = ?")
     this._getUnconvertedPages = this.db.query(`
       SELECT p.path, r.slug as root_slug, COALESCE(p.source_type, r.source_type) as source_type
@@ -493,11 +489,6 @@ export class DocsDatabase {
     this._markPageDeleted = this.db.query("UPDATE pages SET status = 'deleted' WHERE path = ?")
     this._updatePageEtag = this.db.query("UPDATE pages SET etag = $etag, last_modified = $last_modified, content_hash = $content_hash, downloaded_at = $downloaded_at WHERE path = $path")
 
-    // Activity tracking
-    this._setActivity = this.db.query("INSERT OR REPLACE INTO activity (id, action, started_at, pid, roots) VALUES (1, $action, $started_at, $pid, $roots)")
-    this._clearActivity = this.db.query("DELETE FROM activity WHERE id = 1")
-    this._getActivity = this.db.query("SELECT * FROM activity WHERE id = 1")
-
     // Per-root crawl progress
     this._crawlProgressByRoot = this.db.query(`
       SELECT root_slug,
@@ -517,19 +508,6 @@ export class DocsDatabase {
       FROM crawl_state
     `)
 
-    this._getSnapshotMeta = this.db.query('SELECT value FROM snapshot_meta WHERE key = ?')
-    this._setSnapshotMeta = this.db.query('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)')
-    this._getSyncCheckpoint = this.db.query('SELECT value FROM sync_checkpoint WHERE key = ?')
-    this._setSyncCheckpoint = this.db.query('INSERT OR REPLACE INTO sync_checkpoint (key, value, updated_at) VALUES (?, ?, ?)')
-    this._clearSyncCheckpoint = this.db.query('DELETE FROM sync_checkpoint WHERE key = ?')
-
-    this._getRenderIndexEntry = this.db.query(
-      'SELECT doc_id, sections_digest, template_version, html_hash, updated_at FROM document_render_index WHERE doc_id = ?'
-    )
-    this._upsertRenderIndexEntry = this.db.query(
-      'INSERT OR REPLACE INTO document_render_index (doc_id, sections_digest, template_version, html_hash, updated_at) VALUES (?, ?, ?, ?, ?)'
-    )
-    this._clearRenderIndex = this.db.query('DELETE FROM document_render_index')
   }
 
   upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
@@ -945,22 +923,8 @@ export class DocsDatabase {
     this._clearCrawlState.run(rootSlug)
   }
 
-  addUpdateLog(params) {
-    this._addUpdateLog.run({
-      $timestamp: new Date().toISOString(),
-      $root_slug: params.rootSlug ?? null,
-      $action: params.action,
-      $new_count: params.newCount ?? 0,
-      $mod_count: params.modCount ?? 0,
-      $del_count: params.delCount ?? 0,
-      $err_count: params.errCount ?? 0,
-      $duration_ms: params.durationMs ?? null,
-    })
-  }
-
-  getLastUpdateLog() {
-    return this._getLastUpdateLog.get()
-  }
+  addUpdateLog(params) { this.operations.addUpdateLog(params) }
+  getLastUpdateLog() { return this.operations.getLastUpdateLog() }
 
   markConverted(path) {
     this._updatePageConverted.run(new Date().toISOString(), path)
@@ -1012,32 +976,9 @@ export class DocsDatabase {
     })
   }
 
-  setActivity(action, roots = null) {
-    this._setActivity.run({
-      $action: action,
-      $started_at: new Date().toISOString(),
-      $pid: process.pid,
-      $roots: roots ? JSON.stringify(roots) : null,
-    })
-  }
-
-  clearActivity() {
-    this._clearActivity.run()
-  }
-
-  getActivity() {
-    const row = this._getActivity.get()
-    if (!row) return null
-
-    // Check if the process is still alive
-    try {
-      process.kill(row.pid, 0) // signal 0 = existence check
-      return { ...row, alive: true, roots: row.roots ? JSON.parse(row.roots) : null }
-    } catch {
-      // Process is dead — stale activity from a killed run
-      return { ...row, alive: false, roots: row.roots ? JSON.parse(row.roots) : null }
-    }
-  }
+  setActivity(action, roots = null) { this.operations.setActivity(action, roots) }
+  clearActivity() { this.operations.clearActivity() }
+  getActivity() { return this.operations.getActivity() }
 
   getCrawlProgressByRoot() {
     return this._crawlProgressByRoot.all()
@@ -1047,36 +988,17 @@ export class DocsDatabase {
     return this._crawlProgressAll.get() ?? { pending: 0, processed: 0, failed: 0, total: 0 }
   }
 
-  getSnapshotMeta(key) {
-    const row = this._getSnapshotMeta.get(key)
-    return row ? row.value : null
-  }
-
+  getSnapshotMeta(key) { return this.operations.getSnapshotMeta(key) }
   setSnapshotMeta(key, value) {
-    this._setSnapshotMeta.run(key, String(value))
-    if (key === 'snapshot_tier') {
-      this._tier = undefined
-    }
+    this.operations.setSnapshotMeta(key, value)
+    // Tier cache lives on the facade; invalidate when the underlying tier
+    // row changes so getTier() recomputes against the new value.
+    if (key === 'snapshot_tier') this._tier = undefined
   }
 
-  getSyncCheckpoint(key) {
-    const row = this._getSyncCheckpoint.get(key)
-    if (!row) return null
-    try {
-      return JSON.parse(row.value)
-    } catch {
-      return row.value
-    }
-  }
-
-  setSyncCheckpoint(key, value) {
-    const serialized = typeof value === 'string' ? value : JSON.stringify(value)
-    this._setSyncCheckpoint.run(key, serialized, new Date().toISOString())
-  }
-
-  clearSyncCheckpoint(key) {
-    this._clearSyncCheckpoint.run(key)
-  }
+  getSyncCheckpoint(key) { return this.operations.getSyncCheckpoint(key) }
+  setSyncCheckpoint(key, value) { this.operations.setSyncCheckpoint(key, value) }
+  clearSyncCheckpoint(key) { this.operations.clearSyncCheckpoint(key) }
 
   /**
    * Singleton checkpoint for the static web build, stored in sync_checkpoint
@@ -1104,23 +1026,9 @@ export class DocsDatabase {
    * @param {number} docId
    * @returns {{ doc_id: number, sections_digest: string, template_version: string, html_hash: string, updated_at: number }|null}
    */
-  getRenderIndexEntry(docId) {
-    return this._getRenderIndexEntry.get(docId) ?? null
-  }
-
-  upsertRenderIndexEntry({ docId, sectionsDigest, templateVersion, htmlHash }) {
-    this._upsertRenderIndexEntry.run(
-      docId,
-      sectionsDigest,
-      templateVersion,
-      htmlHash,
-      Math.floor(Date.now() / 1000),
-    )
-  }
-
-  clearRenderIndex() {
-    this._clearRenderIndex.run()
-  }
+  getRenderIndexEntry(docId) { return this.operations.getRenderIndexEntry(docId) }
+  upsertRenderIndexEntry(entry) { this.operations.upsertRenderIndexEntry(entry) }
+  clearRenderIndex() { this.operations.clearRenderIndex() }
 
   /**
    * Return parent->child edges for a framework's document tree.
