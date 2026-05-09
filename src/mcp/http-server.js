@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { createServer } from './server.js'
 import { createCacheRegistry } from './cache.js'
 import { createMarkdownCache } from './markdown-cache.js'
+import { buildHealthBody, buildReadinessResponse } from './health-handlers.js'
 import { createReaderPool } from '../storage/reader-pool.js'
 import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 import { isLoopbackOrigin, readJsonRpcBodyCapped } from '../lib/http-body.js'
@@ -157,50 +158,13 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     const url = new URL(request.url)
 
     if (url.pathname === '/healthz') {
-      const body = { ok: true, service: 'apple-docs-mcp' }
-      if (exposeCacheStats) {
-        body.cache = cacheRegistry.stats()
-        body.markdownCache = markdownCache.stats?.()
-        body.concurrency = {
-          heavyMax,
-          heavyQueue,
-          active: heavySemaphore.active,
-          waiting: heavySemaphore._queue.length,
-          rejected: concurrencyStats.rejected,
-        }
-        if (readerPool) body.readerPool = readerPool.stats?.()
-      }
-      return Response.json(body)
+      return Response.json(buildHealthBody({
+        exposeCacheStats, cacheRegistry, markdownCache,
+        heavyMax, heavyQueue, heavySemaphore,
+        concurrencyStats, readerPool,
+      }))
     }
-
-    // A32 readiness probe. 200 only when the DB is reachable + (when
-    // reader-pool is wired) ≥1 worker is alive. Distinct from /healthz:
-    // healthz says the process is up, readyz says it can serve traffic.
-    if (url.pathname === '/readyz') {
-      let dbOk = false
-      try {
-        ctx?.db?.db?.query('SELECT 1').get()
-        dbOk = true
-      } catch {}
-      let readerOk = true
-      let readerStats = null
-      if (readerPool) {
-        try {
-          readerStats = readerPool.stats?.()
-          readerOk = (readerStats?.active ?? 0) > 0
-        } catch { readerOk = false }
-      }
-      const ready = dbOk && readerOk
-      return Response.json(
-        {
-          ok: ready,
-          service: 'apple-docs-mcp',
-          db: dbOk,
-          readerPool: readerPool ? { ok: readerOk, stats: readerStats } : null,
-        },
-        { status: ready ? 200 : 503 },
-      )
-    }
+    if (url.pathname === '/readyz') return buildReadinessResponse({ ctx, readerPool })
 
     if (url.pathname !== '/mcp') {
       return new Response('Not Found', { status: 404 })
@@ -301,13 +265,10 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       const ua = request.headers.get('user-agent') ?? '-'
       const cfRay = request.headers.get('cf-ray') ?? '-'
       const accept = request.headers.get('accept') ?? '-'
-      // A35: correlation IDs. Echo a sane inbound X-Request-Id; mint a
-      // UUID otherwise. Logged alongside cf-ray so an Apple-docs request
-      // can be cross-referenced with the Cloudflare edge trace.
+      // A35: echo sane inbound X-Request-Id; mint a UUID otherwise.
       const incomingId = request.headers.get('x-request-id')
       const requestId = incomingId && /^[A-Za-z0-9._:+/=-]{1,128}$/.test(incomingId)
-        ? incomingId
-        : crypto.randomUUID()
+        ? incomingId : crypto.randomUUID()
       const meta = { requestId }
       try {
         const response = await handle(request, meta)
