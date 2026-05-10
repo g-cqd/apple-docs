@@ -43,9 +43,12 @@ async function dispatchStorage(subcommand, _positional, flags, ctx) {
 
 async function dispatchSnapshot(subcommand, _positional, flags, ctx) {
   if (subcommand === 'build') {
+    if (flags.tier && flags.tier !== 'full') {
+      console.error(`apple-docs snapshot build: --tier ${flags.tier} is no longer supported (G.1). Drop the flag — there is only one tier now.`)
+      process.exit(2)
+    }
     const { snapshotBuild } = await import('../commands/snapshot.js')
     const result = await snapshotBuild({
-      tier: flags.tier ?? 'full',
       out: flags.out,
       tag: flags.tag,
       // F.3b: deliberate-partial-build escape hatch. Pass when

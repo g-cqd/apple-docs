@@ -35,7 +35,7 @@ describe('setup', () => {
       role: 'symbol',
     })
 
-    const result = await setup({ tier: 'standard', force: false }, { db, dataDir, logger })
+    const result = await setup({ force: false }, { db, dataDir, logger })
     expect(result.status).toBe('exists')
     expect(result.dataDir).toBe(dataDir)
   })
@@ -67,7 +67,7 @@ describe('setup', () => {
 
     const snapshotOutDir = mkdtempSync(join(tmpdir(), 'apple-docs-snap-out-'))
     const snapshotResult = await snapshotBuild(
-      { tier: 'standard', out: snapshotOutDir, tag: 'test-release-1' },
+      { out: snapshotOutDir, tag: 'test-release-1' },
       { db: sourceDb, dataDir: sourceDir, logger },
     )
     sourceDb.close()
@@ -87,12 +87,12 @@ describe('setup', () => {
           published_at: '2026-04-13T00:00:00Z',
           assets: [
             {
-              name: 'apple-docs-standard-test-release-1.tar.gz',
+              name: 'apple-docs-full-test-release-1.tar.gz',
               size: archiveBytes.byteLength,
               browser_download_url: 'https://fake.github.com/archive.tar.gz',
             },
             {
-              name: 'apple-docs-standard-test-release-1.sha256',
+              name: 'apple-docs-full-test-release-1.sha256',
               size: checksumText.length,
               browser_download_url: 'https://fake.github.com/checksum.sha256',
             },
@@ -118,13 +118,13 @@ describe('setup', () => {
 
       try {
         const result = await setup(
-          { tier: 'standard', force: false },
+          { force: false },
           { db: setupDb, dataDir: setupDir, logger },
         )
 
         expect(result.status).toBe('ok')
         expect(result.tag).toBe('test-release-1')
-        expect(result.tier).toBe('standard')
+        expect(result.tier).toBe('full')
         expect(result.documentCount).toBeGreaterThanOrEqual(1)
         expect(result.schemaVersion).toBe(17)
 
@@ -158,12 +158,12 @@ describe('setup', () => {
           published_at: '2026-04-13T00:00:00Z',
           assets: [
             {
-              name: 'apple-docs-standard-bad-v1.tar.gz',
+              name: 'apple-docs-full-bad-v1.tar.gz',
               size: 100,
               browser_download_url: 'https://fake.github.com/archive.tar.gz',
             },
             {
-              name: 'apple-docs-standard-bad-v1.sha256',
+              name: 'apple-docs-full-bad-v1.sha256',
               size: 80,
               browser_download_url: 'https://fake.github.com/checksum.sha256',
             },
@@ -184,17 +184,11 @@ describe('setup', () => {
 
     try {
       await expect(
-        setup({ tier: 'standard', force: true }, { db, dataDir, logger })
+        setup({ force: true }, { db, dataDir, logger })
       ).rejects.toThrow('Checksum mismatch')
     } finally {
       globalThis.fetch = originalFetch
     }
-  })
-
-  test('rejects invalid tier', async () => {
-    await expect(
-      setup({ tier: 'mega' }, { db, dataDir, logger })
-    ).rejects.toThrow('Invalid tier')
   })
 
   test('uses setResolvedGitHubToken fallback for release lookups', async () => {
@@ -218,7 +212,7 @@ describe('setup', () => {
 
     try {
       await expect(
-        setup({ tier: 'standard', force: true }, { db, dataDir, logger })
+        setup({ force: true }, { db, dataDir, logger })
       ).rejects.toThrow()
     } finally {
       globalThis.fetch = originalFetch
@@ -233,22 +227,6 @@ describe('setup', () => {
     expect(seenAuth).toBe('Bearer resolved_setup_token')
   })
 
-  test('rejects downgrades without --downgrade', async () => {
-    const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
-    db.upsertPage({
-      rootId: root.id,
-      path: 'swiftui/view',
-      url: 'u',
-      title: 'View',
-      role: 'symbol',
-    })
-    db.setSnapshotMeta('snapshot_tier', 'full')
-
-    await expect(
-      setup({ tier: 'standard', force: true }, { db, dataDir, logger })
-    ).rejects.toThrow('Refusing to downgrade from full to standard without --downgrade')
-  })
-
   test('refuses install when checksum sidecar is missing (P1.5)', async () => {
     const originalFetch = globalThis.fetch
     globalThis.fetch = mock(async (url) => {
@@ -259,7 +237,7 @@ describe('setup', () => {
           published_at: '2026-04-13T00:00:00Z',
           assets: [
             {
-              name: 'apple-docs-standard-test-release-no-checksum.tar.gz',
+              name: 'apple-docs-full-test-release-no-checksum.tar.gz',
               size: 100,
               browser_download_url: 'https://fake.github.com/archive.tar.gz',
             },
@@ -271,7 +249,7 @@ describe('setup', () => {
     })
     try {
       await expect(
-        setup({ tier: 'standard', force: true }, { db, dataDir, logger })
+        setup({ force: true }, { db, dataDir, logger })
       ).rejects.toThrow(/without a matching \.sha256/)
     } finally {
       globalThis.fetch = originalFetch

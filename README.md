@@ -32,7 +32,7 @@ git clone https://github.com/g-cqd/apple-docs.git
 cd apple-docs
 bun install
 bun link
-apple-docs setup --tier full
+apple-docs setup
 ```
 
 This downloads a prebuilt corpus and is the best default for most people.
@@ -323,18 +323,21 @@ Useful environment variables:
 You can build your own release-style snapshot from an existing corpus:
 
 ```bash
-apple-docs snapshot build --tier lite --out dist
-apple-docs snapshot build --tier standard --tag snapshot-20260413
-apple-docs snapshot build --tier full --out dist/releases
+apple-docs snapshot build --out dist
+apple-docs snapshot build --tag snapshot-20260413
 ```
 
-Snapshot tiers:
+Every snapshot ships the full corpus:
 
-| Tier | Includes | Best for |
-| --- | --- | --- |
-| `lite` | Titles, declarations, browse, metadata | Fastest install, smallest footprint |
-| `standard` | `lite` plus full page content for `read` | Lightweight installs that still need `read` |
-| `full` | `standard` plus raw JSON and pre-rendered files on disk | Recommended default; offline-heavy use, publishing, site builds |
+- normalized documents + sections + body FTS5 + trigram FTS5 indexes
+- raw DocC JSON + rendered Markdown
+- every Apple font Apple distributes (extracted)
+- the complete pre-rendered SF Symbols matrix (every weight × scale × scope)
+
+The lite/standard tiers were retired because their consumer experience
+diverged unevenly off-macOS (lite couldn't render symbols at all, standard
+shipped a partial story for raw JSON), and the audits flagged tier-aware
+code paths as a maintenance tax with no proportional value.
 
 ## Configuration
 

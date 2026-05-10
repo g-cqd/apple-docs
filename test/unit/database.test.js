@@ -413,20 +413,18 @@ describe('DocsDatabase', () => {
     expect(db.getTier()).toBe('full')
   })
 
-  test('getTier falls back to lite when document_sections table is absent', () => {
+  test('getTier falls back to "full" when snapshot_meta is empty (G.1)', () => {
+    // Lite/standard tiers were retired; the default for any DB without
+    // snapshot_meta.snapshot_tier is now `'full'` so callers don't need
+    // to special-case the absent-metadata path.
     const tempDir = mkdtempSync(join(tmpdir(), 'apple-docs-db-tier-'))
     const dbPath = join(tempDir, 'apple-docs.db')
-    const seeded = new DocsDatabase(dbPath)
+    const fresh = new DocsDatabase(dbPath)
     try {
-      seeded.db.run('DROP TABLE document_sections')
-      seeded.close()
-
-      const reopened = new DocsDatabase(dbPath)
-      try {
-        expect(reopened.getTier()).toBe('lite')
-      } finally {
-        reopened.close()
-      }
+      fresh.db.run("DELETE FROM snapshot_meta WHERE key = 'snapshot_tier'")
+      fresh._tier = undefined
+      expect(fresh.getTier()).toBe('full')
+      fresh.close()
     } finally {
       rmSync(tempDir, { recursive: true, force: true })
     }

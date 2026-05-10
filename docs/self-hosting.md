@@ -83,11 +83,11 @@ The MCP server trusts anything that reaches `/mcp`.
 
 ## Snapshot consumer requirements
 
-`apple-docs setup` downloads a pre-built corpus snapshot. The `standard`
-and `full` tiers ship the entire pre-rendered SF Symbols matrix
-(`<dataDir>/resources/symbols/<scope>/<weight>-<scale>/<name>.svg`)
+`apple-docs setup` downloads a pre-built corpus snapshot. Every snapshot
+ships the full corpus, every Apple font, and the entire pre-rendered SF
+Symbols matrix (`<dataDir>/resources/symbols/<scope>/<weight>-<scale>/<name>.svg`)
 because the runtime cannot live-render those without the macOS SF
-Symbols system bundle.
+Symbols system bundle. The lite/standard tiers were retired in G.1.
 
 **SVG requests** (`/api/symbols/public/heart.svg?weight=bold&scale=large`):
 served straight from the pre-render — no host-side dependencies.

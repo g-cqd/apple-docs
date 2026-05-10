@@ -2,7 +2,9 @@
 /**
  * Build a snapshot archive from the current corpus. Internal helper for the
  * `Build Snapshots` GitHub Actions workflow — not part of the public CLI
- * surface. Args: --tier <lite|standard|full>, --out <dir>, --tag <name>.
+ * surface. Args: --out <dir>, --tag <name>, --allow-incomplete-symbols.
+ *
+ * Lite/standard tiers were removed in G.1; the only output shape is `full`.
  */
 
 import { join } from 'node:path'
@@ -33,12 +35,17 @@ const dataDir = process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
 const logger = createLogger('info')
 const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
 
+if (args.tier && args.tier !== 'full') {
+  console.error(`build-snapshot: --tier ${args.tier} is no longer supported (G.1).`)
+  process.exit(2)
+}
+
 try {
   const result = await snapshotBuild(
     {
-      tier: args.tier ?? 'full',
       out: args.out ?? 'dist',
       tag: args.tag,
+      allowIncompleteSymbols: args['allow-incomplete-symbols'] === true || args['allow-incomplete-symbols'] === 'true',
     },
     { db, dataDir, logger },
   )

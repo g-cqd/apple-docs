@@ -12,49 +12,29 @@ import { validateArchive } from './setup/validate-archive.js'
 const GITHUB_REPO = 'g-cqd/apple-docs'
 const USER_AGENT = 'apple-docs/2.0'
 
+// Snapshot asset filename component. Lite/standard tiers were removed
+// (G.1); the full snapshot ships every consumer asset.
+const SNAPSHOT_TIER = 'full'
+
 /**
  * Download and install a pre-built documentation snapshot.
  *
- * @param {{ tier?: string, force?: boolean, downgrade?: boolean }} opts
+ * @param {{ force?: boolean, skipResources?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function setup(opts, ctx) {
   const { db, dataDir, logger } = ctx
-  const tier = opts.tier ?? 'full'
   const force = opts.force ?? false
-  const downgrade = opts.downgrade ?? false
-
-  if (!['lite', 'standard', 'full'].includes(tier)) {
-    throw new Error(`Invalid tier "${tier}". Must be one of: lite, standard, full`)
-  }
 
   // 1. Check existing corpus
   const dbPath = join(dataDir, 'apple-docs.db')
   const stats = db.getStats()
-  const currentTier = db.getTier()
-  const tierRank = { lite: 0, standard: 1, full: 2 }
   if (stats.totalPages > 0 && !force) {
     return {
       status: 'exists',
       dataDir,
       pages: stats.totalPages,
-      currentTier,
-      hint: currentTier !== tier
-        ? `Run 'apple-docs setup --tier ${tier} --force' to upgrade from ${currentTier} to ${tier}.`
-        : undefined,
     }
-  }
-
-  if (
-    stats.totalPages > 0
-    && currentTier
-    && tierRank[tier] < tierRank[currentTier]
-    && !downgrade
-  ) {
-    throw new Error(
-      `Refusing to downgrade from ${currentTier} to ${tier} without --downgrade. ` +
-      `Re-run 'apple-docs setup --tier ${tier} --force --downgrade' if you really want to replace the current corpus.`,
-    )
   }
 
   // 2. Fetch latest release
@@ -62,17 +42,17 @@ export async function setup(opts, ctx) {
   const release = await fetchLatestRelease()
   logger.info(`Found release: ${release.tag} (${release.date})`)
 
-  // 3. Find matching asset
-  const archiveAsset = release.assets.find(a => a.name.includes(`-${tier}-`) && a.name.endsWith('.tar.gz'))
+  // 3. Find the full-tier asset (lite/standard were removed in G.1).
+  const archiveAsset = release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.tar.gz'))
   if (!archiveAsset) {
-    throw new Error(`No ${tier} snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
+    throw new Error(`No snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
   }
 
   // P1.5: checksum is mandatory. Previously we silently skipped verification
   // when the .sha256 sidecar was missing; the audits flagged that as a
   // supply-chain hole (compromised release flow could omit the sidecar
   // and still ship arbitrary bytes).
-  const checksumAsset = release.assets.find(a => a.name.includes(`-${tier}-`) && a.name.endsWith('.sha256'))
+  const checksumAsset = release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256'))
   if (!checksumAsset) {
     throw new Error(
       `Refusing to install: release ${release.tag} ships ${archiveAsset.name} without a matching .sha256 sidecar. ` +
@@ -142,9 +122,9 @@ export async function setup(opts, ctx) {
     // 6. Close current DB and extract
     db.close()
 
-    // Remove old extracted payloads before installing the new tier.
-    // This prevents stale markdown/raw-json content from surviving a
-    // downgrade (for example, standard -> lite).
+    // Remove old extracted payloads before installing the fresh
+    // snapshot. Stale markdown / raw-json / pre-rendered symbols from
+    // an older release should not leak into the new corpus.
     const installPaths = [
       dbPath,
       `${dbPath}-wal`,
@@ -152,8 +132,8 @@ export async function setup(opts, ctx) {
       join(dataDir, 'manifest.json'),
       join(dataDir, 'raw-json'),
       join(dataDir, 'markdown'),
-      // Pre-rendered SF Symbols and extracted Apple fonts ship inside the
-      // full-tier archive. Wipe them before extraction so renamed/removed
+      // Pre-rendered SF Symbols and extracted Apple fonts ship inside
+      // every snapshot. Wipe them before extraction so renamed / removed
       // symbols or replaced font files don't leave orphans behind.
       join(dataDir, 'resources', 'symbols'),
       join(dataDir, 'resources', 'fonts', 'extracted'),
@@ -175,9 +155,9 @@ export async function setup(opts, ctx) {
     // to bsdtar, which is what macOS ships; the install flow nukes the
     // target dirs before extraction so the protection it provides is moot
     // here anyway.)
-    // Snapshot tarballs run from ~20 MB (lite) to ~3 GB (full). 10 min
-    // generous deadline bounds an OS-level hang without rejecting legit
-    // big-corpus extracts on slower hosts.
+    // Snapshot tarballs are typically 1-3 GB. 10 min deadline bounds an
+    // OS-level hang without rejecting legit big-corpus extracts on
+    // slower hosts.
     const { stderr, exitCode } = await spawnWithDeadline(
       ['tar', '--no-same-owner', '--no-same-permissions', '-xzf', tmpPath, '-C', dataDir],
       { deadlineMs: 10 * 60_000 },
@@ -193,15 +173,13 @@ export async function setup(opts, ctx) {
       const schemaVersion = verifyDb.getSchemaVersion()
       const documentCount = verifyDb.db.query('SELECT COUNT(*) as c FROM documents').get().c
 
-      // 7b. Index local Apple typography + SF Symbols. The full-tier
-      // snapshot already extracted resources/symbols and
-      // resources/fonts/extracted, but the DB index still needs to point
-      // at this host's font files (system fonts vary by macOS version) and
-      // confirm the symbols framework version matches. lite/standard tiers
-      // ship without bundled resources, so this step ensures every install
-      // ends with a usable fonts/symbols state regardless of tier.
-      // Both calls are upserts, fast (~seconds), and degrade gracefully on
-      // non-macOS hosts where the SF Symbols framework isn't present.
+      // 7b. Index local Apple typography + SF Symbols. The snapshot
+      // archive already extracted resources/symbols and
+      // resources/fonts/extracted, but the DB index still needs to
+      // point at this host's font files (system fonts vary by macOS
+      // version) and confirm the symbols framework version matches.
+      // Both calls are upserts, fast (~seconds), and degrade gracefully
+      // on non-macOS hosts where the SF Symbols framework isn't present.
       if (opts.skipResources !== true) {
         try {
           await syncAppleFonts({ downloadFonts: false }, { db: verifyDb, dataDir, logger })
@@ -221,24 +199,12 @@ export async function setup(opts, ctx) {
       verifyDb.setSnapshotMeta('snapshot_tag', release.tag)
       verifyDb.setSnapshotMeta('snapshot_installed_at', new Date().toISOString())
 
-      // Only treat this as a tier transition when there was an actual populated
-      // corpus before setup ran. Empty databases report a default tier from
-      // capability probing, which would otherwise produce misleading
-      // "Upgraded from standard to <tier>" messages on fresh installs.
-      const transition = stats.totalPages > 0 && currentTier && currentTier !== tier
-        ? { from: currentTier, to: tier }
-        : null
-      if (transition) {
-        const verb = tierRank[transition.to] >= tierRank[transition.from] ? 'Upgraded' : 'Downgraded'
-        logger.info(`${verb} from ${transition.from} to ${transition.to} tier.`)
-      }
       logger.info(`Setup complete! ${documentCount} documents ready.`)
 
       return {
         status: 'ok',
         tag: release.tag,
-        tier,
-        transition,
+        tier: SNAPSHOT_TIER,
         documentCount,
         schemaVersion,
         dataDir,

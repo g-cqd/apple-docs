@@ -1,6 +1,5 @@
-import { join, } from 'node:path'
-import { existsSync, } from 'node:fs'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError } from '../lib/errors.js'
@@ -8,58 +7,42 @@ import { sha256 } from '../lib/hash.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { ensureDir, writeJSON } from '../storage/files.js'
 
-const LITE_DROP = [
-  'document_sections',
-  'documents_body_fts',
-  'documents_body_fts_config',
-  'documents_body_fts_content',
-  'documents_body_fts_data',
-  'documents_body_fts_docsize',
-  'documents_body_fts_idx',
-  'documents_trigram',
-  'documents_trigram_config',
-  'documents_trigram_content',
-  'documents_trigram_data',
-  'documents_trigram_docsize',
-  'documents_trigram_idx',
-  'pages_body_fts',
-  'pages_body_fts_config',
-  'pages_body_fts_content',
-  'pages_body_fts_data',
-  'pages_body_fts_docsize',
-  'pages_body_fts_idx',
-]
+// Operational tables are truncated rather than dropped — DocsDatabase
+// reopens them at first run and crashes if they're missing entirely.
+const OPERATIONAL_TRUNCATE = ['crawl_state', 'activity', 'update_log']
 
-const OPERATIONAL_TRUNCATE = [
-  'crawl_state',
-  'activity',
-  'update_log',
-]
+// `snapshot_tier` retained as a metadata key for forward compatibility
+// and so old consumers that still inspect it see a sane value. The
+// previous lite/standard tiers are gone — every snapshot ships the
+// complete corpus + the full SF Symbols pre-render matrix + raw JSON +
+// markdown + extracted fonts.
+const SNAPSHOT_TIER = 'full'
 
 /**
  * Build a snapshot archive from the current corpus.
  *
- * @param {{ tier?: string, out?: string, tag?: string }} opts
+ * The lite/standard tiers were removed in commit (G.1). Every snapshot
+ * now ships the same payload — the full corpus, every pre-rendered SF
+ * Symbol variant, raw JSON, markdown, and the extracted Apple fonts.
+ * The single tier rules out half-broken consumer experiences (lite
+ * snapshots couldn't live-render symbols off-macOS, standard had a
+ * partial story for raw JSON), and the audits flagged tier-aware code
+ * paths as a maintenance tax with no proportional value.
+ *
+ * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function snapshotBuild(opts, ctx) {
   const { db, dataDir, logger } = ctx
-  const tier = opts.tier ?? 'full'
   const outDir = opts.out ?? 'dist'
   const tag = opts.tag ?? `snapshot-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
   // A22: tag is interpolated into archive / checksum / manifest filenames.
   // Without a strict allowlist, a tag like `../../etc/passwd` or one
   // containing shell-significant characters would land outside `outDir`.
-  // The format we accept matches valid filename stems on every fs we
-  // ship to (including SMB/NTFS mounts via Caddy mirroring).
   if (!/^[a-z0-9._-]{1,64}$/i.test(tag)) {
     throw new Error(`Invalid --tag "${tag}": must match [a-z0-9._-]{1,64}`)
   }
   const schemaVersion = db.getSchemaVersion()
-
-  if (!['lite', 'standard', 'full'].includes(tier)) {
-    throw new Error(`Invalid tier "${tier}". Must be one of: lite, standard, full`)
-  }
 
   // 1. Validate corpus health
   const stats = db.getStats()
@@ -67,7 +50,7 @@ export async function snapshotBuild(opts, ctx) {
     throw new Error('Corpus is empty. Run `apple-docs sync` first.')
   }
 
-  logger.info(`Building ${tier} snapshot (tag: ${tag})...`)
+  logger.info(`Building snapshot (tag: ${tag})...`)
 
   // 2. Copy database via VACUUM INTO (avoids WAL issues)
   const buildDir = mkdtempSync(join(tmpdir(), 'apple-docs-snapshot-'))
@@ -76,26 +59,12 @@ export async function snapshotBuild(opts, ctx) {
   try {
     db.db.run(`VACUUM INTO '${copyPath.replace(/'/g, "''")}'`)
 
-    // 3. Strip per tier
+    // 3. Truncate operational tables (keep schema so DocsDatabase can open)
     const copyDb = new Database(copyPath)
     let documentCount = 0
     try {
-      const tablesToDrop = tier === 'lite' ? [...LITE_DROP] : []
-
-      for (const table of tablesToDrop) {
-        copyDb.run(`DROP TABLE IF EXISTS ${table}`)
-      }
-
-      // Truncate operational tables (keep schema so DocsDatabase can open)
       for (const table of OPERATIONAL_TRUNCATE) {
         copyDb.run(`DELETE FROM ${table}`)
-      }
-
-      // Drop triggers that reference removed tables
-      if (tier === 'lite') {
-        copyDb.run('DROP TRIGGER IF EXISTS documents_ai')
-        copyDb.run('DROP TRIGGER IF EXISTS documents_ad')
-        copyDb.run('DROP TRIGGER IF EXISTS documents_au')
       }
 
       // 4. Write snapshot_meta
@@ -103,7 +72,7 @@ export async function snapshotBuild(opts, ctx) {
       const pageCount = copyDb.query("SELECT COUNT(*) as c FROM pages WHERE status = 'active'").get().c
 
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_version', tag])
-      copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_tier', tier])
+      copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_tier', SNAPSHOT_TIER])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_created_at', new Date().toISOString()])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_schema_version', String(schemaVersion)])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_document_count', String(documentCount)])
@@ -123,7 +92,7 @@ export async function snapshotBuild(opts, ctx) {
     const manifest = {
       version: tag,
       schemaVersion,
-      tier,
+      tier: SNAPSHOT_TIER,
       createdAt: new Date().toISOString(),
       documentCount,
       dbChecksum,
@@ -132,65 +101,46 @@ export async function snapshotBuild(opts, ctx) {
 
     await writeJSON(join(buildDir, 'manifest.json'), manifest)
 
-    // 7. Create tar.gz archive
+    // 7. Create tar.gz archive — DB + manifest + the full asset set.
     ensureDir(outDir)
-    const archiveName = `apple-docs-${tier}-${tag}.tar.gz`
+    const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.tar.gz`
     const archivePath = join(outDir, archiveName)
 
     const tarArgs = ['-czf', archivePath, '-C', buildDir, 'apple-docs.db', 'manifest.json']
 
-    // SF Symbol pre-renders ride along with `standard` AND `full` tiers.
-    // Snapshot consumers without the macOS SF Symbols system bundle
-    // (Linux hosts, Bun on Windows, anyone without a recent Xcode CLT)
-    // cannot live-render symbols from the host bundle, so the pre-
-    // rendered SVG matrix is the only way they can serve `/api/symbols/
-    // …` URIs. Lite tier stays bare — it is the CLI-only / search-only
-    // tier and pays no runtime asset cost.
+    // SF Symbol pre-renders. Required for snapshot consumers without
+    // the macOS SF Symbols system bundle — the runtime cannot live-
+    // render off-macOS, so the matrix has to ride along. F.3b: refuse
+    // to ship a partial matrix without --allow-incomplete-symbols.
     const symbolsDir = join(dataDir, 'resources', 'symbols')
-    if (tier !== 'lite' && existsSync(symbolsDir)) {
-      // F.3b: refuse to ship a snapshot whose pre-render matrix is
-      // partial. A consumer downloading the archive trusts that every
-      // (name × weight × scale) combination resolves; a missing variant
-      // is a 404 on a deterministic URL the snapshot is meant to make
-      // work. `--allow-incomplete-symbols` overrides for deliberate
-      // partial builds (e.g., a contributor on a host that can't run
-      // the live renderer).
+    if (existsSync(symbolsDir)) {
       const validation = validateSymbolMatrixComplete(ctx)
       if (!validation.complete) {
         if (!opts.allowIncompleteSymbols) {
           const head = validation.missing.slice(0, 10).join(', ')
           throw new SnapshotIncompleteError(
-            `Snapshot ${tier}: ${validation.missingCount} pre-rendered SF Symbol variants missing (e.g., ${head}). ` +
+            `Snapshot: ${validation.missingCount} pre-rendered SF Symbol variants missing (e.g., ${head}). ` +
             'Run `apple-docs sync` to bake the missing renders, or pass --allow-incomplete-symbols to override.',
             { missingCount: validation.missingCount, missing: validation.missing },
           )
         }
-        logger.warn(`Snapshot ${tier}: shipping with ${validation.missingCount} missing pre-renders (--allow-incomplete-symbols set)`)
+        logger.warn(`Snapshot: shipping with ${validation.missingCount} missing pre-renders (--allow-incomplete-symbols set)`)
       }
       tarArgs.push('-C', dataDir, 'resources/symbols')
     }
-    // Full tier additionally ships raw-json + markdown + extracted fonts
-    // so a contributor can drive the corpus end-to-end without re-syncing
-    // from Apple's APIs.
-    if (tier === 'full') {
-      const rawJsonDir = join(dataDir, 'raw-json')
-      const markdownDir = join(dataDir, 'markdown')
-      const fontsExtractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
-      if (existsSync(rawJsonDir)) {
-        tarArgs.push('-C', dataDir, 'raw-json')
-      }
-      if (existsSync(markdownDir)) {
-        tarArgs.push('-C', dataDir, 'markdown')
-      }
-      if (existsSync(fontsExtractedDir)) {
-        tarArgs.push('-C', dataDir, 'resources/fonts/extracted')
-      }
-    }
 
-    const proc = Bun.spawn(['tar', ...tarArgs], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
+    // Raw DocC JSON, rendered Markdown, extracted Apple fonts. These
+    // make the snapshot a contributor-ready handoff: a fresh clone +
+    // setup gives you everything needed to rebuild without re-syncing
+    // from Apple's APIs.
+    const rawJsonDir = join(dataDir, 'raw-json')
+    const markdownDir = join(dataDir, 'markdown')
+    const fontsExtractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
+    if (existsSync(rawJsonDir)) tarArgs.push('-C', dataDir, 'raw-json')
+    if (existsSync(markdownDir)) tarArgs.push('-C', dataDir, 'markdown')
+    if (existsSync(fontsExtractedDir)) tarArgs.push('-C', dataDir, 'resources/fonts/extracted')
+
+    const proc = Bun.spawn(['tar', ...tarArgs], { stdout: 'pipe', stderr: 'pipe' })
     const exitCode = await proc.exited
     if (exitCode !== 0) {
       const stderr = await new Response(proc.stderr).text()
@@ -204,16 +154,16 @@ export async function snapshotBuild(opts, ctx) {
     manifest.archiveChecksum = archiveChecksum
 
     // 8. Write checksum file (archive checksum for download verification)
-    const checksumName = `apple-docs-${tier}-${tag}.sha256`
+    const checksumName = `apple-docs-${SNAPSHOT_TIER}-${tag}.sha256`
     await Bun.write(join(outDir, checksumName), `${archiveChecksum}  ${archiveName}\n`)
 
     // Also write manifest to output dir
-    await writeJSON(join(outDir, `apple-docs-${tier}-${tag}.manifest.json`), manifest)
+    await writeJSON(join(outDir, `apple-docs-${SNAPSHOT_TIER}-${tag}.manifest.json`), manifest)
 
     logger.info(`Snapshot built: ${archivePath} (${(archiveSize / 1e6).toFixed(1)} MB)`)
 
     return {
-      tier,
+      tier: SNAPSHOT_TIER,
       tag,
       documentCount: manifest.documentCount,
       dbSize,
@@ -222,7 +172,7 @@ export async function snapshotBuild(opts, ctx) {
       archivePath,
       archiveSize,
       checksumPath: join(outDir, checksumName),
-      manifestPath: join(outDir, `apple-docs-${tier}-${tag}.manifest.json`),
+      manifestPath: join(outDir, `apple-docs-${SNAPSHOT_TIER}-${tag}.manifest.json`),
     }
   } finally {
     // Cleanup build directory

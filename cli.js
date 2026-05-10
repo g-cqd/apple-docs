@@ -257,11 +257,20 @@ try {
     }
 
     case 'setup': {
+      // Lite/standard tiers were removed in G.1; the only snapshot
+      // shape is `full`. Reject the obsolete flags loudly so legacy
+      // automation gets a clear error pointing to the simplification.
+      if (flags.tier && flags.tier !== 'full') {
+        console.error(`apple-docs setup: --tier ${flags.tier} is no longer supported (G.1). Every snapshot now ships the full corpus; drop the --tier flag.`)
+        process.exit(2)
+      }
+      if (flags.downgrade) {
+        console.error('apple-docs setup: --downgrade is no longer meaningful — there is only one snapshot shape (G.1).')
+        process.exit(2)
+      }
       const { setup: setupCmd } = await import('./src/commands/setup.js')
       result = await setupCmd({
-        tier: flags.tier ?? 'full',
         force: !!flags.force,
-        downgrade: !!flags.downgrade,
         skipResources: !!flags['skip-resources'],
       }, ctx)
       formatter = formatSetup

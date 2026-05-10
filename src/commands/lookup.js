@@ -128,7 +128,10 @@ export async function lookup(opts, ctx) {
     return { found: true, metadata, content: null, sections, note: `Section not found: ${sectionQuery}. Available sections: ${available}` }
   }
 
-  // Tier-aware messaging when content is unavailable
+  // Legacy lite-tier snapshots dropped document_sections entirely; for
+  // consumers still on one of those, surface a clear upgrade hint
+  // instead of silently empty content. The current snapshot has only
+  // one tier (G.1), so this branch only fires on stale installs.
   let note = undefined
   let tierLimitation = undefined
   if (content) {
@@ -136,11 +139,11 @@ export async function lookup(opts, ctx) {
   } else {
     const tier = db.getTier()
     if (tier === 'lite') {
-      note = 'Content body unavailable on lite tier. Metadata and declaration shown.'
+      note = 'Content body unavailable on a legacy lite-tier snapshot. Metadata and declaration shown.'
       tierLimitation = {
         tier: 'lite',
-        reason: 'The lite snapshot includes metadata only — document sections and raw content are not included.',
-        upgrade: "Run 'apple-docs setup --tier full --force' to upgrade and get full document content.",
+        reason: 'The legacy lite snapshot includes metadata only — document sections and raw content were not included.',
+        upgrade: "Run 'apple-docs setup --force' to install the current snapshot, which carries full document content.",
       }
     } else {
       note = 'No content available. Run apple-docs sync first.'

@@ -225,9 +225,8 @@ Download a pre-built documentation snapshot for instant access.
 No crawling required — ready in under 60 seconds.
 
 Options:
-  --tier <name>    Snapshot tier: lite, standard, full (default: full)
   --force          Overwrite existing corpus
-  --downgrade      Allow replacing a higher tier with a lower tier
+  --skip-resources Skip the post-extract font + symbols re-index step
   --use-git-auth   Reuse a GitHub token from the local gh CLI or git
                    credential helper to authenticate release downloads.
   --skip-git-auth  Skip local-credential detection for this run.
@@ -315,18 +314,25 @@ Subcommands:
   build                Materialize the corpus to a tarball + .sha256 + manifest
 
 Build options:
-  --tier <name>        Snapshot tier: lite, standard, full (default: full)
-  --out <dir>          Output directory (default: dist)
-  --tag <tag>          Archive tag (default: snapshot-YYYYMMDD)
+  --out <dir>                  Output directory (default: dist)
+  --tag <tag>                  Archive tag (default: snapshot-YYYYMMDD)
+  --allow-incomplete-symbols   Skip the SF Symbols matrix-completeness gate
+                               (only when building on a host that can't run
+                               the live renderer; consumers will see 404s
+                               for the missing variants).
 
-The build runs VACUUM INTO on the live database, drops per-tier tables, writes
-the tarball under <out>/<tag>/, and emits both a SHA-256 sidecar and a JSON
-manifest. Used by the release pipeline (scripts/build-snapshot.js) and the
-operator who wants a portable copy.
+The build runs VACUUM INTO on the live database, writes the tarball under
+<out>/<tag>/, and emits both a SHA-256 sidecar and a JSON manifest. Used
+by the release pipeline (scripts/build-snapshot.js) and the operator
+who wants a portable copy.
+
+Lite/standard tiers were retired in G.1; every snapshot ships the full
+corpus (raw-json + markdown + extracted fonts + the complete pre-
+rendered SF Symbols matrix).
 
 Examples:
-  apple-docs snapshot build --tier full --out dist
-  apple-docs snapshot build --tier lite --tag snapshot-2026-05-09
+  apple-docs snapshot build --out dist
+  apple-docs snapshot build --tag snapshot-2026-05-09
 `.trim(),
 
   consolidate: `
@@ -351,9 +357,8 @@ Resumable: re-run after interruption to continue from the last checkpoint.
   index: `
 Usage: apple-docs index <subcommand> [target] [options]
 
-Rebuild a search index from existing data. Useful after restoring from a
-lower-tier snapshot (which ships without optional indexes) or to recover
-from a corrupted FTS5 / trigram table.
+Rebuild a search index from existing data. Useful after recovering from
+a corrupted FTS5 / trigram table.
 
 Subcommands:
   rebuild body         Rebuild the full-body FTS5 index from documents.

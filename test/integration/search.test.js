@@ -142,7 +142,9 @@ describe('Integration: Lookup with Fallback', () => {
     expect(result.note).toBe('No content available. Run apple-docs sync first.')
   })
 
-  test('lookup returns tier limitation metadata on lite tier', async () => {
+  test('lookup surfaces a legacy-lite-tier upgrade hint when content is missing (G.1 fallback)', async () => {
+    // Lite tier was retired (G.1) but the runtime still recognizes the
+    // metadata value on stale installs and emits an upgrade hint.
     db.setSnapshotMeta('snapshot_tier', 'lite')
 
     const result = await lookup({ path: 'documentation/testfw/mybutton' }, ctx)
@@ -150,6 +152,7 @@ describe('Integration: Lookup with Fallback', () => {
     expect(result.content).toBeNull()
     expect(result.tierLimitation).toBeDefined()
     expect(result.tierLimitation.tier).toBe('lite')
-    expect(result.note).toContain('Content body unavailable on lite tier')
+    expect(result.tierLimitation.upgrade).toContain('apple-docs setup --force')
+    expect(result.note).toContain('legacy lite-tier snapshot')
   })
 })

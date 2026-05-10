@@ -86,8 +86,13 @@ export class DocsDatabase {
   }
 
   /**
-   * Return the snapshot tier (lite/standard/full) or null for non-snapshot databases.
-   * Reads from snapshot_meta, falls back to capability probing.
+   * Return the snapshot tier label, or null for non-snapshot databases.
+   * Lite/standard tiers were removed (G.1); the canonical value is
+   * 'full'. Older snapshots whose snapshot_meta still contains 'lite'
+   * or 'standard' will return that legacy value verbatim — runtime
+   * capability checks (`hasTable('document_sections')`,
+   * `hasTrigramTable`, etc.) decide what features are actually
+   * available, the label is only metadata.
    * @returns {string|null}
    */
   getTier() {
@@ -96,14 +101,7 @@ export class DocsDatabase {
       const row = this.db.query("SELECT value FROM snapshot_meta WHERE key='snapshot_tier'").get()
       if (row) { this._tier = row.value; return this._tier }
     } catch {}
-    // Capability probing fallback: lite tier drops document_sections entirely
-    if (this.hasTable('document_sections')) {
-      this._tier = 'standard'
-    } else if (this.hasTable('documents')) {
-      this._tier = 'lite'
-    } else {
-      this._tier = null
-    }
+    this._tier = this.hasTable('documents') ? 'full' : null
     return this._tier
   }
 

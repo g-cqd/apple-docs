@@ -51,10 +51,10 @@ afterEach(() => {
 })
 
 describe('snapshotBuild', () => {
-  test('produces archive, checksum, and manifest for standard tier', async () => {
-    const result = await snapshotBuild({ tier: 'standard', out: outDir, tag: 'test-v1' }, { db, dataDir, logger })
+  test('produces archive, checksum, and manifest', async () => {
+    const result = await snapshotBuild({ out: outDir, tag: 'test-v1' }, { db, dataDir, logger })
 
-    expect(result.tier).toBe('standard')
+    expect(result.tier).toBe('full')
     expect(result.tag).toBe('test-v1')
     expect(result.documentCount).toBe(1)
     expect(result.dbSize).toBeGreaterThan(0)
@@ -73,39 +73,8 @@ describe('snapshotBuild', () => {
     expect(checksumContent).toContain(result.archiveChecksum)
   })
 
-  test('lite tier drops body/trigram/sections tables', async () => {
-    const result = await snapshotBuild({ tier: 'lite', out: outDir, tag: 'test-lite' }, { db, dataDir, logger })
-
-    // Extract and verify the DB
-    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-'))
-    try {
-      const proc = Bun.spawn(['tar', '-xzf', result.archivePath, '-C', extractDir])
-      await proc.exited
-
-      const extractedDb = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
-      try {
-        // document_sections should be gone in lite tier
-        const tables = extractedDb.query("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
-        expect(tables).not.toContain('document_sections')
-
-        // Operational tables should still exist (schema preserved) but be empty
-        expect(tables).toContain('crawl_state')
-        const crawlCount = extractedDb.query('SELECT COUNT(*) as c FROM crawl_state').get().c
-        expect(crawlCount).toBe(0)
-
-        // But documents should still exist
-        expect(tables).toContain('documents')
-        expect(tables).toContain('pages')
-      } finally {
-        extractedDb.close()
-      }
-    } finally {
-      rmSync(extractDir, { recursive: true, force: true })
-    }
-  })
-
   test('writes snapshot_meta into copied DB', async () => {
-    const result = await snapshotBuild({ tier: 'standard', out: outDir, tag: 'test-meta' }, { db, dataDir, logger })
+    const result = await snapshotBuild({ out: outDir, tag: 'test-meta' }, { db, dataDir, logger })
 
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-'))
     try {
@@ -115,7 +84,7 @@ describe('snapshotBuild', () => {
       const extractedDb = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
       try {
         const tier = extractedDb.query('SELECT value FROM snapshot_meta WHERE key = ?').get('snapshot_tier')
-        expect(tier.value).toBe('standard')
+        expect(tier.value).toBe('full')
 
         const docCount = extractedDb.query('SELECT value FROM snapshot_meta WHERE key = ?').get('snapshot_document_count')
         expect(docCount.value).toBe('1')
@@ -136,7 +105,7 @@ describe('snapshotBuild', () => {
 
     try {
       await expect(
-        snapshotBuild({ tier: 'standard', out: outDir }, { db: emptyDb, dataDir: emptyDir, logger })
+        snapshotBuild({ out: outDir }, { db: emptyDb, dataDir: emptyDir, logger })
       ).rejects.toThrow('Corpus is empty')
     } finally {
       emptyDb.close()
@@ -144,14 +113,8 @@ describe('snapshotBuild', () => {
     }
   })
 
-  test('rejects invalid tier', async () => {
-    await expect(
-      snapshotBuild({ tier: 'mega', out: outDir }, { db, dataDir, logger })
-    ).rejects.toThrow('Invalid tier')
-  })
-
-  test('standard tier drops operational tables but keeps sections', async () => {
-    const result = await snapshotBuild({ tier: 'standard', out: outDir, tag: 'test-std' }, { db, dataDir, logger })
+  test('keeps every table; only operational tables are truncated', async () => {
+    const result = await snapshotBuild({ out: outDir, tag: 'test-tables' }, { db, dataDir, logger })
 
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-'))
     try {
@@ -161,8 +124,11 @@ describe('snapshotBuild', () => {
       const extractedDb = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
       try {
         const tables = extractedDb.query("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
+        // Body / trigram / sections all preserved (G.1: lite-tier drops gone).
         expect(tables).toContain('document_sections')
         expect(tables).toContain('documents')
+        expect(tables).toContain('documents_trigram')
+        expect(tables).toContain('documents_body_fts')
 
         // Operational tables exist but are empty
         expect(tables).toContain('crawl_state')
@@ -176,7 +142,7 @@ describe('snapshotBuild', () => {
     }
   })
 
-  test('standard tier ships pre-rendered SF Symbols (F.3a)', async () => {
+  test('ships pre-rendered SF Symbols (F.3a)', async () => {
     // Stage a couple of pre-rendered SVGs so the snapshot tar has
     // something to pick up.
     const symBase = join(dataDir, 'resources', 'symbols')
@@ -185,7 +151,7 @@ describe('snapshotBuild', () => {
     mkdirSync(join(symBase, 'private'), { recursive: true })
     writeFileSync(join(symBase, 'private', 'pencil.and.sparkles.svg'), '<svg/>')
 
-    const result = await snapshotBuild({ tier: 'standard', out: outDir, tag: 'test-sym' }, { db, dataDir, logger })
+    const result = await snapshotBuild({ out: outDir, tag: 'test-sym' }, { db, dataDir, logger })
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-sym-'))
     try {
       const proc = Bun.spawn(['tar', '-xzf', result.archivePath, '-C', extractDir])
@@ -197,23 +163,7 @@ describe('snapshotBuild', () => {
     }
   })
 
-  test('lite tier excludes pre-rendered symbols (search-only consumers)', async () => {
-    const symBase = join(dataDir, 'resources', 'symbols')
-    mkdirSync(join(symBase, 'public', 'bold-large'), { recursive: true })
-    writeFileSync(join(symBase, 'public', 'bold-large', 'heart.svg'), '<svg/>')
-
-    const result = await snapshotBuild({ tier: 'lite', out: outDir, tag: 'test-lite-sym' }, { db, dataDir, logger })
-    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-lite-sym-'))
-    try {
-      const proc = Bun.spawn(['tar', '-xzf', result.archivePath, '-C', extractDir])
-      await proc.exited
-      expect(existsSync(join(extractDir, 'resources', 'symbols'))).toBe(false)
-    } finally {
-      rmSync(extractDir, { recursive: true, force: true })
-    }
-  })
-
-  test('refuses standard build when symbol matrix is incomplete (F.3b)', async () => {
+  test('refuses build when symbol matrix is incomplete (F.3b)', async () => {
     // Catalog the public symbol; do NOT stage any of its pre-renders.
     db.upsertSfSymbol({
       scope: 'public',
@@ -227,7 +177,7 @@ describe('snapshotBuild', () => {
     mkdirSync(join(dataDir, 'resources', 'symbols', 'public'), { recursive: true })
 
     await expect(
-      snapshotBuild({ tier: 'standard', out: outDir, tag: 'test-incomplete' }, { db, dataDir, logger }),
+      snapshotBuild({ out: outDir, tag: 'test-incomplete' }, { db, dataDir, logger }),
     ).rejects.toThrow(/SnapshotIncompleteError|missing/i)
   })
 
@@ -242,7 +192,7 @@ describe('snapshotBuild', () => {
     mkdirSync(join(dataDir, 'resources', 'symbols', 'public'), { recursive: true })
 
     const result = await snapshotBuild(
-      { tier: 'standard', out: outDir, tag: 'test-allow-incomp', allowIncompleteSymbols: true },
+      { out: outDir, tag: 'test-allow-incomp', allowIncompleteSymbols: true },
       { db, dataDir, logger: { ...logger, warn: () => {} } },
     )
     expect(existsSync(result.archivePath)).toBe(true)

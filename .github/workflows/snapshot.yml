@@ -4,11 +4,6 @@ on:
   schedule:
     - cron: '0 6 * * 0' # Sundays at 06:00 UTC
   workflow_dispatch:
-    inputs:
-      tiers:
-        description: 'Tiers to build (comma-separated or "all")'
-        default: 'all'
-        type: string
 
 concurrency:
   group: snapshot
@@ -19,12 +14,12 @@ permissions:
 
 jobs:
   build-snapshot:
-    # macOS 26 gives us the latest CoreGlyphs / CoreGlyphsPrivate bundles so
-    # the full-tier snapshot ships every SF Symbol Apple has shipped to date.
+    # macOS 26 gives us the latest CoreGlyphs / CoreGlyphsPrivate bundles
+    # so the snapshot ships every SF Symbol Apple has shipped to date.
     # The Swift toolchain on macOS 26 also exposes `vectorGlyph.drawInContext:`
     # which our private-API SVG renderer depends on (see src/resources/
-    # symbol-pdf-to-svg.js). Older runners would silently produce a smaller
-    # symbol catalog.
+    # symbol-pdf-to-svg.js). Older runners would silently produce a
+    # smaller symbol catalog.
     runs-on: macos-26
     timeout-minutes: 240
     permissions:
@@ -57,27 +52,11 @@ jobs:
         id: tag
         run: echo "tag=snapshot-$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve tiers
-        id: tiers
-        run: |
-          TIERS="${{ inputs.tiers || 'all' }}"
-          {
-            echo "build_lite=$( [[ "$TIERS" == "all" || "$TIERS" == *lite* ]] && echo true || echo false )"
-            echo "build_standard=$( [[ "$TIERS" == "all" || "$TIERS" == *standard* ]] && echo true || echo false )"
-            echo "build_full=$( [[ "$TIERS" == "all" || "$TIERS" == *full* ]] && echo true || echo false )"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Build lite snapshot
-        if: steps.tiers.outputs.build_lite == 'true'
-        run: bun run scripts/build-snapshot.js --tier lite --out dist/ --tag ${{ steps.tag.outputs.tag }}
-
-      - name: Build standard snapshot
-        if: steps.tiers.outputs.build_standard == 'true'
-        run: bun run scripts/build-snapshot.js --tier standard --out dist/ --tag ${{ steps.tag.outputs.tag }}
-
-      - name: Build full snapshot
-        if: steps.tiers.outputs.build_full == 'true'
-        run: bun run scripts/build-snapshot.js --tier full --out dist/ --tag ${{ steps.tag.outputs.tag }}
+      # G.1: lite/standard tiers were retired. Every snapshot ships the
+      # full corpus (raw JSON + markdown + every Apple font + every pre-
+      # rendered SF Symbol SVG).
+      - name: Build snapshot
+        run: bun run scripts/build-snapshot.js --out dist/ --tag ${{ steps.tag.outputs.tag }}
 
       - name: Corpus stats
         run: bun run cli.js status --json > dist/status.json
@@ -97,14 +76,12 @@ jobs:
           body: |
             ${{ github.event_name == 'schedule' && 'Scheduled snapshot build.' || 'Manual snapshot build.' }}
 
-            **Tiers:**
-            - `lite` — Metadata + FTS5 title/abstract index
-            - `standard` — + trigram index + body FTS5 + normalized sections
-            - `full` — Standard + raw JSON + Markdown + every Apple font + every pre-rendered SF Symbol SVG
+            Single-tier snapshot — ships the full corpus, every Apple
+            font, and the complete pre-rendered SF Symbols matrix.
 
             **Install:**
             ```bash
-            apple-docs setup --tier full
+            apple-docs setup
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
