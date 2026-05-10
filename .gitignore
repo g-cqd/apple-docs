@@ -14,6 +14,9 @@ coverage/
 reports/
 test/.tmp-*
 
+# Bun perf profiles (CPU + heap snapshots from `perf:cpu` / `perf:heap`)
+reports/profiles/
+
 # Mutation testing
 .stryker-tmp/
 stryker.log
