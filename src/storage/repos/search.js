@@ -146,6 +146,21 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         WHERE documents_trigram MATCH $trigram
       `)
     : null
+  // P3.2: SQL-backed fuzzy candidate pre-filter. Replaces the
+  // in-memory _trigramCache that built a ~7M-entry Map<trigram, [docs]>
+  // per reader-worker (multi-hundred-MB warm RSS). The OR-of-trigrams
+  // MATCH query lets FTS5 rank titles by trigram overlap via bm25;
+  // Levenshtein runs main-thread on the resulting top-N candidates.
+  const fuzzyCandidatesStmt = hasTrigramTable
+    ? db.query(`
+        SELECT d.id, d.title, bm25(documents_trigram) as score
+        FROM documents_trigram
+        JOIN documents d ON documents_trigram.rowid = d.id
+        WHERE documents_trigram MATCH $query
+        ORDER BY score
+        LIMIT $limit
+      `)
+    : null
   const allTitlesStmt = db.query('SELECT id, title FROM documents WHERE title IS NOT NULL')
   const searchByTitleStmt = db.query(`
     SELECT d.*, COALESCE(r.slug, d.framework) as root_slug, COALESCE(r.display_name, d.framework) as framework
@@ -240,6 +255,20 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         default: [],
         log: 'warn-once',
         label: 'search.trigramCandidates',
+      })
+    },
+    /**
+     * Fuzzy candidate pre-filter (P3.2). `orQuery` is an FTS5 OR-of-
+     * trigrams expression — e.g. `"vie" OR "iew"`. bm25 ordering puts
+     * the highest-trigram-overlap titles first; the caller runs
+     * Levenshtein on the result to verify edit distance.
+     */
+    fuzzyTrigramCandidates(orQuery, limit = 500) {
+      if (!fuzzyCandidatesStmt) return []
+      return safeCall(() => fuzzyCandidatesStmt.all({ $query: orQuery, $limit: limit }), {
+        default: [],
+        log: 'warn-once',
+        label: 'search.fuzzyCandidates',
       })
     },
     getAllTitles() {

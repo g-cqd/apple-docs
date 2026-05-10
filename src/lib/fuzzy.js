@@ -1,5 +1,3 @@
-import { statSync } from 'node:fs'
-
 /**
  * Levenshtein edit distance with early exit.
  * Returns maxDist + 1 if distance exceeds maxDist (avoids full computation).
@@ -40,139 +38,69 @@ function trigrams(s) {
 }
 
 /**
- * Module-level trigram cache: lazily built on first fuzzy search per db
- * instance, invalidated on corpus change.
- *
- * P2.9: previously the cache was held forever once built — long-lived MCP
- * HTTP processes would never see new docs from a parallel `apple-docs sync`
- * because nothing rebuilt the in-memory map. The fix stamps the cache with
- * a `(schemaVersion, dbMtime)` snapshot on build; each query re-reads the
- * stamp (capped at STAMP_TTL_MS to avoid syscalling on every keystroke)
- * and rebuilds if it changed.
- *
- * Memory pressure isn't the priority here (64 GB RAM in production) —
- * staleness is. Keeping the in-memory Map is the right tradeoff vs.
- * per-query SQL.
- *
- * @type {Map<string, Array<{ id: number, title: string }>> | null}
+ * Build an FTS5 OR-of-trigrams MATCH expression. Each trigram is
+ * double-quoted to disable FTS5's special characters (`-`, `:`, etc.)
+ * and joined with explicit OR. Empty input → null (caller should skip
+ * the SQL entirely).
  */
-let _trigramCache = null
-/** @type {object | null} */
-let _trigramCacheDb = null
-/** @type {string | null} */
-let _trigramCacheStamp = null
-/** @type {number} */
-let _trigramStampReadAt = 0
-
-const STAMP_TTL_MS = 5_000
-
-function readDbMtime(db) {
-  try {
-    const path = db?.dbPath
-    if (!path || path === ':memory:') return 0
-    return Math.floor(statSync(path).mtimeMs)
-  } catch {
-    return 0
-  }
-}
-
-function readSchemaVersion(db) {
-  try { return db?.getSchemaVersion?.() ?? 0 } catch { return 0 }
-}
-
-function corpusStamp(db) {
-  return `${readSchemaVersion(db)}:${readDbMtime(db)}`
+function buildTrigramOrQuery(triSet) {
+  if (triSet.size === 0) return null
+  const parts = []
+  for (const tri of triSet) parts.push(`"${tri.replace(/"/g, '""')}"`)
+  return parts.join(' OR ')
 }
 
 /**
- * Build the trigram cache from the database's trigram index.
- * Groups all trigram candidates by trigram string for O(1) lookup.
+ * P3.2: no-op kept for test compatibility. The pre-P3.2
+ * implementation built a process-local Map<trigram, [docs]> and this
+ * helper let fixtures drop it between cases. The SQL-backed path
+ * holds no module-level state; the export remains so the test
+ * harness import doesn't break.
  */
-function buildTrigramCache(db) {
-  _trigramCache = new Map()
-  _trigramCacheDb = db
-  _trigramCacheStamp = corpusStamp(db)
-  _trigramStampReadAt = Date.now()
-  // Get all titles from the database and build trigrams locally
-  const allTitles = db.getAllTitlesForFuzzy()
-  for (const row of allTitles) {
-    const titleTrigrams = trigrams(row.title)
-    for (const tri of titleTrigrams) {
-      let bucket = _trigramCache.get(tri)
-      if (!bucket) {
-        bucket = []
-        _trigramCache.set(tri, bucket)
-      }
-      bucket.push({ id: row.id, title: row.title })
-    }
-  }
-}
-
-/** Test-only hook: drop the cache so fixtures can rebuild deterministically. */
-export function _resetTrigramCache() {
-  _trigramCache = null
-  _trigramCacheDb = null
-  _trigramCacheStamp = null
-  _trigramStampReadAt = 0
-}
+export function _resetTrigramCache() { /* no-op since P3.2 */ }
 
 /**
- * Find fuzzy title matches using trigram pre-filter + Levenshtein.
- * Caches trigram sets on first call for fast subsequent lookups.
- * @param {string} query - The user's search query
+ * Find fuzzy title matches using a SQL-backed trigram pre-filter
+ * plus a JS Levenshtein post-filter (P3.2).
+ *
+ * Pre-P3.2 this kept a process-local `Map<trigram, [{id, title}]>`
+ * built from every title (multi-hundred-MB warm RSS per reader
+ * worker, stale-on-write hazard). The SQL path reads the live
+ * `documents_trigram` FTS5 index per call: cheap (~ms), always
+ * fresh, no warm-up cost.
+ *
+ * @param {string} query
  * @param {import('../storage/database.js').DocsDatabase} db
- * @param {{ framework?: string, kind?: string, limit?: number, maxDist?: number, excludeIds?: Set<string> }} opts
+ * @param {{ framework?: string, kind?: string, limit?: number, maxDist?: number, excludeIds?: Set<string|number> }} opts
  * @returns {Array<{ id: number, title: string, distance: number }>}
  */
 export function fuzzyMatchTitles(query, db, { framework: _framework, kind: _kind, limit = 100, maxDist = 2, excludeIds = null } = {}) {
   const queryTrigrams = trigrams(query)
   if (queryTrigrams.size < 2) return []
+  const orQuery = buildTrigramOrQuery(queryTrigrams)
+  if (!orQuery) return []
 
-  // Lazy-init: build trigram cache on first call, or rebuild if db
-  // instance changed OR the corpus stamp drifted (P2.9). The stamp re-read
-  // is rate-limited to STAMP_TTL_MS so high-RPS callers don't pay a
-  // statSync per query.
-  const dbChanged = _trigramCacheDb !== db
-  let stampDrifted = false
-  if (!dbChanged && _trigramCache) {
-    const now = Date.now()
-    if (now - _trigramStampReadAt >= STAMP_TTL_MS) {
-      const currentStamp = corpusStamp(db)
-      _trigramStampReadAt = now
-      stampDrifted = currentStamp !== _trigramCacheStamp
-      _trigramCacheStamp = currentStamp
-    }
-  }
-  if (!_trigramCache || dbChanged || stampDrifted) {
-    buildTrigramCache(db)
-  }
+  // Over-fetch on the SQL side so we have room for the Levenshtein
+  // post-filter to discard non-matches. 500 is generous; bm25
+  // ordering puts the highest-trigram-overlap titles first so the
+  // tail beyond N is unlikely to contain real matches.
+  const sqlLimit = Math.max(limit * 5, 100)
+  const candidates = db.fuzzyTrigramCandidates?.(orQuery, sqlLimit) ?? []
 
-  // Collect candidates from cached trigrams: titles sharing any trigram with query
-  const hits = new Map() // id -> { title, count }
-  for (const tri of queryTrigrams) {
-    const bucket = _trigramCache.get(tri)
-    if (!bucket) continue
-    for (const row of bucket) {
-      if (excludeIds && excludeIds.has(row.id)) continue
-      const existing = hits.get(row.id)
-      if (existing) {
-        existing.count++
-      } else {
-        hits.set(row.id, { title: row.title, count: 1 })
-      }
-    }
-  }
+  // Fallback path for hosts without the trigram FTS5 table (in-memory
+  // tests, schema < v6). Scan every title — slow on a real corpus,
+  // negligible on the small fixtures that hit this branch.
+  const useFallback = candidates.length === 0 && typeof db.fuzzyTrigramCandidates !== 'function'
+  const rows = useFallback ? (db.getAllTitlesForFuzzy?.() ?? []) : candidates
 
-  // Require >= 40% trigram overlap to be a candidate
-  const minHits = Math.max(1, Math.floor(queryTrigrams.size * 0.4))
   const queryLower = query.toLowerCase()
-
   const matches = []
-  for (const [id, { title, count }] of hits) {
-    if (count < minHits) continue
-    const distance = levenshtein(queryLower, title.toLowerCase(), maxDist)
+  for (const row of rows) {
+    if (!row?.title) continue
+    if (excludeIds && excludeIds.has(row.id)) continue
+    const distance = levenshtein(queryLower, row.title.toLowerCase(), maxDist)
     if (distance <= maxDist) {
-      matches.push({ id, title, distance })
+      matches.push({ id: row.id, title: row.title, distance })
     }
   }
 

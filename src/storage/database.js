@@ -231,6 +231,7 @@ export class DocsDatabase {
   insertBody(documentId, body) { this.search.insertBody(documentId, body) }
   clearBodyIndex() { this.search.clearBodyIndex() }
   getTrigramCandidates(trigram) { return this.search.getTrigramCandidates(trigram) }
+  fuzzyTrigramCandidates(orQuery, limit) { return this.search.fuzzyTrigramCandidates(orQuery, limit) }
   getAllTitlesForFuzzy() { return this.search.getAllTitles() }
 
   /**
@@ -238,8 +239,12 @@ export class DocsDatabase {
    * by op name. Keeps the trigram/Levenshtein routine identical — only the
    * call surface changes. Off the main thread, this lets a long fuzzy scan
    * run in parallel with other search tiers rather than blocking the event
-   * loop. The `_trigramCache` lives in the lib module, so each worker builds
-   * its own cache once per process lifetime (cost: O(titles × avg_trigrams)).
+   * loop.
+   *
+   * Since P3.2 the underlying fuzzy implementation queries the live
+   * `documents_trigram` FTS5 index per call rather than building a
+   * process-local Map. No warm-up cost, no staleness hazard, no
+   * multi-hundred-MB per-worker memory footprint.
    */
   fuzzyMatchTitles(query, opts = {}) {
     return fuzzyMatchTitles(query, this, opts)
