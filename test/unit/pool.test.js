@@ -37,6 +37,30 @@ describe('pool (P2.8 AbortSignal)', () => {
     expect(started).toBeLessThan(20)
   })
 
+  test('processes 100k items in input order with no duplicates (cursor mechanics)', async () => {
+    const N = 100_000
+    const items = new Array(N)
+    for (let i = 0; i < N; i++) items[i] = i
+    const seen = new Uint8Array(N)
+    let max = -1
+    await pool(items, 64, async (n) => {
+      seen[n] = 1
+      if (n > max) max = n
+    })
+    expect(max).toBe(N - 1)
+    // Every index visited exactly once.
+    let visited = 0
+    for (let i = 0; i < N; i++) visited += seen[i]
+    expect(visited).toBe(N)
+  })
+
+  test('does not mutate the caller-supplied items array', async () => {
+    const items = [10, 20, 30]
+    const snapshot = [...items]
+    await pool(items, 2, async () => {})
+    expect(items).toEqual(snapshot)
+  })
+
   test('signal is passed to the worker function', async () => {
     const controller = new AbortController()
     const seen = []

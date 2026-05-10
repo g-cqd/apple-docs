@@ -2,9 +2,16 @@
  * Run async tasks with bounded concurrency.
  * Starts up to `limit` tasks in parallel. When one finishes, starts the next.
  *
+ * Implementation note: dispatch walks `items` with an index cursor rather
+ * than copying into a queue and `shift()`-ing the front. `Array.shift()`
+ * is O(n) per call (V8/JSC reindex the backing storage), so the previous
+ * `[...items]` + `queue.shift()` form spent O(n²) just managing the
+ * dispatch list on a 345k-document build. Index walk is O(1) per dequeue
+ * and avoids the upfront copy.
+ *
  * P2.8: optional `signal` aborts further task starts. In-flight tasks are
  * not killed (the supplied fn() owns its own cancellation) but no new
- * tasks are pulled from the queue once aborted, and the returned Promise
+ * tasks are pulled from `items` once aborted, and the returned Promise
  * rejects with the abort reason once in-flight work settles.
  *
  * @param {T[]} items - Items to process
@@ -16,13 +23,14 @@
  */
 export function pool(items, limit, fn, opts = {}) {
   const signal = opts.signal
-  const queue = [...items]
+  const length = items.length
+  let cursor = 0
   const active = new Set()
   const errors = []
 
   return new Promise((resolve, reject) => {
     function settle() {
-      if (active.size > 0 || queue.length > 0) return
+      if (active.size > 0 || cursor < length) return
       if (signal?.aborted) {
         reject(signal.reason ?? new DOMException('aborted', 'AbortError'))
         return
@@ -35,13 +43,13 @@ export function pool(items, limit, fn, opts = {}) {
     }
     function drain() {
       if (signal?.aborted) {
-        // Drop queued items; let active settle naturally.
-        queue.length = 0
+        // Stop pulling new items; let active settle naturally.
+        cursor = length
         settle()
         return
       }
-      while (active.size < limit && queue.length > 0) {
-        const item = queue.shift()
+      while (active.size < limit && cursor < length) {
+        const item = items[cursor++]
         const promise = Promise.resolve()
           .then(() => fn(item, { signal }))
           .catch(err => { errors.push(err) })
