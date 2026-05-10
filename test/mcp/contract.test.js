@@ -245,6 +245,36 @@ describe('MCP contract — tools', () => {
     }
   })
 
+  test('D.1: every tool advertises a JSON-Schema outputSchema', async () => {
+    const result = await client.listTools()
+    for (const tool of result.tools) {
+      expect(tool.outputSchema).toBeDefined()
+      expect(tool.outputSchema.type).toBe('object')
+    }
+  })
+
+  test('D.1: callTool returns structuredContent matching the advertised shape', async () => {
+    // The SDK auto-validates structuredContent against the registered
+    // outputSchema before returning. A successful call therefore proves
+    // the contract holds for that input. search_docs covers the result
+    // shape; read_doc covers the metadata shape; list_frameworks covers
+    // the array-of-roots shape.
+    const search = await client.callTool({ name: 'search_docs', arguments: { query: 'View' } })
+    expect(search.isError).toBeFalsy()
+    expect(search.structuredContent).toBeDefined()
+    expect(Array.isArray(search.structuredContent.results)).toBe(true)
+
+    const read = await client.callTool({ name: 'read_doc', arguments: { path: 'swiftui/view' } })
+    expect(read.isError).toBeFalsy()
+    expect(read.structuredContent).toBeDefined()
+    expect(read.structuredContent.found).toBe(true)
+
+    const frameworks = await client.callTool({ name: 'list_frameworks', arguments: {} })
+    expect(frameworks.isError).toBeFalsy()
+    expect(frameworks.structuredContent).toBeDefined()
+    expect(Array.isArray(frameworks.structuredContent.roots)).toBe(true)
+  })
+
   test('search_docs returns results for a known query', async () => {
     const result = await client.callTool({ name: 'search_docs', arguments: { query: 'View' } })
     expect(result.isError).toBeFalsy()

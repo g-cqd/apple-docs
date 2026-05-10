@@ -24,6 +24,13 @@ import {
 } from '../projection.js'
 import { CACHE_NEGATIVE } from '../cache.js'
 import {
+  browseOutputSchema,
+  listFrameworksOutputSchema,
+  listTaxonomyOutputSchema,
+  readDocOutputSchema,
+  searchDocsOutputSchema,
+} from '../output-schemas.js'
+import {
   compactSearchHit,
   sanitizeDocumentPayload,
   validatePaginationArgs,
@@ -50,10 +57,13 @@ const READ_ONLY_HINTS = {
 }
 
 export function registerDocTools(server, ctx, cache) {
-  server.tool(
+  server.registerTool(
     'search_docs',
-    'Keyword search across all Apple documentation with fuzzy matching and tiered ranking. Use it to find APIs, symbols, articles, HIG pages, or App Store Review Guidelines. This is NOT a natural-language endpoint: pass compact, keyword-shaped queries (symbol names or API terms) and push constraints into the filter arguments (framework, source, kind, language, platform, min_*, year, track) rather than into the query string. Do not ask the user to reformulate — convert their intent yourself before calling. If the strict cascade returns nothing, the server falls back to best-effort relaxed matching (stopword pruning → OR → trigram on the strongest token); relaxed hits are tagged `matchQuality: relaxed*` and the response carries `relaxed: true` with a `relaxationTier`.',
     {
+    description: 'Keyword search across all Apple documentation with fuzzy matching and tiered ranking. Use it to find APIs, symbols, articles, HIG pages, or App Store Review Guidelines. This is NOT a natural-language endpoint: pass compact, keyword-shaped queries (symbol names or API terms) and push constraints into the filter arguments (framework, source, kind, language, platform, min_*, year, track) rather than into the query string. Do not ask the user to reformulate — convert their intent yourself before calling. If the strict cascade returns nothing, the server falls back to best-effort relaxed matching (stopword pruning → OR → trigram on the strongest token); relaxed hits are tagged `matchQuality: relaxed*` and the response carries `relaxed: true` with a `relaxationTier`.',
+    annotations: READ_ONLY_HINTS,
+    outputSchema: searchDocsOutputSchema,
+    inputSchema: {
       query: z.string().describe('Compact keyword query. Prefer symbol names or API terms (e.g. "NavigationStack", "dismiss sheet", "async let") over natural-language sentences. Use the other arguments for framework/source/platform constraints instead of appending them to the query.'),
       framework: z.string().optional().describe('Filter by framework slug (e.g. swiftui, foundation, design, app-store-review)'),
       source: z.string().optional().describe('Filter by source type slug or comma-separated list (e.g. apple-docc, wwdc, sample-code)'),
@@ -80,7 +90,7 @@ export function registerDocTools(server, ctx, cache) {
       maxMatches: z.coerce.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
       caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
-    READ_ONLY_HINTS,
+    },
     cache.wrap('search_docs', async (args) => {
       validatePaginationArgs(args)
       const result = await search({
@@ -142,10 +152,13 @@ export function registerDocTools(server, ctx, cache) {
     }),
   )
 
-  server.tool(
+  server.registerTool(
     'read_doc',
-    'Fetch the full Markdown content of a documentation page by path or symbol name. Returns declarations, parameters, platforms, and relationships. Use when you already know what you\'re looking for.',
     {
+    description: 'Fetch the full Markdown content of a documentation page by path or symbol name. Returns declarations, parameters, platforms, and relationships. Use when you already know what you\'re looking for.',
+    annotations: READ_ONLY_HINTS,
+    outputSchema: readDocOutputSchema,
+    inputSchema: {
       path: z.string().optional().describe('Canonical page path (e.g. swiftui/view, design/human-interface-guidelines/accessibility, app-store-review/3.1)'),
       symbol: z.string().optional().describe('Symbol name to look up (e.g. View, Publisher, NavigationStack)'),
       framework: z.string().optional().describe('Disambiguate symbol by framework slug when multiple frameworks define the same name'),
@@ -157,7 +170,7 @@ export function registerDocTools(server, ctx, cache) {
       maxMatches: z.coerce.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
       caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
     },
-    READ_ONLY_HINTS,
+    },
     cache.wrap('read_doc', async (args) => {
       validatePaginationArgs(args)
       const result = await lookup({
@@ -190,15 +203,18 @@ export function registerDocTools(server, ctx, cache) {
     }),
   )
 
-  server.tool(
+  server.registerTool(
     'list_frameworks',
-    'List all indexed documentation roots — frameworks, technologies, HIG, tooling, release notes, and App Store Review Guidelines — with page counts and status. Use to discover what\'s available.',
     {
+    description: 'List all indexed documentation roots — frameworks, technologies, HIG, tooling, release notes, and App Store Review Guidelines — with page counts and status. Use to discover what\'s available.',
+    annotations: READ_ONLY_HINTS,
+    outputSchema: listFrameworksOutputSchema,
+    inputSchema: {
       kind: z.string().optional().describe('Filter by kind: framework, technology, tooling, release-notes, tutorial, guidelines'),
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
-    READ_ONLY_HINTS,
+    },
     cache.wrap('list_frameworks', async (args) => {
       validatePaginationArgs(args)
       const result = await frameworks(args, ctx)
@@ -213,17 +229,20 @@ export function registerDocTools(server, ctx, cache) {
     }),
   )
 
-  server.tool(
+  server.registerTool(
     'browse',
-    'Explore the documentation topic tree. Lists all pages in a framework, or drills into a specific page to show its children and references.',
     {
+    description: 'Explore the documentation topic tree. Lists all pages in a framework, or drills into a specific page to show its children and references.',
+    annotations: READ_ONLY_HINTS,
+    outputSchema: browseOutputSchema,
+    inputSchema: {
       framework: z.string().describe('Framework slug (e.g. swiftui, combine, design, app-store-review)'),
       path: z.string().optional().describe('Page path to show children of (e.g. swiftui/view, design/human-interface-guidelines/components)'),
       limit: z.coerce.number().int().min(1).max(200).optional().describe('Max pages to return when listing a full framework (hard cap 200; default: all)'),
       maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
       page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
     },
-    READ_ONLY_HINTS,
+    },
     cache.wrap('browse', async (args) => {
       validatePaginationArgs(args)
       const result = await browse(args, ctx)
@@ -240,13 +259,16 @@ export function registerDocTools(server, ctx, cache) {
     }),
   )
 
-  server.tool(
+  server.registerTool(
     'list_taxonomy',
-    'List distinct taxonomy values (kind, role, docKind, roleHeading, sourceType) across the corpus with counts. Use this before calling search_docs when you need to pick a valid `kind` filter or understand what shapes of documentation are indexed. Static between `apple-docs update` runs.',
     {
+    description: 'List distinct taxonomy values (kind, role, docKind, roleHeading, sourceType) across the corpus with counts. Use this before calling search_docs when you need to pick a valid `kind` filter or understand what shapes of documentation are indexed. Static between `apple-docs update` runs.',
+    annotations: READ_ONLY_HINTS,
+    outputSchema: listTaxonomyOutputSchema,
+    inputSchema: {
       field: z.enum(['kind', 'role', 'docKind', 'roleHeading', 'sourceType']).optional().describe('Return a single field instead of all five.'),
     },
-    READ_ONLY_HINTS,
+    },
     cache.wrap('list_taxonomy', async (args) => {
       const result = await taxonomy(args, ctx)
       return createMcpTextResult(result)
