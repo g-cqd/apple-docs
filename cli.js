@@ -17,62 +17,22 @@ import { status } from './src/commands/status.js'
 import { taxonomy } from './src/commands/taxonomy.js'
 import { paginateCliContent } from './src/cli/paginate.js'
 import { dispatchMaintenance, MAINTENANCE_COMMANDS } from './src/cli/maintenance.js'
+import { makeProgressReporter } from './src/cli/progress-reporter.js'
 import { installCrashHandlers, lifecycle } from './src/lib/lifecycle.js'
 
 const { command, subcommand, positional, flags } = parseArgs(process.argv)
 
-/**
- * Throttled TTY progress reporter for `web build`. Emits at most once per
- * second and replaces the line with a carriage return; computes a smoothed
- * rate from a sliding window so a paused-but-resumable build doesn't quote
- * a bogus 0/s instantaneous rate.
- */
-function makeProgressReporter() {
-  const startTs = Date.now()
-  let lastFlush = 0
-  const window = []
-  const WINDOW_MS = 5_000
-
-  const fmt = (n) => n.toLocaleString('en-US')
-  const fmtBytes = (b) => {
-    if (b > 1e9) return `${(b / 1e9).toFixed(1)}G`
-    if (b > 1e6) return `${(b / 1e6).toFixed(0)}M`
-    return `${(b / 1e3).toFixed(0)}K`
-  }
-  const fmtDuration = (ms) => {
-    if (ms < 1000) return `${ms}ms`
-    const s = Math.round(ms / 1000)
-    if (s < 60) return `${s}s`
-    const m = Math.floor(s / 60)
-    return `${m}m${String(s % 60).padStart(2, '0')}s`
-  }
-
-  function reporter(p) {
-    const now = Date.now()
-    window.push({ t: now, n: p.total })
-    while (window.length > 1 && now - window[0].t > WINDOW_MS) window.shift()
-
-    if (now - lastFlush < 1000) return
-    lastFlush = now
-
-    const oldest = window[0]
-    const elapsedSec = Math.max(1e-3, (now - oldest.t) / 1000)
-    const rate = (p.total - oldest.n) / elapsedSec
-    const elapsedTotal = now - startTs
-    const line = (
-      `[${fmtDuration(elapsedTotal)}] ` +
-      `${fmt(p.built)} built, ${fmt(p.skipped)} skipped, ${fmt(p.failed)} failed ` +
-      `· ${rate.toFixed(0)}/s ` +
-      `· RSS=${fmtBytes(p.rss)}`
-    )
-    process.stdout.write(`\r${line.padEnd(process.stdout.columns ?? 80, ' ').slice(0, (process.stdout.columns ?? 80) - 1)}`)
-  }
-  reporter.done = () => {
-    if (lastFlush > 0) process.stdout.write('\n')
-  }
-  return reporter
+function parseOptionalInt(value) {
+  if (value == null) return undefined
+  const n = Number.parseInt(value, 10)
+  return Number.isFinite(n) ? n : undefined
 }
 
+// D.2: metrics-port/host on `mcp serve` + `web serve`. Spread into opts.
+function metricsOpts(flags) {
+  const p = parseOptionalInt(flags['metrics-port'])
+  return { ...(p != null && { metricsPort: p }), ...(flags['metrics-host'] && { metricsHost: flags['metrics-host'] }) }
+}
 
 if (flags.help || !command) {
   showHelp(command)
@@ -223,22 +183,19 @@ try {
           const allowedOrigins = flags['allow-origin']
             ? String(flags['allow-origin']).split(',').map(s => s.trim()).filter(Boolean)
             : []
-          const heavyConcurrency = flags.concurrency != null
-            ? Number.parseInt(flags.concurrency, 10) || undefined
-            : undefined
-          const heavyQueue = flags.queue != null
-            ? Number.parseInt(flags.queue, 10)
-            : undefined
+          const heavyConcurrency = parseOptionalInt(flags.concurrency) || undefined
+          const heavyQueue = parseOptionalInt(flags.queue)
           const handle = await startHttpServer(
-            { port, host, allowedOrigins },
+            { port, host, allowedOrigins, ...metricsOpts(flags) },
             ctx,
             {
               ...(heavyConcurrency != null ? { heavyConcurrency } : {}),
-              ...(heavyQueue != null && Number.isFinite(heavyQueue) ? { heavyQueue } : {}),
+              ...(heavyQueue != null ? { heavyQueue } : {}),
             },
           )
           lifecycle.register({ name: 'mcp-http', stop: (deadlineMs) => handle.close(deadlineMs) })
           console.log(`MCP HTTP server running at ${handle.url}`)
+          if (handle.metricsUrl) console.log(`Metrics endpoint at ${handle.metricsUrl}`)
           console.log('Press Ctrl+C to stop')
           // Keep process alive — process signal handlers at the top of this file
           // close the DB; Bun releases sockets on exit.
@@ -344,9 +301,14 @@ try {
         }
         case 'serve': {
           const { startDevServer } = await import('./src/web/serve.js')
-          const info = await startDevServer({ port: flags.port ? Number.parseInt(flags.port) : 3000, baseUrl: flags['base-url'] }, ctx)
+          const info = await startDevServer({
+            port: flags.port ? Number.parseInt(flags.port) : 3000,
+            baseUrl: flags['base-url'],
+            ...metricsOpts(flags),
+          }, ctx)
           lifecycle.register({ name: 'web', stop: (deadlineMs) => info.close(deadlineMs) })
           console.log(`Dev server running at ${info.url}`)
+          if (info.metricsUrl) console.log(`Metrics endpoint at ${info.metricsUrl}`)
           console.log('Press Ctrl+C to stop')
           // Keep process alive
           await new Promise(() => {})

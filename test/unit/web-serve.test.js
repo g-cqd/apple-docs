@@ -717,3 +717,54 @@ describe('Dev Server (P7-E)', () => {
     expect(fwValues).toContain('swiftui')
   })
 })
+
+describe('Dev Server (D.2 metrics endpoint)', () => {
+  let mDb
+  let mCtx
+  let mServerInfo
+
+  beforeEach(async () => {
+    mDb = new DocsDatabase(':memory:')
+    const root = mDb.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+    mDb.upsertPage({
+      rootId: root.id,
+      path: 'documentation/swiftui/view',
+      url: 'u',
+      title: 'View',
+      role: 'symbol',
+    })
+    mCtx = { db: mDb, dataDir: '/tmp', logger: { info() {}, warn() {}, error() {} } }
+  })
+
+  afterEach(async () => {
+    try { await mServerInfo?.close?.() } catch {}
+    mDb.close()
+  })
+
+  test('--metrics-port spawns a separate /metrics listener with apple_docs_ metrics', async () => {
+    mServerInfo = await startDevServer({ port: 0, metricsPort: 0 }, mCtx)
+    expect(mServerInfo.metricsUrl).toBeTruthy()
+    const res = await fetch(mServerInfo.metricsUrl)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/plain; version=0.0.4; charset=utf-8')
+    const body = await res.text()
+    // Body might be empty when no reader-pool is wired and the rate limiter
+    // doesn't expose _size — that's OK, the body should still parse as
+    // exposition format. When non-empty, every metric line starts with the
+    // apple_docs_ prefix.
+    if (body.length > 0) {
+      expect(body).toMatch(/apple_docs_/)
+    }
+  })
+
+  test('main port does NOT serve /metrics (negative — telemetry must not leak on the public listener)', async () => {
+    mServerInfo = await startDevServer({ port: 0, metricsPort: 0 }, mCtx)
+    const onMain = await fetch(`${mServerInfo.url}/metrics`)
+    expect(onMain.status).toBe(404)
+  })
+
+  test('omitting --metrics-port leaves metricsUrl null and no listener running', async () => {
+    mServerInfo = await startDevServer({ port: 0 }, mCtx)
+    expect(mServerInfo.metricsUrl).toBeNull()
+  })
+})

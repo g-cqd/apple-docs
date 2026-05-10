@@ -7,6 +7,7 @@ import { buildHealthBody, buildReadinessResponse } from './health-handlers.js'
 import { createReaderPool } from '../storage/reader-pool.js'
 import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 import { isLoopbackOrigin, readJsonRpcBodyCapped } from '../lib/http-body.js'
+import { maybeStartMcpMetricsServer } from './metrics-provider.js'
 
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -294,13 +295,12 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   const resolvedPort = server?.port ?? port
   const url = `http://${host}:${resolvedPort}/mcp`
   logger?.info?.(`MCP HTTP server listening at ${url}`)
-
-  async function close(deadlineMs) {
+  const metricsHandle = maybeStartMcpMetricsServer(opts, { logger, serve: deps.serveMetrics, cacheRegistry, markdownCache, heavySemaphore, concurrencyStats, readerPool })
+  const close = async (deadlineMs) => {
     try { server?.stop?.(true) } catch {}
-    try { await readerPool?.close?.({ softDrainMs: deadlineMs ?? 0 }) } catch {}
+    try { await Promise.all([metricsHandle?.close?.(), readerPool?.close?.({ softDrainMs: deadlineMs ?? 0 })]) } catch {}
   }
-
-  return { server, url, close }
+  return { server, url, close, metricsUrl: metricsHandle?.url ?? null }
 }
 
 /**

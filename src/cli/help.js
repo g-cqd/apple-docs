@@ -200,6 +200,11 @@ Serve options:
                        rejecting with HTTP 503 (default: 32, also
                        APPLE_DOCS_MCP_QUEUE). 0 means reject immediately once
                        permits are exhausted.
+  --metrics-port <n>   When set, expose a Prometheus /metrics scrape endpoint
+                       on a separate listener. Absent → disabled (zero cost).
+                       Bound to 127.0.0.1 by default; not gated by main
+                       server middleware (scrapers handle their own auth).
+  --metrics-host <addr> Bind address for --metrics-port (default: 127.0.0.1).
 
 Install options:
   --http <url>         Print configuration for a remote Streamable HTTP
@@ -258,6 +263,10 @@ Pass --json for the full breakdown.
 Serve options:
   --port <n>           Port number (default: 3000)
   --base-url <url>     Base URL prefix for links
+  --metrics-port <n>   When set, expose a Prometheus /metrics scrape endpoint
+                       on a separate listener. Absent → disabled (zero cost).
+                       Bound to 127.0.0.1 by default.
+  --metrics-host <addr> Bind address for --metrics-port (default: 127.0.0.1).
 
 Deploy platforms:
   github-pages         GitHub Pages (default)

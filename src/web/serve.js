@@ -3,6 +3,7 @@ import { notFoundResponse, finalizeResponse } from './responses.js'
 import { createWebContext } from './context.js'
 import { createRouteRegistry } from './route-registry.js'
 import { createRateLimiter, tooManyRequestsResponse } from './middleware/rate-limit.js'
+import { startMetricsServer } from '../lib/metrics-server.js'
 import { healthHandler, readinessHandler } from './routes/health.route.js'
 import { filtersHandler } from './routes/filters.route.js'
 import { symbolsIndexHandler } from './routes/symbols-index.route.js'
@@ -128,6 +129,19 @@ export async function startDevServer(opts, ctx) {
   const serverUrl = `http://localhost:${server.port}`
   if (logger) logger.info(`Dev server running at ${serverUrl}`)
 
+  // Phase D.2: optional Prometheus scrape endpoint on a separate loopback
+  // listener. No-op when --metrics-port is absent. Bypasses the main
+  // rate-limit + security-headers middleware on purpose — scrape bursts
+  // would flap the limiter and Prometheus brings its own auth model.
+  const metricsHandle = opts.metricsPort != null && Number.isFinite(opts.metricsPort)
+    ? startMetricsServer({
+        port: opts.metricsPort,
+        host: opts.metricsHost ?? '127.0.0.1',
+        logger,
+        provider: () => buildWebMetrics({ readerPool, rateLimiter: defaultLimiter }),
+      })
+    : null
+
   // A1: render-cache prune cron. Runs every PRUNE_INTERVAL_MS so an
   // unbounded set of (size,color,weight,scale) param combinations on a
   // long-running server doesn't fill the disk. Both the TTL trim and the
@@ -169,6 +183,7 @@ export async function startDevServer(opts, ctx) {
   async function close(deadlineMs) {
     clearInterval(pruneTimer)
     try { originalStop?.(true) } catch {}
+    try { await metricsHandle?.close?.() } catch {}
     try {
       // Forward the parent shutdown deadline as a soft-drain budget so the
       // reader pool waits for in-flight queries to settle before terminating
@@ -177,11 +192,45 @@ export async function startDevServer(opts, ctx) {
     } catch {}
   }
 
-  return { server, url: serverUrl, close, readerPool }
+  return { server, url: serverUrl, close, readerPool, metricsUrl: metricsHandle?.url ?? null }
 }
 
 function parsePositiveNumber(value) {
   if (value == null) return null
   const n = Number.parseFloat(value)
   return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/**
+ * Build the Prometheus metrics array for `apple-docs web serve`. The web
+ * surface is narrower than mcp's: no per-tool response cache, no heavy
+ * semaphore. Reader-pool stats come through when the pool is wired
+ * (APPLE_DOCS_WEB_READERS=on); the per-IP rate limiter only exposes its
+ * current bucket population — there is no rejection counter to surface
+ * (per Phase D.2 brief: skip metrics that don't exist).
+ */
+function buildWebMetrics({ readerPool, rateLimiter }) {
+  const metrics = []
+  let rp = null
+  try { rp = readerPool?.stats?.() } catch {}
+  if (rp) {
+    metrics.push(
+      { name: 'apple_docs_reader_pool_size', help: 'Reader-pool worker count.', type: 'gauge', samples: [{ value: rp.size ?? 0 }] },
+      { name: 'apple_docs_reader_pool_active', help: 'Reader-pool workers currently alive.', type: 'gauge', samples: [{ value: rp.active ?? 0 }] },
+      { name: 'apple_docs_reader_pool_pending', help: 'Reader-pool in-flight requests across workers.', type: 'gauge', samples: [{ value: rp.pending ?? 0 }] },
+      { name: 'apple_docs_reader_pool_spawns_total', help: 'Reader-pool worker spawns.', type: 'counter', samples: [{ value: rp.spawns ?? 0 }] },
+      { name: 'apple_docs_reader_pool_errors_total', help: 'Reader-pool worker errors / unexpected exits.', type: 'counter', samples: [{ value: rp.errors ?? 0 }] },
+      { name: 'apple_docs_reader_pool_timeouts_total', help: 'Reader-pool per-call deadline expirations.', type: 'counter', samples: [{ value: rp.timeouts ?? 0 }] },
+      { name: 'apple_docs_reader_pool_backpressure_rejects_total', help: 'Reader-pool backpressure rejections.', type: 'counter', samples: [{ value: rp.backpressureRejects ?? 0 }] },
+    )
+  }
+  if (rateLimiter && typeof rateLimiter._size === 'function') {
+    metrics.push({
+      name: 'apple_docs_web_rate_limit_buckets',
+      help: 'Per-IP token-bucket entries currently held by the default web rate limiter.',
+      type: 'gauge',
+      samples: [{ labels: { name: rateLimiter.name ?? 'default' }, value: rateLimiter._size() }],
+    })
+  }
+  return metrics
 }
