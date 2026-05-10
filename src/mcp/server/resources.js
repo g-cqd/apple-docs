@@ -1,7 +1,6 @@
 // MCP resource registrations: stable URIs that map to corpus content
 // (apple-docs://doc/<key>, apple-docs://framework/<slug>,
 // apple-docs://sf-symbol/<scope>/<name>.<format>, apple-docs://font/<id>).
-// Pulled out of mcp/server.js as part of Phase B.
 
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { browse } from '../../commands/browse.js'

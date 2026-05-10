@@ -1,13 +1,11 @@
 // Framework listing page renderer (the `/docs/<root>/index.html` shell
-// for each catalogued framework). Pulled out of web/build.js as part of
-// Phase B.
+// for each catalogued framework).
 //
-// Tree-data lifecycle: previously inlined into every framework HTML page
-// (~800 KB on Swift stdlib, ~500 KB on UIKit), which dominated the HTML
-// payload and prevented edge caching. Now we write it to a content-hashed
-// sibling file under /data/frameworks/<slug>/, which CF caches indefinitely
-// (the hash invalidates on rebuild), and the framework HTML carries only
-// a `data-tree-src` reference.
+// Tree data is written to a content-hashed sibling file under
+// /data/frameworks/<slug>/ so edge caches can hold it indefinitely (the
+// hash invalidates on rebuild). The framework HTML carries only a
+// `data-tree-src` reference — inlining the tree (~800 KB on Swift stdlib,
+// ~500 KB on UIKit) would dominate the HTML payload and defeat caching.
 
 import { dirname, join } from 'node:path'
 import { renderFrameworkPage, buildFrameworkTreeData } from '../templates.js'

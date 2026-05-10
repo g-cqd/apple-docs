@@ -105,11 +105,11 @@ export function notFoundResponse(siteConfig) {
 /**
  * Build a JSON 5xx error response with stack-trace stripping in production.
  *
- * Audit A27: development logs benefit from full stack traces in the
- * response body, but production deployments leak file paths, function
- * names, and sometimes captured argument values when an error surfaces
- * to an unauthenticated client. NODE_ENV=production strips the stack;
- * the structured log line via lib/logger.js still keeps everything.
+ * Development logs benefit from full stack traces in the response body,
+ * but production deployments would leak file paths, function names, and
+ * sometimes captured argument values to an unauthenticated client.
+ * `NODE_ENV=production` strips the stack from the wire; the structured
+ * log line via `lib/logger.js` still keeps everything.
  *
  * @param {Error|string} error
  * @param {{ status?: number, exposeStack?: boolean }} [opts]
@@ -235,12 +235,10 @@ export async function finalizeResponse(request, response, { gzipCache }) {
     return new Response(body, { status: response.status, headers })
   }
 
-  // P3.1: dropped the non-hashable sync gzipSync path. It was the single
-  // largest TTFB pessimization on the response path: Bun.serve had to
-  // buffer the whole body, copy it to a Buffer, run gzipSync (event-loop
-  // blocking for ~10-50 ms on 1 MB payloads), and wrap the compressed
-  // bytes in a fresh Response. Every dynamic response paid this cost on
-  // every call because there was no cache.
+  // Only the hashable / cacheable gzip path is supported. A sync
+  // `gzipSync` on every non-hashable response would block the event
+  // loop for ~10–50 ms on 1 MB payloads and dominate TTFB because every
+  // dynamic response paid the cost without a cache.
   //
   // The hashable path above keeps its cached gzip — those bodies are
   // deterministic functions of their inputs (search results, doc HTML)

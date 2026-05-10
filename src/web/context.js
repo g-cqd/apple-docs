@@ -110,15 +110,15 @@ export async function createWebContext(opts, ctx) {
   /**
    * Invalidate the document-derived caches after a corpus mutation.
    *
-   * P3.2: when the caller knows which document just changed (the
+   * When the caller knows which document just changed (the
    * on-demand-fetch path always does), pass it as `entry` and the
-   * render-cache's triple-index gets incrementally patched instead of
-   * thrown away — saves the ~100-200 MB rebuild that would otherwise
+   * render-cache's triple-index is incrementally patched instead of
+   * thrown away — saves the ~100–200 MB rebuild that would otherwise
    * stall the next request.
    *
    * The other caches (searchCache, title/alias index, search manifest)
-   * still clear on every call. They're smaller, get rebuilt lazily, and
-   * the audit's complaint was specifically about the render-cache cliff.
+   * still clear on every call. They're smaller and get rebuilt lazily;
+   * the render-cache is the one that cannot afford a global wipe.
    *
    * @param {{ key: string, title?: string|null, roleHeading?: string|null }} [entry]
    */
@@ -281,9 +281,9 @@ async function resolveWebReaderPool(ctx, opts, logger) {
     return null
   }
 
-  // P2.1: split into strict + deep pools. APPLE_DOCS_WEB_READER_WORKERS
-  // sizes the strict pool (the dominant one); the deep pool autosizes to
-  // a quarter of `availableParallelism()`, capped at 4. Override
+  // Strict + deep reader pools. APPLE_DOCS_WEB_READER_WORKERS sizes
+  // the strict pool (the dominant one); the deep pool autosizes to a
+  // quarter of `availableParallelism()`, capped at 4. Override
   // explicitly via APPLE_DOCS_WEB_DEEP_READERS when running diagnostics.
   const strictSize = parsePositiveInt(process.env.APPLE_DOCS_WEB_READER_WORKERS) ?? undefined
   const deepSize = parsePositiveInt(process.env.APPLE_DOCS_WEB_DEEP_READERS) ?? undefined

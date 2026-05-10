@@ -1,5 +1,5 @@
 /**
- * Split reader-pool factory (P2.1).
+ * Split reader-pool factory.
  *
  * Creates two `createReaderPool` instances behind a unified facade:
  *   - `strict`  — FTS / trigram / exact / title-prefix lookups. Sized

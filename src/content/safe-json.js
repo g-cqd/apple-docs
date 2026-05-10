@@ -27,11 +27,10 @@ export function safeJson(value) {
 /**
  * Iterative deep freeze with bounded depth.
  *
- * Audit A28: the previous recursive implementation could blow the stack
- * on adversarial JSON (arrays nested >10k deep) and didn't surface the
- * depth violation as a typed error. Walk the value with an explicit work
- * stack instead; cap depth at FREEZE_MAX_DEPTH so a malicious payload
- * cannot exhaust resources before throwing.
+ * A recursive walk would blow the JS stack on adversarial JSON (arrays
+ * nested >10k deep) and wouldn't surface the depth violation as a typed
+ * error. The explicit work stack here caps at FREEZE_MAX_DEPTH so a
+ * malicious payload cannot exhaust resources before throwing.
  */
 function freezeJsonValue(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value

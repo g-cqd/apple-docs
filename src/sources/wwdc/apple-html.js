@@ -1,10 +1,9 @@
 // Apple WWDC year-index + per-session HTML scraping.
 //
-// Pulled out of sources/wwdc.js as part of Phase B. Apple's video pages
-// for 2020+ are server-rendered HTML; the parsing here extracts title +
-// description + chapters + a coarse transcript by walking the DOM with
-// regexes. JSON-LD or render-tree JSON would be cleaner, but Apple
-// inlines neither on the public video pages.
+// Apple's video pages for 2020+ are server-rendered HTML; the parsing
+// here extracts title + description + chapters + a coarse transcript by
+// walking the DOM with regexes. JSON-LD or render-tree JSON would be
+// cleaner, but Apple inlines neither on the public video pages.
 
 import {
   APPLE_BASE,

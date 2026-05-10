@@ -2,7 +2,6 @@
  * Section metadata extractors — title, number, abstract, last-updated.
  * Operate on already-converted Markdown (or the source HTML for last-
  * updated, which lives in a structural element).
- * Extracted from guidelines-parser.js as part of P4.5.
  */
 
 export function resolveTitle(meta, markdown) {

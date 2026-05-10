@@ -4,9 +4,8 @@
  * relaxation pass for natural-language phrase queries that produced no
  * results from the strict cascade.
  *
- * Pulled out of commands/search.js as part of P2.6. Each runner is a
- * pure async function; the orchestrator in commands/search.js wires them
- * up with the per-query state.
+ * Each runner is a pure async function; the orchestrator in
+ * commands/search.js wires them up with the per-query state.
  */
 
 import { safeCall } from '../lib/safe-call.js'

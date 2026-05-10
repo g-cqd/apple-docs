@@ -1,15 +1,15 @@
 /**
  * v17 — `pages.consecutive_404_count` for the N=3 tombstone gate.
  *
- * Audit 5 §4.3 flagged that a single upstream 404 immediately marks a
- * page deleted. That's wrong for transient outages (Apple CDN blip,
- * region-specific routing) and there's no way to distinguish a real
- * removal from a flap. Fix is to require N=3 consecutive 404s before
- * tombstoning, with the counter reset on any successful check.
+ * A single upstream 404 marking a page deleted is wrong for transient
+ * outages (Apple CDN blip, region-specific routing) and gives no way to
+ * distinguish a real removal from a flap. The gate requires N=3
+ * consecutive 404s before tombstoning, and the counter resets on any
+ * successful check.
  *
- * The counter lives on `pages` because that's the row the gate
- * decides to delete; storing it elsewhere would force a join on the
- * hot crawl path.
+ * The counter lives on `pages` because that's the row the gate decides
+ * to delete; storing it elsewhere would force a join on the hot crawl
+ * path.
  */
 export function up(db) {
   try {

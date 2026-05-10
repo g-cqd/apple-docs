@@ -11,9 +11,9 @@
  *   - buildMatchedDocumentPayload — narrow a doc to a substring's match
  *                                   excerpts before pagination.
  *
- * Phase B decomposition: text-shaping helpers live in pagination/text-utils.js,
- * page-plan / fragment builders in pagination/page-builder.js. This module
- * is the strategy-dispatch layer.
+ * Text-shaping helpers live in pagination/text-utils.js, page-plan /
+ * fragment builders in pagination/page-builder.js. This module is the
+ * strategy-dispatch layer.
  */
 
 import {

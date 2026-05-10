@@ -62,11 +62,11 @@ export async function search(opts, ctx) {
   const platform = opts.platform ?? null
   const platformFilters = buildPlatformFilters(platform, { minIos, minMacos, minWatchos, minTvos, minVisionos })
   const deprecated = normalizeDeprecatedFilter(opts.deprecated)
-  // P3.1: only `kind` and platform-version filters stay JS-side now.
-  // sourceTypes IN, year, track substring, deprecated mode all push
-  // down to SQL via FILTER_PREDICATES. Cuts the over-fetch multiplier
-  // from 10× to 3× for the common multi-source / deprecated-exclude
-  // queries, and to 1× when no JS filters apply at all.
+  // Only `kind` and platform-version filters stay JS-side. sourceTypes
+  // IN, year, track substring, and deprecated mode push down to SQL via
+  // FILTER_PREDICATES, so the over-fetch multiplier sits at 3× for the
+  // common multi-source / deprecated-exclude queries and 1× when no JS
+  // filters apply at all.
   const hasJsPostFilters = !!kind
     || Object.values(platformFilters).some(Boolean)
   const searchLimit = hasJsPostFilters ? Math.min(Math.max(requestedWindow * 3, 60), 300) : requestedWindow
@@ -85,10 +85,10 @@ export async function search(opts, ctx) {
     }
   }
 
-  // P3.1: push every multi-valued / metadata filter into SQL. The
-  // residual `activeFilters` is consulted post-cascade only for
-  // checks SQL can't cheaply express (kind taxonomy heuristic +
-  // explicit-platform-only sentinel).
+  // Push every multi-valued / metadata filter into SQL. The residual
+  // `activeFilters` is consulted post-cascade only for checks SQL
+  // can't cheaply express (kind taxonomy heuristic + explicit-
+  // platform-only sentinel).
   const sqlSourceType = sourceTypes?.size === 1 ? [...sourceTypes][0] : null
   const filterOpts = {
     limit: searchLimit,
@@ -104,11 +104,11 @@ export async function search(opts, ctx) {
   const results = []
   const seen = new Set()
 
-  // P4.2: parse platforms_json once per row at arrival without
-  // mutating the row's `platforms` field. `r.platforms` stays a
-  // string (the JIT-stable shape sees one type for that property);
-  // the parsed Array lives on `r.platformsParsed`. Filters and
-  // `formatResult` read `platformsParsed` first.
+  // Parse platforms_json once per row at arrival without mutating the
+  // row's `platforms` field. `r.platforms` stays a string (the JIT-
+  // stable shape sees one type for that property); the parsed Array
+  // lives on `r.platformsParsed`. Filters and `formatResult` read
+  // `platformsParsed` first.
   const parseRowPlatforms = (rows) => {
     for (const r of rows) {
       if (r.platformsParsed !== undefined) continue
@@ -176,12 +176,12 @@ export async function search(opts, ctx) {
   // Merge T2 (trigram) results, skipping already-seen.
   addResults(triResults, 'substring')
 
-  // P2.3: track which deep contributions timed out so the response
-  // envelope can flag `partial: true`. A deadline expiration on fuzzy
-  // or body is *expected* under load (deep pool is intentionally
-  // smaller than strict); the strict cascade already produced usable
-  // results above and we surface those rather than blocking on the
-  // deep contribution.
+  // Track which deep contributions timed out so the response envelope
+  // can flag `partial: true`. A deadline expiration on fuzzy or body
+  // is *expected* under load (the deep pool is intentionally smaller
+  // than strict); the strict cascade already produced usable results
+  // above and we surface those rather than blocking on the deep
+  // contribution.
   let partial = false
   const partialReasons = []
 

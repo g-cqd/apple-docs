@@ -55,7 +55,7 @@ const rateLimiter = createHostBucketedLimiter({
 const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
 const ctx = { db, dataDir, rateLimiter, logger }
 
-// P1.3: signal-driven graceful drain. Each long-running server registers its
+// Signal-driven graceful drain. Each long-running server registers its
 // own stop() with the lifecycle; the DB is the last thing torn down so any
 // drain step that touches it (WAL checkpoint, etc.) runs first.
 installCrashHandlers({ logger })
@@ -257,15 +257,15 @@ try {
     }
 
     case 'setup': {
-      // Lite/standard tiers were removed in G.1; the only snapshot
-      // shape is `full`. Reject the obsolete flags loudly so legacy
-      // automation gets a clear error pointing to the simplification.
+      // Every snapshot ships the full corpus; the obsolete --tier and
+      // --downgrade flags are rejected loudly so legacy automation
+      // gets a clear error.
       if (flags.tier && flags.tier !== 'full') {
-        console.error(`apple-docs setup: --tier ${flags.tier} is no longer supported (G.1). Every snapshot now ships the full corpus; drop the --tier flag.`)
+        console.error(`apple-docs setup: --tier ${flags.tier} is not a supported flag. Every snapshot ships the full corpus; drop --tier.`)
         process.exit(2)
       }
       if (flags.downgrade) {
-        console.error('apple-docs setup: --downgrade is no longer meaningful — there is only one snapshot shape (G.1).')
+        console.error('apple-docs setup: --downgrade is not a supported flag. There is only one snapshot shape.')
         process.exit(2)
       }
       const { setup: setupCmd } = await import('./src/commands/setup.js')

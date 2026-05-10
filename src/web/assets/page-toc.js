@@ -3,9 +3,6 @@
 // `.page-toc a[href^="#"]` link as the user scrolls. The `page-toc:refresh`
 // event lets dynamic content (collapsible sections rebuilt by other
 // controllers) request a re-scan without reloading the bundle.
-//
-// Phase 2: native ES module with an explicit init() that
-// core.bundle.js calls.
 let observer = null
 let currentActiveId = null
 

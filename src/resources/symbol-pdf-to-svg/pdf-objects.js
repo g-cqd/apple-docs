@@ -3,8 +3,6 @@
 // dictionary, and records the byte offsets of any embedded stream so
 // the binary payload can be inflated later without going through the
 // latin-1 round-trip.
-//
-// Pulled out of resources/symbol-pdf-to-svg.js as part of Phase B.
 
 import { inflateSync } from 'node:zlib'
 

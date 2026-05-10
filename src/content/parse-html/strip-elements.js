@@ -1,9 +1,7 @@
 // Strip whole elements (and their content) from an HTML string. Linear
-// single-pass (P4.9 audit fix): walk all open/close events, depth-counter
-// the matched ranges, splice them out. Earlier non-greedy regex replace
-// in a do-while loop hit O(N×depth) on adversarial input.
-//
-// Pulled out of content/parse-html.js as part of Phase B.
+// single-pass: walk all open/close events, depth-counter the matched
+// ranges, splice them out. A non-greedy regex replace in a do-while
+// loop would hit O(N×depth) on adversarial input.
 
 export function stripElements(html, tags) {
   let result = html

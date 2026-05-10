@@ -15,12 +15,11 @@ import { coalesceByKey } from './coalesce.js'
  * and the normalized document model.
  */
 export function persistFetchedDocPage(args) {
-  // Audit 5 §4.5: per-path coalesce so concurrent fetches for the same
-  // key collapse onto one in-flight write. Without this, two callers
-  // can interleave the raw-json + markdown promote-with-backup steps
-  // and leave one of the .bak- sidecars stranded. Same key prefix as
-  // the docs route can't collide because that uses the bare path; we
-  // namespace under `persist:`.
+  // Per-path coalesce so concurrent fetches for the same key collapse
+  // onto one in-flight write. Without this, two callers can interleave
+  // the raw-json + markdown promote-with-backup steps and leave one of
+  // the .bak- sidecars stranded. The docs route uses the bare path; we
+  // namespace under `persist:` so the two scopes can't collide.
   return coalesceByKey(`persist:${args.path}`, () => doPersistFetchedDocPage(args))
 }
 

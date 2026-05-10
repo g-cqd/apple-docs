@@ -1,8 +1,7 @@
 // MCP HTTP server /healthz + /readyz response builders.
 //
-// Pulled out of http-server.js as part of Phase D so that file stays
-// under the 400-LOC ceiling. Pure functions with explicit deps —
-// closures over server-internal state are passed in by the caller.
+// Pure functions with explicit deps — closures over server-internal
+// state are passed in by the caller.
 
 /**
  * Liveness body. When `exposeCacheStats` is on, includes the cache

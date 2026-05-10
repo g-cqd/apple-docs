@@ -3,9 +3,9 @@
 // emits `list-container:ready` so collection-filters.js knows when
 // to re-bind handlers against the rebuilt list.
 //
-// Phase B decomposition: data loading lives in tree-view/data.js, state
-// derivation in tree-view/state.js, DOM rendering in tree-view/render.js.
-// This module owns the event bindings and the lifecycle.
+// Data loading lives in tree-view/data.js, state derivation in
+// tree-view/state.js, DOM rendering in tree-view/render.js. This module
+// owns the event bindings and the lifecycle.
 
 import { createTreeDataLoader, hasTreeData } from './tree-view/data.js'
 import { buildTreeState } from './tree-view/state.js'

@@ -1,7 +1,6 @@
 /**
  * Worker fan-out for src/web/build.js. Partitions the framework list
  * across N child Bun subprocesses, each rendering its own slice.
- * Extracted from build.js as part of P3.8.
  */
 
 import { join } from 'node:path'

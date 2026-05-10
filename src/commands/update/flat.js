@@ -2,8 +2,6 @@
 // swift-book, swift-org, apple-archive). Discover yields a flat list of
 // keys; tracked pages get checked for changes, stale pages get tombstoned,
 // and undiscovered keys get fetched fresh.
-//
-// Pulled out of commands/update.js as part of Phase B.
 
 import { persistNormalizedPage } from '../../pipeline/persist.js'
 import {

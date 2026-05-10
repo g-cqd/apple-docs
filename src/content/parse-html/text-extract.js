@@ -3,8 +3,6 @@
 // of paragraph breaks; htmlToMarkdown preserves code, links, lists,
 // emphasis, and sub-headings so legacy archive HTML (apple-archive)
 // round-trips through the renderer.
-//
-// Pulled out of content/parse-html.js as part of Phase B.
 
 import { BLOCK_TAGS, STRIP_ELEMENTS } from './constants.js'
 import { decodeEntities } from './entities.js'

@@ -5,8 +5,6 @@
  * walks every glyph's path into a theme-neutral SVG. The Swift script lives
  * verbatim in resources/swift-templates.js so this module stays small and
  * the script body can be diffed independently.
- *
- * Pulled out of resources/apple-assets.js as part of P3.7.
  */
 
 import { rm } from 'node:fs/promises'

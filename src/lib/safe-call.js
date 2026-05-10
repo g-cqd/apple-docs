@@ -2,9 +2,7 @@
  * safeCall — uniform replacement for `try { ... } catch {}` and
  * `try { ... } catch { return defaultValue }` patterns.
  *
- * The audit (2026-05-09 deep-exhaustive §1.6, strict-architectural §1)
- * flagged 49+ silent-catch sites across the storage and command layers.
- * Most fall into one of three buckets:
+ * Silent-catch sites fall into one of three buckets:
  *
  *   1. Cleanup paths (resource teardown, log flushes) — failure here adds
  *      noise without value. Use `log: 'silent'`.
@@ -14,10 +12,6 @@
  *   3. Search-quality / correctness paths where catching at all is the
  *      bug. Those should propagate; remove the try/catch entirely. Do
  *      NOT use safeCall to paper over them.
- *
- * Phase-2 P2.5 walks the existing sites and applies one of these three.
- * P2.1 ships only the helper + tests so the call-site refactor in P2.5
- * has a stable target.
  *
  * Sync and async fns are both supported: when the wrapped function
  * returns a Promise, safeCall chains a `.catch` and returns the same
@@ -54,10 +48,10 @@ function emit(log, label, err, logger) {
  * mode is 'warn' so casual usage surfaces failures; the noise-suppressing
  * modes are opt-in.
  *
- * `passThrough` (P2.3) lets a typed error class bubble untouched —
- * callers that need to distinguish e.g. a `DeadlineError` from a
- * generic failure can mark it as pass-through and handle it
- * upstream. Multiple classes may be passed as an array.
+ * `passThrough` lets a typed error class bubble untouched — callers
+ * that need to distinguish e.g. a `DeadlineError` from a generic
+ * failure can mark it as pass-through and handle it upstream. Multiple
+ * classes may be passed as an array.
  *
  * @template T
  * @param {() => T | Promise<T>} fn

@@ -1,6 +1,5 @@
 // HTML entity decoding. Handles named entities + decimal/hex numeric
-// character references. Pulled out of content/parse-html.js as part of
-// Phase B.
+// character references.
 
 export function decodeEntities(text) {
   return text

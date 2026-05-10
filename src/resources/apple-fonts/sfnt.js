@@ -1,9 +1,8 @@
 /**
  * SFNT (TrueType / OpenType) header inspection + filename parsing.
  *
- * Pulled out of resources/apple-assets.js so the font-discovery and font-
- * render paths can share these helpers without dragging in the full
- * Bun.spawn / DMG-extract surface.
+ * Shared by the font-discovery and font-render paths so neither needs
+ * to pull in the full Bun.spawn / DMG-extract surface.
  */
 
 import { closeSync, openSync, readSync } from 'node:fs'

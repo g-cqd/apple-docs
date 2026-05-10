@@ -1,8 +1,6 @@
 // Render DocC block + inline content nodes to plain text. Mirrors the
 // shape consumed by extractor.js but additionally walks the references
 // map so reference titles surface in the rendered output.
-//
-// Pulled out of content/normalize.js as part of Phase B.
 
 import { normalizeIdentifier } from '../../apple/normalizer.js'
 

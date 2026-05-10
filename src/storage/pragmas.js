@@ -1,7 +1,6 @@
 /**
- * SQLite PRAGMA setup for DocsDatabase. Extracted from the constructor in
- * P2.3 so the configuration knobs live in one inspectable place and the
- * database.js facade gets thinner.
+ * SQLite PRAGMA setup for DocsDatabase. Keeps the configuration knobs in
+ * one inspectable place.
  *
  * Run order:
  *   1. applyPragmas(db)            — WAL, mmap, cache, busy timeout, …
@@ -9,7 +8,7 @@
  *   3. enableForeignKeys(db)       — turn FK enforcement on AFTER migrations
  *      so ALTER TABLE-heavy historical migrations don't choke on legacy
  *      orphaned rows. From this point on every insert/update/delete is
- *      FK-checked. (See P1.8.)
+ *      FK-checked.
  */
 
 /** Apply the standard pragma set. Returns the effective mmap size in

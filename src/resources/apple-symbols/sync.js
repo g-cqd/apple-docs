@@ -1,8 +1,7 @@
 /**
  * SF Symbol catalog sync + snapshot pre-rendering.
  *
- * Pulled out of resources/apple-assets.js as part of P3.7. Two public
- * entry points:
+ * Two public entry points:
  *
  *   - syncSfSymbols   : reads the CoreGlyphs.bundle plists into the DB
  *   - prerenderSfSymbols : drives a Swift worker pool to bake every

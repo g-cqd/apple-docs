@@ -1,9 +1,9 @@
 /**
- * Op-name classifier for the split reader-pool design (P2.1).
+ * Op-name classifier for the split reader-pool design.
  *
- * Operations that historically took multi-second p99 — full-text body
- * search, fuzzy-title trigram lookup, body index counts — are routed
- * to a smaller `deep` pool so they cannot starve cheap title / FTS /
+ * Operations whose p99 runs multi-second — full-text body search,
+ * fuzzy-title trigram lookup, body index counts — are routed to a
+ * smaller `deep` pool so they cannot starve cheap title / FTS /
  * trigram reads on the `strict` pool.
  *
  * The list is deliberately conservative: only ops whose worst-case

@@ -48,9 +48,8 @@ const CHECKPOINT_EVERY = 1_000
 /**
  * Build a complete static documentation site from the corpus.
  *
- * See ./build/{assets-pipeline,document-pages,framework-pages,atomic-swap}.js
- * for the per-step decompositions; this function is the orchestrator that
- * threads checkpoint / progress / counter state through them.
+ * This is the orchestrator: it threads checkpoint / progress / counter
+ * state through the per-step modules under ./build/.
  *
  * @param {object} opts
  * @param {string} [opts.out='dist/web']      Output directory for the static site.

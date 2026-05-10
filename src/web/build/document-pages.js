@@ -1,8 +1,8 @@
-// Per-document HTML render loop. Pulled out of web/build.js as part of
-// Phase B. This is the hottest path of the build — sync shiki render,
-// chunked sections fetch, render-index incremental skip, sidecar
-// failure log. Each framework runs through here; the orchestrator
-// dispatches in single-process or worker-fanout mode upstream.
+// Per-document HTML render loop — the hottest path of the build. Sync
+// shiki render, chunked sections fetch, render-index incremental skip,
+// sidecar failure log. Each framework runs through here; the
+// orchestrator dispatches in single-process or worker-fanout mode
+// upstream.
 
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'

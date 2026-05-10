@@ -9,8 +9,6 @@ import { join } from 'node:path'
  * - verifyCorpusIntegrity: read-only audit a sync flow runs after a long
  *   session — orphan sections, FK violations, stale build-failure rows,
  *   and the size of the unconverted-page queue.
- *
- * Extracted from commands/consolidate.js as part of P4.4.
  */
 
 export function verifySnapshot(db, _logger) {

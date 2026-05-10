@@ -1,8 +1,6 @@
 // Lightweight CSS-selector-shaped extraction: finds the first element
 // matching `tag`, `.class`, `#id`, or `tag.class` and returns its inner
 // HTML with balanced same-tag depth tracking.
-//
-// Pulled out of content/parse-html.js as part of Phase B.
 
 import {
   escapeRegex,

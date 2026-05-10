@@ -1,6 +1,5 @@
 // Update path for DocC-shaped sources (apple-docc, hig, swift-docc) —
 // per-page check + pull, plus crawl-from-scratch for any new roots.
-// Pulled out of commands/update.js as part of Phase B.
 
 import { crawlRoot } from '../../pipeline/discover.js'
 import { persistFetchedDocPage } from '../../pipeline/persist.js'

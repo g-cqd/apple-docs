@@ -3,8 +3,6 @@
 //   - findSection / extractFirstHeading / collectHeadings
 //   - enrichDeclarationTokens / enrichTypeTokens (token → typed-link
 //     decoration via the references map).
-//
-// Pulled out of content/normalize.js as part of Phase B.
 
 import { normalizeIdentifier } from '../../apple/normalizer.js'
 import { renderInlineNodes } from './render-content.js'

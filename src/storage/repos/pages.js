@@ -1,9 +1,9 @@
 /**
  * Pages repository: the legacy page table (still used as the crawler's
- * working set; killed in v14 / Phase 4). The methods here cover pure
- * page-row operations. Cross-cluster orchestration (upsertPage syncing
- * a documents row when the page is normalized) lives on the
- * DocsDatabase facade so it can pull in the documents repo too.
+ * working set). The methods here cover pure page-row operations.
+ * Cross-cluster orchestration (upsertPage syncing a documents row when
+ * the page is normalized) lives on the DocsDatabase facade so it can
+ * pull in the documents repo too.
  */
 
 import { serializePlatforms } from './documents.js'

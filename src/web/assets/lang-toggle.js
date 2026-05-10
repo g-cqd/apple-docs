@@ -1,7 +1,6 @@
 // Language toggle controller for the doc page declaration block.
 //
-// Converted to a native ES module as part of Phase 2. The module is
-// served as a standalone `<script src="/assets/lang-toggle.js">`, so it
+// Served as a standalone `<script src="/assets/lang-toggle.js">`, so it
 // self-mounts: top-level `init()` runs once when the script loads. No
 // exports — the bundler emits a minified IIFE that runs immediately.
 const STORAGE_KEY = 'apple-docs-lang'

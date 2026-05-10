@@ -1,6 +1,5 @@
 /**
- * Shared helpers for storage repos. Pulled out of database.js so each
- * repo can import without circular dependencies.
+ * Shared helpers for storage repos.
  */
 
 export function parseJsonValue(value) {

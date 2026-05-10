@@ -6,9 +6,8 @@
  * (with the regular/medium variant kept at the scope root for backwards
  * compatibility with earlier snapshots that didn't carry the variant axis).
  *
- * Pulled out of resources/apple-assets.js so the render path, the snapshot
- * pre-renderer, and the route-side validators can all share the same
- * normalization without dragging the full module in.
+ * Shared by the render path, the snapshot pre-renderer, and the
+ * route-side validators so they all use the same normalization.
  */
 
 import { join } from 'node:path'

@@ -1,6 +1,4 @@
-// Shared helpers for the MCP tool / resource handlers. Pulled out of
-// mcp/server.js as part of Phase B so the registration files stay focused
-// on the tool surface.
+// Shared helpers for the MCP tool / resource handlers.
 
 import { coerceSection } from '../../content/coercion.js'
 import { MIN_PAGINATED_MAX_CHARS } from '../pagination.js'

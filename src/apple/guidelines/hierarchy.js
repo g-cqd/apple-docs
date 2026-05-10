@@ -1,7 +1,6 @@
 /**
  * Hierarchy resolution: walks the dotted section numbering
  * (1, 1.1, 1.1.2, 1.1.2(a)) to derive parent links.
- * Extracted from guidelines-parser.js as part of P4.5.
  */
 
 export function buildHierarchy(sections) {

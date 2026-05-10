@@ -65,10 +65,10 @@ export function safeFilename(basename, ext) {
  * ValidationError on first violation; returns the original key on success
  * so callers can chain.
  *
- * Audit A4: previously each writer trusted upstream `path` strings — a
- * malicious sourceMetadata could land an absolute or traversal path in
- * `documents.key` and slip through keyPath unchecked. validateStorageKey
- * is now the single boundary that every writer calls before resolving.
+ * This is the single boundary every writer calls before resolving a
+ * `documents.key` against `dataDir` — a malicious sourceMetadata could
+ * otherwise land an absolute or traversal path in the key and slip
+ * through keyPath unchecked.
  *
  * @param {string} rawKey
  * @returns {string} the validated key (unchanged)

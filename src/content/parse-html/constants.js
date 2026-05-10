@@ -1,5 +1,4 @@
 // Shared constants + regex caches for the parse-html cluster.
-// Pulled out of content/parse-html.js as part of Phase B.
 
 /** Block-level HTML tags that should produce paragraph breaks. */
 export const BLOCK_TAGS = new Set([

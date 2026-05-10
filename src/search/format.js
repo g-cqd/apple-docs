@@ -3,20 +3,16 @@
  * layer to the public CLI/MCP shape that the formatter / projection
  * layers expect.
  *
- * Pulled out of commands/search.js as part of P2.6.
+ * JIT-friendly shape: every property is assigned in the same order on
+ * every call, and `undefined`-valued conditionals stay present on the
+ * literal so JavaScriptCore / V8 hidden-class inference sees a single
+ * shape across all results in the array. `JSON.stringify` drops
+ * `undefined` values, so the wire format is unchanged.
  *
- * Phase 4.1 — JIT-friendly shape: every property is assigned in the
- * same order on every call, and `undefined`-valued conditionals stay
- * present on the literal so JavaScriptCore / V8 hidden-class
- * inference sees a single shape across all results in the array.
- * `JSON.stringify` drops `undefined` values, so the wire format is
- * unchanged.
- *
- * Phase 4.2 — non-mutating platforms parse: callers attach
- * `r.platformsParsed` (an Array) once at row arrival; this function
- * reads that first and only falls back to parsing `r.platforms`
- * itself when the caller didn't pre-parse. Either way, `r.platforms`
- * itself is never mutated.
+ * Non-mutating platforms parse: callers attach `r.platformsParsed` (an
+ * Array) once at row arrival; this function reads that first and only
+ * falls back to parsing `r.platforms` itself when the caller didn't
+ * pre-parse. Either way, `r.platforms` is never mutated.
  */
 
 /** @param {unknown} value */

@@ -118,13 +118,13 @@ export async function startDevServer(opts, ctx) {
     return dispatched ?? notFoundResponse(siteConfig)
   }
 
-  // Phase 1.1: per-request observability — latency histogram + per-route
-  // counter. Cheap (one performance.now() at entry, one at exit, plus a
-  // map write); surfaced via /metrics.
+  // Per-request observability — latency histogram + per-route counter.
+  // Cheap (one performance.now() at entry, one at exit, plus a map
+  // write); surfaced via /metrics.
   const observability = createObservability()
-  // Phase 1.2: event-loop lag sampler runs in the background and feeds
-  // /metrics. Auto-detects synchronous blockers (gzipSync, sync regex,
-  // recursive parsers) so they show up as p99 lag.
+  // Event-loop lag sampler runs in the background and feeds /metrics.
+  // Auto-detects synchronous blockers (gzipSync, sync regex, recursive
+  // parsers) so they show up as p99 lag.
   const eventLoopLag = createEventLoopLagSampler()
 
   const server = Bun.serve({
@@ -165,10 +165,10 @@ export async function startDevServer(opts, ctx) {
   const serverUrl = `http://localhost:${server.port}`
   if (logger) logger.info(`Dev server running at ${serverUrl}`)
 
-  // Phase D.2 / 1.1: optional Prometheus scrape endpoint on a separate
-  // loopback listener. No-op when --metrics-port is absent. Bypasses the
-  // main rate-limit + security-headers middleware on purpose — scrape
-  // bursts would flap the limiter and Prometheus brings its own auth.
+  // Optional Prometheus scrape endpoint on a separate loopback listener.
+  // No-op when --metrics-port is absent. Bypasses the main rate-limit +
+  // security-headers middleware on purpose — scrape bursts would flap
+  // the limiter and Prometheus brings its own auth.
   const metricsHandle = maybeStartWebMetricsServer(opts, {
     logger,
     readerPool,

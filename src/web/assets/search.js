@@ -3,11 +3,8 @@
 // Escape, `/` shortcut), and announces result counts via an aria-live
 // region.
 //
-// Phase 2: native ES module with explicit init() called from
-// core.bundle.js. The internal scope is preserved by keeping all state
-// and helpers inside init() — the IIFE-to-function conversion is
-// mechanical (replace `;(() => { ... })()` with
-// `export function init() { ... }`).
+// All state and helpers stay inside `init()` so the bundled output keeps
+// a closed scope without an explicit IIFE wrapper.
 export function init() {
   const input = document.querySelector('.search-input')
   const dropdown = document.querySelector('.search-dropdown')

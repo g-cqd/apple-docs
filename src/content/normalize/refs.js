@@ -4,8 +4,6 @@
 //   2. Project link sections into resolved-title shape for storage.
 //   3. Walk every content node and decorate references with their title
 //      + key so the render layer doesn't re-resolve per node.
-//
-// Pulled out of content/normalize.js as part of Phase B.
 
 import { normalizeIdentifier } from '../../apple/normalizer.js'
 import { mapUrlToKey } from '../../lib/link-resolver.js'

@@ -1,5 +1,4 @@
 // Pure HTML helpers used across the render-html cluster.
-// Pulled out of content/render-html.js as part of Phase B.
 
 import {
   coerceDocument as _coerceDocument,

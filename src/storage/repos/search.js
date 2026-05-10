@@ -3,22 +3,20 @@
  * trigram / body), the body-index maintenance ops, the fuzzy-trigram
  * candidate fetch, and the framework-synonym lookup.
  *
- * Tier-aware: trigram and body statements are guarded against lite
- * snapshots that ship without those tables; the corresponding methods
- * return empty results when the table is absent.
+ * Trigram and body statements are guarded against snapshots that ship
+ * without those tables; the corresponding methods return empty results
+ * when the table is absent.
  *
  * Each search variant accepts the same filter bag (framework / kind /
  * language / sourceType / min{Ios,Macos,…}) — the SQL fragments are kept
  * identical across variants so the cascade in commands/search.js sees a
  * uniform row shape.
  *
- * P2.5 (silent-catch cleanup): FTS5 parser errors, malformed user queries,
- * and missing-table edge cases used to swallow exceptions and return
- * empty results without any signal. They still return empty results (the
- * cascade in commands/search.js relies on it), but every failure now
- * goes through safeCall(log: 'warn-once') so the first occurrence per
- * label surfaces in the JSON logger and operators can tell when the
- * planner is silently degrading.
+ * FTS5 parser errors, malformed user queries, and missing-table edge
+ * cases return empty results so the cascade in commands/search.js can
+ * fall through, but every failure goes through `safeCall(log:
+ * 'warn-once')` so the first occurrence per label surfaces in the JSON
+ * logger and operators can tell when the planner is silently degrading.
  */
 
 import { safeCall } from '../../lib/safe-call.js'
@@ -37,9 +35,9 @@ const RESULT_COLUMNS = `
 
 // Filter clauses appended to every variant after its specific MATCH/WHERE.
 //
-// P3.1: multi-source / year / track / deprecated now push down to SQL.
-// The over-fetch multiplier in search.js drops from 10× to 3× when
-// only `kind` and `platformFilters` remain JS-side.
+// Multi-source / year / track / deprecated push down to SQL so the
+// over-fetch multiplier in search.js can stay at 3× — only `kind` and
+// `platformFilters` remain JS-side.
 const FILTER_PREDICATES = `
   AND ($framework IS NULL OR d.framework = $framework)
   AND ($source_type IS NULL OR d.source_type = $source_type)
@@ -70,7 +68,7 @@ function buildFilterParams({
   sources = null, year = null, track = null, deprecatedMode = 'include',
   minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null,
 } = {}) {
-  // P3.1: pack multi-source as a JSON array string for json_each().
+  // Pack multi-source as a JSON array string for json_each().
   // null → no filter; single-element list → equivalent to $source_type.
   const sourcesJson = Array.isArray(sources) && sources.length > 0
     ? JSON.stringify(sources)
@@ -181,11 +179,11 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         WHERE documents_trigram MATCH $trigram
       `)
     : null
-  // P3.2: SQL-backed fuzzy candidate pre-filter. Replaces the
-  // in-memory _trigramCache that built a ~7M-entry Map<trigram, [docs]>
-  // per reader-worker (multi-hundred-MB warm RSS). The OR-of-trigrams
-  // MATCH query lets FTS5 rank titles by trigram overlap via bm25;
-  // Levenshtein runs main-thread on the resulting top-N candidates.
+  // SQL-backed fuzzy candidate pre-filter. A per-worker in-memory
+  // `Map<trigram, [docs]>` would build a ~7M-entry table (multi-hundred-
+  // MB warm RSS per reader). The OR-of-trigrams MATCH query lets FTS5
+  // rank titles by trigram overlap via bm25; Levenshtein then runs
+  // main-thread on the resulting top-N candidates.
   const fuzzyCandidatesStmt = hasTrigramTable
     ? db.query(`
         SELECT d.id, d.title, bm25(documents_trigram) as score
@@ -293,10 +291,10 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
       })
     },
     /**
-     * Fuzzy candidate pre-filter (P3.2). `orQuery` is an FTS5 OR-of-
-     * trigrams expression — e.g. `"vie" OR "iew"`. bm25 ordering puts
-     * the highest-trigram-overlap titles first; the caller runs
-     * Levenshtein on the result to verify edit distance.
+     * Fuzzy candidate pre-filter. `orQuery` is an FTS5 OR-of-trigrams
+     * expression — e.g. `"vie" OR "iew"`. bm25 ordering puts the
+     * highest-trigram-overlap titles first; the caller runs Levenshtein
+     * on the result to verify edit distance.
      */
     fuzzyTrigramCandidates(orQuery, limit = 500) {
       if (!fuzzyCandidatesStmt) return []

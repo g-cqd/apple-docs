@@ -40,7 +40,7 @@ export async function consolidate(opts, ctx) {
       analyzed = all.length
       logger.info(`Analyzing ${all.length} failed entries...`)
 
-      // Phase 1: clean up entries that are not valid standalone pages
+      // Step 1: clean up entries that are not valid standalone pages
       for (const failed of all) {
         if (!isInvalidFailedPath(failed.path)) continue
         if (!dryRun) {
@@ -50,7 +50,7 @@ export async function consolidate(opts, ctx) {
       }
       logger.info(`Cleaned ${cleaned} invalid entries (fragments, dot-operators, bad URLs)`)
 
-      // Phase 2: for remaining failures, check parent pages for correct URL
+      // Step 2: for remaining failures, check parent pages for correct URL
       const remaining = dryRun
         ? all.filter(failed => !isInvalidFailedPath(failed.path))
         : db.db.query("SELECT path, root_slug, error FROM crawl_state WHERE status = 'failed'").all()
@@ -91,7 +91,7 @@ export async function consolidate(opts, ctx) {
       }
     }
 
-    // Phase 3: retry resolved paths (unless dry-run)
+    // Step 3: retry resolved paths (unless dry-run)
     if (!dryRun && resolvedPaths.length > 0) {
       logger.info(`Retrying ${resolvedPaths.length} resolved paths...`)
       const concurrency = Math.max(
@@ -186,7 +186,7 @@ export async function consolidate(opts, ctx) {
 
     const stillFailed = db.db.query("SELECT COUNT(*) as c FROM crawl_state WHERE status = 'failed'").get().c
 
-    // Phase 4: minify existing JSON files if requested
+    // Step 4: minify existing JSON files if requested
     let minified = 0
     let minifySaved = 0
 
@@ -199,7 +199,7 @@ export async function consolidate(opts, ctx) {
       logger.info(`Minified ${minified} files, saved ${(minifySaved / 1e6).toFixed(1)} MB`)
     }
 
-    // Phase 5: rebuild body index if requested
+    // Step 5: rebuild body index if requested
     let bodyIndexed = 0
     if (opts.indexBody && !dryRun) {
       const { indexBodyFull } = await import('../pipeline/index-body.js')
@@ -207,7 +207,7 @@ export async function consolidate(opts, ctx) {
       bodyIndexed = idxResult.indexed
     }
 
-    // Phase 6: verify snapshot/corpus integrity (if requested)
+    // Step 6: verify snapshot/corpus integrity (if requested)
     let snapshotVerification = null
     let corpusIntegrity = null
     if (opts.verify) {

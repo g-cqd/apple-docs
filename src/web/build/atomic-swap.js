@@ -2,8 +2,6 @@
 // staging dir alongside `outDir`, then renames staging over the live
 // directory in a single filesystem op so no partial output is ever
 // served. On failure, restores the previous output.
-//
-// Pulled out of web/build.js as part of Phase B.
 
 import { existsSync } from 'node:fs'
 

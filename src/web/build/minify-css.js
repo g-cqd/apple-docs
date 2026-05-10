@@ -1,7 +1,6 @@
 /**
  * Minify CSS by stripping comments, collapsing whitespace, and removing
- * unnecessary characters. Pulled out of web/build.js as part of Phase B
- * so it's independently testable.
+ * unnecessary characters.
  */
 export function minifyCSS(css) {
   return css

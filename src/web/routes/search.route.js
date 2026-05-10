@@ -4,7 +4,7 @@ import { jsonResponse, API_CORPUS_CACHE_CONTROL } from '../responses.js'
 import { BackpressureError, Semaphore } from '../../lib/semaphore.js'
 
 /**
- * P2.4 — bounded concurrency for explicit `deep=1` search requests.
+ * Bounded concurrency for explicit `deep=1` search requests.
  *
  * The deep reader pool itself is small (default 2), so a hostile peer
  * sending a flood of `deep=1` requests can pin every deep slot for
@@ -75,9 +75,9 @@ export async function searchHandler(_request, ctx, url) {
       headers: { 'x-apple-docs-cache': 'hit', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
     })
   }
-  // P2.4: gate explicit deep requests through the module-level
-  // semaphore. Cheap requests (deep=false) bypass — the strict pool
-  // handles them with low latency. Overflow returns 503 + Retry-After.
+  // Gate explicit deep requests through the module-level semaphore.
+  // Cheap requests (deep=false) bypass — the strict pool handles them
+  // with low latency. Overflow returns 503 + Retry-After.
   if (deep) {
     try {
       return await deepGate.run(async () => {

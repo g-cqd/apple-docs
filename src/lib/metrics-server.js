@@ -2,9 +2,9 @@
  * Optional Prometheus scrape endpoint for the long-running servers
  * (`apple-docs web serve` and `apple-docs mcp serve`).
  *
- * Phase D.2: opt-in only — the metrics server starts only when the operator
- * passes `--metrics-port`. When absent, no listener is created and there is
- * zero per-request overhead on the main server.
+ * Opt-in only — the metrics server starts only when the operator
+ * passes `--metrics-port`. When absent, no listener is created and
+ * there is zero per-request overhead on the main server.
  *
  * Bound to 127.0.0.1 by default. Prometheus scrape endpoints are an internal
  * surface — they are not gated by the main server's auth / rate-limit

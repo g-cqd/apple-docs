@@ -5,8 +5,6 @@
  * then walks: snapshot SVG → live SVG (via PDF) → PNG raster → fallback
  * placeholder. Each stage is its own helper so a failure at any layer
  * falls forward without dragging the others down.
- *
- * Pulled out of resources/apple-assets.js as part of P3.7.
  */
 
 import { existsSync, statSync } from 'node:fs'

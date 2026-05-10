@@ -2,13 +2,12 @@
 // reflects it via `<html data-theme="...">` so the CSS variable layer
 // can pick up the right palette.
 //
-// Phase 2 conversion: the file is a native ES module. The flash-prevention
-// step (set data-theme to the stored value) runs as a top-level
-// side-effect on module load — that ensures it happens BEFORE any other
-// bundle member's IIFE side effects, which is required for the page to
-// render with the correct palette. The `init()` export wires up the
-// button handlers and runs after DOMContentLoaded (queued via the
-// listener); core.bundle.js calls it explicitly.
+// The flash-prevention step (set data-theme to the stored value) runs
+// as a top-level side-effect on module load so it happens BEFORE any
+// other bundle member's side effects — required for the page to render
+// with the correct palette. The `init()` export wires up the button
+// handlers and is called explicitly by the bundle entry after
+// DOMContentLoaded.
 const STORAGE_KEY = 'apple-docs-theme'
 const VALID = ['auto', 'light', 'dark']
 

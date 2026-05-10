@@ -2,12 +2,11 @@
  * Build a `Content-Disposition: attachment; …` header value that survives
  * non-ASCII filenames and quote characters per RFC 5987.
  *
- * Audit A24: previous callers used `attachment; filename="${name.replaceAll('"','')}"`
- * which:
- *   - Drops quotes silently — surprises users whose font names contain `"`.
- *   - Mojibakes any non-ASCII character (Apple ships SF Pro for Arabic /
+ * A naive `attachment; filename="${name.replaceAll('"','')}"` would:
+ *   - Drop quotes silently — surprising for users whose font names contain `"`.
+ *   - Mojibake any non-ASCII character (Apple ships SF Pro for Arabic /
  *     Hebrew / Georgian; the family display names contain Unicode).
- *   - Doesn't escape `;` / `,` / backslash, allowing header smuggling.
+ *   - Fail to escape `;` / `,` / backslash, allowing header smuggling.
  *
  * RFC 5987 says: provide a US-ASCII `filename=` for legacy clients AND a
  * UTF-8 `filename*=` with percent-encoded value. Modern browsers honor

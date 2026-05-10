@@ -4,8 +4,6 @@
  * statement; everything multi-valued or fuzzy (kind taxonomy, platform
  * version comparisons, WWDC year/track, deprecated mode) runs here on
  * the over-fetched result set.
- *
- * Pulled out of commands/search.js as part of P2.6.
  */
 
 const ROLE_KIND_FILTERS = new Set([

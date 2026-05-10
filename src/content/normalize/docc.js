@@ -1,6 +1,4 @@
 // Apple DocC normalizer (apple-docc | hig | swift-docc).
-//
-// Pulled out of content/normalize.js as part of Phase B.
 
 import { normalizeIdentifier } from "../../apple/normalizer.js"
 import {

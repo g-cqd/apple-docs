@@ -3,7 +3,6 @@
  * The HTML is hand-curated and Apple-stable; the regex pipeline here is
  * tuned to the patterns in that one page (anchor-and-section structure,
  * hand-rolled callouts, etc.) and would need rework for any other source.
- * Extracted from guidelines-parser.js as part of P4.5.
  */
 
 export async function htmlToMarkdown(html) {

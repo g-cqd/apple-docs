@@ -1,8 +1,6 @@
 // Declaration / type-token rendering. Walks the DocC `tokens` array
 // (semantic kind + text + optional `_resolvedKey` for type linking) and
 // emits HTML with semantic CSS classes and per-type anchor links.
-//
-// Pulled out of content/render-html.js as part of Phase B.
 
 import { escapeHtml } from './helpers.js'
 

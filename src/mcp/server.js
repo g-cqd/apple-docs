@@ -1,11 +1,11 @@
 // The official MCP SDK is the single sanctioned npm dependency.
 // It handles JSON-RPC 2.0, schema validation, transport negotiation,
-// and protocol compliance — replacing the hand-rolled server.
+// and protocol compliance.
 //
-// Phase B decomposition: doc tools live in mcp/tools/docs.js, asset
-// tools in mcp/tools/assets.js, the resource templates in
-// mcp/server/resources.js, and shared helpers in mcp/server/helpers.js.
-// This file is the entry point + stdio lifecycle.
+// Doc tools live in mcp/tools/docs.js, asset tools in
+// mcp/tools/assets.js, the resource templates in mcp/server/resources.js,
+// and shared helpers in mcp/server/helpers.js. This file is the entry
+// point + stdio lifecycle.
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'

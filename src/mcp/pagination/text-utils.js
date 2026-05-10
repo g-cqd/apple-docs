@@ -1,7 +1,5 @@
 // Text-shaping helpers used by both the array and text-window paginators.
 // All exports are pure functions so each is independently testable.
-//
-// Pulled out of mcp/pagination.js as part of Phase B.
 
 export function splitText(text) {
   const paragraphs = text.split(/\n{2,}/).map(part => part.trim()).filter(Boolean)

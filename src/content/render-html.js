@@ -2,7 +2,7 @@
 // shape produced by content/normalize.js and delegates each section to
 // the matching per-kind renderer in render-html/sections.js.
 //
-// Phase B decomposition:
+// Module layout:
 //   - render-html/helpers.js   — escapeHtml, slugify, isSafeHref,
 //                                resolveReferenceUrl, readableNameFromKey,
 //                                skipDuplicateHeading, coerceDocument/Section.
@@ -12,9 +12,6 @@
 //   - render-html/sections.js  — every renderXxxHtml: abstract, declaration,
 //                                parameters, properties, rest-*, possible-values,
 //                                mentioned-in, discussion, link sections.
-//
-// Tests in test/unit/render-html.test.js exercise the public surface
-// (renderHtml + slugify) so the decomposition is invisible to callers.
 
 import { coerceDocument, escapeHtml, slugify } from './render-html/helpers.js'
 import {

@@ -1,10 +1,11 @@
 /**
  * Prometheus exposition-format encoder.
  *
- * Phase D.2: minimal `/metrics` endpoint shared between `apple-docs web serve`
- * and `apple-docs mcp serve`. Off by default — only spun up when the operator
- * passes `--metrics-port`. The format is plain text (no client library, no
- * dependency); see https://prometheus.io/docs/instrumenting/exposition_formats/.
+ * Minimal `/metrics` endpoint shared between `apple-docs web serve` and
+ * `apple-docs mcp serve`. Off by default — only spun up when the
+ * operator passes `--metrics-port`. The format is plain text (no client
+ * library, no dependency);
+ * see https://prometheus.io/docs/instrumenting/exposition_formats/.
  *
  * Input shape:
  *   [{ name: string, help: string, type: 'counter'|'gauge',

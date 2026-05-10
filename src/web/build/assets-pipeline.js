@@ -1,7 +1,5 @@
 // Build-time asset pipeline: copy + minify the per-server static assets
-// into the build output. Pulled out of web/build.js as part of Phase B
-// so the orchestrator can read clean step-by-step without 40 lines of
-// CSS-minify + bundle-loop noise.
+// into the build output.
 
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'

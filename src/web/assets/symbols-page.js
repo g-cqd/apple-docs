@@ -1,10 +1,10 @@
-// Symbols page (P7) — Phosphor-style global toolbar + Lucide-style
+// Symbols page — Phosphor-style global toolbar + Lucide-style
 // label-less tile grid.
 //
-// Phase B decomposition: pure formatters in symbols-page/format.js, URL
-// state in symbols-page/url-state.js, the chunked grid renderer in
-// symbols-page/grid.js, and the inspector / mobile-route detail panel in
-// symbols-page/detail-panel.js. This module owns the boot flow, the
+// Pure formatters live in symbols-page/format.js, URL state in
+// symbols-page/url-state.js, the chunked grid renderer in
+// symbols-page/grid.js, and the inspector / mobile-route detail panel
+// in symbols-page/detail-panel.js. This module owns the boot flow, the
 // filter compose, the customizer wire-up, and history routing.
 
 import { bindColorPair, normaliseHex } from './symbols-page/format.js'

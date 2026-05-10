@@ -5,13 +5,14 @@
  * Used by Swift.org and Apple Archive adapters.
  * No external HTML parser dependency — regex/string-based parsing.
  *
- * Phase B decomposition: constants in parse-html/constants.js, entity
- * decoding in parse-html/entities.js, the text/markdown converters in
+ * Constants live in parse-html/constants.js, entity decoding in
+ * parse-html/entities.js, the text/markdown converters in
  * parse-html/text-extract.js, the linear strip-elements pass in
  * parse-html/strip-elements.js, the CSS-shaped selector matcher in
- * parse-html/selectors.js, and meta + redirect detection in parse-html/meta.js.
- * This file exposes the public extractHtmlContent + parseHtmlToNormalized
- * surface and re-exports the smaller helpers callers used to import.
+ * parse-html/selectors.js, and meta + redirect detection in
+ * parse-html/meta.js. This file exposes the public
+ * extractHtmlContent + parseHtmlToNormalized surface and re-exports the
+ * smaller helpers callers used to import.
  */
 
 import { createDocumentTemplate } from './document-template.js'

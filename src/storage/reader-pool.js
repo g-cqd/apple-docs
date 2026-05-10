@@ -66,7 +66,7 @@ function resolveDefaultSize() {
 const DEFAULT_MAX_PENDING_PER_WORKER = 64
 const DEFAULT_DEADLINE_MS = 5_000
 
-// Per-op deadline overrides (P2.2). Resolution: opts.deadlineMs > this
+// Per-op deadline overrides. Resolution: opts.deadlineMs > this
 // map > pool default > DEFAULT_DEADLINE_MS. Strict ops cap above warm-
 // cache p99 but below the bench HEAVY budget; deep ops have honest
 // multi-second tails that the phase-2 split keeps off strict slots.
@@ -229,7 +229,7 @@ export function createReaderPool(opts = {}) {
     }
 
     const id = idCounter++
-    // P2.2: opts override > per-op map > pool default > DEFAULT_DEADLINE_MS.
+    // Deadline resolution: opts override > per-op map > pool default > DEFAULT_DEADLINE_MS.
     const deadlineMs = runOpts.deadlineMs
       ?? PER_OP_DEADLINE_MS[op]
       ?? defaultDeadlineMs
@@ -270,11 +270,12 @@ export function createReaderPool(opts = {}) {
   async function close({ softDrainMs = 0 } = {}) {
     if (closed) return
     closed = true
-    // P1.3: optional soft-drain phase — let in-flight reads finish naturally
-    // up to `softDrainMs` before we reject queued work and tear workers down.
-    // Default 0 preserves the immediate-close contract existing tests assert
-    // on. The graceful-shutdown path (lifecycle in cli.js / index.js) passes
-    // a positive value derived from the shutdown deadline.
+    // Optional soft-drain — let in-flight reads finish naturally up to
+    // `softDrainMs` before we reject queued work and tear workers down.
+    // Default 0 preserves the immediate-close contract existing tests
+    // assert on. The graceful-shutdown path (lifecycle in cli.js /
+    // index.js) passes a positive value derived from the shutdown
+    // deadline.
     if (softDrainMs > 0) {
       const start = Date.now()
       while (Date.now() - start < softDrainMs) {

@@ -1,11 +1,10 @@
 /**
  * Per-IP token-bucket rate limiter for the public web server.
  *
- * P3.5 of the remediation plan. The audits flagged the docs handler as
- * an SSRF amplifier (anyone reachable on 0.0.0.0:3000 could drive Apple
- * fetches via /docs/<path>) and the web server overall as a
- * CPU-exhaustion target. The plan's principle is to keep the read path
- * open but bound the work per IP — this module is the per-IP gate.
+ * Keeps the read path open while bounding the work per IP. The docs
+ * handler would otherwise be an SSRF amplifier (anyone reachable on
+ * `0.0.0.0:3000` could drive Apple fetches via `/docs/<path>`) and the
+ * web server as a whole a CPU-exhaustion target.
  *
  * Two limiters are typically created:
  *   - default (60 req/s, burst 120) — gates every request.

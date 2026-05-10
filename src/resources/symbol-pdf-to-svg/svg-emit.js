@@ -3,8 +3,6 @@
 // alpha=0 fills wrap the previously-painted layers in a luminance mask
 // so the cut geometry removes pixels from earlier layers (and only those
 // — subsequent layers escape the cut and become subject to any later one).
-//
-// Pulled out of resources/symbol-pdf-to-svg.js as part of Phase B.
 
 export function assembleSvg(fills, opts) {
   const { name = '', pointSize = 128, color = 'currentColor', background = null } = opts

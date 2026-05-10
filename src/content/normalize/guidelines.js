@@ -1,9 +1,8 @@
 // App Store Review Guidelines normalizer.
 //
-// Pulled out of content/normalize.js as part of Phase B. The guidelines
-// adapter delivers a pre-parsed payload (title + markdown + children),
-// so this normalizer is much simpler than the DocC one — just project
-// onto the document/section/relationship shape.
+// The guidelines adapter delivers a pre-parsed payload (title + markdown
+// + children), so this normalizer is much simpler than the DocC one —
+// it just projects onto the document/section/relationship shape.
 
 export function normalizeGuidelines(payload, key) {
   // payload: { title, role, roleHeading, path, markdown, abstract, id, children: [childPath...] }

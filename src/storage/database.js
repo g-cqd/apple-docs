@@ -87,12 +87,11 @@ export class DocsDatabase {
 
   /**
    * Return the snapshot tier label, or null for non-snapshot databases.
-   * Lite/standard tiers were removed (G.1); the canonical value is
-   * 'full'. Older snapshots whose snapshot_meta still contains 'lite'
-   * or 'standard' will return that legacy value verbatim — runtime
-   * capability checks (`hasTable('document_sections')`,
-   * `hasTrigramTable`, etc.) decide what features are actually
-   * available, the label is only metadata.
+   * The canonical value is `'full'`. Older snapshots whose
+   * `snapshot_meta` still contains `'lite'` or `'standard'` return that
+   * legacy value verbatim — runtime capability checks
+   * (`hasTable('document_sections')`, `hasTrigramTable`, etc.) decide
+   * what features are actually available; the label is only metadata.
    * @returns {string|null}
    */
   getTier() {
@@ -241,7 +240,7 @@ export class DocsDatabase {
    * run in parallel with other search tiers rather than blocking the event
    * loop.
    *
-   * Since P3.2 the underlying fuzzy implementation queries the live
+   * The underlying fuzzy implementation queries the live
    * `documents_trigram` FTS5 index per call rather than building a
    * process-local Map. No warm-up cost, no staleness hazard, no
    * multi-hundred-MB per-worker memory footprint.

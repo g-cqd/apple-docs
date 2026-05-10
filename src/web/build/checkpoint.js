@@ -2,7 +2,6 @@
  * Build checkpoint helpers — section batching, render-fingerprint digest,
  * and the template-version stamp used to invalidate the per-doc render
  * index when the chrome surface changes.
- * Extracted from build.js as part of P3.8.
  */
 
 import { readFileSync } from 'node:fs'

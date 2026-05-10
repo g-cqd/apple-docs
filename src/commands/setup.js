@@ -12,8 +12,8 @@ import { validateArchive } from './setup/validate-archive.js'
 const GITHUB_REPO = 'g-cqd/apple-docs'
 const USER_AGENT = 'apple-docs/2.0'
 
-// Snapshot asset filename component. Lite/standard tiers were removed
-// (G.1); the full snapshot ships every consumer asset.
+// Snapshot asset filename component — every snapshot ships the full
+// payload, so this is fixed.
 const SNAPSHOT_TIER = 'full'
 
 /**
@@ -42,16 +42,15 @@ export async function setup(opts, ctx) {
   const release = await fetchLatestRelease()
   logger.info(`Found release: ${release.tag} (${release.date})`)
 
-  // 3. Find the full-tier asset (lite/standard were removed in G.1).
+  // 3. Find the snapshot archive.
   const archiveAsset = release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.tar.gz'))
   if (!archiveAsset) {
     throw new Error(`No snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
   }
 
-  // P1.5: checksum is mandatory. Previously we silently skipped verification
-  // when the .sha256 sidecar was missing; the audits flagged that as a
-  // supply-chain hole (compromised release flow could omit the sidecar
-  // and still ship arbitrary bytes).
+  // Checksum is mandatory. Skipping verification when the .sha256
+  // sidecar is missing is a supply-chain hole: a compromised release
+  // flow could omit the sidecar and still ship arbitrary bytes.
   const checksumAsset = release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256'))
   if (!checksumAsset) {
     throw new Error(
@@ -92,7 +91,7 @@ export async function setup(opts, ctx) {
     }
     logger.info('Download complete.')
 
-    // 5. Verify checksum (mandatory per P1.5 — see above).
+    // 5. Verify checksum (mandatory — see above).
     logger.info('Verifying checksum...')
     const checksumRes = await fetch(checksumAsset.downloadUrl, {
       headers: { 'User-Agent': USER_AGENT },
@@ -110,11 +109,12 @@ export async function setup(opts, ctx) {
     }
     logger.info('Checksum verified.')
 
-    // 5b. Pre-flight tar member validation (P1.5). Walks every entry via
+    // 5b. Pre-flight tar member validation. Walks every entry via
     // `tar -tvzf` and rejects symlinks, hardlinks, absolute paths, or
-    // anything that escapes dataDir after canonicalization. Run BEFORE
-    // wiping the install dir — a hostile archive should never cause data
-    // loss; we either install cleanly or leave the previous corpus intact.
+    // anything that escapes dataDir after canonicalization. Runs BEFORE
+    // wiping the install dir — a hostile archive should never cause
+    // data loss; we either install cleanly or leave the previous corpus
+    // intact.
     logger.info('Validating archive members...')
     const validation = await validateArchive(tmpPath, dataDir)
     logger.info(`Archive validated (${validation.entries.length} entries).`)

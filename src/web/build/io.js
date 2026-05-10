@@ -1,7 +1,6 @@
 /**
  * Build-time IO helpers — brotli precompression for static assets and
  * recursive directory copy for the public/ tree.
- * Extracted from build.js as part of P3.8.
  */
 
 import { readdirSync, statSync } from 'node:fs'

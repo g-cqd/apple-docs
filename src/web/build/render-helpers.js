@@ -2,7 +2,6 @@
  * Per-page render helpers — promise-race timeout wrapper and the
  * skiplist placeholder fallback for documents that wedge the synchronous
  * render path.
- * Extracted from build.js as part of P3.8.
  */
 
 export function renderWithTimeout(fn, ms) {

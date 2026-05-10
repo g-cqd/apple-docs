@@ -1,9 +1,7 @@
 /**
- * Apple-font discovery + DMG extraction helpers.
- *
- * Pulled out of resources/apple-assets.js as part of P3.7. Used by
- * syncAppleFonts (still in apple-assets.js) and the symbol-bundle plist
- * reader sites that need readPlist-backed maps.
+ * Apple-font discovery + DMG extraction helpers. Used by syncAppleFonts
+ * (in apple-assets.js) and the symbol-bundle plist reader sites that
+ * need readPlist-backed maps.
  */
 
 import { existsSync, readdirSync, statSync } from 'node:fs'

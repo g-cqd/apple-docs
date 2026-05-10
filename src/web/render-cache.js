@@ -1,22 +1,17 @@
 /**
  * Shared render-time lookup caches for web page generation.
  *
- * P3.9 closure: the audit (deep-exhaustive §3.1) recommended replacing
- * the triple-index with on-demand prepared SELECTs against the DB. After
- * measurement that turned out to be the wrong tradeoff:
+ * Replacing this triple-index with on-demand prepared SELECTs against
+ * the DB would cost ~21 s of pure SQL on a full build (350 K renders ×
+ * ~6 ancestor lookups × ~10 µs) versus the O(N) once + O(1) thereafter
+ * the in-memory version pays. The footprint is ~17 MB total across the
+ * three Maps + Set at full corpus — negligible against the production
+ * envelope.
  *
- *   - Memory cost at full corpus (~350 K docs) is ~17 MB total across the
- *     three Maps + Set, not the audit's estimated 100-200 MB. Doesn't
- *     register against the production envelope (64 GB RAM available).
- *   - The cost CPU pays (per-doc DB round trips for ancestor titles +
- *     role headings) would scale build-time poorly: 350 K renders × ~6
- *     ancestor lookups × ~10 µs = ~21 s of pure SQL on a path that
- *     currently does the work in O(N) once and O(1) thereafter.
- *
- * The audit's actual cliff was the GLOBAL invalidate() that wiped the
- * triple-index on every on-demand doc fetch. P3.2 replaced that with the
- * per-key addDocument() patch path, which keeps the cache warm across
- * fetches. Memory was a red herring; staleness was the real bug.
+ * The hazard the in-memory design has to avoid is the global
+ * `invalidate()` wiping every entry on every on-demand doc fetch — the
+ * per-key `addDocument()` patch path keeps the cache warm across
+ * fetches.
  *
  * @param {import('../storage/database.js').DocsDatabase} db
  */
@@ -79,11 +74,11 @@ export function createWebRenderCache(db) {
       return headings
     },
     /**
-     * P3.2: incremental upsert. The audit flagged the global invalidate as
-     * a UX cliff — every on-demand doc fetch wiped the triple-index for
-     * everyone (~100-200 MB rebuild on the next request). When we know
-     * which doc was just persisted we can patch the indexes in place
-     * rather than throwing them away.
+     * Incremental upsert. When the caller knows which doc was just
+     * persisted, patching the indexes in place avoids the global
+     * `invalidate()` cliff — every on-demand doc fetch would otherwise
+     * wipe the triple-index for everyone and force a rebuild on the
+     * next request.
      *
      * No-ops when the indexes haven't been built yet (the first request
      * builds them; until then there's nothing to patch).

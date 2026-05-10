@@ -1,8 +1,6 @@
-// Update path for snapshot-style sources (currently just the App Store
-// Review Guidelines): a single fetched HTML blob that gets re-applied
-// when the upstream ETag drifts.
-//
-// Pulled out of commands/update.js as part of Phase B.
+// Update path for snapshot-style sources (the App Store Review
+// Guidelines): a single fetched HTML blob that gets re-applied when the
+// upstream ETag drifts.
 
 import { applyGuidelinesSnapshot } from '../../pipeline/sync-guidelines.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'

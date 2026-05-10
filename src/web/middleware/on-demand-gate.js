@@ -1,11 +1,11 @@
 /**
  * Composite gate for the on-demand docs fetch path.
  *
- * Audit A7: the /docs/<key> handler falls through to fetchDocPage when a
- * key isn't in the corpus, which makes the public web server a free SSRF
- * amplifier (any reachable client can drive Apple-side traffic). The
- * existing per-IP token bucket handles the warm path well, but the cold
- * path needs three additional defenses:
+ * The `/docs/<key>` handler falls through to `fetchDocPage` when a key
+ * isn't in the corpus, which would make the public web server a free
+ * SSRF amplifier (any reachable client could drive Apple-side traffic).
+ * The base per-IP token bucket handles the warm path; the cold path
+ * needs three additional defenses:
  *
  *   1. **Strict per-IP bucket** (5/min default) — applied only when the
  *      handler enters the cold path, so legitimate users browsing

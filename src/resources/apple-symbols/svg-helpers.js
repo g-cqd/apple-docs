@@ -1,8 +1,8 @@
 /**
  * SVG post-processing helpers for SF Symbol rendering.
  *
- * Pulled out of resources/apple-assets.js. All pure string transforms — no
- * filesystem, no spawn — so they're trivially testable in isolation.
+ * All pure string transforms — no filesystem, no spawn — so they're
+ * trivially testable in isolation.
  *
  * The pre-rendered snapshot SVGs ship with `width`/`height` set to Apple's
  * source point size and a single `fill="#000000"` per visible layer. At

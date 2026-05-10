@@ -16,9 +16,9 @@ const _SECTION_NUM_RE = /^(\d+(?:\.\d+)*(?:\([a-z]\))?)$/
  * Each section has: { id, path, title, abstract, markdown, role, roleHeading, notarization, children }
  *
  * Strategy:
- *   Phase 1 — HTMLRewriter injects boundary markers at each data-sidenav element,
- *             strips ASR/NR badges and localization spans, and extracts metadata.
- *   Phase 2 — Split on markers, convert each chunk from HTML to Markdown.
+ *   Pass 1 — HTMLRewriter injects boundary markers at each data-sidenav element,
+ *            strips ASR/NR badges and localization spans, and extracts metadata.
+ *   Pass 2 — Split on markers, convert each chunk from HTML to Markdown.
  *
  * @param {string} html - The full HTML of the guidelines page
  * @returns {Promise<{ sections: Array, lastUpdated: string|null }>}
@@ -33,7 +33,7 @@ import {
 import { buildHierarchy } from './guidelines/hierarchy.js'
 
 export async function parseGuidelinesHtml(html) {
-  // ── Phase 1: Extract metadata + inject markers ──────────────────────
+  // ── Pass 1: Extract metadata + inject markers ──────────────────────
   const sectionMeta = []  // { id, sidenavTitle, notarization }
   const MARKER = '<!--§SPLIT:'
 
@@ -75,7 +75,7 @@ export async function parseGuidelinesHtml(html) {
   if (containerStart === -1) throw new Error('Could not find #content-container in HTML')
   const contentHtml = transformed.slice(containerStart)
 
-  // ── Phase 2: Split on markers + convert to Markdown ─────────────────
+  // ── Pass 2: Split on markers + convert to Markdown ─────────────────
   const markerRe = /<!--§SPLIT:(\d+)-->/g
   const markerPositions = []
   let m

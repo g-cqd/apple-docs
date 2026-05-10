@@ -9,7 +9,7 @@
  * dispatch list on a 345k-document build. Index walk is O(1) per dequeue
  * and avoids the upfront copy.
  *
- * P2.8: optional `signal` aborts further task starts. In-flight tasks are
+ * An optional `signal` aborts further task starts. In-flight tasks are
  * not killed (the supplied fn() owns its own cancellation) but no new
  * tasks are pulled from `items` once aborted, and the returned Promise
  * rejects with the abort reason once in-flight work settles.

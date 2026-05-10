@@ -4,8 +4,6 @@
  * `src/mcp/metrics-provider.js` so a single Prometheus rule set can
  * cover both listeners with parallel `apple_docs_<surface>_*`
  * metrics.
- *
- * Phase 1.1 of docs/plans/2026-05-10-javascript-performance-sota.md.
  */
 
 import { startMetricsServer } from '../lib/metrics-server.js'
@@ -50,9 +48,9 @@ export function buildWebMetrics(deps) {
   }
 
   // ---- Reader-thread pool (off by default; only emit when wired).
-  // After P2.1 the pool is a {strict, deep} facade — emit per-pool
-  // labels so operators can see the split is healthy. Falls back to
-  // single-pool gauges if `pools` isn't present (test fixtures).
+  // The pool is a {strict, deep} facade — emit per-pool labels so
+  // operators can see the split is healthy. Falls back to single-pool
+  // gauges if `pools` isn't present (test fixtures).
   const rp = safeCall(() => deps.readerPool?.stats?.())
   if (rp) {
     pushReaderPoolMetrics(metrics, rp)
@@ -136,8 +134,8 @@ function safeCall(fn) {
 /**
  * Emit reader-pool metrics labeled by `pool="strict"|"deep"` when the
  * combined facade exposes per-pool stats. When `rp.pools` is absent
- * (e.g. tests pass a single-pool stub), fall back to flat gauges
- * matching the pre-P2.1 shape.
+ * (e.g. tests pass a single-pool stub), fall back to flat single-pool
+ * gauges.
  */
 function pushReaderPoolMetrics(metrics, rp) {
   const pools = rp.pools

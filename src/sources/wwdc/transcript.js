@@ -2,9 +2,8 @@
 //   - Apple JSON sessions (DocC-style render-tree, 2020+)
 //   - ASCIIwwdc community transcripts (VTT-flavoured plain text, 1997-2019)
 //
-// Pulled out of sources/wwdc.js as part of Phase B. The Apple-side
-// helpers also do the title + description extraction since they walk the
-// same JSON tree.
+// The Apple-side helpers also do the title + description extraction
+// since they walk the same JSON tree.
 
 import { decodeHtmlEntities } from './apple-html.js'
 import { VTT_TIMESTAMP_RE } from './constants.js'

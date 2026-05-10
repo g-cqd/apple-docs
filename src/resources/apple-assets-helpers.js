@@ -1,14 +1,12 @@
 /**
- * Pure formatting / normalization helpers shared across the apple-fonts and
- * apple-symbols decomposition. Pulled out of apple-assets.js so the
- * extracted modules don't pull in the full file just for one helper.
+ * Pure formatting / normalization helpers shared across the apple-fonts
+ * and apple-symbols modules.
  */
 
 /**
  * Per-call random suffix for Swift temp script paths. PID alone is
  * predictable on a shared host — appending randomness rules out the
- * symlink-race-then-clobber attack surface flagged in the audit
- * (deep-exhaustive §2.1, P3.4).
+ * symlink-race-then-clobber attack surface.
  */
 export function tempSuffix() {
   return Math.random().toString(36).slice(2, 10)

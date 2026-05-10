@@ -2,9 +2,9 @@
 // both produce the canonical { document, sections, relationships } shape;
 // this module routes raw payloads to the right one based on sourceType.
 //
-// Phase B decomposition: the DocC implementation lives in
-// normalize/docc.js, guidelines in normalize/guidelines.js, with the
-// shared helpers split into normalize/{render-content,refs,metadata}.js.
+// The DocC implementation lives in normalize/docc.js, guidelines in
+// normalize/guidelines.js, with the shared helpers split into
+// normalize/{render-content,refs,metadata}.js.
 
 import { normalizeDocC } from './normalize/docc.js'
 import { normalizeGuidelines } from './normalize/guidelines.js'

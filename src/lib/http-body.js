@@ -1,15 +1,13 @@
 /**
- * HTTP boundary helpers for handlers that previously called
- * `await request.text()` with no size cap and accepted every browser Origin
- * by default. The MCP HTTP server is publicly reachable; both surfaces are
- * trivial DoS / cross-site abuse vectors without these guards.
+ * HTTP boundary helpers. The MCP HTTP server is publicly reachable, so
+ * `await request.text()` without a size cap and a default-allow Origin
+ * policy would be trivial DoS / cross-site abuse vectors.
  *
- * P1.6 (body cap): readBodyCapped + readJsonRpcBodyCapped enforce a hard
- * byte ceiling first via Content-Length, then via a streaming early-abort.
- * P1.7 (origin policy): isLoopbackOrigin lets the MCP server default-deny
+ * Body cap: `readBodyCapped` + `readJsonRpcBodyCapped` enforce a hard
+ * byte ceiling first via Content-Length, then via a streaming
+ * early-abort.
+ * Origin policy: `isLoopbackOrigin` lets the MCP server default-deny
  * non-loopback browser origins when no --allow-origin is configured.
- *
- * See docs/plans/phase-3-quality-and-audit-remediation.md.
  */
 
 /** Hard cap for JSON-RPC POST bodies. Payloads in MCP-style traffic are

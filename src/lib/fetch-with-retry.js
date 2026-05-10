@@ -105,7 +105,7 @@ function combineSignals(callerSignal, timeoutMs) {
 /**
  * Perform a fetch with automatic retry on retriable status codes or network errors.
  *
- * P2.8: caller can pass `signal` to abort the request (and any pending
+ * The caller may pass `signal` to abort the request (and any pending
  * retry sleeps). An aborted request does NOT retry — propagation is the
  * point — so the caller's AbortError surfaces to the await site.
  *

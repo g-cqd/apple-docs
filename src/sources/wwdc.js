@@ -2,9 +2,9 @@
 //   - Apple's developer.apple.com video pages (2020+, HTML scrape)
 //   - ASCIIwwdc community transcripts (1997-2019, GitHub raw .vtt files)
 //
-// Phase B decomposition: keys + constants in wwdc/constants.js, Apple
-// HTML scraping in wwdc/apple-html.js, transcript / description / title
-// extraction in wwdc/transcript.js. This module is the adapter shell.
+// Keys + constants live in wwdc/constants.js, Apple HTML scraping in
+// wwdc/apple-html.js, transcript / description / title extraction in
+// wwdc/transcript.js. This module is the adapter shell.
 
 import { checkRawGitHub, fetchGitHubTree, fetchRawGitHub } from '../lib/github.js'
 import { checkHtmlPage } from '../apple/api.js'

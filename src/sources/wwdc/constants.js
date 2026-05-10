@@ -1,5 +1,5 @@
-// Shared constants for the WWDC source. Keys, year ranges, and the upstream
-// endpoints. Pulled out of sources/wwdc.js as part of Phase B.
+// Shared constants for the WWDC source. Keys, year ranges, and the
+// upstream endpoints.
 
 export const ROOT_SLUG = 'wwdc'
 export const APPLE_VIDEOS_INDEX = 'https://developer.apple.com/videos'

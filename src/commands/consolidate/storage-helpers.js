@@ -9,7 +9,6 @@ import { stableStringify } from '../../storage/files.js'
  *   never be retried (fragments, dot-ops, etc).
  * - minifyDir: walks a directory tree minifying raw-JSON payloads in
  *   place — runs as the trailing pass of consolidate --minify.
- * Extracted from commands/consolidate.js as part of P4.4.
  */
 
 export function isInvalidFailedPath(path) {

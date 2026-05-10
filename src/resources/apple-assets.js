@@ -1,9 +1,8 @@
 /**
- * Apple-asset facade. The font / symbol pipelines were decomposed in P3.7
- * into per-concern modules under apple-fonts/ and apple-symbols/; this
- * module is now the public entry point — it owns syncAppleFonts (the only
- * driver that wasn't lifted because it's the orchestrator) plus the small
- * list/search readers, and re-exports everything else.
+ * Apple-asset facade. The font / symbol pipelines live in per-concern
+ * modules under apple-fonts/ and apple-symbols/; this module is the
+ * public entry point — it owns syncAppleFonts (the orchestrator) plus
+ * the small list/search readers, and re-exports everything else.
  */
 
 import { extname, join } from 'node:path'

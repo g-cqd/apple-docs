@@ -1,7 +1,5 @@
 // Document-level meta extraction: <title>, <meta name="description">,
 // <meta property="og:title">, plus the redirect-stub detector.
-//
-// Pulled out of content/parse-html.js as part of Phase B.
 
 import { decodeEntities } from './entities.js'
 import { htmlToPlainText } from './text-extract.js'

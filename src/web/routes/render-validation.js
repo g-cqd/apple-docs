@@ -1,13 +1,9 @@
 /**
  * Public render endpoints (SF Symbols, font text samples) sit on a CPU
  * budget that's the project's only constrained resource — every render
- * spawns Swift. The plan keeps these endpoints publicly reachable but
- * bounds the work per request: hard text length cap, parameter allowlists
- * with explicit rejection (no silent clamp-and-render fallback).
- *
- * See docs/plans/phase-3-quality-and-audit-remediation.md §P1.9 and the
- * audit findings in docs/audits/2026-05-09-strict-security-sota.md §5
- * and 2026-05-09-findings-brief.md.
+ * spawns Swift. The endpoints stay publicly reachable but bound the
+ * work per request: hard text length cap, parameter allowlists with
+ * explicit rejection (no silent clamp-and-render fallback).
  */
 
 import { SYMBOL_WEIGHTS, SYMBOL_SCALES } from '../../resources/apple-assets.js'

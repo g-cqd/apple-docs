@@ -2,8 +2,7 @@
  * Operations repository: activity tracking, snapshot metadata, sync
  * checkpoints, the update log, and the per-document render-index.
  *
- * Extracted from database.js as part of the P2.3 facade refactor. The
- * statements all run against tables created by migrations v2 / v8 / v9
+ * All statements run against tables created by migrations v2 / v8 / v9
  * and the snapshot_meta + activity definitions in v6.
  */
 

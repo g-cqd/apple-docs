@@ -1,12 +1,11 @@
 /**
  * Process lifecycle helper for the apple-docs CLI / MCP / web entry points.
- * See P1.3 in docs/plans/phase-3-quality-and-audit-remediation.md.
  *
- * Today the entry points install minimal SIGINT/SIGTERM handlers that close
- * the DB and exit. There are no unhandledRejection / uncaughtException
- * handlers, and the signal-driven cleanup is synchronous — in-flight
- * requests are dropped, reader-pool workers are killed without a chance to
- * drain, and launchd's default 20 s ExitTimeOut hard-kills the process.
+ * Replaces the minimal SIGINT/SIGTERM handlers that simply closed the DB
+ * and exited — those left no hook for unhandledRejection /
+ * uncaughtException and the synchronous cleanup dropped in-flight
+ * requests and killed reader-pool workers before they could drain, so
+ * launchd's default 20 s ExitTimeOut hard-killed the process.
  *
  * This module provides:
  *   - `installCrashHandlers({ logger })` — wires SIGINT/SIGTERM and the

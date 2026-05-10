@@ -149,14 +149,13 @@ ${buildScripts(siteConfig, ['core', ...(hasLangToggle ? ['lang-toggle'] : [])])}
 
 /** Batch-enrich topics section items with _resolvedRoleHeading from DB.
  *
- *  P3.3: deep-clones the parsed JSON before mutation. The previous code
- *  aliased `section.contentJson` directly when the upstream had already
- *  parsed it (the typeof-object branch). build.js batches sectionsByDoc
- *  per-root and reuses section rows across renders; a second render of
- *  the same doc would have seen pre-enriched JSON with the
- *  `_resolvedRoleHeading` markers baked in. Currently dormant (single
- *  render per doc per build) but a real correctness hazard if anything
- *  ever retries a render.
+ *  Deep-clones the parsed JSON before mutation. Aliasing
+ *  `section.contentJson` directly when the upstream had already parsed
+ *  it would be a correctness hazard: build.js batches sectionsByDoc
+ *  per-root and reuses section rows across renders, so a second render
+ *  of the same doc would see pre-enriched JSON with the
+ *  `_resolvedRoleHeading` markers baked in. Dormant on the single-render-
+ *  per-build path but real if anything ever retries a render.
  */
 function enrichTopicItems(sections, resolveRoleHeadings) {
   for (const section of sections) {

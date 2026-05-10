@@ -2,8 +2,6 @@
 // representation that normalize.js produces and emits the corresponding
 // HTML tree. Block and inline node handlers live in the same module
 // because they call into each other through every level.
-//
-// Pulled out of content/render-html.js as part of Phase B.
 
 import { normalizeIdentifier } from '../../apple/normalizer.js'
 import { highlightCode } from '../highlight.js'

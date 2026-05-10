@@ -3,8 +3,6 @@
 // no shading. Extracts a flat list of `fill` records (subpaths + alpha
 // + fill-rule) which the SVG-emit layer composes into masks for layer
 // cut-outs.
-//
-// Pulled out of resources/symbol-pdf-to-svg.js as part of Phase B.
 
 import { bytesToLatin1 } from './pdf-objects.js'
 

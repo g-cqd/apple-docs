@@ -3,10 +3,9 @@
 // the original markup the tree-view controller swapped out when the
 // user toggles back to the flat list.
 //
-// Phase B decomposition: state + URL serialization in
-// collection-filters/state.js, DOM rendering in
-// collection-filters/render.js. This module owns the lifecycle and
-// the event wiring.
+// State + URL serialization lives in collection-filters/state.js; DOM
+// rendering in collection-filters/render.js. This module owns the
+// lifecycle and event wiring.
 
 import {
   collectKindCounts,

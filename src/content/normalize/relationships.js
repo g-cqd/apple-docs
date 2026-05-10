@@ -2,8 +2,6 @@
 // relationshipsSections (inheritance / conformance), and seeAlsoSections
 // to produce the canonical { fromKey, toKey, relationType, section,
 // sortOrder } records the storage layer expects.
-//
-// Pulled out of content/normalize.js as part of Phase B.
 
 import { resolveRefKey } from './refs.js'
 

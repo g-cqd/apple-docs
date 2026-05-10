@@ -10,9 +10,8 @@
  *     test/unit/symbols.test.js: <dict>, <array>, <key>, <string>,
  *     <integer>, <real>, <true/>, <false/>, <data>, <date>.
  *
- * Extracted from src/resources/apple-assets.js as part of P3.7 — keeps
- * the asset module focused on rendering and lets the plist parser be
- * tested independently.
+ * Lives in lib/ so the asset module stays focused on rendering and the
+ * plist parser can be tested independently.
  */
 
 import { existsSync } from 'node:fs'

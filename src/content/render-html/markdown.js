@@ -3,8 +3,6 @@
 //   - Discussion-section fallback when DocC `contentJson` isn't present
 //   - Abstract sections from HTML-source articles (they capture multi-
 //     paragraph intros that need structural rendering)
-//
-// Pulled out of content/render-html.js as part of Phase B.
 
 import { highlightCode } from '../highlight.js'
 import { escapeHtml, isSafeHref } from './helpers.js'

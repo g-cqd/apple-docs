@@ -19,7 +19,7 @@
  * we Y-flip and translate into a (0,0)-anchored SVG viewBox so consumers
  * (CSS mask-image, <img src>, plain rendering) all behave consistently.
  *
- * Phase B decomposition: the PDF object-graph extraction lives in
+ * The PDF object-graph extraction lives in
  * symbol-pdf-to-svg/pdf-objects.js, the content-stream interpreter in
  * symbol-pdf-to-svg/content-stream.js, and the SVG-mask compositor in
  * symbol-pdf-to-svg/svg-emit.js. This file is the thin facade that wires

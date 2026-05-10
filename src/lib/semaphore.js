@@ -2,10 +2,10 @@
  * Counting semaphore for bounding global concurrency.
  * All parallel roots share one semaphore so total in-flight fetches are capped.
  *
- * P2.8 added AbortSignal support: acquire({ signal }) and run(fn, { signal })
- * accept an optional caller signal. If the signal aborts while the caller
- * is queued, the queued waiter is rejected with the abort reason and removed
- * from the queue (no permit leak). A signal already aborted at acquire-time
+ * `acquire({ signal })` and `run(fn, { signal })` accept an optional
+ * caller AbortSignal. If the signal aborts while the caller is queued,
+ * the queued waiter is rejected with the abort reason and removed from
+ * the queue (no permit leak). A signal already aborted at acquire-time
  * also rejects immediately.
  */
 export class BackpressureError extends Error {

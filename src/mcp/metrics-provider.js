@@ -1,16 +1,11 @@
 /**
  * Per-request metrics builder + optional metrics server starter for
- * `apple-docs mcp serve` (Phase D.2).
- *
- * Pulled out of http-server.js for two reasons:
- *   1. http-server.js sits at the 400-LOC ceiling; new logic goes elsewhere.
- *   2. Pure read of in-memory counters → trivial to unit-test in isolation
- *      without spinning a server.
+ * `apple-docs mcp serve`.
  *
  * The cache registry, markdown cache, semaphore, concurrency stats, and
  * reader-pool are all closure-held inside http-server's startHttpServer().
  * They are passed in as deps here rather than imported, so the metrics
- * surface is exactly what the operator probes via /healthz today.
+ * surface is exactly what the operator probes via /healthz.
  *
  * Naming convention: `apple_docs_mcp_<subsystem>_<name>` with `_total` for
  * counters per Prometheus convention. Cache stats use `cache="<tool>"` to
@@ -104,8 +99,8 @@ function buildMcpMetrics({
   }
 
   // ---- Reader-thread pool (off by default; only emit when wired).
-  // After P2.1 the pool exposes per-pool stats via `pools.{strict,deep}`;
-  // emit `pool=` labels so operators can verify the split.
+  // The pool exposes per-pool stats via `pools.{strict,deep}`; emit
+  // `pool=` labels so operators can verify the split.
   const rp = safeCall(() => readerPool?.stats?.())
   if (rp) {
     pushReaderPoolMetrics(metrics, rp)

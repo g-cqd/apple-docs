@@ -2,8 +2,6 @@
 // (sectionKind, contentJson, contentText) tuple and emits the matching
 // <section>…</section> markup. The dispatcher in render-html.js routes
 // each section through here based on its sectionKind.
-//
-// Pulled out of content/render-html.js as part of Phase B.
 
 import { highlightCode } from '../highlight.js'
 import { safeJson } from '../safe-json.js'

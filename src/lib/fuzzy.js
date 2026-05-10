@@ -51,23 +51,20 @@ function buildTrigramOrQuery(triSet) {
 }
 
 /**
- * P3.2: no-op kept for test compatibility. The pre-P3.2
- * implementation built a process-local Map<trigram, [docs]> and this
- * helper let fixtures drop it between cases. The SQL-backed path
- * holds no module-level state; the export remains so the test
- * harness import doesn't break.
+ * No-op kept for test compatibility. The SQL-backed fuzzy path holds
+ * no module-level state; the export remains so the test harness import
+ * doesn't break.
  */
-export function _resetTrigramCache() { /* no-op since P3.2 */ }
+export function _resetTrigramCache() { /* no-op */ }
 
 /**
- * Find fuzzy title matches using a SQL-backed trigram pre-filter
- * plus a JS Levenshtein post-filter (P3.2).
+ * Find fuzzy title matches using a SQL-backed trigram pre-filter plus
+ * a JS Levenshtein post-filter.
  *
- * Pre-P3.2 this kept a process-local `Map<trigram, [{id, title}]>`
- * built from every title (multi-hundred-MB warm RSS per reader
- * worker, stale-on-write hazard). The SQL path reads the live
- * `documents_trigram` FTS5 index per call: cheap (~ms), always
- * fresh, no warm-up cost.
+ * The SQL path reads the live `documents_trigram` FTS5 index per call
+ * (cheap, always fresh, no warm-up cost). A process-local
+ * `Map<trigram, [{id, title}]>` would mean multi-hundred-MB warm RSS
+ * per reader worker and a stale-on-write hazard.
  *
  * @param {string} query
  * @param {import('../storage/database.js').DocsDatabase} db

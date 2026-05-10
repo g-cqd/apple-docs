@@ -7,16 +7,8 @@
  * (src/pipeline/sync-guidelines.js) duplicated work that the DocC
  * normalizer already records as document_relationships rows.
  *
- * This migration also removes the parallel writes from sync-guidelines
- * at the source-code level (see same commit). Reads went away in
- * Phase B; we drop the table here so future contributors don't reach
- * for it.
- *
- * Note: the broader v15 envisioned in docs/plans/finalization.md also
- * folds `pages` and `document_relationships` into `documents`. Those
- * are deferred — both are deeply integrated working tables (~60 call
- * sites, framework-tree dependent) and warrant their own migration
- * with a real-corpus canary script. Tracked as a follow-up.
+ * The parallel writes from sync-guidelines were removed alongside this
+ * migration so the table can go without leaving callers behind.
  */
 export function up(db) {
   // Drop dependent indexes first; SQLite will drop them with the table

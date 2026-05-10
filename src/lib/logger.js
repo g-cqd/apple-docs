@@ -2,9 +2,9 @@ const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 }
 
 /**
  * Keys whose values get replaced with the literal string "<redacted>"
- * before serialization. Audit A30: a logger that ships `headers`,
- * `cookies`, or a captured request body straight to disk leaks the
- * caller's secret material on a retry / error.
+ * before serialization. Writing `headers`, `cookies`, or a captured
+ * request body straight to disk would leak the caller's secret material
+ * on a retry or error path.
  */
 const REDACT_KEY_RE = /token|secret|authorization|cookie|password|api[_-]?key|bearer/i
 
