@@ -28,6 +28,27 @@ bun run perf:heap cli.js web serve --port 3030
 
 Same DevTools / speedscope flow.
 
+### Cold-vs-warm heap diff
+
+For "what does the trigram cache + render cache + reader-pool warmup
+actually retain?" use the snapshot-diff harness:
+
+```bash
+scripts/heap-snapshot-diff.sh --warmup 20 --port 3030
+```
+
+Boots two instances back-to-back (cold + warm), runs a 20-second curl
+burst against the warm one, and writes both `.heapprofile` files plus
+a one-page summary into `reports/profiles/`. Open both in Chrome
+DevTools' **Memory tab → Comparison view** to attribute the warm RSS
+delta to specific constructors.
+
+Common warm-vs-cold offenders worth comparing:
+- `Map` from `lib/fuzzy.js` (`_trigramCache`) — multi-hundred-MB on
+  full corpus, deferred to phase 3.2.
+- `Map` from `web/render-cache.js` triple-index.
+- Prepared-statement strings + FTS row arrays.
+
 ### Snapshot a single hot path
 
 ```bash
