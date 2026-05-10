@@ -102,9 +102,12 @@ export function storageGc(opts, ctx) {
   db.db.run('DELETE FROM crawl_state WHERE root_slug NOT IN (SELECT slug FROM roots)')
   let orphansCleaned = db.db.query('SELECT changes() as c').get().c
 
-  // Remove stale activity records
+  // Remove stale activity records. The activity table's own column is
+  // `started_at` (v2 migration) — earlier code referenced a
+  // non-existent `timestamp` column and threw at every gc invocation
+  // with an --older-than flag set.
   if (olderThan != null) {
-    db.db.run("DELETE FROM activity WHERE timestamp < datetime('now', '-' || ? || ' days')", [Math.max(1, Math.floor(olderThan))])
+    db.db.run("DELETE FROM activity WHERE started_at < datetime('now', '-' || ? || ' days')", [Math.max(1, Math.floor(olderThan))])
   } else {
     db.db.run('DELETE FROM activity')
   }

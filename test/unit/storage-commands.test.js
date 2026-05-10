@@ -153,6 +153,26 @@ describe('storageGc', () => {
     expect(result.droppedDirs).not.toContain('markdown')
     expect(result.vacuumed).toBe(false)
   })
+
+  test('--older-than purges stale activity row (regression: column was wrong)', () => {
+    // The activity table column is `started_at` (v2 migration); earlier
+    // code referenced a non-existent `timestamp` and threw on every
+    // --older-than invocation. Activity is a single-row state table
+    // (id CHECK(id=1)) so we seed one stale row and assert it's gone.
+    db.db.run(
+      "INSERT OR REPLACE INTO activity (id, action, started_at, pid) VALUES (1, 'test', datetime('now', '-3 days'), 0)",
+    )
+    expect(db.db.query('SELECT COUNT(*) as c FROM activity').get().c).toBe(1)
+
+    expect(() => storageGc({ olderThan: 1, vacuum: false }, ctx)).not.toThrow()
+
+    expect(db.db.query('SELECT COUNT(*) as c FROM activity').get().c).toBe(0)
+  })
+
+  test('--older-than does not throw when activity table is empty', () => {
+    db.db.run('DELETE FROM activity')
+    expect(() => storageGc({ olderThan: 7, vacuum: false }, ctx)).not.toThrow()
+  })
 })
 
 describe('storageMaterialize', () => {
