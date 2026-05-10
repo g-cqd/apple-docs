@@ -1,6 +1,30 @@
 import { createHash } from 'node:crypto'
 import { search } from '../../commands/search.js'
 import { jsonResponse, API_CORPUS_CACHE_CONTROL } from '../responses.js'
+import { BackpressureError, Semaphore } from '../../lib/semaphore.js'
+
+/**
+ * P2.4 — bounded concurrency for explicit `deep=1` search requests.
+ *
+ * The deep reader pool itself is small (default 2), so a hostile peer
+ * sending a flood of `deep=1` requests can pin every deep slot for
+ * the configured deadline window — saturating other clients' deep
+ * search even though strict reads stay fast. This module-level
+ * semaphore caps concurrent deep requests across the whole web
+ * server; overflow returns HTTP 503 + Retry-After so the caller
+ * retries instead of queueing without bound.
+ *
+ * `maxWaiters` is sized to ~2× the gate so a brief burst is absorbed
+ * without 503s; sustained pressure trips the rejection path.
+ */
+const DEEP_GATE_MAX_INFLIGHT = parsePositiveInt(process.env.APPLE_DOCS_WEB_DEEP_INFLIGHT) ?? 4
+const DEEP_GATE_MAX_WAITERS = parsePositiveInt(process.env.APPLE_DOCS_WEB_DEEP_QUEUE) ?? 8
+const deepGate = new Semaphore(DEEP_GATE_MAX_INFLIGHT, { maxWaiters: DEEP_GATE_MAX_WAITERS })
+
+function parsePositiveInt(value) {
+  const n = value == null ? NaN : Number.parseInt(value, 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
 
 /**
  * `/api/search` — the latency-sensitive endpoint that powers the search
@@ -50,6 +74,29 @@ export async function searchHandler(_request, ctx, url) {
       hashable: true,
       headers: { 'x-apple-docs-cache': 'hit', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
     })
+  }
+  // P2.4: gate explicit deep requests through the module-level
+  // semaphore. Cheap requests (deep=false) bypass — the strict pool
+  // handles them with low latency. Overflow returns 503 + Retry-After.
+  if (deep) {
+    try {
+      return await deepGate.run(async () => {
+        const results = await search(searchOpts, searchCtx)
+        searchCache.set(cacheKey, results)
+        return jsonResponse(results, {
+          hashable: true,
+          headers: { 'x-apple-docs-cache': 'miss', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
+        })
+      })
+    } catch (err) {
+      if (err instanceof BackpressureError) {
+        return new Response('Deep search busy. Retry shortly.\n', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '1' },
+        })
+      }
+      throw err
+    }
   }
   const results = await search(searchOpts, searchCtx)
   searchCache.set(cacheKey, results)
