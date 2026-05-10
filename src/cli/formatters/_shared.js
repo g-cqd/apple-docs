@@ -4,7 +4,7 @@
  * without re-importing the whole module surface.
  */
 
-export const isTTY = process.stdout.isTTY
+const isTTY = process.stdout.isTTY
 
 export const bold = (s) => isTTY ? `\x1b[1m${s}\x1b[0m` : s
 export const dim = (s) => isTTY ? `\x1b[2m${s}\x1b[0m` : s
@@ -16,7 +16,7 @@ export function formatBytes(bytes) {
   return `${bytes} B`
 }
 
-export const RELAXED_QUALITIES = new Set(['relaxed', 'relaxed-or', 'relaxed-token'])
+const RELAXED_QUALITIES = new Set(['relaxed', 'relaxed-or', 'relaxed-token'])
 
 export function qualityBadge(quality, distance) {
   if (quality === 'match') return ''

@@ -35,7 +35,7 @@ export function extractAppleTranscript(json) {
 }
 
 /** Recursively find the first value at `key` in a tree. */
-export function deepFind(obj, key, maxDepth = 6) {
+function deepFind(obj, key, maxDepth = 6) {
   if (maxDepth <= 0 || obj == null || typeof obj !== 'object') return undefined
   if (Object.prototype.hasOwnProperty.call(obj, key)) return obj[key]
   for (const v of Object.values(obj)) {

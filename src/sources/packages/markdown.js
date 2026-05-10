@@ -20,7 +20,7 @@ export function normalizeLanguage(language) {
   return typeof language === 'string' && language.trim() ? language.trim().toLowerCase() : null
 }
 
-export function reindexSections(sections) {
+function reindexSections(sections) {
   return sections.map((section, index) => ({
     ...section,
     sortOrder: index,

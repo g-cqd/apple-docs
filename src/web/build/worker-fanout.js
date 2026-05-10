@@ -7,7 +7,7 @@
 import { join } from 'node:path'
 import { dirname } from 'node:path'
 
-export function partitionFrameworksByDocCount(roots, db, n) {
+function partitionFrameworksByDocCount(roots, db, n) {
   const counts = roots.map(root => ({
     root,
     count: db.db.query('SELECT COUNT(*) as c FROM documents WHERE framework = ?').get(root.slug).c,
@@ -41,7 +41,7 @@ export function partitionFrameworksByDocCount(roots, db, n) {
  * @param {number} args.workers        Number of subprocesses to spawn.
  * @param {number} args.concurrency    Per-process pool concurrency.
  * @param {string} args.outDir
- * @param {import('../storage/database.js').DocsDatabase} args.db  For doc-count partitioning.
+ * @param {import('../../storage/database.js').DocsDatabase} args.db  For doc-count partitioning.
  * @param {object} [args.logger]
  */
 export async function runWorkerBuilds({ roots, opts, siteConfig, workers, concurrency, outDir, db, logger }) {

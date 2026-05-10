@@ -33,7 +33,7 @@ const SYSTEM_FONT_ROOTS = [
  * @param {string} dataDir
  * @returns {string[]}
  */
-export function approvedFontRoots(dataDir) {
+function approvedFontRoots(dataDir) {
   const roots = SYSTEM_FONT_ROOTS.map(p => resolve(p) + sep)
   roots.push(resolve(homedir(), 'Library', 'Fonts') + sep)
   roots.push(resolve(dataDir, 'resources', 'fonts', 'extracted') + sep)

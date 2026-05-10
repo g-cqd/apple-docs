@@ -15,7 +15,7 @@ import { readPlist } from '../../lib/plist.js'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
 import { sanitizeFileName } from '../apple-assets-helpers.js'
 
-export const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.dfont'])
+const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.dfont'])
 
 export function discoverAppleFontFiles(dirs) {
   const files = []
@@ -34,7 +34,7 @@ export function discoverAppleFontFiles(dirs) {
   return files
 }
 
-export function walkFiles(dir, visit) {
+function walkFiles(dir, visit) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
@@ -97,7 +97,7 @@ export async function extractDmgFonts(dmgPath, destinationDir, logger) {
   }
 }
 
-export function findByExtension(dir, extension) {
+function findByExtension(dir, extension) {
   const out = []
   if (!existsSync(dir)) return out
   walkFiles(dir, (filePath) => {

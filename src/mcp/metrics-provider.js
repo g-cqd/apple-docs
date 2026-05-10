@@ -40,7 +40,7 @@ export function maybeStartMcpMetricsServer(opts, deps) {
   })
 }
 
-export function buildMcpMetrics({
+function buildMcpMetrics({
   cacheRegistry,
   markdownCache,
   heavySemaphore,

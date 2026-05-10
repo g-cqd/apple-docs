@@ -9,7 +9,6 @@
  */
 
 import { encodeVersion } from '../../lib/version-encode.js'
-import { parseJsonValue } from '../_helpers.js'
 import { coerceSourceType } from '../source-types.js'
 
 function deriveFrameworkFromPath(path) {
@@ -19,7 +18,7 @@ function deriveFrameworkFromPath(path) {
   return parts[0] ?? null
 }
 
-function serializePlatforms(value) {
+export function serializePlatforms(value) {
   if (value == null) return null
   return typeof value === 'string' ? value : JSON.stringify(value)
 }
@@ -310,6 +309,3 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
   }
 }
 
-// Re-export the helpers that the pages repo needs to share with us
-// without round-tripping through database.js.
-export { deriveFrameworkFromPath, parseJsonValue, serializePlatforms }

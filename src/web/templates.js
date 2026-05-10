@@ -33,7 +33,7 @@ export function assetUrl(siteConfig, file) {
  * not JavaScript, so the rest of the string is safe — but tags inside JSON
  * keys/values would still terminate the script element.
  */
-export function escapeJsonLd(value) {
+function escapeJsonLd(value) {
   return JSON.stringify(value)
     .replaceAll('<', '\\u003c')
     .replaceAll('>', '\\u003e')
@@ -47,7 +47,7 @@ export function escapeJsonLd(value) {
  * don't pass `canonical`); doc/framework/index/search templates always pass
  * the right shape.
  */
-export function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots }) {
+function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots }) {
   if (!canonical) return ''
   const lines = []
   lines.push(`<link rel="canonical" href="${escapeAttr(canonical)}">`)
@@ -275,7 +275,7 @@ export function frameworkOriginalUrl(root) {
 }
 
 /** Short hostname label ("developer.apple.com") used in the link text. */
-export function hostLabel(url) {
+function hostLabel(url) {
   try { return new URL(url).host } catch { return '' }
 }
 
@@ -329,7 +329,7 @@ export function parsePlatformsJson(platformsJson) {
 }
 
 /** Build a platform availability line from a platforms map. */
-export function buildPlatformBadges(platforms) {
+function buildPlatformBadges(platforms) {
   if (!platforms || typeof platforms !== 'object') return ''
   const platformNames = {
     ios: 'iOS', macos: 'macOS', watchos: 'watchOS', tvos: 'tvOS',

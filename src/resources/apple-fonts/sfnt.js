@@ -12,8 +12,8 @@ import { basename, extname } from 'node:path'
 // Apple's typography ships with a fixed vocabulary for both axes. Order
 // matters for weight rendering (Ultralight → Black) — the UI uses these
 // arrays directly to lay pills out in design order.
-export const FONT_VARIANTS = ['Display', 'Text', 'Rounded', 'ExtraLarge', 'Large', 'Medium', 'Small']
-export const FONT_WEIGHTS = ['Ultralight', 'Thin', 'Light', 'Regular', 'Medium', 'Semibold', 'Bold', 'Heavy', 'Black']
+const FONT_VARIANTS = ['Display', 'Text', 'Rounded', 'ExtraLarge', 'Large', 'Medium', 'Small']
+const FONT_WEIGHTS = ['Ultralight', 'Thin', 'Light', 'Regular', 'Medium', 'Semibold', 'Bold', 'Heavy', 'Black']
 
 const VARIANT_LOOKUP = new Map(FONT_VARIANTS.map(v => [v.toLowerCase(), v]))
 const WEIGHT_LOOKUP = new Map(FONT_WEIGHTS.map(w => [w.toLowerCase(), w]))

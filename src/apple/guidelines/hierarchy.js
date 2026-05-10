@@ -22,7 +22,7 @@ export function buildHierarchy(sections) {
 /**
  * Given "1.1.1", return "1.1". Given "3.1.3(a)", return "3.1.3".
  */
-export function findParentNumber(num) {
+function findParentNumber(num) {
   // Handle parenthetical suffixes: "3.1.3(a)" → parent is "3.1.3"
   if (num.includes('(')) {
     return num.replace(/\([a-z]\)$/, '')

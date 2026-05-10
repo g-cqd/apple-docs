@@ -9,7 +9,7 @@ const DEFAULT_BRANCHES = ['main', 'master']
  * possible; the abstract is the first prose paragraph after the title.
  */
 
-export async function fetchRawReadmeOnBranch(owner, repo, branch, rateLimiter) {
+async function fetchRawReadmeOnBranch(owner, repo, branch, rateLimiter) {
   for (const filename of README_FILENAMES) {
     try {
       const result = await fetchRawGitHub(owner, repo, branch, filename, rateLimiter)

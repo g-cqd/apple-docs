@@ -18,7 +18,7 @@ import { joinTokenTexts, renderDeclarationTokens, renderTypeTokens } from './tok
  * per line in normal cases but historically had a wedge on certain pages
  * (since fixed at the ATX-heading regex). The cap stays as belt-and-braces.
  */
-export const MARKDOWN_MAX_BYTES = Math.max(
+const MARKDOWN_MAX_BYTES = Math.max(
   512,
   Number.parseInt(process.env.APPLE_DOCS_MD_MAX_BYTES ?? '', 10) || 256 * 1024,
 )

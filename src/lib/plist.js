@@ -45,7 +45,7 @@ export async function readPlist(path) {
   return parseXmlPlist(xml)
 }
 
-export function parseXmlPlist(text) {
+function parseXmlPlist(text) {
   if (text.startsWith('bplist')) {
     throw new Error('parseXmlPlist: binary plists require plutil; install Apple developer tools')
   }

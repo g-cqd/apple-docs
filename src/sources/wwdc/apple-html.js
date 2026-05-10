@@ -111,7 +111,7 @@ function parseSessionHtml(html, year, sessionId) {
   }
 }
 
-export function stripHtmlTags(html) {
+function stripHtmlTags(html) {
   return decodeHtmlEntities(
     html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '),
   ).trim()

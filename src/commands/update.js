@@ -12,10 +12,6 @@ import { updateDoccSource } from './update/docc.js'
 import { updateFlatSource } from './update/flat.js'
 import { updateGuidelinesSource } from './update/guidelines.js'
 
-// Re-exports for the CLI / sync flows that have always reached for these
-// helpers via './update.js'.
-export { persistFetchedDocPage, persistNormalizedPage } from '../pipeline/persist.js'
-
 /**
  * Check for documentation updates and pull changes.
  * @param {{ roots?: string[], sources?: string[], concurrency?: number, parallel?: number }} opts

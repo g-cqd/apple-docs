@@ -11,7 +11,7 @@
  * The threshold is policy-level; if it ever needs to vary by source
  * type, this module owns the table.
  */
-export const CONSECUTIVE_404_THRESHOLD = 3
+const CONSECUTIVE_404_THRESHOLD = 3
 
 /**
  * Increment the page's 404 streak. Tombstone only when the streak

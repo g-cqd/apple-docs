@@ -30,7 +30,7 @@ import {
 } from './cache-key.js'
 import { SYMBOL_RENDERER_VERSION } from './render.js'
 
-export const SYMBOL_BUNDLES = {
+const SYMBOL_BUNDLES = {
   public: '/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphs.bundle/Contents/Resources',
   private: '/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphsPrivate.bundle/Contents/Resources',
 }
@@ -288,7 +288,7 @@ async function spawnSymbolWorker({ scope, logger }) {
   }
 }
 
-export async function getSymbolRenderProvenance() {
+async function getSymbolRenderProvenance() {
   return {
     macOS: await readMacOSVersion(),
     sources: {

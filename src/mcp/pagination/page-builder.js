@@ -100,7 +100,7 @@ export function buildTextPaginationPlan({ text, maxChars, buildPayload }) {
   return { pages, totalPages: pages.length }
 }
 
-export function buildTextPages({ text, totalPages, maxChars, buildPayload }) {
+function buildTextPages({ text, totalPages, maxChars, buildPayload }) {
   if (!text) {
     const empty = buildPayload('', 1, 1)
     ensureFits(empty, maxChars, 0)
@@ -144,7 +144,7 @@ export function buildTextPages({ text, totalPages, maxChars, buildPayload }) {
   return pages
 }
 
-export function ensureFits(payload, maxChars, itemIndex) {
+function ensureFits(payload, maxChars, itemIndex) {
   if (serializePayload(payload).length > maxChars) {
     throw new PaginationItemTooLargeError(
       `A single page exceeds the maxChars budget (${maxChars}). Increase maxChars.`,
