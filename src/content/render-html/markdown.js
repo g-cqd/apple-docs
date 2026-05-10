@@ -9,7 +9,14 @@
 import { highlightCode } from '../highlight.js'
 import { escapeHtml, isSafeHref } from './helpers.js'
 
-export function markdownToHtml(md) {
+// Hard cap on blockquote nesting depth. Adversarial markdown ("> > > > …"
+// 10 000 deep) used to recurse here without bound and could blow the JS
+// stack. Beyond this many levels we fall through to a flat-text
+// rendering inside the outermost blockquote — the visual difference is
+// imperceptible past ~6 levels and the worker stays alive.
+const MARKDOWN_MAX_BLOCKQUOTE_DEPTH = 32
+
+export function markdownToHtml(md, _depth = 0) {
   if (!md) return ''
 
   // Strip stray XML declarations/processing instructions
@@ -100,7 +107,15 @@ export function markdownToHtml(md) {
         quoteLines.push(lines[i].replace(/^>\s?/, ''))
         i++
       }
-      out.push(`<blockquote>${markdownToHtml(quoteLines.join('\n'))}</blockquote>`)
+      const inner = quoteLines.join('\n')
+      if (_depth >= MARKDOWN_MAX_BLOCKQUOTE_DEPTH) {
+        // Past the cap: skip recursion, emit the inner text as a single
+        // paragraph with inline markdown still applied. Keeps the visible
+        // surface intact without growing the call stack any further.
+        out.push(`<blockquote><p>${inlineMarkdown(inner.replace(/\n+/g, ' ').trim())}</p></blockquote>`)
+      } else {
+        out.push(`<blockquote>${markdownToHtml(inner, _depth + 1)}</blockquote>`)
+      }
       continue
     }
 
@@ -163,7 +178,7 @@ export function markdownToHtml(md) {
 }
 
 /** Convert inline markdown syntax to HTML. */
-export function inlineMarkdown(text) {
+function inlineMarkdown(text) {
   // Pre-process: convert <doc:PageName> and <doc:PageName#Section> references before escaping
   const pre = text.replace(/<doc:([^>#]+)(?:#([^>]+))?>/g, (_match, page, section) => {
     const displayName = section
