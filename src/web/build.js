@@ -13,6 +13,7 @@ import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
 import { linksAudit } from '../commands/links.js'
 import { computeTemplateVersion } from './build/checkpoint.js'
 import { runWorkerBuilds } from './build/worker-fanout.js'
+import { runStep } from '../lib/run-step.js'
 import { runAssetPipeline } from './build/assets-pipeline.js'
 import { buildDocumentPages } from './build/document-pages.js'
 import { buildFrameworkPages } from './build/framework-pages.js'
@@ -291,11 +292,12 @@ export async function buildStaticSite(opts, ctx) {
     // builds since the audit needs the full /docs tree to be meaningful.
     let linksAuditResult = null
     if (buildingAll && !skipDocs) {
-      try {
-        linksAuditResult = await linksAudit({ outDir }, { db, logger })
-      } catch (err) {
-        logger?.warn?.(`Links audit skipped: ${err.message}`)
-      }
+      const auditStep = await runStep(
+        'web-build.links-audit',
+        () => linksAudit({ outDir }, { db, logger }),
+        { logger },
+      )
+      if (auditStep.ok) linksAuditResult = auditStep.result
     }
 
     const durationMs = Math.round(performance.now() - start)

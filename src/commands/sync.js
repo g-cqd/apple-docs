@@ -6,6 +6,7 @@ import { applyGuidelinesSnapshot } from '../pipeline/sync-guidelines.js'
 import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress } from '../lib/flat-source-progress.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
+import { runStep } from '../lib/run-step.js'
 import { getAllAdapters } from '../sources/registry.js'
 import { ROOT_CATALOG_SOURCE_TYPES, selectRootsForAdapter, filterPages, discoverAdaptersInParallel } from './command-helpers.js'
 import { syncAppleFonts, syncSfSymbols, prerenderSfSymbols } from '../resources/apple-assets.js'
@@ -67,16 +68,13 @@ export async function sync(opts, ctx) {
     //    detect added/removed keys at the same time. Resource sync (fonts +
     //    symbols) is suppressed here — sync owns it as its own dedicated step
     //    further down so the work doesn't run twice.
-    try {
-      updateResult = await update(
-        { skipFonts: true, skipSymbols: true },
-        { ...ctx, semaphore, adapters },
-      )
-      db.setActivity('sync', null)
-    } catch (e) {
-      logger.warn('Update phase failed; continuing with crawl', { error: e.message })
-      db.setActivity('sync', null)
-    }
+    const updateStep = await runStep(
+      'sync.update',
+      () => update({ skipFonts: true, skipSymbols: true }, { ...ctx, semaphore, adapters }),
+      { logger },
+    )
+    if (updateStep.ok) updateResult = updateStep.result
+    db.setActivity('sync', null)
 
     // 2. Root discovery for catalog-driven sources (apple-docc et al).
     if (adapters.some(adapter => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
@@ -180,44 +178,51 @@ export async function sync(opts, ctx) {
       logger.info('APPLE_DOCS_SKIP_RESOURCES=1 — skipping fonts + SF Symbols sync')
     } else {
       const downloadFonts = process.env.APPLE_DOCS_DOWNLOAD_FONTS === '1'
-      try {
-        logger.info(`Syncing Apple typography${downloadFonts ? ' (downloading DMGs)' : ''}...`)
-        fontsResult = await syncAppleFonts({ downloadFonts }, ctx)
+      logger.info(`Syncing Apple typography${downloadFonts ? ' (downloading DMGs)' : ''}...`)
+      const fontsStep = await runStep(
+        'sync.apple-fonts',
+        () => syncAppleFonts({ downloadFonts }, ctx),
+        { logger },
+      )
+      if (fontsStep.ok) {
+        fontsResult = fontsStep.result
         logger.info(`Synced ${fontsResult.families} font families, ${fontsResult.files} font files`)
-      } catch (e) {
-        logger.warn('Font sync failed', { error: e.message })
-        failedSources.push({ source: 'apple-fonts', error: e.message })
+      } else {
+        failedSources.push({ source: 'apple-fonts', error: fontsStep.error.message })
       }
 
-      try {
+      const symbolsStep = await runStep('sync.sf-symbols', async () => {
         logger.info('Syncing SF Symbols...')
         const counts = { public: 0, private: 0 }
         for (const scope of ['public', 'private']) {
           counts[scope] = await syncSfSymbols({ scope }, ctx)
         }
-        symbolsResult = counts
         logger.info(`Synced ${counts.public} public + ${counts.private} private SF Symbols`)
 
         // 7. Pre-render every symbol geometry variant. Idempotent when the
         // snapshot metadata matches the renderer + variant matrix; otherwise
         // refreshes the snapshot SVGs so runtime rendering is macOS-stable.
         logger.info('Pre-rendering SF Symbols...')
-        symbolsRenderResult = await prerenderSfSymbols({}, ctx)
-        logger.info(`Pre-rendered ${symbolsRenderResult.rendered ?? 0} symbol variants (${symbolsRenderResult.skipped ?? 0} skipped)`)
-      } catch (e) {
-        logger.warn('SF Symbols sync failed', { error: e.message })
-        failedSources.push({ source: 'sf-symbols', error: e.message })
+        const renders = await prerenderSfSymbols({}, ctx)
+        logger.info(`Pre-rendered ${renders.rendered ?? 0} symbol variants (${renders.skipped ?? 0} skipped)`)
+        return { counts, renders }
+      }, { logger })
+      if (symbolsStep.ok) {
+        symbolsResult = symbolsStep.result.counts
+        symbolsRenderResult = symbolsStep.result.renders
+      } else {
+        failedSources.push({ source: 'sf-symbols', error: symbolsStep.error.message })
       }
     }
 
     // 8. Schema migrations + invalid-entry cleanup + parent-ref re-resolution +
     // raw JSON minification. Idempotent and cheap when there's nothing to do.
-    let doctorResult = null
-    try {
-      doctorResult = await consolidate({ minify: true }, { ...ctx, semaphore })
-    } catch (e) {
-      logger.warn('Doctor pass failed', { error: e.message })
-    }
+    const doctorStep = await runStep(
+      'sync.consolidate',
+      () => consolidate({ minify: true }, { ...ctx, semaphore }),
+      { logger },
+    )
+    const doctorResult = doctorStep.ok ? doctorStep.result : null
 
     const durationMs = Date.now() - startMs
     const totalProcessed = Object.values(crawlResults).reduce((sum, result) => sum + (result.processed ?? 0), 0)
