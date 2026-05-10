@@ -54,28 +54,46 @@ function emit(log, label, err, logger) {
  * mode is 'warn' so casual usage surfaces failures; the noise-suppressing
  * modes are opt-in.
  *
+ * `passThrough` (P2.3) lets a typed error class bubble untouched —
+ * callers that need to distinguish e.g. a `DeadlineError` from a
+ * generic failure can mark it as pass-through and handle it
+ * upstream. Multiple classes may be passed as an array.
+ *
  * @template T
  * @param {() => T | Promise<T>} fn
  * @param {{
  *   default?: T,
  *   log?: 'silent' | 'warn' | 'warn-once',
  *   label?: string,
- *   logger?: { warn: (msg: string, data?: object) => void }
+ *   logger?: { warn: (msg: string, data?: object) => void },
+ *   passThrough?: Function | Function[],
  * }} [opts]
  * @returns {T | Promise<T>}
  */
 export function safeCall(fn, opts = {}) {
-  const { default: defaultValue, log = 'warn', label, logger } = opts
+  const { default: defaultValue, log = 'warn', label, logger, passThrough } = opts
+  const passThroughs = passThrough
+    ? (Array.isArray(passThrough) ? passThrough : [passThrough])
+    : null
+  function shouldRethrow(err) {
+    if (!passThroughs) return false
+    for (const ctor of passThroughs) {
+      if (err instanceof ctor) return true
+    }
+    return false
+  }
   try {
     const result = fn()
     if (result && typeof result.then === 'function') {
       return result.catch((err) => {
+        if (shouldRethrow(err)) throw err
         emit(log, label, err, logger)
         return defaultValue
       })
     }
     return result
   } catch (err) {
+    if (shouldRethrow(err)) throw err
     emit(log, label, err, logger)
     return defaultValue
   }

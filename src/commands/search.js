@@ -10,7 +10,7 @@ import {
 } from '../search/filters.js'
 import { formatResult } from '../search/format.js'
 import { buildFtsQuery } from '../search/fts-query-builder.js'
-import { runRead } from '../storage/reader-pool.js'
+import { runRead, DeadlineError } from '../storage/reader-pool.js'
 
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 
@@ -158,27 +158,54 @@ export async function search(opts, ctx) {
   // Merge T2 (trigram) results, skipping already-seen.
   addResults(triResults, 'substring')
 
+  // P2.3: track which deep contributions timed out so the response
+  // envelope can flag `partial: true`. A deadline expiration on fuzzy
+  // or body is *expected* under load (deep pool is intentionally
+  // smaller than strict); the strict cascade already produced usable
+  // results above and we surface those rather than blocking on the
+  // deep contribution.
+  let partial = false
+  const partialReasons = []
+
   // Tier 3: Levenshtein fuzzy (only if T1+T2 combined < 5 and query >= 4 chars).
   // The fuzzy scan can run in a reader-pool worker concurrently; per-id
   // record fetches are parallelized so the pool fans them out.
   if (results.length < 5 && q.length >= 4 && fuzzy) {
-    const fuzzyMatches = await runRead(ctx, 'fuzzyMatchTitles', [q, { framework, kind, limit: searchLimit }])
-    const fuzzyRecords = await Promise.all(
-      fuzzyMatches.map(fm => runRead(ctx, 'getSearchRecordById', [fm.id]).then(record => ({ fm, record }))),
-    )
-    parseRowPlatforms(fuzzyRecords.map(({ record }) => record).filter(Boolean))
-    for (const { fm, record } of fuzzyRecords) {
-      if (!record) continue
-      if (!matchesSearchFilters(record, activeFilters)) continue
-      if (seen.has(record.path)) continue
-      seen.add(record.path)
-      results.push({ ...formatResult(record), matchQuality: 'fuzzy', distance: fm.distance })
+    try {
+      const fuzzyMatches = await runRead(ctx, 'fuzzyMatchTitles', [q, { framework, kind, limit: searchLimit }])
+      const fuzzyRecords = await Promise.all(
+        fuzzyMatches.map(fm => runRead(ctx, 'getSearchRecordById', [fm.id]).then(record => ({ fm, record }))),
+      )
+      parseRowPlatforms(fuzzyRecords.map(({ record }) => record).filter(Boolean))
+      for (const { fm, record } of fuzzyRecords) {
+        if (!record) continue
+        if (!matchesSearchFilters(record, activeFilters)) continue
+        if (seen.has(record.path)) continue
+        seen.add(record.path)
+        results.push({ ...formatResult(record), matchQuality: 'fuzzy', distance: fm.distance })
+      }
+    } catch (err) {
+      if (err instanceof DeadlineError) {
+        partial = true
+        partialReasons.push('fuzzy')
+      } else {
+        ctx.logger?.warn?.('search fuzzy failed', { error: err.message })
+      }
     }
   }
 
   // Body search: merge or discard if we already have enough.
   if (hasBody && (results.length < requestedWindow || noEager)) {
-    addResults(await runBody(), 'body')
+    try {
+      addResults(await runBody(), 'body')
+    } catch (err) {
+      if (err instanceof DeadlineError) {
+        partial = true
+        partialReasons.push('body')
+      } else {
+        ctx.logger?.warn?.('search body failed', { error: err.message })
+      }
+    }
   }
 
   // Progressive relaxation: only runs when the strict cascade produced
@@ -216,6 +243,7 @@ export async function search(opts, ctx) {
     query,
     intent,
     ...(relaxationTier != null ? { relaxed: true, relaxationTier } : {}),
+    ...(partial ? { partial: true, partialReasons } : {}),
     tier: ctx.db.getTier(),
     trigramAvailable: ctx.db.hasTable('documents_trigram'),
     bodyIndexAvailable: hasBody,

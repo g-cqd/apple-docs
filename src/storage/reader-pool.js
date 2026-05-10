@@ -3,6 +3,17 @@ import { fileURLToPath } from 'node:url'
 import { availableParallelism } from 'node:os'
 import { BackpressureError } from '../lib/semaphore.js'
 
+// Typed error from `pool.run()` deadline expirations — lets the cascade
+// distinguish "partial results: deep tier timed out" from a real failure.
+export class DeadlineError extends Error {
+  constructor(op, deadlineMs) {
+    super(`reader-pool: op '${op}' exceeded deadline ${deadlineMs}ms`)
+    this.name = 'DeadlineError'
+    this.op = op
+    this.deadlineMs = deadlineMs
+  }
+}
+
 const WORKER_URL = new URL('./reader-worker.js', import.meta.url)
 
 const DEFAULT_MAX_WORKERS = 12
@@ -54,6 +65,20 @@ function resolveDefaultSize() {
  */
 const DEFAULT_MAX_PENDING_PER_WORKER = 64
 const DEFAULT_DEADLINE_MS = 5_000
+
+// Per-op deadline overrides (P2.2). Resolution: opts.deadlineMs > this
+// map > pool default > DEFAULT_DEADLINE_MS. Strict ops cap above warm-
+// cache p99 but below the bench HEAVY budget; deep ops have honest
+// multi-second tails that the phase-2 split keeps off strict slots.
+const PER_OP_DEADLINE_MS = Object.freeze({
+  searchTitleExact: 750,
+  searchTrigram: 1_000,
+  searchPages: 1_500,
+  fuzzyMatchTitles: 2_000,
+  searchBody: 4_000,
+  searchBodyAndEnrich: 4_500,
+  getBodyIndexCount: 1_000,
+})
 
 export function createReaderPool(opts = {}) {
   const { dbPath, log } = opts
@@ -204,7 +229,10 @@ export function createReaderPool(opts = {}) {
     }
 
     const id = idCounter++
-    const deadlineMs = runOpts.deadlineMs ?? defaultDeadlineMs
+    // P2.2: opts override > per-op map > pool default > DEFAULT_DEADLINE_MS.
+    const deadlineMs = runOpts.deadlineMs
+      ?? PER_OP_DEADLINE_MS[op]
+      ?? defaultDeadlineMs
 
     return new Promise((resolve, reject) => {
       let timer = null
@@ -232,7 +260,7 @@ export function createReaderPool(opts = {}) {
           if (!slot.pending.has(id)) return
           stats.timeouts++
           cleanup()
-          reject(new Error(`reader-pool: op '${op}' exceeded deadline ${deadlineMs}ms`))
+          reject(new DeadlineError(op, deadlineMs))
         }, deadlineMs)
         timer.unref?.()
       }

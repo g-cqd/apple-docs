@@ -10,7 +10,7 @@
  */
 
 import { safeCall } from '../lib/safe-call.js'
-import { runRead } from '../storage/reader-pool.js'
+import { runRead, DeadlineError } from '../storage/reader-pool.js'
 import { pickHighSignalToken, pruneStopwords, tokenize } from './relaxation.js'
 import { buildFtsQuery } from './fts-query-builder.js'
 
@@ -55,13 +55,20 @@ export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, 
     )
   }
 
+  /**
+   * Body FTS runner. Distinct error semantics from the cheaper runners:
+   * a deadline expiration here is *expected* under load (deep pool is
+   * intentionally small) and the orchestrator surfaces it as a
+   * `partial: true` flag rather than swallowing it. Other errors fall
+   * through to the safeCall warn-once path and return [].
+   */
   const runBody = async () => {
     if (!hasBody) return []
     return await safeCall(
       async () => (await Promise.all(
         frameworks.map(fw => runRead(ctx, 'searchBody', [ftsQuery, { ...filterOpts, framework: fw }])),
       )).flat(),
-      { default: [], log: 'warn-once', label: 'search.cascade.body' },
+      { default: [], log: 'warn-once', label: 'search.cascade.body', passThrough: DeadlineError },
     )
   }
 
