@@ -58,6 +58,19 @@ import {
 //        CoreGlyphs/AppKit rendering is fallback only.
 export const SYMBOL_RENDERER_VERSION = 8
 
+/**
+ * Snapshot-consumer mode. When `APPLE_DOCS_SYMBOLS_OFFLINE=1`, the
+ * renderer refuses to spawn the live Swift fallbacks (CoreGlyphs PDF →
+ * SVG curves, AppKit PNG) and only serves variants that are already
+ * present in `<dataDir>/resources/symbols/`. Hosts without the macOS
+ * SF Symbols system bundle never had a working live path anyway, and
+ * the offline flag lets a self-hoster verify their snapshot is
+ * actually self-sufficient by failing loud on misses.
+ */
+function symbolsOfflineMode() {
+  return process.env.APPLE_DOCS_SYMBOLS_OFFLINE === '1'
+}
+
 export async function renderSfSymbol(opts, ctx) {
   const scope = opts.scope === 'private' ? 'private' : 'public'
   const format = opts.format === 'svg' ? 'svg' : 'png'
@@ -97,6 +110,7 @@ export async function renderSfSymbol(opts, ctx) {
   const filePath = join(renderDir, `${sanitizeFileName(opts.name)}.${cacheKey}.${format}`)
   let data
   let mode = 'live'
+  const offline = symbolsOfflineMode()
   const snapshotSvg = await renderSymbolSvgFromSnapshot({
     name: opts.name, scope, pointSize, weight, scale, color, background,
   }, ctx)
@@ -109,11 +123,28 @@ export async function renderSfSymbol(opts, ctx) {
         data = await renderPngFromSvg(snapshotSvg, { pointSize })
         mode = 'snapshot'
       } catch (error) {
+        if (offline) {
+          // Snapshot consumer can't fall through to Swift; surface the
+          // rasterizer error so the operator knows librsvg/sips is the
+          // missing piece.
+          throw new Error(
+            `SF Symbol PNG rasterization failed for ${scope}/${opts.name} (offline mode): ${error.message}. ` +
+            'Install rsvg-convert (librsvg2-bin) or run on macOS where sips is available.',
+          )
+        }
         ctx.logger?.warn?.(`SF Symbol snapshot PNG rasterization failed for ${scope}/${opts.name}: ${error.message}`)
       }
     }
   }
   if (!data) {
+    if (offline) {
+      // No pre-render found for this (name × weight × scale). The
+      // snapshot is incomplete or the variant truly doesn't exist for
+      // this symbol; either way live rendering is not allowed.
+      throw new Error(
+        `SF Symbol pre-render missing for ${scope}/${opts.name} (${weight}/${scale}) in offline mode; snapshot may be incomplete.`,
+      )
+    }
     if (format === 'svg') {
       try {
         data = await renderSymbolSvgCurves({ name: opts.name, scope, pointSize, weight, scale, color, background })

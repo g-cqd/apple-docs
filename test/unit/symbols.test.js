@@ -179,6 +179,27 @@ describe('SF Symbols', () => {
     expect(output).toContain('<path d="M1 1h8v18z" fill="#ff0000" mask="url(#cut)"/>')
     expect(output).toContain('<rect x="0" y="0" width="10" height="20" fill="#00ff00"/>')
   })
+
+  test('F.3c: APPLE_DOCS_SYMBOLS_OFFLINE refuses live render on missing pre-render', async () => {
+    db.upsertSfSymbol({
+      name: 'orphan.symbol',
+      scope: 'public',
+      categories: [],
+      keywords: [],
+      orderIndex: 0,
+    })
+
+    const prev = process.env.APPLE_DOCS_SYMBOLS_OFFLINE
+    process.env.APPLE_DOCS_SYMBOLS_OFFLINE = '1'
+    try {
+      await expect(
+        renderSfSymbol({ scope: 'public', name: 'orphan.symbol', format: 'svg' }, ctx),
+      ).rejects.toThrow(/offline mode|pre-render missing/i)
+    } finally {
+      if (prev === undefined) delete process.env.APPLE_DOCS_SYMBOLS_OFFLINE
+      else process.env.APPLE_DOCS_SYMBOLS_OFFLINE = prev
+    }
+  })
 })
 
 function plistArray(values) {
