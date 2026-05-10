@@ -137,24 +137,29 @@ export async function snapshotBuild(opts, ctx) {
 
     const tarArgs = ['-czf', archivePath, '-C', buildDir, 'apple-docs.db', 'manifest.json']
 
-    // For full tier, include raw-json, markdown, and the typography/symbols
-    // resource directories. The latter let users skip the long `apple-docs
-    // fonts sync --download` and `apple-docs symbols render` steps after a
-    // setup — they extract straight into the same `~/.apple-docs/resources/...`
-    // path the runtime expects.
+    // SF Symbol pre-renders ride along with `standard` AND `full` tiers.
+    // Snapshot consumers without the macOS SF Symbols system bundle
+    // (Linux hosts, Bun on Windows, anyone without a recent Xcode CLT)
+    // cannot live-render symbols from the host bundle, so the pre-
+    // rendered SVG matrix is the only way they can serve `/api/symbols/
+    // …` URIs. Lite tier stays bare — it is the CLI-only / search-only
+    // tier and pays no runtime asset cost.
+    const symbolsDir = join(dataDir, 'resources', 'symbols')
+    if (tier !== 'lite' && existsSync(symbolsDir)) {
+      tarArgs.push('-C', dataDir, 'resources/symbols')
+    }
+    // Full tier additionally ships raw-json + markdown + extracted fonts
+    // so a contributor can drive the corpus end-to-end without re-syncing
+    // from Apple's APIs.
     if (tier === 'full') {
       const rawJsonDir = join(dataDir, 'raw-json')
       const markdownDir = join(dataDir, 'markdown')
-      const symbolsDir = join(dataDir, 'resources', 'symbols')
       const fontsExtractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
       if (existsSync(rawJsonDir)) {
         tarArgs.push('-C', dataDir, 'raw-json')
       }
       if (existsSync(markdownDir)) {
         tarArgs.push('-C', dataDir, 'markdown')
-      }
-      if (existsSync(symbolsDir)) {
-        tarArgs.push('-C', dataDir, 'resources/symbols')
       }
       if (existsSync(fontsExtractedDir)) {
         tarArgs.push('-C', dataDir, 'resources/fonts/extracted')

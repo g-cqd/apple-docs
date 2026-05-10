@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
@@ -171,6 +171,43 @@ describe('snapshotBuild', () => {
       } finally {
         extractedDb.close()
       }
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
+  test('standard tier ships pre-rendered SF Symbols (F.3a)', async () => {
+    // Stage a couple of pre-rendered SVGs so the snapshot tar has
+    // something to pick up.
+    const symBase = join(dataDir, 'resources', 'symbols')
+    mkdirSync(join(symBase, 'public', 'bold-large'), { recursive: true })
+    writeFileSync(join(symBase, 'public', 'bold-large', 'heart.svg'), '<svg/>')
+    mkdirSync(join(symBase, 'private'), { recursive: true })
+    writeFileSync(join(symBase, 'private', 'pencil.and.sparkles.svg'), '<svg/>')
+
+    const result = await snapshotBuild({ tier: 'standard', out: outDir, tag: 'test-sym' }, { db, dataDir, logger })
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-sym-'))
+    try {
+      const proc = Bun.spawn(['tar', '-xzf', result.archivePath, '-C', extractDir])
+      await proc.exited
+      expect(existsSync(join(extractDir, 'resources', 'symbols', 'public', 'bold-large', 'heart.svg'))).toBe(true)
+      expect(existsSync(join(extractDir, 'resources', 'symbols', 'private', 'pencil.and.sparkles.svg'))).toBe(true)
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
+  test('lite tier excludes pre-rendered symbols (search-only consumers)', async () => {
+    const symBase = join(dataDir, 'resources', 'symbols')
+    mkdirSync(join(symBase, 'public', 'bold-large'), { recursive: true })
+    writeFileSync(join(symBase, 'public', 'bold-large', 'heart.svg'), '<svg/>')
+
+    const result = await snapshotBuild({ tier: 'lite', out: outDir, tag: 'test-lite-sym' }, { db, dataDir, logger })
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-lite-sym-'))
+    try {
+      const proc = Bun.spawn(['tar', '-xzf', result.archivePath, '-C', extractDir])
+      await proc.exited
+      expect(existsSync(join(extractDir, 'resources', 'symbols'))).toBe(false)
     } finally {
       rmSync(extractDir, { recursive: true, force: true })
     }
