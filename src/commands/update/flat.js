@@ -12,6 +12,7 @@ import {
   seedFlatSourceProgress,
 } from '../../lib/flat-source-progress.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'
+import { clearTombstoneCounter, gateAndTombstone404 } from './tombstone-policy.js'
 
 export async function updateFlatSource(adapter, discovery, requestedRoots, _concurrency, semaphore, ctx) {
   const { db, dataDir, logger } = ctx
@@ -73,16 +74,23 @@ async function checkAndPullTrackedPages({
         switch (result.status) {
           case 'unchanged':
             counts.unchangedCount++
+            clearTombstoneCounter(db, page.path)
             break
           case 'modified':
             modified.push(page)
+            clearTombstoneCounter(db, page.path)
             break
           case 'deleted':
-            db.markPageDeleted(page.path)
-            if (root && discoveredKeySet.has(page.path)) {
-              markFlatSourceFailed(db, root.slug, page.path, 'Source entry is no longer available')
+            // Audit 5 §4.3: per-page 404 from upstream is gated by the
+            // N=3 streak; the discovery-driven `stalePages` branch above
+            // is unrelated (those keys are missing from the source's own
+            // catalog and tombstone immediately).
+            if (gateAndTombstone404(db, page.path, logger)) {
+              if (root && discoveredKeySet.has(page.path)) {
+                markFlatSourceFailed(db, root.slug, page.path, 'Source entry is no longer available')
+              }
+              counts.delCount++
             }
-            counts.delCount++
             break
           default:
             if (root && discoveredKeySet.has(page.path)) {

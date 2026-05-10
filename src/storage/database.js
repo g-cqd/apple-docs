@@ -279,6 +279,9 @@ export class DocsDatabase {
     this.deleteNormalizedDocument(path)
   }
 
+  bumpConsecutive404(path) { return this.pages.bumpConsecutive404(path) }
+  resetConsecutive404(path) { this.pages.resetConsecutive404(path) }
+
   deleteNormalizedDocument(key) {
     const document = this.documents.getDocumentIdByKey(key)
     if (!document) return false

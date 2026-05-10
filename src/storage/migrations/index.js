@@ -25,6 +25,7 @@ import { up as v13Up } from './v13-documents-title-index.js'
 import { up as v14Up } from './v14-trigram-external-content.js'
 import { up as v15Up } from './v15-kill-refs.js'
 import { up as v15aUp } from './v15a-numeric-platforms.js'
+import { up as v17Up } from './v17-page-consecutive-404s.js'
 
 export const MIGRATIONS = Object.freeze([
   { version: 1, up: v1Up },
@@ -43,6 +44,7 @@ export const MIGRATIONS = Object.freeze([
   { version: 14, up: v14Up },
   { version: 15, up: v15Up },
   { version: 16, up: v15aUp },
+  { version: 17, up: v17Up },
 ])
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

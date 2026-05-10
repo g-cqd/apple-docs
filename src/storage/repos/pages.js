@@ -70,6 +70,7 @@ export function createPagesRepo(db) {
   )
   const getBySourceTypeStmt = db.query(`
     SELECT p.path, p.root_id, p.etag, p.last_modified, p.content_hash,
+           p.consecutive_404_count,
            r.slug as root_slug, COALESCE(p.source_type, r.source_type) as source_type
     FROM pages p
     JOIN roots r ON p.root_id = r.id
@@ -77,6 +78,15 @@ export function createPagesRepo(db) {
       AND COALESCE(p.source_type, r.source_type) = ?
     ORDER BY p.path
   `)
+  // v17: tombstone gate. bumpConsecutive404 increments + returns the new
+  // count atomically (RETURNING avoids a follow-up SELECT race); reset
+  // zeroes the counter on any successful crawl.
+  const bump404Stmt = db.query(
+    'UPDATE pages SET consecutive_404_count = consecutive_404_count + 1 WHERE path = ? RETURNING consecutive_404_count',
+  )
+  const reset404Stmt = db.query(
+    'UPDATE pages SET consecutive_404_count = 0 WHERE path = ? AND consecutive_404_count > 0',
+  )
 
   return {
     upsertPageRow(params) {
@@ -154,6 +164,13 @@ export function createPagesRepo(db) {
     },
     getPagesBySourceType(sourceType) {
       return getBySourceTypeStmt.all(sourceType)
+    },
+    bumpConsecutive404(path) {
+      const row = bump404Stmt.get(path)
+      return row?.consecutive_404_count ?? 0
+    },
+    resetConsecutive404(path) {
+      reset404Stmt.run(path)
     },
   }
 }

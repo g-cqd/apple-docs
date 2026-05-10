@@ -6,6 +6,7 @@
 
 import { applyGuidelinesSnapshot } from '../../pipeline/sync-guidelines.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'
+import { clearTombstoneCounter, gateAndTombstone404 } from './tombstone-policy.js'
 
 export async function updateGuidelinesSource(adapter, discovery, requestedRoots, ctx) {
   const { db, dataDir, logger } = ctx
@@ -33,11 +34,16 @@ export async function updateGuidelinesSource(adapter, discovery, requestedRoots,
   switch (result.status) {
     case 'unchanged':
       counts.unchangedCount += pages.length
+      for (const page of pages) clearTombstoneCounter(db, page.path)
       return counts
     case 'deleted':
+      // Audit 5 §4.3: gate per-page tombstone behind N=3 consecutive
+      // 404s. Guidelines is a single-blob source; every page in `pages`
+      // shares the upstream check result, so they all bump together.
       for (const page of pages) {
-        db.markPageDeleted(page.path)
-        counts.delCount++
+        if (gateAndTombstone404(db, page.path, logger)) {
+          counts.delCount++
+        }
       }
       return counts
     case 'error':

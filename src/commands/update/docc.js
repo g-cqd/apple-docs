@@ -6,6 +6,7 @@ import { crawlRoot } from '../../pipeline/discover.js'
 import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { pool } from '../../lib/pool.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'
+import { clearTombstoneCounter, gateAndTombstone404 } from './tombstone-policy.js'
 
 export async function updateDoccSource(adapter, discovery, requestedRoots, concurrency, parallel, semaphore, ctx) {
   const { db, dataDir, logger } = ctx
@@ -31,12 +32,19 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
         switch (result.status) {
           case 'unchanged':
             counts.unchangedCount++
+            clearTombstoneCounter(db, page.path)
             break
           case 'modified':
             modified.push(page)
+            clearTombstoneCounter(db, page.path)
             break
           case 'deleted':
-            deleted.push(page.path)
+            // Audit 5 §4.3: gate tombstone behind N=3 consecutive 404s.
+            // Only push to `deleted` when the streak crosses the
+            // threshold; transient flaps stay active for another cycle.
+            if (gateAndTombstone404(db, page.path, logger)) {
+              deleted.push(page.path)
+            }
             break
           default:
             counts.errCount++
@@ -83,10 +91,9 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
     ))
   }
 
-  for (const path of deleted) {
-    db.markPageDeleted(path)
-    counts.delCount++
-  }
+  // Pages reach `deleted` only after gateAndTombstone404 has already
+  // marked them; the loop here is just for the operator-visible count.
+  counts.delCount += deleted.length
 
   const newRoots = selectRootsForAdapter(adapter, discovery, db, requestedRoots).filter(root => {
     const stats = db.getCrawlStats(root.slug)
