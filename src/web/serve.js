@@ -3,7 +3,9 @@ import { notFoundResponse, finalizeResponse } from './responses.js'
 import { createWebContext } from './context.js'
 import { createRouteRegistry } from './route-registry.js'
 import { createRateLimiter, tooManyRequestsResponse } from './middleware/rate-limit.js'
-import { startMetricsServer } from '../lib/metrics-server.js'
+import { createObservability } from './middleware/observability.js'
+import { maybeStartWebMetricsServer } from './metrics-provider.js'
+import { createEventLoopLagSampler } from '../lib/event-loop-lag.js'
 import { healthHandler, readinessHandler } from './routes/health.route.js'
 import { filtersHandler } from './routes/filters.route.js'
 import { symbolsIndexHandler } from './routes/symbols-index.route.js'
@@ -116,10 +118,20 @@ export async function startDevServer(opts, ctx) {
     return dispatched ?? notFoundResponse(siteConfig)
   }
 
+  // Phase 1.1: per-request observability — latency histogram + per-route
+  // counter. Cheap (one performance.now() at entry, one at exit, plus a
+  // map write); surfaced via /metrics.
+  const observability = createObservability()
+  // Phase 1.2: event-loop lag sampler runs in the background and feeds
+  // /metrics. Auto-detects synchronous blockers (gzipSync, sync regex,
+  // recursive parsers) so they show up as p99 lag.
+  const eventLoopLag = createEventLoopLagSampler()
+
   const server = Bun.serve({
     port,
     hostname: host,
     async fetch(request, srv) {
+      const reqStart = performance.now()
       if (defaultLimiter) {
         const defaultGate = defaultLimiter.take(request, srv)
         if (!defaultGate.ok) return tooManyRequestsResponse(defaultGate.retryAfterMs, defaultLimiter.name)
@@ -140,25 +152,34 @@ export async function startDevServer(opts, ctx) {
       const response = await handleRequest(request)
       for (const [k, v] of Object.entries(securityHeaders)) response.headers.set(k, v)
       response.headers.set('X-Request-Id', requestId)
-      return finalizeResponse(request, response, { gzipCache })
+      const finalized = await finalizeResponse(request, response, { gzipCache })
+      observability.record({
+        pathname: new URL(request.url).pathname,
+        status: finalized.status,
+        ms: performance.now() - reqStart,
+      })
+      return finalized
     },
   })
 
   const serverUrl = `http://localhost:${server.port}`
   if (logger) logger.info(`Dev server running at ${serverUrl}`)
 
-  // Phase D.2: optional Prometheus scrape endpoint on a separate loopback
-  // listener. No-op when --metrics-port is absent. Bypasses the main
-  // rate-limit + security-headers middleware on purpose — scrape bursts
-  // would flap the limiter and Prometheus brings its own auth model.
-  const metricsHandle = opts.metricsPort != null && Number.isFinite(opts.metricsPort)
-    ? startMetricsServer({
-        port: opts.metricsPort,
-        host: opts.metricsHost ?? '127.0.0.1',
-        logger,
-        provider: () => buildWebMetrics({ readerPool, rateLimiter: defaultLimiter }),
-      })
-    : null
+  // Phase D.2 / 1.1: optional Prometheus scrape endpoint on a separate
+  // loopback listener. No-op when --metrics-port is absent. Bypasses the
+  // main rate-limit + security-headers middleware on purpose — scrape
+  // bursts would flap the limiter and Prometheus brings its own auth.
+  const metricsHandle = maybeStartWebMetricsServer(opts, {
+    logger,
+    readerPool,
+    rateLimiter: defaultLimiter,
+    searchCache: webCtx.searchCache,
+    renderCache: webCtx.renderCache,
+    gzipCache,
+    bundleCache: webCtx.bundleCache,
+    observability,
+    eventLoopLag,
+  })
 
   // A1: render-cache prune cron. Runs every PRUNE_INTERVAL_MS so an
   // unbounded set of (size,color,weight,scale) param combinations on a
@@ -200,6 +221,7 @@ export async function startDevServer(opts, ctx) {
 
   async function close(deadlineMs) {
     clearInterval(pruneTimer)
+    try { eventLoopLag.stop() } catch {}
     try { originalStop?.(true) } catch {}
     try { await metricsHandle?.close?.() } catch {}
     try {
@@ -219,36 +241,3 @@ function parsePositiveNumber(value) {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-/**
- * Build the Prometheus metrics array for `apple-docs web serve`. The web
- * surface is narrower than mcp's: no per-tool response cache, no heavy
- * semaphore. Reader-pool stats come through when the pool is wired
- * (APPLE_DOCS_WEB_READERS=on); the per-IP rate limiter only exposes its
- * current bucket population — there is no rejection counter to surface
- * (per Phase D.2 brief: skip metrics that don't exist).
- */
-function buildWebMetrics({ readerPool, rateLimiter }) {
-  const metrics = []
-  let rp = null
-  try { rp = readerPool?.stats?.() } catch {}
-  if (rp) {
-    metrics.push(
-      { name: 'apple_docs_reader_pool_size', help: 'Reader-pool worker count.', type: 'gauge', samples: [{ value: rp.size ?? 0 }] },
-      { name: 'apple_docs_reader_pool_active', help: 'Reader-pool workers currently alive.', type: 'gauge', samples: [{ value: rp.active ?? 0 }] },
-      { name: 'apple_docs_reader_pool_pending', help: 'Reader-pool in-flight requests across workers.', type: 'gauge', samples: [{ value: rp.pending ?? 0 }] },
-      { name: 'apple_docs_reader_pool_spawns_total', help: 'Reader-pool worker spawns.', type: 'counter', samples: [{ value: rp.spawns ?? 0 }] },
-      { name: 'apple_docs_reader_pool_errors_total', help: 'Reader-pool worker errors / unexpected exits.', type: 'counter', samples: [{ value: rp.errors ?? 0 }] },
-      { name: 'apple_docs_reader_pool_timeouts_total', help: 'Reader-pool per-call deadline expirations.', type: 'counter', samples: [{ value: rp.timeouts ?? 0 }] },
-      { name: 'apple_docs_reader_pool_backpressure_rejects_total', help: 'Reader-pool backpressure rejections.', type: 'counter', samples: [{ value: rp.backpressureRejects ?? 0 }] },
-    )
-  }
-  if (rateLimiter && typeof rateLimiter._size === 'function') {
-    metrics.push({
-      name: 'apple_docs_web_rate_limit_buckets',
-      help: 'Per-IP token-bucket entries currently held by the default web rate limiter.',
-      type: 'gauge',
-      samples: [{ labels: { name: rateLimiter.name ?? 'default' }, value: rateLimiter._size() }],
-    })
-  }
-  return metrics
-}
