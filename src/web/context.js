@@ -9,6 +9,7 @@ import { initHighlighter } from '../content/highlight.js'
 import { createLru } from '../lib/lru.js'
 import { createWebRenderCache } from './render-cache.js'
 import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
+import { buildCsp } from './csp.js'
 
 /**
  * @typedef {object} WebContext
@@ -155,19 +156,24 @@ export async function createWebContext(opts, ctx) {
     return cachedSearchManifest
   }
 
-  // A16: app-layer security headers. Caddy in production layers a CSP
-  // and HSTS in front of these (Caddyfile.tpl), but the Bun server
-  // serves directly during dev + when Caddy is bypassed, so we ship a
-  // baseline here. Permissions-Policy denies sensor / location APIs we
-  // never use; the Cross-Origin-* pair isolates document context from
-  // an embedding origin.
+  // A16: app-layer security headers. Caddy in production may layer
+  // additional headers (HSTS) in front of these (Caddyfile.tpl), but the
+  // Bun server serves directly during dev + when Caddy is bypassed, so
+  // we ship a complete baseline here.
+  //
+  // CSP is hash-based for the single inline IIFE on the 404 page (see
+  // web/csp.js) and `'self'` for everything else. Permissions-Policy
+  // denies sensor / location APIs we never use. CORP is tightened to
+  // `same-origin` so a malicious cross-origin embedder can't load
+  // search results / symbol JSON / font binaries as a no-cors resource.
   const securityHeaders = {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
     'Cross-Origin-Opener-Policy': 'same-origin',
-    'Cross-Origin-Resource-Policy': 'same-site',
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    'Content-Security-Policy': buildCsp(),
   }
   // In production Caddy serves /assets/* and /worker/* directly from disk
   // with `Cache-Control: public, max-age=31536000, immutable` (configured in

@@ -553,8 +553,13 @@ describe('Dev Server (P7-E)', () => {
     const res = await fetch(`${serverInfo.url}/healthz`)
     expect(res.headers.get('permissions-policy')).toContain('camera=()')
     expect(res.headers.get('cross-origin-opener-policy')).toBe('same-origin')
-    expect(res.headers.get('cross-origin-resource-policy')).toBe('same-site')
+    expect(res.headers.get('cross-origin-resource-policy')).toBe('same-origin')
     expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    // CSP is hash-based for the not-found inline script; verify it lands.
+    const csp = res.headers.get('content-security-policy')
+    expect(csp).toContain("default-src 'self'")
+    expect(csp).toContain("frame-ancestors 'none'")
+    expect(csp).toContain("'sha256-")
   })
 
   test('home page surfaces fonts and symbols inside the design section', async () => {

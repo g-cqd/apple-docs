@@ -9,11 +9,16 @@ import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 import { isLoopbackOrigin, readJsonRpcBodyCapped } from '../lib/http-body.js'
 import { maybeStartMcpMetricsServer } from './metrics-provider.js'
 
+// JSON-RPC over HTTP — no HTML, so CSP doesn't apply. Isolation +
+// Permissions-Policy aligned with web/context.js for browser callers.
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'no-referrer',
   'Cache-Control': 'no-store',
+  'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
 }
 
 const CORS_ALLOWED_HEADERS = 'content-type, mcp-session-id, mcp-protocol-version, last-event-id'
@@ -380,21 +385,16 @@ async function resolveReaderPool(ctx, _opts, deps, logger) {
 }
 
 function parsePositiveInt(value) {
-  if (value == null) return null
-  const n = Number.parseInt(value, 10)
+  const n = value == null ? NaN : Number.parseInt(value, 10)
   return Number.isFinite(n) && n > 0 ? n : null
 }
-
 function parseNonNegativeInt(value) {
-  if (value == null) return null
-  const n = Number.parseInt(value, 10)
+  const n = value == null ? NaN : Number.parseInt(value, 10)
   return Number.isFinite(n) && n >= 0 ? n : null
 }
-
 // Cache scale accepts fractional values (e.g. "2.5") so operators can dial in
 // capacity without flipping each default.
 function parsePositiveNumber(value) {
-  if (value == null) return null
-  const n = Number.parseFloat(value)
+  const n = value == null ? NaN : Number.parseFloat(value)
   return Number.isFinite(n) && n > 0 ? n : null
 }

@@ -1,5 +1,51 @@
 import { buildFooter, buildHead, buildHeader } from '../templates.js'
 
+/**
+ * Inline IIFE body for the 404 page. Exported separately so `web/csp.js`
+ * can compute its SHA-256 once at module load and pin it in the CSP
+ * `script-src` directive — keeps the policy and the rendered HTML in
+ * lockstep without runtime recomputation.
+ *
+ * The leading and trailing newlines are part of the source bytes the
+ * browser hashes; do not change the surrounding whitespace without
+ * regenerating the CSP hash.
+ */
+export const NOT_FOUND_INLINE_SCRIPT = `
+(function () {
+  // Derive a search-friendly query from the requested URL. The terminal
+  // path segment is the most likely page name; humanize CamelCase / kebab-
+  // case / snake_case and decode percent escapes so users land on the
+  // search page with a meaningful pre-filled query instead of a blank box.
+  var url = window.location;
+  var displayUrl = (url.pathname || '') + (url.search || '') + (url.hash || '');
+  var urlEl = document.getElementById('not-found-url');
+  if (urlEl) urlEl.textContent = displayUrl;
+
+  var path = (url.pathname || '').replace(/\\/+$/, '').replace(/^\\/+/, '');
+  // Drop /docs/ prefix and known framework segments — they're not the
+  // search target. Keep only the last two segments at most so multi-level
+  // misses (e.g. /docs/foo/bar/baz) yield "bar baz".
+  if (path.indexOf('docs/') === 0) path = path.slice(5);
+  var segs = path.split('/').filter(Boolean).slice(-2);
+  var raw = segs.join(' ');
+  var pretty = '';
+  try { pretty = decodeURIComponent(raw); } catch (_) { pretty = raw; }
+  pretty = pretty
+    .replace(/[-_]+/g, ' ')                  // kebab/snake → space
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // CamelCase split
+    .replace(/\\.html?$/i, '')               // drop terminal .html
+    .replace(/\\s+/g, ' ')
+    .trim();
+
+  var input = document.getElementById('not-found-q');
+  if (input && pretty) {
+    input.value = pretty;
+    // Pre-select so a single keystroke replaces the inferred query.
+    input.select();
+  }
+})();
+`
+
 export function renderNotFoundPage(siteConfig) {
   const pageTitle = `Not Found — ${siteConfig.siteName}`
   return `<!DOCTYPE html>
@@ -38,42 +84,7 @@ ${buildHeader(siteConfig)}
   </p>
 </main>
 ${buildFooter(siteConfig)}
-<script>
-(function () {
-  // Derive a search-friendly query from the requested URL. The terminal
-  // path segment is the most likely page name; humanize CamelCase / kebab-
-  // case / snake_case and decode percent escapes so users land on the
-  // search page with a meaningful pre-filled query instead of a blank box.
-  var url = window.location;
-  var displayUrl = (url.pathname || '') + (url.search || '') + (url.hash || '');
-  var urlEl = document.getElementById('not-found-url');
-  if (urlEl) urlEl.textContent = displayUrl;
-
-  var path = (url.pathname || '').replace(/\\/+$/, '').replace(/^\\/+/, '');
-  // Drop /docs/ prefix and known framework segments — they're not the
-  // search target. Keep only the last two segments at most so multi-level
-  // misses (e.g. /docs/foo/bar/baz) yield "bar baz".
-  if (path.indexOf('docs/') === 0) path = path.slice(5);
-  var segs = path.split('/').filter(Boolean).slice(-2);
-  var raw = segs.join(' ');
-  var pretty = '';
-  try { pretty = decodeURIComponent(raw); } catch (_) { pretty = raw; }
-  pretty = pretty
-    .replace(/[-_]+/g, ' ')                  // kebab/snake → space
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // CamelCase split
-    .replace(/\\.html?$/i, '')               // drop terminal .html
-    .replace(/\\s+/g, ' ')
-    .trim();
-
-  var input = document.getElementById('not-found-q');
-  if (input && pretty) {
-    input.value = pretty;
-    // Pre-select so a single keystroke replaces the inferred query.
-    input.select();
-  }
-})();
-</script>
+<script>${NOT_FOUND_INLINE_SCRIPT}</script>
 </body>
 </html>`
 }
-
