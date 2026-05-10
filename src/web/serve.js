@@ -37,26 +37,41 @@ import { docsHandler } from './routes/docs.route.js'
 
 /**
  * Start a local dev server for previewing documentation.
- * @param {object} opts - { port?: number, baseUrl?: string }
+ * @param {object} opts - { port?: number, host?: string, baseUrl?: string, rateLimit?: boolean }
  * @param {object} ctx - { db, dataDir, logger }
  * @returns {{ server: object, url: string }}
  */
 export async function startDevServer(opts, ctx) {
   const port = opts.port ?? 3000
+  // Default-deny LAN exposure. Bun.serve binds all interfaces when
+  // hostname is omitted; loopback is the safer default for `web serve`,
+  // which is documented as a local preview tool. Operators who want LAN
+  // reach pass --host 0.0.0.0 (or APPLE_DOCS_WEB_HOST=0.0.0.0).
+  const host = opts.host ?? process.env.APPLE_DOCS_WEB_HOST ?? '127.0.0.1'
   const webCtx = await createWebContext(opts, ctx)
   const { logger, siteConfig, readerPool, securityHeaders, gzipCache } = webCtx
 
-  // P3.5: per-IP token-bucket gate covering every route. Tuned for "open
-  // public service" — generous bursts so legitimate users don't notice.
-  // Override via APPLE_DOCS_WEB_{RATE,BURST} env vars when the deployment
-  // has different load characteristics. The strict 5/min limit on the
-  // /docs/<key> on-demand-fetch path now lives inside docs.route.js
-  // (A7), so warm-path requests for already-cached docs aren't capped.
-  const defaultLimiter = createRateLimiter({
-    rate: parsePositiveNumber(process.env.APPLE_DOCS_WEB_RATE) ?? 60,
-    burst: parsePositiveNumber(process.env.APPLE_DOCS_WEB_BURST) ?? 120,
-    name: 'web',
-  })
+  // Per-client-IP token-bucket gate. Disabled by default — most deployments
+  // front the dev server with Caddy / Cloudflare, which handle abuse
+  // controls upstream. Enable explicitly via:
+  //   APPLE_DOCS_WEB_RATE_LIMIT=1
+  //   APPLE_DOCS_WEB_RATE=<rps>   (also implies on)
+  //   APPLE_DOCS_WEB_BURST=<n>    (also implies on)
+  //   opts.rateLimit === true
+  // The strict 5/min limit on the /docs/<key> on-demand-fetch path lives
+  // inside docs.route.js (A7) and is independent — that's a specific SSRF
+  // amplifier control, not general rate limiting.
+  const rateLimitOptIn = opts.rateLimit === true
+    || process.env.APPLE_DOCS_WEB_RATE_LIMIT === '1'
+    || process.env.APPLE_DOCS_WEB_RATE != null
+    || process.env.APPLE_DOCS_WEB_BURST != null
+  const defaultLimiter = rateLimitOptIn
+    ? createRateLimiter({
+        rate: parsePositiveNumber(process.env.APPLE_DOCS_WEB_RATE) ?? 60,
+        burst: parsePositiveNumber(process.env.APPLE_DOCS_WEB_BURST) ?? 120,
+        name: 'web',
+      })
+    : null
 
   const registry = createRouteRegistry()
   registry.register('/healthz', healthHandler)
@@ -103,9 +118,12 @@ export async function startDevServer(opts, ctx) {
 
   const server = Bun.serve({
     port,
+    hostname: host,
     async fetch(request, srv) {
-      const defaultGate = defaultLimiter.take(request, srv)
-      if (!defaultGate.ok) return tooManyRequestsResponse(defaultGate.retryAfterMs, defaultLimiter.name)
+      if (defaultLimiter) {
+        const defaultGate = defaultLimiter.take(request, srv)
+        if (!defaultGate.ok) return tooManyRequestsResponse(defaultGate.retryAfterMs, defaultLimiter.name)
+      }
       // Stash srv on ctx so handlers can resolve client IP for their own
       // gates (A7 docs on-demand). webCtx is per-server, so this is safe
       // for the duration of the request — Bun re-enters fetch for each.

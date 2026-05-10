@@ -40,7 +40,7 @@ if (flags.help || !command) {
 }
 
 const dataDir = flags.home ?? process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
-const logLevel = flags.verbose ? 'debug' : 'info'
+const logLevel = flags.verbose ? 'debug' : (process.env.APPLE_DOCS_LOG_LEVEL ?? 'info')
 const logger = createLogger(logLevel)
 const isCrawlCommand = command === 'sync'
 const defaultRate = isCrawlCommand ? '500' : '5'
@@ -310,9 +310,13 @@ try {
         }
         case 'serve': {
           const { startDevServer } = await import('./src/web/serve.js')
+          const host = flags.host ?? process.env.APPLE_DOCS_WEB_HOST ?? '127.0.0.1'
+          const rateLimit = !!flags['rate-limit']
           const info = await startDevServer({
             port: flags.port ? Number.parseInt(flags.port) : 3000,
+            host,
             baseUrl: flags['base-url'],
+            ...(rateLimit ? { rateLimit: true } : {}),
             ...metricsOpts(flags),
           }, ctx)
           lifecycle.register({ name: 'web', stop: (deadlineMs) => info.close(deadlineMs) })
