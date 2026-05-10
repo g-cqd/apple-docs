@@ -8,12 +8,23 @@ import { discardAtomicWrite, promoteAtomicWrite, stageTextAtomic } from '../lib/
 import { sha256 } from '../lib/hash.js'
 import { keyPath } from '../lib/safe-path.js'
 import { stableStringify } from '../storage/files.js'
+import { coalesceByKey } from './coalesce.js'
 
 /**
  * Persist a fetched DocC JSON payload into raw storage, legacy page rows,
  * and the normalized document model.
  */
-export async function persistFetchedDocPage({
+export function persistFetchedDocPage(args) {
+  // Audit 5 §4.5: per-path coalesce so concurrent fetches for the same
+  // key collapse onto one in-flight write. Without this, two callers
+  // can interleave the raw-json + markdown promote-with-backup steps
+  // and leave one of the .bak- sidecars stranded. Same key prefix as
+  // the docs route can't collide because that uses the bare path; we
+  // namespace under `persist:`.
+  return coalesceByKey(`persist:${args.path}`, () => doPersistFetchedDocPage(args))
+}
+
+async function doPersistFetchedDocPage({
   db,
   dataDir,
   rootId,
@@ -88,7 +99,11 @@ export async function persistFetchedDocPage({
  * Unlike persistFetchedDocPage, this accepts already-normalized data
  * and uses the generic renderMarkdown instead of DocC-specific renderPage.
  */
-export async function persistNormalizedPage({
+export function persistNormalizedPage(args) {
+  return coalesceByKey(`persist:${args.path}`, () => doPersistNormalizedPage(args))
+}
+
+async function doPersistNormalizedPage({
   db,
   dataDir,
   rootId,
