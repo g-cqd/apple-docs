@@ -48,3 +48,6 @@ ops/launchd/sudoers.apple-docs-launchctl
 ops/caddy/Caddyfile
 ops/cloudflared/config.yml
 ops/cloudflared/config-mcp.yml
+
+# Claude Code working tree (agent worktrees, plans, etc.)
+.claude/
