@@ -4,7 +4,7 @@ import { createServer } from './server.js'
 import { createCacheRegistry } from './cache.js'
 import { createMarkdownCache } from './markdown-cache.js'
 import { buildHealthBody, buildReadinessResponse } from './health-handlers.js'
-import { createReaderPool } from '../storage/reader-pool.js'
+import { createReaderPools } from '../storage/reader-pools.js'
 import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 import { isLoopbackOrigin, readJsonRpcBodyCapped } from '../lib/http-body.js'
 import { maybeStartMcpMetricsServer } from './metrics-provider.js'
@@ -367,16 +367,22 @@ async function resolveReaderPool(ctx, _opts, deps, logger) {
     return null
   }
   const dbPath = join(dataDir, 'apple-docs.db')
-  const size = parsePositiveInt(process.env.APPLE_DOCS_MCP_READER_WORKERS) ?? undefined
+  // P2.1: split into strict + deep pools so heavy fuzzy/body work
+  // doesn't poison the SLO read path.
+  const strictSize = parsePositiveInt(process.env.APPLE_DOCS_MCP_READER_WORKERS) ?? undefined
+  const deepSize = parsePositiveInt(process.env.APPLE_DOCS_MCP_DEEP_READERS) ?? undefined
   try {
-    const pool = createReaderPool({
+    const pool = createReaderPools({
       dbPath,
-      size,
+      strictSize,
+      deepSize,
       log: (level, msg) => logger?.[level]?.(`reader-pool: ${msg}`),
     })
     await pool.start()
     const snap = pool.stats()
-    logger?.info?.(`reader-pool: ready size=${snap.size} spawns=${snap.spawns}`)
+    logger?.info?.(
+      `reader-pool: ready strict=${snap.pools.strict.size} deep=${snap.pools.deep.size} spawns=${snap.spawns}`,
+    )
     return pool
   } catch (err) {
     logger?.error?.(`reader-pool: failed to start (${err?.message ?? err}); falling back to main-thread reads`)
@@ -384,17 +390,11 @@ async function resolveReaderPool(ctx, _opts, deps, logger) {
   }
 }
 
-function parsePositiveInt(value) {
-  const n = value == null ? NaN : Number.parseInt(value, 10)
-  return Number.isFinite(n) && n > 0 ? n : null
+// Three flavors of "parse env into a usable number" + a shared helper.
+function parseNumber(value, parser, predicate) {
+  const n = value == null ? NaN : parser(value, 10)
+  return Number.isFinite(n) && predicate(n) ? n : null
 }
-function parseNonNegativeInt(value) {
-  const n = value == null ? NaN : Number.parseInt(value, 10)
-  return Number.isFinite(n) && n >= 0 ? n : null
-}
-// Cache scale accepts fractional values (e.g. "2.5") so operators can dial in
-// capacity without flipping each default.
-function parsePositiveNumber(value) {
-  const n = value == null ? NaN : Number.parseFloat(value)
-  return Number.isFinite(n) && n > 0 ? n : null
-}
+const parsePositiveInt = (v) => parseNumber(v, Number.parseInt, n => n > 0)
+const parseNonNegativeInt = (v) => parseNumber(v, Number.parseInt, n => n >= 0)
+const parsePositiveNumber = (v) => parseNumber(v, Number.parseFloat, n => n > 0)

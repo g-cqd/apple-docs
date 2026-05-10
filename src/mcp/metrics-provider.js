@@ -104,17 +104,11 @@ function buildMcpMetrics({
   }
 
   // ---- Reader-thread pool (off by default; only emit when wired).
+  // After P2.1 the pool exposes per-pool stats via `pools.{strict,deep}`;
+  // emit `pool=` labels so operators can verify the split.
   const rp = safeCall(() => readerPool?.stats?.())
   if (rp) {
-    metrics.push(
-      { name: 'apple_docs_reader_pool_size', help: 'Reader-pool worker count.', type: 'gauge', samples: [{ value: rp.size ?? 0 }] },
-      { name: 'apple_docs_reader_pool_active', help: 'Reader-pool workers currently alive.', type: 'gauge', samples: [{ value: rp.active ?? 0 }] },
-      { name: 'apple_docs_reader_pool_pending', help: 'Reader-pool in-flight requests across workers.', type: 'gauge', samples: [{ value: rp.pending ?? 0 }] },
-      { name: 'apple_docs_reader_pool_spawns_total', help: 'Reader-pool worker spawns.', type: 'counter', samples: [{ value: rp.spawns ?? 0 }] },
-      { name: 'apple_docs_reader_pool_errors_total', help: 'Reader-pool worker errors / unexpected exits.', type: 'counter', samples: [{ value: rp.errors ?? 0 }] },
-      { name: 'apple_docs_reader_pool_timeouts_total', help: 'Reader-pool per-call deadline expirations.', type: 'counter', samples: [{ value: rp.timeouts ?? 0 }] },
-      { name: 'apple_docs_reader_pool_backpressure_rejects_total', help: 'Reader-pool backpressure rejections (per-worker pending cap).', type: 'counter', samples: [{ value: rp.backpressureRejects ?? 0 }] },
-    )
+    pushReaderPoolMetrics(metrics, rp)
   }
 
   return metrics
@@ -122,4 +116,26 @@ function buildMcpMetrics({
 
 function safeCall(fn) {
   try { return fn() } catch { return null }
+}
+
+function pushReaderPoolMetrics(metrics, rp) {
+  const pools = rp.pools
+  const FIELDS = [
+    ['size', 'gauge', 'apple_docs_reader_pool_size', 'Reader-pool worker count.'],
+    ['active', 'gauge', 'apple_docs_reader_pool_active', 'Reader-pool workers currently alive.'],
+    ['pending', 'gauge', 'apple_docs_reader_pool_pending', 'Reader-pool in-flight requests.'],
+    ['spawns', 'counter', 'apple_docs_reader_pool_spawns_total', 'Reader-pool worker spawns.'],
+    ['errors', 'counter', 'apple_docs_reader_pool_errors_total', 'Reader-pool worker errors.'],
+    ['timeouts', 'counter', 'apple_docs_reader_pool_timeouts_total', 'Reader-pool deadline expirations.'],
+    ['backpressureRejects', 'counter', 'apple_docs_reader_pool_backpressure_rejects_total', 'Reader-pool backpressure rejections.'],
+  ]
+  for (const [field, type, name, help] of FIELDS) {
+    const samples = pools
+      ? [
+          { labels: { pool: 'strict' }, value: pools.strict?.[field] ?? 0 },
+          { labels: { pool: 'deep' }, value: pools.deep?.[field] ?? 0 },
+        ]
+      : [{ value: rp[field] ?? 0 }]
+    metrics.push({ name, help, type, samples })
+  }
 }

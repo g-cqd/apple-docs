@@ -1,6 +1,6 @@
 import { dirname } from 'node:path'
 import { existsSync, statSync } from 'node:fs'
-import { createReaderPool } from '../storage/reader-pool.js'
+import { createReaderPools } from '../storage/reader-pools.js'
 import { createHostBucketedLimiter } from '../lib/per-host-rate-limiter.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { createOnDemandGate } from './middleware/on-demand-gate.js'
@@ -281,16 +281,24 @@ async function resolveWebReaderPool(ctx, opts, logger) {
     return null
   }
 
-  const size = parsePositiveInt(process.env.APPLE_DOCS_WEB_READER_WORKERS) ?? undefined
+  // P2.1: split into strict + deep pools. APPLE_DOCS_WEB_READER_WORKERS
+  // sizes the strict pool (the dominant one); the deep pool autosizes to
+  // a quarter of `availableParallelism()`, capped at 4. Override
+  // explicitly via APPLE_DOCS_WEB_DEEP_READERS when running diagnostics.
+  const strictSize = parsePositiveInt(process.env.APPLE_DOCS_WEB_READER_WORKERS) ?? undefined
+  const deepSize = parsePositiveInt(process.env.APPLE_DOCS_WEB_DEEP_READERS) ?? undefined
   try {
-    const pool = createReaderPool({
+    const pool = createReaderPools({
       dbPath,
-      size,
+      strictSize,
+      deepSize,
       log: (level, msg) => logger?.[level]?.(`web reader-pool: ${msg}`),
     })
     await pool.start()
     const snap = pool.stats()
-    logger?.info?.(`web reader-pool: ready size=${snap.size} spawns=${snap.spawns}`)
+    logger?.info?.(
+      `web reader-pool: ready strict=${snap.pools.strict.size} deep=${snap.pools.deep.size} spawns=${snap.spawns}`,
+    )
     return pool
   } catch (err) {
     logger?.error?.(`web reader-pool: failed to start (${err?.message ?? err}); falling back to main-thread reads`)
