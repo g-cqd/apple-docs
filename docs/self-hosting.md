@@ -81,6 +81,37 @@ long-lived MCP endpoint.
 (Cloudflare Access, Tailscale ACLs, IP allowlist, mTLS, whatever you use).
 The MCP server trusts anything that reaches `/mcp`.
 
+## Snapshot consumer requirements
+
+`apple-docs setup` downloads a pre-built corpus snapshot. The `standard`
+and `full` tiers ship the entire pre-rendered SF Symbols matrix
+(`<dataDir>/resources/symbols/<scope>/<weight>-<scale>/<name>.svg`)
+because the runtime cannot live-render those without the macOS SF
+Symbols system bundle.
+
+**SVG requests** (`/api/symbols/public/heart.svg?weight=bold&scale=large`):
+served straight from the pre-render — no host-side dependencies.
+
+**PNG requests** (`/api/symbols/public/heart.png?...`): derived at
+request time from the same pre-rendered SVG via:
+- `rsvg-convert` from librsvg, if available on `PATH`. On Debian /
+  Ubuntu install with `apt install librsvg2-bin`. Fedora / Arch:
+  `dnf install librsvg2-tools` / `pacman -S librsvg`.
+- macOS `/usr/bin/sips` as a fallback.
+
+If neither rasterizer is available, PNG requests return 404 with a
+clear error in the access log. SVG requests still work.
+
+To verify your snapshot is self-sufficient (no live-render fallback),
+set `APPLE_DOCS_SYMBOLS_OFFLINE=1` before starting `web serve`. Any
+request that would have spawned the Swift / AppKit live renderer will
+return 404 instead, so a misshipped snapshot fails loud during smoke
+tests rather than serving a placeholder image.
+
+`apple-docs sync` on a host without the SF Symbols bundle produces an
+empty `resources/symbols/` directory; the `setup` snapshot path is the
+supported acquisition method on Linux / Windows hosts.
+
 ## Run the web server
 
 ```bash
