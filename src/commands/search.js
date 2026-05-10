@@ -62,13 +62,14 @@ export async function search(opts, ctx) {
   const platform = opts.platform ?? null
   const platformFilters = buildPlatformFilters(platform, { minIos, minMacos, minWatchos, minTvos, minVisionos })
   const deprecated = normalizeDeprecatedFilter(opts.deprecated)
-  const hasJsPostFilters = sourceTypes?.size > 1
-    || !!kind
-    || !!opts.year
-    || !!opts.track
+  // P3.1: only `kind` and platform-version filters stay JS-side now.
+  // sourceTypes IN, year, track substring, deprecated mode all push
+  // down to SQL via FILTER_PREDICATES. Cuts the over-fetch multiplier
+  // from 10× to 3× for the common multi-source / deprecated-exclude
+  // queries, and to 1× when no JS filters apply at all.
+  const hasJsPostFilters = !!kind
     || Object.values(platformFilters).some(Boolean)
-    || deprecated !== 'include'
-  const searchLimit = hasJsPostFilters ? Math.min(Math.max(requestedWindow * 10, 200), 1000) : requestedWindow
+  const searchLimit = hasJsPostFilters ? Math.min(Math.max(requestedWindow * 3, 60), 300) : requestedWindow
 
   if (!query?.trim()) return { results: [], total: 0, query: '' }
 
@@ -84,9 +85,20 @@ export async function search(opts, ctx) {
     }
   }
 
-  // Push single source_type to SQL for efficient filtering; multi-source stays as JS post-filter
+  // P3.1: push every multi-valued / metadata filter into SQL. The
+  // residual `activeFilters` is consulted post-cascade only for
+  // checks SQL can't cheaply express (kind taxonomy heuristic +
+  // explicit-platform-only sentinel).
   const sqlSourceType = sourceTypes?.size === 1 ? [...sourceTypes][0] : null
-  const filterOpts = { limit: searchLimit, language, sourceType: sqlSourceType }
+  const filterOpts = {
+    limit: searchLimit,
+    language,
+    sourceType: sqlSourceType,
+    sources: sourceTypes,
+    year: typeof opts.year === 'number' ? opts.year : null,
+    track: opts.track ?? null,
+    deprecatedMode: deprecated,
+  }
   const activeFilters = { frameworks, sourceTypes, kind, language, platformFilters, year: opts.year, track: opts.track, deprecated }
 
   const results = []

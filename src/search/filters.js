@@ -48,6 +48,11 @@ export function buildPlatformFilters(platform, explicit) {
 }
 
 export function matchesSearchFilters(row, filters) {
+  // P3.1: sourceTypes IN, year, track, deprecated mode now push into
+  // SQL via FILTER_PREDICATES. Keep the JS implementations below for
+  // callers that bypass the SQL filter (e.g. relaxation cascade
+  // probes that re-query with reduced WHERE) and as a defense-in-
+  // depth check.
   return matchesSourceFilter(row, filters.sourceTypes)
     && matchesFrameworkFilter(row, filters.frameworks)
     && matchesKindFilter(row, filters.kind)

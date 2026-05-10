@@ -36,9 +36,14 @@ const RESULT_COLUMNS = `
 `
 
 // Filter clauses appended to every variant after its specific MATCH/WHERE.
+//
+// P3.1: multi-source / year / track / deprecated now push down to SQL.
+// The over-fetch multiplier in search.js drops from 10× to 3× when
+// only `kind` and `platformFilters` remain JS-side.
 const FILTER_PREDICATES = `
   AND ($framework IS NULL OR d.framework = $framework)
   AND ($source_type IS NULL OR d.source_type = $source_type)
+  AND ($sources_json IS NULL OR d.source_type IN (SELECT value FROM json_each($sources_json)))
   AND (
     $kind IS NULL
     OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
@@ -46,6 +51,13 @@ const FILTER_PREDICATES = `
     OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
   )
   AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
+  AND ($year IS NULL OR CAST(json_extract(d.source_metadata, '$.year') AS INTEGER) = $year)
+  AND ($track_like IS NULL OR LOWER(COALESCE(json_extract(d.source_metadata, '$.track'), '')) LIKE $track_like)
+  AND (
+    $deprecated_mode = 'include'
+    OR ($deprecated_mode = 'exclude' AND COALESCE(d.is_deprecated, 0) = 0)
+    OR ($deprecated_mode = 'only'    AND COALESCE(d.is_deprecated, 0) = 1)
+  )
   AND ($min_ios IS NULL OR d.min_ios_num IS NULL OR d.min_ios_num <= $min_ios)
   AND ($min_macos IS NULL OR d.min_macos_num IS NULL OR d.min_macos_num <= $min_macos)
   AND ($min_watchos IS NULL OR d.min_watchos_num IS NULL OR d.min_watchos_num <= $min_watchos)
@@ -55,13 +67,36 @@ const FILTER_PREDICATES = `
 
 function buildFilterParams({
   framework = null, kind = null, language = null, sourceType = null,
+  sources = null, year = null, track = null, deprecatedMode = 'include',
   minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null,
 } = {}) {
+  // P3.1: pack multi-source as a JSON array string for json_each().
+  // null → no filter; single-element list → equivalent to $source_type.
+  const sourcesJson = Array.isArray(sources) && sources.length > 0
+    ? JSON.stringify(sources)
+    : (sources instanceof Set && sources.size > 0
+      ? JSON.stringify([...sources])
+      : null)
+  // Track filter is substring-matched (lowercase) so "graphics" matches
+  // "Graphics & Games". $track_like has the `%...%` wrappers baked in.
+  const trackLike = typeof track === 'string' && track.trim()
+    ? `%${track.trim().toLowerCase()}%`
+    : null
+  // Deprecated mode is one of 'include' | 'exclude' | 'only'. The
+  // FILTER_PREDICATES OR chain selects which branch applies — pass
+  // through verbatim with a safe fallback.
+  const deprecated = ['include', 'exclude', 'only'].includes(deprecatedMode)
+    ? deprecatedMode
+    : 'include'
   return {
     $framework: framework,
     $kind: kind,
     $language: language,
     $source_type: sourceType,
+    $sources_json: sourcesJson,
+    $year: typeof year === 'number' && Number.isFinite(year) ? year : null,
+    $track_like: trackLike,
+    $deprecated_mode: deprecated,
     // v15a: filter predicates compare numeric companions; encode the
     // user-supplied "17.4"-style strings to integers up front so SQLite
     // doesn't collate text. encodeVersion('') / null both → null which
