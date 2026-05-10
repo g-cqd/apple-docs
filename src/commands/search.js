@@ -92,14 +92,20 @@ export async function search(opts, ctx) {
   const results = []
   const seen = new Set()
 
-  // P2.7: parse platforms_json once per row at arrival. Both
-  // matchesSearchFilters' platform-version predicate and formatResult
-  // accept already-parsed values gracefully, so this turns the per-row
-  // double-parse + cross-tier re-parse pattern into a single parse.
+  // P4.2: parse platforms_json once per row at arrival without
+  // mutating the row's `platforms` field. `r.platforms` stays a
+  // string (the JIT-stable shape sees one type for that property);
+  // the parsed Array lives on `r.platformsParsed`. Filters and
+  // `formatResult` read `platformsParsed` first.
   const parseRowPlatforms = (rows) => {
     for (const r of rows) {
+      if (r.platformsParsed !== undefined) continue
       if (typeof r.platforms === 'string') {
-        try { r.platforms = JSON.parse(r.platforms) } catch { r.platforms = null }
+        try { r.platformsParsed = JSON.parse(r.platforms) } catch { r.platformsParsed = null }
+      } else if (Array.isArray(r.platforms)) {
+        r.platformsParsed = r.platforms
+      } else {
+        r.platformsParsed = null
       }
     }
   }
@@ -110,7 +116,7 @@ export async function search(opts, ctx) {
       if (!matchesSearchFilters(r, activeFilters)) continue
       if (seen.has(r.path)) continue
       seen.add(r.path)
-      results.push({ ...formatResult(r), matchQuality: quality })
+      results.push(formatResult(r, quality))
     }
   }
 
@@ -152,7 +158,7 @@ export async function search(opts, ctx) {
     if (!matchesSearchFilters(r, activeFilters)) continue
     if (seen.has(r.path)) continue
     seen.add(r.path)
-    results.push({ ...formatResult(r), matchQuality: TIER_LABELS[r.tier] ?? 'match' })
+    results.push(formatResult(r, TIER_LABELS[r.tier] ?? 'match'))
   }
 
   // Merge T2 (trigram) results, skipping already-seen.
@@ -182,7 +188,7 @@ export async function search(opts, ctx) {
         if (!matchesSearchFilters(record, activeFilters)) continue
         if (seen.has(record.path)) continue
         seen.add(record.path)
-        results.push({ ...formatResult(record), matchQuality: 'fuzzy', distance: fm.distance })
+        results.push(formatResult(record, 'fuzzy', fm.distance))
       }
     } catch (err) {
       if (err instanceof DeadlineError) {

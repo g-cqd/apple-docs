@@ -112,7 +112,10 @@ function matchesLanguageFilter(row, language) {
 }
 
 function matchesPlatformFilters(row, platformFilters) {
-  const platforms = parsePlatforms(row?.platforms)
+  // P4.2: prefer the cached parse on `platformsParsed` (search.js
+  // attaches it once per row); fall back to parsing `platforms`
+  // for callers that didn't pre-parse.
+  const platforms = row?.platformsParsed ?? parsePlatforms(row?.platforms)
   return [
     ['minIos', 'ios', row?.min_ios ?? row?.minIos],
     ['minMacos', 'macos', row?.min_macos ?? row?.minMacos],
