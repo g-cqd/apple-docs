@@ -56,10 +56,17 @@ func renderPdf(_ name: String, weight: String, scale: String) throws -> Data {
   guard let image = resolveImage(name, weight: weight, scale: scale), let rep = image.representations.first else {
     throw NSError(domain: "apple-docs", code: 1, userInfo: [NSLocalizedDescriptionKey: "symbol not found"])
   }
+  // Symbols that aren't vector-backed (emoji.* and a handful of other
+  // private bitmap reps) don't implement -vectorGlyph. Detect via
+  // respondsToSelector — class_getMethodImplementation always returns
+  // a non-nil forwarding stub for missing selectors, which crashes
+  // the worker when invoked. The respondsToSelector check turns the
+  // crash into a clean per-symbol error.
   let vgSel = NSSelectorFromString("vectorGlyph")
-  guard let vgImp = class_getMethodImplementation(object_getClass(rep)!, vgSel) else {
-    throw NSError(domain: "apple-docs", code: 2, userInfo: [NSLocalizedDescriptionKey: "no vectorGlyph"])
+  guard let repClass = object_getClass(rep), class_respondsToSelector(repClass, vgSel) else {
+    throw NSError(domain: "apple-docs", code: 2, userInfo: [NSLocalizedDescriptionKey: "symbol has no vectorGlyph (likely bitmap-backed)"])
   }
+  let vgImp = class_getMethodImplementation(repClass, vgSel)!
   typealias VG = @convention(c) (AnyObject, Selector) -> AnyObject?
   guard let vg = unsafeBitCast(vgImp, to: VG.self)(rep, vgSel) else {
     throw NSError(domain: "apple-docs", code: 3, userInfo: [NSLocalizedDescriptionKey: "vectorGlyph nil"])
@@ -75,9 +82,10 @@ func renderPdf(_ name: String, weight: String, scale: String) throws -> Data {
   ctx.beginPDFPage(nil)
   ctx.setFillColor(NSColor.black.cgColor)
   let drawSel = NSSelectorFromString("drawInContext:")
-  guard let drawImp = class_getMethodImplementation(object_getClass(vg)!, drawSel) else {
-    throw NSError(domain: "apple-docs", code: 6, userInfo: [NSLocalizedDescriptionKey: "no drawInContext:"])
+  guard let vgClass = object_getClass(vg), class_respondsToSelector(vgClass, drawSel) else {
+    throw NSError(domain: "apple-docs", code: 6, userInfo: [NSLocalizedDescriptionKey: "vectorGlyph has no drawInContext:"])
   }
+  let drawImp = class_getMethodImplementation(vgClass, drawSel)!
   typealias DrawFn = @convention(c) (AnyObject, Selector, CGContext) -> Void
   unsafeBitCast(drawImp, to: DrawFn.self)(vg, drawSel, ctx)
   ctx.endPDFPage()

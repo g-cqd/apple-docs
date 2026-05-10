@@ -205,12 +205,25 @@ async function processSymbolQueue({ worker, queue, dataDir, scope, result, onPro
       await Bun.write(filePath, svg)
       result.rendered++
     } catch (error) {
-      logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name} (${weight}/${scale}): ${error.message}`)
-      result.failed++
-      result.failures.push({ scope, name: symbol.name, weight, scale, error: error.message })
-      // The worker may have died; restart it.
-      try { activeWorker.close() } catch {}
-      activeWorker = await restart()
+      const msg = error.message ?? String(error)
+      // Bitmap-only symbols (most private/emoji.* entries, some
+      // private misc) genuinely don't have a vector form. The Swift
+      // worker reports this via respondsToSelector; log at debug so
+      // we don't flood at warn level. Treat as `skipped` rather than
+      // `failed` — the snapshot validator still flags them as
+      // missing, but the prerender process itself is healthy.
+      const bitmapOnly = msg.includes('bitmap-backed') || msg.includes('no vectorGlyph')
+      if (bitmapOnly) {
+        logger?.debug?.(`Skip ${scope}/${symbol.name} (${weight}/${scale}): no vector form`)
+        result.skipped++
+      } else {
+        logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name} (${weight}/${scale}): ${msg}`)
+        result.failed++
+        result.failures.push({ scope, name: symbol.name, weight, scale, error: msg })
+        // The worker may have died on a non-bitmap error; restart it.
+        try { activeWorker.close() } catch {}
+        activeWorker = await restart()
+      }
     }
     onProgress?.(result)
   }
