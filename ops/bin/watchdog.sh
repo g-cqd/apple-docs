@@ -45,14 +45,16 @@ log() {
 #   1. Caddy now serves the prebuilt static site for /docs/* and /assets/* —
 #      a wedged Bun process would still respond 200 through Caddy for those
 #      paths. Probing Bun's port catches the API wedge specifically.
-#   2. /healthz on Bun is implemented in src/web/serve.js with `Cache-Control:
-#      no-store` and never touches the DB, so a healthy probe means accept()
-#      is alive without conflating it with a slow DB query.
-# Map a short name to (label, healthz URL, optional RSS limit, ps pattern).
+#   2. /readyz on Bun touches the DB + reader-pool stats — a wedged DB or a
+#      crashed reader pool will fail the probe and trigger a kickstart.
+#      /healthz is liveness-only ("accept() is alive"); /readyz is the
+#      stronger contract we want for the watchdog. Both endpoints are
+#      defined in src/web/serve.js + src/mcp/http-server.js.
+# Map a short name to (label, readyz URL, optional RSS limit, ps pattern).
 # The ps pattern uses the absolute REPO_DIR path so it cannot match an
 # unprivileged local user that runs `bun cli.js web serve` out of /tmp.
 backend_label()    { case "$1" in web) echo "$LABEL_WEB" ;; mcp) echo "$LABEL_MCP" ;; *) return 1 ;; esac; }
-backend_url()      { case "$1" in web) echo "http://127.0.0.1:${WEB_BACKEND_PORT}/healthz" ;; mcp) echo "http://127.0.0.1:${MCP_BACKEND_PORT}/healthz" ;; *) return 1 ;; esac; }
+backend_url()      { case "$1" in web) echo "http://127.0.0.1:${WEB_BACKEND_PORT}/readyz" ;; mcp) echo "http://127.0.0.1:${MCP_BACKEND_PORT}/readyz" ;; *) return 1 ;; esac; }
 backend_rss_cap()  { case "$1" in web) echo "$WEB_RSS_LIMIT_MB" ;; mcp) echo "$MCP_RSS_LIMIT_MB" ;; *) return 1 ;; esac; }
 backend_ps_match() { case "$1" in web) echo "${REPO_DIR}/cli.js web serve" ;; mcp) echo "${REPO_DIR}/cli.js mcp serve" ;; *) return 1 ;; esac; }
 
