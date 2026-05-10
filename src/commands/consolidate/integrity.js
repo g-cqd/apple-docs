@@ -63,7 +63,7 @@ export function verifySnapshot(db, _logger) {
 /**
  * Verify structural integrity of the corpus database and raw-json files.
  *
- * @param {import('../storage/database.js').DocsDatabase} db
+ * @param {import('../../storage/database.js').DocsDatabase} db
  * @param {string} dataDir
  * @param {{ debug: Function, info: Function, warn: Function, error: Function }} logger
  * @returns {{ checks: Array<{ name: string, ok: boolean, detail?: string }>, allOk: boolean }}

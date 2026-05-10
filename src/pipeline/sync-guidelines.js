@@ -52,8 +52,9 @@ export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
     // Write Markdown file
     await writeText(join(dataDir, 'markdown', `${section.path}.md`), markdown)
 
-    // Upsert page in DB
-    const page = db.upsertPage({
+    // Upsert page in DB. Return value isn't needed — the normalized
+    // document upsert below references the row by `section.path`.
+    db.upsertPage({
       rootId,
       path: section.path,
       url: `${GUIDELINES_URL}#${section.id}`,
