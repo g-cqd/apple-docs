@@ -126,7 +126,7 @@ describe('setup', () => {
         expect(result.tag).toBe('test-release-1')
         expect(result.tier).toBe('full')
         expect(result.documentCount).toBeGreaterThanOrEqual(1)
-        expect(result.schemaVersion).toBe(17)
+        expect(result.schemaVersion).toBe(18)
 
         // Verify the DB was extracted and is valid
         const verifyDb = new DocsDatabase(join(setupDir, 'apple-docs.db'))

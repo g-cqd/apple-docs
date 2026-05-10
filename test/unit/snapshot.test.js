@@ -90,7 +90,7 @@ describe('snapshotBuild', () => {
         expect(docCount.value).toBe('1')
 
         const schemaVer = extractedDb.query('SELECT value FROM snapshot_meta WHERE key = ?').get('snapshot_schema_version')
-        expect(schemaVer.value).toBe('17')
+        expect(schemaVer.value).toBe('18')
       } finally {
         extractedDb.close()
       }

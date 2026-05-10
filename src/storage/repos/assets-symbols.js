@@ -46,10 +46,17 @@ export function createAssetsSymbolsRepo(db) {
   )
   const getSymbolStmt = db.query('SELECT * FROM sf_symbols WHERE scope = ? AND name = ?')
   const listCatalogStmt = db.query(`
-    SELECT name, scope, categories_json, keywords_json
+    SELECT name, scope, categories_json, keywords_json, bitmap_only
     FROM sf_symbols
     ORDER BY scope, COALESCE(order_index, 999999), name
   `)
+  // v18: mark a symbol as bitmap-only (no -vectorGlyph in the private
+  // bundle representation) so the validator and snapshot completeness
+  // gate skip it. Called from the prerender loop when the Swift worker
+  // reports the symbol has no vector form.
+  const markBitmapOnlyStmt = db.query(
+    'UPDATE sf_symbols SET bitmap_only = 1 WHERE scope = $scope AND name = $name',
+  )
   // Search variants — empty query, FTS hit, fallback LIKE.
   const searchEmptyStmt = db.query(`
     SELECT * FROM sf_symbols
@@ -145,7 +152,11 @@ export function createAssetsSymbolsRepo(db) {
         scope: row.scope,
         categories: parseJsonArray(row.categories_json),
         keywords: parseJsonArray(row.keywords_json),
+        bitmapOnly: !!row.bitmap_only,
       }))
+    },
+    markBitmapOnly(scope, name) {
+      markBitmapOnlyStmt.run({ $scope: scope, $name: name })
     },
     /** Hybrid search: FTS5 first, falls back to LIKE on parser failure
      *  (FTS5 trips on `?`, `:`, etc — the catalog has thousands of dotted

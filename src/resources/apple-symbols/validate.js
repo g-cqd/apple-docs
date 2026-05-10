@@ -28,12 +28,20 @@ export function validateSymbolMatrixComplete(ctx, opts = {}) {
   const maxSamples = Math.max(1, opts.maxMissingSamples ?? 50)
   const symbols = ctx.db?.listSfSymbolsCatalog?.() ?? []
   const counts = { public: 0, private: 0 }
+  const skippedBitmapOnly = { public: 0, private: 0 }
   const missing = []
   let missingCount = 0
 
   for (const symbol of symbols) {
     const scope = symbol.scope === 'private' ? 'private' : 'public'
     counts[scope]++
+    // v18: bitmap-only symbols (emoji.* and a few private misc names)
+    // genuinely don't have a vector form. Skip the file-existence
+    // check so the snapshot completeness gate doesn't flag them.
+    if (symbol.bitmapOnly) {
+      skippedBitmapOnly[scope]++
+      continue
+    }
     for (const variant of symbolVariantMatrix(scope)) {
       const path = getPrerenderedSymbolPath(ctx, scope, symbol.name, variant)
       if (existsSync(path)) continue
@@ -44,5 +52,5 @@ export function validateSymbolMatrixComplete(ctx, opts = {}) {
     }
   }
 
-  return { complete: missingCount === 0, missingCount, missing, counts }
+  return { complete: missingCount === 0, missingCount, missing, counts, skippedBitmapOnly }
 }

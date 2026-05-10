@@ -111,7 +111,7 @@ export async function prerenderSfSymbols(opts, ctx) {
       scope,
       symbols: buckets[scope],
       variants,
-      dataDir,
+      ctx,
       concurrency,
       logger,
       onProgress: opts.onProgress,
@@ -160,7 +160,7 @@ function hasSnapshotVariantSet(meta, scope) {
   return expected.length === actual.length && expected.every((key, index) => key === actual[index])
 }
 
-async function renderScopeBucket({ scope, symbols, variants, dataDir, concurrency, logger, onProgress, result }) {
+async function renderScopeBucket({ scope, symbols, variants, ctx, concurrency, logger, onProgress, result }) {
   const queue = []
   for (const symbol of symbols) {
     for (const variant of variants) queue.push({ symbol, ...variant })
@@ -169,12 +169,13 @@ async function renderScopeBucket({ scope, symbols, variants, dataDir, concurrenc
   const startWorker = () => spawnSymbolWorker({ scope, logger })
   for (let i = 0; i < concurrency; i++) {
     const worker = await startWorker()
-    workers.push(processSymbolQueue({ worker, queue, dataDir, scope, result, onProgress, logger, restart: startWorker }))
+    workers.push(processSymbolQueue({ worker, queue, ctx, scope, result, onProgress, logger, restart: startWorker }))
   }
   await Promise.all(workers)
 }
 
-async function processSymbolQueue({ worker, queue, dataDir, scope, result, onProgress, logger, restart }) {
+async function processSymbolQueue({ worker, queue, ctx, scope, result, onProgress, logger, restart }) {
+  const dataDir = ctx.dataDir
   let activeWorker = worker
   while (queue.length > 0) {
     const item = queue.shift()
@@ -210,12 +211,13 @@ async function processSymbolQueue({ worker, queue, dataDir, scope, result, onPro
       // private misc) genuinely don't have a vector form. The Swift
       // worker reports this via respondsToSelector; log at debug so
       // we don't flood at warn level. Treat as `skipped` rather than
-      // `failed` — the snapshot validator still flags them as
-      // missing, but the prerender process itself is healthy.
+      // `failed`, and mark the catalog row so the snapshot validator
+      // doesn't flag the missing files as an error.
       const bitmapOnly = msg.includes('bitmap-backed') || msg.includes('no vectorGlyph')
       if (bitmapOnly) {
         logger?.debug?.(`Skip ${scope}/${symbol.name} (${weight}/${scale}): no vector form`)
         result.skipped++
+        try { ctx.db.markSfSymbolBitmapOnly(scope, symbol.name) } catch {}
       } else {
         logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name} (${weight}/${scale}): ${msg}`)
         result.failed++
