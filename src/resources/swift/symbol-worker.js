@@ -103,7 +103,7 @@ func writeFrame(status: UInt32, payload: Data) {
 
 while let line = readLine(strippingNewline: true) {
   if line.isEmpty { continue }
-  let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+  let parts = line.split(separator: "\\t", omittingEmptySubsequences: false).map(String.init)
   let name = parts.count > 0 ? parts[0] : ""
   let weight = parts.count > 1 ? parts[1] : "regular"
   let scale = parts.count > 2 ? parts[2] : "medium"
