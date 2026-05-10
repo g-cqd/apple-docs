@@ -80,7 +80,7 @@ try {
         framework: flags.framework,
         source: flags.source,
         kind: flags.kind,
-        limit: flags.limit ? Number.parseInt(flags.limit) : undefined,
+        limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined,
         fuzzy: !flags['no-fuzzy'],
         noDeep: !!flags['no-deep'],
         noEager: !!flags['no-eager'],
@@ -91,7 +91,7 @@ try {
         minWatchos: flags['min-watchos'],
         minTvos: flags['min-tvos'],
         minVisionos: flags['min-visionos'],
-        year: flags.year ? Number.parseInt(flags.year) : undefined,
+        year: flags.year ? Number.parseInt(flags.year, 10) : undefined,
         track: flags.track,
         deprecated: flags.deprecated,
       }, ctx)
@@ -141,7 +141,7 @@ try {
     case 'browse': {
       const fw = positional[0]
       if (!fw) { showHelp('browse'); process.exit(1) }
-      result = await browse({ framework: fw, path: flags.path, limit: flags.limit ? Number.parseInt(flags.limit) : undefined }, ctx)
+      result = await browse({ framework: fw, path: flags.path, limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined }, ctx)
       formatter = formatBrowse
       break
     }
@@ -272,6 +272,7 @@ try {
       result = await setupCmd({
         force: !!flags.force,
         skipResources: !!flags['skip-resources'],
+        archive: flags.archive ?? null,
       }, ctx)
       formatter = formatSetup
       break
@@ -313,7 +314,7 @@ try {
           const host = flags.host ?? process.env.APPLE_DOCS_WEB_HOST ?? '127.0.0.1'
           const rateLimit = !!flags['rate-limit']
           const info = await startDevServer({
-            port: flags.port ? Number.parseInt(flags.port) : 3000,
+            port: flags.port ? Number.parseInt(flags.port, 10) : 3000,
             host,
             baseUrl: flags['base-url'],
             ...(rateLimit ? { rateLimit: true } : {}),

@@ -225,12 +225,16 @@ Download a pre-built documentation snapshot for instant access.
 No crawling required — ready in under 60 seconds.
 
 Options:
-  --force          Overwrite existing corpus
-  --skip-resources Skip the post-extract font + symbols re-index step
-  --use-git-auth   Reuse a GitHub token from the local gh CLI or git
-                   credential helper to authenticate release downloads.
-  --skip-git-auth  Skip local-credential detection for this run.
-  --json           Output results as JSON
+  --force            Overwrite existing corpus
+  --skip-resources   Skip the post-extract font + symbols re-index step
+  --archive <path>   Install from a local snapshot tarball produced by
+                     \`apple-docs snapshot build\` instead of fetching from
+                     GitHub. Verifies a sibling .sha256 sidecar if present.
+                     Path must live under $HOME or the current directory.
+  --use-git-auth     Reuse a GitHub token from the local gh CLI or git
+                     credential helper to authenticate release downloads.
+  --skip-git-auth    Skip local-credential detection for this run.
+  --json             Output results as JSON
 `.trim(),
 
   web: `
@@ -331,9 +335,8 @@ The build runs VACUUM INTO on the live database, writes the tarball under
 by the release pipeline (scripts/build-snapshot.js) and the operator
 who wants a portable copy.
 
-Lite/standard tiers were retired in G.1; every snapshot ships the full
-corpus (raw-json + markdown + extracted fonts + the complete pre-
-rendered SF Symbols matrix).
+Every snapshot ships the full corpus: raw-json + markdown + extracted
+fonts + the complete pre-rendered SF Symbols matrix.
 
 Examples:
   apple-docs snapshot build --out dist

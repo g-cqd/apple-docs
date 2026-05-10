@@ -1,6 +1,5 @@
-import { join } from 'node:path'
-import { existsSync } from 'node:fs'
-import { rmSync } from 'node:fs'
+import { join, dirname, basename, resolve, isAbsolute } from 'node:path'
+import { existsSync, rmSync, statSync } from 'node:fs'
 import { sha256 } from '../lib/hash.js'
 import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
 import { ensureDir } from '../storage/files.js'
@@ -19,37 +18,136 @@ const SNAPSHOT_TIER = 'full'
 /**
  * Download and install a pre-built documentation snapshot.
  *
- * @param {{ force?: boolean, skipResources?: boolean }} opts
+ * Two install sources:
+ *   - GitHub release (default) — fetches the latest tagged snapshot from
+ *     the upstream repo, verifies the published `.sha256` sidecar, then
+ *     extracts.
+ *   - Local archive (`--archive <path>`) — operates on a tarball produced
+ *     by `apple-docs snapshot build` on this or another host. Verifies a
+ *     sibling `.sha256` sidecar when present, warns when absent (the
+ *     operator built the archive locally; mandatory checksums on a path
+ *     they control would be policy, not correctness). Closes the local-
+ *     dev loop for self-hosters running their own snapshot pipeline.
+ *
+ * Both paths converge on the same `validateArchive` → tar extract →
+ * post-install resource re-index sequence, so a fault in either source
+ * surfaces identically.
+ *
+ * @param {{ force?: boolean, skipResources?: boolean, archive?: string | null }} opts
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function setup(opts, ctx) {
-  const { db, dataDir, logger } = ctx
+  const { db } = ctx
   const force = opts.force ?? false
 
-  // 1. Check existing corpus
-  const dbPath = join(dataDir, 'apple-docs.db')
   const stats = db.getStats()
   if (stats.totalPages > 0 && !force) {
     return {
       status: 'exists',
-      dataDir,
+      dataDir: ctx.dataDir,
       pages: stats.totalPages,
     }
   }
 
-  // 2. Fetch latest release
+  if (opts.archive) {
+    return installFromLocalArchive(ctx, opts)
+  }
+  return installFromGithubRelease(ctx, opts)
+}
+
+/**
+ * Install from a local tarball produced by `apple-docs snapshot build`.
+ *
+ * Sidecar files are sourced by sibling-name convention:
+ *   foo.tar.gz       → archive
+ *   foo.sha256       → checksum (optional; warn if missing)
+ *   foo.manifest.json → metadata (optional; informational only)
+ *
+ * Refuses sources outside `$HOME` so a misplaced argv path can't read an
+ * arbitrary system file. The tar member walker still runs, so the
+ * symlink-escape protection is identical to the GitHub-release path.
+ */
+async function installFromLocalArchive(ctx, opts) {
+  const { dataDir, logger } = ctx
+  const archivePath = resolveArchivePath(opts.archive)
+
+  if (!existsSync(archivePath)) {
+    throw new Error(`Snapshot archive not found: ${archivePath}`)
+  }
+  const archiveStats = statSync(archivePath)
+  if (!archiveStats.isFile()) {
+    throw new Error(`Snapshot archive must be a regular file: ${archivePath}`)
+  }
+
+  logger.info(`Installing from local archive: ${archivePath} (${formatSize(archiveStats.size)})`)
+
+  // Sidecar discovery: same basename, `.sha256` / `.manifest.json` suffix.
+  // The naming convention is what `apple-docs snapshot build` writes.
+  const checksumPath = `${stripTarGz(archivePath)}.sha256`
+  const manifestPath = `${stripTarGz(archivePath)}.manifest.json`
+  const hasChecksum = existsSync(checksumPath)
+  const hasManifest = existsSync(manifestPath)
+
+  if (hasChecksum) {
+    logger.info('Verifying checksum...')
+    const checksumText = await Bun.file(checksumPath).text()
+    const expectedHash = checksumText.trim().split(/\s+/)[0]
+    const archiveBytes = await Bun.file(archivePath).arrayBuffer()
+    const actualHash = sha256(new Uint8Array(archiveBytes))
+    if (actualHash !== expectedHash) {
+      throw new Error(`Checksum mismatch! Expected ${expectedHash.slice(0, 16)}..., got ${actualHash.slice(0, 16)}...`)
+    }
+    logger.info('Checksum verified.')
+  } else {
+    logger.warn(`No .sha256 sidecar at ${checksumPath} — proceeding without checksum verification`)
+  }
+
+  let manifestTag = 'local'
+  if (hasManifest) {
+    try {
+      const manifest = await Bun.file(manifestPath).json()
+      // snapshot.js writes `version` (= tag) — accept both shapes so a
+      // future rename doesn't silently fall through to 'local'.
+      manifestTag = manifest?.tag ?? manifest?.version ?? manifestTag
+      const ts = manifest?.createdAt ?? manifest?.builtAt ?? 'unknown'
+      logger.info(`Manifest: tag=${manifestTag} built=${ts} docs=${manifest?.documentCount ?? '?'}`)
+    } catch (err) {
+      logger.warn(`Manifest at ${manifestPath} present but unreadable: ${err.message}`)
+    }
+  }
+
+  const result = await extractAndIndex(ctx, archivePath, { skipResources: opts.skipResources })
+  return {
+    status: 'ok',
+    source: 'local-archive',
+    archive: archivePath,
+    tag: manifestTag,
+    tier: SNAPSHOT_TIER,
+    documentCount: result.documentCount,
+    schemaVersion: result.schemaVersion,
+    dataDir,
+  }
+}
+
+/**
+ * Install from the latest GitHub release.
+ * Pulled out of the previous monolithic setup() so the local-archive
+ * path can short-circuit before any network call.
+ */
+async function installFromGithubRelease(ctx, opts) {
+  const { dataDir, logger } = ctx
+
   logger.info('Fetching latest release...')
   const release = await fetchLatestRelease()
   logger.info(`Found release: ${release.tag} (${release.date})`)
 
-  // 3. Find the snapshot archive.
   const archiveAsset = release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.tar.gz'))
   if (!archiveAsset) {
     throw new Error(`No snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
   }
 
-  // Checksum is mandatory. Skipping verification when the .sha256
-  // sidecar is missing is a supply-chain hole: a compromised release
+  // Checksum is mandatory on the release path. Skipping verification when the
+  // .sha256 sidecar is missing is a supply-chain hole: a compromised release
   // flow could omit the sidecar and still ship arbitrary bytes.
   const checksumAsset = release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256'))
   if (!checksumAsset) {
@@ -59,7 +157,6 @@ export async function setup(opts, ctx) {
     )
   }
 
-  // 4. Download archive to temp file
   const tmpPath = join(dataDir, '.setup-download.tar.gz')
   ensureDir(dataDir)
 
@@ -69,12 +166,8 @@ export async function setup(opts, ctx) {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/octet-stream' },
       redirect: 'follow',
     })
-    if (!archiveRes.ok) {
-      throw new Error(`Download failed: HTTP ${archiveRes.status}`)
-    }
-    if (!archiveRes.body) {
-      throw new Error('Download failed: response has no body')
-    }
+    if (!archiveRes.ok) throw new Error(`Download failed: HTTP ${archiveRes.status}`)
+    if (!archiveRes.body) throw new Error('Download failed: response has no body')
     // Stream to disk via an explicit reader loop. Bun.write(path, response)
     // hangs on large responses behind HTTP/2 redirects (e.g. GitHub release
     // asset downloads), so pull chunks manually and feed a FileSink.
@@ -91,15 +184,12 @@ export async function setup(opts, ctx) {
     }
     logger.info('Download complete.')
 
-    // 5. Verify checksum (mandatory — see above).
     logger.info('Verifying checksum...')
     const checksumRes = await fetch(checksumAsset.downloadUrl, {
       headers: { 'User-Agent': USER_AGENT },
       redirect: 'follow',
     })
-    if (!checksumRes.ok) {
-      throw new Error(`Checksum download failed: HTTP ${checksumRes.status}`)
-    }
+    if (!checksumRes.ok) throw new Error(`Checksum download failed: HTTP ${checksumRes.status}`)
     const checksumText = await checksumRes.text()
     const expectedHash = checksumText.trim().split(/\s+/)[0]
     const archiveBytes = await Bun.file(tmpPath).arrayBuffer()
@@ -109,120 +199,128 @@ export async function setup(opts, ctx) {
     }
     logger.info('Checksum verified.')
 
-    // 5b. Pre-flight tar member validation. Walks every entry via
-    // `tar -tvzf` and rejects symlinks, hardlinks, absolute paths, or
-    // anything that escapes dataDir after canonicalization. Runs BEFORE
-    // wiping the install dir — a hostile archive should never cause
-    // data loss; we either install cleanly or leave the previous corpus
-    // intact.
-    logger.info('Validating archive members...')
-    const validation = await validateArchive(tmpPath, dataDir)
-    logger.info(`Archive validated (${validation.entries.length} entries).`)
-
-    // 6. Close current DB and extract
-    db.close()
-
-    // Remove old extracted payloads before installing the fresh
-    // snapshot. Stale markdown / raw-json / pre-rendered symbols from
-    // an older release should not leak into the new corpus.
-    const installPaths = [
-      dbPath,
-      `${dbPath}-wal`,
-      `${dbPath}-shm`,
-      join(dataDir, 'manifest.json'),
-      join(dataDir, 'raw-json'),
-      join(dataDir, 'markdown'),
-      // Pre-rendered SF Symbols and extracted Apple fonts ship inside
-      // every snapshot. Wipe them before extraction so renamed / removed
-      // symbols or replaced font files don't leave orphans behind.
-      join(dataDir, 'resources', 'symbols'),
-      join(dataDir, 'resources', 'fonts', 'extracted'),
-      // Per-symbol parameterised render cache is keyed off the renderer
-      // version that produced the prerender. A snapshot install is also
-      // a renderer cutover, so flush the cache and let it rehydrate.
-      join(dataDir, 'resources', 'symbol-renders'),
-    ]
-    for (const target of installPaths) {
-      if (existsSync(target)) {
-        rmSync(target, { recursive: true, force: true })
-      }
-    }
-
-    // --no-same-owner / --no-same-permissions: defensive belts on top of
-    // the pre-flight validator. Even if the validator misses a hostile
-    // entry, these flags keep tar from chmod'ing / chown'ing files into a
-    // privileged state. (--no-overwrite-dir is GNU-only and not portable
-    // to bsdtar, which is what macOS ships; the install flow nukes the
-    // target dirs before extraction so the protection it provides is moot
-    // here anyway.)
-    // Snapshot tarballs are typically 1-3 GB. 10 min deadline bounds an
-    // OS-level hang without rejecting legit big-corpus extracts on
-    // slower hosts.
-    const { stderr, exitCode } = await spawnWithDeadline(
-      ['tar', '--no-same-owner', '--no-same-permissions', '-xzf', tmpPath, '-C', dataDir],
-      { deadlineMs: 10 * 60_000 },
-    )
-    if (exitCode !== 0) {
-      throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`)
-    }
-    logger.info('Extracted snapshot.')
-
-    // 7. Verify extracted database
-    const verifyDb = new DocsDatabase(dbPath)
-    try {
-      const schemaVersion = verifyDb.getSchemaVersion()
-      const documentCount = verifyDb.db.query('SELECT COUNT(*) as c FROM documents').get().c
-
-      // 7b. Index local Apple typography + SF Symbols. The snapshot
-      // archive already extracted resources/symbols and
-      // resources/fonts/extracted, but the DB index still needs to
-      // point at this host's font files (system fonts vary by macOS
-      // version) and confirm the symbols framework version matches.
-      // Both calls are upserts, fast (~seconds), and degrade gracefully
-      // on non-macOS hosts where the SF Symbols framework isn't present.
-      if (opts.skipResources !== true) {
-        try {
-          await syncAppleFonts({ downloadFonts: false }, { db: verifyDb, dataDir, logger })
-        } catch (e) {
-          logger?.warn?.(`Font index refresh skipped: ${e.message}`)
-        }
-        try {
-          for (const scope of ['public', 'private']) {
-            await syncSfSymbols({ scope }, { db: verifyDb, dataDir, logger })
-          }
-        } catch (e) {
-          logger?.warn?.(`SF Symbols refresh skipped: ${e.message}`)
-        }
-      }
-
-      // 8. Store installation metadata
-      verifyDb.setSnapshotMeta('snapshot_tag', release.tag)
-      verifyDb.setSnapshotMeta('snapshot_installed_at', new Date().toISOString())
-
-      logger.info(`Setup complete! ${documentCount} documents ready.`)
-
-      return {
-        status: 'ok',
-        tag: release.tag,
-        tier: SNAPSHOT_TIER,
-        documentCount,
-        schemaVersion,
-        dataDir,
-      }
-    } finally {
-      verifyDb.close()
+    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, tag: release.tag })
+    return {
+      status: 'ok',
+      source: 'github-release',
+      tag: release.tag,
+      tier: SNAPSHOT_TIER,
+      documentCount: result.documentCount,
+      schemaVersion: result.schemaVersion,
+      dataDir,
     }
   } finally {
-    // 9. Cleanup temp file
-    if (existsSync(tmpPath)) {
-      rmSync(tmpPath, { force: true })
-    }
+    if (existsSync(tmpPath)) rmSync(tmpPath, { force: true })
   }
 }
 
 /**
- * Fetch the latest release from GitHub.
+ * Shared post-archive flow used by both install sources:
+ *   1. tar-member validator (rejects symlinks, traversal, etc.).
+ *   2. Close the live DB, wipe per-install paths, extract.
+ *   3. Open the extracted DB, optionally re-index fonts + symbols.
+ *   4. Record snapshot install metadata.
+ *
+ * Source-specific concerns (network fetch, sidecar discovery, manifest
+ * parsing) stay in the calling function.
  */
+async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } = {}) {
+  const { db, dataDir, logger } = ctx
+  const dbPath = join(dataDir, 'apple-docs.db')
+
+  logger.info('Validating archive members...')
+  const validation = await validateArchive(archivePath, dataDir)
+  logger.info(`Archive validated (${validation.entries.length} entries).`)
+
+  db.close()
+
+  // Remove old extracted payloads before installing the fresh snapshot.
+  // Stale markdown / raw-json / pre-rendered symbols from an older release
+  // should not leak into the new corpus.
+  const installPaths = [
+    dbPath,
+    `${dbPath}-wal`,
+    `${dbPath}-shm`,
+    join(dataDir, 'manifest.json'),
+    join(dataDir, 'raw-json'),
+    join(dataDir, 'markdown'),
+    join(dataDir, 'resources', 'symbols'),
+    join(dataDir, 'resources', 'fonts', 'extracted'),
+    join(dataDir, 'resources', 'symbol-renders'),
+  ]
+  for (const target of installPaths) {
+    if (existsSync(target)) rmSync(target, { recursive: true, force: true })
+  }
+
+  // --no-same-owner / --no-same-permissions: defensive belts on top of
+  // the pre-flight validator. Even if the validator misses a hostile
+  // entry, these flags keep tar from chmod'ing / chown'ing files into a
+  // privileged state. Snapshot tarballs are typically 1-3 GB; 10 min
+  // deadline bounds an OS-level hang without rejecting legit big-corpus
+  // extracts on slower hosts.
+  const { stderr, exitCode } = await spawnWithDeadline(
+    ['tar', '--no-same-owner', '--no-same-permissions', '-xzf', archivePath, '-C', dataDir],
+    { deadlineMs: 10 * 60_000 },
+  )
+  if (exitCode !== 0) throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`)
+  logger.info('Extracted snapshot.')
+
+  const verifyDb = new DocsDatabase(dbPath)
+  try {
+    const schemaVersion = verifyDb.getSchemaVersion()
+    const documentCount = verifyDb.db.query('SELECT COUNT(*) as c FROM documents').get().c
+
+    if (skipResources !== true) {
+      try {
+        await syncAppleFonts({ downloadFonts: false }, { db: verifyDb, dataDir, logger })
+      } catch (e) {
+        logger?.warn?.(`Font index refresh skipped: ${e.message}`)
+      }
+      try {
+        for (const scope of ['public', 'private']) {
+          await syncSfSymbols({ scope }, { db: verifyDb, dataDir, logger })
+        }
+      } catch (e) {
+        logger?.warn?.(`SF Symbols refresh skipped: ${e.message}`)
+      }
+    }
+
+    if (tag) verifyDb.setSnapshotMeta('snapshot_tag', tag)
+    verifyDb.setSnapshotMeta('snapshot_installed_at', new Date().toISOString())
+
+    logger.info(`Setup complete! ${documentCount} documents ready.`)
+    return { documentCount, schemaVersion }
+  } finally {
+    verifyDb.close()
+  }
+}
+
+/**
+ * Resolve the --archive flag to an absolute path and confirm it lives
+ * under $HOME. Refusing arbitrary system paths matches the audit-flagged
+ * principle: setup is a local operator tool; reading from `/etc/...` is
+ * never the intended use.
+ */
+function resolveArchivePath(archive) {
+  const absolute = isAbsolute(archive) ? archive : resolve(process.cwd(), archive)
+  const home = process.env.HOME
+  // Allow $HOME and the current repo checkout (a developer building +
+  // installing from `dist/` is the canonical local-dev flow).
+  const cwd = process.cwd()
+  if (home && absolute.startsWith(`${home}/`)) return absolute
+  if (absolute.startsWith(`${cwd}/`) || absolute === cwd) return absolute
+  throw new Error(
+    `Refusing to install from ${absolute}: archive path must live under $HOME or the current working directory.`,
+  )
+}
+
+function stripTarGz(p) {
+  const name = basename(p)
+  if (name.endsWith('.tar.gz')) return join(dirname(p), name.slice(0, -'.tar.gz'.length))
+  if (name.endsWith('.tgz')) return join(dirname(p), name.slice(0, -'.tgz'.length))
+  return p
+}
+
 async function fetchLatestRelease() {
   const token = getGitHubToken()
   const headers = {
