@@ -4,18 +4,41 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
+      day: monday
+      time: "06:00"
     open-pull-requests-limit: 5
+    # All workflow updates land in one PR per week so review is batched.
+    # Patterns "*" include both version-tag and SHA-pinned references —
+    # when we adopt SHA pinning, Dependabot will keep the SHAs fresh
+    # against the same week's release alongside the tag comment.
     groups:
       github-actions:
         patterns:
           - "*"
+    commit-message:
+      prefix: ci
+      include: scope
+    labels:
+      - dependencies
+      - ci
 
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+      day: monday
+      time: "06:30"
+    open-pull-requests-limit: 10
+    # Split production vs development so a runtime-relevant bump is
+    # never hidden inside a tooling-update PR.
     groups:
-      dev-dependencies:
+      production-dependencies:
+        dependency-type: production
+      development-dependencies:
         dependency-type: development
+    commit-message:
+      prefix: deps
+      include: scope
+    labels:
+      - dependencies
