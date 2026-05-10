@@ -3,7 +3,9 @@ import { existsSync, } from 'node:fs'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
+import { SnapshotIncompleteError } from '../lib/errors.js'
 import { sha256 } from '../lib/hash.js'
+import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { ensureDir, writeJSON } from '../storage/files.js'
 
 const LITE_DROP = [
@@ -146,6 +148,25 @@ export async function snapshotBuild(opts, ctx) {
     // tier and pays no runtime asset cost.
     const symbolsDir = join(dataDir, 'resources', 'symbols')
     if (tier !== 'lite' && existsSync(symbolsDir)) {
+      // F.3b: refuse to ship a snapshot whose pre-render matrix is
+      // partial. A consumer downloading the archive trusts that every
+      // (name × weight × scale) combination resolves; a missing variant
+      // is a 404 on a deterministic URL the snapshot is meant to make
+      // work. `--allow-incomplete-symbols` overrides for deliberate
+      // partial builds (e.g., a contributor on a host that can't run
+      // the live renderer).
+      const validation = validateSymbolMatrixComplete(ctx)
+      if (!validation.complete) {
+        if (!opts.allowIncompleteSymbols) {
+          const head = validation.missing.slice(0, 10).join(', ')
+          throw new SnapshotIncompleteError(
+            `Snapshot ${tier}: ${validation.missingCount} pre-rendered SF Symbol variants missing (e.g., ${head}). ` +
+            'Run `apple-docs sync` to bake the missing renders, or pass --allow-incomplete-symbols to override.',
+            { missingCount: validation.missingCount, missing: validation.missing },
+          )
+        }
+        logger.warn(`Snapshot ${tier}: shipping with ${validation.missingCount} missing pre-renders (--allow-incomplete-symbols set)`)
+      }
       tarArgs.push('-C', dataDir, 'resources/symbols')
     }
     // Full tier additionally ships raw-json + markdown + extracted fonts

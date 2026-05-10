@@ -48,6 +48,9 @@ async function dispatchSnapshot(subcommand, _positional, flags, ctx) {
       tier: flags.tier ?? 'full',
       out: flags.out,
       tag: flags.tag,
+      // F.3b: deliberate-partial-build escape hatch. Pass when
+      // building on a host that can't run the SF Symbols renderer.
+      allowIncompleteSymbols: !!flags['allow-incomplete-symbols'],
     }, ctx)
     return { result, formatter: summary('snapshot') }
   }

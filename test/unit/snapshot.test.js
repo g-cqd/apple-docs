@@ -212,4 +212,39 @@ describe('snapshotBuild', () => {
       rmSync(extractDir, { recursive: true, force: true })
     }
   })
+
+  test('refuses standard build when symbol matrix is incomplete (F.3b)', async () => {
+    // Catalog the public symbol; do NOT stage any of its pre-renders.
+    db.upsertSfSymbol({
+      scope: 'public',
+      name: 'heart',
+      categories: [],
+      keywords: [],
+      orderIndex: 0,
+    })
+    // Create the symbols dir so the include branch fires; leave it
+    // empty so validation finds 27 missing variants.
+    mkdirSync(join(dataDir, 'resources', 'symbols', 'public'), { recursive: true })
+
+    await expect(
+      snapshotBuild({ tier: 'standard', out: outDir, tag: 'test-incomplete' }, { db, dataDir, logger }),
+    ).rejects.toThrow(/SnapshotIncompleteError|missing/i)
+  })
+
+  test('--allow-incomplete-symbols overrides the matrix gate (F.3b)', async () => {
+    db.upsertSfSymbol({
+      scope: 'public',
+      name: 'heart',
+      categories: [],
+      keywords: [],
+      orderIndex: 0,
+    })
+    mkdirSync(join(dataDir, 'resources', 'symbols', 'public'), { recursive: true })
+
+    const result = await snapshotBuild(
+      { tier: 'standard', out: outDir, tag: 'test-allow-incomp', allowIncompleteSymbols: true },
+      { db, dataDir, logger: { ...logger, warn: () => {} } },
+    )
+    expect(existsSync(result.archivePath)).toBe(true)
+  })
 })

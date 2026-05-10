@@ -80,3 +80,18 @@ export class SpawnTimeoutError extends Error {
     if (stderr) this.stderr = stderr
   }
 }
+
+/**
+ * Pre-tar gate: snapshot build refused because the symbol pre-render
+ * matrix is incomplete and `--allow-incomplete-symbols` was not set.
+ * `missing` carries up to N sample entries for the operator log;
+ * `missingCount` is the true total so the message can quote it.
+ */
+export class SnapshotIncompleteError extends Error {
+  constructor(message, { missingCount, missing } = {}) {
+    super(message)
+    this.name = 'SnapshotIncompleteError'
+    if (missingCount !== undefined) this.missingCount = missingCount
+    if (missing !== undefined) this.missing = missing
+  }
+}
