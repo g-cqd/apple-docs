@@ -40,8 +40,6 @@ function init() {
   const weightValueEl = document.getElementById('fonts-weight-value')
   const italicEl = document.getElementById('fonts-italic')
   const styleEl = document.getElementById('fonts-style')
-  const chipsEl = document.getElementById('fonts-chips')
-  const railListEl = document.getElementById('fonts-rail-list')
   const grid = document.getElementById('font-family-grid')
   const bottomCta = document.getElementById('fonts-bottom-bar-cta')
   const bottomAll = document.getElementById('fonts-bottom-bar-all')
@@ -190,48 +188,10 @@ function init() {
   })
 
   // ---------------------------------------------------------------------
-  // 4. Category filter (chip strip + desktop rail).
-  // ---------------------------------------------------------------------
-  let activeCategory = ''
-
-  function applyFilter() {
-    document.querySelectorAll('.font-family').forEach(card => {
-      const cat = card.getAttribute('data-family-category') ?? 'other'
-      const visible = !activeCategory || cat === activeCategory
-      card.hidden = !visible
-    })
-    // Sync chip + rail aria states.
-    if (chipsEl) {
-      chipsEl.querySelectorAll('.font-chip').forEach(b => {
-        b.dataset.active = (b.getAttribute('data-category') ?? '') === activeCategory ? 'true' : 'false'
-      })
-    }
-    if (railListEl) {
-      railListEl.querySelectorAll('.fonts-rail__btn').forEach(b => {
-        b.dataset.active = (b.getAttribute('data-category') ?? '') === activeCategory ? 'true' : 'false'
-      })
-    }
-  }
-
-  if (chipsEl) {
-    chipsEl.addEventListener('click', e => {
-      const btn = e.target.closest('.font-chip')
-      if (!btn) return
-      activeCategory = btn.getAttribute('data-category') ?? ''
-      applyFilter()
-    })
-  }
-  if (railListEl) {
-    railListEl.addEventListener('click', e => {
-      const btn = e.target.closest('.fonts-rail__btn')
-      if (!btn) return
-      activeCategory = btn.getAttribute('data-category') ?? ''
-      applyFilter()
-    })
-  }
-
-  // ---------------------------------------------------------------------
-  // 5. Mobile sticky bottom CTA.
+  // 4. Mobile sticky bottom CTA.
+  //    (Category filter chips + rail removed — the three-category taxonomy
+  //    didn't earn its keep; every Apple family is sans-serif except
+  //    New York and SF-Mono, so the filter was a single-bit selector.)
   // ---------------------------------------------------------------------
   if (bottomAll) {
     bottomAll.addEventListener('click', e => {

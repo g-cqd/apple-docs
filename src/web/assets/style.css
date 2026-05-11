@@ -1134,6 +1134,23 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   text-decoration-color: currentColor;
 }
 
+.site-footer code {
+  font-size: 0.75rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  background: var(--surface, transparent);
+  border: 1px solid var(--border);
+}
+
+.site-footer a:has(code) {
+  text-decoration: none;
+}
+
+.site-footer a:has(code):hover code,
+.site-footer a:has(code):focus-visible code {
+  border-color: currentColor;
+}
+
 /* ------------------------------------------------------------
    13. Collection filter chips
    ------------------------------------------------------------ */
@@ -1997,38 +2014,6 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 1.25rem;
 }
 
-.font-family__badge {
-  font-size: 0.6875rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--secondary-fg);
-  background: var(--code-bg);
-}
-
-.font-family__badge[data-category="serif"] {
-  color: #92480a;
-  border-color: #d4a373;
-}
-[data-theme="dark"] .font-family__badge[data-category="serif"] {
-  color: #f7c598;
-  border-color: #b97e36;
-  background: #2a1d10;
-}
-
-.font-family__badge[data-category="monospace"] {
-  color: #1d4ed8;
-  border-color: #93c5fd;
-}
-[data-theme="dark"] .font-family__badge[data-category="monospace"] {
-  color: #93c5fd;
-  border-color: #2563eb;
-  background: #0f1a30;
-}
-
 .font-family__meta {
   margin: 0;
   color: var(--secondary-fg);
@@ -2180,144 +2165,6 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .font-preview-line:focus-visible {
   background: var(--code-bg);
   box-shadow: 0 0 0 2px var(--accent);
-}
-
-/* -- Fonts page filter rail + chip strip (P7 §5.5) -- */
-.fonts-shell {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-.fonts-rail {
-  display: none;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg);
-  padding: 0.75rem 0.5rem;
-}
-
-.fonts-rail__title {
-  margin: 0 0.5rem 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--secondary-fg);
-}
-
-.fonts-rail__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.fonts-rail__btn {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  font-size: 0.875rem;
-  color: var(--fg);
-  text-align: left;
-  padding: 0.4rem 0.5rem;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.fonts-rail__btn:hover {
-  background: var(--code-bg);
-}
-
-.fonts-rail__btn[data-active="true"] {
-  background: var(--accent);
-  color: var(--bg);
-}
-
-.fonts-rail__btn span {
-  font-size: 0.75rem;
-  color: var(--secondary-fg);
-  font-variant-numeric: tabular-nums;
-}
-
-.fonts-rail__btn[data-active="true"] span {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-@media (min-width: 64em) {
-  .fonts-shell {
-    grid-template-columns: 220px minmax(0, 1fr);
-  }
-  .fonts-rail {
-    display: block;
-  }
-  /* On desktop, the inline chip strip is redundant with the rail. */
-  .fonts-tester__chips {
-    display: none;
-  }
-}
-
-/* Chip strip (mobile): horizontal-scroll, single-line. */
-.fonts-tester__chips {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0.4rem;
-  overflow-x: auto;
-  padding: 0.25rem 0;
-  scrollbar-width: thin;
-}
-
-.font-chip {
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--fg);
-  font-family: inherit;
-  font-size: 0.8125rem;
-  padding: 0.4rem 0.75rem;
-  border-radius: 999px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  white-space: nowrap;
-}
-
-/* Tag chips render in their own visual style — Adobe pattern (research
-   §5.5). "Sans-serif" is set in a system sans face by default; "Serif"
-   in serif; "Monospace" in mono. */
-.font-chip--serif {
-  font-family: ui-serif, "Charter", "Iowan Old Style", "Times New Roman", serif;
-}
-.font-chip--monospace {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-}
-.font-chip--sans-serif,
-.font-chip--other {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-}
-
-.font-chip[data-active="true"] {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
-}
-
-.font-chip__count {
-  font-size: 0.75rem;
-  color: var(--secondary-fg);
-  font-variant-numeric: tabular-nums;
-}
-
-.font-chip[data-active="true"] .font-chip__count {
-  color: rgba(255, 255, 255, 0.85);
 }
 
 /* Variable-axis sliders. */

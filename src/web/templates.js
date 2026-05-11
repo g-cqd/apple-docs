@@ -137,9 +137,13 @@ export function buildFooter(siteConfig) {
   // Snapshot tag is sourced from the installed DB's snapshot_meta at build
   // time (see src/web/build.js); fall back to an em-dash when the corpus
   // predates the tag column so an older deploy still renders a valid footer.
+  // Snapshot tag links to the GitHub release the instance is serving.
+  // <code> here is semantic (it's a literal release tag like "snapshot-20260511")
+  // — not a styling decision; the earlier "no <code>" feedback was about a
+  // bare tag with no link, which read as gratuitous monospace styling.
   const snapshotTag = siteConfig.snapshotTag ? escapeAttr(siteConfig.snapshotTag) : null
   const snapshotLine = snapshotTag
-    ? `<span class="footer-snapshot">Snapshot ${snapshotTag}</span>`
+    ? `<span class="footer-snapshot">Snapshot <a href="https://github.com/g-cqd/apple-docs/releases/tag/${snapshotTag}" rel="noopener noreferrer"><code>${snapshotTag}</code></a></span>`
     : ''
   return `<footer class="site-footer">
   <p>

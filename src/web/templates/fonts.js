@@ -8,15 +8,6 @@ export function renderFontsPage(siteConfig, data = {}) {
   const familiesJson = JSON.stringify(families).replace(/</g, '\\u003c')
   const baseUrl = siteConfig.baseUrl || ''
 
-  // Tag inventory — surface category counts. Even a thin taxonomy lets
-  // us render a chip strip on mobile and a checklist rail on desktop.
-  const categoryCounts = new Map()
-  for (const f of families) {
-    const cat = f.category ?? 'other'
-    categoryCounts.set(cat, (categoryCounts.get(cat) ?? 0) + 1)
-  }
-  const categoryEntries = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])
-
   const familyMarkup = families.map(family => {
     const variableCount = family.files.filter(f => f.is_variable).length
     const remoteCount = family.files.filter(f => f.source === 'remote').length
@@ -27,10 +18,6 @@ export function renderFontsPage(siteConfig, data = {}) {
       remoteCount > 0 ? `${remoteCount} remote` : null,
       systemCount > 0 ? `${systemCount} system` : null,
     ].filter(Boolean).join(' · ')
-    const categoryLabel = formatFontCategory(family.category)
-    const categoryBadge = categoryLabel
-      ? `<span class="font-family__badge" data-category="${escapeAttr(family.category)}">${escapeAttr(categoryLabel)}</span>`
-      : ''
     const familyZip = (subset) => `${baseUrl}/api/fonts/family/${encodeURIComponent(family.id)}.zip${subset && subset !== 'all' ? `?subset=${encodeURIComponent(subset)}` : ''}`
     const downloadButtons = [
       `<a class="font-family__download" href="${escapeAttr(familyZip('all'))}" download>Download all</a>`,
@@ -42,11 +29,10 @@ export function renderFontsPage(siteConfig, data = {}) {
         : '',
     ].filter(Boolean).join('')
     return `
-    <article class="font-family" data-family-id="${escapeAttr(family.id)}" data-family-category="${escapeAttr(family.category ?? 'other')}">
+    <article class="font-family" data-family-id="${escapeAttr(family.id)}">
       <header class="font-family__header">
         <div class="font-family__title-row">
           <h2 class="font-family__title">${escapeAttr(family.display_name)}</h2>
-          ${categoryBadge}
         </div>
         <p class="font-family__meta">${escapeAttr(meta)}</p>
         <div class="font-family__downloads">${downloadButtons}</div>
@@ -55,16 +41,6 @@ export function renderFontsPage(siteConfig, data = {}) {
       <div class="font-family__preview" data-preview></div>
     </article>`
   }).join('')
-
-  // Mobile chip strip + desktop rail markup. Categories are radio-style
-  // (single-select); JS toggles `[data-active]` on the chosen chip.
-  const allCategoriesChip = `<button type="button" class="font-chip" data-category="" data-active="true">All <span class="font-chip__count">${families.length.toLocaleString('en-US')}</span></button>`
-  const categoryChips = categoryEntries
-    .map(([cat, count]) => {
-      const label = formatFontCategory(cat) ?? cat
-      return `<button type="button" class="font-chip font-chip--${escapeAttr(cat)}" data-category="${escapeAttr(cat)}">${escapeAttr(label)} <span class="font-chip__count">${count.toLocaleString('en-US')}</span></button>`
-    })
-    .join('')
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
@@ -119,25 +95,9 @@ ${buildHeader(siteConfig)}
         </select>
       </label>
     </div>
-    <div class="fonts-tester__chips" id="fonts-chips" role="radiogroup" aria-label="Filter by category">
-      ${allCategoriesChip}${categoryChips}
-    </div>
   </section>
 
-  <div class="fonts-shell">
-    <aside class="fonts-rail" aria-label="Filter">
-      <h2 class="fonts-rail__title">Categories</h2>
-      <ul class="fonts-rail__list" id="fonts-rail-list">
-        ${[`<li><button type="button" class="fonts-rail__btn" data-category="" data-active="true">All <span>${families.length.toLocaleString('en-US')}</span></button></li>`]
-          .concat(categoryEntries.map(([cat, count]) => {
-            const label = formatFontCategory(cat) ?? cat
-            return `<li><button type="button" class="fonts-rail__btn" data-category="${escapeAttr(cat)}">${escapeAttr(label)} <span>${count.toLocaleString('en-US')}</span></button></li>`
-          })).join('')}
-      </ul>
-    </aside>
-
-    <section class="font-family-grid" id="font-family-grid">${familyMarkup}</section>
-  </div>
+  <section class="font-family-grid" id="font-family-grid">${familyMarkup}</section>
 
   <div class="fonts-bottom-bar" id="fonts-bottom-bar">
     <a class="fonts-bottom-bar__cta" href="#" id="fonts-bottom-bar-cta" download hidden>Download family</a>
@@ -150,14 +110,5 @@ ${buildFooter(siteConfig)}
 <script src="${escapeAttr(assetUrl(siteConfig, 'fonts-page.js'))}" defer></script>
 </body>
 </html>`
-}
-
-function formatFontCategory(category) {
-  switch (category) {
-    case 'sans-serif': return 'Sans-serif'
-    case 'serif': return 'Serif'
-    case 'monospace': return 'Monospace'
-    default: return null
-  }
 }
 

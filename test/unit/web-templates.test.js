@@ -255,6 +255,8 @@ describe('renderDocumentPage', () => {
     // External links must carry rel=noopener noreferrer.
     expect(page).toMatch(/href="https:\/\/github\.com\/g-cqd"[^>]*rel="noopener noreferrer"/)
     expect(page).toMatch(/href="https:\/\/developer\.apple\.com"[^>]*rel="noopener noreferrer"/)
+    // Snapshot tag is an <a><code>tag</code></a> linking to the release.
+    expect(page).toMatch(/href="https:\/\/github\.com\/g-cqd\/apple-docs\/releases\/tag\/snapshot-20260511"[^>]*rel="noopener noreferrer"><code>snapshot-20260511<\/code><\/a>/)
   })
 
   test('footer omits snapshot tag when corpus lacks one', () => {
