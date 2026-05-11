@@ -10,6 +10,7 @@ import { createLru } from '../lib/lru.js'
 import { createWebRenderCache } from './render-cache.js'
 import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { buildCsp } from './csp.js'
+import { createPyftsubsetPool } from './lib/font-subset/pyftsubset-pool.js'
 
 /**
  * @typedef {object} WebContext
@@ -81,6 +82,41 @@ export async function createWebContext(opts, ctx) {
     parsePositiveInt(process.env.APPLE_DOCS_WEB_RENDER_CONCURRENCY) ?? 4,
     { maxWaiters: 8 },
   )
+  // P3: font-subset has its own semaphore so a burst of subset calls
+  // can't squeeze out the symbol/text renderers and vice versa. The
+  // pool itself sizes its Python workers (max 4); the semaphore is the
+  // queue admission gate. Overflow → 503 + Retry-After: 1.
+  const fontSubsetSemaphore = new Semaphore(
+    parsePositiveInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_CONCURRENCY) ?? 8,
+    { maxWaiters: 16 },
+  )
+  // Lazy-init: the pool spawns Python processes, so building it during
+  // tests that never touch the route would waste CPU and crash hosts
+  // without fontTools installed. The route checks `fontSubsetPool`
+  // and falls back to 503 when init failed.
+  let fontSubsetPool = null
+  let fontSubsetPoolPromise = null
+  function getFontSubsetPool() {
+    if (fontSubsetPool) return Promise.resolve(fontSubsetPool)
+    if (fontSubsetPoolPromise) return fontSubsetPoolPromise
+    fontSubsetPoolPromise = (async () => {
+      const pool = createPyftsubsetPool({
+        size: parsePositiveInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_WORKERS) ?? undefined,
+        logger,
+      })
+      await pool.init()
+      fontSubsetPool = pool
+      return pool
+    })()
+    return fontSubsetPoolPromise
+  }
+  // In-memory cache for subset bytes. Counts capped at 256 entries plus a
+  // 64 MB byte cap so a flood of large subsets can't blow memory.
+  const fontSubsetCache = createLru({
+    max: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_LRU) ?? 256,
+    maxBytes: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_LRU_BYTES) ?? (64 * 1024 * 1024),
+    sizeFn: (v) => v?.byteLength ?? 0,
+  })
   const readerPool = await resolveWebReaderPool(ctx, opts, logger)
   const searchCtx = readerPool ? { ...ctx, readerPool } : ctx
   // A20: searchCache had a count cap (default 512) but no byte cap, so a
@@ -210,6 +246,10 @@ export async function createWebContext(opts, ctx) {
     rateLimiter,
     onDemandGate,
     renderSemaphore,
+    fontSubsetSemaphore,
+    fontSubsetCache,
+    getFontSubsetPool,
+    get fontSubsetPool() { return fontSubsetPool },
     renderCache,
     readerPool,
     searchCtx,

@@ -36,6 +36,7 @@ import {
 import { assetsHandler, workerHandler } from './routes/assets.route.js'
 import { frameworkTreeHandler } from './routes/framework-tree.route.js'
 import { docsHandler } from './routes/docs.route.js'
+import { fontSubsetHandler } from './routes/font-subset.route.js'
 
 /**
  * Start a local dev server for previewing documentation.
@@ -82,6 +83,15 @@ export async function startDevServer(opts, ctx) {
   registry.register('/api/filters', filtersHandler)
   registry.register('/api/fonts', listFontsHandler)
   registry.register('/api/fonts/text.svg', fontTextSvgHandler)
+  // P3: font-subset (lazy pool init on first request).
+  registry.register('/api/fonts/subset', async (request, c, url, match) => {
+    if (!c.fontSubsetPool) {
+      try { await c.getFontSubsetPool() } catch (err) {
+        c.logger?.warn?.(`font-subset pool init failed: ${err?.message ?? err}`)
+      }
+    }
+    return fontSubsetHandler(request, c, url, match)
+  })
   registry.register('/api/symbols/index.json', symbolsIndexHandler)
   registry.register('/api/symbols/search', symbolsSearchHandler)
   registry.registerPattern(/^\/api\/fonts\/file\/([^/]+)$/, fontFileHandler)
@@ -215,6 +225,7 @@ export async function startDevServer(opts, ctx) {
     server.stop = (...args) => {
       const out = originalStop(...args)
       void readerPool?.close?.()
+      void webCtx.fontSubsetPool?.close?.()
       return out
     }
   }
@@ -230,6 +241,7 @@ export async function startDevServer(opts, ctx) {
       // workers. Falsy / undefined → immediate close (legacy behavior).
       await readerPool?.close?.({ softDrainMs: deadlineMs ?? 0 })
     } catch {}
+    try { await webCtx.fontSubsetPool?.close?.() } catch {}
   }
 
   return { server, url: serverUrl, close, readerPool, metricsUrl: metricsHandle?.url ?? null }
