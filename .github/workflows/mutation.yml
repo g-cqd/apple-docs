@@ -1,0 +1,89 @@
+name: Mutation testing
+
+# Mutation testing is too expensive to gate every push. A docs-only
+# commit that touches 50+ source files (comment scrub, type-doc
+# refresh) blows out the incremental baseline and projects multi-hour
+# wall-clock — well past any reasonable CI timeout. Separate workflow
+# so it can run on its own cadence:
+#
+#   - nightly cron — full regression on the canonical branch
+#   - workflow_dispatch — manual re-run before a release
+#   - opt-in via the `run-mutation` label on PRs that genuinely need it
+#
+# Failure here does NOT block merges. Stryker reports go to the
+# artifact + a future dashboard; correctness is gated by the ci.yml
+# unit + coverage runs.
+
+on:
+  schedule:
+    # Daily at 04:00 UTC. Cheap on weekends; the runner pool is
+    # otherwise quiet at that hour.
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    if: github.event_name != 'pull_request' || github.event.label.name == 'run-mutation'
+    runs-on: ubuntu-latest
+    # Stryker's full corpus pass on this codebase has been observed in
+    # the 1-4 hour range. Generous budget keeps the job from being
+    # killed mid-baseline on an empty cache.
+    timeout-minutes: 300
+    env:
+      APPLE_DOCS_NO_GIT_AUTH: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+
+      - name: Restore Stryker incremental baseline
+        uses: actions/cache@v5
+        with:
+          path: |
+            .stryker-tmp
+            reports/stryker-incremental.json
+          key: stryker-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            stryker-${{ github.ref }}-
+            stryker-refs/heads/main-
+
+      # Push / cron runs: mutate the whole src/ tree (Stryker uses the
+      # incremental baseline to skip already-tested mutations).
+      # PR-with-label runs: mutate only the files actually touched in
+      # the PR so the operator gets a fast targeted answer.
+      - name: Mutation testing
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="origin/${{ github.base_ref }}"
+            git fetch --no-tags --depth=50 origin "${{ github.base_ref }}"
+            CHANGED=$(git diff --name-only "$BASE"...HEAD -- 'src/**/*.js' | paste -sd, -)
+            if [ -z "$CHANGED" ]; then
+              echo "No src/ JS files changed since $BASE — skipping"
+              exit 0
+            fi
+            echo "Mutating PR-changed files: $CHANGED"
+            bunx stryker run --mutate "$CHANGED" --incremental
+          else
+            echo "Full corpus mutation pass (incremental baseline restored from cache)"
+            bunx stryker run --incremental
+          fi
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: mutation-report
+          path: reports/stryker/
+          retention-days: 30
+          if-no-files-found: ignore

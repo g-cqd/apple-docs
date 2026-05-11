@@ -87,50 +87,10 @@ jobs:
           flags: unittests
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  mutation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      APPLE_DOCS_NO_GIT_AUTH: '1'
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: ./.github/actions/setup
-
-      - name: Restore Stryker incremental baseline
-        uses: actions/cache@v5
-        with:
-          path: |
-            .stryker-tmp
-            reports/stryker-incremental.json
-          key: stryker-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            stryker-${{ github.ref }}-
-            stryker-refs/heads/main-
-
-      - name: Mutation testing (changed files)
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BASE="origin/${{ github.base_ref }}"
-            git fetch --no-tags --depth=50 origin "${{ github.base_ref }}"
-          else
-            BASE="HEAD~1"
-          fi
-          CHANGED=$(git diff --name-only "$BASE"...HEAD -- 'src/**/*.js' | paste -sd, -)
-          if [ -n "$CHANGED" ]; then
-            echo "Mutating: $CHANGED"
-            bunx stryker run --mutate "$CHANGED" --incremental
-          else
-            echo "No src/ JS files changed since $BASE — skipping mutation testing"
-          fi
-
-      - name: Upload mutation report
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: mutation-report
-          path: reports/stryker/
-          retention-days: 30
-          if-no-files-found: ignore
+  # Mutation testing lives in .github/workflows/mutation.yml as a
+  # separate workflow (nightly cron + workflow_dispatch + opt-in via
+  # a `run-mutation` PR label). Rationale: a comment-scrub commit
+  # touching 50+ source files blows out the Stryker incremental
+  # baseline and projects multi-hour wall-clock — well past any
+  # reasonable per-push CI timeout. Mutation is correctness
+  # reporting, not a merge gate, so it deserves its own cadence.
