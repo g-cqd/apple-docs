@@ -118,10 +118,10 @@ export function markdownToHtml(md, _depth = 0) {
     }
 
     // Unordered list
-    if (/^[\-\*\+]\s+/.test(line)) {
+    if (/^[-*+]\s+/.test(line)) {
       const items = []
-      while (i < lines.length && /^[\-\*\+]\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^[\-\*\+]\s+/, ''))
+      while (i < lines.length && /^[-*+]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^[-*+]\s+/, ''))
         i++
       }
       out.push(`<ul>${items.map(item => `<li>${inlineMarkdown(item)}</li>`).join('')}</ul>`)
@@ -129,10 +129,10 @@ export function markdownToHtml(md, _depth = 0) {
     }
 
     // Ordered list
-    if (/^\d+[\.\)]\s+/.test(line)) {
+    if (/^\d+[.)]\s+/.test(line)) {
       const items = []
-      while (i < lines.length && /^\d+[\.\)]\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\d+[\.\)]\s+/, ''))
+      while (i < lines.length && /^\d+[.)]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+[.)]\s+/, ''))
         i++
       }
       out.push(`<ol>${items.map(item => `<li>${inlineMarkdown(item)}</li>`).join('')}</ol>`)
@@ -152,8 +152,8 @@ export function markdownToHtml(md, _depth = 0) {
       !lines[i].match(/^(`{3,}|~{3,})/) &&
       !lines[i].match(/^#{1,6}\s/) &&
       !lines[i].match(/^>\s/) &&
-      !lines[i].match(/^[\-\*\+]\s+/) &&
-      !lines[i].match(/^\d+[\.\)]\s+/) &&
+      !lines[i].match(/^[-*+]\s+/) &&
+      !lines[i].match(/^\d+[.)]\s+/) &&
       !lines[i].match(/^[-*_]{3,}\s*$/) &&
       !lines[i].trim().startsWith('<!--')) {
       paraLines.push(lines[i])

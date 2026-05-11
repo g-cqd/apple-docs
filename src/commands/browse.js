@@ -34,7 +34,7 @@ export async function browse(opts, ctx) {
   }
 
   const allPages = db.getPagesByRoot(root.slug)
-  const limit = opts.limit ? Math.max(Number.parseInt(opts.limit), 1) : undefined
+  const limit = opts.limit ? Math.max(Number.parseInt(opts.limit, 10), 1) : undefined
   const pages = limit ? allPages.slice(0, limit) : allPages
   return {
     framework: root.display_name,

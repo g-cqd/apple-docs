@@ -74,7 +74,7 @@ export function init() {
     listContainer.removeAttribute('data-deferred')
     listContainer.innerHTML = '<p class="loading">Loading…</p>'
     loader.load().then(data => {
-      if (!data || !data.roleGroups || data.roleGroups.length === 0) {
+      if (!data?.roleGroups || data.roleGroups.length === 0) {
         listContainer.innerHTML = '<p>No documents found for this framework.</p>'
         return
       }
@@ -85,7 +85,7 @@ export function init() {
           const meta = doc.role_heading ? `<span class="doc-item-meta">${escapeHtml(doc.role_heading)}</span>` : ''
           const abstractText = doc.abstract
           const abstract = abstractText
-            ? `<span class="doc-item-meta">— ${escapeHtml(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
+            ? `<span class="doc-item-meta">— ${escapeHtml(abstractText.length > 80 ? `${abstractText.slice(0, 80)}...` : abstractText)}</span>`
             : ''
           const deprecatedAttr = doc.deprecated ? ' data-deprecated="true"' : ''
           return `<li data-filter-kind="${escapeHtml(doc.role_heading)}"${deprecatedAttr}><a href="/docs/${escapeHtml(doc.key)}/">${titleHtml}</a>${meta}${abstract}</li>`
@@ -111,7 +111,7 @@ export function init() {
 
   treeContainer.addEventListener('toggle', (e) => {
     const details = e.target.closest('details.tree-node')
-    if (!details || !details.open || !treeState) return
+    if (!details?.open || !treeState) return
     const lazyUl = details.querySelector(':scope > ul[data-lazy-parent]')
     if (lazyUl) {
       expandLazy(treeState, treeContainer, lazyUl.getAttribute('data-lazy-parent'))

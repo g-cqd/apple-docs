@@ -130,7 +130,7 @@ export function init() {
       announce(`No results for ${query}`)
       return
     }
-    dropdown.innerHTML = hits
+    dropdown.innerHTML = `${hits
       .map(
         (hit, i) => `
       <a href="/docs/${esc(hit.path)}/" class="search-result" role="option" id="search-result-${i}" data-index="${i}" aria-selected="false">
@@ -140,7 +140,7 @@ export function init() {
       </a>
     `,
       )
-      .join('') + `<a href="/search?q=${encodeURIComponent(query || '')}" class="search-view-all" role="option" id="search-result-viewall">View all results &rarr;</a>`
+      .join('')}<a href="/search?q=${encodeURIComponent(query || '')}" class="search-view-all" role="option" id="search-result-viewall">View all results &rarr;</a>`
     showDropdown()
 
     const count = hits.length

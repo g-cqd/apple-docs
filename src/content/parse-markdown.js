@@ -169,10 +169,8 @@ export function splitByHeadings(body, level = 2) {
   // Collect all heading positions
   const headingMatches = []
   const scanRe = getHeadingScanRegex(level)
-  scanRe.lastIndex = 0
 
-  let match
-  while ((match = scanRe.exec(body)) !== null) {
+  for (const match of body.matchAll(scanRe)) {
     headingMatches.push({
       index: match.index,
       full: match[1],
@@ -257,8 +255,7 @@ export function parseMarkdownToSections(markdown, key, opts = {}) {
   // ── Headings for FTS ──────────────────────────────────────────────────────
   const headingTexts = []
   const allH2Re = /^## +(.+)$/mg
-  let hm
-  while ((hm = allH2Re.exec(bodyWithoutH1)) !== null) {
+  for (const hm of bodyWithoutH1.matchAll(allH2Re)) {
     headingTexts.push(hm[1].trim())
   }
   const headings = headingTexts.length > 0 ? headingTexts.join(' ') : null

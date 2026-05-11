@@ -1,16 +1,13 @@
 /**
- * Pre-flight validation for snapshot release archives. See P1.5 in
- * docs/plans/phase-3-quality-and-audit-remediation.md and the audit
- * findings in docs/audits/2026-05-09-strict-security-sota.md §3 +
- * 2026-05-09-deep-exhaustive.md §2.1.
+ * Pre-flight validation for snapshot release archives.
  *
- * Today setup runs `tar -xzf <archive> -C <dataDir>` with no member
- * validation. Modern tar refuses literal `..` and absolute paths, but does
- * not block symlink-based escape during extraction (entry creates symlink,
- * subsequent entry writes through it). A compromised release archive could
- * plant `manifest.json` → `~/.ssh/authorized_keys` and then write through
- * it. This validator runs `tar -tvzf` first, parses the entry type letter
- * (`-`, `d`, `l`, `h`, …) and the path, and rejects anything that:
+ * `tar -xzf <archive> -C <dataDir>` refuses literal `..` and absolute
+ * paths in modern tar, but does NOT block symlink-based escape during
+ * extraction: one entry creates a symlink, a later entry writes through
+ * it. A compromised release archive could plant `manifest.json`
+ * → `~/.ssh/authorized_keys` and overwrite it. This validator runs
+ * `tar -tvzf` first, parses the entry type letter (`-`, `d`, `l`, `h`,
+ * …) and the path, and rejects anything that:
  *   - is a symlink (`l`) or hardlink (`h`),
  *   - is an absolute path,
  *   - canonicalizes outside the destination directory, or

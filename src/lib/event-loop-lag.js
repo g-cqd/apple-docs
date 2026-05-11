@@ -17,8 +17,6 @@
  * and compute percentiles on demand.
  *
  * Output: { p50, p95, p99, max, samples } in milliseconds.
- *
- * Related: phase 1.2 of docs/plans/2026-05-10-javascript-performance-sota.md
  */
 
 const DEFAULT_INTERVAL_MS = 100

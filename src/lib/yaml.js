@@ -18,7 +18,7 @@ export function toFrontMatter(obj) {
 
 function quoteIfNeeded(s) {
   if (s === '' || s === 'true' || s === 'false' || s === 'null' ||
-      /^[\d.]+$/.test(s) || /[:{}\[\],&*?|>!%#@`"']/.test(s) || s.includes('\n')) {
+      /^[\d.]+$/.test(s) || /[:{}[\],&*?|>!%#@`"']/.test(s) || s.includes('\n')) {
     return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
   }
   return s

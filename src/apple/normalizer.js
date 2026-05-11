@@ -45,7 +45,7 @@ export function normalizeIdentifier(raw) {
   const segments = id.split('/')
   for (const seg of segments) {
     // Segment starts with a dot followed by operator chars — Swift operator, not a page
-    if (/^\.[\.\-\+\*\/\<\>\=\!\&\|\^\~\%_]/.test(seg)) return null
+    if (/^\.[.\-+*/<>=!&|^~%_]/.test(seg)) return null
     // Empty segment (double slash)
     if (seg === '') return null
   }

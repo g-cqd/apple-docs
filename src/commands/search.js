@@ -35,8 +35,8 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
  */
 export async function search(opts, ctx) {
   const { query, kind } = opts
-  const limit = Math.max(Number.parseInt(opts.limit) || 100, 1)
-  const offset = Math.max(Number.parseInt(opts.offset) || 0, 0)
+  const limit = Math.max(Number.parseInt(opts.limit, 10) || 100, 1)
+  const offset = Math.max(Number.parseInt(opts.offset, 10) || 0, 0)
   const requestedWindow = limit + offset
   const sourceTypes = normalizeSourceFilter(opts.source)
 

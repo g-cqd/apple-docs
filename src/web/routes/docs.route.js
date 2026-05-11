@@ -61,9 +61,9 @@ export async function docsHandler(request, ctx, url) {
   // Try as document page.
   let doc = db.db.query(DOC_BASE_QUERY).get(key)
 
-  // On-demand fetch from Apple if not in database. The cold path is the
-  // SSRF amplifier (audit A7); apply the composite gate before doing
-  // any upstream work:
+  // On-demand fetch from Apple if not in database. The cold path is
+  // the SSRF amplifier; apply the composite gate before doing any
+  // upstream work:
   //   1. Negative cache: 24h tombstone for keys that previously 404'd.
   //   2. Per-IP strict bucket: 5 req/min, separate from the global limiter.
   //   3. Bounded fetch queue: cap concurrent fetches at 8 with 16 waiters;

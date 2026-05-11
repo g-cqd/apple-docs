@@ -21,8 +21,7 @@ export function bytesToLatin1(buf) {
 export function collectObjects(text, bytes) {
   const objects = new Map()
   const re = /(\d+)\s+(\d+)\s+obj\b/g
-  let match
-  while ((match = re.exec(text)) !== null) {
+  for (const match of text.matchAll(re)) {
     const id = `${match[1]} ${match[2]}`
     const headerEnd = match.index + match[0].length
     const endObj = text.indexOf('endobj', headerEnd)
@@ -47,7 +46,7 @@ export function collectObjects(text, bytes) {
       const lengthMatch = dictText.match(/\/Length\s+(\d+)/)
       let absEnd
       if (lengthMatch) {
-        absEnd = absStart + parseInt(lengthMatch[1], 10)
+        absEnd = absStart + Number.parseInt(lengthMatch[1], 10)
       } else {
         const endStreamRel = body.indexOf('endstream', streamStart)
         absEnd = headerEnd + endStreamRel
@@ -78,7 +77,7 @@ function parseDictionary(text) {
     if (text[i] !== '/') { i++; continue }
     i++
     const keyStart = i
-    while (i < text.length && !/[\s/<>\[\]]/.test(text[i])) i++
+    while (i < text.length && !/[\s/<>[\]]/.test(text[i])) i++
     const key = text.slice(keyStart, i)
     skipWs(text, i, value => { i = value })
     if (text.startsWith('<<', i)) {
@@ -92,12 +91,12 @@ function parseDictionary(text) {
     } else if (text[i] === '/') {
       i++
       const nameStart = i
-      while (i < text.length && !/[\s/<>\[\]]/.test(text[i])) i++
+      while (i < text.length && !/[\s/<>[\]]/.test(text[i])) i++
       out[key] = `/${text.slice(nameStart, i)}`
     } else {
       const tokenStart = i
-      while (i < text.length && !/[\s/<>\[\]]/.test(text[i])) i++
-      let token = text.slice(tokenStart, i).trim()
+      while (i < text.length && !/[\s/<>[\]]/.test(text[i])) i++
+      const token = text.slice(tokenStart, i).trim()
       // Indirect reference: "<obj> <gen> R"
       const refMatch = token.match(/^(\d+)$/)
       if (refMatch) {
@@ -107,10 +106,10 @@ function parseDictionary(text) {
           out[key] = { ref: `${refMatch[1]} ${refRest[1]}` }
           i += refRest[0].length
         } else {
-          out[key] = parseFloat(token)
+          out[key] = Number.parseFloat(token)
         }
       } else if (/^-?\d+(?:\.\d+)?$/.test(token)) {
-        out[key] = parseFloat(token)
+        out[key] = Number.parseFloat(token)
       } else {
         out[key] = token
       }

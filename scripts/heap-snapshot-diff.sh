@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # heap-snapshot-diff.sh — capture two Bun heap snapshots separated by a
-# workload, then summarize the delta. Phase 3.4 of the JavaScript
-# performance SOTA plan.
+# workload, then summarize the delta.
 #
 # Workflow this captures:
 #   1. Cold start: Bun web serve + heap-prof
@@ -52,7 +51,7 @@ cold_dir="$OUT_DIR/cold-$ts"
 warm_dir="$OUT_DIR/warm-$ts"
 mkdir -p "$cold_dir" "$warm_dir"
 
-echo "==> phase 1: cold-start snapshot ($cold_dir)"
+echo "==> step 1: cold-start snapshot ($cold_dir)"
 bun --heap-prof --heap-prof-dir "$cold_dir" cli.js web serve --port "$PORT" --metrics-port $((PORT + 70)) &
 cold_pid=$!
 
@@ -66,8 +65,8 @@ echo "==> stopping cold instance to flush profile"
 kill -TERM "$cold_pid"
 wait "$cold_pid" 2>/dev/null || true
 
-# Phase 2: warm run with the configured workload.
-echo "==> phase 2: warm snapshot after $WARMUP_SECONDS s of $WORKLOAD ($warm_dir)"
+# Step 2: warm run with the configured workload.
+echo "==> step 2: warm snapshot after $WARMUP_SECONDS s of $WORKLOAD ($warm_dir)"
 bun --heap-prof --heap-prof-dir "$warm_dir" cli.js web serve --port "$PORT" --metrics-port $((PORT + 70)) &
 warm_pid=$!
 sleep 3

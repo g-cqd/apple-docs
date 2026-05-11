@@ -35,7 +35,6 @@ function partitionFrameworksByDocCount(roots, db, n) {
  *
  * @param {object} args
  * @param {Array}  args.roots          Filtered framework list to fan out across.
- * @param {object} args.opts           Original `buildStaticSite` opts (forwarded selectively).
  * @param {object} args.siteConfig
  * @param {number} args.workers        Number of subprocesses to spawn.
  * @param {number} args.concurrency    Per-process pool concurrency.
@@ -43,7 +42,7 @@ function partitionFrameworksByDocCount(roots, db, n) {
  * @param {import('../../storage/database.js').DocsDatabase} args.db  For doc-count partitioning.
  * @param {object} [args.logger]
  */
-export async function runWorkerBuilds({ roots, opts, siteConfig, workers, concurrency, outDir, db, logger }) {
+export async function runWorkerBuilds({ roots, siteConfig, workers, concurrency, outDir, db, logger }) {
   const bins = partitionFrameworksByDocCount(roots, db, workers)
   if (bins.length === 0) {
     return { pagesBuilt: 0, pagesSkipped: 0, pagesFailed: 0 }

@@ -60,10 +60,8 @@ export function parseBookTopics(markdown) {
   const groups = []
   for (const sub of splitByHeadings(topics.content, 3)) {
     if (!sub.heading) continue
-    DOC_REF_REGEX.lastIndex = 0
     const items = []
-    let m
-    while ((m = DOC_REF_REGEX.exec(sub.content)) !== null) {
+    for (const m of sub.content.matchAll(DOC_REF_REGEX)) {
       items.push(m[1])
     }
     if (items.length > 0) groups.push({ title: sub.heading, items })

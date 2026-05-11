@@ -2,8 +2,7 @@
 /**
  * check-file-size.js
  *
- * Enforces the 200-400 LOC ceiling per source file. See
- * docs/plans/phase-3-quality-and-audit-remediation.md for the policy.
+ * Enforces the 200–400 LOC ceiling per source file.
  *
  * Reads .file-size-budget.json. Two failure modes:
  *   1. Any non-exempt file exceeds max_lines → fail.

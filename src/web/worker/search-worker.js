@@ -234,9 +234,12 @@ function intersectPostings(lists) {
 
 function intersectTwoSorted(a, b) {
   const out = new Uint32Array(Math.min(a.length, b.length))
-  let ai = 0, bi = 0, oi = 0
+  let ai = 0
+  let bi = 0
+  let oi = 0
   while (ai < a.length && bi < b.length) {
-    const av = a[ai], bv = b[bi]
+    const av = a[ai]
+    const bv = b[bi]
     if (av === bv) { out[oi++] = av; ai++; bi++ }
     else if (av < bv) ai++
     else bi++
@@ -259,9 +262,12 @@ function unionPostings(lists) {
 
 function unionTwoSorted(a, b) {
   const out = new Uint32Array(a.length + b.length)
-  let ai = 0, bi = 0, oi = 0
+  let ai = 0
+  let bi = 0
+  let oi = 0
   while (ai < a.length && bi < b.length) {
-    const av = a[ai], bv = b[bi]
+    const av = a[ai]
+    const bv = b[bi]
     if (av === bv) { out[oi++] = av; ai++; bi++ }
     else if (av < bv) { out[oi++] = av; ai++ }
     else { out[oi++] = bv; bi++ }

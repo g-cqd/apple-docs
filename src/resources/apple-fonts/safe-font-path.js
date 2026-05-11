@@ -2,18 +2,15 @@
  * Validate that a font's on-disk path lives under an approved root before
  * the web layer reads it.
  *
- * Audit A6: apple_font_files.file_path is filled at sync time from either
- * a system-font directory (/Library/Fonts, /System/Library/Fonts,
- * ~/Library/Fonts) or the DMG-extract output under
- * <dataDir>/resources/fonts/extracted. Without a runtime containment
- * check, a malicious DB row (or a sync-time bug that lands a path
- * pointing outside those roots) would let the route serve arbitrary
- * filesystem bytes.
- *
- * Rather than a schema migration (the plan's first sketch — add a
- * relative_path column), this module enforces the invariant at every
- * read. The existing rows are unchanged; the route refuses paths that
- * canonicalize outside the allowlist.
+ * `apple_font_files.file_path` is filled at sync time from either a
+ * system-font directory (`/Library/Fonts`, `/System/Library/Fonts`,
+ * `~/Library/Fonts`) or the DMG-extract output under
+ * `<dataDir>/resources/fonts/extracted`. Without a runtime containment
+ * check a malicious DB row — or a sync-time bug that lands a path
+ * outside those roots — would let the route serve arbitrary filesystem
+ * bytes. This module enforces the invariant at every read so existing
+ * rows stay untouched and the route refuses anything that canonicalizes
+ * outside the allowlist.
  */
 
 import { resolve, sep } from 'node:path'

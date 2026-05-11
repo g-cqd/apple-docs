@@ -40,9 +40,7 @@ export function extractBySelector(html, selector) {
 
   // Find the first opening tag that matches
   const openTagRe = getOpenTagRegex(tagPattern)
-  openTagRe.lastIndex = 0
-  let match
-  while ((match = openTagRe.exec(html)) !== null) {
+  for (const match of html.matchAll(openTagRe)) {
     if (attrFilter && !attrFilter.test(match[0])) continue
 
     const actualTag = match[1]

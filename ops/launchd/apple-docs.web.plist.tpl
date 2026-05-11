@@ -27,7 +27,7 @@
     <key>KeepAlive</key>
     <dict>
         <!-- Restart on crash, but not after a clean graceful drain
-             (SIGTERM-triggered exit 0). The Phase-1 lifecycle helper drains
+             (SIGTERM-triggered exit 0). The lifecycle helper drains
              in-flight requests and exits 0 on success; we don't want launchd
              to immediately respawn during operator-initiated shutdowns. -->
         <key>SuccessfulExit</key>

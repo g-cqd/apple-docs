@@ -131,9 +131,9 @@ export async function lookup(opts, ctx) {
   // Legacy lite-tier snapshots dropped document_sections entirely; for
   // consumers still on one of those, surface a clear upgrade hint
   // instead of silently empty content. The current snapshot has only
-  // one tier (G.1), so this branch only fires on stale installs.
-  let note = undefined
-  let tierLimitation = undefined
+  // one tier, so this branch only fires on stale installs.
+  let note 
+  let tierLimitation 
   if (content) {
     note = fallback ? 'Rendered on-demand from normalized content.' : undefined
   } else {

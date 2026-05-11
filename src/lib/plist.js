@@ -54,7 +54,7 @@ function parseXmlPlist(text) {
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(Number.parseInt(n, 16)))
     .replace(/&amp;/g, '&')
 
   let i = 0
@@ -134,8 +134,8 @@ function parseXmlPlist(text) {
     if (tag.name === 'dict') return readDict(tag)
     if (tag.name === 'array') return readArray(tag)
     if (tag.name === 'string') return tag.isSelf ? '' : readText('string')
-    if (tag.name === 'integer') return tag.isSelf ? 0 : parseInt(readText('integer').trim(), 10)
-    if (tag.name === 'real') return tag.isSelf ? 0 : parseFloat(readText('real').trim())
+    if (tag.name === 'integer') return tag.isSelf ? 0 : Number.parseInt(readText('integer').trim(), 10)
+    if (tag.name === 'real') return tag.isSelf ? 0 : Number.parseFloat(readText('real').trim())
     if (tag.name === 'true') return true
     if (tag.name === 'false') return false
     if (tag.name === 'data') return tag.isSelf ? '' : readText('data').replace(/\s+/g, '')

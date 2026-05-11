@@ -2,11 +2,10 @@
 # Sourced by every ops/bin/ script. Loads ops/.env, validates required vars,
 # and exports them for child processes.
 #
-# Audit A18: previously this used `source "$ENV_FILE"`, which executes the
-# file as bash. A compromised .env (writable by another user, dropped by
-# a misconfigured deploy) could embed `$(rm -rf /)` and run as the ops
-# owner. Parse KEY=VALUE as data instead, and enforce that the file is
-# owned by the running user with mode 0600.
+# Parses .env as KEY=VALUE data rather than `source`-ing it: `source` would
+# execute the file as bash, so a compromised .env (writable by another
+# user, dropped by a misconfigured deploy) could embed `$(rm -rf /)` and
+# run as the ops owner. Ownership + mode 0600 are also enforced.
 
 OPS_DIR_FROM_LIB=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 ENV_FILE="${OPS_DIR_FROM_LIB}/.env"

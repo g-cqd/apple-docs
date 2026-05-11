@@ -45,7 +45,7 @@ export function createRateLimiter(opts = {}) {
   const burst = opts.burst ?? 120
   const lruCap = opts.lruCap ?? DEFAULT_LRU_CAP
   const name = opts.name ?? 'default'
-  const tokenIntervalMs = rate > 0 ? 1000 / rate : Infinity
+  const tokenIntervalMs = rate > 0 ? 1000 / rate : Number.POSITIVE_INFINITY
   /** @type {Map<string, { tokens: number, lastRefill: number }>} */
   const buckets = new Map()
 

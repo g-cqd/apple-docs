@@ -60,7 +60,8 @@ export function buildPageToc(sections) {
       if (!hasRenderableItems(json)) continue
     }
 
-    let id, label
+    let id
+    let label
     switch (kind) {
       case 'declaration':
         id = 'declaration'; label = 'Declaration'; break

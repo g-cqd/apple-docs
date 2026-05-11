@@ -35,9 +35,9 @@ export async function updateGuidelinesSource(adapter, discovery, requestedRoots,
       for (const page of pages) clearTombstoneCounter(db, page.path)
       return counts
     case 'deleted':
-      // Audit 5 §4.3: gate per-page tombstone behind N=3 consecutive
-      // 404s. Guidelines is a single-blob source; every page in `pages`
-      // shares the upstream check result, so they all bump together.
+      // Gate per-page tombstone behind N=3 consecutive 404s. Guidelines
+      // is a single-blob source; every page in `pages` shares the
+      // upstream check result, so they all bump together.
       for (const page of pages) {
         if (gateAndTombstone404(db, page.path, logger)) {
           counts.delCount++

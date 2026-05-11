@@ -18,6 +18,7 @@
 			},
 			"style": {
 				"noNonNullAssertion": "off",
+				"noDescendingSpecificity": "off",
 				"useConst": "warn",
 				"useNumberNamespace": "warn",
 				"useTemplate": "warn",

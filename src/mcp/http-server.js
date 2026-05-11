@@ -46,8 +46,8 @@ const HEAVY_TOOLS = new Set([
 // Active permits. Without a worker pool, heavy SQL work blocks the single
 // Bun event loop regardless of permit count, so raising this buys you queued
 // requests rather than parallelism. 8 is a small bump that absorbs typical
-// burst fan-out while still serializing predictably. Scales up meaningfully
-// only once a reader-worker pool lands (see reader-pool / Phase 4).
+// burst fan-out while still serializing predictably. The setting only
+// scales up meaningfully once the reader-worker pool is enabled.
 const DEFAULT_HEAVY_CONCURRENCY = 8
 // Waiting room depth before 503 backpressure kicks in. 64 is generous on
 // purpose: most bursts drain in well under a second, and the cost of an
@@ -99,12 +99,11 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   // only by section/maxChars/match share a single `renderMarkdown()` run.
   // Plumbed through `ctx.markdownCache` — lookup() consults it when present.
   const markdownCache = deps.markdownCache ?? createMarkdownCache(ctx, { scale: cacheScale })
-  // Worker-thread reader pool. Off by default for this rollout — enable with
-  // APPLE_DOCS_MCP_READERS=on. When active, heavy read-only SQL work routes
-  // to dedicated worker threads each holding their own bun:sqlite handle,
-  // genuinely parallelizing the FTS/trigram/body search paths. When absent,
-  // `runRead()` falls through to the main-thread handle identically to the
-  // pre-pool behavior.
+  // Worker-thread reader pool. Opt-in via APPLE_DOCS_MCP_READERS=on.
+  // When active, heavy read-only SQL work routes to dedicated worker
+  // threads each holding their own bun:sqlite handle, genuinely
+  // parallelizing the FTS/trigram/body search paths. When absent,
+  // `runRead()` falls through to the main-thread handle.
   const readerPool = await resolveReaderPool(ctx, opts, deps, logger)
   const ctxWithCaches = { ...ctx, markdownCache, ...(readerPool ? { readerPool } : {}) }
   const exposeCacheStats = process.env.APPLE_DOCS_MCP_CACHE_STATS === '1'
@@ -123,7 +122,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     ?? new Semaphore(heavyMax, { maxWaiters: heavyQueue })
   const concurrencyStats = { rejected: 0 }
 
-  // P1.7: when no --allow-origin is set, deny browser origins except loopback.
+  // When no --allow-origin is set, deny browser origins except loopback.
   function originOk(request) {
     const origin = request.headers.get('origin')
     if (!origin) return true
@@ -187,8 +186,8 @@ export async function startHttpServer(opts, ctx, deps = {}) {
 
     // Peek JSON-RPC method so heavy tool calls can be gated without making
     // initialize/ping/tools/list/notifications/resources wait behind them.
-    // Body is buffered once (size-capped via readJsonRpcBodyCapped — P1.6)
-    // and forwarded to the transport via a cloned Request.
+    // Body is buffered once (size-capped via readJsonRpcBodyCapped) and
+    // forwarded to the transport via a cloned Request.
     let forwardRequest = request
     let priority = 'light'
     if (request.method === 'POST') {
@@ -348,8 +347,7 @@ function buildPriorityTag(meta) {
  * Returns:
  *   - `deps.readerPool` verbatim when tests inject one (null-safe: `null`
  *     means "explicitly disabled", `undefined` means "fall through to env").
- *   - `null` when `APPLE_DOCS_MCP_READERS !== 'on'`. Default OFF so the pool
- *     is opt-in during rollout.
+ *   - `null` when `APPLE_DOCS_MCP_READERS !== 'on'`. The pool is opt-in.
  *   - `null` when `ctx.dataDir` is missing or the DB is in-memory. Workers
  *     need a real file path; `:memory:` handles do not survive a thread
  *     boundary.
@@ -367,8 +365,8 @@ async function resolveReaderPool(ctx, _opts, deps, logger) {
     return null
   }
   const dbPath = join(dataDir, 'apple-docs.db')
-  // P2.1: split into strict + deep pools so heavy fuzzy/body work
-  // doesn't poison the SLO read path.
+  // Strict + deep pools so heavy fuzzy/body work doesn't poison the
+  // SLO read path.
   const strictSize = parsePositiveInt(process.env.APPLE_DOCS_MCP_READER_WORKERS) ?? undefined
   const deepSize = parsePositiveInt(process.env.APPLE_DOCS_MCP_DEEP_READERS) ?? undefined
   try {
@@ -392,7 +390,7 @@ async function resolveReaderPool(ctx, _opts, deps, logger) {
 
 // Three flavors of "parse env into a usable number" + a shared helper.
 function parseNumber(value, parser, predicate) {
-  const n = value == null ? NaN : parser(value, 10)
+  const n = value == null ? Number.NaN : parser(value, 10)
   return Number.isFinite(n) && predicate(n) ? n : null
 }
 const parsePositiveInt = (v) => parseNumber(v, Number.parseInt, n => n > 0)

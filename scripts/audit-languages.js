@@ -14,8 +14,8 @@
  */
 
 import { Database } from "bun:sqlite";
-import { homedir } from "os";
-import { join } from "path";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Database
@@ -64,7 +64,7 @@ function normalise(lang) {
 
 const freq = new Map(); // normalised language → total count
 
-function tally(lang, source) {
+function tally(lang, _source) {
   if (!lang) return;
   const key = normalise(lang);
   if (!key) return;
@@ -149,9 +149,7 @@ let fenceCount = 0;
 for (const row of text.iterate()) {
   textRows++;
   const content = row.content_text;
-  FENCE_RE.lastIndex = 0;
-  let m;
-  while ((m = FENCE_RE.exec(content)) !== null) {
+  for (const m of content.matchAll(FENCE_RE)) {
     fenceCount++;
     const lang = m[1].trim();
     tally(lang || "(none)", "fence");

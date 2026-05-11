@@ -44,7 +44,7 @@ async function dispatchStorage(subcommand, _positional, flags, ctx) {
 async function dispatchSnapshot(subcommand, _positional, flags, ctx) {
   if (subcommand === 'build') {
     if (flags.tier && flags.tier !== 'full') {
-      console.error(`apple-docs snapshot build: --tier ${flags.tier} is no longer supported (G.1). Drop the flag — there is only one tier now.`)
+      console.error(`apple-docs snapshot build: --tier ${flags.tier} is not a supported flag. Snapshots ship in a single shape; drop --tier.`)
       process.exit(2)
     }
     const { snapshotBuild } = await import('../commands/snapshot.js')

@@ -42,7 +42,7 @@ export async function assetsHandler(_request, ctx, url) {
   const file = url.pathname.replace('/assets/', '')
   if (file.includes('..') || file.includes('\0')) return new Response('Forbidden', { status: 403 })
 
-  if (Object.prototype.hasOwnProperty.call(ENTRY_BUNDLES, file)) {
+  if (Object.hasOwn(ENTRY_BUNDLES, file)) {
     const code = await getBundledJs(ctx, file, ENTRY_BUNDLES[file])
     return new Response(code, {
       headers: {

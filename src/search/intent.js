@@ -12,7 +12,7 @@ const SINGLE_CAPITALIZED = /^[A-Z][A-Za-z0-9]+$/
  * @returns {{ type: 'symbol'|'howto'|'error'|'concept'|'general', confidence: number }}
  */
 export function detectIntent(query) {
-  if (!query || !query.trim()) return { type: 'general', confidence: 0.5 }
+  if (!query?.trim()) return { type: 'general', confidence: 0.5 }
 
   const q = query.trim()
 

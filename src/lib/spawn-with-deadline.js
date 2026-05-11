@@ -1,11 +1,11 @@
 /**
  * One-shot Bun.spawn wrapper with a hard deadline + bounded stderr capture.
  *
- * Audit finding A1: every native spawn (Swift renderer, hdiutil, pkgutil,
- * tar, sips, rsvg-convert, sw_vers) was reading proc.exited without a
- * timeout. A wedged Swift process held a request handler indefinitely
- * and accumulated stderr could blow up memory on a worker that streamed
- * thousands of "deprecated API" warnings.
+ * Every native spawn (Swift renderer, hdiutil, pkgutil, tar, sips,
+ * rsvg-convert, sw_vers) needs a timeout — `proc.exited` alone would
+ * let a wedged child hold a request handler indefinitely, and unbounded
+ * stderr could blow up memory on a worker that streams thousands of
+ * "deprecated API" warnings.
  *
  * Usage:
  *   const { stdout, stderr, exitCode } = await spawnWithDeadline(

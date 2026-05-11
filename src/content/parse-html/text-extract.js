@@ -127,12 +127,11 @@ export function htmlToMarkdown(html, opts = {}) {
     const ddRe = /<dd[^>]*>([\s\S]*?)<\/dd>/gi
     const terms = []
     const defs = []
-    let m
-    while ((m = termRe.exec(inner)) !== null) {
+    for (const m of inner.matchAll(termRe)) {
       const text = decodeEntities(stripInlineTags(m[2])).trim()
       if (text) terms.push(text)
     }
-    while ((m = ddRe.exec(inner)) !== null) {
+    for (const m of inner.matchAll(ddRe)) {
       const text = stripInlineTags(m[1]).trim()
       if (text) defs.push(text)
     }
@@ -196,9 +195,8 @@ function stripInlineTags(s) {
 function listToMarkdown(inner, ordered) {
   const items = []
   const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi
-  let m
   let n = 1
-  while ((m = liRe.exec(inner)) !== null) {
+  for (const m of inner.matchAll(liRe)) {
     const text = decodeEntities(stripInlineTags(m[1])).replace(/\s+/g, ' ').trim()
     if (text) {
       items.push(ordered ? `${n}. ${text}` : `- ${text}`)

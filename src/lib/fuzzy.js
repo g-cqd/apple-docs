@@ -94,7 +94,7 @@ export function fuzzyMatchTitles(query, db, { framework: _framework, kind: _kind
   const matches = []
   for (const row of rows) {
     if (!row?.title) continue
-    if (excludeIds && excludeIds.has(row.id)) continue
+    if (excludeIds?.has(row.id)) continue
     const distance = levenshtein(queryLower, row.title.toLowerCase(), maxDist)
     if (distance <= maxDist) {
       matches.push({ id: row.id, title: row.title, distance })

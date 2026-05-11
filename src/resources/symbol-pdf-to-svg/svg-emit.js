@@ -9,7 +9,10 @@ export function assembleSvg(fills, opts) {
 
   // Compute the global bbox across every fill so we can normalise to a
   // (0,0)-anchored, Y-flipped viewBox.
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
   for (const fill of fills) {
     for (const sub of fill.subpaths) {
       for (const cmd of sub.commands) {
@@ -68,7 +71,7 @@ export function assembleSvg(fills, opts) {
       defs += `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" mask-type="luminance" style="mask-type:luminance">`
         + `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="#fff"/>`
         + `<path d="${cutD}" fill="#000"${fillRuleAttr(fill.fillRule)}/>`
-        + `</mask>`
+        + "</mask>"
       nodes = [`<g mask="url(#${maskId})">${nodes.join('')}</g>`]
     }
   })

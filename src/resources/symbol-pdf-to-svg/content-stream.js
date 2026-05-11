@@ -128,7 +128,7 @@ function tokenize(text) {
     if (ch === '/') {
       const start = i
       i++
-      while (i < text.length && !/[\s/\[\](){}<>]/.test(text[i])) i++
+      while (i < text.length && !/[\s/[\](){}<>]/.test(text[i])) i++
       tokens.push({ type: 'name', value: text.slice(start, i) })
       continue
     }

@@ -41,11 +41,11 @@ function escapeXml(s) {
  * homepage entry share the same shape and indentation.
  */
 function urlEntry({ loc, lastmod, changefreq, priority }) {
-  const parts = [`  <url>`, `    <loc>${escapeXml(loc)}</loc>`]
+  const parts = ["  <url>", `    <loc>${escapeXml(loc)}</loc>`]
   if (lastmod) parts.push(`    <lastmod>${escapeXml(lastmod)}</lastmod>`)
   if (changefreq) parts.push(`    <changefreq>${escapeXml(changefreq)}</changefreq>`)
   if (priority != null) parts.push(`    <priority>${priority.toFixed(1)}</priority>`)
-  parts.push(`  </url>`)
+  parts.push("  </url>")
   return parts.join('\n')
 }
 

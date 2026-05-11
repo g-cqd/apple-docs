@@ -38,9 +38,9 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
             clearTombstoneCounter(db, page.path)
             break
           case 'deleted':
-            // Audit 5 §4.3: gate tombstone behind N=3 consecutive 404s.
-            // Only push to `deleted` when the streak crosses the
-            // threshold; transient flaps stay active for another cycle.
+            // Gate tombstone behind N=3 consecutive 404s. Only push to
+            // `deleted` when the streak crosses the threshold; transient
+            // flaps stay active for another cycle.
             if (gateAndTombstone404(db, page.path, logger)) {
               deleted.push(page.path)
             }

@@ -69,7 +69,8 @@ const DEFAULT_DEADLINE_MS = 5_000
 // Per-op deadline overrides. Resolution: opts.deadlineMs > this
 // map > pool default > DEFAULT_DEADLINE_MS. Strict ops cap above warm-
 // cache p99 but below the bench HEAVY budget; deep ops have honest
-// multi-second tails that the phase-2 split keeps off strict slots.
+// multi-second tails that the strict/deep pool split keeps off strict
+// slots.
 const PER_OP_DEADLINE_MS = Object.freeze({
   searchTitleExact: 750,
   searchTrigram: 1_000,
@@ -189,7 +190,7 @@ export function createReaderPool(opts = {}) {
     let bestLoad = Number.POSITIVE_INFINITY
     for (let i = 0; i < size; i++) {
       let slot = slots[i]
-      if (!slot || !slot.alive) {
+      if (!slot?.alive) {
         spawn(i)
         slot = slots[i]
       }

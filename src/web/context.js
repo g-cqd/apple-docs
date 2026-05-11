@@ -105,8 +105,14 @@ export async function createWebContext(opts, ctx) {
   let cachedAliasMap = null
   let cachedSearchManifest = null
 
-  function getTitleIndex() { return cachedTitleIndex ??= buildTitleIndex(db) }
-  function getAliasMap() { return cachedAliasMap ??= buildAliasMap(db) }
+  function getTitleIndex() {
+    if (cachedTitleIndex === null) cachedTitleIndex = buildTitleIndex(db)
+    return cachedTitleIndex
+  }
+  function getAliasMap() {
+    if (cachedAliasMap === null) cachedAliasMap = buildAliasMap(db)
+    return cachedAliasMap
+  }
   /**
    * Invalidate the document-derived caches after a corpus mutation.
    *

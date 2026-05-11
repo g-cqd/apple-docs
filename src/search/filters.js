@@ -46,11 +46,10 @@ export function buildPlatformFilters(platform, explicit) {
 }
 
 export function matchesSearchFilters(row, filters) {
-  // P3.1: sourceTypes IN, year, track, deprecated mode now push into
-  // SQL via FILTER_PREDICATES. Keep the JS implementations below for
-  // callers that bypass the SQL filter (e.g. relaxation cascade
-  // probes that re-query with reduced WHERE) and as a defense-in-
-  // depth check.
+  // SourceTypes IN, year, track, and deprecated mode push into SQL via
+  // FILTER_PREDICATES. The JS implementations below cover callers that
+  // bypass the SQL filter (e.g. relaxation cascade probes that re-query
+  // with a reduced WHERE) and act as a defense-in-depth check.
   return matchesSourceFilter(row, filters.sourceTypes)
     && matchesFrameworkFilter(row, filters.frameworks)
     && matchesKindFilter(row, filters.kind)
@@ -115,9 +114,9 @@ function matchesLanguageFilter(row, language) {
 }
 
 function matchesPlatformFilters(row, platformFilters) {
-  // P4.2: prefer the cached parse on `platformsParsed` (search.js
-  // attaches it once per row); fall back to parsing `platforms`
-  // for callers that didn't pre-parse.
+  // Prefer the cached parse on `platformsParsed` (search.js attaches it
+  // once per row); fall back to parsing `platforms` for callers that
+  // didn't pre-parse.
   const platforms = row?.platformsParsed ?? parsePlatforms(row?.platforms)
   return [
     ['minIos', 'ios', row?.min_ios ?? row?.minIos],
@@ -158,7 +157,7 @@ function matchesMetadataFilters(row, year, track) {
   if (year && metadata.year !== year) return false
   if (track) {
     const metadataTrack = normalizeFilterValue(metadata.track)
-    if (!metadataTrack || !metadataTrack.includes(normalizeFilterValue(track))) return false
+    if (!metadataTrack?.includes(normalizeFilterValue(track))) return false
   }
   return true
 }

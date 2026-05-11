@@ -78,8 +78,7 @@ export async function parseGuidelinesHtml(html) {
   // ── Pass 2: Split on markers + convert to Markdown ─────────────────
   const markerRe = /<!--§SPLIT:(\d+)-->/g
   const markerPositions = []
-  let m
-  while ((m = markerRe.exec(contentHtml)) !== null) {
+  for (const m of contentHtml.matchAll(markerRe)) {
     markerPositions.push({ index: m.index, metaIdx: Number.parseInt(m[1], 10), marker: m[0] })
   }
 

@@ -54,7 +54,7 @@ export function symbolPdfToSvg(pdfBytes, opts = {}) {
   for (const [name, ref] of Object.entries(extGState)) {
     const dict = resolveDict(ref, objects)
     if (!dict) continue
-    if (dict.ca !== undefined) alphaByName[name] = parseFloat(dict.ca)
+    if (dict.ca !== undefined) alphaByName[name] = Number.parseFloat(dict.ca)
   }
   const contentRef = page.dict.Contents
   const contentObj = resolveStreamObject(contentRef, objects)

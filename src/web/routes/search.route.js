@@ -22,7 +22,7 @@ const DEEP_GATE_MAX_WAITERS = parsePositiveInt(process.env.APPLE_DOCS_WEB_DEEP_Q
 const deepGate = new Semaphore(DEEP_GATE_MAX_INFLIGHT, { maxWaiters: DEEP_GATE_MAX_WAITERS })
 
 function parsePositiveInt(value) {
-  const n = value == null ? NaN : Number.parseInt(value, 10)
+  const n = value == null ? Number.NaN : Number.parseInt(value, 10)
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
@@ -45,7 +45,7 @@ export async function searchHandler(_request, ctx, url) {
   const deep = url.searchParams.get('deep') === '1' || url.searchParams.get('full_text') === '1'
   const searchOpts = {
     query,
-    limit: Math.min(Number.parseInt(url.searchParams.get('limit') ?? '50') || 50, 200),
+    limit: Math.min(Number.parseInt(url.searchParams.get('limit') ?? '50', 10) || 50, 200),
     fuzzy: url.searchParams.get('fuzzy') === '1' && url.searchParams.get('no_fuzzy') !== '1',
     noDeep: url.searchParams.get('no_deep') === '1' || !deep,
     noEager: url.searchParams.get('no_eager') === '1',
@@ -60,10 +60,10 @@ export async function searchHandler(_request, ctx, url) {
     if (val) searchOpts[key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = val
   }
   const year = url.searchParams.get('year')
-  if (year) searchOpts.year = Number.parseInt(year)
+  if (year) searchOpts.year = Number.parseInt(year, 10)
   const track = url.searchParams.get('track')
   if (track) searchOpts.track = track
-  const offset = Number.parseInt(url.searchParams.get('offset') ?? '0') || 0
+  const offset = Number.parseInt(url.searchParams.get('offset') ?? '0', 10) || 0
   if (offset > 0) searchOpts.offset = offset
 
   const { searchCache, searchCtx, corpusStamp } = ctx

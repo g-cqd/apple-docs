@@ -11,23 +11,19 @@ import { ensureDir, writeJSON } from '../storage/files.js'
 // reopens them at first run and crashes if they're missing entirely.
 const OPERATIONAL_TRUNCATE = ['crawl_state', 'activity', 'update_log']
 
-// `snapshot_tier` retained as a metadata key for forward compatibility
-// and so old consumers that still inspect it see a sane value. The
-// previous lite/standard tiers are gone — every snapshot ships the
-// complete corpus + the full SF Symbols pre-render matrix + raw JSON +
-// markdown + extracted fonts.
+// `snapshot_tier` is kept as a metadata key so consumers that inspect
+// it see a sane value. The single shape rules out half-broken consumer
+// experiences (a metadata-only snapshot can't live-render symbols
+// off-macOS, a partial JSON snapshot leaves the raw view incomplete).
 const SNAPSHOT_TIER = 'full'
 
 /**
  * Build a snapshot archive from the current corpus.
  *
- * The lite/standard tiers were removed in commit (G.1). Every snapshot
- * now ships the same payload — the full corpus, every pre-rendered SF
- * Symbol variant, raw JSON, markdown, and the extracted Apple fonts.
- * The single tier rules out half-broken consumer experiences (lite
- * snapshots couldn't live-render symbols off-macOS, standard had a
- * partial story for raw JSON), and the audits flagged tier-aware code
- * paths as a maintenance tax with no proportional value.
+ * Every snapshot ships the same payload: the full corpus, every
+ * pre-rendered SF Symbol variant, raw JSON, markdown, and the extracted
+ * Apple fonts. A single shape keeps the install path simple and avoids
+ * tier-aware code paths.
  *
  * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
@@ -36,9 +32,10 @@ export async function snapshotBuild(opts, ctx) {
   const { db, dataDir, logger } = ctx
   const outDir = opts.out ?? 'dist'
   const tag = opts.tag ?? `snapshot-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
-  // A22: tag is interpolated into archive / checksum / manifest filenames.
-  // Without a strict allowlist, a tag like `../../etc/passwd` or one
-  // containing shell-significant characters would land outside `outDir`.
+  // The tag is interpolated into archive / checksum / manifest
+  // filenames. Without a strict allowlist, a tag like
+  // `../../etc/passwd` or one containing shell-significant characters
+  // would land outside `outDir`.
   if (!/^[a-z0-9._-]{1,64}$/i.test(tag)) {
     throw new Error(`Invalid --tag "${tag}": must match [a-z0-9._-]{1,64}`)
   }

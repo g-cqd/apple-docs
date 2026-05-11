@@ -37,8 +37,7 @@ export async function fetchAppleYearIndex(year, rateLimiter) {
 function extractSessionIdsFromHtml(html, year) {
   const ids = new Set()
   const re = new RegExp(`/videos/play/wwdc${year}/(\\d+)/?["']`, 'g')
-  let match
-  while ((match = re.exec(html)) !== null) {
+  for (const match of html.matchAll(re)) {
     ids.add(match[1])
   }
   return [...ids]

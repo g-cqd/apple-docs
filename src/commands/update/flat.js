@@ -79,9 +79,9 @@ async function checkAndPullTrackedPages({
             clearTombstoneCounter(db, page.path)
             break
           case 'deleted':
-            // Audit 5 §4.3: per-page 404 from upstream is gated by the
-            // N=3 streak; the discovery-driven `stalePages` branch above
-            // is unrelated (those keys are missing from the source's own
+            // Per-page 404 from upstream is gated by the N=3 streak;
+            // the discovery-driven `stalePages` branch above is
+            // unrelated (those keys are missing from the source's own
             // catalog and tombstone immediately).
             if (gateAndTombstone404(db, page.path, logger)) {
               if (root && discoveredKeySet.has(page.path)) {

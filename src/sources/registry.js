@@ -36,12 +36,12 @@ export function getAdapterTypes() {
   return [...registry.keys()]
 }
 
-// Phase 0-2 adapters
+// Apple-side adapters
 registerAdapter(AppleDoccAdapter)
 registerAdapter(HigAdapter)
 registerAdapter(GuidelinesAdapter)
 
-// Phase 4 adapters
+// Swift / community adapters
 registerAdapter(SwiftEvolutionAdapter)
 registerAdapter(SwiftBookAdapter)
 registerAdapter(SwiftDoccAdapter)

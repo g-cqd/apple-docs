@@ -29,7 +29,7 @@ export async function htmlToMarkdown(html) {
   rw.on('h1, h2, h3', {
     element(el) {
       if (skipDepth > 0) return
-      const level = Number.parseInt(el.tagName[1])
+      const level = Number.parseInt(el.tagName[1], 10)
       parts.push(`\n${'#'.repeat(level)} `)
       el.onEndTag(() => parts.push('\n\n'))
     },
@@ -155,7 +155,7 @@ export async function htmlToMarkdown(html) {
   // Images (skip, they're mostly ASR/NR badges already stripped)
   rw.on('img', {
     element(_el) {
-      // Already stripped ASR badges in phase 1, skip any remaining
+      // ASR badges were already removed upstream; skip any remaining.
     },
   })
 

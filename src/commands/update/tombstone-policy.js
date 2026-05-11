@@ -1,12 +1,12 @@
 /**
  * N=3 consecutive 404s before tombstoning a page.
  *
- * Audit 5 §4.3 flagged that a single 404 from upstream caused immediate
- * `markPageDeleted`. Apple's CDN occasionally serves transient 404s
- * (region-specific routing, content rotation, edge cache miss races).
- * Requiring a streak rules out the flap class without losing genuine
- * removals: a real removal stays 404 forever, so it tombstones in three
- * crawl cycles. The counter resets on any successful check.
+ * Apple's CDN occasionally serves transient 404s (region-specific
+ * routing, content rotation, edge cache miss races), so tombstoning on
+ * a single 404 would flap. Requiring a streak rules out that class
+ * without losing genuine removals: a real removal stays 404 forever and
+ * tombstones in three crawl cycles. The counter resets on any
+ * successful check.
  *
  * The threshold is policy-level; if it ever needs to vary by source
  * type, this module owns the table.

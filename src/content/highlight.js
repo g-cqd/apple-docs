@@ -90,7 +90,7 @@ export function highlightCode(code, lang) {
     return null
   }
 
-  const cacheKey = sha256(code + '\0' + grammar).slice(0, 16)
+  const cacheKey = sha256(`${code}\0${grammar}`).slice(0, 16)
   const cached = _highlightCache.get(cacheKey)
   if (cached !== undefined) return cached
 

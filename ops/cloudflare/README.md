@@ -23,7 +23,7 @@ Free Plan allows up to 10 cache rules. We use 6.
 | 1 | `assets-immutable` | URI Path matches `/assets/*` | Yes | Override: 1 year | Override: 1 year | Versioned by `?v=…`, see `siteConfig.assetVersion`. |
 | 2 | `worker-immutable` | URI Path matches `/worker/*` | Yes | Override: 1 year | Override: 1 year | Same lifecycle as `/assets/*`. |
 | 3 | `hashed-data-immutable` | URI Path matches `/data/search/*` AND URI Path contains `.json` | Yes | Override: 1 year | Override: 1 month | Content-hashed filenames, e.g. `title-index.{10-hex}.json`. |
-| 4 | `framework-data-immutable` | URI Path matches `/data/frameworks/*` | Yes | Override: 1 year | Override: 1 month | Per-framework metadata + (Phase 5) tree.{hash}.json. |
+| 4 | `framework-data-immutable` | URI Path matches `/data/frameworks/*` | Yes | Override: 1 year | Override: 1 month | Per-framework metadata + tree.{hash}.json. |
 | 5 | `docs-edge-day` | URI Path matches `/docs/*` | Yes | Override: 1 day | Override: 1 hour | Origin advertises `stale-while-revalidate=604800`. |
 | 6 | `home-and-static` | URI Path matches `/` OR `/sitemap.xml` OR `/robots.txt` OR `/llms.txt` OR URI Path matches `/sitemaps/*` | Yes | Override: 5 minutes | Override: 5 minutes | Cheap to revalidate. |
 

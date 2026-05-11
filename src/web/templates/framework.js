@@ -10,7 +10,7 @@ import {
 } from '../templates.js'
 import { slugify } from '../../content/render-html.js'
 
-export function buildFrameworkTreeData(framework, documents, treeEdges, siteConfig) {
+export function buildFrameworkTreeData(_framework, documents, treeEdges, siteConfig) {
   if (!treeEdges || treeEdges.length === 0) return { json: '', hasTree: false }
 
   const docList = documents ?? []
@@ -115,7 +115,7 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
       const abstractText = doc.abstract_text ?? doc.abstract ?? ''
       const isDeprecated = /\bDeprecated\b/i.test(abstractText)
       const abstract = abstractText
-        ? `<span class="doc-item-meta">— ${escapeAttr(abstractText.length > 80 ? abstractText.slice(0, 80) + '...' : abstractText)}</span>`
+        ? `<span class="doc-item-meta">— ${escapeAttr(abstractText.length > 80 ? `${abstractText.slice(0, 80)}...` : abstractText)}</span>`
         : ''
       const deprecatedAttr = isDeprecated ? ' data-deprecated="true"' : ''
       const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'

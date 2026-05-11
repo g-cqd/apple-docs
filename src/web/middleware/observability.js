@@ -10,8 +10,6 @@
  *   - One `performance.now()` at entry, one at exit.
  *   - Two map writes (route key + classification key) per request.
  *   - Histogram record is O(buckets) — 10 comparisons + counter bumps.
- *
- * Related: phase 1.1 of docs/plans/2026-05-10-javascript-performance-sota.md
  */
 
 import { createHistogram } from '../../lib/histogram.js'

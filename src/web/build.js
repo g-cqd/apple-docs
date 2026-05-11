@@ -211,7 +211,7 @@ export async function buildStaticSite(opts, ctx) {
       // Workers must write into the orchestrator's `buildDir`, NOT `outDir`,
       // otherwise the orchestrator's atomic swap clobbers everything.
       const stats = await runWorkerBuilds({
-        roots, opts, siteConfig, workers, concurrency, outDir: buildDir, db, logger,
+        roots, siteConfig, workers, concurrency, outDir: buildDir, db, logger,
       })
       counters.pagesBuilt += stats.pagesBuilt
       counters.pagesSkipped += stats.pagesSkipped

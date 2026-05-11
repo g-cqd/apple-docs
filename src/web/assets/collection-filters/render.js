@@ -77,7 +77,7 @@ export function insertControls({ controls, controlsHost }) {
     return
   }
   const firstGroup = document.querySelector('.framework-group, .role-group')
-  if (firstGroup && firstGroup.parentNode) {
+  if (firstGroup?.parentNode) {
     firstGroup.parentNode.insertBefore(bar, firstGroup)
     firstGroup.parentNode.insertBefore(inlineRow, bar)
     firstGroup.parentNode.insertBefore(searchInput, inlineRow)

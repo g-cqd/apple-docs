@@ -334,10 +334,9 @@ Every snapshot ships the full corpus:
 - every Apple font Apple distributes (extracted)
 - the complete pre-rendered SF Symbols matrix (every weight × scale × scope)
 
-The lite/standard tiers were retired because their consumer experience
-diverged unevenly off-macOS (lite couldn't render symbols at all, standard
-shipped a partial story for raw JSON), and the audits flagged tier-aware
-code paths as a maintenance tax with no proportional value.
+Snapshots ship in a single shape so the consumer experience is the same
+on every host — metadata-only or partial-JSON variants couldn't render
+symbols off-macOS and left the raw-JSON view incomplete.
 
 ## Configuration
 

@@ -23,7 +23,7 @@ import {
 
 export function init() {
   const listContainer = document.getElementById('list-container')
-  const isDeferred = listContainer && listContainer.hasAttribute('data-deferred')
+  const isDeferred = listContainer?.hasAttribute('data-deferred')
   const filterableItems = document.querySelectorAll('[data-filter-kind]')
   if (filterableItems.length === 0 && !isDeferred) return
 
