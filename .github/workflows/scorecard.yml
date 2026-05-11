@@ -29,7 +29,10 @@ jobs:
         with:
           persist-credentials: false
       - name: Run analysis
-        uses: ossf/scorecard-action@v2
+        # `@v2` is not a resolvable ref on this action; the publisher
+        # only ships specific minor tags. Pin the current minor so
+        # the workflow doesn't fail with "Unable to resolve action".
+        uses: ossf/scorecard-action@v2.4.3
         with:
           results_file: results.sarif
           results_format: sarif
