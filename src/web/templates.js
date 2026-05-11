@@ -139,7 +139,7 @@ export function buildFooter(siteConfig) {
   // predates the tag column so an older deploy still renders a valid footer.
   const snapshotTag = siteConfig.snapshotTag ? escapeAttr(siteConfig.snapshotTag) : null
   const snapshotLine = snapshotTag
-    ? `<span class="footer-snapshot">Snapshot <code>${snapshotTag}</code></span>`
+    ? `<span class="footer-snapshot">Snapshot ${snapshotTag}</span>`
     : ''
   return `<footer class="site-footer">
   <p>

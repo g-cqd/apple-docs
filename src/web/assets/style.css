@@ -1134,14 +1134,6 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   text-decoration-color: currentColor;
 }
 
-.site-footer code {
-  font-size: 0.75rem;
-  padding: 0.05rem 0.3rem;
-  border-radius: 3px;
-  background: var(--surface, transparent);
-  border: 1px solid var(--border);
-}
-
 /* ------------------------------------------------------------
    13. Collection filter chips
    ------------------------------------------------------------ */
