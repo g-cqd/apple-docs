@@ -16,11 +16,11 @@
 #   3. If newer (or --force):
 #      a. Stop watchdog + web + mcp (in that order — watchdog first so it
 #         doesn't try to revive a partially-swapped backend).
-#      b. Run `apple-docs setup --tier <tier> --force --downgrade`. The
-#         `setup` command already downloads from the same release, verifies
-#         the SHA-256, removes stale resource dirs (raw-json, markdown,
-#         resources/symbols, resources/fonts/extracted, symbol-renders),
-#         extracts the tar, and stamps snapshot_meta in the new DB.
+#      b. Run `apple-docs setup --force`. The `setup` command downloads
+#         from the same release, verifies the SHA-256, removes stale
+#         resource dirs (raw-json, markdown, resources/symbols,
+#         resources/fonts/extracted, symbol-renders), extracts the tar,
+#         and stamps snapshot_meta in the new DB.
 #      c. Rebuild the static site (incremental — it picks up the new corpus
 #         and refreshes only what changed since the last manifest).
 #      d. Bootstrap services back up: web → mcp → watchdog.
@@ -45,15 +45,18 @@ LOG_DIR="$OPS/logs"
 LOG="$LOG_DIR/pull-snapshot.log"
 STATE_DIR="${OPS}/state"
 APPLIED_FILE="${STATE_DIR}/applied-snapshot"
-TIER="${SNAPSHOT_TIER:-full}"
 FORCE=${FORCE_PULL:-0}
 GITHUB_REPO_SLUG="${GITHUB_REPO_SLUG:-g-cqd/apple-docs}"
 
 # Allow `pull-snapshot.sh --force` from the CLI without exporting an env var.
+# `--tier` was retired with the single-snapshot collapse; accept it for
+# backwards-compat with older ops cron entries but warn so we can scrub it.
 for arg in "$@"; do
   case "$arg" in
     --force|-f) FORCE=1 ;;
-    --tier=*) TIER="${arg#--tier=}" ;;
+    --tier=*)
+      printf 'WARN: --tier is deprecated and ignored (single-snapshot shape since 2e20145)\n' >&2
+      ;;
     -h|--help)
       sed -n '2,60p' "$0"
       exit 0
@@ -71,7 +74,7 @@ if [ ! -d "$REPO" ]; then
   exit 1
 fi
 
-say "=== pull-snapshot starting (tier=${TIER}, force=${FORCE}) ==="
+say "=== pull-snapshot starting (force=${FORCE}) ==="
 
 # 1. Discover the latest release tag. We intentionally use the public
 # /releases/latest endpoint so this works without a token. If it fails,
@@ -145,11 +148,11 @@ done
 
 # 3b. Run apple-docs setup. The Bun command does the actual GH download
 # (via getLatestRelease in src/commands/setup.js), checksum verification,
-# and atomic-ish DB swap. We pass --downgrade because the user may be
-# applying a snapshot of a smaller tier than what's currently installed.
+# and atomic-ish DB swap. `--tier`/`--downgrade` were retired with the
+# single-snapshot collapse (commit 2e20145); `--force` is sufficient.
 export PATH="$(/usr/bin/dirname -- "$BUN"):$PATH"
 setup_status=0
-run "$BUN" run "$REPO/cli.js" setup --tier "$TIER" --force --downgrade || setup_status=$?
+run "$BUN" run "$REPO/cli.js" setup --force || setup_status=$?
 
 if [ "$setup_status" != "0" ]; then
   say "ERROR: apple-docs setup failed (exit $setup_status). Restoring services."
