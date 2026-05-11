@@ -2,11 +2,12 @@ import { join, dirname, basename, resolve, isAbsolute } from 'node:path'
 import { existsSync, rmSync, statSync } from 'node:fs'
 import { sha256 } from '../lib/hash.js'
 import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
+import { resolveSevenZipBinary } from '../lib/archive-7z.js'
 import { ensureDir } from '../storage/files.js'
 import { DocsDatabase } from '../storage/database.js'
 import { getGitHubToken } from '../lib/github.js'
 import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
-import { validateArchive } from './setup/validate-archive.js'
+import { validateArchive, validate7zArchive } from './setup/validate-archive.js'
 
 const GITHUB_REPO = 'g-cqd/apple-docs'
 const USER_AGENT = 'apple-docs/2.0'
@@ -82,9 +83,16 @@ async function installFromLocalArchive(ctx, opts) {
   logger.info(`Installing from local archive: ${archivePath} (${formatSize(archiveStats.size)})`)
 
   // Sidecar discovery: same basename, `.sha256` / `.manifest.json` suffix.
-  // The naming convention is what `apple-docs snapshot build` writes.
-  const checksumPath = `${stripTarGz(archivePath)}.sha256`
-  const manifestPath = `${stripTarGz(archivePath)}.manifest.json`
+  // The naming convention is what `apple-docs snapshot build` writes. Two
+  // shapes are accepted: `.7z` (current; archive-7z helper writes
+  // `<file>.7z.sha256`) and `.tar.gz` (legacy snapshots predating P2).
+  const isSevenZip = archivePath.endsWith('.7z')
+  const checksumPath = isSevenZip
+    ? `${archivePath}.sha256`
+    : `${stripTarGz(archivePath)}.sha256`
+  const manifestPath = isSevenZip
+    ? `${archivePath.slice(0, -'.7z'.length)}.manifest.json`
+    : `${stripTarGz(archivePath)}.manifest.json`
   const hasChecksum = existsSync(checksumPath)
   const hasManifest = existsSync(manifestPath)
 
@@ -141,15 +149,27 @@ async function installFromGithubRelease(ctx, opts) {
   const release = await fetchLatestRelease()
   logger.info(`Found release: ${release.tag} (${release.date})`)
 
-  const archiveAsset = release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.tar.gz'))
+  // P2: prefer `.7z` (current format); accept `.tar.gz` as a fallback so a
+  // host pulling a pre-P2 release still installs (forward-compat is one-way
+  // — pre-P2 setup binaries cannot read .7z, and we don't try to fix that).
+  const archiveAsset =
+    release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.7z')) ??
+    release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.tar.gz'))
   if (!archiveAsset) {
     throw new Error(`No snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
   }
+  const isSevenZip = archiveAsset.name.endsWith('.7z')
 
   // Checksum is mandatory on the release path. Skipping verification when the
   // .sha256 sidecar is missing is a supply-chain hole: a compromised release
   // flow could omit the sidecar and still ship arbitrary bytes.
-  const checksumAsset = release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256'))
+  const expectedSidecar = `${archiveAsset.name}.sha256`
+  const checksumAsset = release.assets.find(a => a.name === expectedSidecar)
+    // Legacy shape: `<base>.sha256` (no double extension). Accept on the
+    // tar.gz path only.
+    ?? (isSevenZip
+      ? null
+      : release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256')))
   if (!checksumAsset) {
     throw new Error(
       `Refusing to install: release ${release.tag} ships ${archiveAsset.name} without a matching .sha256 sidecar. ` +
@@ -157,7 +177,7 @@ async function installFromGithubRelease(ctx, opts) {
     )
   }
 
-  const tmpPath = join(dataDir, '.setup-download.tar.gz')
+  const tmpPath = join(dataDir, isSevenZip ? '.setup-download.7z' : '.setup-download.tar.gz')
   ensureDir(dataDir)
 
   try {
@@ -227,9 +247,24 @@ async function installFromGithubRelease(ctx, opts) {
 async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } = {}) {
   const { db, dataDir, logger } = ctx
   const dbPath = join(dataDir, 'apple-docs.db')
+  const isSevenZip = archivePath.endsWith('.7z')
+
+  // Native 7z requires p7zip on PATH. Fail early with an install hint
+  // instead of letting Bun.spawn surface a `ENOENT 7zz` later.
+  if (isSevenZip) {
+    try {
+      resolveSevenZipBinary()
+    } catch (err) {
+      throw new Error(
+        `${err.message}\nThe snapshot is shipped as a .7z archive; p7zip is required to install it.`,
+      )
+    }
+  }
 
   logger.info('Validating archive members...')
-  const validation = await validateArchive(archivePath, dataDir)
+  const validation = isSevenZip
+    ? await validate7zArchive(archivePath, dataDir)
+    : await validateArchive(archivePath, dataDir)
   logger.info(`Archive validated (${validation.entries.length} entries).`)
 
   db.close()
@@ -252,17 +287,32 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } =
     if (existsSync(target)) rmSync(target, { recursive: true, force: true })
   }
 
-  // --no-same-owner / --no-same-permissions: defensive belts on top of
-  // the pre-flight validator. Even if the validator misses a hostile
-  // entry, these flags keep tar from chmod'ing / chown'ing files into a
-  // privileged state. Snapshot tarballs are typically 1-3 GB; 10 min
-  // deadline bounds an OS-level hang without rejecting legit big-corpus
-  // extracts on slower hosts.
-  const { stderr, exitCode } = await spawnWithDeadline(
-    ['tar', '--no-same-owner', '--no-same-permissions', '-xzf', archivePath, '-C', dataDir],
-    { deadlineMs: 10 * 60_000 },
-  )
-  if (exitCode !== 0) throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`)
+  if (isSevenZip) {
+    // Native 7z extract. `x` preserves paths; `-y` answers "yes" to
+    // overwrite prompts (we just wiped the destination above so prompts
+    // shouldn't fire, but the flag is defence-in-depth for ad-hoc reruns).
+    // `-o<dir>` sets the output directory. The validator already rejected
+    // anything that would escape `dataDir`, so the on-disk safety is in
+    // line with the tar path.
+    const binary = resolveSevenZipBinary()
+    const { stderr, exitCode } = await spawnWithDeadline(
+      [binary, 'x', '-y', `-o${dataDir}`, archivePath],
+      { deadlineMs: 10 * 60_000 },
+    )
+    if (exitCode !== 0) throw new Error(`Extraction failed (${binary} exit ${exitCode}): ${stderr}`)
+  } else {
+    // --no-same-owner / --no-same-permissions: defensive belts on top of
+    // the pre-flight validator. Even if the validator misses a hostile
+    // entry, these flags keep tar from chmod'ing / chown'ing files into a
+    // privileged state. Snapshot tarballs are typically 1-3 GB; 10 min
+    // deadline bounds an OS-level hang without rejecting legit big-corpus
+    // extracts on slower hosts.
+    const { stderr, exitCode } = await spawnWithDeadline(
+      ['tar', '--no-same-owner', '--no-same-permissions', '-xzf', archivePath, '-C', dataDir],
+      { deadlineMs: 10 * 60_000 },
+    )
+    if (exitCode !== 0) throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`)
+  }
   logger.info('Extracted snapshot.')
 
   const verifyDb = new DocsDatabase(dbPath)

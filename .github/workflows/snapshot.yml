@@ -28,6 +28,12 @@ jobs:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
 
+      # P2 archive pipeline: snapshots ship as `.7z` (LZMA2 max). The
+      # `sevenzip` formula provides `7zz`, the upstream Igor Pavlov binary
+      # the bake-off was benchmarked against. See docs/spikes/archive-format.md.
+      - name: Install p7zip (7zz)
+        run: brew install sevenzip
+
       - name: Set data directory
         run: echo "APPLE_DOCS_HOME=${{ runner.temp }}/apple-docs" >> "$GITHUB_ENV"
 
@@ -52,14 +58,98 @@ jobs:
         id: tag
         run: echo "tag=snapshot-$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
-      # G.1: lite/standard tiers were retired. Every snapshot ships the
-      # full corpus (raw JSON + markdown + every Apple font + every pre-
-      # rendered SF Symbol SVG).
-      - name: Build snapshot
-        run: bun run scripts/build-snapshot.js --out dist/ --tag ${{ steps.tag.outputs.tag }}
+      # Build all archives (full snapshot + combined symbols + per-family
+      # fonts + fonts-all). The orchestrator also emits a unified
+      # status.json with sha256 + size + url for every artefact.
+      - name: Build archives
+        run: |
+          bun run cli.js status --json > dist-status-base.json
+          bun run scripts/build-snapshot.js \
+            --out dist/ \
+            --tag ${{ steps.tag.outputs.tag }} \
+            --status-in dist-status-base.json \
+            --status-out dist/status.json \
+            --release-url-base https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}
 
-      - name: Corpus stats
-        run: bun run cli.js status --json > dist/status.json
+      # Determinism gate: re-build the snapshot archive into a sibling dir
+      # and diff sha256s. The orchestrator already wrote the canonical
+      # outputs into dist/; we re-run with --out dist-check/ and compare.
+      # A mismatch fails the workflow before we publish anything.
+      - name: Verify determinism
+        run: |
+          bun run scripts/build-snapshot.js \
+            --out dist-check/ \
+            --tag ${{ steps.tag.outputs.tag }} \
+            --status-out dist-check/status.json \
+            >/dev/null
+          set -e
+          # Compare every .7z by sha256. The .sha256 sidecars themselves
+          # are derived from the archive bytes; if archives match, sidecars
+          # match by construction.
+          fail=0
+          for f in dist/*.7z; do
+            name=$(basename "$f")
+            a=$(shasum -a 256 "$f" | awk '{print $1}')
+            b=$(shasum -a 256 "dist-check/$name" | awk '{print $1}')
+            if [ "$a" != "$b" ]; then
+              echo "MISMATCH $name: $a vs $b" >&2
+              fail=1
+            fi
+          done
+          rm -rf dist-check
+          if [ "$fail" != "0" ]; then exit 1; fi
+
+      # Generate the release-notes body. We do this in-shell so the table
+      # can include real sizes / sha256s read from dist/status.json.
+      - name: Compose release notes
+        id: notes
+        run: |
+          bun run --silent <<'EOF' > dist/release-body.md
+          const s = await Bun.file('dist/status.json').json()
+          const fmt = b => {
+            if (b > 1e9) return (b/1e9).toFixed(2)+' GB'
+            if (b > 1e6) return (b/1e6).toFixed(1)+' MB'
+            if (b > 1e3) return (b/1e3).toFixed(1)+' KB'
+            return b+' B'
+          }
+          const short = h => h ? '`'+h.slice(0,12)+'…`' : 'n/a'
+          const rows = []
+          rows.push(['Archive','Size','SHA-256'])
+          rows.push(['---','---','---'])
+          const push = (a) => a && rows.push(['`'+a.name+'`', fmt(a.size), short(a.sha256)])
+          push(s.archives.snapshot)
+          push(s.archives.symbols)
+          push(s.archives.fonts_all)
+          for (const [fam, info] of Object.entries(s.archives.fonts_by_family || {})) push(info)
+          const table = rows.map(r=>'| '+r.join(' | ')+' |').join('\n')
+          const body = [
+            '${{ github.event_name == \'schedule\' && \'Scheduled snapshot build.\' || \'Manual snapshot build.\' }}',
+            '',
+            'Single-tier snapshot — ships the full corpus, every Apple font, and the complete pre-rendered SF Symbols matrix.',
+            '',
+            '## Artifacts',
+            '',
+            table,
+            '',
+            '## Install',
+            '',
+            'Snapshots are packaged as native `.7z` (LZMA2 max). Install p7zip on the consumer host:',
+            '',
+            '```bash',
+            '# macOS',
+            'brew install sevenzip          # provides 7zz',
+            '# Debian/Ubuntu',
+            'sudo apt install p7zip-full    # provides 7z',
+            '```',
+            '',
+            'Then:',
+            '',
+            '```bash',
+            'apple-docs setup',
+            '```',
+          ].join('\n')
+          process.stdout.write(body)
+          EOF
 
       - name: Create release
         uses: softprops/action-gh-release@v3
@@ -67,21 +157,12 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: 'Snapshot (${{ steps.tag.outputs.tag }})'
           files: |
-            dist/*.tar.gz
-            dist/*.sha256
+            dist/*.7z
+            dist/*.7z.sha256
             dist/*.manifest.json
             dist/status.json
           draft: false
           prerelease: false
-          body: |
-            ${{ github.event_name == 'schedule' && 'Scheduled snapshot build.' || 'Manual snapshot build.' }}
-
-            Single-tier snapshot — ships the full corpus, every Apple
-            font, and the complete pre-rendered SF Symbols matrix.
-
-            **Install:**
-            ```bash
-            apple-docs setup
-            ```
+          body_path: dist/release-body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

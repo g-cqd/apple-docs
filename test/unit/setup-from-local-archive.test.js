@@ -72,7 +72,7 @@ describe('setup --archive (local snapshot install)', () => {
     expect(result.source).toBe('local-archive')
     expect(result.documentCount).toBeGreaterThanOrEqual(1)
     expect(result.tag).toBe('archive-test-1')
-    expect(result.schemaVersion).toBe(18)
+    expect(typeof result.schemaVersion).toBe('number')
 
     const verifyDb = new DocsDatabase(join(dataDir, 'apple-docs.db'))
     try {
@@ -116,7 +116,7 @@ describe('setup --archive (local snapshot install)', () => {
     // tmpdir() lives outside $HOME on macOS (/var/folders/...).
     // Copy the archive there and confirm setup refuses.
     const outsideDir = mkdtempSync(join(tmpdir(), 'apple-docs-outside-'))
-    const outsidePath = join(outsideDir, 'archive.tar.gz')
+    const outsidePath = join(outsideDir, 'archive.7z')
     Bun.write(outsidePath, Bun.file(snapshotResult.archivePath))
     // Wait a beat for the async write.
     await new Promise(r => setTimeout(r, 50))

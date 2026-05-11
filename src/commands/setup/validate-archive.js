@@ -15,6 +15,7 @@
  */
 
 import { resolve, sep } from 'node:path'
+import { resolveSevenZipBinary } from '../../lib/archive-7z.js'
 
 const ALLOWED_TYPES = new Set(['-', 'd'])
 
@@ -62,6 +63,70 @@ export async function validateArchive(archivePath, destDir, deps = {}) {
     entries.push({ type, path })
   }
 
+  return { entries }
+}
+
+/**
+ * Validate a native `.7z` archive's member list.
+ *
+ * Runs `7zz l -slt` (or `7z l -slt`) and parses the technical listing, the
+ * stable cross-platform format documented by 7-Zip. Rejects entries that:
+ *   - are symlinks (`Attributes` row starting `L`),
+ *   - are absolute paths or start with `~`,
+ *   - canonicalize outside `destDir`.
+ *
+ * The 7z format does not have hardlinks as a first-class type, so the
+ * tar-equivalent `h` check has no analogue here.
+ *
+ * @param {string} archivePath
+ * @param {string} destDir
+ * @param {{ spawn?: typeof Bun.spawn, which?: Function }} [deps]
+ * @returns {Promise<{ entries: Array<{ type: string, path: string }> }>}
+ */
+export async function validate7zArchive(archivePath, destDir, deps = {}) {
+  const spawn = deps.spawn ?? Bun.spawn
+  const binary = resolveSevenZipBinary(deps)
+  const proc = spawn([binary, 'l', '-slt', archivePath], { stdout: 'pipe', stderr: 'pipe' })
+  const exitCode = await proc.exited
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr).text()
+    throw new Error(`archive listing failed (${binary} exit ${exitCode}): ${stderr.trim()}`)
+  }
+  const stdoutText = await new Response(proc.stdout).text()
+
+  const root = resolve(destDir) + sep
+  const entries = []
+  // 7z technical listing emits Path = / Attributes = pairs per entry,
+  // separated by blank lines. We scan record-by-record.
+  const records = stdoutText.split(/\n\s*\n/)
+  for (const rec of records) {
+    const pathMatch = rec.match(/^Path = (.+)$/m)
+    const attrMatch = rec.match(/^Attributes = (.+)$/m)
+    if (!pathMatch || !attrMatch) continue
+    const path = pathMatch[1].trim()
+    const attrs = attrMatch[1].trim()
+    // Skip the archive's own header record (Path = <archive name>) — it
+    // doesn't carry an `Attributes =` row in the technical listing, but
+    // some 7zz builds include a `Type = 7z` line we'd otherwise pick up.
+    // We disambiguate by skipping any record whose Path equals the archive
+    // itself.
+    if (rec.includes('Type = 7z') && rec.includes('Physical Size')) continue
+    let type = '-'
+    if (/^D/.test(attrs)) type = 'd'
+    else if (/^L/.test(attrs)) type = 'l'
+    else if (/^A/.test(attrs) || /^\s*-/.test(attrs)) type = '-'
+    if (!ALLOWED_TYPES.has(type)) {
+      throw new Error(`archive contains disallowed entry "${type}" attrs="${attrs}": ${path}`)
+    }
+    if (path.startsWith('/') || path.startsWith('~')) {
+      throw new Error(`archive contains absolute path: ${path}`)
+    }
+    const resolved = resolve(destDir, path)
+    if (resolved !== resolve(destDir) && !resolved.startsWith(root)) {
+      throw new Error(`archive entry escapes destDir after canonicalization: ${path} → ${resolved}`)
+    }
+    entries.push({ type, path })
+  }
   return { entries }
 }
 

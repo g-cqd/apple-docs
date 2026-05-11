@@ -1,9 +1,10 @@
 import { join } from 'node:path'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, cpSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError } from '../lib/errors.js'
 import { sha256 } from '../lib/hash.js'
+import { createSevenZipArchive, writeSha256Sidecar } from '../lib/archive-7z.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { ensureDir, writeJSON } from '../storage/files.js'
 
@@ -24,6 +25,12 @@ const SNAPSHOT_TIER = 'full'
  * pre-rendered SF Symbol variant, raw JSON, markdown, and the extracted
  * Apple fonts. A single shape keeps the install path simple and avoids
  * tier-aware code paths.
+ *
+ * P2 archive pipeline (this revision): the snapshot is now packaged as a
+ * native LZMA2 `.7z` instead of `.tar.gz`. Decisions and bake-off numbers:
+ * docs/spikes/archive-format.md. Consumers must have `7zz` (Homebrew
+ * `sevenzip`) or `7z` (Debian `p7zip-full`) on PATH; `apple-docs setup`
+ * surfaces a clear error when neither is installed.
  *
  * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
@@ -98,19 +105,13 @@ export async function snapshotBuild(opts, ctx) {
 
     await writeJSON(join(buildDir, 'manifest.json'), manifest)
 
-    // 7. Create tar.gz archive — DB + manifest + the full asset set.
-    ensureDir(outDir)
-    const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.tar.gz`
-    const archivePath = join(outDir, archiveName)
-
-    const tarArgs = ['-czf', archivePath, '-C', buildDir, 'apple-docs.db', 'manifest.json']
-
     // SF Symbol pre-renders. Required for snapshot consumers without
     // the macOS SF Symbols system bundle — the runtime cannot live-
     // render off-macOS, so the matrix has to ride along. F.3b: refuse
     // to ship a partial matrix without --allow-incomplete-symbols.
     const symbolsDir = join(dataDir, 'resources', 'symbols')
-    if (existsSync(symbolsDir)) {
+    const includeSymbols = existsSync(symbolsDir)
+    if (includeSymbols) {
       const validation = validateSymbolMatrixComplete(ctx)
       if (!validation.complete) {
         if (!opts.allowIncompleteSymbols) {
@@ -123,26 +124,46 @@ export async function snapshotBuild(opts, ctx) {
         }
         logger.warn(`Snapshot: shipping with ${validation.missingCount} missing pre-renders (--allow-incomplete-symbols set)`)
       }
-      tarArgs.push('-C', dataDir, 'resources/symbols')
     }
 
-    // Raw DocC JSON, rendered Markdown, extracted Apple fonts. These
-    // make the snapshot a contributor-ready handoff: a fresh clone +
-    // setup gives you everything needed to rebuild without re-syncing
-    // from Apple's APIs.
+    // 7. Stage the snapshot payload into a single tree, then archive it as
+    // a deterministic .7z. Staging into buildDir keeps member paths in the
+    // archive flat (no `dataDir`-leak / no `../` games) and lets the 7z
+    // helper sort the entire tree as one input.
+    //
+    // Layout inside the archive:
+    //   apple-docs.db
+    //   manifest.json
+    //   resources/symbols/...
+    //   raw-json/...
+    //   markdown/...
+    //   resources/fonts/extracted/...
+    if (includeSymbols) {
+      cpSync(symbolsDir, join(buildDir, 'resources', 'symbols'), { recursive: true })
+    }
     const rawJsonDir = join(dataDir, 'raw-json')
-    const markdownDir = join(dataDir, 'markdown')
-    const fontsExtractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
-    if (existsSync(rawJsonDir)) tarArgs.push('-C', dataDir, 'raw-json')
-    if (existsSync(markdownDir)) tarArgs.push('-C', dataDir, 'markdown')
-    if (existsSync(fontsExtractedDir)) tarArgs.push('-C', dataDir, 'resources/fonts/extracted')
-
-    const proc = Bun.spawn(['tar', ...tarArgs], { stdout: 'pipe', stderr: 'pipe' })
-    const exitCode = await proc.exited
-    if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text()
-      throw new Error(`tar failed (exit ${exitCode}): ${stderr}`)
+    if (existsSync(rawJsonDir)) {
+      cpSync(rawJsonDir, join(buildDir, 'raw-json'), { recursive: true })
     }
+    const markdownDir = join(dataDir, 'markdown')
+    if (existsSync(markdownDir)) {
+      cpSync(markdownDir, join(buildDir, 'markdown'), { recursive: true })
+    }
+    const fontsExtractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
+    if (existsSync(fontsExtractedDir)) {
+      cpSync(fontsExtractedDir, join(buildDir, 'resources', 'fonts', 'extracted'), { recursive: true })
+    }
+
+    ensureDir(outDir)
+    const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.7z`
+    const archivePath = join(outDir, archiveName)
+
+    await createSevenZipArchive({
+      sourceDir: buildDir,
+      outputPath: archivePath,
+      name: archiveName,
+      logger,
+    })
 
     const archiveBytes = await Bun.file(archivePath).arrayBuffer()
     const archiveSize = archiveBytes.byteLength
@@ -150,12 +171,14 @@ export async function snapshotBuild(opts, ctx) {
     manifest.archiveSize = archiveSize
     manifest.archiveChecksum = archiveChecksum
 
-    // 8. Write checksum file (archive checksum for download verification)
-    const checksumName = `apple-docs-${SNAPSHOT_TIER}-${tag}.sha256`
-    await Bun.write(join(outDir, checksumName), `${archiveChecksum}  ${archiveName}\n`)
+    // 8. Sidecar checksum (the .7z.sha256 file used for download verification).
+    // Use the shared sidecar helper so the format matches `shasum -a 256`
+    // output and aligns with the symbols / fonts archive sidecars.
+    const { sidecarPath: checksumPath } = await writeSha256Sidecar(archivePath)
 
     // Also write manifest to output dir
-    await writeJSON(join(outDir, `apple-docs-${SNAPSHOT_TIER}-${tag}.manifest.json`), manifest)
+    const manifestPath = join(outDir, `apple-docs-${SNAPSHOT_TIER}-${tag}.manifest.json`)
+    await writeJSON(manifestPath, manifest)
 
     logger.info(`Snapshot built: ${archivePath} (${(archiveSize / 1e6).toFixed(1)} MB)`)
 
@@ -168,8 +191,9 @@ export async function snapshotBuild(opts, ctx) {
       archiveChecksum,
       archivePath,
       archiveSize,
-      checksumPath: join(outDir, checksumName),
-      manifestPath: join(outDir, `apple-docs-${SNAPSHOT_TIER}-${tag}.manifest.json`),
+      archiveName,
+      checksumPath,
+      manifestPath,
     }
   } finally {
     // Cleanup build directory
