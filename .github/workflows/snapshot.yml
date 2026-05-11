@@ -101,8 +101,13 @@ jobs:
 
       # Generate the release-notes body. We do this in-shell so the table
       # can include real sizes / sha256s read from dist/status.json.
+      # Actions expressions cannot appear inside a heredoc — the YAML/expr
+      # lexer evaluates `${{ }}` before the shell sees the body — so we
+      # surface the schedule-vs-dispatch prologue via env.
       - name: Compose release notes
         id: notes
+        env:
+          RELEASE_PROLOGUE: ${{ github.event_name == 'schedule' && 'Scheduled snapshot build.' || 'Manual snapshot build.' }}
         run: |
           bun run --silent <<'EOF' > dist/release-body.md
           const s = await Bun.file('dist/status.json').json()
@@ -123,7 +128,7 @@ jobs:
           for (const [fam, info] of Object.entries(s.archives.fonts_by_family || {})) push(info)
           const table = rows.map(r=>'| '+r.join(' | ')+' |').join('\n')
           const body = [
-            '${{ github.event_name == \'schedule\' && \'Scheduled snapshot build.\' || \'Manual snapshot build.\' }}',
+            process.env.RELEASE_PROLOGUE || 'Snapshot build.',
             '',
             'Single-tier snapshot — ships the full corpus, every Apple font, and the complete pre-rendered SF Symbols matrix.',
             '',

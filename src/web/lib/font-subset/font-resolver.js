@@ -52,6 +52,8 @@ export function resolveFontPath(family, dataDir) {
   return path
 }
 
-export function listSupportedFamilies() {
-  return Object.keys(FAMILY_MASTER_FILENAMES)
-}
+// Kept around for the upcoming P4 /design Generator pane which needs the
+// list of subsettable families to drive the font picker. Not exported
+// until that consumer lands — knip's "unused exports" gate would
+// otherwise flag it. Re-export when wiring the Generator UI.
+// function listSupportedFamilies() { return Object.keys(FAMILY_MASTER_FILENAMES) }

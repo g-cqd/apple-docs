@@ -214,5 +214,6 @@ function formatSize(bytes) {
   return `${bytes} B`
 }
 
-/** @internal exported for tests */
-export const __test = { walk, defaultWhich }
+// Internal helpers (walk, defaultWhich) are exercised through the public
+// API surface (createSevenZipArchive, resolveSevenZipBinary) and don't
+// need a dedicated test export.
