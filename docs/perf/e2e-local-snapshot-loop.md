@@ -11,7 +11,8 @@ clean machine without going through a GitHub release.
 # 1. Erase the local data directory.
 rm -rf ~/.apple-docs
 
-# 2. Full sync against the live Apple API. Default concurrency (100 req/s).
+# 2. Full sync against the live Apple API. Defaults: 100 in-flight
+#    fetches and a 500 req/s rate limit.
 #    APPLE_DOCS_DOWNLOAD_FONTS=1 so the snapshot ships the Apple typography
 #    DMGs (font index points at extracted files inside the snapshot).
 APPLE_DOCS_DOWNLOAD_FONTS=1 apple-docs sync --verbose 2>&1 | tee /tmp/sync.log

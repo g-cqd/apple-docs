@@ -127,7 +127,7 @@ fi
 #   USE_SNAPSHOT=1 (default when the GH snapshot release tag is newer than
 #       what's locally applied): hand off to pull-snapshot.sh which
 #       downloads the latest release, verifies its SHA-256, and runs
-#       `apple-docs setup --tier full --force --downgrade` to swap the DB
+#       `apple-docs setup --force` to swap the DB
 #       and resource directories in one go. Cheap on CPU/network, captures
 #       the canonical SF-Symbols + fonts pre-render done by the macos-26
 #       runner.

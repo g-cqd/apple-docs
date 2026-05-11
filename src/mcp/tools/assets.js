@@ -36,7 +36,7 @@ export function registerAssetTools(server, ctx, cache) {
   server.registerTool(
     'search_sf_symbols',
     {
-      description: 'Search indexed public and private SF Symbols by symbol name, category, alias, or keyword. Run `apple-docs symbols sync` first if no symbols are indexed.',
+      description: 'Search indexed public and private SF Symbols by symbol name, category, alias, or keyword. Run `apple-docs setup` or `apple-docs sync` first if no symbols are indexed.',
       annotations: READ_ONLY_HINTS,
       outputSchema: searchSfSymbolsOutputSchema,
       inputSchema: {
@@ -53,7 +53,7 @@ export function registerAssetTools(server, ctx, cache) {
   server.registerTool(
     'list_apple_fonts',
     {
-      description: 'List indexed Apple font families and font files, including download-ready file identifiers. Run `apple-docs fonts sync` first if no fonts are indexed.',
+      description: 'List indexed Apple font families and font files, including download-ready file identifiers. Run `apple-docs setup` or `apple-docs sync` first if no fonts are indexed.',
       annotations: READ_ONLY_HINTS,
       outputSchema: listAppleFontsOutputSchema,
       inputSchema: {},

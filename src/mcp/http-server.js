@@ -32,7 +32,7 @@ const CORS_METHODS = 'GET, POST, DELETE, OPTIONS'
 //
 // `list_frameworks` and `list_taxonomy` are intentionally NOT heavy: they are
 // cache-wrapped with static/near-static payloads (taxonomy is invalidated
-// only on `apple-docs update`) and their uncached miss path is a small bulk
+// only after a corpus refresh) and their uncached miss path is a small bulk
 // SQL read, not CPU-bound ranking work.
 const HEAVY_TOOLS = new Set([
   'search_docs',

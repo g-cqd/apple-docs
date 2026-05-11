@@ -8,6 +8,7 @@ Read / query:
   read <path>          Read a specific page or symbol
   frameworks           List known documentation roots
   browse <framework>   Browse topic tree for a framework
+  kinds                List taxonomy values for filters
   status               Show corpus statistics
 
 Operator:
@@ -30,7 +31,7 @@ Storage:
   storage gc           Garbage collect cached files
 
 Maintenance:
-  snapshot build       Build a release snapshot archive (lite/standard/full)
+  snapshot build       Build a full release snapshot archive
   consolidate          Repair failed crawl entries and re-resolve URLs
   index rebuild <kind> Rebuild a search index from existing data (body|trigram)
 
@@ -124,6 +125,18 @@ Options:
   --json               Output raw JSON
 `.trim(),
 
+  kinds: `
+Usage: apple-docs kinds [options]
+
+List distinct taxonomy values with counts. Use this to discover valid
+--kind, --source, and related filter values for search.
+
+Options:
+  --field <name>       Return one field only: kind, role, docKind,
+                       roleHeading, or sourceType
+  --json               Output raw JSON
+`.trim(),
+
   sync: `
 Usage: apple-docs sync [options]
 
@@ -148,6 +161,9 @@ Options:
                        after a major schema change or to recover from a
                        corrupted incremental state.
   --rate <n>           Max requests per second across all roots (default: 500)
+  --aggressive         Use the legacy 500 in-flight fetch profile. Without
+                       this, sync defaults to 100 in-flight fetches unless
+                       APPLE_DOCS_CONCURRENCY is set explicitly.
   --json               Output the full pipeline report as JSON
 
 GitHub auth:
@@ -190,14 +206,14 @@ Serve options:
   --port <n>           Port number (default: 3031)
   --host <addr>        Bind address (default: 127.0.0.1)
   --allow-origin <url> Allowed browser Origin header(s); comma-separated.
-                       Omit to allow all origins (defaults open — intended
-                       to run behind a private network boundary).
-  --concurrency <n>    Max in-flight heavy tool calls (default: 4, also
+                       Omit to deny browser origins except loopback. Native
+                       clients without an Origin header are allowed.
+  --concurrency <n>    Max in-flight heavy tool calls (default: 8, also
                        APPLE_DOCS_MCP_CONCURRENCY). Caps search_docs /
-                       read_doc / browse / list_frameworks / list_taxonomy so
-                       initialize/ping/tools/list stay responsive.
+                       read_doc / browse / render tools so initialize/ping /
+                       tools/list stay responsive.
   --queue <n>          Max queued heavy calls beyond --concurrency before
-                       rejecting with HTTP 503 (default: 32, also
+                       rejecting with HTTP 503 (default: 64, also
                        APPLE_DOCS_MCP_QUEUE). 0 means reject immediately once
                        permits are exhausted.
   --metrics-port <n>   When set, expose a Prometheus /metrics scrape endpoint
@@ -331,7 +347,7 @@ Build options:
                                for the missing variants).
 
 The build runs VACUUM INTO on the live database, writes the tarball under
-<out>/<tag>/, and emits both a SHA-256 sidecar and a JSON manifest. Used
+<out>/, and emits both a SHA-256 sidecar and a JSON manifest. Used
 by the release pipeline (scripts/build-snapshot.js) and the operator
 who wants a portable copy.
 

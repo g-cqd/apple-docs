@@ -35,9 +35,6 @@ export function formatStatus(result) {
     caps.push(`body: ${c.searchBody ? 'yes' : 'no'}`)
     caps.push(`read: ${c.readContent ? 'yes' : 'metadata only'}`)
     lines.push(`  Capabilities:    ${caps.join(', ')}`)
-    if (result.tier === 'lite') {
-      lines.push(dim("  Hint:            Run 'apple-docs setup --tier full --force' to upgrade"))
-    }
   }
 
   // Activity status
@@ -106,4 +103,3 @@ export function formatStatus(result) {
 
   return lines.join('\n')
 }
-

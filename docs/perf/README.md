@@ -75,16 +75,31 @@ bun cli.js web serve --port 3030 --metrics-port 9101
 curl -sS http://127.0.0.1:9101/metrics
 ```
 
-Phase 1.1 mirrors the MCP metrics surface on the web listener:
+The web metrics surface includes:
 
-- `apple_docs_web_search_requests_total{mode,cache,deep,fuzzy}`
-- `apple_docs_web_search_latency_ms_bucket{tier}` (cumulative histogram)
-- `apple_docs_web_reader_pool_pending{op}`
-- `apple_docs_web_reader_pool_timeouts_total{op}`
-- `apple_docs_web_search_cache_bytes`
-- `apple_docs_web_event_loop_lag_ms{quantile}`
+- `apple_docs_web_request_latency_ms_bucket`
+- `apple_docs_web_request_latency_ms_sum`
+- `apple_docs_web_request_latency_ms_count`
+- `apple_docs_web_requests_total{route,status}`
+- `apple_docs_web_cache_bytes{cache}`
+- `apple_docs_web_rate_limit_buckets{name}`
+- `apple_docs_reader_pool_pending{pool}`
+- `apple_docs_reader_pool_timeouts_total{pool}`
+- `apple_docs_event_loop_lag_ms{quantile}`
 - `apple_docs_process_rss_bytes`
 - `apple_docs_process_heap_bytes{kind}`
+- `apple_docs_process_external_bytes`
+
+The MCP metrics listener uses parallel names for cache, markdown cache,
+heavy-tool semaphore, and reader-pool health:
+
+- `apple_docs_mcp_cache_hits_total{cache}`
+- `apple_docs_mcp_cache_misses_total{cache}`
+- `apple_docs_mcp_markdown_cache_hits_total`
+- `apple_docs_heavy_semaphore_active`
+- `apple_docs_heavy_semaphore_waiting`
+- `apple_docs_heavy_semaphore_rejected_total`
+- `apple_docs_reader_pool_pending{pool}`
 
 ## Output locations
 

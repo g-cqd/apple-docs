@@ -13,8 +13,8 @@ import { createStamper } from './cache.js'
  *
  * Invalidation reuses the same `corpusStamp` the tool cache already uses
  * (schema version + DB mtime, refreshed every 5 s). When the stamp rotates
- * — i.e. `apple-docs update` ran — entries for that path are treated as
- * stale on next access and re-rendered.
+ * after a corpus refresh — entries for that path are treated as stale on next
+ * access and re-rendered.
  *
  * Capacity: 512 entries. Rendered Markdown bodies land in the tens of KB,
  * so the steady-state memory footprint is on the order of 10–50 MB.

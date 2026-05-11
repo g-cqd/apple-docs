@@ -19,7 +19,7 @@ import { join } from 'node:path'
  *     casing stay distinct on purpose (we do not want to pretend "View" and
  *     "view" are the same search).
  *   - `corpusStamp = `${schemaVersion}:${dbMtimeMs}`` refreshed every 5s so
- *     `apple-docs update` invalidates transparently without a callback.
+ *     corpus refreshes invalidate transparently without a callback.
  *
  * Per-tool sizes (items, not bytes):
  *   search_docs   100
@@ -40,7 +40,7 @@ const DEFAULT_SIZES = {
   list_taxonomy: 16,
 }
 
-// Short enough that an ad-hoc `apple-docs update` is visible within seconds;
+// Short enough that an ad-hoc corpus refresh is visible within seconds;
 // `statSync` is sub-millisecond on APFS, so the per-request overhead is
 // negligible even at peak agent fan-out.
 const STAMP_TTL_MS = 5_000

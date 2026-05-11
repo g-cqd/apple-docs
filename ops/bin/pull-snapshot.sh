@@ -1,7 +1,7 @@
 #!/bin/bash
 # Detect the latest snapshot release on GitHub and, if newer than what's
 # applied locally, download + verify + apply it via `apple-docs setup
-# --tier full --force`. Designed to be safe to re-run: silent no-op when
+# --force`. Designed to be safe to re-run: silent no-op when
 # the corpus is already up to date.
 #
 # This script is the snapshot-driven counterpart to deploy-update.sh: where

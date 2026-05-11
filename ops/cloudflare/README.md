@@ -16,25 +16,27 @@ keep them recognisable so a future operator can spot drift.
 
 > Caching → Cache Rules → Create rule
 
-Free Plan allows up to 10 cache rules. We use 6.
+Free Plan allows up to 10 cache rules. We use 7.
 
 | # | Name | If (custom expression / path matcher) | Eligible for cache | Edge TTL | Browser TTL | Notes |
 |---|---|---|---|---|---|---|
-| 1 | `assets-immutable` | URI Path matches `/assets/*` | Yes | Override: 1 year | Override: 1 year | Versioned by `?v=…`, see `siteConfig.assetVersion`. |
+| 1 | `assets-immutable` | URI Path matches `/assets/*` | Yes | Override: 1 year | Override: 1 year | Versioned by `?v=...`, see `siteConfig.assetVersion`. |
 | 2 | `worker-immutable` | URI Path matches `/worker/*` | Yes | Override: 1 year | Override: 1 year | Same lifecycle as `/assets/*`. |
 | 3 | `hashed-data-immutable` | URI Path matches `/data/search/*` AND URI Path contains `.json` | Yes | Override: 1 year | Override: 1 month | Content-hashed filenames, e.g. `title-index.{10-hex}.json`. |
 | 4 | `framework-data-immutable` | URI Path matches `/data/frameworks/*` | Yes | Override: 1 year | Override: 1 month | Per-framework metadata + tree.{hash}.json. |
 | 5 | `docs-edge-day` | URI Path matches `/docs/*` | Yes | Override: 1 day | Override: 1 hour | Origin advertises `stale-while-revalidate=604800`. |
-| 6 | `home-and-static` | URI Path matches `/` OR `/sitemap.xml` OR `/robots.txt` OR `/llms.txt` OR URI Path matches `/sitemaps/*` | Yes | Override: 5 minutes | Override: 5 minutes | Cheap to revalidate. |
+| 6 | `api-search-filters` | URI Path starts with `/api/search` OR URI Path starts with `/api/filters` | Yes | Respect origin | Respect origin | Origin emits `Cache-Control: public, max-age=300, stale-while-revalidate=3600`; deploy scripts purge after corpus changes. |
+| 7 | `home-and-static` | URI Path matches `/` OR `/sitemap.xml` OR `/robots.txt` OR `/llms.txt` OR URI Path matches `/sitemaps/*` | Yes | Override: 5 minutes | Override: 5 minutes | Cheap to revalidate. |
 
 > Caching → Configuration → tick **Use stale while updating**.
 > Caching → Configuration → tick **Always Online™**.
 > Speed → Optimization → enable **Early Hints** (free, no code change required).
 
-`/api/*`, `/healthz`, `/data/search/search-manifest.json`, and 404s should
-**not** be cached. Cloudflare's default behavior is to bypass caching when
-the response carries `Cache-Control: no-cache` or `private`, which `serve.js`
-already emits for these paths — no rule needed.
+Other `/api/*` paths, `/healthz`, `/readyz`,
+`/data/search/search-manifest.json`, and 404s should **not** be cached.
+Cloudflare's default behavior is to bypass caching when the response carries
+`Cache-Control: no-cache`, `no-store`, or `private`, which the app already
+emits for these paths.
 
 ---
 
@@ -63,7 +65,11 @@ leak onto the MCP subdomain. Use **Set static** unless noted.
 - **Header**: `Cross-Origin-Resource-Policy`
 - **Value**: `same-origin`
 
-### 2.5 `csp-report-only` (start here, then promote to enforced)
+The app emits its own CSP and related security headers. Use Cloudflare header
+rules as edge defense-in-depth, but do not set a conflicting enforced CSP. If
+you want to test a stricter edge policy, start with report-only:
+
+### 2.5 `csp-report-only` (optional)
 - **Header**: `Content-Security-Policy-Report-Only`
 - **Value**:
   ```
@@ -71,18 +77,14 @@ leak onto the MCP subdomain. Use **Set static** unless noted.
   ```
 
 After running for ~1 week with no violations from real traffic (check the
-Security → Events tab), retire rule 2.5 and create:
+Security → Events tab), promote only if the value still matches the app's
+HTML, inline-script hash policy, and asset paths:
 
 ### 2.5b `csp` (enforced)
 - Same value as 2.5, but header name `Content-Security-Policy`.
 
-The CSP is achievable as-is because:
-- All `<script>` tags use `src=` (no inline JS); see `src/web/templates.js`.
-- The framework page emits `<script type="application/json" id="tree-data">`,
-  which is data, not code — browsers do not execute it.
-- No inline `<style>` blocks; the only stylesheet is `/assets/style.css`.
-- SVG icons in the header are inlined as `<svg>` markup, which CSP does not
-  intercept.
+The app's CSP includes a hash for the one inline 404-page script and keeps
+JSON data blocks as `type="application/json"`, which browsers do not execute.
 
 ---
 
@@ -97,9 +99,9 @@ Free Plan allows up to 5 custom rules and 1 rate-limiting rule.
 - **Then**: Block (or Managed Challenge) when more than **60 requests in 60 seconds** from the same IP.
 - **Mitigation timeout**: 60 seconds.
 
-This protects the only Bun-served path that touches the SQLite query plan.
-HTML, sitemaps, and the title-index are all CDN-cached after warmup, so the
-rest of the site is effectively free under traffic spikes.
+This protects the only public high-frequency path that touches the SQLite
+query plan before the edge cache is warm. HTML, sitemaps, search artifacts,
+and repeated search/filter responses are CDN-cached after warmup.
 
 ### 3.2 (Optional) Custom rule `block-empty-ua`
 - **If**: HTTP User-Agent contains the empty string (i.e. UA is missing) AND URI Path does not start with `/healthz`

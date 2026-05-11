@@ -262,7 +262,7 @@ export function registerDocTools(server, ctx, cache) {
   server.registerTool(
     'list_taxonomy',
     {
-    description: 'List distinct taxonomy values (kind, role, docKind, roleHeading, sourceType) across the corpus with counts. Use this before calling search_docs when you need to pick a valid `kind` filter or understand what shapes of documentation are indexed. Static between `apple-docs update` runs.',
+    description: 'List distinct taxonomy values (kind, role, docKind, roleHeading, sourceType) across the corpus with counts. Use this before calling search_docs when you need to pick a valid `kind` filter or understand what shapes of documentation are indexed. Static between corpus refreshes (`apple-docs setup` or `apple-docs sync`).',
     annotations: READ_ONLY_HINTS,
     outputSchema: listTaxonomyOutputSchema,
     inputSchema: {

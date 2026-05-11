@@ -4,7 +4,7 @@ This guide covers running the `apple-docs` web UI and MCP server on your own
 machine and, optionally, exposing them to the public internet.
 
 If you only want to _use_ the public MCP instance from a client (Claude Code,
-Codex, Cursor, etc.), see the [README](../README.md#use-the-public-mcp-instance).
+Codex, Cursor, etc.), see the [README](../README.md#public-mcp-instance).
 This document is for people who want to run the services themselves.
 
 The examples below come from the actual setup that runs the public instance
@@ -87,7 +87,8 @@ The MCP server trusts anything that reaches `/mcp`.
 ships the full corpus, every Apple font, and the entire pre-rendered SF
 Symbols matrix (`<dataDir>/resources/symbols/<scope>/<weight>-<scale>/<name>.svg`)
 because the runtime cannot live-render those without the macOS SF
-Symbols system bundle. The lite/standard tiers were retired in G.1.
+Symbols system bundle. There is now one full snapshot shape; older lite and
+standard tiers are retired.
 
 **SVG requests** (`/api/symbols/public/heart.svg?weight=bold&scale=large`):
 served straight from the pre-render — no host-side dependencies.
@@ -121,8 +122,14 @@ apple-docs web serve \
 ```
 
 - `--port` — bind port. Default `3000`.
+- `--host` — bind address. Default `127.0.0.1`; pass `0.0.0.0` only when
+  you intend to expose it on the LAN.
 - `--base-url` — absolute URL used for canonical links, OpenGraph, etc. Set it
   to whatever public hostname the user will see.
+- `--rate-limit` — opt into the general per-client-IP token bucket. It is off
+  by default; the narrower on-demand `/docs/*` upstream-fetch gate stays on.
+- `--metrics-port` — optional Prometheus `/metrics` listener on a separate
+  loopback port.
 - `APPLE_DOCS_HOME` — path to the corpus. Default `~/.apple-docs`. Required for
   the server to find the SQLite DB and rendered artifacts.
 
@@ -142,12 +149,15 @@ apple-docs mcp serve \
 - `--host` — bind address. Default `127.0.0.1`. **Keep it on loopback unless
   you trust the network**; expose the server through a reverse proxy or tunnel.
 - `--allow-origin` — comma-separated allowlist for the browser `Origin` header.
-  Omit to allow any origin (which is appropriate behind a private-network
-  boundary or a tunnel that already filters).
+  When omitted, browser origins are denied except loopback origins. Native MCP
+  clients that send no `Origin` header are allowed.
 - `--concurrency` — max in-flight heavy tool calls (`search_docs`, `read_doc`,
-  `browse`). See `APPLE_DOCS_MCP_CONCURRENCY` below.
+  `browse`, SF Symbol rendering, and font text rendering). See
+  `APPLE_DOCS_MCP_CONCURRENCY` below.
 - `--queue` — max queued heavy calls before returning HTTP 503. See
   `APPLE_DOCS_MCP_QUEUE`.
+- `--metrics-port` — optional Prometheus `/metrics` listener on a separate
+  loopback port.
 
 Endpoints:
 
@@ -156,7 +166,8 @@ Endpoints:
 | `/mcp` | `POST` | JSON-RPC requests |
 | `/mcp` | `GET` | Server-initiated SSE stream |
 | `/mcp` | `DELETE` | Terminate a session |
-| `/healthz` | `GET` | Liveness / readiness probe |
+| `/healthz` | `GET` | Liveness probe |
+| `/readyz` | `GET` | DB and reader-pool readiness probe |
 
 If `APPLE_DOCS_MCP_CACHE_STATS=1`, `/healthz` also reports per-tool cache hit
 ratios and reader-pool depth — wire it into your probes.
@@ -285,27 +296,29 @@ same shape. On Linux, translate directly to a systemd unit: `ExecStart`,
 
 ## Updating a running deployment
 
-The corpus is updated with `apple-docs update --index`. While the update runs,
-any active MCP process keeps serving stale data — the writer path holds the
-main-thread DB handle, and the reader pool (if enabled) recycles its workers
-after the writer completes, so prepared statements reload cleanly.
+Use one of two supported refresh paths:
 
-Two viable update strategies:
+1. **Snapshot refresh** — run `apple-docs setup --force` or
+   `ops/bin/pull-snapshot.sh` to install the latest published snapshot, then
+   rebuild the static site and restart web/MCP so caches pick up the new corpus.
+2. **Crawl-on-host refresh** — run `apple-docs sync`, then rebuild the static
+   site and restart web/MCP. `sync` is the single full-corpus pipeline: update
+   checks, crawl, conversion, indexes, fonts, symbols, migrations,
+   consolidation, and minification.
 
-1. **Cut-over restart** — run `apple-docs update` while the daemon is serving,
-   then `launchctl kickstart -k` (or `systemctl restart`) to pick up the new
-   data. This has a ~1s blip but zero code-path complication.
-2. **Pull-refresh-restart** — fast-forward the repo, `bun install` if the
-   lockfile changed, run `apple-docs update` → `sync --retry-failed` →
-   `doctor`, then kickstart the daemons. A smoke test that hits `/healthz`
-   and one `tools/call` afterwards catches the easy regressions.
+The reference `ops/bin/deploy-update.sh` handles both modes. It keeps the old
+web/MCP daemons online during the corpus refresh, rebuilds `dist/web`, purges
+the Cloudflare edge cache when configured, then performs a short cut-over
+restart and smoke test.
 
 ## Observability
 
 | Endpoint | What it shows |
 | --- | --- |
 | `GET /healthz` | Process liveness (`{status: "ok"}`) |
+| `GET /readyz` | DB and reader-pool readiness |
 | `GET /healthz` with `APPLE_DOCS_MCP_CACHE_STATS=1` | Also reports `cache` (hit ratios, per-tool sizes, stamp), `concurrency` (permits/waiters/rejects), and `readerPool` (size/active/pending/errors) |
+| `GET /metrics` on `--metrics-port` | Prometheus metrics for web or MCP, bound to the separate metrics listener |
 
 Example with stats enabled:
 
@@ -337,23 +350,36 @@ respawned).
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `APPLE_DOCS_HOME` | `~/.apple-docs` | Corpus location (SQLite DB + rendered artifacts) |
-| `APPLE_DOCS_RATE` | `500` for `sync`/`update`, `5` otherwise | Default request rate against Apple endpoints |
-| `APPLE_DOCS_BURST` | Matches active rate floor | Rate-limiter burst size |
-| `APPLE_DOCS_CONCURRENCY` | `500` for `sync`/`update`, `5` otherwise | Max simultaneous outbound HTTP fetches |
+| `APPLE_DOCS_RATE` | `500` for `sync`, `5` otherwise | Default request rate against Apple endpoints |
+| `APPLE_DOCS_BURST` | At least the active rate | Rate-limiter burst size |
+| `APPLE_DOCS_CONCURRENCY` | `100` for `sync`, `5` otherwise | Max simultaneous outbound HTTP fetches. Set explicitly to exceed 100, or pass `sync --aggressive` for the legacy 500 profile. |
+| `APPLE_DOCS_PARALLEL` | `10` | Number of DocC roots crawled in parallel during `sync` |
 | `APPLE_DOCS_TIMEOUT` | `30000` | HTTP timeout in ms |
 | `APPLE_DOCS_GITHUB_TIMEOUT` | `45000` (or `APPLE_DOCS_TIMEOUT`) | GitHub-specific timeout override |
 | `APPLE_DOCS_API_BASE` | Apple tutorial data URL | Override Apple's DocC API base (for testing / mirrors) |
 | `APPLE_DOCS_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `APPLE_DOCS_SKIP_RESOURCES` | unset | Set to `1` to skip font and SF Symbols sync during `sync` |
+| `APPLE_DOCS_DOWNLOAD_FONTS` | unset | Set to `1` to download and extract Apple font DMGs during `sync` |
 | `GITHUB_TOKEN` / `GH_TOKEN` | none | Only required when `APPLE_DOCS_PACKAGES_FETCH=api`. Default `raw` path uses `raw.githubusercontent.com` and needs no token. |
 | `APPLE_DOCS_PACKAGES_SCOPE` | `official` | `official` (curated) or `full` (SwiftPackageIndex catalog) |
 | `APPLE_DOCS_PACKAGES_FETCH` | `raw` | `raw` = README-only via raw.githubusercontent.com (no quota). `api` = GitHub REST with token (adds stars, license, topics). Degrades to `raw` if no token. |
 | `APPLE_DOCS_PACKAGES_LIMIT` | unset | Cap total packages fetched in `full` scope |
 
+### Web server
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APPLE_DOCS_WEB_HOST` | `127.0.0.1` | Default bind host for `web serve` |
+| `APPLE_DOCS_WEB_RATE_LIMIT` | unset | Set to `1` to enable the general web rate limiter |
+| `APPLE_DOCS_WEB_RATE` | `60` | Web rate-limiter rate when enabled |
+| `APPLE_DOCS_WEB_BURST` | `120` | Web rate-limiter burst when enabled |
+| `APPLE_DOCS_SYMBOLS_OFFLINE` | unset | Set to `1` to require pre-rendered SF Symbol assets and fail missing live renders loudly |
+
 ### MCP HTTP server
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `APPLE_DOCS_MCP_CONCURRENCY` | `8` | Max in-flight heavy tool calls (`search_docs`, `read_doc`, `browse`, `list_frameworks`, `list_taxonomy`). Keeps initialize/ping/tools-list responsive under load. |
+| `APPLE_DOCS_MCP_CONCURRENCY` | `8` | Max in-flight heavy tool calls (`search_docs`, `read_doc`, `browse`, SF Symbol rendering, font text rendering). Keeps initialize/ping/tools-list responsive under load. |
 | `APPLE_DOCS_MCP_QUEUE` | `64` | Max queued heavy calls beyond concurrency before rejecting with HTTP 503. `0` = reject immediately once permits are exhausted. |
 | `APPLE_DOCS_MCP_READERS` | unset (off) | Set to `on` to enable the worker-thread reader pool. Heavy read-only SQL runs on dedicated threads, each with its own `bun:sqlite` handle, instead of blocking the main Bun event loop. |
 | `APPLE_DOCS_MCP_READER_WORKERS` | auto (`availableParallelism() − 2`, capped at 12) | Explicit worker count when the pool is on. Match it to `APPLE_DOCS_MCP_CONCURRENCY` so a saturating burst fits exactly. |
@@ -376,9 +402,10 @@ A few things worth knowing once you're past the happy path:
   on the pool. If workers > permits, surplus workers sit idle. `8/8` is a
   reasonable default for modern hardware.
 - **Set `APPLE_DOCS_HOME` read-only** for MCP and web processes that never
-  write, if your OS supports it. The writer (`apple-docs update`, `sync`,
-  `doctor`) needs write access, so run it from a separate identity or an
-  admin shell.
+  write, if your OS supports it. Corpus writers (`apple-docs setup`,
+  `apple-docs sync`, `apple-docs consolidate`, `apple-docs index rebuild`,
+  and `apple-docs storage gc`) need write access, so run them from a separate
+  identity or an admin shell.
 - **Cache stamp rotates on writer completion.** If you see `totalHits` drop
   to zero after a deploy, that's expected — the stamp changed, invalidating
   all entries. It re-warms after a few client calls.
