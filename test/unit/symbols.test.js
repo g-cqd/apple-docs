@@ -71,6 +71,35 @@ describe('SF Symbols', () => {
     expect(catalog.find(symbol => symbol.name === 'pencil.and.sparkles')?.categories).toEqual(['editing'])
   })
 
+  test('filters catalog meta-names that are not real symbols', async () => {
+    // Apple's plists embed "symbols" (catalog root) and "year_to_release"
+    // (release pivot) alongside real symbol names. They have no
+    // vectorGlyph drawable, so letting them through would force the
+    // snapshot completeness validator to flag 14 × 4 = 56 phantom
+    // missing renders. Verify they never enter sf_symbols.
+    const contentsDir = join(tmp, 'CoreGlyphsMeta.bundle', 'Contents')
+    const resourcesDir = join(contentsDir, 'Resources')
+    await mkdir(resourcesDir, { recursive: true })
+    await Bun.write(join(contentsDir, 'Info.plist'), plistDict({ CFBundleVersion: '1' }))
+    await Bun.write(join(resourcesDir, 'symbol_order.plist'), plistArray([
+      'symbols',
+      'year_to_release',
+      'pencil',
+    ]))
+    await Bun.write(join(resourcesDir, 'symbol_search.plist'), plistDict({
+      symbols: ['root'],
+      year_to_release: ['version'],
+      pencil: ['write'],
+    }))
+
+    const count = await syncSfSymbols({ scope: 'public', bundleDir: resourcesDir }, ctx)
+    expect(count).toBe(1)
+    const names = db.listSfSymbolsCatalog().filter(s => s.scope === 'public').map(s => s.name)
+    expect(names).toEqual(['pencil'])
+    expect(names).not.toContain('symbols')
+    expect(names).not.toContain('year_to_release')
+  })
+
   test('maps public symbol snapshot variants without multiplying private paths', () => {
     expect(getPrerenderedSymbolPath(ctx, 'public', 'pencil.and.sparkles', {
       weight: 'regular',

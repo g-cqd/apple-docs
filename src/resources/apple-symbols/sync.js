@@ -34,6 +34,16 @@ const SYMBOL_BUNDLES = {
   private: '/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphsPrivate.bundle/Contents/Resources',
 }
 
+// Apple's plists embed catalog meta-entries alongside real symbol names —
+// `symbols` is the top-level catalog root and `year_to_release` is the
+// release-grouping pivot. They appear in symbol_categories.plist /
+// symbol_search.plist / name_availability.plist but have no vectorGlyph
+// drawable in either bundle, so the Swift worker can't render them and
+// the snapshot completeness validator flags 14 weight/scale variants ×
+// 4 (2 names × 2 scopes) = 56 phantom misses. Filter at ingest so they
+// never enter the sf_symbols table.
+const CATALOG_META_NAMES = new Set(['symbols', 'year_to_release'])
+
 const SYMBOL_DEFAULT_RENDER_SIZE = 128
 
 export async function syncSfSymbols(opts, ctx) {
@@ -56,6 +66,7 @@ export async function syncSfSymbols(opts, ctx) {
   for (const name of Object.keys(search)) names.add(name)
   for (const name of Object.keys(categories)) names.add(name)
   for (const name of Object.keys(availability)) names.add(name)
+  for (const meta of CATALOG_META_NAMES) names.delete(meta)
 
   let count = 0
   const ordered = Array.isArray(order) ? order : [...names].sort()
