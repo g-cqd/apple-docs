@@ -134,8 +134,19 @@ export function buildHeader(siteConfig) {
 
 export function buildFooter(siteConfig) {
   const buildDate = escapeAttr(siteConfig.buildDate ?? new Date().toISOString().slice(0, 10))
+  // Snapshot tag is sourced from the installed DB's snapshot_meta at build
+  // time (see src/web/build.js); fall back to an em-dash when the corpus
+  // predates the tag column so an older deploy still renders a valid footer.
+  const snapshotTag = siteConfig.snapshotTag ? escapeAttr(siteConfig.snapshotTag) : null
+  const snapshotLine = snapshotTag
+    ? `<span class="footer-snapshot">Snapshot <code>${snapshotTag}</code></span>`
+    : ''
   return `<footer class="site-footer">
-  <p>Built on ${buildDate}</p>
+  <p>
+    Built on ${buildDate}${snapshotLine ? ` &middot; ${snapshotLine}` : ''}
+    &middot; by <a href="https://github.com/g-cqd" rel="noopener noreferrer">@g-cqd</a>
+    &middot; based on <a href="https://developer.apple.com" rel="noopener noreferrer">Apple Developer Documentation</a>
+  </p>
 </footer>`
 }
 

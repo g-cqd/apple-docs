@@ -242,6 +242,28 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('site-footer')
   })
 
+  test('footer attribution links + snapshot tag', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, {
+      ...siteConfig,
+      snapshotTag: 'snapshot-20260511',
+    })
+    expect(page).toContain('snapshot-20260511')
+    expect(page).toContain('https://github.com/g-cqd')
+    expect(page).toContain('@g-cqd')
+    expect(page).toContain('https://developer.apple.com')
+    expect(page).toContain('Apple Developer Documentation')
+    // External links must carry rel=noopener noreferrer.
+    expect(page).toMatch(/href="https:\/\/github\.com\/g-cqd"[^>]*rel="noopener noreferrer"/)
+    expect(page).toMatch(/href="https:\/\/developer\.apple\.com"[^>]*rel="noopener noreferrer"/)
+  })
+
+  test('footer omits snapshot tag when corpus lacks one', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, siteConfig)
+    // No snapshotTag → no "Snapshot" prefix nor a stray empty <code>.
+    expect(page).not.toContain('Snapshot <code></code>')
+    expect(page).not.toContain('footer-snapshot')
+  })
+
   test('empty sections produce valid page without crash', () => {
     const page = renderDocumentPage(mockDoc, [], siteConfig)
     expect(page).toBeTypeOf('string')

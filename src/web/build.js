@@ -87,13 +87,20 @@ export async function buildStaticSite(opts, ctx) {
     : `${outDir}.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`
   const previousDir = `${outDir}.prev-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
+  const { db, logger } = ctx
+  // `snapshot_tag` is the install-time stamp (set in src/commands/setup.js);
+  // `snapshot_version` is the build-time stamp (set in src/commands/snapshot.js).
+  // Either is valid as the "what corpus am I rendering" label.
+  const snapshotTag = db.getSnapshotMeta?.('snapshot_tag')
+    ?? db.getSnapshotMeta?.('snapshot_version')
+    ?? null
   const siteConfig = {
     baseUrl: opts.baseUrl || '',
     siteName: opts.siteName || 'Apple Developer Docs',
     buildDate: new Date().toISOString().split('T')[0],
+    snapshotTag,
     bundled: true,
   }
-  const { db, logger } = ctx
   const fsOps = opts.fsOps ?? { rename, rm }
 
   await initHighlighter()
