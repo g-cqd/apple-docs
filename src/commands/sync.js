@@ -9,7 +9,7 @@ import { pool } from '../lib/pool.js'
 import { runStep } from '../lib/run-step.js'
 import { getAllAdapters } from '../sources/registry.js'
 import { ROOT_CATALOG_SOURCE_TYPES, selectRootsForAdapter, filterPages, discoverAdaptersInParallel } from './command-helpers.js'
-import { syncAppleFonts, syncSfSymbols, prerenderSfSymbols } from '../resources/apple-assets.js'
+import { syncAppleFonts, syncSfSymbols, prerenderSfSymbols, stampSfSymbolCodepoints } from '../resources/apple-assets.js'
 import { update } from './update.js'
 import { consolidate } from './consolidate.js'
 import { indexBodyFull, indexBodyIncremental } from '../pipeline/index-body.js'
@@ -198,6 +198,15 @@ export async function sync(opts, ctx) {
           counts[scope] = await syncSfSymbols({ scope }, ctx)
         }
         logger.info(`Synced ${counts.public} public + ${counts.private} private SF Symbols`)
+
+        // 6b. Stamp each public symbol with its Unicode codepoint from
+        // SF-Pro.ttf via a one-shot Swift worker. Idempotent; safely
+        // skipped when the font isn't present in the snapshot.
+        try {
+          await stampSfSymbolCodepoints({}, ctx)
+        } catch (err) {
+          logger.warn(`SF Symbol codepoint stamping failed: ${err?.message ?? err}`)
+        }
 
         // 7. Pre-render every symbol geometry variant. Idempotent when the
         // snapshot metadata matches the renderer + variant matrix; otherwise

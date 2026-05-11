@@ -27,6 +27,7 @@ import { up as v15Up } from './v15-kill-refs.js'
 import { up as v15aUp } from './v15a-numeric-platforms.js'
 import { up as v17Up } from './v17-page-consecutive-404s.js'
 import { up as v18Up } from './v18-sf-symbols-bitmap-only.js'
+import { up as v19Up } from './v19-sf-symbols-codepoint.js'
 
 export const MIGRATIONS = Object.freeze([
   { version: 1, up: v1Up },
@@ -47,6 +48,7 @@ export const MIGRATIONS = Object.freeze([
   { version: 16, up: v15aUp },
   { version: 17, up: v17Up },
   { version: 18, up: v18Up },
+  { version: 19, up: v19Up },
 ])
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

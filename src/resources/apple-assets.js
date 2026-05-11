@@ -33,6 +33,7 @@ import { customizePrerenderedSymbolSvg } from './apple-symbols/svg-helpers.js'
 import { renderSfSymbol, SYMBOL_RENDERER_VERSION } from './apple-symbols/render.js'
 import {
   prerenderSfSymbols,
+  stampSfSymbolCodepoints,
   symbolSnapshotNeedsReset,
   syncSfSymbols,
 } from './apple-symbols/sync.js'
@@ -41,7 +42,7 @@ export { inspectSfntFile, parseFontFilename }
 export { SYMBOL_WEIGHTS, SYMBOL_SCALES, getPrerenderedSymbolPath }
 export { renderFontText }
 export { renderSfSymbol }
-export { syncSfSymbols, prerenderSfSymbols }
+export { syncSfSymbols, prerenderSfSymbols, stampSfSymbolCodepoints }
 
 const APPLE_FONT_FAMILIES = [
   { id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg', match: /^SF-Pro(?:-|\.|$)|^SFNS/i },

@@ -55,6 +55,7 @@ function renderMetadata(detailMeta, symbol) {
   if (aliases) rows.push(['Aliases', aliases])
   const availability = formatAvailability(symbol.availability)
   if (availability) rows.push(['Availability', availability])
+  if (symbol.codepoint_display) rows.push(['Unicode', symbol.codepoint_display])
   if (symbol.bundle_version || symbol.bundleVersion) {
     rows.push(['Bundle', symbol.bundle_version ?? symbol.bundleVersion])
   }

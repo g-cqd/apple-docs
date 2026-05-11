@@ -367,6 +367,9 @@ export class DocsDatabase {
   getSfSymbol(scope, name) { return this.assetsSymbols.getSymbol(scope, name) }
   listSfSymbolsCatalog() { return this.assetsSymbols.listCatalog() }
   markSfSymbolBitmapOnly(scope, name) { this.assetsSymbols.markBitmapOnly(scope, name) }
+  updateSfSymbolCodepoint(scope, name, codepoint) {
+    this.assetsSymbols.updateCodepoint(scope, name, codepoint)
+  }
   searchSfSymbols(query = '', opts = {}) { return this.assetsSymbols.searchSymbols(query, opts) }
   upsertSfSymbolRender(params) { this.assetsSymbols.upsertRender(params) }
   getSfSymbolRender(cacheKey) { return this.assetsSymbols.getRender(cacheKey) }

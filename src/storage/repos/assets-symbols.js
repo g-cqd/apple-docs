@@ -46,7 +46,7 @@ export function createAssetsSymbolsRepo(db) {
   )
   const getSymbolStmt = db.query('SELECT * FROM sf_symbols WHERE scope = ? AND name = ?')
   const listCatalogStmt = db.query(`
-    SELECT name, scope, categories_json, keywords_json, bitmap_only
+    SELECT name, scope, categories_json, keywords_json, bitmap_only, codepoint
     FROM sf_symbols
     ORDER BY scope, COALESCE(order_index, 999999), name
   `)
@@ -56,6 +56,12 @@ export function createAssetsSymbolsRepo(db) {
   // reports the symbol has no vector form.
   const markBitmapOnlyStmt = db.query(
     'UPDATE sf_symbols SET bitmap_only = 1 WHERE scope = $scope AND name = $name',
+  )
+  // v19: stamp the resolved Private Use Area codepoint at sync time.
+  // Pass NULL to clear (e.g., when the dump can't reach the symbol
+  // through SF-Pro.ttf's PUA cmap).
+  const updateCodepointStmt = db.query(
+    'UPDATE sf_symbols SET codepoint = $codepoint WHERE scope = $scope AND name = $name',
   )
   // Search variants — empty query, FTS hit, fallback LIKE.
   const searchEmptyStmt = db.query(`
@@ -153,10 +159,19 @@ export function createAssetsSymbolsRepo(db) {
         categories: parseJsonArray(row.categories_json),
         keywords: parseJsonArray(row.keywords_json),
         bitmapOnly: !!row.bitmap_only,
+        codepoint: row.codepoint ?? null,
       }))
     },
     markBitmapOnly(scope, name) {
       markBitmapOnlyStmt.run({ $scope: scope, $name: name })
+    },
+    /** Stamp the resolved Private Use Area codepoint. Pass null to clear. */
+    updateCodepoint(scope, name, codepoint) {
+      updateCodepointStmt.run({
+        $scope: scope,
+        $name: name,
+        $codepoint: codepoint == null ? null : codepoint,
+      })
     },
     /** Hybrid search: FTS5 first, falls back to LIKE on parser failure
      *  (FTS5 trips on `?`, `:`, etc — the catalog has thousands of dotted

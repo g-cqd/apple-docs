@@ -32,6 +32,15 @@ export function symbolMetadataHandler(_request, ctx, _url, match) {
   const decodedName = decodeURIComponent(encodedName)
   const row = ctx.db.getSfSymbol(scope, decodedName)
   if (!row) return new Response('Not Found', { status: 404 })
+  // Surface the Private Use Area codepoint (and its U+XXXX display
+  // form) when the sync-time Swift dump resolved one. NULL codepoints
+  // are omitted from the response so the client can simply `if`-guard.
+  if (row.codepoint != null) {
+    row.codepoint_display = `U+${row.codepoint.toString(16).toUpperCase().padStart(4, '0')}`
+  } else {
+    delete row.codepoint
+    delete row.codepoint_display
+  }
   return jsonResponse(row, { hashable: true })
 }
 

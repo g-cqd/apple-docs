@@ -1,138 +1,202 @@
 # Spike: SF Symbol → Unicode codepoint mapping
 
-**Status:** BLOCKED. Stopping per task instructions and writing up the finding before wiring anything into sync / migrations / the route layer.
+**Status:** BLOCKED. Stopping at the stop condition defined by the task — all
+three sub-paths (C.1 public API, C.2 dlopen + Swift, C.3 metadata.store
+binary walk) are intractable within the 2-hour budget. Best achievable
+coverage from a hybrid is ~45%, well below the 90% acceptance threshold.
 
 **Date:** 2026-05-11
-**Font under test:** `/Users/gc/.apple-docs/resources/fonts/extracted/sf-pro/SF-Pro.ttf` (25,872,268 bytes)
-**Parser:** `src/resources/apple-symbols/codepoint-from-font.js` (hand-rolled `cmap` formats 4 + 12 and `post` format 2)
-**Probe script:** `scripts/spike-sf-pro-cmap.js`
-**Cross-check tool:** Python `fontTools` 4.60.0 (system install)
+**macOS under test:** 26.4 (snapshot of system frameworks + SF Symbols.app 7.x)
+**Probe artefacts:** `/tmp/probe-*.swift`, `/tmp/coverage-test.swift`
+**Existing artefacts kept on disk:** the unstaged P1.4 scaffolding (DB
+migration v19, `db.updateSfSymbolCodepoint`, `dumpSymbolCodepoints` JS
+orchestrator, route + UI wiring, tests). The Swift worker still uses the
+unsuccessful `CTFontGetGlyphWithName` strategy; it is intentionally left
+as-is because no replacement reaches the acceptance bar.
 
 ## TL;DR
 
-The premise the task is built on — that SF-Pro.ttf's `post` table holds
-glyph names matching the SF Symbol catalog names (`house.fill`,
-`person.crop.circle`, …) and that joining the `post` and `cmap` tables
-yields `catalogName → codepoint` — **does not hold for SF-Pro.ttf as
-shipped on macOS 26.4**. There is no JS-only path from the font alone
-to the catalog-name codepoint.
+The premise that catalog names like `house.fill` can be resolved to PUA
+codepoints by walking the SF Pro / SF Symbols font tables holds for
+roughly half the catalog. The other half lives behind an encrypted /
+private surface that we cannot reproduce without either:
 
-The parser itself works: cmap, post, the PUA filter, and the
-glyph-name extraction all return what the OpenType spec says they
-should. fontTools agrees with our parser on every probe. What's
-missing is the catalog-name layer, which lives outside the font.
+1. shipping a custom hardcoded mapping (forbidden by task constraints), or
+2. depending on the Swift `SFSymbolsShared.framework` private API which
+   requires a `.swiftmodule` that Apple does not distribute.
 
-I'm stopping at the parser + spike. The migration, sync stamp, route
-serializer, detail-panel row, and tests are **not** yet written — they
-all depend on a working name resolution and would otherwise stamp
-`NULL` on every public symbol.
+I am stopping per the task's stop condition.
 
-## What the parser sees
+## Path-by-path findings
+
+### C.1 — Public Apple Symbol APIs
+
+Dead.
+
+- `Symbols.framework` (public, has `.swiftinterface` in the SDK): only
+  exposes symbol-effect types (Pulse, Bounce, VariableColor, …). No
+  catalog query, no `unicodeScalar`, no `glyphID` accessor on any of the
+  638 lines of interface surface.
+- `NSImage(systemSymbolName:)` + `withSymbolConfiguration(_:)` produce a
+  `NSSymbolImageRep` backed by a `CUINamedVectorGlyph`. The vector glyph
+  exposes `name` (the catalog name itself), `pointSize`, `scale`,
+  `baselineOffset` — no scalar or codepoint accessor on any superclass.
+- Method-list and ivar-list probes against `NSImage`, `NSImageRep`,
+  `NSSymbolImageRep`, `CUINamedVectorGlyph`, `CUINamedLookup` find no
+  public, private, or `_underscore`-prefixed accessor that yields a
+  codepoint. Closest is `_symbolName` on `NSImage`, which returns the
+  catalog name we passed in.
+
+### C.2 — dlopen + Swift symbol resolution against CoreGlyphsLib / SFSymbolsShared
+
+Partial; not sufficient.
+
+- `SymbolStore.init(fontGroup: FontGroup)` is the catalog entry point in
+  `CoreGlyphsLib.framework`. `SymbolStore.getSymbol(_:String)` returns a
+  `Symbol`. Neither type exposes the codepoint directly — `Symbol`'s
+  `init(_:String, from: FontGroup, nameMap: [String:String], glyphName: String, ...)`
+  shows the layer where the catalog→font-glyph mapping happens, but the
+  `nameMap` and `glyphName` arguments are supplied by a higher layer.
+- That higher layer is `SFSymbolsShared.framework`. Demangling its 4,692
+  exported symbols turned up the real catalog:
+  - `SymbolMetadataStore.symbolMetadata(forSystemName: String) -> SymbolMetadata?`
+  - `SymbolMetadata.privateScalar: Unicode.Scalar?`
+  - `SymbolMetadata.publicScalars: [Unicode.Scalar]`
+  - `SymbolFontReader.init(symbolFontProvider:, metadataReadingOptions:)`
+  - `MetadataReadingOptions(metadataDirectory: URL)` accepting the
+    `/System/Library/PrivateFrameworks/SFSymbols.framework/.../metadata` path
+- **Blocker:** `SFSymbolsShared.framework` ships **without** a
+  `.swiftmodule` or `.swiftinterface`, so we cannot `import SFSymbolsShared`
+  from a Swift source file. The framework binary is loadable via
+  `dlopen`, but its public surface is pure Swift (structs, generic
+  initializers with protocol constraints, throwing initializers) that
+  cannot be called via the Objective-C runtime. Calling it via raw
+  `dlsym` + manually fabricated mangled-name lookups is technically
+  possible but requires reconstructing Swift's metadata layout
+  (`SymbolFontReader` ivar offsets, witness tables for
+  `SymbolFontProvider`, `MetadataReadingOptions`'s padding, etc.) — that
+  is a multi-day project, far outside the 2 h budget, and the result
+  would break on any Swift compiler bump or framework rebuild.
+- One @objc-exposed hook does exist on `CUICatalog`:
+  `_baseVectorGlyphForName:` returns a `CUIRenditionKey` whose
+  `themeIdentifier` is a 16-bit NameIdentifier per catalog name. This
+  works for all 8,303 public symbols.
+
+### C.3 — Walk the metadata.store binary format
+
+Dead.
+
+- File header is `1f e5 2b ff`, not any of the documented Apple
+  compression magic numbers (`zlib`, `LZ4`, `LZMA`, `LZFSE`,
+  `Brotli`, `LZBITMAP`).
+- Apple's `compression_decode_buffer(COMPRESSION_ZLIB)` from offset 4
+  decodes the first 65,536 bytes of source into 48,003 bytes of output —
+  but the output has 7.95 bits/byte entropy and no plist / JSON / utf-8
+  prefix. The data is **encrypted**, not just compressed.
+- That matches what we found in `SFSymbolFontReader.MetadataReadingOptions`:
+  it carries an explicit `fontTableDecryptor: ((CTFontRef, UInt32) -> Data?)?`
+  callback. The system framework decrypts metadata at runtime using a
+  key bound to the CT font object. Without invoking the framework's
+  decryptor, the bytes are useless.
+
+## What the hybrid prototype achieves
+
+Best in-budget Swift prototype combining C.2's `_baseVectorGlyphForName:`
+hook with a font-side lookup against `SFSymbolsFallback.otf` (the 94 MB
+font bundled with `SF Symbols.app` that contains the catalog rendering):
+
+1. For each of the 8,303 public catalog names, call
+   `CUICatalog._baseVectorGlyphForName:` to get a `themeIdentifier`
+   NameIdentifier (16-bit).
+2. If `NameIdentifier < CTFontGetGlyphCount(SFSymbolsFallback.otf)` (i.e.
+   below 40,852) AND `CTFontCopyNameForGlyph` returns a name matching
+   `uniXXXXXX[.size]`, the hex digits after `uni` are the codepoint.
+3. Otherwise, no codepoint available from this surface — emit `null`.
+
+Measured outcome:
 
 ```
-Reading: /Users/gc/.apple-docs/resources/fonts/extracted/sf-pro/SF-Pro.ttf
-Parsed 8314 (glyphName → PUA codepoint) entries in 32.1 ms
-
-First 20 entries by codepoint:
-  U+F6D5      uni100136.small
-  U+F6D6      uni100137.small
-  …
-  U+100000    uni100000.medium
-  U+100001    uni100001.medium
-  …
-
-Probes:
-  house                        MISSING
-  house.fill                   MISSING
-  globe                        MISSING
-  star                         MISSING
-  star.fill                    MISSING
-  person.crop.circle           MISSING
-  pencil.and.sparkles          MISSING
+total catalog names: 8303
+resolved: 3770 (45.4%)
+unresolved: 4533 (54.6%)
 ```
 
-8,314 PUA glyphs are reachable via cmap. Every name has the form
-`uniXXXXXX[.size]` — i.e. the post table tells us "the glyph at
-codepoint U+XXXXXX is named `uniXXXXXX`", which is tautological. The
-SF Symbol catalog name layer is not present at this seam.
+Sample unresolved cases:
 
-## Why the mapping is missing
+```
+ellipsis.viewfinder           NID 54414 (> font glyph count 40852)
+rectangle.arrowtriangle.2.outward  NID 51482
+figure.strengthtraining.traditional  NID 47753
+phone.down.waves.left.and.right  NID 9005, name=rectangle.3grid.bubble.color
+28.square.hi                  NID 60203
+app.dashed                    NID 60019
+forward.circle                NID 43508
+chart.xyaxis.line             NID 48200
+pencil.and.list.clipboard     NID 51504
+inset.filled.bottomthird.square  NID 1944, name=Ibreve.1.sc
+```
 
-SF-Pro.ttf has **35,026 total glyphs** but only 8,314 PUA-mapped
-codepoints. The other 26,712 glyphs are not directly addressable via
-`cmap`; they are reached through OpenType GSUB substitutions (the
-`ssNN` stylistic sets, plus contextual rules) that the SF Symbols
-runtime triggers when an app asks for `house.fill` at a given
-weight/scale.
+Two unresolved patterns:
 
-The `post` table **does** carry the catalog-shaped names — e.g.
-`house.color`, `house.fill.color`, `pencil.tag.color.medium`,
-`globe.fill.crop.color`. But:
+- **NID > 40852:** NameIdentifier is a catalog asset ID, not a glyph
+  index. The mapping from NameIdentifier to font glyph for these symbols
+  lives in `SFSymbolsShared`'s encrypted font tables (`syls` and `symp`
+  in `SFSymbolsFallback.otf`).
+- **NID < 40852 but the font glyph is not a `uniXXXX*` name** — these
+  are symbols where the canonical font glyph is a multicolor/variant
+  representation (e.g. `Ibreve.1.sc`, `rectangle.3grid.bubble.color`),
+  and the base codepoint lives at a different glyph that we cannot
+  identify from this surface.
 
-1. None of those glyphs has a `cmap` entry, so they don't have a
-   "their own" codepoint.
-2. The base catalog names (`house`, `globe`, `pencil`) are not in the
-   `post` table at all — verified against the full 35,026-element
-   glyph order via fontTools.
+45% coverage is materially below the 90% acceptance bar, so this
+prototype is not wired in.
 
-The `Assets.car` CoreGlyphs catalog (dumped via `assetutil`) has
-8,303 entries with `Name` + `NameIdentifier` fields. The
-`NameIdentifier` values (e.g. `house.fill` → 22827) are **not**
-codepoints; they're string-pool indices.
+## Options for a real fix (no change since the previous spike)
 
-`/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/metadata/metadata.store`
-is the most likely location of the runtime name→codepoint table, but
-it's a 588 KB undocumented binary format flagged as compressed in
-`index.plist` (`isCompressed = true`, no documented schema).
+1. **Bake the mapping at SF Symbols release time using Apple's `SFSymbols`
+   command-line export.** The SF Symbols.app `Export…` menu writes a
+   `.symbolset` directory plus a `metadata.json` containing
+   `unicodePoint` per symbol. This would be a manual or CI-time export,
+   not a runtime extraction.
+2. **Vendor a `(name, codepoint)` JSON for the supported macOS major
+   version.** Forbidden by the task constraint "Don't introduce ANY
+   hardcoded codepoint mapping". (The constraint conflicts with the
+   acceptance bar; this is the conflict that produced the stop condition.)
+3. **Write a custom Swift framework that links against
+   `SFSymbolsShared.framework` via Xcode's private-framework search
+   path, ship the resulting `(name, codepoint)` dump as a snapshot
+   sidecar.** This requires the SF Symbols.app to be installed at sync
+   time and pinned to a known version. Heavy, but it's the only path
+   that reaches >99% coverage.
 
-## Options for an actual fix
-
-Listed in order of cost / risk:
-
-1. **Bake the mapping at snapshot build time using a Swift helper**
-   that asks CoreText for `CTFontCopyCharacterIdentifiersForGlyphs`
-   or queries the SF Symbols framework directly. Ship the resulting
-   `(name, codepoint)` pairs as a JSON sidecar in the snapshot — we
-   already have a Swift worker (`SYMBOL_WORKER_SCRIPT`) for the
-   prerender, so adding a one-shot dump step is cheap. Pure
-   JS/parse-side stays read-only.
-
-2. **Resolve GSUB substitutions in JS** starting from the
-   `uniXXXXXX.medium` cmap entries and walking the substitution
-   chain to the named target glyphs. The GSUB table in SF-Pro.ttf is
-   complex (multiple lookup types, contextual rules); ~600 lines of
-   new parser code, and we'd still need to know which substitution
-   chain corresponds to which catalog suffix (`.fill`, `.circle`).
-
-3. **Reverse-engineer `metadata.store`**. High risk: undocumented,
-   may change format between macOS releases, and the existing
-   apple-docs pipeline pinned to a specific SFSymbols version would
-   need a parser update on each snapshot rebuild.
-
-4. **Shell out to Python `fontTools` plus a community-maintained
-   `sf-symbols-extractor`** at sync time. Violates the "no new deps,
-   no project-level pip" constraint and adds a runtime dependency on
-   third-party code that tracks SF Symbols releases.
-
-My recommendation is **Option 1** (Swift helper at snapshot time).
-It matches the existing prerender pipeline architecture — we already
-shell out to Swift for symbol PDF rendering, so a sibling "name dump"
-worker fits naturally. The DB column + route serializer + detail-panel
-row from this task all still apply, but the source of truth for the
-mapping changes from SF-Pro.ttf to the Swift helper's JSON output.
+My recommendation is **Option 3**, executed off-line and the output
+shipped as a snapshot artefact, not via runtime extraction. Until that
+work happens, the `sf_symbols.codepoint` column will stay NULL.
 
 ## What ships from this spike
 
-| Path | Status | Note |
-| --- | --- | --- |
-| `src/resources/apple-symbols/codepoint-from-font.js` | written, correct, currently unused | exposes `buildNameToCodepointMap`, `isPrivateUseCodepoint`, `formatCodepoint`. Reusable when a future GSUB-walking layer needs the cmap join. |
-| `scripts/spike-sf-pro-cmap.js` | written | runnable verification; produces the output above. |
-| `docs/spikes/sf-symbol-codepoints.md` | this file | the writeup. |
+| Path | Status |
+| --- | --- |
+| `src/resources/apple-symbols/codepoint-from-font.js` | unchanged, still correct for the 8,314 cmap-addressable entries; not connected |
+| `src/resources/apple-symbols/codepoint-dump.js` | scaffolded by the previous P1.4 agent, unchanged, currently writes `NULL` for every symbol because the Swift worker can't resolve catalog names |
+| `src/resources/swift/symbol-codepoint-worker.js` | unchanged, still using `CTFontGetGlyphWithName` which returns 0 for all catalog names |
+| `src/storage/migrations/v19-sf-symbols-codepoint.js` | unchanged, valid schema |
+| `src/storage/repos/assets-symbols.js` (`updateSfSymbolCodepoint`) | unchanged |
+| `src/web/routes/symbols.route.js` (codepoint serialization) | unchanged |
+| `src/web/assets/symbols-page/detail-panel.js` | unchanged |
+| `test/unit/symbol-codepoints.test.js` | unchanged |
 
-The DB migration, `db.updateSfSymbolCodepoint`, the
-`symbolMetadataHandler` serializer, the detail-panel row, and the
-tests called for in the task are **not** in this commit. They would
-all hang off an `(name → codepoint)` source that, per the evidence
-above, has to come from outside SF-Pro.ttf.
+The schema migration, repo method, route, and detail-panel row are all
+correct and safely emit nothing when `codepoint IS NULL`. They will
+start producing data the moment a future fix populates the column.
 
-Awaiting direction on which of the four options above to pursue.
+## Verdict
+
+**Definitively unreachable from the public/semi-public surface within
+the 2-hour budget.** The complete catalog name→codepoint mapping is
+gated behind Swift-only private APIs (`SFSymbolsShared.SymbolMetadataStore`)
+that have no Objective-C shim and no published Swift module.
+Reaching ≥90% coverage requires shipping the data out-of-band — either
+as a build-time export from SF Symbols.app's own export feature, or via
+a custom Swift binary linked against the private framework with a
+matching pinned macOS SDK.
