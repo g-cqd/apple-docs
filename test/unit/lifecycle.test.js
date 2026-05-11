@@ -59,15 +59,12 @@ describe('lifecycle.register / gracefulShutdown', () => {
     })
 
     const code = await gracefulShutdown('test', 100, { logger: makeLogger() })
-    // The "wedged" component runs first (LIFO), races against the 100ms
-    // timeout, returns. "after-wedge" should still run — but the deadline
-    // budget is shared, so it may or may not get a turn depending on
-    // timing. Either way, the code reflects the deadline overrun.
+    // LIFO: after-wedge runs first and completes synchronously, then
+    // wedged loses the race against the remaining deadline budget. The
+    // timeout-sentinel branch in gracefulShutdown sets exitCode=1
+    // deterministically, regardless of host clock precision.
     expect(code).toBe(1)
-    // aborted=true means the second component DID run; if false the loop
-    // exited early due to deadline. Both are acceptable; we just want to
-    // assert no crash.
-    expect(typeof aborted).toBe('boolean')
+    expect(aborted).toBe(true)
   })
 
   test('unregister removes the component', async () => {

@@ -82,6 +82,7 @@ async function gracefulShutdown(reason, deadlineMs = DEFAULT_DEADLINE_MS, opts =
 
   const start = Date.now()
   let exitCode = 0
+  const TIMEOUT = Symbol('timeout')
   while (components.length > 0) {
     const entry = components.pop()
     const remaining = Math.max(0, deadlineMs - (Date.now() - start))
@@ -90,19 +91,29 @@ async function gracefulShutdown(reason, deadlineMs = DEFAULT_DEADLINE_MS, opts =
       exitCode = 1
       break
     }
-    try {
-      await Promise.race([
-        Promise.resolve(entry.stop(remaining)),
-        new Promise((resolve) => setTimeout(resolve, remaining)),
-      ])
-    } catch (err) {
+    // Race stop() against the deadline. We want to know which side won —
+    // a wall-clock comparison after the fact is unreliable on fast hosts
+    // where setTimeout can fire a millisecond early. Tag each side of the
+    // race so the outcome is unambiguous, and swallow any late rejection
+    // from a stop() that loses the race so it doesn't surface as an
+    // unhandledRejection after we've moved on.
+    const stopP = Promise.resolve().then(() => entry.stop(remaining))
+    stopP.catch(() => {})
+    const settled = await Promise.race([
+      stopP.then(() => null, (err) => ({ err })),
+      new Promise((resolve) => setTimeout(() => resolve(TIMEOUT), remaining)),
+    ])
+    if (settled === TIMEOUT) {
+      logger?.warn?.(`shutdown: ${entry.name} stop() exceeded remaining deadline (${remaining}ms)`)
+      exitCode = 1
+    } else if (settled && typeof settled === 'object' && 'err' in settled) {
+      const err = settled.err
       logger?.error?.(`shutdown: ${entry.name} stop() threw`, { error: err?.message, stack: err?.stack })
       exitCode = 1
     }
   }
 
   const elapsed = Date.now() - start
-  if (elapsed >= deadlineMs && exitCode === 0) exitCode = 1
   logger?.info?.(`shutdown.done reason=${reason} elapsed=${elapsed}ms exit=${exitCode}`)
   return exitCode
 }
