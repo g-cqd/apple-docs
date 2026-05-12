@@ -107,7 +107,6 @@ ${buildHeader(siteConfig)}
             <button type="button" class="symbols-pill" role="radio" data-scale="large" aria-checked="false" title="Large">L</button>
           </div>
         </fieldset>
-        <p class="symbols-detail__axes-hint" id="symbols-detail-axes-hint" hidden>Weight + scale apply to public SF Symbols only — private CoreGlyphs are bitmap-derived.</p>
       </section>
 
       <section class="symbols-detail__downloads" aria-label="Downloads">

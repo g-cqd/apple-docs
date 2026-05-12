@@ -151,11 +151,6 @@ export function createDetailPanel(deps) {
     if (detail.name) detail.name.textContent = symbol.name
     if (detail.scope) detail.scope.textContent =
       symbol.scope === 'private' ? 'Private CoreGlyphs' : 'Public SF Symbol'
-    // Weight/scale apply uniformly to both public and private symbols
-    // (NSImage.withSymbolConfiguration honours private CoreGlyphs reps),
-    // so the previous "axes don't apply here" hint is permanently hidden.
-    const axesHint = document.getElementById('symbols-detail-axes-hint')
-    if (axesHint) axesHint.hidden = true
     refreshDetail()
     fetchMetadata(symbol).then(meta => {
       if (activeSymbol === symbol) renderMetadata(detail.meta, meta)
