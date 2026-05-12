@@ -113,15 +113,16 @@ describe('codepoint dump orchestrator', () => {
     }
   })
 
-  test('resolveSymbolFontPath returns a string or null', async () => {
-    // Without an extracted snapshot at the given dataDir, the function
-    // may fall through to the system /System/Library/Fonts/SFNS.ttf
-    // on macOS. Either result is acceptable; we just want to confirm
-    // the function never throws on a missing snapshot path.
+  test('resolveSymbolFontPath returns a {fontPath, metadataDir} pair or null', async () => {
+    // On macOS with SF Symbols.app installed, the pair points at the
+    // catalog font + system metadata directory. On every other host
+    // (or macOS without SF Symbols.app) it returns null. The dataDir
+    // argument is no longer consulted but accepted for compat.
     const result = resolveSymbolFontPath('/tmp/path-that-does-not-exist-' + Date.now())
     if (result != null) {
-      expect(typeof result).toBe('string')
-      expect(result.endsWith('.ttf') || result.endsWith('.otf')).toBe(true)
+      expect(typeof result).toBe('object')
+      expect(result.fontPath.endsWith('.otf')).toBe(true)
+      expect(result.metadataDir).toMatch(/metadata$/)
     } else {
       expect(result).toBe(null)
     }
@@ -243,26 +244,26 @@ describe('/api/symbols/<scope>/<name>.json route', () => {
 })
 
 // Integration: run the real Swift worker against a handful of
-// known-good symbols. Skipped on non-Darwin runners; the CI matrix
-// includes macos-26, where this test should pass.
+// known-good symbols. Skipped when SF Symbols.app isn't installed,
+// which is the only macOS configuration where Crypton +
+// SymbolFontReader are reachable.
 const isMacOS = process.platform === 'darwin'
 describe.skipIf(!isMacOS)('codepoint dump (real Swift worker, macOS-only)', () => {
-  test('queries five canary symbols without crashing', async () => {
-    const fontPath = resolveSymbolFontPath('/Users/gc/.apple-docs')
-      ?? '/System/Library/Fonts/SFNS.ttf'
-    if (!fontPath) return // No font on disk, skip silently.
+  test('resolves five canary symbols to valid PUA codepoints', async () => {
+    const resolved = resolveSymbolFontPath('/Users/gc/.apple-docs')
+    if (!resolved) return // SF Symbols.app not installed; skip silently.
     const names = ['house.fill', 'star.fill', 'person.crop.circle', 'globe', 'gear']
-    const { map, total } = await dumpSymbolCodepoints(names, { fontPath })
+    const { map, total } = await dumpSymbolCodepoints(names, resolved)
     expect(total).toBe(5)
-    // We make no claim about resolution success — the catalog-name to
-    // codepoint mapping currently lives outside the post table for
-    // most names. We just assert the orchestrator completed and the
-    // returned values are either null or in the PUA.
+    // With the Crypton + SymbolFontReader pipeline, every public catalog
+    // name resolves to a valid PUA codepoint. The assertion deliberately
+    // demands non-null for these five — they have shipped in every SF
+    // Symbols release since 2019 — so a regression to the broken stub
+    // (all-NULL output) fails this test loudly.
     for (const name of names) {
       const value = map.get(name)
-      if (value != null) {
-        expect(_internals.isPrivateUseCodepoint(value)).toBe(true)
-      }
+      expect(value).not.toBeNull()
+      expect(_internals.isPrivateUseCodepoint(value)).toBe(true)
     }
   }, 60_000)
 })

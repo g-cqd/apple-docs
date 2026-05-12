@@ -28,6 +28,7 @@ import {
   symbolVariantMatrix,
 } from './cache-key.js'
 import { dumpSymbolCodepoints, resolveSymbolFontPath } from './codepoint-dump.js'
+import { ensureSfSymbolsApp } from '../sf-symbols-app/install.js'
 import { SYMBOL_RENDERER_VERSION } from './render.js'
 
 const SYMBOL_BUNDLES = {
@@ -41,9 +42,13 @@ const SYMBOL_BUNDLES = {
 // symbol_search.plist / name_availability.plist but have no vectorGlyph
 // drawable in either bundle, so the Swift worker can't render them and
 // the snapshot completeness validator flags 14 weight/scale variants ×
-// 4 (2 names × 2 scopes) = 56 phantom misses. Filter at ingest so they
-// never enter the sf_symbols table.
-const CATALOG_META_NAMES = new Set(['symbols', 'year_to_release'])
+// 4 (2 names × 2 scopes) = 56 phantom misses.
+//
+// Filter at ingest so they never enter the sf_symbols table going
+// forward, AND filter at prerender so a DB carrying stale rows from
+// pre-filter syncs doesn't surface the failure. Exported so a one-shot
+// cleanup script (or test) can also use the same source of truth.
+export const CATALOG_META_NAMES = new Set(['symbols', 'year_to_release'])
 
 const SYMBOL_DEFAULT_RENDER_SIZE = 128
 
@@ -95,11 +100,13 @@ export async function syncSfSymbols(opts, ctx) {
  * resolved Unicode codepoint back onto the row. Idempotent: re-running
  * against the same font writes the same value.
  *
- * Skips silently (no-op + warn) when SF-Pro.ttf isn't present at
- * `${dataDir}/resources/fonts/extracted/sf-pro/SF-Pro.ttf` and the
- * system fallback `/System/Library/Fonts/SFNS.ttf` is also unavailable
- * — e.g. on a snapshot rebuilt before fonts were extracted, or on a
- * non-mac runtime that's hosting a prebuilt snapshot DB.
+ * Skips silently (no-op + warn) when SF Symbols.app isn't installed at
+ * `/Applications/SF Symbols.app` — the worker depends on its bundled
+ * SFSymbolsShared + CoreGlyphsLib frameworks (the latter exports
+ * `Crypton.decryptObfuscatedFontTable`, the only known way to read the
+ * encrypted catalog tables in SFSymbolsFallback.otf). On a
+ * non-mac runtime that's hosting a prebuilt snapshot DB the column
+ * stays populated from the snapshot itself.
  *
  * Returns `{ stamped, total, fontPath }`. `stamped` is the count with
  * a non-NULL codepoint after the dump; `total` is the size of the
@@ -107,16 +114,54 @@ export async function syncSfSymbols(opts, ctx) {
  */
 export async function stampSfSymbolCodepoints(opts, ctx) {
   const { db, dataDir, logger } = ctx
-  const fontPath = opts?.fontPath ?? resolveSymbolFontPath(dataDir)
-  if (!fontPath) {
-    logger?.warn?.('SF-Pro.ttf not found; skipping SF Symbol codepoint stamping')
+
+  // Ensure a current SF Symbols.app is on disk before resolving paths.
+  // Prefers /Applications when already current; downloads the latest
+  // .dmg to <dataDir>/cache/sf-symbols/<version>/ otherwise. Caller can
+  // pass `appPath`/`fontPath` to bypass the provisioner entirely
+  // (used by tests and offline snapshot rebuilds).
+  let appPath = opts?.appPath ?? null
+  if (!appPath && !opts?.fontPath) {
+    try {
+      const installed = await ensureSfSymbolsApp({
+        dataDir,
+        logger,
+        forceRefresh: opts?.forceRefresh,
+      })
+      appPath = installed.appPath
+    } catch (err) {
+      logger?.warn?.(
+        `SF Symbols.app provisioning failed (${err?.message ?? err}); ` +
+        `falling back to any local install`,
+      )
+    }
+  }
+
+  const resolved = opts?.fontPath
+    ? {
+        appPath: opts.appPath,
+        fontPath: opts.fontPath,
+        metadataDir: opts.metadataDir,
+      }
+    : resolveSymbolFontPath(dataDir, { appPath })
+  if (!resolved || !resolved.fontPath) {
+    logger?.warn?.(
+      'SF Symbols.app not available; skipping SF Symbol codepoint stamping. ' +
+      'Install from https://developer.apple.com/sf-symbols/ or retry with network access.',
+    )
     return { stamped: 0, total: 0, fontPath: null }
   }
+  const { fontPath, metadataDir, appPath: usedAppPath } = resolved
   const catalog = db.listSfSymbolsCatalog().filter(symbol => symbol.scope === 'public')
   if (catalog.length === 0) return { stamped: 0, total: 0, fontPath }
 
   const names = catalog.map(symbol => symbol.name)
-  const { map } = await dumpSymbolCodepoints(names, { fontPath, logger })
+  const { map } = await dumpSymbolCodepoints(names, {
+    fontPath,
+    metadataDir,
+    appPath: usedAppPath,
+    logger,
+  })
 
   let stamped = 0
   for (const [name, codepoint] of map) {
@@ -150,8 +195,14 @@ export async function prerenderSfSymbols(opts, ctx) {
     await rm(baseDir, { recursive: true, force: true }).catch(() => {})
   }
   ensureDir(baseDir)
+  // Defense in depth: filter CATALOG_META_NAMES here too. The sync-time
+  // filter already keeps new rows out of the DB, but a stale snapshot
+  // built before that filter landed can still carry `symbols` /
+  // `year_to_release` rows. Letting them through here would burn
+  // 27 variants × ~scopes worth of doomed worker calls for no payoff.
   const symbols = ctx.db.listSfSymbolsCatalog()
     .filter(symbol => !scopeFilter || symbol.scope === scopeFilter)
+    .filter(symbol => !CATALOG_META_NAMES.has(symbol.name))
   const result = { rendered: 0, skipped: 0, failed: 0, total: 0, symbols: symbols.length, failures: [] }
 
   // Cluster work by scope so each worker only handles one bundle path.

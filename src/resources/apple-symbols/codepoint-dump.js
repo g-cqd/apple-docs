@@ -23,6 +23,42 @@ const PUA_RANGES = Object.freeze([
   [0x100000, 0x10fffd],
 ])
 
+// Catalog metadata lives in the system framework, independent of which
+// SF Symbols.app the worker targets. The Resources are plain plists +
+// the (encrypted) metadata.store; SFSymbolsShared.SymbolFontReader
+// reads them regardless of the framework binary's origin.
+const METADATA_DIR =
+  '/System/Library/PrivateFrameworks/SFSymbols.framework/Resources/metadata'
+
+const DEFAULT_APP_PATH = '/Applications/SF Symbols.app'
+
+/**
+ * Build the set of paths the codepoint worker needs from a given
+ * SF Symbols.app bundle. Pure path arithmetic; no FS checks here so
+ * the call is cheap and the caller can validate or pretend (for tests).
+ *
+ * @param {string} appPath absolute path to SF Symbols.app
+ * @returns {{ fontPath: string, metadataDir: string, sharedFramework: string,
+ *   sharedFrameworkDir: string, glyphsLibFrameworkDir: string }}
+ */
+export function pathsForApp(appPath) {
+  const sharedFrameworkDir = join(appPath, 'Contents', 'Frameworks')
+  const sharedFramework = join(sharedFrameworkDir, 'SFSymbolsShared.framework')
+  const glyphsLibFrameworkDir = join(
+    sharedFramework,
+    'Versions', 'A', 'Frameworks',
+  )
+  const fontPath = join(appPath, 'Contents', 'Resources', 'Fonts', 'SFSymbolsFallback.otf')
+  return {
+    appPath,
+    fontPath,
+    metadataDir: METADATA_DIR,
+    sharedFramework,
+    sharedFrameworkDir,
+    glyphsLibFrameworkDir,
+  }
+}
+
 function isPrivateUseCodepoint(cp) {
   if (!Number.isInteger(cp) || cp < 0 || cp > 0x10ffff) return false
   return (
@@ -33,16 +69,27 @@ function isPrivateUseCodepoint(cp) {
 }
 
 /**
- * Default font path within a snapshot. Returns null when SF-Pro.ttf
- * is not present — callers should skip the dump rather than crash.
+ * Resolve the catalog font + metadata directory the worker needs.
+ * Returns `{ appPath, fontPath, metadataDir, ... }` or `null` when no
+ * usable SF Symbols.app is present at the supplied path nor at
+ * /Applications/SF Symbols.app.
+ *
+ * @param {string} _dataDir kept for callsite compatibility (unused)
+ * @param {{ appPath?: string }} [opts] explicit SF Symbols.app path
+ *   (typically from `ensureSfSymbolsApp`). Falls back to /Applications.
+ * @returns {ReturnType<typeof pathsForApp> | null}
  */
-export function resolveSymbolFontPath(dataDir) {
-  const candidates = [
-    join(dataDir, 'resources', 'fonts', 'extracted', 'sf-pro', 'SF-Pro.ttf'),
-    '/System/Library/Fonts/SFNS.ttf',
-  ]
-  for (const path of candidates) {
-    if (existsSync(path)) return path
+export function resolveSymbolFontPath(_dataDir, opts = {}) {
+  const candidates = []
+  if (opts.appPath) candidates.push(opts.appPath)
+  candidates.push(DEFAULT_APP_PATH)
+  for (const appPath of candidates) {
+    const paths = pathsForApp(appPath)
+    if (!existsSync(paths.fontPath)) continue
+    if (!existsSync(paths.sharedFramework)) continue
+    if (!existsSync(paths.glyphsLibFrameworkDir)) continue
+    if (!existsSync(paths.metadataDir)) continue
+    return paths
   }
   return null
 }
@@ -54,21 +101,24 @@ export function resolveSymbolFontPath(dataDir) {
  * row was not touched.
  *
  * @param {string[]} names — list of catalog names to query
- * @param {{ fontPath: string, logger?: object, spawn?: Function,
- *   wallClockMs?: number, lineTimeoutMs?: number }} opts
+ * @param {{ fontPath: string, metadataDir?: string, logger?: object,
+ *   spawn?: Function, wallClockMs?: number, lineTimeoutMs?: number }} opts
  */
 export async function dumpSymbolCodepoints(names, opts) {
   const {
     fontPath,
+    metadataDir = METADATA_DIR,
+    appPath,
     logger,
     spawn = defaultSpawn,
     wallClockMs = 30_000,
     lineTimeoutMs = 5_000,
   } = opts
   if (!fontPath) throw new Error('dumpSymbolCodepoints: fontPath is required')
+  if (!metadataDir) throw new Error('dumpSymbolCodepoints: metadataDir is required')
 
   const map = new Map()
-  const proc = await spawn({ fontPath, logger })
+  const proc = await spawn({ fontPath, metadataDir, appPath, logger })
   const wallClockDeadline = Date.now() + wallClockMs
 
   // Drain stderr in the background so worker crashes are visible.
@@ -177,25 +227,93 @@ function parseLine(line) {
   }
 }
 
-async function defaultSpawn({ fontPath, logger }) {
-  const { SYMBOL_CODEPOINT_WORKER_SCRIPT } = await import('../swift/symbol-codepoint-worker.js')
+async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH, logger }) {
+  const {
+    SYMBOL_CODEPOINT_WORKER_SCRIPT,
+    SF_SYMBOLS_SHARED_INTERFACE,
+    CORE_GLYPHS_LIB_INTERFACE,
+  } = await import('../swift/symbol-codepoint-worker.js')
   const { tmpdir } = await import('node:os')
-  const { rm } = await import('node:fs/promises')
-  const scriptPath = join(
+  const { rm, mkdir, symlink } = await import('node:fs/promises')
+
+  const paths = pathsForApp(appPath)
+
+  // Stage the worker script + handcrafted Swift modules in one temp
+  // dir. The `.swiftinterface` files let `swiftc` accept `import
+  // SFSymbolsShared` / `import CoreGlyphsLib` against frameworks that
+  // ship without a `.swiftmodule`. The symlinked `.framework` shells
+  // satisfy `-framework` at link/load time.
+  const stageDir = join(
     tmpdir(),
-    `apple-docs-codepoint-worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}.swift`,
+    `apple-docs-codepoint-worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}`,
   )
+  await mkdir(stageDir, { recursive: true })
+
+  const sharedModuleDir = join(stageDir, 'SFSymbolsShared.swiftmodule')
+  const glyphsModuleDir = join(stageDir, 'CoreGlyphsLib.swiftmodule')
+  await mkdir(sharedModuleDir, { recursive: true })
+  await mkdir(glyphsModuleDir, { recursive: true })
+
+  // Per-arch swiftinterface — Apple Silicon only is fine for this
+  // tool; x86_64 hosts run x86_64 Swift script mode and pick up
+  // the x86_64 framework slice automatically. We name the interface
+  // generically so swift picks it for both arches.
+  const arch = process.arch === 'arm64' ? 'arm64-apple-macos' : 'x86_64-apple-macos'
+  await Bun.write(join(sharedModuleDir, `${arch}.swiftinterface`), SF_SYMBOLS_SHARED_INTERFACE)
+  await Bun.write(join(glyphsModuleDir, `${arch}.swiftinterface`), CORE_GLYPHS_LIB_INTERFACE)
+
+  // Two-level framework search path — SFSymbolsShared lives one level
+  // up, CoreGlyphsLib lives nested inside SFSymbolsShared's bundle.
+  const sharedFwShellDir = join(stageDir, 'SFSymbolsShared.framework')
+  const glyphsFwShellDir = join(stageDir, 'CoreGlyphsLib.framework')
+  await mkdir(sharedFwShellDir, { recursive: true })
+  await mkdir(glyphsFwShellDir, { recursive: true })
+  await symlink(
+    join(paths.sharedFramework, 'Versions', 'A', 'SFSymbolsShared'),
+    join(sharedFwShellDir, 'SFSymbolsShared'),
+  )
+  await symlink(
+    join(paths.glyphsLibFrameworkDir, 'CoreGlyphsLib.framework', 'Versions', 'A', 'CoreGlyphsLib'),
+    join(glyphsFwShellDir, 'CoreGlyphsLib'),
+  )
+
+  const scriptPath = join(stageDir, 'worker.swift')
   await Bun.write(scriptPath, SYMBOL_CODEPOINT_WORKER_SCRIPT)
-  logger?.debug?.(`spawning codepoint worker against ${fontPath}`)
-  const proc = Bun.spawn(['swift', scriptPath, fontPath], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-    stdin: 'pipe',
-  })
-  // Schedule script cleanup once the process exits.
+
+  logger?.debug?.(`spawning codepoint worker against ${fontPath} (app=${appPath})`)
+  const proc = Bun.spawn(
+    [
+      'swift',
+      '-I', stageDir,
+      '-F', stageDir,
+      '-framework', 'SFSymbolsShared',
+      '-framework', 'CoreGlyphsLib',
+      scriptPath,
+      fontPath,
+      metadataDir,
+    ],
+    {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: 'pipe',
+      env: {
+        ...process.env,
+        // Runtime loader needs the real framework tree so the
+        // symlinks resolve at exec time (dyld follows the link, then
+        // re-resolves rpath-relative @rpath/CoreGlyphsLib inside the
+        // SFSymbolsShared.framework bundle).
+        DYLD_FRAMEWORK_PATH: [
+          paths.glyphsLibFrameworkDir,
+          paths.sharedFrameworkDir,
+          process.env.DYLD_FRAMEWORK_PATH,
+        ].filter(Boolean).join(':'),
+      },
+    },
+  )
+  // Schedule stage cleanup once the process exits.
   void (async () => {
     try { await proc.exited } catch {}
-    void rm(scriptPath, { force: true }).catch(() => {})
+    void rm(stageDir, { recursive: true, force: true }).catch(() => {})
   })()
   return proc
 }
