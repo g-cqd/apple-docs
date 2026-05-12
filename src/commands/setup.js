@@ -16,27 +16,10 @@ const USER_AGENT = 'apple-docs/2.0'
 // payload, so this is fixed.
 const SNAPSHOT_TIER = 'full'
 
-/**
- * Download and install a pre-built documentation snapshot.
- *
- * Two install sources:
- *   - GitHub release (default) — fetches the latest tagged snapshot from
- *     the upstream repo, verifies the published `.sha256` sidecar, then
- *     extracts.
- *   - Local archive (`--archive <path>`) — operates on a tarball produced
- *     by `apple-docs snapshot build` on this or another host. Verifies a
- *     sibling `.sha256` sidecar when present, warns when absent (the
- *     operator built the archive locally; mandatory checksums on a path
- *     they control would be policy, not correctness). Closes the local-
- *     dev loop for self-hosters running their own snapshot pipeline.
- *
- * Both paths converge on the same `validateArchive` → tar extract →
- * post-install resource re-index sequence, so a fault in either source
- * surfaces identically.
- *
- * @param {{ force?: boolean, skipResources?: boolean, archive?: string | null }} opts
- * @param {{ db, dataDir, logger }} ctx
- */
+// setup: install a pre-built snapshot from GitHub releases (default) or
+// a local --archive path. Both routes converge on
+// validateArchive → tar extract → post-install resource re-index.
+// Local archives verify a sibling .sha256 when present, warn when absent.
 export async function setup(opts, ctx) {
   const { db } = ctx
   const force = opts.force ?? false

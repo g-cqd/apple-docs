@@ -46,30 +46,15 @@ export class DocsDatabase {
     enableForeignKeys(this.db)
   }
 
-  getEffectiveMmapSize() {
-    return this._effectiveMmapSize ?? 0
-  }
+  getEffectiveMmapSize() { return this._effectiveMmapSize ?? 0 }
+  _migrate() { runMigrations(this.db) }
 
-  _migrate() {
-    runMigrations(this.db)
-  }
-
-  /**
-   * Check if a table exists in the database.
-   * @param {string} name
-   * @returns {boolean}
-   */
   hasTable(name) {
     return !!this.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name)
   }
 
-  /**
-   * Run a synchronous unit of work inside a transaction.
-   * Rolls back on error and returns the callback result on success.
-   * @template T
-   * @param {(db: DocsDatabase) => T} fn
-   * @returns {T}
-   */
+  // tx(fn): synchronous unit of work in a transaction; rolls back on
+  // throw, returns the callback result on success.
   tx(fn) {
     this.db.run('BEGIN IMMEDIATE')
     try {

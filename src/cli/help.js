@@ -80,15 +80,10 @@ Options:
   --json               Output raw JSON
 
 Examples:
-  apple-docs search "NavigationStack"         # exact + CamelCase expansion
+  apple-docs search "NavigationStack"
   apple-docs search "Publsher"                # fuzzy: finds Publisher (d=1)
-  apple-docs search "navig"                   # substring match on titles
-  apple-docs search "async patterns" --no-eager  # wait for body results
-  apple-docs search "in-app purchase" --framework app-store-review
-  apple-docs search "Observation" --source wwdc
   apple-docs search "Swift Testing" --source wwdc --year 2024
   apple-docs search "privacy" --framework guidelines --read  # search + read best match
-  apple-docs search "View" --read --max-chars 4000            # paginated read
 `.trim(),
 
   read: `
