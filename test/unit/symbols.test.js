@@ -100,7 +100,7 @@ describe('SF Symbols', () => {
     expect(names).not.toContain('year_to_release')
   })
 
-  test('maps public symbol snapshot variants without multiplying private paths', () => {
+  test('maps snapshot variant paths for both scopes including weight/scale subdirs', () => {
     expect(getPrerenderedSymbolPath(ctx, 'public', 'pencil.and.sparkles', {
       weight: 'regular',
       scale: 'medium',
@@ -109,13 +109,19 @@ describe('SF Symbols', () => {
       weight: 'bold',
       scale: 'large',
     })).toBe(join(tmp, 'resources', 'symbols', 'public', 'bold-large', 'pencil.and.sparkles.svg'))
+    // Private now mirrors public: default variant at the scope root, non-default
+    // variants under `<weight>-<scale>/`.
+    expect(getPrerenderedSymbolPath(ctx, 'private', 'pencil.and.sparkles', {
+      weight: 'regular',
+      scale: 'medium',
+    })).toBe(join(tmp, 'resources', 'symbols', 'private', 'pencil.and.sparkles.svg'))
     expect(getPrerenderedSymbolPath(ctx, 'private', 'pencil.and.sparkles', {
       weight: 'bold',
       scale: 'large',
-    })).toBe(join(tmp, 'resources', 'symbols', 'private', 'pencil.and.sparkles.svg'))
+    })).toBe(join(tmp, 'resources', 'symbols', 'private', 'bold-large', 'pencil.and.sparkles.svg'))
 
     expect(appleAssetsTest.symbolVariantMatrix('public')).toHaveLength(27)
-    expect(appleAssetsTest.symbolVariantMatrix('private')).toEqual([{ weight: 'regular', scale: 'medium' }])
+    expect(appleAssetsTest.symbolVariantMatrix('private')).toHaveLength(27)
   })
 
   test('detects stale or incomplete pre-rendered symbol snapshots', async () => {

@@ -28,11 +28,14 @@ export function normalizeSymbolScale(value) {
 
 /**
  * Cartesian product of weight × scale used to drive snapshot pre-rendering.
- * Private symbols are scope-locked to the regular/medium variant — Apple's
- * private SF Symbols framework intentionally ships one rendering only.
+ * Both scopes get the full matrix: private SF Symbols from
+ * CoreGlyphsPrivate.bundle are NSSymbolImageRep-backed and honour
+ * `NSImage.withSymbolConfiguration(_:)` exactly like public ones, even
+ * though `NSImage(systemSymbolName:)` rejects them by name. The earlier
+ * "private is regular/medium only" note was wrong — confirmed on macOS
+ * 26.4 by re-rendering `10.timer.enclosure` at bold/large (15→198 px).
  */
-export function symbolVariantMatrix(scope) {
-  if (scope === 'private') return [{ weight: 'regular', scale: 'medium' }]
+export function symbolVariantMatrix(_scope) {
   const variants = []
   for (const weight of SYMBOL_WEIGHTS) {
     for (const scale of SYMBOL_SCALES) variants.push({ weight, scale })
@@ -55,7 +58,7 @@ export function getPrerenderedSymbolPath(ctx, scope, name, opts = {}) {
   const cleanScope = scope === 'private' ? 'private' : 'public'
   const weight = normalizeSymbolWeight(opts.weight)
   const scale = normalizeSymbolScale(opts.scale)
-  if (cleanScope === 'public' && (weight !== 'regular' || scale !== 'medium')) {
+  if (weight !== 'regular' || scale !== 'medium') {
     return join(ctx.dataDir, 'resources', 'symbols', cleanScope, `${weight}-${scale}`, `${sanitizeFileName(name)}.svg`)
   }
   return join(ctx.dataDir, 'resources', 'symbols', cleanScope, `${sanitizeFileName(name)}.svg`)

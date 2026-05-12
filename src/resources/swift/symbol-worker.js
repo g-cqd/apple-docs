@@ -35,20 +35,35 @@ func parseScale(_ s: String) -> NSImage.SymbolScale {
   }
 }
 
+func configuredImage(_ img: NSImage?, weight: String, scale: String) -> NSImage? {
+  guard let img else { return nil }
+  let cfg = NSImage.SymbolConfiguration(
+    pointSize: 256,
+    weight: parseWeight(weight),
+    scale: parseScale(scale),
+  )
+  return img.withSymbolConfiguration(cfg) ?? img
+}
+
 let publicProvider: (String, String, String) -> NSImage? = { name, weight, scale in
-  let cfg = NSImage.SymbolConfiguration(pointSize: 256, weight: parseWeight(weight), scale: parseScale(scale))
-  return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(cfg)
+  configuredImage(NSImage(systemSymbolName: name, accessibilityDescription: nil),
+                  weight: weight, scale: scale)
 }
 let privateBundles = [
   "/System/Library/CoreServices/CoreGlyphsPrivate.bundle",
   "/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphsPrivate.bundle",
 ].compactMap { Bundle(path: $0) }
-let privateProvider: (String) -> NSImage? = { name in
-  privateBundles.lazy.compactMap { $0.image(forResource: name) }.first
+// NSImage from Bundle.image(forResource:) is also NSSymbolImageRep-backed
+// for CoreGlyphsPrivate vector entries, so withSymbolConfiguration applies
+// the same way as for public symbols. Verified on macOS 26.4: pointSize
+// + .weight + .scale all change the rendered size/stroke.
+let privateProvider: (String, String, String) -> NSImage? = { name, weight, scale in
+  let raw = privateBundles.lazy.compactMap { $0.image(forResource: name) }.first
+  return configuredImage(raw, weight: weight, scale: scale)
 }
 
 func resolveImage(_ name: String, weight: String, scale: String) -> NSImage? {
-  if scope == "private" { return privateProvider(name) }
+  if scope == "private" { return privateProvider(name, weight, scale) }
   return publicProvider(name, weight, scale)
 }
 
