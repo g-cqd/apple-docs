@@ -20,9 +20,9 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, sep } from 'node:path'
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { spawnWithDeadline } from './spawn-with-deadline.js'
 
 /** LZMA2 flag set.
@@ -167,12 +167,26 @@ export async function createSevenZipArchive({
     throw new Error(`createSevenZipArchive: no files under ${sourceDir}`)
   }
 
+  // Resolve outputPath to absolute before spawning 7zz. 7zz runs with
+  // `cwd: sourceDir` (the listfile entries are relative to sourceDir),
+  // so a relative outputPath would land at `<sourceDir>/<outputPath>`
+  // — which is exactly the bug that hid every prior .7z snapshot build
+  // failure behind the much-louder timeout. The downstream statSync /
+  // unlinkSync / sha256 sidecar paths all consume `outputPath` too,
+  // so they have to see the same absolute form the caller intended.
+  const absOutput = isAbsolute(outputPath) ? outputPath : resolve(outputPath)
+  // Ensure the parent dir exists; 7zz creates the file but not intermediate
+  // directories when given an absolute path under a not-yet-created tree.
+  if (!existsSync(dirname(absOutput))) {
+    mkdirSync(dirname(absOutput), { recursive: true })
+  }
+
   // `7zz a` appends to an existing archive, which would silently make output
   // nondeterministic across runs that don't start from a clean slate. Delete
   // any prior artefact before invoking.
-  if (existsSync(outputPath)) unlinkSync(outputPath)
+  if (existsSync(absOutput)) unlinkSync(absOutput)
 
-  log.info?.(`[archive-7z] ${binary}: ${name ?? outputPath} (${files.length} files)`)
+  log.info?.(`[archive-7z] ${binary}: ${name ?? absOutput} (${files.length} files)`)
 
   // 7zz requires a seekable listfile (`errno=29 : Illegal seek` on /dev/stdin),
   // so write the sorted file list to a temp file in the parent of outputPath.
@@ -187,7 +201,7 @@ export async function createSevenZipArchive({
     'a',
     '-t7z',
     ...LZMA2_FLAGS,
-    outputPath,
+    absOutput,
     `@${listPath}`,
   ]
 
@@ -208,11 +222,11 @@ export async function createSevenZipArchive({
     rmSync(listDir, { recursive: true, force: true })
   }
 
-  const stat = statSync(outputPath)
-  log.info?.(`[archive-7z] wrote ${outputPath} (${formatSize(stat.size)})`)
+  const stat = statSync(absOutput)
+  log.info?.(`[archive-7z] wrote ${absOutput} (${formatSize(stat.size)})`)
 
   return {
-    outputPath,
+    outputPath: absOutput,
     fileCount: files.length,
     size: stat.size,
     binary,
