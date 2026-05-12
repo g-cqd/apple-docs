@@ -97,9 +97,10 @@ export async function createTarGzArchive({
   //                         (small but important for byte-determinism)
   //   -c                    stdout
   //
-  // Run through /bin/sh so we can chain tar -> gzip -> file with
+  // Run through /bin/bash so we can chain tar -> gzip -> file with
   // pipefail; otherwise an error in tar would be silently swallowed
-  // by gzip's successful exit.
+  // by gzip's successful exit. /bin/sh on Ubuntu is dash, which rejects
+  // `set -o pipefail` — bash is present on both Ubuntu and macOS.
   const sh = [
     'set -euo pipefail',
     `tar -cf - --no-recursion -T ${escapeShellArg(listPath)} | gzip -9 -n -c > ${escapeShellArg(absOutput)}`,
@@ -107,7 +108,7 @@ export async function createTarGzArchive({
 
   let result
   try {
-    result = spawnSync('/bin/sh', ['-c', sh], {
+    result = spawnSync('/bin/bash', ['-c', sh], {
       cwd: sourceDir,
       env: { ...process.env, LC_ALL: 'C' },
       stdio: ['ignore', 'pipe', 'pipe'],
