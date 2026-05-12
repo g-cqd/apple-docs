@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError } from '../lib/errors.js'
 import { sha256 } from '../lib/hash.js'
-import { createSevenZipArchive, writeSha256Sidecar } from '../lib/archive-7z.js'
+import { writeSha256Sidecar } from '../lib/archive-7z.js'
+import { createTarGzArchive } from '../lib/archive-targz.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { copyTreeFast, ensureDir, writeJSON } from '../storage/files.js'
 
@@ -26,11 +27,13 @@ const SNAPSHOT_TIER = 'full'
  * Apple fonts. A single shape keeps the install path simple and avoids
  * tier-aware code paths.
  *
- * P2 archive pipeline (this revision): the snapshot is now packaged as a
- * native LZMA2 `.7z` instead of `.tar.gz`. Decisions and bake-off numbers:
- * docs/spikes/archive-format.md. Consumers must have `7zz` (Homebrew
- * `sevenzip`) or `7z` (Debian `p7zip-full`) on PATH; `apple-docs setup`
- * surfaces a clear error when neither is installed.
+ * Archive pipeline: the snapshot is packaged as `.tar.gz` with `gzip -9`
+ * (max DEFLATE). The .7z migration in a5a0244 traded a 2x size win for
+ * 5x slower pack time; on the GH macos-26 runner (3-core M1 / 7 GB RAM)
+ * the corpus outgrew the LZMA2 budget — multiple snapshot attempts
+ * timed out at the 7zz spawn deadline. tar.gz finishes inside the
+ * workflow time budget for the same corpus and decompresses with stock
+ * `tar -xzf` everywhere, so consumers no longer need p7zip installed.
  *
  * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
@@ -127,9 +130,9 @@ export async function snapshotBuild(opts, ctx) {
     }
 
     // 7. Stage the snapshot payload into a single tree, then archive it as
-    // a deterministic .7z. Staging into buildDir keeps member paths in the
-    // archive flat (no `dataDir`-leak / no `../` games) and lets the 7z
-    // helper sort the entire tree as one input.
+    // a deterministic .tar.gz. Staging into buildDir keeps member paths
+    // in the archive flat (no `dataDir`-leak / no `../` games) and lets
+    // the archive helper sort the entire tree as one input.
     //
     // `copyTreeFast` uses APFS `clonefile(2)` on macOS so the ~946k file
     // entries (most of them being SF Symbol pre-renders) materialise in
@@ -161,10 +164,10 @@ export async function snapshotBuild(opts, ctx) {
     }
 
     ensureDir(outDir)
-    const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.7z`
+    const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.tar.gz`
     const archivePath = join(outDir, archiveName)
 
-    await createSevenZipArchive({
+    await createTarGzArchive({
       sourceDir: buildDir,
       outputPath: archivePath,
       name: archiveName,
@@ -177,7 +180,7 @@ export async function snapshotBuild(opts, ctx) {
     manifest.archiveSize = archiveSize
     manifest.archiveChecksum = archiveChecksum
 
-    // 8. Sidecar checksum (the .7z.sha256 file used for download verification).
+    // 8. Sidecar checksum (the .tar.gz.sha256 file used for download verification).
     // Use the shared sidecar helper so the format matches `shasum -a 256`
     // output and aligns with the symbols / fonts archive sidecars.
     const { sidecarPath: checksumPath } = await writeSha256Sidecar(archivePath)

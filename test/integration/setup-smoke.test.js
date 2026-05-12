@@ -80,7 +80,7 @@ async function buildReleaseFixture() {
     const result = await snapshotBuild({ out: outDir, tag: 'test-full-1' }, { db: sourceDb, dataDir: sourceDir, logger })
     return {
       tag: result.tag,
-      archiveUrl: 'https://fake.github.com/full.7z',
+      archiveUrl: 'https://fake.github.com/full.tar.gz',
       checksumUrl: 'https://fake.github.com/full.sha256',
       archiveBytes: await Bun.file(result.archivePath).arrayBuffer(),
       checksumText: await Bun.file(result.checksumPath).text(),
@@ -100,12 +100,12 @@ function installReleaseMock(fixture) {
         published_at: '2026-04-13T00:00:00Z',
         assets: [
           {
-            name: `apple-docs-full-${fixture.tag}.7z`,
+            name: `apple-docs-full-${fixture.tag}.tar.gz`,
             size: fixture.archiveBytes.byteLength,
             browser_download_url: fixture.archiveUrl,
           },
           {
-            name: `apple-docs-full-${fixture.tag}.7z.sha256`,
+            name: `apple-docs-full-${fixture.tag}.tar.gz.sha256`,
             size: fixture.checksumText.length,
             browser_download_url: fixture.checksumUrl,
           },

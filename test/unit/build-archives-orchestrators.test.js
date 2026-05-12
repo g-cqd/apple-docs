@@ -24,7 +24,7 @@ try { resolveSevenZipBinary() } catch { hasSevenZip = false }
 const describeIf = hasSevenZip ? describe : describe.skip
 
 describeIf('buildSymbolsArchive', () => {
-  test('emits one symbols-<tag>.7z plus a sidecar from a public+private fixture', async () => {
+  test('emits one symbols-<tag>.tar.gz plus a sidecar from a public+private fixture', async () => {
     const sym = join(dataDir, 'resources', 'symbols')
     mkdirSync(join(sym, 'public', 'regular-medium'), { recursive: true })
     writeFileSync(join(sym, 'public', 'regular-medium', 'heart.svg'), '<svg/>')
@@ -33,7 +33,7 @@ describeIf('buildSymbolsArchive', () => {
 
     const result = await buildSymbolsArchive({ dataDir, outDir, tag: 'snap-test' })
     expect(result).not.toBeNull()
-    expect(result.name).toBe('symbols-snap-test.7z')
+    expect(result.name).toBe('symbols-snap-test.tar.gz')
     expect(existsSync(result.path)).toBe(true)
     expect(existsSync(`${result.path}.sha256`)).toBe(true)
     expect(result.size).toBeGreaterThan(0)
@@ -58,14 +58,14 @@ describeIf('buildFontsArchives', () => {
     const result = await buildFontsArchives({ dataDir, outDir, tag: 'snap-fonts' })
     // fonts-all + 2 family archives
     expect(result.all).not.toBeNull()
-    expect(result.all.name).toBe('fonts-all-snap-fonts.7z')
+    expect(result.all.name).toBe('fonts-all-snap-fonts.tar.gz')
     expect(existsSync(result.all.path)).toBe(true)
     expect(existsSync(`${result.all.path}.sha256`)).toBe(true)
 
     expect(Object.keys(result.byFamily).sort()).toEqual(['sf-mono', 'sf-pro'])
     for (const fam of ['sf-pro', 'sf-mono']) {
       const a = result.byFamily[fam]
-      expect(a.name).toBe(`fonts-${fam}-snap-fonts.7z`)
+      expect(a.name).toBe(`fonts-${fam}-snap-fonts.tar.gz`)
       expect(existsSync(a.path)).toBe(true)
       expect(existsSync(`${a.path}.sha256`)).toBe(true)
       expect(a.sha256).toMatch(/^[0-9a-f]{64}$/)
@@ -74,7 +74,7 @@ describeIf('buildFontsArchives', () => {
     // No archive for families not present
     for (const fam of FONT_FAMILIES) {
       if (fam === 'sf-pro' || fam === 'sf-mono') continue
-      expect(existsSync(join(outDir, `fonts-${fam}-snap-fonts.7z`))).toBe(false)
+      expect(existsSync(join(outDir, `fonts-${fam}-snap-fonts.tar.gz`))).toBe(false)
     }
   })
 

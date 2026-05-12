@@ -65,14 +65,13 @@ async function installFromLocalArchive(ctx, opts) {
 
   logger.info(`Installing from local archive: ${archivePath} (${formatSize(archiveStats.size)})`)
 
-  // Sidecar discovery: same basename, `.sha256` / `.manifest.json` suffix.
-  // The naming convention is what `apple-docs snapshot build` writes. Two
-  // shapes are accepted: `.7z` (current; archive-7z helper writes
-  // `<file>.7z.sha256`) and `.tar.gz` (legacy snapshots predating P2).
+  // Sidecar discovery: full-archive-name + `.sha256` / strip-ext +
+  // `.manifest.json`. This is what `apple-docs snapshot build` writes
+  // for both formats — the `.sha256` sidecar always uses the FULL
+  // archive name (so `foo.tar.gz.sha256` for .tar.gz, `foo.7z.sha256`
+  // for legacy .7z); manifest strips the archive extension.
   const isSevenZip = archivePath.endsWith('.7z')
-  const checksumPath = isSevenZip
-    ? `${archivePath}.sha256`
-    : `${stripTarGz(archivePath)}.sha256`
+  const checksumPath = `${archivePath}.sha256`
   const manifestPath = isSevenZip
     ? `${archivePath.slice(0, -'.7z'.length)}.manifest.json`
     : `${stripTarGz(archivePath)}.manifest.json`
@@ -132,12 +131,14 @@ async function installFromGithubRelease(ctx, opts) {
   const release = await fetchLatestRelease()
   logger.info(`Found release: ${release.tag} (${release.date})`)
 
-  // P2: prefer `.7z` (current format); accept `.tar.gz` as a fallback so a
-  // host pulling a pre-P2 release still installs (forward-compat is one-way
-  // — pre-P2 setup binaries cannot read .7z, and we don't try to fix that).
+  // Prefer `.tar.gz` (current format after May 2026 — LZMA2 .7z didn't
+  // fit the GH runner's compression budget once the corpus grew past
+  // ~1M file entries). Accept `.7z` as a transitional fallback so a
+  // host pulling the very last .7z release before the format flip still
+  // installs (provided p7zip is on PATH).
   const archiveAsset =
-    release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.7z')) ??
-    release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.tar.gz'))
+    release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.tar.gz')) ??
+    release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.7z'))
   if (!archiveAsset) {
     throw new Error(`No snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
   }

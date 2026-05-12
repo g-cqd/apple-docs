@@ -28,12 +28,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
 
-      # P2 archive pipeline: snapshots ship as `.7z` (LZMA2 max). The
-      # `sevenzip` formula provides `7zz`, the upstream Igor Pavlov binary
-      # the bake-off was benchmarked against. See docs/spikes/archive-format.md.
-      - name: Install p7zip (7zz)
-        run: brew install sevenzip
-
+      # Archive pipeline: snapshots ship as `.tar.gz` with `gzip -9`
+      # (max DEFLATE). LZMA2 / .7z used to be the format but May 2026
+      # corpus growth pushed it past the 3-core M1 runner's wallclock
+      # budget — see docs/spikes/archive-format.md. Stock `tar` + `gzip`
+      # are pre-installed on macos-26, so no install step is needed.
       - name: Set data directory
         run: echo "APPLE_DOCS_HOME=${{ runner.temp }}/apple-docs" >> "$GITHUB_ENV"
 
@@ -92,11 +91,11 @@ jobs:
             --status-out dist-check/status.json \
             >/dev/null
           set -e
-          # Compare every .7z by sha256. The .sha256 sidecars themselves
+          # Compare every .tar.gz by sha256. The .sha256 sidecars themselves
           # are derived from the archive bytes; if archives match, sidecars
           # match by construction.
           fail=0
-          for f in dist/*.7z; do
+          for f in dist/*.tar.gz; do
             name=$(basename "$f")
             a=$(shasum -a 256 "$f" | awk '{print $1}')
             b=$(shasum -a 256 "dist-check/$name" | awk '{print $1}')
@@ -147,16 +146,7 @@ jobs:
             '',
             '## Install',
             '',
-            'Snapshots are packaged as native `.7z` (LZMA2 max). Install p7zip on the consumer host:',
-            '',
-            '```bash',
-            '# macOS',
-            'brew install sevenzip          # provides 7zz',
-            '# Debian/Ubuntu',
-            'sudo apt install p7zip-full    # provides 7z',
-            '```',
-            '',
-            'Then:',
+            'Snapshots are packaged as `.tar.gz` with `gzip -9` (max DEFLATE). Stock `tar` extracts them on every supported platform — no extra tooling required:',
             '',
             '```bash',
             'apple-docs setup',
@@ -171,8 +161,8 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: 'Snapshot (${{ steps.tag.outputs.tag }})'
           files: |
-            dist/*.7z
-            dist/*.7z.sha256
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
             dist/*.manifest.json
             dist/status.json
           draft: false

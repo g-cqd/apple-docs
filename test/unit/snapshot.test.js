@@ -6,19 +6,18 @@ import { Database } from 'bun:sqlite'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { snapshotBuild } from '../../src/commands/snapshot.js'
 import { createLogger } from '../../src/lib/logger.js'
-import { resolveSevenZipBinary } from '../../src/lib/archive-7z.js'
-
-// Snapshot archives are native .7z (P2 archive pipeline). Tests extract via
-// the same 7zz/7z binary the runtime uses, discovered on PATH at call time.
-async function extract7z(archivePath, destDir) {
-  const binary = resolveSevenZipBinary()
-  const proc = Bun.spawn([binary, 'x', '-y', `-o${destDir}`, archivePath], {
+// Snapshot archives are .tar.gz (post-May-2026 recalibration; .7z was
+// abandoned after sustained corpus growth pushed LZMA2 max compression
+// beyond the GH macos-26 runner's wallclock budget). Tests extract via
+// stock `tar -xzf` which is available on every host we run on.
+async function extractTarGz(archivePath, destDir) {
+  const proc = Bun.spawn(['tar', '-xzf', archivePath, '-C', destDir], {
     stdout: 'pipe', stderr: 'pipe',
   })
   const code = await proc.exited
   if (code !== 0) {
     const stderr = await new Response(proc.stderr).text()
-    throw new Error(`7z extraction failed (exit ${code}): ${stderr}`)
+    throw new Error(`tar.gz extraction failed (exit ${code}): ${stderr}`)
   }
 }
 
@@ -93,7 +92,7 @@ describe('snapshotBuild', () => {
 
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-'))
     try {
-      await extract7z(result.archivePath, extractDir)
+      await extractTarGz(result.archivePath, extractDir)
 
       const extractedDb = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
       try {
@@ -133,7 +132,7 @@ describe('snapshotBuild', () => {
 
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-'))
     try {
-      await extract7z(result.archivePath, extractDir)
+      await extractTarGz(result.archivePath, extractDir)
 
       const extractedDb = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
       try {
@@ -168,7 +167,7 @@ describe('snapshotBuild', () => {
     const result = await snapshotBuild({ out: outDir, tag: 'test-sym' }, { db, dataDir, logger })
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-sym-'))
     try {
-      await extract7z(result.archivePath, extractDir)
+      await extractTarGz(result.archivePath, extractDir)
       expect(existsSync(join(extractDir, 'resources', 'symbols', 'public', 'bold-large', 'heart.svg'))).toBe(true)
       expect(existsSync(join(extractDir, 'resources', 'symbols', 'private', 'pencil.and.sparkles.svg'))).toBe(true)
     } finally {

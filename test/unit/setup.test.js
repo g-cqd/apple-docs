@@ -87,12 +87,12 @@ describe('setup', () => {
           published_at: '2026-04-13T00:00:00Z',
           assets: [
             {
-              name: 'apple-docs-full-test-release-1.7z',
+              name: 'apple-docs-full-test-release-1.tar.gz',
               size: archiveBytes.byteLength,
-              browser_download_url: 'https://fake.github.com/archive.7z',
+              browser_download_url: 'https://fake.github.com/archive.tar.gz',
             },
             {
-              name: 'apple-docs-full-test-release-1.7z.sha256',
+              name: 'apple-docs-full-test-release-1.tar.gz.sha256',
               size: checksumText.length,
               browser_download_url: 'https://fake.github.com/checksum.sha256',
             },
@@ -100,7 +100,7 @@ describe('setup', () => {
         }), { status: 200 })
       }
 
-      if (urlStr.includes('archive.7z')) {
+      if (urlStr.includes('archive.tar.gz')) {
         return new Response(archiveBytes, { status: 200 })
       }
 
@@ -158,12 +158,12 @@ describe('setup', () => {
           published_at: '2026-04-13T00:00:00Z',
           assets: [
             {
-              name: 'apple-docs-full-bad-v1.7z',
+              name: 'apple-docs-full-bad-v1.tar.gz',
               size: 100,
-              browser_download_url: 'https://fake.github.com/archive.7z',
+              browser_download_url: 'https://fake.github.com/archive.tar.gz',
             },
             {
-              name: 'apple-docs-full-bad-v1.7z.sha256',
+              name: 'apple-docs-full-bad-v1.tar.gz.sha256',
               size: 80,
               browser_download_url: 'https://fake.github.com/checksum.sha256',
             },
@@ -171,12 +171,12 @@ describe('setup', () => {
         }), { status: 200 })
       }
 
-      if (urlStr.includes('archive.7z')) {
+      if (urlStr.includes('archive.tar.gz')) {
         return new Response(new Uint8Array([1, 2, 3]), { status: 200 })
       }
 
       if (urlStr.includes('checksum.sha256')) {
-        return new Response('0000000000000000000000000000000000000000000000000000000000000000  archive.7z\n', { status: 200 })
+        return new Response('0000000000000000000000000000000000000000000000000000000000000000  archive.tar.gz\n', { status: 200 })
       }
 
       return new Response('Not found', { status: 404 })
@@ -237,9 +237,9 @@ describe('setup', () => {
           published_at: '2026-04-13T00:00:00Z',
           assets: [
             {
-              name: 'apple-docs-full-test-release-no-checksum.7z',
+              name: 'apple-docs-full-test-release-no-checksum.tar.gz',
               size: 100,
-              browser_download_url: 'https://fake.github.com/archive.7z',
+              browser_download_url: 'https://fake.github.com/archive.tar.gz',
             },
             // intentionally NO .sha256 asset
           ],

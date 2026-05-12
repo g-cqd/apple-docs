@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
  * Build the font archives shipped with each snapshot release:
- *   - `fonts-all-<tag>.7z`        — every extracted family in one archive.
- *   - `fonts-<family>-<tag>.7z`   — one archive per family.
+ *   - `fonts-all-<tag>.tar.gz`        — every extracted family in one archive.
+ *   - `fonts-<family>-<tag>.tar.gz`   — one archive per family.
  *
  * Source: `<dataDir>/resources/fonts/extracted/<family>/`. Family ids are
  * the canonical slugs from src/resources/apple-assets.js. We deliberately
@@ -18,7 +18,8 @@ import { existsSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createLogger } from '../src/lib/logger.js'
-import { createSevenZipArchive, writeSha256Sidecar } from '../src/lib/archive-7z.js'
+import { writeSha256Sidecar } from '../src/lib/archive-7z.js'
+import { createTarGzArchive } from '../src/lib/archive-targz.js'
 import { ensureDir } from '../src/storage/files.js'
 
 /** Mirror of `APPLE_FONT_FAMILIES` ids in src/resources/apple-assets.js. */
@@ -77,11 +78,11 @@ export async function buildFontsArchives({ dataDir, outDir, tag, logger }) {
       logger?.info?.(`[fonts-archive] no ${family} extracted; skipping`)
       continue
     }
-    // Skip an empty family dir (would make 7zz fail).
+    // Skip an empty family dir (would make tar fail).
     if (readdirSync(familyDir).length === 0) continue
-    const name = `fonts-${family}-${tag}.7z`
+    const name = `fonts-${family}-${tag}.tar.gz`
     const outputPath = join(outDir, name)
-    const built = await createSevenZipArchive({
+    const built = await createTarGzArchive({
       sourceDir: familyDir,
       outputPath,
       name,
@@ -91,16 +92,16 @@ export async function buildFontsArchives({ dataDir, outDir, tag, logger }) {
     byFamily[family] = { name, path: outputPath, sha256, size: built.size, fileCount: built.fileCount }
   }
 
-  // Combined archive (`fonts-all-<tag>.7z`). Built from the same source tree
-  // so member paths are `<family>/<file>`. If no families were present we
-  // skip — buildSnapshot's status emitter will record `null`.
+  // Combined archive (`fonts-all-<tag>.tar.gz`). Built from the same source
+  // tree so member paths are `<family>/<file>`. If no families were present
+  // we skip — buildSnapshot's status emitter will record `null`.
   let all = null
   const presentFamilies = readdirSync(extractedRoot, { withFileTypes: true })
     .filter(d => d.isDirectory() && readdirSync(join(extractedRoot, d.name)).length > 0)
   if (presentFamilies.length > 0) {
-    const name = `fonts-all-${tag}.7z`
+    const name = `fonts-all-${tag}.tar.gz`
     const outputPath = join(outDir, name)
-    const built = await createSevenZipArchive({
+    const built = await createTarGzArchive({
       sourceDir: extractedRoot,
       outputPath,
       name,

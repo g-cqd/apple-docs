@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 /**
- * Build the combined SF Symbols pre-render archive: `symbols-<tag>.7z`.
+ * Build the combined SF Symbols pre-render archive: `symbols-<tag>.tar.gz`.
  *
  * Source: `<dataDir>/resources/symbols/`. Contains `public/` and `private/`
  * subdirectories preserving the existing weight-scale layout from the
  * symbol-bake step in `apple-docs sync`.
  *
- * Output: a single deterministic .7z file plus a `.sha256` sidecar.
+ * Output: a single deterministic .tar.gz file plus a `.sha256` sidecar.
  *
  * Driven by `scripts/build-snapshot.js` as part of the snapshot pipeline,
  * but invocable standalone for ad-hoc rebuilds.
@@ -18,7 +18,8 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createLogger } from '../src/lib/logger.js'
-import { createSevenZipArchive, writeSha256Sidecar } from '../src/lib/archive-7z.js'
+import { writeSha256Sidecar } from '../src/lib/archive-7z.js'
+import { createTarGzArchive } from '../src/lib/archive-targz.js'
 import { ensureDir } from '../src/storage/files.js'
 
 function parseArgs(argv) {
@@ -57,9 +58,9 @@ export async function buildSymbolsArchive({ dataDir, outDir, tag, logger }) {
   }
   ensureDir(outDir)
 
-  const name = `symbols-${tag}.7z`
+  const name = `symbols-${tag}.tar.gz`
   const outputPath = join(outDir, name)
-  const built = await createSevenZipArchive({
+  const built = await createTarGzArchive({
     sourceDir: symbolsDir,
     outputPath,
     name,
