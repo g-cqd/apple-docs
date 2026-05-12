@@ -40,8 +40,11 @@ export const LZMA2_FLAGS = Object.freeze([
   '-mta=off',
 ])
 
-/** Default deadline. A full snapshot archive can take several minutes. */
-const DEFAULT_DEADLINE_MS = 30 * 60_000
+/** Default deadline. The full snapshot archive carries ~1M file entries
+ *  (DB + raw JSON + markdown + ~266k pre-rendered SVG variants + fonts);
+ *  at LZMA2 `-mx=9` it took ~33 min on a macos-26 runner in May 2026, so
+ *  we hold the ceiling at 90 min to leave 3× headroom for growth. */
+const DEFAULT_DEADLINE_MS = 90 * 60_000
 
 /**
  * Resolve the 7z CLI on PATH. Prefers `7zz` (Homebrew `sevenzip`, upstream

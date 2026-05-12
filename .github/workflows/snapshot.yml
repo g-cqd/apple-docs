@@ -75,7 +75,16 @@ jobs:
       # and diff sha256s. The orchestrator already wrote the canonical
       # outputs into dist/; we re-run with --out dist-check/ and compare.
       # A mismatch fails the workflow before we publish anything.
+      #
+      # Only runs on the scheduled Sunday build. The determinism check is
+      # an "is the build reproducible across reruns" guard, not a "is this
+      # particular build correct" check — re-running the whole pipeline
+      # roughly doubles the workflow wallclock (~47 min → ~94 min on a
+      # 4-core macos-26 runner). Manual dispatches typically follow a code
+      # change the operator wants to ship promptly, so the cron is the
+      # right cadence for the determinism re-verification.
       - name: Verify determinism
+        if: github.event_name == 'schedule'
         run: |
           bun run scripts/build-snapshot.js \
             --out dist-check/ \
