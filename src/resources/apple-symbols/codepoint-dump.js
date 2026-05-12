@@ -41,7 +41,7 @@ const DEFAULT_APP_PATH = '/Applications/SF Symbols.app'
  * @returns {{ fontPath: string, metadataDir: string, sharedFramework: string,
  *   sharedFrameworkDir: string, glyphsLibFrameworkDir: string }}
  */
-export function pathsForApp(appPath) {
+function pathsForApp(appPath) {
   const sharedFrameworkDir = join(appPath, 'Contents', 'Frameworks')
   const sharedFramework = join(sharedFrameworkDir, 'SFSymbolsShared.framework')
   const glyphsLibFrameworkDir = join(

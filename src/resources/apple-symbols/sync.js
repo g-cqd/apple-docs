@@ -49,7 +49,7 @@ const SYMBOL_BUNDLES = {
 // forward, AND filter at prerender so a DB carrying stale rows from
 // pre-filter syncs doesn't surface the failure. Exported so a one-shot
 // cleanup script (or test) can also use the same source of truth.
-export const CATALOG_META_NAMES = new Set(['symbols', 'year_to_release'])
+const CATALOG_META_NAMES = new Set(['symbols', 'year_to_release'])
 
 const SYMBOL_DEFAULT_RENDER_SIZE = 128
 

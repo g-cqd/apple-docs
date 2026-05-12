@@ -93,7 +93,7 @@ export async function discoverLatest(opts = {}) {
  * @param {string} appPath
  * @returns {Promise<{ short: string, build: string } | null>}
  */
-export async function readInstalledVersion(appPath) {
+async function readInstalledVersion(appPath) {
   if (!existsSync(appPath)) return null
   const plistPath = join(appPath, 'Contents', 'Info.plist')
   if (!existsSync(plistPath)) return null
