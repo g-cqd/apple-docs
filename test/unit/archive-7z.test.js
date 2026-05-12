@@ -85,11 +85,15 @@ describe('listFilesSorted', () => {
 })
 
 describe('LZMA2_FLAGS', () => {
-  test('locks the bench-off flag set', () => {
-    expect(LZMA2_FLAGS).toContain('-mx=9')
+  test('locks the post-recalibration flag set (S0.2 + May 2026 dictionary-ceiling exit)', () => {
+    // S0.2 originally locked `-mx=9 -md=1024m -mfb=273 -mqs=on`. The May 2026
+    // recalibration (full weight/scale matrix landed for both scopes) dropped
+    // `-mx` to 5 and removed `-mfb=273` (only matters at -mx>=7) to keep the
+    // pack within the workflow's wallclock budget. See the LZMA2_FLAGS docblock
+    // in src/lib/archive-7z.js for the rationale and the size/speed tradeoff.
+    expect(LZMA2_FLAGS).toContain('-mx=5')
     expect(LZMA2_FLAGS).toContain('-m0=lzma2')
     expect(LZMA2_FLAGS).toContain('-md=1024m')
-    expect(LZMA2_FLAGS).toContain('-mfb=273')
     expect(LZMA2_FLAGS).toContain('-mqs=on')
     expect(LZMA2_FLAGS).toContain('-mtm=off')
     expect(LZMA2_FLAGS).toContain('-mtc=off')
