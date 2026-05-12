@@ -1,12 +1,12 @@
 import { join } from 'node:path'
-import { existsSync, mkdtempSync, rmSync, cpSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError } from '../lib/errors.js'
 import { sha256 } from '../lib/hash.js'
 import { createSevenZipArchive, writeSha256Sidecar } from '../lib/archive-7z.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
-import { ensureDir, writeJSON } from '../storage/files.js'
+import { copyTreeFast, ensureDir, writeJSON } from '../storage/files.js'
 
 // Operational tables are truncated rather than dropped — DocsDatabase
 // reopens them at first run and crashes if they're missing entirely.
@@ -131,6 +131,12 @@ export async function snapshotBuild(opts, ctx) {
     // archive flat (no `dataDir`-leak / no `../` games) and lets the 7z
     // helper sort the entire tree as one input.
     //
+    // `copyTreeFast` uses APFS `clonefile(2)` on macOS so the ~946k file
+    // entries (most of them being SF Symbol pre-renders) materialise in
+    // seconds via copy-on-write extent sharing. The previous `cpSync`
+    // path read+wrote every byte once, which on the GH macos-26 runner
+    // alone took 15-20 minutes before compression could start.
+    //
     // Layout inside the archive:
     //   apple-docs.db
     //   manifest.json
@@ -139,19 +145,19 @@ export async function snapshotBuild(opts, ctx) {
     //   markdown/...
     //   resources/fonts/extracted/...
     if (includeSymbols) {
-      cpSync(symbolsDir, join(buildDir, 'resources', 'symbols'), { recursive: true })
+      copyTreeFast(symbolsDir, join(buildDir, 'resources', 'symbols'))
     }
     const rawJsonDir = join(dataDir, 'raw-json')
     if (existsSync(rawJsonDir)) {
-      cpSync(rawJsonDir, join(buildDir, 'raw-json'), { recursive: true })
+      copyTreeFast(rawJsonDir, join(buildDir, 'raw-json'))
     }
     const markdownDir = join(dataDir, 'markdown')
     if (existsSync(markdownDir)) {
-      cpSync(markdownDir, join(buildDir, 'markdown'), { recursive: true })
+      copyTreeFast(markdownDir, join(buildDir, 'markdown'))
     }
     const fontsExtractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
     if (existsSync(fontsExtractedDir)) {
-      cpSync(fontsExtractedDir, join(buildDir, 'resources', 'fonts', 'extracted'), { recursive: true })
+      copyTreeFast(fontsExtractedDir, join(buildDir, 'resources', 'fonts', 'extracted'))
     }
 
     ensureDir(outDir)

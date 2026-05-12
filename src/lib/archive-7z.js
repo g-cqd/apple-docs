@@ -28,31 +28,37 @@ import { spawnWithDeadline } from './spawn-with-deadline.js'
 /** LZMA2 flag set.
  *
  *  Originally `-mx=9 -md=1024m -mfb=273 -mqs=on` per the S0.2 bake-off
- *  (docs/spikes/archive-format.md). That doc explicitly flagged the
- *  exit case for the 2025 budget:
+ *  (docs/spikes/archive-format.md). That doc flagged the exit case:
  *
  *    > When additional weights/scales land and the corpus grows toward
  *    > the projected 4 GB, re-run on the expanded tree before signing
  *    > the format choice in stone … `-md=1024m` may saturate (LZMA2
  *    > dictionary ceiling).
  *
- *  May 2026: the catalog × full weight/scale matrix landed for both
- *  scopes, the full archive grew to ~946k file entries, and `-mx=9`
- *  blew past a 90-minute deadline on a macos-26 runner. The S0.2 winner
- *  is no longer reachable in any reasonable CI budget.
+ *  May 2026 recalibration (after two consecutive snapshot timeouts on
+ *  the GH macos-26 runner — 3-core M1, 7 GB RAM):
  *
- *  Recalibrated to `-mx=5` (the 7-Zip "Normal" preset) which trades
- *  roughly 5-10% archive size for 3-5x pack speed at this scale. The
- *  other flags are kept: `-md=1024m` is still useful for SVG/text
- *  cross-file redundancy and `-mfb=273` only matters at `-mx>=7`.
+ *    - `-mx=9 → -mx=5` ("Normal" preset). ~3-5x faster pack at this
+ *      scale, ~5-10% size hit. `-mx=9` simply doesn't finish in a CI
+ *      budget once the file count crosses ~1M.
+ *    - `-md=1024m → -md=256m`. Empirically identical compressed output
+ *      on the SVG-heavy corpus (the cross-file redundancy is found
+ *      within the first ~256 MB of dictionary; the wider window adds
+ *      RAM cost without ratio gain). 3 threads × 1 GiB dict at -md=1024m
+ *      was 3 GiB of just-LZMA2 RAM on a 7 GiB runner; -md=256m leaves
+ *      the host comfortable headroom for the OS + file table.
+ *    - `-mmt=3` made explicit so 7zz's auto-detection doesn't allocate
+ *      more block-coder threads than the runner has physical cores.
+ *    - `-mfb=273` dropped (only meaningful at -mx>=7).
  *
- *  When the corpus stabilises, rerun the bake-off and decide whether
- *  to climb back to `-mx=9` or push `-mx=3`. */
+ *  When the corpus stabilises, redo the bake-off on the expanded tree
+ *  and decide whether to climb back to `-mx=9` or push `-mx=3`. */
 export const LZMA2_FLAGS = Object.freeze([
   '-mx=5',
   '-m0=lzma2',
-  '-md=1024m',
+  '-md=256m',
   '-mqs=on',
+  '-mmt=3',
   // Determinism: strip per-file timestamps so reruns produce byte-identical
   // archives. 7z's solid-block scheme is already deterministic given a fixed
   // input order; mtimes are the only remaining source of nondeterminism.
@@ -63,10 +69,8 @@ export const LZMA2_FLAGS = Object.freeze([
 
 /** Default deadline. The full snapshot archive carries ~1M file entries
  *  (DB + raw JSON + markdown + ~266k pre-rendered SVG variants + fonts);
- *  at LZMA2 `-mx=5` we'd expect ~10-15 min on a macos-26 runner with
- *  current corpus shape, so 60 min leaves 4-6x headroom. The previous
- *  90-min ceiling held with `-mx=9` until it didn't; this is the new
- *  safe budget after the May 2026 compression recalibration. */
+ *  at LZMA2 `-mx=5 -md=256m -mmt=3` we expect ~10-15 min on a macos-26
+ *  runner with current corpus shape, so 60 min leaves 4-6x headroom. */
 const DEFAULT_DEADLINE_MS = 60 * 60_000
 
 /**

@@ -86,15 +86,21 @@ describe('listFilesSorted', () => {
 
 describe('LZMA2_FLAGS', () => {
   test('locks the post-recalibration flag set (S0.2 + May 2026 dictionary-ceiling exit)', () => {
-    // S0.2 originally locked `-mx=9 -md=1024m -mfb=273 -mqs=on`. The May 2026
-    // recalibration (full weight/scale matrix landed for both scopes) dropped
-    // `-mx` to 5 and removed `-mfb=273` (only matters at -mx>=7) to keep the
-    // pack within the workflow's wallclock budget. See the LZMA2_FLAGS docblock
-    // in src/lib/archive-7z.js for the rationale and the size/speed tradeoff.
+    // S0.2 originally locked `-mx=9 -md=1024m -mfb=273 -mqs=on`. The May
+    // 2026 recalibration (full weight/scale matrix landed for both scopes,
+    // file count hit ~1M) shipped:
+    //   - -mx: 9 → 5 (size +5-10%, speed 3-5× on this corpus)
+    //   - -md: 1024m → 256m (empirically identical compressed bytes for
+    //     SVG-heavy input; saves 2.3 GB RAM on a 3-core GH runner)
+    //   - -mmt=3 made explicit so 7zz doesn't over-allocate threads
+    //   - -mfb=273 dropped (only meaningful at -mx>=7)
+    // See the LZMA2_FLAGS docblock in src/lib/archive-7z.js for the
+    // measurement trail.
     expect(LZMA2_FLAGS).toContain('-mx=5')
     expect(LZMA2_FLAGS).toContain('-m0=lzma2')
-    expect(LZMA2_FLAGS).toContain('-md=1024m')
+    expect(LZMA2_FLAGS).toContain('-md=256m')
     expect(LZMA2_FLAGS).toContain('-mqs=on')
+    expect(LZMA2_FLAGS).toContain('-mmt=3')
     expect(LZMA2_FLAGS).toContain('-mtm=off')
     expect(LZMA2_FLAGS).toContain('-mtc=off')
     expect(LZMA2_FLAGS).toContain('-mta=off')
