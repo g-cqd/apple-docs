@@ -12,8 +12,11 @@ export const FONT_TEXT_MAX_CHARS = 256
 
 /** Sizes the SF Symbol renderer is willing to accept. Discrete to keep the
  * persistent render cache from growing unboundedly with attacker-chosen
- * parameter combinations. */
-export const ALLOWED_SYMBOL_SIZES = new Set([8, 12, 16, 20, 24, 32, 48, 64, 96, 128])
+ * parameter combinations. 256 is the canonical "download a single symbol
+ * at high resolution" size and is emitted by the symbols-page detail
+ * panel's download links; smaller sizes serve the grid/inspector
+ * previews. */
+export const ALLOWED_SYMBOL_SIZES = new Set([8, 12, 16, 20, 24, 32, 48, 64, 96, 128, 256])
 
 const COLOR_RE = /^#?[0-9A-Fa-f]{6}$/
 

@@ -2933,6 +2933,27 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   word-break: break-word;
 }
 
+.symbol-codepoint {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.symbol-codepoint__hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  background: var(--code-bg, rgba(127, 127, 127, 0.12));
+  color: var(--code-fg, inherit);
+}
+
+.symbol-codepoint__glyph {
+  font-size: 1.05rem;
+  line-height: 1;
+  user-select: text;
+}
+
 /* -- Mobile sticky bottom action bar (detail route, <1024) -- */
 .symbols-mobile-bar {
   position: fixed;

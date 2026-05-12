@@ -55,15 +55,44 @@ function renderMetadata(detailMeta, symbol) {
   if (aliases) rows.push(['Aliases', aliases])
   const availability = formatAvailability(symbol.availability)
   if (availability) rows.push(['Availability', availability])
-  if (symbol.codepoint_display) rows.push(['Unicode', symbol.codepoint_display])
+  if (symbol.codepoint != null && symbol.codepoint_display) {
+    rows.push(['Unicode', renderCodepointCell(symbol.codepoint, symbol.codepoint_display)])
+  }
   if (symbol.bundle_version || symbol.bundleVersion) {
     rows.push(['Bundle', symbol.bundle_version ?? symbol.bundleVersion])
   }
   for (const [k, v] of rows) {
     const dt = document.createElement('dt'); dt.textContent = k
-    const dd = document.createElement('dd'); dd.textContent = v
+    const dd = document.createElement('dd')
+    if (v instanceof Node) dd.append(v)
+    else dd.textContent = v
     detailMeta.append(dt, dd)
   }
+}
+
+/**
+ * Render the Unicode cell as `<code>U+XXXXX</code>` followed by the
+ * actual character at that codepoint. The character only renders
+ * faithfully when the host has SF Pro (or another font with the PUA
+ * glyph) installed — on Apple platforms that's the system default; on
+ * Linux/Windows the glyph falls back to .notdef but the codepoint
+ * itself stays copyable. The character is wrapped in a span tagged
+ * with `font-family: system-ui` so the user agent picks the platform
+ * font without us having to ship SF Pro as a webfont on this page.
+ */
+function renderCodepointCell(codepoint, display) {
+  const wrap = document.createElement('span')
+  wrap.className = 'symbol-codepoint'
+  const code = document.createElement('code')
+  code.className = 'symbol-codepoint__hex'
+  code.textContent = display
+  const ch = document.createElement('span')
+  ch.className = 'symbol-codepoint__glyph'
+  ch.style.fontFamily = 'system-ui, -apple-system, "SF Pro", sans-serif'
+  ch.textContent = String.fromCodePoint(codepoint)
+  ch.setAttribute('aria-hidden', 'true')
+  wrap.append(code, document.createTextNode(' '), ch)
+  return wrap
 }
 
 /**
@@ -122,10 +151,11 @@ export function createDetailPanel(deps) {
     if (detail.name) detail.name.textContent = symbol.name
     if (detail.scope) detail.scope.textContent =
       symbol.scope === 'private' ? 'Private CoreGlyphs' : 'Public SF Symbol'
-    // Surface the "weight/scale apply to public only" hint when looking
-    // at a private symbol — withSymbolConfiguration is a no-op there.
+    // Weight/scale apply uniformly to both public and private symbols
+    // (NSImage.withSymbolConfiguration honours private CoreGlyphs reps),
+    // so the previous "axes don't apply here" hint is permanently hidden.
     const axesHint = document.getElementById('symbols-detail-axes-hint')
-    if (axesHint) axesHint.hidden = symbol.scope !== 'private'
+    if (axesHint) axesHint.hidden = true
     refreshDetail()
     fetchMetadata(symbol).then(meta => {
       if (activeSymbol === symbol) renderMetadata(detail.meta, meta)
