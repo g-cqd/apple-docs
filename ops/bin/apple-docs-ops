@@ -1,160 +1,20 @@
-#!/bin/bash
-set -euo pipefail
+#!/bin/sh
+# Shim → JS implementation in ops/cli.js. The legacy `status` verb is
+# translated to `service status all` for back-compat with ops/README.md;
+# everything else passes through unchanged.
+set -eu
+DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+. "$DIR/_exec.sh"
 
-BIN_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
-OPS=$(cd -- "$BIN_DIR/.." && pwd)
-# shellcheck source=ops/lib/env.sh
-. "${OPS}/lib/env.sh"
-
-usage() {
-  cat <<EOF
-Usage:
-  apple-docs-ops install
-  apple-docs-ops deploy
-  apple-docs-ops smoke
-  apple-docs-ops status
-  apple-docs-ops render
-  apple-docs-ops proxy <run|validate|reload|status>
-  apple-docs-ops service <start|stop|restart|status> <proxy|web|mcp|watchdog|tunnel-web|tunnel-mcp|all>
-EOF
-}
-
-label_for() {
-  case "${1:-}" in
-    proxy) echo "${LABEL_PROXY}" ;;
-    web) echo "${LABEL_WEB}" ;;
-    mcp) echo "${LABEL_MCP}" ;;
-    watchdog) echo "${LABEL_WATCHDOG}" ;;
-    tunnel-web|cloudflared-web) echo "${LABEL_TUNNEL_WEB}" ;;
-    tunnel-mcp|cloudflared-mcp) echo "${LABEL_TUNNEL_MCP}" ;;
-    *)
-      echo "ERROR: unknown service '$1'" >&2
-      exit 64
-      ;;
-  esac
-}
-
-plist_for() {
-  local label
-  label=$(label_for "$1")
-  echo "/Library/LaunchDaemons/${label}.plist"
-}
-
-service_targets() {
-  case "${1:-}" in
-    all) printf '%s\n' proxy web mcp watchdog tunnel-web tunnel-mcp ;;
-    *) printf '%s\n' "$1" ;;
-  esac
-}
-
-service_start() {
-  local service="$1" label plist
-  label=$(label_for "$service")
-  plist=$(plist_for "$service")
-
-  if /usr/bin/sudo -n /bin/launchctl print "system/$label" >/dev/null 2>&1; then
-    echo "restart loaded service: $service ($label)"
-    /usr/bin/sudo -n /bin/launchctl kickstart -k "system/$label"
-  else
-    echo "bootstrap service: $service ($label)"
-    /usr/bin/sudo -n /bin/launchctl bootstrap system "$plist"
-  fi
-}
-
-service_stop() {
-  local service="$1" label
-  label=$(label_for "$service")
-  echo "stop service: $service ($label)"
-  /usr/bin/sudo -n /bin/launchctl bootout "system/$label"
-}
-
-service_status() {
-  local service="$1" label tmp
-  label=$(label_for "$service")
-  tmp=$(/usr/bin/mktemp)
-
-  if /usr/bin/sudo -n /bin/launchctl print "system/$label" >"$tmp" 2>&1; then
-    echo "$service ($label)"
-    if ! /usr/bin/awk '/state =|pid =|last exit code =|path =/ { print }' "$tmp"; then
-      cat "$tmp"
-    fi
-  else
-    echo "$service ($label)"
-    cat "$tmp"
-    rm -f "$tmp"
-    return 1
-  fi
-
-  rm -f "$tmp"
-}
-
-aggregate_status() {
-  local service
-
-  echo "== launchd services =="
-  for service in proxy web mcp watchdog tunnel-web tunnel-mcp; do
-    service_status "$service" || true
-    echo ""
-  done
-
-  echo "== caddy upstreams =="
-  "$OPS/bin/proxy-status.sh" || true
-  echo ""
-
-  echo "== smoke tests =="
-  "$OPS/bin/smoke-test.sh" || true
-}
-
-command="${1:-}"
-case "$command" in
-  install)
-    exec /usr/bin/sudo -E "$OPS/bin/install-daemons.sh"
-    ;;
-  deploy)
-    shift
-    exec "$OPS/bin/deploy-update.sh" "$@"
-    ;;
-  smoke)
-    exec "$OPS/bin/smoke-test.sh"
-    ;;
+case "${1:-}" in
   status)
-    aggregate_status
+    shift
+    exec_bun_cli "$DIR/../cli.js" service status all "$@"
     ;;
-  render)
-    exec "$OPS/bin/render-all.sh"
-    ;;
-  proxy)
-    subcommand="${2:-}"
-    case "$subcommand" in
-      run) exec "$OPS/bin/run-proxy.sh" ;;
-      validate) exec "$OPS/bin/proxy-validate.sh" ;;
-      reload) exec "$OPS/bin/proxy-reload.sh" ;;
-      status) exec "$OPS/bin/proxy-status.sh" ;;
-      *) usage; exit 64 ;;
-    esac
-    ;;
-  service)
-    action="${2:-}"
-    target="${3:-}"
-
-    if [ -z "$action" ] || [ -z "$target" ]; then
-      usage
-      exit 64
-    fi
-
-    while IFS= read -r service; do
-      case "$action" in
-        start) service_start "$service" ;;
-        stop) service_stop "$service" ;;
-        restart) service_start "$service" ;;
-        status) service_status "$service" || true ;;
-        *) usage; exit 64 ;;
-      esac
-      [ "$action" = "status" ] || echo ""
-    done < <(service_targets "$target")
+  '')
+    exec_bun_cli "$DIR/../cli.js" --help
     ;;
   *)
-    usage
-    exit 64
+    exec_bun_cli "$DIR/../cli.js" "$@"
     ;;
 esac
