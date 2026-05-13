@@ -237,9 +237,9 @@ describe('createReaderPool', () => {
     const pool = createReaderPool({
       dbPath: DB_PATH, size: 1, WorkerCtor: FakeCtor, maxPendingPerWorker: 2, deadlineMs: 0,
     })
-    const a = pool.run('search', ['a'])
-    const b = pool.run('search', ['b'])
-    await expect(pool.run('search', ['c'])).rejects.toThrow(/maxPendingPerWorker/)
+    const a = pool.run('searchPages', ['a'])
+    const b = pool.run('searchPages', ['b'])
+    await expect(pool.run('searchPages', ['c'])).rejects.toThrow(/maxPendingPerWorker/)
     expect(pool.stats().backpressureRejects).toBe(1)
     // resolve the held calls so close() doesn't hang
     const w = FakeCtor.instances[0]
@@ -255,7 +255,10 @@ describe('createReaderPool', () => {
     const pool = createReaderPool({
       dbPath: DB_PATH, size: 1, WorkerCtor: FakeCtor, deadlineMs: 50,
     })
-    await expect(pool.run('search', ['x'])).rejects.toThrow(/exceeded deadline 50ms/)
+    // Use `getPage` here so the pool's deadlineMs=50 default takes
+    // effect; `searchPages` has a 1.5s per-op deadline that overrides
+    // it (see PER_OP_DEADLINE_MS in src/storage/reader-pool.js).
+    await expect(pool.run('getPage', ['x'])).rejects.toThrow(/exceeded deadline 50ms/)
     expect(pool.stats().timeouts).toBe(1)
     await pool.close()
   })
@@ -268,7 +271,7 @@ describe('createReaderPool', () => {
       },
     })
     const pool = createReaderPool({ dbPath: DB_PATH, size: 1, WorkerCtor: FakeCtor, deadlineMs: 0 })
-    await expect(pool.run('search', ['x'])).resolves.toBe('ok')
+    await expect(pool.run('searchPages', ['x'])).resolves.toBe('ok')
     await pool.close()
   })
 })

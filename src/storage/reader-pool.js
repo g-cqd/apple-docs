@@ -2,6 +2,7 @@ import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import { availableParallelism } from 'node:os'
 import { BackpressureError } from '../lib/semaphore.js'
+import { READ_OPS } from './reader-worker.js'
 
 // Typed error from `pool.run()` deadline expirations — lets the cascade
 // distinguish "partial results: deep tier timed out" from a real failure.
@@ -206,6 +207,16 @@ export function createReaderPool(opts = {}) {
 
   async function run(op, args = [], runOpts = {}) {
     if (closed) throw new Error('reader-pool: run() after close()')
+    // Reject ops that aren't on the worker's whitelist immediately, on
+    // the parent thread, before we pay for a worker round-trip. The
+    // worker still independently rejects on its side as defense in
+    // depth; this check avoids the race where a busy CI runner blows
+    // past the per-op deadline before the worker can post its rejection
+    // back — masking the real "not in whitelist" error behind a generic
+    // deadline error.
+    if (!READ_OPS.has(op)) {
+      throw new Error(`reader-pool: operation not in whitelist: ${op}`)
+    }
     const idx = pickSlot()
     if (idx < 0) throw new Error('reader-pool: no workers available')
     const slot = slots[idx]
