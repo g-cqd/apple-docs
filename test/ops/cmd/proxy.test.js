@@ -112,4 +112,39 @@ describe('runProxy', () => {
     expect(code).toBe(1)
     expect(log.lines.some(m => m.startsWith('E:proxy: could not query'))).toBe(true)
   })
+
+  test('run supervises caddy via spawn (NOT runCmd) and propagates exit code', async () => {
+    // runCmd has a 60s default deadline that would SIGKILL caddy mid-
+    // serve. `proxy run` must spawn caddy directly and wait on its
+    // exit without any timeout.
+    let spawnCalledWith
+    const spawn = (args, opts) => {
+      spawnCalledWith = { args, opts }
+      return {
+        exited: Promise.resolve(0),
+        kill: () => {},
+      }
+    }
+    const r = captureRunner()
+    const code = await runProxy({
+      args: ['run'], envLoader: () => ENV, logger: captureLogger(),
+      deps: { ...presentDeps(r), spawn },
+    })
+    expect(code).toBe(0)
+    // runCmd was NOT used for the long-running spawn.
+    expect(r.calls.length).toBe(0)
+    expect(spawnCalledWith.args[0]).toBe('/opt/homebrew/bin/caddy')
+    expect(spawnCalledWith.args[1]).toBe('run')
+    expect(spawnCalledWith.opts.stdout).toBe('inherit')
+    expect(spawnCalledWith.opts.stderr).toBe('inherit')
+  })
+
+  test('run returns a non-zero exit if caddy exits non-zero', async () => {
+    const spawn = () => ({ exited: Promise.resolve(2), kill: () => {} })
+    const code = await runProxy({
+      args: ['run'], envLoader: () => ENV, logger: captureLogger(),
+      deps: { ...presentDeps(), spawn },
+    })
+    expect(code).toBe(2)
+  })
 })

@@ -69,7 +69,10 @@ export default async function runProxy(ctx = {}) {
     return await runCaddy(runner, logger, [caddyBin, 'validate', '--config', configPath, '--adapter', 'caddyfile'], { env: childEnv })
   }
   if (verb === 'run') {
-    return await runCaddy(runner, logger, [caddyBin, 'run', '--config', configPath, '--adapter', 'caddyfile'], { env: childEnv })
+    return await superviseCaddy(
+      [caddyBin, 'run', '--config', configPath, '--adapter', 'caddyfile'],
+      { env: childEnv, logger, spawn: ctx.deps?.spawn ?? Bun.spawn },
+    )
   }
   if (verb === 'reload') {
     // Validate first so we don't try to apply a broken config — the
@@ -106,6 +109,28 @@ async function runCaddy(runner, logger, args, opts) {
   } catch (err) {
     logger.error(err?.message ?? String(err))
     return 1
+  }
+}
+
+/**
+ * Long-running caddy supervision. Bypasses runCmd because runCmd's
+ * default 60s deadline would SIGKILL caddy after the timer fires — for
+ * the `run` verb we want bun to wait on caddy indefinitely and let
+ * launchd manage restarts. Forwards SIGTERM/SIGINT/SIGHUP so launchd's
+ * "stop the daemon" path (or `service stop proxy`) drains caddy
+ * cleanly rather than killing it via parent death.
+ */
+async function superviseCaddy(args, { env, logger, spawn }) {
+  logger.say(`$ ${args.join(' ')}`)
+  const proc = spawn(args, { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', env })
+  const forward = (sig) => { try { proc.kill(sig) } catch { /* already gone */ } }
+  const sigs = ['SIGTERM', 'SIGINT', 'SIGHUP']
+  for (const s of sigs) process.on(s, () => forward(s))
+  try {
+    const code = await proc.exited
+    return typeof code === 'number' ? code : 0
+  } finally {
+    for (const s of sigs) process.removeAllListeners(s)
   }
 }
 
