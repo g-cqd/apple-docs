@@ -41,7 +41,7 @@ jobs:
     env:
       APPLE_DOCS_NO_GIT_AUTH: '1'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
@@ -81,7 +81,7 @@ jobs:
 
       - name: Upload mutation report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: mutation-report
           path: reports/stryker/
