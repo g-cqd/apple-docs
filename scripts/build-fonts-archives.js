@@ -1,15 +1,20 @@
 #!/usr/bin/env bun
 /**
- * Build the font archives shipped with each snapshot release:
+ * Build the combined fonts archive for the snapshot pipeline:
  *   - `fonts-all-<tag>.tar.gz`        — every extracted family in one archive.
- *   - `fonts-<family>-<tag>.tar.gz`   — one archive per family.
  *
  * Source: `<dataDir>/resources/fonts/extracted/<family>/`. Family ids are
  * the canonical slugs from src/resources/apple-assets.js. We deliberately
- * hard-code the list here so we can build the archives even if the corpus
+ * hard-code the list here so we can build the archive even if the corpus
  * sqlite file is closed / unavailable.
  *
- * Each archive is paired with a `.sha256` sidecar.
+ * Per-family archives used to be built alongside but are no longer
+ * shipped — they duplicated the full-snapshot payload at no consumer
+ * benefit. A running instance that needs a single-family download can
+ * subset on demand via /api/fonts/subset, or build a per-family archive
+ * from `resources/fonts/extracted/<family>/` directly.
+ *
+ * The archive is paired with a `.sha256` sidecar.
  *
  * Args: --data-dir <path> --out <dir> --tag <name>
  */
@@ -59,8 +64,10 @@ function parseArgs(argv) {
  * @param {{info?: Function, warn?: Function, error?: Function}} [args.logger]
  * @returns {Promise<{
  *   all: {name, path, sha256, size, fileCount} | null,
- *   byFamily: Record<string, {name, path, sha256, size, fileCount}>,
+ *   byFamily: Record<string, never>,
  * }>}
+ *   `byFamily` is intentionally always empty in the current pipeline;
+ *   the field is kept for callsite + status.json compatibility.
  */
 export async function buildFontsArchives({ dataDir, outDir, tag, logger }) {
   const extractedRoot = join(dataDir, 'resources', 'fonts', 'extracted')
@@ -70,31 +77,9 @@ export async function buildFontsArchives({ dataDir, outDir, tag, logger }) {
   }
   ensureDir(outDir)
 
-  /** @type {Record<string, any>} */
-  const byFamily = {}
-  for (const family of FONT_FAMILIES) {
-    const familyDir = join(extractedRoot, family)
-    if (!existsSync(familyDir)) {
-      logger?.info?.(`[fonts-archive] no ${family} extracted; skipping`)
-      continue
-    }
-    // Skip an empty family dir (would make tar fail).
-    if (readdirSync(familyDir).length === 0) continue
-    const name = `fonts-${family}-${tag}.tar.gz`
-    const outputPath = join(outDir, name)
-    const built = await createTarGzArchive({
-      sourceDir: familyDir,
-      outputPath,
-      name,
-      logger,
-    })
-    const { sha256 } = await writeSha256Sidecar(outputPath)
-    byFamily[family] = { name, path: outputPath, sha256, size: built.size, fileCount: built.fileCount }
-  }
-
-  // Combined archive (`fonts-all-<tag>.tar.gz`). Built from the same source
-  // tree so member paths are `<family>/<file>`. If no families were present
-  // we skip — buildSnapshot's status emitter will record `null`.
+  // Combined archive (`fonts-all-<tag>.tar.gz`). Built from the extracted
+  // root so member paths are `<family>/<file>`. Skip when no families
+  // are present — buildSnapshot's status emitter will record `null`.
   let all = null
   const presentFamilies = readdirSync(extractedRoot, { withFileTypes: true })
     .filter(d => d.isDirectory() && readdirSync(join(extractedRoot, d.name)).length > 0)
@@ -111,7 +96,7 @@ export async function buildFontsArchives({ dataDir, outDir, tag, logger }) {
     all = { name, path: outputPath, sha256, size: built.size, fileCount: built.fileCount }
   }
 
-  return { all, byFamily }
+  return { all, byFamily: {} }
 }
 
 if (import.meta.main) {

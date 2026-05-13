@@ -107,66 +107,37 @@ jobs:
           rm -rf dist-check
           if [ "$fail" != "0" ]; then exit 1; fi
 
-      # Generate the release-notes body. We do this in-shell so the table
-      # can include real sizes / sha256s read from dist/status.json.
-      # Actions expressions cannot appear inside a heredoc — the YAML/expr
-      # lexer evaluates `${{ }}` before the shell sees the body — so we
-      # surface the schedule-vs-dispatch prologue via env.
+      # Generate the release-notes body via a dedicated script. The
+      # previous in-step `bun run --silent <<EOF ... EOF` was a stdin
+      # invocation `bun run` does not support; it printed bun's CLI
+      # help into release-body.md instead of the rendered markdown.
       - name: Compose release notes
-        id: notes
         env:
           RELEASE_PROLOGUE: ${{ github.event_name == 'schedule' && 'Scheduled snapshot build.' || 'Manual snapshot build.' }}
+          APPLE_DOCS_STATUS: dist/status.json
         run: |
-          bun run --silent <<'EOF' > dist/release-body.md
-          const s = await Bun.file('dist/status.json').json()
-          const fmt = b => {
-            if (b > 1e9) return (b/1e9).toFixed(2)+' GB'
-            if (b > 1e6) return (b/1e6).toFixed(1)+' MB'
-            if (b > 1e3) return (b/1e3).toFixed(1)+' KB'
-            return b+' B'
-          }
-          const short = h => h ? '`'+h.slice(0,12)+'…`' : 'n/a'
-          const rows = []
-          rows.push(['Archive','Size','SHA-256'])
-          rows.push(['---','---','---'])
-          const push = (a) => a && rows.push(['`'+a.name+'`', fmt(a.size), short(a.sha256)])
-          push(s.archives.snapshot)
-          push(s.archives.symbols)
-          push(s.archives.fonts_all)
-          for (const [fam, info] of Object.entries(s.archives.fonts_by_family || {})) push(info)
-          const table = rows.map(r=>'| '+r.join(' | ')+' |').join('\n')
-          const body = [
-            process.env.RELEASE_PROLOGUE || 'Snapshot build.',
-            '',
-            'Single-tier snapshot — ships the full corpus, every Apple font, and the complete pre-rendered SF Symbols matrix.',
-            '',
-            '## Artifacts',
-            '',
-            table,
-            '',
-            '## Install',
-            '',
-            'Snapshots are packaged as `.tar.gz` with `gzip -9` (max DEFLATE). Stock `tar` extracts them on every supported platform — no extra tooling required:',
-            '',
-            '```bash',
-            'apple-docs setup',
-            '```',
-          ].join('\n')
-          process.stdout.write(body)
-          EOF
+          bun scripts/render-release-notes.js > dist/release-body.md
 
+      # Release ships only the full snapshot archive + its sidecar + the
+      # manifest. The build pipeline still produces the combined fonts
+      # archive (`fonts-all-<tag>.tar.gz`) and the symbols archive
+      # (`symbols-<tag>.tar.gz`) so a running instance can expose them at
+      # runtime, but they are intentionally NOT attached to the release —
+      # the full snapshot tarball already contains every resource they
+      # bundle, so attaching them would duplicate ~1.5x the bytes for no
+      # consumer benefit.
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: 'Snapshot (${{ steps.tag.outputs.tag }})'
+          body_path: dist/release-body.md
           files: |
-            dist/*.tar.gz
-            dist/*.tar.gz.sha256
-            dist/*.manifest.json
+            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.tar.gz
+            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.tar.gz.sha256
+            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.manifest.json
             dist/status.json
           draft: false
           prerelease: false
-          body_path: dist/release-body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

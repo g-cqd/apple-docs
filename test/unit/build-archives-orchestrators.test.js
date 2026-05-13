@@ -48,7 +48,7 @@ describeIf('buildSymbolsArchive', () => {
 })
 
 describeIf('buildFontsArchives', () => {
-  test('emits per-family + fonts-all archives only for present families', async () => {
+  test('emits a single fonts-all archive; no per-family archives', async () => {
     const fontsRoot = join(dataDir, 'resources', 'fonts', 'extracted')
     mkdirSync(join(fontsRoot, 'sf-pro'), { recursive: true })
     writeFileSync(join(fontsRoot, 'sf-pro', 'SF-Pro.otf'), 'fakeotf-pro')
@@ -56,24 +56,16 @@ describeIf('buildFontsArchives', () => {
     writeFileSync(join(fontsRoot, 'sf-mono', 'SF-Mono.otf'), 'fakeotf-mono')
 
     const result = await buildFontsArchives({ dataDir, outDir, tag: 'snap-fonts' })
-    // fonts-all + 2 family archives
+    // Combined fonts-all archive only.
     expect(result.all).not.toBeNull()
     expect(result.all.name).toBe('fonts-all-snap-fonts.tar.gz')
     expect(existsSync(result.all.path)).toBe(true)
     expect(existsSync(`${result.all.path}.sha256`)).toBe(true)
 
-    expect(Object.keys(result.byFamily).sort()).toEqual(['sf-mono', 'sf-pro'])
-    for (const fam of ['sf-pro', 'sf-mono']) {
-      const a = result.byFamily[fam]
-      expect(a.name).toBe(`fonts-${fam}-snap-fonts.tar.gz`)
-      expect(existsSync(a.path)).toBe(true)
-      expect(existsSync(`${a.path}.sha256`)).toBe(true)
-      expect(a.sha256).toMatch(/^[0-9a-f]{64}$/)
-    }
-
-    // No archive for families not present
+    // Per-family archives are no longer built — they used to duplicate
+    // the full-snapshot payload at no consumer benefit.
+    expect(result.byFamily).toEqual({})
     for (const fam of FONT_FAMILIES) {
-      if (fam === 'sf-pro' || fam === 'sf-mono') continue
       expect(existsSync(join(outDir, `fonts-${fam}-snap-fonts.tar.gz`))).toBe(false)
     }
   })
