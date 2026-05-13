@@ -14,8 +14,10 @@ directory just templates the specific pieces used on the maintainer's box.
 ```
 ops/
 ├── .env.example            # every operator-specific value, documented
-├── bin/                    # entrypoints (apple-docs-ops dispatches the rest)
-├── lib/                    # env.sh (loads .env), render.sh (envsubst helper)
+├── cli.js                  # single dispatcher; subcommands live in cmd/
+├── cmd/*.js                # one file per verb (deploy, install, watchdog, …)
+├── lib/*.js                # env loader, launchctl wrapper, http probe, …
+├── bin/*.sh                # thin shims so launchd plists keep working
 ├── launchd/*.tpl           # system LaunchDaemons + sudoers drop-in
 ├── caddy/Caddyfile.tpl     # reverse proxy terminating TLS on localhost
 └── cloudflared/*.tpl       # two tunnels: one for the web UI, one for MCP
@@ -30,23 +32,27 @@ directory and `apple-docs` still works.
 cd ops
 cp .env.example .env
 $EDITOR .env                       # fill in every value
-./bin/render-all.sh                # envsubst every .tpl -> sibling file
-./bin/install-daemons.sh           # copies rendered plists into /Library/LaunchDaemons
+bun cli.js render-all              # render every .tpl -> sibling file
+sudo bun cli.js install            # copies rendered plists into /Library/LaunchDaemons
 ```
 
-`install-daemons.sh` installs the sudoers drop-in first (via `visudo -cf` for
-validation, then `install -m 0440`) so the remaining `launchctl bootstrap`
-calls work without a password prompt. It only grants `launchctl` rights for
-the five labels in `launchd/sudoers.apple-docs-launchctl.tpl` — nothing more.
+`install` writes the sudoers drop-in first (via `visudo -cf` for validation,
+then `install -m 0440`) so the remaining `launchctl bootstrap` calls work
+without a password prompt. It only grants `launchctl` rights for the five
+labels in `launchd/sudoers.apple-docs-launchctl.tpl` — nothing more.
 
 ## Day-to-day
 
 ```sh
-./bin/apple-docs-ops status        # show launchd status for all five daemons
-./bin/apple-docs-ops restart web   # kickstart just one
-./bin/deploy-update.sh             # git pull + bun install + restart web/mcp
-./bin/smoke-test.sh                # curl the public endpoints
+bun cli.js service status all      # show launchd status for every daemon
+bun cli.js service restart web     # kickstart just one
+bun cli.js deploy                  # git pull + render + (snapshot|sync) + cutover
+bun cli.js smoke                   # curl the public endpoints
 ```
+
+The `ops/bin/*.sh` files are kept as thin shims so the existing LaunchDaemon
+plists (and any cron/CI workflows that invoke them by path) continue to work
+— they exec `bun cli.js <verb>` under the hood.
 
 ## Not shipped here
 
@@ -61,5 +67,5 @@ the five labels in `launchd/sudoers.apple-docs-launchctl.tpl` — nothing more.
 ## Template variables
 
 `ops/.env.example` is the complete list. Derived values (`LABEL_PROXY`,
-`LABEL_WEB`, …) are computed in `ops/lib/env.sh` and do not need to be set
+`LABEL_WEB`, …) are computed in `ops/lib/env.js` and do not need to be set
 by hand.
