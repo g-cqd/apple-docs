@@ -53,6 +53,16 @@ afterAll(() => {
 })
 
 describe('reader-pool (integration, real workers)', () => {
+  // Per-test timeout 30s (vs Bun's 5s default). Every test in this
+  // file spawns at least one real worker thread, opens a SQLite handle
+  // inside it, runs the assertion, then awaits a clean pool.close().
+  // On the 4-vCPU Ubuntu runner under Stryker's 8× concurrency, worker
+  // startup alone can consume most of the 5s budget — `whitelist
+  // rejects non-read ops` started flaking there on 2026-05-13, gating
+  // every mutation run. 30s leaves room for the slow path without
+  // hiding genuine hangs.
+  const READER_POOL_TEST_TIMEOUT_MS = 30_000
+
   test('routes a getPage call through a worker and returns identical data', async () => {
     const pool = createReaderPool({ dbPath, size: 2 })
     await pool.start()
@@ -66,7 +76,7 @@ describe('reader-pool (integration, real workers)', () => {
     } finally {
       await pool.close()
     }
-  })
+  }, READER_POOL_TEST_TIMEOUT_MS)
 
   test('parallel searchPages across multiple workers returns merged rows', async () => {
     const pool = createReaderPool({ dbPath, size: 3 })
@@ -85,7 +95,7 @@ describe('reader-pool (integration, real workers)', () => {
     } finally {
       await pool.close()
     }
-  })
+  }, READER_POOL_TEST_TIMEOUT_MS)
 
   test('whitelist rejects non-read ops', async () => {
     const pool = createReaderPool({ dbPath, size: 1 })
@@ -95,7 +105,7 @@ describe('reader-pool (integration, real workers)', () => {
     } finally {
       await pool.close()
     }
-  })
+  }, READER_POOL_TEST_TIMEOUT_MS)
 
   test('fuzzyMatchTitles runs inside a worker and returns Levenshtein matches', async () => {
     const pool = createReaderPool({ dbPath, size: 1 })
@@ -110,7 +120,7 @@ describe('reader-pool (integration, real workers)', () => {
     } finally {
       await pool.close()
     }
-  })
+  }, READER_POOL_TEST_TIMEOUT_MS)
 
   test('recycle reopens workers against the same DB file', async () => {
     const pool = createReaderPool({ dbPath, size: 2 })
@@ -126,5 +136,5 @@ describe('reader-pool (integration, real workers)', () => {
     } finally {
       await pool.close()
     }
-  })
+  }, READER_POOL_TEST_TIMEOUT_MS)
 })
