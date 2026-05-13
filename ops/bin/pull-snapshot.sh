@@ -162,30 +162,40 @@ if [ "$setup_status" != "0" ]; then
   exit 2
 fi
 
-# 3b. Rebuild the static site against the freshly-installed corpus.
-# Incremental keeps the existing dist/ directory online if the rebuild
-# fails — caddy won't 404 mid-deploy.
-run "$BUN" run "$REPO/cli.js" web build --incremental \
-  --out "$STATIC_DIR" \
-  --base-url "https://${PUBLIC_WEB_HOST}" \
-  || say "WARN: incremental static build failed — Caddy keeps the previous tree"
-
-# 3b-bis. Wipe Cloudflare's edge cache so /api/search and /api/filters
-# (now Cache-Control: public, max-age=300, stale-while-revalidate=3600)
-# don't briefly serve stale corpus data after a deploy. Soft-fails if the
-# CF token / zone is not configured.
-run "$OPS/bin/cf-purge.sh" || say "WARN: cf-purge.sh exited non-zero — edge cache may be stale"
-
-# 3c. Bring services back. Order matters (web first, watchdog last) for
-# the same reason as deploy-update.sh.
+# 3c. Bring services back BEFORE the incremental site rebuild. The new DB
+# + raw-json + markdown trees are on disk and complete; MCP serves
+# straight from the DB so it's ready immediately, and the web service
+# answers dynamic API routes from the same DB while still serving the
+# previous build's static `dist/web/` files (incremental does not wipe).
+# Reordering here closes the ~10-30 min gap where the site was 503 while
+# `web build` churned through 340k documents.
 for label in "${LABEL_WEB}" "${LABEL_MCP}"; do
   start_one "$label"
 done
 sleep 3
 start_one "${LABEL_WATCHDOG}" || say "WARN: watchdog didn't restart"
 
-# 3d. Smoke. If the test fails we don't roll back automatically — the new
-# corpus is already on disk and a manual reinstall via --force is cheap.
+# 3d. Rebuild the static site against the freshly-installed corpus.
+# Incremental writes new doc pages in place; caddy keeps serving the
+# previous tree alongside the new files until each one is replaced.
+# Running this AFTER the daemons are back means the site stays live
+# through the entire rebuild — total downtime is now bounded by the
+# setup-extract phase (~10 min) instead of setup + build (~20-40 min).
+run "$BUN" run "$REPO/cli.js" web build --incremental \
+  --out "$STATIC_DIR" \
+  --base-url "https://${PUBLIC_WEB_HOST}" \
+  || say "WARN: incremental static build failed — Caddy keeps the previous tree"
+
+# 3e. Wipe Cloudflare's edge cache so /api/search and /api/filters
+# (Cache-Control: public, max-age=300, stale-while-revalidate=3600)
+# don't briefly serve stale corpus data after a deploy. Soft-fails if
+# the CF token / zone is not configured. Runs AFTER the build so the
+# cache miss it forces hits a hot, fully-rebuilt origin.
+run "$OPS/bin/cf-purge.sh" || say "WARN: cf-purge.sh exited non-zero — edge cache may be stale"
+
+# 3f. Smoke. If the test fails we don't roll back automatically — the
+# new corpus is already on disk and a manual reinstall via --force is
+# cheap.
 sleep 3
 if ! "$OPS/bin/smoke-test.sh" 2>&1 | tee -a "$LOG"; then
   say "WARN: smoke test reported failures — investigate before declaring success"
