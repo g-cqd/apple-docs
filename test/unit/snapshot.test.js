@@ -209,4 +209,28 @@ describe('snapshotBuild', () => {
     )
     expect(existsSync(result.archivePath)).toBe(true)
   })
+
+  // Determinism gate (mirrors .github/workflows/snapshot.yml). Two
+  // consecutive snapshotBuild calls against the same tag and corpus
+  // must produce bit-identical tar.gz archives — the workflow re-runs
+  // the build into dist-check/ and compares sha256s before publishing.
+  // Regressions here would surface as a failed Sunday cron with a
+  // MISMATCH line and no release artefact.
+  test('two builds of the same tag produce bit-identical archives', async () => {
+    const outA = mkdtempSync(join(tmpdir(), 'apple-docs-det-a-'))
+    const outB = mkdtempSync(join(tmpdir(), 'apple-docs-det-b-'))
+    try {
+      const a = await snapshotBuild({ out: outA, tag: 'snapshot-20260517' }, { db, dataDir, logger })
+      // Force a wall-clock gap so any lingering Date.now() use would
+      // diverge the second run.
+      await new Promise(resolve => setTimeout(resolve, 1100))
+      const b = await snapshotBuild({ out: outB, tag: 'snapshot-20260517' }, { db, dataDir, logger })
+
+      expect(a.archiveChecksum).toBe(b.archiveChecksum)
+      expect(a.dbChecksum).toBe(b.dbChecksum)
+    } finally {
+      rmSync(outA, { recursive: true, force: true })
+      rmSync(outB, { recursive: true, force: true })
+    }
+  })
 })

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError } from '../lib/errors.js'
@@ -18,6 +18,33 @@ const OPERATIONAL_TRUNCATE = ['crawl_state', 'activity', 'update_log']
 // experiences (a metadata-only snapshot can't live-render symbols
 // off-macOS, a partial JSON snapshot leaves the raw view incomplete).
 const SNAPSHOT_TIER = 'full'
+
+// Derive a deterministic `createdAt` ISO string from `tag`. The Sunday
+// cron passes `snapshot-YYYYMMDD`; we map that to midnight UTC of the
+// same day so two consecutive runs against the same tag bake identical
+// bytes into `manifest.json` and `snapshot_meta.snapshot_created_at`.
+// The determinism gate in .github/workflows/snapshot.yml relies on this:
+// without it, the timestamp drift between the dist/ and dist-check/
+// builds (~few minutes) made the full-snapshot archives diverge while
+// the symbols/fonts archives (no embedded build-time data) still
+// matched. Non-cron tags (test fixtures, ad-hoc dispatches) fall back
+// to the Unix epoch — still stable across reruns of the same tag.
+function deterministicCreatedAt(tag) {
+  const m = /^snapshot-(\d{4})(\d{2})(\d{2})$/.exec(tag)
+  if (m) return `${m[1]}-${m[2]}-${m[3]}T00:00:00.000Z`
+  return '1970-01-01T00:00:00.000Z'
+}
+
+// Seconds-since-epoch counterpart of {@link deterministicCreatedAt}.
+// Used to clamp the mtimes of the two freshly-written files inside
+// `buildDir` (apple-docs.db, manifest.json) — `cp -c -R` already
+// preserves source mtimes for everything else, and tar embeds the
+// integer-seconds mtime into each member header.
+function deterministicMtimeSeconds(tag) {
+  const m = /^snapshot-(\d{4})(\d{2})(\d{2})$/.exec(tag)
+  if (m) return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 1000)
+  return 0
+}
 
 /**
  * Build a snapshot archive from the current corpus.
@@ -50,6 +77,7 @@ export async function snapshotBuild(opts, ctx) {
     throw new Error(`Invalid --tag "${tag}": must match [a-z0-9._-]{1,64}`)
   }
   const schemaVersion = db.getSchemaVersion()
+  const createdAt = deterministicCreatedAt(tag)
 
   // 1. Validate corpus health
   const stats = db.getStats()
@@ -80,7 +108,7 @@ export async function snapshotBuild(opts, ctx) {
 
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_version', tag])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_tier', SNAPSHOT_TIER])
-      copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_created_at', new Date().toISOString()])
+      copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_created_at', createdAt])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_schema_version', String(schemaVersion)])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_document_count', String(documentCount)])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_page_count', String(pageCount)])
@@ -100,7 +128,7 @@ export async function snapshotBuild(opts, ctx) {
       version: tag,
       schemaVersion,
       tier: SNAPSHOT_TIER,
-      createdAt: new Date().toISOString(),
+      createdAt,
       documentCount,
       dbChecksum,
       dbSize,
@@ -166,6 +194,18 @@ export async function snapshotBuild(opts, ctx) {
     ensureDir(outDir)
     const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.tar.gz`
     const archivePath = join(outDir, archiveName)
+
+    // Clamp the mtimes of the two files we just wrote into `buildDir`
+    // to a tag-derived constant. `cp -c -R` (clonefile) already preserves
+    // source mtimes for every staged corpus file, so those are stable
+    // across reruns of the same corpus; manifest.json and apple-docs.db
+    // are the only fresh writes, and tar embeds their integer-seconds
+    // mtimes into the archive header. Without this step the dist/ and
+    // dist-check/ builds disagree on those two members even though the
+    // file contents are identical.
+    const stableMtime = deterministicMtimeSeconds(tag)
+    utimesSync(copyPath, stableMtime, stableMtime)
+    utimesSync(join(buildDir, 'manifest.json'), stableMtime, stableMtime)
 
     await createTarGzArchive({
       sourceDir: buildDir,
