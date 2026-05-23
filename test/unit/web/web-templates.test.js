@@ -41,7 +41,7 @@ const mockSections = [
 
 describe('buildBreadcrumbs', () => {
   test('multi-segment key produces linked ancestors and plain last segment', () => {
-    const html = buildBreadcrumbs('swiftui/view/body')
+    const html = buildBreadcrumbs('swiftui/view/body').toString()
     expect(html).toContain('<a href="/docs/swiftui/">swiftui</a>')
     expect(html).toContain('<a href="/docs/swiftui/view/">view</a>')
     // Last segment is not a link
@@ -50,19 +50,19 @@ describe('buildBreadcrumbs', () => {
   })
 
   test('single-segment key returns plain text with no link', () => {
-    const html = buildBreadcrumbs('swiftui')
+    const html = buildBreadcrumbs('swiftui').toString()
     expect(html).toContain('swiftui')
     expect(html).not.toContain('<a ')
   })
 
   test('two-segment key links the first and makes the second plain', () => {
-    const html = buildBreadcrumbs('swiftui/view')
+    const html = buildBreadcrumbs('swiftui/view').toString()
     expect(html).toContain('<a href="/docs/swiftui/">swiftui</a>')
     expect(html).toContain('<span aria-current="page">view</span>')
   })
 
   test('uses the framework display name for the first segment', () => {
-    const html = buildBreadcrumbs('swiftui/view', { title: 'View', framework: 'SwiftUI' })
+    const html = buildBreadcrumbs('swiftui/view', { title: 'View', framework: 'SwiftUI' }).toString()
     expect(html).toContain('<a href="/docs/swiftui/">SwiftUI</a>')
     expect(html).not.toContain('>swiftui</a>')
   })
@@ -73,22 +73,22 @@ describe('buildBreadcrumbs', () => {
       title: 'PublicKey',
       framework: 'Apple CryptoKit',
       ancestorTitles: ancestors,
-    })
+    }).toString()
     expect(html).toContain('<a href="/docs/cryptokit/">Apple CryptoKit</a>')
     expect(html).toContain('<a href="/docs/cryptokit/kemprivatekey/">KEMPrivateKey</a>')
     expect(html).toContain('<span aria-current="page">PublicKey</span>')
   })
 
   test('empty string returns empty string', () => {
-    expect(buildBreadcrumbs('')).toBe('')
+    expect(buildBreadcrumbs('').toString()).toBe('')
   })
 
   test('null returns empty string', () => {
-    expect(buildBreadcrumbs(null)).toBe('')
+    expect(buildBreadcrumbs(null).toString()).toBe('')
   })
 
   test('contains breadcrumbs nav element', () => {
-    const html = buildBreadcrumbs('swiftui/view')
+    const html = buildBreadcrumbs('swiftui/view').toString()
     expect(html).toContain('<nav class="breadcrumbs"')
   })
 
@@ -104,7 +104,7 @@ describe('buildBreadcrumbs', () => {
       title: 'The Basics',
       framework: 'The Swift Programming Language',
       knownKeys,
-    })
+    }).toString()
     expect(html).toContain('<a href="/docs/swift-book/">The Swift Programming Language</a>')
     expect(html).toContain('<span>LanguageGuide</span>')
     expect(html).not.toContain('href="/docs/swift-book/LanguageGuide/"')
@@ -115,7 +115,7 @@ describe('buildBreadcrumbs', () => {
     const html = buildBreadcrumbs('swift-book/LanguageGuide/TheBasics', {
       title: 'The Basics',
       framework: 'TSPL',
-    })
+    }).toString()
     expect(html).toContain('href="/docs/swift-book/LanguageGuide/"')
   })
 })
