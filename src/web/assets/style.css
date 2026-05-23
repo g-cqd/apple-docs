@@ -2509,8 +2509,24 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   }
   .symbols-toolbar__row--search .symbols-scope,
   .symbols-toolbar__row--search .symbols-category-mobile {
-    flex: 1 1 calc(50% - 0.25rem);
-    min-width: 0;
+    /* `flex: 1 1 auto` + `min-width` lets the two selects wrap to
+       separate lines on very narrow viewports (<320px) instead of
+       overflowing the toolbar — the previous `calc(50% - 0.25rem)`
+       flex-basis with `min-width: 0` allowed shrink past the
+       intrinsic content + padding width and produced overflow. */
+    flex: 1 1 auto;
+    min-width: 100px;
+  }
+}
+
+/* Tablet width range (480–768px) — the customize row's color picker,
+   hex input, size slider, and status text wrap on multiple lines but
+   their varying baseline heights can produce vertical collisions.
+   Stack them vertically (same treatment as <480px below). */
+@media (max-width: 47.99em) {
+  .symbols-toolbar__row--customize {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 
@@ -2591,7 +2607,12 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
     display: block;
   }
   .symbols-layout--detail-open {
-    grid-template-columns: 220px minmax(0, 1fr) 320px;
+    /* Floor the middle column at 300px so the grid stays usable on
+       narrow desktops (1024–1200px) when the inspector is open. With
+       minmax(0, 1fr) the middle column could collapse to nothing
+       once the sidebar (220) + inspector (320) + gaps consumed most
+       of the viewport. */
+    grid-template-columns: 220px minmax(300px, 1fr) 320px;
   }
 }
 
@@ -2625,6 +2646,9 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
      desktop; the toolbar + header above eat ~200px of vertical space. */
   max-height: calc(100vh - 220px);
   overflow-y: auto;
+  /* Belt-and-braces: a misbehaving descendant (e.g. an accidentally-
+     wide tile) won't trigger horizontal page scroll. */
+  overflow-x: hidden;
   overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: 12px;
