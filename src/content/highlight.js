@@ -44,7 +44,7 @@ const HIGHLIGHT_MAX_BYTES = Math.max(
  *
  * The size guard above is a backstop; this is the operator's "I want this
  * build to finish, period" lever. The first full build of the corpus on
- * mm18.local needed it to traverse swift-evolution/0253-callable and a
+ * the reference host needed it to traverse swift-evolution/0253-callable and a
  * handful of similar proposals where even modest blocks hit the bad
  * grammar path — symptom: a single render call pinned the JS thread for
  * hours with no event-loop turn to fire the per-page timeout. After the

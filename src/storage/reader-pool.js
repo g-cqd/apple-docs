@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import { availableParallelism } from 'node:os'
+import { AssertionError, ValidationError } from '../lib/errors.js'
 import { BackpressureError } from '../lib/semaphore.js'
 import { READ_OPS } from './reader-worker.js'
 
@@ -85,12 +86,12 @@ const PER_OP_DEADLINE_MS = Object.freeze({
 export function createReaderPool(opts = {}) {
   const { dbPath, log } = opts
   if (!dbPath || dbPath === ':memory:') {
-    throw new Error(`createReaderPool: dbPath must be a real file path, got ${String(dbPath)}`)
+    throw new ValidationError(`createReaderPool: dbPath must be a real file path, got ${String(dbPath)}`, { field: 'dbPath', value: dbPath })
   }
   const size = Math.max(1, opts.size ?? resolveDefaultSize())
   const WorkerCtor = opts.WorkerCtor ?? Worker
 
-  // A15: budget knobs. maxPendingPerWorker bounds the per-slot queue so a
+  // budget knobs. maxPendingPerWorker bounds the per-slot queue so a
   // burst can't accumulate unbounded memory; deadlineMs forces a per-call
   // timeout so a wedged reader (long FTS, runaway query plan) doesn't
   // pin the slot forever. Both are tunable per call via run(op, args, opts).
@@ -206,7 +207,7 @@ export function createReaderPool(opts = {}) {
   }
 
   async function run(op, args = [], runOpts = {}) {
-    if (closed) throw new Error('reader-pool: run() after close()')
+    if (closed) throw new AssertionError('reader-pool: run() after close()')
     // Reject ops that aren't on the worker's whitelist immediately, on
     // the parent thread, before we pay for a worker round-trip. The
     // worker still independently rejects on its side as defense in
@@ -215,10 +216,10 @@ export function createReaderPool(opts = {}) {
     // back — masking the real "not in whitelist" error behind a generic
     // deadline error.
     if (!READ_OPS.has(op)) {
-      throw new Error(`reader-pool: operation not in whitelist: ${op}`)
+      throw new AssertionError(`reader-pool: operation not in whitelist: ${op}`)
     }
     const idx = pickSlot()
-    if (idx < 0) throw new Error('reader-pool: no workers available')
+    if (idx < 0) throw new AssertionError('reader-pool: no workers available')
     const slot = slots[idx]
 
     // Wait for this particular worker to emit ready. Already-ready slots
@@ -227,7 +228,7 @@ export function createReaderPool(opts = {}) {
     // propagate to the caller.
     await slot.ready
 
-    // A15: per-worker pending cap. Reject with a typed BackpressureError so
+    // per-worker pending cap. Reject with a typed BackpressureError so
     // the route layer can translate to 503 + Retry-After instead of letting
     // the queue grow unbounded. Checked after `await slot.ready` so that
     // sibling concurrent run() calls have already enrolled into
@@ -263,7 +264,7 @@ export function createReaderPool(opts = {}) {
         reject(err)
         return
       }
-      // A15: per-call deadline. On expiry, reject with a timeout error;
+      // per-call deadline. On expiry, reject with a timeout error;
       // the worker keeps running its query (we can't cancel SQLite
       // mid-statement from the parent), but the caller is unblocked and
       // the slot frees on the next message dispatch.
@@ -294,7 +295,7 @@ export function createReaderPool(opts = {}) {
         let pending = 0
         for (const slot of slots) pending += slot?.pending.size ?? 0
         if (pending === 0) break
-        await new Promise((resolve) => setTimeout(resolve, 50))
+        await Bun.sleep(50)
       }
     }
     // Use `terminate()` exclusively — the one-shot way to reap a worker in both
@@ -393,7 +394,7 @@ export async function runRead(ctx, op, args = []) {
   if (ctx?.readerPool) return ctx.readerPool.run(op, args)
   const fn = ctx?.db?.[op]
   if (typeof fn !== 'function') {
-    throw new Error(`runRead: ctx.db has no method ${op}`)
+    throw new AssertionError(`runRead: ctx.db has no method ${op}`)
   }
   return fn.apply(ctx.db, args)
 }

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { gzipSync } from 'node:zlib'
+import { AssertionError } from '../lib/errors.js'
 import { ensureDir } from '../storage/files.js'
 
 /**
@@ -70,8 +70,8 @@ function buildFrameworkSitemapXml({ root, docs, baseUrl, lastmod }) {
   // is ~39 K docs, well under the 50 K limit, so this should never trip in
   // practice. Surfaces a hard error if it ever does.
   if (docs.length + 1 > URLS_PER_SITEMAP) {
-    throw new Error(
-      `framework ${root.slug} has ${docs.length} docs — exceeds the per-sitemap cap (${URLS_PER_SITEMAP}); split-by-letter not implemented`
+    throw new AssertionError(
+      `framework ${root.slug} has ${docs.length} docs — exceeds the per-sitemap cap (${URLS_PER_SITEMAP}); split-by-letter not implemented`,
     )
   }
 
@@ -154,7 +154,7 @@ export async function generateSitemaps({ db, outputDir, baseUrl, buildDate }) {
     '</urlset>',
     '',
   ].join('\n')
-  await Bun.write(join(sitemapsDir, '_root.xml.gz'), gzipSync(Buffer.from(rootXml)))
+  await Bun.write(join(sitemapsDir, '_root.xml.gz'), Bun.gzipSync(Buffer.from(rootXml)))
 
   // Per-framework sitemaps. We pull the framework + its docs in two queries
   // each (matching the build pipeline's chunked pattern) and skip empty
@@ -172,7 +172,7 @@ export async function generateSitemaps({ db, outputDir, baseUrl, buildDate }) {
     const xml = buildFrameworkSitemapXml({ root, docs, baseUrl: cleanBase, lastmod })
     if (!xml) continue
 
-    await Bun.write(join(sitemapsDir, `${root.slug}.xml.gz`), gzipSync(Buffer.from(xml)))
+    await Bun.write(join(sitemapsDir, `${root.slug}.xml.gz`), Bun.gzipSync(Buffer.from(xml)))
     writtenSlugs.push(root.slug)
     totalUrls += docs.length + 1
   }

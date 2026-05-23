@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto'
 import { search } from '../../commands/search.js'
 import { jsonResponse, API_CORPUS_CACHE_CONTROL } from '../responses.js'
 import { BackpressureError, Semaphore } from '../../lib/semaphore.js'
+import { projectSearchResult } from '../../output/projection.js'
 
 /**
  * Bounded concurrency for explicit `deep=1` search requests.
@@ -41,7 +41,7 @@ function parsePositiveInt(value) {
  */
 export async function searchHandler(_request, ctx, url) {
   const query = url.searchParams.get('q')
-  if (!query) return jsonResponse({ results: [], total: 0 })
+  if (!query) return jsonResponse({ query: '', total: 0, results: [] })
   const deep = url.searchParams.get('deep') === '1' || url.searchParams.get('full_text') === '1'
   const searchOpts = {
     query,
@@ -70,7 +70,7 @@ export async function searchHandler(_request, ctx, url) {
   const cacheKey = searchResponseCacheKey(searchOpts, corpusStamp.get())
   const cached = searchCache.get(cacheKey)
   if (cached !== undefined) {
-    return jsonResponse(cached, {
+    return jsonResponse(projectSearchResult(cached), {
       hashable: true,
       headers: { 'x-apple-docs-cache': 'hit', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
     })
@@ -83,7 +83,7 @@ export async function searchHandler(_request, ctx, url) {
       return await deepGate.run(async () => {
         const results = await search(searchOpts, searchCtx)
         searchCache.set(cacheKey, results)
-        return jsonResponse(results, {
+        return jsonResponse(projectSearchResult(results), {
           hashable: true,
           headers: { 'x-apple-docs-cache': 'miss', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
         })
@@ -100,14 +100,14 @@ export async function searchHandler(_request, ctx, url) {
   }
   const results = await search(searchOpts, searchCtx)
   searchCache.set(cacheKey, results)
-  return jsonResponse(results, {
+  return jsonResponse(projectSearchResult(results), {
     hashable: true,
     headers: { 'x-apple-docs-cache': 'miss', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
   })
 }
 
 function searchResponseCacheKey(searchOpts, stamp) {
-  return createHash('sha256').update(`${stableJson(searchOpts)}\0${stamp}`).digest('hex')
+  return new Bun.CryptoHasher('sha256').update(`${stableJson(searchOpts)}\0${stamp}`).digest('hex')
 }
 
 // Stable, key-sorted JSON so logically-equal opts hash to the same key

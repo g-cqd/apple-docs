@@ -15,6 +15,54 @@ import { runRead, DeadlineError } from '../storage/reader-pool.js'
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 
 /**
+ * @typedef {object} SearchArgs
+ * @property {string} query
+ * @property {string} [framework]
+ * @property {string} [source]
+ * @property {string} [kind]
+ * @property {'swift'|'objc'} [language]
+ * @property {'ios'|'macos'|'watchos'|'tvos'|'visionos'} [platform]
+ * @property {string} [minIos]
+ * @property {string} [minMacos]
+ * @property {string} [minWatchos]
+ * @property {string} [minTvos]
+ * @property {string} [minVisionos]
+ * @property {number} [year]
+ * @property {string} [track]
+ * @property {'include'|'exclude'|'only'} [deprecated]
+ * @property {number} [limit]
+ * @property {number} [offset]
+ * @property {boolean} [fuzzy]
+ * @property {boolean} [noDeep]
+ * @property {boolean} [noEager]
+ * @property {boolean} [fast]
+ *
+ * @typedef {object} SearchHit
+ * @property {string} path
+ * @property {string} title
+ * @property {string|null} framework
+ * @property {string|null} rootSlug
+ * @property {string|null} kind
+ * @property {string} sourceType
+ * @property {string|null} abstract
+ * @property {string|null} declaration
+ * @property {object|Array} [platforms]
+ * @property {'swift'|'objc'|null} language
+ * @property {string|null} snippet
+ * @property {number} relatedCount
+ * @property {'exact'|'partial'|'approximate'} confidence
+ * @property {true} [isDeprecated]
+ * @property {true} [isBeta]
+ * @property {true} [isReleaseNotes]
+ *
+ * @typedef {object} SearchResult
+ * @property {string} query
+ * @property {number} total
+ * @property {SearchHit[]} results
+ * @property {true} [approximate]
+ * @property {true} [truncated]
+ * @property {object} [pageInfo]
+ *
  * Search with tiered cascade: fast title/path tiers first, deep body search only
  * when needed.
  *
@@ -25,13 +73,9 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
  * Tier 4 (body) runs only when the requested result window is not already
  * satisfied, or when explicitly forced with `noEager`.
  *
- * @param {{ query: string, framework?: string, kind?: string, limit?: number,
- *           offset?: number, fuzzy?: boolean, noDeep?: boolean, noEager?: boolean,
- *           fast?: boolean,
- *           source?: string, language?: string, platform?: string,
- *           minIos?: string, minMacos?: string, minWatchos?: string,
- *           minTvos?: string, minVisionos?: string }} opts
+ * @param {SearchArgs} opts
  * @param {{ db, dataDir, logger }} ctx
+ * @returns {Promise<SearchResult>}
  */
 export async function search(opts, ctx) {
   const { query, kind } = opts

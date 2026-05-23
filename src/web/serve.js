@@ -62,7 +62,7 @@ export async function startDevServer(opts, ctx) {
   //   APPLE_DOCS_WEB_BURST=<n>    (also implies on)
   //   opts.rateLimit === true
   // The strict 5/min limit on the /docs/<key> on-demand-fetch path lives
-  // inside docs.route.js (A7) and is independent — that's a specific SSRF
+  // inside docs.route.js and is independent — that's a specific SSRF
   // amplifier control, not general rate limiting.
   const rateLimitOptIn = opts.rateLimit === true
     || process.env.APPLE_DOCS_WEB_RATE_LIMIT === '1'
@@ -83,7 +83,7 @@ export async function startDevServer(opts, ctx) {
   registry.register('/api/filters', filtersHandler)
   registry.register('/api/fonts', listFontsHandler)
   registry.register('/api/fonts/text.svg', fontTextSvgHandler)
-  // P3: font-subset (lazy pool init on first request).
+  // font-subset (lazy pool init on first request).
   registry.register('/api/fonts/subset', async (request, c, url, match) => {
     if (!c.fontSubsetPool) {
       try { await c.getFontSubsetPool() } catch (err) {
@@ -150,16 +150,26 @@ export async function startDevServer(opts, ctx) {
       // gates (A7 docs on-demand). webCtx is per-server, so this is safe
       // for the duration of the request — Bun re-enters fetch for each.
       webCtx._server = srv
-      // A35: correlation IDs. Echo the inbound X-Request-Id when present
+      // correlation IDs. Echo the inbound X-Request-Id when present
       // (so an upstream proxy / browser-injected header survives intact);
       // mint one with crypto.randomUUID() otherwise. Stash on webCtx for
-      // the request scope so log records can pick it up.
+      // the request scope so log records can pick it up. The per-request
+      // logger.withRequestId child stamps `requestId` into every JSON log
+      // line emitted while handling this request.
       const incoming = request.headers.get('x-request-id')
       const requestId = incoming && /^[A-Za-z0-9._:+/=-]{1,128}$/.test(incoming)
         ? incoming
         : crypto.randomUUID()
       webCtx._requestId = requestId
-      const response = await handleRequest(request)
+      const baseLogger = webCtx._baseLogger ?? webCtx.logger ?? null
+      if (!webCtx._baseLogger && baseLogger) webCtx._baseLogger = baseLogger
+      webCtx.logger = baseLogger?.withRequestId?.(requestId) ?? baseLogger
+      let response
+      try {
+        response = await handleRequest(request)
+      } finally {
+        webCtx.logger = baseLogger
+      }
       for (const [k, v] of Object.entries(securityHeaders)) response.headers.set(k, v)
       response.headers.set('X-Request-Id', requestId)
       const finalized = await finalizeResponse(request, response, { gzipCache })
@@ -191,7 +201,7 @@ export async function startDevServer(opts, ctx) {
     eventLoopLag,
   })
 
-  // A1: render-cache prune cron. Runs every PRUNE_INTERVAL_MS so an
+  // render-cache prune cron. Runs every PRUNE_INTERVAL_MS so an
   // unbounded set of (size,color,weight,scale) param combinations on a
   // long-running server doesn't fill the disk. Both the TTL trim and the
   // byte-quota trim are best-effort — failures are logged once and the

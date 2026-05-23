@@ -1,5 +1,6 @@
 import { join, dirname, basename, resolve, isAbsolute } from 'node:path'
 import { existsSync, rmSync, statSync } from 'node:fs'
+import { HttpError, NotFoundError, ValidationError } from '../lib/errors.js'
 import { sha256 } from '../lib/hash.js'
 import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
 import { resolveSevenZipBinary } from '../lib/archive-7z.js'
@@ -56,11 +57,11 @@ async function installFromLocalArchive(ctx, opts) {
   const archivePath = resolveArchivePath(opts.archive)
 
   if (!existsSync(archivePath)) {
-    throw new Error(`Snapshot archive not found: ${archivePath}`)
+    throw new NotFoundError(archivePath, `Snapshot archive not found: ${archivePath}`)
   }
   const archiveStats = statSync(archivePath)
   if (!archiveStats.isFile()) {
-    throw new Error(`Snapshot archive must be a regular file: ${archivePath}`)
+    throw new ValidationError(`Snapshot archive must be a regular file: ${archivePath}`, { field: 'archive', value: archivePath })
   }
 
   logger.info(`Installing from local archive: ${archivePath} (${formatSize(archiveStats.size)})`)
@@ -85,7 +86,7 @@ async function installFromLocalArchive(ctx, opts) {
     const archiveBytes = await Bun.file(archivePath).arrayBuffer()
     const actualHash = sha256(new Uint8Array(archiveBytes))
     if (actualHash !== expectedHash) {
-      throw new Error(`Checksum mismatch! Expected ${expectedHash.slice(0, 16)}..., got ${actualHash.slice(0, 16)}...`)
+      throw new ValidationError(`Checksum mismatch! Expected ${expectedHash.slice(0, 16)}..., got ${actualHash.slice(0, 16)}...`, { field: 'checksum' })
     }
     logger.info('Checksum verified.')
   } else {
@@ -131,7 +132,7 @@ async function installFromGithubRelease(ctx, opts) {
   const release = await fetchLatestRelease()
   logger.info(`Found release: ${release.tag} (${release.date})`)
 
-  // Prefer `.tar.gz` (current format after May 2026 — LZMA2 .7z didn't
+  // Prefer `.tar.gz` (current format after the format recalibration — LZMA2 .7z didn't
   // fit the GH runner's compression budget once the corpus grew past
   // ~1M file entries). Accept `.7z` as a transitional fallback so a
   // host pulling the very last .7z release before the format flip still
@@ -140,7 +141,7 @@ async function installFromGithubRelease(ctx, opts) {
     release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.tar.gz')) ??
     release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.7z'))
   if (!archiveAsset) {
-    throw new Error(`No snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
+    throw new NotFoundError(`release/${release.tag}`, `No snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
   }
   const isSevenZip = archiveAsset.name.endsWith('.7z')
 
@@ -155,9 +156,10 @@ async function installFromGithubRelease(ctx, opts) {
       ? null
       : release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256')))
   if (!checksumAsset) {
-    throw new Error(
+    throw new ValidationError(
       `Refusing to install: release ${release.tag} ships ${archiveAsset.name} without a matching .sha256 sidecar. ` +
       'Snapshot integrity cannot be verified.',
+      { field: 'checksum' },
     )
   }
 
@@ -170,8 +172,8 @@ async function installFromGithubRelease(ctx, opts) {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/octet-stream' },
       redirect: 'follow',
     })
-    if (!archiveRes.ok) throw new Error(`Download failed: HTTP ${archiveRes.status}`)
-    if (!archiveRes.body) throw new Error('Download failed: response has no body')
+    if (!archiveRes.ok) throw new HttpError(archiveRes.status, archiveAsset.browser_download_url, `Download failed: HTTP ${archiveRes.status}`)
+    if (!archiveRes.body) throw new HttpError(0, archiveAsset.browser_download_url, 'Download failed: response has no body')
     // Stream to disk via an explicit reader loop. Bun.write(path, response)
     // hangs on large responses behind HTTP/2 redirects (e.g. GitHub release
     // asset downloads), so pull chunks manually and feed a FileSink.
@@ -193,13 +195,13 @@ async function installFromGithubRelease(ctx, opts) {
       headers: { 'User-Agent': USER_AGENT },
       redirect: 'follow',
     })
-    if (!checksumRes.ok) throw new Error(`Checksum download failed: HTTP ${checksumRes.status}`)
+    if (!checksumRes.ok) throw new HttpError(checksumRes.status, checksumAsset.browser_download_url, `Checksum download failed: HTTP ${checksumRes.status}`)
     const checksumText = await checksumRes.text()
     const expectedHash = checksumText.trim().split(/\s+/)[0]
     const archiveBytes = await Bun.file(tmpPath).arrayBuffer()
     const actualHash = sha256(new Uint8Array(archiveBytes))
     if (actualHash !== expectedHash) {
-      throw new Error(`Checksum mismatch! Expected ${expectedHash.slice(0, 16)}..., got ${actualHash.slice(0, 16)}...`)
+      throw new ValidationError(`Checksum mismatch! Expected ${expectedHash.slice(0, 16)}..., got ${actualHash.slice(0, 16)}...`, { field: 'checksum' })
     }
     logger.info('Checksum verified.')
 
@@ -239,7 +241,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } =
     try {
       resolveSevenZipBinary()
     } catch (err) {
-      throw new Error(
+      throw new ValidationError(
         `${err.message}\nThe snapshot is shipped as a .7z archive; p7zip is required to install it.`,
       )
     }
@@ -283,7 +285,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } =
       [binary, 'x', '-y', `-o${dataDir}`, archivePath],
       { deadlineMs: 10 * 60_000 },
     )
-    if (exitCode !== 0) throw new Error(`Extraction failed (${binary} exit ${exitCode}): ${stderr}`)
+    if (exitCode !== 0) throw new ValidationError(`Extraction failed (${binary} exit ${exitCode}): ${stderr}`)
   } else {
     // --no-same-owner / --no-same-permissions: defensive belts on top of
     // the pre-flight validator. Even if the validator misses a hostile
@@ -295,7 +297,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } =
       ['tar', '--no-same-owner', '--no-same-permissions', '-xzf', archivePath, '-C', dataDir],
       { deadlineMs: 10 * 60_000 },
     )
-    if (exitCode !== 0) throw new Error(`Extraction failed (exit ${exitCode}): ${stderr}`)
+    if (exitCode !== 0) throw new ValidationError(`Extraction failed (exit ${exitCode}): ${stderr}`)
   }
   logger.info('Extracted snapshot.')
 
@@ -331,7 +333,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } =
 
 /**
  * Resolve the --archive flag to an absolute path and confirm it lives
- * under $HOME. Refusing arbitrary system paths matches the audit-flagged
+ * under $HOME. Refusing arbitrary system paths matches the documented
  * principle: setup is a local operator tool; reading from `/etc/...` is
  * never the intended use.
  */
@@ -343,8 +345,9 @@ function resolveArchivePath(archive) {
   const cwd = process.cwd()
   if (home && absolute.startsWith(`${home}/`)) return absolute
   if (absolute.startsWith(`${cwd}/`) || absolute === cwd) return absolute
-  throw new Error(
+  throw new ValidationError(
     `Refusing to install from ${absolute}: archive path must live under $HOME or the current working directory.`,
+    { field: 'archive', value: absolute },
   )
 }
 
@@ -370,9 +373,9 @@ async function fetchLatestRelease() {
 
   if (!res.ok) {
     if (res.status === 404) {
-      throw new Error('No releases found. The repository may not have published any snapshots yet.')
+      throw new NotFoundError(`https://api.github.com/repos/${GITHUB_REPO}/releases`, 'No releases found. The repository may not have published any snapshots yet.')
     }
-    throw new Error(`GitHub API error: HTTP ${res.status}`)
+    throw new HttpError(res.status, `https://api.github.com/repos/${GITHUB_REPO}/releases`, `GitHub API error: HTTP ${res.status}`)
   }
 
   const data = await res.json()

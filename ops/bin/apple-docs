@@ -1,0 +1,8 @@
+#!/bin/sh
+# Shim → apple-docs CLI (root cli.js). Locates Bun via _exec.sh so the
+# command works under non-interactive SSH where the operator's PATH
+# isn't loaded. Pair with `ops/bin/apple-docs-ops` for the ops layer.
+set -eu
+DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+. "$DIR/_exec.sh"
+exec_bun_cli "$DIR/../../cli.js" "$@"

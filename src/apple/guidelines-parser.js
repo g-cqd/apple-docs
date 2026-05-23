@@ -1,3 +1,4 @@
+import { ParseError } from '../lib/errors.js'
 /**
  * Parse the Apple App Store Review Guidelines HTML page into structured sections.
  * Uses Bun's built-in HTMLRewriter (Cloudflare lol-html) — zero dependencies.
@@ -72,7 +73,7 @@ export async function parseGuidelinesHtml(html) {
 
   // Extract just the content container
   const containerStart = transformed.indexOf('id="content-container"')
-  if (containerStart === -1) throw new Error('Could not find #content-container in HTML')
+  if (containerStart === -1) throw new ParseError('Could not find #content-container in HTML')
   const contentHtml = transformed.slice(containerStart)
 
   // ── Pass 2: Split on markers + convert to Markdown ─────────────────

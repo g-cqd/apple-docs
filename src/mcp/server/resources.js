@@ -6,6 +6,7 @@ import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { browse } from '../../commands/browse.js'
 import { frameworks } from '../../commands/frameworks.js'
 import { lookup } from '../../commands/lookup.js'
+import { NotFoundError } from '../../lib/errors.js'
 import { renderSfSymbol } from '../../resources/apple-assets.js'
 import {
   paginateArrayField,
@@ -14,7 +15,7 @@ import {
   projectBrowse,
   projectFrameworks,
   projectReadDoc,
-} from '../projection.js'
+} from '../../output/projection.js'
 import { parseResourcePagination, sanitizeDocumentPayload } from './helpers.js'
 
 export function registerResources(server, ctx) {
@@ -107,9 +108,9 @@ export function registerResources(server, ctx) {
     { description: 'Read an indexed Apple font file', mimeType: 'application/octet-stream' },
     async (uri, { id }) => {
       const font = ctx.db.getAppleFontFile(String(id))
-      if (!font) throw new Error(`Font file not found: ${id}`)
+      if (!font) throw new NotFoundError(`apple-docs://font/${id}`, `Font file not found: ${id}`)
       const file = Bun.file(font.file_path)
-      if (!await file.exists()) throw new Error(`Font file missing on disk: ${font.file_path}`)
+      if (!await file.exists()) throw new NotFoundError(`apple-docs://font/${id}`, `Font file missing on disk: ${font.file_path}`)
       return {
         contents: [{
           uri: uri.href,

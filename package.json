@@ -50,12 +50,18 @@
     "lint:unused:fix": "bunx knip --fix",
     "lint:duplication": "bunx jscpd src/ cli.js index.js",
     "lint:size": "bun scripts/check-file-size.js",
-    "test:web": "bun test --isolate test/unit/web-serve.test.js test/unit/web-templates.test.js test/unit/web-search-client.test.js test/unit/web-search-artifacts.test.js test/unit/web-build.test.js",
+    "test:web": "bun test --isolate test/unit/web/",
     "audit": "bun run lint && bun run typecheck && bun run lint:unused && bun run lint:duplication && bun run lint:size && bun run test:coverage",
     "audit:report": "mkdir -p reports && bun run lint && bun run typecheck && bunx knip --reporter json > reports/knip.json; bunx jscpd src/ cli.js index.js; bun run test:coverage",
     "test:mutate": "npx stryker run",
     "test:mutate:changed": "npx stryker run --incremental",
-    "ci": "bun run lint && bun run typecheck && bun test --isolate"
+    "ci": "bun run lint && bun run typecheck && bun test --isolate",
+    "build:cli": "mkdir -p dist && bun build --compile --minify --sourcemap --target=bun-darwin-arm64 cli.js --outfile dist/apple-docs",
+    "build:cli:all": "mkdir -p dist && bun build --compile --minify --sourcemap --target=bun-darwin-arm64 cli.js --outfile dist/apple-docs-darwin-arm64 && bun build --compile --minify --sourcemap --target=bun-linux-x64 cli.js --outfile dist/apple-docs-linux-x64 && bun build --compile --minify --sourcemap --target=bun-linux-arm64 cli.js --outfile dist/apple-docs-linux-arm64",
+    "dev:setup": "bun scripts/dev-setup.js",
+    "docs:dev": "bunx vitepress dev docs",
+    "docs:build": "bunx vitepress build docs",
+    "docs:preview": "bunx vitepress preview docs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
@@ -64,7 +70,8 @@
     "jscpd": "^4.1.0",
     "knip": "^6.12.2",
     "playwright": "^1.59.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitepress": "^1.6.4"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { AssertionError } from '../lib/errors.js'
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 import { runMigrations } from './migrations/index.js'
 import { applyPragmas, enableForeignKeys } from './pragmas.js'
@@ -60,7 +61,7 @@ export class DocsDatabase {
     try {
       const result = fn(this)
       if (result && typeof result.then === 'function') {
-        throw new Error('DocsDatabase.tx() callback must be synchronous')
+        throw new AssertionError('DocsDatabase.tx() callback must be synchronous')
       }
       this.db.run('COMMIT')
       return result
@@ -210,6 +211,7 @@ export class DocsDatabase {
 
   getDocumentSnippetData(keys) { return this.documents.getDocumentSnippetData(keys) }
   getRelatedDocCounts(keys) { return this.documents.getRelatedDocCounts(keys) }
+  getRelationshipCountsByType(key) { return this.documents.getRelationshipCountsByType(key) }
 
   getBodyIndexCount() { return this.search.getBodyIndexCount() }
   insertBody(documentId, body) { this.search.insertBody(documentId, body) }

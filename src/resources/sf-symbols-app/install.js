@@ -28,6 +28,7 @@ import { mkdir, readFile, rm, writeFile, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn as nodeSpawn } from 'node:child_process'
+import { HttpError, NotFoundError, ValidationError } from '../../lib/errors.js'
 
 const LANDING_URL = 'https://developer.apple.com/sf-symbols/'
 const SYSTEM_APP_PATH = '/Applications/SF Symbols.app'
@@ -47,7 +48,7 @@ export async function discoverLatest(opts = {}) {
   const logger = opts.logger
   const res = await fetcher(LANDING_URL, { redirect: 'follow' })
   if (!res.ok) {
-    throw new Error(`SF Symbols landing fetch failed: ${res.status} ${res.statusText}`)
+    throw new HttpError(res.status, LANDING_URL, `SF Symbols landing fetch failed: ${res.status} ${res.statusText}`)
   }
   const html = await res.text()
   // Pull every SF-Symbols-N.dmg(?M)? URL; the page typically has
@@ -62,7 +63,7 @@ export async function discoverLatest(opts = {}) {
     if (!seen.has(key)) seen.set(key, { url: match[0], major, cacheBuster })
   }
   if (seen.size === 0) {
-    throw new Error('SF Symbols landing page had no recognised .dmg link')
+    throw new NotFoundError(LANDING_URL, 'SF Symbols landing page had no recognised .dmg link')
   }
   // Latest = highest major, tie-break on cache-buster.
   const entries = [...seen.values()].sort((a, b) =>
@@ -126,7 +127,7 @@ export function compareVersions(a, b) {
  * Approximate the SF Symbols version that a download URL represents.
  * The path encodes only the major; the `?N` cache-buster increments
  * per minor release. We treat (major, cacheBuster) as (X, Y) so the
- * pair "7.2" maps to URL with `?2` (verified manually on 2026-05-12).
+ * pair "7.2" maps to URL with `?2` (verified manually).
  *
  * @param {{ major: number, cacheBuster: number }} info
  * @returns {string}
@@ -156,7 +157,7 @@ export function versionFromUrl({ major, cacheBuster }) {
  */
 export async function ensureSfSymbolsApp(opts) {
   const { dataDir, logger, fetcher, skipDiscovery, forceRefresh } = opts
-  if (!dataDir) throw new Error('ensureSfSymbolsApp: dataDir required')
+  if (!dataDir) throw new ValidationError('ensureSfSymbolsApp: dataDir required', { field: 'dataDir' })
 
   const cacheRoot = join(dataDir, 'cache', 'sf-symbols')
   const manifestPath = join(cacheRoot, 'manifest.json')
@@ -202,7 +203,8 @@ export async function ensureSfSymbolsApp(opts) {
       logger?.warn?.('Using stale cached SF Symbols.app (discovery unavailable)')
       return { appPath: prevManifest.appPath, version: prevManifest.version, source: 'cache' }
     }
-    throw new Error(
+    throw new NotFoundError(
+      LANDING_URL,
       'SF Symbols.app missing and Apple developer site unreachable. ' +
       'Install SF Symbols.app from https://developer.apple.com/sf-symbols/ or retry with network.',
     )
@@ -231,7 +233,7 @@ export async function ensureSfSymbolsApp(opts) {
     try {
       const sourceApp = join(mountPoint, 'SF Symbols.app')
       if (!existsSync(sourceApp)) {
-        throw new Error(`SF Symbols.app not found at expected path inside .dmg (${sourceApp})`)
+        throw new NotFoundError(sourceApp, `SF Symbols.app not found at expected path inside .dmg (${sourceApp})`)
       }
       // Clean any partial copy from a previous aborted run, then
       // copy the app out of the mounted volume.
@@ -264,10 +266,10 @@ export async function ensureSfSymbolsApp(opts) {
 async function downloadFile(url, destPath, { fetcher = fetch, logger } = {}) {
   const res = await fetcher(url, { redirect: 'follow' })
   if (!res.ok) {
-    throw new Error(`download failed: ${res.status} ${res.statusText} for ${url}`)
+    throw new HttpError(res.status, url, `download failed: ${res.status} ${res.statusText} for ${url}`)
   }
   // Stream to disk to keep memory bounded — the .dmg is ~500 MB.
-  if (!res.body) throw new Error('download response had no body')
+  if (!res.body) throw new HttpError(0, url, 'download response had no body')
   const file = Bun.file(destPath)
   const writer = file.writer()
   const reader = res.body.getReader()

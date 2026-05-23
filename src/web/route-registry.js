@@ -1,3 +1,4 @@
+import { AssertionError } from '../lib/errors.js'
 /**
  * Minimal route registry for the dev server.
  *
@@ -28,7 +29,7 @@ export function createRouteRegistry() {
   return {
     register(pathname, handler) {
       if (exact.has(pathname)) {
-        throw new Error(`route-registry: duplicate exact route ${pathname}`)
+        throw new AssertionError(`route-registry: duplicate exact route ${pathname}`)
       }
       exact.set(pathname, handler)
     },

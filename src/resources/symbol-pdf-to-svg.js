@@ -1,3 +1,4 @@
+import { ParseError } from "../lib/errors.js"
 /**
  * Convert a single-page SF Symbol PDF (as emitted by
  * `vectorGlyph.drawInContext:`) into a true vector SVG with full layer-cutout
@@ -47,7 +48,7 @@ export function symbolPdfToSvg(pdfBytes, opts = {}) {
   const text = bytesToLatin1(buffer)
   const objects = collectObjects(text, buffer)
   const page = findPage(objects)
-  if (!page) throw new Error('symbol PDF: no /Type /Page object found')
+  if (!page) throw new ParseError('symbol PDF: no /Type /Page object found')
   const resources = resolveDict(page.dict.Resources, objects)
   const extGState = resolveDict(resources?.ExtGState, objects) ?? {}
   const alphaByName = {}
@@ -58,10 +59,10 @@ export function symbolPdfToSvg(pdfBytes, opts = {}) {
   }
   const contentRef = page.dict.Contents
   const contentObj = resolveStreamObject(contentRef, objects)
-  if (!contentObj) throw new Error('symbol PDF: no content stream')
+  if (!contentObj) throw new ParseError('symbol PDF: no content stream')
   const stream = decodeStream(contentObj)
   const fills = parseContentStream(stream, alphaByName)
-  if (fills.length === 0) throw new Error('symbol PDF: no fill operations')
+  if (fills.length === 0) throw new ParseError('symbol PDF: no fill operations')
   return assembleSvg(fills, opts)
 }
 

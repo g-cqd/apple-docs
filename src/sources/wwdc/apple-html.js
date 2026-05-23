@@ -5,6 +5,7 @@
 // walking the DOM with regexes. JSON-LD or render-tree JSON would be
 // cleaner, but Apple inlines neither on the public video pages.
 
+import { HttpError } from '../../lib/errors.js'
 import {
   APPLE_BASE,
   APPLE_VIDEOS_INDEX,
@@ -57,7 +58,7 @@ export async function fetchAppleSession(year, sessionId, rateLimiter) {
     throw Object.assign(new Error(`Not found: ${url}`), { status: 404 })
   }
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} fetching ${url}`)
+    throw new HttpError(res.status, url, `HTTP ${res.status} fetching ${url}`)
   }
 
   const html = await res.text()

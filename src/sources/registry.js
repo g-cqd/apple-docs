@@ -1,3 +1,4 @@
+import { AssertionError, NotFoundError } from '../lib/errors.js'
 import { AppleDoccAdapter } from './apple-docc.js'
 import { AppleArchiveAdapter } from './apple-archive.js'
 import { SourceAdapter } from './base.js'
@@ -15,7 +16,7 @@ const registry = new Map()
 
 function registerAdapter(AdapterClass) {
   if (!(AdapterClass.prototype instanceof SourceAdapter)) {
-    throw new Error('Adapter must extend SourceAdapter')
+    throw new AssertionError('Adapter must extend SourceAdapter')
   }
   registry.set(AdapterClass.type, AdapterClass)
 }
@@ -23,7 +24,7 @@ function registerAdapter(AdapterClass) {
 export function getAdapter(sourceType) {
   const AdapterClass = registry.get(sourceType)
   if (!AdapterClass) {
-    throw new Error(`Unknown source type: ${sourceType}`)
+    throw new NotFoundError(sourceType, `Unknown source type: ${sourceType}`)
   }
   return new AdapterClass()
 }

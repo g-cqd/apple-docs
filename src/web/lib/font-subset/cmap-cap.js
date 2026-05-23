@@ -1,3 +1,4 @@
+import { ParseError } from '../../../lib/errors.js'
 import { readFile } from 'node:fs/promises'
 import { parseCmap } from '../../../resources/apple-symbols/codepoint-from-font.js'
 
@@ -33,7 +34,7 @@ async function loadLegalSet(fontPath) {
   const buf = await readFile(fontPath)
   const tables = parseSfntDirectoryLocal(buf)
   const cmapRec = tables.get('cmap')
-  if (!cmapRec) throw new Error(`font missing cmap table: ${fontPath}`)
+  if (!cmapRec) throw new ParseError(`font missing cmap table: ${fontPath}`)
   const cmapTable = buf.subarray(cmapRec.offset, cmapRec.offset + cmapRec.length)
   const map = parseCmap(cmapTable)
   return new Set(map.keys())
@@ -43,7 +44,7 @@ async function loadLegalSet(fontPath) {
 // codepoint-from-font.js but stays unexported there, so we duplicate the
 // 10 lines here rather than widen that module's public surface.
 function parseSfntDirectoryLocal(buf) {
-  if (buf.length < 12) throw new Error('font too short for SFNT header')
+  if (buf.length < 12) throw new ParseError('font too short for SFNT header')
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
   const numTables = view.getUint16(4, false)
   const tables = new Map()

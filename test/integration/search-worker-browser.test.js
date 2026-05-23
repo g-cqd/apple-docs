@@ -22,7 +22,22 @@ import { DocsDatabase } from '../../src/storage/database.js'
 import { startDevServer } from '../../src/web/serve.js'
 
 const DB_PATH = join(homedir(), '.apple-docs', 'apple-docs.db')
-const HAS_LOCAL_DB = existsSync(DB_PATH)
+// `bun cli.js status` / other read-only commands materialise an empty
+// schema-only DB file, so file-existence alone isn't enough — also check
+// that the corpus carries indexed documents. Otherwise the search probe
+// trivially returns 0 results and the assertion fails on a clean machine.
+const HAS_LOCAL_DB = existsSync(DB_PATH) && hasIndexedDocs(DB_PATH)
+
+function hasIndexedDocs(path) {
+  try {
+    const probe = new DocsDatabase(path)
+    const row = probe.db.query('SELECT COUNT(*) as n FROM documents').get()
+    probe.close()
+    return (row?.n ?? 0) > 0
+  } catch {
+    return false
+  }
+}
 
 let server = null
 let db = null

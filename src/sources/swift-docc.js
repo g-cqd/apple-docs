@@ -74,7 +74,7 @@ export function pathToKey(slug, internalPath) {
 export function keyToPath(slug, key) {
   const prefix = `${slug}/`
   if (!key.startsWith(prefix)) {
-    throw new Error(`Key '${key}' does not belong to archive '${slug}'`)
+    throw new ValidationError(`Key '${key}' does not belong to archive '${slug}'`, { field: 'key', value: key })
   }
   return `/${key.slice(prefix.length)}`
 }
@@ -82,9 +82,11 @@ export function keyToPath(slug, key) {
 function archiveForKey(key) {
   const slug = extractRootSlug(key)
   const archive = ARCHIVES[slug]
-  if (!archive) throw new Error(`Unknown swift-docc archive slug: ${slug}`)
+  if (!archive) throw new NotFoundError(slug, `Unknown swift-docc archive slug: ${slug}`)
   return { slug, archive, path: keyToPath(slug, key) }
 }
+
+import { NotFoundError, ValidationError } from '../lib/errors.js'
 
 export class SwiftDoccAdapter extends SourceAdapter {
   static type = 'swift-docc'

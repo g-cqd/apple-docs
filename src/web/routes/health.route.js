@@ -15,7 +15,7 @@ export function healthHandler() {
 }
 
 /**
- * A32 readiness probe. 200 only when the DB is reachable AND (when a
+ * Readiness probe. 200 only when the DB is reachable AND (when a
  * reader-pool is wired) at least one reader worker is alive. 503
  * otherwise so a load balancer can route around a wedged instance even
  * when the process is otherwise responsive.

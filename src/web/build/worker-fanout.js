@@ -1,3 +1,4 @@
+import { ValidationError } from '../../lib/errors.js'
 /**
  * Worker fan-out for src/web/build.js. Partitions the framework list
  * across N child Bun subprocesses, each rendering its own slice.
@@ -85,7 +86,7 @@ export async function runWorkerBuilds({ roots, siteConfig, workers, concurrency,
   const exits = await Promise.all(procs.map(p => p.exited))
   const failedCount = exits.filter(c => c !== 0).length
   if (failedCount > 0) {
-    throw new Error(`${failedCount}/${exits.length} build worker(s) exited non-zero`)
+    throw new ValidationError(`${failedCount}/${exits.length} build worker(s) exited non-zero`)
   }
 
   // Re-read counts from the render-index for an honest aggregate. We don't

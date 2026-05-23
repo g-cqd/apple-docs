@@ -9,7 +9,7 @@ export function renderSymbolsPage(siteConfig, data = {}) {
   const publicCount = totals.find(row => row.scope === 'public')?.count ?? 0
   const privateCount = totals.find(row => row.scope === 'private')?.count ?? 0
 
-  // Layout (research/fonts-symbols-ux.md §6):
+  // Layout:
   //   - global sticky toolbar at top: search · scope · category(mobile) ·
   //     weight · scale · color · size. Values flow into CSS custom props
   //     (`--symbol-color`, `--symbol-size`, `--symbol-weight`,

@@ -49,7 +49,7 @@ export async function downloadFileIfNeeded(url, filePath) {
   ensureDir(dirname(filePath))
   const tmpPath = `${filePath}.${process.pid}.tmp`
   const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(300_000) })
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} downloading ${url}`)
+  if (!res.ok || !res.body) throw new HttpError(res.status, url, `HTTP ${res.status} downloading ${url}`)
   const sink = Bun.file(tmpPath).writer()
   const reader = res.body.getReader()
   let ended = false
@@ -124,7 +124,7 @@ async function run(args) {
   // hdiutil attach / detach and pkgutil --expand-full each finish in seconds
   // on a normal DMG; 60s is generous and bounds an OS-level hang.
   const { stderr, exitCode } = await spawnWithDeadline(args, { deadlineMs: 60_000 })
-  if (exitCode !== 0) throw new Error(stderr.trim() || `exited ${exitCode}`)
+  if (exitCode !== 0) throw new ValidationError(stderr.trim() || `exited ${exitCode}`)
 }
 
 export async function hashFile(path) {

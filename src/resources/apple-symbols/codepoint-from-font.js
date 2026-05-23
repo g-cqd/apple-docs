@@ -1,3 +1,4 @@
+import { ParseError } from '../../lib/errors.js'
 /**
  * SFNT `cmap` table parser — codepoint → glyph-index map.
  *
@@ -50,7 +51,7 @@ export function parseCmap(cmapTable) {
     const map = tryParseCmapSubtable(cmapTable, view, c.subtableOffset)
     if (map && map.size > 0) return map
   }
-  throw new Error('no usable cmap subtable (formats 4/12) found')
+  throw new ParseError('no usable cmap subtable (formats 4/12) found')
 }
 
 function tryParseCmapSubtable(cmapTable, view, offset) {

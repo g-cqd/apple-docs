@@ -1,3 +1,4 @@
+import { NotFoundError, ValidationError } from "./errors.js"
 /**
  * Deterministic native .7z archive builder.
  *
@@ -35,7 +36,7 @@ import { spawnWithDeadline } from './spawn-with-deadline.js'
  *    > the format choice in stone … `-md=1024m` may saturate (LZMA2
  *    > dictionary ceiling).
  *
- *  May 2026 recalibration (after two consecutive snapshot timeouts on
+ *  the snapshot format recalibration (after two consecutive snapshot timeouts on
  *  the GH macos-26 runner — 3-core M1, 7 GB RAM):
  *
  *    - `-mx=9 → -mx=5` ("Normal" preset). ~3-5x faster pack at this
@@ -87,7 +88,8 @@ export function resolveSevenZipBinary(deps = {}) {
     const resolved = which(bin)
     if (resolved) return bin
   }
-  throw new Error(
+  throw new NotFoundError(
+    '7zz',
     'Neither `7zz` nor `7z` is on PATH. Install p7zip to build / extract ' +
     'snapshot archives:\n' +
     '  macOS:  brew install sevenzip   # ships 7zz\n' +
@@ -164,7 +166,7 @@ export async function createSevenZipArchive({
   const binary = resolveSevenZipBinary(deps)
   const files = listFilesSorted(sourceDir)
   if (files.length === 0) {
-    throw new Error(`createSevenZipArchive: no files under ${sourceDir}`)
+    throw new ValidationError(`createSevenZipArchive: no files under ${sourceDir}`)
   }
 
   // Resolve outputPath to absolute before spawning 7zz. 7zz runs with
@@ -216,7 +218,7 @@ export async function createSevenZipArchive({
       },
     })
     if (exitCode !== 0) {
-      throw new Error(`7z archive build failed (exit ${exitCode}): ${stderr.trim()}`)
+      throw new ValidationError(`7z archive build failed (exit ${exitCode}): ${stderr.trim()}`)
     }
   } finally {
     rmSync(listDir, { recursive: true, force: true })

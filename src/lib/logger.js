@@ -17,19 +17,35 @@ const REDACT_MAX_DEPTH = 8
 export function createLogger(level = process.env.APPLE_DOCS_LOG_LEVEL || 'info') {
   const threshold = LEVELS[level] ?? LEVELS.info
 
-  function log(lvl, msg, data) {
-    if (LEVELS[lvl] < threshold) return
+  function buildEntry(lvl, msg, data, requestId) {
     const entry = { ts: new Date().toISOString(), level: lvl, msg }
+    if (requestId) entry.requestId = requestId
     if (data !== undefined) entry.data = redact(data, 0)
-    process.stderr.write(`${JSON.stringify(entry)}\n`)
+    return entry
   }
 
-  return {
-    debug: (msg, data) => log('debug', msg, data),
-    info: (msg, data) => log('info', msg, data),
-    warn: (msg, data) => log('warn', msg, data),
-    error: (msg, data) => log('error', msg, data),
+  function emit(lvl, msg, data, requestId) {
+    if (LEVELS[lvl] < threshold) return
+    process.stderr.write(`${JSON.stringify(buildEntry(lvl, msg, data, requestId))}\n`)
   }
+
+  function makeLogger(requestId) {
+    return {
+      debug: (msg, data) => emit('debug', msg, data, requestId),
+      info: (msg, data) => emit('info', msg, data, requestId),
+      warn: (msg, data) => emit('warn', msg, data, requestId),
+      error: (msg, data) => emit('error', msg, data, requestId),
+      /**
+       * Returns a child logger that stamps every log line with `requestId`.
+       * The base logger is reused; only the closed-over id changes.
+       */
+      withRequestId(id) {
+        return makeLogger(id)
+      },
+    }
+  }
+
+  return makeLogger(null)
 }
 
 /**

@@ -1,24 +1,53 @@
+import { NotFoundError, ValidationError } from '../lib/errors.js'
+
 /**
+ * @typedef {object} BrowseArgs
+ * @property {string} framework   Framework slug (e.g. swiftui, design, app-store-review).
+ * @property {string} [path]      Page path to drill into; omit to list framework root.
+ * @property {number} [limit]     Max pages when listing a full framework (cap 200).
+ *
+ * @typedef {object} BrowsePageEntry
+ * @property {string} path
+ * @property {string|null} title
+ * @property {string|null} kind
+ * @property {string|null} [abstract]
+ * @property {string|null} [section]
+ *
+ * @typedef {object} BrowseResult
+ * @property {string} framework
+ * @property {string} [slug]
+ * @property {string} [kind]
+ * @property {string} [path]
+ * @property {string} [title]
+ * @property {BrowsePageEntry[]} [pages]
+ * @property {BrowsePageEntry[]} [children]
+ * @property {number} [total]
+ * @property {boolean} [limited]
+ *
  * Browse the topic tree for a framework or subtree.
- * @param {{ framework: string, path?: string }} opts
+ *
+ * @param {BrowseArgs} opts
  * @param {{ db }} ctx
+ * @returns {Promise<BrowseResult>}
+ * @throws {ValidationError} when `framework` is missing.
+ * @throws {NotFoundError} when the framework slug or page path is unknown.
  */
 export async function browse(opts, ctx) {
   const { db } = ctx
   const { framework } = opts
 
   if (!framework) {
-    throw new Error('framework is required')
+    throw new ValidationError('framework is required', { field: 'framework' })
   }
 
   const root = db.resolveRoot(framework)
   if (!root) {
-    throw new Error(`Unknown framework: ${framework}`)
+    throw new NotFoundError(framework, `Unknown framework: ${framework}`)
   }
 
   if (opts.path) {
     const page = db.getPage(opts.path)
-    if (!page) throw new Error(`Page not found: ${opts.path}`)
+    if (!page) throw new NotFoundError(opts.path, `Page not found: ${opts.path}`)
 
     const refs = db.getDocumentRelationships(page.path)
     return {

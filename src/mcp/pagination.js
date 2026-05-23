@@ -16,6 +16,7 @@
  * strategy-dispatch layer.
  */
 
+import { ValidationError } from '../lib/errors.js'
 import {
   PaginationItemTooLargeError,
   PAGINATION_LIMITS,
@@ -69,7 +70,7 @@ export function paginateArrayField(payload, fieldName, opts = {}) {
   })
 
   if (page < 1 || page > totalPages) {
-    throw new Error(`Page ${page} is out of range. Valid pages: 1-${totalPages}.`)
+    throw new ValidationError(`Page ${page} is out of range. Valid pages: 1-${totalPages}.`, { field: 'page', value: page })
   }
 
   return pages[page - 1]
@@ -93,7 +94,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
 
   if (serializePayload(singlePage).length <= maxChars) {
     if (page !== 1) {
-      throw new Error('Page 1 is the only available page for this response.')
+      throw new ValidationError('Page 1 is the only available page for this response.', { field: 'page', value: page })
     }
     return singlePage
   }
@@ -164,7 +165,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
   }
 
   if (page < 1 || page > pagePayloads.length) {
-    throw new Error(`Page ${page} is out of range. Valid pages: 1-${pagePayloads.length}.`)
+    throw new ValidationError(`Page ${page} is out of range. Valid pages: 1-${pagePayloads.length}.`, { field: 'page', value: page })
   }
 
   return pagePayloads[page - 1]
@@ -235,7 +236,7 @@ function paginateTextWindowPayload(payload, opts) {
   })
 
   if (page < 1 || page > plan.pages.length) {
-    throw new Error(`Page ${page} is out of range. Valid pages: 1-${plan.pages.length}.`)
+    throw new ValidationError(`Page ${page} is out of range. Valid pages: 1-${plan.pages.length}.`, { field: 'page', value: page })
   }
 
   return plan.pages[page - 1]
@@ -267,7 +268,7 @@ function paginateMatchedDocumentPayload(payload, opts) {
   })
 
   if (page < 1 || page > totalPages) {
-    throw new Error(`Page ${page} is out of range. Valid pages: 1-${totalPages}.`)
+    throw new ValidationError(`Page ${page} is out of range. Valid pages: 1-${totalPages}.`, { field: 'page', value: page })
   }
 
   return pages[page - 1]

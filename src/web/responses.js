@@ -1,4 +1,3 @@
-import { gzipSync } from 'node:zlib'
 import { sha256 } from '../lib/hash.js'
 import { renderNotFoundPage } from './templates.js'
 
@@ -224,7 +223,7 @@ export async function finalizeResponse(request, response, { gzipCache }) {
     if (accept.includes('gzip') && COMPRESSIBLE.has(mimeBase)) {
       let compressed = gzipCache.get(etag)
       if (!compressed) {
-        compressed = gzipSync(Buffer.from(body))
+        compressed = Bun.gzipSync(Buffer.from(body))
         gzipCache.set(etag, compressed)
       }
       headers.set('Content-Encoding', 'gzip')

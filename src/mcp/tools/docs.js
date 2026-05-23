@@ -1,7 +1,7 @@
 // MCP tool surface for the documentation queries: search_docs, read_doc,
-// list_frameworks, browse, list_taxonomy. They all share the doc projection
-// and cache-wrap pattern; isolating them from the asset rendering tools
-// keeps each surface independently reviewable.
+// list_frameworks, browse, list_taxonomy. Every response routes through
+// src/output/projection.js before serialisation; nothing else in this
+// file is allowed to shape the public payload.
 
 import { z } from 'zod'
 import { search } from '../../commands/search.js'
@@ -21,7 +21,8 @@ import {
   projectFrameworks,
   projectReadDoc,
   projectSearchResult,
-} from '../projection.js'
+  projectTaxonomy,
+} from '../../output/projection.js'
 import { CACHE_NEGATIVE } from '../cache.js'
 import {
   browseOutputSchema,
@@ -29,26 +30,18 @@ import {
   listTaxonomyOutputSchema,
   readDocOutputSchema,
   searchDocsOutputSchema,
-} from '../output-schemas.js'
+} from '../../output/schemas.js'
 import {
-  compactSearchHit,
   sanitizeDocumentPayload,
   validatePaginationArgs,
 } from '../server/helpers.js'
 
-// Use `z.coerce.number()` rather than `z.number()` so clients that hand-
-// serialize JSON-RPC args as strings (observed: claude-code CLI sending
-// `"limit": "5"`) don't trip validation. The JSON Schema exposed to the
-// client is still `{ type: "number" }`; coercion only kicks in when the
-// argument arrives as a numeric string.
+// `z.coerce.number()` accepts numeric strings — observed: claude-code CLI
+// sends `"limit": "5"`. The exposed JSON Schema is still `{ type: "number" }`.
 const paginatedMaxChars = z.coerce.number().int().min(MIN_PAGINATED_MAX_CHARS)
 const paginatedPage = z.coerce.number().int().min(1)
 
-// D.1: every doc tool is read-only and idempotent — same args produce
-// the same response (modulo a corpus update). MCP clients use these
-// hints to decide whether to display a confirmation prompt or to allow
-// retries. `openWorldHint: false` records that the tools never reach
-// out to a network beyond the local DB.
+// every doc tool is read-only and idempotent.
 const READ_ONLY_HINTS = {
   readOnlyHint: true,
   idempotentHint: true,
@@ -56,72 +49,76 @@ const READ_ONLY_HINTS = {
   openWorldHint: false,
 }
 
+const minVersionSchema = z.object({
+  ios: z.string().optional(),
+  macos: z.string().optional(),
+  watchos: z.string().optional(),
+  tvos: z.string().optional(),
+  visionos: z.string().optional(),
+}).optional().describe('Minimum version per platform, e.g. { ios: "17.0" }.')
+
+const matchExcerptSchema = z.object({
+  query: z.string().describe('Substring to find within document content.'),
+  context: z.coerce.number().int().min(20).max(2000).optional().describe('Context window per excerpt (default 140 chars).'),
+  max: z.coerce.number().int().min(1).max(50).optional().describe('Max excerpts (default 5).'),
+  caseSensitive: z.boolean().optional().describe('Case-sensitive lookup (default false).'),
+}).optional().describe('Focused match excerpts from document content.')
+
 export function registerDocTools(server, ctx, cache) {
   server.registerTool(
     'search_docs',
     {
-    description: 'Keyword search across all Apple documentation with fuzzy matching and tiered ranking. Use it to find APIs, symbols, articles, HIG pages, or App Store Review Guidelines. This is NOT a natural-language endpoint: pass compact, keyword-shaped queries (symbol names or API terms) and push constraints into the filter arguments (framework, source, kind, language, platform, min_*, year, track) rather than into the query string. Do not ask the user to reformulate — convert their intent yourself before calling. If the strict cascade returns nothing, the server falls back to best-effort relaxed matching (stopword pruning → OR → trigram on the strongest token); relaxed hits are tagged `matchQuality: relaxed*` and the response carries `relaxed: true` with a `relaxationTier`.',
-    annotations: READ_ONLY_HINTS,
-    outputSchema: searchDocsOutputSchema,
-    inputSchema: {
-      query: z.string().describe('Compact keyword query. Prefer symbol names or API terms (e.g. "NavigationStack", "dismiss sheet", "async let") over natural-language sentences. Use the other arguments for framework/source/platform constraints instead of appending them to the query.'),
-      framework: z.string().optional().describe('Filter by framework slug (e.g. swiftui, foundation, design, app-store-review)'),
-      source: z.string().optional().describe('Filter by source type slug or comma-separated list (e.g. apple-docc, wwdc, sample-code)'),
-      kind: z.string().optional().describe('Filter by role or displayed kind (e.g. symbol, article, Article, Session, Collection)'),
-      language: z.enum(['swift', 'objc']).optional().describe('Filter by programming language'),
-      platform: z.enum(['ios', 'macos', 'watchos', 'tvos', 'visionos']).optional().describe('Filter by platform availability'),
-      min_ios: z.string().optional().describe('Minimum iOS version (e.g. "17.0")'),
-      min_macos: z.string().optional().describe('Minimum macOS version (e.g. "14.0")'),
-      min_watchos: z.string().optional().describe('Minimum watchOS version'),
-      min_tvos: z.string().optional().describe('Minimum tvOS version'),
-      min_visionos: z.string().optional().describe('Minimum visionOS version'),
-      limit: z.coerce.number().int().min(1).max(100).optional().describe('Max results (default 50, hard cap 100)'),
-      fuzzy: z.boolean().optional().describe('Enable typo-tolerant fuzzy matching (default true)'),
-      noDeep: z.boolean().optional().describe('Disable background full-body search (default false)'),
-      noEager: z.boolean().optional().describe('Wait for full-body search to complete instead of returning early (default false)'),
-      read: z.boolean().optional().describe('Return the full Markdown content of the top search result instead of the result list'),
-      year: z.coerce.number().optional().describe('Filter WWDC sessions by year (e.g. 2024)'),
-      track: z.string().optional().describe('Filter WWDC sessions by track (e.g. SwiftUI, Accessibility)'),
-      deprecated: z.enum(['include', 'exclude', 'only']).optional().describe('Deprecation filter. Default "include" returns everything with an `isDeprecated: true` flag on deprecated hits. For code-writing tasks set "exclude" to hide deprecated APIs. "only" returns just deprecated hits.'),
-      maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
-      page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
-      match: z.string().optional().describe('Return focused match excerpts from the top read result instead of the full page content.'),
-      contextChars: z.coerce.number().int().min(20).max(2000).optional().describe('Context window around each match excerpt (default 140 characters).'),
-      maxMatches: z.coerce.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
-      caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
-    },
+      description: 'Keyword search across Apple docs. Pass compact symbol/API terms — not natural language. Use filter args (framework, source, kind, language, platform, minVersion, year, track, deprecated) instead of appending constraints to the query. Empty results may fall back to approximate matching — flagged in the response.',
+      annotations: READ_ONLY_HINTS,
+      outputSchema: searchDocsOutputSchema,
+      inputSchema: {
+        query: z.string().describe('Compact keyword query (symbol or API term).'),
+        framework: z.string().optional().describe('Framework slug (e.g. swiftui, foundation, app-store-review).'),
+        source: z.string().optional().describe('Source slug or comma-separated list (apple-docc, wwdc, sample-code, ...).'),
+        kind: z.string().optional().describe('Role or displayed kind (use list_taxonomy to discover values).'),
+        language: z.enum(['swift', 'objc']).optional().describe('Language filter.'),
+        platform: z.enum(['ios', 'macos', 'watchos', 'tvos', 'visionos']).optional().describe('Platform availability.'),
+        minVersion: minVersionSchema,
+        limit: z.coerce.number().int().min(1).max(100).optional().describe('Max results (default 50, cap 100).'),
+        read: z.boolean().optional().describe('Return the top result\'s full content instead of the list.'),
+        year: z.coerce.number().optional().describe('Filter WWDC sessions by year.'),
+        track: z.string().optional().describe('Filter WWDC sessions by track.'),
+        deprecated: z.enum(['include', 'exclude', 'only']).optional().describe('Deprecation filter (default include; pass exclude for code-writing tasks).'),
+        maxChars: paginatedMaxChars.optional().describe(`Max characters per response page (minimum ${MIN_PAGINATED_MAX_CHARS}).`),
+        page: paginatedPage.optional().describe('1-based page number (requires maxChars).'),
+        match: matchExcerptSchema,
+      },
     },
     cache.wrap('search_docs', async (args) => {
       validatePaginationArgs(args)
+      const { minVersion = {}, match: matchOpts, ...rest } = args
       const result = await search({
-        ...args,
-        minIos: args.min_ios,
-        minMacos: args.min_macos,
-        minWatchos: args.min_watchos,
-        minTvos: args.min_tvos,
-        minVisionos: args.min_visionos,
+        ...rest,
+        minIos: minVersion.ios,
+        minMacos: minVersion.macos,
+        minWatchos: minVersion.watchos,
+        minTvos: minVersion.tvos,
+        minVisionos: minVersion.visionos,
       }, ctx)
+
       if (args.read && result.results.length > 0) {
         const hit = result.results[0]
-        const page = await lookup({
-          path: hit.path,
-          includeSections: args.maxChars != null || args.match != null,
-        }, ctx)
+        const includeSections = args.maxChars != null || matchOpts != null
+        const page = await lookup({ path: hit.path, includeSections }, ctx)
         let readResult = sanitizeDocumentPayload({
           found: page.found,
-          bestMatch: compactSearchHit(hit, { compact: args.maxChars != null }),
+          bestMatch: hit,
           metadata: page.metadata,
           content: page.content ?? page.note ?? 'Markdown not available.',
           sections: page.sections,
           ...(page.note ? { note: page.note } : {}),
-          ...(page.tierLimitation ? { tierLimitation: page.tierLimitation } : {}),
         })
-        if (args.match) {
+        if (matchOpts) {
           readResult = buildMatchedDocumentPayload(readResult, {
-            match: args.match,
-            contextChars: args.contextChars,
-            maxMatches: args.maxMatches,
-            caseSensitive: args.caseSensitive,
+            match: matchOpts.query,
+            contextChars: matchOpts.context,
+            maxMatches: matchOpts.max,
+            caseSensitive: matchOpts.caseSensitive,
           })
         }
         if (args.maxChars != null) {
@@ -131,11 +128,10 @@ export function registerDocTools(server, ctx, cache) {
             document: page.metadata,
           })
         }
-        const projectedRead = projectReadDoc(readResult, {
-          full: args.match != null || args.maxChars != null,
-        })
-        return createMcpTextResult(projectedRead)
+        const full = matchOpts != null || args.maxChars != null
+        return createMcpTextResult(projectReadDoc(readResult, { full }))
       }
+
       const payload = args.maxChars != null
         ? paginateArrayField(result, 'results', {
             maxChars: args.maxChars,
@@ -144,9 +140,7 @@ export function registerDocTools(server, ctx, cache) {
           })
         : result
       const out = createMcpTextResult(projectSearchResult(payload))
-      // Empty-result queries re-run the full 4-tier cascade + progressive
-      // relaxation on every call. Cache misses briefly so mistypes and fuzz
-      // can't burn the cascade in a tight loop.
+      // Cache empty results briefly so the cascade isn't burned in a tight loop.
       if (result.results.length === 0) out[CACHE_NEGATIVE] = true
       return out
     }),
@@ -155,35 +149,33 @@ export function registerDocTools(server, ctx, cache) {
   server.registerTool(
     'read_doc',
     {
-    description: 'Fetch the full Markdown content of a documentation page by path or symbol name. Returns declarations, parameters, platforms, and relationships. Use when you already know what you\'re looking for.',
-    annotations: READ_ONLY_HINTS,
-    outputSchema: readDocOutputSchema,
-    inputSchema: {
-      path: z.string().optional().describe('Canonical page path (e.g. swiftui/view, design/human-interface-guidelines/accessibility, app-store-review/3.1)'),
-      symbol: z.string().optional().describe('Symbol name to look up (e.g. View, Publisher, NavigationStack)'),
-      framework: z.string().optional().describe('Disambiguate symbol by framework slug when multiple frameworks define the same name'),
-      section: z.string().optional().describe('Extract a specific section by heading or file path (e.g. ContentView.swift). Omit to get the full document.'),
-      maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
-      page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
-      match: z.string().optional().describe('Return focused match excerpts instead of the full document.'),
-      contextChars: z.coerce.number().int().min(20).max(2000).optional().describe('Context window around each match excerpt (default 140 characters).'),
-      maxMatches: z.coerce.number().int().min(1).max(50).optional().describe('Maximum number of match excerpts to return (default 5).'),
-      caseSensitive: z.boolean().optional().describe('Whether match lookups should be case-sensitive (default false).'),
-    },
+      description: 'Fetch the full Markdown content of a documentation page by path or symbol name. Returns declarations, parameters, platforms, and a `relationships` count (inherits-from, conforms-to, see-also, children) on the metadata. Use when you already know what you\'re looking for.',
+      annotations: READ_ONLY_HINTS,
+      outputSchema: readDocOutputSchema,
+      inputSchema: {
+        path: z.string().optional().describe('Canonical page path (e.g. swiftui/view, app-store-review/3.1).'),
+        symbol: z.string().optional().describe('Symbol name (e.g. View, Publisher, NavigationStack).'),
+        framework: z.string().optional().describe('Disambiguate symbol when multiple frameworks share the name.'),
+        section: z.string().optional().describe('Extract a specific section by heading or file path.'),
+        maxChars: paginatedMaxChars.optional().describe(`Max characters per response page (minimum ${MIN_PAGINATED_MAX_CHARS}).`),
+        page: paginatedPage.optional().describe('1-based page number (requires maxChars).'),
+        match: matchExcerptSchema,
+      },
     },
     cache.wrap('read_doc', async (args) => {
       validatePaginationArgs(args)
+      const matchOpts = args.match
       const result = await lookup({
         ...args,
-        includeSections: args.maxChars != null || args.match != null,
+        includeSections: args.maxChars != null || matchOpts != null,
       }, ctx)
       let payload = sanitizeDocumentPayload(result)
-      if (args.match) {
+      if (matchOpts) {
         payload = buildMatchedDocumentPayload(payload, {
-          match: args.match,
-          contextChars: args.contextChars,
-          maxMatches: args.maxMatches,
-          caseSensitive: args.caseSensitive,
+          match: matchOpts.query,
+          contextChars: matchOpts.context,
+          maxMatches: matchOpts.max,
+          caseSensitive: matchOpts.caseSensitive,
         })
       }
       if (args.maxChars != null) {
@@ -193,11 +185,8 @@ export function registerDocTools(server, ctx, cache) {
           document: result.metadata,
         })
       }
-      const full = args.section != null || args.match != null || args.maxChars != null
+      const full = args.section != null || matchOpts != null || args.maxChars != null
       const out = createMcpTextResult(projectReadDoc(payload, { full }))
-      // 404-style lookups (typo'd path/symbol) are re-scanned on every call;
-      // short-TTL cache them so pathological clients don't keep burning the
-      // disk/DB path.
       if (result?.found === false) out[CACHE_NEGATIVE] = true
       return out
     }),
@@ -206,14 +195,14 @@ export function registerDocTools(server, ctx, cache) {
   server.registerTool(
     'list_frameworks',
     {
-    description: 'List all indexed documentation roots — frameworks, technologies, HIG, tooling, release notes, and App Store Review Guidelines — with page counts and status. Use to discover what\'s available.',
-    annotations: READ_ONLY_HINTS,
-    outputSchema: listFrameworksOutputSchema,
-    inputSchema: {
-      kind: z.string().optional().describe('Filter by kind: framework, technology, tooling, release-notes, tutorial, guidelines'),
-      maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
-      page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
-    },
+      description: 'List all indexed documentation roots — frameworks, technologies, HIG, tooling, release notes, App Store Review Guidelines — with page counts. Returns the full set by default; pass `kind` to filter.',
+      annotations: READ_ONLY_HINTS,
+      outputSchema: listFrameworksOutputSchema,
+      inputSchema: {
+        kind: z.string().optional().describe('Filter by kind (framework, technology, tooling, release-notes, tutorial, guidelines).'),
+        maxChars: paginatedMaxChars.optional().describe(`Max characters per response page (minimum ${MIN_PAGINATED_MAX_CHARS}).`),
+        page: paginatedPage.optional().describe('1-based page number (requires maxChars).'),
+      },
     },
     cache.wrap('list_frameworks', async (args) => {
       validatePaginationArgs(args)
@@ -232,16 +221,16 @@ export function registerDocTools(server, ctx, cache) {
   server.registerTool(
     'browse',
     {
-    description: 'Explore the documentation topic tree. Lists all pages in a framework, or drills into a specific page to show its children and references.',
-    annotations: READ_ONLY_HINTS,
-    outputSchema: browseOutputSchema,
-    inputSchema: {
-      framework: z.string().describe('Framework slug (e.g. swiftui, combine, design, app-store-review)'),
-      path: z.string().optional().describe('Page path to show children of (e.g. swiftui/view, design/human-interface-guidelines/components)'),
-      limit: z.coerce.number().int().min(1).max(200).optional().describe('Max pages to return when listing a full framework (hard cap 200; default: all)'),
-      maxChars: paginatedMaxChars.optional().describe(`Maximum number of characters to return in one response page (minimum ${MIN_PAGINATED_MAX_CHARS})`),
-      page: paginatedPage.optional().describe('1-based page number to return when maxChars is set (default 1)'),
-    },
+      description: 'Explore the documentation topic tree. Lists all pages in a framework, or drills into a specific page to show its children.',
+      annotations: READ_ONLY_HINTS,
+      outputSchema: browseOutputSchema,
+      inputSchema: {
+        framework: z.string().describe('Framework slug (e.g. swiftui, combine, design, app-store-review).'),
+        path: z.string().optional().describe('Page path to drill into (e.g. swiftui/view).'),
+        limit: z.coerce.number().int().min(1).max(200).optional().describe('Max pages when listing a full framework (cap 200).'),
+        maxChars: paginatedMaxChars.optional().describe(`Max characters per response page (minimum ${MIN_PAGINATED_MAX_CHARS}).`),
+        page: paginatedPage.optional().describe('1-based page number (requires maxChars).'),
+      },
     },
     cache.wrap('browse', async (args) => {
       validatePaginationArgs(args)
@@ -262,16 +251,17 @@ export function registerDocTools(server, ctx, cache) {
   server.registerTool(
     'list_taxonomy',
     {
-    description: 'List distinct taxonomy values (kind, role, docKind, roleHeading, sourceType) across the corpus with counts. Use this before calling search_docs when you need to pick a valid `kind` filter or understand what shapes of documentation are indexed. Static between corpus refreshes (`apple-docs setup` or `apple-docs sync`).',
-    annotations: READ_ONLY_HINTS,
-    outputSchema: listTaxonomyOutputSchema,
-    inputSchema: {
-      field: z.enum(['kind', 'role', 'docKind', 'roleHeading', 'sourceType']).optional().describe('Return a single field instead of all five.'),
-    },
+      description: 'List distinct taxonomy values (kind, role, docKind, roleHeading, sourceType) across the corpus with counts. Use before search_docs to pick a valid `kind` filter. Default returns the top 20 per field; pass `all: true` for the full distribution.',
+      annotations: READ_ONLY_HINTS,
+      outputSchema: listTaxonomyOutputSchema,
+      inputSchema: {
+        field: z.enum(['kind', 'role', 'docKind', 'roleHeading', 'sourceType']).optional().describe('Return a single field instead of all five.'),
+        all: z.boolean().optional().describe('Return every distinct value (default: top 20 per field).'),
+      },
     },
     cache.wrap('list_taxonomy', async (args) => {
       const result = await taxonomy(args, ctx)
-      return createMcpTextResult(result)
+      return createMcpTextResult(projectTaxonomy(result))
     }),
   )
 }

@@ -73,16 +73,16 @@ export async function createWebContext(opts, ctx) {
     primary: { rate: 5, burst: 2 },
   })
   const renderCache = createWebRenderCache(db)
-  // A7: composite gate for the on-demand /docs/<key> fetch path.
+  // composite gate for the on-demand /docs/<key> fetch path.
   const onDemandGate = createOnDemandGate({})
-  // A1: cap concurrent native-render work (Swift symbols / fonts) so a
+  // cap concurrent native-render work (Swift symbols / fonts) so a
   // burst of renders can't pin every CPU. maxWaiters bounds the queue
   // depth — past that we shed load with 503 + Retry-After: 1.
   const renderSemaphore = new Semaphore(
     parsePositiveInt(process.env.APPLE_DOCS_WEB_RENDER_CONCURRENCY) ?? 4,
     { maxWaiters: 8 },
   )
-  // P3: font-subset has its own semaphore so a burst of subset calls
+  // font-subset has its own semaphore so a burst of subset calls
   // can't squeeze out the symbol/text renderers and vice versa. The
   // pool itself sizes its Python workers (max 4); the semaphore is the
   // queue admission gate. Overflow → 503 + Retry-After: 1.
@@ -119,7 +119,7 @@ export async function createWebContext(opts, ctx) {
   })
   const readerPool = await resolveWebReaderPool(ctx, opts, logger)
   const searchCtx = readerPool ? { ...ctx, readerPool } : ctx
-  // A20: searchCache had a count cap (default 512) but no byte cap, so a
+  // searchCache had a count cap (default 512) but no byte cap, so a
   // burst of long-tail queries could push it past tens of MB on a tier
   // with rich snippets. Add a 64 MB byte cap on top of the count cap.
   const searchCache = createLru({
@@ -198,7 +198,7 @@ export async function createWebContext(opts, ctx) {
     return cachedSearchManifest
   }
 
-  // A16: app-layer security headers. Caddy in production may layer
+  // app-layer security headers. Caddy in production may layer
   // additional headers (HSTS) in front of these (Caddyfile.tpl), but the
   // Bun server serves directly during dev + when Caddy is bypassed, so
   // we ship a complete baseline here.

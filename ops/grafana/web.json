@@ -1,0 +1,84 @@
+{
+  "title": "apple-docs · Web",
+  "uid": "apple-docs-web",
+  "schemaVersion": 39,
+  "tags": ["apple-docs", "web"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Request latency (p50 / p95 / p99)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(apple_docs_web_request_duration_ms_bucket[5m])))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(apple_docs_web_request_duration_ms_bucket[5m])))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(apple_docs_web_request_duration_ms_bucket[5m])))", "legendFormat": "p99" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests/sec by status",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "sum by (status) (rate(apple_docs_web_request_total[1m]))", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rate-limit rejections",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "rate(apple_docs_web_rate_limit_rejected_total[1m])", "legendFormat": "rejected/sec" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache bytes (search / render / gzip / bundle)",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "apple_docs_web_cache_bytes{cache=\"search\"}", "legendFormat": "search" },
+        { "expr": "apple_docs_web_cache_bytes{cache=\"render\"}", "legendFormat": "render" },
+        { "expr": "apple_docs_web_cache_bytes{cache=\"gzip\"}", "legendFormat": "gzip" },
+        { "expr": "apple_docs_web_cache_bytes{cache=\"bundle\"}", "legendFormat": "bundle" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Reader pool pending / timeouts",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "apple_docs_web_reader_pool_pending", "legendFormat": "pending ({{pool}})" },
+        { "expr": "rate(apple_docs_web_reader_pool_timeout_total[1m])", "legendFormat": "timeouts/sec ({{pool}})" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Event-loop lag (p95)",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(apple_docs_event_loop_lag_ms_bucket[5m])))", "legendFormat": "p95" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Process RSS / heap",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "apple_docs_process_rss_bytes", "legendFormat": "RSS" },
+        { "expr": "apple_docs_process_heap_bytes{kind=\"used\"}", "legendFormat": "heap used" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    }
+  ]
+}

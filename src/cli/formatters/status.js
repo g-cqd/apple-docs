@@ -11,18 +11,23 @@ export function formatStatus(result) {
     return `[${'='.repeat(filled)}${' '.repeat(width - filled)}] ${pct}%`
   }
 
-  const kindStr = Object.entries(result.roots.byKind).map(([k, v]) => `${v} ${k}`).join(', ')
+  const roots = result.roots ?? { total: 0, byKind: {} }
+  const pages = result.pages ?? { active: 0, deleted: 0 }
+  const rawJson = result.rawJson ?? { size: 0, files: 0 }
+  const markdown = result.markdown ?? { size: 0, files: 0 }
+  const kindStr = Object.entries(roots.byKind ?? {}).map(([k, v]) => `${v} ${k}`).join(', ')
 
+  // `tier` only appears when `apple-docs status --advanced` is passed.
   const tierLabel = result.tier ? ` [${result.tier} tier]` : ''
 
   const lines = [
     bold(`Apple Documentation Corpus${tierLabel}`),
     `  Data directory:  ${result.dataDir}`,
-    `  Database:        ${fmt(result.databaseSize)}`,
-    `  Raw JSON:        ${fmt(result.rawJson.size)} (${result.rawJson.files} files)`,
-    `  Markdown:        ${fmt(result.markdown.size)} (${result.markdown.files} files)`,
-    `  Roots:           ${result.roots.total} (${kindStr || 'none'})`,
-    `  Pages:           ${result.pages.active} active, ${result.pages.deleted} deleted`,
+    `  Database:        ${fmt(result.databaseSize ?? 0)}`,
+    `  Raw JSON:        ${fmt(rawJson.size)} (${rawJson.files} files)`,
+    `  Markdown:        ${fmt(markdown.size)} (${markdown.files} files)`,
+    `  Roots:           ${roots.total} (${kindStr || 'none'})`,
+    `  Pages:           ${pages.active} active, ${pages.deleted} deleted`,
     `  Last sync:       ${result.lastSync ?? 'never'}`,
     `  Last action:     ${result.lastAction ?? 'none'}`,
   ]
@@ -41,27 +46,28 @@ export function formatStatus(result) {
   if (result.activity) {
     lines.push('')
     const a = result.activity
+    const rootsStr = a.roots ? ` (${a.roots.join(', ')})` : ''
+    const pidStr = a.pid != null ? ` [pid ${a.pid}]` : ''
     if (a.status === 'running') {
-      const rootsStr = a.roots ? ` (${a.roots.join(', ')})` : ''
-      lines.push(bold(`  Active:  ${a.action}${rootsStr} running since ${a.startedAt} [pid ${a.pid}]`))
+      lines.push(bold(`  Active:  ${a.action}${rootsStr} running since ${a.startedAt}${pidStr}`))
     } else {
-      const rootsStr = a.roots ? ` (${a.roots.join(', ')})` : ''
       lines.push(bold(`  Stopped: ${a.action}${rootsStr} was interrupted (started ${a.startedAt})`))
       lines.push(`           Run "apple-docs sync" again to resume`)
     }
   }
 
-  // Crawl progress
+  // Crawl progress (only in --advanced mode; projected status omits it).
   const cp = result.crawlProgress
-  if (cp.total > 0) {
+  if (cp && cp.total > 0) {
     lines.push('')
     lines.push(bold('  Crawl Progress'))
     lines.push(`  Overall: ${cp.processed} processed, ${cp.pending} pending, ${cp.failed} failed / ${cp.total} total`)
     lines.push(`           ${bar(cp.processed, cp.total)}`)
 
     // Per-root breakdown (only show roots with pending or failed)
-    const active = result.crawlByRoot.filter(r => r.pending > 0 || r.failed > 0)
-    const done = result.crawlByRoot.filter(r => r.pending === 0 && r.failed === 0)
+    const crawlByRoot = result.crawlByRoot ?? []
+    const active = crawlByRoot.filter(r => r.pending > 0 || r.failed > 0)
+    const done = crawlByRoot.filter(r => r.pending === 0 && r.failed === 0)
 
     if (active.length > 0) {
       lines.push('')

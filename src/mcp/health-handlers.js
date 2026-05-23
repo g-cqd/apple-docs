@@ -35,7 +35,7 @@ export function buildHealthBody({
 }
 
 /**
- * A32 readiness response. 200 only when the DB is reachable AND (when
+ * Readiness response. 200 only when the DB is reachable AND (when
  * reader-pool is wired) ≥1 worker is alive. Distinct from /healthz:
  * healthz says the process is up, readyz says it can serve traffic.
  */

@@ -1,6 +1,7 @@
+import { ValidationError } from "../lib/errors.js"
 /**
  * Deterministic `tar.gz` archive builder. Drop-in replacement for
- * `createSevenZipArchive` after the May 2026 snapshot recalibration:
+ * `createSevenZipArchive` after the the snapshot format recalibration:
  * LZMA2 max compression no longer fits the GH macos-26 runner's wall
  * time budget for ~1M file entries, and the corpus shape (lots of
  * small, similar SVG files) is what DEFLATE was designed for.
@@ -62,7 +63,7 @@ export async function createTarGzArchive({
   const log = logger ?? { info() {}, warn() {}, error() {} }
   const files = listFilesSorted(sourceDir)
   if (files.length === 0) {
-    throw new Error(`createTarGzArchive: no files under ${sourceDir}`)
+    throw new ValidationError(`createTarGzArchive: no files under ${sourceDir}`)
   }
 
   // Same absolute-path discipline as the 7z helper: tar runs with
@@ -120,14 +121,14 @@ export async function createTarGzArchive({
   }
 
   if (result.error) {
-    throw new Error(`tar.gz archive build failed to spawn: ${result.error.message}`)
+    throw new ValidationError(`tar.gz archive build failed to spawn: ${result.error.message}`)
   }
   if (result.signal) {
-    throw new Error(`tar.gz archive build was killed by ${result.signal} (likely a deadline hit)`)
+    throw new ValidationError(`tar.gz archive build was killed by ${result.signal} (likely a deadline hit)`)
   }
   if (result.status !== 0) {
     const stderr = (result.stderr || '').trim().slice(0, 4096)
-    throw new Error(`tar.gz archive build failed (exit ${result.status}): ${stderr || '<no stderr>'}`)
+    throw new ValidationError(`tar.gz archive build failed (exit ${result.status}): ${stderr || '<no stderr>'}`)
   }
 
   const stat = statSync(absOutput)

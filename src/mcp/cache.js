@@ -1,5 +1,4 @@
 import { statSync } from 'node:fs'
-import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 
 /**
@@ -170,7 +169,7 @@ function safeSchemaVersion(ctx) {
 
 export function cacheKey(tool, args, stamp) {
   const payload = `${tool}\0${stableJson(args ?? {})}\0${stamp}`
-  return createHash('sha256').update(payload).digest('hex')
+  return new Bun.CryptoHasher('sha256').update(payload).digest('hex')
 }
 
 /**

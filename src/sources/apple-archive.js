@@ -1,5 +1,6 @@
 import { fetchHtmlPage } from '../apple/api.js'
 import { parseHtmlToNormalized } from '../content/parse-html.js'
+import { HttpError } from '../lib/errors.js'
 import { SourceAdapter } from './base.js'
 
 const ROOT_SLUG = 'apple-archive'
@@ -126,7 +127,7 @@ async function fetchArchivePdfMetadata(url, rateLimiter) {
   })
 
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} fetching ${url}`)
+    throw new HttpError(res.status, url, `HTTP ${res.status} fetching ${url}`)
   }
 
   return {
@@ -286,7 +287,7 @@ export class AppleArchiveAdapter extends SourceAdapter {
     })
 
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status} fetching ${ARCHIVE_LIBRARY_URL}`)
+      throw new HttpError(res.status, ARCHIVE_LIBRARY_URL, `HTTP ${res.status} fetching ${ARCHIVE_LIBRARY_URL}`)
     }
 
     const library = parseArchiveLibrary(await res.text())

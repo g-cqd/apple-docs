@@ -2,7 +2,7 @@
  * Apply the latest GH-release snapshot to a running apple-docs host.
  *
  * Ports ops/bin/pull-snapshot.sh. The flow preserves the
- * post-mm18-outage reordering (services come back IMMEDIATELY after
+ * post-outage reordering (services come back IMMEDIATELY after
  * setup, not after the long web build) — that's what kept the user-
  * facing /api/symbols/* down for 30 min last deploy.
  *

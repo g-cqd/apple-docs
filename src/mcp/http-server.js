@@ -270,21 +270,23 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       const ua = request.headers.get('user-agent') ?? '-'
       const cfRay = request.headers.get('cf-ray') ?? '-'
       const accept = request.headers.get('accept') ?? '-'
-      // A35: echo sane inbound X-Request-Id; mint a UUID otherwise.
+      // echo sane inbound X-Request-Id; mint UUID otherwise. Per-
+      // request child logger stamps `requestId` on every JSON log line.
       const incomingId = request.headers.get('x-request-id')
       const requestId = incomingId && /^[A-Za-z0-9._:+/=-]{1,128}$/.test(incomingId)
         ? incomingId : crypto.randomUUID()
-      const meta = { requestId }
+      const reqLogger = logger?.withRequestId?.(requestId) ?? logger
+      const meta = { requestId, logger: reqLogger }
       try {
         const response = await handle(request, meta)
         applyCorsHeaders(request, response)
         applySecurityHeaders(response)
         response.headers.set('X-Request-Id', requestId)
         const tag = buildPriorityTag(meta)
-        logger?.info?.(`${request.method} ${url.pathname} -> ${response.status} ${Date.now() - started}ms${tag} req=${requestId} ua="${ua}" cf-ray=${cfRay} accept="${accept}"`)
+        reqLogger?.info?.(`${request.method} ${url.pathname} -> ${response.status} ${Date.now() - started}ms${tag} ua="${ua}" cf-ray=${cfRay} accept="${accept}"`)
         return response
       } catch (err) {
-        logger?.error?.(`${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms req=${requestId} err="${err?.message}" ua="${ua}" cf-ray=${cfRay}`, { stack: err?.stack })
+        reqLogger?.error?.(`${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms err="${err?.message}" ua="${ua}" cf-ray=${cfRay}`, { stack: err?.stack })
         const response = Response.json(
           { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' } },
           { status: 500 },

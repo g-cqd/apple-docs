@@ -1,0 +1,73 @@
+{
+  "title": "apple-docs · MCP",
+  "uid": "apple-docs-mcp",
+  "schemaVersion": 39,
+  "tags": ["apple-docs", "mcp"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Tool latency (p50 / p95 / p99)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le, tool) (rate(apple_docs_mcp_tool_duration_ms_bucket[5m])))", "legendFormat": "p50 {{tool}}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, tool) (rate(apple_docs_mcp_tool_duration_ms_bucket[5m])))", "legendFormat": "p95 {{tool}}" },
+        { "expr": "histogram_quantile(0.99, sum by (le, tool) (rate(apple_docs_mcp_tool_duration_ms_bucket[5m])))", "legendFormat": "p99 {{tool}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache hit ratio",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "sum by (tool) (rate(apple_docs_mcp_cache_hit_total[5m])) / sum by (tool) (rate(apple_docs_mcp_cache_request_total[5m]))", "legendFormat": "{{tool}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Heavy-tool semaphore (active / waiting / rejected)",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "apple_docs_mcp_heavy_tool_active", "legendFormat": "active" },
+        { "expr": "apple_docs_mcp_heavy_tool_queue_depth", "legendFormat": "queued" },
+        { "expr": "rate(apple_docs_mcp_heavy_tool_rejected_total[1m])", "legendFormat": "rejected/sec" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Reader pool pending / timeouts",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "apple_docs_mcp_reader_pool_pending", "legendFormat": "pending ({{pool}})" },
+        { "expr": "rate(apple_docs_mcp_reader_pool_timeout_total[1m])", "legendFormat": "timeouts/sec ({{pool}})" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Markdown render-cache hits",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "rate(apple_docs_mcp_markdown_cache_hit_total[1m])", "legendFormat": "hits/sec" },
+        { "expr": "rate(apple_docs_mcp_markdown_cache_miss_total[1m])", "legendFormat": "misses/sec" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Process RSS",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "apple_docs_process_rss_bytes", "legendFormat": "RSS" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    }
+  ]
+}

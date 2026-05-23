@@ -3,7 +3,7 @@
  *
  * @param {{ max?: number, maxBytes?: number, sizeFn?: (value: unknown) => number }} opts
  *   max:     Cap on entry count. 0 disables the cache (set() is a no-op).
- *   maxBytes: Cap on total estimated bytes (A20). When set, evictions also
+ *   maxBytes: Cap on total estimated bytes. When set, evictions also
  *             trigger when the running byte total exceeds the cap.
  *   sizeFn:  Per-value byte estimator. Defaults to a JSON.stringify length
  *            heuristic — fine for the search-result payloads this caches.

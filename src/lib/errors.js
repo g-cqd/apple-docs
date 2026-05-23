@@ -95,3 +95,29 @@ export class SnapshotIncompleteError extends Error {
     if (missing !== undefined) this.missing = missing
   }
 }
+
+/**
+ * `src/config.js` rejected the runtime environment. Surfaced at startup
+ * with a multi-line message listing every invalid var. No recovery path
+ * — operator must fix the env and restart.
+ */
+export class ConfigError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'ConfigError'
+  }
+}
+
+/**
+ * Internal invariant guard. Distinct from `ValidationError`: assertions
+ * report programming bugs ("this branch should never be reachable"),
+ * not caller-supplied bad input. Catch surfaces should escalate
+ * `AssertionError` (log + 500) rather than turning it into a user-
+ * facing 4xx.
+ */
+export class AssertionError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'AssertionError'
+  }
+}

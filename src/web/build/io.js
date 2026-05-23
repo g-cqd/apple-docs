@@ -6,6 +6,7 @@
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
+import { ValidationError } from '../../lib/errors.js'
 import { ensureDir } from '../../storage/files.js'
 
 /**
@@ -46,7 +47,7 @@ export async function copyDirRecursive(src, dst) {
       // we don't accidentally inflate the build with a stray multi-GB blob.
       const size = statSync(from).size
       if (size > 16 * 1024 * 1024) {
-        throw new Error(`refusing to copy ${from} (${size} bytes) into static public dir`)
+        throw new ValidationError(`refusing to copy ${from} (${size} bytes) into static public dir`)
       }
       await Bun.write(to, Bun.file(from))
     }

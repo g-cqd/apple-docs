@@ -6,9 +6,41 @@ import { keyPath } from '../lib/safe-path.js'
 import { getProfile, getProfileConfig } from '../storage/profiles.js'
 
 /**
+ * @typedef {object} LookupArgs
+ * @property {string} [path]                  Canonical page path (e.g. swiftui/view).
+ * @property {string} [symbol]                Symbol name (e.g. View).
+ * @property {string} [framework]             Disambiguate symbol when multiple frameworks share the name.
+ * @property {string} [section]               Extract a specific section by heading or file path.
+ * @property {boolean} [includeSections]      Return the full sections list (default: skeleton).
+ * @property {boolean} [noCache]              Skip the markdown render-cache write on miss.
+ *
+ * @typedef {object} DocMetadata
+ * @property {string} title
+ * @property {string|null} framework
+ * @property {string|null} rootSlug
+ * @property {string|null} roleHeading
+ * @property {string|null} kind
+ * @property {string|null} abstract
+ * @property {string|null} declaration
+ * @property {string} path
+ * @property {object|Array} [platforms]
+ * @property {true} [isDeprecated]
+ * @property {true} [isBeta]
+ * @property {true} [isReleaseNotes]
+ * @property {{ inheritsFrom?: number, inheritedBy?: number, conformsTo?: number, seeAlso?: number, children?: number }} [relationships]
+ *
+ * @typedef {object} LookupResult
+ * @property {boolean} found
+ * @property {DocMetadata} [metadata]
+ * @property {string|null} [content]
+ * @property {object[]} [sections]
+ * @property {string} [note]
+ *
  * Look up a specific documentation page by path or symbol name.
- * @param {{ path?: string, symbol?: string, framework?: string, noCache?: boolean, includeSections?: boolean }} opts
+ *
+ * @param {LookupArgs} opts
  * @param {{ db, dataDir }} ctx
+ * @returns {Promise<LookupResult>}
  */
 export async function lookup(opts, ctx) {
   const { db, dataDir } = ctx
@@ -97,17 +129,25 @@ export async function lookup(opts, ctx) {
     }
   }
 
+  // Cheap COUNT-by-relation-type so callers know whether a follow-up
+  // relationship walk is worthwhile. The counts themselves are emitted in
+  // the public projection; an empty object is also emitted (consistent
+  // shape, projection drops the key when empty).
+  const relationshipCounts = db.getRelationshipCountsByType(pagePath)
+
   const metadata = {
     title: page.title,
     framework: page.framework,
     rootSlug: page.root_slug,
     roleHeading: page.role_heading,
+    kind: page.kind ?? null,
     abstract: page.abstract,
     platforms: page.platforms
       ? (typeof page.platforms === 'string' ? JSON.parse(page.platforms) : page.platforms)
       : [],
     declaration: page.declaration,
     path: pagePath,
+    ...(Object.keys(relationshipCounts).length > 0 ? { relationships: relationshipCounts } : {}),
     ...(page.is_deprecated ? { isDeprecated: true } : {}),
     ...(page.is_beta ? { isBeta: true } : {}),
   }

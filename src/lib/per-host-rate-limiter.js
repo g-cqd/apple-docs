@@ -24,7 +24,7 @@ function parsePositiveInt(value) {
  * re-inserts the bucket so the most-recently-used host is at the tail
  * of the iteration order; once the cap is exceeded we drop the oldest
  * (head) host. This bounds memory growth on long-running crawls that
- * touch a steady stream of new hosts (audit5 §2.2 / "Top 10 Perf Wins").
+ * touch a steady stream of new hosts.
  *
  * Override the cap via `opts.maxBuckets` or the
  * `APPLE_DOCS_HOST_BUCKET_MAX` environment variable.

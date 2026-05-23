@@ -34,6 +34,8 @@ import {
 
 export { parseWwdcKey }
 
+import { ValidationError } from '../lib/errors.js'
+
 export class WwdcAdapter extends SourceAdapter {
   static type = 'wwdc'
   static displayName = 'WWDC Session Transcripts'
@@ -102,7 +104,7 @@ export class WwdcAdapter extends SourceAdapter {
 
   async fetch(key, ctx) {
     const parsed = parseWwdcKey(key)
-    if (!parsed) throw new Error(`Invalid WWDC key: ${key}`)
+    if (!parsed) throw new ValidationError(`Invalid WWDC key: ${key}`, { field: 'key', value: key })
 
     const { year, sessionId } = parsed
 
@@ -169,7 +171,7 @@ export class WwdcAdapter extends SourceAdapter {
 
   normalize(key, rawPayload) {
     const parsed = parseWwdcKey(key)
-    if (!parsed) throw new Error(`Invalid WWDC key: ${key}`)
+    if (!parsed) throw new ValidationError(`Invalid WWDC key: ${key}`, { field: 'key', value: key })
     const { year, sessionId } = parsed
 
     if (year >= 2020) {

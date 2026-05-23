@@ -1,10 +1,9 @@
+import { ParseError } from '../../lib/errors.js'
 // PDF object-graph extraction. Walks the (latin-1-decoded) PDF source,
 // indexes every `<n> <gen> obj … endobj` block, parses its trailing
 // dictionary, and records the byte offsets of any embedded stream so
 // the binary payload can be inflated later without going through the
 // latin-1 round-trip.
-
-import { inflateSync } from 'node:zlib'
 
 export function bytesToLatin1(buf) {
   // latin-1 round-trip preserves every byte 1:1, which is what PDF text
@@ -161,7 +160,7 @@ export function resolveStreamObject(value, objects) {
 
 export function decodeStream(obj) {
   const filter = obj.dict.Filter
-  if (filter === '/FlateDecode') return inflateSync(obj.stream)
+  if (filter === '/FlateDecode') return Bun.inflateSync(obj.stream)
   if (!filter) return obj.stream
-  throw new Error(`symbol PDF: unsupported stream filter ${filter}`)
+  throw new ParseError(`symbol PDF: unsupported stream filter ${filter}`)
 }

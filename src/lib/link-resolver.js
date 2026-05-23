@@ -1,7 +1,7 @@
 /**
  * Global link resolver — maps every external URL pattern we know about to its
  * corresponding corpus storage key, and packages the rules into a callback
- * shape compatible with `htmlToMarkdown`'s `linkResolver` opt and the audit
+ * shape compatible with `htmlToMarkdown`'s `linkResolver` opt
  * command's classifier.
  *
  * URL→key rules live in one place so adding a new source means adding one

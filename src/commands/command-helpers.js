@@ -1,3 +1,4 @@
+import { ValidationError } from '../lib/errors.js'
 import { getAdapterTypes } from '../sources/registry.js'
 
 export const ROOT_CATALOG_SOURCE_TYPES = new Set(['apple-docc', 'hig'])
@@ -23,7 +24,7 @@ export function validateRequestedSources(requestedSources) {
   const knownSources = new Set(getAdapterTypes())
   const unknownSources = requestedSources.filter(source => !knownSources.has(source))
   if (unknownSources.length > 0) {
-    throw new Error(`Unknown source type(s): ${unknownSources.join(', ')}`)
+    throw new ValidationError(`Unknown source type(s): ${unknownSources.join(', ')}`, { field: 'sources', value: unknownSources })
   }
 }
 

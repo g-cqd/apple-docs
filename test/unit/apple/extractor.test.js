@@ -1,0 +1,164 @@
+import { describe, test, expect } from 'bun:test'
+import { extractReferences, extractMetadata, renderInlineToText } from '../../../src/apple/extractor.js'
+
+// Load the real fixture
+const fixture = await Bun.file(new URL('../../fixtures/swiftui-view.json', import.meta.url)).json()
+
+describe('extractReferences', () => {
+  test('extracts references from real fixture', () => {
+    const refs = extractReferences(fixture)
+    expect(refs.length).toBeGreaterThan(10)
+    // All should be lowercase canonical paths
+    for (const ref of refs) {
+      expect(ref).toBe(ref.toLowerCase())
+      expect(ref).not.toContain('doc://')
+      expect(ref).not.toContain('/documentation/')
+    }
+  })
+
+  test('includes topic section identifiers', () => {
+    const refs = extractReferences(fixture)
+    // SwiftUI/View has topic sections with child symbols
+    expect(refs.some(r => r.startsWith('swiftui/view/'))).toBe(true)
+  })
+
+  test('returns empty for empty json', () => {
+    expect(extractReferences({})).toEqual([])
+  })
+
+  test('skips ghost cross-references (empty abstract, not in any structured section)', () => {
+    // When Apple promotes a child symbol to a standalone page, the parent's
+    // references map keeps both URLs: the canonical one (with content) and a
+    // legacy nested one (empty abstract, points to a 404). The ghost only
+    // appears via the catch-all loop — empty abstract is the discriminator.
+    const json = {
+      topicSections: [
+        {
+          identifiers: [
+            'doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/hasMore',
+          ],
+        },
+      ],
+      references: {
+        'doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/hasMore': {
+          url: '/documentation/appstoreserverapi/hasmore',
+          type: 'topic',
+          abstract: [{ type: 'text', text: 'A Boolean value indicating ...' }],
+        },
+        'doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/NotificationHistoryResponse/hasMore': {
+          url: '/documentation/appstoreserverapi/notificationhistoryresponse/hasmore',
+          type: 'topic',
+          abstract: [],
+        },
+      },
+    }
+    const refs = extractReferences(json)
+    expect(refs).toContain('appstoreserverapi/hasmore')
+    expect(refs).not.toContain('appstoreserverapi/notificationhistoryresponse/hasmore')
+  })
+
+  test('keeps inline cross-refs that have prose abstracts (real legitimate links)', () => {
+    // Refs that aren't in topicSections / relationshipsSections / seeAlso
+    // but have a real abstract are legitimate inline mentions — keep them
+    // so the breadth-first crawl can pick up cross-framework symbols.
+    const json = {
+      topicSections: [],
+      references: {
+        'doc://com.apple.swiftui/documentation/SwiftUI/View': {
+          url: '/documentation/swiftui/view',
+          type: 'topic',
+          abstract: [{ type: 'text', text: 'A type that represents part of your app.' }],
+        },
+      },
+    }
+    const refs = extractReferences(json)
+    expect(refs).toContain('swiftui/view')
+  })
+
+  test('skips externally-resolved symbols (no DocC JSON page exists)', () => {
+    // Apple lists Swift stdlib / cross-module symbols via references with a
+    // url field, but the endpoints 404. The identifier prefix flags them.
+    const json = {
+      topicSections: [
+        {
+          identifiers: [
+            'doc://com.apple.tabletopkit/documentation/TabletopKit/Player/id',
+            'doc://com.externally.resolved.symbol/s:11TabletopKit6PlayerV2IDa',
+          ],
+        },
+      ],
+      references: {
+        'doc://com.apple.tabletopkit/documentation/TabletopKit/Player/id': {
+          url: '/documentation/tabletopkit/player/id',
+          type: 'topic',
+        },
+        'doc://com.externally.resolved.symbol/s:11TabletopKit6PlayerV2IDa': {
+          url: '/documentation/TabletopKit/Player/ID-swift.typealias',
+          type: 'topic',
+        },
+      },
+    }
+    const refs = extractReferences(json)
+    expect(refs).toContain('tabletopkit/player/id')
+    expect(refs).not.toContain('tabletopkit/player/id-swift.typealias')
+  })
+})
+
+describe('extractMetadata', () => {
+  test('extracts title and role from real fixture', () => {
+    const meta = extractMetadata(fixture)
+    expect(meta.title).toBe('View')
+    expect(meta.role).toBe('symbol')
+    expect(meta.roleHeading).toBe('Protocol')
+  })
+
+  test('extracts abstract as plain text', () => {
+    const meta = extractMetadata(fixture)
+    expect(meta.abstract).toContain('user interface')
+    expect(typeof meta.abstract).toBe('string')
+  })
+
+  test('extracts platforms', () => {
+    const meta = extractMetadata(fixture)
+    expect(meta.platforms.length).toBeGreaterThan(0)
+    expect(meta.platforms.some(p => p.includes('iOS'))).toBe(true)
+  })
+
+  test('extracts declaration', () => {
+    const meta = extractMetadata(fixture)
+    // View protocol should have a declaration
+    if (meta.declaration) {
+      expect(meta.declaration).toContain('View')
+    }
+  })
+
+  test('handles empty json gracefully', () => {
+    const meta = extractMetadata({})
+    expect(meta.title).toBeNull()
+    expect(meta.role).toBeNull()
+    expect(meta.abstract).toBeNull()
+  })
+})
+
+describe('renderInlineToText', () => {
+  test('renders text nodes', () => {
+    expect(renderInlineToText([{ type: 'text', text: 'hello' }])).toBe('hello')
+  })
+
+  test('renders codeVoice', () => {
+    expect(renderInlineToText([{ type: 'codeVoice', code: 'View' }])).toBe('View')
+  })
+
+  test('renders mixed content', () => {
+    const result = renderInlineToText([
+      { type: 'text', text: 'A ' },
+      { type: 'codeVoice', code: 'View' },
+      { type: 'text', text: ' protocol' },
+    ])
+    expect(result).toBe('A View protocol')
+  })
+
+  test('returns null for empty array', () => {
+    expect(renderInlineToText([])).toBeNull()
+  })
+})

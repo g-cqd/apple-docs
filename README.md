@@ -17,11 +17,11 @@ Swift package catalog.
 
 ## Quick Start
 
-Requirements:
+Requirements: **Bun 1.0+**. See [`docs/installing.md`](docs/installing.md)
+for the three supported install paths (dev / standalone binary /
+production self-host) and their verification steps.
 
-- Bun 1.0+
-
-Install the CLI and download the latest prebuilt snapshot:
+Fastest path — dev install + prebuilt snapshot:
 
 ```bash
 git clone https://github.com/g-cqd/apple-docs.git
@@ -31,8 +31,9 @@ bun link
 apple-docs setup
 ```
 
-`setup` is the fastest path. It installs one full snapshot shape: database,
-Markdown, raw JSON, extracted Apple fonts, and pre-rendered SF Symbols.
+`setup` installs one full snapshot shape: database, Markdown, raw JSON,
+extracted Apple fonts, and pre-rendered SF Symbols. ~60 seconds, ~6 GB
+on disk.
 
 If you want to build the corpus yourself instead:
 
@@ -44,6 +45,11 @@ apple-docs sync
 HEAD checks, discovery, crawl, download, conversion, body index refresh, Apple
 typography and SF Symbols sync, symbol pre-render, schema migrations,
 consolidation, and raw JSON minification.
+
+For a standalone Bun-compiled binary (no toolchain required after
+build) see the [Standalone binary](docs/installing.md#standalone-binary)
+section of the install guide. For self-hosting a public MCP HTTP
+server, see [Production self-host](docs/installing.md#production-self-host).
 
 By default `sync` uses 100 in-flight fetches and a 500 requests/sec rate limit.
 Use `--rate <n>` to lower the request rate, `APPLE_DOCS_CONCURRENCY=<n>` to set
@@ -275,23 +281,82 @@ apple-docs setup --archive dist/apple-docs-full-<tag>.tar.gz --force
 
 ## Configuration
 
-CLI flags take precedence over environment variables.
+CLI flags take precedence over environment variables. Every variable is
+validated at startup against the zod schema in
+[`src/config.js`](src/config.js); a misconfigured env aborts the process
+with a multi-line summary listing every offending field.
+
+### Core
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `APPLE_DOCS_HOME` | `~/.apple-docs` | Corpus location |
-| `APPLE_DOCS_RATE` | `500` for `sync`, `5` otherwise | Request rate limit |
-| `APPLE_DOCS_BURST` | At least the active rate | Rate-limiter burst size |
+| `APPLE_DOCS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
+| `APPLE_DOCS_DEBUG` | `false` | Bypass the public-output projection (raw envelopes leak through MCP/CLI/web). Local-debug only. |
+
+### Outbound HTTP (crawl)
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APPLE_DOCS_RATE` | `500` for `sync`, `5` otherwise | Requests per second across all hosts |
+| `APPLE_DOCS_BURST` | At least the active rate | Token-bucket burst size |
 | `APPLE_DOCS_CONCURRENCY` | `100` for `sync`, `5` otherwise | Outbound fetch concurrency |
 | `APPLE_DOCS_PARALLEL` | `10` | Number of DocC roots crawled in parallel during `sync` |
 | `APPLE_DOCS_TIMEOUT` | `30000` | HTTP timeout in ms |
 | `APPLE_DOCS_GITHUB_TIMEOUT` | `45000` or `APPLE_DOCS_TIMEOUT` | GitHub timeout override |
 | `APPLE_DOCS_API_BASE` | Apple tutorial data URL | Override Apple's DocC API base |
-| `APPLE_DOCS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
-| `APPLE_DOCS_PACKAGES_SCOPE` | `official` | `official` or `full` |
-| `APPLE_DOCS_PACKAGES_FETCH` | `raw` | `raw` or `api` |
-| `APPLE_DOCS_PACKAGES_LIMIT` | unset | Cap package count during package discovery |
+| `APPLE_DOCS_HOST_BUCKET_MAX` | `256` | Per-host limiter LRU cap |
+
+### Sync & sources
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APPLE_DOCS_PACKAGES_SCOPE` | `official` | `official` or `full` Swift Package Index scope |
+| `APPLE_DOCS_PACKAGES_FETCH` | `raw` | `raw` README fetch or `api` (richer GitHub metadata) |
+| `APPLE_DOCS_PACKAGES_LIMIT` | unset | Cap package count during discovery |
+| `APPLE_DOCS_SKIP_RESOURCES` | `false` | Skip post-extract font + SF Symbols re-index |
+| `APPLE_DOCS_DOWNLOAD_FONTS` | unset | Force-download Apple fonts even if system-installed |
+| `APPLE_DOCS_SYMBOLS_OFFLINE` | `false` | Skip the live SF Symbols renderer (use bundled prerenders only) |
+
+### Auth
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
 | `GITHUB_TOKEN` / `GH_TOKEN` | unset | GitHub token for release downloads or package API metadata |
+| `APPLE_DOCS_NO_GIT_AUTH` | unset | Disable local-credential detection (set to `1` in CI) |
+
+### MCP server (HTTP transport)
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APPLE_DOCS_MCP_CACHE` | `on` | Per-tool LRU cache. Set to `off` for raw projection traces. |
+| `APPLE_DOCS_MCP_CACHE_SCALE` | `1.0` | Uniform multiplier on per-tool LRU sizes |
+| `APPLE_DOCS_MCP_CONCURRENCY` | `8` | Max in-flight heavy-tool calls |
+| `APPLE_DOCS_MCP_QUEUE` | `64` | Max queued heavy-tool calls before HTTP 503 |
+| `APPLE_DOCS_MCP_READERS` / `APPLE_DOCS_MCP_DEEP_READERS` / `APPLE_DOCS_MCP_READER_WORKERS` | runtime-derived | Reader-pool sizing |
+
+### Web server
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APPLE_DOCS_WEB_HOST` | `127.0.0.1` | Bind address (pass `0.0.0.0` for LAN reach) |
+| `APPLE_DOCS_WEB_RATE` / `APPLE_DOCS_WEB_BURST` | `60` / `120` | Per-IP rate-limit defaults |
+| `APPLE_DOCS_WEB_RATE_LIMIT` | `false` | Enable per-IP rate limit (off by default; CLI `--rate-limit` overrides) |
+| `APPLE_DOCS_WEB_DEEP_INFLIGHT` / `APPLE_DOCS_WEB_DEEP_QUEUE` | `4` / `8` | Deep-search gate sizing |
+| `APPLE_DOCS_WEB_READERS` / `APPLE_DOCS_WEB_DEEP_READERS` / `APPLE_DOCS_WEB_READER_WORKERS` | runtime-derived | Reader-pool sizing |
+| `APPLE_DOCS_WEB_RENDER_CONCURRENCY` | runtime-derived | On-demand render-pipeline concurrency |
+| `APPLE_DOCS_WEB_SEARCH_CACHE` / `APPLE_DOCS_WEB_SEARCH_CACHE_BYTES` | runtime-derived | Search-result LRU sizing |
+| `APPLE_DOCS_WEB_FONT_SUBSET_WORKERS` / `APPLE_DOCS_WEB_FONT_SUBSET_CONCURRENCY` / `APPLE_DOCS_WEB_FONT_SUBSET_LRU` / `APPLE_DOCS_WEB_FONT_SUBSET_LRU_BYTES` | runtime-derived | Font-subset pool sizing |
+| `APPLE_DOCS_FONT_SUBSET_PYTHON` | `python3` | Python interpreter for the pyftsubset pool |
+
+### Content rendering
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APPLE_DOCS_NO_HIGHLIGHT` | `false` | Disable Shiki syntax highlighting |
+| `APPLE_DOCS_HIGHLIGHT_MAX` | unset | Cap input chars sent through Shiki |
+| `APPLE_DOCS_MD_MAX_BYTES` | unset | Cap rendered Markdown payload size |
+| `APPLE_DOCS_RENDER_CACHE_BYTES` / `APPLE_DOCS_RENDER_CACHE_TTL_DAYS` | runtime-derived | Render cache sizing |
 
 ## Documentation Map
 

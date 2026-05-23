@@ -1,5 +1,4 @@
 import { join, resolve, sep } from 'node:path'
-import { createHash } from 'node:crypto'
 import { ValidationError } from './errors.js'
 
 /**
@@ -51,7 +50,7 @@ export function safeFilename(basename, ext) {
   if (Buffer.byteLength(fullName, 'utf8') + TMP_SUFFIX_BUDGET <= MAX_COMPONENT_BYTES) {
     return fullName
   }
-  const hash = createHash('sha1').update(basename).digest('hex').slice(0, HASH_PREFIX_LEN)
+  const hash = new Bun.CryptoHasher('sha1').update(basename).digest('hex').slice(0, HASH_PREFIX_LEN)
   // Budget = MAX - tmpSuffix - ext - separator(~) - hash
   const budget = MAX_COMPONENT_BYTES - TMP_SUFFIX_BUDGET - Buffer.byteLength(ext, 'utf8') - 1 - HASH_PREFIX_LEN
   const truncated = truncateToBytes(basename, Math.max(0, budget))
@@ -119,7 +118,7 @@ export function validateStorageKey(rawKey) {
  * Reads and writes both go through this helper, so as long as the
  * caller hands us the same `key`, the same on-disk path is produced.
  *
- * Validates the key first (A4) and asserts the resolved result lives
+ * Validates the key first and asserts the resolved result lives
  * under `dataDir` — a belt-and-braces guard against a future regex bug
  * in validateStorageKey (e.g. unicode normalization corner cases).
  *

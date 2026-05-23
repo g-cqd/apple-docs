@@ -1,3 +1,4 @@
+import { ValidationError } from './errors.js'
 /**
  * Optional Prometheus scrape endpoint for the long-running servers
  * (`apple-docs web serve` and `apple-docs mcp serve`).
@@ -33,7 +34,7 @@ import { formatPrometheus, PROMETHEUS_CONTENT_TYPE } from './metrics.js'
 export function startMetricsServer(opts) {
   const { provider } = opts
   if (typeof provider !== 'function') {
-    throw new Error('startMetricsServer: provider must be a function')
+    throw new ValidationError('startMetricsServer: provider must be a function', { field: 'provider' })
   }
   const host = opts.host ?? '127.0.0.1'
   const requestedPort = opts.port ?? 0

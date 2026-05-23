@@ -52,5 +52,9 @@ ops/caddy/Caddyfile
 ops/cloudflared/config.yml
 ops/cloudflared/config-mcp.yml
 
+# VitePress build artifacts. Source markdown is tracked; build output isn't.
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
 # Claude Code working tree (agent worktrees, plans, etc.)
 .claude/

@@ -1,3 +1,5 @@
+import { ValidationError } from '../../lib/errors.js'
+
 /**
  * Pre-flight validation for snapshot release archives.
  *
@@ -34,7 +36,7 @@ export async function validateArchive(archivePath, destDir, deps = {}) {
   const exitCode = await proc.exited
   if (exitCode !== 0) {
     const stderr = await new Response(proc.stderr).text()
-    throw new Error(`archive listing failed (tar exit ${exitCode}): ${stderr.trim()}`)
+    throw new ValidationError(`archive listing failed (tar exit ${exitCode}): ${stderr.trim()}`)
   }
   const stdoutText = await new Response(proc.stdout).text()
 
@@ -47,18 +49,18 @@ export async function validateArchive(archivePath, destDir, deps = {}) {
     if (!line) continue
     const parsed = parseTarVerboseLine(line)
     if (!parsed) {
-      throw new Error(`archive listing line ${lineno} did not parse: ${line.slice(0, 80)}`)
+      throw new ValidationError(`archive listing line ${lineno} did not parse: ${line.slice(0, 80)}`)
     }
     const { type, path } = parsed
     if (!ALLOWED_TYPES.has(type)) {
-      throw new Error(`archive contains disallowed entry type "${type}" at line ${lineno}: ${path}`)
+      throw new ValidationError(`archive contains disallowed entry type "${type}" at line ${lineno}: ${path}`)
     }
     if (path.startsWith('/') || path.startsWith('~')) {
-      throw new Error(`archive contains absolute path: ${path}`)
+      throw new ValidationError(`archive contains absolute path: ${path}`)
     }
     const resolved = resolve(destDir, path)
     if (resolved !== resolve(destDir) && !resolved.startsWith(root)) {
-      throw new Error(`archive entry escapes destDir after canonicalization: ${path} → ${resolved}`)
+      throw new ValidationError(`archive entry escapes destDir after canonicalization: ${path} → ${resolved}`)
     }
     entries.push({ type, path })
   }
@@ -90,7 +92,7 @@ export async function validate7zArchive(archivePath, destDir, deps = {}) {
   const exitCode = await proc.exited
   if (exitCode !== 0) {
     const stderr = await new Response(proc.stderr).text()
-    throw new Error(`archive listing failed (${binary} exit ${exitCode}): ${stderr.trim()}`)
+    throw new ValidationError(`archive listing failed (${binary} exit ${exitCode}): ${stderr.trim()}`)
   }
   const stdoutText = await new Response(proc.stdout).text()
 
@@ -116,14 +118,14 @@ export async function validate7zArchive(archivePath, destDir, deps = {}) {
     else if (/^L/.test(attrs)) type = 'l'
     else if (/^A/.test(attrs) || /^\s*-/.test(attrs)) type = '-'
     if (!ALLOWED_TYPES.has(type)) {
-      throw new Error(`archive contains disallowed entry "${type}" attrs="${attrs}": ${path}`)
+      throw new ValidationError(`archive contains disallowed entry "${type}" attrs="${attrs}": ${path}`)
     }
     if (path.startsWith('/') || path.startsWith('~')) {
-      throw new Error(`archive contains absolute path: ${path}`)
+      throw new ValidationError(`archive contains absolute path: ${path}`)
     }
     const resolved = resolve(destDir, path)
     if (resolved !== resolve(destDir) && !resolved.startsWith(root)) {
-      throw new Error(`archive entry escapes destDir after canonicalization: ${path} → ${resolved}`)
+      throw new ValidationError(`archive entry escapes destDir after canonicalization: ${path} → ${resolved}`)
     }
     entries.push({ type, path })
   }

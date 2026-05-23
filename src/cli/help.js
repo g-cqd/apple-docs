@@ -3,43 +3,41 @@ apple-docs - Apple Developer Documentation search and management
 
 Usage: apple-docs <command> [options]
 
-Read / query:
+Query:
   search <query>       Search documentation by term or symbol
   read <path>          Read a specific page or symbol
-  frameworks           List known documentation roots
   browse <framework>   Browse topic tree for a framework
+  frameworks           List known documentation roots
   kinds                List taxonomy values for filters
   status               Show corpus statistics
 
-Operator:
-  sync                 Refresh the entire corpus end-to-end
-                       (HEAD-check existing pages, crawl new pages, convert,
-                       index, sync fonts + SF Symbols, pre-render symbols,
-                       run schema migrations / minify / cleanup)
+Setup & Sync:
   setup                Download a pre-built documentation snapshot
+  sync                 Refresh the entire corpus end-to-end
+  consolidate          Repair failed crawl entries and re-resolve URLs
 
-Build / serve:
-  web build            Build static documentation site
-  web serve            Start local dev server
-  web deploy           Show deployment instructions
+Hosting:
   mcp start            Start MCP stdio server
   mcp serve            Start MCP Streamable HTTP server
-  mcp install          Show MCP configuration instructions
+  mcp install          Show MCP client configuration
+  web serve            Start local dev web server
+  web build            Build static documentation site
+  web deploy           Show deployment instructions
 
-Storage:
+Maintenance & Build:
+  snapshot build       Build a release snapshot archive
   storage stats        Show disk usage breakdown
   storage gc           Garbage collect cached files
-
-Maintenance:
-  snapshot build       Build a full release snapshot archive
-  consolidate          Repair failed crawl entries and re-resolve URLs
-  index rebuild <kind> Rebuild a search index from existing data (body|trigram)
+  index rebuild <kind> Rebuild a search index (body | trigram)
 
 Global options:
   --json               Output raw JSON (for scripting)
   --home <path>        Override data directory (default: ~/.apple-docs)
   --verbose            Verbose logging
   --help               Show help
+
+Environment:
+  APPLE_DOCS_DEBUG=1   Bypass public-output projection (raw envelopes)
 `.trim()
 
 const COMMANDS = {
@@ -47,19 +45,15 @@ const COMMANDS = {
 Usage: apple-docs search <query> [options]
 
 Search Apple documentation with typo tolerance and tiered ranking.
-Results are ranked: exact > prefix > contains > match > substring > fuzzy > body.
 
 Keep queries short and keyword-shaped. Use symbol names or API terms rather
 than natural-language questions, and apply filters (--framework, --source,
 --platform, ...) to narrow results instead of stuffing them into the query.
 
-Body search runs in background by default when the index exists. Fast tiers get
-a 200ms head start; if they fill the limit, body results are skipped (eager mode).
-
 Options:
   --framework <name>   Filter by framework (e.g. swiftui, design, app-store-review)
-  --source <name>      Filter by source type(s), comma-separated (e.g. apple-docc, wwdc, sample-code)
-  --kind <kind>        Filter by role or displayed kind (e.g. symbol, article, Article, Session)
+  --source <name>      Filter by source type(s), comma-separated (apple-docc, wwdc, sample-code)
+  --kind <kind>        Filter by role or displayed kind (Article, Session, symbol, ...)
   --language <lang>    Filter by language: swift, objc
   --platform <name>    Filter by platform availability: ios, macos, watchos, tvos, visionos
   --min-ios <ver>      Only show docs available on iOS >= version (e.g. 17.0)
@@ -71,19 +65,21 @@ Options:
   --track <name>       Filter WWDC sessions by track (e.g. SwiftUI, Accessibility)
   --deprecated <mode>  Deprecated filter: include (default), exclude, only
   --limit <n>          Max results (default: 100)
-  --no-fuzzy           Disable typo-tolerant matching
-  --no-deep            Disable full-body search entirely
-  --no-eager           Wait for body search to finish (exhaustive results)
   --read               Read the full content of the best match
   --max-chars <n>      Paginate output to fit within N characters (use with --read)
   --page <n>           Page number to display (default: 1, requires --max-chars)
-  --json               Output raw JSON
+  --json               Output raw JSON (projected — internals hidden)
+
+Advanced (search-tuning, diagnostic):
+  --no-fuzzy           Disable typo-tolerant matching
+  --no-deep            Disable full-body search entirely
+  --no-eager           Wait for body search to finish (exhaustive results)
 
 Examples:
   apple-docs search "NavigationStack"
   apple-docs search "Publsher"                # fuzzy: finds Publisher (d=1)
   apple-docs search "Swift Testing" --source wwdc --year 2024
-  apple-docs search "privacy" --framework guidelines --read  # search + read best match
+  apple-docs search "privacy" --framework guidelines --read
 `.trim(),
 
   read: `
@@ -129,62 +125,74 @@ List distinct taxonomy values with counts. Use this to discover valid
 Options:
   --field <name>       Return one field only: kind, role, docKind,
                        roleHeading, or sourceType
+  --all                Return every distinct value (default: top 20 per field)
   --json               Output raw JSON
+`.trim(),
+
+  status: `
+Usage: apple-docs status [options]
+
+Show corpus statistics and freshness.
+
+Options:
+  --json               Output raw JSON
+
+Advanced (operator diagnostics):
+  --advanced           Include snapshot tier, search-index availability,
+                       and per-root crawl progress
 `.trim(),
 
   sync: `
 Usage: apple-docs sync [options]
 
 Refresh the entire Apple documentation corpus end-to-end. Single command,
-full coverage — no scope flags, no skip flags. Resumable: if interrupted,
-re-run the same command to continue where you left off.
+full coverage. Resumable: re-run after interruption to continue.
 
-Stages, in order:
-  1. HEAD-check every existing page across every source for upstream changes
-  2. Discover roots and adapter pages (catalog + flat sources)
-  3. Crawl new pages, retrying any previously-failed entries
-  4. Download missing raw payloads, convert to Markdown
-  5. Build / refresh the body search index
-  6. Sync Apple typography (downloads SF Pro / Compact / Mono / etc DMGs)
-  7. Sync SF Symbols (public + private) and pre-render every variant to SVG
-  8. Run schema migrations, clean invalid entries, re-resolve failures,
-     minify raw JSON
+Stages: HEAD-check → discover → crawl → download → convert → body index →
+fonts → SF Symbols → migrations + cleanup + minify.
 
 Options:
-  --full               Force a clean rebuild: rebuild the body index from
-                       scratch and treat every page as if it were new. Use
-                       after a major schema change or to recover from a
-                       corrupted incremental state.
-  --rate <n>           Max requests per second across all roots (default: 500)
-  --aggressive         Use the legacy 500 in-flight fetch profile. Without
-                       this, sync defaults to 100 in-flight fetches unless
-                       APPLE_DOCS_CONCURRENCY is set explicitly.
+  --full               Force a clean rebuild from scratch
+  --rate <n>           Max requests per second across roots (default: 500)
   --json               Output the full pipeline report as JSON
 
-GitHub auth:
-  --use-git-auth       Reuse a GitHub token from the local gh CLI or git
-                       credential helper. No prompt. Env vars still take
-                       precedence.
+Advanced (performance / auth tuning):
+  --aggressive         Use the legacy 500 in-flight fetch profile. Default
+                       caps at 100 in-flight unless APPLE_DOCS_CONCURRENCY
+                       is set explicitly.
+  --use-git-auth       Reuse a GitHub token from local gh CLI or git
+                       credential helper. No prompt.
   --skip-git-auth      Skip all local-credential detection for this run.
 
-On a TTY with no GITHUB_TOKEN set, sync prompts before using local credentials
-and can remember the choice with "always". Persisted preference lives at
-~/.apple-docs/config.json. Set APPLE_DOCS_NO_GIT_AUTH=1 to disable detection
-globally (recommended for CI).
+On a TTY without GITHUB_TOKEN, sync prompts before using local credentials
+and can remember the choice. Set APPLE_DOCS_NO_GIT_AUTH=1 to disable
+detection globally (recommended for CI).
 
 Examples:
   apple-docs sync                # full refresh, idempotent
-  apple-docs sync --full         # clean rebuild from scratch
+  apple-docs sync --full         # clean rebuild
   apple-docs sync --json         # pipeline report as JSON
 `.trim(),
 
-  status: `
-Usage: apple-docs status [options]
+  setup: `
+Usage: apple-docs setup [options]
 
-Show corpus statistics and health.
+Download a pre-built documentation snapshot for instant access.
+No crawling required — ready in under 60 seconds.
 
 Options:
-  --json               Output raw JSON
+  --force            Overwrite existing corpus
+  --skip-resources   Skip the post-extract font + symbols re-index step
+  --archive <path>   Install from a local snapshot tarball produced by
+                     \`apple-docs snapshot build\` instead of fetching from
+                     GitHub. Verifies a sibling .sha256 sidecar if present.
+                     Path must live under $HOME or the current directory.
+  --json             Output results as JSON
+
+Advanced (auth tuning):
+  --use-git-auth     Reuse a GitHub token from the local gh CLI or git
+                     credential helper to authenticate release downloads.
+  --skip-git-auth    Skip local-credential detection for this run.
 `.trim(),
 
   mcp: `
@@ -203,6 +211,8 @@ Serve options:
   --allow-origin <url> Allowed browser Origin header(s); comma-separated.
                        Omit to deny browser origins except loopback. Native
                        clients without an Origin header are allowed.
+
+Serve options (advanced — capacity / observability):
   --concurrency <n>    Max in-flight heavy tool calls (default: 8, also
                        APPLE_DOCS_MCP_CONCURRENCY). Caps search_docs /
                        read_doc / browse / render tools so initialize/ping /
@@ -229,25 +239,6 @@ Examples:
   apple-docs mcp install --http https://apple-docs-mcp.example.com/mcp
 `.trim(),
 
-  setup: `
-Usage: apple-docs setup [options]
-
-Download a pre-built documentation snapshot for instant access.
-No crawling required — ready in under 60 seconds.
-
-Options:
-  --force            Overwrite existing corpus
-  --skip-resources   Skip the post-extract font + symbols re-index step
-  --archive <path>   Install from a local snapshot tarball produced by
-                     \`apple-docs snapshot build\` instead of fetching from
-                     GitHub. Verifies a sibling .sha256 sidecar if present.
-                     Path must live under $HOME or the current directory.
-  --use-git-auth     Reuse a GitHub token from the local gh CLI or git
-                     credential helper to authenticate release downloads.
-  --skip-git-auth    Skip local-credential detection for this run.
-  --json             Output results as JSON
-`.trim(),
-
   web: `
 Usage: apple-docs web <subcommand> [options]
 
@@ -265,9 +256,9 @@ Build options:
   --incremental        Skip docs whose render fingerprint matches the last build (writes in place; resumable)
   --full               Force a full rebuild (clears the per-doc render index, rewrites via staging dir)
   --frameworks <a,b>   Restrict the build to these framework slugs (escape hatch for memory pressure on giant frameworks)
-  --concurrency <n>    Per-process render concurrency (default: ncpu - 2). Sync-CPU rendering doesn't benefit much above 2-4 within one Bun process; for real parallelism see --workers.
-  --workers <n>        Fan out across N child Bun subprocesses, each rendering a partition of the framework list (default: 1 = inline). Use ncpu (e.g. 6) for the first full build to scale near-linearly with cores.
-  --skip-docs          Build only the site essentials (homepage, search page, public files, sitemap-index, search artifacts, manifest, framework metadata) and skip every per-document and per-framework HTML page. Caddy falls through to Bun for /docs/*, where the on-demand renderer + Cache-Control headers let Cloudflare cache each doc after first visit. The fastest path to a working deploy.
+  --concurrency <n>    Per-process render concurrency (default: ncpu - 2). For real parallelism see --workers.
+  --workers <n>        Fan out across N child Bun subprocesses, each rendering a partition of the framework list (default: 1 = inline).
+  --skip-docs          Build only the site essentials and skip every per-document HTML page.
   --json               Emit the build summary plus the full link-audit report as JSON
 
 After every build, the link auditor walks the rendered HTML tree and prints a
@@ -282,6 +273,8 @@ Serve options:
                        Tune via APPLE_DOCS_WEB_RATE / APPLE_DOCS_WEB_BURST,
                        or set APPLE_DOCS_WEB_RATE_LIMIT=1.
   --base-url <url>     Base URL prefix for links
+
+Serve options (advanced — observability):
   --metrics-port <n>   When set, expose a Prometheus /metrics scrape endpoint
                        on a separate listener. Absent → disabled (zero cost).
                        Bound to 127.0.0.1 by default.
@@ -297,9 +290,8 @@ Examples:
   apple-docs web serve
   apple-docs web build --out dist/web                                 # full build via staging
   apple-docs web build --incremental --out dist/web                   # skip unchanged pages, write in place
-  apple-docs web build --workers 6 --incremental --out dist/web       # fan out across 6 cores; one Bun subprocess each
-  apple-docs web build --skip-docs --out dist/web                     # essentials only; let Bun + Cloudflare handle /docs/* on demand
-  apple-docs web build --frameworks kernel,matter,swift --concurrency 2  # one big framework at a time
+  apple-docs web build --workers 6 --incremental --out dist/web       # fan out across 6 cores
+  apple-docs web build --skip-docs --out dist/web                     # essentials only
   apple-docs web deploy github-pages
 `.trim(),
 
@@ -316,6 +308,8 @@ Subcommands:
 GC options:
   --drop <types>       Categories to drop: markdown, html (comma-separated)
   --older-than <days>  Remove activity records older than this many days before cleanup
+
+GC options (advanced):
   --no-vacuum          Skip database VACUUM after cleanup
 
 Examples:
@@ -336,6 +330,8 @@ Subcommands:
 Build options:
   --out <dir>                  Output directory (default: dist)
   --tag <tag>                  Archive tag (default: snapshot-YYYYMMDD)
+
+Build options (advanced — escape hatches):
   --allow-incomplete-symbols   Skip the SF Symbols matrix-completeness gate
                                (only when building on a host that can't run
                                the live renderer; consumers will see 404s
@@ -366,9 +362,11 @@ Steps:
   3. Retry resolved paths, persisting checkpoints between batches.
 
 Options:
+  --json               Output raw JSON.
+
+Options (advanced — pipeline tuning):
   --dry-run            Report what would change without persisting.
   --minify             Trim raw-JSON payloads in place after consolidation.
-  --json               Output raw JSON.
 
 Resumable: re-run after interruption to continue from the last checkpoint.
 `.trim(),

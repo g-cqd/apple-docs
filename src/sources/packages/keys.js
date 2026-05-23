@@ -1,3 +1,4 @@
+import { ValidationError } from '../../lib/errors.js'
 const ROOT_SLUG = 'packages'
 
 /**
@@ -22,7 +23,7 @@ export function parsePackageUrl(url) {
 export function parsePackageKey(key) {
   const match = String(key ?? '').match(/^packages\/([^/]+)\/([^/]+)$/)
   if (!match) {
-    throw new Error(`Invalid package key: ${key}`)
+    throw new ValidationError(`Invalid package key: ${key}`, { field: 'key', value: key })
   }
   return { owner: match[1], repo: match[2] }
 }

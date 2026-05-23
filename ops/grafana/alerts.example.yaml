@@ -1,0 +1,72 @@
+# Example Prometheus alert rules for apple-docs. Drop into a file listed
+# under `rule_files:` in your prometheus.yml. Tune thresholds to match
+# your traffic profile.
+groups:
+  - name: apple-docs-web
+    rules:
+      - alert: WebReadyzDown
+        expr: probe_success{job="apple-docs-readyz"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Web readyz failing for >2 min"
+          description: "DB or reader-pool is down — the web server stopped reporting ready."
+
+      - alert: WebP95LatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(apple_docs_web_request_duration_ms_bucket[5m]))) > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Web p95 latency >500 ms for 10 min"
+
+      - alert: WebRateLimitFloor
+        expr: rate(apple_docs_web_rate_limit_rejected_total[5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sustained rate-limit rejections — possible abuse or under-provisioned bucket"
+
+      - alert: WebReaderPoolTimeoutBurst
+        expr: rate(apple_docs_web_reader_pool_timeout_total[1m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Reader-pool timeouts firing — DB contention or stuck queries"
+
+      - alert: EventLoopLagHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(apple_docs_event_loop_lag_ms_bucket[5m]))) > 200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Event-loop lag p95 >200 ms"
+
+  - name: apple-docs-mcp
+    rules:
+      - alert: McpReadyzDown
+        expr: probe_success{job="apple-docs-mcp-readyz"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MCP HTTP readyz failing for >2 min"
+
+      - alert: McpHeavyToolQueueSaturated
+        expr: apple_docs_mcp_heavy_tool_queue_depth >= 60
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MCP heavy-tool queue ≥60 — clients will start getting 503s"
+
+      - alert: McpToolP99High
+        expr: histogram_quantile(0.99, sum by (le, tool) (rate(apple_docs_mcp_tool_duration_ms_bucket[5m]))) > 5000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MCP tool {{ $labels.tool }} p99 >5s for 10 min"

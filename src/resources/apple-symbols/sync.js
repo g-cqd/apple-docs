@@ -15,6 +15,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { ValidationError } from '../../lib/errors.js'
 import { readPlist } from '../../lib/plist.js'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
 import { ensureDir } from '../../storage/files.js'
@@ -281,7 +282,7 @@ async function spawnSymbolWorker({ scope, logger }) {
   async function readBytes(n) {
     while (buffer.length < n) {
       const { value, done } = await reader.read()
-      if (done) throw new Error('worker exited')
+      if (done) throw new ValidationError('worker exited')
       const merged = new Uint8Array(buffer.length + value.length)
       merged.set(buffer, 0)
       merged.set(value, buffer.length)
@@ -310,7 +311,7 @@ async function spawnSymbolWorker({ scope, logger }) {
           const length = view.getUint32(4)
           const payload = await readBytes(length)
           if (status !== 0) {
-            throw new Error(new TextDecoder().decode(payload) || 'worker error')
+            throw new ValidationError(new TextDecoder().decode(payload) || 'worker error')
           }
           return payload
         })(),

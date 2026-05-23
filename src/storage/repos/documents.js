@@ -306,6 +306,40 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       for (const r of rows) map.set(r.from_key, r.count)
       return map
     },
+    /**
+     * Per-relation-type counts for a single document key. Returns an object
+     * like { inheritsFrom, inheritedBy, conformsTo, seeAlso, children };
+     * keys with zero counts are omitted. Used by read_doc to surface a
+     * cheap relationship-presence hint without leaking the relationship
+     * list itself.
+     */
+    getRelationshipCountsByType(fromKey) {
+      if (!fromKey) return {}
+      const rows = db.query(`
+        SELECT relation_type, COUNT(*) as count
+        FROM document_relationships WHERE from_key = ?
+        GROUP BY relation_type
+      `).all(fromKey)
+      const out = {}
+      for (const r of rows) {
+        const key = RELATION_TYPE_TO_CAMEL[r.relation_type]
+        if (key && r.count > 0) out[key] = r.count
+      }
+      return out
+    },
   }
+}
+
+// Map DB relation_type slugs to camelCase public names. Anything not in
+// this map is dropped from the surfaced count object (so an unexpected
+// future relation_type never leaks via the count).
+const RELATION_TYPE_TO_CAMEL = {
+  inherits_from: 'inheritsFrom',
+  inherited_by: 'inheritedBy',
+  conforms_to: 'conformsTo',
+  'see-also': 'seeAlso',
+  see_also: 'seeAlso',
+  seeAlso: 'seeAlso',
+  child: 'children',
 }
 

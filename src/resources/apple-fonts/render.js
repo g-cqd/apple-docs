@@ -22,11 +22,11 @@ import { FONT_TEXT_SCRIPT } from '../swift-templates.js'
 
 export async function renderFontText(opts, ctx) {
   const font = ctx.db.getAppleFontFile(opts.fontId)
-  if (!font) throw new Error(`Font file not found: ${opts.fontId}`)
+  if (!font) throw new NotFoundError(opts.fontId, `Font file not found: ${opts.fontId}`)
   const text = String(opts.text ?? 'Typography')
   const pointSize = clampInteger(opts.size ?? 96, 8, 512)
   let content
-  // A6: refuse to feed a non-allowlisted path to CoreText / Swift.
+  // refuse to feed a non-allowlisted path to CoreText / Swift.
   // Surfaces as a placeholder SVG so the user sees a clean fallback
   // rather than a 500.
   let safeFontPath
@@ -84,7 +84,7 @@ async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
       ['swift', scriptPath, fontPath, text, String(pointSize)],
       { deadlineMs: 10_000 },
     )
-    if (exitCode !== 0) throw new Error(stderr.trim() || `swift exited ${exitCode}`)
+    if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
     return new TextDecoder().decode(stdout)
   } finally {
     await rm(scriptPath, { force: true }).catch(() => {})

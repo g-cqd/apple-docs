@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { existsSync, mkdtempSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
-import { SnapshotIncompleteError } from '../lib/errors.js'
+import { SnapshotIncompleteError, ValidationError } from '../lib/errors.js'
 import { sha256 } from '../lib/hash.js'
 import { writeSha256Sidecar } from '../lib/archive-7z.js'
 import { createTarGzArchive } from '../lib/archive-targz.js'
@@ -74,7 +74,7 @@ export async function snapshotBuild(opts, ctx) {
   // `../../etc/passwd` or one containing shell-significant characters
   // would land outside `outDir`.
   if (!/^[a-z0-9._-]{1,64}$/i.test(tag)) {
-    throw new Error(`Invalid --tag "${tag}": must match [a-z0-9._-]{1,64}`)
+    throw new ValidationError(`Invalid --tag "${tag}": must match [a-z0-9._-]{1,64}`)
   }
   const schemaVersion = db.getSchemaVersion()
   const createdAt = deterministicCreatedAt(tag)
@@ -82,7 +82,7 @@ export async function snapshotBuild(opts, ctx) {
   // 1. Validate corpus health
   const stats = db.getStats()
   if (stats.totalPages === 0 && stats.totalRoots === 0) {
-    throw new Error('Corpus is empty. Run `apple-docs sync` first.')
+    throw new ValidationError('Corpus is empty. Run `apple-docs sync` first.')
   }
 
   logger.info(`Building snapshot (tag: ${tag})...`)

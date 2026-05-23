@@ -7,6 +7,8 @@
  * - prebuilt: Full materialization. Markdown + HTML persisted during sync.
  */
 
+import { NotFoundError } from '../lib/errors.js'
+
 const PROFILES = {
   'raw-only': {
     persistMarkdown: false,
@@ -55,7 +57,8 @@ export function getProfile(db) {
  */
 export function setProfile(db, name) {
   if (!PROFILES[name]) {
-    throw new Error(
+    throw new NotFoundError(
+      `storage-profile/${name}`,
       `Unknown storage profile: "${name}". Valid profiles: ${PROFILE_NAMES.join(', ')}`,
     )
   }
@@ -71,7 +74,8 @@ export function setProfile(db, name) {
  */
 export function getProfileConfig(name) {
   if (!PROFILES[name]) {
-    throw new Error(
+    throw new NotFoundError(
+      `storage-profile/${name}`,
       `Unknown storage profile: "${name}". Valid profiles: ${PROFILE_NAMES.join(', ')}`,
     )
   }

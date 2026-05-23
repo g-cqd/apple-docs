@@ -13,7 +13,7 @@
 
 export const DEEP_OPS = Object.freeze(new Set([
   // Bottom-of-cascade body FTS — multi-second outliers in the
-  // 2026-05-10 benchmark.
+  // the benchmark.
   'searchBody',
   'searchBodyAndEnrich',
   // Trigram-cache backed fuzzy match. Per-process Map of every title's

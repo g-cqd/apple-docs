@@ -1,6 +1,7 @@
 // Shared helpers for the MCP tool / resource handlers.
 
 import { coerceSection } from '../../content/coercion.js'
+import { ValidationError } from '../../lib/errors.js'
 import { MIN_PAGINATED_MAX_CHARS } from '../pagination.js'
 
 /**
@@ -18,7 +19,7 @@ export function sanitizeDocumentPayload(payload) {
 
 export function validatePaginationArgs(args) {
   if (args.page != null && args.maxChars == null) {
-    throw new Error('The page parameter requires maxChars.')
+    throw new ValidationError('The page parameter requires maxChars.', { field: 'page' })
   }
 }
 
@@ -34,46 +35,17 @@ export function parseResourcePagination(uri) {
   const page = pageValue == null ? 1 : Number.parseInt(pageValue, 10)
 
   if (Number.isNaN(maxChars)) {
-    throw new Error('Invalid maxChars query parameter.')
+    throw new ValidationError('Invalid maxChars query parameter.', { field: 'maxChars' })
   }
   if (Number.isNaN(page) || page < 1) {
-    throw new Error('Invalid page query parameter.')
+    throw new ValidationError('Invalid page query parameter.', { field: 'page' })
   }
   if (pageValue != null && maxCharsValue == null) {
-    throw new Error('The page query parameter requires maxChars.')
+    throw new ValidationError('The page query parameter requires maxChars.', { field: 'page' })
   }
   if (maxChars != null && maxChars < MIN_PAGINATED_MAX_CHARS) {
-    throw new Error(`maxChars must be at least ${MIN_PAGINATED_MAX_CHARS}.`)
+    throw new ValidationError(`maxChars must be at least ${MIN_PAGINATED_MAX_CHARS}.`, { field: 'maxChars', value: maxChars })
   }
 
   return { maxChars, page }
-}
-
-export function compactSearchHit(hit, opts = {}) {
-  const { compact = false } = opts
-  const result = {
-    title: hit?.title ?? null,
-    framework: hit?.framework ?? null,
-    rootSlug: hit?.rootSlug ?? null,
-    kind: hit?.kind ?? null,
-    path: hit?.path ?? null,
-    matchQuality: hit?.matchQuality ?? null,
-  }
-
-  if (!compact) {
-    result.sourceType = hit?.sourceType ?? null
-    result.sourceMetadata = hit?.sourceMetadata ?? null
-    result.abstract = hit?.abstract ?? null
-    result.platforms = hit?.platforms ?? []
-    result.declaration = hit?.declaration ?? null
-    result.urlDepth = hit?.urlDepth ?? 0
-    result.isReleaseNotes = hit?.isReleaseNotes ?? false
-    result.language = hit?.language ?? null
-    result.snippet = hit?.snippet ?? null
-    result.relatedCount = hit?.relatedCount ?? null
-    if (hit?.isDeprecated) result.isDeprecated = true
-    if (hit?.isBeta) result.isBeta = true
-  }
-
-  return result
 }

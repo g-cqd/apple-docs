@@ -12,6 +12,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
+import { NotFoundError } from '../lib/errors.js'
 import { classifyLink, mapUrlToKey } from '../lib/link-resolver.js'
 
 const HREF_REGEX = /<a\s[^>]*href\s*=\s*"([^"]+)"/gi
@@ -105,7 +106,7 @@ export async function linksAudit(opts, ctx) {
   const outDir = opts.outDir ?? 'dist/web'
 
   if (!existsSync(outDir)) {
-    throw new Error(`outDir does not exist: ${outDir}. Run \`apple-docs web build\` first.`)
+    throw new NotFoundError(outDir, `outDir does not exist: ${outDir}. Run \`apple-docs web build\` first.`)
   }
 
   // Build the knownKeys set from the DB. Includes every active page key
@@ -130,7 +131,7 @@ export async function linksAudit(opts, ctx) {
 
   const docsRoot = join(outDir, 'docs')
   if (!existsSync(docsRoot)) {
-    throw new Error(`No /docs directory in ${outDir}; the build may have failed.`)
+    throw new NotFoundError(`${outDir}/docs`, `No /docs directory in ${outDir}; the build may have failed.`)
   }
 
   for await (const file of walkFiles(docsRoot)) {

@@ -295,7 +295,7 @@ export async function buildStaticSite(opts, ctx) {
     }
 
     // 11. Walk the rendered HTML and classify every link. Skipped on partial
-    // builds since the audit needs the full /docs tree to be meaningful.
+    // builds because the link audit needs the full /docs tree to be meaningful.
     let linksAuditResult = null
     if (buildingAll && !skipDocs) {
       const auditStep = await runStep(

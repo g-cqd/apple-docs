@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { config } from './src/config.js'
 import { parseArgs } from './src/cli/parser.js'
 import { showHelp } from './src/cli/help.js'
 import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatSetup, formatWebBuild, formatWebDeploy, formatTaxonomy } from './src/cli/formatter.js'
@@ -15,6 +15,8 @@ import { browse } from './src/commands/browse.js'
 import { sync } from './src/commands/sync.js'
 import { status } from './src/commands/status.js'
 import { taxonomy } from './src/commands/taxonomy.js'
+import { projectStatus } from './src/output/projection.js'
+import { jsonProject } from './src/cli/json-project.js'
 import { paginateCliContent } from './src/cli/paginate.js'
 import { dispatchMaintenance, MAINTENANCE_COMMANDS } from './src/cli/maintenance.js'
 import { makeProgressReporter } from './src/cli/progress-reporter.js'
@@ -28,7 +30,7 @@ function parseOptionalInt(value) {
   return Number.isFinite(n) ? n : undefined
 }
 
-// D.2: metrics-port/host on `mcp serve` + `web serve`. Spread into opts.
+// metrics-port/host on `mcp serve` + `web serve`. Spread into opts.
 function metricsOpts(flags) {
   const p = parseOptionalInt(flags['metrics-port'])
   return { ...(p != null && { metricsPort: p }), ...(flags['metrics-host'] && { metricsHost: flags['metrics-host'] }) }
@@ -39,14 +41,14 @@ if (flags.help || !command) {
   process.exit(flags.help ? 0 : (command ? 0 : 1))
 }
 
-const dataDir = flags.home ?? process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
-const logLevel = flags.verbose ? 'debug' : (process.env.APPLE_DOCS_LOG_LEVEL ?? 'info')
+const dataDir = flags.home ?? config.APPLE_DOCS_HOME
+const logLevel = flags.verbose ? 'debug' : config.APPLE_DOCS_LOG_LEVEL
 const logger = createLogger(logLevel)
 const isCrawlCommand = command === 'sync'
-const defaultRate = isCrawlCommand ? '500' : '5'
-const defaultBurst = isCrawlCommand ? '500' : '2'
-const rate = Number.parseInt(flags.rate ?? process.env.APPLE_DOCS_RATE ?? defaultRate, 10)
-const burst = Math.max(rate, Number.parseInt(process.env.APPLE_DOCS_BURST ?? defaultBurst, 10))
+const defaultRate = isCrawlCommand ? 500 : 5
+const defaultBurst = isCrawlCommand ? 500 : 2
+const rate = flags.rate != null ? Number.parseInt(flags.rate, 10) : (config.APPLE_DOCS_RATE ?? defaultRate)
+const burst = Math.max(rate, config.APPLE_DOCS_BURST ?? defaultBurst)
 const rateLimiter = createHostBucketedLimiter({
   defaults: { rate, burst },
   primary: { rate, burst },
@@ -153,7 +155,7 @@ try {
     }
 
     case 'sync': {
-      // A25: --aggressive opts back into the legacy 500-in-flight default.
+      // --aggressive opts back into the legacy 500-in-flight default.
       // Without it, sync caps at 100 concurrent fetches (Apple's per-IP
       // limit absorbs that comfortably; 500 was an unfriendly default).
       result = await sync({ full: !!flags.full, aggressive: !!flags.aggressive }, ctx)
@@ -162,7 +164,10 @@ try {
     }
 
     case 'status': {
-      result = await status({}, ctx)
+      const raw = await status({}, ctx)
+      // Default status hides snapshot-tier / index-table availability /
+      // crawler internals; --advanced opts back into the full envelope.
+      result = flags.advanced ? raw : projectStatus(raw)
       formatter = formatStatus
       break
     }
@@ -354,7 +359,7 @@ try {
 
   if (formatter && result !== undefined) {
     if (flags.json) {
-      console.log(JSON.stringify(result, null, 2))
+      console.log(JSON.stringify(jsonProject(command, result, flags), null, 2))
     } else {
       console.log(formatter(result))
     }

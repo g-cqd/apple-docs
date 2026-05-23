@@ -3,6 +3,7 @@
 // driven by a binary search against a serialized-length budget.
 
 import { renderMarkdown } from '../../content/render-markdown.js'
+import { ValidationError } from '../../lib/errors.js'
 import {
   serializePayload,
   skipWhitespace,
@@ -131,7 +132,7 @@ function buildTextPages({ text, totalPages, maxChars, buildPayload }) {
     }
 
     if (best === start) {
-      throw new Error(`The requested maxChars budget (${maxChars}) is too small to return any content.`)
+      throw new ValidationError(`The requested maxChars budget (${maxChars}) is too small to return any content.`, { field: 'maxChars', value: maxChars })
     }
 
     pages.push(buildPayload(text.slice(start, best).trim(), pageIndex, totalPages))

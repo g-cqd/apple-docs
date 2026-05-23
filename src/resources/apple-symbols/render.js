@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sha256 } from '../../lib/hash.js'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
+import { NotFoundError, ValidationError } from '../../lib/errors.js'
 import { ensureDir } from '../../storage/files.js'
 import {
   clampInteger,
@@ -101,7 +102,7 @@ export async function renderSfSymbol(opts, ctx) {
   if (cached && existsSync(cached.file_path)) return cached
 
   const symbol = ctx.db.getSfSymbol(scope, opts.name)
-  if (!symbol) throw new Error(`SF Symbol not found: ${scope}/${opts.name}`)
+  if (!symbol) throw new NotFoundError(`${scope}/${opts.name}`, `SF Symbol not found: ${scope}/${opts.name}`)
 
   const renderDir = join(ctx.dataDir, 'resources', 'symbol-renders', scope)
   ensureDir(renderDir)
@@ -125,7 +126,7 @@ export async function renderSfSymbol(opts, ctx) {
           // Snapshot consumer can't fall through to Swift; surface the
           // rasterizer error so the operator knows librsvg/sips is the
           // missing piece.
-          throw new Error(
+          throw new ValidationError(
             `SF Symbol PNG rasterization failed for ${scope}/${opts.name} (offline mode): ${error.message}. ` +
             'Install rsvg-convert (librsvg2-bin) or run on macOS where sips is available.',
           )
@@ -139,7 +140,8 @@ export async function renderSfSymbol(opts, ctx) {
       // No pre-render found for this (name × weight × scale). The
       // snapshot is incomplete or the variant truly doesn't exist for
       // this symbol; either way live rendering is not allowed.
-      throw new Error(
+      throw new NotFoundError(
+        `${scope}/${opts.name}`,
         `SF Symbol pre-render missing for ${scope}/${opts.name} (${weight}/${scale}) in offline mode; snapshot may be incomplete.`,
       )
     }
@@ -183,7 +185,7 @@ async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', sca
       ['swift', scriptPath, name, scope, String(pointSize), color, background ?? '', weight, scale],
       { deadlineMs: 10_000 },
     )
-    if (exitCode !== 0) throw new Error(stderr.trim() || `swift exited ${exitCode}`)
+    if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
     return stdout
   } finally {
     await rm(scriptPath, { force: true }).catch(() => {})
@@ -203,7 +205,7 @@ async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale =
       ['swift', scriptPath, name, scope, weight, scale],
       { deadlineMs: 10_000 },
     )
-    if (exitCode !== 0) throw new Error(stderr.trim() || `swift exited ${exitCode}`)
+    if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
     return new Uint8Array(stdout)
   } finally {
     await rm(scriptPath, { force: true }).catch(() => {})
@@ -239,7 +241,7 @@ async function renderPngFromSvg(svg, { pointSize }) {
     if (sips.ok) return await readRasterizedPng(pngPath)
     errors.push(`sips: ${sips.error}`)
 
-    throw new Error(errors.join('; '))
+    throw new ValidationError(errors.join('; '))
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {})
   }
@@ -247,7 +249,7 @@ async function renderPngFromSvg(svg, { pointSize }) {
 
 async function readRasterizedPng(path) {
   if (!existsSync(path) || statSync(path).size === 0) {
-    throw new Error('rasterizer did not produce a PNG')
+    throw new ValidationError('rasterizer did not produce a PNG')
   }
   return await Bun.file(path).arrayBuffer()
 }

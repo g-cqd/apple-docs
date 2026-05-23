@@ -11,7 +11,7 @@ import { HttpError, NotFoundError } from './errors.js'
  * @returns {Promise<void>}
  */
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return Bun.sleep(ms)
 }
 
 function acquireRateLimit(rateLimiter, url) {

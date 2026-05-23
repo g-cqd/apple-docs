@@ -15,6 +15,7 @@
  */
 
 import { existsSync } from 'node:fs'
+import { ParseError } from './errors.js'
 import { spawnWithDeadline } from './spawn-with-deadline.js'
 
 export async function readPlist(path) {
@@ -34,7 +35,7 @@ export async function readPlist(path) {
     // Distinguish "binary not on PATH" from "plutil ran but rejected the
     // input". For the former we try the JS fallback; for the latter we
     // surface the original error so the caller can see what plutil saw.
-    if (exitCode !== 127) throw new Error(`plutil failed for ${path}: ${stderr.trim()}`)
+    if (exitCode !== 127) throw new ParseError(`plutil failed for ${path}: ${stderr.trim()}`)
   } catch (error) {
     // Bun.spawn throws ENOENT when the binary isn't on PATH.
     const message = String(error?.message ?? '')
@@ -46,7 +47,7 @@ export async function readPlist(path) {
 
 function parseXmlPlist(text) {
   if (text.startsWith('bplist')) {
-    throw new Error('parseXmlPlist: binary plists require plutil; install Apple developer tools')
+    throw new ParseError('parseXmlPlist: binary plists require plutil; install Apple developer tools')
   }
   const decode = (s) => s
     .replace(/&lt;/g, '<')
@@ -87,7 +88,7 @@ function parseXmlPlist(text) {
     skipMisc()
     if (i >= len || text[i] !== '<') return null
     const close = text.indexOf('>', i)
-    if (close < 0) throw new Error('parseXmlPlist: unterminated tag')
+    if (close < 0) throw new ParseError('parseXmlPlist: unterminated tag')
     const raw = text.slice(i + 1, close)
     i = close + 1
     const isClose = raw.startsWith('/')
@@ -99,7 +100,7 @@ function parseXmlPlist(text) {
   function readText(untilTag) {
     const closeTag = `</${untilTag}>`
     const end = text.indexOf(closeTag, i)
-    if (end < 0) throw new Error(`parseXmlPlist: missing </${untilTag}>`)
+    if (end < 0) throw new ParseError(`parseXmlPlist: missing </${untilTag}>`)
     const value = text.slice(i, end)
     i = end + closeTag.length
     return decode(value)
@@ -110,12 +111,12 @@ function parseXmlPlist(text) {
     const out = {}
     while (true) {
       const next = readTag()
-      if (!next) throw new Error('parseXmlPlist: unterminated <dict>')
+      if (!next) throw new ParseError('parseXmlPlist: unterminated <dict>')
       if (next.isClose && next.name === 'dict') return out
-      if (next.name !== 'key') throw new Error(`parseXmlPlist: expected <key>, got <${next.name}>`)
+      if (next.name !== 'key') throw new ParseError(`parseXmlPlist: expected <key>, got <${next.name}>`)
       const key = readText('key')
       const valueTag = readTag()
-      if (!valueTag || valueTag.isClose) throw new Error(`parseXmlPlist: missing value for key ${key}`)
+      if (!valueTag || valueTag.isClose) throw new ParseError(`parseXmlPlist: missing value for key ${key}`)
       out[key] = readValue(valueTag)
     }
   }
@@ -124,7 +125,7 @@ function parseXmlPlist(text) {
     const out = []
     while (true) {
       const next = readTag()
-      if (!next) throw new Error('parseXmlPlist: unterminated <array>')
+      if (!next) throw new ParseError('parseXmlPlist: unterminated <array>')
       if (next.isClose && next.name === 'array') return out
       out.push(readValue(next))
     }
@@ -155,6 +156,6 @@ function parseXmlPlist(text) {
       return readValue(value)
     }
   }
-  throw new Error('parseXmlPlist: no <plist> root found')
+  throw new ParseError('parseXmlPlist: no <plist> root found')
 }
 

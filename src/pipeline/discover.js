@@ -1,3 +1,4 @@
+import { NotFoundError } from '../lib/errors.js'
 import { normalizeIdentifier, extractRootSlug } from '../apple/normalizer.js'
 import { fetchDocPage, fetchTechnologies } from '../apple/api.js'
 import { persistFetchedDocPage } from './persist.js'
@@ -63,7 +64,7 @@ export async function discoverRoots(db, rateLimiter, logger) {
 export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onProgress, opts = {}) {
   const { retryFailed = false, semaphore, adapter = null } = opts
   const root = db.getRootBySlug(rootSlug)
-  if (!root) throw new Error(`Unknown root: ${rootSlug}`)
+  if (!root) throw new NotFoundError(rootSlug, `Unknown root: ${rootSlug}`)
 
   // Seed the crawl queue with the root's entry point
   const seedPath = root.seed_path ?? rootSlug

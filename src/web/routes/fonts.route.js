@@ -13,6 +13,7 @@ import {
   fileResponseRevalidated,
   matchesIfNoneMatch,
 } from '../responses.js'
+import { projectListAppleFonts } from '../../output/projection.js'
 import { validateFontText } from './render-validation.js'
 
 /**
@@ -22,7 +23,7 @@ import { validateFontText } from './render-validation.js'
  * @type {import('../route-registry.js').RouteHandler}
  */
 export function listFontsHandler(_request, ctx) {
-  return jsonResponse(listAppleFonts(ctx), { hashable: true })
+  return jsonResponse(projectListAppleFonts(listAppleFonts(ctx)), { hashable: true })
 }
 
 /**
@@ -35,7 +36,7 @@ export function listFontsHandler(_request, ctx) {
 export async function fontFileHandler(request, ctx, _url, match) {
   const font = ctx.db.getAppleFontFile(decodeURIComponent(match[1]))
   if (!font) return new Response('Not Found', { status: 404 })
-  // A6: refuse to serve any font whose stored file_path resolves outside
+  // refuse to serve any font whose stored file_path resolves outside
   // the approved roots (system font dirs + dataDir/resources/fonts/extracted).
   // This is the read-side of the containment invariant.
   let safePath
@@ -63,7 +64,7 @@ export async function fontFileHandler(request, ctx, _url, match) {
  * ZIP (deterministic bytes for stable ETags). The optional `?subset=`
  * query filters by variant (variable / static / remote / system).
  *
- * A23: persists the built archive to
+ * Persists the built archive to
  * `<dataDir>/resources/fonts/zips/<familyId>-<subset>-<inputHash>.zip`
  * on first request and serves subsequent requests through `Bun.file()`
  * directly. The hash in the filename keys on family file paths + sizes

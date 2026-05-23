@@ -4,6 +4,7 @@ import { downloadMissing } from '../pipeline/download.js'
 import { persistNormalizedPage } from '../pipeline/persist.js'
 import { applyGuidelinesSnapshot } from '../pipeline/sync-guidelines.js'
 import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress } from '../lib/flat-source-progress.js'
+import { ValidationError } from '../lib/errors.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { pool } from '../lib/pool.js'
 import { runStep } from '../lib/run-step.js'
@@ -37,7 +38,7 @@ export async function sync(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const startMs = Date.now()
   const fullRebuild = !!opts.full
-  // A25: bound the default in-flight fetch concurrency to 100. The
+  // bound the default in-flight fetch concurrency to 100. The
   // previous default (500) saturates Apple's per-IP rate limit instantly
   // and is friendly only on first-time bulk syncs. Operators who want
   // the old behavior pass --aggressive (or set APPLE_DOCS_CONCURRENCY
@@ -51,7 +52,7 @@ export async function sync(opts, ctx) {
     ?? envConcurrency
     ?? (opts.aggressive ? AGGRESSIVE_CONCURRENCY : DEFAULT_CONCURRENCY)
   if (concurrency > 100 && !opts.aggressive && envConcurrency == null) {
-    throw new Error(`--concurrency ${concurrency} > 100 requires --aggressive (or set APPLE_DOCS_CONCURRENCY explicitly)`)
+    throw new ValidationError(`--concurrency ${concurrency} > 100 requires --aggressive (or set APPLE_DOCS_CONCURRENCY explicitly)`)
   }
   const parallel = Number.parseInt(process.env.APPLE_DOCS_PARALLEL ?? '10', 10)
   const semaphore = ctx.semaphore ?? new Semaphore(concurrency)

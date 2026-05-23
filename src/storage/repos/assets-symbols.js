@@ -102,7 +102,7 @@ export function createAssetsSymbolsRepo(db) {
   `)
   const getRenderStmt = db.query('SELECT * FROM sf_symbol_renders WHERE cache_key = ?')
 
-  // A1: render-cache prune support. The render cache grows monotonically
+  // render-cache prune support. The render cache grows monotonically
   // unless something prunes it; on a long-running public server with
   // millions of distinct (size, color, weight, scale) combinations, that's
   // an unbounded disk-fill hazard. Two prune strategies, callable from a

@@ -9,6 +9,7 @@
  * ALTER TABLE in try/catch for re-run safety).
  */
 
+import { ValidationError } from '../../lib/errors.js'
 import { up as v1Up } from './v1-initial-schema.js'
 import { up as v2Up } from './v2-activity-table.js'
 import { up as v3Up } from './v3-roots-seed-path.js'
@@ -66,8 +67,9 @@ export function runMigrations(db) {
   const current = row ? Number.parseInt(row.value, 10) : 0
 
   if (current > SCHEMA_VERSION) {
-    throw new Error(
-      `Database schema version ${current} is newer than supported version ${SCHEMA_VERSION}. Update apple-docs to a newer version.`
+    throw new ValidationError(
+      `Database schema version ${current} is newer than supported version ${SCHEMA_VERSION}. Update apple-docs to a newer version.`,
+      { field: 'schemaVersion', value: current },
     )
   }
   if (current === SCHEMA_VERSION) return
@@ -81,6 +83,6 @@ export function runMigrations(db) {
     db.run('COMMIT')
   } catch (e) {
     db.run('ROLLBACK')
-    throw new Error(`Migration from v${current} to v${SCHEMA_VERSION} failed: ${e.message}`)
+    throw new ValidationError(`Migration from v${current} to v${SCHEMA_VERSION} failed: ${e.message}`)
   }
 }

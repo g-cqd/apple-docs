@@ -83,7 +83,7 @@ export async function symbolRenderHandler(request, ctx, url, match) {
       })
     }
   }
-  // A1: render through the per-server concurrency cap so a burst of cold
+  // render through the per-server concurrency cap so a burst of cold
   // requests can't pin every Swift process. Backpressure overflow → 503
   // with a brief Retry-After so clients back off instead of retrying
   // immediately.

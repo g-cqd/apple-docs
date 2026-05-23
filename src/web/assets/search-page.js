@@ -169,20 +169,20 @@ function init() {
     return !!q
   }
 
-  // Coalesce the three relaxed subtypes into a single user-facing label while
-  // preserving the original subtype on a data attribute for analytics.
-  function displayQuality(quality) {
-    if (!quality) return null
-    if (quality === 'relaxed' || quality === 'relaxed-or' || quality === 'relaxed-token') return 'relaxed'
-    return quality
+  // Pick a user-facing label for the result's confidence flag. The API
+  // returns `confidence: 'exact' | 'partial' | 'approximate'` — only
+  // approximate gets a visible badge so the user can tell when a hit
+  // came from relaxed matching.
+  function displayConfidence(confidence) {
+    return confidence === 'approximate' ? 'approximate' : null
   }
 
   // Render results
   function renderResults(results, append) {
     const html = results.map(r => {
-      const label = displayQuality(r.matchQuality)
+      const label = displayConfidence(r.confidence)
       const qualityHtml = label
-        ? `<span class="result-card-quality" data-relaxation-tier="${esc(r.matchQuality)}">${esc(label)}</span>`
+        ? `<span class="result-card-quality" data-confidence="${esc(r.confidence)}">${esc(label)}</span>`
         : ''
       return `
       <a href="/docs/${esc(r.path)}/" class="search-result-card">

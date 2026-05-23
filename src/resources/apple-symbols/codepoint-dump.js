@@ -1,3 +1,4 @@
+import { ValidationError } from '../../lib/errors.js'
 /**
  * Drive the Swift codepoint-dump worker against the catalog of
  * synced public SF Symbols and return a `Map<name, codepoint|null>`.
@@ -114,8 +115,8 @@ export async function dumpSymbolCodepoints(names, opts) {
     wallClockMs = 30_000,
     lineTimeoutMs = 5_000,
   } = opts
-  if (!fontPath) throw new Error('dumpSymbolCodepoints: fontPath is required')
-  if (!metadataDir) throw new Error('dumpSymbolCodepoints: metadataDir is required')
+  if (!fontPath) throw new ValidationError('dumpSymbolCodepoints: fontPath is required', { field: 'fontPath' })
+  if (!metadataDir) throw new ValidationError('dumpSymbolCodepoints: metadataDir is required', { field: 'metadataDir' })
 
   const map = new Map()
   const proc = await spawn({ fontPath, metadataDir, appPath, logger })

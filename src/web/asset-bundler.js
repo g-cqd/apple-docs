@@ -1,3 +1,4 @@
+import { ValidationError } from "../lib/errors.js"
 /**
  * Build a single browser-targeted JS entrypoint via `Bun.build` and return
  * the minified source text.
@@ -29,13 +30,13 @@ export async function minifyJs(entrypoint) {
       format: 'iife',
     })
   } catch (err) {
-    throw new Error(`Bun.build failed for ${entrypoint}: ${err?.message ?? err}`)
+    throw new ValidationError(`Bun.build failed for ${entrypoint}: ${err?.message ?? err}`)
   }
   if (!result.success) {
     const message = result.logs?.map(l => l.message ?? String(l)).join('\n') ?? 'build failed'
-    throw new Error(`Bun.build failed for ${entrypoint}: ${message}`)
+    throw new ValidationError(`Bun.build failed for ${entrypoint}: ${message}`)
   }
   const output = result.outputs?.[0]
-  if (!output) throw new Error(`Bun.build produced no output for ${entrypoint}`)
+  if (!output) throw new ValidationError(`Bun.build produced no output for ${entrypoint}`)
   return await output.text()
 }

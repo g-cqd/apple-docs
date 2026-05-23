@@ -1,3 +1,4 @@
+import { ParseError } from '../../lib/errors.js'
 // Compose the parsed PDF fills into an SVG that mirrors Apple's
 // destination-out compositing. Visible (alpha>0) fills paint normally;
 // alpha=0 fills wrap the previously-painted layers in a luminance mask
@@ -28,7 +29,7 @@ export function assembleSvg(fills, opts) {
       }
     }
   }
-  if (!Number.isFinite(minX)) throw new Error('symbol PDF: empty geometry')
+  if (!Number.isFinite(minX)) throw new ParseError('symbol PDF: empty geometry')
   const span = Math.max(maxX - minX, maxY - minY) || 1
   const pad = span * 0.06
   const flipY = (y) => (maxY - y) + pad

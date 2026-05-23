@@ -283,10 +283,16 @@ describe('MCP contract — tools', () => {
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.results).toBeArray()
     expect(parsed.results.length).toBeGreaterThan(0)
-    expect(parsed.tier).toBe('standard')
-    // MCP projection strips trigramAvailable/bodyIndexAvailable from responses.
+    // Public projection strips snapshot-tier name, trigram/body index
+    // availability, matchQuality, and other infrastructure fields.
+    expect(parsed.tier).toBeUndefined()
     expect(parsed.trigramAvailable).toBeUndefined()
     expect(parsed.bodyIndexAvailable).toBeUndefined()
+    expect(parsed.relaxed).toBeUndefined()
+    expect(parsed.relaxationTier).toBeUndefined()
+    // Per-result confidence replaces matchQuality / distance.
+    expect(['exact', 'partial', 'approximate']).toContain(parsed.results[0].confidence)
+    expect(parsed.results[0].matchQuality).toBeUndefined()
   })
 
   test('search_sf_symbols returns indexed private symbols', async () => {
@@ -471,16 +477,17 @@ describe('MCP contract — tools', () => {
       name: 'read_doc',
       arguments: {
         path: 'swiftui/long-article',
-        match: 'Observation',
+        match: { query: 'Observation', max: 2 },
         maxChars: 1000,
-        maxMatches: 2,
       },
     })
     expect(result.isError).toBeFalsy()
     expect(result.content[0].text.length).toBeLessThanOrEqual(1000)
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.matches.length).toBeGreaterThan(0)
-    expect(parsed.pageInfo.strategy).toBe('matches')
+    // `pageInfo.strategy` is an infrastructure field stripped by projection;
+    // navigational fields stay.
+    expect(parsed.pageInfo.strategy).toBeUndefined()
     expect(parsed.pageInfo.totalPages).toBeGreaterThan(1)
     expect(parsed.matches[0].excerpt).toContain('Observation')
   })

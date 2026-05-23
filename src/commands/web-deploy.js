@@ -1,3 +1,5 @@
+import { ValidationError } from '../lib/errors.js'
+
 const INSTRUCTIONS = {
   'github-pages': [
     '1. Push your built site to the `gh-pages` branch (or configure GitHub Pages to use `docs/` on `main`).',
@@ -46,7 +48,7 @@ export function webDeploy(opts) {
 
   if (!INSTRUCTIONS[platform]) {
     const supported = SUPPORTED_PLATFORMS.join(', ')
-    throw new Error(`Unknown platform: "${platform}". Supported platforms: ${supported}`)
+    throw new ValidationError(`Unknown platform: "${platform}". Supported platforms: ${supported}`, { field: 'platform', value: platform })
   }
 
   return {
