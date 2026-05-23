@@ -20,6 +20,26 @@ export function renderSymbolsPage(siteConfig, data = {}) {
   //     the inspector opens. <1024 the rail collapses behind a native
   //     <select>, the inspector becomes a dedicated `/symbols/<name>`
   //     route handled in symbols-page.js.
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: pageTitle,
+    description,
+    inLanguage: 'en',
+    isAccessibleForFree: true,
+    url: canonical,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: siteConfig.siteName,
+      url: `${siteConfig.baseUrl || ''}/`,
+    },
+    about: {
+      '@type': 'Thing',
+      name: 'SF Symbols',
+      description: 'Apple\'s icon library shipped with iOS, macOS, watchOS, tvOS, and visionOS.',
+    },
+    numberOfItems: totalCount,
+  }
   return html`<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({
@@ -28,6 +48,7 @@ ${buildHead({
   siteConfig,
   canonical,
   ogType: 'website',
+  jsonLd,
 })}
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>

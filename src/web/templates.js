@@ -274,6 +274,64 @@ export function buildBreadcrumbs(key, opts = {}) {
   return html`<nav class="breadcrumbs" aria-label="Breadcrumb">${interleaved}</nav>`
 }
 
+/**
+ * Build a `BreadcrumbList` schema.org object suitable for embedding under
+ * the `breadcrumb` key of a parent JSON-LD entity (TechArticle,
+ * APIReference, etc.). Mirrors the structure of `buildBreadcrumbs` so
+ * the visual nav and the structured-data declaration always agree on
+ * the chain.
+ *
+ * Returns null when no key is provided (caller should `?` the spread)
+ * or when the key produces no segments. The terminal segment is
+ * intentionally emitted WITHOUT an `item` URL — that's the current
+ * page and Google's BreadcrumbList docs explicitly recommend omitting
+ * it.
+ *
+ * @param {string} key  slash-separated doc/framework key
+ * @param {string} baseUrl  absolute site base URL (no trailing slash)
+ * @param {object} [opts]
+ * @param {string} [opts.title]            display label for the final segment
+ * @param {string} [opts.framework]        display label for the framework root segment
+ * @param {Map<string, string>} [opts.ancestorTitles]  partial-key → display label
+ * @returns {object | null}
+ */
+export function buildBreadcrumbListJsonLd(key, baseUrl, opts = {}) {
+  if (!key || typeof key !== 'string') return null
+  const segments = key.split('/').filter(Boolean)
+  if (segments.length === 0) return null
+  const cleanBase = (baseUrl ?? '').replace(/\/+$/, '')
+  const lastLabel = opts.title ?? segments[segments.length - 1]
+  const ancestorTitles = opts.ancestorTitles ?? new Map()
+  const items = []
+  for (let i = 0; i < segments.length; i++) {
+    const isLast = i === segments.length - 1
+    const partialKey = segments.slice(0, i + 1).join('/')
+    let name
+    if (isLast) {
+      name = lastLabel
+    } else if (i === 0 && opts.framework) {
+      name = opts.framework
+    } else if (ancestorTitles.has(partialKey)) {
+      name = ancestorTitles.get(partialKey)
+    } else {
+      name = segments[i]
+    }
+    const entry = {
+      '@type': 'ListItem',
+      position: i + 1,
+      name,
+    }
+    if (!isLast) {
+      entry.item = `${cleanBase}/docs/${partialKey}/`
+    }
+    items.push(entry)
+  }
+  return {
+    '@type': 'BreadcrumbList',
+    itemListElement: items,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Original-resource link helpers
 // ---------------------------------------------------------------------------

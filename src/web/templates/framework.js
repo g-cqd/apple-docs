@@ -1,5 +1,6 @@
 import { html, raw, attr } from '../lib/html.js'
 import {
+  buildBreadcrumbListJsonLd,
   buildFooter,
   buildHead,
   buildHeader,
@@ -220,6 +221,9 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   const description = `${fwName} documentation index.`
   const canonical = framework?.slug ? `${siteConfig.baseUrl || ''}/docs/${framework.slug}/` : null
   const originalUrl = frameworkOriginalUrl(framework)
+  const breadcrumbJsonLd = framework?.slug
+    ? buildBreadcrumbListJsonLd(framework.slug, siteConfig.baseUrl, { title: fwName, framework: fwName })
+    : null
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'APIReference',
@@ -231,6 +235,7 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     ...(siteConfig.buildDate ? { dateModified: siteConfig.buildDate } : {}),
     ...(originalUrl ? { isBasedOn: originalUrl } : {}),
     programmingLanguage: 'Swift',
+    ...(breadcrumbJsonLd ? { breadcrumb: breadcrumbJsonLd } : {}),
   }
 
   return html`<!DOCTYPE html>

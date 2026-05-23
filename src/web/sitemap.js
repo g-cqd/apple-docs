@@ -141,11 +141,14 @@ export async function generateSitemaps({ db, outputDir, baseUrl, buildDate }) {
   const lastmod = buildDate
   const cleanBase = baseUrl.replace(/\/+$/, '')
 
-  // _root sitemap: homepage + search page (and any other site-wide entries
-  // we don't want to spread across the per-framework files).
+  // _root sitemap: homepage + search page + the curated design tools
+  // (/symbols, /fonts). These four are site-wide entries we don't want
+  // to spread across the per-framework files.
   const rootEntries = [
     urlEntry({ loc: `${cleanBase}/`, lastmod, changefreq: 'daily', priority: 1.0 }),
     urlEntry({ loc: `${cleanBase}/search`, lastmod, changefreq: 'monthly', priority: 0.7 }),
+    urlEntry({ loc: `${cleanBase}/symbols`, lastmod, changefreq: 'weekly', priority: 0.7 }),
+    urlEntry({ loc: `${cleanBase}/fonts`, lastmod, changefreq: 'weekly', priority: 0.7 }),
   ]
   const rootXml = [
     '<?xml version="1.0" encoding="UTF-8"?>',

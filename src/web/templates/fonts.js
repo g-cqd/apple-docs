@@ -46,6 +46,26 @@ export function renderFontsPage(siteConfig, data = {}) {
     </article>`
   })
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: pageTitle,
+    description,
+    inLanguage: 'en',
+    isAccessibleForFree: true,
+    url: canonical,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: siteConfig.siteName,
+      url: `${siteConfig.baseUrl || ''}/`,
+    },
+    about: {
+      '@type': 'Thing',
+      name: 'Apple Typography',
+      description: 'San Francisco type-family variants distributed by Apple: SF Pro, SF Mono, SF Compact, New York.',
+    },
+    numberOfItems: families.length,
+  }
   return html`<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({
@@ -54,6 +74,7 @@ ${buildHead({
   siteConfig,
   canonical,
   ogType: 'website',
+  jsonLd,
 })}
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>

@@ -1,6 +1,7 @@
 import { html, raw } from '../lib/html.js'
 import {
   buildBreadcrumbs,
+  buildBreadcrumbListJsonLd,
   buildDocMeta,
   buildFooter,
   buildHead,
@@ -99,6 +100,11 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
     maccatalyst: 'Mac Catalyst', ipados: 'iPadOS',
   }[k] ?? k))
   const programmingLanguage = (doc.language === 'occ' || doc.language === 'objc') ? 'Objective-C' : 'Swift'
+  const breadcrumbJsonLd = doc.key ? buildBreadcrumbListJsonLd(doc.key, siteConfig.baseUrl, {
+    title: doc.title,
+    framework: doc.framework_display ?? doc.framework,
+    ancestorTitles: opts.ancestorTitles,
+  }) : null
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'TechArticle',
@@ -116,6 +122,7 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
     ...(doc.url ? { isBasedOn: doc.url } : {}),
     ...(programmingLanguage ? { programmingLanguage } : {}),
     ...(platformNames.length > 0 ? { audience: { '@type': 'Audience', audienceType: 'Developers' }, applicationSuite: platformNames.join(', ') } : {}),
+    ...(breadcrumbJsonLd ? { breadcrumb: breadcrumbJsonLd } : {}),
   }
 
   return html`<!DOCTYPE html>
