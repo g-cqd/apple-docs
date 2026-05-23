@@ -33,6 +33,15 @@ const POLICY_DIRECTIVES = [
   "default-src 'self'",
   `script-src 'self' ${INLINE_SCRIPT_HASHES.join(' ')}`,
   "style-src 'self'",
+  // Shiki emits per-token `style="--shiki-light:#..."` for dual-theme
+  // highlighting. The set of literal style values is unbounded across
+  // ~329 K pages, so hashing is impractical; `style-src-attr` is the
+  // CSP-3 directive that scopes the inline-style relaxation to
+  // attributes only — `<style>` blocks remain restricted by
+  // `style-src 'self'` above. Pre-CSP-3 browsers fall back to
+  // `style-src`; highlighting degrades to monochrome on those
+  // (no functional break).
+  "style-src-attr 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self' data:",
   "connect-src 'self'",

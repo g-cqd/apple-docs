@@ -560,6 +560,11 @@ describe('Dev Server (P7-E)', () => {
     expect(csp).toContain("default-src 'self'")
     expect(csp).toContain("frame-ancestors 'none'")
     expect(csp).toContain("'sha256-")
+    // Shiki's per-token inline `style="--shiki-light:..."` requires the
+    // CSP-3 `style-src-attr` relaxation; `<style>` blocks stay locked
+    // down by the strict `style-src 'self'` above.
+    expect(csp).toContain("style-src 'self'")
+    expect(csp).toContain("style-src-attr 'unsafe-inline'")
   })
 
   test('home page surfaces fonts and symbols inside the design section', async () => {
