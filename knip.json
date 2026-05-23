@@ -1,13 +1,17 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/**/*.js",
+    "test/**/*.js",
+    "scripts/**/*.js",
+    "docs/.vitepress/config.mjs"
+  ],
   "project": [
     "src/**/*.js",
     "test/**/*.js",
+    "scripts/**/*.js",
+    "docs/.vitepress/**/*.{js,mjs}",
     "!test/fixtures/**"
-  ],
-  "ignore": [
-    "src/web/assets/**",
-    "src/web/worker/**"
   ],
   "ignoreDependencies": [
     "zod",
