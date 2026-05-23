@@ -72,7 +72,11 @@ const configSchema = z.object({
   APPLE_DOCS_MCP_CACHE_STATS: bool().default(false),
   APPLE_DOCS_MCP_CONCURRENCY: posInt().default(8),
   APPLE_DOCS_MCP_QUEUE: nonNegInt().default(64),
-  APPLE_DOCS_MCP_READERS: posInt().optional(),
+  // Reader-pool toggle ('on' enables the worker-thread pool); the pool's
+  // *size* lives in APPLE_DOCS_MCP_READER_WORKERS. The runtime check is
+  // a strict equality against 'on' (src/mcp/http-server.js), so the
+  // schema must accept the toggle string rather than coerce to a number.
+  APPLE_DOCS_MCP_READERS: z.enum(['on', 'off']).optional(),
   APPLE_DOCS_MCP_READER_WORKERS: posInt().optional(),
   APPLE_DOCS_MCP_DEEP_READERS: posInt().optional(),
 
@@ -84,7 +88,10 @@ const configSchema = z.object({
   APPLE_DOCS_WEB_DEEP_INFLIGHT: posInt().default(4),
   APPLE_DOCS_WEB_DEEP_QUEUE: nonNegInt().default(8),
   APPLE_DOCS_WEB_DEEP_READERS: posInt().optional(),
-  APPLE_DOCS_WEB_READERS: posInt().optional(),
+  // Reader-pool mode (off|auto|on); the pool's size lives in
+  // APPLE_DOCS_WEB_READER_WORKERS. Runtime reads the string directly
+  // (src/web/context.js), so accept the enum rather than coerce.
+  APPLE_DOCS_WEB_READERS: z.enum(['off', 'auto', 'on']).optional(),
   APPLE_DOCS_WEB_READER_WORKERS: posInt().optional(),
   APPLE_DOCS_WEB_RENDER_CONCURRENCY: posInt().optional(),
   APPLE_DOCS_WEB_SEARCH_CACHE: posInt().optional(),
