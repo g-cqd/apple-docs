@@ -39,7 +39,31 @@
   --token-type: #703daa;
   --token-identifier: #4b21b0;
   --token-number: #272ad8;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  /* Typography
+     ----------
+     Body stack is system-first: macOS / iOS resolve `-apple-system` to
+     SF Pro Text (auto-switching to SF Pro Display at display sizes via
+     the optical-sizing axis), Windows hits Segoe UI Variable (Win 11)
+     or Segoe UI (Win 10), Linux falls through to the platform's
+     `system-ui` (Cantarell, Ubuntu, DejaVu, etc.). Apple users skip
+     any download entirely — the bundled fonts at /api/fonts are
+     intentionally NOT registered as @font-face since the system
+     resolution above already serves the same typefaces on Apple
+     hardware.
+     Mono stack: `ui-monospace` resolves to SF Mono on macOS,
+     Cascadia Mono on Windows 11, system mono elsewhere; the
+     follow-on names are explicit fallbacks for older browsers. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, ui-sans-serif, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  /* Reading measure. Tinker / Bringhurst / Dyson & Haselgrove
+     converge on ~45–75 CPL for sustained reading; 70ch puts prose
+     paragraphs inside that band at 16px body. Code blocks get a
+     wider 100ch since horizontal scroll already handles long
+     identifiers. Applied per-element (p, li) below so non-prose
+     layouts (tile grids, font preview tester, search forms) keep
+     their existing widths. */
+  --measure-prose: 70ch;
+  --measure-code: 100ch;
 }
 
 [data-theme="dark"] {
@@ -186,11 +210,57 @@ body {
   margin: 0;
   background-color: var(--bg);
   color: var(--fg);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* `font-optical-sizing: auto` is the browser default since 2020
+     but stated explicitly so a future browser doesn't change it.
+     Variable SF Pro on macOS/iOS auto-flips Text → Display past
+     ~20pt under this setting. */
+  font-optical-sizing: auto;
+  /* Default ligature + kerning behaviour for body prose. Apple SF
+     Pro Text uses contextual alternates for things like fi/fl
+     ligatures; enabling `calt` keeps that on consistently across
+     browsers (Firefox defaults differ from WebKit). */
+  font-feature-settings: "kern", "liga", "calt";
+  /* Optical margin alignment on prose paragraphs — opening quotes
+     and closing punctuation hang into the gutter for a more even
+     visual margin. Modern browsers (Safari 18+, Chromium 144+,
+     Firefox 142+ behind flag) respect this; older browsers ignore
+     it harmlessly. */
+  hanging-punctuation: first allow-end last;
+}
+
+/* Reading measure on prose paragraphs and list items inside the
+   article. Constrains the line length to ~70 characters while
+   leaving structural containers free to use their existing widths
+   (sidebar grids, tile collections, search forms). */
+.doc-article p,
+.doc-article li,
+.doc-article blockquote {
+  max-width: var(--measure-prose);
+}
+
+/* Code typography. Slashed zero + contextual alternates +
+   programming ligatures (for fonts that ship them; SF Mono does
+   not but `liga` is harmless when absent). `tnum` keeps line-
+   number gutters aligned. */
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-feature-settings: "kern", "liga", "calt", "zero", "tnum";
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* Pre / code blocks get the wider 100ch measure — long identifier
+   chains tolerate it and horizontal scroll is already provided
+   below. */
+pre {
+  max-width: var(--measure-code);
 }
 
 a {
