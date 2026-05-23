@@ -64,6 +64,37 @@
      their existing widths. */
   --measure-prose: 70ch;
   --measure-code: 100ch;
+  /* Design tokens — type scale, spacing, radii.
+     ----------------------------------------------
+     Type scale is a five-step ratio anchored on 1rem (16px).
+     `--font-base` matches the legacy `0.875rem` value used by
+     ~35 rules across the stylesheet; the rest expand the scale
+     in both directions. Use these named tokens instead of bare
+     `rem` literals so a future global rescale (e.g. bumping
+     `font-size` on `html`) propagates correctly. */
+  --font-xs: 0.75rem;
+  --font-sm: 0.8125rem;
+  --font-base: 0.875rem;
+  --font-md: 1rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.25rem;
+  /* Spacing scale follows the same anchored-on-1rem progression
+     used throughout the stylesheet's padding / margin / gap
+     values. */
+  --space-xs: 0.375rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+  /* Border-radius scale. `--radius-full` is the pill shape used
+     for badges and chip controls; `--radius-sm/md/lg` map the
+     three sizes (4 / 6 / 8 px) used by inputs, buttons, cards,
+     and toolbars. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 999px;
 }
 
 [data-theme="dark"] {
@@ -769,10 +800,19 @@ a:hover {
 @media (prefers-color-scheme: dark) {
   [data-theme="auto"] .shiki span { color: var(--shiki-dark); }
 }
-.shiki { background-color: var(--code-bg); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.8125rem; }
+/* Code block shell — shared between Shiki-highlighted blocks and the
+   DocC declaration-token blocks (`pre.decl-tokens`). These previously
+   defined the same 5-property block in two places; consolidated here. */
+.shiki,
+pre.decl-tokens {
+  background-color: var(--code-bg);
+  padding: var(--space-lg);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
+  font-size: var(--font-sm);
+}
 
 /* Declaration token rendering — semantic coloring for Apple DocC tokens */
-pre.decl-tokens { background-color: var(--code-bg); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.8125rem; }
 pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; border-radius: 0; }
 .decl-keyword { color: var(--token-keyword); }
 .decl-type { color: var(--token-type); }
