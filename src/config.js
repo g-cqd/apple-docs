@@ -116,13 +116,18 @@ const configSchema = z.object({
 }).passthrough()
 
 /**
- * Parse `process.env` once at module load. Errors abort the process with
- * a readable summary — there is no recovery path for an invalid runtime
- * configuration.
+ * Parse a given environment block (`process.env` by default) against the
+ * schema. Errors abort the caller with a readable summary — there is no
+ * recovery path for an invalid runtime configuration.
  *
+ * Exported so unit tests can pin the schema against synthetic env blocks
+ * (notably the ones our launchd plists ship) without monkey-patching the
+ * real `process.env`.
+ *
+ * @param {Record<string, string | undefined>} [env]
  * @returns {Readonly<z.infer<typeof configSchema>>}
  */
-function loadConfig(env = process.env) {
+export function loadConfig(env = process.env) {
   const result = configSchema.safeParse(env)
   if (!result.success) {
     const issues = result.error.issues
