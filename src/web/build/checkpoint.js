@@ -55,13 +55,31 @@ export function computeSectionsDigest(sections) {
  * Hash of the template surface — bumping any of these files invalidates the
  * render index. Keep the list tight: anything that contributes HTML output
  * during `renderDocumentPage` must be included.
+ *
+ * Previously the path resolution was wrong (joined from
+ * `src/web/build/` instead of from `src/web/`), so the template-version
+ * stamp silently hashed three `missing:…` strings instead of the
+ * actual file bytes. The spine refactor in commits 49f9eae and
+ * d8b342f split the rendering pipeline across `templates.js`,
+ * `templates/*.js`, and `lib/html.js`; this list now mirrors that.
  */
 export function computeTemplateVersion() {
-  const here = dirname(new URL(import.meta.url).pathname)
+  // import.meta.url here is .../src/web/build/checkpoint.js; templates
+  // live one directory up under src/web/.
+  const webDir = join(dirname(new URL(import.meta.url).pathname), '..')
   const files = [
-    join(here, 'templates.js'),
-    join(here, '..', 'content', 'render-html.js'),
-    join(here, 'assets', 'style.css'),
+    join(webDir, 'templates.js'),
+    join(webDir, 'lib', 'html.js'),
+    join(webDir, 'templates', 'document.js'),
+    join(webDir, 'templates', '_doc-content.js'),
+    join(webDir, 'templates', 'framework.js'),
+    join(webDir, 'templates', 'index-page.js'),
+    join(webDir, 'templates', 'search.js'),
+    join(webDir, 'templates', 'fonts.js'),
+    join(webDir, 'templates', 'symbols.js'),
+    join(webDir, 'templates', 'not-found.js'),
+    join(webDir, '..', 'content', 'render-html.js'),
+    join(webDir, 'assets', 'style.css'),
   ]
   const hasher = new Bun.CryptoHasher('sha256')
   for (const f of files) {
