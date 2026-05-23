@@ -1,3 +1,4 @@
+import { html, raw } from '../lib/html.js'
 import { buildFooter, buildHead, buildHeader } from '../templates.js'
 
 /**
@@ -48,7 +49,7 @@ export const NOT_FOUND_INLINE_SCRIPT = `
 
 export function renderNotFoundPage(siteConfig) {
   const pageTitle = `Not Found — ${siteConfig.siteName}`
-  return `<!DOCTYPE html>
+  return html`<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({
   title: pageTitle,
@@ -84,7 +85,7 @@ ${buildHeader(siteConfig)}
   </p>
 </main>
 ${buildFooter(siteConfig)}
-<script>${NOT_FOUND_INLINE_SCRIPT}</script>
+<script>${raw(NOT_FOUND_INLINE_SCRIPT)}</script>
 </body>
-</html>`
+</html>`.toString()
 }

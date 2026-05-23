@@ -9,19 +9,6 @@ export { renderFontsPage } from './templates/fonts.js'
 export { renderSymbolsPage } from './templates/symbols.js'
 
 
-// Thin alias over `Bun.escapeHTML` so existing call sites keep their
-// intent label. Bun's native implementation is faster than chained
-// `replaceAll`s and escapes the same set of characters (`& < > " '`)
-// — the only wire-level difference is `&#x27;` vs `&#39;` for the
-// apostrophe, which is semantically identical in HTML.
-//
-// Still exported because per-page templates that haven't migrated to
-// the DSL (`src/web/lib/html.js`) yet rely on it. Phase 1 of the DSL
-// migration drops every caller; this helper goes away once that lands.
-export function escapeAttr(value) {
-  return Bun.escapeHTML(String(value ?? ''))
-}
-
 export function assetUrl(siteConfig, file) {
   const base = `${siteConfig.baseUrl}/assets/${file}`
   if (!siteConfig.assetVersion) return base

@@ -1,10 +1,10 @@
+import { html, raw, attr } from '../lib/html.js'
 import {
   buildFooter,
   buildHead,
   buildHeader,
   buildOriginalResourceBlock,
   buildScripts,
-  escapeAttr,
   frameworkOriginalUrl,
   renderTocHtml,
 } from '../templates.js'
@@ -105,36 +105,39 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
 
   const roleSections = []
   for (const [role, docs] of byRole) {
-    const docsHtml = docs.map(doc => {
+    const docItems = docs.map(doc => {
       const docKey = doc.key ?? doc.path ?? ''
-      const href = `${siteConfig.baseUrl}/docs/${escapeAttr(docKey)}/`
-      const title = escapeAttr(doc.title ?? docKey)
-      const filterKind = escapeAttr(doc.role_heading ?? doc.role ?? 'Other')
-      // Show role_heading as metadata to distinguish duplicates (e.g. .!=(_:_:) across types)
-      const meta = doc.role_heading ? `<span class="doc-item-meta">${escapeAttr(doc.role_heading)}</span>` : ''
+      const href = `${siteConfig.baseUrl}/docs/${docKey}/`
+      const filterKind = doc.role_heading ?? doc.role ?? 'Other'
+      // Show role_heading as metadata to distinguish duplicates
+      // (e.g. .!=(_:_:) across types).
+      const meta = doc.role_heading
+        ? html`<span class="doc-item-meta">${doc.role_heading}</span>`
+        : null
       const abstractText = doc.abstract_text ?? doc.abstract ?? ''
       const isDeprecated = /\bDeprecated\b/i.test(abstractText)
       const abstract = abstractText
-        ? `<span class="doc-item-meta">— ${escapeAttr(abstractText.length > 80 ? `${abstractText.slice(0, 80)}...` : abstractText)}</span>`
-        : ''
-      const deprecatedAttr = isDeprecated ? ' data-deprecated="true"' : ''
+        ? html`<span class="doc-item-meta">— ${abstractText.length > 80 ? `${abstractText.slice(0, 80)}...` : abstractText}</span>`
+        : null
       const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
-      const titleHtml = isSymbol ? `<code>${title}</code>` : title
-      return `<li data-filter-kind="${filterKind}"${deprecatedAttr}><a href="${href}">${titleHtml}</a>${meta}${abstract}</li>`
-    }).join('\n      ')
+      const titleContent = isSymbol
+        ? html`<code>${doc.title ?? docKey}</code>`
+        : (doc.title ?? docKey)
+      return html`<li data-filter-kind="${filterKind}"${attr('data-deprecated', isDeprecated || null)}><a href="${href}">${titleContent}</a>${meta}${abstract}</li>`
+    })
 
     const roleId = slugify(role)
-    roleSections.push(`<section id="${escapeAttr(roleId)}" class="role-group" data-filter-kind="${escapeAttr(role)}">
-    <h2 class="role-heading">${escapeAttr(role)}</h2>
+    roleSections.push(html`<section id="${roleId}" class="role-group" data-filter-kind="${role}">
+    <h2 class="role-heading">${role}</h2>
     <ul class="doc-list">
-      ${docsHtml}
+      ${interleave(docItems, html`\n      `)}
     </ul>
   </section>`)
   }
 
   const mainContent = roleSections.length > 0
-    ? roleSections.join('\n  ')
-    : '<p>No documents found for this framework.</p>'
+    ? interleave(roleSections, html`\n  `)
+    : html`<p>No documents found for this framework.</p>`
 
   // View toggle only shown when we have tree edges
   const hasTree = treeEdges.length > 0
@@ -146,19 +149,19 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   // switches to list view.
   const deferList = hasTree
 
-  const breadcrumbs = `<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${escapeAttr(fwName)}</span></nav>`
+  const breadcrumbs = html`<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${fwName}</span></nav>`
 
   // Build sidebar: original-resource block + TOC of role groups.
   const tocItems = [...byRole.keys()].map(role => ({ id: slugify(role), label: role }))
   const hasSidebar = tocItems.length >= 2
   const sidebarBlocks = []
   const originalBlock = buildOriginalResourceBlock(frameworkOriginalUrl(framework))
-  if (originalBlock) sidebarBlocks.push(originalBlock)
-  if (hasSidebar) sidebarBlocks.push(`<div class="sidebar-block">${renderTocHtml(tocItems, false)}</div>`)
+  if (originalBlock.toString()) sidebarBlocks.push(originalBlock)
+  if (hasSidebar) sidebarBlocks.push(html`<div class="sidebar-block">${renderTocHtml(tocItems, false)}</div>`)
   const sidebar = sidebarBlocks.length > 0
-    ? `<aside class="doc-sidebar">${sidebarBlocks.join('\n')}</aside>`
-    : ''
-  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
+    ? html`<aside class="doc-sidebar">${interleave(sidebarBlocks, html`\n`)}</aside>`
+    : null
+  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : null
 
   // Build the doc lookup JSON for tree view (key -> {title, role_heading, href})
   const docLookup = {}
@@ -208,11 +211,11 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   const externalTreeDataUrl = opts.treeDataUrl ?? null
 
   const viewToggle = hasTree
-    ? `<div class="view-toggle" role="group" aria-label="View mode">
+    ? html`<div class="view-toggle" role="group" aria-label="View mode">
     <button data-view="list" aria-pressed="false">List</button>
     <button class="active" data-view="tree" aria-pressed="true">Tree</button>
   </div>`
-    : ''
+    : null
 
   const description = `${fwName} documentation index.`
   const canonical = framework?.slug ? `${siteConfig.baseUrl || ''}/docs/${framework.slug}/` : null
@@ -230,7 +233,7 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     programmingLanguage: 'Swift',
   }
 
-  return `<!DOCTYPE html>
+  return html`<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({
   title: pageTitle,
@@ -248,20 +251,32 @@ ${buildHead({
 ${buildHeader(siteConfig)}
 <main id="main-content" class="main-content${sidebar ? ' has-sidebar' : ''} listing">
   ${breadcrumbs}
-  <h1>${escapeAttr(fwName)}${viewToggle}</h1>
+  <h1>${fwName}${viewToggle}</h1>
   ${mobileToc}
   <article class="doc-article">
-  <div id="collection-controls"${deferList ? ' class="hidden"' : ''}></div>
-  <div id="list-container"${hasTree ? ' class="hidden"' : ''}${deferList ? ' data-deferred' : ''}>
-  ${deferList ? '' : mainContent}
+  <div id="collection-controls"${attr('class', deferList ? 'hidden' : null)}></div>
+  <div id="list-container"${attr('class', hasTree ? 'hidden' : null)}${attr('data-deferred', deferList || null)}>
+  ${deferList ? null : mainContent}
   </div>
-  <div id="tree-container"${externalTreeDataUrl ? ` data-tree-src="${escapeAttr(externalTreeDataUrl)}"` : ''}></div>
-  ${hasTree && !externalTreeDataUrl ? `<script type="application/json" id="tree-data">${treeDataJsonInline}</script>` : ''}
+  <div id="tree-container"${externalTreeDataUrl ? attr('data-tree-src', externalTreeDataUrl) : null}></div>
+  ${hasTree && !externalTreeDataUrl ? html`<script type="application/json" id="tree-data">${raw(treeDataJsonInline)}</script>` : null}
   </article>
   ${sidebar}
 </main>
 ${buildFooter(siteConfig)}
 ${buildScripts(siteConfig, ['core', 'listing'])}
 </body>
-</html>`
+</html>`.toString()
+}
+
+/**
+ * Splice an HtmlString separator between every element of `items`.
+ */
+function interleave(items, separator) {
+  const out = []
+  for (let i = 0; i < items.length; i++) {
+    if (i > 0) out.push(separator)
+    out.push(items[i])
+  }
+  return out
 }

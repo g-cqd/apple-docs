@@ -1,4 +1,5 @@
-import { assetUrl, buildFooter, buildHead, buildHeader, escapeAttr } from '../templates.js'
+import { html } from '../lib/html.js'
+import { assetUrl, buildFooter, buildHead, buildHeader } from '../templates.js'
 
 export function renderSymbolsPage(siteConfig, data = {}) {
   const pageTitle = `Symbols — ${siteConfig.siteName}`
@@ -19,7 +20,7 @@ export function renderSymbolsPage(siteConfig, data = {}) {
   //     the inspector opens. <1024 the rail collapses behind a native
   //     <select>, the inspector becomes a dedicated `/symbols/<name>`
   //     route handled in symbols-page.js.
-  return `<!DOCTYPE html>
+  return html`<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({
   title: pageTitle,
@@ -128,13 +129,7 @@ ${buildHeader(siteConfig)}
   </div>
 </main>
 ${buildFooter(siteConfig)}
-<script src="${escapeAttr(assetUrl(siteConfig, 'symbols-page.js'))}" defer></script>
+<script src="${assetUrl(siteConfig, 'symbols-page.js')}" defer></script>
 </body>
-</html>`
+</html>`.toString()
 }
-
-// ---------------------------------------------------------------------------
-// Escaping
-// ---------------------------------------------------------------------------
-
-/** Escape a value for use inside HTML attribute values or text content. */

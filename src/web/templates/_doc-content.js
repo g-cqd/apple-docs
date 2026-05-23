@@ -1,6 +1,7 @@
+import { html, raw } from '../lib/html.js'
 import { slugify } from '../../content/render-html.js'
-import { escapeAttr } from '../templates.js'
 
+/** @returns {import('../lib/html.js').HtmlString} */
 export function buildRelationshipContent(section) {
   const contentJson = section?.content_json ?? section?.contentJson ?? null
   let groups = null
@@ -10,30 +11,35 @@ export function buildRelationshipContent(section) {
     groups = contentJson
   }
 
-  const parts = ['<h2>Relationships</h2>']
+  /** @type {import('../lib/html.js').HtmlString[]} */
+  const parts = [html`<h2>Relationships</h2>`]
 
   if (Array.isArray(groups) && groups.length > 0) {
     for (const group of groups) {
       if (group?.title) {
-        parts.push(`<h3 class="sidebar-group-title">${escapeAttr(group.title)}</h3>`)
+        parts.push(html`<h3 class="sidebar-group-title">${group.title}</h3>`)
       }
-      const items = (group?.items ?? [])
-        .map(item => {
-          if (item?.key) {
-            return `<li><a href="/docs/${escapeAttr(item.key)}/"><code>${escapeAttr(item.title ?? item.key)}</code></a></li>`
-          }
-          return `<li>${escapeAttr(item?.title ?? item?.identifier ?? '')}</li>`
-        })
-        .join('')
-      if (items) {
-        parts.push(`<ul class="sidebar-list">${items}</ul>`)
+      const items = (group?.items ?? []).map(item => {
+        if (item?.key) {
+          return html`<li><a href="/docs/${item.key}/"><code>${item.title ?? item.key}</code></a></li>`
+        }
+        return html`<li>${item?.title ?? item?.identifier ?? ''}</li>`
+      })
+      if (items.length > 0) {
+        parts.push(html`<ul class="sidebar-list">${items}</ul>`)
       }
     }
   } else {
-    parts.push('<p class="sidebar-hint">See relationships section in the article.</p>')
+    parts.push(html`<p class="sidebar-hint">See relationships section in the article.</p>`)
   }
 
-  return parts.join('\n  ')
+  // Historical layout joined with `\n  ` (newline + two-space indent).
+  const interleaved = []
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) interleaved.push(raw('\n  '))
+    interleaved.push(parts[i])
+  }
+  return html`${interleaved}`
 }
 
 // ---------------------------------------------------------------------------
@@ -127,16 +133,18 @@ export function hasRenderableItems(json) {
   return false
 }
 
-/** Render the TOC HTML. In mobile mode, wraps in a <details> element. */
+/**
+ * Render the TOC HTML. In mobile mode, wraps in a <details> element.
+ * @returns {import('../lib/html.js').HtmlString}
+ */
 export function renderTocHtml(tocItems, mobile = false) {
-  if (tocItems.length < 2) return ''
-  const listHtml = `<ul>${tocItems.map(item =>
-    `<li><a href="#${escapeAttr(item.id)}">${escapeAttr(item.label)}</a></li>`
-  ).join('')}</ul>`
-
+  if (tocItems.length < 2) return html``
+  const list = tocItems.map(item =>
+    html`<li><a href="#${item.id}">${item.label}</a></li>`,
+  )
+  const listHtml = html`<ul>${list}</ul>`
   if (mobile) {
-    return `<details class="page-toc-mobile"><summary>Contents</summary><nav class="page-toc">${listHtml}</nav></details>`
+    return html`<details class="page-toc-mobile"><summary>Contents</summary><nav class="page-toc">${listHtml}</nav></details>`
   }
-  return `<nav class="page-toc">${listHtml}</nav>`
+  return html`<nav class="page-toc">${listHtml}</nav>`
 }
-

@@ -1,11 +1,12 @@
-import { assetUrl, buildFooter, buildHead, buildHeader, escapeAttr } from '../templates.js'
+import { html } from '../lib/html.js'
+import { assetUrl, buildFooter, buildHead, buildHeader } from '../templates.js'
 
 export function renderSearchPage(siteConfig) {
   const pageTitle = `Search — ${siteConfig.siteName}`
   const canonical = `${siteConfig.baseUrl || ''}/search`
   const description = 'Search Apple developer documentation with filters.'
 
-  return `<!DOCTYPE html>
+  return html`<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({
   title: pageTitle,
@@ -125,9 +126,9 @@ ${buildHeader(siteConfig)}
   <button id="search-load-more" class="load-more" hidden aria-label="Load more search results">Load more results</button>
 </main>
 ${buildFooter(siteConfig)}
-<script src="${escapeAttr(assetUrl(siteConfig, 'search-page.js'))}" defer></script>
+<script src="${assetUrl(siteConfig, 'search-page.js')}" defer></script>
 </body>
-</html>`
+</html>`.toString()
 }
 
 /**

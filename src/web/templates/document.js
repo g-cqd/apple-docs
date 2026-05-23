@@ -1,3 +1,4 @@
+import { html, raw } from '../lib/html.js'
 import {
   buildBreadcrumbs,
   buildDocMeta,
@@ -34,7 +35,7 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
     framework: doc.framework_display ?? doc.framework,
     ancestorTitles: opts.ancestorTitles,
     knownKeys: opts.knownKeys,
-  }) : ''
+  }) : null
 
   // Sort sections for TOC (same order as renderHtml uses)
   const orderedSections = sectionsList.slice().sort((a, b) =>
@@ -60,12 +61,12 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   // Original-resource → meta → language toggle → TOC → relationships.
   const sidebarParts = []
   const originalBlock = buildOriginalResourceBlock(doc.url)
-  if (originalBlock) sidebarParts.push(originalBlock)
-  if (docMeta) {
-    sidebarParts.push(`<div class="sidebar-block sidebar-meta">${docMeta}</div>`)
+  if (originalBlock.toString()) sidebarParts.push(originalBlock)
+  if (docMeta.toString()) {
+    sidebarParts.push(html`<div class="sidebar-block sidebar-meta">${docMeta}</div>`)
   }
   if (hasLangToggle) {
-    sidebarParts.push(`<div class="sidebar-block">
+    sidebarParts.push(html`<div class="sidebar-block">
   <div class="lang-toggle" role="group" aria-label="Language">
     <button class="lang-btn active" data-lang="swift" aria-pressed="true">Swift</button>
     <button class="lang-btn" data-lang="occ" aria-pressed="false">ObjC</button>
@@ -73,22 +74,22 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
 </div>`)
   }
   if (hasSidebar) {
-    sidebarParts.push(`<div class="sidebar-block">${renderTocHtml(tocItems, false)}</div>`)
+    sidebarParts.push(html`<div class="sidebar-block">${renderTocHtml(tocItems, false)}</div>`)
   }
   if (relationshipSection) {
     const relJson = relationshipSection.contentJson ?? relationshipSection.content_json ?? ''
     if (typeof relJson === 'string' ? hasRenderableItems(relJson) : true) {
-      sidebarParts.push(`<div class="sidebar-block">${buildRelationshipContent(relationshipSection)}</div>`)
+      sidebarParts.push(html`<div class="sidebar-block">${buildRelationshipContent(relationshipSection)}</div>`)
     }
   }
 
   const sidebar = sidebarParts.length > 0
-    ? `<aside class="doc-sidebar">${sidebarParts.join('\n')}</aside>`
-    : ''
+    ? html`<aside class="doc-sidebar">${interleave(sidebarParts, html`\n`)}</aside>`
+    : null
 
-  const hasSidebarFinal = sidebar.length > 0
+  const hasSidebarFinal = sidebarParts.length > 0
 
-  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : ''
+  const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : null
 
   const canonical = doc.key ? `${siteConfig.baseUrl || ''}/docs/${doc.key}/` : null
   const docDescription = doc.abstract_text || `${doc.title ?? ''} — Apple developer documentation`.trim()
@@ -117,7 +118,7 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
     ...(platformNames.length > 0 ? { audience: { '@type': 'Audience', audienceType: 'Developers' }, applicationSuite: platformNames.join(', ') } : {}),
   }
 
-  return `<!DOCTYPE html>
+  return html`<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({
   title: pageTitle,
@@ -137,14 +138,24 @@ ${buildHeader(siteConfig)}
   ${breadcrumbs}
   ${mobileToc}
   <article class="doc-article">
-    ${content}
+    ${raw(content)}
   </article>
   ${sidebar}
 </main>
 ${buildFooter(siteConfig)}
 ${buildScripts(siteConfig, ['core', ...(hasLangToggle ? ['lang-toggle'] : [])])}
 </body>
-</html>`
+</html>`.toString()
+}
+
+/** Splice an HtmlString separator between every element of `items`. */
+function interleave(items, separator) {
+  const out = []
+  for (let i = 0; i < items.length; i++) {
+    if (i > 0) out.push(separator)
+    out.push(items[i])
+  }
+  return out
 }
 
 /** Batch-enrich topics section items with _resolvedRoleHeading from DB.

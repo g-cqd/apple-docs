@@ -1,10 +1,14 @@
-import { assetUrl, buildFooter, buildHead, buildHeader, escapeAttr } from '../templates.js'
+import { html, raw } from '../lib/html.js'
+import { assetUrl, buildFooter, buildHead, buildHeader } from '../templates.js'
 
 export function renderFontsPage(siteConfig, data = {}) {
   const pageTitle = `Fonts — ${siteConfig.siteName}`
   const canonical = `${siteConfig.baseUrl || ''}/fonts`
   const description = 'Browse, preview, and download Apple typography (SF Pro, SF Mono, New York, …).'
   const families = Array.isArray(data.families) ? data.families : []
+  // The JSON payload is consumed by the client-side fonts-page.js. The
+  // only escape needed inside a <script type="application/json"> block
+  // is `</`, which the `<` → `<` substitution covers.
   const familiesJson = JSON.stringify(families).replace(/</g, '\\u003c')
   const baseUrl = siteConfig.baseUrl || ''
 
@@ -20,29 +24,29 @@ export function renderFontsPage(siteConfig, data = {}) {
     ].filter(Boolean).join(' · ')
     const familyZip = (subset) => `${baseUrl}/api/fonts/family/${encodeURIComponent(family.id)}.zip${subset && subset !== 'all' ? `?subset=${encodeURIComponent(subset)}` : ''}`
     const downloadButtons = [
-      `<a class="font-family__download" href="${escapeAttr(familyZip('all'))}" download>Download all</a>`,
+      html`<a class="font-family__download" href="${familyZip('all')}" download>Download all</a>`,
       variableCount > 0
-        ? `<a class="font-family__download font-family__download--alt" href="${escapeAttr(familyZip('variable'))}" download>Variable only</a>`
-        : '',
+        ? html`<a class="font-family__download font-family__download--alt" href="${familyZip('variable')}" download>Variable only</a>`
+        : null,
       family.files.length - variableCount > 0
-        ? `<a class="font-family__download font-family__download--alt" href="${escapeAttr(familyZip('static'))}" download>Static only</a>`
-        : '',
-    ].filter(Boolean).join('')
-    return `
-    <article class="font-family" data-family-id="${escapeAttr(family.id)}">
+        ? html`<a class="font-family__download font-family__download--alt" href="${familyZip('static')}" download>Static only</a>`
+        : null,
+    ]
+    return html`
+    <article class="font-family" data-family-id="${family.id}">
       <header class="font-family__header">
         <div class="font-family__title-row">
-          <h2 class="font-family__title">${escapeAttr(family.display_name)}</h2>
+          <h2 class="font-family__title">${family.display_name}</h2>
         </div>
-        <p class="font-family__meta">${escapeAttr(meta)}</p>
+        <p class="font-family__meta">${meta}</p>
         <div class="font-family__downloads">${downloadButtons}</div>
       </header>
       <div class="font-family__variants" data-variants></div>
       <div class="font-family__preview" data-preview></div>
     </article>`
-  }).join('')
+  })
 
-  return `<!DOCTYPE html>
+  return html`<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 ${buildHead({
   title: pageTitle,
@@ -104,11 +108,10 @@ ${buildHeader(siteConfig)}
     <a class="fonts-bottom-bar__cta fonts-bottom-bar__cta--all" href="#" id="fonts-bottom-bar-all">Jump to family list</a>
   </div>
 
-  <script id="fonts-data" type="application/json">${familiesJson}</script>
+  <script id="fonts-data" type="application/json">${raw(familiesJson)}</script>
 </main>
 ${buildFooter(siteConfig)}
-<script src="${escapeAttr(assetUrl(siteConfig, 'fonts-page.js'))}" defer></script>
+<script src="${assetUrl(siteConfig, 'fonts-page.js')}" defer></script>
 </body>
-</html>`
+</html>`.toString()
 }
-
