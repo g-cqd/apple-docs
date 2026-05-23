@@ -358,21 +358,29 @@ with a multi-line summary listing every offending field.
 | `APPLE_DOCS_MD_MAX_BYTES` | unset | Cap rendered Markdown payload size |
 | `APPLE_DOCS_RENDER_CACHE_BYTES` / `APPLE_DOCS_RENDER_CACHE_TTL_DAYS` | runtime-derived | Render cache sizing |
 
-## Documentation Map
+## Documentation
 
-Current operational docs:
-
-- [Documentation index](docs/README.md)
-- [Self-hosting guide](docs/self-hosting.md)
-- [Performance workflow](docs/perf/README.md)
+- [Documentation index](docs/README.md) — site map for the full docs.
+- [Installing](docs/installing.md) — dev, standalone binary, or
+  production install paths.
+- [Architecture](docs/architecture.md) — five-layer stack, projection
+  boundary, adapter and repository patterns.
+- [Self-hosting](docs/self-hosting.md) — deployment topology and
+  tuning.
+- [Performance](docs/perf/index.md) — profiling, benchmarks, and
+  metrics scrape.
+- [Public-instance update runbook](docs/runbooks/public-instance-update.md)
+- [Grafana dashboards](docs/ops-grafana.md)
 - [Reference ops deployment](ops/README.md)
 - [Cloudflare configuration](ops/cloudflare/README.md)
 - [Security policy](SECURITY.md)
 
-Research, plans, and audits under `docs/research/`, `docs/plans/`, and
-`docs/audits/` are retained as project history. They may describe old defaults
-or planned work; current behavior is defined by this README and `apple-docs
---help`.
+The documentation also builds into a static site via VitePress:
+
+```bash
+bun run docs:dev      # live preview
+bun run docs:build    # static site at docs/.vitepress/dist/
+```
 
 ## Development
 

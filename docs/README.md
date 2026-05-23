@@ -1,26 +1,37 @@
 # Documentation
 
-For command syntax, the source of truth is always:
+Documentation source for the apple-docs project. The same files are
+rendered as a static site via VitePress; see `bun run docs:dev` for a
+local preview and `bun run docs:build` for the static site under
+`docs/.vitepress/dist/`.
+
+For exhaustive command syntax, always defer to:
 
 ```bash
 apple-docs --help
 apple-docs <command> --help
 ```
 
-| Document | Purpose |
-| --- | --- |
-| [../README.md](../README.md) | Project overview, quickstart, common commands, and configuration summary |
-| [../ARCHITECTURE.md](../ARCHITECTURE.md) | Five-layer stack diagram + key patterns (projection / adapter / repository) |
-| [installing.md](installing.md) | Three install paths — dev / standalone binary / production self-host |
-| [self-hosting.md](self-hosting.md) | Run the web UI and MCP server yourself |
-| [runbooks/public-instance-update.md](runbooks/public-instance-update.md) | Roll a new snapshot to a self-hosted public instance |
-| [runbooks/symbols-fonts-cache-rebuild.md](runbooks/symbols-fonts-cache-rebuild.md) | Reference-host runbook for rebuilding symbol/font caches |
-| [perf/README.md](perf/README.md) | Profiling, benchmark, and metrics workflow |
-| [perf/e2e-local-snapshot-loop.md](perf/e2e-local-snapshot-loop.md) | End-to-end local snapshot build and install validation |
-| [../ops/README.md](../ops/README.md) | Reference macOS + Caddy + Cloudflare Tunnel deployment |
-| [../ops/grafana/README.md](../ops/grafana/README.md) | Starter Grafana dashboards + Prometheus alert rules |
-| [../ops/cloudflare/README.md](../ops/cloudflare/README.md) | Cloudflare cache, header, and rate-limit configuration |
-| [../SECURITY.md](../SECURITY.md) | Vulnerability reporting and security scope |
+## Site map
 
-A clean static-site build of this content lives under `docs/.vitepress/dist/`
-after `bun run docs:build`. Run `bun run docs:dev` for live preview.
+- [Introduction](index.md)
+- [Installing](installing.md) — dev, standalone, or production install.
+- [Architecture](architecture.md) — five-layer stack, projection
+  boundary, adapter and repository patterns.
+- [Self-hosting](self-hosting.md) — deployment topology, environment
+  variables, tuning.
+- [Public-instance update runbook](runbooks/public-instance-update.md)
+- [Performance](perf/index.md) — profiling, benchmarks, metrics scrape.
+- [End-to-end snapshot loop](perf/e2e-local-snapshot-loop.md)
+- [Grafana dashboards](ops-grafana.md)
+- [Security policy](security.md)
+
+## Repository pointers
+
+- [`../README.md`](../README.md) — GitHub project landing.
+- [`../ops/README.md`](../ops/README.md) — reference ops topology
+  (templated launchd plists, Caddyfile, cloudflared configs).
+- [`../ops/grafana/README.md`](../ops/grafana/README.md) — starter
+  Grafana dashboards (the source for the rendered Grafana page above).
+- [`../ops/cloudflare/README.md`](../ops/cloudflare/README.md) —
+  Cloudflare cache, header, and rate-limit configuration.

@@ -1,28 +1,20 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
-// Documentation-site config. Builds the contents of `docs/` (plus the
-// repo-root README.md / ARCHITECTURE.md / SECURITY.md included via
-// `<!--@include:-->` macros) into a static site under
-// `docs/.vitepress/dist/`. Run `bun run docs:dev` for live preview.
-
-export default defineConfig({
+const config = defineConfig({
   title: 'apple-docs',
   description: 'Apple Developer Documentation CLI and MCP server — search, read, and browse Apple docs locally.',
   cleanUrls: true,
   lastUpdated: true,
-  // README.md is the GitHub directory landing; index.md is the site
-  // landing. Skip it so VitePress doesn't try to render both.
   srcExclude: [
     'README.md',
   ],
   markdown: {
-    // Reduce noise: don't fail on missing language definitions.
     languageAlias: {
       caddy: 'nginx',
       plist: 'xml',
     },
   },
-  // VitePress' default theme is fine — keep things minimal.
   themeConfig: {
     logo: undefined,
     nav: [
@@ -44,14 +36,7 @@ export default defineConfig({
         text: 'Operating',
         items: [
           { text: 'Self-hosting', link: '/self-hosting' },
-          {
-            text: 'Runbooks',
-            collapsed: false,
-            items: [
-              { text: 'Public-instance update', link: '/runbooks/public-instance-update' },
-              { text: 'Symbols & fonts cache rebuild', link: '/runbooks/symbols-fonts-cache-rebuild' },
-            ],
-          },
+          { text: 'Public-instance update', link: '/runbooks/public-instance-update' },
           { text: 'Grafana dashboards', link: '/ops-grafana' },
         ],
       },
@@ -59,7 +44,7 @@ export default defineConfig({
         text: 'Performance',
         items: [
           { text: 'Profiling workflow', link: '/perf/' },
-          { text: 'E2E snapshot loop', link: '/perf/e2e-local-snapshot-loop' },
+          { text: 'End-to-end snapshot loop', link: '/perf/e2e-local-snapshot-loop' },
         ],
       },
       {
@@ -88,11 +73,9 @@ export default defineConfig({
       label: 'On this page',
     },
   },
-  // Site links live in the docs/ URL space; GitHub-relative links inside
-  // the source markdown (e.g. ../README.md from a docs file, ./src/... from
-  // the included ARCHITECTURE.md) don't resolve under the site root.
-  // Surface those as warnings rather than build-fatal so the site stays
-  // shippable while still rendering the cross-references intact for GitHub
-  // readers.
-  ignoreDeadLinks: true,
+  mermaid: {
+    theme: 'default',
+  },
 })
+
+export default withMermaid(config)

@@ -20,19 +20,22 @@ import { indexBodyFull, indexBodyIncremental } from '../pipeline/index-body.js'
  *
  *   1. Detect changed pages on every existing source via HEAD checks (was `update`)
  *   2. Discover roots (catalog sources) and adapter pages
- *   3. Crawl each adapter, retrying any previously-failed entries
+ *   3. Crawl every adapter end-to-end (all adapters in parallel; per-root parallelism inside)
  *   4. Download missing raw payloads, convert to Markdown
- *   5. Index body content (FTS) incrementally
- *   6. Sync Apple typography (DMG download + extract) and SF Symbols (public + private)
- *   7. Pre-render every SF Symbol to SVG (idempotent — skips already-rendered ones)
- *   8. Run schema migrations, clean invalid entries, re-resolve failures, minify raw JSON (was `doctor`)
+ *   5. Body index (FTS) + resources (fonts, SF Symbols, prerender) run concurrently
+ *   6. Run schema migrations, clean invalid entries, re-resolve failures, minify raw JSON
  *
  * Always full coverage. The only flag is `--full`, which forces a clean re-crawl
  * (resets failed entries everywhere, ignores incremental shortcuts) instead of
  * a normal resumable refresh.
  *
- * @param {{ full?: boolean }} opts
- * @param {{ db, dataDir, rateLimiter, logger }} ctx
+ * Independent phases run concurrently:
+ *   - All 11 source adapters' crawls run in parallel (Promise.allSettled).
+ *   - Body-index and the resources phase overlap (Promise.all).
+ *   - Inside resources, fonts ∥ symbols catalog; stamp depends on both; prerender depends only on symbols.
+ *
+ * @param {{ full?: boolean, aggressive?: boolean }} opts
+ * @param {{ db, dataDir, rateLimiter, logger, semaphore?, adapters?, readerPool? }} ctx
  */
 export async function sync(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
@@ -84,57 +87,49 @@ export async function sync(opts, ctx) {
     }
 
     const crawlOpts = { retryFailed: true, semaphore }
+    const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } = await discoverAdaptersInParallel(adapters, adapterCtx)
+
+    // 3. Crawl every adapter end-to-end in parallel. Per-host rate limits in
+    //    rateLimiter keep upstream load bounded; the global semaphore caps
+    //    aggregate in-flight fetches; per-root parallelism (APPLE_DOCS_PARALLEL)
+    //    runs inside each adapter's crawlRoots. Adapters target disjoint
+    //    hosts so concurrent crawls do not contend on the same upstream
+    //    budget.
+    const adapterOutcomes = await Promise.allSettled(
+      adapters.map(adapter => runAdapterStep(adapter, {
+        ctx,
+        adapterCtx,
+        db,
+        dataDir,
+        logger,
+        discoveriesBySource,
+        discoveryErrorsBySource,
+        parallel,
+        concurrency,
+        crawlOpts,
+      })),
+    )
+
     const crawlResults = {}
     const failedSources = []
     let guidelinesResult = null
     let rootsCrawled = 0
-    const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } = await discoverAdaptersInParallel(adapters, adapterCtx)
-
-    // 3. Crawl every adapter end-to-end.
-    for (const adapter of adapters) {
-      logger.info(`Syncing ${adapter.constructor.displayName}...`)
-
-      try {
-        const discoveryError = discoveryErrorsBySource.get(adapter.constructor.type)
-        if (discoveryError) {
-          logger.error(`Source ${adapter.constructor.type} failed`, { error: discoveryError.message })
-          failedSources.push({ source: adapter.constructor.type, error: discoveryError.message })
-          continue
-        }
-
-        const discovery = discoveriesBySource.get(adapter.constructor.type)
-        const roots = selectRootsForAdapter(adapter, discovery, db, null)
-
-        switch (adapter.constructor.syncMode) {
-          case 'snapshot': {
-            if (roots.length > 0) {
-              logger.info(`Fetching ${adapter.constructor.displayName} via adapter...`)
-              const fetchResult = await adapter.fetch(roots[0].slug, adapterCtx)
-              guidelinesResult = await applyGuidelinesSnapshot(db, dataDir, fetchResult.payload)
-              logger.info(`Synced ${guidelinesResult.sections} guideline sections`)
-            }
-            break
-          }
-          case 'flat': {
-            const flatResults = await syncFlatSource(adapter, discovery, roots, concurrency, adapterCtx)
-            rootsCrawled += roots.length
-            Object.assign(crawlResults, flatResults)
-            break
-          }
-          default: {
-            const rootSlugs = roots.map(root => root.slug)
-            if (rootSlugs.length === 0) break
-
-            rootsCrawled += rootSlugs.length
-            const adapterResults = await crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpts, adapter)
-            Object.assign(crawlResults, adapterResults)
-            break
-          }
-        }
-      } catch (e) {
-        logger.error(`Source ${adapter.constructor.type} failed`, { error: e.message })
-        failedSources.push({ source: adapter.constructor.type, error: e.message })
+    for (const settled of adapterOutcomes) {
+      // Promise.allSettled with a body that already try/catches means
+      // settled.status is always 'fulfilled'. Defensive 'rejected' branch
+      // for unanticipated throws from the wrapper itself.
+      if (settled.status === 'rejected') {
+        failedSources.push({ source: 'unknown', error: String(settled.reason?.message ?? settled.reason) })
+        continue
       }
+      const outcome = settled.value
+      if (outcome.error) {
+        failedSources.push({ source: outcome.type, error: outcome.error.message })
+        continue
+      }
+      if (outcome.results) Object.assign(crawlResults, outcome.results)
+      if (outcome.guidelinesResult) guidelinesResult = outcome.guidelinesResult
+      if (outcome.rootsCrawled) rootsCrawled += outcome.rootsCrawled
     }
 
     const activeSourceTypes = adapters.map(adapter => adapter.constructor.type)
@@ -150,82 +145,22 @@ export async function sync(opts, ctx) {
       cvResult = await convertAll(db, dataDir, logger, null, filters, { semaphore })
     }
 
-    // 5. Body index. `--full` triggers a clean rebuild from scratch; otherwise
-    // we update only the rows whose content fingerprint changed since the
-    // last index pass.
-    logger.info(fullRebuild ? 'Rebuilding body index...' : 'Indexing body content...')
-    const idxResult = fullRebuild
-      ? await indexBodyFull(db, dataDir, logger)
-      : await indexBodyIncremental(db, dataDir, logger)
-    const bodyIndexed = idxResult.indexed
+    // 5. Body index + resources run concurrently. They touch disjoint tables
+    //    (body index: documents_body_fts + schema_meta; resources:
+    //    sf_symbols + apple_font_*). bun:sqlite serialises SQL on the
+    //    single connection, but the wall-clock win comes from the disk + network
+    //    + Swift-worker I/O overlap between the two phases.
+    const [idxOutcome, resOutcome] = await Promise.all([
+      runBodyIndex({ db, dataDir, logger, fullRebuild }),
+      runResourcesPhase({ ctx, logger }),
+    ])
+    const bodyIndexed = idxOutcome.indexed
+    for (const failure of resOutcome.failedSources) failedSources.push(failure)
+    const fontsResult = resOutcome.fontsResult
+    const symbolsResult = resOutcome.symbolsResult
+    const symbolsRenderResult = resOutcome.symbolsRenderResult
 
-    // 6. Resource sync — Apple typography + SF Symbols. Both are first-class
-    // corpus citizens; a corpus-wide refresh implies full asset coverage.
-    //
-    // Two opt-out / opt-in switches:
-    //   APPLE_DOCS_SKIP_RESOURCES=1   — bypass the entire resource pass
-    //                                    (used by the unit tests so they
-    //                                    don't spawn Swift workers / mount
-    //                                    DMGs against a tmpdir corpus).
-    //   APPLE_DOCS_DOWNLOAD_FONTS=1   — also fetch + extract Apple's font
-    //                                    DMGs. Off by default; the snapshot
-    //                                    CI sets it so the published
-    //                                    archive ships every Apple font.
-    let fontsResult = null
-    let symbolsResult = null
-    let symbolsRenderResult = null
-
-    if (process.env.APPLE_DOCS_SKIP_RESOURCES === '1') {
-      logger.info('APPLE_DOCS_SKIP_RESOURCES=1 — skipping fonts + SF Symbols sync')
-    } else {
-      const downloadFonts = process.env.APPLE_DOCS_DOWNLOAD_FONTS === '1'
-      logger.info(`Syncing Apple typography${downloadFonts ? ' (downloading DMGs)' : ''}...`)
-      const fontsStep = await runStep(
-        'sync.apple-fonts',
-        () => syncAppleFonts({ downloadFonts }, ctx),
-        { logger },
-      )
-      if (fontsStep.ok) {
-        fontsResult = fontsStep.result
-        logger.info(`Synced ${fontsResult.families} font families, ${fontsResult.files} font files`)
-      } else {
-        failedSources.push({ source: 'apple-fonts', error: fontsStep.error.message })
-      }
-
-      const symbolsStep = await runStep('sync.sf-symbols', async () => {
-        logger.info('Syncing SF Symbols...')
-        const counts = { public: 0, private: 0 }
-        for (const scope of ['public', 'private']) {
-          counts[scope] = await syncSfSymbols({ scope }, ctx)
-        }
-        logger.info(`Synced ${counts.public} public + ${counts.private} private SF Symbols`)
-
-        // 6b. Stamp each public symbol with its Unicode codepoint from
-        // SF-Pro.ttf via a one-shot Swift worker. Idempotent; safely
-        // skipped when the font isn't present in the snapshot.
-        try {
-          await stampSfSymbolCodepoints({}, ctx)
-        } catch (err) {
-          logger.warn(`SF Symbol codepoint stamping failed: ${err?.message ?? err}`)
-        }
-
-        // 7. Pre-render every symbol geometry variant. Idempotent when the
-        // snapshot metadata matches the renderer + variant matrix; otherwise
-        // refreshes the snapshot SVGs so runtime rendering is macOS-stable.
-        logger.info('Pre-rendering SF Symbols...')
-        const renders = await prerenderSfSymbols({}, ctx)
-        logger.info(`Pre-rendered ${renders.rendered ?? 0} symbol variants (${renders.skipped ?? 0} skipped)`)
-        return { counts, renders }
-      }, { logger })
-      if (symbolsStep.ok) {
-        symbolsResult = symbolsStep.result.counts
-        symbolsRenderResult = symbolsStep.result.renders
-      } else {
-        failedSources.push({ source: 'sf-symbols', error: symbolsStep.error.message })
-      }
-    }
-
-    // 8. Schema migrations + invalid-entry cleanup + parent-ref re-resolution +
+    // 6. Schema migrations + invalid-entry cleanup + parent-ref re-resolution +
     // raw JSON minification. Idempotent and cheap when there's nothing to do.
     const doctorStep = await runStep(
       'sync.consolidate',
@@ -263,6 +198,184 @@ export async function sync(opts, ctx) {
     db.clearActivity()
     try { await ctx.readerPool?.recycle?.() } catch {}
   }
+}
+
+/**
+ * Run one adapter's crawl pipeline. Returns a result tuple the outer
+ * sync() reduces into the shared accumulators after Promise.allSettled.
+ *
+ * Captures errors locally so a single adapter failing never aborts its
+ * siblings — the outer reducer turns `outcome.error` into a `failedSources`
+ * entry.
+ */
+async function runAdapterStep(adapter, env) {
+  const { ctx, adapterCtx, db, dataDir, logger, discoveriesBySource, discoveryErrorsBySource, parallel, concurrency, crawlOpts } = env
+  const type = adapter.constructor.type
+  const displayName = adapter.constructor.displayName
+  const mode = adapter.constructor.syncMode
+  const stepStart = Date.now()
+
+  try {
+    const discoveryError = discoveryErrorsBySource.get(type)
+    if (discoveryError) {
+      logger.error(`Source ${type} failed`, { error: discoveryError.message })
+      return { type, mode, error: discoveryError }
+    }
+
+    const discovery = discoveriesBySource.get(type)
+    const roots = selectRootsForAdapter(adapter, discovery, db, null)
+
+    logger.info(`Starting ${displayName} (mode=${mode}, roots=${roots.length})`)
+
+    switch (mode) {
+      case 'snapshot': {
+        if (roots.length === 0) {
+          logger.info(`Finished ${displayName} in ${Date.now() - stepStart}ms (no roots)`)
+          return { type, mode }
+        }
+        const fetchResult = await adapter.fetch(roots[0].slug, adapterCtx)
+        const guidelinesResult = await applyGuidelinesSnapshot(db, dataDir, fetchResult.payload)
+        logger.info(`Finished ${displayName} in ${Date.now() - stepStart}ms (${guidelinesResult.sections} sections)`)
+        return { type, mode, guidelinesResult }
+      }
+      case 'flat': {
+        const results = await syncFlatSource(adapter, discovery, roots, concurrency, adapterCtx)
+        logger.info(`Finished ${displayName} in ${Date.now() - stepStart}ms`)
+        return { type, mode, results, rootsCrawled: roots.length }
+      }
+      default: {
+        const rootSlugs = roots.map(root => root.slug)
+        if (rootSlugs.length === 0) {
+          logger.info(`Finished ${displayName} in ${Date.now() - stepStart}ms (no roots)`)
+          return { type, mode }
+        }
+        const results = await crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpts, adapter)
+        logger.info(`Finished ${displayName} in ${Date.now() - stepStart}ms`)
+        return { type, mode, results, rootsCrawled: rootSlugs.length }
+      }
+    }
+  } catch (error) {
+    logger.error(`Source ${type} failed`, { error: error.message })
+    return { type, mode, error }
+  }
+}
+
+/**
+ * Body-index phase. Incremental by default; `--full` triggers a clean
+ * rebuild. Returns `{ indexed }` so the outer sync() can surface it.
+ */
+async function runBodyIndex({ db, dataDir, logger, fullRebuild }) {
+  logger.info(fullRebuild ? 'Rebuilding body index...' : 'Indexing body content...')
+  const idxResult = fullRebuild
+    ? await indexBodyFull(db, dataDir, logger)
+    : await indexBodyIncremental(db, dataDir, logger)
+  return { indexed: idxResult.indexed ?? 0 }
+}
+
+/**
+ * Resources phase. Runs four tasks with the dependency graph:
+ *
+ *   fonts ──────────────────────────────────┐
+ *   symbols ─┬─ prerender (depends on symbols only)
+ *            └──────────────────────────────┐
+ *                                           ▼
+ *                                      stamp (needs fonts + symbols)
+ *
+ * Each task is wrapped in runStep so failures stay isolated and
+ * activity tracking captures per-step duration.
+ */
+async function runResourcesPhase({ ctx, logger }) {
+  const failedSources = []
+  let fontsResult = null
+  let symbolsResult = null
+  let symbolsRenderResult = null
+
+  if (process.env.APPLE_DOCS_SKIP_RESOURCES === '1') {
+    logger.info('APPLE_DOCS_SKIP_RESOURCES=1 — skipping fonts + SF Symbols sync')
+    return { failedSources, fontsResult, symbolsResult, symbolsRenderResult }
+  }
+
+  const downloadFonts = process.env.APPLE_DOCS_DOWNLOAD_FONTS === '1'
+  logger.info(`Syncing Apple typography${downloadFonts ? ' (downloading DMGs)' : ''}...`)
+
+  const fontsTask = runStep(
+    'sync.apple-fonts',
+    () => syncAppleFonts({ downloadFonts }, ctx),
+    { logger },
+  )
+
+  const symbolsTask = runStep(
+    'sync.sf-symbols-catalog',
+    async () => {
+      logger.info('Syncing SF Symbols catalog (public + private)...')
+      const [publicCount, privateCount] = await Promise.all([
+        syncSfSymbols({ scope: 'public' }, ctx),
+        syncSfSymbols({ scope: 'private' }, ctx),
+      ])
+      logger.info(`Synced ${publicCount} public + ${privateCount} private SF Symbols`)
+      return { public: publicCount, private: privateCount }
+    },
+    { logger },
+  )
+
+  // Prerender only depends on the symbol catalog. Start it as soon as
+  // symbols completes — does not wait for fonts.
+  const prerenderTask = symbolsTask.then(async outcome => {
+    if (!outcome.ok) return { ok: true, label: 'sync.sf-symbols-prerender', result: null, ms: 0 }
+    return runStep(
+      'sync.sf-symbols-prerender',
+      async () => {
+        logger.info('Pre-rendering SF Symbols...')
+        const renders = await prerenderSfSymbols({}, ctx)
+        logger.info(`Pre-rendered ${renders.rendered ?? 0} symbol variants (${renders.skipped ?? 0} skipped)`)
+        return renders
+      },
+      { logger },
+    )
+  })
+
+  // Stamp needs SF-Pro.ttf extracted (fonts) AND sf_symbols rows
+  // (symbols). Gracefully skips when either prerequisite failed.
+  const stampTask = Promise.all([fontsTask, symbolsTask]).then(async ([fOutcome, sOutcome]) => {
+    if (!sOutcome.ok) return { ok: true, label: 'sync.sf-symbols-stamp', result: null, ms: 0 }
+    return runStep(
+      'sync.sf-symbols-stamp',
+      async () => stampSfSymbolCodepoints({}, ctx),
+      { logger },
+    )
+  })
+
+  const [fontsOutcome, symbolsOutcome, prerenderOutcome, stampOutcome] =
+    await Promise.all([fontsTask, symbolsTask, prerenderTask, stampTask])
+
+  if (fontsOutcome.ok) {
+    fontsResult = fontsOutcome.result
+    if (fontsResult) {
+      logger.info(`Synced ${fontsResult.families} font families, ${fontsResult.files} font files`)
+    }
+  } else {
+    failedSources.push({ source: 'apple-fonts', error: fontsOutcome.error.message })
+  }
+
+  if (symbolsOutcome.ok) {
+    symbolsResult = symbolsOutcome.result
+  } else {
+    failedSources.push({ source: 'sf-symbols', error: symbolsOutcome.error.message })
+  }
+
+  if (prerenderOutcome.ok) {
+    symbolsRenderResult = prerenderOutcome.result
+  } else {
+    failedSources.push({ source: 'sf-symbols-prerender', error: prerenderOutcome.error.message })
+  }
+
+  if (!stampOutcome.ok) {
+    // Stamping is best-effort; surface as a warning, not a failure,
+    // matching the previous try/catch behaviour.
+    logger.warn(`SF Symbol codepoint stamping failed: ${stampOutcome.error.message}`)
+  }
+
+  return { failedSources, fontsResult, symbolsResult, symbolsRenderResult }
 }
 
 async function crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpts, adapter) {

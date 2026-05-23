@@ -1,9 +1,19 @@
+import { inflateSync } from 'node:zlib'
 import { ParseError } from '../../lib/errors.js'
 // PDF object-graph extraction. Walks the (latin-1-decoded) PDF source,
 // indexes every `<n> <gen> obj … endobj` block, parses its trailing
 // dictionary, and records the byte offsets of any embedded stream so
 // the binary payload can be inflated later without going through the
 // latin-1 round-trip.
+//
+// Decompression uses `node:zlib.inflateSync` rather than
+// `Bun.inflateSync`: Bun's implementation rejects the DEFLATE streams
+// emitted by Apple's `CGPDFContext` (the zlib-wrapped stream starts
+// with a valid `78 01` header but Bun reports "invalid stored block
+// lengths" mid-stream, while `node:zlib` decompresses cleanly). When
+// Bun ships an inflate fix this back-port becomes optional, but
+// keeping `node:zlib` here costs nothing and protects against
+// regression for the symbol-prerender pipeline.
 
 export function bytesToLatin1(buf) {
   // latin-1 round-trip preserves every byte 1:1, which is what PDF text
@@ -18,7 +28,13 @@ export function bytesToLatin1(buf) {
 }
 
 export function collectObjects(text, bytes) {
-  const objects = new Map()
+  // Two-pass extraction so indirect-reference `/Length N gen R` values
+  // (used by Apple's symbol PDFs for larger streams) can be resolved
+  // against the full object table before slicing stream bytes. Treating
+  // the regex match as a literal length truncated those streams mid-
+  // DEFLATE-block and broke ~12 % of symbol prerenders with
+  // "invalid stored block lengths" from inflate.
+  const records = []
   const re = /(\d+)\s+(\d+)\s+obj\b/g
   for (const match of text.matchAll(re)) {
     const id = `${match[1]} ${match[2]}`
@@ -27,10 +43,10 @@ export function collectObjects(text, bytes) {
     if (endObj < 0) continue
     const body = text.slice(headerEnd, endObj)
     const streamStart = body.indexOf('stream')
-    let dictText = body
-    let stream = null
+    const dictText = streamStart >= 0 ? body.slice(0, streamStart) : body
+    const dict = parseDictionary(dictText)
+    let streamRange = null
     if (streamStart >= 0) {
-      dictText = body.slice(0, streamStart)
       // The content after "stream\n" is raw bytes; locate it back in the
       // original Uint8Array by absolute offset so binary data isn't mangled
       // by the latin-1 decode round-trip above.
@@ -38,27 +54,81 @@ export function collectObjects(text, bytes) {
       // Per spec, "stream" is followed by either CRLF or a single LF.
       if (text.charCodeAt(absStart) === 0x0d) absStart++
       if (text.charCodeAt(absStart) === 0x0a) absStart++
-      // Prefer the declared `/Length` field — Flate-compressed streams can
-      // legitimately end with a 0x0A byte, and a back-search-then-trim
-      // heuristic would lop that byte off and leave inflate with truncated
-      // input ("unexpected end of file"). Length is mandatory in the dict.
-      const lengthMatch = dictText.match(/\/Length\s+(\d+)/)
-      let absEnd
-      if (lengthMatch) {
-        absEnd = absStart + Number.parseInt(lengthMatch[1], 10)
-      } else {
-        const endStreamRel = body.indexOf('endstream', streamStart)
-        absEnd = headerEnd + endStreamRel
-        while (absEnd > absStart && (bytes[absEnd - 1] === 0x0a || bytes[absEnd - 1] === 0x0d)) {
-          absEnd--
-        }
-      }
-      stream = bytes.subarray(absStart, absEnd)
+      streamRange = { absStart, headerEnd, body, streamStart }
     }
-    const dict = parseDictionary(dictText)
-    objects.set(id, { id, dict, stream })
+    records.push({ id, dict, streamRange })
+  }
+
+  // First pass: index every object so indirect refs from `/Length` can
+  // dereference into already-parsed dicts. Numeric-only objects (the
+  // typical /Length target shape) have `dict = {}` since they have no
+  // `<<…>>`; their literal value is parsed in pass two via `findLiteralNumber`.
+  const objects = new Map()
+  for (const r of records) objects.set(r.id, { id: r.id, dict: r.dict, stream: null })
+
+  // Second pass: slice each stream now that we can resolve indirect /Length.
+  for (const r of records) {
+    if (!r.streamRange) continue
+    const { absStart, headerEnd, body, streamStart } = r.streamRange
+    const literalLength = resolveStreamLength(r.dict.Length, text)
+    let absEnd
+    if (literalLength != null) {
+      absEnd = absStart + literalLength
+    } else {
+      // Fallback: scan to the next `endstream` marker and trim any trailing
+      // newline. Less robust than `/Length` when the compressed payload
+      // happens to contain the byte sequence "endstream", but the only
+      // remaining option when both forms of `/Length` are absent or unparseable.
+      const endStreamRel = body.indexOf('endstream', streamStart)
+      absEnd = headerEnd + endStreamRel
+      while (absEnd > absStart && (bytes[absEnd - 1] === 0x0a || bytes[absEnd - 1] === 0x0d)) {
+        absEnd--
+      }
+    }
+    objects.get(r.id).stream = bytes.subarray(absStart, absEnd)
   }
   return objects
+}
+
+/**
+ * Coerce a `/Length` field into a literal byte count. Returns null when
+ * the value isn't a positive number and can't be resolved via an
+ * indirect reference.
+ *
+ * @param {unknown} value - the parsed dict value at `dict.Length`
+ * @param {string} text  - the latin-1 PDF source, used to look up
+ *                        indirect-reference target objects
+ * @returns {number | null}
+ */
+function resolveStreamLength(value, text) {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value
+  if (value && typeof value === 'object' && typeof value.ref === 'string') {
+    const refMatch = value.ref.match(/^(\d+)\s+(\d+)$/)
+    if (!refMatch) return null
+    const [, objNum, genNum] = refMatch
+    return findLiteralNumber(text, objNum, genNum)
+  }
+  return null
+}
+
+/**
+ * Locate `<objNum> <genNum> obj <integer> endobj` in the PDF source and
+ * return the integer body. Returns null when the target object isn't a
+ * bare numeric literal.
+ */
+function findLiteralNumber(text, objNum, genNum) {
+  // Anchor on the actual obj header so we don't collide with the same
+  // digit sequence appearing inside another stream's text.
+  const headerRe = new RegExp(`(?:^|[\\s\\r\\n])${objNum}\\s+${genNum}\\s+obj\\b`)
+  const headerMatch = text.match(headerRe)
+  if (!headerMatch) return null
+  const headerEnd = (headerMatch.index ?? 0) + headerMatch[0].length
+  const endObj = text.indexOf('endobj', headerEnd)
+  if (endObj < 0) return null
+  const innerText = text.slice(headerEnd, endObj).trim()
+  if (!/^-?\d+(?:\.\d+)?$/.test(innerText)) return null
+  const parsed = Number.parseFloat(innerText)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function parseDictionary(text) {
@@ -160,7 +230,7 @@ export function resolveStreamObject(value, objects) {
 
 export function decodeStream(obj) {
   const filter = obj.dict.Filter
-  if (filter === '/FlateDecode') return Bun.inflateSync(obj.stream)
+  if (filter === '/FlateDecode') return inflateSync(obj.stream)
   if (!filter) return obj.stream
   throw new ParseError(`symbol PDF: unsupported stream filter ${filter}`)
 }

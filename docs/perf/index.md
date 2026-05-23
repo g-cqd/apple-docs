@@ -1,13 +1,10 @@
 # Performance workflow
 
-Canonical commands for profiling and benchmarking apple-docs. See
-`docs/research/2026-05-10-javascript-performance-sota.md` for the
-underlying SOTA report and `docs/plans/2026-05-10-javascript-performance-sota.md`
-for the phased implementation plan.
+Canonical commands for profiling and benchmarking apple-docs.
 
 ## Profiling
 
-### CPU profile (Bun)
+### CPU profile
 
 ```bash
 bun run perf:cpu cli.js web serve --port 3030
@@ -15,10 +12,10 @@ bun run perf:cpu cli.js web serve --port 3030
 # Ctrl-C → reports/profiles/CPU.<timestamp>.cpuprofile
 ```
 
-Open the resulting `.cpuprofile` in Chrome DevTools (Performance tab → Load
-profile) or `bunx speedscope reports/profiles/CPU.*.cpuprofile`.
+Open the resulting `.cpuprofile` in Chrome DevTools (Performance tab →
+Load profile) or `bunx speedscope reports/profiles/CPU.*.cpuprofile`.
 
-### Heap profile (Bun)
+### Heap profile
 
 ```bash
 bun run perf:heap cli.js web serve --port 3030
@@ -30,24 +27,23 @@ Same DevTools / speedscope flow.
 
 ### Cold-vs-warm heap diff
 
-For "what does the trigram cache + render cache + reader-pool warmup
-actually retain?" use the snapshot-diff harness:
+To attribute the warm RSS delta to specific constructors, use the
+snapshot-diff harness:
 
 ```bash
 scripts/heap-snapshot-diff.sh --warmup 20 --port 3030
 ```
 
-Boots two instances back-to-back (cold + warm), runs a 20-second curl
-burst against the warm one, and writes both `.heapprofile` files plus
-a one-page summary into `reports/profiles/`. Open both in Chrome
-DevTools' **Memory tab → Comparison view** to attribute the warm RSS
-delta to specific constructors.
+It boots two instances back-to-back (cold and warm), runs a 20-second
+curl burst against the warm one, and writes both `.heapprofile` files
+plus a one-page summary into `reports/profiles/`. Open both in Chrome
+DevTools' **Memory tab → Comparison view**.
 
-Common warm-vs-cold offenders worth comparing:
-- `Map` from `lib/fuzzy.js` (`_trigramCache`) — multi-hundred-MB on
-  full corpus, deferred to phase 3.2.
-- `Map` from `web/render-cache.js` triple-index.
-- Prepared-statement strings + FTS row arrays.
+Common warm-vs-cold candidates worth comparing:
+
+- `Map` instances from `src/lib/fuzzy.js` (`_trigramCache`).
+- `Map` instances from `src/web/render-cache.js`.
+- Prepared-statement strings and FTS row arrays.
 
 ### Snapshot a single hot path
 
@@ -59,14 +55,13 @@ bun --cpu-prof --cpu-prof-dir reports/profiles \
 ## Benchmarks
 
 | Script | Purpose |
-|---|---|
+| --- | --- |
 | `bun run bench` | Existing micro-benchmarks (search, highlight, pipeline, seed) |
-| `bun run bench:search-real` | Real-corpus search latency (default + cache off/on, mixed concurrency) |
-| `bun run bench:mixed` | SLO + heavy fuzzy/body interleaved — phase-2 regression gate |
+| `bun run bench:search-real` | Real-corpus search latency (default + cache off / on, mixed concurrency) |
+| `bun run bench:mixed` | Service-level objective regression gate — heavy fuzzy and body searches interleaved |
 
 The mixed benchmark expects the dev DB at `~/.apple-docs/apple-docs.db`
-(or pass `--db <path>`). It reports SLO p99 separately from heavy p99 so
-the phase-2 split-pool change is visible.
+(or pass `--db <path>`). It reports SLO p99 separately from heavy p99.
 
 ## Metrics scrape
 
@@ -101,14 +96,22 @@ heavy-tool semaphore, and reader-pool health:
 - `apple_docs_heavy_semaphore_rejected_total`
 - `apple_docs_reader_pool_pending{pool}`
 
+Wire the metrics endpoints into Prometheus and import the starter
+dashboards from [Grafana dashboards](/ops-grafana).
+
 ## Output locations
 
-- CPU/heap profiles: `reports/profiles/` (gitignored)
-- Benchmark history: `test/benchmarks/*.jsonl` (gitignored)
-- Latest run summary: stdout
+- CPU and heap profiles: `reports/profiles/` (gitignored).
+- Benchmark history: `test/benchmarks/*.jsonl` (gitignored).
+- Latest run summary: stdout.
 
 ## Cleanup
 
 ```bash
 rm -rf reports/profiles
 ```
+
+## See also
+
+- [End-to-end snapshot loop](/perf/e2e-local-snapshot-loop) — close the
+  operator loop locally without going through a GitHub release.

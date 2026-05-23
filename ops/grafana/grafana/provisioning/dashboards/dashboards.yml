@@ -1,0 +1,16 @@
+# Auto-load every JSON dashboard under /var/lib/grafana/dashboards.
+# The path is mounted read-only from ops/grafana/grafana/dashboards/
+# by docker-compose.yml.
+apiVersion: 1
+
+providers:
+  - name: apple-docs
+    orgId: 1
+    folder: apple-docs
+    type: file
+    disableDeletion: true
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

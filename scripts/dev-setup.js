@@ -87,20 +87,25 @@ if (which('7zz') || which('7z')) {
   fail(`unsupported platform: ${platform()}`)
 }
 
-step('Install Python fontTools (unblocks font-subset tests)')
+step('Install Python fontTools + brotli (unblocks font-subset tests)')
 if (!which('python3')) {
   fail('python3 not on PATH', 'Install Python 3 from your OS package manager or https://python.org.')
 } else {
-  const probe = spawnSync('python3', ['-c', 'import fontTools.subset'], { stdio: ['ignore', 'ignore', 'pipe'] })
+  // brotli is the compressor fontTools uses when writing WOFF2 output.
+  // Without it, every /api/fonts/subset request fails with HTTP 500 and
+  // the five route-contract tests in test/unit/resources/font-subset.test.js
+  // fail. fontTools doesn't declare brotli as a dependency because the
+  // module supports multiple output formats; pin it explicitly here.
+  const probe = spawnSync('python3', ['-c', 'import fontTools.subset; import brotli'], { stdio: ['ignore', 'ignore', 'pipe'] })
   if (probe.status === 0) {
-    skip('python3 + fontTools')
+    skip('python3 + fontTools + brotli')
   } else if (!which('pip3')) {
     fail('pip3 not on PATH', 'Install pip (typically bundled with python3) and re-run.')
   } else {
     // `--user` avoids touching system Python; works on macOS + Linux.
-    const r = run('pip3', ['install', '--user', '--quiet', 'fontTools'])
-    if (r.status === 0) ok('pip3 install fontTools (user-local)')
-    else fail('pip3 install fontTools failed')
+    const r = run('pip3', ['install', '--user', '--quiet', 'fontTools', 'brotli'])
+    if (r.status === 0) ok('pip3 install fontTools brotli (user-local)')
+    else fail('pip3 install fontTools brotli failed')
   }
 }
 

@@ -27,9 +27,19 @@ the reporter in the release notes unless asked otherwise.
 
 ## Supported versions
 
-The project ships from `main`. The most recent **two minor versions** on
-the `main` branch receive security fixes; older versions get advisories
-in the changelog but no backport.
+There is one supported version: whatever is on `main`. The project has
+no semver release line and no maintained backport branches. Security
+fixes land on `main` and reach users through:
+
+- The **next weekly snapshot** (`snapshot-YYYYMMDD` GitHub release) —
+  rerun `apple-docs setup` to pick it up.
+- The **next standalone binary build** (`release-binaries.yml`) —
+  re-download from the latest release.
+- A `git pull` for source installs.
+
+If you are running an older snapshot or binary, the supported remedy is
+to upgrade to the latest. No fixes are backported to earlier snapshot
+tags.
 
 ## Scope
 
@@ -58,18 +68,69 @@ Out of scope:
 
 apple-docs is designed to remain publicly reachable, so the defenses
 below bound the work an unauthenticated request can do rather than
-gating access:
+gating access.
 
-- Per-IP token-bucket rate limit (60 req/s burst 120; 5 req/min on
-  on-demand doc fetches that trigger upstream traffic).
-- 1 MiB body cap on MCP HTTP; streaming reads abort on overflow.
-- Browser `Origin` default-deny on MCP HTTP (loopback exempt; no-Origin
-  native clients pass).
-- Snapshot tarball validator rejects symlinks, hardlinks, absolute paths,
-  and traversal members; mandatory `.sha256` checksum.
-- Native-spawn (Swift / hdiutil / tar) deadlines + bounded stderr capture.
-- Storage-key validator rejects traversal/absolute/embedded-NUL keys
-  and asserts the resolved path lives under `dataDir`.
+### Request boundary
+
+- **Per-IP token-bucket rate limit.** Default 60 req/s burst 120, with
+  an LRU-bounded bucket table (4096 IPs max) so a botnet flood cannot
+  exhaust memory. `X-Forwarded-For` is honoured when a reverse proxy
+  is in front.
+- **Stricter on-demand cold-path gate.** Requests under `/docs/*` that
+  miss the corpus and would trigger an upstream Apple fetch are
+  additionally gated at 5 req/min per IP, with a 24-hour 1024-entry
+  negative cache so 404s from Apple are not replayed.
+- **1 MiB body cap on MCP HTTP.** Both the `Content-Length` header and
+  the streaming reader are bounded; the stream is cancelled on
+  overflow.
+- **Browser `Origin` default-deny on MCP HTTP** (loopback exempt;
+  no-`Origin` native clients pass).
+- **Request-ID validation.** Inbound `X-Request-Id` headers are
+  accepted only if they match `[A-Za-z0-9._:+/=-]{1,128}`; otherwise a
+  UUID is minted server-side. Prevents log-injection via the
+  correlation header.
+- **MCP HTTP response headers.** `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `Cache-Control: no-store`, `Cross-Origin-Resource-Policy:
+  same-origin`, plus a `Permissions-Policy` disabling geolocation,
+  camera, microphone, and similar capabilities.
+
+### Concurrency bounding
+
+- **MCP heavy-tool semaphore.** `search_docs`, `read_doc`, `browse`,
+  and the rendering tools share an 8-slot semaphore with a 64-entry
+  waiter queue (defaults; configurable). Overflow returns JSON-RPC
+  error `-32003` with HTTP 503.
+- **Reader-pool backpressure rejects.** Both surfaces emit per-pool
+  backpressure-reject counters via `/metrics`; sustained rejects
+  indicate a saturated DB or runaway query path.
+
+### Storage and supply chain
+
+- **Snapshot tarball validator** rejects symlinks, hardlinks, absolute
+  paths, and traversal members before extraction. `.sha256` sidecar is
+  mandatory for GitHub releases and optional-with-warning for local
+  `--archive` paths.
+- **Native-spawn deadlines** (Swift, `hdiutil`, `tar`, `7z`) with a
+  default deadline and a 64 KiB stderr cap. On timeout the process is
+  SIGKILL'd and the captured stderr prefix is included in the thrown
+  error.
+- **Storage-key validator** rejects traversal, absolute, embedded-NUL,
+  and backslash-bearing keys, and asserts the resolved path lives
+  under `dataDir` after canonicalization.
+
+### Upstream traffic
+
+- **Fetch retry budget.** Outbound fetches honour `Retry-After` and
+  GitHub's `x-ratelimit-reset` headers and cap cumulative backoff so
+  a misbehaving upstream cannot park a request indefinitely.
+
+### Logging
+
+- **Secret redaction.** Structured log payloads are walked at emission
+  and values for keys matching `token`, `secret`, `authorization`,
+  `cookie`, `password`, `api[_-]?key`, or `bearer` are replaced with
+  `<redacted>` (case-insensitive, depth-capped).
 
 If you find a way around any of these, please report it via the channel
 above.

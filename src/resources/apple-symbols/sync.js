@@ -215,24 +215,14 @@ async function processSymbolQueue({ worker, queue, ctx, scope, result, onProgres
       onProgress?.(result)
       continue
     }
+    // Split the failure surfaces: the Swift worker (renders the PDF on
+    // stdout) and the JS-side PDF→SVG parser are separate concerns.
+    // Restarting the Swift worker on a parser error costs ~200 ms of
+    // cold-start per call — irrelevant on the happy path, but a
+    // 30-minute prerender tax when the parser hits a recurring bug.
+    let pdfBytes
     try {
-      const pdfBytes = await activeWorker.render(symbol.name, weight, scale)
-      // Pre-rendered SVGs are used both as <img src> targets (where
-      // currentColor would resolve correctly) AND as CSS `mask-image`
-      // sources for the symbols-grid tiles (where the browser only reads
-      // the alpha channel — `currentColor` evaluates against a context
-      // that doesn't exist, yielding zero alpha). Bake an opaque color in
-      // so the mask has solid coverage, then have the API route swap it
-      // out when the user requests an explicit foreground.
-      const svg = await symbolPdfToSvg(pdfBytes, {
-        name: symbol.name,
-        pointSize: SYMBOL_DEFAULT_RENDER_SIZE,
-        color: '#000000',
-        background: null,
-      })
-      ensureDir(dirname(filePath))
-      await Bun.write(filePath, svg)
-      result.rendered++
+      pdfBytes = await activeWorker.render(symbol.name, weight, scale)
     } catch (error) {
       const msg = error.message ?? String(error)
       // Bitmap-only symbols (most private/emoji.* entries, some
@@ -250,10 +240,37 @@ async function processSymbolQueue({ worker, queue, ctx, scope, result, onProgres
         logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name} (${weight}/${scale}): ${msg}`)
         result.failed++
         result.failures.push({ scope, name: symbol.name, weight, scale, error: msg })
-        // The worker may have died on a non-bitmap error; restart it.
+        // Worker actually died (broken pipe, crash, etc.) — restart.
         try { activeWorker.close() } catch {}
         activeWorker = await restart()
       }
+      onProgress?.(result)
+      continue
+    }
+
+    try {
+      // Pre-rendered SVGs are used both as <img src> targets (where
+      // currentColor would resolve correctly) AND as CSS `mask-image`
+      // sources for the symbols-grid tiles (where the browser only reads
+      // the alpha channel — `currentColor` evaluates against a context
+      // that doesn't exist, yielding zero alpha). Bake an opaque color in
+      // so the mask has solid coverage, then have the API route swap it
+      // out when the user requests an explicit foreground.
+      const svg = await symbolPdfToSvg(pdfBytes, {
+        name: symbol.name,
+        pointSize: SYMBOL_DEFAULT_RENDER_SIZE,
+        color: '#000000',
+        background: null,
+      })
+      ensureDir(dirname(filePath))
+      await Bun.write(filePath, svg)
+      result.rendered++
+    } catch (error) {
+      // Parser failure — the Swift worker is healthy, no restart needed.
+      const msg = error.message ?? String(error)
+      logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name} (${weight}/${scale}): ${msg}`)
+      result.failed++
+      result.failures.push({ scope, name: symbol.name, weight, scale, error: msg })
     }
     onProgress?.(result)
   }
