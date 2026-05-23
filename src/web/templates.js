@@ -109,8 +109,25 @@ ${seo}
 </head>`
 }
 
+// Per-siteConfig memoization for the spine helpers whose output is
+// 100 % a function of `siteConfig` — these get called once per page
+// during the static-site build (~329 k pages today). The HtmlString
+// returned by the DSL is frozen so handing out the same instance to
+// every caller is safe.
+const headerCache = new WeakMap()
+const footerCache = new WeakMap()
+const scriptsCache = new WeakMap()
+
 /** @returns {import('./lib/html.js').HtmlString} */
 export function buildHeader(siteConfig) {
+  const cached = headerCache.get(siteConfig)
+  if (cached) return cached
+  const out = renderHeader(siteConfig)
+  headerCache.set(siteConfig, out)
+  return out
+}
+
+function renderHeader(siteConfig) {
   const homeHref = `${siteConfig.baseUrl}/`
   // /fonts and /symbols deliberately removed from the global header nav —
   // they remain reachable from the home page's Design section. Keeping them
@@ -136,6 +153,14 @@ export function buildHeader(siteConfig) {
 
 /** @returns {import('./lib/html.js').HtmlString} */
 export function buildFooter(siteConfig) {
+  const cached = footerCache.get(siteConfig)
+  if (cached) return cached
+  const out = renderFooter(siteConfig)
+  footerCache.set(siteConfig, out)
+  return out
+}
+
+function renderFooter(siteConfig) {
   const buildDate = siteConfig.buildDate ?? new Date().toISOString().slice(0, 10)
   // Snapshot tag is sourced from the installed DB's snapshot_meta at build
   // time (see src/web/build.js); fall back to an em-dash when the corpus
@@ -171,6 +196,24 @@ const BUNDLES = {
 
 /** @returns {import('./lib/html.js').HtmlString} */
 export function buildScripts(siteConfig, groups) {
+  // Memoize on (siteConfig, sorted groups). Templates currently call
+  // with `['core']` or `['core', 'listing']` plus an optional
+  // `lang-toggle` — small enumeration of distinct calls, no risk of
+  // map bloat across a build.
+  let perSite = scriptsCache.get(siteConfig)
+  if (!perSite) {
+    perSite = new Map()
+    scriptsCache.set(siteConfig, perSite)
+  }
+  const key = groups.slice().sort().join('|')
+  const cached = perSite.get(key)
+  if (cached) return cached
+  const out = renderScripts(siteConfig, groups)
+  perSite.set(key, out)
+  return out
+}
+
+function renderScripts(siteConfig, groups) {
   const files = []
   if (siteConfig.bundled) {
     for (const group of groups) {
