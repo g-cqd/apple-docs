@@ -88,13 +88,24 @@
   --space-xl: 1.5rem;
   --space-2xl: 2rem;
   /* Border-radius scale. `--radius-full` is the pill shape used
-     for badges and chip controls; `--radius-sm/md/lg` map the
-     three sizes (4 / 6 / 8 px) used by inputs, buttons, cards,
-     and toolbars. */
+     for badges and chip controls; `--radius-xs/sm/md/lg/xl` map
+     the five sizes (2 / 4 / 6 / 8 / 12 px) used by inputs,
+     buttons, cards, toolbars, and surface containers. A handful
+     of off-scale values (3 px / 5 px / 10 px / 50 %) stay as
+     literals because they're either one-offs or shape-specific
+     (50 % = circle). */
+  --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
+  --radius-xl: 12px;
   --radius-full: 999px;
+  /* Active-state colour pair for segmented controls (language
+     toggle, filter chips, view toggle). Centralising the
+     foreground means a future theme can shift inverse-button
+     text colour without touching every selector. */
+  --button-active-bg: var(--accent);
+  --button-active-fg: #fff;
 }
 
 [data-theme="dark"] {
@@ -194,7 +205,7 @@
   font-weight: 500;
   text-decoration: none;
   border: 2px solid var(--accent);
-  border-radius: 0 0 8px 0;
+  border-radius: 0 0 var(--radius-lg) 0;
 }
 
 .skip-link:focus {
@@ -424,7 +435,7 @@ a:hover {
   width: 100%;
   padding: 0.4rem 2rem 0.4rem 0.75rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background-color: var(--code-bg);
   color: var(--fg);
   font-family: inherit;
@@ -544,7 +555,7 @@ a:hover {
 .search-result mark {
   background-color: var(--highlight-bg);
   color: var(--highlight-fg);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   padding: 0 0.05em;
 }
 
@@ -556,7 +567,7 @@ a:hover {
   flex-shrink: 0;
   display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 2px;
   margin: 0;
   gap: 2px;
@@ -581,7 +592,7 @@ a:hover {
   width: 30px;
   height: 28px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--secondary-fg);
   cursor: pointer;
@@ -753,7 +764,7 @@ a:hover {
 .doc-article pre {
   background-color: var(--code-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 1rem;
   overflow-x: auto;
   font-size: 0.875rem;
@@ -766,7 +777,7 @@ a:hover {
   font-size: 0.875em;
   background-color: var(--code-bg);
   padding: 0.1em 0.3em;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .doc-article pre code {
@@ -824,7 +835,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 /* Type links in declaration blocks */
 .code-type-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
 .code-type-link:hover { text-decoration: underline solid; opacity: 0.85; }
-.code-type-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
+.code-type-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--radius-xs); }
 
 /* Language variant toggle — declaration show/hide */
 .decl-variant[hidden] { display: none; }
@@ -833,7 +844,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .lang-toggle {
   display: flex;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   margin-bottom: 1rem;
 }
@@ -856,8 +867,8 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 }
 
 .lang-btn.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--button-active-bg);
+  color: var(--button-active-fg);
 }
 
 .lang-btn:hover:not(.active) {
@@ -903,7 +914,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   padding: 0.75rem 1rem;
   background-color: var(--code-bg);
   border-left: 3px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 0.9375rem;
 }
 
@@ -996,7 +1007,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--badge-deprecated-fg);
   font-size: 0.65rem;
   padding: 0.1em 0.4em;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-weight: 600;
   vertical-align: middle;
 }
@@ -1006,7 +1017,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--secondary-fg);
   font-size: 0.65rem;
   padding: 0.1em 0.4em;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-weight: 500;
   vertical-align: middle;
 }
@@ -1014,7 +1025,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .rest-endpoint {
   background-color: var(--code-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 0.75rem 1rem;
   margin: 0.75rem 0;
   overflow-x: auto;
@@ -1279,7 +1290,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   gap: 0.25rem;
   padding: 0.3em 0.75em;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--bg);
   color: var(--fg);
   font-size: 0.8125rem;
@@ -1295,8 +1306,8 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 }
 
 .filter-chip.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--button-active-bg);
+  color: var(--button-active-fg);
   border-color: var(--accent);
 }
 
@@ -1340,7 +1351,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .sort-controls select {
   padding: 0.3rem 0.5rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.8125rem;
   font-family: inherit;
   background: var(--bg);
@@ -1370,7 +1381,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   max-width: 300px;
   padding: 0.4rem 0.75rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 0.875rem;
   font-family: inherit;
   background: var(--code-bg);
@@ -1463,7 +1474,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .page-toc-mobile {
   margin-bottom: 1rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 0.5rem 0.75rem;
   background: var(--code-bg);
   font-size: 0.875rem;
@@ -1527,7 +1538,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   background: var(--code-bg);
   border: 1px solid var(--border);
   padding: 0.125rem 0.4rem;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.85em;
   word-break: break-all;
 }
@@ -1543,14 +1554,14 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 1rem;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .not-found-search__row button {
   padding: 0.6rem 1.2rem;
   background: var(--accent);
   color: var(--bg);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
@@ -1614,7 +1625,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .filter-select {
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--fg);
   font-size: 0.875rem;
@@ -1668,10 +1679,10 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 
 .filter-button {
   padding: 0.5rem 1.5rem;
-  background: var(--accent);
-  color: #fff;
+  background: var(--button-active-bg);
+  color: var(--button-active-fg);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -1709,7 +1720,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .search-result-placeholder {
   padding: 1rem;
   border: 1px dashed var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--code-bg);
   color: var(--secondary-fg);
   font-size: 0.875rem;
@@ -1721,7 +1732,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   top: 0;
   align-self: flex-start;
   padding: 0.25rem 0.625rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--accent) 14%, var(--bg));
   color: var(--accent);
   font-size: 0.75rem;
@@ -1734,7 +1745,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   display: block;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   text-decoration: none;
   color: var(--fg);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
@@ -1799,7 +1810,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   padding: 0.5rem 2rem;
   background: var(--code-bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--accent);
   font-size: 0.875rem;
   font-weight: 500;
@@ -1807,8 +1818,8 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 }
 
 .load-more:hover {
-  background: var(--accent);
-  color: #fff;
+  background: var(--button-active-bg);
+  color: var(--button-active-fg);
 }
 
 /* View all results link in quick search dropdown */
@@ -1845,7 +1856,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .view-toggle {
   display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   margin-left: 1rem;
   vertical-align: middle;
@@ -1862,8 +1873,8 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 }
 
 .view-toggle button.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--button-active-bg);
+  color: var(--button-active-fg);
 }
 
 .tree-node {
@@ -1906,7 +1917,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--secondary-fg);
   background: var(--code-bg);
   padding: 0.1rem 0.4rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .tree-leaf {
@@ -1931,7 +1942,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 0.75rem;
   padding: 0.2rem 0.5rem;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
   color: var(--secondary-fg);
@@ -1967,7 +1978,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   gap: 0.75rem;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--code-bg);
   margin-bottom: 2rem;
 }
@@ -1990,7 +2001,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 1rem;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--fg);
 }
@@ -2028,7 +2039,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   width: 100%;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--fg);
   font: inherit;
@@ -2061,7 +2072,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   inset: 0;
   background: var(--code-bg);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   transition: background-color 0.15s ease;
 }
 
@@ -2100,7 +2111,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 
 .font-family {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   padding: 1rem 1.25rem;
   background: var(--bg);
 }
@@ -2143,7 +2154,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   text-decoration: none;
   padding: 0.35rem 0.75rem;
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .font-family__download:hover,
@@ -2200,7 +2211,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-family: inherit;
   font-size: 0.875rem;
   padding: 0.45rem 0.85rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg);
@@ -2269,7 +2280,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   word-break: break-word;
   min-height: 1em;
   outline: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .font-preview-line:focus-visible {
@@ -2325,7 +2336,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   width: 36px;
   height: 22px;
   background: var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   position: relative;
   cursor: pointer;
   transition: background-color 120ms ease;
@@ -2377,7 +2388,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 0.875rem;
   font-weight: 600;
   padding: 0.7rem 0.9rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--accent);
   color: var(--bg);
   min-height: 44px;
@@ -2447,7 +2458,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   backdrop-filter: saturate(180%) blur(12px);
   -webkit-backdrop-filter: saturate(180%) blur(12px);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   margin-bottom: 1rem;
 }
 
@@ -2469,7 +2480,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 1rem;
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--fg);
 }
@@ -2480,7 +2491,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 0.875rem;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--fg);
 }
@@ -2528,7 +2539,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   gap: 2px;
   background: var(--code-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 2px;
 }
 
@@ -2542,7 +2553,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   min-width: 26px;
   min-height: 28px;
   padding: 0 0.45rem;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease;
 }
@@ -2568,7 +2579,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   height: 28px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
 }
 
@@ -2578,7 +2589,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 0.8125rem;
   padding: 0.3rem 0.4rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--fg);
 }
@@ -2651,7 +2662,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .symbols-categories {
   display: none;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--bg);
   padding: 0.75rem 0.5rem;
 }
@@ -2686,7 +2697,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--fg);
   text-align: left;
   padding: 0.4rem 0.5rem;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
@@ -2761,7 +2772,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   overflow-x: hidden;
   overscroll-behavior: contain;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--bg);
   padding: 0.5rem;
 }
@@ -2875,7 +2886,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--bg);
   font-size: 0.6875rem;
   padding: 0.15rem 0.4rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
@@ -2900,7 +2911,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--bg);
   padding: 1rem;
   display: flex;
@@ -2946,7 +2957,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   justify-content: center;
   padding: 1rem;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   min-height: 160px;
   background:
     repeating-conic-gradient(var(--code-bg) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
@@ -2984,7 +2995,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 
 .symbols-detail__variable {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 0.6rem 0.75rem;
   background: var(--code-bg);
 }
@@ -3026,7 +3037,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   text-decoration: none;
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--accent);
   font-family: inherit;
   background: transparent;
@@ -3124,7 +3135,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--fg);
   width: 44px;
   height: 44px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 1.1rem;
   cursor: pointer;
 }
@@ -3146,7 +3157,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 0.875rem;
   font-weight: 600;
   padding: 0.6rem 0.9rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   min-height: 44px;
 }
