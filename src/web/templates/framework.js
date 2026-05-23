@@ -271,7 +271,7 @@ ${buildHeader(siteConfig)}
 ${buildFooter(siteConfig)}
 ${buildScripts(siteConfig, ['core', 'listing'])}
 </body>
-</html>`.toString()
+</html>`
 }
 
 /**

@@ -193,15 +193,18 @@ export async function buildStaticSite(opts, ctx) {
     // 4. Landing pages. Same orchestrator-only guard as the public/ copy:
     // letting workers write here would publish a partition-only homepage.
     if (isOrchestratorRun) {
+      // Per-page templates return HtmlString; calling `.bytes()` hands
+      // Bun.write a Uint8Array so it skips the implicit string → UTF-8
+      // encode pass on the write path.
       const homepageProps = buildHomepageProps({ db, siteConfig })
       await Bun.write(join(buildDir, 'index.html'),
-        renderIndexPage(homepageProps.roots, siteConfig, { extras: homepageProps.extras }))
-      await Bun.write(join(buildDir, 'search', 'index.html'), renderSearchPage(siteConfig))
+        renderIndexPage(homepageProps.roots, siteConfig, { extras: homepageProps.extras }).bytes())
+      await Bun.write(join(buildDir, 'search', 'index.html'), renderSearchPage(siteConfig).bytes())
       await Bun.write(join(buildDir, 'fonts', 'index.html'),
-        renderFontsPage(siteConfig, buildFontsPageProps({ db })))
+        renderFontsPage(siteConfig, buildFontsPageProps({ db })).bytes())
       await Bun.write(join(buildDir, 'symbols', 'index.html'),
-        renderSymbolsPage(siteConfig, buildSymbolsPageProps({ db })))
-      await Bun.write(join(buildDir, '404.html'), renderNotFoundPage(siteConfig))
+        renderSymbolsPage(siteConfig, buildSymbolsPageProps({ db })).bytes())
+      await Bun.write(join(buildDir, '404.html'), renderNotFoundPage(siteConfig).bytes())
     }
 
     // 5. Build document pages. Two execution modes:

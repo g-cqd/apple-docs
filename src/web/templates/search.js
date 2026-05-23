@@ -128,7 +128,7 @@ ${buildHeader(siteConfig)}
 ${buildFooter(siteConfig)}
 <script src="${assetUrl(siteConfig, 'search-page.js')}" defer></script>
 </body>
-</html>`.toString()
+</html>`
 }
 
 /**

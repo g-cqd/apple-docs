@@ -13,7 +13,7 @@ const HTML = { contentType: 'text/html; charset=utf-8' }
  * @type {import('../route-registry.js').RouteHandler}
  */
 export function searchPageHandler(_request, ctx) {
-  return textResponse(renderSearchPage(ctx.siteConfig), HTML)
+  return textResponse(renderSearchPage(ctx.siteConfig).bytes(), HTML)
 }
 
 /**
@@ -23,7 +23,7 @@ export function searchPageHandler(_request, ctx) {
  */
 export function fontsPageHandler(_request, ctx) {
   const props = buildFontsPageProps(ctx)
-  return textResponse(renderFontsPage(ctx.siteConfig, props), HTML)
+  return textResponse(renderFontsPage(ctx.siteConfig, props).bytes(), HTML)
 }
 
 /**
@@ -40,7 +40,7 @@ export function symbolsPageHandler(_request, ctx, url) {
     return null
   }
   const props = buildSymbolsPageProps(ctx)
-  return textResponse(renderSymbolsPage(ctx.siteConfig, props), HTML)
+  return textResponse(renderSymbolsPage(ctx.siteConfig, props).bytes(), HTML)
 }
 
 /**
@@ -53,5 +53,5 @@ export function symbolsPageHandler(_request, ctx, url) {
 export function homepageHandler(_request, ctx) {
   const { roots, extras } = buildHomepageProps(ctx)
   const html = renderIndexPage(roots, ctx.siteConfig, { extras })
-  return textResponse(html, HTML)
+  return textResponse(html.bytes(), HTML)
 }

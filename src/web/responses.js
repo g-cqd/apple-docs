@@ -95,7 +95,10 @@ export function textResponse(body, { contentType = 'text/plain; charset=utf-8', 
  * @returns {Response}
  */
 export function notFoundResponse(siteConfig) {
-  return new Response(renderNotFoundPage(siteConfig), {
+  // `.bytes()` returns a Uint8Array; Response accepts that directly and
+  // skips the implicit string → UTF-8 encode pass that constructing
+  // from a string would force.
+  return new Response(renderNotFoundPage(siteConfig).bytes(), {
     status: 404,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   })

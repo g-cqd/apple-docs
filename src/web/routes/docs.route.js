@@ -54,7 +54,7 @@ export async function docsHandler(request, ctx, url) {
         treeDataUrl = `${siteConfig.baseUrl || ''}/data/frameworks/${root.slug}/tree.${hash}.json`
       }
       const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl })
-      return textResponse(html, HTML_HASHABLE)
+      return textResponse(html.bytes(), HTML_HASHABLE)
     }
   }
 
@@ -161,7 +161,7 @@ export async function docsHandler(request, ctx, url) {
       ancestorTitles: renderCache.getAncestorTitles(doc.key),
       resolveRoleHeadings: (keys) => renderCache.getRoleHeadings(keys),
     })
-    return textResponse(html, HTML_HASHABLE)
+    return textResponse(html.bytes(), HTML_HASHABLE)
   }
 
   return notFoundResponse(siteConfig)

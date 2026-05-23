@@ -152,5 +152,5 @@ ${buildHeader(siteConfig)}
 ${buildFooter(siteConfig)}
 <script src="${assetUrl(siteConfig, 'symbols-page.js')}" defer></script>
 </body>
-</html>`.toString()
+</html>`
 }

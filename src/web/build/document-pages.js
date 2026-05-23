@@ -100,13 +100,21 @@ export async function buildDocumentPages({
       try {
         // Skiplist entries get a tombstone page so the rest of the build
         // can proceed without wedging on a single bad input.
-        const html = skipList.has(doc.key)
+        const rendered = skipList.has(doc.key)
           ? renderSkiplistPlaceholder(doc, siteConfig)
           : await renderWithTimeout(() => renderDocumentPage(doc, sections, siteConfig, {
               knownKeys,
               ancestorTitles: renderCache.getAncestorTitles(doc.key),
               resolveRoleHeadings: (keys) => renderCache.getRoleHeadings(keys),
             }), renderTimeoutMs)
+
+        // renderDocumentPage returns HtmlString; renderSkiplistPlaceholder
+        // returns a plain string. Coerce to Uint8Array bytes once and
+        // hand the same buffer to write + precompress + hash so we only
+        // pay one UTF-8 encode per page instead of three.
+        const html = typeof rendered === 'string'
+          ? Buffer.from(rendered)
+          : rendered.bytes()
 
         ensureDir(dirname(filePath))
         await Bun.write(filePath, html)

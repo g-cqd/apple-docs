@@ -87,5 +87,5 @@ ${buildHeader(siteConfig)}
 ${buildFooter(siteConfig)}
 <script>${raw(NOT_FOUND_INLINE_SCRIPT)}</script>
 </body>
-</html>`.toString()
+</html>`
 }

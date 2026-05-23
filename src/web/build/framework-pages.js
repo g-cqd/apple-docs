@@ -37,7 +37,10 @@ export async function buildFrameworkPages({ roots, db, buildDir, siteConfig }) {
       treeDataUrl = `${siteConfig.baseUrl || ''}/${treeRel}`
     }
 
-    const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl })
+    // renderFrameworkPage returns HtmlString; `.bytes()` gives us a
+    // single Uint8Array we can hand to both Bun.write and
+    // maybePrecompress without paying a second UTF-8 encode pass.
+    const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl }).bytes()
     const fwFilePath = join(buildDir, 'docs', root.slug, 'index.html')
     ensureDir(dirname(fwFilePath))
     await Bun.write(fwFilePath, html)

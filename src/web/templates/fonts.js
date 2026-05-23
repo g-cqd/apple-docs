@@ -134,5 +134,5 @@ ${buildHeader(siteConfig)}
 ${buildFooter(siteConfig)}
 <script src="${assetUrl(siteConfig, 'fonts-page.js')}" defer></script>
 </body>
-</html>`.toString()
+</html>`
 }

@@ -152,7 +152,7 @@ ${buildHeader(siteConfig)}
 ${buildFooter(siteConfig)}
 ${buildScripts(siteConfig, ['core', ...(hasLangToggle ? ['lang-toggle'] : [])])}
 </body>
-</html>`.toString()
+</html>`
 }
 
 /** Splice an HtmlString separator between every element of `items`. */
