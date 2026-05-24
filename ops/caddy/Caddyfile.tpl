@@ -1,6 +1,14 @@
 {
 	admin ${CADDY_ADMIN_ADDR}
 	auto_https off
+	# Accept HTTP/2 cleartext on the loopback bind so the cloudflared
+	# tunnel can multiplex per-tunnel-connection requests against
+	# Caddy instead of opening N concurrent HTTP/1.1 sockets. h1 stays
+	# in the list as a fallback for the health probe and any tooling
+	# that doesn't speak h2 prior-knowledge.
+	servers {
+		protocols h1 h2c
+	}
 }
 
 # ----------------------------------------------------------------------------
