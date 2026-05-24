@@ -26,6 +26,10 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Content-Signal: search=yes, ai-input=yes, ai-train=yes
+
+# Content signals are also delivered as an HTTP response header on
+# every response (`Content-Signal: search=yes, ai-input=yes,
+# ai-train=yes`) so spec-aware crawlers can read them per-page
+# without needing a non-standard directive in this file.
 
 Sitemap: https://apple-docs.everest.mt/sitemap.xml

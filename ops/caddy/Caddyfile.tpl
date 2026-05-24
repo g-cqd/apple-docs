@@ -44,6 +44,13 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 		format json
 	}
 
+	# Content-Signal (Cloudflare/contentsignals.org spec, HTTP-header
+	# variant of the robots.txt directive). Tells spec-aware crawlers
+	# our per-page AI-usage preferences. Header form, not robots.txt
+	# directive, because Lighthouse's REP validator flags the latter
+	# as "Unknown directive". Same payload either way.
+	header Content-Signal "search=yes, ai-input=yes, ai-train=yes"
+
 	# Cache-Control headers (apply to every response on the matching path,
 	# including 304s). Cloudflare reads these to decide what to cache.
 	@assets path /assets/* /worker/*

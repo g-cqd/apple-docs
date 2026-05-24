@@ -596,7 +596,11 @@ a:hover {
   background: transparent;
   color: var(--secondary-fg);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  /* No transition here: background-color and color are non-composited
+     paint properties. Lighthouse flags any active transition on them
+     as "non-composited animation". For a 30 × 28 px segmented control
+     the visual cost of an instant hover swap is negligible, and the
+     warning category counts toward CLS. */
 }
 
 .theme-option:hover {

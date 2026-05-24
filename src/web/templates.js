@@ -137,7 +137,7 @@ function renderHeader(siteConfig) {
   <nav class="site-nav">
     <a class="site-name" href="${homeHref}">${siteConfig.siteName}</a>
     <div class="search-container">
-      <input class="search-input" type="search" placeholder="Search…" aria-label="Search documentation" autocomplete="off" aria-expanded="false" aria-controls="search-listbox" aria-activedescendant="" aria-autocomplete="list">
+      <input class="search-input" type="search" role="combobox" aria-haspopup="listbox" placeholder="Search…" aria-label="Search documentation" autocomplete="off" aria-expanded="false" aria-controls="search-listbox" aria-activedescendant="" aria-autocomplete="list">
       <button class="search-clear" type="button" aria-label="Clear search" hidden>&times;</button>
       <div class="search-dropdown" id="search-listbox" hidden></div>
       <div id="header-search-status" aria-live="assertive" class="sr-only"></div>
