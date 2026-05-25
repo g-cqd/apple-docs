@@ -13,7 +13,8 @@ on:
     - cron: '31 6 * * 2'
   workflow_dispatch:
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   analysis:
@@ -25,25 +26,25 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           persist-credentials: false
       - name: Run analysis
         # `@v2` is not a resolvable ref on this action; the publisher
-        # only ships specific minor tags. Pin the current minor so
-        # the workflow doesn't fail with "Unable to resolve action".
-        uses: ossf/scorecard-action@v2.4.3
+        # only ships specific minor tags. Pin the current minor SHA so
+        # the workflow is reproducible and not subject to tag movement.
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
         with:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: SARIF file
           path: results.sarif
           retention-days: 5
       - name: Upload to code-scanning
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57 # v3
         with:
           sarif_file: results.sarif

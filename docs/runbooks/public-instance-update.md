@@ -42,20 +42,36 @@ cd <repo>
 # Optional: render templates if .env changed.
 ops/bin/render-all.sh
 
-# Fetch the new snapshot tarball + .sha256 sidecar from GitHub releases.
-ops/bin/pull-snapshot.sh --tag snapshot-YYYYMMDD
+# Pull the latest GitHub release snapshot. The script auto-detects
+# the newest published `snapshot-YYYYMMDD` tag, verifies its .sha256
+# sidecar, and runs `apple-docs setup --force`. Use --force/-f or
+# FORCE_PULL=1 to re-apply a tag that's already installed.
+ops/bin/pull-snapshot.sh
 
-# Atomic deploy: drains the running web + MCP servers, swaps the
-# corpus directory, restarts via launchctl.
+# Atomic deploy: git pull, render templates, optional corpus refresh,
+# incremental static-site rebuild, launchctl kickstart of web + MCP,
+# Cloudflare edge purge, smoke test.
 ops/bin/deploy-update.sh
 
 # Smoke-test the running instance.
 ops/bin/smoke-test.sh
 ```
 
-`deploy-update.sh` is idempotent and atomic — if any step fails, the
-previous corpus stays in place and the running servers are not
-interrupted.
+`deploy-update.sh` keeps the previous web and MCP daemons online while
+the corpus refresh runs, swaps in the new tree, then kickstarts the
+services. Caddy's health-gated upstream absorbs the cut-over.
+
+If you need to install a **specific** older snapshot tag (e.g. the one
+you were on before today), download the asset by hand and feed it to
+`setup --archive`:
+
+```bash
+gh release download <tag> --repo g-cqd/apple-docs \
+  --pattern 'apple-docs-full-*.tar.gz' \
+  --pattern 'apple-docs-full-*.tar.gz.sha256'
+ops/bin/apple-docs setup --archive apple-docs-full-<tag>.tar.gz --force
+ops/bin/deploy-update.sh
+```
 
 ## Verification
 
@@ -74,33 +90,47 @@ ssh <host> '<repo>/ops/bin/apple-docs status --advanced --json' \
   | jq '.lastSync, .freshness'
 
 # Internal probes (loopback, via the local Caddy + Bun chain).
-ssh <host> "curl -sf http://127.0.0.1:\${APPLE_DOCS_PROXY_MCP_PORT:-3031}/readyz | jq"
+ssh <host> "curl -sf http://127.0.0.1:\${MCP_PORT:-3031}/readyz | jq"
 ```
 
-## CDN cache warmup
+## CDN cache purge
 
-After a corpus refresh, Cloudflare keeps stale objects for cached
-`/api/*` and `/data/*` responses until they age out. Optionally trigger
-a purge plus warmup:
+`deploy-update.sh` calls `ops/bin/cf-purge.sh` as its last step (no
+flags). The script issues a single Cloudflare `purge_everything`
+against the configured zone and returns. If `CLOUDFLARE_API_TOKEN` /
+`CLOUDFLARE_ZONE_ID` aren't set in `ops/.env`, the purge step warns
+and exits 0 — the deploy is still considered successful.
+
+The site's Cache Rules already advertise `stale-while-updating`, so
+end-users see the old cached object while Cloudflare revalidates
+against the origin. There is no built-in warmup step. If you want to
+pre-warm specific endpoints after a purge, drive `curl` against them
+by hand:
 
 ```bash
-ops/bin/cf-purge.sh --warmup
+for path in / /docs/swiftui/ /api/search?q=NavigationStack; do
+  curl -sI "https://${PUBLIC_WEB_HOST}${path}" >/dev/null
+done
 ```
-
-This issues a purge of `/api/*` and the static `/data/*` artefacts,
-then re-fetches the most-used endpoints to populate the edge cache
-from a known-warm state.
 
 ## Rollback
 
-If `/readyz` or `ops/bin/smoke-test.sh` fails post-deploy:
+There is no in-place revert. If `/readyz` or
+`ops/bin/smoke-test.sh` fails after a deploy, recover by installing the
+previous snapshot tag from scratch:
 
 ```bash
-ops/bin/deploy-update.sh --revert
+gh release download <previous-tag> --repo g-cqd/apple-docs \
+  --pattern 'apple-docs-full-*.tar.gz' \
+  --pattern 'apple-docs-full-*.tar.gz.sha256'
+ops/bin/apple-docs setup --archive apple-docs-full-<previous-tag>.tar.gz --force
+ops/bin/deploy-update.sh
+ops/bin/smoke-test.sh
 ```
 
-Falls back to the previous snapshot directory (still on disk until
-pruned).
+`apple-docs setup --force` wipes the `apple-docs.db` and extracts the
+new archive into the same `DATA_DIR`. The reverse-proxy and tunnel
+daemons stay up across the swap.
 
 ## Related
 

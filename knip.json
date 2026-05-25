@@ -16,6 +16,7 @@
   "ignoreDependencies": [
     "zod",
     "@stryker-mutator/command-runner",
-    "bun-types"
+    "bun-types",
+    "mermaid"
   ]
 }

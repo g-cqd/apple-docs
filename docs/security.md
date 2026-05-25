@@ -67,6 +67,29 @@ Out of scope:
 - Issues that require an attacker to already have shell access on the
   host (for example, modifying `data/` directly).
 - Brute-force or DoS reports without an amplification or work-bound bug.
+- **Repo-policy alerts** surfaced by OpenSSF Scorecard. Status of each
+  as of the most recent counter-audit:
+  - **Branch-Protection** — `main` is now protected via the GitHub API:
+    no force-push, no deletion (`gh api PUT
+    repos/g-cqd/apple-docs/branches/main/protection`). Required
+    status checks and required reviews are deliberately *not* enabled
+    so the solo-maintainer workflow keeps working. Scorecard will
+    grade this somewhere between "partial" and "fail" depending on the
+    cycle's exact criteria; the deliberate trade-off is documented
+    here rather than left implicit.
+  - **Code-Review** — a solo-maintained project cannot satisfy
+    Scorecard's "every commit reviewed by another human" criterion
+    without splitting maintainers. The alert remains open; reviewers
+    should treat it as a known governance constraint of this
+    repository.
+  - **Maintained** — passive; auto-clears once recent commit activity
+    is reflected in the next Scorecard run.
+  - **CII-Best-Practices** — requires registration at
+    bestpractices.coreinfrastructure.org. Not a code change; the
+    maintainer can register at their discretion.
+  - **Fuzzing** — requires OSS-Fuzz / ClusterFuzzLite integration.
+    Tracked as out-of-scope for this codebase until a meaningful
+    fuzzing target exists.
 
 ## Hardened defaults
 
@@ -84,9 +107,9 @@ gating access.
   miss the corpus and would trigger an upstream Apple fetch are
   additionally gated at 5 req/min per IP, with a 24-hour 1024-entry
   negative cache so 404s from Apple are not replayed.
-- **1 MiB body cap on MCP HTTP.** Both the `Content-Length` header and
-  the streaming reader are bounded; the stream is cancelled on
-  overflow.
+- **1 MB body cap on MCP HTTP** (`DEFAULT_MAX_BODY_BYTES = 1_000_000`
+  in `src/lib/http-body.js`). Both the `Content-Length` header and the
+  streaming reader are bounded; the stream is cancelled on overflow.
 - **Browser `Origin` default-deny on MCP HTTP.** Loopback origins
   (`http(s)://localhost`, `127.0.0.1`, `[::1]` on any port) are
   exempt; native MCP clients that send no `Origin` header are allowed;
@@ -141,12 +164,41 @@ gating access.
   attempt so a misbehaving upstream cannot park a request
   indefinitely.
 
+### Web Worker boundary
+
+- **Origin-validated `base` argument.** The browser-side search Web
+  Worker (`src/web/worker/search-worker.js`) accepts an `init`
+  postMessage carrying a `base` URL used for `/data/search/*` fetches.
+  The worker rejects any base whose origin differs from
+  `self.location.origin`, so a same-origin script cannot redirect the
+  worker's index-load fetches to an external host. Empty string and
+  root-relative paths pass through as before.
+
 ### Logging
 
-- **Secret redaction.** Structured log payloads are walked at emission
-  time and values for keys matching `token`, `secret`, `authorization`,
-  `cookie`, `password`, `api[_-]?key`, or `bearer` are replaced with
-  `<redacted>` (case-insensitive, depth-capped at 8).
+- **Secret redaction (in-process).** Structured log payloads are
+  walked at emission time and values for keys matching `token`,
+  `secret`, `authorization`, `cookie`, `password`, `api[_-]?key`, or
+  `bearer` are replaced with `<redacted>` (case-insensitive,
+  depth-capped at 8). See `src/lib/logger.js`.
+- **Secret redaction (ops layer).** `ops/lib/logger.js` mirrors the
+  same redaction over free-form subprocess output (curl, gh, cf-purge)
+  so HTTP Authorization headers / Bearer tokens / query-string
+  credentials never reach the on-disk deploy log.
+
+### Subprocess / shell hardening
+
+- **No shell interpolation.** Native-binary spawns
+  (`tar`, `gzip`, `hdiutil`, `7zz`, `swift`, `sips`, `rsvg-convert`)
+  always go through `Bun.spawn` / `node:child_process.spawn` with an
+  argv array, never `bash -c`. The tar.gz archive pipeline pipes
+  tar's stdout through `node:zlib.createGzip()` in-process so no
+  shell layer participates in the build.
+- **Pinned GitHub Actions.** Every workflow `uses:` reference is
+  pinned to a full commit SHA with a trailing version comment
+  (`actions/checkout@93cb6efe…  # v5`). Resolves OpenSSF
+  Scorecard's Pinned-Dependencies check and prevents supply-chain
+  hijacks via tag movement.
 
 If you find a way around any of these, please report it via the
 channel above.

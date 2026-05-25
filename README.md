@@ -17,7 +17,7 @@ Swift package catalog.
 
 ## Quick Start
 
-Requirements: **Bun 1.0+**. See [`docs/installing.md`](docs/installing.md)
+Requirements: **Bun 1.1+**. See [`docs/installing.md`](docs/installing.md)
 for the three supported install paths (dev / standalone binary /
 production self-host) and their verification steps.
 
@@ -26,10 +26,15 @@ Fastest path — dev install + prebuilt snapshot:
 ```bash
 git clone https://github.com/g-cqd/apple-docs.git
 cd apple-docs
-bun install
-bun link
+bun run dev:setup
 apple-docs setup
 ```
+
+`bun run dev:setup` is idempotent and a strict superset of
+`bun install && bun link`: it also installs 7zip (for archive
+tests), Python `fontTools` + `brotli` (for font-subset tests), and
+Playwright Chromium (for the browser-worker test). See
+[`docs/installing.md`](docs/installing.md) for the breakdown.
 
 `setup` installs one full snapshot shape: database, Markdown, raw JSON,
 extracted Apple fonts, and pre-rendered SF Symbols. ~60 seconds, ~6 GB
@@ -269,7 +274,7 @@ This writes:
 
 ```text
 dist/apple-docs-full-<tag>.tar.gz
-dist/apple-docs-full-<tag>.sha256
+dist/apple-docs-full-<tag>.tar.gz.sha256
 dist/apple-docs-full-<tag>.manifest.json
 ```
 
@@ -333,7 +338,9 @@ with a multi-line summary listing every offending field.
 | `APPLE_DOCS_MCP_CACHE_SCALE` | `1.0` | Uniform multiplier on per-tool LRU sizes |
 | `APPLE_DOCS_MCP_CONCURRENCY` | `8` | Max in-flight heavy-tool calls |
 | `APPLE_DOCS_MCP_QUEUE` | `64` | Max queued heavy-tool calls before HTTP 503 |
-| `APPLE_DOCS_MCP_READERS` / `APPLE_DOCS_MCP_DEEP_READERS` / `APPLE_DOCS_MCP_READER_WORKERS` | runtime-derived | Reader-pool sizing |
+| `APPLE_DOCS_MCP_READERS` | unset (off) | Set to `on` to enable the worker-thread reader pool. Opt-in. |
+| `APPLE_DOCS_MCP_READER_WORKERS` | runtime-derived | Pool size when the pool is on (default: `availableParallelism() − 2`, capped at 12). |
+| `APPLE_DOCS_MCP_DEEP_READERS` | runtime-derived | Deep-pool size when the pool is on. |
 
 ### Web server
 
@@ -373,7 +380,7 @@ with a multi-line summary listing every offending field.
 - [Grafana dashboards](docs/ops-grafana.md)
 - [Reference ops deployment](ops/README.md)
 - [Cloudflare configuration](ops/cloudflare/README.md)
-- [Security policy](SECURITY.md)
+- [Security policy](docs/security.md) (long form; root [`SECURITY.md`](SECURITY.md) is the GitHub-facing reporting stub).
 
 The documentation also builds into a static site via VitePress:
 

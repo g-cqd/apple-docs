@@ -25,7 +25,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: ./.github/actions/setup
 
       # Archive pipeline: snapshots ship as `.tar.gz` with `gzip -9`
@@ -125,7 +125,7 @@ jobs:
       # bundle, so attaching them would duplicate ~1.5x the bytes for no
       # consumer benefit.
       - name: Create release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: 'Snapshot (${{ steps.tag.outputs.tag }})'

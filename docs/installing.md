@@ -14,9 +14,18 @@ All three require Bun **only for build or install**. The standalone
 binary and the production launchd plists run Bun internally; operators
 do not need it on their interactive `PATH` afterwards.
 
+> [!NOTE]
+> **Linux SF Symbol parity.** SF Symbol pre-rendering needs the macOS
+> SF Symbols system bundle, so `apple-docs sync` on Linux produces an
+> empty `resources/symbols/` directory. Linux installs should use the
+> snapshot path (`apple-docs setup`) — every published snapshot ships
+> the full pre-rendered SVG matrix and works offline. PNG variants
+> still need `rsvg-convert` (librsvg) on the host at request time; see
+> [Self-hosting → Snapshot consumer requirements](self-hosting.md#snapshot-consumer-requirements).
+
 ## Prerequisites
 
-- macOS 13+ on Apple Silicon or Intel, or Linux x64 / arm64 with Bun 1.0+.
+- macOS 13+ on Apple Silicon or Intel, or Linux x64 / arm64 with Bun 1.1+.
 - `git`, `curl`, `unzip`.
 - For the production path: `caddy` (`brew install caddy` on macOS,
   package manager on Linux), `cloudflared`, and a Cloudflare account
@@ -149,16 +158,17 @@ cp ops/.env.example ops/.env
 $EDITOR ops/.env
 ```
 
-Set at minimum:
+Set at minimum (variable names match `ops/.env.example` exactly):
 
-- `APPLE_DOCS_REPO_DIR` — absolute path to this checkout.
-- `APPLE_DOCS_DATA_DIR` — corpus location (`apple-docs setup` writes here).
-- `APPLE_DOCS_PROXY_WEB_PORT` and `APPLE_DOCS_PROXY_MCP_PORT` — Caddy's
-  loopback listeners.
-- `APPLE_DOCS_BUN_WEB_PORT` and `APPLE_DOCS_BUN_MCP_PORT` — Bun's
-  loopback listeners behind Caddy.
-- `CF_TOKEN`, `CF_ZONE_ID` — for cache purges.
+- `REPO_DIR` — absolute path to this checkout.
+- `DATA_DIR` — corpus location (`apple-docs setup` writes here).
+- `WEB_PORT` and `MCP_PORT` — Caddy's loopback listeners (default
+  `3030` / `3031`).
+- `WEB_BACKEND_PORT` and `MCP_BACKEND_PORT` — Bun's loopback listeners
+  behind Caddy (default `3130` / `3131`).
 - `PUBLIC_WEB_HOST`, `PUBLIC_MCP_HOST` — your public hostnames.
+- `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID` — optional, only for
+  edge cache purges after a deploy.
 
 See `ops/.env.example` for the full list with comments.
 
@@ -198,11 +208,11 @@ the loopback ports, and Caddy forwards to the Bun upstreams.
 
 ```bash
 # Local liveness (Caddy loopback ports).
-curl -sf http://127.0.0.1:${APPLE_DOCS_PROXY_WEB_PORT:-3030}/healthz
-curl -sf http://127.0.0.1:${APPLE_DOCS_PROXY_MCP_PORT:-3031}/readyz | jq
+curl -sf http://127.0.0.1:${WEB_PORT:-3030}/healthz
+curl -sf http://127.0.0.1:${MCP_PORT:-3031}/readyz | jq
 
 # Internal Bun upstream (bypasses Caddy — useful if Caddy is the suspect).
-curl -sf http://127.0.0.1:${APPLE_DOCS_BUN_MCP_PORT:-3131}/readyz | jq
+curl -sf http://127.0.0.1:${MCP_BACKEND_PORT:-3131}/readyz | jq
 
 # Public reach (via cloudflared).
 curl -sf https://${PUBLIC_MCP_HOST}/readyz | jq
@@ -250,5 +260,5 @@ ops/bin/apple-docs-ops service stop all
 sudo launchctl unload /Library/LaunchDaemons/com.apple-docs.*.plist
 sudo rm /Library/LaunchDaemons/com.apple-docs.*.plist
 sudo rm /etc/sudoers.d/apple-docs
-rm -rf "$APPLE_DOCS_DATA_DIR"
+rm -rf "$DATA_DIR"
 ```

@@ -27,7 +27,7 @@ apple-docs snapshot build --tag "$TAG" --allow-incomplete-symbols 2>&1 | tee /tm
 rm -rf ~/.apple-docs
 
 # 5. Install from the local tarball. --archive lives under $HOME or cwd;
-#    sibling .sha256 / .manifest.json are picked up by name convention.
+#    sibling .tar.gz.sha256 / .manifest.json are picked up by name convention.
 apple-docs setup --archive "dist/apple-docs-full-${TAG}.tar.gz" 2>&1 | tee /tmp/setup.log
 
 # 6. Verify.
@@ -106,9 +106,9 @@ If a sync dies mid-way (network blip, OOM, user `Ctrl-C`), the next
 
 ```text
 dist/
-├── apple-docs-full-<tag>.tar.gz         # corpus tarball
-├── apple-docs-full-<tag>.sha256         # checksum of the tarball
-└── apple-docs-full-<tag>.manifest.json  # metadata: schema, doc count, checksum
+├── apple-docs-full-<tag>.tar.gz             # corpus tarball
+├── apple-docs-full-<tag>.tar.gz.sha256      # checksum of the tarball
+└── apple-docs-full-<tag>.manifest.json      # metadata: schema, doc count, checksum
 ```
 
 Example manifest (truncated):
@@ -128,7 +128,9 @@ Example manifest (truncated):
 ```
 
 `setup --archive <path>` discovers the sidecars by name convention:
-`stripTarGz(path) + '.sha256'` and `stripTarGz(path) + '.manifest.json'`.
+`<path>.sha256` (always full archive name) and the manifest at
+`stripTarGz(path) + '.manifest.json'` for `.tar.gz` archives, or
+`<base>.manifest.json` (without the `.7z` suffix) for legacy `.7z`.
 Missing sidecars produce a `warn` log and proceed; the local-archive
 path treats checksums as an operator policy, not a correctness gate.
 

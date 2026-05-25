@@ -38,7 +38,7 @@ exposes three public surfaces over the same SQLite corpus:
 
 - **CLI** — `apple-docs search …`, `apple-docs read …`, plus commands to
   sync, browse, and maintain the corpus.
-- **MCP server** — eight tools and four resource templates, available
+- **MCP server** — nine tools and four resource templates, available
   over stdio for local clients and Streamable HTTP for shared or remote
   deployments.
 - **Local website** — `apple-docs web serve` for a Browse / Search UI;

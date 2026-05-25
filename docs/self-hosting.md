@@ -304,18 +304,17 @@ For atomic snapshot rollovers on a public instance, follow the
 
 | Endpoint | What it shows |
 | --- | --- |
-| `GET /healthz` | Process liveness (`{status: "ok"}`) |
-| `GET /readyz` | DB and reader-pool readiness |
-| `GET /healthz` with `APPLE_DOCS_MCP_CACHE_STATS=1` | Also reports `cache` (hit ratios, per-tool sizes, stamp), `concurrency` (permits, waiters, rejects), and `readerPool` (size, active, pending, errors) |
+| `GET /healthz` | Process liveness (`{ok: true, service: "apple-docs-mcp"}`, or `"apple-docs-web"` on the web surface) |
+| `GET /readyz` | DB and reader-pool readiness (`{ok, service, db, readerPool}`) |
+| `GET /healthz` with `APPLE_DOCS_MCP_CACHE_STATS=1` | Also reports `cache` (hit ratios, per-tool sizes, stamp), `concurrency` (permits, waiters, rejects), `markdownCache`, and `readerPool` (size, active, pending, errors) |
 | `GET /metrics` on `--metrics-port` | Prometheus metrics for web or MCP, bound to the separate metrics listener |
 
-Example `/healthz` payload with stats enabled:
+Example MCP `/healthz` payload with stats enabled:
 
 ```json
 {
-  "status": "ok",
-  "concurrency": {"heavyMax": 8, "heavyQueue": 64, "active": 0, "waiting": 0, "rejected": 0},
-  "readerPool":  {"size": 8, "active": 8, "pending": 0, "spawns": 8, "errors": 0},
+  "ok": true,
+  "service": "apple-docs-mcp",
   "cache": {
     "enabled": true,
     "stamp": "8:1776563770798",
@@ -323,9 +322,16 @@ Example `/healthz` payload with stats enabled:
     "totalHits": 4,
     "totalMisses": 4,
     "tools": {"search_docs": {"hits": 4, "misses": 4, "size": 4}}
-  }
+  },
+  "markdownCache": {"hits": 12, "misses": 3, "evictions": 0, "size": 12},
+  "concurrency": {"heavyMax": 8, "heavyQueue": 64, "active": 0, "waiting": 0, "rejected": 0},
+  "readerPool":  {"size": 8, "active": 8, "pending": 0, "spawns": 8, "errors": 0}
 }
 ```
+
+Field order matches the order `buildHealthBody` sets keys in
+`src/mcp/health-handlers.js`, so a future schema change is one diff
+away from being reflected here.
 
 Server-issued structured JSON logs go to stdout / stderr. Fields worth
 alerting on: `level=error`, `prio=heavy` requests with `wait>0ms` (the

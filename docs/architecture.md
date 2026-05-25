@@ -125,7 +125,7 @@ selection so cheap reads do not queue behind deep body searches.
 | Surface | Entry | Tools / commands |
 | --- | --- | --- |
 | **CLI** | `cli.js` | User-facing commands grouped Query / Setup & Sync / Hosting / Maintenance & Build. Advanced flags live under a per-command "Advanced" subsection. `--json` routes through the public projection. |
-| **MCP** | `index.js` → `src/mcp/server.js` | Eight tools (`search_docs`, `read_doc`, `browse`, `list_frameworks`, `list_taxonomy`, `search_sf_symbols`, `list_apple_fonts`, `render_sf_symbol`, `render_font_text`) and four resource templates. Stdio and Streamable HTTP transports. |
+| **MCP** | `index.js` → `src/mcp/server.js` | Nine tools (`search_docs`, `read_doc`, `browse`, `list_frameworks`, `list_taxonomy`, `search_sf_symbols`, `list_apple_fonts`, `render_sf_symbol`, `render_font_text`) and four resource templates. Stdio and Streamable HTTP transports. |
 | **Web** | `src/web/serve.js` | Static-site builder (`apple-docs web build`) and dev server (`web serve`). Twelve route files, content-hashed `/data/*` artifacts, SSR for `/docs/*`. |
 
 All three flow through `src/commands/*.js` for use-case logic and
@@ -173,9 +173,11 @@ The codebase leans on Bun rather than Node compatibility:
   `Worker` instances.
 - `Bun.serve()` for both HTTP servers. `Bun.spawn()` for archive
   extraction and symbol-render subprocesses.
-- `Bun.gzipSync`, `Bun.inflateSync`, `Bun.CryptoHasher`,
-  `Bun.escapeHTML`, `Bun.sleep` in place of the `node:zlib` /
-  `node:crypto` / `setTimeout` idioms.
+- `Bun.gzipSync`, `Bun.CryptoHasher`, `Bun.escapeHTML`, `Bun.sleep`
+  in place of the `node:zlib` / `node:crypto` / `setTimeout` idioms.
+  (`Bun.inflateSync` is deliberately avoided in the symbol-PDF inflate
+  path because Bun's implementation rejects Apple's DEFLATE streams;
+  `node:zlib.inflateSync` is used there instead.)
 - `Bun.file()` and `Bun.write()` for reads and writes.
 
 ## What is intentionally out of scope
@@ -183,8 +185,13 @@ The codebase leans on Bun rather than Node compatibility:
 - A Node port. Bun is the only target runtime.
 - A TypeScript compile step. JavaScript with JSDoc types, validated by
   `bun x tsc --noEmit`.
-- Background workers beyond the reader pool and the static-site build
-  fan-out.
+- Background workers beyond the four already in use: the SQLite reader
+  pool (`src/storage/reader-pool.js`), the static-site build fan-out
+  (`src/web/build/worker-fanout.js`), the pyftsubset worker pool that
+  backs `/api/fonts/subset`
+  (`src/web/lib/font-subset/pyftsubset-pool.js`), and the long-lived
+  Swift symbol-render subprocess used during sync
+  (`src/resources/apple-symbols/sync.js`).
 - External service dependencies at runtime. The corpus is local; the
   public hosted instance is the only optional network artefact.
 

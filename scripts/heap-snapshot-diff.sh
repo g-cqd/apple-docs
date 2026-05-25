@@ -12,7 +12,8 @@
 #      between exits we use the file system mtime to compare runs).
 #
 # Usage:
-#   scripts/heap-snapshot-diff.sh [--port 3030] [--workload curl_bursts] [--out reports/profiles]
+#   scripts/heap-snapshot-diff.sh [--port 3030] [--workload curl_bursts] \
+#                                 [--warmup 20] [--out reports/profiles]
 #
 # Outputs:
 #   reports/profiles/cold-<timestamp>/Heap.<n>.<pid>.heapsnapshot
