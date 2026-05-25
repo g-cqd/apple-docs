@@ -11,8 +11,8 @@
  * runtime renderer can detect drift and bust the cache.
  */
 
-import { existsSync, readdirSync, statSync } from 'node:fs'
-import { rm } from 'node:fs/promises'
+import { existsSync, statSync } from 'node:fs'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { ValidationError } from '../../lib/errors.js'
@@ -25,7 +25,6 @@ import { normalizeStringArray } from '../apple-fonts/sfnt.js'
 import { readBundleVersion, readStringsMap } from '../apple-fonts/sync.js'
 import {
   getPrerenderedSymbolPath,
-  symbolVariantKey,
   symbolVariantMatrix,
 } from './cache-key.js'
 import { stampSfSymbolCodepoints } from './codepoint-stamp.js'
@@ -161,32 +160,10 @@ export async function prerenderSfSymbols(opts, ctx) {
   return result
 }
 
-export async function symbolSnapshotNeedsReset(baseDir) {
-  if (!existsSync(baseDir)) return false
-  const entries = readdirSync(baseDir, { withFileTypes: true })
-    .filter(entry => entry.name !== 'meta.json')
-  if (entries.length === 0) return false
-
-  const meta = await readJsonIfExists(join(baseDir, 'meta.json'))
-  if (!meta || meta.rendererVersion !== SYMBOL_RENDERER_VERSION) return true
-  return !hasSnapshotVariantSet(meta, 'public') || !hasSnapshotVariantSet(meta, 'private')
-}
-
-async function readJsonIfExists(path) {
-  try {
-    return await Bun.file(path).json()
-  } catch {
-    return null
-  }
-}
-
-function hasSnapshotVariantSet(meta, scope) {
-  const expected = symbolVariantMatrix(scope).map(symbolVariantKey).sort()
-  const actual = Array.isArray(meta?.variants?.[scope])
-    ? meta.variants[scope].map(symbolVariantKey).sort()
-    : []
-  return expected.length === actual.length && expected.every((key, index) => key === actual[index])
-}
+// Snapshot-meta gating moved to ./snapshot-meta.js so this module
+// fits under the 400-line ceiling. Re-exported here so callers that
+// import `symbolSnapshotNeedsReset` from this file keep working.
+export { symbolSnapshotNeedsReset } from './snapshot-meta.js'
 
 async function renderScopeBucket({ scope, symbols, variants, ctx, concurrency, logger, onProgress, result }) {
   const queue = []
@@ -278,7 +255,10 @@ async function processSymbolQueue({ worker, queue, ctx, scope, result, onProgres
 }
 
 async function spawnSymbolWorker({ scope, logger }) {
-  const scriptPath = join(tmpdir(), `apple-docs-symbol-worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}.swift`)
+  // Per-worker mkdtemp staging dir so the Swift script lives at an
+  // unguessable, mode-0700 path. The dir is torn down in close().
+  const stagingDir = await mkdtemp(join(tmpdir(), 'apple-docs-symbol-worker-'))
+  const scriptPath = join(stagingDir, 'symbol-worker.swift')
   await Bun.write(scriptPath, SYMBOL_WORKER_SCRIPT)
   const proc = Bun.spawn(['swift', scriptPath, scope], {
     stdout: 'pipe',
@@ -343,7 +323,7 @@ async function spawnSymbolWorker({ scope, logger }) {
     close() {
       try { proc.stdin.end?.() } catch {}
       try { proc.kill() } catch {}
-      void rm(scriptPath, { force: true }).catch(() => {})
+      void rm(stagingDir, { recursive: true, force: true }).catch(() => {})
     },
   }
 }

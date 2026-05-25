@@ -8,6 +8,13 @@ import { createReaderPools } from '../storage/reader-pools.js'
 import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 import { isLoopbackOrigin, readJsonRpcBodyCapped } from '../lib/http-body.js'
 import { maybeStartMcpMetricsServer } from './metrics-provider.js'
+import { classifyRpcPayload } from './rpc-classify.js'
+
+// Re-export the classifier so the public import shape
+// `import { classifyRpcPayload } from 'src/mcp/http-server.js'` keeps
+// working — the actual implementation lives in ./rpc-classify.js to
+// keep this file under the 400-line ceiling.
+export { classifyRpcPayload }
 
 // JSON-RPC over HTTP — no HTML, so CSP doesn't apply. Isolation +
 // Permissions-Policy aligned with web/context.js for browser callers.
@@ -24,24 +31,6 @@ const SECURITY_HEADERS = {
 const CORS_ALLOWED_HEADERS = 'content-type, mcp-session-id, mcp-protocol-version, last-event-id'
 const CORS_EXPOSE_HEADERS = 'mcp-session-id'
 const CORS_METHODS = 'GET, POST, DELETE, OPTIONS'
-
-// Tool names whose handlers can saturate the Bun event loop (FTS + ranking +
-// SQLite reads + markdown hydration). Gated through a bounded semaphore so
-// that cheap protocol traffic (initialize, ping, tools/list) never waits
-// behind a burst of heavy calls from another client.
-//
-// `list_frameworks` and `list_taxonomy` are intentionally NOT heavy: they are
-// cache-wrapped with static/near-static payloads (taxonomy is invalidated
-// only after a corpus refresh) and their uncached miss path is a small bulk
-// SQL read, not CPU-bound ranking work.
-const HEAVY_TOOLS = new Set([
-  'search_docs',
-  'read_doc',
-  'browse',
-  'search_sf_symbols',
-  'render_sf_symbol',
-  'render_font_text',
-])
 
 // Active permits. Without a worker pool, heavy SQL work blocks the single
 // Bun event loop regardless of permit count, so raising this buys you queued
@@ -309,30 +298,9 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   return { server, url, close, metricsUrl: metricsHandle?.url ?? null }
 }
 
-/**
- * Classify a JSON-RPC POST payload as 'heavy' (a tools/call that may saturate
- * the event loop) or 'light' (everything else: initialize, ping, tools/list,
- * resources/*, notifications/*, malformed). Unknown or unparseable payloads
- * are treated as light — the transport will produce the right error, and we
- * would rather not throttle on data we can't interpret.
- */
-export function classifyRpcPayload(bodyText) {
-  if (!bodyText) return 'light'
-  let parsed
-  try { parsed = JSON.parse(bodyText) } catch { return 'light' }
-  if (Array.isArray(parsed)) {
-    // JSON-RPC batch: throttle if any sub-call is heavy.
-    return parsed.some(item => isHeavyRpc(item)) ? 'heavy' : 'light'
-  }
-  return isHeavyRpc(parsed) ? 'heavy' : 'light'
-}
-
-function isHeavyRpc(message) {
-  if (!message || typeof message !== 'object') return false
-  if (message.method !== 'tools/call') return false
-  const name = message?.params?.name
-  return typeof name === 'string' && HEAVY_TOOLS.has(name)
-}
+// classifyRpcPayload + isHeavyRpc moved to ./rpc-classify.js so this
+// file fits under the 400-line ceiling. The classifier is imported and
+// re-exported at the top of this module.
 
 function buildPriorityTag(meta) {
   const parts = []

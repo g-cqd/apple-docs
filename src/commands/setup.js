@@ -1,17 +1,20 @@
-import { join, dirname, basename, resolve, isAbsolute } from 'node:path'
+import { join } from 'node:path'
 import { existsSync, rmSync, statSync } from 'node:fs'
-import { HttpError, NotFoundError, ValidationError } from '../lib/errors.js'
+import { NotFoundError, ValidationError } from '../lib/errors.js'
 import { sha256 } from '../lib/hash.js'
 import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
 import { resolveSevenZipBinary } from '../lib/archive-7z.js'
 import { ensureDir } from '../storage/files.js'
 import { DocsDatabase } from '../storage/database.js'
-import { getGitHubToken } from '../lib/github.js'
 import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
 import { validateArchive, validate7zArchive } from './setup/validate-archive.js'
-
-const GITHUB_REPO = 'g-cqd/apple-docs'
-const USER_AGENT = 'apple-docs/2.0'
+import {
+  fetchLatestRelease,
+  formatSize,
+  resolveArchivePath,
+  stripTarGz,
+  USER_AGENT,
+} from './setup/helpers.js'
 
 // Snapshot asset filename component — every snapshot ships the full
 // payload, so this is fixed.
@@ -331,68 +334,5 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } =
   }
 }
 
-/**
- * Resolve the --archive flag to an absolute path and confirm it lives
- * under $HOME. Refusing arbitrary system paths matches the documented
- * principle: setup is a local operator tool; reading from `/etc/...` is
- * never the intended use.
- */
-function resolveArchivePath(archive) {
-  const absolute = isAbsolute(archive) ? archive : resolve(process.cwd(), archive)
-  const home = process.env.HOME
-  // Allow $HOME and the current repo checkout (a developer building +
-  // installing from `dist/` is the canonical local-dev flow).
-  const cwd = process.cwd()
-  if (home && absolute.startsWith(`${home}/`)) return absolute
-  if (absolute.startsWith(`${cwd}/`) || absolute === cwd) return absolute
-  throw new ValidationError(
-    `Refusing to install from ${absolute}: archive path must live under $HOME or the current working directory.`,
-    { field: 'archive', value: absolute },
-  )
-}
-
-function stripTarGz(p) {
-  const name = basename(p)
-  if (name.endsWith('.tar.gz')) return join(dirname(p), name.slice(0, -'.tar.gz'.length))
-  if (name.endsWith('.tgz')) return join(dirname(p), name.slice(0, -'.tgz'.length))
-  return p
-}
-
-async function fetchLatestRelease() {
-  const token = getGitHubToken()
-  const headers = {
-    'User-Agent': USER_AGENT,
-    Accept: 'application/vnd.github+json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
-
-  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
-    headers,
-    signal: AbortSignal.timeout(15000),
-  })
-
-  if (!res.ok) {
-    if (res.status === 404) {
-      throw new NotFoundError(`https://api.github.com/repos/${GITHUB_REPO}/releases`, 'No releases found. The repository may not have published any snapshots yet.')
-    }
-    throw new HttpError(res.status, `https://api.github.com/repos/${GITHUB_REPO}/releases`, `GitHub API error: HTTP ${res.status}`)
-  }
-
-  const data = await res.json()
-  return {
-    tag: data.tag_name,
-    date: data.published_at?.slice(0, 10) ?? 'unknown',
-    assets: (data.assets ?? []).map(a => ({
-      name: a.name,
-      size: a.size,
-      downloadUrl: a.browser_download_url,
-    })),
-  }
-}
-
-function formatSize(bytes) {
-  if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
-  if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
-  if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`
-  return `${bytes} B`
-}
+// resolveArchivePath, stripTarGz, fetchLatestRelease, formatSize live
+// in ./setup/helpers.js so this file fits under the 400-line ceiling.
