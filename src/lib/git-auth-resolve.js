@@ -80,7 +80,7 @@ export async function resolveGitHubAuth({
     if (!detected) {
       return { token: null, source: null }
     }
-    let answer = 'no'
+    let answer
     try {
       answer = await promptFn(
         `Use local GitHub credentials from ${detected.source} to authenticate requests? [y/N/always]`,

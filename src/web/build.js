@@ -1,6 +1,7 @@
 import { join, dirname } from 'node:path'
 import { rename, rm } from 'node:fs/promises'
 import { availableParallelism } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { renderIndexPage, renderSearchPage, renderFontsPage, renderSymbolsPage, renderNotFoundPage } from './templates.js'
 import { buildHomepageProps } from './view-models/homepage.viewmodel.js'
 import { buildFontsPageProps } from './view-models/fonts-page.viewmodel.js'
@@ -82,10 +83,13 @@ export async function buildStaticSite(opts, ctx) {
   const skipDocs = opts.skipDocs === true
   const onProgress = opts.onProgress ?? null
 
+  // Crypto-random suffixes on the staging + rollback dirs so a
+  // co-resident process can't pre-create them as symlinks and race the
+  // rename. Mirrors the atomic-write pattern in src/lib/atomic-write.js.
   const buildDir = incremental
     ? outDir
-    : `${outDir}.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  const previousDir = `${outDir}.prev-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    : `${outDir}.tmp-${Date.now()}-${randomBytes(8).toString('hex')}`
+  const previousDir = `${outDir}.prev-${Date.now()}-${randomBytes(8).toString('hex')}`
 
   const { db, logger } = ctx
   // `snapshot_tag` is the install-time stamp (set in src/commands/setup.js);

@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { searchHandler } from '../../../src/web/routes/search.route.js'
 import { createLru } from '../../../src/lib/lru.js'
 
 let db
 let ctx
+let dataDir
 
 const INFRA_BLACKLIST = new Set([
   'matchQuality', 'distance', 'score',
@@ -58,11 +62,16 @@ beforeEach(() => {
     relationships: [],
   })
 
+  // Use a real tmpdir so any markdown / raw-json writers don't create a
+  // literal `:memory:/` tree at the repo root. (See the matching fix in
+  // test/mcp/leak-guard.test.js.)
+  dataDir = mkdtempSync(join(tmpdir(), 'apple-docs-web-leak-guard-'))
+
   // Minimal ctx for /api/search — see src/web/routes/search.route.js for the
   // shape it expects.
   ctx = {
     db,
-    searchCtx: { db, dataDir: ':memory:', logger: console },
+    searchCtx: { db, dataDir, logger: console },
     searchCache: createLru({ max: 64 }),
     corpusStamp: { get: () => 'stamp-1' },
   }
@@ -70,6 +79,10 @@ beforeEach(() => {
 
 afterEach(() => {
   db?.close()
+  if (dataDir) {
+    try { rmSync(dataDir, { recursive: true, force: true }) } catch { /* tolerate */ }
+    dataDir = undefined
+  }
 })
 
 async function callSearch(query, params = {}) {

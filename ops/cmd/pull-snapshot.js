@@ -155,7 +155,18 @@ export default async function runPullSnapshot(ctx = {}) {
     logger.warn('smoke test reported failures — investigate before declaring success')
   }
 
-  // 9. Stamp applied-snapshot.
+  // 9. Stamp applied-snapshot. `release.tagName` is GitHub-controlled
+  // and already conforms to the project's tag scheme, but we enforce a
+  // strict allowlist before writing it to disk so a future relaxation
+  // of the GitHub Releases API (or a hostile fork) can't smuggle
+  // newlines / shell metacharacters / path traversal into the
+  // applied-snapshot stamp file. CodeQL `js/http-to-file-access` is
+  // satisfied by this validator: the file only ever holds a bounded,
+  // pattern-matched ASCII tag name.
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(release.tagName)) {
+    logger.error(`refusing to stamp suspect tag name: ${JSON.stringify(release.tagName)}`)
+    return 1
+  }
   fs.mkdirp(dirname(appliedFile))
   fs.writeFile(appliedFile, `${release.tagName}\n`)
   logger.say(`stamped applied-snapshot=${release.tagName}`)

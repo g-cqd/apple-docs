@@ -20,7 +20,6 @@ import {
   normalizeBackground,
   normalizeColor,
   sanitizeFileName,
-  tempSuffix,
 } from '../apple-assets-helpers.js'
 import {
   getPrerenderedSymbolPath,
@@ -178,7 +177,11 @@ export async function renderSfSymbol(opts, ctx) {
 }
 
 async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
-  const scriptPath = join(tmpdir(), `apple-docs-render-symbol-${process.pid}-${tempSuffix()}.swift`)
+  // mkdtemp the staging dir so the Swift script path is unpredictable
+  // and the dir is mode 0700 — closes the symlink-race window CodeQL's
+  // js/insecure-temporary-file rule flags on shared hosts.
+  const stagingDir = await mkdtemp(join(tmpdir(), 'apple-docs-render-symbol-'))
+  const scriptPath = join(stagingDir, 'render-symbol.swift')
   await Bun.write(scriptPath, SYMBOL_PNG_SCRIPT)
   try {
     const { stdout, stderr, exitCode } = await spawnWithDeadline(
@@ -188,7 +191,7 @@ async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', sca
     if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
     return stdout
   } finally {
-    await rm(scriptPath, { force: true }).catch(() => {})
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => {})
   }
 }
 
@@ -198,7 +201,10 @@ async function renderSymbolSvgCurves({ name, scope, pointSize, weight = 'regular
 }
 
 async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale = 'medium' }) {
-  const scriptPath = join(tmpdir(), `apple-docs-symbol-pdf-${process.pid}-${tempSuffix()}.swift`)
+  // mkdtemp staging so the Swift PDF-driver script gets an
+  // unpredictable, mode-0700 home (see renderSymbolPng for rationale).
+  const stagingDir = await mkdtemp(join(tmpdir(), 'apple-docs-symbol-pdf-'))
+  const scriptPath = join(stagingDir, 'symbol-pdf.swift')
   await Bun.write(scriptPath, SYMBOL_PDF_SCRIPT)
   try {
     const { stdout, stderr, exitCode } = await spawnWithDeadline(
@@ -208,7 +214,7 @@ async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale =
     if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
     return new Uint8Array(stdout)
   } finally {
-    await rm(scriptPath, { force: true }).catch(() => {})
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => {})
   }
 }
 

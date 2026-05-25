@@ -22,7 +22,7 @@
  */
 
 import { existsSync, readFileSync, mkdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { CryptoHasher } from 'bun'
 import { loadEnv } from '../lib/env.js'
 import { createLogger } from '../lib/logger.js'

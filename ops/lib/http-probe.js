@@ -58,6 +58,15 @@ export async function probe(url, opts = {}) {
   const startedAt = clock()
 
   try {
+    // CodeQL flags `headers` / `body` here as `js/file-access-to-http`
+    // because the values originate (in some callers) from `ops/.env`,
+    // which is read off disk. This is intentional and the only way to
+    // call the Cloudflare / GitHub APIs: the operator's `.env` is the
+    // canonical credential store for the deployment, and the request
+    // target is constrained to whitelisted hostnames by the callers
+    // (cf-purge → api.cloudflare.com, pull-snapshot → api.github.com).
+    // The file is mode-0600 + owner-checked (`ops/lib/env.js`), so a
+    // process that can read it already holds the token by other means.
     const res = await fetcher(url, {
       method,
       headers: opts.headers,

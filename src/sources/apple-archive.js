@@ -104,12 +104,15 @@ function keyToFallbackUrl(key) {
  */
 function decodeHtmlEntities(value) {
   if (typeof value !== 'string') return null
+  // Decode &amp; LAST so already-double-encoded entities (e.g. `&amp;lt;`)
+  // round-trip to the intended literal (`&lt;`) instead of being
+  // collapsed to `<`. Resolves CodeQL `js/double-escaping`.
   return value
     .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&')
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
 }
 
 function getArchiveFormat(relativeUrl) {

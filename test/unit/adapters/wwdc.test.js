@@ -3,6 +3,35 @@ import { WwdcAdapter, parseWwdcKey } from '../../../src/sources/wwdc.js'
 
 const originalFetch = globalThis.fetch
 
+/**
+ * Host-exact URL match. Replaces `url.includes('host.example.com')`
+ * in fetch-mock branches so CodeQL's
+ * `js/incomplete-url-substring-sanitization` is satisfied — a URL
+ * carrying the host as a path or query parameter would otherwise
+ * trigger the wrong branch.
+ */
+function urlHasHost(url, host) {
+  try {
+    return new URL(url).host === host
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Match an absolute URL prefix (host + path prefix) exactly. Used in
+ * fetch-mock branches that need to dispatch on full path scopes (e.g.
+ * `developer.apple.com/videos/wwdc`).
+ */
+function urlMatchesPrefix(url, host, pathPrefix) {
+  try {
+    const parsed = new URL(url)
+    return parsed.host === host && parsed.pathname.startsWith(pathPrefix)
+  } catch {
+    return false
+  }
+}
+
 afterEach(() => {
   globalThis.fetch = originalFetch
 })
@@ -72,11 +101,11 @@ describe('WwdcAdapter.discover', () => {
 
     globalThis.fetch = async (url) => {
       // Apple year-index HTML — return empty page for all years
-      if (url.includes('developer.apple.com/videos/wwdc')) {
+      if (urlMatchesPrefix(url, 'developer.apple.com', '/videos/wwdc')) {
         return new Response('<html><body></body></html>', { status: 200 })
       }
       // GitHub tree — empty
-      if (url.includes('api.github.com')) {
+      if (urlHasHost(url, 'api.github.com')) {
         return new Response(JSON.stringify({ tree: [] }), { status: 200 })
       }
       return new Response('', { status: 404 })
@@ -106,18 +135,18 @@ describe('WwdcAdapter.discover', () => {
 
     globalThis.fetch = async (url) => {
       // Apple year-index HTML for 2024 returns one session link
-      if (url.includes('/videos/wwdc2024/')) {
+      if (new URL(url).pathname.startsWith('/videos/wwdc2024/')) {
         return new Response(
           '<html><body><a href="/videos/play/wwdc2024/10001/">Session</a></body></html>',
           { status: 200 },
         )
       }
       // All other Apple year indexes return empty HTML
-      if (url.includes('developer.apple.com/videos/wwdc')) {
+      if (urlMatchesPrefix(url, 'developer.apple.com', '/videos/wwdc')) {
         return new Response('<html><body></body></html>', { status: 200 })
       }
       // GitHub tree returns one ASCIIwwdc file
-      if (url.includes('api.github.com')) {
+      if (urlHasHost(url, 'api.github.com')) {
         return new Response(
           JSON.stringify({
             tree: [
@@ -153,10 +182,10 @@ describe('WwdcAdapter.discover', () => {
 
     globalThis.fetch = async (url) => {
       // Simulate Apple returning 404 for all years
-      if (url.includes('developer.apple.com/videos/wwdc')) {
+      if (urlMatchesPrefix(url, 'developer.apple.com', '/videos/wwdc')) {
         return new Response('Not Found', { status: 404 })
       }
-      if (url.includes('api.github.com')) {
+      if (urlHasHost(url, 'api.github.com')) {
         return new Response(JSON.stringify({ tree: [] }), { status: 200 })
       }
       return new Response('', { status: 404 })
@@ -174,10 +203,10 @@ describe('WwdcAdapter.discover', () => {
     let root = null
 
     globalThis.fetch = async (url) => {
-      if (url.includes('developer.apple.com/videos/wwdc')) {
+      if (urlMatchesPrefix(url, 'developer.apple.com', '/videos/wwdc')) {
         return new Response('<html><body></body></html>', { status: 200 })
       }
-      if (url.includes('api.github.com')) {
+      if (urlHasHost(url, 'api.github.com')) {
         return new Response(JSON.stringify({ tree: [] }), { status: 200 })
       }
       return new Response('', { status: 404 })

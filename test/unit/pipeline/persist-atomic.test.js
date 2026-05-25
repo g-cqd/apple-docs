@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { persistFetchedDocPage } from '../../../src/pipeline/persist.js'
@@ -11,7 +11,7 @@ let db
 let tmpDir
 
 beforeEach(() => {
-  tmpDir = join(tmpdir(), `apple-docs-persist-atomic-${crypto.randomUUID()}`)
+  tmpDir = mkdtempSync(join(tmpdir(), 'apple-docs-persist-atomic-'))
   mkdirSync(join(tmpDir, 'raw-json'), { recursive: true })
   mkdirSync(join(tmpDir, 'markdown'), { recursive: true })
   db = new DocsDatabase(':memory:')

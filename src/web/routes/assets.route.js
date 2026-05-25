@@ -4,14 +4,24 @@ import { MIME_TYPES } from '../responses.js'
 import { minifyJs } from '../asset-bundler.js'
 
 async function getBundledJs(ctx, bundleName, entryRel) {
-  // Returns either the resolved bundle text or the in-flight Promise of a
-  // build already in progress. Storing the Promise (not just the resolved
-  // text) collapses parallel requests for the same bundle onto one
-  // Bun.build call — without this, two concurrent /assets/core.js hits
-  // before the first cache write would each run a build, doubling
-  // startup cost and racing on the Map.set.
+  // `bundleCache` stores either the resolved bundle text (string) OR the
+  // in-flight Promise<string> of a build currently running. Storing the
+  // Promise (not just the resolved text) collapses parallel requests for
+  // the same bundle onto one Bun.build call — without this, two concurrent
+  // /assets/core.js hits before the first cache write would each run a
+  // build, doubling startup cost and racing on the Map.set.
+  //
+  // Returning the Promise from this async function is intentional: async
+  // functions automatically unwrap a returned Promise, so the caller's
+  // `await getBundledJs(...)` resolves to the bundle text either way. The
+  // identity comparison `=== pending` in the catch branch below is also
+  // intentional — we only want to evict the cache entry if it's still the
+  // same Promise we put in (a concurrent caller might have already
+  // replaced it). CodeQL's `js/missing-await` alert on this pattern is a
+  // false positive: there's nothing to await on a Promise we are
+  // explicitly comparing for identity.
   const cached = ctx.bundleCache.get(bundleName)
-  if (cached) return cached
+  if (cached !== undefined) return cached
   const pending = minifyJs(join(ctx.srcWebDir, 'assets', entryRel))
   ctx.bundleCache.set(bundleName, pending)
   try {

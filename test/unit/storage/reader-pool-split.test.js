@@ -22,7 +22,6 @@ class StubWorkerBase extends EventEmitter {
     super()
     this._terminated = false
     this.constructor.instances.push(this)
-    State.outbox.push  // anchor reference so the linter is happy
     // Emit ready on the next microtask so callers can `await ready`.
     queueMicrotask(() => this.emit('message', { type: 'ready' }))
   }

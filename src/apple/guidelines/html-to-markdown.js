@@ -182,13 +182,17 @@ export async function htmlToMarkdown(html) {
   await rw.transform(new Response(wrapped)).text()
 
   // Clean up the markdown
+  // Decode `&amp;` last so already-double-encoded sequences like
+  // `&amp;lt;` round-trip to the intended literal (`&lt;`) instead of
+  // being mistakenly collapsed to `<`. Resolves CodeQL
+  // `js/double-escaping`.
   const md = parts.join('')
     .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
     .replace(/\u00a0/g, ' ')       // non-breaking space
     .replace(/\t/g, ' ')           // tabs
     .replace(/^[ \t]+/gm, '')      // leading whitespace on each line (HTML indentation)

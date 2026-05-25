@@ -61,7 +61,6 @@ function init() {
   }
 
   function ensureSelectOption(select, value) {
-    if (!select || !value) return
     if ([...select.options].some(option => option.value === value)) return
     const opt = document.createElement('option')
     opt.value = value

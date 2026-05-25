@@ -235,20 +235,18 @@ async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH,
     CORE_GLYPHS_LIB_INTERFACE,
   } = await import('../swift/symbol-codepoint-worker.js')
   const { tmpdir } = await import('node:os')
-  const { rm, mkdir, symlink } = await import('node:fs/promises')
+  const { mkdtemp, rm, mkdir, symlink } = await import('node:fs/promises')
 
   const paths = pathsForApp(appPath)
 
-  // Stage the worker script + handcrafted Swift modules in one temp
-  // dir. The `.swiftinterface` files let `swiftc` accept `import
-  // SFSymbolsShared` / `import CoreGlyphsLib` against frameworks that
-  // ship without a `.swiftmodule`. The symlinked `.framework` shells
-  // satisfy `-framework` at link/load time.
-  const stageDir = join(
-    tmpdir(),
-    `apple-docs-codepoint-worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}`,
-  )
-  await mkdir(stageDir, { recursive: true })
+  // Stage the worker script + handcrafted Swift modules in one
+  // mkdtemp-allocated dir. The `.swiftinterface` files let `swiftc`
+  // accept `import SFSymbolsShared` / `import CoreGlyphsLib` against
+  // frameworks that ship without a `.swiftmodule`. The symlinked
+  // `.framework` shells satisfy `-framework` at link/load time. The
+  // kernel-randomised mkdtemp suffix closes the symlink-race window
+  // that the previous `${pid}-${Math.random()}` path left open.
+  const stageDir = await mkdtemp(join(tmpdir(), 'apple-docs-codepoint-worker-'))
 
   const sharedModuleDir = join(stageDir, 'SFSymbolsShared.swiftmodule')
   const glyphsModuleDir = join(stageDir, 'CoreGlyphsLib.swiftmodule')

@@ -3,13 +3,22 @@
  * and apple-symbols modules.
  */
 
+import { randomBytes } from 'node:crypto'
+
 /**
  * Per-call random suffix for Swift temp script paths. PID alone is
- * predictable on a shared host — appending randomness rules out the
- * symlink-race-then-clobber attack surface.
+ * predictable on a shared host — appending crypto-strong randomness
+ * rules out the symlink-race-then-clobber attack surface. Returns
+ * 16 hex chars (64 bits of entropy), enough that birthday collisions
+ * across the lifetime of any single process are negligible.
+ *
+ * Crypto-strong is intentional over `Math.random()`: a shared host
+ * adversary observing the same Math.random PRNG could narrow the
+ * window between path construction and `Bun.spawn()` resolving the
+ * script file. `randomBytes` is seeded from the OS CSPRNG.
  */
 export function tempSuffix() {
-  return Math.random().toString(36).slice(2, 10)
+  return randomBytes(8).toString('hex')
 }
 
 export function sanitizeFileName(value) {

@@ -11,8 +11,8 @@
  * caller decides whether that's an error or just a warning).
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { dirname, basename, join } from 'node:path'
 
 const PLACEHOLDER_RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g
 
@@ -99,5 +99,29 @@ export function renderTemplate(templatePath, outputPath, env, opts = {}) {
 }
 
 function defaultRead(p) { return readFileSync(p, 'utf8') }
-function defaultWrite(p, content) { writeFileSync(p, content) }
+
+/**
+ * Atomic write with O_EXCL on the staging file so a hostile symlink
+ * cannot redirect the write to an attacker-controlled path. The
+ * staging file is created in the same directory as the target so the
+ * rename is atomic (same filesystem, POSIX guarantee).
+ *
+ * Resolves CodeQL `js/insecure-temporary-file` on this writer by
+ * removing the writeFileSync-with-overwrite pattern in favor of
+ * create-exclusive + rename.
+ */
+function defaultWrite(p, content) {
+  const dir = dirname(p)
+  const staging = join(dir, `.${basename(p)}.${process.pid}.${Date.now()}.tmp`)
+  try {
+    writeFileSync(staging, content, { flag: 'wx', mode: 0o644 })
+    renameSync(staging, p)
+  } catch (err) {
+    if (existsSync(staging)) {
+      try { unlinkSync(staging) } catch { /* tolerate */ }
+    }
+    throw err
+  }
+}
+
 function defaultEnsureDir(p) { if (!existsSync(p)) mkdirSync(p, { recursive: true }) }

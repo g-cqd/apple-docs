@@ -15,8 +15,8 @@
  *     --dry-run   print what would render but don't write
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { loadEnv } from '../lib/env.js'
 import { createLogger } from '../lib/logger.js'
 import { ALLOWED_VARS, renderTemplateString } from '../lib/render-template.js'
@@ -138,10 +138,24 @@ function defaultFs() {
     tryReadFile: (p) => {
       try { return readFileSync(p, 'utf8') } catch { return null }
     },
+    // Atomic write: stage the content in a sibling temp file with O_EXCL
+    // so a hostile symlink at the target can't redirect the write, then
+    // rename into place. Same pattern as ops/lib/render-template.js's
+    // defaultWrite — mirrored here because render-all wires its own fs
+    // shim instead of calling renderTemplate's default deps.
     write: (p, content) => {
       const dir = dirname(p)
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-      writeFileSync(p, content)
+      const staging = join(dir, `.${basename(p)}.${process.pid}.${Date.now()}.tmp`)
+      try {
+        writeFileSync(staging, content, { flag: 'wx', mode: 0o644 })
+        renameSync(staging, p)
+      } catch (err) {
+        if (existsSync(staging)) {
+          try { unlinkSync(staging) } catch { /* tolerate */ }
+        }
+        throw err
+      }
     },
   }
 }

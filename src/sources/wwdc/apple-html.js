@@ -125,10 +125,14 @@ function extractChaptersFromHtml(html) {
 }
 
 export function decodeHtmlEntities(value) {
+  // Decode &amp; LAST so an input like `&amp;lt;` (a literal `&lt;`
+  // string that was further escaped) round-trips correctly. Otherwise
+  // we'd produce `<` instead of `&lt;`. Resolves CodeQL
+  // `js/double-escaping`.
   return String(value ?? '')
     .replace(/&gt;/g, '>')
     .replace(/&lt;/g, '<')
-    .replace(/&amp;/g, '&')
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
 }

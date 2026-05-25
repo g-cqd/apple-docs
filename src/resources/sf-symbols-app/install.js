@@ -215,10 +215,14 @@ export async function ensureSfSymbolsApp(opts) {
   const appPath = join(versionedDir, 'SF Symbols.app')
   await mkdir(versionedDir, { recursive: true })
 
-  // Download + mount + copy. The .dmg is ~500 MB; download to a temp
-  // file so a partial network failure doesn't poison the cache, then
-  // mount it read-only in an ephemeral mountpoint.
-  const dmgPath = join(versionedDir, `SF-Symbols-${version}.dmg.partial`)
+  // Download + mount + copy. The .dmg is ~500 MB; download to a
+  // unique staging path under the versioned cache dir so a partial
+  // network failure doesn't poison the cache, then mount it read-only
+  // in an ephemeral mountpoint. mkdtemp + a random suffix make the
+  // staging filename unpredictable, closing the symlink-race window
+  // CodeQL flags on predictable-name temp files.
+  const dmgStagingDir = await mkdtemp(join(versionedDir, '.download-'))
+  const dmgPath = join(dmgStagingDir, `SF-Symbols-${version}.dmg.partial`)
   logger?.info?.(`Downloading SF Symbols.app ${version} from ${latest.url}`)
   await downloadFile(latest.url, dmgPath, { fetcher, logger })
 
@@ -244,7 +248,7 @@ export async function ensureSfSymbolsApp(opts) {
     }
   } finally {
     await rm(mountPoint, { recursive: true, force: true }).catch(() => {})
-    await rm(dmgPath, { force: true }).catch(() => {})
+    await rm(dmgStagingDir, { recursive: true, force: true }).catch(() => {})
   }
 
   const installedVersion = (await readInstalledVersion(appPath))?.short ?? version

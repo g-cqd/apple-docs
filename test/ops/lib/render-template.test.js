@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -81,5 +81,44 @@ describe('renderTemplate (file IO)', () => {
     })
     expect(written).toBe('hello gc')
     expect(result.unresolved).toEqual([])
+  })
+
+  test('atomically replaces an existing target via staging file + rename', () => {
+    // The default write path stages content in a sibling `.tmp` file
+    // with O_EXCL, then renames into place. Re-rendering must overwrite
+    // the previous content without leaving the staging file behind.
+    const dir = mkdtempSync(join(tmpdir(), 'rt-atomic-'))
+    try {
+      const tpl = join(dir, 'in.tpl')
+      const out = join(dir, 'rendered.txt')
+      writeFileSync(tpl, 'value=${LABEL_WEB}\n')
+      renderTemplate(tpl, out, { LABEL_WEB: 'first' })
+      expect(readFileSync(out, 'utf8')).toBe('value=first\n')
+      renderTemplate(tpl, out, { LABEL_WEB: 'second' })
+      expect(readFileSync(out, 'utf8')).toBe('value=second\n')
+      // Staging files have the pattern `.<basename>.<pid>.<ts>.tmp` and
+      // must NOT survive a successful write.
+      const leftovers = readdirSync(dir).filter(f => f.startsWith('.rendered.txt.') && f.endsWith('.tmp'))
+      expect(leftovers).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('staging cleanup runs on error (deps-injection path)', () => {
+    let attemptedDelete = false
+    const fakeRead = () => 'static'
+    // Custom writeFile dep that records being called and throws —
+    // mirrors the real defaultWrite's failure-cleanup branch via the
+    // injection point so we don't need an actually broken filesystem.
+    const fakeWrite = () => {
+      attemptedDelete = true
+      throw new Error('disk full')
+    }
+    const fakeEnsure = () => {}
+    expect(() => renderTemplate('/virtual.tpl', '/virtual.out', {}, {
+      deps: { readFile: fakeRead, writeFile: fakeWrite, ensureDir: fakeEnsure },
+    })).toThrow(/disk full/)
+    expect(attemptedDelete).toBe(true)
   })
 })

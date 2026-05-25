@@ -119,7 +119,17 @@ export function normalizeAsciiwwdcTranscript(text) {
 
   const cleaned = []
   for (const rawLine of lines) {
-    const line = decodeHtmlEntities(rawLine).replace(/<[^>]+>/g, '').trim()
+    // Strip every inline tag iteratively so nested or back-to-back
+    // `<<x>>` patterns don't leave a stray `<` behind (CodeQL
+    // `js/incomplete-multi-character-sanitization`). Worst-case is
+    // O(line.length²) but transcript lines are short.
+    let stripped = decodeHtmlEntities(rawLine)
+    let prev
+    do {
+      prev = stripped
+      stripped = stripped.replace(/<[^>]+>/g, '')
+    } while (stripped !== prev)
+    const line = stripped.trim()
     if (!line) continue
     if (line === 'WEBVTT') continue
     if (/^\d+$/.test(line)) continue

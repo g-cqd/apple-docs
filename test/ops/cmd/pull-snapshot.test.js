@@ -185,4 +185,50 @@ describe('runPullSnapshot', () => {
     expect(code).toBe(1)
     expect(log.lines.some(m => m.startsWith('E:'))).toBe(true)
   })
+
+  test('refuses to stamp a tag name that contains forbidden characters', async () => {
+    // Defensive: GitHub's release tag is normally `snapshot-YYYYMMDD`,
+    // but pull-snapshot validates it against /^[A-Za-z0-9._-]{1,64}$/
+    // before writing to the applied-snapshot file. A hostile tag like
+    // "snapshot-20260513\nrm -rf /" must be rejected, not stamped.
+    const log = captureLogger()
+    const fs = inMemoryFs({})
+    const runner = fakeRunner()
+    const code = await runPullSnapshot({
+      args: [], envLoader: () => ENV, logger: log,
+      deps: {
+        fetcher: makeFetcher(releasePayload('snapshot-20260513\nrm -rf /')),
+        fs,
+        runCmd: runner.fn,
+        runCmdAllowFailure: async () => ({ exitCode: 0 }),
+        bootout: async () => {},
+        bootstrapOrKick: async () => ({}),
+        smokeTest: async () => 0, cfPurge: async () => 0, sleep: async () => {},
+      },
+    })
+    expect(code).toBe(1)
+    expect(fs.files.get('/fake/ops/state/applied-snapshot')).toBeUndefined()
+    expect(log.lines.some(m => m.includes('suspect tag'))).toBe(true)
+  })
+
+  test('refuses an empty tag and an oversized tag', async () => {
+    for (const badTag of ['', 'x'.repeat(65)]) {
+      const log = captureLogger()
+      const fs = inMemoryFs({})
+      const code = await runPullSnapshot({
+        args: [], envLoader: () => ENV, logger: log,
+        deps: {
+          fetcher: makeFetcher(releasePayload(badTag)),
+          fs,
+          runCmd: fakeRunner().fn,
+          runCmdAllowFailure: async () => ({ exitCode: 0 }),
+          bootout: async () => {},
+          bootstrapOrKick: async () => ({}),
+          smokeTest: async () => 0, cfPurge: async () => 0, sleep: async () => {},
+        },
+      })
+      expect(code).toBe(1)
+      expect(fs.files.get('/fake/ops/state/applied-snapshot')).toBeUndefined()
+    }
+  })
 })

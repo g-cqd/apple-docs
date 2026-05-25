@@ -84,13 +84,13 @@ export async function startDevServer(opts, ctx) {
   registry.register('/api/fonts', listFontsHandler)
   registry.register('/api/fonts/text.svg', fontTextSvgHandler)
   // font-subset (lazy pool init on first request).
-  registry.register('/api/fonts/subset', async (request, c, url, match) => {
+  registry.register('/api/fonts/subset', async (request, c) => {
     if (!c.fontSubsetPool) {
       try { await c.getFontSubsetPool() } catch (err) {
         c.logger?.warn?.(`font-subset pool init failed: ${err?.message ?? err}`)
       }
     }
-    return fontSubsetHandler(request, c, url, match)
+    return fontSubsetHandler(request, c)
   })
   registry.register('/api/symbols/index.json', symbolsIndexHandler)
   registry.register('/api/symbols/search', symbolsSearchHandler)

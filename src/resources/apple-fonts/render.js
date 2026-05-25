@@ -8,13 +8,13 @@
  */
 
 import { rm } from 'node:fs/promises'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
 import {
   clampInteger,
   escapeXml,
-  tempSuffix,
 } from '../apple-assets-helpers.js'
 import { isLikelySfnt } from './sfnt.js'
 import { assertFontPathContained } from './safe-font-path.js'
@@ -77,7 +77,12 @@ function renderFontTextSvgFallback({ fontFamily, text, pointSize }) {
 }
 
 async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
-  const scriptPath = join(tmpdir(), `apple-docs-render-font-${process.pid}-${tempSuffix()}.swift`)
+  // Stage the Swift driver in a per-call mkdtemp dir so the script path
+  // is unguessable (kernel-allocated random suffix, mode 0700). Closes
+  // the symlink-race window an `apple-docs-render-font-<pid>-<n>.swift`
+  // path under /tmp would leave open on a shared host.
+  const stagingDir = mkdtempSync(join(tmpdir(), 'apple-docs-render-font-'))
+  const scriptPath = join(stagingDir, 'render-font.swift')
   await Bun.write(scriptPath, FONT_TEXT_SCRIPT)
   try {
     const { stdout, stderr, exitCode } = await spawnWithDeadline(
@@ -87,6 +92,6 @@ async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
     if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
     return new TextDecoder().decode(stdout)
   } finally {
-    await rm(scriptPath, { force: true }).catch(() => {})
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => {})
   }
 }

@@ -13,7 +13,16 @@ import { stableStringify } from '../../storage/files.js'
 
 export function isInvalidFailedPath(path) {
   const renorm = normalizeIdentifier(path)
-  return renorm === null || path.includes('#') || (renorm !== path && renorm !== null)
+  // Three independent rejection reasons:
+  //   - the normalizer rejected the path outright
+  //   - the path embeds a `#` fragment (never resolvable in our corpus)
+  //   - normalizing the path produced something different
+  // The previous form had a redundant `renorm !== null` guard inside
+  // the third clause, which CodeQL flagged as an incompatible-type
+  // comparison (the first clause already handles the null case).
+  if (renorm === null) return true
+  if (path.includes('#')) return true
+  return renorm !== path
 }
 
 /**

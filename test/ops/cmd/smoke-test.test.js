@@ -61,7 +61,12 @@ describe('runSmokeTest', () => {
 
   test('returns 1 when an edge healthz returns 503', async () => {
     const fetcher = (url) => {
-      if (url.includes('https://web.example')) return Promise.resolve(makeResp(503))
+      // Match the edge web origin by host, not by substring, so a URL
+      // carrying "web.example" elsewhere in the path can't accidentally
+      // trigger this branch (CodeQL js/incomplete-url-substring-sanitization).
+      let host
+      try { host = new URL(url).host } catch { host = '' }
+      if (host === 'web.example') return Promise.resolve(makeResp(503))
       return Promise.resolve(makeResp(200))
     }
     const logger = captureLogger()

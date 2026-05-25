@@ -1,6 +1,21 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { PackagesAdapter } from '../../../src/sources/packages.js'
 
+/**
+ * Host-exact URL match. Replaces the substring `.includes('host.example.com')`
+ * pattern that CodeQL flags as `js/incomplete-url-substring-sanitization` —
+ * a malicious URL with that string as a path or query parameter would
+ * otherwise satisfy the substring test even though the host is something
+ * else entirely. `new URL(u).host` decodes to the bare authority.
+ */
+function urlHasHost(url, host) {
+  try {
+    return new URL(url).host === host
+  } catch {
+    return false
+  }
+}
+
 const originalFetch = globalThis.fetch
 const originalToken = process.env.GITHUB_TOKEN
 const originalGhToken = process.env.GH_TOKEN
@@ -358,8 +373,8 @@ describe('PackagesAdapter', () => {
     expect(etag.readmeFilename).toBe('README.md')
     expect(etag.branch).toBe('main')
     // No api.github.com / swiftpackageindex.com traffic in official scope.
-    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
-    expect(urlsSeen.some(u => u.includes('swiftpackageindex.com'))).toBe(false)
+    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
+    expect(urlsSeen.some(u => urlHasHost(u, 'swiftpackageindex.com'))).toBe(false)
   })
 
   test('full-catalog fetch without a token falls back to raw README mode', async () => {
@@ -383,7 +398,7 @@ describe('PackagesAdapter', () => {
 
     expect(result.payload.syncScope).toBe('full')
     expect(result.payload.fetchMode).toBe('raw')
-    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
+    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
   })
 
   test('default fetch path uses raw.githubusercontent.com even when a token is set', async () => {
@@ -406,7 +421,7 @@ describe('PackagesAdapter', () => {
     expect(result.payload.fetchMode).toBe('raw')
     // Stars/forks are null because no /repos call is made.
     expect(result.payload.repo.stargazers_count).toBeNull()
-    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
+    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
     const etag = JSON.parse(result.etag)
     expect(etag.source).toBe('raw')
   })
@@ -434,7 +449,14 @@ describe('PackagesAdapter', () => {
     const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
 
     expect(result.payload.fetchMode).toBe('api')
-    expect(urlsSeen.some(u => u.includes('api.github.com/repos/apple/swift-argument-parser'))).toBe(true)
+    expect(urlsSeen.some(u => {
+      try {
+        const parsed = new URL(u)
+        return parsed.host === 'api.github.com' && parsed.pathname === '/repos/apple/swift-argument-parser'
+      } catch {
+        return false
+      }
+    })).toBe(true)
   })
 
   test('APPLE_DOCS_PACKAGES_FETCH=api without a token degrades to raw mode', async () => {
@@ -454,7 +476,7 @@ describe('PackagesAdapter', () => {
     const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
 
     expect(result.payload.fetchMode).toBe('raw')
-    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
+    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
   })
 
   test('APPLE_DOCS_PACKAGES_FETCH=raw overrides any opt-in, even with a token', async () => {
@@ -473,7 +495,7 @@ describe('PackagesAdapter', () => {
     const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
 
     expect(result.payload.fetchMode).toBe('raw')
-    expect(urlsSeen.some(u => u.includes('api.github.com'))).toBe(false)
+    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
   })
 
   test('official-scope fetch falls back through README filename variants', async () => {
@@ -555,7 +577,7 @@ describe('PackagesAdapter', () => {
     expect(result.status).toBe('unchanged')
     expect(calledUrls).toContain('https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md')
     // The raw-scope check never hits api.github.com.
-    expect(calledUrls.some(u => u.includes('api.github.com'))).toBe(false)
+    expect(calledUrls.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
   })
 
   test('check treats legacy etag without source as the GitHub API path', async () => {

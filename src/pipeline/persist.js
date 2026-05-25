@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { rename, unlink } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
 import { extractReferences } from '../apple/extractor.js'
 import { renderPage } from '../apple/renderer.js'
 import { normalize } from '../content/normalize.js'
@@ -208,7 +209,10 @@ function defaultDoccUrl(path) {
 }
 
 function createBackupPath(filePath) {
-  return `${filePath}.bak-${process.pid}-${Math.random().toString(16).slice(2)}`
+  // Crypto-random suffix so the rollback backup can't be pre-guessed
+  // and symlinked by a co-resident process between the rename and the
+  // restore. Mirrors src/lib/atomic-write.js.
+  return `${filePath}.bak-${process.pid}-${randomBytes(8).toString('hex')}`
 }
 
 async function promoteWithBackup(tempPath, filePath) {

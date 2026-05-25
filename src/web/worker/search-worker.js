@@ -14,11 +14,33 @@ let invertedIndex = null
 /** @type {Map<string, Uint32Array> | null} */
 let prefixIndex = null
 
+// Reject base URLs that resolve outside the worker's own origin. Allowed
+// shapes: empty / undefined; a root-relative path (`/…`); an absolute URL
+// whose origin matches `self.location.origin`. Anything else throws.
+// Closes the CSRF surface flagged by CodeQL on this worker's init path.
+function validateBase(rawBase) {
+  if (rawBase == null || rawBase === '') return ''
+  if (typeof rawBase !== 'string') throw new Error('base must be a string')
+  if (rawBase.startsWith('/') && !rawBase.startsWith('//')) return rawBase
+  let parsed
+  try { parsed = new URL(rawBase, self.location.href) }
+  catch { throw new Error(`base is not a valid URL: ${rawBase}`) }
+  if (parsed.origin !== self.location.origin) {
+    throw new Error(`base origin ${parsed.origin} does not match worker origin ${self.location.origin}`)
+  }
+  return /^https?:/.test(parsed.protocol) ? rawBase : ''
+}
+
 self.addEventListener('message', async (event) => {
   const { type, query, limit, base, seqId } = event.data
 
   if (type === 'init') {
-    if (base) baseUrl = base
+    try {
+      baseUrl = validateBase(base)
+    } catch (e) {
+      self.postMessage({ type: 'error', message: e.message })
+      return
+    }
     try {
       // Try loading the manifest first for content-hashed filenames
       let titleUrl = `${baseUrl}/data/search/title-index.json`

@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createServer } from '../../src/mcp/server.js'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { createLogger } from '../../src/lib/logger.js'
 
-let db, server, client
+let db, server, client, dataDir
 
 // Allowlist per tool — these are the ONLY top-level keys that may appear
 // in a public-mode response. Any extra key is treated as a leak.
@@ -120,8 +123,13 @@ beforeEach(async () => {
     ],
   })
 
+  // Use a real tmpdir for dataDir so the markdown/raw-json persistence
+  // paths land somewhere safe. The previous literal `':memory:'` made
+  // those helpers create a `:memory:/markdown/...` tree at the repo
+  // root (CodeQL didn't flag it; the counter-audit caught it).
+  dataDir = mkdtempSync(join(tmpdir(), 'apple-docs-leak-guard-'))
   const logger = createLogger('error')
-  const ctx = { db, dataDir: ':memory:', logger }
+  const ctx = { db, dataDir, logger }
   server = createServer(ctx)
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -133,6 +141,10 @@ afterEach(async () => {
   await client?.close()
   await server?.close()
   db?.close()
+  if (dataDir) {
+    try { rmSync(dataDir, { recursive: true, force: true }) } catch { /* tolerate */ }
+    dataDir = undefined
+  }
 })
 
 async function callTool(tool, args = {}) {

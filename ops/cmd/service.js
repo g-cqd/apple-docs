@@ -25,7 +25,6 @@
  * intentionally taking down.
  */
 
-import { join } from 'node:path'
 import { loadEnv } from '../lib/env.js'
 import { createLogger } from '../lib/logger.js'
 import {

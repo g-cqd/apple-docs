@@ -105,14 +105,28 @@ export function htmlToMarkdown(html, opts = {}) {
     return `[${text}](${resolved})`
   })
 
-  s = s.replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_m, _t, inner) => {
-    const text = decodeEntities(stripInlineTags(inner))
-    return text ? `**${text}**` : ''
-  })
-  s = s.replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_m, _t, inner) => {
-    const text = decodeEntities(stripInlineTags(inner))
-    return text ? `*${text}*` : ''
-  })
+  // Bold / italic: iterate the replace until idempotent so nested
+  // `<strong><strong>` / `<em><em>` patterns (rare in Apple's HTML but
+  // present in user-quoted blocks) all flatten to the markdown form
+  // rather than leaving a half-stripped inner pair. Resolves CodeQL
+  // `js/incomplete-multi-character-sanitization`. The corpus's HTML
+  // fragments are bounded, so the iteration cost is negligible.
+  let prevBold
+  do {
+    prevBold = s
+    s = s.replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_m, _t, inner) => {
+      const text = decodeEntities(stripInlineTags(inner))
+      return text ? `**${text}**` : ''
+    })
+  } while (s !== prevBold)
+  let prevItalic
+  do {
+    prevItalic = s
+    s = s.replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_m, _t, inner) => {
+      const text = decodeEntities(stripInlineTags(inner))
+      return text ? `*${text}*` : ''
+    })
+  } while (s !== prevItalic)
 
   // Lists — process before <dl> so list items nested inside <dd> survive.
   s = s.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_m, inner) => listToMarkdown(inner, false))
@@ -189,7 +203,20 @@ export function htmlToMarkdown(html, opts = {}) {
 }
 
 function stripInlineTags(s) {
-  return s.replace(/<[^>]+>/g, '')
+  // Iterate until idempotent so a pathological input like `<<x>>` (where
+  // the first replace leaves `<>` which is itself a degenerate tag) is
+  // fully sanitised. Resolves CodeQL
+  // `js/incomplete-multi-character-sanitization` — the previous
+  // single-pass regex left "<" prefixes intact when the surrounding
+  // structure happened to start with a stray `<`. Loop is bounded by
+  // input length so worst-case is O(n²) but the inputs here are
+  // already-parsed HTML fragments < a few KB.
+  let prev
+  do {
+    prev = s
+    s = s.replace(/<[^>]+>/g, '')
+  } while (s !== prev)
+  return s
 }
 
 function listToMarkdown(inner, ordered) {

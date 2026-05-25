@@ -212,17 +212,16 @@ export function findPage(objects) {
 }
 
 export function resolveDict(value, objects) {
-  if (!value) return null
-  if (typeof value === 'object' && value !== null && 'ref' in value) {
+  if (value == null || typeof value !== 'object') return null
+  if ('ref' in value) {
     return objects.get(value.ref)?.dict ?? null
   }
-  if (typeof value === 'object') return value
-  return null
+  return value
 }
 
 export function resolveStreamObject(value, objects) {
-  if (!value) return null
-  if (typeof value === 'object' && 'ref' in value) {
+  if (value == null || typeof value !== 'object') return null
+  if ('ref' in value) {
     return objects.get(value.ref) ?? null
   }
   return null

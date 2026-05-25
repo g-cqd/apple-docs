@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../../src/storage/database.js'
@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 function setup() {
-  const dir = join(tmpdir(), `apple-docs-links-${crypto.randomUUID()}`)
+  const dir = mkdtempSync(join(tmpdir(), 'apple-docs-links-'))
   mkdirSync(join(dir, 'docs', 'swiftui'), { recursive: true })
   mkdirSync(join(dir, 'docs', 'swift-org'), { recursive: true })
   tempDirs.push(dir)

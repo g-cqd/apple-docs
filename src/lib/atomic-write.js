@@ -1,9 +1,14 @@
 import { copyFile, rename, unlink } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { randomBytes } from 'node:crypto'
 import { ensureDir, stableStringify } from '../storage/files.js'
 
 function createTempPath(filePath) {
-  return `${filePath}.tmp-${process.pid}-${Math.random().toString(16).slice(2)}`
+  // Crypto-random suffix (~64 bits) so the staging name can't be
+  // pre-guessed by a co-resident attacker who watches the
+  // `.tmp-<pid>-…` prefix and races a symlink in before
+  // `Bun.write()` opens it. Hex output keeps the path POSIX-safe.
+  return `${filePath}.tmp-${process.pid}-${randomBytes(8).toString('hex')}`
 }
 
 async function finalizeAtomicWrite(tempPath, filePath) {

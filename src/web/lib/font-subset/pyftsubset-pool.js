@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, unlink } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
@@ -46,9 +46,17 @@ export class PoolUnavailableError extends Error {
 export function createPyftsubsetPool(opts = {}) {
   const size = Math.max(1, Math.min(opts.size ?? autoSize(), 8))
   const python = opts.python ?? DEFAULT_PYTHON
-  const tempDir = opts.tempDir ?? join(tmpdir(), 'apple-docs-font-subset')
   const scriptPath = opts.scriptPath ?? WORKER_SCRIPT
   const logger = opts.logger ?? null
+
+  // Each pool instance owns its own mkdtemp staging dir. The previous
+  // fixed-name `${tmpdir}/apple-docs-font-subset` was a shared-dir
+  // attack surface on multi-user hosts (CodeQL js/insecure-temporary-file
+  // class) — a co-resident user could pre-create the dir with attacker
+  // content and race the subset writer. Lazy create on first use so
+  // pools that never receive a request don't leave litter behind.
+  // `tempDir` opt is preserved for test injection.
+  let tempDir = opts.tempDir ?? null
 
   /** @type {Array<Worker>} */
   const workers = []
@@ -60,7 +68,11 @@ export function createPyftsubsetPool(opts = {}) {
   let degradeReason = null
 
   async function ensureTempDir() {
-    if (!existsSync(tempDir)) await mkdir(tempDir, { recursive: true })
+    if (tempDir == null) {
+      tempDir = await mkdtemp(join(tmpdir(), 'apple-docs-font-subset-'))
+    } else if (!existsSync(tempDir)) {
+      await mkdir(tempDir, { recursive: true })
+    }
   }
 
   function autoSize() {
@@ -268,6 +280,12 @@ export function createPyftsubsetPool(opts = {}) {
       try { w.child.kill() } catch {}
     }
     workers.length = 0
+    // Tear down the mkdtemp staging dir if one was lazily created.
+    // Callers that injected an `opts.tempDir` keep ownership.
+    if (tempDir != null && opts.tempDir == null) {
+      try { await rm(tempDir, { recursive: true, force: true }) } catch { /* tolerate */ }
+      tempDir = null
+    }
   }
 
   function stats() {
