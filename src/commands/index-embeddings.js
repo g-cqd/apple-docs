@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { quantize } from '../search/embedding.js'
 import { getEmbedder } from '../search/embedder.js'
 
@@ -11,10 +12,10 @@ import { getEmbedder } from '../search/embedder.js'
  * fake and never need the optional `@huggingface/transformers` dependency.
  *
  * @param {{ full?: boolean, embedder?: { embed(t: string): Promise<Float32Array> } }} opts
- * @param {{ db, logger, onProgress? }} ctx
+ * @param {{ db, dataDir?, logger, onProgress? }} ctx
  */
 export async function indexEmbeddings(opts, ctx) {
-  const { db, logger } = ctx
+  const { db, dataDir, logger } = ctx
   if (!db.hasTable('documents')) {
     return { status: 'error', message: 'No documents to embed. Run apple-docs sync first.' }
   }
@@ -25,7 +26,8 @@ export async function indexEmbeddings(opts, ctx) {
     )`)
   }
 
-  const embedder = opts?.embedder ?? (await getEmbedder({ logger }))
+  const modelsDir = dataDir ? join(dataDir, 'resources', 'models') : undefined
+  const embedder = opts?.embedder ?? (await getEmbedder({ logger, modelsDir }))
   if (!embedder) {
     return {
       status: 'error',

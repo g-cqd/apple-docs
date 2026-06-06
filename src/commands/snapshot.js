@@ -51,13 +51,14 @@ function deterministicMtimeSeconds(tag) {
 /**
  * Build a snapshot archive from the current corpus.
  *
- * The snapshot ships: the SQLite DB (with document_sections — the
- * authoritative content), every pre-rendered SF Symbol variant, and the
- * extracted Apple fonts. Markdown is NEVER shipped — it is regenerable from
- * document_sections via `storage materialize` (the prebuilt profile does this
- * locally at install). raw JSON rides along only with `--with-raw-json`; by
- * default it ships as a separate opt-in pack (snapshotBuildRawJsonPack), since
- * it is needed only for local re-normalization, not for reading or search.
+ * The snapshot ships, as a single artifact: the SQLite DB (with
+ * document_sections — the authoritative content — plus the raw upstream
+ * payloads zstd-compressed in `document_raw` and the optional semantic
+ * vectors in `document_vectors`), every pre-rendered SF Symbol variant, the
+ * extracted Apple fonts, and the offline query-embedding model. Markdown and
+ * loose raw-json are NEVER shipped — they are regenerable on device via
+ * `storage materialize` (markdown/html from document_sections; raw-json by
+ * decompressing document_raw).
  *
  * Archive pipeline: the snapshot is packaged as `.tar.gz` with `gzip -9`
  * (max DEFLATE). The .7z migration in a5a0244 traded a 2x size win for
@@ -67,7 +68,7 @@ function deterministicMtimeSeconds(tag) {
  * workflow time budget for the same corpus and decompresses with stock
  * `tar -xzf` everywhere, so consumers no longer need p7zip installed.
  *
- * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean, withRawJson?: boolean }} opts
+ * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function snapshotBuild(opts, ctx) {
@@ -208,6 +209,13 @@ export async function snapshotBuild(opts, ctx) {
     const fontsExtractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
     if (existsSync(fontsExtractedDir)) {
       copyTreeFast(fontsExtractedDir, join(buildDir, 'resources', 'fonts', 'extracted'))
+    }
+    // Offline query-embedding model (q8 ONNX, ~23 MB). Ships so a fresh
+    // install runs the semantic tier with no network. Absent → tier dormant
+    // (lexical-only). Static files → deterministic.
+    const modelsDir = join(dataDir, 'resources', 'models')
+    if (existsSync(modelsDir)) {
+      copyTreeFast(modelsDir, join(buildDir, 'resources', 'models'))
     }
 
     ensureDir(outDir)

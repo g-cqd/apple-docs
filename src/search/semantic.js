@@ -7,6 +7,7 @@
  * lexical-only search (zero behavior change).
  */
 
+import { join } from 'node:path'
 import { quantize, hamming, VECTOR_BYTES } from './embedding.js'
 import { getEmbedder } from './embedder.js'
 
@@ -46,9 +47,10 @@ function loadVectors(db) {
  * @returns {Promise<Array<{ documentId: number, distance: number }>>}
  */
 export async function semanticCandidates(ctx, query, topK = 50) {
-  const { db, logger } = ctx
+  const { db, dataDir, logger } = ctx
   if (!isSemanticAvailable(db)) return []
-  const embedder = ctx.embedder ?? (await getEmbedder({ logger }))
+  const modelsDir = dataDir ? join(dataDir, 'resources', 'models') : undefined
+  const embedder = ctx.embedder ?? (await getEmbedder({ logger, modelsDir }))
   if (!embedder) return []
   const store = loadVectors(db)
   if (!store) return []

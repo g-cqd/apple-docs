@@ -60,7 +60,18 @@ jobs:
       # Build all archives (full snapshot + combined symbols + per-family
       # fonts + fonts-all). The orchestrator also emits a unified
       # status.json with sha256 + size + url for every artefact.
+      #
+      # APPLE_DOCS_ALLOW_REMOTE_MODELS=1 lets the embeddings step (run inside
+      # build-snapshot.js) fetch the q8 ONNX query model once into
+      # $APPLE_DOCS_HOME/resources/models so it ships in the snapshot for
+      # offline semantic search. The determinism re-build below intentionally
+      # omits this — the model is already present locally by then, so the
+      # second build reuses it (no re-download) and the archives stay
+      # bit-identical. The optional @huggingface/transformers dependency is
+      # already installed by the frozen `bun install` (it's in bun.lock).
       - name: Build archives
+        env:
+          APPLE_DOCS_ALLOW_REMOTE_MODELS: '1'
         run: |
           bun run cli.js status --json > dist-status-base.json
           bun run scripts/build-snapshot.js \

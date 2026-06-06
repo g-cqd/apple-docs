@@ -74,6 +74,26 @@ if (args.tier && args.tier !== 'full') {
 ensureDir(outDir)
 
 try {
+  // 0. Bake the optional semantic tier into the snapshot. `index embeddings`
+  //    builds the binary doc vectors (document_vectors); with remote model
+  //    downloads enabled (APPLE_DOCS_ALLOW_REMOTE_MODELS=1, set by the CI
+  //    workflow) the q8 ONNX model is fetched into <dataDir>/resources/models
+  //    so it ships for offline query-embedding. Additive — if the optional
+  //    embedder dependency or model is unavailable the tier stays dormant and
+  //    the snapshot is lexical-only, so a failure here never blocks the build.
+  process.env.APPLE_DOCS_MODELS_DIR ??= join(dataDir, 'resources', 'models')
+  try {
+    const { indexEmbeddings } = await import('../src/commands/index-embeddings.js')
+    const res = await indexEmbeddings({}, { db, logger })
+    logger.info(
+      res.status === 'ok'
+        ? `Embeddings: ${res.indexed}/${res.total} indexed`
+        : `Embeddings skipped (lexical-only): ${res.message}`,
+    )
+  } catch (err) {
+    logger.warn(`Embeddings step failed (shipping lexical-only): ${err.message}`)
+  }
+
   // 1. Full snapshot (.7z replaces the old .tar.gz path).
   const snapshot = await snapshotBuild(
     {

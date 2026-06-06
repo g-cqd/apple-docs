@@ -254,6 +254,27 @@ describe('snapshotBuild', () => {
     }
   })
 
+  test('ships the offline query-embedding model when present (F4)', async () => {
+    // Stage a stand-in for the q8 ONNX model tree (resources/models/<modelId>/…)
+    // so the snapshot picks it up for offline semantic search.
+    const modelBase = join(dataDir, 'resources', 'models', 'Xenova', 'all-MiniLM-L6-v2')
+    mkdirSync(join(modelBase, 'onnx'), { recursive: true })
+    writeFileSync(join(modelBase, 'config.json'), '{"model_type":"bert"}')
+    writeFileSync(join(modelBase, 'tokenizer.json'), '{}')
+    writeFileSync(join(modelBase, 'onnx', 'model_quantized.onnx'), 'ONNX-BYTES')
+
+    const result = await snapshotBuild({ out: outDir, tag: 'test-model' }, { db, dataDir, logger })
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-model-'))
+    try {
+      await extractTarGz(result.archivePath, extractDir)
+      const shipped = join(extractDir, 'resources', 'models', 'Xenova', 'all-MiniLM-L6-v2')
+      expect(existsSync(join(shipped, 'config.json'))).toBe(true)
+      expect(existsSync(join(shipped, 'onnx', 'model_quantized.onnx'))).toBe(true)
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
   test('embeds raw payloads (zstd) into the snapshot DB, not as loose files', async () => {
     mkdirSync(join(dataDir, 'raw-json', 'swiftui'), { recursive: true })
     const payload = '{"metadata":{"title":"View"},"k":1}'
