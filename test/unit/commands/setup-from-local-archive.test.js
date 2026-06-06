@@ -1,10 +1,10 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import { snapshotBuild, snapshotBuildRawJsonPack } from '../../../src/commands/snapshot.js'
-import { setup, setupRawJson } from '../../../src/commands/setup.js'
+import { snapshotBuild } from '../../../src/commands/snapshot.js'
+import { setup } from '../../../src/commands/setup.js'
 import { createLogger } from '../../../src/lib/logger.js'
 import { fileCount } from '../../../src/storage/files.js'
 
@@ -188,31 +188,5 @@ describe('setup --archive (local snapshot install)', () => {
       { archive: snapshotResult.archivePath, profile: 'bogus' },
       { db, dataDir, logger },
     )).rejects.toThrow(/Unknown --profile/)
-  })
-
-  test('setup raw-json --archive installs the opt-in raw-json pack', async () => {
-    // Build a raw-json pack from a source corpus that has a raw-json tree.
-    const packSourceDir = mkdtempSync(join(homedir(), '.apple-docs-pack-source-'))
-    const packOutDir = mkdtempSync(join(homedir(), '.apple-docs-pack-out-'))
-    mkdirSync(join(packSourceDir, 'raw-json', 'swiftui'), { recursive: true })
-    writeFileSync(join(packSourceDir, 'raw-json', 'swiftui', 'view.json'), '{"metadata":{"title":"View"}}')
-    try {
-      const pack = await snapshotBuildRawJsonPack({ out: packOutDir, tag: 'pack-test-1' }, { dataDir: packSourceDir, logger })
-      // Target dataDir has no raw-json before the pack install.
-      expect(existsSync(join(dataDir, 'raw-json'))).toBe(false)
-
-      const res = await setupRawJson({ archive: pack.archivePath }, { db, dataDir, logger })
-      expect(res.status).toBe('ok')
-      expect(res.files).toBeGreaterThanOrEqual(1)
-      expect(existsSync(join(dataDir, 'raw-json', 'swiftui', 'view.json'))).toBe(true)
-    } finally {
-      rmSync(packSourceDir, { recursive: true, force: true })
-      rmSync(packOutDir, { recursive: true, force: true })
-    }
-  })
-
-  test('setup raw-json without --archive throws a helpful error', async () => {
-    await expect(setupRawJson({ archive: null }, { db, dataDir, logger }))
-      .rejects.toThrow(/requires --archive/)
   })
 })

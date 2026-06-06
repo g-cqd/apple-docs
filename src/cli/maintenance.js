@@ -71,16 +71,8 @@ async function dispatchSnapshot(subcommand, _positional, flags, ctx) {
       // F.3b: deliberate-partial-build escape hatch. Pass when
       // building on a host that can't run the SF Symbols renderer.
       allowIncompleteSymbols: !!flags['allow-incomplete-symbols'],
-      // Opt in to bundling raw-json into the main snapshot. Default off —
-      // the lean snapshot omits it; ship it as a separate pack instead.
-      withRawJson: !!flags['with-raw-json'],
     }, ctx)
     return { result, formatter: summary('snapshot') }
-  }
-  if (subcommand === 'build-raw-json-pack') {
-    const { snapshotBuildRawJsonPack } = await import('../commands/snapshot.js')
-    const result = await snapshotBuildRawJsonPack({ out: flags.out, tag: flags.tag }, ctx)
-    return { result, formatter: summary('raw-json pack') }
   }
   return exitHelp('snapshot')
 }

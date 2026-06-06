@@ -193,10 +193,6 @@ Options:
                      verifies a sibling .sha256 sidecar when present.
   --json             Output results as JSON
 
-Subcommand:
-  raw-json --archive <path>   Install the opt-in raw-json pack; reading and
-                              search work without it.
-
 Advanced (auth tuning):
   --use-git-auth     Reuse a GitHub token from the local gh CLI or git
                      credential helper to authenticate release downloads.
@@ -334,21 +330,18 @@ Build a release snapshot archive of the corpus.
 
 Subcommands:
   build                Materialize the corpus to a tarball + .sha256 + manifest
-  build-raw-json-pack  Build the opt-in raw-json pack (separate archive)
 
 Build options:
   --out <dir>                  Output directory (default: dist)
   --tag <tag>                  Archive tag (default: snapshot-YYYYMMDD)
-  --with-raw-json              Bundle raw-json into the main snapshot (default off)
 
 Build options (advanced):
   --allow-incomplete-symbols   Skip the SF Symbols matrix gate (for build
                                hosts without the live renderer; expect 404s).
 
-The build runs VACUUM INTO and writes a tarball + .sha256 + manifest under
-<out>/. The lean snapshot ships the DB (document_sections), SF Symbols, and
-fonts — never markdown. raw-json ships only with --with-raw-json or a pack
-(build-raw-json-pack + \`setup raw-json --archive\`).
+The build writes a single tarball + .sha256 + manifest under <out>/: the DB
+(document_sections), SF Symbols, and fonts. Markdown/HTML are regenerated on
+device (\`storage materialize\`).
 
 Examples:
   apple-docs snapshot build --out dist

@@ -390,7 +390,3 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
 
 // resolveArchivePath, stripTarGz, fetchLatestRelease, formatSize live
 // in ./setup/helpers.js so this file fits under the 400-line ceiling.
-// setupRawJson (the opt-in raw-json pack installer) lives in
-// ./setup/raw-json.js for the same reason; re-exported for a stable
-// `commands/setup.js` import surface.
-export { setupRawJson } from './setup/raw-json.js'

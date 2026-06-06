@@ -26,7 +26,6 @@ const BOOLEAN_FLAGS = new Set([
   'incremental',
   'skip-docs',
   'yes',
-  'with-raw-json',
 ])
 
 /**
