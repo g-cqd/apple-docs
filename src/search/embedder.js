@@ -56,6 +56,19 @@ export async function getEmbedder({ logger, modelsDir } = {}) {
         const out = await extract(text ?? '', { pooling: 'mean', normalize: true })
         return out.data
       },
+      // Batch path: one pipeline call for many texts. Mean-pooling respects the
+      // attention mask, so a padded batch yields the same per-text vectors as
+      // single calls — at a fraction of the JS↔WASM overhead. Returns one
+      // Float32Array(384) view per input text.
+      async embedBatch(texts) {
+        if (!texts || texts.length === 0) return []
+        const out = await extract(texts.map(t => t ?? ''), { pooling: 'mean', normalize: true })
+        const dim = out.dims[out.dims.length - 1]
+        const n = out.data.length / dim
+        const result = new Array(n)
+        for (let i = 0; i < n; i++) result[i] = out.data.subarray(i * dim, (i + 1) * dim)
+        return result
+      },
     }
   } catch (err) {
     logger?.debug?.(`semantic embedder unavailable (${err.message}) — lexical-only`)

@@ -47,25 +47,36 @@ export async function indexEmbeddings(opts, ctx) {
   }
 
   const upsert = db.db.query('INSERT OR REPLACE INTO document_vectors(document_id, vec) VALUES ($id, $vec)')
-  const BATCH = 256
+  // Batch the model calls when the embedder supports it (the real ONNX
+  // pipeline does; injected test fakes fall back to per-text embed).
+  const BATCH = 64
   let indexed = 0
   for (let i = 0; i < total; i += BATCH) {
     const batch = rows.slice(i, i + BATCH)
-    const out = []
-    for (const r of batch) out.push({ id: r.id, vec: quantize(await embedder.embed(embedText(r))) })
+    const texts = batch.map(embedText)
+    const vecs = embedder.embedBatch
+      ? await embedder.embedBatch(texts)
+      : await sequentialEmbed(embedder, texts)
     db.db.run('BEGIN')
     try {
-      for (const v of out) upsert.run({ $id: v.id, $vec: v.vec })
+      for (let j = 0; j < batch.length; j++) upsert.run({ $id: batch[j].id, $vec: quantize(vecs[j]) })
       db.db.run('COMMIT')
     } catch (e) {
       db.db.run('ROLLBACK')
       throw e
     }
-    indexed += out.length
+    indexed += batch.length
     ctx.onProgress?.({ done: indexed, total })
   }
   logger?.info?.(`Embedding index built: ${indexed}/${total} documents.`)
   return { status: 'ok', indexed, total }
+}
+
+/** Fallback for embedders without embedBatch (injected test fakes). */
+async function sequentialEmbed(embedder, texts) {
+  const out = new Array(texts.length)
+  for (let i = 0; i < texts.length; i++) out[i] = await embedder.embed(texts[i])
+  return out
 }
 
 /** Bounded embedding input: the symbol/topic surface, not the full body. */
