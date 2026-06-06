@@ -1,17 +1,15 @@
-import { describe, test, expect, mock, beforeEach } from 'bun:test'
+import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test'
+import * as github from '../../../src/lib/github.js'
+import { SwiftBookAdapter, parseBookTopics } from '../../../src/sources/swift-book.js'
 
-// Mock GitHub helpers before importing adapter
-const mockFetchGitHubTree = mock(() => Promise.resolve([]))
-const mockFetchRawGitHub = mock(() => Promise.resolve({ text: '', etag: null, lastModified: null }))
-const mockCheckRawGitHub = mock(() => Promise.resolve({ status: 'unchanged', etag: null }))
-
-mock.module('../../../src/lib/github.js', () => ({
-  fetchGitHubTree: mockFetchGitHubTree,
-  fetchRawGitHub: mockFetchRawGitHub,
-  checkRawGitHub: mockCheckRawGitHub,
-}))
-
-const { SwiftBookAdapter, parseBookTopics } = await import('../../../src/sources/swift-book.js')
+// Spy on the real github.js exports and restore them per test via
+// mock.restore(). This avoids mock.module(), which is process-global and leaks
+// the stub into files that import the real github.js (e.g. lib/github.test.js)
+// under single-process runs — Stryker's `bun test` baseline. --isolate hides
+// the leak; spies don't leak.
+let mockFetchGitHubTree
+let mockFetchRawGitHub
+let mockCheckRawGitHub
 
 const SAMPLE_ROOT_TOC = `# The Swift Programming Language (6.3 beta)
 
@@ -76,11 +74,13 @@ describe('SwiftBookAdapter', () => {
   let adapter
 
   beforeEach(() => {
+    mockFetchGitHubTree = spyOn(github, 'fetchGitHubTree').mockResolvedValue([])
+    mockFetchRawGitHub = spyOn(github, 'fetchRawGitHub').mockResolvedValue({ text: '', etag: null, lastModified: null })
+    mockCheckRawGitHub = spyOn(github, 'checkRawGitHub').mockResolvedValue({ status: 'unchanged', etag: null })
     adapter = new SwiftBookAdapter()
-    mockFetchGitHubTree.mockReset()
-    mockFetchRawGitHub.mockReset()
-    mockCheckRawGitHub.mockReset()
   })
+
+  afterEach(() => { mock.restore() })
 
   test('has correct static properties', () => {
     expect(SwiftBookAdapter.type).toBe('swift-book')

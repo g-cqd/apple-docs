@@ -1,5 +1,15 @@
-import { afterAll, beforeAll, describe, expect, test, mock } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test, mock, spyOn } from 'bun:test'
 import { createMockLogger } from '../../helpers/mocks.js'
+import * as updateMod from '../../../src/commands/update.js'
+import * as consolidateMod from '../../../src/commands/consolidate.js'
+import * as discoverMod from '../../../src/pipeline/discover.js'
+import * as downloadMod from '../../../src/pipeline/download.js'
+import * as convertMod from '../../../src/pipeline/convert.js'
+import * as guidelinesMod from '../../../src/pipeline/sync-guidelines.js'
+import * as indexBodyMod from '../../../src/pipeline/index-body.js'
+import * as appleAssetsMod from '../../../src/resources/apple-assets.js'
+import * as registryMod from '../../../src/sources/registry.js'
+import { sync } from '../../../src/commands/sync.js'
 
 /**
  * Parallelism contract for src/commands/sync.js. We don't exercise the
@@ -106,52 +116,39 @@ beforeAll(() => {
   process.env.APPLE_DOCS_DOWNLOAD_FONTS = '1'
   process.env.APPLE_DOCS_PARALLEL = '2'
 
-  mock.module('../../../src/commands/update.js', () => ({
-    update: updateBarrier.fn,
-  }))
-  mock.module('../../../src/commands/consolidate.js', () => ({
-    consolidate: consolidateBarrier.fn,
-  }))
-  mock.module('../../../src/pipeline/discover.js', () => ({
-    discoverRoots: async () => {},
-    crawlRoot: async () => ({ total: 0, processed: 0 }),
-  }))
-  mock.module('../../../src/pipeline/download.js', () => ({
-    downloadMissing: async () => ({ downloaded: 0 }),
-  }))
-  mock.module('../../../src/pipeline/convert.js', () => ({
-    convertAll: async () => ({ converted: 0, total: 0 }),
-  }))
-  mock.module('../../../src/pipeline/sync-guidelines.js', () => ({
-    applyGuidelinesSnapshot: async () => ({ sections: 0 }),
-  }))
-  mock.module('../../../src/pipeline/index-body.js', () => ({
-    indexBodyFull: bodyIndexBarrier.fn,
-    indexBodyIncremental: bodyIndexBarrier.fn,
-  }))
-  mock.module('../../../src/resources/apple-assets.js', () => ({
-    syncAppleFonts: async (...args) => {
-      const out = await fontsBarrier.fn(...args)
-      return { families: 0, files: 0, ...out }
-    },
-    syncSfSymbols: async ({ scope }) => {
-      const barrier = scope === 'public' ? symbolsPublicBarrier : symbolsPrivateBarrier
-      await barrier.fn({ scope })
-      return 0
-    },
-    stampSfSymbolCodepoints: stampBarrier.fn,
-    prerenderSfSymbols: async (...args) => {
-      const out = await prerenderBarrier.fn(...args)
-      return { rendered: 0, skipped: 0, ...out }
-    },
-  }))
-  mock.module('../../../src/sources/registry.js', () => ({
-    // sync() falls back to getAllAdapters() only when ctx.adapters is
-    // absent — the tests inject their own list, so this stub is just
-    // defensive and matches the registry's getAdapterTypes shape too.
-    getAllAdapters: () => [],
-    getAdapterTypes: () => [],
-  }))
+  // Spy on the orchestrator's downstream primitives (restored in afterAll via
+  // mock.restore()). sync.js calls these through their live module bindings, so
+  // the spies intercept. We avoid mock.module() here: it's process-global and
+  // leaks the stubs into files that import the real modules (consolidate,
+  // update, index-rebuild, storage-compact tests) under single-process runs —
+  // Stryker's `bun test` baseline. --isolate hides that; spies don't leak.
+  spyOn(updateMod, 'update').mockImplementation(updateBarrier.fn)
+  spyOn(consolidateMod, 'consolidate').mockImplementation(consolidateBarrier.fn)
+  spyOn(discoverMod, 'discoverRoots').mockImplementation(async () => {})
+  spyOn(discoverMod, 'crawlRoot').mockImplementation(async () => ({ total: 0, processed: 0 }))
+  spyOn(downloadMod, 'downloadMissing').mockImplementation(async () => ({ downloaded: 0 }))
+  spyOn(convertMod, 'convertAll').mockImplementation(async () => ({ converted: 0, total: 0 }))
+  spyOn(guidelinesMod, 'applyGuidelinesSnapshot').mockImplementation(async () => ({ sections: 0 }))
+  spyOn(indexBodyMod, 'indexBodyFull').mockImplementation(bodyIndexBarrier.fn)
+  spyOn(indexBodyMod, 'indexBodyIncremental').mockImplementation(bodyIndexBarrier.fn)
+  spyOn(appleAssetsMod, 'syncAppleFonts').mockImplementation(async (...args) => {
+    const out = await fontsBarrier.fn(...args)
+    return { families: 0, files: 0, ...out }
+  })
+  spyOn(appleAssetsMod, 'syncSfSymbols').mockImplementation(async ({ scope }) => {
+    const barrier = scope === 'public' ? symbolsPublicBarrier : symbolsPrivateBarrier
+    await barrier.fn({ scope })
+    return 0
+  })
+  spyOn(appleAssetsMod, 'stampSfSymbolCodepoints').mockImplementation(stampBarrier.fn)
+  spyOn(appleAssetsMod, 'prerenderSfSymbols').mockImplementation(async (...args) => {
+    const out = await prerenderBarrier.fn(...args)
+    return { rendered: 0, skipped: 0, ...out }
+  })
+  // sync() falls back to getAllAdapters() only when ctx.adapters is absent —
+  // the test injects its own list, so these stubs are just defensive.
+  spyOn(registryMod, 'getAllAdapters').mockImplementation(() => [])
+  spyOn(registryMod, 'getAdapterTypes').mockImplementation(() => [])
 })
 
 afterAll(() => {
@@ -161,13 +158,13 @@ afterAll(() => {
   else process.env.APPLE_DOCS_DOWNLOAD_FONTS = originalEnv.downloadFonts
   if (originalEnv.parallel === undefined) delete process.env.APPLE_DOCS_PARALLEL
   else process.env.APPLE_DOCS_PARALLEL = originalEnv.parallel
+
+  // Restore the spied-on module functions so they don't leak into other files.
+  mock.restore()
 })
 
 describe('sync orchestrator parallelism', () => {
   test('phases run with the documented concurrency / DAG', async () => {
-    // Dynamic import so the mock.module replacements above are in effect.
-    const { sync } = await import('../../../src/commands/sync.js')
-
     // 11 fake adapters mirror the real source count, all in flat mode so
     // syncFlatSource() short-circuits (zero keys) without contacting the
     // mocked pipeline modules. Concurrency is observable via the
