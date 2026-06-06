@@ -114,13 +114,18 @@ export async function dumpSymbolCodepoints(names, opts) {
     spawn = defaultSpawn,
     wallClockMs = 30_000,
     lineTimeoutMs = 5_000,
+    // The first line carries the worker's cold start (Swift compile + font
+    // load), which can exceed the steady-state line idle on slower machines.
+    startupTimeoutMs = 60_000,
   } = opts
   if (!fontPath) throw new ValidationError('dumpSymbolCodepoints: fontPath is required', { field: 'fontPath' })
   if (!metadataDir) throw new ValidationError('dumpSymbolCodepoints: metadataDir is required', { field: 'metadataDir' })
 
   const map = new Map()
   const proc = await spawn({ fontPath, metadataDir, appPath, logger })
-  const wallClockDeadline = Date.now() + wallClockMs
+  // Generous budget until the worker warms; reset to wallClockMs after the
+  // first line so cold-start time doesn't eat into the per-symbol budget.
+  let wallClockDeadline = Date.now() + startupTimeoutMs
 
   // Drain stderr in the background so worker crashes are visible.
   void (async () => {
@@ -138,7 +143,7 @@ export async function dumpSymbolCodepoints(names, opts) {
   const decoder = new TextDecoder()
   let buffer = ''
 
-  async function readLine() {
+  async function readLine(timeoutMs) {
     while (true) {
       const newlineIdx = buffer.indexOf('\n')
       if (newlineIdx !== -1) {
@@ -149,7 +154,7 @@ export async function dumpSymbolCodepoints(names, opts) {
       // Race the read against a line-level idle timeout.
       const readPromise = reader.read()
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('codepoint worker line timeout')), lineTimeoutMs),
+        setTimeout(() => reject(new Error('codepoint worker line timeout')), timeoutMs),
       )
       const { value, done } = await Promise.race([readPromise, timeoutPromise])
       if (done) {
@@ -167,6 +172,7 @@ export async function dumpSymbolCodepoints(names, opts) {
   let resolved = 0
   let skipped = 0
   let killed = false
+  let firstLine = true
   try {
     for (const name of names) {
       if (Date.now() > wallClockDeadline) {
@@ -179,12 +185,17 @@ export async function dumpSymbolCodepoints(names, opts) {
       await proc.stdin.flush?.()
       let line
       try {
-        line = await readLine()
+        line = await readLine(firstLine ? startupTimeoutMs : lineTimeoutMs)
       } catch (error) {
         logger?.warn?.(`codepoint dump aborted at ${name}: ${error.message}`)
         break
       }
       if (line == null) break
+      if (firstLine) {
+        // Worker is warm — start the steady-state per-symbol wall-clock budget.
+        firstLine = false
+        wallClockDeadline = Date.now() + wallClockMs
+      }
       const parsed = parseLine(line)
       if (!parsed) continue
       if (parsed.codepoint != null) {
