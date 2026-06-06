@@ -137,18 +137,21 @@ afterEach(() => {
 })
 
 describe('setup release smoke', () => {
-  test('snapshot setup preserves raw and markdown payloads + body index works', async () => {
+  test('lean snapshot omits raw-json + markdown; lookup renders from sections; body index works', async () => {
     const fixture = await buildReleaseFixture()
     installReleaseMock(fixture)
     const installDir = trackDir(mkdtempSync(join(tmpdir(), 'apple-docs-install-')))
 
     const setupCtx = openCtx(installDir)
-    const result = await setup({ skipResources: true }, setupCtx)
+    const result = await setup({ skipResources: true, yes: true }, setupCtx)
     expect(result.status).toBe('ok')
     expect(result.tier).toBe('full')
+    expect(result.storageProfile).toBe('balanced')
 
-    expect(existsSync(join(installDir, 'raw-json', 'swiftui', 'view.json'))).toBe(true)
-    expect(existsSync(join(installDir, 'markdown', 'swiftui', 'view.md'))).toBe(true)
+    // Lean snapshot ships neither raw-json nor markdown — both are
+    // unnecessary against document_sections (markdown is regenerable).
+    expect(existsSync(join(installDir, 'raw-json', 'swiftui', 'view.json'))).toBe(false)
+    expect(existsSync(join(installDir, 'markdown', 'swiftui', 'view.md'))).toBe(false)
     setupCtx.db.close()
 
     const liveCtx = openCtx(installDir)
@@ -159,6 +162,9 @@ describe('setup release smoke', () => {
     const fullLookup = await lookup({ path: 'swiftui/view' }, liveCtx)
     expect(fullLookup.content).toContain('# View')
     expect(fullLookup.content).toContain('Use this to compose SwiftUI interfaces.')
+
+    // balanced profile caches the on-demand render to disk after first read.
+    expect(existsSync(join(installDir, 'markdown', 'swiftui', 'view.md'))).toBe(true)
 
     const searchHit = await search({ query: 'View', noDeep: true }, liveCtx)
     expect(searchHit.results[0].path).toBe('swiftui/view')

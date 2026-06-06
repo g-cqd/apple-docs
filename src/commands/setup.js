@@ -15,10 +15,48 @@ import {
   stripTarGz,
   USER_AGENT,
 } from './setup/helpers.js'
+import { setProfile, PROFILE_NAMES, DEFAULT_PROFILE } from '../storage/profiles.js'
+import { promptChoice } from '../cli/prompts.js'
 
 // Snapshot asset filename component — every snapshot ships the full
 // payload, so this is fixed.
 const SNAPSHOT_TIER = 'full'
+
+/**
+ * Resolve the storage profile to apply to a freshly-installed corpus:
+ *   1. An explicit, valid `--profile` wins.
+ *   2. On an interactive TTY (without `--yes`), prompt for the choice.
+ *   3. Otherwise fall back to the default profile.
+ *
+ * setup applies the result explicitly on every install: a snapshot embeds
+ * whatever `storage_profile` the build host had in snapshot_meta, so the
+ * installer must override it rather than silently inherit the build's value.
+ *
+ * @param {{ profile?: string|null, yes?: boolean }} opts
+ * @returns {Promise<string>} a name in PROFILE_NAMES
+ */
+async function resolveStorageProfile({ profile, yes }) {
+  if (profile != null) {
+    if (!PROFILE_NAMES.includes(profile)) {
+      throw new ValidationError(
+        `Unknown --profile "${profile}". Valid profiles: ${PROFILE_NAMES.join(', ')}`,
+        { field: 'profile', value: profile },
+      )
+    }
+    return profile
+  }
+  if (!yes && process.stdin.isTTY) {
+    return promptChoice(
+      'Choose a storage profile for this install:',
+      [
+        { label: 'Render on demand', value: 'balanced', hint: 'smallest disk; markdown rendered per request and cached' },
+        { label: 'Prebuilt', value: 'prebuilt', hint: 'fastest; materializes markdown + HTML now (largest disk)' },
+      ],
+      { defaultIndex: 0 },
+    )
+  }
+  return DEFAULT_PROFILE
+}
 
 // setup: install a pre-built snapshot from GitHub releases (default) or
 // a local --archive path. Both routes converge on
@@ -110,7 +148,7 @@ async function installFromLocalArchive(ctx, opts) {
     }
   }
 
-  const result = await extractAndIndex(ctx, archivePath, { skipResources: opts.skipResources })
+  const result = await extractAndIndex(ctx, archivePath, { skipResources: opts.skipResources, profile: opts.profile, yes: opts.yes })
   return {
     status: 'ok',
     source: 'local-archive',
@@ -119,6 +157,7 @@ async function installFromLocalArchive(ctx, opts) {
     tier: SNAPSHOT_TIER,
     documentCount: result.documentCount,
     schemaVersion: result.schemaVersion,
+    storageProfile: result.storageProfile,
     dataDir,
   }
 }
@@ -208,7 +247,7 @@ async function installFromGithubRelease(ctx, opts) {
     }
     logger.info('Checksum verified.')
 
-    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, tag: release.tag })
+    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, tag: release.tag, profile: opts.profile, yes: opts.yes })
     return {
       status: 'ok',
       source: 'github-release',
@@ -216,6 +255,7 @@ async function installFromGithubRelease(ctx, opts) {
       tier: SNAPSHOT_TIER,
       documentCount: result.documentCount,
       schemaVersion: result.schemaVersion,
+      storageProfile: result.storageProfile,
       dataDir,
     }
   } finally {
@@ -233,7 +273,7 @@ async function installFromGithubRelease(ctx, opts) {
  * Source-specific concerns (network fetch, sidecar discovery, manifest
  * parsing) stay in the calling function.
  */
-async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } = {}) {
+async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, profile = null, yes = false } = {}) {
   const { db, dataDir, logger } = ctx
   const dbPath = join(dataDir, 'apple-docs.db')
   const isSevenZip = archivePath.endsWith('.7z')
@@ -324,11 +364,25 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } =
       }
     }
 
+    // Apply the storage profile explicitly — overrides whatever the snapshot
+    // build host baked into snapshot_meta. Prebuilt materializes the fast
+    // artifacts locally so the shipped (compact) snapshot can still serve a
+    // max-speed instance.
+    const storageProfile = await resolveStorageProfile({ profile, yes })
+    setProfile(verifyDb, storageProfile)
+    if (storageProfile === 'prebuilt') {
+      logger.info('Prebuilt profile — materializing markdown + HTML…')
+      const { storageMaterialize } = await import('./storage.js')
+      const md = await storageMaterialize({ format: 'markdown' }, { db: verifyDb, dataDir, logger })
+      const html = await storageMaterialize({ format: 'html' }, { db: verifyDb, dataDir, logger })
+      logger.info(`Materialized ${md.materialized} markdown + ${html.materialized} HTML documents.`)
+    }
+
     if (tag) verifyDb.setSnapshotMeta('snapshot_tag', tag)
     verifyDb.setSnapshotMeta('snapshot_installed_at', new Date().toISOString())
 
-    logger.info(`Setup complete! ${documentCount} documents ready.`)
-    return { documentCount, schemaVersion }
+    logger.info(`Setup complete! ${documentCount} documents ready (profile: ${storageProfile}).`)
+    return { documentCount, schemaVersion, storageProfile }
   } finally {
     verifyDb.close()
   }
@@ -336,3 +390,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null } =
 
 // resolveArchivePath, stripTarGz, fetchLatestRelease, formatSize live
 // in ./setup/helpers.js so this file fits under the 400-line ceiling.
+// setupRawJson (the opt-in raw-json pack installer) lives in
+// ./setup/raw-json.js for the same reason; re-exported for a stable
+// `commands/setup.js` import surface.
+export { setupRawJson } from './setup/raw-json.js'

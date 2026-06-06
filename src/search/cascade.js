@@ -11,7 +11,7 @@
 import { safeCall } from '../lib/safe-call.js'
 import { runRead, DeadlineError } from '../storage/reader-pool.js'
 import { pickHighSignalToken, pruneStopwords, tokenize } from './relaxation.js'
-import { buildFtsQuery } from './fts-query-builder.js'
+import { buildFtsQuery, sanitizeTrigramQuery } from './fts-query-builder.js'
 
 /** Build the four cascade runners bound to the current query state. */
 export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, hasBody }) {
@@ -46,9 +46,12 @@ export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, 
 
   const runTrigram = async () => {
     if (q.length < 3) return []
+    // Sanitize so dotted/qualified symbol queries (e.g. `A.B.C`) don't make
+    // FTS5 parse `.` as query syntax and error out the whole tier.
+    const trigramQuery = sanitizeTrigramQuery(q)
     return await safeCall(
       async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchTrigram', [q, { ...filterOpts, framework: fw }])),
+        frameworks.map(fw => runRead(ctx, 'searchTrigram', [trigramQuery, { ...filterOpts, framework: fw }])),
       )).flat(),
       { default: [], log: 'warn-once', label: 'search.cascade.trigram' },
     )
@@ -128,7 +131,7 @@ export async function runRelaxationCascade(state) {
     if (signal && signal.length >= 3) {
       const r3 = await safeCall(
         async () => (await Promise.all(
-          frameworks.map(fw => runRead(ctx, 'searchTrigram', [signal, { ...filterOpts, framework: fw }])),
+          frameworks.map(fw => runRead(ctx, 'searchTrigram', [sanitizeTrigramQuery(signal), { ...filterOpts, framework: fw }])),
         )).flat(),
         { default: [], log: 'warn-once', label: 'search.relax.trigramToken' },
       )

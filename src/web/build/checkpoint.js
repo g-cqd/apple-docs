@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { sha256 } from '../../lib/hash.js'
+import { decodeSectionRow } from '../../storage/section-codec.js'
 
 export function batchFetchSections(db, docIds, chunkSize) {
   const result = new Map()
@@ -25,7 +26,7 @@ export function batchFetchSections(db, docIds, chunkSize) {
         arr = []
         result.set(row.document_id, arr)
       }
-      arr.push(row)
+      arr.push(decodeSectionRow(row))
     }
   }
   return result

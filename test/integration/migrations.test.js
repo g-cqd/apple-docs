@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'bun:test'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { Database } from 'bun:sqlite'
+import { SCHEMA_VERSION } from '../../src/storage/migrations/index.js'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -9,7 +10,7 @@ describe('Migration E2E (P8-G)', () => {
   test('fresh DB creates all tables at current schema version', () => {
     const db = new DocsDatabase(':memory:')
     const version = db.getSchemaVersion()
-    expect(version).toBe(20)
+    expect(version).toBe(SCHEMA_VERSION)
 
     const tables = db.db
       .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
@@ -25,9 +26,8 @@ describe('Migration E2E (P8-G)', () => {
     expect(tableNames).toContain('update_log')
     // v15 dropped the legacy refs table.
     expect(tableNames).not.toContain('refs')
-
-    // Added in v4
-    expect(tableNames).toContain('pages_body_fts')
+    // v21 dropped the dead legacy pages FTS subsystem.
+    expect(tableNames).not.toContain('pages_body_fts')
 
     // Added in v5
     expect(tableNames).toContain('framework_synonyms')
@@ -58,11 +58,10 @@ describe('Migration E2E (P8-G)', () => {
       .all()
     const virtualTableNames = virtualTables.map(t => t.name)
 
-    // pages FTS (v1)
-    expect(virtualTableNames).toContain('pages_fts')
-    // trigram and body FTS (v4)
-    expect(virtualTableNames).toContain('titles_trigram')
-    expect(virtualTableNames).toContain('pages_body_fts')
+    // v21 dropped the dead legacy pages FTS (pages_fts / titles_trigram / pages_body_fts)
+    expect(virtualTableNames).not.toContain('pages_fts')
+    expect(virtualTableNames).not.toContain('titles_trigram')
+    expect(virtualTableNames).not.toContain('pages_body_fts')
     // documents FTS (v6)
     expect(virtualTableNames).toContain('documents_fts')
     expect(virtualTableNames).toContain('documents_trigram')
@@ -76,7 +75,7 @@ describe('Migration E2E (P8-G)', () => {
   test('migration is idempotent — schema version stays stable after construction', () => {
     const db = new DocsDatabase(':memory:')
     const v1 = db.getSchemaVersion()
-    expect(v1).toBe(20)
+    expect(v1).toBe(SCHEMA_VERSION)
 
     // Reading version again must return the same value — no spurious increment
     const v2 = db.getSchemaVersion()
@@ -130,7 +129,7 @@ describe('Migration E2E (P8-G)', () => {
       expect(caught).not.toBeNull()
       // The error should mention both the DB version and the supported version
       expect(caught.message).toMatch(/42/)
-      expect(caught.message).toMatch(/20/)
+      expect(caught.message).toContain(String(SCHEMA_VERSION))
     } finally {
       rmSync(tmpDir, { recursive: true, force: true })
     }
@@ -205,23 +204,16 @@ describe('Migration E2E (P8-G)', () => {
     db.close()
   })
 
-  test('FTS tables are functional — pages_fts MATCH works', () => {
+  test('FTS tables are functional — documents_fts MATCH works (trigger sync)', () => {
     const db = new DocsDatabase(':memory:')
 
-    const root = db.upsertRoot('test', 'Test', 'framework', 'test')
-    db.upsertPage({
-      rootId: root.id,
-      path: 'documentation/test/searchable',
-      url: 'u',
-      title: 'SearchableList',
-      role: 'symbol',
-      roleHeading: 'Structure',
-      abstract: 'A searchable list component',
-    })
+    // The documents_ai trigger must mirror the row into documents_fts on insert.
+    db.db.run(
+      "INSERT INTO documents (key, title, abstract_text) VALUES ('documentation/test/searchable', 'SearchableList', 'A searchable list component')",
+    )
 
-    // pages_fts must also be kept in sync by the after-insert trigger
     const results = db.db
-      .query("SELECT path FROM pages_fts WHERE pages_fts MATCH 'searchable'")
+      .query("SELECT key FROM documents_fts WHERE documents_fts MATCH 'searchable'")
       .all()
     expect(results.length).toBeGreaterThanOrEqual(1)
 
@@ -247,7 +239,7 @@ describe('Migration E2E (P8-G)', () => {
       .query("SELECT value FROM schema_meta WHERE key = 'schema_version'")
       .get()
     expect(row).not.toBeNull()
-    expect(row.value).toBe('20')
+    expect(row.value).toBe(String(SCHEMA_VERSION))
 
     db.close()
   })
@@ -272,7 +264,7 @@ describe('Migration E2E (P8-G)', () => {
   test('getSchemaVersion() matches the constant embedded in the source', () => {
     const db = new DocsDatabase(':memory:')
     // The public accessor must agree with what _migrate() wrote
-    expect(db.getSchemaVersion()).toBe(20)
+    expect(db.getSchemaVersion()).toBe(SCHEMA_VERSION)
     db.close()
   })
 })

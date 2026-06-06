@@ -7,7 +7,7 @@ import { sha256 } from '../lib/hash.js'
 import { writeSha256Sidecar } from '../lib/archive-7z.js'
 import { createTarGzArchive } from '../lib/archive-targz.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
-import { copyTreeFast, ensureDir, writeJSON } from '../storage/files.js'
+import { copyTreeFast, ensureDir, fileCount, writeJSON } from '../storage/files.js'
 
 // Operational tables are truncated rather than dropped — DocsDatabase
 // reopens them at first run and crashes if they're missing entirely.
@@ -49,10 +49,13 @@ function deterministicMtimeSeconds(tag) {
 /**
  * Build a snapshot archive from the current corpus.
  *
- * Every snapshot ships the same payload: the full corpus, every
- * pre-rendered SF Symbol variant, raw JSON, markdown, and the extracted
- * Apple fonts. A single shape keeps the install path simple and avoids
- * tier-aware code paths.
+ * The snapshot ships: the SQLite DB (with document_sections — the
+ * authoritative content), every pre-rendered SF Symbol variant, and the
+ * extracted Apple fonts. Markdown is NEVER shipped — it is regenerable from
+ * document_sections via `storage materialize` (the prebuilt profile does this
+ * locally at install). raw JSON rides along only with `--with-raw-json`; by
+ * default it ships as a separate opt-in pack (snapshotBuildRawJsonPack), since
+ * it is needed only for local re-normalization, not for reading or search.
  *
  * Archive pipeline: the snapshot is packaged as `.tar.gz` with `gzip -9`
  * (max DEFLATE). The .7z migration in a5a0244 traded a 2x size win for
@@ -62,7 +65,7 @@ function deterministicMtimeSeconds(tag) {
  * workflow time budget for the same corpus and decompresses with stock
  * `tar -xzf` everywhere, so consumers no longer need p7zip installed.
  *
- * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean }} opts
+ * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean, withRawJson?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function snapshotBuild(opts, ctx) {
@@ -132,6 +135,7 @@ export async function snapshotBuild(opts, ctx) {
       documentCount,
       dbChecksum,
       dbSize,
+      includesRawJson: !!opts.withRawJson,
     }
 
     await writeJSON(join(buildDir, 'manifest.json'), manifest)
@@ -172,19 +176,23 @@ export async function snapshotBuild(opts, ctx) {
     //   apple-docs.db
     //   manifest.json
     //   resources/symbols/...
-    //   raw-json/...
-    //   markdown/...
     //   resources/fonts/extracted/...
+    //   raw-json/...            (only with --with-raw-json)
     if (includeSymbols) {
       copyTreeFast(symbolsDir, join(buildDir, 'resources', 'symbols'))
     }
-    const rawJsonDir = join(dataDir, 'raw-json')
-    if (existsSync(rawJsonDir)) {
-      copyTreeFast(rawJsonDir, join(buildDir, 'raw-json'))
-    }
-    const markdownDir = join(dataDir, 'markdown')
-    if (existsSync(markdownDir)) {
-      copyTreeFast(markdownDir, join(buildDir, 'markdown'))
+    // Markdown is never staged — it is fully regenerable from
+    // document_sections (`storage materialize`), so shipping it would just
+    // bloat the archive and the installed footprint. raw-json rides along
+    // only when explicitly requested; otherwise it ships as a separate
+    // opt-in pack (snapshotBuildRawJsonPack) because reading and search work
+    // entirely from document_sections — raw-json is needed only to
+    // re-normalize locally after a renderer change.
+    if (opts.withRawJson) {
+      const rawJsonDir = join(dataDir, 'raw-json')
+      if (existsSync(rawJsonDir)) {
+        copyTreeFast(rawJsonDir, join(buildDir, 'raw-json'))
+      }
     }
     const fontsExtractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
     if (existsSync(fontsExtractedDir)) {
@@ -243,9 +251,67 @@ export async function snapshotBuild(opts, ctx) {
       archiveName,
       checksumPath,
       manifestPath,
+      includesRawJson: !!opts.withRawJson,
     }
   } finally {
     // Cleanup build directory
+    rmSync(buildDir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Build a standalone raw-json pack: a `.tar.gz` of just the `raw-json/` tree
+ * plus a `.sha256` sidecar and a manifest. This is the opt-in companion to the
+ * default (lean) snapshot — only operators who re-normalize locally need it;
+ * reading and search work from the DB's document_sections without it.
+ *
+ * Members are staged under `raw-json/` so they extract straight into the data
+ * dir, matching what `apple-docs setup raw-json --archive <pack>` expects.
+ *
+ * @param {{ out?: string, tag?: string }} opts
+ * @param {{ dataDir, logger }} ctx
+ */
+export async function snapshotBuildRawJsonPack(opts, ctx) {
+  const { dataDir, logger } = ctx
+  const outDir = opts.out ?? 'dist'
+  const tag = opts.tag ?? `snapshot-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
+  if (!/^[a-z0-9._-]{1,64}$/i.test(tag)) {
+    throw new ValidationError(`Invalid --tag "${tag}": must match [a-z0-9._-]{1,64}`)
+  }
+
+  const rawJsonDir = join(dataDir, 'raw-json')
+  if (!existsSync(rawJsonDir)) {
+    throw new ValidationError('No raw-json/ directory to pack. Run `apple-docs sync` first.')
+  }
+
+  logger.info(`Building raw-json pack (tag: ${tag})...`)
+  const buildDir = mkdtempSync(join(tmpdir(), 'apple-docs-rawjson-'))
+  try {
+    copyTreeFast(rawJsonDir, join(buildDir, 'raw-json'))
+    ensureDir(outDir)
+    const archiveName = `apple-docs-raw-json-${tag}.tar.gz`
+    const archivePath = join(outDir, archiveName)
+    await createTarGzArchive({ sourceDir: buildDir, outputPath: archivePath, name: archiveName, logger })
+
+    const archiveBytes = await Bun.file(archivePath).arrayBuffer()
+    const archiveSize = archiveBytes.byteLength
+    const archiveChecksum = sha256(new Uint8Array(archiveBytes))
+    const { sidecarPath: checksumPath } = await writeSha256Sidecar(archivePath)
+
+    const manifest = {
+      version: tag,
+      kind: 'raw-json-pack',
+      createdAt: deterministicCreatedAt(tag),
+      fileCount: fileCount(rawJsonDir),
+      archiveSize,
+      archiveChecksum,
+    }
+    const manifestPath = join(outDir, `apple-docs-raw-json-${tag}.manifest.json`)
+    await writeJSON(manifestPath, manifest)
+
+    logger.info(`raw-json pack built: ${archivePath} (${(archiveSize / 1e6).toFixed(1)} MB)`)
+    return { tag, archivePath, archiveName, archiveSize, archiveChecksum, checksumPath, manifestPath }
+  } finally {
     rmSync(buildDir, { recursive: true, force: true })
   }
 }

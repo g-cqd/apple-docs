@@ -31,6 +31,7 @@ export function storageStats(_opts, ctx) {
   const rawJsonPath = join(dataDir, 'raw-json')
   const markdownPath = join(dataDir, 'markdown')
   const htmlPath = join(dataDir, 'html')
+  const resourcesPath = join(dataDir, 'resources')
 
   const rawJson = {
     size: dirSize(rawJsonPath),
@@ -47,6 +48,13 @@ export function storageStats(_opts, ctx) {
     files: fileCount(htmlPath),
   }
 
+  // Pre-rendered SF Symbols + extracted fonts. Previously omitted, which made
+  // the reported total understate real disk usage by ~2 GB on a full corpus.
+  const resources = {
+    size: dirSize(resourcesPath),
+    files: fileCount(resourcesPath),
+  }
+
   const tables = {
     documents: db.db.query('SELECT COUNT(*) as count FROM documents').get().count,
     document_sections: db.hasTable('document_sections') ? db.db.query('SELECT COUNT(*) as count FROM document_sections').get().count : 0,
@@ -55,13 +63,14 @@ export function storageStats(_opts, ctx) {
     crawl_state: db.db.query('SELECT COUNT(*) as count FROM crawl_state').get().count,
   }
 
-  const total = dbSize + rawJson.size + markdown.size + html.size
+  const total = dbSize + rawJson.size + markdown.size + html.size + resources.size
 
   return {
     database: { size: dbSize, path: dbPath },
     rawJson,
     markdown,
     html,
+    resources,
     tables,
     total,
   }

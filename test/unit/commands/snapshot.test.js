@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import { snapshotBuild } from '../../../src/commands/snapshot.js'
+import { snapshotBuild, snapshotBuildRawJsonPack } from '../../../src/commands/snapshot.js'
 import { createLogger } from '../../../src/lib/logger.js'
 // Snapshot archives are .tar.gz (post-May-2026 recalibration; .7z was
 // abandoned after sustained corpus growth pushed LZMA2 max compression
@@ -232,5 +232,71 @@ describe('snapshotBuild', () => {
       rmSync(outA, { recursive: true, force: true })
       rmSync(outB, { recursive: true, force: true })
     }
+  })
+
+  test('lean build omits markdown and raw-json from the archive', async () => {
+    // Stage payloads that the lean snapshot must NOT ship.
+    mkdirSync(join(dataDir, 'markdown', 'swiftui'), { recursive: true })
+    writeFileSync(join(dataDir, 'markdown', 'swiftui', 'view.md'), '# View')
+    mkdirSync(join(dataDir, 'raw-json', 'swiftui'), { recursive: true })
+    writeFileSync(join(dataDir, 'raw-json', 'swiftui', 'view.json'), '{}')
+
+    const result = await snapshotBuild({ out: outDir, tag: 'test-lean' }, { db, dataDir, logger })
+    expect(result.includesRawJson).toBe(false)
+
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-lean-'))
+    try {
+      await extractTarGz(result.archivePath, extractDir)
+      expect(existsSync(join(extractDir, 'markdown'))).toBe(false)
+      expect(existsSync(join(extractDir, 'raw-json'))).toBe(false)
+      expect(existsSync(join(extractDir, 'apple-docs.db'))).toBe(true)
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
+  test('--with-raw-json includes raw-json but never markdown', async () => {
+    mkdirSync(join(dataDir, 'markdown', 'swiftui'), { recursive: true })
+    writeFileSync(join(dataDir, 'markdown', 'swiftui', 'view.md'), '# View')
+    mkdirSync(join(dataDir, 'raw-json', 'swiftui'), { recursive: true })
+    writeFileSync(join(dataDir, 'raw-json', 'swiftui', 'view.json'), '{}')
+
+    const result = await snapshotBuild({ out: outDir, tag: 'test-withraw', withRawJson: true }, { db, dataDir, logger })
+    expect(result.includesRawJson).toBe(true)
+
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-withraw-'))
+    try {
+      await extractTarGz(result.archivePath, extractDir)
+      expect(existsSync(join(extractDir, 'raw-json', 'swiftui', 'view.json'))).toBe(true)
+      expect(existsSync(join(extractDir, 'markdown'))).toBe(false)
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('snapshotBuildRawJsonPack', () => {
+  test('packages only the raw-json tree (no DB)', async () => {
+    mkdirSync(join(dataDir, 'raw-json', 'swiftui'), { recursive: true })
+    writeFileSync(join(dataDir, 'raw-json', 'swiftui', 'view.json'), '{"metadata":{"title":"View"}}')
+
+    const result = await snapshotBuildRawJsonPack({ out: outDir, tag: 'test-pack' }, { dataDir, logger })
+    expect(existsSync(result.archivePath)).toBe(true)
+    expect(existsSync(result.checksumPath)).toBe(true)
+
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-pack-'))
+    try {
+      await extractTarGz(result.archivePath, extractDir)
+      expect(existsSync(join(extractDir, 'raw-json', 'swiftui', 'view.json'))).toBe(true)
+      expect(existsSync(join(extractDir, 'apple-docs.db'))).toBe(false)
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects when there is no raw-json/ tree', async () => {
+    await expect(
+      snapshotBuildRawJsonPack({ out: outDir, tag: 'test-empty-pack' }, { dataDir, logger }),
+    ).rejects.toThrow(/No raw-json/)
   })
 })

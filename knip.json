@@ -17,6 +17,7 @@
     "zod",
     "@stryker-mutator/command-runner",
     "bun-types",
-    "mermaid"
+    "mermaid",
+    "@huggingface/transformers"
   ]
 }

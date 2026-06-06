@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { ensureDir } from '../storage/files.js'
 import { sha256 } from '../lib/hash.js'
+import { decodeSectionContent } from '../storage/section-codec.js'
 
 /**
  * Compute a short content hash (first 10 hex chars of SHA-256).
@@ -122,7 +123,7 @@ export async function buildBodyShards(db, outputDir) {
       for (const row of sectionRows) {
         const existing = bodyByDoc.get(row.document_id) ?? ''
         if (existing.length >= BODY_PREVIEW_CHARS) continue
-        const piece = row.content_text ?? ''
+        const piece = decodeSectionContent(row.content_text) ?? ''
         if (!piece) continue
         bodyByDoc.set(row.document_id, existing ? `${existing} ${piece}` : piece)
       }

@@ -40,27 +40,19 @@ export async function parseGuidelinesHtml(html) {
 
   const rewriter = new HTMLRewriter()
 
-  // Major sections: <h3 data-sidenav ...>
-  rewriter.on('#content-container h3[data-sidenav]', {
+  // Major sections (<h3 data-sidenav>) and subsections (<li data-sidenav>)
+  // capture identically — only the selector and the recorded tag differ.
+  const captureSidenav = (tag) => ({
     element(el) {
       const id = el.getAttribute('id') ?? ''
       const sidenavVal = el.getAttribute('data-sidenav')
       const nr = el.hasAttribute('data-nr')
-      sectionMeta.push({ id, sidenavTitle: sidenavVal || null, notarization: nr, tag: 'h3' })
+      sectionMeta.push({ id, sidenavTitle: sidenavVal || null, notarization: nr, tag })
       el.before(`${MARKER}${sectionMeta.length - 1}-->`, { html: true })
     },
   })
-
-  // Subsections: <li data-sidenav="...">
-  rewriter.on('#content-container li[data-sidenav]', {
-    element(el) {
-      const id = el.getAttribute('id') ?? ''
-      const sidenavVal = el.getAttribute('data-sidenav')
-      const nr = el.hasAttribute('data-nr')
-      sectionMeta.push({ id, sidenavTitle: sidenavVal || null, notarization: nr, tag: 'li' })
-      el.before(`${MARKER}${sectionMeta.length - 1}-->`, { html: true })
-    },
-  })
+  rewriter.on('#content-container h3[data-sidenav]', captureSidenav('h3'))
+  rewriter.on('#content-container li[data-sidenav]', captureSidenav('li'))
 
   // Strip ASR/NR badge images and their wrapper spans
   rewriter.on('span.custom-tooltip-icon', { element(el) { el.remove() } })

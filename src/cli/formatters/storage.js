@@ -7,6 +7,7 @@ export function formatStorageStats(result) {
     `  Raw JSON:     ${formatBytes(result.rawJson.size)} (${result.rawJson.files} files)`,
     `  Markdown:     ${formatBytes(result.markdown.size)} (${result.markdown.files} files)`,
     `  HTML cache:   ${formatBytes(result.html.size)} (${result.html.files} files)`,
+    ...(result.resources ? [`  Resources:    ${formatBytes(result.resources.size)} (${result.resources.files} files)`] : []),
     `  Total:        ${formatBytes(result.total)}`,
     '',
     bold('Table Row Counts'),

@@ -25,10 +25,13 @@ Hosting:
   web deploy           Show deployment instructions
 
 Maintenance & Build:
-  snapshot build       Build a release snapshot archive
+  snapshot build       Build a release snapshot archive (lean by default)
   storage stats        Show disk usage breakdown
   storage gc           Garbage collect cached files
-  index rebuild <kind> Rebuild a search index (body | trigram)
+  storage profile      Get or set the storage profile (on-demand vs prebuilt)
+  storage materialize  Render markdown/HTML to disk (prebuilt fast path)
+  storage compact      Shrink an install (zstd sections + contentless body FTS)
+  index <subcommand>   rebuild <body|trigram> | embeddings (semantic vectors)
 
 Global options:
   --json               Output raw JSON (for scripting)
@@ -182,12 +185,17 @@ No crawling required — ready in under 60 seconds.
 
 Options:
   --force            Overwrite existing corpus
+  --profile <name>   raw-only | balanced | prebuilt — render on demand vs
+                     prebuilt (max speed). Prompts on a TTY; else balanced.
+  --yes              Accept the default profile without prompting
   --skip-resources   Skip the post-extract font + symbols re-index step
-  --archive <path>   Install from a local snapshot tarball produced by
-                     \`apple-docs snapshot build\` instead of fetching from
-                     GitHub. Verifies a sibling .sha256 sidecar if present.
-                     Path must live under $HOME or the current directory.
+  --archive <path>   Install from a local snapshot tarball (under $HOME/cwd);
+                     verifies a sibling .sha256 sidecar when present.
   --json             Output results as JSON
+
+Subcommand:
+  raw-json --archive <path>   Install the opt-in raw-json pack; reading and
+                              search work without it.
 
 Advanced (auth tuning):
   --use-git-auth     Reuse a GitHub token from the local gh CLI or git
@@ -326,28 +334,24 @@ Build a release snapshot archive of the corpus.
 
 Subcommands:
   build                Materialize the corpus to a tarball + .sha256 + manifest
+  build-raw-json-pack  Build the opt-in raw-json pack (separate archive)
 
 Build options:
   --out <dir>                  Output directory (default: dist)
   --tag <tag>                  Archive tag (default: snapshot-YYYYMMDD)
+  --with-raw-json              Bundle raw-json into the main snapshot (default off)
 
-Build options (advanced — escape hatches):
-  --allow-incomplete-symbols   Skip the SF Symbols matrix-completeness gate
-                               (only when building on a host that can't run
-                               the live renderer; consumers will see 404s
-                               for the missing variants).
+Build options (advanced):
+  --allow-incomplete-symbols   Skip the SF Symbols matrix gate (for build
+                               hosts without the live renderer; expect 404s).
 
-The build runs VACUUM INTO on the live database, writes the tarball under
-<out>/, and emits both a SHA-256 sidecar and a JSON manifest. Used
-by the release pipeline (scripts/build-snapshot.js) and the operator
-who wants a portable copy.
-
-Every snapshot ships the full corpus: raw-json + markdown + extracted
-fonts + the complete pre-rendered SF Symbols matrix.
+The build runs VACUUM INTO and writes a tarball + .sha256 + manifest under
+<out>/. The lean snapshot ships the DB (document_sections), SF Symbols, and
+fonts — never markdown. raw-json ships only with --with-raw-json or a pack
+(build-raw-json-pack + \`setup raw-json --archive\`).
 
 Examples:
   apple-docs snapshot build --out dist
-  apple-docs snapshot build --tag snapshot-2026-05-09
 `.trim(),
 
   consolidate: `

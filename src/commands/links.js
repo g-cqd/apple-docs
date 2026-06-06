@@ -10,6 +10,7 @@
  */
 
 import { readFile, readdir } from 'node:fs/promises'
+import { decodeSectionContent } from '../storage/section-codec.js'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { NotFoundError } from '../lib/errors.js'
@@ -328,7 +329,7 @@ export async function linksConsolidate(opts, ctx) {
   let processed = 0
   for (const row of sections) {
     let payload
-    try { payload = JSON.parse(row.content_json) } catch { continue }
+    try { payload = JSON.parse(decodeSectionContent(row.content_json)) } catch { continue }
     if (!payload) continue
 
     let added = 0

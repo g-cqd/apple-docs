@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { storageStats, storageGc, storageMaterialize } from '../../../src/commands/storage.js'
+import { dispatchMaintenance } from '../../../src/cli/maintenance.js'
 
 let db
 let dataDir
@@ -89,6 +90,41 @@ describe('storageStats', () => {
     expect(stats.tables).toHaveProperty('roots')
     expect(stats.tables).toHaveProperty('crawl_state')
     expect(stats.tables).not.toHaveProperty('refs') // dropped in v15
+  })
+
+  test('counts resources/ in the breakdown and total (regression: was omitted)', () => {
+    mkdirSync(join(dataDir, 'resources', 'symbols'), { recursive: true })
+    writeFileSync(join(dataDir, 'resources', 'symbols', 'glyph.svg'), '<svg></svg>')
+    const stats = storageStats({}, ctx)
+    expect(stats).toHaveProperty('resources')
+    expect(stats.resources.files).toBeGreaterThanOrEqual(1)
+    expect(stats.resources.size).toBeGreaterThan(0)
+    expect(stats.total).toBeGreaterThanOrEqual(stats.resources.size)
+  })
+})
+
+describe('storage profile / materialize (maintenance dispatch)', () => {
+  test('storage profile <name> sets and reports the profile', async () => {
+    const d = await dispatchMaintenance('storage', 'profile', ['prebuilt'], {}, ctx)
+    expect(d.result.profile).toBe('prebuilt')
+    // Persisted across calls.
+    const again = await dispatchMaintenance('storage', 'profile', [], {}, ctx)
+    expect(again.result.profile).toBe('prebuilt')
+  })
+
+  test('storage profile with no name reports a valid current profile', async () => {
+    const d = await dispatchMaintenance('storage', 'profile', [], {}, ctx)
+    expect(['raw-only', 'balanced', 'prebuilt']).toContain(d.result.profile)
+  })
+
+  test('storage profile rejects an unknown name', async () => {
+    await expect(dispatchMaintenance('storage', 'profile', ['bogus'], {}, ctx)).rejects.toThrow()
+  })
+
+  test('storage materialize renders markdown for the seeded document', async () => {
+    const d = await dispatchMaintenance('storage', 'materialize', [], { format: 'markdown' }, ctx)
+    expect(d.result.materialized).toBeGreaterThanOrEqual(1)
+    expect(d.result.format).toBe('markdown')
   })
 })
 

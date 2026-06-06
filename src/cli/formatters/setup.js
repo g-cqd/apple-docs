@@ -12,6 +12,7 @@ export function formatSetup(result) {
     `  Tag:         ${result.tag}`,
     `  Snapshot:    ${result.tier}`,
     `  Documents:   ${result.documentCount}`,
+    ...(result.storageProfile ? [`  Profile:     ${result.storageProfile}`] : []),
     `  Data dir:    ${result.dataDir}`,
   ]
   if (result.transition) {

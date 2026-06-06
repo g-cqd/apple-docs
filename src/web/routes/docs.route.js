@@ -6,6 +6,7 @@ import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { coalesceByKey } from '../../pipeline/coalesce.js'
 import { tooManyRequestsResponse } from '../middleware/rate-limit.js'
 import { textResponse, notFoundResponse } from '../responses.js'
+import { decodeSectionRow } from '../../storage/section-codec.js'
 
 const HTML_HASHABLE = { contentType: 'text/html; charset=utf-8', hashable: true }
 
@@ -127,7 +128,7 @@ export async function docsHandler(request, ctx, url) {
 
   if (doc) {
     let sections = db.hasTable('document_sections')
-      ? db.db.query(DOC_SECTIONS_QUERY).all(doc.id)
+      ? db.db.query(DOC_SECTIONS_QUERY).all(doc.id).map(decodeSectionRow)
       : []
 
     // On-demand fetch sections for lite snapshots (doc exists but sections are missing).
@@ -148,7 +149,7 @@ export async function docsHandler(request, ctx, url) {
             json, etag, lastModified,
           })
         })
-        sections = db.db.query(DOC_SECTIONS_QUERY).all(doc.id)
+        sections = db.db.query(DOC_SECTIONS_QUERY).all(doc.id).map(decodeSectionRow)
         invalidateDocumentCaches({ key: doc.key, title: doc.title, roleHeading: doc.role_heading })
         try { await readerPool?.recycle?.() } catch {}
       } catch {

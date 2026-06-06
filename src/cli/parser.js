@@ -25,6 +25,8 @@ const BOOLEAN_FLAGS = new Set([
   'skip-git-auth',
   'incremental',
   'skip-docs',
+  'yes',
+  'with-raw-json',
 ])
 
 /**

@@ -262,6 +262,14 @@ try {
     }
 
     case 'setup': {
+      // `setup raw-json --archive <pack>` installs the opt-in raw-json pack
+      // (re-enables local re-normalization) without touching the corpus DB.
+      if (positional[0] === 'raw-json') {
+        const { setupRawJson } = await import('./src/commands/setup.js')
+        result = await setupRawJson({ archive: flags.archive ?? null }, ctx)
+        formatter = (r) => `raw-json pack installed: ${r.files} files into ${r.dataDir}`
+        break
+      }
       // Every snapshot ships the full corpus; the obsolete --tier and
       // --downgrade flags are rejected loudly so legacy automation
       // gets a clear error.
@@ -278,6 +286,8 @@ try {
         force: !!flags.force,
         skipResources: !!flags['skip-resources'],
         archive: flags.archive ?? null,
+        profile: flags.profile ?? null,
+        yes: !!flags.yes,
       }, ctx)
       formatter = formatSetup
       break

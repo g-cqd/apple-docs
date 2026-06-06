@@ -224,6 +224,22 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
   return {
     hasTrigramTable,
     hasBodyFtsTable,
+    /** Batched id→record fetch (semantic tier maps doc ids back to rows). */
+    getSearchRecordsByIds(ids) {
+      const safe = (ids ?? []).map(Number).filter(Number.isInteger)
+      if (safe.length === 0) return []
+      const placeholders = safe.map(() => '?').join(',')
+      return db.query(`
+        SELECT d.id, d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
+               d.declaration_text as declaration, d.platforms_json as platforms,
+               COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
+               d.source_type as source_type, d.source_metadata as source_metadata,
+               d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language,
+               d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos
+        FROM documents d LEFT JOIN roots r ON r.slug = d.framework
+        WHERE d.id IN (${placeholders})
+      `).all(...safe)
+    },
     /** FTS5 main planner. Fires bm25-ranked rows tagged with a tier 0-3. */
     searchPages(ftsQuery, rawQuery, opts = {}) {
       return searchFtsStmt.all({

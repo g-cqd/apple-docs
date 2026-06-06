@@ -1,5 +1,6 @@
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { renderPlainText } from '../content/render-text.js'
+import { decodeSectionContent } from '../storage/section-codec.js'
 
 /**
  * Index all document bodies into documents_body_fts.
@@ -83,8 +84,8 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
         `).all(document.id).map(section => ({
           sectionKind: section.section_kind,
           heading: section.heading,
-          contentText: section.content_text,
-          contentJson: section.content_json,
+          contentText: decodeSectionContent(section.content_text),
+          contentJson: decodeSectionContent(section.content_json),
           sortOrder: section.sort_order,
         }))
 

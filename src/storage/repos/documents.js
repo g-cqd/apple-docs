@@ -10,6 +10,7 @@
 
 import { encodeVersion } from '../../lib/version-encode.js'
 import { coerceSourceType } from '../source-types.js'
+import { decodeSectionContent } from '../section-codec.js'
 
 function deriveFrameworkFromPath(path) {
   if (!path) return null
@@ -248,8 +249,8 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       return getSectionsStmt.all(document.id).map(section => ({
         sectionKind: section.section_kind,
         heading: section.heading,
-        contentText: section.content_text,
-        contentJson: section.content_json,
+        contentText: decodeSectionContent(section.content_text),
+        contentJson: decodeSectionContent(section.content_json),
         sortOrder: section.sort_order,
       }))
     },
@@ -288,7 +289,10 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
         `).all(...ids)
         for (const s of sections) {
           const key = idToKey.get(s.document_id)
-          if (key && docMap.has(key)) docMap.get(key).sections.push(s)
+          if (key && docMap.has(key)) {
+            s.content_text = decodeSectionContent(s.content_text)
+            docMap.get(key).sections.push(s)
+          }
         }
       }
       return docMap

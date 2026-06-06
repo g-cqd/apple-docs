@@ -213,6 +213,11 @@ export class DocsDatabase {
   getRelatedDocCounts(keys) { return this.documents.getRelatedDocCounts(keys) }
   getRelationshipCountsByType(key) { return this.documents.getRelationshipCountsByType(key) }
 
+  // Semantic tier: binary embedding store (optional; empty/absent → dormant).
+  getVectorCount() { return this.hasTable('document_vectors') ? this.db.query('SELECT COUNT(*) AS c FROM document_vectors').get().c : 0 }
+  getAllVectors() { return this.hasTable('document_vectors') ? this.db.query('SELECT document_id, vec FROM document_vectors').all() : [] }
+  getSearchRecordsByIds(ids) { return this.search.getSearchRecordsByIds(ids) }
+
   getBodyIndexCount() { return this.search.getBodyIndexCount() }
   insertBody(documentId, body) { this.search.insertBody(documentId, body) }
   clearBodyIndex() { this.search.clearBodyIndex() }

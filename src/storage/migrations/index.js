@@ -30,6 +30,8 @@ import { up as v17Up } from './v17-page-consecutive-404s.js'
 import { up as v18Up } from './v18-sf-symbols-bitmap-only.js'
 import { up as v19Up } from './v19-sf-symbols-codepoint.js'
 import { up as v20Up } from './v20-purge-catalog-meta-names.js'
+import { up as v21Up } from './v21-drop-legacy-fts-and-rel-indexes.js'
+import { up as v22Up } from './v22-document-vectors.js'
 
 export const MIGRATIONS = Object.freeze([
   { version: 1, up: v1Up },
@@ -52,6 +54,8 @@ export const MIGRATIONS = Object.freeze([
   { version: 18, up: v18Up },
   { version: 19, up: v19Up },
   { version: 20, up: v20Up },
+  { version: 21, up: v21Up },
+  { version: 22, up: v22Up },
 ])
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

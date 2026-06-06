@@ -104,3 +104,74 @@ describe('migrations', () => {
     db.close()
   })
 })
+
+describe('v21 — drop legacy pages FTS + redundant relationship indexes', () => {
+  const v21 = MIGRATIONS.find((m) => m.version === 21).up
+
+  function names(db, type) {
+    return new Set(db.query(`SELECT name FROM sqlite_master WHERE type='${type}'`).all().map((r) => r.name))
+  }
+
+  test('drops the dead pages FTS tables and their maintenance triggers', () => {
+    const db = new Database(dbPath)
+    runMigrations(db)
+    const tables = names(db, 'table')
+    expect(tables.has('pages_fts')).toBe(false)
+    expect(tables.has('titles_trigram')).toBe(false)
+    expect(tables.has('pages_body_fts')).toBe(false)
+    const triggers = names(db, 'trigger')
+    expect(triggers.has('pages_ai')).toBe(false)
+    expect(triggers.has('pages_ad')).toBe(false)
+    expect(triggers.has('pages_au')).toBe(false)
+    db.close()
+  })
+
+  test('keeps the load-bearing tables and the live documents FTS', () => {
+    const db = new Database(dbPath)
+    runMigrations(db)
+    const tables = names(db, 'table')
+    for (const keep of ['pages', 'document_relationships', 'documents_fts', 'documents_trigram', 'documents_body_fts']) {
+      expect(tables.has(keep)).toBe(true)
+    }
+    db.close()
+  })
+
+  test('drops the redundant relationship indexes', () => {
+    const db = new Database(dbPath)
+    runMigrations(db)
+    const indexes = names(db, 'index')
+    expect(indexes.has('idx_rel_from')).toBe(false)
+    expect(indexes.has('idx_rel_to')).toBe(false)
+    db.close()
+  })
+
+  test('from_key lookups still resolve through the UNIQUE auto-index (no full scan)', () => {
+    const db = new Database(dbPath)
+    runMigrations(db)
+    const plan = db.query("EXPLAIN QUERY PLAN SELECT 1 FROM document_relationships WHERE from_key = 'x'").all()
+    const detail = plan.map((r) => r.detail).join(' ')
+    expect(detail).toContain('sqlite_autoindex_document_relationships_1')
+    expect(detail).not.toContain('SCAN document_relationships')
+    db.close()
+  })
+
+  test('a pages insert after migration does not throw (no dangling FTS trigger)', () => {
+    const db = new Database(dbPath)
+    runMigrations(db)
+    // Raw bun:sqlite connection has foreign_keys OFF, so root_id need not exist.
+    expect(() => {
+      db.run("INSERT INTO pages (root_id, path, url) VALUES (1, 'swiftui/view', 'https://example.com')")
+    }).not.toThrow()
+    db.close()
+  })
+
+  test('v21.up is idempotent (safe to re-run)', () => {
+    const db = new Database(dbPath)
+    runMigrations(db)
+    expect(() => {
+      v21(db)
+      v21(db)
+    }).not.toThrow()
+    db.close()
+  })
+})

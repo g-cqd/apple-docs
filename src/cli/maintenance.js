@@ -20,10 +20,27 @@ function summary(label) {
   return (result) => `${label}: ${JSON.stringify(result)}`
 }
 
-async function dispatchStorage(subcommand, _positional, flags, ctx) {
+async function dispatchStorage(subcommand, positional, flags, ctx) {
   if (subcommand === 'stats') {
     const { storageStats } = await import('../commands/storage.js')
     return { result: await storageStats({}, ctx), formatter: formatStorageStats }
+  }
+  if (subcommand === 'profile') {
+    const { getProfile, setProfile, getProfileConfig } = await import('../storage/profiles.js')
+    const name = positional[0]
+    if (name) setProfile(ctx.db, name) // throws NotFoundError on an unknown name
+    const active = getProfile(ctx.db)
+    return { result: { profile: active, ...getProfileConfig(active) }, formatter: summary('storage profile') }
+  }
+  if (subcommand === 'materialize') {
+    const { storageMaterialize } = await import('../commands/storage.js')
+    const format = flags.format === 'html' ? 'html' : 'markdown'
+    const roots = flags.roots ? String(flags.roots).split(',').map(s => s.trim()).filter(Boolean) : undefined
+    return { result: await storageMaterialize({ format, roots }, ctx), formatter: summary('storage materialize') }
+  }
+  if (subcommand === 'compact') {
+    const { storageCompact } = await import('../commands/storage-compact.js')
+    return { result: await storageCompact({ force: !!flags.force }, ctx), formatter: summary('storage compact') }
   }
   if (subcommand === 'gc') {
     const { storageGc } = await import('../commands/storage.js')
@@ -54,8 +71,16 @@ async function dispatchSnapshot(subcommand, _positional, flags, ctx) {
       // F.3b: deliberate-partial-build escape hatch. Pass when
       // building on a host that can't run the SF Symbols renderer.
       allowIncompleteSymbols: !!flags['allow-incomplete-symbols'],
+      // Opt in to bundling raw-json into the main snapshot. Default off —
+      // the lean snapshot omits it; ship it as a separate pack instead.
+      withRawJson: !!flags['with-raw-json'],
     }, ctx)
     return { result, formatter: summary('snapshot') }
+  }
+  if (subcommand === 'build-raw-json-pack') {
+    const { snapshotBuildRawJsonPack } = await import('../commands/snapshot.js')
+    const result = await snapshotBuildRawJsonPack({ out: flags.out, tag: flags.tag }, ctx)
+    return { result, formatter: summary('raw-json pack') }
   }
   return exitHelp('snapshot')
 }
@@ -69,7 +94,11 @@ async function dispatchConsolidate(_subcommand, _positional, flags, ctx) {
   return { result, formatter: summary('consolidate') }
 }
 
-async function dispatchIndex(subcommand, positional, _flags, ctx) {
+async function dispatchIndex(subcommand, positional, flags, ctx) {
+  if (subcommand === 'embeddings') {
+    const { indexEmbeddings } = await import('../commands/index-embeddings.js')
+    return { result: await indexEmbeddings({ full: !!flags.full }, ctx), formatter: summary('index embeddings') }
+  }
   if (subcommand === 'rebuild') {
     const target = positional[0] ?? 'body'
     if (target === 'body') {

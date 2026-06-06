@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../../src/storage/database.js'
+import { SCHEMA_VERSION } from '../../../src/storage/migrations/index.js'
 
 let db
 
@@ -18,7 +19,7 @@ afterEach(() => {
 describe('DocsDatabase', () => {
   test('creates schema on init', () => {
     const row = db.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
-    expect(row.value).toBe('20')
+    expect(row.value).toBe(String(SCHEMA_VERSION))
   })
 
   test('upsertRoot inserts and returns id', () => {
@@ -431,7 +432,7 @@ describe('DocsDatabase', () => {
   })
 
   test('getSchemaVersion returns current schema version', () => {
-    expect(db.getSchemaVersion()).toBe(20)
+    expect(db.getSchemaVersion()).toBe(SCHEMA_VERSION)
   })
 
   test('getStats returns aggregate data', () => {

@@ -10,7 +10,11 @@ import {
 } from '../search/filters.js'
 import { formatResult } from '../search/format.js'
 import { buildFtsQuery } from '../search/fts-query-builder.js'
+import { isSemanticAvailable, semanticCandidates } from '../search/semantic.js'
+import { weightedRRF } from '../search/fusion.js'
 import { runRead, DeadlineError } from '../storage/reader-pool.js'
+
+const SEMANTIC_TOP_K = 50
 
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 
@@ -119,6 +123,16 @@ export async function search(opts, ctx) {
 
   const q = query.trim()
   const ftsQuery = buildFtsQuery(q)
+
+  // Optional semantic tier — kicked off here so the query embed overlaps the
+  // lexical cascade. Dormant (null) unless vectors + an embedder are present;
+  // skipped on the latency-critical `fast` path.
+  const semanticPromise = (!fast && isSemanticAvailable(ctx.db))
+    ? semanticCandidates(ctx, q, SEMANTIC_TOP_K).catch((err) => {
+        ctx.logger?.debug?.(`semantic tier skipped: ${err.message}`)
+        return []
+      })
+    : null
 
   // Framework synonym expansion
   const frameworks = [framework]
@@ -276,9 +290,38 @@ export async function search(opts, ctx) {
     ctx, q, frameworks, filterOpts, results, addResults,
   })
 
-  // Intent detection + source-aware reranking
+  // Intent detection + source-aware reranking (lexical order)
   const intent = detectIntent(q)
   rerank(results, q, intent)
+
+  // Hybrid fusion: blend the lexical order with the semantic order via Weighted
+  // RRF (lexical weighted higher, so exact symbol matches at lexical rank 0 stay
+  // on top). No-op when the semantic tier is dormant.
+  if (semanticPromise) {
+    const sem = await semanticPromise
+    if (sem.length > 0) {
+      const lexicalRanked = results.map(r => r.path)
+      const byId = new Map(ctx.db.getSearchRecordsByIds(sem.map(c => c.documentId)).map(r => [r.id, r]))
+      const semanticRanked = []
+      for (const c of sem) {
+        const rec = byId.get(c.documentId)
+        if (!rec) continue
+        parseRowPlatforms([rec])
+        if (!matchesSearchFilters(rec, activeFilters)) continue
+        semanticRanked.push(rec.path)
+        if (!seen.has(rec.path)) {
+          seen.add(rec.path)
+          results.push(formatResult(rec, 'semantic'))
+        }
+      }
+      const fused = weightedRRF([
+        { ranked: lexicalRanked, weight: 1.0 },
+        { ranked: semanticRanked, weight: 0.6 },
+      ])
+      for (const r of results) r.score = fused.get(r.path) ?? 0
+      results.sort((a, b) => b.score - a.score)
+    }
+  }
 
   const sliced = results.slice(offset, offset + limit)
 

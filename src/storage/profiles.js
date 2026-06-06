@@ -33,7 +33,7 @@ const PROFILES = {
   },
 }
 
-const DEFAULT_PROFILE = 'balanced'
+export const DEFAULT_PROFILE = 'balanced'
 
 export const PROFILE_NAMES = Object.keys(PROFILES)
 
