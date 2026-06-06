@@ -5,6 +5,7 @@ import { renderMarkdown } from '../content/render-markdown.js'
 import { renderHtml } from '../content/render-html.js'
 import { pool } from '../lib/pool.js'
 import { keyPath } from '../lib/safe-path.js'
+import { decodeSectionContent } from '../storage/section-codec.js'
 
 /**
  * Returns a storage breakdown: DB file size, rendered output dirs, raw JSON,
@@ -173,6 +174,30 @@ export function storageCheckOrphans(_opts, ctx) {
 export async function storageMaterialize(opts, ctx) {
   const { db, dataDir, logger } = ctx
   const { format = 'markdown', roots } = opts ?? {}
+
+  // raw-json: decompress the raw upstream payloads shipped in the DB
+  // (document_raw) to loose files on disk, re-enabling local re-normalization.
+  if (format === 'raw-json') {
+    if (!db.hasTable('document_raw')) {
+      logger?.info?.('No document_raw to materialize (raw payloads not shipped in this snapshot).')
+      return { format, materialized: 0 }
+    }
+    const rows = db.db.query('SELECT dr.document_id AS id, d.key AS key FROM document_raw dr JOIN documents d ON d.id = dr.document_id').all()
+    const getRaw = db.db.query('SELECT raw FROM document_raw WHERE document_id = ?')
+    let materialized = 0
+    await pool(rows, 50, async (row) => {
+      const blob = getRaw.get(row.id)
+      if (!blob) return
+      try {
+        await writeText(keyPath(dataDir, 'raw-json', row.key, '.json'), decodeSectionContent(blob.raw))
+        materialized++
+      } catch (err) {
+        logger?.error?.(`raw-json materialize failed for ${row.key}: ${err.message}`)
+      }
+    })
+    logger?.info?.(`Materialized ${materialized} raw-json files.`)
+    return { format, materialized }
+  }
 
   let _docsQuery
   let docsRows

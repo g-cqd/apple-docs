@@ -17,7 +17,13 @@ export async function ensureNormalizedDocument(db, dataDir, key, sourceType = 'a
     return hydrateGuidelines(db, dataDir, key)
   }
 
-  const rawJson = await readJSON(keyPath(dataDir, 'raw-json', key, '.json'))
+  let rawJson = await readJSON(keyPath(dataDir, 'raw-json', key, '.json'))
+  if (!rawJson) {
+    // Fall back to the compressed raw payload shipped inside the DB (single
+    // snapshot) when loose raw-json files haven't been materialized on disk.
+    const fromDb = db.getRawPayloadByKey?.(key)
+    if (fromDb) { try { rawJson = JSON.parse(fromDb) } catch { /* not JSON — skip */ } }
+  }
   if (!rawJson) return false
 
   const normalized = normalize(rawJson, key, sourceType)

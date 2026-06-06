@@ -32,6 +32,7 @@ import { up as v19Up } from './v19-sf-symbols-codepoint.js'
 import { up as v20Up } from './v20-purge-catalog-meta-names.js'
 import { up as v21Up } from './v21-drop-legacy-fts-and-rel-indexes.js'
 import { up as v22Up } from './v22-document-vectors.js'
+import { up as v23Up } from './v23-document-raw.js'
 
 export const MIGRATIONS = Object.freeze([
   { version: 1, up: v1Up },
@@ -56,6 +57,7 @@ export const MIGRATIONS = Object.freeze([
   { version: 20, up: v20Up },
   { version: 21, up: v21Up },
   { version: 22, up: v22Up },
+  { version: 23, up: v23Up },
 ])
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

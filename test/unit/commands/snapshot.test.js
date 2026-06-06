@@ -254,4 +254,26 @@ describe('snapshotBuild', () => {
     }
   })
 
+  test('embeds raw payloads (zstd) into the snapshot DB, not as loose files', async () => {
+    mkdirSync(join(dataDir, 'raw-json', 'swiftui'), { recursive: true })
+    const payload = '{"metadata":{"title":"View"},"k":1}'
+    writeFileSync(join(dataDir, 'raw-json', 'swiftui', 'view.json'), payload)
+
+    const result = await snapshotBuild({ out: outDir, tag: 'test-rawembed' }, { db, dataDir, logger })
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-rawembed-'))
+    try {
+      await extractTarGz(result.archivePath, extractDir)
+      expect(existsSync(join(extractDir, 'raw-json'))).toBe(false)
+      const edb = new DocsDatabase(join(extractDir, 'apple-docs.db'))
+      try {
+        expect(edb.getRawCount()).toBeGreaterThanOrEqual(1)
+        expect(edb.getRawPayloadByKey('swiftui/view')).toBe(payload)
+      } finally {
+        edb.close()
+      }
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
 })

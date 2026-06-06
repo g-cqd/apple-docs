@@ -34,7 +34,7 @@ async function dispatchStorage(subcommand, positional, flags, ctx) {
   }
   if (subcommand === 'materialize') {
     const { storageMaterialize } = await import('../commands/storage.js')
-    const format = flags.format === 'html' ? 'html' : 'markdown'
+    const format = ['html', 'raw-json'].includes(flags.format) ? flags.format : 'markdown'
     const roots = flags.roots ? String(flags.roots).split(',').map(s => s.trim()).filter(Boolean) : undefined
     return { result: await storageMaterialize({ format, roots }, ctx), formatter: summary('storage materialize') }
   }

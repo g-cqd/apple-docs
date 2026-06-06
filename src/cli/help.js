@@ -29,7 +29,7 @@ Maintenance & Build:
   storage stats        Show disk usage breakdown
   storage gc           Garbage collect cached files
   storage profile      Get or set the storage profile (on-demand vs prebuilt)
-  storage materialize  Render markdown/HTML to disk (prebuilt fast path)
+  storage materialize  Render markdown/HTML/raw-json to disk on demand
   storage compact      Shrink an install (zstd sections + contentless body FTS)
   index <subcommand>   rebuild <body|trigram> | embeddings (semantic vectors)
 

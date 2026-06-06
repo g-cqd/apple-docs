@@ -213,10 +213,13 @@ export class DocsDatabase {
   getRelatedDocCounts(keys) { return this.documents.getRelatedDocCounts(keys) }
   getRelationshipCountsByType(key) { return this.documents.getRelationshipCountsByType(key) }
 
-  // Semantic tier: binary embedding store (optional; empty/absent → dormant).
-  getVectorCount() { return this.hasTable('document_vectors') ? this.db.query('SELECT COUNT(*) AS c FROM document_vectors').get().c : 0 }
-  getAllVectors() { return this.hasTable('document_vectors') ? this.db.query('SELECT document_id, vec FROM document_vectors').all() : [] }
+  // Semantic vectors + raw-payload store (SQL + zstd live in the search repo).
+  getVectorCount() { return this.search.getVectorCount() }
+  getAllVectors() { return this.search.getAllVectors() }
   getSearchRecordsByIds(ids) { return this.search.getSearchRecordsByIds(ids) }
+  getRawCount() { return this.search.getRawCount() }
+  upsertRawPayload(documentId, json) { this.search.upsertRawPayload(documentId, json) }
+  getRawPayloadByKey(key) { return this.search.getRawPayloadByKey(key) }
 
   getBodyIndexCount() { return this.search.getBodyIndexCount() }
   insertBody(documentId, body) { this.search.insertBody(documentId, body) }

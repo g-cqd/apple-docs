@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { storageStats, storageGc, storageMaterialize } from '../../../src/commands/storage.js'
 import { dispatchMaintenance } from '../../../src/cli/maintenance.js'
+import { fileCount } from '../../../src/storage/files.js'
 
 let db
 let dataDir
@@ -255,5 +256,17 @@ describe('storageMaterialize', () => {
   test('materialize with matching roots filter materializes the document', async () => {
     const result = await storageMaterialize({ format: 'markdown', roots: ['swiftui'] }, ctx)
     expect(result.materialized).toBe(1)
+  })
+
+  test('raw-json round-trips through the DB and materializes to a file', async () => {
+    const docId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
+    const payload = '{"metadata":{"title":"View"},"abstract":[{"type":"text","text":"A view."}]}'
+    db.upsertRawPayload(docId, payload)
+    expect(db.getRawCount()).toBe(1)
+    expect(db.getRawPayloadByKey('documentation/swiftui/view')).toBe(payload) // zstd round-trip
+
+    const res = await storageMaterialize({ format: 'raw-json' }, ctx)
+    expect(res.materialized).toBe(1)
+    expect(fileCount(join(dataDir, 'raw-json'))).toBe(1)
   })
 })

@@ -96,7 +96,13 @@ export async function lookup(opts, ctx) {
 
   if (!content) {
     const jsonPath = keyPath(dataDir, 'raw-json', pagePath, '.json')
-    const json = await readJSON(jsonPath)
+    let json = await readJSON(jsonPath)
+    if (!json) {
+      // Compressed raw payload shipped in the DB (single snapshot) — used when
+      // loose raw-json files aren't materialized on disk.
+      const raw = db.getRawPayloadByKey?.(pagePath)
+      if (raw) { try { json = JSON.parse(raw) } catch { /* not JSON — skip */ } }
+    }
     if (json) {
       try {
         const normalized = normalize(json, pagePath, page.source_type ?? 'apple-docc')

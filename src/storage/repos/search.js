@@ -21,6 +21,7 @@
 
 import { safeCall } from '../../lib/safe-call.js'
 import { encodeVersion } from '../../lib/version-encode.js'
+import { encodeSectionContent, decodeSectionContent } from '../section-codec.js'
 
 // Column projection shared across the four search variants. Bundled here
 // so a future schema column addition only has to land in one place.
@@ -221,9 +222,46 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
     SELECT canonical FROM framework_synonyms WHERE alias = ?
   `)
 
+  // Semantic vectors (v22) + compressed raw payloads (v23). Both tables
+  // are created by migrations that always run before this repo is built,
+  // so the statements prepare unconditionally. An empty document_vectors
+  // table simply means the semantic tier is dormant.
+  const vectorCountStmt = db.query('SELECT COUNT(*) AS c FROM document_vectors')
+  const allVectorsStmt = db.query('SELECT document_id, vec FROM document_vectors')
+  const rawCountStmt = db.query('SELECT COUNT(*) AS c FROM document_raw')
+  const rawUpsertStmt = db.query('INSERT OR REPLACE INTO document_raw(document_id, raw) VALUES (?, ?)')
+  const rawByKeyStmt = db.query(`
+    SELECT dr.raw AS raw
+    FROM document_raw dr JOIN documents d ON d.id = dr.document_id
+    WHERE d.key = ?
+  `)
+
   return {
     hasTrigramTable,
     hasBodyFtsTable,
+    /** Row count of the semantic vector table; 0 ⇒ tier dormant. */
+    getVectorCount() {
+      return safeCall(() => vectorCountStmt.get().c, { default: 0, log: 'warn-once', label: 'search.vectorCount' })
+    },
+    /** All packed binary codes: `[{ document_id, vec: Uint8Array }]`. */
+    getAllVectors() {
+      return safeCall(() => allVectorsStmt.all(), { default: [], log: 'warn-once', label: 'search.allVectors' })
+    },
+    /** Row count of the embedded raw-payload store. */
+    getRawCount() {
+      return safeCall(() => rawCountStmt.get().c, { default: 0, log: 'warn-once', label: 'search.rawCount' })
+    },
+    /** Store a raw Apple payload, zstd-compressed when that saves bytes. */
+    upsertRawPayload(documentId, json) {
+      if (json == null) return
+      const text = typeof json === 'string' ? json : JSON.stringify(json)
+      rawUpsertStmt.run(documentId, encodeSectionContent(text))
+    },
+    /** Fetch + inflate a raw payload by document key; null when absent. */
+    getRawPayloadByKey(key) {
+      const row = safeCall(() => rawByKeyStmt.get(key), { default: null, log: 'warn-once', label: 'search.rawByKey' })
+      return row ? decodeSectionContent(row.raw) : null
+    },
     /** Batched id→record fetch (semantic tier maps doc ids back to rows). */
     getSearchRecordsByIds(ids) {
       const safe = (ids ?? []).map(Number).filter(Number.isInteger)

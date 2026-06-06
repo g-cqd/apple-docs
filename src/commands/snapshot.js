@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { existsSync, mkdtempSync, rmSync, utimesSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError, ValidationError } from '../lib/errors.js'
@@ -8,6 +8,8 @@ import { writeSha256Sidecar } from '../lib/archive-7z.js'
 import { createTarGzArchive } from '../lib/archive-targz.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { copyTreeFast, ensureDir, writeJSON } from '../storage/files.js'
+import { encodeSectionContent } from '../storage/section-codec.js'
+import { keyPath } from '../lib/safe-path.js'
 
 // Operational tables are truncated rather than dropped — DocsDatabase
 // reopens them at first run and crashes if they're missing entirely.
@@ -115,6 +117,26 @@ export async function snapshotBuild(opts, ctx) {
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_schema_version', String(schemaVersion)])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_document_count', String(documentCount)])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_page_count', String(pageCount)])
+
+      // 4b. Embed raw upstream payloads (zstd) into the snapshot DB so the
+      // single artifact carries everything; loose raw-json files are not
+      // shipped. Deterministic (zstd is stable for a fixed input), preserving
+      // the determinism gate. `storage materialize raw-json` unpacks them.
+      const rawJsonDir = join(dataDir, 'raw-json')
+      if (existsSync(rawJsonDir)) {
+        // document_raw exists in copyDb already (v23 ran before the VACUUM INTO).
+        const ins = copyDb.query('INSERT OR REPLACE INTO document_raw(document_id, raw) VALUES (?, ?)')
+        let packed = 0
+        copyDb.run('BEGIN')
+        for (const d of copyDb.query('SELECT id, key FROM documents').all()) {
+          const p = keyPath(dataDir, 'raw-json', d.key, '.json')
+          if (!existsSync(p)) continue
+          ins.run(d.id, encodeSectionContent(readFileSync(p, 'utf8')))
+          packed++
+        }
+        copyDb.run('COMMIT')
+        logger.info(`Embedded ${packed} raw payloads into the snapshot DB.`)
+      }
 
       copyDb.run('VACUUM')
     } finally {
