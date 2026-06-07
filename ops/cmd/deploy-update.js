@@ -148,11 +148,17 @@ export default async function runDeployUpdate(ctx = {}) {
   if (useSnapshot) {
     const rcSnap = await pullSnapshot({ env: procEnv, envLoader: () => env, logger, deps: { fetcher, runCmd: runner, runCmdAllowFailure: runAllow, sleep } })
       .catch(err => { logger.error(`pull-snapshot threw: ${err?.message ?? err}`); return 1 })
-    if (rcSnap !== 0) {
-      logger.warn('pull-snapshot failed; falling back to crawl-on-host refresh')
-      await runner([env.bunBin, 'run', `${repoDir}/cli.js`, 'sync'], { cwd: repoDir, deadlineMs: 4 * 60 * 60_000 })
-        .catch(err => logger.warn(`sync exited: ${err?.message ?? err}`))
+    if (rcSnap === 0) {
+      // pull-snapshot is a complete refresh on its own: DB swap, service
+      // restart, web build, cf-purge, smoke, and the applied-snapshot stamp.
+      // Skip the duplicate steps 6-9 below — they rebuilt + re-smoked the site
+      // a second time, doubling the deploy's wall-clock for no gain.
+      logger.say('=== deploy-update done (snapshot refresh handled by pull-snapshot) ===')
+      return 0
     }
+    logger.warn('pull-snapshot failed; falling back to crawl-on-host refresh')
+    await runner([env.bunBin, 'run', `${repoDir}/cli.js`, 'sync'], { cwd: repoDir, deadlineMs: 4 * 60 * 60_000 })
+      .catch(err => logger.warn(`sync exited: ${err?.message ?? err}`))
   } else {
     await runner([env.bunBin, 'run', `${repoDir}/cli.js`, 'sync'], { cwd: repoDir, deadlineMs: 4 * 60 * 60_000 })
       .catch(err => logger.warn(`sync exited: ${err?.message ?? err}`))

@@ -15,7 +15,7 @@ import {
   stripTarGz,
   USER_AGENT,
 } from './setup/helpers.js'
-import { setProfile, PROFILE_NAMES, DEFAULT_PROFILE } from '../storage/profiles.js'
+import { getProfile, setProfile, PROFILE_NAMES, DEFAULT_PROFILE } from '../storage/profiles.js'
 import { promptChoice } from '../cli/prompts.js'
 
 // Snapshot asset filename component — every snapshot ships the full
@@ -294,6 +294,16 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
     : await validateArchive(archivePath, dataDir)
   logger.info(`Archive validated (${validation.entries.length} entries).`)
 
+  // Preserve the operator's storage profile across a re-install (snapshot
+  // swap). The new snapshot DB doesn't carry a storage_profile, so without
+  // this a `--force` deploy would silently reset a prebuilt host to the
+  // default. Only inherit when there's an existing corpus (a true re-install);
+  // a fresh install still prompts / defaults. An explicit --profile wins.
+  let priorProfile = null
+  try {
+    if (db.getStats().totalPages > 0) priorProfile = getProfile(db)
+  } catch { /* fresh or unreadable db — no profile to inherit */ }
+
   db.close()
 
   // Remove old extracted payloads before installing the fresh snapshot.
@@ -366,7 +376,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
     // build host baked into snapshot_meta. Prebuilt materializes the fast
     // artifacts locally so the shipped (compact) snapshot can still serve a
     // max-speed instance.
-    const storageProfile = await resolveStorageProfile({ profile, yes })
+    const storageProfile = await resolveStorageProfile({ profile: profile ?? priorProfile, yes })
     setProfile(verifyDb, storageProfile)
     if (storageProfile === 'prebuilt') {
       logger.info('Prebuilt profile — materializing markdown + HTML…')

@@ -282,6 +282,26 @@ describe('runDeployUpdate', () => {
     expect(syncCalled).toBe(false)
   })
 
+  test('snapshot success returns early — no duplicate web build / smoke', async () => {
+    let webBuilt = false
+    const smokeCalls = []
+    const code = await runDeployUpdate(defaults({
+      env: { USE_SNAPSHOT: '1' },
+      deps: {
+        pullSnapshot: async () => 0, // complete refresh: build/smoke/stamp done
+        smokeTest: async (ctx) => { smokeCalls.push(ctx); return 0 },
+        runCmd: async (args) => {
+          if (args.includes('build') && args[3] === 'web') webBuilt = true
+          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+        },
+      },
+    }))
+    expect(code).toBe(0)
+    // pull-snapshot already built + smoked; deploy-update must not repeat them.
+    expect(webBuilt).toBe(false)
+    expect(smokeCalls.length).toBe(0)
+  })
+
   test('USE_SNAPSHOT=0 forces crawl-on-host (cli.js sync runs, pullSnapshot skipped)', async () => {
     let pullSnapshotCalled = false
     let syncCalled = false

@@ -65,22 +65,32 @@ ops/bin/deploy-update.sh
 ops/bin/smoke-test.sh
 ```
 
-`deploy-update.sh` is the all-in-one: it keeps the previous web and MCP
-daemons online while it pulls + renders + refreshes the corpus + rebuilds
-the static site, then cuts over by `launchctl kickstart`-ing the daemons in
-order — **web → mcp → (3 s pause) → watchdog**. The pause lets the watchdog
-re-probe the fresh backends instead of the just-killed ones. Caddy's
-health-gated upstream (`/healthz`, 2 passes / 3 fails) absorbs the cut-over.
+`deploy-update.sh` pulls the code, installs deps, re-renders config, then
+auto-detects the corpus refresh mode (newer GitHub snapshot tag vs
+`ops/state/applied-snapshot`):
 
-Because `deploy-update.sh` already refreshes the corpus itself (it
-auto-detects a newer GitHub snapshot tag vs `ops/state/applied-snapshot`
-and runs `pull-snapshot` when one exists, else an incremental host `sync`),
-the standalone `pull-snapshot.sh` / `render-all.sh` steps above are only for
-a **corpus-only** or **config-only** refresh. For a normal roll you can run
-`deploy-update.sh` alone. Force snapshot mode with `USE_SNAPSHOT=1` (or crawl
-mode with `USE_SNAPSHOT=0`). If a deploy changed any `launchd/*.tpl`, the
-run warns about plist drift — `kickstart` won't pick up new plists, so run
-`apple-docs-ops install` to reinstall them.
+- **Snapshot path** (the usual roll): it hands off to `pull-snapshot`, which
+  stops watchdog → web → mcp, runs `setup --force` to swap the DB (**a brief
+  MCP/API outage, under ~10 min** — Caddy keeps serving the previous static
+  web tree throughout), brings web → mcp → watchdog back up, rebuilds the
+  static site while they serve, purges Cloudflare, smoke-tests, and stamps the
+  tag. `deploy-update` then returns — it does **not** rebuild a second time.
+- **Crawl path** (no newer snapshot): it keeps web + mcp online, refreshes the
+  corpus in place, rebuilds the static site, then cuts over by `launchctl
+  kickstart`-ing **web → mcp → (3 s pause) → watchdog** (the pause lets the
+  watchdog re-probe the fresh backends), and smoke-tests. Caddy's health-gated
+  upstream (`/healthz`, 2 passes / 3 fails) absorbs the cut-over.
+
+`setup --force` preserves the host's existing storage profile across the swap
+(a prebuilt host stays prebuilt and re-materializes), unless you pass an
+explicit `--profile`.
+
+Because `deploy-update.sh` refreshes the corpus itself, the standalone
+`pull-snapshot.sh` / `render-all.sh` steps above are only for a **corpus-only**
+or **config-only** refresh. For a normal roll, run `deploy-update.sh` alone.
+Force snapshot mode with `USE_SNAPSHOT=1` (or crawl mode with `USE_SNAPSHOT=0`).
+If a deploy changed any `launchd/*.tpl`, the run warns about plist drift —
+`kickstart` won't pick up new plists, so run `apple-docs-ops install`.
 
 If you need to install a **specific** older snapshot tag (e.g. the one
 you were on before today), download the asset by hand and feed it to
