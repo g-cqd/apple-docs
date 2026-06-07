@@ -40,7 +40,7 @@ async function dispatchStorage(subcommand, positional, flags, ctx) {
   }
   if (subcommand === 'compact') {
     const { storageCompact } = await import('../commands/storage-compact.js')
-    return { result: await storageCompact({ force: !!flags.force }, ctx), formatter: summary('storage compact') }
+    return { result: await storageCompact({ force: !!flags.force, keepRaw: !!flags['keep-raw'] }, ctx), formatter: summary('storage compact') }
   }
   if (subcommand === 'gc') {
     const { storageGc } = await import('../commands/storage.js')

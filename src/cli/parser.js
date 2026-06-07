@@ -15,6 +15,7 @@ const BOOLEAN_FLAGS = new Set([
   'json',
   'full',
   'force',
+  'keep-raw',
   'downgrade',
   'read',
   'no-vacuum',

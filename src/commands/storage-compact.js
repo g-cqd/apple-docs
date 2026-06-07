@@ -11,16 +11,18 @@ const BODY_FTS_CONTENTLESS = `CREATE VIRTUAL TABLE documents_body_fts USING fts5
 
 /**
  * Compact an install for minimum disk: zstd-compress document_sections content
- * in place and rebuild documents_body_fts as a contentless index (dropping its
- * stored body copy). Reads stay correct because every section reader decodes
- * via src/storage/section-codec.js, and switches the profile to render-on-demand.
+ * in place, rebuild documents_body_fts as a contentless index (dropping its
+ * stored body copy), and drop the embedded raw payloads (document_raw, ~1 GB on
+ * a full corpus — `--keep-raw` retains them). Reads stay correct because every
+ * section reader decodes via src/storage/section-codec.js; the profile switches
+ * to render-on-demand.
  *
  * Refuses a `prebuilt` install (compaction trades disk for per-read
  * decompression — the opposite of the prebuilt fast path) unless --force.
  *
  * Idempotent: already-compressed rows and rows that don't shrink are left as-is.
  *
- * @param {{ force?: boolean }} opts
+ * @param {{ force?: boolean, keepRaw?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function storageCompact(opts, ctx) {
@@ -72,6 +74,21 @@ export async function storageCompact(opts, ctx) {
     await indexBodyFull(db, dataDir, logger)
   }
 
+  // 2b. Drop the embedded raw upstream payloads (document_raw). They exist
+  //     only to re-materialize raw-json on demand; reads and search use
+  //     document_sections, which stay intact. On a v23 corpus this is the
+  //     single biggest compaction win (~1 GB). DELETE (not DROP) keeps the
+  //     table so prepared statements / `storage materialize raw-json` still
+  //     resolve — they just return nothing. `--keep-raw` retains them.
+  let rawDropped = 0
+  if (!opts?.keepRaw && db.hasTable('document_raw')) {
+    rawDropped = db.db.query('SELECT COUNT(*) AS c FROM document_raw').get().c
+    if (rawDropped > 0) {
+      logger?.info?.(`Dropping ${rawDropped} embedded raw payloads (pass --keep-raw to retain)…`)
+      db.db.run('DELETE FROM document_raw')
+    }
+  }
+
   // 3. Record the mode, switch to render-on-demand, reclaim freed pages.
   db.setSnapshotMeta('sections_compressed', '1')
   if (profileBefore !== 'raw-only') setProfile(db, 'raw-only')
@@ -82,6 +99,6 @@ export async function storageCompact(opts, ctx) {
   db.db.run('PRAGMA wal_checkpoint(TRUNCATE)')
 
   const profile = getProfile(db)
-  logger?.info?.(`Compact complete: ${compressed} sections compressed; profile=${profile}.`)
-  return { status: 'ok', sectionsCompressed: compressed, profile }
+  logger?.info?.(`Compact complete: ${compressed} sections compressed; ${rawDropped} raw payloads dropped; profile=${profile}.`)
+  return { status: 'ok', sectionsCompressed: compressed, rawDropped, profile }
 }

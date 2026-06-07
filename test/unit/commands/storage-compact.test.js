@@ -61,6 +61,28 @@ describe('storageCompact', () => {
     expect(r.results.map(x => x.path)).toContain(KEY)
   })
 
+  test('drops embedded raw payloads by default (DELETE, table kept)', async () => {
+    const docId = db.db.query('SELECT id FROM documents WHERE key = ?').get(KEY).id
+    db.upsertRawPayload(docId, '{"metadata":{"title":"View"}}')
+    expect(db.getRawCount()).toBe(1)
+
+    setProfile(db, 'balanced')
+    const res = await storageCompact({}, ctx)
+    expect(res.rawDropped).toBe(1)
+    expect(db.getRawCount()).toBe(0)             // payloads gone
+    expect(db.hasTable('document_raw')).toBe(true) // but the table stays (DELETE, not DROP)
+  })
+
+  test('--keep-raw retains the embedded raw payloads', async () => {
+    const docId = db.db.query('SELECT id FROM documents WHERE key = ?').get(KEY).id
+    db.upsertRawPayload(docId, '{"k":1}')
+
+    setProfile(db, 'balanced')
+    const res = await storageCompact({ keepRaw: true }, ctx)
+    expect(res.rawDropped).toBe(0)
+    expect(db.getRawCount()).toBe(1)
+  })
+
   test('rebuilds documents_body_fts as contentless and body MATCH still works', async () => {
     setProfile(db, 'balanced')
     await storageCompact({}, ctx)
