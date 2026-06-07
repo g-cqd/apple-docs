@@ -103,6 +103,21 @@ describe('loadEnv', () => {
     }
   })
 
+  test('under sudo (root) accepts a .env owned by the SUDO_UID operator', () => {
+    const deps = fakeDeps({ uid: 501, fileText: envText(minimalEnv({ LABEL_PREFIX: 'mt.test' })) })
+    deps.currentUid = () => 0 // running as root via sudo
+    deps.sudoUid = 501 // ... but the invoking operator is uid 501
+    const out = loadEnv({ path: '/fake', deps })
+    expect(out.vars.LABEL_PREFIX).toBe('mt.test')
+  })
+
+  test('under sudo still rejects a .env owned by a third party', () => {
+    const deps = fakeDeps({ uid: 999, fileText: envText(minimalEnv()) })
+    deps.currentUid = () => 0
+    deps.sudoUid = 501 // operator is 501, but the file is owned by 999
+    expect(() => loadEnv({ path: '/fake', deps })).toThrow(/wrong-owner|owner uid/)
+  })
+
   test('throws wrong-mode when mode is too permissive', () => {
     const deps = fakeDeps({ mode: 0o644, fileText: envText(minimalEnv()) })
     try {

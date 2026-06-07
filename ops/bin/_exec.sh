@@ -7,16 +7,18 @@
 #   2. /opt/homebrew/bin/bun  (Apple Silicon, default homebrew prefix)
 #   3. /usr/local/bin/bun     (Intel macOS / linuxbrew)
 #   4. $HOME/.bun/bin/bun     (default `bun upgrade` install location)
-#   5. `command -v bun`       (anything else on PATH)
+#   5. /Users/$SUDO_USER/.bun/bin/bun  (under `sudo`, $HOME is /var/root, so
+#      the operator's bun lives under their home, not root's)
+#   6. `command -v bun`       (anything else on PATH)
 #
 # The launchd plists set PATH to /opt/homebrew/bin:/usr/local/bin:... and
-# HOME to /Users/<operator> but do not set BUN_BIN — that's why we walk
-# all four well-known locations before falling back to PATH.
+# HOME to /Users/<operator> but do not set BUN_BIN — that's why we walk the
+# well-known locations before falling back to PATH.
 exec_bun_cli() {
   if [ -n "${BUN_BIN:-}" ] && [ -x "$BUN_BIN" ]; then
     exec "$BUN_BIN" "$@"
   fi
-  for _b in /opt/homebrew/bin/bun /usr/local/bin/bun "${HOME:-}/.bun/bin/bun"; do
+  for _b in /opt/homebrew/bin/bun /usr/local/bin/bun "${HOME:-}/.bun/bin/bun" "${SUDO_USER:+/Users/$SUDO_USER/.bun/bin/bun}"; do
     if [ -n "$_b" ] && [ -x "$_b" ]; then
       exec "$_b" "$@"
     fi

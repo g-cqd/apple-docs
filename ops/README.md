@@ -31,10 +31,16 @@ directory and `apple-docs` still works.
 ```sh
 cd ops
 cp .env.example .env
-$EDITOR .env                       # fill in every value
+$EDITOR .env                       # fill in every value; keep it `chmod 0600` and owned by you
 bun cli.js render-all              # render every .tpl -> sibling file
-sudo bun cli.js install            # copies rendered plists into /Library/LaunchDaemons
+sudo bin/apple-docs-ops install    # installs plists + sudoers (re-run any time)
 ```
+
+Use the `bin/apple-docs-ops` shim for the `sudo` step rather than `sudo bun
+cli.js …`: the shim resolves bun even though `sudo` resets `$HOME` to
+`/var/root` (it falls back to `/Users/$SUDO_USER/.bun/bin/bun`), and the env
+loader accepts your operator-owned `.env` because `sudo` exports `SUDO_UID`.
+A `.env` owned by anyone other than the invoking operator is still rejected.
 
 `install` writes the sudoers drop-in first (via `visudo -cf` for validation,
 then `install -m 0440`) so the remaining `launchctl bootstrap` calls work

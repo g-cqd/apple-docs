@@ -81,6 +81,11 @@ export function loadEnv(opts = {}) {
   const stat = deps.stat ?? defaultStat
   const currentUid = deps.currentUid ?? (() => process.getuid?.() ?? userInfo().uid)
   const currentUser = deps.currentUser ?? (() => userInfo().username)
+  // Under `sudo` the process runs as root (uid 0) but the .env belongs to the
+  // invoking operator — sudo exports their uid as SUDO_UID. Accept it so the
+  // documented `sudo apple-docs-ops install` can load the operator-owned .env,
+  // without weakening the check: a .env owned by anyone else is still rejected.
+  const sudoUid = deps.sudoUid ?? process.env.SUDO_UID
 
   const opsDir = opts.opsDir ?? defaultOpsDir()
   const envPath = opts.path ?? join(opsDir, '.env')
@@ -97,9 +102,14 @@ export function loadEnv(opts = {}) {
     )
   }
 
-  if (!opts.skipOwnerCheck && info.uid !== currentUid()) {
+  const cuid = currentUid()
+  const acceptableUids = new Set([cuid])
+  if (cuid === 0 && sudoUid != null && /^\d+$/.test(String(sudoUid))) {
+    acceptableUids.add(Number(sudoUid))
+  }
+  if (!opts.skipOwnerCheck && !acceptableUids.has(info.uid)) {
     throw new EnvLoadError(
-      `${envPath} owner uid is ${info.uid}, expected ${currentUid()} (${currentUser()}). Refusing to load.`,
+      `${envPath} owner uid is ${info.uid}, expected ${[...acceptableUids].join(' or ')} (${currentUser()}). Refusing to load.`,
       { code: 'wrong-owner' },
     )
   }
