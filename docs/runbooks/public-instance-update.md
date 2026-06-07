@@ -9,14 +9,22 @@ This runbook assumes the standard `ops/` topology described in
 ```mermaid
 flowchart LR
   TUN["cloudflared tunnel"]
-  CADDY["Caddy"]
+  CADDY["Caddy (apple-docs.proxy daemon)"]
   WEB["Bun web server"]
   MCP["Bun mcp server"]
+  WD["watchdog (apple-docs.watchdog daemon)"]
 
   TUN -- "loopback" --> CADDY
-  CADDY -- "loopback" --> WEB
-  CADDY -- "loopback" --> MCP
+  CADDY -- "health-gated /healthz" --> WEB
+  CADDY -- "health-gated /healthz" --> MCP
+  WD -. "kickstarts on probe fail" .-> WEB
+  WD -. "kickstarts on probe fail" .-> MCP
 ```
+
+All six daemons run as **system LaunchDaemons** in `/Library/LaunchDaemons`
+(`apple-docs.{web,mcp,proxy,watchdog}` + `cloudflared.apple-docs{,-mcp}`),
+installed via `apple-docs-ops install`. Caddy is supervised by the
+`apple-docs.proxy` daemon (the ops `proxy run` verb just execs `caddy run`).
 
 It uses the `ops/bin/*.sh` shims so commands work under non-interactive
 SSH without depending on the operator's PATH. Replace `<host>` with the
@@ -57,9 +65,22 @@ ops/bin/deploy-update.sh
 ops/bin/smoke-test.sh
 ```
 
-`deploy-update.sh` keeps the previous web and MCP daemons online while
-the corpus refresh runs, swaps in the new tree, then kickstarts the
-services. Caddy's health-gated upstream absorbs the cut-over.
+`deploy-update.sh` is the all-in-one: it keeps the previous web and MCP
+daemons online while it pulls + renders + refreshes the corpus + rebuilds
+the static site, then cuts over by `launchctl kickstart`-ing the daemons in
+order — **web → mcp → (3 s pause) → watchdog**. The pause lets the watchdog
+re-probe the fresh backends instead of the just-killed ones. Caddy's
+health-gated upstream (`/healthz`, 2 passes / 3 fails) absorbs the cut-over.
+
+Because `deploy-update.sh` already refreshes the corpus itself (it
+auto-detects a newer GitHub snapshot tag vs `ops/state/applied-snapshot`
+and runs `pull-snapshot` when one exists, else an incremental host `sync`),
+the standalone `pull-snapshot.sh` / `render-all.sh` steps above are only for
+a **corpus-only** or **config-only** refresh. For a normal roll you can run
+`deploy-update.sh` alone. Force snapshot mode with `USE_SNAPSHOT=1` (or crawl
+mode with `USE_SNAPSHOT=0`). If a deploy changed any `launchd/*.tpl`, the
+run warns about plist drift — `kickstart` won't pick up new plists, so run
+`apple-docs-ops install` to reinstall them.
 
 If you need to install a **specific** older snapshot tag (e.g. the one
 you were on before today), download the asset by hand and feed it to
