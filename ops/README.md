@@ -18,7 +18,7 @@ ops/
 ├── cmd/*.js                # one file per verb (deploy, install, watchdog, …)
 ├── lib/*.js                # env loader, launchctl wrapper, http probe, …
 ├── bin/*.sh                # thin shims so launchd plists keep working
-├── launchd/*.tpl           # system LaunchDaemons + sudoers drop-in
+├── launchd/*.tpl           # system LaunchDaemons (incl. weekly auto-roll) + sudoers
 ├── caddy/Caddyfile.tpl     # reverse proxy terminating TLS on localhost
 └── cloudflared/*.tpl       # two tunnels: one for the web UI, one for MCP
 ```
@@ -38,8 +38,10 @@ sudo bun cli.js install            # copies rendered plists into /Library/Launch
 
 `install` writes the sudoers drop-in first (via `visudo -cf` for validation,
 then `install -m 0440`) so the remaining `launchctl bootstrap` calls work
-without a password prompt. It only grants `launchctl` rights for the five
-labels in `launchd/sudoers.apple-docs-launchctl.tpl` — nothing more.
+without a password prompt. It only grants `launchctl` rights for the
+apple-docs labels in `launchd/sudoers.apple-docs-launchctl.tpl`
+(`proxy`/`web`/`mcp`/`watchdog`/`autoroll` + the two cloudflared tunnels) —
+nothing more.
 
 ## Day-to-day
 

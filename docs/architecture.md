@@ -138,7 +138,7 @@ flowchart LR
   src["Source checkout<br/>(<code>bun link</code>)"]
   binary["Standalone binary<br/>(<code>bun build --compile</code>)"]
   snapshot["Snapshot tarball<br/>(<code>apple-docs setup</code>)"]
-  corpus["Local corpus<br/>(SQLite + Markdown + raw JSON +<br/>fonts + SF Symbols)"]
+  corpus["Local corpus<br/>(SQLite: sections + raw + vectors;<br/>fonts + SF Symbols + ONNX model)"]
 
   src --> corpus
   binary --> corpus
@@ -147,9 +147,12 @@ flowchart LR
 
 - **Source install** populates the corpus by running `apple-docs sync`
   (full crawl) or `apple-docs setup` (snapshot).
-- **Snapshot install** downloads a pre-built tarball that ships the DB,
-  raw JSON, Markdown, extracted Apple fonts, and the pre-rendered SF
-  Symbols matrix.
+- **Snapshot install** downloads a single pre-built `.tar.gz` that ships the
+  DB (document sections + zstd-compressed raw payloads in `document_raw` +
+  the optional semantic vectors in `document_vectors`), extracted Apple
+  fonts, the pre-rendered SF Symbols matrix, and the offline query-embedding
+  model. Markdown/HTML and loose raw-JSON are materialized on device
+  (`storage materialize`), not shipped.
 - **Standalone binary** compiles `cli.js` into a single executable via
   `bun build --compile`. The `release-binaries.yml` workflow attaches
   `darwin-arm64`, `linux-x64`, and `linux-arm64` binaries to GitHub

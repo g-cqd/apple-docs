@@ -21,31 +21,42 @@ operator-edited `.env`.
 
 ## Topology
 
-The reference deployment separates four concerns:
+The reference deployment runs as a small set of **system LaunchDaemons**
+(`/Library/LaunchDaemons`, installed by `apple-docs-ops install`):
 
 ```mermaid
 flowchart LR
   CF["Cloudflare edge"]
   TUN["cloudflared tunnel<br/>(outbound)"]
-  CADDY["Caddy reverse proxy<br/>(loopback :3030 / :3031)"]
-  BUN_WEB["bun cli.js web serve<br/>(loopback :3130)"]
-  BUN_MCP["bun cli.js mcp serve<br/>(loopback :3131)"]
+  CADDY["Caddy / apple-docs.proxy<br/>(loopback :3030 / :3031)"]
+  BUN_WEB["web serve<br/>(loopback :3130)"]
+  BUN_MCP["mcp serve<br/>(loopback :3131)"]
+  WD["apple-docs.watchdog"]
 
   CF -- "TLS" --> TUN
   TUN -- "HTTP" --> CADDY
-  CADDY -- "loopback" --> BUN_WEB
-  CADDY -- "loopback" --> BUN_MCP
+  CADDY -- "health-gated" --> BUN_WEB
+  CADDY -- "health-gated" --> BUN_MCP
+  WD -. "probes /readyz, kickstarts" .-> BUN_WEB
+  WD -. "probes /readyz, kickstarts" .-> BUN_MCP
 ```
 
 - `cloudflared` terminates the public hostname and originates a local
   HTTP connection. No ports are opened on the host — the tunnel is
   outbound.
-- **Caddy** owns stable local ports and proxies to the app. It lets you
-  restart the Bun process without dropping tunnel traffic and provides
-  a health-gated upstream.
+- **Caddy** — run by the `apple-docs.proxy` daemon (the ops `proxy run`
+  verb execs `caddy run`) — owns stable local ports and proxies to the app
+  with a health-gated upstream, so a backend restart doesn't drop tunnel
+  traffic.
 - **Bun** runs `apple-docs web serve` and `apple-docs mcp serve` on
   private loopback ports. They have no built-in auth, no TLS, and are
   never reachable directly from the network.
+- **watchdog** (`apple-docs.watchdog`) probes the backends' `/readyz`
+  directly (bypassing Caddy) and kickstarts a wedged one; it also runs an
+  optional daily restart.
+- **autoroll** (`apple-docs.autoroll`) is a weekly timer that auto-updates
+  the instance from the latest GitHub snapshot — see the
+  [update runbook](/runbooks/public-instance-update).
 
 You can collapse this (for example, skip Caddy and point the tunnel at
 Bun directly). Caddy is in the reference because zero-downtime restarts
@@ -66,12 +77,16 @@ already use). The MCP server trusts anything that reaches `/mcp`.
 
 ## Snapshot consumer requirements
 
-`apple-docs setup` downloads a pre-built corpus snapshot. Every snapshot
-ships the full corpus, every Apple font, and the entire pre-rendered SF
-Symbols matrix
+`apple-docs setup` downloads a single pre-built corpus snapshot (a
+`.tar.gz`). It ships the full corpus DB (sections + zstd-compressed raw
+payloads + the semantic-search vectors), every Apple font, the entire
+pre-rendered SF Symbols matrix
 (`<dataDir>/resources/symbols/<scope>/<weight>-<scale>/<name>.svg`)
-because the runtime cannot live-render those without the macOS SF
-Symbols system bundle.
+because the runtime cannot live-render those without the macOS SF Symbols
+system bundle, and the offline query-embedding model under
+`resources/models` (so semantic search needs no network). Markdown/HTML and
+loose raw-json are not shipped — `storage materialize` renders them on
+device. `setup --force` preserves the host's chosen storage profile.
 
 **SVG requests** (`/api/symbols/public/heart.svg?weight=bold&scale=large`)
 are served straight from the pre-render — no host-side dependencies.

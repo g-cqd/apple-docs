@@ -36,9 +36,11 @@ tests), Python `fontTools` + `brotli` (for font-subset tests), and
 Playwright Chromium (for the browser-worker test). See
 [`docs/installing.md`](docs/installing.md) for the breakdown.
 
-`setup` installs one full snapshot shape: database, Markdown, raw JSON,
-extracted Apple fonts, and pre-rendered SF Symbols. ~60 seconds, ~6 GB
-on disk.
+`setup` installs one full snapshot shape (a single `.tar.gz`): the database
+(document sections + zstd-compressed raw payloads + semantic-search vectors),
+extracted Apple fonts, the pre-rendered SF Symbols matrix, and the offline
+query-embedding model. Markdown/HTML and loose raw-JSON aren't shipped —
+`storage materialize` renders them on device. ~1.8 GB download, ~6 GB on disk.
 
 If you want to build the corpus yourself instead:
 

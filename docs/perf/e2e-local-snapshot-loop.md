@@ -98,7 +98,7 @@ If a sync dies mid-way (network blip, OOM, user `Ctrl-C`), the next
 | `apple-docs search 'NavigationStack' --limit 3` | SwiftUI `navigationstack` in the top results |
 | `apple-docs read swiftui/view` | Returns abstract and platforms list |
 | `apple-docs status --json .crawlProgress.failed` | `0` after a clean install |
-| `du -sh ~/.apple-docs` | Matches the manifest's `dbSize` plus raw JSON, Markdown, and resources |
+| `du -sh ~/.apple-docs` | ≈ the manifest's `dbSize` plus resources (fonts + SF Symbols + model); markdown/raw-json are empty until `storage materialize` runs |
 
 ## Snapshot artifact layout
 
@@ -116,7 +116,7 @@ Example manifest (truncated):
 ```json
 {
   "version": "<tag>",
-  "schemaVersion": 18,
+  "schemaVersion": 23,
   "tier": "full",
   "createdAt": "<ISO 8601>",
   "documentCount": <count>,
