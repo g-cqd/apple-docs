@@ -172,9 +172,13 @@ function renderFooter(siteConfig) {
   const snapshotLine = siteConfig.snapshotTag
     ? html`<span class="footer-snapshot">Snapshot <a href="https://github.com/g-cqd/apple-docs/releases/tag/${siteConfig.snapshotTag}" rel="noopener noreferrer"><code>${siteConfig.snapshotTag}</code></a></span>`
     : null
+  // Commit the instance is serving — the code SHA captured at web-build time.
+  const commitLine = siteConfig.commitHash
+    ? html`<span class="footer-commit">Commit <a href="https://github.com/g-cqd/apple-docs/commit/${siteConfig.commitHash}" rel="noopener noreferrer"><code>${siteConfig.commitHash}</code></a></span>`
+    : null
   return html`<footer class="site-footer">
   <p>
-    Built on ${buildDate}${snapshotLine ? html` &middot; ${snapshotLine}` : null}
+    Built on ${buildDate}${snapshotLine ? html` &middot; ${snapshotLine}` : null}${commitLine ? html` &middot; ${commitLine}` : null}
     &middot; by <a href="https://github.com/g-cqd" rel="noopener noreferrer">@g-cqd</a>
     &middot; based on <a href="https://developer.apple.com" rel="noopener noreferrer">Apple Developer Documentation</a>
   </p>

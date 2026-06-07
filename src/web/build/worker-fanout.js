@@ -79,7 +79,13 @@ export async function runWorkerBuilds({ roots, siteConfig, workers, concurrency,
     return Bun.spawn([bunBin, ...args], {
       stdout: 'inherit',
       stderr: 'inherit',
-      env: { ...process.env, APPLE_DOCS_BUILD_WORKER: '1' },
+      // Pin the commit the orchestrator computed so every worker renders the
+      // same footer SHA (and skips its own `git` call).
+      env: {
+        ...process.env,
+        APPLE_DOCS_BUILD_WORKER: '1',
+        ...(siteConfig.commitHash ? { APPLE_DOCS_COMMIT: siteConfig.commitHash } : {}),
+      },
     })
   })
 

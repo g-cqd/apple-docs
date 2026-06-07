@@ -15,6 +15,7 @@ import { linksAudit } from '../commands/links.js'
 import { computeTemplateVersion } from './build/checkpoint.js'
 import { runWorkerBuilds } from './build/worker-fanout.js'
 import { runStep } from '../lib/run-step.js'
+import { getCommitHash } from '../lib/git-version.js'
 import { runAssetPipeline } from './build/assets-pipeline.js'
 import { buildDocumentPages } from './build/document-pages.js'
 import { buildFrameworkPages } from './build/framework-pages.js'
@@ -103,6 +104,7 @@ export async function buildStaticSite(opts, ctx) {
     siteName: opts.siteName || 'Apple Developer Docs',
     buildDate: new Date().toISOString().split('T')[0],
     snapshotTag,
+    commitHash: getCommitHash(),
     bundled: true,
   }
   const fsOps = opts.fsOps ?? { rename, rm }

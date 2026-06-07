@@ -266,6 +266,22 @@ describe('renderDocumentPage', () => {
     expect(page).not.toContain('footer-snapshot')
   })
 
+  test('footer shows the running commit hash linked to the GitHub commit', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, {
+      ...siteConfig,
+      commitHash: 'a1b2c3d',
+    }).toString()
+    expect(page).toContain('footer-commit')
+    expect(page).toContain('a1b2c3d')
+    expect(page).toMatch(/href="https:\/\/github\.com\/g-cqd\/apple-docs\/commit\/a1b2c3d"[^>]*rel="noopener noreferrer"><code>a1b2c3d<\/code><\/a>/)
+  })
+
+  test('footer omits the commit line when no hash is available', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, siteConfig).toString()
+    expect(page).not.toContain('footer-commit')
+    expect(page).not.toContain('/apple-docs/commit/')
+  })
+
   test('empty sections produce valid page without crash', () => {
     const page = renderDocumentPage(mockDoc, [], siteConfig).toString()
     expect(typeof page.toString()).toBe('string')
