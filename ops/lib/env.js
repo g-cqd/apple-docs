@@ -33,7 +33,8 @@ export const REQUIRED_VARS = Object.freeze([
  */
 export const DERIVED_NAMES = Object.freeze([
   'LABEL_PROXY', 'LABEL_WEB', 'LABEL_MCP',
-  'LABEL_TUNNEL_WEB', 'LABEL_TUNNEL_MCP', 'LABEL_WATCHDOG',
+  'LABEL_TUNNEL_WEB', 'LABEL_TUNNEL_MCP', 'LABEL_WATCHDOG', 'LABEL_AUTOROLL',
+  'AUTOROLL_WEEKDAY', 'AUTOROLL_HOUR',
   'STATIC_DIR', 'APPLE_DOCS_MCP_CACHE_SCALE', 'LEGACY_LAUNCHD_LABELS',
 ])
 
@@ -126,6 +127,7 @@ export function loadEnv(opts = {}) {
       tunnelWeb: vars.LABEL_TUNNEL_WEB,
       tunnelMcp: vars.LABEL_TUNNEL_MCP,
       watchdog: vars.LABEL_WATCHDOG,
+      autoroll: vars.LABEL_AUTOROLL,
     },
     staticDir: vars.STATIC_DIR,
     opsDir,
@@ -186,6 +188,12 @@ function applyDerived(vars) {
   vars.LABEL_TUNNEL_WEB = `${prefix}.cloudflared.web`
   vars.LABEL_TUNNEL_MCP = `${prefix}.cloudflared.mcp`
   vars.LABEL_WATCHDOG = `${prefix}.watchdog`
+  vars.LABEL_AUTOROLL = `${prefix}.autoroll`
+  // Weekly auto-roll schedule (launchd StartCalendarInterval, LOCAL time).
+  // Default: Sunday (0) at 14:00 — comfortably after the Sunday 06:00 UTC
+  // snapshot build publishes. Override AUTOROLL_WEEKDAY / AUTOROLL_HOUR in .env.
+  vars.AUTOROLL_WEEKDAY = vars.AUTOROLL_WEEKDAY || '0'
+  vars.AUTOROLL_HOUR = vars.AUTOROLL_HOUR || '14'
   vars.STATIC_DIR = vars.STATIC_DIR || `${vars.REPO_DIR}/dist/web`
   vars.APPLE_DOCS_MCP_CACHE_SCALE = vars.APPLE_DOCS_MCP_CACHE_SCALE || '1'
   vars.LEGACY_LAUNCHD_LABELS = vars.LEGACY_LAUNCHD_LABELS || ''

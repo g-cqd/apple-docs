@@ -88,7 +88,7 @@ describe('runInstallDaemons', () => {
     const plistInstalls = runner.calls.filter(c =>
       c.args[0] === '/usr/bin/install' && c.args.includes('644'),
     )
-    expect(plistInstalls.length).toBe(6) // 4 app + 2 tunnel labels
+    expect(plistInstalls.length).toBe(7) // 5 app (proxy/web/mcp/watchdog/autoroll) + 2 tunnel labels
 
     // smoke-test was run after the 8s settle sleep.
     expect(sleeps).toContain(8_000)

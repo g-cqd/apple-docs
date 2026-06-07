@@ -26,6 +26,7 @@ const LAUNCHD_NAME_MAP = Object.freeze({
   'apple-docs.web.plist.tpl': 'LABEL_WEB',
   'apple-docs.mcp.plist.tpl': 'LABEL_MCP',
   'apple-docs.watchdog.plist.tpl': 'LABEL_WATCHDOG',
+  'apple-docs.autoroll.plist.tpl': 'LABEL_AUTOROLL',
   'cloudflared.apple-docs.plist.tpl': 'LABEL_TUNNEL_WEB',
   'cloudflared.apple-docs-mcp.plist.tpl': 'LABEL_TUNNEL_MCP',
 })

@@ -34,7 +34,7 @@ import { runCmd, runCmdAllowFailure } from '../lib/run-cmd.js'
 import runRenderAll from './render-all.js'
 import runSmokeTest from './smoke-test.js'
 
-const APP_LABEL_KEYS = ['LABEL_PROXY', 'LABEL_WEB', 'LABEL_MCP', 'LABEL_WATCHDOG']
+const APP_LABEL_KEYS = ['LABEL_PROXY', 'LABEL_WEB', 'LABEL_MCP', 'LABEL_WATCHDOG', 'LABEL_AUTOROLL']
 const ALL_LABEL_KEYS = [...APP_LABEL_KEYS, 'LABEL_TUNNEL_WEB', 'LABEL_TUNNEL_MCP']
 
 /**

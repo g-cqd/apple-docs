@@ -21,10 +21,34 @@ flowchart LR
   WD -. "kickstarts on probe fail" .-> MCP
 ```
 
-All six daemons run as **system LaunchDaemons** in `/Library/LaunchDaemons`
-(`apple-docs.{web,mcp,proxy,watchdog}` + `cloudflared.apple-docs{,-mcp}`),
+All daemons run as **system LaunchDaemons** in `/Library/LaunchDaemons`
+(`apple-docs.{web,mcp,proxy,watchdog,autoroll}` + `cloudflared.apple-docs{,-mcp}`),
 installed via `apple-docs-ops install`. Caddy is supervised by the
-`apple-docs.proxy` daemon (the ops `proxy run` verb just execs `caddy run`).
+`apple-docs.proxy` daemon (the ops `proxy run` verb just execs `caddy run`);
+`apple-docs.autoroll` is the weekly auto-update timer (below).
+
+## Automated weekly roll
+
+`apple-docs.autoroll` is a `StartCalendarInterval` LaunchDaemon that runs
+`deploy-update.sh` with `USE_SNAPSHOT=1` once a week — default **Sunday 14:00
+local** (`AUTOROLL_WEEKDAY` / `AUTOROLL_HOUR` in `ops/.env`; launchd uses local
+time, and runs a missed interval once the machine wakes). It's scheduled after
+the Sunday 06:00 UTC `snapshot.yml` build publishes.
+
+Each run git-pulls the latest code and, via `USE_SNAPSHOT=1`, applies a newer
+GitHub snapshot when one exists (full refresh: DB swap → restart → rebuild →
+smoke) or **no-ops** when the corpus is already current. So in steady state the
+instance rolls itself every Sunday; the manual steps below are the override /
+recovery path. Tail `ops/logs/apple-docs-autoroll.log`.
+
+- **Disable for a week / pin a version:** `sudo launchctl bootout
+  system/<prefix>.autoroll` (re-enable with `apple-docs-ops install`, or
+  `sudo launchctl bootstrap system /Library/LaunchDaemons/<prefix>.autoroll.plist`).
+- **Roll now, off-schedule:** `sudo launchctl kickstart -k system/<prefix>.autoroll`
+  (or just run `deploy-update.sh` yourself).
+- **Caveat:** a roll deploys unattended. A bad snapshot or a red `main` would
+  ship without a human in the loop — the determinism gate + the per-run smoke
+  test are the guardrails, and the Rollback section is the recovery.
 
 It uses the `ops/bin/*.sh` shims so commands work under non-interactive
 SSH without depending on the operator's PATH. Replace `<host>` with the

@@ -9,7 +9,7 @@
 #        /etc/sudoers.d/apple-docs-launchctl
 #
 # This grants ${USER_NAME} the ability to bootstrap, bootout, kickstart, and
-# print only the five labels below — nothing else gains elevated privilege.
+# print only the apple-docs labels below — nothing else gains elevated privilege.
 
 Cmnd_Alias APPLE_DOCS_LAUNCHCTL = \
     /bin/launchctl bootstrap system /Library/LaunchDaemons/${LABEL_PREFIX}.proxy.plist, \
@@ -35,6 +35,10 @@ Cmnd_Alias APPLE_DOCS_LAUNCHCTL = \
     /bin/launchctl print system/${LABEL_PREFIX}.mcp, \
     /bin/launchctl print system/${LABEL_PREFIX}.watchdog, \
     /bin/launchctl print system/${LABEL_PREFIX}.cloudflared.web, \
-    /bin/launchctl print system/${LABEL_PREFIX}.cloudflared.mcp
+    /bin/launchctl print system/${LABEL_PREFIX}.cloudflared.mcp, \
+    /bin/launchctl bootstrap system /Library/LaunchDaemons/${LABEL_PREFIX}.autoroll.plist, \
+    /bin/launchctl bootout system/${LABEL_PREFIX}.autoroll, \
+    /bin/launchctl kickstart -k system/${LABEL_PREFIX}.autoroll, \
+    /bin/launchctl print system/${LABEL_PREFIX}.autoroll
 
 ${USER_NAME} ALL=(root) NOPASSWD: APPLE_DOCS_LAUNCHCTL

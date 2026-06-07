@@ -66,6 +66,22 @@ describe('loadEnv', () => {
     expect(out.labels.mcp).toBe('mt.test.mcp')
     expect(out.labels.tunnelWeb).toBe('mt.test.cloudflared.web')
     expect(out.labels.watchdog).toBe('mt.test.watchdog')
+    expect(out.labels.autoroll).toBe('mt.test.autoroll')
+  })
+
+  test('synthesises the weekly auto-roll label + schedule defaults', () => {
+    const file = envText(minimalEnv({ LABEL_PREFIX: 'mt.test' }))
+    const out = loadEnv({ path: '/fake/.env', deps: fakeDeps({ fileText: file }) })
+    expect(out.vars.LABEL_AUTOROLL).toBe('mt.test.autoroll')
+    expect(out.vars.AUTOROLL_WEEKDAY).toBe('0') // Sunday
+    expect(out.vars.AUTOROLL_HOUR).toBe('14')
+  })
+
+  test('respects an explicit auto-roll schedule from .env', () => {
+    const file = envText(minimalEnv({ LABEL_PREFIX: 'mt.test', AUTOROLL_WEEKDAY: '1', AUTOROLL_HOUR: '9' }))
+    const out = loadEnv({ path: '/fake/.env', deps: fakeDeps({ fileText: file }) })
+    expect(out.vars.AUTOROLL_WEEKDAY).toBe('1')
+    expect(out.vars.AUTOROLL_HOUR).toBe('9')
   })
 
   test('throws missing when stat fails', () => {
