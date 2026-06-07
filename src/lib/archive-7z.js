@@ -25,6 +25,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, unli
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { spawnWithDeadline } from './spawn-with-deadline.js'
+import { sha256File } from './hash.js'
 
 /** LZMA2 flag set.
  *
@@ -243,8 +244,8 @@ export async function createSevenZipArchive({
  * @returns {Promise<{sidecarPath: string, sha256: string}>}
  */
 export async function writeSha256Sidecar(archivePath) {
-  const bytes = await Bun.file(archivePath).arrayBuffer()
-  const sha256 = new Bun.CryptoHasher('sha256').update(new Uint8Array(bytes)).digest('hex')
+  // Streamed: release archives are multi-GB; one big arrayBuffer() aborts.
+  const sha256 = await sha256File(archivePath)
   // basename only — matches `shasum -a 256 <file>` output when the caller
   // runs shasum with a bare filename from the file's parent dir.
   const filename = archivePath.split(sep).pop()

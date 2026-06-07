@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync } from 'node:
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError, ValidationError } from '../lib/errors.js'
-import { sha256 } from '../lib/hash.js'
+import { sha256File } from '../lib/hash.js'
 import { writeSha256Sidecar } from '../lib/archive-7z.js'
 import { createTarGzArchive } from '../lib/archive-targz.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
@@ -144,10 +144,9 @@ export async function snapshotBuild(opts, ctx) {
       copyDb.close()
     }
 
-    // 5. Compute DB checksum
-    const dbBytes = await Bun.file(copyPath).arrayBuffer()
-    const dbChecksum = sha256(new Uint8Array(dbBytes))
-    const dbSize = dbBytes.byteLength
+    // 5. Compute DB checksum (streamed — the copy can be many GB)
+    const dbChecksum = await sha256File(copyPath)
+    const dbSize = Bun.file(copyPath).size
 
     // 6. Build manifest
     const manifest = {
@@ -241,9 +240,8 @@ export async function snapshotBuild(opts, ctx) {
       logger,
     })
 
-    const archiveBytes = await Bun.file(archivePath).arrayBuffer()
-    const archiveSize = archiveBytes.byteLength
-    const archiveChecksum = sha256(new Uint8Array(archiveBytes))
+    const archiveSize = Bun.file(archivePath).size
+    const archiveChecksum = await sha256File(archivePath)
     manifest.archiveSize = archiveSize
     manifest.archiveChecksum = archiveChecksum
 

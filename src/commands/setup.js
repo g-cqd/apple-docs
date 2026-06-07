@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { existsSync, rmSync, statSync } from 'node:fs'
 import { NotFoundError, ValidationError } from '../lib/errors.js'
-import { sha256 } from '../lib/hash.js'
+import { sha256File } from '../lib/hash.js'
 import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
 import { resolveSevenZipBinary } from '../lib/archive-7z.js'
 import { ensureDir } from '../storage/files.js'
@@ -124,8 +124,7 @@ async function installFromLocalArchive(ctx, opts) {
     logger.info('Verifying checksum...')
     const checksumText = await Bun.file(checksumPath).text()
     const expectedHash = checksumText.trim().split(/\s+/)[0]
-    const archiveBytes = await Bun.file(archivePath).arrayBuffer()
-    const actualHash = sha256(new Uint8Array(archiveBytes))
+    const actualHash = await sha256File(archivePath) // streamed: full-corpus archives are multi-GB
     if (actualHash !== expectedHash) {
       throw new ValidationError(`Checksum mismatch! Expected ${expectedHash.slice(0, 16)}..., got ${actualHash.slice(0, 16)}...`, { field: 'checksum' })
     }
@@ -240,8 +239,7 @@ async function installFromGithubRelease(ctx, opts) {
     if (!checksumRes.ok) throw new HttpError(checksumRes.status, checksumAsset.browser_download_url, `Checksum download failed: HTTP ${checksumRes.status}`)
     const checksumText = await checksumRes.text()
     const expectedHash = checksumText.trim().split(/\s+/)[0]
-    const archiveBytes = await Bun.file(tmpPath).arrayBuffer()
-    const actualHash = sha256(new Uint8Array(archiveBytes))
+    const actualHash = await sha256File(tmpPath) // streamed: full-corpus archives are multi-GB
     if (actualHash !== expectedHash) {
       throw new ValidationError(`Checksum mismatch! Expected ${expectedHash.slice(0, 16)}..., got ${actualHash.slice(0, 16)}...`, { field: 'checksum' })
     }
