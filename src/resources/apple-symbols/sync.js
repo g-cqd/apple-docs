@@ -27,6 +27,7 @@ import {
   getPrerenderedSymbolPath,
   symbolVariantMatrix,
 } from './cache-key.js'
+import { symbolSnapshotNeedsReset } from './snapshot-meta.js'
 import { stampSfSymbolCodepoints } from './codepoint-stamp.js'
 import { SYMBOL_RENDERER_VERSION } from './render.js'
 
@@ -160,10 +161,10 @@ export async function prerenderSfSymbols(opts, ctx) {
   return result
 }
 
-// Snapshot-meta gating moved to ./snapshot-meta.js so this module
-// fits under the 400-line ceiling. Re-exported here so callers that
-// import `symbolSnapshotNeedsReset` from this file keep working.
-export { symbolSnapshotNeedsReset } from './snapshot-meta.js'
+// Snapshot-meta gating lives in ./snapshot-meta.js (keeps this module under
+// the 400-line ceiling); imported above for prerenderSfSymbols and re-exported
+// here so callers that import it from this file keep working.
+export { symbolSnapshotNeedsReset }
 
 async function renderScopeBucket({ scope, symbols, variants, ctx, concurrency, logger, onProgress, result }) {
   const queue = []

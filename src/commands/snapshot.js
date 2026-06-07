@@ -167,19 +167,23 @@ export async function snapshotBuild(opts, ctx) {
     // to ship a partial matrix without --allow-incomplete-symbols.
     const symbolsDir = join(dataDir, 'resources', 'symbols')
     const includeSymbols = existsSync(symbolsDir)
-    if (includeSymbols) {
-      const validation = validateSymbolMatrixComplete(ctx)
-      if (!validation.complete) {
-        if (!opts.allowIncompleteSymbols) {
-          const head = validation.missing.slice(0, 10).join(', ')
-          throw new SnapshotIncompleteError(
-            `Snapshot: ${validation.missingCount} pre-rendered SF Symbol variants missing (e.g., ${head}). ` +
-            'Run `apple-docs sync` to bake the missing renders, or pass --allow-incomplete-symbols to override.',
-            { missingCount: validation.missingCount, missing: validation.missing },
-          )
-        }
-        logger.warn(`Snapshot: shipping with ${validation.missingCount} missing pre-renders (--allow-incomplete-symbols set)`)
+    // Validate against the DB catalog ALWAYS — not only when the dir exists.
+    // A populated catalog with no `resources/symbols/` means the prerender
+    // step was skipped or crashed (e.g. snapshot-20260607 shipped empty after
+    // a ReferenceError in prerenderSfSymbols). An empty catalog validates
+    // clean. This refuses to silently ship a symbol-less snapshot.
+    const validation = validateSymbolMatrixComplete(ctx)
+    if (!validation.complete) {
+      if (!opts.allowIncompleteSymbols) {
+        const head = validation.missing.slice(0, 10).join(', ')
+        throw new SnapshotIncompleteError(
+          `Snapshot: ${validation.missingCount} pre-rendered SF Symbol variants missing` +
+          `${includeSymbols ? '' : ' (resources/symbols is absent — the prerender step did not run)'}` +
+          ` (e.g., ${head}). Run \`apple-docs sync\` to bake the missing renders, or pass --allow-incomplete-symbols to override.`,
+          { missingCount: validation.missingCount, missing: validation.missing },
+        )
       }
+      logger.warn(`Snapshot: shipping with ${validation.missingCount} missing pre-renders (--allow-incomplete-symbols set)`)
     }
 
     // 7. Stage the snapshot payload into a single tree, then archive it as

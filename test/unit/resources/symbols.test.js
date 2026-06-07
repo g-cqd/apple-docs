@@ -3,9 +3,11 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../../src/storage/database.js'
+import { existsSync } from 'node:fs'
 import {
   _test as appleAssetsTest,
   getPrerenderedSymbolPath,
+  prerenderSfSymbols,
   renderSfSymbol,
   searchSfSymbols,
   syncSfSymbols,
@@ -27,6 +29,15 @@ afterEach(async () => {
 })
 
 describe('SF Symbols', () => {
+  test('prerenderSfSymbols resolves its imports — no ReferenceError (regression: snapshot-20260607 shipped symbol-less)', async () => {
+    // Empty catalog → no Swift workers spawned, but this still runs the
+    // symbolSnapshotNeedsReset() call whose missing import crashed the
+    // prerender at 1ms and silently shipped a symbol-less snapshot.
+    const res = await prerenderSfSymbols({}, { db, dataDir: tmp, logger: { info() {}, warn() {} } })
+    expect(res.rendered).toBe(0)
+    expect(existsSync(join(tmp, 'resources', 'symbols', 'meta.json'))).toBe(true)
+  })
+
   test('syncs public/private SF Symbols from CoreGlyphs-style plists', async () => {
     const contentsDir = join(tmp, 'CoreGlyphs.bundle', 'Contents')
     const resourcesDir = join(contentsDir, 'Resources')
