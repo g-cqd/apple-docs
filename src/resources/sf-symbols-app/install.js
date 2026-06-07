@@ -23,9 +23,8 @@
  * "current" pointer automatically.
  */
 
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile, mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn as nodeSpawn } from 'node:child_process'
 import { HttpError, NotFoundError, ValidationError } from '../../lib/errors.js'
@@ -217,37 +216,26 @@ export async function ensureSfSymbolsApp(opts) {
 
   // Download + mount + copy. The .dmg is ~500 MB; download to a
   // unique staging path under the versioned cache dir so a partial
-  // network failure doesn't poison the cache, then mount it read-only
-  // in an ephemeral mountpoint. mkdtemp + a random suffix make the
-  // staging filename unpredictable, closing the symlink-race window
-  // CodeQL flags on predictable-name temp files.
+  // network failure doesn't poison the cache. mkdtemp + a random suffix
+  // make the staging filename unpredictable, closing the symlink-race
+  // window CodeQL flags on predictable-name temp files.
   const dmgStagingDir = await mkdtemp(join(versionedDir, '.download-'))
   const dmgPath = join(dmgStagingDir, `SF-Symbols-${version}.dmg.partial`)
   logger?.info?.(`Downloading SF Symbols.app ${version} from ${latest.url}`)
   await downloadFile(latest.url, dmgPath, { fetcher, logger })
 
-  const mountPoint = await mkdtemp(join(tmpdir(), 'apple-docs-sfsymbols-mount-'))
+  // Guard against a CDN error/redirect body masquerading as the image:
+  // a real SF Symbols .dmg is ~500 MB, so anything under 1 MB isn't it.
+  // Mounting such a file fails opaquely; this gives a clear signal.
+  const dmgSize = Bun.file(dmgPath).size
+  if (dmgSize < 1_000_000) {
+    await rm(dmgStagingDir, { recursive: true, force: true }).catch(() => {})
+    throw new HttpError(0, latest.url, `downloaded SF Symbols .dmg is implausibly small (${dmgSize} bytes) — likely an error page, not the image`)
+  }
+
   try {
-    await runCmd('hdiutil', [
-      'attach', dmgPath,
-      '-nobrowse', '-readonly',
-      '-mountpoint', mountPoint,
-      '-quiet',
-    ])
-    try {
-      const sourceApp = join(mountPoint, 'SF Symbols.app')
-      if (!existsSync(sourceApp)) {
-        throw new NotFoundError(sourceApp, `SF Symbols.app not found at expected path inside .dmg (${sourceApp})`)
-      }
-      // Clean any partial copy from a previous aborted run, then
-      // copy the app out of the mounted volume.
-      if (existsSync(appPath)) await rm(appPath, { recursive: true, force: true })
-      await runCmd('cp', ['-R', sourceApp, versionedDir])
-    } finally {
-      await runCmd('hdiutil', ['detach', mountPoint, '-quiet']).catch(() => {})
-    }
+    await provisionFromDmg(dmgPath, { appPath, versionedDir })
   } finally {
-    await rm(mountPoint, { recursive: true, force: true }).catch(() => {})
     await rm(dmgStagingDir, { recursive: true, force: true }).catch(() => {})
   }
 
@@ -265,6 +253,79 @@ export async function ensureSfSymbolsApp(opts) {
 
   logger?.info?.(`SF Symbols.app ${installedVersion} installed at ${appPath}`)
   return { appPath, version: installedVersion, source: 'cache' }
+}
+
+/**
+ * Mount a SF Symbols .dmg, copy SF Symbols.app out of it, and detach.
+ *
+ * Uses `hdiutil attach -plist` with NO forced `-mountpoint`: Apple's SF
+ * Symbols image is SLA-wrapped and exposes several entities, so forcing a
+ * single mountpoint can latch onto the wrong volume — the app volume then
+ * auto-mounts elsewhere under /Volumes and the forced dir comes up empty
+ * (attach still exits 0). That was the CI failure mode: "attached but no
+ * SF Symbols.app at the mountpoint". We instead enumerate every mounted
+ * filesystem and pick whichever one actually holds the bundle.
+ *
+ * @param {string} dmgPath
+ * @param {{ appPath: string, versionedDir: string }} dest
+ */
+async function provisionFromDmg(dmgPath, { appPath, versionedDir }) {
+  const plist = await runCmd('hdiutil', [
+    'attach', dmgPath, '-nobrowse', '-readonly', '-noautoopen', '-plist',
+  ])
+  const mountPoints = parseHdiutilMountPoints(plist)
+  if (mountPoints.length === 0) {
+    throw new NotFoundError(dmgPath, `hdiutil attached ${dmgPath} but exposed no mounted volume`)
+  }
+  try {
+    let sourceApp = null
+    for (const mp of mountPoints) {
+      const candidate = join(mp, 'SF Symbols.app')
+      if (existsSync(candidate)) { sourceApp = candidate; break }
+    }
+    if (!sourceApp) {
+      const listing = mountPoints.map(mp => `${mp} → [${safeReaddir(mp).join(', ')}]`).join('; ')
+      throw new NotFoundError(dmgPath, `SF Symbols.app not present in any mounted volume (${listing})`)
+    }
+    if (existsSync(appPath)) await rm(appPath, { recursive: true, force: true })
+    await runCmd('cp', ['-R', sourceApp, versionedDir])
+  } finally {
+    for (const mp of mountPoints) {
+      await runCmd('hdiutil', ['detach', mp, '-quiet']).catch(() => {})
+    }
+  }
+}
+
+/**
+ * Extract every `mount-point` path from `hdiutil attach -plist` output.
+ * Whole-disk entities carry no `mount-point` key and are skipped, so the
+ * result is exactly the set of mounted filesystems.
+ *
+ * @param {string} plistText
+ * @returns {string[]}
+ */
+export function parseHdiutilMountPoints(plistText) {
+  const out = []
+  const re = /<key>mount-point<\/key>\s*<string>([^<]*)<\/string>/g
+  let m
+  while ((m = re.exec(plistText)) != null) {
+    const mp = decodeXmlEntities(m[1]).trim()
+    if (mp) out.push(mp)
+  }
+  return out
+}
+
+function decodeXmlEntities(s) {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+}
+
+function safeReaddir(dir) {
+  try { return readdirSync(dir) } catch { return [] }
 }
 
 async function downloadFile(url, destPath, { fetcher = fetch, logger } = {}) {
