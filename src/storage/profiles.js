@@ -1,35 +1,39 @@
 /**
  * Storage profile definitions and accessors.
  *
- * Profiles control how documents are materialized on disk:
- * - raw-only: Minimal disk. Only raw JSON + SQLite. Renders on demand.
- * - balanced: Default. Caches markdown on first read (7-day TTL).
- * - prebuilt: Full materialization. Markdown + HTML persisted during sync.
+ * Profiles are the headline install choice — they trade disk for serving
+ * speed:
+ * - compact:  smallest disk. Fully compacted at install (compressed
+ *             sections, contentless body index, raw payloads dropped).
+ *             Renders on demand.
+ * - balanced: default. Ships the snapshot as-is; caches rendered Markdown
+ *             on first read (7-day TTL).
+ * - prebuilt: fastest. Materializes Markdown + HTML at install. Largest disk.
  */
 
 import { NotFoundError } from '../lib/errors.js'
 
 const PROFILES = {
-  'raw-only': {
+  'compact': {
     persistMarkdown: false,
     persistHtml: false,
     cacheOnRead: false,
     cacheMaxAge: 0,
-    description: 'Minimal disk usage. Renders on demand from raw JSON.',
+    description: 'Smallest disk. Fully compacted at install (compressed sections, contentless body index, raw payloads dropped). Renders on demand.',
   },
   'balanced': {
     persistMarkdown: false,
     persistHtml: false,
     cacheOnRead: true,
     cacheMaxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    description: 'Default. Caches rendered markdown on first read, evicts after 7 days.',
+    description: 'Default. Ships the snapshot as-is and caches rendered Markdown on first read, evicting after 7 days.',
   },
   'prebuilt': {
     persistMarkdown: true,
     persistHtml: true,
     cacheOnRead: false,
     cacheMaxAge: 0,
-    description: 'Full materialization during sync. Largest disk usage.',
+    description: 'Fastest. Materializes Markdown + HTML at install. Largest disk.',
   },
 }
 
@@ -52,7 +56,7 @@ export function getProfile(db) {
 /**
  * Set the active storage profile.
  * @param {import('./database.js').DocsDatabase} db
- * @param {string} name - Profile name (raw-only, balanced, prebuilt)
+ * @param {string} name - Profile name (compact, balanced, prebuilt)
  * @throws {Error} if name is not a valid profile
  */
 export function setProfile(db, name) {

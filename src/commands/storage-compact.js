@@ -36,7 +36,7 @@ export async function storageCompact(opts, ctx) {
   if (profileBefore === 'prebuilt' && !force) {
     throw new ValidationError(
       'Refusing to compact a `prebuilt` install — it would add per-read decompression on the fast path. ' +
-      'Set a render-on-demand profile first (`apple-docs storage profile raw-only`) or pass --force.',
+      'Set a render-on-demand profile first (`apple-docs storage profile compact`) or pass --force.',
       { field: 'profile', value: profileBefore },
     )
   }
@@ -91,7 +91,7 @@ export async function storageCompact(opts, ctx) {
 
   // 3. Record the mode, switch to render-on-demand, reclaim freed pages.
   db.setSnapshotMeta('sections_compressed', '1')
-  if (profileBefore !== 'raw-only') setProfile(db, 'raw-only')
+  if (profileBefore !== 'compact') setProfile(db, 'compact')
   logger?.info?.('Reclaiming free pages (VACUUM)…')
   db.db.run('VACUUM')
   // VACUUM commits via the WAL; truncate it so the freed space is realized on
