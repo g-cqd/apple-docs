@@ -111,6 +111,13 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 	handle @md_docs {
 		reverse_proxy 127.0.0.1:${WEB_BACKEND_PORT} {
 			header_up Accept-Encoding identity
+			# Cloudflare (and most shared caches) ignore `Vary: Accept`, so a
+			# cached Markdown body would get served to browsers under the same
+			# URL. Mark the Markdown variant uncacheable at the edge — it stays
+			# origin-rendered (agents are low-volume). Browsers keep hitting the
+			# cached static HTML below. Full edge caching of both variants needs
+			# a Cloudflare cache-key rule on the Accept header.
+			header_down Cache-Control "no-store"
 		}
 	}
 
