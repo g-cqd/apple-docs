@@ -72,13 +72,7 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 	@api_catalog path /.well-known/api-catalog
 	header @api_catalog Content-Type "application/linkset+json"
 
-	# Cacheable HTML docs — but NOT the Markdown variant (handled below with
-	# no-store), so this public directive can't override it and leak a cached
-	# Markdown body to browsers.
-	@docs {
-		path /docs/*
-		not header Accept *text/markdown*
-	}
+	@docs path /docs/*
 	header @docs Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
 
 	@root path /
@@ -114,14 +108,8 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 		path /docs/*
 		header Accept *text/markdown*
 	}
-	# The Markdown variant must not be edge-cached: Cloudflare ignores
-	# `Vary: Accept`, so a cached Markdown body would be served to browsers
-	# under the same /docs URL. A top-level `header` (vs reverse_proxy
-	# header_down) reliably overrides the upstream Cache-Control. It stays
-	# origin-rendered (agents are low-volume); browsers keep hitting the
-	# cached static HTML. Reliable edge caching of BOTH variants would need a
-	# Cloudflare cache-key rule keyed on the Accept header.
-	header @md_docs Cache-Control "no-store"
+	# Markdown is served no-store by Bun (src/web/routes/docs.route.js) so the
+	# negotiated variant never lands in a shared cache that ignores Vary.
 	handle @md_docs {
 		reverse_proxy 127.0.0.1:${WEB_BACKEND_PORT} {
 			header_up Accept-Encoding identity

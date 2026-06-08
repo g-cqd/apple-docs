@@ -220,7 +220,12 @@ function markdownResponse(content) {
     headers: {
       'Vary': 'Accept',
       'x-markdown-tokens': String(Math.ceil(content.length / 4)),
-      'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
+      // Not `public`: shared caches (Cloudflare) ignore `Vary: Accept`, so a
+      // cached Markdown body would be served to browsers under the same /docs
+      // URL. Keep the negotiated variant out of shared caches — it's cheap to
+      // re-render and agents are low-volume. Reliable edge caching of both
+      // variants needs a CDN cache-key rule keyed on Accept.
+      'Cache-Control': 'no-store',
     },
     hashable: true,
   })
