@@ -114,16 +114,17 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 		path /docs/*
 		header Accept *text/markdown*
 	}
+	# The Markdown variant must not be edge-cached: Cloudflare ignores
+	# `Vary: Accept`, so a cached Markdown body would be served to browsers
+	# under the same /docs URL. A top-level `header` (vs reverse_proxy
+	# header_down) reliably overrides the upstream Cache-Control. It stays
+	# origin-rendered (agents are low-volume); browsers keep hitting the
+	# cached static HTML. Reliable edge caching of BOTH variants would need a
+	# Cloudflare cache-key rule keyed on the Accept header.
+	header @md_docs Cache-Control "no-store"
 	handle @md_docs {
 		reverse_proxy 127.0.0.1:${WEB_BACKEND_PORT} {
 			header_up Accept-Encoding identity
-			# Cloudflare (and most shared caches) ignore `Vary: Accept`, so a
-			# cached Markdown body would get served to browsers under the same
-			# URL. Mark the Markdown variant uncacheable at the edge — it stays
-			# origin-rendered (agents are low-volume). Browsers keep hitting the
-			# cached static HTML below. Full edge caching of both variants needs
-			# a Cloudflare cache-key rule on the Accept header.
-			header_down Cache-Control "no-store"
 		}
 	}
 
