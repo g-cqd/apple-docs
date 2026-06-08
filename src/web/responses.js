@@ -40,6 +40,7 @@ export const COMPRESSIBLE = new Set([
   'text/html',
   'text/css',
   'text/javascript',
+  'text/markdown',
   'application/json',
 ])
 

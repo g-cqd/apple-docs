@@ -4,6 +4,7 @@ import { BackpressureError } from '../../lib/errors.js'
 import { fetchDocPage } from '../../apple/api.js'
 import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { coalesceByKey } from '../../pipeline/coalesce.js'
+import { lookup } from '../../commands/lookup.js'
 import { tooManyRequestsResponse } from '../middleware/rate-limit.js'
 import { textResponse, notFoundResponse } from '../responses.js'
 import { decodeSectionRow } from '../../storage/section-codec.js'
@@ -29,6 +30,16 @@ export async function docsHandler(request, ctx, url) {
   const { db, dataDir, siteConfig, renderCache, rateLimiter, readerPool, frameworkTreeCache, frameworkTreeBySlug, invalidateDocumentCaches, onDemandGate } = ctx
   const key = url.pathname.replace('/docs/', '').replace(/\/$/, '').replace(/\/index\.html$/, '')
   if (!key) return notFoundResponse(siteConfig)
+
+  // Markdown content negotiation. Agents that prefer `text/markdown` get the
+  // same rendered body MCP `read_doc` serves (via lookup()), keyed on the
+  // same `key` the HTML path resolves. Browsers never send that Accept, so
+  // HTML stays the default below. Corpus docs only — an on-demand miss falls
+  // through to the HTML path (which can fetch + render HTML).
+  if (prefersMarkdown(request.headers.get('accept'))) {
+    const md = await lookup({ path: key }, ctx)
+    if (md.found && md.content) return markdownResponse(md.content)
+  }
 
   // Try as framework listing first.
   const root = db.getRootBySlug(key)
@@ -166,4 +177,51 @@ export async function docsHandler(request, ctx, url) {
   }
 
   return notFoundResponse(siteConfig)
+}
+
+/**
+ * True when the client prefers `text/markdown` at least as strongly as
+ * `text/html`. Browsers send `text/html,...` with no markdown token, so this
+ * stays false for them; an agent sending `Accept: text/markdown` (alone or
+ * ahead of HTML) opts in. Honours `q=` weights.
+ *
+ * @param {string | null | undefined} accept
+ * @returns {boolean}
+ */
+function prefersMarkdown(accept) {
+  if (!accept) return false
+  let markdownQ = -1
+  let htmlQ = -1
+  for (const part of accept.split(',')) {
+    const [type, ...params] = part.trim().split(';')
+    const mediaType = type.trim().toLowerCase()
+    let q = 1
+    for (const param of params) {
+      const match = param.trim().match(/^q=([0-9.]+)$/i)
+      if (match) q = Number.parseFloat(match[1])
+    }
+    if (mediaType === 'text/markdown') markdownQ = Math.max(markdownQ, q)
+    else if (mediaType === 'text/html' || mediaType === 'text/*' || mediaType === '*/*') htmlQ = Math.max(htmlQ, q)
+  }
+  return markdownQ > 0 && markdownQ >= htmlQ
+}
+
+/**
+ * `text/markdown` response for a negotiated `/docs/<key>` request. Hashable
+ * (ETag + 304 + gzip) and carries a rough `x-markdown-tokens` estimate
+ * (~4 chars/token) so an agent can budget context before reading the body.
+ *
+ * @param {string} content Rendered Markdown body.
+ * @returns {Response}
+ */
+function markdownResponse(content) {
+  return textResponse(content, {
+    contentType: 'text/markdown; charset=utf-8',
+    headers: {
+      'Vary': 'Accept',
+      'x-markdown-tokens': String(Math.ceil(content.length / 4)),
+      'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
+    },
+    hashable: true,
+  })
 }
