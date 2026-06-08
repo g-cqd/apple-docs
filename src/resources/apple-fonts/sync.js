@@ -12,6 +12,8 @@ import { ensureDir } from '../../storage/files.js'
 import { readPlist } from '../../lib/plist.js'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
 import { sanitizeFileName } from '../apple-assets-helpers.js'
+import { HttpError, ValidationError } from '../../lib/errors.js'
+import { parseHdiutilMountPoints } from '../sf-symbols-app/dmg-helpers.js'
 
 const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.dfont'])
 
@@ -71,26 +73,38 @@ export async function downloadFileIfNeeded(url, filePath) {
 
 export async function extractDmgFonts(dmgPath, destinationDir, logger) {
   ensureDir(destinationDir)
-  const mountDir = await mkdtemp(join(tmpdir(), 'apple-docs-font-dmg-'))
   const expandedDir = await mkdtemp(join(tmpdir(), 'apple-docs-font-pkg-'))
+  // Attach with `-plist` and NO forced `-mountpoint`: Apple font DMGs can be
+  // SLA-wrapped / multi-volume, where forcing a single mountpoint latches the
+  // wrong volume so the fonts are nowhere to be found — a silent partial that
+  // left the snapshot non-deterministic (the New York family flickered in and
+  // out between the two determinism builds). Enumerate every mounted volume.
+  const plist = await runCapture(['hdiutil', 'attach', '-readonly', '-nobrowse', '-noautoopen', '-plist', dmgPath])
+  const mountPoints = parseHdiutilMountPoints(plist)
   try {
-    await run(['hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mountDir, dmgPath])
-    for (const pkg of findByExtension(mountDir, '.pkg')) {
-      const out = join(expandedDir, sanitizeFileName(basename(pkg)))
-      await run(['pkgutil', '--expand-full', pkg, out]).catch(error => {
-        logger?.warn?.(`pkgutil failed for ${pkg}: ${error.message}`)
-      })
+    for (const mp of mountPoints) {
+      for (const pkg of findByExtension(mp, '.pkg')) {
+        const out = join(expandedDir, sanitizeFileName(basename(pkg)))
+        await run(['pkgutil', '--expand-full', pkg, out]).catch(error => {
+          logger?.warn?.(`pkgutil failed for ${pkg}: ${error.message}`)
+        })
+      }
     }
+    // Sort by file name so the extracted set + copy order is deterministic;
+    // discoverAppleFontFiles' walk order is filesystem-dependent.
+    const sources = discoverAppleFontFiles([...mountPoints, expandedDir])
+      .sort((a, b) => (a.fileName < b.fileName ? -1 : a.fileName > b.fileName ? 1 : 0))
     const extracted = []
-    for (const source of discoverAppleFontFiles([mountDir, expandedDir])) {
+    for (const source of sources) {
       const target = join(destinationDir, source.fileName)
       await copyFile(source.filePath, target)
       extracted.push(target)
     }
     return extracted
   } finally {
-    await run(['hdiutil', 'detach', mountDir]).catch(() => {})
-    await rm(mountDir, { recursive: true, force: true }).catch(() => {})
+    for (const mp of mountPoints) {
+      await run(['hdiutil', 'detach', mp]).catch(() => {})
+    }
     await rm(expandedDir, { recursive: true, force: true }).catch(() => {})
   }
 }
@@ -125,6 +139,13 @@ async function run(args) {
   // on a normal DMG; 60s is generous and bounds an OS-level hang.
   const { stderr, exitCode } = await spawnWithDeadline(args, { deadlineMs: 60_000 })
   if (exitCode !== 0) throw new ValidationError(stderr.trim() || `exited ${exitCode}`)
+}
+
+/** Like {@link run} but returns stdout (used for `hdiutil attach -plist`). */
+async function runCapture(args) {
+  const { stdout, stderr, exitCode } = await spawnWithDeadline(args, { deadlineMs: 60_000 })
+  if (exitCode !== 0) throw new ValidationError(stderr.trim() || `exited ${exitCode}`)
+  return typeof stdout === 'string' ? stdout : String(stdout ?? '')
 }
 
 export async function hashFile(path) {

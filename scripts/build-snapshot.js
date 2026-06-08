@@ -33,6 +33,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { DocsDatabase } from '../src/storage/database.js'
 import { snapshotBuild } from '../src/commands/snapshot.js'
+import { ensureFontsExtracted } from '../src/resources/apple-assets.js'
 import { createLogger } from '../src/lib/logger.js'
 import { ensureDir, readJSON, writeJSON } from '../src/storage/files.js'
 import { buildSymbolsArchive } from './build-symbols-archive.js'
@@ -92,6 +93,23 @@ try {
     )
   } catch (err) {
     logger.warn(`Embeddings step failed (shipping lexical-only): ${err.message}`)
+  }
+
+  // 0b. Determinism guard for fonts. The workflow runs this orchestrator
+  //     twice against the SAME dataDir (dist/ then dist-check/) and sha-diffs
+  //     the archives. If a font family failed to extract during `sync` (a
+  //     flaky SLA/multi-volume DMG mount), its absence would either differ
+  //     between the two passes or ship an incomplete font set. ensureFontsExtracted
+  //     re-extracts any missing family from the cached original/<id>.dmg using
+  //     the hardened `-plist` mount; idempotent, so the dist-check pass sees
+  //     the now-complete set and skips. Both passes stage an identical tree.
+  try {
+    const repaired = await ensureFontsExtracted(dataDir, logger)
+    if (repaired.families.length) {
+      logger.info(`Fonts: re-extracted ${repaired.extracted} file(s) for ${repaired.families.join(', ')}`)
+    }
+  } catch (err) {
+    logger.warn(`Font determinism guard failed (continuing): ${err.message}`)
   }
 
   // 1. Full snapshot (.7z replaces the old .tar.gz path).

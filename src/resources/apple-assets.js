@@ -6,7 +6,7 @@
  */
 
 import { extname, join } from 'node:path'
-import { statSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { sha256 } from '../lib/hash.js'
 import { ensureDir } from '../storage/files.js'
@@ -60,6 +60,8 @@ const DEFAULT_FONT_DIRS = [
   '/System/Library/Fonts',
   join(homedir(), 'Library', 'Fonts'),
 ]
+
+const FONT_FILE_RE = /\.(ttf|otf|ttc|dfont)$/i
 
 export async function syncAppleFonts(opts, ctx) {
   const { db, dataDir, logger } = ctx
@@ -161,6 +163,39 @@ export async function syncAppleFonts(opts, ctx) {
 function matchFamilyId(fileName) {
   const family = APPLE_FONT_FAMILIES.find(f => f.match.test(fileName))
   return family?.id ?? ''
+}
+
+/**
+ * Determinism guard for the snapshot build: re-extract any font family whose
+ * extracted/ dir is missing or empty, from the cached original/<id>.dmg. The
+ * snapshot is built twice and the two .tar.gz are sha-diffed; a family that
+ * silently failed to extract on only one pass (flaky SLA/multi-volume DMG
+ * mount) made the archive non-deterministic. Idempotent: skips families that
+ * already have at least one font file. No-op when downloadFonts never ran
+ * (no cached DMG) — that family stays absent on both passes, still
+ * deterministic.
+ */
+export async function ensureFontsExtracted(dataDir, logger) {
+  const extractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
+  const originalsDir = join(dataDir, 'resources', 'fonts', 'original')
+  const repaired = []
+  let extracted = 0
+  for (const family of APPLE_FONT_FAMILIES) {
+    const familyDir = join(extractedDir, family.id)
+    if (existsSync(familyDir) && readdirSync(familyDir).some(f => FONT_FILE_RE.test(f))) continue
+    const dmgPath = join(originalsDir, `${family.id}.dmg`)
+    if (!existsSync(dmgPath)) {
+      logger?.warn?.(`Apple font family ${family.displayName} has no extracted fonts and no cached DMG; skipping`)
+      continue
+    }
+    try {
+      extracted += (await extractDmgFonts(dmgPath, familyDir, logger)).length
+      repaired.push(family.id)
+    } catch (error) {
+      logger?.warn?.(`Apple font re-extract failed for ${family.displayName}: ${error.message}`)
+    }
+  }
+  return { extracted, families: repaired }
 }
 
 export function listAppleFonts(ctx) {

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import { inspectSfntFile, listAppleFonts, parseFontFilename } from '../../../src/resources/apple-assets.js'
+import { ensureFontsExtracted, inspectSfntFile, listAppleFonts, parseFontFilename } from '../../../src/resources/apple-assets.js'
 
 let db
 let tmp
@@ -90,6 +90,40 @@ describe('Apple fonts', () => {
     const result = inspectSfntFile(fontPath)
     expect(result.isVariable).toBe(false)
     expect(result.axes).toEqual([])
+  })
+
+  // ensureFontsExtracted is the snapshot determinism guard: it must (1) be a
+  // no-op for a family whose extracted/ dir already holds a font file — so the
+  // dist-check rebuild stages the identical tree — and (2) skip (not throw)
+  // a family with neither extracted fonts nor a cached DMG to re-extract from.
+  test('ensureFontsExtracted skips a family that already has extracted fonts', async () => {
+    const warnings = []
+    const logger = { info() {}, warn(msg) { warnings.push(msg) }, error() {} }
+    const familyDir = join(tmp, 'resources', 'fonts', 'extracted', 'sf-pro')
+    await mkdir(familyDir, { recursive: true })
+    await writeFile(join(familyDir, 'SF-Pro-Display-Bold.otf'), 'stub')
+
+    const result = await ensureFontsExtracted(tmp, logger)
+
+    // No re-extraction happened; the present family is not "repaired".
+    expect(result.extracted).toBe(0)
+    expect(result.families).toEqual([])
+    // SF Pro was skipped silently (had a font file) — no spawn, no warning.
+    expect(warnings.some(w => w.includes('SF Pro'))).toBe(false)
+    // Families with neither fonts nor a cached DMG warn and are skipped.
+    expect(warnings.some(w => w.includes('no cached DMG'))).toBe(true)
+  })
+
+  test('ensureFontsExtracted skips (does not throw) when no fonts and no cached DMG exist', async () => {
+    const warnings = []
+    const logger = { info() {}, warn(msg) { warnings.push(msg) }, error() {} }
+
+    const result = await ensureFontsExtracted(tmp, logger)
+
+    expect(result.extracted).toBe(0)
+    expect(result.families).toEqual([])
+    expect(warnings.length).toBeGreaterThan(0)
+    expect(warnings.every(w => w.includes('no cached DMG'))).toBe(true)
   })
 })
 
