@@ -22,6 +22,11 @@ export function isInvalidFailedPath(path) {
   // comparison (the first clause already handles the null case).
   if (renorm === null) return true
   if (path.includes('#')) return true
+  // JSON:API relationship/link schema nodes from the App Store Connect /
+  // Enterprise Program REST APIs (e.g. `…/relationships-data.dictionary/…/links`).
+  // These are structural artifacts of the OpenAPI doc, never standalone pages —
+  // their content lives in the parent resource page. Confirmed 404 on the web.
+  if (path.includes('-data.dictionary')) return true
   return renorm !== path
 }
 

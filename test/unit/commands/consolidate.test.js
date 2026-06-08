@@ -49,6 +49,25 @@ describe('consolidate', () => {
     expect(result.cleaned).toBe(1)
   })
 
+  test('drops cross-adapter false positives and JSON:API artifacts', async () => {
+    // swift-compiler is served by the swift-docc adapter (docs.swift.org), not
+    // apple-docc — the bare /documentation/swift-compiler 404 is a false positive.
+    db.upsertRoot('swift-compiler', 'Swift Compiler', 'tooling', 'swift-docc', null, 'swift-docc')
+    db.upsertRoot('enterpriseprogramapi', 'Enterprise', 'framework', 'apple-docc')
+    db.seedCrawlIfNew('swift-compiler', 'swift-compiler', 0)
+    db.setCrawlState('swift-compiler', 'failed', 'swift-compiler', 0, 'Not found')
+    // JSON:API relationship node — a structural artifact, not a page.
+    const artifact = 'enterpriseprogramapi/profile/relationships-data.dictionary/links'
+    db.seedCrawlIfNew(artifact, 'enterpriseprogramapi', 2)
+    db.setCrawlState(artifact, 'failed', 'enterpriseprogramapi', 2, 'Not found')
+
+    const result = await consolidate({}, { db, dataDir, rateLimiter, logger })
+    expect(result.crossAdapter).toBe(1)
+    expect(result.cleaned).toBe(1)
+    const remaining = db.db.query("SELECT COUNT(*) as c FROM crawl_state WHERE status = 'failed'").get().c
+    expect(remaining).toBe(0)
+  })
+
   test('dry run does not delete entries', async () => {
     db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'apple-docc')
     db.seedCrawlIfNew('documentation/swiftui#section', 'swiftui', 1)

@@ -12,6 +12,20 @@ const CONSOLIDATE_RETRY_CHECKPOINT = 'consolidate:retry-resolved'
 
 import { isInvalidFailedPath, minifyDir } from './consolidate/storage-helpers.js'
 import { verifyCorpusIntegrity, verifySnapshot } from './consolidate/integrity.js'
+import { retryTransientFailures } from './consolidate/retry-transient.js'
+import { ROOT_CATALOG_SOURCE_TYPES } from './command-helpers.js'
+
+/**
+ * A failed catalog-crawl path whose root slug is owned by a different
+ * (flat) adapter — e.g. `swift-compiler` is referenced from an Apple page
+ * but actually served by the swift-docc adapter at docs.swift.org. The page
+ * IS in the corpus under that adapter's keys, so the apple-docc 404 is a
+ * false positive that should be dropped rather than reported as missing.
+ */
+function isCrossAdapterFalsePositive(db, path) {
+  const root = db.getRootBySlug(extractRootSlug(path))
+  return Boolean(root && !ROOT_CATALOG_SOURCE_TYPES.has(root.source_type))
+}
 
 export async function consolidate(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
@@ -21,9 +35,11 @@ export async function consolidate(opts, ctx) {
   try {
     let analyzed = 0
     let cleaned = 0
+    let crossAdapter = 0
     let resolved = 0
     let retried = 0
     let retriedOk = 0
+    let transientRecovered = 0
     let resolvedPaths = []
 
     const retryCheckpoint = dryRun ? null : db.getSyncCheckpoint(CONSOLIDATE_RETRY_CHECKPOINT)
@@ -40,15 +56,19 @@ export async function consolidate(opts, ctx) {
       analyzed = all.length
       logger.info(`Analyzing ${all.length} failed entries...`)
 
-      // Step 1: clean up entries that are not valid standalone pages
+      // Step 1: drop entries that can never resolve to a standalone page —
+      // invalid paths (fragments, dot-operators, JSON:API artifacts) and
+      // cross-adapter false positives (content already served by another
+      // adapter under different keys).
       for (const failed of all) {
-        if (!isInvalidFailedPath(failed.path)) continue
-        if (!dryRun) {
-          db.db.run("DELETE FROM crawl_state WHERE path = ?", [failed.path])
-        }
-        cleaned++
+        const invalid = isInvalidFailedPath(failed.path)
+        const crossDup = !invalid && isCrossAdapterFalsePositive(db, failed.path)
+        if (!invalid && !crossDup) continue
+        if (!dryRun) db.db.run("DELETE FROM crawl_state WHERE path = ?", [failed.path])
+        if (crossDup) crossAdapter++
+        else cleaned++
       }
-      logger.info(`Cleaned ${cleaned} invalid entries (fragments, dot-operators, bad URLs)`)
+      logger.info(`Cleaned ${cleaned} invalid + ${crossAdapter} cross-adapter false-positive entries`)
 
       // Step 2: for remaining failures, check parent pages for correct URL
       const remaining = dryRun
@@ -184,6 +204,16 @@ export async function consolidate(opts, ctx) {
       db.clearSyncCheckpoint(CONSOLIDATE_RETRY_CHECKPOINT)
     }
 
+    // Step 3b: delayed retry of *transient* failures (5xx / 429 / timeout).
+    // Skips instantly when there are none, so a clean crawl pays no delay.
+    if (!dryRun && opts.retryTransient !== false) {
+      const res = await retryTransientFailures(ctx, {
+        rounds: opts.transientRounds,
+        baseDelayMs: opts.transientDelayMs,
+      })
+      transientRecovered = res.recovered
+    }
+
     const stillFailed = db.db.query("SELECT COUNT(*) as c FROM crawl_state WHERE status = 'failed'").get().c
 
     // Step 4: minify existing JSON files if requested
@@ -218,9 +248,11 @@ export async function consolidate(opts, ctx) {
     return {
       analyzed,
       cleaned,
+      crossAdapter,
       resolved,
       retried,
       retriedOk,
+      transientRecovered,
       genuine: stillFailed,
       minified,
       minifySaved,
