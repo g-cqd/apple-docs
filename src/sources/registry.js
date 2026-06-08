@@ -7,6 +7,7 @@ import { PackagesAdapter } from './packages.js'
 import { HigAdapter } from './hig.js'
 import { SampleCodeAdapter } from './sample-code.js'
 import { SwiftBookAdapter } from './swift-book.js'
+import { ExternalDoccAdapter } from './external-docc.js'
 import { SwiftDoccAdapter } from './swift-docc.js'
 import { SwiftEvolutionAdapter } from './swift-evolution.js'
 import { SwiftOrgAdapter } from './swift-org.js'
@@ -46,6 +47,7 @@ registerAdapter(GuidelinesAdapter)
 registerAdapter(SwiftEvolutionAdapter)
 registerAdapter(SwiftBookAdapter)
 registerAdapter(SwiftDoccAdapter)
+registerAdapter(ExternalDoccAdapter)
 registerAdapter(SwiftOrgAdapter)
 registerAdapter(AppleArchiveAdapter)
 registerAdapter(WwdcAdapter)

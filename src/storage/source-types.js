@@ -13,6 +13,7 @@ export const DEFAULT_SOURCE_TYPE = 'apple-docc'
 export const SOURCE_TYPES = Object.freeze([
   'apple-docc',
   'swift-docc',
+  'external-docc',
   'apple-archive',
   'guidelines',
   'hig',
