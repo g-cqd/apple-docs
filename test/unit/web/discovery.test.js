@@ -108,10 +108,11 @@ describe('discovery: buildHeadersFile + DISCOVERY_LINKS', () => {
     expect(headers).toContain('Content-Type: application/linkset+json')
   })
 
-  test('DISCOVERY_LINKS advertises sitemap, api-catalog, and service-doc relations', () => {
+  test('DISCOVERY_LINKS advertises sitemap, api-catalog, service-doc, and search relations', () => {
     expect(DISCOVERY_LINKS).toContain('</sitemap.xml>; rel="sitemap"')
     expect(DISCOVERY_LINKS).toContain('</.well-known/api-catalog>; rel="api-catalog"')
     expect(DISCOVERY_LINKS).toContain('</docs/>; rel="service-doc"')
+    expect(DISCOVERY_LINKS).toContain('</opensearch.xml>; rel="search"')
   })
 })
 

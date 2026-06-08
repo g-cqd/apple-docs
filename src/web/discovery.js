@@ -50,6 +50,7 @@ export const DISCOVERY_LINKS = [
   '</sitemap.xml>; rel="sitemap"',
   '</.well-known/api-catalog>; rel="api-catalog"',
   '</docs/>; rel="service-doc"',
+  '</opensearch.xml>; rel="search"',
 ].join(', ')
 
 /** Resolve the configured content-signal policy string. */

@@ -51,6 +51,13 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 	# as "Unknown directive". Same payload either way.
 	header Content-Signal "search=yes, ai-input=yes, ai-train=yes"
 
+	# RFC 8288 Link header — advertise the sitemap, RFC 9727 API catalog,
+	# human docs, and OpenSearch endpoint to agents on every response. The
+	# Bun backend sets the same set (src/web/discovery.js DISCOVERY_LINKS) on
+	# its own responses; this covers the static file_server ones Caddy serves
+	# directly. Backtick-quoted so the inner rel="" quotes survive.
+	header Link `</sitemap.xml>; rel="sitemap", </.well-known/api-catalog>; rel="api-catalog", </docs/>; rel="service-doc", </opensearch.xml>; rel="search"`
+
 	# Cache-Control headers (apply to every response on the matching path,
 	# including 304s). Cloudflare reads these to decide what to cache.
 	@assets path /assets/* /worker/*
