@@ -18,6 +18,7 @@ import {
 import { searchHandler } from './routes/search.route.js'
 import {
   listFontsHandler,
+  fontFacesCssHandler,
   fontFileHandler,
   fontFamilyZipHandler,
   fontTextSvgHandler,
@@ -37,6 +38,12 @@ import { assetsHandler, workerHandler } from './routes/assets.route.js'
 import { frameworkTreeHandler } from './routes/framework-tree.route.js'
 import { docsHandler } from './routes/docs.route.js'
 import { fontSubsetHandler } from './routes/font-subset.route.js'
+import {
+  robotsTxtHandler,
+  apiCatalogHandler,
+  mcpServerCardHandler,
+} from './routes/discovery.route.js'
+import { DISCOVERY_LINKS } from './discovery.js'
 
 /**
  * Start a local dev server for previewing documentation.
@@ -79,9 +86,15 @@ export async function startDevServer(opts, ctx) {
   const registry = createRouteRegistry()
   registry.register('/healthz', healthHandler)
   registry.register('/readyz', readinessHandler)
+  // Agent-discovery endpoints. These live in src/web/public/ for Caddy in
+  // production, but are unreachable under `web serve` unless wired here.
+  registry.register('/robots.txt', robotsTxtHandler)
+  registry.register('/.well-known/api-catalog', apiCatalogHandler)
+  registry.register('/.well-known/mcp/server-card.json', mcpServerCardHandler)
   registry.register('/api/search', searchHandler)
   registry.register('/api/filters', filtersHandler)
   registry.register('/api/fonts', listFontsHandler)
+  registry.register('/api/fonts/faces.css', fontFacesCssHandler)
   registry.register('/api/fonts/text.svg', fontTextSvgHandler)
   // font-subset (lazy pool init on first request).
   registry.register('/api/fonts/subset', async (request, c) => {
@@ -172,6 +185,12 @@ export async function startDevServer(opts, ctx) {
       }
       for (const [k, v] of Object.entries(securityHeaders)) response.headers.set(k, v)
       response.headers.set('X-Request-Id', requestId)
+      // Agent-discovery affordances on every response: the RFC 8288 Link
+      // set, plus Vary: Accept so shared caches key the content-negotiated
+      // /docs responses (HTML vs Markdown) separately. Merge Vary instead of
+      // overwriting — the font-subset route advertises Vary: Accept-Encoding.
+      response.headers.set('Link', DISCOVERY_LINKS)
+      mergeVary(response.headers, 'Accept')
       const finalized = await finalizeResponse(request, response, { gzipCache })
       observability.record({
         pathname: new URL(request.url).pathname,
@@ -261,5 +280,19 @@ function parsePositiveNumber(value) {
   if (value == null) return null
   const n = Number.parseFloat(value)
   return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/**
+ * Add a field name to a response's `Vary` header without dropping any value
+ * a handler already set (e.g. `Accept-Encoding`). No-op when `Vary: *` or
+ * the field is already listed.
+ */
+function mergeVary(headers, field) {
+  const existing = headers.get('Vary')
+  if (!existing) { headers.set('Vary', field); return }
+  if (existing.trim() === '*') return
+  const present = existing.split(',').map(s => s.trim().toLowerCase())
+  if (present.includes(field.toLowerCase())) return
+  headers.set('Vary', `${existing}, ${field}`)
 }
 

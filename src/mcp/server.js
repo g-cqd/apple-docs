@@ -10,6 +10,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
+import { VERSION } from '../lib/version.js'
 import { createCacheRegistry } from './cache.js'
 import { registerDocTools } from './tools/docs.js'
 import { registerAssetTools } from './tools/assets.js'
@@ -27,7 +28,7 @@ import { registerResources } from './server/resources.js'
  */
 export function createServer(ctx, deps = {}) {
   const server = new McpServer(
-    { name: 'apple-docs', version: '1.0.0' },
+    { name: 'apple-docs', version: VERSION },
     { capabilities: { resources: {}, tools: {} } },
   )
 
