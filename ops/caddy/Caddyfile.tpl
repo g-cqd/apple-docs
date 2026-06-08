@@ -72,7 +72,13 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 	@api_catalog path /.well-known/api-catalog
 	header @api_catalog Content-Type "application/linkset+json"
 
-	@docs path /docs/*
+	# Cacheable HTML docs — but NOT the Markdown variant (handled below with
+	# no-store), so this public directive can't override it and leak a cached
+	# Markdown body to browsers.
+	@docs {
+		path /docs/*
+		not header Accept *text/markdown*
+	}
 	header @docs Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
 
 	@root path /
