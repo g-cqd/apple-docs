@@ -239,16 +239,40 @@ function parseLine(line) {
   }
 }
 
+/**
+ * Read the SF Symbols.app major version (CFBundleShortVersionString → first
+ * dotted segment). Drives which MetadataReadingOptions ABI the worker targets.
+ * Falls back to the latest known major when unreadable, since we always
+ * provision the newest app.
+ */
+async function appMajorVersion(appPath, logger) {
+  try {
+    const proc = Bun.spawn(
+      ['defaults', 'read', join(appPath, 'Contents', 'Info.plist'), 'CFBundleShortVersionString'],
+      { stdout: 'pipe', stderr: 'ignore' },
+    )
+    const out = (await new Response(proc.stdout).text()).trim()
+    await proc.exited
+    const major = Number.parseInt(out.split('.')[0], 10)
+    if (Number.isInteger(major) && major > 0) return major
+  } catch { /* fall through */ }
+  logger?.debug?.(`SF Symbols app version unreadable at ${appPath}; assuming latest major (8)`)
+  return 8
+}
+
 async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH, logger }) {
   const {
-    SYMBOL_CODEPOINT_WORKER_SCRIPT,
-    SF_SYMBOLS_SHARED_INTERFACE,
+    symbolCodepointWorkerScript,
+    sfSymbolsSharedInterface,
     CORE_GLYPHS_LIB_INTERFACE,
   } = await import('../swift/symbol-codepoint-worker.js')
   const { tmpdir } = await import('node:os')
   const { mkdtemp, rm, mkdir, symlink } = await import('node:fs/promises')
 
   const paths = pathsForApp(appPath)
+  // The MetadataReadingOptions ABI changed in SF Symbols 8; pick the matching
+  // interface + init call so the worker links against whatever app we point at.
+  const major = await appMajorVersion(appPath, logger)
 
   // Stage the worker script + handcrafted Swift modules in one
   // mkdtemp-allocated dir. The `.swiftinterface` files let `swiftc`
@@ -269,7 +293,7 @@ async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH,
   // the x86_64 framework slice automatically. We name the interface
   // generically so swift picks it for both arches.
   const arch = process.arch === 'arm64' ? 'arm64-apple-macos' : 'x86_64-apple-macos'
-  await Bun.write(join(sharedModuleDir, `${arch}.swiftinterface`), SF_SYMBOLS_SHARED_INTERFACE)
+  await Bun.write(join(sharedModuleDir, `${arch}.swiftinterface`), sfSymbolsSharedInterface(major))
   await Bun.write(join(glyphsModuleDir, `${arch}.swiftinterface`), CORE_GLYPHS_LIB_INTERFACE)
 
   // Two-level framework search path — SFSymbolsShared lives one level
@@ -288,7 +312,7 @@ async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH,
   )
 
   const scriptPath = join(stageDir, 'worker.swift')
-  await Bun.write(scriptPath, SYMBOL_CODEPOINT_WORKER_SCRIPT)
+  await Bun.write(scriptPath, symbolCodepointWorkerScript(major))
 
   logger?.debug?.(`spawning codepoint worker against ${fontPath} (app=${appPath})`)
   const proc = Bun.spawn(

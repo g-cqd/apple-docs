@@ -31,8 +31,16 @@
  * Setup of the module dirs happens in `codepoint-dump.js`; this script
  * just consumes them.
  *
- * Coverage on macOS 26.4 + SF Symbols.app 7.x:
+ * Coverage on macOS 26.4 + SF Symbols.app 8.0:
  *   8,302 / 8,302 public catalog names = 100%
+ *
+ * The interface below is matched to the CURRENT major (8). SF Symbols 8
+ * added a 5th `enhancedKeywordsURL` parameter to MetadataReadingOptions.init
+ * and made `fontTableDecryptor` a non-optional @escaping closure — a 7.x-shaped
+ * interface JIT-fails to link against the v8 framework (symbol not found). We
+ * always provision the latest app, so the interface tracks the latest major;
+ * a future major that changes these signatures needs the same treatment
+ * (dump with `nm -gU … | xcrun swift-demangle`, then mirror here).
  *
  * Watch the `\\t` gotcha from commit 75b507a — JS template literals
  * eat one level of backslashes. None of the Swift in this file needs
@@ -66,7 +74,8 @@ let opts = SymbolFontReader.MetadataReadingOptions(
   },
   customCSVData: nil,
   additionalCSVColumns: nil,
-  metadataDirectory: URL(fileURLWithPath: metadataDir)
+  metadataDirectory: URL(fileURLWithPath: metadataDir),
+  enhancedKeywordsURL: nil
 )
 
 let reader: SymbolFontReader
@@ -129,10 +138,12 @@ while let raw = readLine(strippingNewline: true) {
 // across SF Symbols.app versions without breaking us.
 //
 // Reverse-engineered from `nm -gU` + `xcrun swift-demangle` against
-// SFSymbolsShared and CoreGlyphsLib in SF Symbols.app 7.x. The mangled
-// symbols this resolves to are stable across SF Symbols releases since
-// 2021 (the same Crypton.decryptObfuscatedFontTable signature shipped
-// in SF Symbols 3 onward).
+// SFSymbolsShared and CoreGlyphsLib in SF Symbols.app 8.0. Crypton's
+// decryptObfuscatedFontTable + VariableSymbolFontProvider.init + symbol(
+// forSystemName:) have been stable since SF Symbols 3; only
+// MetadataReadingOptions.init drifts — 8.0 grew the `enhancedKeywordsURL`
+// parameter, so the declared init must mangle byte-for-byte to the v8 symbol
+// (5 labels, an @escaping decryptor closure → `…Vtc_…`, not `…VtXE_…`).
 export const SF_SYMBOLS_SHARED_INTERFACE = `// swift-interface-format-version: 1.0
 // swift-compiler-version: Apple Swift version 5.10
 // swift-module-flags: -target arm64-apple-macos14.0 -enable-library-evolution -module-name SFSymbolsShared
@@ -160,10 +171,11 @@ public struct FontSymbol {
 final public class SymbolFontReader {
   public struct MetadataReadingOptions {
     public init(
-      fontTableDecryptor: ((CoreText.CTFont, Swift.UInt32) -> Foundation.Data?)?,
+      fontTableDecryptor: @escaping (CoreText.CTFont, Swift.UInt32) -> Foundation.Data?,
       customCSVData: Foundation.Data?,
       additionalCSVColumns: [Swift.String]?,
-      metadataDirectory: Foundation.URL?
+      metadataDirectory: Foundation.URL?,
+      enhancedKeywordsURL: Foundation.URL?
     )
   }
   public init<A>(symbolFontProvider: A, metadataReadingOptions: SFSymbolsShared.SymbolFontReader.MetadataReadingOptions) throws where A : SFSymbolsShared.SymbolFontProvider
@@ -182,3 +194,49 @@ public struct Crypton {
   public static func decryptObfuscatedFontTable(tableTag: Swift.UInt32, from: CoreText.CTFont) -> Foundation.Data?
 }
 `
+
+// ── Version-adaptive selection ──────────────────────────────────────────────
+//
+// The two exports above are the SF Symbols 8 baseline. SF Symbols ≤ 7 declared
+// a 4-parameter MetadataReadingOptions.init whose decryptor closure was OPTIONAL
+// (and no enhancedKeywordsURL). The worker must mangle to exactly what the
+// provisioned app exports, so the interface + the init call are selected by the
+// app's major version — codepoint-dump.js reads it from the bundle's
+// CFBundleShortVersionString. The drift guard throws loudly if a future edit
+// renames the v8 markers so the downgrade can't silently no-op.
+
+const V8_META_INIT = `    public init(
+      fontTableDecryptor: @escaping (CoreText.CTFont, Swift.UInt32) -> Foundation.Data?,
+      customCSVData: Foundation.Data?,
+      additionalCSVColumns: [Swift.String]?,
+      metadataDirectory: Foundation.URL?,
+      enhancedKeywordsURL: Foundation.URL?
+    )`
+
+const V7_META_INIT = `    public init(
+      fontTableDecryptor: ((CoreText.CTFont, Swift.UInt32) -> Foundation.Data?)?,
+      customCSVData: Foundation.Data?,
+      additionalCSVColumns: [Swift.String]?,
+      metadataDirectory: Foundation.URL?
+    )`
+
+const V8_ENHANCED_ARG = ',\n  enhancedKeywordsURL: nil'
+
+function downgrade(text, marker, replacement) {
+  if (!text.includes(marker)) {
+    throw new Error('symbol-codepoint-worker: version template drifted (v8 marker not found)')
+  }
+  return text.split(marker).join(replacement)
+}
+
+/** SFSymbolsShared `.swiftinterface` matched to the app's major version. */
+export function sfSymbolsSharedInterface(major) {
+  if (major >= 8) return SF_SYMBOLS_SHARED_INTERFACE
+  return downgrade(SF_SYMBOLS_SHARED_INTERFACE, V8_META_INIT, V7_META_INIT)
+}
+
+/** Worker Swift source matched to the app's major version. */
+export function symbolCodepointWorkerScript(major) {
+  if (major >= 8) return SYMBOL_CODEPOINT_WORKER_SCRIPT
+  return downgrade(SYMBOL_CODEPOINT_WORKER_SCRIPT, V8_ENHANCED_ARG, '')
+}
