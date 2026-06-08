@@ -116,6 +116,35 @@ Sitemap: ${url(origin, '/sitemap.xml')}
 }
 
 /**
+ * OpenSearch 1.1 description document. Lets browsers and spec-aware engines
+ * register the site as a search source pointing at the same `/search?q=` URL
+ * the SERP `SearchAction` JSON-LD uses. The address-bar/site-search path that
+ * survived Google's 2024 deprecation of the sitelinks search box.
+ *
+ * `ShortName` is capped at the spec's 16-character limit.
+ *
+ * @param {{ baseUrl?: string, siteName?: string }} [siteConfig]
+ * @returns {string} `application/opensearchdescription+xml` body
+ */
+export function buildOpenSearchXml(siteConfig = {}) {
+  const origin = originOf(siteConfig)
+  const longName = siteConfig.siteName || 'Apple Developer Docs'
+  const shortName = (siteConfig.searchShortName || 'Apple Docs').slice(0, 16)
+  const esc = (s) => String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+  <ShortName>${esc(shortName)}</ShortName>
+  <LongName>${esc(longName)}</LongName>
+  <Description>${esc(`Search ${longName}`)}</Description>
+  <InputEncoding>UTF-8</InputEncoding>
+  <Url type="text/html" method="get" template="${esc(url(origin, '/search?q={searchTerms}'))}"/>
+  <Url type="application/opensearchdescription+xml" rel="self" template="${esc(url(origin, '/opensearch.xml'))}"/>
+</OpenSearchDescription>
+`
+}
+
+/**
  * RFC 9727 API catalog as an RFC 9264 linkset. Anchored at the site root,
  * it points crawlers and agents at the human docs (`service-doc`), the
  * health probe (`status`), the JSON API surface (`item`), and the MCP

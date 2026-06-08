@@ -40,6 +40,7 @@ import { docsHandler } from './routes/docs.route.js'
 import { fontSubsetHandler } from './routes/font-subset.route.js'
 import {
   robotsTxtHandler,
+  openSearchHandler,
   apiCatalogHandler,
   mcpServerCardHandler,
 } from './routes/discovery.route.js'
@@ -89,6 +90,7 @@ export async function startDevServer(opts, ctx) {
   // Agent-discovery endpoints. These live in src/web/public/ for Caddy in
   // production, but are unreachable under `web serve` unless wired here.
   registry.register('/robots.txt', robotsTxtHandler)
+  registry.register('/opensearch.xml', openSearchHandler)
   registry.register('/.well-known/api-catalog', apiCatalogHandler)
   registry.register('/.well-known/mcp/server-card.json', mcpServerCardHandler)
   registry.register('/api/search', searchHandler)

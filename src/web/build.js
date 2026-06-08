@@ -9,6 +9,7 @@ import { buildSymbolsPageProps } from './view-models/symbols-page.viewmodel.js'
 import { buildFontFaceCss } from './lib/font-faces.js'
 import {
   buildRobotsTxt,
+  buildOpenSearchXml,
   buildApiCatalog,
   buildMcpServerCard,
   buildHeadersFile,
@@ -235,6 +236,7 @@ export async function buildStaticSite(opts, ctx) {
       // after runAssetPipeline's public/ copy so they win over any stale
       // committed copy. Same src/web/discovery.js builders the Bun routes use.
       await Bun.write(join(buildDir, 'robots.txt'), buildRobotsTxt(siteConfig))
+      await Bun.write(join(buildDir, 'opensearch.xml'), buildOpenSearchXml(siteConfig))
       await Bun.write(join(buildDir, '.well-known', 'api-catalog'),
         JSON.stringify(buildApiCatalog(siteConfig), null, 2))
       await Bun.write(join(buildDir, '.well-known', 'mcp', 'server-card.json'),

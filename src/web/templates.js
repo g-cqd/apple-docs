@@ -113,7 +113,8 @@ export function buildHead({ title, description, siteConfig, canonical, alternate
   ${descMeta}
 ${seo}
   <link rel="preload" href="${cssHref}" as="style">
-  <link rel="stylesheet" href="${cssHref}">${extra}
+  <link rel="stylesheet" href="${cssHref}">
+  <link rel="search" type="application/opensearchdescription+xml" title="${siteConfig.siteName}" href="${siteConfig.baseUrl || ''}/opensearch.xml">${extra}
   <script src="${headScriptHref}" defer></script>
 </head>`
 }

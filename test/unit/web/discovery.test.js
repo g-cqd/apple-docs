@@ -1,6 +1,7 @@
 import { describe, test, expect, afterEach } from 'bun:test'
 import {
   buildRobotsTxt,
+  buildOpenSearchXml,
   buildApiCatalog,
   buildMcpServerCard,
   buildHeadersFile,
@@ -38,6 +39,28 @@ describe('discovery: buildRobotsTxt', () => {
   test('siteConfig.contentSignal wins over the env override', () => {
     process.env.APPLE_DOCS_CONTENT_SIGNAL = 'search=yes, ai-input=no, ai-train=no'
     expect(contentSignal({ contentSignal: 'search=no' })).toBe('search=no')
+  })
+})
+
+describe('discovery: buildOpenSearchXml', () => {
+  test('valid OpenSearch 1.1 doc targeting /search?q={searchTerms} from baseUrl', () => {
+    const xml = buildOpenSearchXml({ baseUrl: 'https://docs.example.com', siteName: 'Example Docs' })
+    expect(xml).toContain('xmlns="http://a9.com/-/spec/opensearch/1.1/"')
+    expect(xml).toContain('<Url type="text/html" method="get" template="https://docs.example.com/search?q={searchTerms}"/>')
+    expect(xml).toContain('rel="self" template="https://docs.example.com/opensearch.xml"')
+    expect(xml).toContain('<LongName>Example Docs</LongName>')
+  })
+
+  test('ShortName respects the 16-char OpenSearch limit', () => {
+    const xml = buildOpenSearchXml({ searchShortName: 'A Very Long Search Source Name' })
+    const short = xml.match(/<ShortName>([^<]*)<\/ShortName>/)?.[1]
+    expect(short.length).toBeLessThanOrEqual(16)
+  })
+
+  test('escapes XML metacharacters in the site name', () => {
+    const xml = buildOpenSearchXml({ siteName: 'Docs & <Co>' })
+    expect(xml).toContain('Docs &amp; &lt;Co&gt;')
+    expect(xml).not.toContain('Docs & <Co>')
   })
 })
 

@@ -1,6 +1,6 @@
 import { textResponse, jsonResponse } from '../responses.js'
 import { VERSION } from '../../lib/version.js'
-import { buildRobotsTxt, buildApiCatalog, buildMcpServerCard } from '../discovery.js'
+import { buildRobotsTxt, buildApiCatalog, buildMcpServerCard, buildOpenSearchXml } from '../discovery.js'
 
 // Discovery endpoints are a pure function of siteConfig (no corpus
 // dependency), so a flat hour of shared-cache life is safe and they're
@@ -17,6 +17,20 @@ const DISCOVERY_CACHE_CONTROL = 'public, max-age=3600'
 export function robotsTxtHandler(_request, ctx) {
   return textResponse(buildRobotsTxt(ctx.siteConfig), {
     contentType: 'text/plain; charset=utf-8',
+    headers: { 'Cache-Control': DISCOVERY_CACHE_CONTROL },
+    hashable: true,
+  })
+}
+
+/**
+ * `/opensearch.xml` — OpenSearch description so browsers/engines can register
+ * the site search. Targets the same `/search?q=` URL as the SearchAction.
+ *
+ * @type {import('../route-registry.js').RouteHandler}
+ */
+export function openSearchHandler(_request, ctx) {
+  return textResponse(buildOpenSearchXml(ctx.siteConfig), {
+    contentType: 'application/opensearchdescription+xml',
     headers: { 'Cache-Control': DISCOVERY_CACHE_CONTROL },
     hashable: true,
   })
