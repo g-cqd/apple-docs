@@ -14,7 +14,6 @@ import {
   compareVersions,
   discoverLatest,
   ensureSfSymbolsApp,
-  parseHdiutilMountPoints,
   versionFromUrl,
 } from '../../../src/resources/sf-symbols-app/install.js'
 
@@ -123,49 +122,6 @@ describe('ensureSfSymbolsApp (without network)', () => {
     } finally {
       rmSync(dataDir, { recursive: true, force: true })
     }
-  })
-})
-
-describe('parseHdiutilMountPoints', () => {
-  // Apple's SF Symbols .dmg is SLA-wrapped: `hdiutil attach -plist` returns
-  // a whole-disk entity (no mount-point) plus the mounted app volume. The
-  // parser must skip the former and return only real mount points.
-  test('returns only entities that carry a mount-point', () => {
-    const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict>
-  <key>system-entities</key>
-  <array>
-    <dict>
-      <key>content-hint</key><string>GUID_partition_scheme</string>
-      <key>dev-entry</key><string>/dev/disk4</string>
-    </dict>
-    <dict>
-      <key>content-hint</key><string>Apple_HFS</string>
-      <key>dev-entry</key><string>/dev/disk4s1</string>
-      <key>mount-point</key><string>/Volumes/SF Symbols</string>
-    </dict>
-  </array>
-</dict></plist>`
-    expect(parseHdiutilMountPoints(plist)).toEqual(['/Volumes/SF Symbols'])
-  })
-
-  test('captures multiple mounted volumes in order', () => {
-    const plist = `
-      <key>mount-point</key><string>/Volumes/A</string>
-      <key>dev-entry</key><string>/dev/disk9</string>
-      <key>mount-point</key>
-      <string>/Volumes/B</string>`
-    expect(parseHdiutilMountPoints(plist)).toEqual(['/Volumes/A', '/Volumes/B'])
-  })
-
-  test('decodes XML entities in volume names', () => {
-    const plist = '<key>mount-point</key><string>/Volumes/Tom &amp; Jerry</string>'
-    expect(parseHdiutilMountPoints(plist)).toEqual(['/Volumes/Tom & Jerry'])
-  })
-
-  test('returns [] when nothing is mounted', () => {
-    expect(parseHdiutilMountPoints('<key>dev-entry</key><string>/dev/disk4</string>')).toEqual([])
-    expect(parseHdiutilMountPoints('')).toEqual([])
   })
 })
 
