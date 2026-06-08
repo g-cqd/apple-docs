@@ -62,8 +62,8 @@ describe('Lookup cache (P8-D)', () => {
     expect(r2.note).toBeUndefined()
   })
 
-  test('raw-only profile does NOT cache', async () => {
-    setProfile(db, 'raw-only')
+  test('compact profile does NOT cache', async () => {
+    setProfile(db, 'compact')
     await lookup({ path: 'documentation/swiftui/view' }, ctx)
 
     const mdPath = join(dataDir, 'markdown', 'documentation/swiftui/view.md')
@@ -84,7 +84,7 @@ describe('Lookup cache (P8-D)', () => {
   })
 
   test('reuses ctx.markdownCache across variant args on the same page', async () => {
-    setProfile(db, 'raw-only') // disable filesystem caching so we isolate the in-memory cache
+    setProfile(db, 'compact') // disable filesystem caching so we isolate the in-memory cache
     const gets = []
     const sets = []
     const markdownCache = {

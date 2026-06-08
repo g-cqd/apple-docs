@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe('PROFILE_NAMES', () => {
   test('contains the three canonical profile names in declaration order', () => {
-    expect(PROFILE_NAMES).toEqual(['raw-only', 'balanced', 'prebuilt'])
+    expect(PROFILE_NAMES).toEqual(['compact', 'balanced', 'prebuilt'])
   })
 })
 
@@ -43,16 +43,16 @@ describe('getProfile', () => {
 })
 
 describe('setProfile / getProfile roundtrip', () => {
-  for (const name of ['raw-only', 'balanced', 'prebuilt']) {
+  for (const name of ['compact', 'balanced', 'prebuilt']) {
     test(`roundtrips profile "${name}"`, () => {
       setProfile(db, name)
       expect(getProfile(db)).toBe(name)
     })
   }
 
-  test('setProfile raw-only persists and getProfile returns raw-only', () => {
-    setProfile(db, 'raw-only')
-    expect(getProfile(db)).toBe('raw-only')
+  test('setProfile compact persists and getProfile returns compact', () => {
+    setProfile(db, 'compact')
+    expect(getProfile(db)).toBe('compact')
   })
 
   test('setProfile prebuilt persists and getProfile returns prebuilt', () => {
@@ -82,8 +82,8 @@ describe('getProfileConfig', () => {
     expect(config.cacheOnRead).toBe(true)
   })
 
-  test('raw-only has persistMarkdown false and cacheOnRead false', () => {
-    const config = getProfileConfig('raw-only')
+  test('compact has persistMarkdown false and cacheOnRead false', () => {
+    const config = getProfileConfig('compact')
     expect(config.persistMarkdown).toBe(false)
     expect(config.cacheOnRead).toBe(false)
   })

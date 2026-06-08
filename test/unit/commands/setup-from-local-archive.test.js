@@ -183,6 +183,25 @@ describe('setup --archive (local snapshot install)', () => {
     expect(fileCount(join(dataDir, 'markdown'))).toBeGreaterThanOrEqual(1)
   })
 
+  test('--profile compact compacts the install in one step (no separate storage compact)', async () => {
+    const result = await setup(
+      { archive: snapshotResult.archivePath, profile: 'compact' },
+      { db, dataDir, logger },
+    )
+    expect(result.storageProfile).toBe('compact')
+    const verifyDb = new DocsDatabase(join(dataDir, 'apple-docs.db'))
+    try {
+      // Inline compaction ran during setup: profile recorded + the
+      // sections_compressed marker set, with no follow-up command.
+      expect(verifyDb.getSnapshotMeta('storage_profile')).toBe('compact')
+      expect(verifyDb.getSnapshotMeta('sections_compressed')).toBe('1')
+      // Compact renders on demand — nothing materialized to disk.
+      expect(fileCount(join(dataDir, 'markdown'))).toBe(0)
+    } finally {
+      verifyDb.close()
+    }
+  })
+
   test('--profile rejects an unknown name', async () => {
     await expect(setup(
       { archive: snapshotResult.archivePath, profile: 'bogus' },

@@ -115,7 +115,7 @@ describe('storage profile / materialize (maintenance dispatch)', () => {
 
   test('storage profile with no name reports a valid current profile', async () => {
     const d = await dispatchMaintenance('storage', 'profile', [], {}, ctx)
-    expect(['raw-only', 'balanced', 'prebuilt']).toContain(d.result.profile)
+    expect(['compact', 'balanced', 'prebuilt']).toContain(d.result.profile)
   })
 
   test('storage profile rejects an unknown name', async () => {

@@ -37,13 +37,13 @@ afterEach(() => {
 })
 
 describe('storageCompact', () => {
-  test('compresses sections, keeps reads correct, switches to raw-only', async () => {
+  test('compresses sections, keeps reads correct, switches to compact', async () => {
     setProfile(db, 'balanced')
     const res = await storageCompact({}, ctx)
 
     expect(res.status).toBe('ok')
     expect(res.sectionsCompressed).toBeGreaterThanOrEqual(1)
-    expect(getProfile(db)).toBe('raw-only')
+    expect(getProfile(db)).toBe('compact')
     expect(db.getSnapshotMeta('sections_compressed')).toBe('1')
 
     // The large section is now stored as a BLOB (compressed) on disk…
