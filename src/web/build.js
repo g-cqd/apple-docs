@@ -6,6 +6,14 @@ import { renderIndexPage, renderSearchPage, renderFontsPage, renderSymbolsPage, 
 import { buildHomepageProps } from './view-models/homepage.viewmodel.js'
 import { buildFontsPageProps } from './view-models/fonts-page.viewmodel.js'
 import { buildSymbolsPageProps } from './view-models/symbols-page.viewmodel.js'
+import { buildFontFaceCss } from './lib/font-faces.js'
+import {
+  buildRobotsTxt,
+  buildApiCatalog,
+  buildMcpServerCard,
+  buildHeadersFile,
+} from './discovery.js'
+import { VERSION } from '../lib/version.js'
 import { generateSearchArtifacts } from './search-artifacts.js'
 import { generateSitemaps } from './sitemap.js'
 import { createWebRenderCache } from './render-cache.js'
@@ -178,7 +186,7 @@ export async function buildStaticSite(opts, ctx) {
   try {
     // 1. Create directory structure (always — incremental builds may target a
     // partially populated dir, but the subdirs must exist either way).
-    for (const sub of ['assets', 'docs', 'data/search', 'data/frameworks', 'worker', 'search', 'fonts', 'symbols']) {
+    for (const sub of ['assets', 'docs', 'data/search', 'data/frameworks', 'worker', 'search', 'fonts', 'symbols', 'api/fonts', '.well-known/mcp']) {
       ensureDir(join(buildDir, sub))
     }
 
@@ -206,11 +214,34 @@ export async function buildStaticSite(opts, ctx) {
       await Bun.write(join(buildDir, 'index.html'),
         renderIndexPage(homepageProps.roots, siteConfig, { extras: homepageProps.extras }).bytes())
       await Bun.write(join(buildDir, 'search', 'index.html'), renderSearchPage(siteConfig).bytes())
+      const fontsProps = buildFontsPageProps({ db })
       await Bun.write(join(buildDir, 'fonts', 'index.html'),
-        renderFontsPage(siteConfig, buildFontsPageProps({ db })).bytes())
+        renderFontsPage(siteConfig, fontsProps).bytes())
+      // External @font-face sheet the /fonts page links. Font binaries are
+      // served by the /api/fonts/file/<id> route (proxied to Bun behind
+      // Caddy); a pure static CDN gets the sheet but the src URLs still
+      // resolve through whatever serves /api — matching the prior behavior
+      // where fonts-page.js built the same URLs client-side.
+      await Bun.write(join(buildDir, 'api', 'fonts', 'faces.css'),
+        buildFontFaceCss(fontsProps.families, {
+          fileUrl: (id) => `${siteConfig.baseUrl || ''}/api/fonts/file/${encodeURIComponent(id)}`,
+        }))
       await Bun.write(join(buildDir, 'symbols', 'index.html'),
         renderSymbolsPage(siteConfig, buildSymbolsPageProps({ db })).bytes())
       await Bun.write(join(buildDir, '404.html'), renderNotFoundPage(siteConfig).bytes())
+
+      // Agent-discovery files. Generated (not committed under public/)
+      // because they embed the configured baseUrl + package version. Written
+      // after runAssetPipeline's public/ copy so they win over any stale
+      // committed copy. Same src/web/discovery.js builders the Bun routes use.
+      await Bun.write(join(buildDir, 'robots.txt'), buildRobotsTxt(siteConfig))
+      await Bun.write(join(buildDir, '.well-known', 'api-catalog'),
+        JSON.stringify(buildApiCatalog(siteConfig), null, 2))
+      await Bun.write(join(buildDir, '.well-known', 'mcp', 'server-card.json'),
+        JSON.stringify(buildMcpServerCard(siteConfig, VERSION), null, 2))
+      // _headers carries the Link/Vary/Content-Signal set onto static CDN
+      // deploys (Cloudflare Pages / Netlify) that have no origin server.
+      await Bun.write(join(buildDir, '_headers'), buildHeadersFile(siteConfig))
     }
 
     // 5. Build document pages. Two execution modes:
