@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
@@ -228,6 +228,38 @@ describe('snapshotBuild', () => {
 
       expect(a.archiveChecksum).toBe(b.archiveChecksum)
       expect(a.dbChecksum).toBe(b.dbChecksum)
+    } finally {
+      rmSync(outA, { recursive: true, force: true })
+      rmSync(outB, { recursive: true, force: true })
+    }
+  })
+
+  // Regression for the determinism break that shipped once the 266k SF
+  // Symbol renders were staged: the full snapshot CLONES resources into a
+  // temp tree before archiving, and a cross-filesystem clone falls back to
+  // a copy that re-stamps mtimes with the current time — so the dist/ and
+  // dist-check/ builds disagreed on the cloned members even though the
+  // bytes matched. The build must clamp EVERY staged file's mtime, making
+  // the archive independent of the source files' mtimes. We prove that by
+  // changing a staged source file's mtime between two builds of the same
+  // tag and asserting the archives stay bit-identical.
+  test('archive bytes are independent of staged source mtimes', async () => {
+    const symBase = join(dataDir, 'resources', 'symbols', 'public', 'bold-large')
+    mkdirSync(symBase, { recursive: true })
+    const svg = join(symBase, 'heart.svg')
+    writeFileSync(svg, '<svg/>')
+
+    const outA = mkdtempSync(join(tmpdir(), 'apple-docs-mt-a-'))
+    const outB = mkdtempSync(join(tmpdir(), 'apple-docs-mt-b-'))
+    try {
+      utimesSync(svg, new Date('2020-01-01T00:00:00Z'), new Date('2020-01-01T00:00:00Z'))
+      const a = await snapshotBuild({ out: outA, tag: 'snapshot-20260517' }, { db, dataDir, logger })
+
+      // Simulate the clone re-stamping the staged file on the second build.
+      utimesSync(svg, new Date('2024-06-06T12:34:56Z'), new Date('2024-06-06T12:34:56Z'))
+      const b = await snapshotBuild({ out: outB, tag: 'snapshot-20260517' }, { db, dataDir, logger })
+
+      expect(a.archiveChecksum).toBe(b.archiveChecksum)
     } finally {
       rmSync(outA, { recursive: true, force: true })
       rmSync(outB, { recursive: true, force: true })

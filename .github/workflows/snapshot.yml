@@ -111,6 +111,14 @@ jobs:
             if [ "$a" != "$b" ]; then
               echo "MISMATCH $name: $a vs $b" >&2
               fail=1
+              # Pinpoint the drift without extracting (disk-safe on the runner):
+              # a `tar -tv` listing carries each member's size + mtime + path,
+              # so a metadata diff names the offending members directly (e.g.
+              # re-stamped mtimes on a cloned subtree) instead of an opaque hash.
+              tar -tvf "$f"               > /tmp/det-a.lst 2>/dev/null || true
+              tar -tvf "dist-check/$name" > /tmp/det-b.lst 2>/dev/null || true
+              echo "--- first differing members in $name (perms/size/mtime/path) ---" >&2
+              diff /tmp/det-a.lst /tmp/det-b.lst | head -40 >&2 || true
             fi
           done
           rm -rf dist-check

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError, ValidationError } from '../lib/errors.js'
 import { sha256File } from '../lib/hash.js'
-import { writeSha256Sidecar } from '../lib/archive-7z.js'
+import { listFilesSorted, writeSha256Sidecar } from '../lib/archive-7z.js'
 import { createTarGzArchive } from '../lib/archive-targz.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { copyTreeFast, ensureDir, writeJSON } from '../storage/files.js'
@@ -225,17 +225,20 @@ export async function snapshotBuild(opts, ctx) {
     const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.tar.gz`
     const archivePath = join(outDir, archiveName)
 
-    // Clamp the mtimes of the two files we just wrote into `buildDir`
-    // to a tag-derived constant. `cp -c -R` (clonefile) already preserves
-    // source mtimes for every staged corpus file, so those are stable
-    // across reruns of the same corpus; manifest.json and apple-docs.db
-    // are the only fresh writes, and tar embeds their integer-seconds
-    // mtimes into the archive header. Without this step the dist/ and
-    // dist-check/ builds disagree on those two members even though the
-    // file contents are identical.
+    // Clamp the mtime of EVERY staged file to a tag-derived constant so the
+    // archive is byte-identical across reruns. tar embeds each member's
+    // integer-seconds mtime, so any drift fails the determinism gate. We
+    // can't trust the staged corpus files to keep their source mtimes:
+    // `copyTreeFast` clones via `cp -c -R` (clonefile preserves mtime), but
+    // a cross-filesystem or otherwise-failed clone falls back to `cpSync`,
+    // which stamps the copy with the current time. That diverged the dist/
+    // and dist-check/ builds once the 266k SF Symbol renders were staged —
+    // the in-place symbols archive matched while the cloned full tree did
+    // not. `listFilesSorted` enumerates exactly the set tar will archive.
     const stableMtime = deterministicMtimeSeconds(tag)
-    utimesSync(copyPath, stableMtime, stableMtime)
-    utimesSync(join(buildDir, 'manifest.json'), stableMtime, stableMtime)
+    for (const rel of listFilesSorted(buildDir)) {
+      utimesSync(join(buildDir, rel), stableMtime, stableMtime)
+    }
 
     await createTarGzArchive({
       sourceDir: buildDir,
