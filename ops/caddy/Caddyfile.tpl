@@ -59,6 +59,12 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 	@hashed_data path_regexp /data/(search|frameworks)/.*\.[0-9a-f]{10}\..*
 	header @hashed_data Cache-Control "public, max-age=31536000, immutable"
 
+	# RFC 9727 API catalog is an extension-less file on disk; stamp the
+	# RFC 9264 linkset media type so spec-aware agents get the right
+	# Content-Type when Caddy serves it via file_server.
+	@api_catalog path /.well-known/api-catalog
+	header @api_catalog Content-Type "application/linkset+json"
+
 	@docs path /docs/*
 	header @docs Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
 
@@ -79,6 +85,22 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 			health_fails 3
 			fail_duration 30s
 			max_fails 1
+		}
+	}
+
+	# Markdown content negotiation. Agents that prefer `text/markdown` get
+	# the on-the-fly Markdown render from Bun (the same body MCP `read_doc`
+	# serves) instead of the static HTML on disk. Browsers never send that
+	# Accept token, so they keep hitting the static file_server below. Bun's
+	# handler does the precise q-value check and falls back to HTML when
+	# markdown isn't actually preferred.
+	@md_docs {
+		path /docs/*
+		header Accept *text/markdown*
+	}
+	handle @md_docs {
+		reverse_proxy 127.0.0.1:${WEB_BACKEND_PORT} {
+			header_up Accept-Encoding identity
 		}
 	}
 

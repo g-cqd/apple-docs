@@ -238,6 +238,62 @@ If you do not want to use Cloudflare: Tailscale Funnel, ngrok, frp, or
 a classic reverse-proxy-with-TLS all work the same way — point them at
 the loopback port.
 
+## Agent discovery
+
+The web server and the static build both ship a set of machine-readable
+affordances so crawlers and AI agents can discover the API and MCP surface
+without scraping HTML. All of them are generated from one place
+(`src/web/discovery.js`), so `apple-docs web serve`, a Caddy self-host, and a
+static CDN deploy stay in lockstep.
+
+| Surface | Path | Notes |
+| --- | --- | --- |
+| `Link` header (RFC 8288) | every response | `rel="sitemap"`, `rel="api-catalog"`, `rel="service-doc"`. |
+| Content signals | `/robots.txt` + `Content-Signal` header | AI-usage policy (see below). |
+| API catalog (RFC 9727) | `/.well-known/api-catalog` | RFC 9264 linkset, `application/linkset+json`. |
+| MCP server card | `/.well-known/mcp/server-card.json` | Server identity, transport, tool/resource names. |
+| Markdown negotiation | `GET /docs/<key>` with `Accept: text/markdown` | Same body MCP `read_doc` returns; HTML stays the browser default. |
+| CDN headers | `_headers` (build output) | Mirrors the `Link`/`Vary`/`Content-Signal` headers on Cloudflare Pages / Netlify. |
+
+### Content-Signal policy
+
+The default is `search=yes, ai-input=yes, ai-train=yes` (the project welcomes
+AI use). Override it per-deploy without code changes:
+
+```bash
+APPLE_DOCS_CONTENT_SIGNAL="search=yes, ai-input=yes, ai-train=no" apple-docs web serve
+```
+
+The same value is baked into `robots.txt`, the `_headers` file, and the
+`Content-Signal` response header. If you front the site with the bundled
+Caddyfile, also update the `header Content-Signal …` line in
+`ops/caddy/Caddyfile.tpl` so the static-served paths agree.
+
+### Markdown over Caddy
+
+Under the bundled Caddyfile the prebuilt `/docs/*` HTML is served straight
+from disk, so an `Accept: text/markdown` request only reaches Bun because of
+the `@md_docs` matcher (it proxies markdown requests for `/docs/*` to the Bun
+backend). Without that matcher a Caddy-fronted prebuilt site would answer
+HTML regardless of `Accept`. `apple-docs web serve` (no Caddy) negotiates
+markdown for every corpus doc directly.
+
+### DNS-AID (operations, not code)
+
+[DNS-based agent discovery](https://datatracker.ietf.org/doc/draft-ietf-dnsop-dns-aid/)
+is configured on the DNS zone, not in this codebase. To advertise the MCP
+endpoint via the DNS, publish a SVCB/HTTPS record under the `_agents`
+underscore-prefixed name pointing at the MCP host, e.g.:
+
+```dns
+_agents.apple-docs.example.com.  3600 IN HTTPS 1 apple-docs-mcp.example.com. (
+    alpn="h2" port=443 )
+```
+
+Sign the zone with DNSSEC so resolvers can authenticate the record — an
+unsigned agent-discovery record is trivially spoofable. These are registrar /
+authoritative-DNS changes; the application emits nothing here.
+
 ## Run as a background service (launchd example)
 
 macOS LaunchDaemon that runs the MCP server with the reader pool
