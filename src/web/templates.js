@@ -80,8 +80,15 @@ function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDe
   return html`${out}`
 }
 
-/** @returns {import('./lib/html.js').HtmlString} */
-export function buildHead({ title, description, siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots }) {
+/**
+ * @param {object} args
+ * @param {import('./lib/html.js').HtmlString} [args.headExtra] Page-scoped
+ *   markup appended after the stylesheet link (e.g. the /fonts page's
+ *   external `@font-face` sheet). Absent → zero byte change for every other
+ *   page, so the static-build snapshots stay stable.
+ * @returns {import('./lib/html.js').HtmlString}
+ */
+export function buildHead({ title, description, siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots, headExtra }) {
   const cssHref = assetUrl(siteConfig, 'style.css')
   const headScriptHref = assetUrl(siteConfig, siteConfig.bundled ? 'core.js' : 'theme.js')
   const seo = buildSeoBlock({
@@ -97,6 +104,8 @@ export function buildHead({ title, description, siteConfig, canonical, alternate
   const descMeta = description
     ? html`<meta name="description" content="${description}">`
     : raw('')
+  const extra = headExtra ? html`
+  ${headExtra}` : raw('')
   return html`<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -104,7 +113,7 @@ export function buildHead({ title, description, siteConfig, canonical, alternate
   ${descMeta}
 ${seo}
   <link rel="preload" href="${cssHref}" as="style">
-  <link rel="stylesheet" href="${cssHref}">
+  <link rel="stylesheet" href="${cssHref}">${extra}
   <script src="${headScriptHref}" defer></script>
 </head>`
 }

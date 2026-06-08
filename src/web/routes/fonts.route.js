@@ -8,12 +8,14 @@ import { contentDispositionAttachment } from '../../lib/http-content-disposition
 import { buildStoreZip } from '../../lib/zip.js'
 import {
   MIME_TYPES,
+  API_CORPUS_CACHE_CONTROL,
   jsonResponse,
   textResponse,
   fileResponseRevalidated,
   matchesIfNoneMatch,
 } from '../responses.js'
 import { projectListAppleFonts } from '../../output/projection.js'
+import { buildFontFaceCss } from '../lib/font-faces.js'
 import { validateFontText } from './render-validation.js'
 
 /**
@@ -24,6 +26,29 @@ import { validateFontText } from './render-validation.js'
  */
 export function listFontsHandler(_request, ctx) {
   return jsonResponse(projectListAppleFonts(listAppleFonts(ctx)), { hashable: true })
+}
+
+/**
+ * `/api/fonts/faces.css` — same-origin `@font-face` stylesheet for the
+ * /fonts page. Served as an external sheet (governed by CSP
+ * `style-src-elem`/`style-src 'self'`) instead of an inline `<style>`
+ * block injected by client JS, which the strict CSP would reject.
+ *
+ * Pure function of the font corpus, so it's `hashable` (ETag + gzip) and
+ * carries the same shared-cache directive as `/api/fonts`.
+ *
+ * @type {import('../route-registry.js').RouteHandler}
+ */
+export function fontFacesCssHandler(_request, ctx) {
+  const baseUrl = ctx.siteConfig?.baseUrl || ''
+  const css = buildFontFaceCss(ctx.db.listAppleFonts(), {
+    fileUrl: (id) => `${baseUrl}/api/fonts/file/${encodeURIComponent(id)}`,
+  })
+  return textResponse(css, {
+    contentType: MIME_TYPES['.css'],
+    headers: { 'Cache-Control': API_CORPUS_CACHE_CONTROL },
+    hashable: true,
+  })
 }
 
 /**

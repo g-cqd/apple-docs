@@ -16,6 +16,8 @@
 // Tag chips render in their own visual style (Adobe pattern): the
 // "Sans-serif" chip is set in a sans face, "Serif" in serif, etc.
 
+import { fontFaceName } from '../lib/font-faces.js'
+
 function init() {
   const VARIANT_ORDER = ['Display', 'Text', 'Rounded', 'ExtraLarge', 'Large', 'Medium', 'Small', '__default__']
   const WEIGHT_NUMERIC = {
@@ -53,24 +55,12 @@ function init() {
   }
 
   // ---------------------------------------------------------------------
-  // 1. Inject @font-face for every family file.
+  // 1. @font-face rules ship as an external same-origin stylesheet
+  //    (<link href="/api/fonts/faces.css"> in the page head). An inline
+  //    <style> block here would trip CSP `style-src 'self'`; the route
+  //    and this controller derive the family names from the same
+  //    `fontFaceName()` so they always agree.
   // ---------------------------------------------------------------------
-  const styleSheet = document.createElement('style')
-  styleSheet.id = 'fonts-page-faces'
-  document.head.appendChild(styleSheet)
-
-  const cssNameByFileId = new Map()
-  const cssRules = []
-  for (const family of families) {
-    for (const file of family.files) {
-      const cssName = `apple-docs-${family.id}-${file.id}`
-      cssNameByFileId.set(file.id, cssName)
-      const url = `/api/fonts/file/${encodeURIComponent(file.id)}`
-      const format = formatHint(file.format)
-      cssRules.push(`@font-face { font-family: "${cssName}"; src: url("${url}")${format ? ` format("${format}")` : ''}; font-display: swap; }`)
-    }
-  }
-  styleSheet.textContent = cssRules.join('\n')
 
   // ---------------------------------------------------------------------
   // 2. Per-family card render: one preview line, no controls.
@@ -118,7 +108,7 @@ function init() {
         previewLine.dataset.fileId = ''
         continue
       }
-      previewLine.style.fontFamily = `"${cssNameByFileId.get(file.id)}", system-ui, sans-serif`
+      previewLine.style.fontFamily = `"${fontFaceName(family.id, file.id)}", system-ui, sans-serif`
       previewLine.style.fontWeight = globals.weight
       // Italic: prefer an actual italic file; fall back to synthesized
       // oblique via `font-style` if the family doesn't ship one.
@@ -266,15 +256,6 @@ function init() {
       }
     }
     return best
-  }
-
-  function formatHint(format) {
-    switch ((format || '').toLowerCase()) {
-      case 'ttf': return 'truetype'
-      case 'otf': return 'opentype'
-      case 'ttc': return 'collection'
-      default: return ''
-    }
   }
 }
 

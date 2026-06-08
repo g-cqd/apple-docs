@@ -75,6 +75,11 @@ ${buildHead({
   canonical,
   ogType: 'website',
   jsonLd,
+  // External same-origin @font-face sheet. Replaces the inline
+  // <style id="fonts-page-faces"> that fonts-page.js used to inject —
+  // CSP `style-src 'self'` allows the external sheet but blocks inline
+  // <style> elements, so the injected block tripped a violation on /fonts.
+  headExtra: html`<link rel="stylesheet" href="${baseUrl}/api/fonts/faces.css">`,
 })}
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
