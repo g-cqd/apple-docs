@@ -115,6 +115,10 @@ export async function buildStaticSite(opts, ctx) {
     snapshotTag,
     commitHash: getCommitHash(),
     bundled: true,
+    // Emit the `<link rel="alternate" type="text/markdown">` discovery hint on
+    // doc pages (the Markdown variant is served at /docs/<key>.md). Workers
+    // inherit APPLE_DOCS_MARKDOWN_DOCS via process.env, so this stays in sync.
+    markdownDocs: process.env.APPLE_DOCS_MARKDOWN_DOCS !== '0',
   }
   const fsOps = opts.fsOps ?? { rename, rm }
 

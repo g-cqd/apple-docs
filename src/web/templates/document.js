@@ -93,6 +93,12 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : null
 
   const canonical = doc.key ? `${siteConfig.baseUrl || ''}/docs/${doc.key}/` : null
+  // Advertise the Markdown variant (served at /docs/<key>.md) so agents
+  // discover it without sniffing. A distinct URL → distinct cache key, so it
+  // caches cleanly alongside the HTML (no Vary: Accept hazard).
+  const mdAlternate = (siteConfig.markdownDocs && doc.key)
+    ? html`<link rel="alternate" type="text/markdown" href="${siteConfig.baseUrl || ''}/docs/${doc.key}.md">`
+    : null
   const docDescription = doc.abstract_text || `${doc.title ?? ''} — Apple developer documentation`.trim()
   const platforms = parsePlatformsJson(doc.platforms_json) || {}
   const platformNames = Object.keys(platforms).filter(k => platforms[k]).map(k => ({
@@ -137,6 +143,7 @@ ${buildHead({
   ogTitle: doc.title ?? pageTitle,
   ogDesc: docDescription,
   jsonLd,
+  headExtra: mdAlternate,
 })}
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>

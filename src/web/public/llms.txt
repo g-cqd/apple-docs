@@ -35,6 +35,14 @@ and link back to the canonical Apple URL emitted on each page.
 - [Search manifest](https://apple-docs.everest.mt/data/search/search-manifest.json)
   — small JSON pointing at the current hashed artifact filenames.
 
+## Markdown for agents
+
+Every documentation page is also available as Markdown: append `.md` to any
+doc URL — e.g. <https://apple-docs.everest.mt/docs/swiftui/view.md> returns the
+same body the MCP `read_doc` tool serves, as `text/markdown`, cached under its
+own URL. Each HTML page advertises this with a
+`<link rel="alternate" type="text/markdown">` in its head.
+
 ## Top frameworks
 
 - [SwiftUI](https://apple-docs.everest.mt/docs/swiftui/)

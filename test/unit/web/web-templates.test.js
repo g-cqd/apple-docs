@@ -177,6 +177,16 @@ describe('renderDocumentPage', () => {
     expect(page).toContain('<link rel="stylesheet" href="/assets/style.css">')
   })
 
+  test('advertises the Markdown alternate (.md) when markdownDocs is enabled', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, { ...siteConfig, baseUrl: 'https://apple-docs.everest.mt', markdownDocs: true }).toString()
+    expect(page).toContain('<link rel="alternate" type="text/markdown" href="https://apple-docs.everest.mt/docs/swiftui/view.md">')
+  })
+
+  test('omits the Markdown alternate when markdownDocs is disabled', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, { ...siteConfig, markdownDocs: false }).toString()
+    expect(page).not.toContain('type="text/markdown"')
+  })
+
   test('contains theme.js deferred script in head', () => {
     const page = renderDocumentPage(mockDoc, mockSections, siteConfig).toString()
     expect(page).toContain('/assets/theme.js')
