@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { existsSync, rmSync, statSync } from 'node:fs'
-import { NotFoundError, ValidationError } from '../lib/errors.js'
+import { HttpError, NotFoundError, ValidationError } from '../lib/errors.js'
 import { sha256File } from '../lib/hash.js'
 import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
 import { resolveSevenZipBinary } from '../lib/archive-7z.js'
