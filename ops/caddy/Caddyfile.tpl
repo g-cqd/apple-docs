@@ -12,8 +12,8 @@
 }
 
 # ----------------------------------------------------------------------------
-# Web vhost — static site primary, Bun fallback for /api, /healthz, and on-
-# demand /docs/* renders.
+# Web vhost — static site primary, Bun fallback for /api, /healthz, /readyz,
+# and on-demand /docs/* renders.
 #
 # The prebuilt site lives in ${STATIC_DIR} (rendered by `apple-docs web build
 # --incremental`). Cloudflare and the local box both hit this vhost; the
@@ -73,8 +73,11 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 
 	# Live endpoints — always go to Bun. Health-probe `/healthz` so Caddy
 	# pulls Bun out of rotation if the event loop wedges (cheaper now that
-	# Bun only handles /api/*, but still useful as a backstop).
-	@live path /api/* /healthz /data/search/search-manifest.json
+	# Bun only handles /api/*, but still useful as a backstop). `/readyz`
+	# MUST be here too: without it the readiness JSON falls through to the
+	# static file_server and 404s (a cached 404 then masks DB / reader-pool
+	# health), so a probe sees a dead page instead of live status.
+	@live path /api/* /healthz /readyz /data/search/search-manifest.json
 	handle @live {
 		reverse_proxy 127.0.0.1:${WEB_BACKEND_PORT} {
 			header_up Accept-Encoding identity
