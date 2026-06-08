@@ -354,14 +354,52 @@ describe('buildStaticSite — SEO surface (Phase 4)', () => {
     expect(indexXml).toContain('https://example.test/sitemaps/_root.xml.gz')
   })
 
-  test('copies the static public/ tree (robots.txt, llms.txt, security.txt) into the build', async () => {
+  test('copies the static public/ tree (llms.txt, security.txt) into the build', async () => {
     await buildStaticSite({ out: outDir }, ctx)
-    expect(existsSync(join(outDir, 'robots.txt'))).toBe(true)
     expect(existsSync(join(outDir, 'llms.txt'))).toBe(true)
     expect(existsSync(join(outDir, '.well-known', 'security.txt'))).toBe(true)
+  })
+
+  test('generates robots.txt with a Content-Signal directive and a baseUrl-derived Sitemap', async () => {
+    await buildStaticSite({ out: outDir, baseUrl: 'https://example.test' }, ctx)
     const robots = readFileSync(join(outDir, 'robots.txt'), 'utf8')
     expect(robots).toContain('User-agent: *')
-    expect(robots).toContain('Sitemap:')
+    expect(robots).toMatch(/^Content-Signal: .+/m)
+    expect(robots).toContain('Sitemap: https://example.test/sitemap.xml')
+  })
+
+  test('emits the agent-discovery artifacts (api-catalog, MCP card, _headers, faces.css)', async () => {
+    // Seed a font so faces.css has at least one @font-face rule.
+    const fontDir = join(tmpDir, 'resources', 'fonts', 'extracted', 'sf-pro')
+    mkdirSync(fontDir, { recursive: true })
+    writeFileSync(join(fontDir, 'x.ttf'), 'fake')
+    db.upsertAppleFontFamily({ id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif' })
+    db.upsertAppleFontFile({
+      id: 'font-x', familyId: 'sf-pro', fileName: 'X.ttf', filePath: join(fontDir, 'x.ttf'),
+      format: 'ttf', size: 4, source: 'remote', variant: 'Display', weight: 'Bold', italic: false, isVariable: false,
+    })
+
+    await buildStaticSite({ out: outDir, baseUrl: 'https://example.test' }, ctx)
+
+    const catalog = JSON.parse(readFileSync(join(outDir, '.well-known', 'api-catalog'), 'utf8'))
+    expect(catalog.linkset[0].anchor).toBe('https://example.test/')
+
+    const card = JSON.parse(readFileSync(join(outDir, '.well-known', 'mcp', 'server-card.json'), 'utf8'))
+    expect(card.serverInfo.name).toBe('apple-docs')
+    expect(card.tools).toHaveLength(9)
+
+    const headers = readFileSync(join(outDir, '_headers'), 'utf8')
+    expect(headers).toContain('Link:')
+    expect(headers).toContain('Content-Signal:')
+    expect(headers).toContain('Content-Type: application/linkset+json')
+
+    const faces = readFileSync(join(outDir, 'api', 'fonts', 'faces.css'), 'utf8')
+    expect(faces).toContain('@font-face')
+    expect(faces).toContain('https://example.test/api/fonts/file/font-x')
+
+    const fontsHtml = readFileSync(join(outDir, 'fonts', 'index.html'), 'utf8')
+    expect(fontsHtml).toMatch(/<link rel="stylesheet" href="[^"]*\/api\/fonts\/faces\.css">/)
+    expect(fontsHtml).not.toContain('fonts-page-faces')
   })
 
   test('emits canonical, alternate, OpenGraph, and JSON-LD on document pages', async () => {

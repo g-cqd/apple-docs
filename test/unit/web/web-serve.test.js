@@ -728,6 +728,107 @@ describe('Dev Server (P7-E)', () => {
   })
 })
 
+describe('Dev Server — agent discovery + Markdown negotiation', () => {
+  test('/robots.txt is served by Bun with a Content-Signal directive', async () => {
+    const res = await fetch(`${serverInfo.url}/robots.txt`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/plain')
+    const body = await res.text()
+    expect(body).toMatch(/^Content-Signal: .+/m)
+    expect(body).toContain('User-agent: *')
+    expect(body).toContain('Sitemap:')
+  })
+
+  test('/.well-known/api-catalog returns an RFC 9264 linkset', async () => {
+    const res = await fetch(`${serverInfo.url}/.well-known/api-catalog`, {
+      headers: { Accept: 'application/linkset+json' },
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('application/linkset+json')
+    const json = await res.json()
+    expect(Array.isArray(json.linkset)).toBe(true)
+    const ctx = json.linkset[0]
+    expect(ctx['service-doc'][0].href).toContain('/docs/')
+    expect(ctx.item.map(i => i.href).some(h => h.includes('/api/search'))).toBe(true)
+  })
+
+  test('/.well-known/mcp/server-card.json advertises the 9 tools + 4 resources', async () => {
+    const res = await fetch(`${serverInfo.url}/.well-known/mcp/server-card.json`)
+    expect(res.status).toBe(200)
+    const card = await res.json()
+    expect(card.serverInfo.name).toBe('apple-docs')
+    expect(card.serverInfo.version).toBeTruthy()
+    expect(card.transport.type).toBe('streamable-http')
+    expect(card.tools).toHaveLength(9)
+    expect(card.resources).toHaveLength(4)
+  })
+
+  test('every response carries the Link set and Vary: Accept', async () => {
+    const res = await fetch(`${serverInfo.url}/healthz`)
+    const link = res.headers.get('link')
+    expect(link).toContain('rel="sitemap"')
+    expect(link).toContain('rel="api-catalog"')
+    expect(link).toContain('rel="service-doc"')
+    expect(res.headers.get('vary')).toContain('Accept')
+  })
+
+  test('/api/fonts/faces.css serves the external @font-face sheet', async () => {
+    const res = await fetch(`${serverInfo.url}/api/fonts/faces.css`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/css')
+    expect(res.headers.get('etag')).toBeTruthy()
+    const css = await res.text()
+    // Seeded font from the module beforeEach (family sf-pro, file font-web-test).
+    expect(css).toContain('@font-face')
+    expect(css).toContain('apple-docs-sf-pro-font-web-test')
+    expect(css).toContain('/api/fonts/file/font-web-test')
+  })
+
+  test('/fonts links the external sheet and injects no inline <style> faces block', async () => {
+    const html = await (await fetch(`${serverInfo.url}/fonts`)).text()
+    expect(html).toMatch(/<link rel="stylesheet" href="[^"]*\/api\/fonts\/faces\.css">/)
+    // The CSP fix: the old client-injected <style id="fonts-page-faces"> is gone.
+    expect(html).not.toContain('fonts-page-faces')
+  })
+
+  test('CSP is unchanged — still strict on <style> elements', async () => {
+    const csp = (await fetch(`${serverInfo.url}/fonts`)).headers.get('content-security-policy')
+    expect(csp).toContain("style-src 'self'")
+    expect(csp).toContain("style-src-attr 'unsafe-inline'")
+    expect(csp).not.toContain("style-src-elem")
+  })
+
+  test('GET /docs/<key> negotiates Markdown on Accept: text/markdown', async () => {
+    const url = `${serverInfo.url}/docs/documentation/swiftui/view`
+    const md = await fetch(url, { headers: { Accept: 'text/markdown' } })
+    expect(md.status).toBe(200)
+    expect(md.headers.get('content-type')).toContain('text/markdown')
+    expect(md.headers.get('vary')).toContain('Accept')
+    expect(Number(md.headers.get('x-markdown-tokens'))).toBeGreaterThan(0)
+    const body = await md.text()
+    expect(body).toContain('# View')
+    expect(body).not.toContain('<!DOCTYPE html>')
+  })
+
+  test('GET /docs/<key> stays HTML for browser Accept headers', async () => {
+    const url = `${serverInfo.url}/docs/documentation/swiftui/view`
+    const res = await fetch(url, {
+      headers: { Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+    })
+    expect(res.headers.get('content-type')).toContain('text/html')
+    expect(await res.text()).toContain('<!DOCTYPE html>')
+  })
+
+  test('negotiated Markdown supports conditional GET (ETag → 304)', async () => {
+    const url = `${serverInfo.url}/docs/documentation/swiftui/view`
+    const first = await fetch(url, { headers: { Accept: 'text/markdown' } })
+    const etag = first.headers.get('etag')
+    expect(etag).toBeTruthy()
+    const second = await fetch(url, { headers: { Accept: 'text/markdown', 'If-None-Match': etag } })
+    expect(second.status).toBe(304)
+  })
+})
+
 describe('Dev Server (D.2 metrics endpoint)', () => {
   let mDb
   let mCtx
