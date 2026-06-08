@@ -70,7 +70,16 @@ describe('search worker (headless Chromium)', () => {
       console.warn('skipping browser smoke: playwright not available')
       return
     }
-    chromium = await playwright.chromium.launch({ headless: true })
+    try {
+      chromium = await playwright.chromium.launch({ headless: true })
+    } catch (err) {
+      // The playwright package is installed but its Chromium browser build
+      // isn't (`bunx playwright install chromium`). The file docstring
+      // promises an automatic skip in that case — honour it rather than
+      // failing the run.
+      console.warn(`skipping browser smoke: Chromium build not installed (${String(err?.message).split('\n')[0]})`)
+      return
+    }
     const ctx = await chromium.newContext()
     const page = await ctx.newPage()
 

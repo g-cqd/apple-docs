@@ -1,5 +1,15 @@
-import { describe, test, expect, afterEach } from 'bun:test'
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { getCommitHash, _resetCommitHash } from '../../../src/lib/git-version.js'
+
+// Reset the process-wide memoization cache BEFORE each test as well as after:
+// getCommitHash() caches its first resolution, so another test file that
+// resolves it earlier in the run would leave the real HEAD cached and the
+// first test here would read that instead of the env it sets. beforeEach
+// isolates this file from cross-file execution order.
+beforeEach(() => {
+  _resetCommitHash()
+  delete process.env.APPLE_DOCS_COMMIT
+})
 
 afterEach(() => {
   _resetCommitHash()
