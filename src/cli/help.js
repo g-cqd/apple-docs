@@ -1,47 +1,4 @@
-const GLOBAL = `
-apple-docs - Apple Developer Documentation search and management
-
-Usage: apple-docs <command> [options]
-
-Query:
-  search <query>       Search documentation by term or symbol
-  read <path>          Read a specific page or symbol
-  browse <framework>   Browse topic tree for a framework
-  frameworks           List known documentation roots
-  kinds                List taxonomy values for filters
-  status               Show corpus statistics
-
-Setup & Sync:
-  setup                Download a pre-built documentation snapshot
-  sync                 Refresh the entire corpus end-to-end
-  consolidate          Repair failed crawl entries and re-resolve URLs
-
-Hosting:
-  mcp start            Start MCP stdio server
-  mcp serve            Start MCP Streamable HTTP server
-  mcp install          Show MCP client configuration
-  web serve            Start local dev web server
-  web build            Build static documentation site
-  web deploy           Show deployment instructions
-
-Maintenance & Build:
-  snapshot build       Build a release snapshot archive (lean by default)
-  storage stats        Show disk usage breakdown
-  storage gc           Garbage collect cached files
-  storage profile      Get or set the storage profile (on-demand vs prebuilt)
-  storage materialize  Render markdown/HTML/raw-json to disk on demand
-  storage compact      Shrink an install (zstd sections, contentless FTS, drop raw; --keep-raw)
-  index <subcommand>   rebuild <body|trigram> | embeddings (semantic vectors)
-
-Global options:
-  --json               Output raw JSON (for scripting)
-  --home <path>        Override data directory (default: ~/.apple-docs)
-  --verbose            Verbose logging
-  --help               Show help
-
-Environment:
-  APPLE_DOCS_DEBUG=1   Bypass public-output projection (raw envelopes)
-`.trim()
+import { GLOBAL } from './help-global.js'
 
 const COMMANDS = {
   search: `
@@ -180,13 +137,22 @@ Examples:
   setup: `
 Usage: apple-docs setup [options]
 
-Download a pre-built documentation snapshot for instant access.
-No crawling required — ready in under 60 seconds.
+Download a pre-built documentation snapshot (~2 GB). No
+crawling required — ready in a few minutes, mostly the download. --compact
+and --prebuilt do extra one-time work after extracting (see below).
+
+Profiles pick disk-vs-speed and finish in one step (no follow-up command):
+  --compact          Smallest disk. Compacts the install now: compresses
+                     sections, makes the body index contentless, drops the
+                     embedded raw payloads (~1 GB), VACUUMs. Renders on demand.
+  --prebuilt         Fastest. Materializes Markdown + HTML now (largest disk).
+  (default)          balanced — snapshot as-is; caches Markdown on first read.
 
 Options:
   --force            Overwrite existing corpus
-  --profile <name>   raw-only | balanced | prebuilt — render on demand vs
-                     prebuilt (max speed). Prompts on a TTY; else balanced.
+  --profile <name>   compact | balanced | prebuilt (explicit; overrides the
+                     --compact / --prebuilt shorthands). Prompts on a TTY;
+                     otherwise balanced.
   --yes              Accept the default profile without prompting
   --skip-resources   Skip the post-extract font + symbols re-index step
   --archive <path>   Install from a local snapshot tarball (under $HOME/cwd);
@@ -197,6 +163,11 @@ Advanced (auth tuning):
   --use-git-auth     Reuse a GitHub token from the local gh CLI or git
                      credential helper to authenticate release downloads.
   --skip-git-auth    Skip local-credential detection for this run.
+
+Examples:
+  apple-docs setup                 # balanced (default), prompts on a TTY
+  apple-docs setup --compact       # smallest install, one step
+  apple-docs setup --prebuilt      # fastest install, one step
 `.trim(),
 
   mcp: `

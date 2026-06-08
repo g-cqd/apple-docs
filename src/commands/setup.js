@@ -15,48 +15,12 @@ import {
   stripTarGz,
   USER_AGENT,
 } from './setup/helpers.js'
-import { getProfile, setProfile, PROFILE_NAMES, DEFAULT_PROFILE } from '../storage/profiles.js'
-import { promptChoice } from '../cli/prompts.js'
+import { getProfile, setProfile } from '../storage/profiles.js'
+import { resolveStorageProfile } from './setup/profile.js'
 
 // Snapshot asset filename component — every snapshot ships the full
 // payload, so this is fixed.
 const SNAPSHOT_TIER = 'full'
-
-/**
- * Resolve the storage profile to apply to a freshly-installed corpus:
- *   1. An explicit, valid `--profile` wins.
- *   2. On an interactive TTY (without `--yes`), prompt for the choice.
- *   3. Otherwise fall back to the default profile.
- *
- * setup applies the result explicitly on every install: a snapshot embeds
- * whatever `storage_profile` the build host had in snapshot_meta, so the
- * installer must override it rather than silently inherit the build's value.
- *
- * @param {{ profile?: string|null, yes?: boolean }} opts
- * @returns {Promise<string>} a name in PROFILE_NAMES
- */
-async function resolveStorageProfile({ profile, yes }) {
-  if (profile != null) {
-    if (!PROFILE_NAMES.includes(profile)) {
-      throw new ValidationError(
-        `Unknown --profile "${profile}". Valid profiles: ${PROFILE_NAMES.join(', ')}`,
-        { field: 'profile', value: profile },
-      )
-    }
-    return profile
-  }
-  if (!yes && process.stdin.isTTY) {
-    return promptChoice(
-      'Choose a storage profile for this install:',
-      [
-        { label: 'Render on demand', value: 'balanced', hint: 'smallest disk; markdown rendered per request and cached' },
-        { label: 'Prebuilt', value: 'prebuilt', hint: 'fastest; materializes markdown + HTML now (largest disk)' },
-      ],
-      { defaultIndex: 0 },
-    )
-  }
-  return DEFAULT_PROFILE
-}
 
 // setup: install a pre-built snapshot from GitHub releases (default) or
 // a local --archive path. Both routes converge on
@@ -373,9 +337,12 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
     }
 
     // Apply the storage profile explicitly — overrides whatever the snapshot
-    // build host baked into snapshot_meta. Prebuilt materializes the fast
-    // artifacts locally so the shipped (compact) snapshot can still serve a
-    // max-speed instance.
+    // build host baked into snapshot_meta. Each non-default profile finishes
+    // its shape in one step so the operator never has to chase setup with a
+    // second command:
+    //   prebuilt → materialize Markdown + HTML (max speed).
+    //   compact  → run the full compaction (compress sections, contentless
+    //              body index, drop raw payloads, VACUUM) — smallest disk.
     const storageProfile = await resolveStorageProfile({ profile: profile ?? priorProfile, yes })
     setProfile(verifyDb, storageProfile)
     if (storageProfile === 'prebuilt') {
@@ -384,6 +351,11 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
       const md = await storageMaterialize({ format: 'markdown' }, { db: verifyDb, dataDir, logger })
       const html = await storageMaterialize({ format: 'html' }, { db: verifyDb, dataDir, logger })
       logger.info(`Materialized ${md.materialized} markdown + ${html.materialized} HTML documents.`)
+    } else if (storageProfile === 'compact') {
+      logger.info('Compact profile — compacting install (compressed sections, contentless body index, dropping raw payloads)…')
+      const { storageCompact } = await import('./storage-compact.js')
+      const compacted = await storageCompact({}, { db: verifyDb, dataDir, logger })
+      logger.info(`Compacted: ${compacted.sectionsCompressed} sections compressed, ${compacted.rawDropped} raw payloads dropped.`)
     }
 
     if (tag) verifyDb.setSnapshotMeta('snapshot_tag', tag)

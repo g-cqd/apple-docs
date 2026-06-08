@@ -273,12 +273,25 @@ try {
         console.error('apple-docs setup: --downgrade is not a supported flag. There is only one snapshot shape.')
         process.exit(2)
       }
+      // Profile resolution: explicit `--profile` wins; `--compact` /
+      // `--prebuilt` are convenience aliases for the two poles. An explicit
+      // profile short-circuits the interactive prompt, so `--compact` is a
+      // one-step non-interactive minimal install.
+      if (flags.compact && flags.prebuilt) {
+        console.error('apple-docs setup: pass only one of --compact / --prebuilt.')
+        process.exit(2)
+      }
+      let setupProfile = flags.profile ?? null
+      if (setupProfile == null) {
+        if (flags.compact) setupProfile = 'compact'
+        else if (flags.prebuilt) setupProfile = 'prebuilt'
+      }
       const { setup: setupCmd } = await import('./src/commands/setup.js')
       result = await setupCmd({
         force: !!flags.force,
         skipResources: !!flags['skip-resources'],
         archive: flags.archive ?? null,
-        profile: flags.profile ?? null,
+        profile: setupProfile,
         yes: !!flags.yes,
       }, ctx)
       formatter = formatSetup
