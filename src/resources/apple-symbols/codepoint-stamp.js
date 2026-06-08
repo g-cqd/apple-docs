@@ -34,6 +34,9 @@ export async function stampSfSymbolCodepoints(opts, ctx) {
   // pass `appPath`/`fontPath` to bypass the provisioner entirely
   // (used by tests and offline snapshot rebuilds).
   let appPath = opts?.appPath ?? null
+  // SF Symbols version the codepoints are resolved against — stamped alongside
+  // each codepoint so the snapshot's font can be matched to its codepoints.
+  let version = opts?.version ?? null
   if (!appPath && !opts?.fontPath) {
     try {
       const installed = await ensureSfSymbolsApp({
@@ -42,6 +45,7 @@ export async function stampSfSymbolCodepoints(opts, ctx) {
         forceRefresh: opts?.forceRefresh,
       })
       appPath = installed.appPath
+      version = installed.version ?? version
     } catch (err) {
       logger?.warn?.(
         `SF Symbols.app provisioning failed (${err?.message ?? err}); ` +
@@ -79,7 +83,7 @@ export async function stampSfSymbolCodepoints(opts, ctx) {
   let stamped = 0
   for (const [name, codepoint] of map) {
     try {
-      db.updateSfSymbolCodepoint('public', name, codepoint)
+      db.updateSfSymbolCodepoint('public', name, codepoint, version)
       if (codepoint != null) stamped++
     } catch (err) {
       logger?.warn?.(`failed to stamp codepoint for ${name}: ${err.message ?? err}`)

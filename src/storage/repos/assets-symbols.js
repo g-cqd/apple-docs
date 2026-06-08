@@ -46,7 +46,7 @@ export function createAssetsSymbolsRepo(db) {
   )
   const getSymbolStmt = db.query('SELECT * FROM sf_symbols WHERE scope = ? AND name = ?')
   const listCatalogStmt = db.query(`
-    SELECT name, scope, categories_json, keywords_json, bitmap_only, codepoint
+    SELECT name, scope, categories_json, keywords_json, bitmap_only, codepoint, codepoint_version
     FROM sf_symbols
     ORDER BY scope, COALESCE(order_index, 999999), name
   `)
@@ -61,7 +61,7 @@ export function createAssetsSymbolsRepo(db) {
   // Pass NULL to clear (e.g., when the dump can't reach the symbol
   // through SF-Pro.ttf's PUA cmap).
   const updateCodepointStmt = db.query(
-    'UPDATE sf_symbols SET codepoint = $codepoint WHERE scope = $scope AND name = $name',
+    'UPDATE sf_symbols SET codepoint = $codepoint, codepoint_version = $version WHERE scope = $scope AND name = $name',
   )
   // Search variants — empty query, FTS hit, fallback LIKE.
   const searchEmptyStmt = db.query(`
@@ -160,17 +160,20 @@ export function createAssetsSymbolsRepo(db) {
         keywords: parseJsonArray(row.keywords_json),
         bitmapOnly: !!row.bitmap_only,
         codepoint: row.codepoint ?? null,
+        codepointVersion: row.codepoint_version ?? null,
       }))
     },
     markBitmapOnly(scope, name) {
       markBitmapOnlyStmt.run({ $scope: scope, $name: name })
     },
-    /** Stamp the resolved Private Use Area codepoint. Pass null to clear. */
-    updateCodepoint(scope, name, codepoint) {
+    /** Stamp the resolved PUA codepoint + the SF Symbols version it came from
+     *  (so the codepoint can be matched to the shipped font). Pass null to clear. */
+    updateCodepoint(scope, name, codepoint, version = null) {
       updateCodepointStmt.run({
         $scope: scope,
         $name: name,
         $codepoint: codepoint == null ? null : codepoint,
+        $version: version ?? null,
       })
     },
     /** Hybrid search: FTS5 first, falls back to LIKE on parser failure

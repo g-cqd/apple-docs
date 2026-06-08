@@ -185,6 +185,28 @@ describe('v19 migration', () => {
       db.close()
     }
   })
+
+  test('versioned stamping tags codepoints with the SF Symbols version', () => {
+    const db = new DocsDatabase(':memory:')
+    try {
+      db.upsertSfSymbol({ name: 'house.fill', scope: 'public', categories: [], keywords: [], orderIndex: 0 })
+      db.updateSfSymbolCodepoint('public', 'house.fill', 0x1004b6, '8.0')
+      let entry = db.listSfSymbolsCatalog().find(s => s.name === 'house.fill')
+      expect(entry.codepoint).toBe(0x1004b6)
+      expect(entry.codepointVersion).toBe('8.0')
+      // Re-stamp against a newer font: the version follows the codepoint so the
+      // mapping always describes the font it was resolved from.
+      db.updateSfSymbolCodepoint('public', 'house.fill', 0x1004c0, '9.0')
+      entry = db.listSfSymbolsCatalog().find(s => s.name === 'house.fill')
+      expect(entry.codepoint).toBe(0x1004c0)
+      expect(entry.codepointVersion).toBe('9.0')
+      // Legacy/unversioned stamp leaves the version null.
+      db.updateSfSymbolCodepoint('public', 'house.fill', 0x1004b6)
+      expect(db.listSfSymbolsCatalog().find(s => s.name === 'house.fill').codepointVersion).toBe(null)
+    } finally {
+      db.close()
+    }
+  })
 })
 
 describe('/api/symbols/<scope>/<name>.json route', () => {
