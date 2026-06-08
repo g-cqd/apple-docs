@@ -16,6 +16,8 @@ apple-docs <command> --help
 
 - [Introduction](index.md)
 - [Installing](installing.md) — dev, standalone, or production install.
+- [Configuration](configuration.md) — storage profiles, environment
+  variables, and post-install storage management.
 - [Architecture](architecture.md) — five-layer stack, projection
   boundary, adapter and repository patterns.
 - [Self-hosting](self-hosting.md) — deployment topology, environment
