@@ -230,6 +230,40 @@ describe('createReaderPool', () => {
     await pool.close()
   })
 
+  test('transient boot fatal is retried, then start() succeeds', async () => {
+    // Mirrors the real WAL/SHM bring-up race: the first worker boot throws
+    // SQLITE_NOTADB ("file is not a database"); the respawn opens cleanly.
+    let spawns = 0
+    function FlakyCtor() {
+      spawns++
+      const failThis = spawns === 1
+      const w = makeFakeWorker(null, { autoReady: false })
+      queueMicrotask(() => w.emit('message', failThis
+        ? { type: 'fatal', error: { message: 'file is not a database' } }
+        : { type: 'ready' }))
+      return w
+    }
+    const pool = createReaderPool({ dbPath: DB_PATH, size: 1, WorkerCtor: FlakyCtor })
+    await pool.start() // retries past the first fatal instead of rejecting
+    expect(spawns).toBe(2) // one failed boot + one good
+    expect(pool.stats()).toMatchObject({ size: 1, active: 1 })
+    await pool.close()
+  })
+
+  test('boot retries are bounded — a permanent failure still rejects start()', async () => {
+    let spawns = 0
+    function AlwaysFailCtor() {
+      spawns++
+      const w = makeFakeWorker(null, { autoReady: false })
+      queueMicrotask(() => w.emit('message', { type: 'fatal', error: { message: 'db open failed' } }))
+      return w
+    }
+    const pool = createReaderPool({ dbPath: DB_PATH, size: 1, WorkerCtor: AlwaysFailCtor, bootRetries: 2 })
+    await expect(pool.start()).rejects.toThrow(/db open failed|reader-worker fatal/)
+    expect(spawns).toBe(3) // initial attempt + 2 retries
+    await pool.close()
+  })
+
   test('A15: per-worker pending cap rejects with BackpressureError', async () => {
     // Hold every dispatched call open by never replying. After the cap
     // entries land in slot.pending, the (cap+1)th run() throws.

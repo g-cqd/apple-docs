@@ -81,12 +81,15 @@ export function createReaderPools(opts = {}) {
   })
 
   async function start() {
-    // Start in parallel; both pools internally serialize their own
-    // worker boots to avoid the WAL/SHM bring-up race. Two pools at
-    // once doesn't reintroduce the race because the workers each
-    // open their own `bun:sqlite` handle on the same file — read-only
-    // mmap share is fine across handles.
-    await Promise.all([strict.start(), deep.start()])
+    // Boot the pools SERIALLY. Each pool already serializes its own worker
+    // boots to dodge the WAL/SHM bring-up race on `PRAGMA journal_mode =
+    // WAL`; starting both at once reintroduced that race ACROSS pools — a
+    // worker in one pool hitting SQLITE_NOTADB while the other pool's worker
+    // brought up the shared -wal/-shm, which rejected the whole start and
+    // disabled both pools. Serial start keeps total boot latency at
+    // (strict + deep) × ~10-30ms — negligible against process lifetime.
+    await strict.start()
+    await deep.start()
   }
 
   async function run(op, args = [], runOpts = {}) {

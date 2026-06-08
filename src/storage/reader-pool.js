@@ -1,9 +1,15 @@
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
-import { availableParallelism } from 'node:os'
 import { AssertionError, ValidationError } from '../lib/errors.js'
 import { BackpressureError } from '../lib/semaphore.js'
 import { READ_OPS } from './reader-worker.js'
+import {
+  DEFAULT_BOOT_RETRIES,
+  DEFAULT_DEADLINE_MS,
+  DEFAULT_MAX_PENDING_PER_WORKER,
+  PER_OP_DEADLINE_MS,
+  resolveDefaultSize,
+} from './reader-pool-config.js'
 
 // Typed error from `pool.run()` deadline expirations — lets the cascade
 // distinguish "partial results: deep tier timed out" from a real failure.
@@ -17,20 +23,6 @@ export class DeadlineError extends Error {
 }
 
 const WORKER_URL = new URL('./reader-worker.js', import.meta.url)
-
-const DEFAULT_MAX_WORKERS = 12
-const FALLBACK_SIZE = 6
-
-function resolveDefaultSize() {
-  try {
-    const hw = availableParallelism?.() ?? FALLBACK_SIZE
-    // Leave headroom for the main thread + OS. Cap at DEFAULT_MAX_WORKERS so
-    // a 96-core host doesn't spawn absurd numbers of SQLite handles.
-    return Math.min(DEFAULT_MAX_WORKERS, Math.max(2, hw - 2))
-  } catch {
-    return FALLBACK_SIZE
-  }
-}
 
 /**
  * Spawns a pool of worker threads each holding its own `bun:sqlite` read-only
@@ -65,24 +57,6 @@ function resolveDefaultSize() {
  * @param {new (...args: any[]) => Worker} [opts.WorkerCtor] - Injectable
  *   for tests.
  */
-const DEFAULT_MAX_PENDING_PER_WORKER = 64
-const DEFAULT_DEADLINE_MS = 5_000
-
-// Per-op deadline overrides. Resolution: opts.deadlineMs > this
-// map > pool default > DEFAULT_DEADLINE_MS. Strict ops cap above warm-
-// cache p99 but below the bench HEAVY budget; deep ops have honest
-// multi-second tails that the strict/deep pool split keeps off strict
-// slots.
-const PER_OP_DEADLINE_MS = Object.freeze({
-  searchTitleExact: 750,
-  searchTrigram: 1_000,
-  searchPages: 1_500,
-  fuzzyMatchTitles: 2_000,
-  searchBody: 4_000,
-  searchBodyAndEnrich: 4_500,
-  getBodyIndexCount: 1_000,
-})
-
 export function createReaderPool(opts = {}) {
   const { dbPath, log } = opts
   if (!dbPath || dbPath === ':memory:') {
@@ -97,6 +71,7 @@ export function createReaderPool(opts = {}) {
   // pin the slot forever. Both are tunable per call via run(op, args, opts).
   const maxPendingPerWorker = Math.max(1, opts.maxPendingPerWorker ?? DEFAULT_MAX_PENDING_PER_WORKER)
   const defaultDeadlineMs = Math.max(0, opts.deadlineMs ?? DEFAULT_DEADLINE_MS)
+  const bootRetries = Math.max(0, opts.bootRetries ?? DEFAULT_BOOT_RETRIES)
 
   const stats = { spawns: 0, errors: 0, timeouts: 0, backpressureRejects: 0 }
 
@@ -174,16 +149,36 @@ export function createReaderPool(opts = {}) {
     // loop doesn't thrash. Next `run()` will respawn this index.
   }
 
+  // Boot one slot, retrying a failed open up to `bootRetries` times.
+  // failSlot() nulls the slot on a fatal/exit, so each attempt respawns a
+  // fresh worker. The try also covers a throwing WorkerCtor. Exhausting the
+  // retries rethrows the last error; the caller (web/MCP context) then falls
+  // back to main-thread reads.
+  async function startSlot(index) {
+    let lastErr
+    for (let attempt = 0; attempt <= bootRetries; attempt++) {
+      try {
+        spawn(index)
+        const slot = slots[index]
+        if (slot?.ready) await slot.ready
+        return
+      } catch (err) {
+        lastErr = err
+        log?.('warn', `worker ${index} boot attempt ${attempt + 1}/${bootRetries + 1} failed: ${err?.message ?? err}`)
+        if (attempt < bootRetries) await Bun.sleep(25 * (attempt + 1))
+      }
+    }
+    throw lastErr
+  }
+
   async function start() {
     // Spawn serially: N workers opening the same SQLite file simultaneously
-    // races on WAL / SHM bring-up on some platforms (observed on x86 Darwin:
-    // "database disk image is malformed" / "malformed sqlite_master" fatals
-    // at worker boot). The cost is one-time startup latency on the order of
-    // N × ~10-30ms; trivial against process lifetime, eliminates the race.
+    // race on WAL/SHM bring-up on some platforms (observed on Darwin:
+    // "malformed sqlite_master" / SQLITE_NOTADB fatals at worker boot).
+    // Serial boot + per-slot retry (startSlot) eliminates the race and
+    // self-heals a transient miss. Cost: one-time N × ~10-30ms startup.
     for (let i = 0; i < size; i++) {
-      spawn(i)
-      const slot = slots[i]
-      if (slot?.ready) await slot.ready
+      await startSlot(i)
     }
   }
 
