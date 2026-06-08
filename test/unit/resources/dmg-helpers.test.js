@@ -6,6 +6,7 @@ import {
   findAppInTree,
   findAppInVolumes,
   findPkgInVolumes,
+  isSfSymbolsAppName,
   parseHdiutilMountPoints,
 } from '../../../src/resources/sf-symbols-app/dmg-helpers.js'
 
@@ -66,6 +67,12 @@ describe('volume / package discovery', () => {
     expect(findAppInVolumes([other])).toBeNull()
   })
 
+  test('findAppInVolumes accepts the beta-channel bundle name', () => {
+    const vol = join(root, 'vol-beta')
+    mkdirSync(join(vol, 'SF Symbols Beta.app', 'Contents'), { recursive: true })
+    expect(findAppInVolumes([vol])).toBe(join(vol, 'SF Symbols Beta.app'))
+  })
+
   test('findPkgInVolumes finds the installer package (case-insensitive)', () => {
     const vol = join(root, 'vol-pkg')
     mkdirSync(vol, { recursive: true })
@@ -90,5 +97,40 @@ describe('volume / package discovery', () => {
     // The app is 3 levels below root; a maxDepth of 1 must not reach it.
     expect(findAppInTree(root, 1)).toBeNull()
     expect(findAppInTree(root, 8)).toBe(join(root, 'a', 'b', 'c', 'SF Symbols.app'))
+  })
+
+  test('findAppInTree locates the SF Symbols 8 beta bundle in a real pkg layout', () => {
+    // Exactly what `pkgutil --expand-full` produced for SF-Symbols-8.dmg:
+    // <dest>/SFSymbols.pkg/Payload/Applications/SF Symbols Beta.app
+    const betaApp = join(root, 'expanded', 'SFSymbols.pkg', 'Payload', 'Applications', 'SF Symbols Beta.app')
+    mkdirSync(join(betaApp, 'Contents'), { recursive: true })
+    expect(findAppInTree(join(root, 'expanded'))).toBe(betaApp)
+  })
+
+  test('findAppInTree prefers an SF Symbols bundle but falls back to any .app', () => {
+    // An unrelated installer app shallower than the SF Symbols bundle must
+    // not win when the branded bundle exists.
+    mkdirSync(join(root, 'pref', 'Helper.app'), { recursive: true })
+    mkdirSync(join(root, 'pref', 'Payload', 'SF Symbols Beta.app'), { recursive: true })
+    expect(findAppInTree(join(root, 'pref'))).toBe(join(root, 'pref', 'Payload', 'SF Symbols Beta.app'))
+
+    // With no branded bundle, the shallowest plain .app is the fallback.
+    mkdirSync(join(root, 'fb', 'Some Installer.app'), { recursive: true })
+    expect(findAppInTree(join(root, 'fb'))).toBe(join(root, 'fb', 'Some Installer.app'))
+  })
+})
+
+describe('isSfSymbolsAppName', () => {
+  test('matches stable and beta channel bundle names', () => {
+    expect(isSfSymbolsAppName('SF Symbols.app')).toBe(true)
+    expect(isSfSymbolsAppName('SF Symbols Beta.app')).toBe(true)
+    expect(isSfSymbolsAppName('SF Symbols 9.app')).toBe(true)
+  })
+
+  test('rejects unrelated or malformed names', () => {
+    expect(isSfSymbolsAppName('Xcode.app')).toBe(false)
+    expect(isSfSymbolsAppName('SF SymbolsX.app')).toBe(false) // no word boundary
+    expect(isSfSymbolsAppName('SF Symbols')).toBe(false) // not a bundle
+    expect(isSfSymbolsAppName(null)).toBe(false)
   })
 })

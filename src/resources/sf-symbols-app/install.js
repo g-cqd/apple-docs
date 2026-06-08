@@ -35,6 +35,7 @@ import {
   findPkgInVolumes,
   parseHdiutilMountPoints,
   safeReaddir,
+  SF_SYMBOLS_APP,
 } from './dmg-helpers.js'
 
 const LANDING_URL = 'https://developer.apple.com/sf-symbols/'
@@ -219,7 +220,7 @@ export async function ensureSfSymbolsApp(opts) {
 
   const version = versionFromUrl(latest)
   const versionedDir = join(cacheRoot, version)
-  const appPath = join(versionedDir, 'SF Symbols.app')
+  const appPath = join(versionedDir, SF_SYMBOLS_APP)
   await mkdir(versionedDir, { recursive: true })
 
   // Download + mount + copy. The .dmg is ~500 MB; download to a
@@ -242,7 +243,7 @@ export async function ensureSfSymbolsApp(opts) {
   }
 
   try {
-    await provisionFromDmg(dmgPath, { appPath, versionedDir })
+    await provisionFromDmg(dmgPath, { appPath })
   } finally {
     await rm(dmgStagingDir, { recursive: true, force: true }).catch(() => {})
   }
@@ -273,14 +274,17 @@ export async function ensureSfSymbolsApp(opts) {
  * (attach still exits 0). We enumerate every mounted filesystem instead.
  *
  * Two payload shapes: older DMGs carried a loose `SF Symbols.app` at a
- * volume root; SF Symbols 7.x ships an `SF Symbols.pkg` installer. For the
+ * volume root; SF Symbols 7.x+ ships an `SF Symbols.pkg` installer. For the
  * latter we `pkgutil --expand-full` the package and pull the bundled app
- * out of its Payload.
+ * out of its Payload. SF Symbols 8 names that bundle `SF Symbols Beta.app`,
+ * so discovery matches any `SF Symbols*.app` and we copy it to the canonical
+ * `appPath` (`<versionedDir>/SF Symbols.app`) — every downstream consumer
+ * (version read, font/framework paths) keys off that fixed name.
  *
  * @param {string} dmgPath
- * @param {{ appPath: string, versionedDir: string }} dest
+ * @param {{ appPath: string }} dest
  */
-async function provisionFromDmg(dmgPath, { appPath, versionedDir }) {
+async function provisionFromDmg(dmgPath, { appPath }) {
   const plist = await runCmd('hdiutil', [
     'attach', dmgPath, '-nobrowse', '-readonly', '-noautoopen', '-plist',
   ])
@@ -305,7 +309,9 @@ async function provisionFromDmg(dmgPath, { appPath, versionedDir }) {
       throw new NotFoundError(dmgPath, `SF Symbols.app not found in any mounted volume or installer package (${listing})`)
     }
     if (existsSync(appPath)) await rm(appPath, { recursive: true, force: true })
-    await runCmd('cp', ['-R', sourceApp, versionedDir])
+    // Copy TO appPath (not into its parent) so a `SF Symbols Beta.app` source
+    // is normalised to the canonical `SF Symbols.app` name on disk.
+    await runCmd('cp', ['-R', sourceApp, appPath])
   } finally {
     for (const mp of mountPoints) {
       await runCmd('hdiutil', ['detach', mp, '-quiet']).catch(() => {})

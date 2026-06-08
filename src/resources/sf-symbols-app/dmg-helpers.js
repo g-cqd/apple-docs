@@ -9,6 +9,21 @@ import { join } from 'node:path'
 
 export const SF_SYMBOLS_APP = 'SF Symbols.app'
 
+// Match any SF Symbols application bundle, whatever the release channel: the
+// stable `SF Symbols.app`, the `SF Symbols Beta.app` that SF Symbols 8 ships
+// inside its installer pkg, or a future `SF Symbols <x>.app`. Staying flexible
+// means provisioning succeeds with whatever variant Apple publishes; the
+// caller normalises the on-disk name back to SF_SYMBOLS_APP.
+const SF_SYMBOLS_APP_RE = /^SF Symbols\b.*\.app$/i
+
+export function isSfSymbolsAppName(name) {
+  return typeof name === 'string' && SF_SYMBOLS_APP_RE.test(name)
+}
+
+function isAppBundleName(name) {
+  return typeof name === 'string' && name.toLowerCase().endsWith('.app')
+}
+
 /**
  * Extract every `mount-point` path from `hdiutil attach -plist` output.
  * Whole-disk entities carry no `mount-point` key and are skipped, so the
@@ -41,13 +56,23 @@ export function safeReaddir(dir) {
   try { return readdirSync(dir) } catch { return [] }
 }
 
-/** First mounted volume that holds a loose `SF Symbols.app` at its root. */
+/**
+ * First mounted volume that holds an SF Symbols app bundle at its root.
+ * Prefers an `SF Symbols*.app`; falls back to any loose `.app` so a renamed
+ * future bundle still provisions.
+ */
 export function findAppInVolumes(mountPoints) {
+  let fallback = null
   for (const mp of mountPoints) {
-    const candidate = join(mp, SF_SYMBOLS_APP)
-    if (existsSync(candidate)) return candidate
+    for (const name of safeReaddir(mp)) {
+      if (!isAppBundleName(name)) continue
+      const candidate = join(mp, name)
+      if (!existsSync(candidate)) continue
+      if (isSfSymbolsAppName(name)) return candidate
+      fallback ??= candidate
+    }
   }
-  return null
+  return fallback
 }
 
 /** First `.pkg` installer found at a mounted volume root. */
@@ -61,27 +86,33 @@ export function findPkgInVolumes(mountPoints) {
 }
 
 /**
- * Recursively locate the `SF Symbols.app` bundle under `root`, bounded to
- * `maxDepth` directory levels so a pathological tree can't spin. Returns the
- * absolute path or null. Used to pull the app out of an expanded `.pkg`
- * Payload — SF Symbols 7.x ships an installer package, not a loose .app, so
- * the bundle lands at `<expanded>/Payload/<install-location>/SF Symbols.app`.
+ * Locate the SF Symbols app bundle under `root` (BFS, shallowest-first),
+ * bounded to `maxDepth` directory levels so a pathological tree can't spin.
+ * Used to pull the app out of an expanded installer pkg Payload — SF Symbols
+ * 7.x+ ships a package, not a loose .app, and SF Symbols 8 names the bundle
+ * `SF Symbols Beta.app` at `<expanded>/<component>.pkg/Payload/Applications/`.
+ * Prefers an `SF Symbols*.app`; falls back to the shallowest `.app` found so
+ * provisioning still succeeds if Apple renames the bundle. Never descends into
+ * a `.app` (bundles can nest helper apps). Returns the absolute path or null.
  *
  * @param {string} root
  * @param {number} [maxDepth]
  * @returns {string | null}
  */
 export function findAppInTree(root, maxDepth = 8) {
-  const stack = [[root, 0]]
-  while (stack.length > 0) {
-    const [dir, depth] = stack.pop()
+  const queue = [[root, 0]]
+  let fallback = null
+  while (queue.length > 0) {
+    const [dir, depth] = queue.shift()
     let entries
     try { entries = readdirSync(dir, { withFileTypes: true }) } catch { continue }
     for (const e of entries) {
       if (!e.isDirectory()) continue
-      if (e.name === SF_SYMBOLS_APP) return join(dir, e.name)
-      if (depth < maxDepth) stack.push([join(dir, e.name), depth + 1])
+      const full = join(dir, e.name)
+      if (isSfSymbolsAppName(e.name)) return full
+      if (isAppBundleName(e.name)) { fallback ??= full; continue }
+      if (depth < maxDepth) queue.push([full, depth + 1])
     }
   }
-  return null
+  return fallback
 }
