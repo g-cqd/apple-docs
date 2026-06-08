@@ -798,33 +798,31 @@ describe('Dev Server — agent discovery + Markdown negotiation', () => {
     expect(csp).not.toContain("style-src-elem")
   })
 
-  test('GET /docs/<key> negotiates Markdown on Accept: text/markdown', async () => {
-    const url = `${serverInfo.url}/docs/documentation/swiftui/view`
-    const md = await fetch(url, { headers: { Accept: 'text/markdown' } })
+  test('GET /docs/<key>.md serves cacheable Markdown', async () => {
+    const md = await fetch(`${serverInfo.url}/docs/documentation/swiftui/view.md`)
     expect(md.status).toBe(200)
     expect(md.headers.get('content-type')).toContain('text/markdown')
-    expect(md.headers.get('vary')).toContain('Accept')
+    expect(md.headers.get('cache-control')).toContain('public')
     expect(Number(md.headers.get('x-markdown-tokens'))).toBeGreaterThan(0)
     const body = await md.text()
     expect(body).toContain('# View')
     expect(body).not.toContain('<!DOCTYPE html>')
   })
 
-  test('GET /docs/<key> stays HTML for browser Accept headers', async () => {
-    const url = `${serverInfo.url}/docs/documentation/swiftui/view`
-    const res = await fetch(url, {
-      headers: { Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+  test('GET /docs/<key> stays HTML even with Accept: text/markdown (no header negotiation)', async () => {
+    const res = await fetch(`${serverInfo.url}/docs/documentation/swiftui/view`, {
+      headers: { Accept: 'text/markdown' },
     })
     expect(res.headers.get('content-type')).toContain('text/html')
     expect(await res.text()).toContain('<!DOCTYPE html>')
   })
 
-  test('negotiated Markdown supports conditional GET (ETag → 304)', async () => {
-    const url = `${serverInfo.url}/docs/documentation/swiftui/view`
-    const first = await fetch(url, { headers: { Accept: 'text/markdown' } })
+  test('GET /docs/<key>.md supports conditional GET (ETag → 304)', async () => {
+    const url = `${serverInfo.url}/docs/documentation/swiftui/view.md`
+    const first = await fetch(url)
     const etag = first.headers.get('etag')
     expect(etag).toBeTruthy()
-    const second = await fetch(url, { headers: { Accept: 'text/markdown', 'If-None-Match': etag } })
+    const second = await fetch(url, { headers: { 'If-None-Match': etag } })
     expect(second.status).toBe(304)
   })
 })

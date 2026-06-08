@@ -72,14 +72,9 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 	@api_catalog path /.well-known/api-catalog
 	header @api_catalog Content-Type "application/linkset+json"
 
-	# HTML docs are edge-cacheable; the Markdown variant is NOT (Bun sends it
-	# no-store). Exclude Markdown from this public directive — it's a top-level
-	# header that otherwise overrides the proxied Markdown response and would
-	# re-mark it cacheable, leaking a cached Markdown body to browsers.
-	@docs {
-		path /docs/*
-		not header Accept *text/markdown*
-	}
+	# /docs/* (HTML and the `.md` variant) is edge-cacheable. The `.md` URL is
+	# a distinct cache key, so both cache cleanly under their own URLs.
+	@docs path /docs/*
 	header @docs Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
 
 	@root path /
@@ -105,23 +100,9 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 		}
 	}
 
-	# Markdown content negotiation. Agents that prefer `text/markdown` get
-	# the on-the-fly Markdown render from Bun (the same body MCP `read_doc`
-	# serves) instead of the static HTML on disk. Browsers never send that
-	# Accept token, so they keep hitting the static file_server below. Bun's
-	# handler does the precise q-value check and falls back to HTML when
-	# markdown isn't actually preferred.
-	@md_docs {
-		path /docs/*
-		header Accept *text/markdown*
-	}
-	# Markdown is served no-store by Bun (src/web/routes/docs.route.js) so the
-	# negotiated variant never lands in a shared cache that ignores Vary.
-	handle @md_docs {
-		reverse_proxy 127.0.0.1:${WEB_BACKEND_PORT} {
-			header_up Accept-Encoding identity
-		}
-	}
+	# Markdown is served at the `/docs/<key>.md` URL (distinct cache key, no
+	# Vary: Accept hazard). Those have no static file on disk, so they fall
+	# through to Bun via @docs_miss below and cache under their own URL.
 
 	# /docs/* and /data/frameworks/*/tree.* misses fall through to Bun.
 	#

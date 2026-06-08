@@ -61,6 +61,10 @@ export async function createWebContext(opts, ctx) {
     buildDate: new Date().toISOString().split('T')[0],
     assetVersion: Date.now().toString(36),
     bundled: true,
+    // Serve Markdown at `/docs/<key>.md` (a distinct URL → distinct cache key,
+    // so it sidesteps the `Vary: Accept` caching hazard of header
+    // negotiation). On by default; set APPLE_DOCS_MARKDOWN_DOCS=0 to disable.
+    markdownDocs: process.env.APPLE_DOCS_MARKDOWN_DOCS !== '0',
   }
 
   void initHighlighter().catch((err) => {
