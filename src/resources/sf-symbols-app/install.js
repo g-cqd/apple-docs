@@ -24,7 +24,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, rm, writeFile, mkdtemp } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn as nodeSpawn } from 'node:child_process'
@@ -258,7 +258,16 @@ export async function ensureSfSymbolsApp(opts) {
     installedAt: new Date().toISOString(),
   }
   await mkdir(cacheRoot, { recursive: true })
-  await writeFile(manifestPath, JSON.stringify(manifest, null, 2))
+  // Create-exclusive + atomic rename so a hostile pre-placed symlink at
+  // manifestPath cannot redirect the write (CodeQL js/insecure-temporary-file).
+  const staging = join(cacheRoot, `.manifest.${process.pid}.${Date.now()}.tmp`)
+  try {
+    await writeFile(staging, JSON.stringify(manifest, null, 2), { flag: 'wx', mode: 0o644 })
+    await rename(staging, manifestPath)
+  } catch (err) {
+    await rm(staging, { force: true }).catch(() => {})
+    throw err
+  }
 
   logger?.info?.(`SF Symbols.app ${installedVersion} installed at ${appPath}`)
   return { appPath, version: installedVersion, source: 'cache' }

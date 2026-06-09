@@ -213,9 +213,9 @@ export async function snapshotBuild(opts, ctx) {
     if (existsSync(fontsExtractedDir)) {
       copyTreeFast(fontsExtractedDir, join(buildDir, 'resources', 'fonts', 'extracted'))
     }
-    // Offline query-embedding model (q8 ONNX, ~23 MB). Ships so a fresh
-    // install runs the semantic tier with no network. Absent → tier dormant
-    // (lexical-only). Static files → deterministic.
+    // Offline query-embedding model (model2vec, ~126 MB fp32). Ships so a
+    // fresh install runs the semantic tier with no network. Absent → tier
+    // dormant (lexical-only). Static files → deterministic.
     const modelsDir = join(dataDir, 'resources', 'models')
     if (existsSync(modelsDir)) {
       copyTreeFast(modelsDir, join(buildDir, 'resources', 'models'))

@@ -16,7 +16,7 @@
  * --mode full   : real `sync --full` per setup (hours each) — the real matrix.
  */
 
-import { existsSync, mkdirSync, rmSync, mkdtempSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, mkdtempSync } from 'node:fs'
 import { writeFileSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
@@ -46,7 +46,7 @@ const SETUPS = (typeof args.setups === 'string' ? args.setups.split(',') : ['raw
 const BASE = args.base ? String(args.base) : mkdtempSync(join(homedir(), '.apple-docs-verify-'))
 const OUT = args.out ? String(args.out) : join(BASE, 'report')
 const MIN_FREE_GB = Number(args['min-free-gb'] ?? 20)
-// Shared model dir so the q8 ONNX model downloads once and is reused offline.
+// Shared model dir so the model2vec model downloads once and is reused offline.
 const MODELS_DIR = join(BASE, 'models')
 
 mkdirSync(OUT, { recursive: true })

@@ -25,7 +25,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/setup
 
       # Archive pipeline: snapshots ship as `.tar.zst` with `zstd -9 -T3
@@ -72,7 +72,7 @@ jobs:
       # status.json with sha256 + size + url for every artefact.
       #
       # APPLE_DOCS_ALLOW_REMOTE_MODELS=1 lets the embeddings step (run inside
-      # build-snapshot.js) fetch the q8 ONNX query model once into
+      # build-snapshot.js) fetch the model2vec query model once into
       # $APPLE_DOCS_HOME/resources/models so it ships in the snapshot for
       # offline semantic search. The determinism re-build below intentionally
       # omits this — the model is already present locally by then, so the
