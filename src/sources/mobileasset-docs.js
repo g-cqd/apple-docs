@@ -28,7 +28,7 @@
 
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { Database } from 'bun:sqlite'
+import { Database, constants } from 'bun:sqlite'
 import { encodeVersion } from '../lib/version-encode.js'
 
 export const DEFAULT_ASSET_ROOT =
@@ -63,9 +63,12 @@ export function findDocumentationAssets(rootDir = DEFAULT_ASSET_ROOT) {
   return out.sort((a, b) => b.docs - a.docs)
 }
 
-/** Read-only, immutable open — never touches WAL/SHM under /System. */
+/** Read-only, immutable open — never touches WAL/SHM under /System. The raw
+ *  flags form is required: `immutable=1` only takes effect when SQLITE_OPEN_URI
+ *  is set, and bun:sqlite enables URI parsing implicitly on macOS but not on
+ *  Linux, so the object-options form silently fails there (CANTOPEN). */
 export function openAssetDb(dbPath) {
-  return new Database(`file:${dbPath}?immutable=1`, { readonly: true })
+  return new Database(`file:${dbPath}?immutable=1`, constants.SQLITE_OPEN_READONLY | constants.SQLITE_OPEN_URI)
 }
 
 /** `/documentation/SwiftUI/View` → `swiftui/view` (the project's key shape). */
