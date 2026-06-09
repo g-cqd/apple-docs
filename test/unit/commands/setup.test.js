@@ -87,12 +87,12 @@ describe('setup', () => {
           published_at: '2026-04-13T00:00:00Z',
           assets: [
             {
-              name: 'apple-docs-full-test-release-1.tar.gz',
+              name: 'apple-docs-full-test-release-1.tar.zst',
               size: archiveBytes.byteLength,
               browser_download_url: 'https://fake.github.com/archive.tar.gz',
             },
             {
-              name: 'apple-docs-full-test-release-1.tar.gz.sha256',
+              name: 'apple-docs-full-test-release-1.tar.zst.sha256',
               size: checksumText.length,
               browser_download_url: 'https://fake.github.com/checksum.sha256',
             },
