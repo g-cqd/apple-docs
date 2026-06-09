@@ -43,6 +43,7 @@
     "perf:heap": "mkdir -p reports/profiles && bun --heap-prof --heap-prof-dir reports/profiles",
     "test:coverage": "bun test --coverage --isolate",
     "start": "bun run index.js",
+    "eval:search": "bun scripts/eval-search.js",
     "typecheck": "bun x tsc --noEmit",
     "lint": "biome check --diagnostic-level=error ./src ./test ./cli.js ./index.js",
     "lint:web": "biome check --diagnostic-level=error ./src/web/",

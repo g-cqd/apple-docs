@@ -2,6 +2,8 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { search } from '../../src/commands/search.js'
 import { lookup } from '../../src/commands/lookup.js'
+import { indexEmbeddings } from '../../src/commands/index-embeddings.js'
+import { topicEmbedder } from '../helpers/topic-embedder.js'
 import { writeJSON } from '../../src/storage/files.js'
 import { join } from 'node:path'
 import { mkdirSync, rmSync } from 'node:fs'
@@ -115,6 +117,69 @@ describe('Integration: Search', () => {
     expect(result.results).toHaveLength(1)
     expect(result.results[0].path).toBe('documentation/testfw/testing-guide')
     expect(result.results[0].kind).toBe('Article')
+  })
+})
+
+// Hybrid fusion + MMR are default-on whenever the semantic tier is active.
+// These guard that they improve recall without regressing the exact-match
+// winner or duplicating documents — the core correctness contract of Phase 1/2.
+describe('Integration: Search with semantic fusion + MMR active', () => {
+  let sdb
+  let sctx
+
+  beforeAll(async () => {
+    sdb = new DocsDatabase(':memory:')
+    sctx = { db: sdb, dataDir: tmpDir, logger: { debug() {}, info() {}, warn() {}, error() {} }, embedder: topicEmbedder() }
+    const r = sdb.upsertRoot('audiokit', 'AudioKit', 'framework', 'test')
+    // One exact-symbol target plus several audio-topical near-duplicates that
+    // semantic recall will surface together (the "symbol overload" MMR collapses).
+    const docs = [
+      { key: 'documentation/audiokit/audioengine', title: 'AudioEngine', abstract: 'plays audio buffers through the engine' },
+      { key: 'documentation/audiokit/audioplayer', title: 'AudioPlayer', abstract: 'plays audio from a file' },
+      { key: 'documentation/audiokit/audiomixer', title: 'AudioMixer', abstract: 'mixes audio signals' },
+      { key: 'documentation/audiokit/audionode', title: 'AudioNode', abstract: 'an audio processing node' },
+    ]
+    for (const d of docs) {
+      sdb.upsertPage({ rootId: r.id, path: d.key, url: 'u', title: d.title, role: 'symbol', abstract: d.abstract })
+      sdb.upsertNormalizedDocument({
+        document: { key: d.key, title: d.title, sourceType: 'apple-docc', framework: 'audiokit', role: 'symbol', abstractText: d.abstract },
+        sections: [], relationships: [],
+      })
+    }
+    await indexEmbeddings({ embedder: topicEmbedder() }, sctx)
+  })
+
+  afterAll(() => sdb.close())
+
+  test('exact symbol stays the top hit despite fusion + MMR', async () => {
+    const res = await search({ query: 'AudioEngine', limit: 10, noDeep: true }, sctx)
+    expect(res.results[0].path).toBe('documentation/audiokit/audioengine')
+  })
+
+  test('semantic recall surfaces a body-topical doc the lexical query misses', async () => {
+    // "sound" appears in no title/abstract → lexical-only returns nothing; the
+    // semantic tier maps sound → audio and surfaces the audio docs.
+    const res = await search({ query: 'sound', limit: 10, noDeep: true }, sctx)
+    expect(res.results.length).toBeGreaterThan(0)
+    expect(res.results.map(x => x.path)).toContain('documentation/audiokit/audioengine')
+  })
+
+  test('results carry no duplicate paths after fusion + MMR', async () => {
+    const res = await search({ query: 'sound', limit: 10, noDeep: true }, sctx)
+    const paths = res.results.map(x => x.path)
+    expect(new Set(paths).size).toBe(paths.length)
+  })
+
+  test('APPLE_DOCS_MMR=off still keeps the exact-match winner', async () => {
+    const prev = process.env.APPLE_DOCS_MMR
+    process.env.APPLE_DOCS_MMR = 'off'
+    try {
+      const res = await search({ query: 'AudioEngine', limit: 10, noDeep: true }, sctx)
+      expect(res.results[0].path).toBe('documentation/audiokit/audioengine')
+    } finally {
+      if (prev === undefined) delete process.env.APPLE_DOCS_MMR
+      else process.env.APPLE_DOCS_MMR = prev
+    }
   })
 })
 

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { quantize, hamming, VECTOR_BYTES, VECTOR_DIMS } from '../../../src/search/embedding.js'
+import { quantize, hamming, quantizeI8, dotI8, VECTOR_BYTES, VECTOR_DIMS } from '../../../src/search/embedding.js'
 
 describe('quantize', () => {
   test('produces VECTOR_BYTES and sign bits in little-endian bit order', () => {
@@ -31,5 +31,53 @@ describe('hamming', () => {
     const a = new Uint8Array([0xff, 0x00])
     const packed = new Uint8Array([0x00, 0xff, 0x00, 0x12])
     expect(hamming(a, packed, 1)).toBe(0)
+  })
+
+  test('honors width to compare a prefix only', () => {
+    const a = new Uint8Array([0x00, 0xff])
+    const b = new Uint8Array([0x00, 0x00])
+    expect(hamming(a, b, 0, 1)).toBe(0) // first byte equal
+    expect(hamming(a, b, 0, 2)).toBe(8) // second byte differs in all bits
+  })
+})
+
+describe('quantizeI8 / dotI8', () => {
+  test('layout is dims int8 + f32 scale, scale = absmax/127', () => {
+    const v = new Float32Array([0, 1, -2, 0.5])
+    const packed = quantizeI8(v)
+    expect(packed.length).toBe(4 + 4)
+    const scale = new DataView(packed.buffer, packed.byteOffset + 4, 4).getFloat32(0, true)
+    expect(scale).toBeCloseTo(2 / 127)
+    const i8 = new Int8Array(packed.buffer, packed.byteOffset, 4)
+    expect(i8[1]).toBe(64) // 1 * 127/2 = 63.5 → round 64
+    expect(i8[2]).toBe(-127) // the absmax maps to ±127
+  })
+
+  test('round-trips a vector dot to ≈ ||v||² within int8 tolerance', () => {
+    const v = new Float32Array(VECTOR_DIMS)
+    for (let i = 0; i < VECTOR_DIMS; i++) v[i] = Math.sin(i) // deterministic spread
+    const packed = quantizeI8(v)
+    let exact = 0
+    for (let i = 0; i < VECTOR_DIMS; i++) exact += v[i] * v[i]
+    const approx = dotI8(v, packed, 0, VECTOR_DIMS)
+    expect(approx).toBeCloseTo(exact, 0) // within ~1 absolute on a ~256-magnitude dot
+  })
+
+  test('reads a record at a byte offset inside a multi-vector buffer', () => {
+    const a = quantizeI8(new Float32Array([1, 0, 0, 0]))
+    const b = quantizeI8(new Float32Array([0, 0, 0, 3]))
+    const stride = a.length
+    const both = new Uint8Array(stride * 2)
+    both.set(a, 0)
+    both.set(b, stride)
+    const q = new Float32Array([0, 0, 0, 1])
+    // q·a ≈ 0, q·b ≈ 3 (only the 4th dim aligns with b)
+    expect(dotI8(q, both, 0, 4)).toBeCloseTo(0)
+    expect(dotI8(q, both, stride, 4)).toBeCloseTo(3, 1)
+  })
+
+  test('all-zero vector is safe (no div-by-zero)', () => {
+    const packed = quantizeI8(new Float32Array(4))
+    expect(dotI8(new Float32Array([1, 1, 1, 1]), packed, 0, 4)).toBe(0)
   })
 })

@@ -60,6 +60,11 @@ const args = parseArgs(process.argv)
 const dataDir = process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
 const outDir = args.out ?? 'dist'
 const tag = args.tag ?? `snapshot-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
+// Optional non-default embedder. Selects the registry model for both the index
+// build (env → search/embedder.js) and the artifact name (a separate
+// `apple-docs-full-<model>-<tag>` variant). Omitted ⇒ the default potion build.
+const embedModel = typeof args['embed-model'] === 'string' ? args['embed-model'] : null
+if (embedModel) process.env.APPLE_DOCS_EMBED_MODEL = embedModel
 if (!/^[a-z0-9._-]{1,64}$/i.test(tag)) {
   console.error(`build-snapshot: invalid --tag "${tag}"`)
   process.exit(2)
@@ -123,6 +128,7 @@ try {
     {
       out: outDir,
       tag,
+      embedModel,
       allowIncompleteSymbols:
         args['allow-incomplete-symbols'] === true || args['allow-incomplete-symbols'] === 'true',
     },

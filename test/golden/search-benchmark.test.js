@@ -150,5 +150,9 @@ describe('Search latency benchmark', () => {
     console.log(`  p50=${p50.toFixed(2)}ms  p95=${p95.toFixed(2)}ms  p99=${p99.toFixed(2)}ms`)
 
     expect(p95).toBeLessThan(50)
-  })
+    // Explicit, generous wall-clock budget: this test runs 2100 sequential
+    // awaited search() calls, so the *total* time brushes Bun's 5 s default
+    // under machine load even though the metric under test (p95) clears 50 ms
+    // with wide margin. The timeout guards the measurement, not throughput.
+  }, 30000)
 })

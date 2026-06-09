@@ -297,6 +297,35 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       }
       return docMap
     },
+    /**
+     * Batched document_id → sections fetch for the embedding-index build
+     * (chunker input). Returns a Map keyed by document_id, each value an
+     * ordered array of `{ sectionKind, heading, contentText, sortOrder }`
+     * with content_text inflated. Empty Map on the lite tier (no sections).
+     */
+    getSectionsByDocumentIds(ids) {
+      if (!ids || ids.length === 0 || !hasSectionsTable) return new Map()
+      const safe = ids.map(Number).filter(Number.isInteger)
+      if (safe.length === 0) return new Map()
+      const placeholders = safe.map(() => '?').join(',')
+      const rows = db.query(`
+        SELECT document_id, section_kind, heading, content_text, sort_order
+        FROM document_sections WHERE document_id IN (${placeholders})
+        ORDER BY document_id, sort_order, id
+      `).all(...safe)
+      const map = new Map()
+      for (const s of rows) {
+        let arr = map.get(s.document_id)
+        if (!arr) { arr = []; map.set(s.document_id, arr) }
+        arr.push({
+          sectionKind: s.section_kind,
+          heading: s.heading,
+          contentText: decodeSectionContent(s.content_text),
+          sortOrder: s.sort_order,
+        })
+      }
+      return map
+    },
     /** Counts of relationships originating from each given doc key. */
     getRelatedDocCounts(keys) {
       if (!keys || keys.length === 0) return new Map()

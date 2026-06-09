@@ -68,13 +68,21 @@ function deterministicMtimeSeconds(tag) {
  * built-in zstd to a temp tar and extracts that (no system zstd / p7zip
  * needed). See src/lib/archive-zstd.js.
  *
- * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean }} opts
+ * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean, embedModel?: string }} opts
  * @param {{ db, dataDir, logger }} ctx
  */
 export async function snapshotBuild(opts, ctx) {
   const { db, dataDir, logger } = ctx
   const outDir = opts.out ?? 'dist'
   const tag = opts.tag ?? `snapshot-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
+  // A non-default embedder produces a SEPARATE artifact variant
+  // (`apple-docs-full-<model>-<tag>.tar.zst`) so the default download stays
+  // byte-stable and out of the transformer's determinism risk. The default
+  // (potion) keeps the unsuffixed name.
+  const embedModel = typeof opts.embedModel === 'string' ? opts.embedModel : null
+  const modelSlug = embedModel && embedModel !== 'potion-retrieval-32M'
+    ? `${embedModel.replace(/[^a-z0-9._-]/gi, '-')}-`
+    : ''
   // The tag is interpolated into archive / checksum / manifest
   // filenames. Without a strict allowlist, a tag like
   // `../../etc/passwd` or one containing shell-significant characters
@@ -157,6 +165,7 @@ export async function snapshotBuild(opts, ctx) {
       documentCount,
       dbChecksum,
       dbSize,
+      ...(embedModel ? { embedModel } : {}),
     }
 
     await writeJSON(join(buildDir, 'manifest.json'), manifest)
@@ -222,7 +231,7 @@ export async function snapshotBuild(opts, ctx) {
     }
 
     ensureDir(outDir)
-    const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.tar.zst`
+    const archiveName = `apple-docs-${SNAPSHOT_TIER}-${modelSlug}${tag}.tar.zst`
     const archivePath = join(outDir, archiveName)
 
     // Clamp the mtime of EVERY staged file to a tag-derived constant so the
@@ -258,7 +267,7 @@ export async function snapshotBuild(opts, ctx) {
     const { sidecarPath: checksumPath } = await writeSha256Sidecar(archivePath)
 
     // Also write manifest to output dir
-    const manifestPath = join(outDir, `apple-docs-${SNAPSHOT_TIER}-${tag}.manifest.json`)
+    const manifestPath = join(outDir, `apple-docs-${SNAPSHOT_TIER}-${modelSlug}${tag}.manifest.json`)
     await writeJSON(manifestPath, manifest)
 
     logger.info(`Snapshot built: ${archivePath} (${(archiveSize / 1e6).toFixed(1)} MB)`)

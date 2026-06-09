@@ -7,6 +7,7 @@ import { runMigrations } from './migrations/index.js'
 import { applyPragmas, enableForeignKeys } from './pragmas.js'
 import { createAssetsFontsRepo } from './repos/assets-fonts.js'
 import { createAssetsSymbolsRepo } from './repos/assets-symbols.js'
+import { createChunksRepo } from './repos/chunks.js'
 import { createCrawlRepo } from './repos/crawl.js'
 import { createDocumentsRepo } from './repos/documents.js'
 import { createOperationsRepo } from './repos/operations.js'
@@ -44,6 +45,7 @@ export class DocsDatabase {
       hasTrigramTable: this.hasTable('documents_trigram'),
       hasBodyFtsTable: this.hasTable('documents_body_fts'),
     })
+    this.chunks = createChunksRepo(this.db)
     enableForeignKeys(this.db)
   }
 
@@ -216,6 +218,12 @@ export class DocsDatabase {
   // Semantic vectors + raw-payload store (SQL + zstd live in the search repo).
   getVectorCount() { return this.search.getVectorCount() }
   getAllVectors() { return this.search.getAllVectors() }
+  getChunkCount() { return this.chunks.getChunkCount() }
+  getAllChunkVectors() { return this.chunks.getAllChunkVectors() }
+  getChunkI8(chunkId) { return this.chunks.getChunkI8(chunkId) }
+  upsertChunk(params) { this.chunks.upsertChunk(params) }
+  deleteChunksByDocId(documentId) { this.chunks.deleteChunksByDocId(documentId) }
+  getSectionsByDocumentIds(ids) { return this.documents.getSectionsByDocumentIds(ids) }
   getSearchRecordsByIds(ids) { return this.search.getSearchRecordsByIds(ids) }
   getRawCount() { return this.search.getRawCount() }
   upsertRawPayload(documentId, json) { this.search.upsertRawPayload(documentId, json) }

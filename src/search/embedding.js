@@ -26,6 +26,23 @@ export function quantize(vec) {
   return out
 }
 
+/**
+ * Width-aware sign-quantization for variable-dimension codes (chunks /
+ * Matryoshka-truncated transformer embeddings). Produces `ceil(dims/8)` bytes.
+ * `quantize` is the fixed-512 special case kept for the legacy whole-doc path.
+ * @param {Float32Array|number[]} vec
+ * @param {number} [dims=vec.length]
+ * @returns {Uint8Array} length ceil(dims/8)
+ */
+export function quantizeTo(vec, dims = vec.length) {
+  const out = new Uint8Array(Math.ceil(dims / 8))
+  const n = Math.min(vec.length, dims)
+  for (let i = 0; i < n; i++) {
+    if (vec[i] >= 0) out[i >> 3] |= 1 << (i & 7)
+  }
+  return out
+}
+
 // 8-bit popcount lookup table.
 const POPCOUNT = new Uint8Array(256)
 for (let i = 0; i < 256; i++) POPCOUNT[i] = (i & 1) + POPCOUNT[i >> 1]
@@ -35,10 +52,68 @@ for (let i = 0; i < 256; i++) POPCOUNT[i] = (i & 1) + POPCOUNT[i >> 1]
  * @param {Uint8Array} a
  * @param {Uint8Array} b
  * @param {number} [offsetB] start offset of b within its buffer (for packed scans)
- * @returns {number} number of differing bits (0..VECTOR_DIMS)
+ * @param {number} [width] bytes to compare (defaults to a.length)
+ * @returns {number} number of differing bits (0..width*8)
  */
-export function hamming(a, b, offsetB = 0) {
+export function hamming(a, b, offsetB = 0, width = a.length) {
   let d = 0
-  for (let i = 0; i < a.length; i++) d += POPCOUNT[a[i] ^ b[offsetB + i]]
+  for (let i = 0; i < width; i++) d += POPCOUNT[a[i] ^ b[offsetB + i]]
   return d
+}
+
+/**
+ * Per-vector int8 quantization for the rescore stage of the SOTA
+ * "binary-retrieve → int8-rescore" pipeline. The binary code answers *which*
+ * docs to consider (cheap Hamming); int8 recovers the magnitude the sign bits
+ * threw away (~96% of full-precision quality vs ~92.5% binary-only).
+ *
+ * Layout: `[int8 × dims][f32 scale]` — `dims` signed bytes followed by a
+ * little-endian f32 absmax scale, so a doc vector packs to `dims + 4` bytes.
+ * The scale is the per-vector absolute max / 127, making quantization
+ * order-independent and corpus-calibration-free → snapshot-stable / bit-
+ * identical across the determinism gate's two passes.
+ *
+ * @param {Float32Array|number[]} vec
+ * @returns {Uint8Array} length `vec.length + 4`
+ */
+export function quantizeI8(vec) {
+  const n = vec.length
+  const buf = new ArrayBuffer(n + 4)
+  const i8 = new Int8Array(buf, 0, n)
+  let amax = 0
+  for (let i = 0; i < n; i++) {
+    const a = vec[i] < 0 ? -vec[i] : vec[i]
+    if (a > amax) amax = a
+  }
+  const scale = amax > 0 ? amax / 127 : 1
+  const inv = amax > 0 ? 127 / amax : 0
+  for (let i = 0; i < n; i++) {
+    let q = Math.round(vec[i] * inv)
+    if (q > 127) q = 127
+    else if (q < -127) q = -127
+    i8[i] = q
+  }
+  new DataView(buf).setFloat32(n, scale, true)
+  return new Uint8Array(buf)
+}
+
+/**
+ * Dot product of a full-precision query against a packed int8 doc vector
+ * (the rescore step). Reads `dims` signed bytes at `off` plus the trailing f32
+ * scale; returns `scale · Σ q[i]·i8[i]`, which ranks identically to cosine for
+ * a fixed query (the query norm is constant across the shortlist).
+ *
+ * @param {Float32Array} qFp32 query embedding, length ≥ dims
+ * @param {Uint8Array} packed buffer holding one or more `[int8×dims][f32]` records
+ * @param {number} off byte offset of this record within `packed`
+ * @param {number} dims embedding width
+ * @returns {number}
+ */
+export function dotI8(qFp32, packed, off, dims) {
+  const base = packed.byteOffset + off
+  const i8 = new Int8Array(packed.buffer, base, dims)
+  const scale = new DataView(packed.buffer, base + dims, 4).getFloat32(0, true)
+  let dot = 0
+  for (let i = 0; i < dims; i++) dot += qFp32[i] * i8[i]
+  return dot * scale
 }
