@@ -78,6 +78,8 @@ ops/bin/render-all.sh
 # the newest published `snapshot-YYYYMMDD` tag, verifies its .sha256
 # sidecar, and runs `apple-docs setup --force`. Use --force/-f or
 # FORCE_PULL=1 to re-apply a tag that's already installed.
+# Note: setup also rebuilds the semantic chunk index locally (~2 min on
+# Apple Silicon for the full corpus) — snapshots ship no vectors.
 ops/bin/pull-snapshot.sh
 
 # Atomic deploy: git pull, render templates, optional corpus refresh,

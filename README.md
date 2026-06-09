@@ -34,10 +34,10 @@ and system load. Pick the shape that fits with a single flag:
 | *(none)* | `balanced` default — snapshot as-is; caches Markdown on first read. | **~5.5 GB** (5.5) | +~1 min |
 | `--prebuilt` | Fastest. Markdown + HTML materialized up front. | **~8.6 GB** (8.6) | +~3–4 min |
 
-<sup>¹ Parenthesised values are measured (`du`) as of `snapshot-20260609` (353,295 docs). `balanced` is a 4.3 GiB DB + 1.3 GB of extracted fonts, SF Symbol renders, and the ~125 MB model2vec embedding model. `compact` more than halves the DB (→1.9 GiB). `prebuilt` adds ~3.2 GB of Markdown + HTML — only ~1.12 GB is content; the rest is 4 KB block rounding across 706,590 small files. `apple-docs storage stats` reports logical bytes, which run smaller.</sup>
+<sup>¹ Parenthesised values are measured (`du`) as of `snapshot-20260609` (353,295 docs). `balanced` is a 4.3 GiB DB + 1.3 GB of extracted fonts, SF Symbol renders, and the ~125 MB model2vec embedding model. `compact` more than halves the DB (→1.9 GiB). `prebuilt` adds ~3.2 GB of Markdown + HTML — only ~1.12 GB is content; the rest is 4 KB block rounding across 706,590 small files. `apple-docs storage stats` reports logical bytes, which run smaller. Add ~0.5 GB to the DB on every profile for the semantic chunk index, which is built locally (snapshots ship the model, never the vectors).</sup>
 
 
-<sup>² Post-download work, measured from a local archive; on top of the 1.53 GB download.</sup>
+<sup>² Post-download work, measured from a local archive; on top of the 1.53 GB download. Includes the semantic index build (~1.5–2 min for 353k docs on Apple Silicon; `--skip-semantic` opts out).</sup>
 
 Each profile finishes in that one `setup` call. See
 [`docs/configuration.md`](docs/configuration.md#storage-profiles) for the full

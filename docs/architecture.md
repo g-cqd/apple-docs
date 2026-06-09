@@ -148,10 +148,12 @@ flowchart LR
 - **Source install** populates the corpus by running `apple-docs sync`
   (full crawl) or `apple-docs setup` (snapshot).
 - **Snapshot install** downloads a single pre-built `.tar.zst` that ships the
-  DB (document sections + zstd-compressed raw payloads in `document_raw` +
-  the optional semantic vectors in `document_vectors`), extracted Apple
-  fonts, the pre-rendered SF Symbols matrix, and the offline query-embedding
-  model. Markdown/HTML and loose raw-JSON are materialized on device
+  DB (document sections + zstd-compressed raw payloads in `document_raw`),
+  extracted Apple fonts, the pre-rendered SF Symbols matrix, and the offline
+  embedding model. Semantic vectors are **not** shipped (the per-chunk codes
+  are ~0.5 GB of incompressible blobs) — `setup` rebuilds `document_chunks` +
+  `document_vectors` locally from the shipped sections + model in ~2 minutes.
+  Markdown/HTML and loose raw-JSON are materialized on device
   (`storage materialize`), not shipped.
 - **Standalone binary** compiles `cli.js` into a single executable via
   `bun build --compile`. The `release-binaries.yml` workflow attaches

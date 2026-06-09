@@ -138,8 +138,10 @@ Examples:
 Usage: apple-docs setup [options]
 
 Download a pre-built documentation snapshot (~1.5 GB). No
-crawling required — ready in a few minutes, mostly the download. --compact
-and --prebuilt do extra one-time work after extracting (see below).
+crawling required — ready in a few minutes, mostly the download. After
+extraction, setup builds the semantic search index locally (snapshots ship
+the embedding model but no vectors); --compact and --prebuilt do extra
+one-time work after that (see below).
 
 Profiles pick disk-vs-speed and finish in one step (no follow-up command):
   --compact          Smallest disk. Compacts the install now: compresses
@@ -156,6 +158,8 @@ Options:
                      otherwise balanced.
   --yes              Accept the default profile without prompting
   --skip-resources   Skip the post-extract font + symbols re-index step
+  --skip-semantic    Skip the post-extract semantic index build (lexical-only
+                     search; run \`apple-docs index embeddings --full\` later)
   --archive <path>   Install from a local snapshot tarball (under $HOME/cwd);
                      verifies a sibling .sha256 sidecar when present.
   --json             Output results as JSON
@@ -314,7 +318,8 @@ Build options (advanced):
 The build writes a single .tar.zst + .sha256 + manifest under <out>/: the DB
 (document_sections + zstd-compressed raw payloads), SF Symbols, fonts, and the
 model2vec embedding model. Markdown/HTML are regenerated on device
-(\`storage materialize\`).
+(\`storage materialize\`). Semantic vectors are NOT shipped — \`setup\`
+rebuilds them locally from the shipped sections + model.
 
 Examples:
   apple-docs snapshot build --out dist
@@ -350,14 +355,16 @@ corrupted FTS5 / trigram table, or to (re)build the optional semantic tier.
 Subcommands:
   rebuild body         Rebuild the full-body FTS5 index from documents.
   rebuild trigram      Rebuild the trigram FTS5 index from document titles.
-  embeddings           Build the binary semantic vectors (document_vectors)
-                       with the model2vec embedder. Needs the optional
-                       @huggingface/transformers dep + the local model;
-                       otherwise search stays lexical-only.
+  embeddings           Build the semantic index (document_chunks: per-chunk
+                       binary + int8 codes, plus the document_vectors anchor)
+                       with the model2vec embedder. Runs automatically at
+                       setup; needs the optional @huggingface/transformers
+                       dep + the local model, otherwise lexical-only.
 
 Options:
-  --full               (embeddings) Re-embed every document. Without it, only
-                       documents missing a vector are processed.
+  --full               (embeddings) Re-chunk + re-embed every document.
+                       Without it, only documents with no chunks yet are
+                       processed.
 
 Examples:
   apple-docs index rebuild body

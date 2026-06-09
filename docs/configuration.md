@@ -70,6 +70,28 @@ per-read decompression to the fast path defeats the point of prebuilt.
 | `APPLE_DOCS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `APPLE_DOCS_DEBUG` | `false` | Bypass the public-output projection (raw envelopes leak through MCP/CLI/web). Local-debug only. |
 
+## Semantic search
+
+Snapshots ship the model2vec embedding model but **no vectors** — `setup`
+builds the chunk index locally after extraction (`--skip-semantic` opts out;
+`apple-docs index embeddings --full` builds or rebuilds it later). The chunk
+store adds roughly 0.5–0.7 GB to the local DB on the full corpus. Defaults
+preserve prior behavior; every knob below is an escape hatch, not a tuning
+requirement.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APPLE_DOCS_SEMANTIC` | (unset) | `off` hard-disables the semantic tier |
+| `APPLE_DOCS_EMBED_MODEL` | `potion-retrieval-32M` | Registry model. Non-default models are a gated track for separate snapshot variants |
+| `APPLE_DOCS_EMBED_DIMS` | model native (512) | Matryoshka truncation for feature-extraction models (potion ignores it) |
+| `APPLE_DOCS_RESCORE` | on when int8 codes exist | `off` skips the int8 rescore stage (binary-only ranking) |
+| `APPLE_DOCS_SEMANTIC_SHORTLIST` | `200` | Hamming shortlist size before rescore (16–5000) |
+| `APPLE_DOCS_FUSION` | `hybrid` | `rrf` reverts to rank-only weighted-RRF fusion |
+| `APPLE_DOCS_MMR` | on | `off` disables the MMR diversity pass |
+| `APPLE_DOCS_MMR_LAMBDA` | `0.7` | MMR relevance↔diversity balance (0–1) |
+| `APPLE_DOCS_ALLOW_REMOTE_MODELS` | unset | `1` lets the snapshot CI build fetch the model from HuggingFace (sha256-pinned; see `src/search/model-integrity.js`). Never needed by consumers |
+| `APPLE_DOCS_MODELS_DIR` | `$APPLE_DOCS_HOME/resources/models` | Override the model directory |
+
 ## Outbound HTTP (crawl)
 
 | Variable | Default | Purpose |
