@@ -1,6 +1,7 @@
 // Small helpers shared by `apple-docs setup` — extracted from
 // src/commands/setup.js to keep that file under the 400-line ceiling.
 
+import { rmSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { HttpError, NotFoundError, ValidationError } from '../../lib/errors.js'
 import { getGitHubToken } from '../../lib/github.js'
@@ -47,21 +48,28 @@ export function stripTarGz(p) {
  * keeps memory bounded on a multi-GB archive; no system zstd required.
  */
 export async function extractTarZst(archivePath, dataDir) {
-  const stream = Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))
-  // Extract via `cwd: dataDir` rather than `-C dataDir`: GNU tar (Linux)
-  // mis-parses `-xf - -C <dir>` when the archive is stdin and treats <dir>
-  // as a member operand ("Cannot open"), whereas it's fine with `-xzf <file>
-  // -C <dir>`. cwd is unambiguous on both GNU tar and bsdtar. dataDir is
-  // ensured by the caller (and any decode failure now surfaces as a clear
-  // EOF error instead of this confusing one).
-  const proc = Bun.spawn(
-    ['tar', '--no-same-owner', '--no-same-permissions', '-xf', '-'],
-    { stdin: stream, cwd: dataDir, stdout: 'ignore', stderr: 'pipe', timeout: 10 * 60_000 },
-  )
-  const stderrText = new Response(proc.stderr).text()
-  const exitCode = await proc.exited
-  if (exitCode !== 0) {
-    throw new ValidationError(`Extraction failed (tar exit ${exitCode}): ${(await stderrText).trim().slice(0, 4096)}`)
+  // Decompress to a temp `.tar`, then extract from the real file. Streaming the
+  // decompressed bytes to `tar -xf -` over stdin truncates past one pipe buffer
+  // under Bun on Linux (GNU tar then errors mid-archive); materializing the tar
+  // first matches the proven `.tar.gz` path. `Bun.write(file, stream)` streams
+  // to disk with bounded memory, and Bun's native zstd needs no system zstd
+  // (macOS ships none).
+  const tarPath = join(dataDir, `.setup-extract-${process.pid}-${Date.now()}.tar`)
+  try {
+    const sink = Bun.file(tarPath).writer()
+    for await (const chunk of Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))) sink.write(chunk)
+    await sink.end()
+    const proc = Bun.spawn(
+      ['tar', '--no-same-owner', '--no-same-permissions', '-xf', tarPath, '-C', dataDir],
+      { stdout: 'ignore', stderr: 'pipe', timeout: 10 * 60_000 },
+    )
+    const stderrText = new Response(proc.stderr).text()
+    const exitCode = await proc.exited
+    if (exitCode !== 0) {
+      throw new ValidationError(`Extraction failed (tar exit ${exitCode}): ${(await stderrText).trim().slice(0, 4096)}`)
+    }
+  } finally {
+    try { rmSync(tarPath, { force: true }) } catch { /* tolerate */ }
   }
 }
 

@@ -28,9 +28,9 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/setup
 
-      # Archive pipeline: snapshots ship as `.tar.zst` with `zstd -9 -T3
-      # --long=27` — ~15% smaller and ~5x faster than the prior `gzip -9`,
-      # which itself replaced LZMA2 / .7z after May 2026 corpus growth blew
+      # Archive pipeline: snapshots ship as `.tar.zst` with `zstd -9 -T3`
+      # — ~15% smaller and ~5x faster than the prior `gzip -9`, which
+      # itself replaced LZMA2 / .7z after May 2026 corpus growth blew
       # the 3-core M1 runner's wallclock budget (see
       # docs/spikes/archive-format.md). `zstd` ships on macos-26 runners;
       # consumers decompress in-process via Bun, so no host `zstd` is needed.

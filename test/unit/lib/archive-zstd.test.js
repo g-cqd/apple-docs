@@ -11,7 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import { createTarZstArchive, countArchiveMembers } from '../../../src/lib/archive-zstd.js'
+import { createTarZstArchive, countTarMembers } from '../../../src/lib/archive-zstd.js'
 import { extractTarZst } from '../../../src/commands/setup/helpers.js'
 
 let workDir
@@ -92,20 +92,20 @@ describe('createTarZstArchive', () => {
     expect([...readFileSync(join(dest, 'sub', 'gamma.bin'))]).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
   })
 
-  test('member-count integrity check detects a truncated archive', async () => {
+  test('member-count integrity check detects a truncated tar', async () => {
+    // The producer counts members of the uncompressed tar before compressing;
+    // a short count (truncated tar) is the corruption that slipped past the old
+    // gzip path. Build a probe tar and confirm truncation is caught.
     const src = stageFixture('integrity')
-    const out = join(workDir, 'ok.tar.zst')
-    await createTarZstArchive({ sourceDir: src, outputPath: out })
-    expect(await countArchiveMembers(out)).toBe(3) // 3 staged files -> 3 members
+    const tarPath = join(workDir, 'probe.tar')
+    Bun.spawnSync(['tar', '-cf', tarPath, '--no-recursion', 'alpha.txt', 'beta.txt', 'sub/gamma.bin'], { cwd: src })
+    expect(await countTarMembers(tarPath)).toBe(3)
 
-    // Lop off the back half of the compressed stream — the exact corruption
-    // (a truncated archive) that slipped past the old gzip path. Detection is
-    // either a non-zero tar exit (thrown) or a short member count.
-    const bytes = readFileSync(out)
-    writeFileSync(out, bytes.subarray(0, 12)) // keep only the zstd frame header
+    const bytes = readFileSync(tarPath)
+    writeFileSync(tarPath, bytes.subarray(0, 200)) // partial first header
     let threw = false
     let count = -1
-    try { count = await countArchiveMembers(out) } catch { threw = true }
+    try { count = await countTarMembers(tarPath) } catch { threw = true }
     expect(threw || count !== 3).toBe(true)
   })
 

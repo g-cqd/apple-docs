@@ -60,13 +60,13 @@ function deterministicMtimeSeconds(tag) {
  * `storage materialize` (markdown/html from document_sections; raw-json by
  * decompressing document_raw).
  *
- * Archive pipeline: the snapshot is packaged as `.tar.zst` (zstd `-9 -T3
- * --long=27`). zstd is ~15% smaller AND ~5× faster than `gzip -9` on this
- * corpus shape and multithreaded, so it fits the GH macos-26 runner (3-core
- * M1 / 7 GB) budget with headroom. macOS ships no zstd and Apple's bsdtar
- * lacks libzstd, so consumers do NOT `tar --zstd`: `apple-docs setup`
- * stream-decompresses with Bun's built-in zstd and pipes plain tar to
- * `tar -xf -` (no system zstd / p7zip needed). See src/lib/archive-zstd.js.
+ * Archive pipeline: the snapshot is packaged as `.tar.zst` (zstd `-9 -T3`).
+ * zstd is ~15% smaller AND ~5× faster than `gzip -9` on this corpus shape and
+ * multithreaded, so it fits the GH macos-26 runner (3-core M1 / 7 GB) budget
+ * with headroom. macOS ships no zstd and Apple's bsdtar lacks libzstd, so
+ * consumers do NOT `tar --zstd`: `apple-docs setup` decompresses with Bun's
+ * built-in zstd to a temp tar and extracts that (no system zstd / p7zip
+ * needed). See src/lib/archive-zstd.js.
  *
  * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx

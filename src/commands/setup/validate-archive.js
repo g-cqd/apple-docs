@@ -16,7 +16,8 @@ import { ValidationError } from '../../lib/errors.js'
  *   - is anything other than a regular file or directory.
  */
 
-import { resolve, sep } from 'node:path'
+import { rmSync } from 'node:fs'
+import { join, resolve, sep } from 'node:path'
 import { resolveSevenZipBinary } from '../../lib/archive-7z.js'
 
 const ALLOWED_TYPES = new Set(['-', 'd'])
@@ -44,20 +45,29 @@ export async function validateArchive(archivePath, destDir, deps = {}) {
 
 /**
  * Validate a `.tar.zst` archive's members. macOS bsdtar can't read zstd and
- * there's no system `zstd`, so decompress with Bun's native zstd
- * (`DecompressionStream`) and list via `tar -tvf -`. Streaming bounds memory.
+ * there's no system `zstd`, so decompress with Bun's native zstd to a temp
+ * `.tar`, then list from the real file. (Piping the decompressed stream to
+ * `tar -tvf -` over stdin truncates past one pipe buffer under Bun on Linux —
+ * same reason setup/helpers.js materializes the tar before extracting.)
  */
 export async function validateZstArchive(archivePath, destDir, deps = {}) {
   const spawn = deps.spawn ?? Bun.spawn
-  const stream = Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))
-  const proc = spawn(['tar', '-tvf', '-'], { stdin: stream, stdout: 'pipe', stderr: 'pipe' })
-  const stdoutP = new Response(proc.stdout).text()
-  const exitCode = await proc.exited
-  if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text()
-    throw new ValidationError(`archive listing failed (tar exit ${exitCode}): ${stderr.trim()}`)
+  const tarPath = join(destDir, `.setup-validate-${process.pid}-${Date.now()}.tar`)
+  try {
+    const sink = Bun.file(tarPath).writer()
+    for await (const chunk of Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))) sink.write(chunk)
+    await sink.end()
+    const proc = spawn(['tar', '-tvf', tarPath], { stdout: 'pipe', stderr: 'pipe' })
+    const stdoutP = new Response(proc.stdout).text()
+    const exitCode = await proc.exited
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text()
+      throw new ValidationError(`archive listing failed (tar exit ${exitCode}): ${stderr.trim()}`)
+    }
+    return validateTarListing(await stdoutP, destDir)
+  } finally {
+    try { rmSync(tarPath, { force: true }) } catch { /* tolerate */ }
   }
-  return validateTarListing(await stdoutP, destDir)
 }
 
 /** Shared member-safety check over a `tar -tv…` long listing. */
