@@ -38,10 +38,12 @@ function makeAssetDb(path) {
   }))
   // 3. Anchor row → skipped outright.
   insDoc.run('/documentation/SwiftUI#Essentials', JSON.stringify({ uri: '/documentation/SwiftUI#Essentials', kind: 'article', role: 'article' }))
-  // 4. Child-granularity novel (parent exists in project) → skipped.
+  // 4. Member page whose parent (swiftui/view) exists but which the corpus
+  // lacks → a real missing page; inserted (no parent/child suppression).
   insDoc.run('/documentation/SwiftUI/View/somenewthing', JSON.stringify({
     uri: '/documentation/SwiftUI/View/somenewthing', kind: 'symbol', role: 'symbol', modules: ['SwiftUI'],
   }))
+  insAttr.run('/documentation/SwiftUI/View/somenewthing', 3, 0, 'symbol', 'SwiftUI', 'someNewThing', 'someNewThing\nA brand new member.')
   // 5. Truly novel page (framework absent from project) → inserted w/ chunks.
   // modules[0] deliberately contains spaces: it is a DISPLAY name; the
   // framework slug must come from the URI segment instead.
@@ -102,10 +104,9 @@ describe('enrichFromAsset', () => {
     const stats = enrichFromAsset(db, assetPath, { apply: false })
     expect(stats.pages).toBe(4)
     expect(stats.anchorsSkipped).toBe(1)
-    expect(stats.childSkipped).toBe(1)
     expect(stats.usrBackfilled).toBe(2)
     expect(stats.platformsBackfilled).toBe(1) // text already has platforms
-    expect(stats.novelInserted).toBe(1)
+    expect(stats.novelInserted).toBe(2) // AppleNewsFormat + SwiftUI/View/somenewthing
     expect(db.db.query("SELECT usr FROM documents WHERE key='swiftui/view'").get().usr).toBeNull()
     expect(db.db.query("SELECT COUNT(*) c FROM documents WHERE key='applenewsformat'").get().c).toBe(0)
   })
@@ -123,13 +124,16 @@ describe('enrichFromAsset', () => {
     expect(text.min_ios).toBe('13.0')
   })
 
-  test('apply inserts only the truly-novel page, with sections, root, and usr', () => {
+  test('apply inserts novel pages (incl. members of an existing parent), with sections, root, and usr', () => {
     enrichFromAsset(db, assetPath, { apply: true })
     const novel = db.db.query("SELECT usr, framework, language FROM documents WHERE key='applenewsformat'").get()
     expect(novel.framework).toBe('applenewsformat')
     expect(novel.usr).toBe('ANF-root')
     expect(db.getDocumentSections('applenewsformat').length).toBe(2)
-    expect(db.db.query("SELECT COUNT(*) c FROM documents WHERE key='swiftui/view/somenewthing'").get().c).toBe(0)
+    // the member page whose parent exists is inserted, not suppressed
+    const member = db.db.query("SELECT framework, title FROM documents WHERE key='swiftui/view/somenewthing'").get()
+    expect(member.framework).toBe('swiftui')
+    expect(member.title).toBe('someNewThing')
   })
 
   test('idempotent: a second apply changes nothing', () => {

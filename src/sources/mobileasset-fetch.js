@@ -18,7 +18,7 @@
 
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 import { ValidationError } from '../lib/errors.js'
 import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
 import { DEFAULT_ASSET_ROOT } from './mobileasset-docs.js'
@@ -89,8 +89,13 @@ export async function fetchDocumentationAsset({ url, sha1 = null, size = null, c
   if (!url) throw new ValidationError('fetchDocumentationAsset: url is required')
   const home = process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
   const root = cacheDir ?? join(home, 'cache', 'xcode-docs')
-  const slot = join(root, (sha1 ?? basename(url)).replace(/[^a-z0-9._-]/gi, '_'))
-  const dbPath = join(slot, 'AssetData', 'documentation-db', 'index.sql')
+  // Cache key is the content hash when pinned; for an unpinned --url it must be
+  // derived from the full URL, not basename(url) — two assets named e.g.
+  // `docs.zip` on different hosts would otherwise share a slot.
+  const cacheKey = sha1 ?? new Bun.CryptoHasher('sha256').update(url).digest('hex')
+  const slot = join(root, cacheKey.replace(/[^a-z0-9._-]/gi, '_'))
+  const dbDir = join(slot, 'AssetData', 'documentation-db')
+  const dbPath = join(dbDir, 'index.sql')
   if (existsSync(dbPath)) return { dbPath, cached: true }
   if (!Bun.which('unzip')) {
     throw new ValidationError('`unzip` is required to extract the documentation asset (install it and retry).')
@@ -120,8 +125,12 @@ export async function fetchDocumentationAsset({ url, sha1 = null, size = null, c
     }
     if (!sha1) logger?.info?.(`Asset SHA-1 (unpinned URL): ${gotSha1}`)
 
+    // `-j` (junk paths) flattens every matched member into dbDir, so a crafted
+    // member name like `documentation-db/../../evil` can't escape the slot even
+    // though the glob would match it. Only index.sql (+ its WAL/SHM) is needed.
+    mkdirSync(dbDir, { recursive: true })
     const { exitCode, stderr } = await spawnWithDeadline(
-      ['unzip', '-o', '-q', zipPath, 'AssetData/documentation-db/*', '-d', slot],
+      ['unzip', '-j', '-o', '-q', zipPath, 'AssetData/documentation-db/*', '-d', dbDir],
       { deadlineMs: 10 * 60_000 },
     )
     if (exitCode !== 0 || !existsSync(dbPath)) {

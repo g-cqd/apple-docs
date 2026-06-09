@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test'
 import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
@@ -13,6 +13,18 @@ let db
 let logger
 let snapshotOutDir
 let snapshotResult
+
+// These tests exercise archive install + storage profiles, not semantics.
+// Force the semantic tier off so setup's post-extract index build is a fast
+// no-op instead of loading the real model (which a prior test file may have
+// left in the module-level embedder cache) — that load made the suite flaky
+// under parallel load. The WITH-semantic path is covered by setup-smoke.
+let priorSemanticEnv
+beforeAll(() => { priorSemanticEnv = process.env.APPLE_DOCS_SEMANTIC; process.env.APPLE_DOCS_SEMANTIC = 'off' })
+afterAll(() => {
+  if (priorSemanticEnv === undefined) delete process.env.APPLE_DOCS_SEMANTIC
+  else process.env.APPLE_DOCS_SEMANTIC = priorSemanticEnv
+})
 
 beforeEach(async () => {
   // Source corpus: seed enough rows to look like a real install.

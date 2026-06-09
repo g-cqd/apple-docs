@@ -356,7 +356,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
       try {
         const { indexEmbeddings } = await import('./index-embeddings.js')
         const sem = await indexEmbeddings({ full: true, embedder }, { db: verifyDb, dataDir, logger })
-        if (sem.status !== 'ok') logger.info(`Semantic index skipped (lexical-only): ${sem.message}`)
+        if (sem.status !== 'ok') logger.warn(`Semantic index skipped (lexical-only): ${sem.message}`)
       } catch (e) {
         logger?.warn?.(`Semantic index build failed (search stays lexical-only): ${e.message}`)
       }

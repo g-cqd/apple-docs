@@ -72,11 +72,14 @@ export async function verifyPinnedModelFiles(dir, hfId, pins = PINNED_MODEL_FILE
  * @returns {Promise<{ status: 'ok'|'skipped', hfId?: string, verified?: number, message?: string }>}
  */
 export async function ensureEmbeddingModel({ modelsDir, logger, embedder } = {}) {
-  const strict = process.env.APPLE_DOCS_ALLOW_REMOTE_MODELS === '1'
+  // The remote-models flag is set only by the CI snapshot build, so it doubles
+  // as the "this is a release build" signal — a missing model there must fail
+  // hard rather than silently ship a snapshot with no semantic tier.
+  const isReleaseBuild = process.env.APPLE_DOCS_ALLOW_REMOTE_MODELS === '1'
   const active = embedder !== undefined ? embedder : await getEmbedder({ logger, modelsDir })
   if (!active) {
     const message = 'embedder unavailable (optional @huggingface/transformers dependency or model missing)'
-    if (strict) throw new ValidationError(`Release build requires the embedding model to ship: ${message}`)
+    if (isReleaseBuild) throw new ValidationError(`Release build requires the embedding model to ship: ${message}`)
     return { status: 'skipped', message }
   }
   await active.embed('integrity probe') // the model must actually run, not just hash

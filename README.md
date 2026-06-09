@@ -149,8 +149,8 @@ manifest). Install it with `apple-docs setup --archive <path> --force`.
 Xcode 26+ ships the documentation corpus as a MobileAsset
 (`com.apple.MobileAsset.AppleDeveloperDocumentation`). It backfills two
 things the crawl can't see: each symbol's **USR** (`documents.usr`, stable
-across releases and shared by the Swift/Obj-C variants) and a handful of
-pages that never appear on the website index. The merge is keyed,
+across releases and shared by the Swift/Obj-C variants) and several thousand
+member/symbol pages the crawl missed. The merge is keyed,
 NULL-guarded, and idempotent: it never duplicates or overwrites crawled
 data. The asset is auto-resolved — a local Xcode install is used when
 present, otherwise it is downloaded (~650 MB, SHA-1-verified) from Apple's

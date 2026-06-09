@@ -8,16 +8,17 @@
  * JSON blob per page (`documents`) and rendered-Markdown chunks
  * (`attributes`). The page JSON carries two things the crawled RenderJSON
  * never exposes: the symbol's USR (`external_id`) and structured per-platform
- * `introduced`/`deprecated` data. Apple's embeddings ride along but use a
- * proprietary model, so they are ignored.
+ * `introduced`/`deprecated` data. (Apple's own embeddings ride along too but
+ * use a proprietary model incompatible with ours, so the vectors are unused.)
  *
  * Merge discipline (duplication-safe by construction):
  *   1. ENRICH the keyed intersection — `UPDATE … WHERE key = ?`, never insert:
  *      backfill `usr` (always when NULL) and `platforms_json` + min_* columns
  *      (only when NULL — the crawl stays authoritative when it has data).
- *   2. INSERT only truly-novel pages: key absent AND parent key absent (a
- *      present parent means the project models the same content at finer
- *      granularity — inserting would duplicate it as a coarser copy).
+ *   2. INSERT every page whose exact key is absent from the corpus. Exact-key
+ *      matching already prevents page-level dups; measuring the corpus showed
+ *      0% of "parent exists" pages are stored as a section of that parent, so
+ *      no parent/child suppression is applied — those were real, missing pages.
  *   3. SKIP `#anchor` rows entirely: they are section groupings of pages the
  *      corpus already stores as `document_sections`.
  *
@@ -120,7 +121,7 @@ function languageFromUsr(usr) {
  * @param {{ apply?: boolean, logger?: object, sourceTag?: string }} [opts]
  *   `apply: false` (default) computes counts without writing.
  * @returns {{ pages: number, anchorsSkipped: number, usrBackfilled: number,
- *   platformsBackfilled: number, novelInserted: number, childSkipped: number }}
+ *   platformsBackfilled: number, novelInserted: number }}
  */
 export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger, sourceTag = 'xcode-mobileasset' } = {}) {
   const asset = openAssetDb(assetDbPath)
@@ -132,6 +133,7 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
   }
 
   const setUsr = raw.query('UPDATE documents SET usr = $usr WHERE id = $id AND usr IS NULL')
+  const setUsrById = raw.query('UPDATE documents SET usr = $usr WHERE id = $id')
   const setPlatforms = raw.query(`UPDATE documents SET
       platforms_json = $pj,
       min_ios = $ios, min_macos = $macos, min_watchos = $watchos, min_tvos = $tvos, min_visionos = $visionos,
@@ -141,7 +143,7 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
     'SELECT title, content FROM attributes WHERE asset_id = ? ORDER BY chunk_index',
   )
 
-  const stats = { pages: 0, anchorsSkipped: 0, usrBackfilled: 0, platformsBackfilled: 0, novelInserted: 0, childSkipped: 0 }
+  const stats = { pages: 0, anchorsSkipped: 0, usrBackfilled: 0, platformsBackfilled: 0, novelInserted: 0 }
   const novel = []
   const BATCH = 5000
   let inTxn = false
@@ -186,8 +188,6 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
         continue
       }
 
-      const parent = key.split('/').slice(0, -1).join('/')
-      if (parent && existing.has(parent)) { stats.childSkipped++; continue }
       novel.push({ key, uri: row.asset_id, doc, usr })
     }
     commit()
@@ -234,7 +234,7 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
         sections,
         relationships: [],
       })
-      if (n.usr) raw.query('UPDATE documents SET usr = ? WHERE id = ?').run(n.usr, documentId)
+      if (n.usr) setUsrById.run({ $usr: n.usr, $id: documentId })
     }
     commit()
   } finally {
@@ -245,7 +245,7 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
   logger?.info?.(
     `xcode-docs merge${apply ? '' : ' (dry-run)'}: ${stats.usrBackfilled} USRs, ` +
     `${stats.platformsBackfilled} platform backfills, ${stats.novelInserted} novel pages ` +
-    `(${stats.anchorsSkipped} anchors + ${stats.childSkipped} child-granularity skipped)`,
+    `(${stats.anchorsSkipped} section anchors skipped)`,
   )
   return stats
 }
