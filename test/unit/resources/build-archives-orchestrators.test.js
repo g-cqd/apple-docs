@@ -24,7 +24,7 @@ try { resolveSevenZipBinary() } catch { hasSevenZip = false }
 const describeIf = hasSevenZip ? describe : describe.skip
 
 describeIf('buildSymbolsArchive', () => {
-  test('emits one symbols-<tag>.tar.gz plus a sidecar from a public+private fixture', async () => {
+  test('emits one symbols-<tag>.tar.zst plus a sidecar from a public+private fixture', async () => {
     const sym = join(dataDir, 'resources', 'symbols')
     mkdirSync(join(sym, 'public', 'regular-medium'), { recursive: true })
     writeFileSync(join(sym, 'public', 'regular-medium', 'heart.svg'), '<svg/>')
@@ -33,7 +33,7 @@ describeIf('buildSymbolsArchive', () => {
 
     const result = await buildSymbolsArchive({ dataDir, outDir, tag: 'snap-test' })
     expect(result).not.toBeNull()
-    expect(result.name).toBe('symbols-snap-test.tar.gz')
+    expect(result.name).toBe('symbols-snap-test.tar.zst')
     expect(existsSync(result.path)).toBe(true)
     expect(existsSync(`${result.path}.sha256`)).toBe(true)
     expect(result.size).toBeGreaterThan(0)
@@ -58,7 +58,7 @@ describeIf('buildFontsArchives', () => {
     const result = await buildFontsArchives({ dataDir, outDir, tag: 'snap-fonts' })
     // Combined fonts-all archive only.
     expect(result.all).not.toBeNull()
-    expect(result.all.name).toBe('fonts-all-snap-fonts.tar.gz')
+    expect(result.all.name).toBe('fonts-all-snap-fonts.tar.zst')
     expect(existsSync(result.all.path)).toBe(true)
     expect(existsSync(`${result.all.path}.sha256`)).toBe(true)
 
@@ -66,7 +66,7 @@ describeIf('buildFontsArchives', () => {
     // the full-snapshot payload at no consumer benefit.
     expect(result.byFamily).toEqual({})
     for (const fam of FONT_FAMILIES) {
-      expect(existsSync(join(outDir, `fonts-${fam}-snap-fonts.tar.gz`))).toBe(false)
+      expect(existsSync(join(outDir, `fonts-${fam}-snap-fonts.tar.zst`))).toBe(false)
     }
   })
 

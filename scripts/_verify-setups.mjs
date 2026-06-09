@@ -236,7 +236,7 @@ async function snapshotRoundTrip(homeDir, setup) {
     const r = await cli(homeDir, ['snapshot', 'build', '--out', distB, '--tag', 'verify-snap', '--allow-incomplete-symbols'], { timeoutMs: 60 * 60 * 1000 })
     assert(r.code === 0, `2nd build exit ${r.code}`)
     const sh = (d) => {
-      const f = Bun.spawnSync(['sh', '-c', `ls ${d}/*.tar.gz`]).stdout
+      const f = Bun.spawnSync(['sh', '-c', `ls ${d}/*.tar.zst`]).stdout
       const path = new TextDecoder().decode(f).trim().split('\n')[0]
       const out = Bun.spawnSync(['shasum', '-a', '256', path]).stdout
       return new TextDecoder().decode(out).trim().split(/\s+/)[0]
@@ -247,7 +247,7 @@ async function snapshotRoundTrip(homeDir, setup) {
   })
 
   await probe(checks, 'install from snapshot (fresh home)', async () => {
-    const archive = new TextDecoder().decode(Bun.spawnSync(['sh', '-c', `ls ${distA}/*.tar.gz`]).stdout).trim().split('\n')[0]
+    const archive = new TextDecoder().decode(Bun.spawnSync(['sh', '-c', `ls ${distA}/*.tar.zst`]).stdout).trim().split('\n')[0]
     // Fail honestly rather than letting an empty path fall through to a remote
     // download (which would pass against a *published* snapshot, not our build).
     assert(archive && existsSync(archive), 'no locally-built archive to install (build failed?)')

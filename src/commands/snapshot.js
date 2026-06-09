@@ -5,7 +5,7 @@ import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError, ValidationError } from '../lib/errors.js'
 import { sha256File } from '../lib/hash.js'
 import { listFilesSorted, writeSha256Sidecar } from '../lib/archive-7z.js'
-import { createTarGzArchive } from '../lib/archive-targz.js'
+import { createTarZstArchive } from '../lib/archive-zstd.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { copyTreeFast, ensureDir, writeJSON } from '../storage/files.js'
 import { encodeSectionContent } from '../storage/section-codec.js'
@@ -60,13 +60,13 @@ function deterministicMtimeSeconds(tag) {
  * `storage materialize` (markdown/html from document_sections; raw-json by
  * decompressing document_raw).
  *
- * Archive pipeline: the snapshot is packaged as `.tar.gz` with `gzip -9`
- * (max DEFLATE). The .7z migration in a5a0244 traded a 2x size win for
- * 5x slower pack time; on the GH macos-26 runner (3-core M1 / 7 GB RAM)
- * the corpus outgrew the LZMA2 budget — multiple snapshot attempts
- * timed out at the 7zz spawn deadline. tar.gz finishes inside the
- * workflow time budget for the same corpus and decompresses with stock
- * `tar -xzf` everywhere, so consumers no longer need p7zip installed.
+ * Archive pipeline: the snapshot is packaged as `.tar.zst` (zstd `-9 -T3
+ * --long=27`). zstd is ~15% smaller AND ~5× faster than `gzip -9` on this
+ * corpus shape and multithreaded, so it fits the GH macos-26 runner (3-core
+ * M1 / 7 GB) budget with headroom. macOS ships no zstd and Apple's bsdtar
+ * lacks libzstd, so consumers do NOT `tar --zstd`: `apple-docs setup`
+ * stream-decompresses with Bun's built-in zstd and pipes plain tar to
+ * `tar -xf -` (no system zstd / p7zip needed). See src/lib/archive-zstd.js.
  *
  * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean }} opts
  * @param {{ db, dataDir, logger }} ctx
@@ -187,7 +187,7 @@ export async function snapshotBuild(opts, ctx) {
     }
 
     // 7. Stage the snapshot payload into a single tree, then archive it as
-    // a deterministic .tar.gz. Staging into buildDir keeps member paths
+    // a deterministic .tar.zst. Staging into buildDir keeps member paths
     // in the archive flat (no `dataDir`-leak / no `../` games) and lets
     // the archive helper sort the entire tree as one input.
     //
@@ -222,7 +222,7 @@ export async function snapshotBuild(opts, ctx) {
     }
 
     ensureDir(outDir)
-    const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.tar.gz`
+    const archiveName = `apple-docs-${SNAPSHOT_TIER}-${tag}.tar.zst`
     const archivePath = join(outDir, archiveName)
 
     // Clamp the mtime of EVERY staged file to a tag-derived constant so the
@@ -240,7 +240,7 @@ export async function snapshotBuild(opts, ctx) {
       utimesSync(join(buildDir, rel), stableMtime, stableMtime)
     }
 
-    await createTarGzArchive({
+    await createTarZstArchive({
       sourceDir: buildDir,
       outputPath: archivePath,
       name: archiveName,
@@ -252,7 +252,7 @@ export async function snapshotBuild(opts, ctx) {
     manifest.archiveSize = archiveSize
     manifest.archiveChecksum = archiveChecksum
 
-    // 8. Sidecar checksum (the .tar.gz.sha256 file used for download verification).
+    // 8. Sidecar checksum (the .tar.zst.sha256 file used for download verification).
     // Use the shared sidecar helper so the format matches `shasum -a 256`
     // output and aligns with the symbols / fonts archive sidecars.
     const { sidecarPath: checksumPath } = await writeSha256Sidecar(archivePath)

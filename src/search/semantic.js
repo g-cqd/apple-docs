@@ -28,11 +28,17 @@ function loadVectors(db) {
   const existing = caches.get(db)
   if (existing && existing.count === count) return existing
   const rows = db.getAllVectors()
-  const ids = new Int32Array(rows.length)
-  const packed = new Uint8Array(rows.length * VECTOR_BYTES)
-  for (let i = 0; i < rows.length; i++) {
-    ids[i] = rows[i].document_id
-    packed.set(rows[i].vec, i * VECTOR_BYTES)
+  // Only keep vectors whose width matches the current code size. An older
+  // snapshot (48-byte MiniLM codes) read by the newer 512-bit (64-byte) code
+  // is a mismatch — skip those rows so the tier degrades to lexical-only
+  // instead of Hamming-scanning misaligned bytes. (Cache stays keyed on the
+  // full row count; a re-installed snapshot is a fresh DB instance anyway.)
+  const usable = rows.filter(r => r.vec && r.vec.length === VECTOR_BYTES)
+  const ids = new Int32Array(usable.length)
+  const packed = new Uint8Array(usable.length * VECTOR_BYTES)
+  for (let i = 0; i < usable.length; i++) {
+    ids[i] = usable[i].document_id
+    packed.set(usable[i].vec, i * VECTOR_BYTES)
   }
   const built = { count, ids, packed }
   caches.set(db, built)

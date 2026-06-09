@@ -79,7 +79,7 @@ export async function fetchLatest(repo, deps = {}) {
 
 /**
  * Pick the snapshot archive asset by suffix preference. Returns
- * `.tar.gz` first, falls back to legacy `.7z`. Throws if neither is
+ * `.tar.zst` first, then `.tar.gz`, then legacy `.7z`. Throws if none is
  * present (the release is malformed — no point downloading anything).
  *
  * @param {Release} release
@@ -88,9 +88,8 @@ export async function fetchLatest(repo, deps = {}) {
  */
 export function pickSnapshotAssets(release, opts = {}) {
   const tier = opts.tier ?? 'full'
-  const archive =
-    release.assets.find(a => a.name.includes(`-${tier}-`) && a.name.endsWith('.tar.gz')) ??
-    release.assets.find(a => a.name.includes(`-${tier}-`) && a.name.endsWith('.7z'))
+  const find = ext => release.assets.find(a => a.name.includes(`-${tier}-`) && a.name.endsWith(ext))
+  const archive = find('.tar.zst') ?? find('.tar.gz') ?? find('.7z')
   if (!archive) {
     throw new GhReleaseError(
       `release ${release.tagName} has no -${tier}- archive (available: ${release.assets.map(a => a.name).join(', ') || 'none'})`,

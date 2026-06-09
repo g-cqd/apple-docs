@@ -125,7 +125,7 @@ apple-docs sync --full   # clean rebuild
 ```
 
 Build a portable snapshot from an existing corpus with
-`apple-docs snapshot build --out dist` (writes a `.tar.gz` + `.sha256` +
+`apple-docs snapshot build --out dist` (writes a `.tar.zst` + `.sha256` +
 manifest). Install it with `apple-docs setup --archive <path> --force`.
 
 ## Corpus sources

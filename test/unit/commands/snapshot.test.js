@@ -6,20 +6,10 @@ import { Database } from 'bun:sqlite'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { snapshotBuild } from '../../../src/commands/snapshot.js'
 import { createLogger } from '../../../src/lib/logger.js'
-// Snapshot archives are .tar.gz (post-May-2026 recalibration; .7z was
-// abandoned after sustained corpus growth pushed LZMA2 max compression
-// beyond the GH macos-26 runner's wallclock budget). Tests extract via
-// stock `tar -xzf` which is available on every host we run on.
-async function extractTarGz(archivePath, destDir) {
-  const proc = Bun.spawn(['tar', '-xzf', archivePath, '-C', destDir], {
-    stdout: 'pipe', stderr: 'pipe',
-  })
-  const code = await proc.exited
-  if (code !== 0) {
-    const stderr = await new Response(proc.stderr).text()
-    throw new Error(`tar.gz extraction failed (exit ${code}): ${stderr}`)
-  }
-}
+// Snapshot archives are `.tar.zst`. Extract them exactly the way the real
+// consumer (`apple-docs setup`) does — Bun's native zstd → `tar -xf -` — so
+// the test passes on stock macOS too (Apple's bsdtar lacks zstd).
+import { extractTarZst } from '../../../src/commands/setup/helpers.js'
 
 let db
 let dataDir
@@ -92,7 +82,7 @@ describe('snapshotBuild', () => {
 
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-'))
     try {
-      await extractTarGz(result.archivePath, extractDir)
+      await extractTarZst(result.archivePath, extractDir)
 
       const extractedDb = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
       try {
@@ -132,7 +122,7 @@ describe('snapshotBuild', () => {
 
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-'))
     try {
-      await extractTarGz(result.archivePath, extractDir)
+      await extractTarZst(result.archivePath, extractDir)
 
       const extractedDb = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
       try {
@@ -167,7 +157,7 @@ describe('snapshotBuild', () => {
     const result = await snapshotBuild({ out: outDir, tag: 'test-sym' }, { db, dataDir, logger })
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-sym-'))
     try {
-      await extractTarGz(result.archivePath, extractDir)
+      await extractTarZst(result.archivePath, extractDir)
       expect(existsSync(join(extractDir, 'resources', 'symbols', 'public', 'bold-large', 'heart.svg'))).toBe(true)
       expect(existsSync(join(extractDir, 'resources', 'symbols', 'private', 'pencil.and.sparkles.svg'))).toBe(true)
     } finally {
@@ -277,7 +267,7 @@ describe('snapshotBuild', () => {
 
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-lean-'))
     try {
-      await extractTarGz(result.archivePath, extractDir)
+      await extractTarZst(result.archivePath, extractDir)
       expect(existsSync(join(extractDir, 'markdown'))).toBe(false)
       expect(existsSync(join(extractDir, 'raw-json'))).toBe(false)
       expect(existsSync(join(extractDir, 'apple-docs.db'))).toBe(true)
@@ -289,7 +279,7 @@ describe('snapshotBuild', () => {
   test('ships the offline query-embedding model when present (F4)', async () => {
     // Stage a stand-in for the q8 ONNX model tree (resources/models/<modelId>/…)
     // so the snapshot picks it up for offline semantic search.
-    const modelBase = join(dataDir, 'resources', 'models', 'Xenova', 'all-MiniLM-L6-v2')
+    const modelBase = join(dataDir, 'resources', 'models', 'minishlab', 'potion-retrieval-32M')
     mkdirSync(join(modelBase, 'onnx'), { recursive: true })
     writeFileSync(join(modelBase, 'config.json'), '{"model_type":"bert"}')
     writeFileSync(join(modelBase, 'tokenizer.json'), '{}')
@@ -298,8 +288,8 @@ describe('snapshotBuild', () => {
     const result = await snapshotBuild({ out: outDir, tag: 'test-model' }, { db, dataDir, logger })
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-model-'))
     try {
-      await extractTarGz(result.archivePath, extractDir)
-      const shipped = join(extractDir, 'resources', 'models', 'Xenova', 'all-MiniLM-L6-v2')
+      await extractTarZst(result.archivePath, extractDir)
+      const shipped = join(extractDir, 'resources', 'models', 'minishlab', 'potion-retrieval-32M')
       expect(existsSync(join(shipped, 'config.json'))).toBe(true)
       expect(existsSync(join(shipped, 'onnx', 'model_quantized.onnx'))).toBe(true)
     } finally {
@@ -315,7 +305,7 @@ describe('snapshotBuild', () => {
     const result = await snapshotBuild({ out: outDir, tag: 'test-rawembed' }, { db, dataDir, logger })
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-rawembed-'))
     try {
-      await extractTarGz(result.archivePath, extractDir)
+      await extractTarZst(result.archivePath, extractDir)
       expect(existsSync(join(extractDir, 'raw-json'))).toBe(false)
       const edb = new DocsDatabase(join(extractDir, 'apple-docs.db'))
       try {

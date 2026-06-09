@@ -112,7 +112,7 @@ try {
     logger.warn(`Font determinism guard failed (continuing): ${err.message}`)
   }
 
-  // 1. Full snapshot (.7z replaces the old .tar.gz path).
+  // 1. Full snapshot (.tar.zst, zstd -9; replaces the old .tar.gz path).
   const snapshot = await snapshotBuild(
     {
       out: outDir,

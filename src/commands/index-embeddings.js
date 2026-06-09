@@ -5,7 +5,8 @@ import { getEmbedder } from '../search/embedder.js'
 /**
  * Build the binary embedding index (`document_vectors`) for the optional
  * semantic-search tier. Embeds `title + abstract + headings` per document with
- * all-MiniLM-L6-v2, sign-quantizes to 48 bytes, and upserts.
+ * the model2vec static embedder (see search/embedder.js), sign-quantizes to
+ * 64 bytes (512-bit), and upserts.
  *
  * Resumable: without `--full`, only documents missing a vector are processed.
  * The embedder is injectable (`opts.embedder`) so tests use a deterministic

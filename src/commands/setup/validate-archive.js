@@ -39,7 +39,29 @@ export async function validateArchive(archivePath, destDir, deps = {}) {
     throw new ValidationError(`archive listing failed (tar exit ${exitCode}): ${stderr.trim()}`)
   }
   const stdoutText = await new Response(proc.stdout).text()
+  return validateTarListing(stdoutText, destDir)
+}
 
+/**
+ * Validate a `.tar.zst` archive's members. macOS bsdtar can't read zstd and
+ * there's no system `zstd`, so decompress with Bun's native zstd
+ * (`DecompressionStream`) and list via `tar -tvf -`. Streaming bounds memory.
+ */
+export async function validateZstArchive(archivePath, destDir, deps = {}) {
+  const spawn = deps.spawn ?? Bun.spawn
+  const stream = Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))
+  const proc = spawn(['tar', '-tvf', '-'], { stdin: stream, stdout: 'pipe', stderr: 'pipe' })
+  const stdoutP = new Response(proc.stdout).text()
+  const exitCode = await proc.exited
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr).text()
+    throw new ValidationError(`archive listing failed (tar exit ${exitCode}): ${stderr.trim()}`)
+  }
+  return validateTarListing(await stdoutP, destDir)
+}
+
+/** Shared member-safety check over a `tar -tv…` long listing. */
+function validateTarListing(stdoutText, destDir) {
   const root = resolve(destDir) + sep
   const entries = []
   let lineno = 0
@@ -64,7 +86,6 @@ export async function validateArchive(archivePath, destDir, deps = {}) {
     }
     entries.push({ type, path })
   }
-
   return { entries }
 }
 

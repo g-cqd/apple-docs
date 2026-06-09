@@ -7,8 +7,9 @@ import { resolveSevenZipBinary } from '../lib/archive-7z.js'
 import { ensureDir } from '../storage/files.js'
 import { DocsDatabase } from '../storage/database.js'
 import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
-import { validateArchive, validate7zArchive } from './setup/validate-archive.js'
+import { validateArchive, validate7zArchive, validateZstArchive } from './setup/validate-archive.js'
 import {
+  extractTarZst,
   fetchLatestRelease,
   formatSize,
   resolveArchivePath,
@@ -137,14 +138,12 @@ async function installFromGithubRelease(ctx, opts) {
   const release = await fetchLatestRelease()
   logger.info(`Found release: ${release.tag} (${release.date})`)
 
-  // Prefer `.tar.gz` (current format after the format recalibration — LZMA2 .7z didn't
-  // fit the GH runner's compression budget once the corpus grew past
-  // ~1M file entries). Accept `.7z` as a transitional fallback so a
-  // host pulling the very last .7z release before the format flip still
-  // installs (provided p7zip is on PATH).
-  const archiveAsset =
-    release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.tar.gz')) ??
-    release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.7z'))
+  // Prefer `.tar.zst` (current format — zstd -9 is faster to build and
+  // smaller than gzip -9, decompressed in-process via Bun's native zstd so
+  // no system zstd is needed). Accept `.tar.gz` then legacy `.7z` so a host
+  // pulling an older release still installs.
+  const findAsset = ext => release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith(ext))
+  const archiveAsset = findAsset('.tar.zst') ?? findAsset('.tar.gz') ?? findAsset('.7z')
   if (!archiveAsset) {
     throw new NotFoundError(`release/${release.tag}`, `No snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
   }
@@ -168,7 +167,10 @@ async function installFromGithubRelease(ctx, opts) {
     )
   }
 
-  const tmpPath = join(dataDir, isSevenZip ? '.setup-download.7z' : '.setup-download.tar.gz')
+  // Keep the real extension on the temp file so extractAndIndex detects the
+  // format the same way the local-archive path does.
+  const tmpExt = isSevenZip ? '.7z' : (archiveAsset.name.endsWith('.tar.zst') ? '.tar.zst' : '.tar.gz')
+  const tmpPath = join(dataDir, `.setup-download${tmpExt}`)
   ensureDir(dataDir)
 
   try {
@@ -239,6 +241,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
   const { db, dataDir, logger } = ctx
   const dbPath = join(dataDir, 'apple-docs.db')
   const isSevenZip = archivePath.endsWith('.7z')
+  const isZst = archivePath.endsWith('.tar.zst')
 
   // Native 7z requires p7zip on PATH. Fail early with an install hint
   // instead of letting Bun.spawn surface a `ENOENT 7zz` later.
@@ -255,7 +258,9 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
   logger.info('Validating archive members...')
   const validation = isSevenZip
     ? await validate7zArchive(archivePath, dataDir)
-    : await validateArchive(archivePath, dataDir)
+    : isZst
+      ? await validateZstArchive(archivePath, dataDir)
+      : await validateArchive(archivePath, dataDir)
   logger.info(`Archive validated (${validation.entries.length} entries).`)
 
   // Preserve the operator's storage profile across a re-install (snapshot
@@ -301,6 +306,13 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
       { deadlineMs: 10 * 60_000 },
     )
     if (exitCode !== 0) throw new ValidationError(`Extraction failed (${binary} exit ${exitCode}): ${stderr}`)
+  } else if (isZst) {
+    // macOS ships no zstd and Apple's bsdtar lacks libzstd, so we can't
+    // `tar --zstd`. Decompress in-process with Bun's native zstd and pipe
+    // plain tar to `tar -xf -` — streaming keeps memory bounded on a
+    // multi-GB archive, and needs no system zstd. Same defensive tar flags
+    // as the gzip path.
+    await extractTarZst(archivePath, dataDir)
   } else {
     // --no-same-owner / --no-same-permissions: defensive belts on top of
     // the pre-flight validator. Even if the validator misses a hostile
@@ -368,5 +380,5 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
   }
 }
 
-// resolveArchivePath, stripTarGz, fetchLatestRelease, formatSize live
-// in ./setup/helpers.js so this file fits under the 400-line ceiling.
+// resolveArchivePath, stripTarGz, fetchLatestRelease, formatSize, extractTarZst
+// live in ./setup/helpers.js so this file fits under the 400-line ceiling.

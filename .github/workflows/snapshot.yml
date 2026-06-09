@@ -28,11 +28,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup
 
-      # Archive pipeline: snapshots ship as `.tar.gz` with `gzip -9`
-      # (max DEFLATE). LZMA2 / .7z used to be the format but May 2026
-      # corpus growth pushed it past the 3-core M1 runner's wallclock
-      # budget — see docs/spikes/archive-format.md. Stock `tar` + `gzip`
-      # are pre-installed on macos-26, so no install step is needed.
+      # Archive pipeline: snapshots ship as `.tar.zst` with `zstd -9 -T3
+      # --long=27` — ~15% smaller and ~5x faster than the prior `gzip -9`,
+      # which itself replaced LZMA2 / .7z after May 2026 corpus growth blew
+      # the 3-core M1 runner's wallclock budget (see
+      # docs/spikes/archive-format.md). `zstd` ships on macos-26 runners;
+      # consumers decompress in-process via Bun, so no host `zstd` is needed.
       - name: Set data directory
         run: echo "APPLE_DOCS_HOME=${{ runner.temp }}/apple-docs" >> "$GITHUB_ENV"
 
@@ -109,11 +110,11 @@ jobs:
             --status-out dist-check/status.json \
             >/dev/null
           set -e
-          # Compare every .tar.gz by sha256. The .sha256 sidecars themselves
+          # Compare every .tar.zst by sha256. The .sha256 sidecars themselves
           # are derived from the archive bytes; if archives match, sidecars
           # match by construction.
           fail=0
-          for f in dist/*.tar.gz; do
+          for f in dist/*.tar.zst; do
             name=$(basename "$f")
             a=$(shasum -a 256 "$f" | awk '{print $1}')
             b=$(shasum -a 256 "dist-check/$name" | awk '{print $1}')
@@ -122,10 +123,10 @@ jobs:
               fail=1
               # Pinpoint the drift without extracting (disk-safe on the runner):
               # a `tar -tv` listing carries each member's size + mtime + path,
-              # so a metadata diff names the offending members directly (e.g.
-              # re-stamped mtimes on a cloned subtree) instead of an opaque hash.
-              tar -tvf "$f"               > /tmp/det-a.lst 2>/dev/null || true
-              tar -tvf "dist-check/$name" > /tmp/det-b.lst 2>/dev/null || true
+              # so a metadata diff names the offending members directly. zstd is
+              # on the runner image; decompress to stdout and list with tar.
+              zstd -dc "$f"               | tar -tvf - > /tmp/det-a.lst 2>/dev/null || true
+              zstd -dc "dist-check/$name" | tar -tvf - > /tmp/det-b.lst 2>/dev/null || true
               echo "--- first differing members in $name (perms/size/mtime/path) ---" >&2
               diff /tmp/det-a.lst /tmp/det-b.lst | head -40 >&2 || true
             fi
@@ -146,8 +147,8 @@ jobs:
 
       # Release ships only the full snapshot archive + its sidecar + the
       # manifest. The build pipeline still produces the combined fonts
-      # archive (`fonts-all-<tag>.tar.gz`) and the symbols archive
-      # (`symbols-<tag>.tar.gz`) so a running instance can expose them at
+      # archive (`fonts-all-<tag>.tar.zst`) and the symbols archive
+      # (`symbols-<tag>.tar.zst`) so a running instance can expose them at
       # runtime, but they are intentionally NOT attached to the release —
       # the full snapshot tarball already contains every resource they
       # bundle, so attaching them would duplicate ~1.5x the bytes for no
@@ -159,8 +160,8 @@ jobs:
           name: 'Snapshot (${{ steps.tag.outputs.tag }})'
           body_path: dist/release-body.md
           files: |
-            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.tar.gz
-            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.tar.gz.sha256
+            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.tar.zst
+            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.tar.zst.sha256
             dist/apple-docs-full-${{ steps.tag.outputs.tag }}.manifest.json
             dist/status.json
           draft: false

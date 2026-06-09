@@ -168,7 +168,7 @@ function matchFamilyId(fileName) {
 /**
  * Determinism guard for the snapshot build: re-extract any font family whose
  * extracted/ dir is missing or empty, from the cached original/<id>.dmg. The
- * snapshot is built twice and the two .tar.gz are sha-diffed; a family that
+ * snapshot is built twice and the two .tar archives are sha-diffed; a family that
  * silently failed to extract on only one pass (flaky SLA/multi-volume DMG
  * mount) made the archive non-deterministic. Idempotent: skips families that
  * already have at least one font file. No-op when downloadFonts never ran

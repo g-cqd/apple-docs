@@ -1,14 +1,16 @@
 /**
  * Binary embedding primitives for the semantic tier (pure JS, no deps).
  *
- * A 384-d float embedding (L2-normalized) is sign-quantized to 384 bits =
- * 48 bytes: bit i = 1 iff dim i >= 0. Similarity is then Hamming distance
- * (XOR + popcount), which closely tracks cosine for normalized vectors and
- * is trivially fast over a packed Uint8Array.
+ * A 512-d float embedding (from the model2vec static embedder) is
+ * sign-quantized to 512 bits = 64 bytes: bit i = 1 iff dim i >= 0.
+ * Similarity is then Hamming distance (XOR + popcount), which closely tracks
+ * cosine for normalized vectors and is trivially fast over a packed
+ * Uint8Array. (Was 384-d / 48-byte under all-MiniLM-L6-v2; the wider code
+ * measurably improves recall at full-corpus scale — see search/embedder.js.)
  */
 
-export const VECTOR_DIMS = 384
-export const VECTOR_BYTES = VECTOR_DIMS / 8 // 48
+export const VECTOR_DIMS = 512
+export const VECTOR_BYTES = VECTOR_DIMS / 8 // 64
 
 /**
  * Sign-quantize a float embedding into a packed bit vector.

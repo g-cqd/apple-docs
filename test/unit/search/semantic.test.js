@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { indexEmbeddings } from '../../../src/commands/index-embeddings.js'
 import { semanticCandidates, isSemanticAvailable, _resetVectorCache } from '../../../src/search/semantic.js'
+import { VECTOR_BYTES } from '../../../src/search/embedding.js'
 import { topicEmbedder } from '../../helpers/topic-embedder.js'
 
 let db
@@ -63,5 +64,34 @@ describe('semanticCandidates', () => {
     } finally {
       bare.close()
     }
+  })
+
+  // Compat guard: a vector whose width != VECTOR_BYTES is an older snapshot's
+  // 48-byte MiniLM code read by the 64-byte model2vec scanner. Hamming-scanning
+  // those misaligned bytes would corrupt distances, so loadVectors drops them.
+  const idOf = (path) => {
+    const ids = db.getAllVectors().map((v) => v.document_id)
+    return db.getSearchRecordsByIds(ids).find((r) => r.path === path).id
+  }
+  const writeRawVector = (id, bytes) =>
+    db.db.query('INSERT OR REPLACE INTO document_vectors(document_id, vec) VALUES (?, ?)').run(id, new Uint8Array(bytes))
+  const STALE_BYTES = 48 // older MiniLM-384 code width (vs the current 512-bit/64-byte)
+
+  test('skips a single width-mismatched vector, still ranks the rest', async () => {
+    expect(STALE_BYTES).not.toBe(VECTOR_BYTES) // the guard only bites while widths differ
+    const alphaId = idOf('fw/alpha') // the doc "sound" would otherwise match
+    writeRawVector(alphaId, STALE_BYTES)
+
+    const res = await semanticCandidates(ctx, 'sound', 3)
+    expect(res.length).toBe(2) // alpha skipped; beta + gamma remain scannable
+    expect(res.map((r) => r.documentId)).not.toContain(alphaId)
+  })
+
+  test('degrades to lexical-only when every vector is the wrong width', async () => {
+    for (const p of ['fw/alpha', 'fw/beta', 'fw/gamma']) writeRawVector(idOf(p), STALE_BYTES)
+
+    expect(db.getVectorCount()).toBe(3) // rows present, so the cheap gate is open
+    expect(isSemanticAvailable(db)).toBe(true)
+    expect(await semanticCandidates(ctx, 'sound', 3)).toEqual([]) // but none are usable
   })
 })

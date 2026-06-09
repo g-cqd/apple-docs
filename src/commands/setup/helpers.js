@@ -29,14 +29,34 @@ export function resolveArchivePath(archive) {
 }
 
 /**
- * Strip the `.tar.gz` / `.tgz` extension from a path. Used to derive
- * the manifest path from the archive path.
+ * Strip the tar archive extension (`.tar.zst` / `.tar.gz` / `.tgz`) from a
+ * path. Used to derive the manifest path from the archive path.
  */
 export function stripTarGz(p) {
   const name = basename(p)
-  if (name.endsWith('.tar.gz')) return join(dirname(p), name.slice(0, -'.tar.gz'.length))
-  if (name.endsWith('.tgz')) return join(dirname(p), name.slice(0, -'.tgz'.length))
+  for (const ext of ['.tar.zst', '.tar.gz', '.tgz']) {
+    if (name.endsWith(ext)) return join(dirname(p), name.slice(0, -ext.length))
+  }
   return p
+}
+
+/**
+ * Stream-extract a `.tar.zst` snapshot into `dataDir`. macOS ships no `zstd`
+ * binary and Apple's bsdtar lacks libzstd, so decompress with Bun's built-in
+ * zstd (`DecompressionStream`) and pipe plain tar to `tar -xf -`. Streaming
+ * keeps memory bounded on a multi-GB archive; no system zstd required.
+ */
+export async function extractTarZst(archivePath, dataDir) {
+  const stream = Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))
+  const proc = Bun.spawn(
+    ['tar', '--no-same-owner', '--no-same-permissions', '-xf', '-', '-C', dataDir],
+    { stdin: stream, stdout: 'ignore', stderr: 'pipe', timeout: 10 * 60_000 },
+  )
+  const stderrText = new Response(proc.stderr).text()
+  const exitCode = await proc.exited
+  if (exitCode !== 0) {
+    throw new ValidationError(`Extraction failed (tar exit ${exitCode}): ${(await stderrText).trim().slice(0, 4096)}`)
+  }
 }
 
 /**

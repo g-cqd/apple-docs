@@ -48,7 +48,7 @@ const table = rows.map(r => '| ' + r.join(' | ') + ' |').join('\n')
 const body = [
   prologue,
   '',
-  'Single-tier snapshot — ships the full corpus, every Apple font, and the complete pre-rendered SF Symbols matrix in one `.tar.gz`.',
+  'Single-tier snapshot — ships the full corpus, every Apple font, and the complete pre-rendered SF Symbols matrix in one `.tar.zst`.',
   '',
   '## Artifact',
   '',
@@ -56,11 +56,13 @@ const body = [
   '',
   '## Install',
   '',
-  'Snapshots are packaged as `.tar.gz` with `gzip -9`. Stock `tar` extracts them on every supported platform — no extra tooling required:',
+  'Snapshots are packaged as `.tar.zst` with `zstd -9`. `apple-docs setup` downloads, verifies, and extracts it (Bun decompresses zstd in-process — no extra tooling required):',
   '',
   '```bash',
   'apple-docs setup',
   '```',
+  '',
+  'To extract manually: `zstd -d apple-docs-full-<tag>.tar.zst -c | tar -xf -` (stock `tar` on macOS cannot read zstd directly).',
 ].join('\n')
 
 process.stdout.write(body)

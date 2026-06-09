@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Build the combined fonts archive for the snapshot pipeline:
- *   - `fonts-all-<tag>.tar.gz`        — every extracted family in one archive.
+ *   - `fonts-all-<tag>.tar.zst`       — every extracted family in one archive.
  *
  * Source: `<dataDir>/resources/fonts/extracted/<family>/`. Family ids are
  * the canonical slugs from src/resources/apple-assets.js. We deliberately
@@ -24,7 +24,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createLogger } from '../src/lib/logger.js'
 import { writeSha256Sidecar } from '../src/lib/archive-7z.js'
-import { createTarGzArchive } from '../src/lib/archive-targz.js'
+import { createTarZstArchive } from '../src/lib/archive-zstd.js'
 import { ensureDir } from '../src/storage/files.js'
 
 /** Mirror of `APPLE_FONT_FAMILIES` ids in src/resources/apple-assets.js. */
@@ -77,16 +77,16 @@ export async function buildFontsArchives({ dataDir, outDir, tag, logger }) {
   }
   ensureDir(outDir)
 
-  // Combined archive (`fonts-all-<tag>.tar.gz`). Built from the extracted
+  // Combined archive (`fonts-all-<tag>.tar.zst`). Built from the extracted
   // root so member paths are `<family>/<file>`. Skip when no families
   // are present — buildSnapshot's status emitter will record `null`.
   let all = null
   const presentFamilies = readdirSync(extractedRoot, { withFileTypes: true })
     .filter(d => d.isDirectory() && readdirSync(join(extractedRoot, d.name)).length > 0)
   if (presentFamilies.length > 0) {
-    const name = `fonts-all-${tag}.tar.gz`
+    const name = `fonts-all-${tag}.tar.zst`
     const outputPath = join(outDir, name)
-    const built = await createTarGzArchive({
+    const built = await createTarZstArchive({
       sourceDir: extractedRoot,
       outputPath,
       name,
