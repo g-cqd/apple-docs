@@ -11,7 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import { createTarZstArchive } from '../../../src/lib/archive-zstd.js'
+import { createTarZstArchive, countArchiveMembers } from '../../../src/lib/archive-zstd.js'
 import { extractTarZst } from '../../../src/commands/setup/helpers.js'
 
 let workDir
@@ -90,6 +90,23 @@ describe('createTarZstArchive', () => {
     expect(readFileSync(join(dest, 'alpha.txt'), 'utf8')).toBe('aaaaaaaaaa')
     expect(readFileSync(join(dest, 'beta.txt'), 'utf8')).toBe('bbbbbbbbbbbb')
     expect([...readFileSync(join(dest, 'sub', 'gamma.bin'))]).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+  })
+
+  test('member-count integrity check detects a truncated archive', async () => {
+    const src = stageFixture('integrity')
+    const out = join(workDir, 'ok.tar.zst')
+    await createTarZstArchive({ sourceDir: src, outputPath: out })
+    expect(await countArchiveMembers(out)).toBe(3) // 3 staged files -> 3 members
+
+    // Lop off the back half of the compressed stream — the exact corruption
+    // (a truncated archive) that slipped past the old gzip path. Detection is
+    // either a non-zero tar exit (thrown) or a short member count.
+    const bytes = readFileSync(out)
+    writeFileSync(out, bytes.subarray(0, 12)) // keep only the zstd frame header
+    let threw = false
+    let count = -1
+    try { count = await countArchiveMembers(out) } catch { threw = true }
+    expect(threw || count !== 3).toBe(true)
   })
 
   test('refuses to archive an empty source dir', async () => {

@@ -116,9 +116,40 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
     rmSync(listDir, { recursive: true, force: true })
   }
 
+  // Integrity gate: decompress the archive we just wrote and count its tar
+  // members. `tar --no-recursion -T <files>` packs exactly one entry per
+  // listed (regular) file, so a complete archive lists `files.length`
+  // members. A short count means the stream was truncated — the failure that
+  // silently shipped a 199 MB (vs 1.6 GB) archive past the old gzip path and
+  // only blew up later in the determinism gate. Catch it here, at build time,
+  // in every pass. Streams via Bun's native zstd (the same path consumers
+  // use), so no system zstd is required.
+  const members = await countArchiveMembers(absOutput)
+  if (members !== files.length) {
+    if (existsSync(absOutput)) { try { unlinkSync(absOutput) } catch { /* tolerate */ } }
+    throw new ValidationError(
+      `tar.zst integrity check failed for ${name ?? absOutput}: archive lists ${members} members but ${files.length} were staged — truncated or corrupt`,
+    )
+  }
+
   const stat = statSync(absOutput)
-  log.info?.(`[archive-tar.zst] wrote ${absOutput} (${formatSize(stat.size)})`)
+  log.info?.(`[archive-tar.zst] wrote ${absOutput} (${formatSize(stat.size)}, ${members} members verified)`)
   return { outputPath: absOutput, fileCount: files.length, size: stat.size }
+}
+
+/**
+ * Count tar members in a `.tar.zst` by streaming it through Bun's zstd.
+ * Exported as a test seam for the truncation-detection regression test.
+ */
+export async function countArchiveMembers(absOutput) {
+  const stream = Bun.file(absOutput).stream().pipeThrough(new DecompressionStream('zstd'))
+  const proc = Bun.spawn(['tar', '-tf', '-'], { stdin: stream, stdout: 'pipe', stderr: 'ignore' })
+  const listing = await new Response(proc.stdout).text()
+  const code = await proc.exited
+  if (code !== 0) throw new ValidationError(`tar.zst integrity check: member listing failed (tar exit ${code})`)
+  let n = 0
+  for (let i = 0; i < listing.length; i++) if (listing[i] === '\n') n++
+  return n
 }
 
 function formatSize(bytes) {
