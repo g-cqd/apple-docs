@@ -97,6 +97,17 @@ describe('normalizeAssetUri / platformsToProject', () => {
     expect(p.minIos).toBe('13.0')
     expect(platformsToProject([])).toBeNull()
   })
+
+  test('rounds away the IEEE-754 noise Apple ships in introduced floats', () => {
+    // The asset serializes 17.2 as 17.199999999999999, 1.1 as 1.1000000000000001.
+    const p = platformsToProject([
+      { platform: 'iOS', introduced: 17.199999999999999 },
+      { platform: 'macOS', introduced: 14.199999999999999 },
+      { platform: 'visionOS', introduced: 1.1000000000000001 },
+      { platform: 'tvOS', introduced: 18 },
+    ])
+    expect(JSON.parse(p.platformsJson)).toEqual({ ios: '17.2', macos: '14.2', visionos: '1.1', tvos: '18.0' })
+  })
 })
 
 describe('enrichFromAsset', () => {

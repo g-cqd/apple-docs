@@ -102,11 +102,15 @@ export function platformsToProject(platforms) {
   }
 }
 
-/** 13 → "13.0", 10.15 → "10.15" (matches the crawl's version strings). */
+/** 13 → "13.0", 10.15 → "10.15" (matches the crawl's version strings).
+ *  Apple ships `introduced` as JSON floats carrying IEEE-754 noise — 17.2 is
+ *  serialized as 17.199999999999999 — so round to 2 decimals (the depth of a
+ *  real major.minor) and strip trailing zeros instead of stringifying raw. */
 function formatVersion(v) {
   const n = Number(v)
   if (!Number.isFinite(n) || n <= 0) return null
-  return Number.isInteger(n) ? `${n}.0` : String(n)
+  const s = n.toFixed(2).replace(/\.?0+$/, '')
+  return s.includes('.') ? s : `${s}.0`
 }
 
 function languageFromUsr(usr) {
@@ -238,6 +242,9 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
         relationships: [],
       })
       if (n.usr) setUsrById.run({ $usr: n.usr, $id: documentId })
+      // Commit in batches so a fresh run (tens of thousands of novel pages,
+      // each an upsert + sections + FTS triggers) is not one giant transaction.
+      if (stats.novelInserted % BATCH === 0) { commit(); begin() }
     }
     commit()
   } finally {

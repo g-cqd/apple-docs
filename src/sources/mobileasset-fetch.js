@@ -109,11 +109,15 @@ export async function fetchDocumentationAsset({ url, sha1 = null, size = null, c
     if (!res.ok) throw new ValidationError(`Asset download failed: HTTP ${res.status} for ${url}`)
     const hasher = new Bun.CryptoHasher('sha1')
     const sink = Bun.file(zipPath).writer()
+    // Hard ceiling even when the manifest gives no size (the --url path):
+    // bound a hostile/oversized response so it can't fill the disk.
+    const MAX_BYTES = Math.max(size ?? 0, 2 * 1024 ** 3)
     let written = 0
     for await (const chunk of res.body) {
+      written += chunk.byteLength
+      if (written > MAX_BYTES) throw new ValidationError(`Asset exceeds ${(MAX_BYTES / 1024 ** 3).toFixed(1)} GiB cap — refusing.`)
       hasher.update(chunk)
       sink.write(chunk)
-      written += chunk.byteLength
     }
     await sink.end()
     const gotSha1 = hasher.digest('hex')
@@ -123,7 +127,9 @@ export async function fetchDocumentationAsset({ url, sha1 = null, size = null, c
     if (sha1 && gotSha1 !== sha1) {
       throw new ValidationError(`Asset SHA-1 mismatch: got ${gotSha1}, manifest says ${sha1}. Do not use.`)
     }
-    if (!sha1) logger?.info?.(`Asset SHA-1 (unpinned URL): ${gotSha1}`)
+    // No pinned hash means an explicit --url with no integrity reference —
+    // make the unverified install loud rather than an info footnote.
+    if (!sha1) logger?.warn?.(`UNVERIFIED download (no pinned hash) — sha1=${gotSha1}. Trust the source before using.`)
 
     // `-j` (junk paths) flattens every matched member into dbDir, so a crafted
     // member name like `documentation-db/../../evil` can't escape the slot even

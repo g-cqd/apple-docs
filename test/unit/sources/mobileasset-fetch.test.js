@@ -59,8 +59,13 @@ const MANIFEST_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
 let dir
 let zipBytes
 let zipSha1
+// The fetch fixture needs the `zip` binary to author a real archive. It's
+// present on the CI runners, but guard so a minimal image skips rather than
+// failing opaquely in beforeAll.
+const HAS_ZIP = !!Bun.which('zip')
 
 beforeAll(async () => {
+  if (!HAS_ZIP) return
   dir = mkdtempSync(join(tmpdir(), 'apple-docs-ma-fetch-'))
   // Build a real zip with the expected inner layout.
   const stage = join(dir, 'stage')
@@ -73,7 +78,7 @@ beforeAll(async () => {
   zipSha1 = new Bun.CryptoHasher('sha1').update(zipBytes).digest('hex')
 })
 
-afterAll(() => rmSync(dir, { recursive: true, force: true }))
+afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }) })
 
 describe('parseAssetManifest', () => {
   test('extracts every variant, newest OS first, with hex sha1', () => {
@@ -104,7 +109,7 @@ describe('resolveDownload', () => {
   })
 })
 
-describe('fetchDocumentationAsset', () => {
+describe.skipIf(!HAS_ZIP)('fetchDocumentationAsset', () => {
   const fetchImpl = async () => new Response(zipBytes, { status: 200 })
 
   test('downloads, verifies sha1 + size, extracts, then serves from cache', async () => {
