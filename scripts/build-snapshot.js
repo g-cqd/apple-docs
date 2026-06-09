@@ -78,14 +78,20 @@ try {
   // 0. Bake the optional semantic tier into the snapshot. `index embeddings`
   //    builds the binary doc vectors (document_vectors); with remote model
   //    downloads enabled (APPLE_DOCS_ALLOW_REMOTE_MODELS=1, set by the CI
-  //    workflow) the q8 ONNX model is fetched into <dataDir>/resources/models
-  //    so it ships for offline query-embedding. Additive — if the optional
-  //    embedder dependency or model is unavailable the tier stays dormant and
-  //    the snapshot is lexical-only, so a failure here never blocks the build.
+  //    workflow) the model2vec static model is fetched into
+  //    <dataDir>/resources/models so it ships for offline query-embedding.
+  //    Additive — if the optional embedder dependency or model is unavailable
+  //    the tier stays dormant and the snapshot is lexical-only, so a failure
+  //    here never blocks the build.
+  //    `full: true` regenerates every vector from the current model rather than
+  //    only filling gaps: it guarantees the shipped codes match the live
+  //    embedding width (a stale-width row from an older model would otherwise
+  //    be skipped at query time), overwrites any such rows, and stays
+  //    deterministic across the gate's two passes (model2vec is bit-identical).
   process.env.APPLE_DOCS_MODELS_DIR ??= join(dataDir, 'resources', 'models')
   try {
     const { indexEmbeddings } = await import('../src/commands/index-embeddings.js')
-    const res = await indexEmbeddings({}, { db, logger })
+    const res = await indexEmbeddings({ full: true }, { db, logger })
     logger.info(
       res.status === 'ok'
         ? `Embeddings: ${res.indexed}/${res.total} indexed`
