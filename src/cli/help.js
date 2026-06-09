@@ -137,14 +137,15 @@ Examples:
   setup: `
 Usage: apple-docs setup [options]
 
-Download a pre-built documentation snapshot (~2 GB). No
+Download a pre-built documentation snapshot (~1.5 GB). No
 crawling required — ready in a few minutes, mostly the download. --compact
 and --prebuilt do extra one-time work after extracting (see below).
 
 Profiles pick disk-vs-speed and finish in one step (no follow-up command):
   --compact          Smallest disk. Compacts the install now: compresses
                      sections, makes the body index contentless, drops the
-                     embedded raw payloads (~1 GB), VACUUMs. Renders on demand.
+                     embedded raw payloads, VACUUMs (DB ~4.3 → ~1.9 GiB).
+                     Renders on demand.
   --prebuilt         Fastest. Materializes Markdown + HTML now (largest disk).
   (default)          balanced — snapshot as-is; caches Markdown on first read.
 
@@ -310,9 +311,10 @@ Build options (advanced):
   --allow-incomplete-symbols   Skip the SF Symbols matrix gate (for build
                                hosts without the live renderer; expect 404s).
 
-The build writes a single tarball + .sha256 + manifest under <out>/: the DB
-(document_sections), SF Symbols, and fonts. Markdown/HTML are regenerated on
-device (\`storage materialize\`).
+The build writes a single .tar.zst + .sha256 + manifest under <out>/: the DB
+(document_sections + zstd-compressed raw payloads), SF Symbols, fonts, and the
+model2vec embedding model. Markdown/HTML are regenerated on device
+(\`storage materialize\`).
 
 Examples:
   apple-docs snapshot build --out dist
@@ -342,16 +344,25 @@ Resumable: re-run after interruption to continue from the last checkpoint.
   index: `
 Usage: apple-docs index <subcommand> [target] [options]
 
-Rebuild a search index from existing data. Useful after recovering from
-a corrupted FTS5 / trigram table.
+Rebuild a search index from existing data. Useful after recovering from a
+corrupted FTS5 / trigram table, or to (re)build the optional semantic tier.
 
 Subcommands:
   rebuild body         Rebuild the full-body FTS5 index from documents.
   rebuild trigram      Rebuild the trigram FTS5 index from document titles.
+  embeddings           Build the binary semantic vectors (document_vectors)
+                       with the model2vec embedder. Needs the optional
+                       @huggingface/transformers dep + the local model;
+                       otherwise search stays lexical-only.
+
+Options:
+  --full               (embeddings) Re-embed every document. Without it, only
+                       documents missing a vector are processed.
 
 Examples:
   apple-docs index rebuild body
   apple-docs index rebuild trigram
+  apple-docs index embeddings --full
 `.trim(),
 }
 

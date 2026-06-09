@@ -21,7 +21,7 @@ and link back to the canonical Apple URL emitted on each page.
 
 - [Homepage](https://apple-docs.everest.mt/) — index of every framework / kind.
 - [Search page](https://apple-docs.everest.mt/search) — server- and client-side
-  search across all 346 K+ documents, with filters by framework / language /
+  search across all 353 K+ documents, with filters by framework / language /
   platform / WWDC year.
 - [Sitemap index](https://apple-docs.everest.mt/sitemap.xml) — points at one
   per-framework sitemap; preferred entry for crawlers.
