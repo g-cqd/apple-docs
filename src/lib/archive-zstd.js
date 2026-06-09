@@ -24,12 +24,9 @@ import { ValidationError } from "../lib/errors.js"
  * (dev machines). CI always has the CLI, so the gate uses the fast path.
  */
 
-import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import { pipeline } from 'node:stream/promises'
-import { Readable } from 'node:stream'
 import { listFilesSorted } from './archive-7z.js'
 
 const DEFAULT_DEADLINE_MS = 60 * 60_000
@@ -43,13 +40,6 @@ function findZstd() {
   // Last resort: anything named `zstd` on PATH (covers the CI runner, where
   // it may live outside the well-known prefixes above).
   try { return Bun.which('zstd') } catch { return null }
-}
-
-function waitExit(proc) {
-  return new Promise((r) => {
-    if (proc.exitCode != null || proc.signalCode != null) r()
-    else proc.once('close', r)
-  })
 }
 
 /**
@@ -74,37 +64,45 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
   writeFileSync(listPath, `${files.join('\n')}\n`)
 
   const effectiveDeadline = deadlineMs ?? DEFAULT_DEADLINE_MS
-  let timedOut = false
-  const tarProc = spawn('tar', ['-cf', '-', '--no-recursion', '-T', listPath], {
+  const zstdBin = findZstd()
+
+  // Feed `tar -cf -` straight into the compressor with Bun's native process
+  // plumbing. Node's `pipeline(tar.stdout, zstd.stdin)` throws `EINVAL …
+  // send` once the piped volume reaches multi-GB on the macOS CI runner (it
+  // round-trips every byte through a JS socket write); Bun wires the two
+  // process pipes together directly, so the full-corpus archive streams
+  // without the JS hop. Same path the consumer (setup) already uses.
+  const tarProc = Bun.spawn(['tar', '-cf', '-', '--no-recursion', '-T', listPath], {
     cwd: sourceDir,
     env: { ...process.env, LC_ALL: 'C' },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: effectiveDeadline,
+    killSignal: 'SIGKILL',
   })
-  let tarErr = ''
-  tarProc.stderr.on('data', (c) => { if (tarErr.length < 65536) tarErr += c.toString('utf8') })
-  const timer = setTimeout(() => { timedOut = true; try { tarProc.kill('SIGKILL') } catch { /* gone */ } }, effectiveDeadline)
+  // Drain stderr concurrently so a chatty process can't deadlock on a full pipe.
+  const tarErrP = new Response(tarProc.stderr).text().catch(() => '')
 
-  const zstdBin = findZstd()
   try {
     if (zstdBin) {
-      // tar -cf - … | zstd … -o <out>   (zstd reads stdin when given no input file)
-      const zstdProc = spawn(zstdBin, [...ZSTD_ARGS, '-o', absOutput], { stdio: ['pipe', 'ignore', 'pipe'] })
-      let zErr = ''
-      zstdProc.stderr.on('data', (c) => { if (zErr.length < 65536) zErr += c.toString('utf8') })
-      await pipeline(tarProc.stdout, zstdProc.stdin)
-      await Promise.all([waitExit(tarProc), waitExit(zstdProc)])
-      if (timedOut) throw new ValidationError(`tar.zst build exceeded ${effectiveDeadline} ms deadline`)
-      if (tarProc.exitCode !== 0) throw new ValidationError(`tar.zst: tar exit ${tarProc.exitCode}: ${tarErr.trim().slice(0, 4096) || '<no stderr>'}`)
-      if (zstdProc.exitCode !== 0) throw new ValidationError(`tar.zst: zstd exit ${zstdProc.exitCode}: ${zErr.trim().slice(0, 4096) || '<no stderr>'}`)
+      // zstd reads tar's stdout on its stdin and writes the archive itself.
+      const zstdProc = Bun.spawn([zstdBin, ...ZSTD_ARGS, '-o', absOutput], {
+        stdin: tarProc.stdout,
+        stdout: 'ignore',
+        stderr: 'pipe',
+        timeout: effectiveDeadline,
+        killSignal: 'SIGKILL',
+      })
+      const zstdErrP = new Response(zstdProc.stderr).text().catch(() => '')
+      const [tarCode, zstdCode] = await Promise.all([tarProc.exited, zstdProc.exited])
+      if (tarCode !== 0) throw new ValidationError(`tar.zst: tar exit ${tarCode}: ${(await tarErrP).trim().slice(0, 4096) || '<no stderr>'}`)
+      if (zstdCode !== 0) throw new ValidationError(`tar.zst: zstd exit ${zstdCode}: ${(await zstdErrP).trim().slice(0, 4096) || '<no stderr>'}`)
     } else {
       log.warn?.('[archive-tar.zst] zstd CLI not found — using Bun CompressionStream (slower, single-thread)')
-      const web = Readable.toWeb(tarProc.stdout).pipeThrough(new CompressionStream('zstd'))
-      const writer = Bun.file(absOutput).writer()
-      for await (const chunk of web) writer.write(chunk)
-      await writer.end()
-      await waitExit(tarProc)
-      if (timedOut) throw new ValidationError(`tar.zst build exceeded ${effectiveDeadline} ms deadline`)
-      if (tarProc.exitCode !== 0) throw new ValidationError(`tar.zst: tar exit ${tarProc.exitCode}: ${tarErr.trim().slice(0, 4096) || '<no stderr>'}`)
+      const compressed = tarProc.stdout.pipeThrough(new CompressionStream('zstd'))
+      await Bun.write(absOutput, new Response(compressed))
+      const tarCode = await tarProc.exited
+      if (tarCode !== 0) throw new ValidationError(`tar.zst: tar exit ${tarCode}: ${(await tarErrP).trim().slice(0, 4096) || '<no stderr>'}`)
     }
   } catch (err) {
     try { tarProc.kill('SIGKILL') } catch { /* gone */ }
@@ -112,7 +110,6 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
     if (err instanceof ValidationError) throw err
     throw new ValidationError(`tar.zst archive build failed: ${err?.message ?? err}`)
   } finally {
-    clearTimeout(timer)
     rmSync(listDir, { recursive: true, force: true })
   }
 
