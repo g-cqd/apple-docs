@@ -18,7 +18,6 @@ import { safeCall } from '../../lib/safe-call.js'
 export function createChunksRepo(db) {
   const countStmt = db.query('SELECT COUNT(*) AS c FROM document_chunks')
   const allBinStmt = db.query('SELECT chunk_id, document_id, vec_bin FROM document_chunks ORDER BY document_id, ord')
-  const i8ByIdStmt = db.query('SELECT vec_i8 FROM document_chunks WHERE chunk_id = ?')
   const upsertStmt = db.query(
     'INSERT OR REPLACE INTO document_chunks(document_id, ord, text, vec_bin, vec_i8) VALUES ($doc, $ord, $text, $bin, $i8)',
   )
@@ -33,10 +32,19 @@ export function createChunksRepo(db) {
     getAllChunkVectors() {
       return safeCall(() => allBinStmt.all(), { default: [], log: 'warn-once', label: 'chunks.allVectors' })
     },
-    /** A single chunk's int8 code (rescore stage); null when absent. */
-    getChunkI8(chunkId) {
-      const row = safeCall(() => i8ByIdStmt.get(chunkId), { default: null, log: 'warn-once', label: 'chunks.i8' })
-      return row?.vec_i8 ?? null
+    /** int8 codes for a shortlist in one round-trip: Map chunk_id → vec_i8.
+     *  Batched at 500 ids to stay under SQLite's bound-parameter ceiling. */
+    getChunkI8Batch(chunkIds) {
+      const out = new Map()
+      for (let i = 0; i < chunkIds.length; i += 500) {
+        const ids = chunkIds.slice(i, i + 500)
+        const rows = safeCall(
+          () => db.query(`SELECT chunk_id, vec_i8 FROM document_chunks WHERE chunk_id IN (${ids.map(() => '?').join(',')})`).all(...ids),
+          { default: [], log: 'warn-once', label: 'chunks.i8Batch' },
+        )
+        for (const r of rows) if (r.vec_i8) out.set(r.chunk_id, r.vec_i8)
+      }
+      return out
     },
     /** Upsert one chunk's codes (keyed on document_id+ord). */
     upsertChunk({ documentId, ord, text = null, vecBin, vecI8 = null }) {

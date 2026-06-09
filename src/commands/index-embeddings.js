@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { quantizeTo, quantizeI8 } from '../search/embedding.js'
 import { getEmbedder } from '../search/embedder.js'
 import { chunkDocument } from '../search/chunker.js'
+import { _resetVectorCache } from '../search/semantic.js'
 
 /**
  * Build the per-chunk embedding index (`document_chunks`) for the body-aware
@@ -77,7 +78,13 @@ export async function indexEmbeddings(opts, ctx) {
     const vecs = embedder.embedBatch
       ? await embedder.embedBatch(texts)
       : await sequentialEmbed(embedder, texts)
-    if (!dims && vecs.length) dims = vecs[0].length
+    if (!dims && vecs.length) {
+      dims = vecs[0].length
+      // Written with the first batch (idempotent) so an interrupted run never
+      // leaves chunks on disk with absent/stale model meta.
+      db.setSnapshotMeta('embed_dims', String(dims))
+      db.setSnapshotMeta('embed_model', process.env.APPLE_DOCS_EMBED_MODEL ?? 'potion-retrieval-32M')
+    }
 
     db.db.run('BEGIN')
     try {
@@ -99,10 +106,7 @@ export async function indexEmbeddings(opts, ctx) {
     ctx.onProgress?.({ done: indexed, total })
   }
 
-  if (dims) {
-    db.setSnapshotMeta('embed_dims', String(dims))
-    db.setSnapshotMeta('embed_model', process.env.APPLE_DOCS_EMBED_MODEL ?? 'potion-retrieval-32M')
-  }
+  _resetVectorCache() // in-process readers must rebuild from the new tables
   logger?.info?.(`Embedding index built: ${chunkCount} chunks across ${indexed}/${total} documents.`)
   return { status: 'ok', indexed, total, chunks: chunkCount }
 }

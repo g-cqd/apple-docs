@@ -21,8 +21,8 @@ import { quantize, quantizeTo, hamming, dotI8, VECTOR_DIMS, VECTOR_BYTES } from 
 import { getEmbedder } from './embedder.js'
 
 // Per-DB packed vector store (WeakMap → no cross-instance collision, auto-GC).
-// Invalidated cheaply by row count + mode.
-const caches = new WeakMap()
+// Invalidated cheaply by row count + mode; fully dropped by _resetVectorCache.
+let caches = new WeakMap()
 
 /** Cheap gate: vectors or chunks present and not explicitly disabled. */
 export function isSemanticAvailable(db) {
@@ -112,7 +112,9 @@ export async function semanticCandidates(ctx, query, topK = 50) {
   const store = loadVectors(db)
   if (!store) return []
 
-  const qFp32 = await embedder.embed(query)
+  // isQuery selects the query-side instruction prefix on asymmetric models
+  // (potion ignores it) — without it queries embed in document space.
+  const qFp32 = await embedder.embed(query, { isQuery: true })
   // Width guard (generalizes the v22 code-size check to the query side): a
   // query embedded at a different width than the snapshot can't be compared —
   // degrade to lexical-only rather than scan misaligned codes.
@@ -145,14 +147,17 @@ function chunkSearch(db, store, qFp32, topK, logger) {
   const shortlistN = clampInt(process.env.APPLE_DOCS_SEMANTIC_SHORTLIST, 200, 16, 5000)
   const shortlist = shortlistByHamming(qBin, store.binPacked, store.binWidth, store.n, shortlistN)
   const rescore = process.env.APPLE_DOCS_RESCORE !== 'off'
+  const i8Map = rescore
+    ? db.getChunkI8Batch(shortlist.map(({ idx }) => store.chunkId[idx]))
+    : null
 
   // Max-pool chunk scores up to their documents; keep each doc's best chunk
   // (its code becomes the doc's vector for the MMR diversity pass downstream).
   const docBest = new Map()
   for (const { idx, dist } of shortlist) {
     let score = 1 - dist / bits
-    if (rescore) {
-      const i8 = db.getChunkI8(store.chunkId[idx])
+    if (i8Map) {
+      const i8 = i8Map.get(store.chunkId[idx])
       if (i8 && i8.length === store.dims + 4) score = dotI8(qFp32, i8, 0, store.dims)
     }
     const docId = store.chunkDocId[idx]
@@ -210,5 +215,8 @@ function clampInt(value, fallback, min, max) {
   return Math.min(max, Math.max(min, n))
 }
 
-/** Test seam (no-op now that the cache is a per-DB WeakMap; kept for callers). */
-export function _resetVectorCache() {}
+/** Drop every cached store — call after a re-index or model switch so the
+ *  next query rebuilds from the live tables. */
+export function _resetVectorCache() {
+  caches = new WeakMap()
+}

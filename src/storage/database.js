@@ -220,7 +220,7 @@ export class DocsDatabase {
   getAllVectors() { return this.search.getAllVectors() }
   getChunkCount() { return this.chunks.getChunkCount() }
   getAllChunkVectors() { return this.chunks.getAllChunkVectors() }
-  getChunkI8(chunkId) { return this.chunks.getChunkI8(chunkId) }
+  getChunkI8Batch(chunkIds) { return this.chunks.getChunkI8Batch(chunkIds) }
   upsertChunk(params) { this.chunks.upsertChunk(params) }
   deleteChunksByDocId(documentId) { this.chunks.deleteChunksByDocId(documentId) }
   getSectionsByDocumentIds(ids) { return this.documents.getSectionsByDocumentIds(ids) }
