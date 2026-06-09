@@ -24,20 +24,20 @@ apple-docs setup --compact # download + install a prebuilt snapshot
 
 Then `apple-docs search "NavigationStack"` works offline.
 
-`setup` downloads one verified snapshot (**~1.9 GB**, 340,515 documents) and
+`setup` downloads one verified snapshot (**1.53 GB**, 353,295 documents) and
 installs it — **about 5 minutes** end to end, depending on your download speed
 and system load. Pick the shape that fits with a single flag:
 
 | Flag | Result | On disk¹ | Install² |
 | --- | --- | --- | --- |
-| `--compact` | Smallest. Fully compacted in one step (raw payloads dropped, contentless index). Renders on demand. | **~4 GB** (3.4) | +~1–2 min |
-| *(none)* | `balanced` default — snapshot as-is; caches Markdown on first read. | **~6 GB** (5.7) | +~40 s |
-| `--prebuilt` | Fastest. Markdown + HTML materialized up front. | **~9 GB** (8.8) | +~2 min |
+| `--compact` | Smallest. Fully compacted in one step (raw payloads dropped, contentless index). Renders on demand. | **~3 GB** (3.1) | +~2–3 min |
+| *(none)* | `balanced` default — snapshot as-is; caches Markdown on first read. | **~5.5 GB** (5.5) | +~1 min |
+| `--prebuilt` | Fastest. Markdown + HTML materialized up front. | **~8.6 GB** (8.6) | +~3–4 min |
 
-<sup>¹ Parenthesised values are measured (`du`) as of `snapshot-20260608` (340,515 docs). `balanced` is a 4.1 GiB DB + 1.7 GB of extracted fonts, SF Symbol renders, and the embedding model. `compact` nearly halves the DB (→1.8 GiB). `prebuilt` adds ~3 GB of Markdown + HTML — only ~1.15 GB is content; the rest is 4 KB block rounding across ~681k small files. `apple-docs storage stats` reports logical bytes, which run smaller.</sup>
+<sup>¹ Parenthesised values are measured (`du`) as of `snapshot-20260609` (353,295 docs). `balanced` is a 4.3 GiB DB + 1.3 GB of extracted fonts, SF Symbol renders, and the ~125 MB model2vec embedding model. `compact` more than halves the DB (→1.9 GiB). `prebuilt` adds ~3.2 GB of Markdown + HTML — only ~1.12 GB is content; the rest is 4 KB block rounding across 706,590 small files. `apple-docs storage stats` reports logical bytes, which run smaller.</sup>
 
 
-<sup>² Post-download work, measured from a local archive; on top of the ~1.9 GB download.</sup>
+<sup>² Post-download work, measured from a local archive; on top of the 1.53 GB download.</sup>
 
 Each profile finishes in that one `setup` call. See
 [`docs/configuration.md`](docs/configuration.md#storage-profiles) for the full

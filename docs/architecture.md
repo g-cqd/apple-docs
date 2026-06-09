@@ -147,7 +147,7 @@ flowchart LR
 
 - **Source install** populates the corpus by running `apple-docs sync`
   (full crawl) or `apple-docs setup` (snapshot).
-- **Snapshot install** downloads a single pre-built `.tar.gz` that ships the
+- **Snapshot install** downloads a single pre-built `.tar.zst` that ships the
   DB (document sections + zstd-compressed raw payloads in `document_raw` +
   the optional semantic vectors in `document_vectors`), extracted Apple
   fonts, the pre-rendered SF Symbols matrix, and the offline query-embedding

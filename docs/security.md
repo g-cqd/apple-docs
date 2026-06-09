@@ -139,8 +139,8 @@ gating access.
 ### Storage and supply chain
 
 - **Snapshot tarball validator** rejects symlinks, hardlinks, absolute
-  paths, and traversal members before extraction. Both `.tar.gz` and
-  `.7z` archives go through the same gate. `.sha256` sidecar is
+  paths, and traversal members before extraction. `.tar.zst`, `.tar.gz`,
+  and `.7z` archives go through the same gate. `.sha256` sidecar is
   mandatory for GitHub releases and optional-with-warning for local
   `--archive` paths (the operator is trusted at that boundary but the
   warning surfaces missing sidecars).

@@ -78,7 +78,7 @@ already use). The MCP server trusts anything that reaches `/mcp`.
 ## Snapshot consumer requirements
 
 `apple-docs setup` downloads a single pre-built corpus snapshot (a
-`.tar.gz`). It ships the full corpus DB (sections + zstd-compressed raw
+`.tar.zst`). It ships the full corpus DB (sections + zstd-compressed raw
 payloads + the semantic-search vectors), every Apple font, the entire
 pre-rendered SF Symbols matrix
 (`<dataDir>/resources/symbols/<scope>/<weight>-<scale>/<name>.svg`)

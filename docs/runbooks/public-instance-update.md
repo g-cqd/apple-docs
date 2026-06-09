@@ -122,9 +122,8 @@ you were on before today), download the asset by hand and feed it to
 
 ```bash
 gh release download <tag> --repo g-cqd/apple-docs \
-  --pattern 'apple-docs-full-*.tar.gz' \
-  --pattern 'apple-docs-full-*.tar.gz.sha256'
-ops/bin/apple-docs setup --archive apple-docs-full-<tag>.tar.gz --force
+  --pattern 'apple-docs-full-*.tar.*'
+ops/bin/apple-docs setup --archive apple-docs-full-<tag>.tar.zst --force   # .tar.gz for tags before snapshot-20260609
 ops/bin/deploy-update.sh
 ```
 
@@ -176,9 +175,8 @@ previous snapshot tag from scratch:
 
 ```bash
 gh release download <previous-tag> --repo g-cqd/apple-docs \
-  --pattern 'apple-docs-full-*.tar.gz' \
-  --pattern 'apple-docs-full-*.tar.gz.sha256'
-ops/bin/apple-docs setup --archive apple-docs-full-<previous-tag>.tar.gz --force
+  --pattern 'apple-docs-full-*.tar.*'
+ops/bin/apple-docs setup --archive apple-docs-full-<previous-tag>.tar.zst --force   # .tar.gz for tags before snapshot-20260609
 ops/bin/deploy-update.sh
 ops/bin/smoke-test.sh
 ```
