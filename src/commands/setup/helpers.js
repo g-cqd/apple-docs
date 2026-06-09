@@ -48,9 +48,15 @@ export function stripTarGz(p) {
  */
 export async function extractTarZst(archivePath, dataDir) {
   const stream = Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))
+  // Extract via `cwd: dataDir` rather than `-C dataDir`: GNU tar (Linux)
+  // mis-parses `-xf - -C <dir>` when the archive is stdin and treats <dir>
+  // as a member operand ("Cannot open"), whereas it's fine with `-xzf <file>
+  // -C <dir>`. cwd is unambiguous on both GNU tar and bsdtar. dataDir is
+  // ensured by the caller (and any decode failure now surfaces as a clear
+  // EOF error instead of this confusing one).
   const proc = Bun.spawn(
-    ['tar', '--no-same-owner', '--no-same-permissions', '-xf', '-', '-C', dataDir],
-    { stdin: stream, stdout: 'ignore', stderr: 'pipe', timeout: 10 * 60_000 },
+    ['tar', '--no-same-owner', '--no-same-permissions', '-xf', '-'],
+    { stdin: stream, cwd: dataDir, stdout: 'ignore', stderr: 'pipe', timeout: 10 * 60_000 },
   )
   const stderrText = new Response(proc.stderr).text()
   const exitCode = await proc.exited
