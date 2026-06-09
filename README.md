@@ -144,6 +144,22 @@ manifest). Install it with `apple-docs setup --archive <path> --force`.
 | `sample-code` | Apple sample code catalog |
 | `packages` | Swift package catalog, enriched with repository README content |
 
+### Optional: enrich from Xcode's offline documentation
+
+Xcode 26+ ships the documentation corpus as a MobileAsset
+(`com.apple.MobileAsset.AppleDeveloperDocumentation`). When present — or
+fetched from Apple's CDN — it backfills two things the crawl can't see:
+each symbol's **USR** (`documents.usr`, stable across releases and shared by
+the Swift/Obj-C variants) and a handful of pages that never appear on the
+website index. The merge is keyed, NULL-guarded, and idempotent: it never
+duplicates or overwrites crawled data.
+
+```bash
+bun scripts/enrich-xcode-docs.js            # dry-run against the installed asset
+bun scripts/enrich-xcode-docs.js --apply    # write the merge
+bun scripts/enrich-xcode-docs.js --fetch --apply   # no Xcode: download (~650 MB, SHA-1-pinned)
+```
+
 ## Documentation
 
 - [Installing](docs/installing.md) — dev, standalone binary, or production self-host.
