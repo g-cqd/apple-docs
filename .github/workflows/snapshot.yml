@@ -67,6 +67,19 @@ jobs:
         id: tag
         run: echo "tag=snapshot-$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
+      # Enrich the crawled corpus from Xcode's offline Developer Documentation
+      # asset BEFORE the two-pass build, so both determinism passes VACUUM the
+      # same enriched DB. The runner has no Xcode, so --fetch downloads the
+      # asset zip from Apple's public CDN (manifest URL when present, else the
+      # SHA-1-pinned fallback in src/sources/mobileasset-fetch.js) and verifies
+      # it. Backfills symbol USRs + per-platform versions and inserts the few
+      # pages absent from the crawl; keyed, NULL-guarded, idempotent. Non-fatal
+      # by design — a stale pin or CDN hiccup logs a warning and ships an
+      # un-enriched (but fully functional) snapshot rather than breaking the
+      # weekly release.
+      - name: Enrich from Xcode documentation
+        run: bun run scripts/enrich-xcode-docs.js --fetch --apply
+
       # Build all archives (full snapshot + combined symbols + per-family
       # fonts + fonts-all). The orchestrator also emits a unified
       # status.json with sha256 + size + url for every artefact.

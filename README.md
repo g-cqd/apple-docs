@@ -147,18 +147,24 @@ manifest). Install it with `apple-docs setup --archive <path> --force`.
 ### Optional: enrich from Xcode's offline documentation
 
 Xcode 26+ ships the documentation corpus as a MobileAsset
-(`com.apple.MobileAsset.AppleDeveloperDocumentation`). When present — or
-fetched from Apple's CDN — it backfills two things the crawl can't see:
-each symbol's **USR** (`documents.usr`, stable across releases and shared by
-the Swift/Obj-C variants) and a handful of pages that never appear on the
-website index. The merge is keyed, NULL-guarded, and idempotent: it never
-duplicates or overwrites crawled data.
+(`com.apple.MobileAsset.AppleDeveloperDocumentation`). It backfills two
+things the crawl can't see: each symbol's **USR** (`documents.usr`, stable
+across releases and shared by the Swift/Obj-C variants) and a handful of
+pages that never appear on the website index. The merge is keyed,
+NULL-guarded, and idempotent: it never duplicates or overwrites crawled
+data. The asset is auto-resolved — a local Xcode install is used when
+present, otherwise it is downloaded (~650 MB, SHA-1-verified) from Apple's
+CDN, so it works on machines without Xcode.
 
 ```bash
-bun scripts/enrich-xcode-docs.js            # dry-run against the installed asset
+bun scripts/enrich-xcode-docs.js            # dry-run (auto-resolve the asset)
 bun scripts/enrich-xcode-docs.js --apply    # write the merge
-bun scripts/enrich-xcode-docs.js --fetch --apply   # no Xcode: download (~650 MB, SHA-1-pinned)
+bun scripts/enrich-xcode-docs.js --fetch --apply   # force the CDN download
 ```
+
+The weekly snapshot build runs this automatically (always downloading, since
+CI has no Xcode), so published snapshots already carry the USRs and the
+extra pages.
 
 ## Documentation
 
