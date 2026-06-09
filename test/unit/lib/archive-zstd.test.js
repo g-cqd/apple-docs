@@ -116,4 +116,24 @@ describe('createTarZstArchive', () => {
       createTarZstArchive({ sourceDir: src, outputPath: join(workDir, 'empty.tar.zst') }),
     ).rejects.toThrow(/no files under/)
   })
+
+  test('excludes macOS Finder junk (.DS_Store / ._*) so they cannot break determinism', async () => {
+    const src = stageFixture('junk')
+    // These carry non-deterministic bytes across builds; they must never ship.
+    writeFileSync(join(src, '.DS_Store'), new Uint8Array([1, 2, 3, 4]))
+    writeFileSync(join(src, 'sub', '.DS_Store'), new Uint8Array([5, 6, 7, 8]))
+    writeFileSync(join(src, '._beta.txt'), new Uint8Array([9, 9, 9]))
+    const out = join(workDir, 'junk.tar.zst')
+
+    const result = await createTarZstArchive({ sourceDir: src, outputPath: out })
+    expect(result.fileCount).toBe(3) // only alpha/beta/gamma — junk dropped
+
+    const dest = join(workDir, 'extracted')
+    mkdirSync(dest)
+    await extractTarZst(out, dest)
+    expect(existsSync(join(dest, '.DS_Store'))).toBe(false)
+    expect(existsSync(join(dest, 'sub', '.DS_Store'))).toBe(false)
+    expect(existsSync(join(dest, '._beta.txt'))).toBe(false)
+    expect(existsSync(join(dest, 'alpha.txt'))).toBe(true)
+  })
 })

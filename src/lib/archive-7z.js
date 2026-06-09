@@ -132,6 +132,11 @@ function walk(absRoot, relDir, out) {
     if (entry.isDirectory()) {
       walk(absRoot, rel, out)
     } else if (entry.isFile()) {
+      // Skip macOS Finder junk: .DS_Store and ._* AppleDouble files carry
+      // non-deterministic bytes (same size, varying content) that break the
+      // snapshot determinism gate on any machine where Finder has touched the
+      // staged dirs. They're useless in the corpus regardless.
+      if (entry.name === '.DS_Store' || entry.name.startsWith('._')) continue
       out.push(rel)
     }
     // Symlinks and special files are intentionally ignored — none belong in a

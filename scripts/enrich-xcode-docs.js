@@ -75,7 +75,17 @@ const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
 try {
   const stats = enrichFromAsset(db, dbPath, { apply, logger })
   console.log(JSON.stringify({ apply, asset: dbPath, ...stats }, null, 2))
-  if (!apply) logger.info('Dry-run only — re-run with --apply to write the merge.')
+  // The body FTS is rebuild-based (no insert trigger, unlike title/trigram),
+  // so novel pages inserted above are not body-searchable until it is rebuilt.
+  // Trigram + title FTS are kept current by the documents_ai trigger.
+  if (apply && stats.novelInserted > 0) {
+    logger.info(`Rebuilding body search index for ${stats.novelInserted} novel pages…`)
+    const { rebuildBody } = await import('../src/commands/index-rebuild.js')
+    const r = await rebuildBody({}, { db, dataDir, logger })
+    logger.info(`Body index rebuilt: ${r.indexed} documents.`)
+  } else if (!apply) {
+    logger.info('Dry-run only — re-run with --apply to write the merge.')
+  }
 } finally {
   db.close()
 }
