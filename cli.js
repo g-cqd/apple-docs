@@ -290,6 +290,7 @@ try {
       result = await setupCmd({
         force: !!flags.force,
         skipResources: !!flags['skip-resources'],
+        skipSemantic: !!flags['skip-semantic'],
         archive: flags.archive ?? null,
         profile: setupProfile,
         yes: !!flags.yes,

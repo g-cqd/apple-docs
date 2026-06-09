@@ -58,6 +58,11 @@ const REGISTRY = {
 const DEFAULT_MODEL = 'potion-retrieval-32M'
 let cached // { embed, embedBatch } | null | undefined
 
+/** Build-time accessor for the active spec (model-integrity, snapshot). */
+export function resolveActiveSpec() {
+  return resolveSpec()
+}
+
 /** Resolve the active model spec from env (falls back to the default). */
 function resolveSpec() {
   const key = process.env.APPLE_DOCS_EMBED_MODEL || DEFAULT_MODEL

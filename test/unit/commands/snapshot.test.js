@@ -10,6 +10,8 @@ import { createLogger } from '../../../src/lib/logger.js'
 // consumer (`apple-docs setup`) does — Bun's native zstd → `tar -xf -` — so
 // the test passes on stock macOS too (Apple's bsdtar lacks zstd).
 import { extractTarZst } from '../../../src/commands/setup/helpers.js'
+import { indexEmbeddings } from '../../../src/commands/index-embeddings.js'
+import { topicEmbedder } from '../../helpers/topic-embedder.js'
 
 let db
 let dataDir
@@ -311,6 +313,31 @@ describe('snapshotBuild', () => {
       try {
         expect(edb.getRawCount()).toBeGreaterThanOrEqual(1)
         expect(edb.getRawPayloadByKey('swiftui/view')).toBe(payload)
+      } finally {
+        edb.close()
+      }
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
+  test('strips semantic vectors, chunks, and embed meta from the artifact DB', async () => {
+    // A vectored source DB (an operator's live corpus) must still produce a
+    // lean artifact: setup rebuilds the semantic index locally.
+    await indexEmbeddings({ full: true, embedder: topicEmbedder() }, { db, dataDir, logger })
+    expect(db.getChunkCount()).toBeGreaterThan(0)
+    expect(db.getVectorCount()).toBeGreaterThan(0)
+
+    const result = await snapshotBuild({ out: outDir, tag: 'test-strip' }, { db, dataDir, logger })
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-strip-'))
+    try {
+      await extractTarZst(result.archivePath, extractDir)
+      const edb = new DocsDatabase(join(extractDir, 'apple-docs.db'))
+      try {
+        expect(edb.getChunkCount()).toBe(0)
+        expect(edb.getVectorCount()).toBe(0)
+        expect(edb.getSnapshotMeta('embed_dims')).toBeFalsy()
+        expect(edb.getSnapshotMeta('embed_model')).toBeFalsy()
       } finally {
         edb.close()
       }

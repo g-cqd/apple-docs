@@ -71,11 +71,15 @@ jobs:
       # fonts + fonts-all). The orchestrator also emits a unified
       # status.json with sha256 + size + url for every artefact.
       #
-      # APPLE_DOCS_ALLOW_REMOTE_MODELS=1 lets the embeddings step (run inside
-      # build-snapshot.js) fetch the model2vec query model once into
-      # $APPLE_DOCS_HOME/resources/models so it ships in the snapshot for
-      # offline semantic search. The determinism re-build below intentionally
-      # omits this — the model is already present locally by then, so the
+      # APPLE_DOCS_ALLOW_REMOTE_MODELS=1 lets the model step (run inside
+      # build-snapshot.js) fetch the model2vec embedding model once into
+      # $APPLE_DOCS_HOME/resources/models so it ships in the snapshot.
+      # Vectors themselves do NOT ship — `apple-docs setup` rebuilds them
+      # locally (the per-chunk codes would blow GitHub's 2 GiB asset ceiling).
+      # The step probe-runs the model and sha256-verifies its files against
+      # the supply-chain pins in src/search/model-integrity.js, ABORTING the
+      # build on drift. The determinism re-build below intentionally omits
+      # the env var — the model is already present locally by then, so the
       # second build reuses it (no re-download) and the archives stay
       # bit-identical. The optional @huggingface/transformers dependency is
       # already installed by the frozen `bun install` (it's in bun.lock).

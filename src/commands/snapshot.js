@@ -15,6 +15,12 @@ import { keyPath } from '../lib/safe-path.js'
 // reopens them at first run and crashes if they're missing entirely.
 const OPERATIONAL_TRUNCATE = ['crawl_state', 'activity', 'update_log']
 
+// Semantic vectors never ship: the per-chunk codes are ~0.5 GB of
+// incompressible blobs that would eat the GitHub 2 GiB asset ceiling.
+// They are regenerable offline — setup rebuilds them from the shipped
+// sections + the shipped embedding model (see setup.js / --skip-semantic).
+const REGENERABLE_TRUNCATE = ['document_chunks', 'document_vectors']
+
 // `snapshot_tier` is kept as a metadata key so consumers that inspect
 // it see a sane value. The single shape rules out half-broken consumer
 // experiences (a metadata-only snapshot can't live-render symbols
@@ -53,12 +59,12 @@ function deterministicMtimeSeconds(tag) {
  *
  * The snapshot ships, as a single artifact: the SQLite DB (with
  * document_sections — the authoritative content — plus the raw upstream
- * payloads zstd-compressed in `document_raw` and the optional semantic
- * vectors in `document_vectors`), every pre-rendered SF Symbol variant, the
- * extracted Apple fonts, and the offline query-embedding model. Markdown and
- * loose raw-json are NEVER shipped — they are regenerable on device via
- * `storage materialize` (markdown/html from document_sections; raw-json by
- * decompressing document_raw).
+ * payloads zstd-compressed in `document_raw`), every pre-rendered SF Symbol
+ * variant, the extracted Apple fonts, and the offline embedding model.
+ * Markdown and loose raw-json are NEVER shipped — they are regenerable on
+ * device via `storage materialize`. Semantic vectors are NEVER shipped
+ * either ({@link REGENERABLE_TRUNCATE}) — setup rebuilds them locally from
+ * the shipped sections + model.
  *
  * Archive pipeline: the snapshot is packaged as `.tar.zst` (zstd `-9 -T3`).
  * zstd is ~15% smaller AND ~5× faster than `gzip -9` on this corpus shape and
@@ -112,9 +118,12 @@ export async function snapshotBuild(opts, ctx) {
     const copyDb = new Database(copyPath)
     let documentCount = 0
     try {
-      for (const table of OPERATIONAL_TRUNCATE) {
+      for (const table of [...OPERATIONAL_TRUNCATE, ...REGENERABLE_TRUNCATE]) {
         copyDb.run(`DELETE FROM ${table}`)
       }
+      // Vector meta describes rows we just stripped — drop it so the
+      // installed DB's embed_* meta always comes from the local build.
+      copyDb.run("DELETE FROM snapshot_meta WHERE key IN ('embed_dims', 'embed_model')")
 
       // 4. Write snapshot_meta
       documentCount = copyDb.query('SELECT COUNT(*) as c FROM documents').get().c

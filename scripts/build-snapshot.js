@@ -80,31 +80,24 @@ if (args.tier && args.tier !== 'full') {
 ensureDir(outDir)
 
 try {
-  // 0. Bake the optional semantic tier into the snapshot. `index embeddings`
-  //    builds the binary doc vectors (document_vectors); with remote model
-  //    downloads enabled (APPLE_DOCS_ALLOW_REMOTE_MODELS=1, set by the CI
-  //    workflow) the model2vec static model is fetched into
-  //    <dataDir>/resources/models so it ships for offline query-embedding.
-  //    Additive — if the optional embedder dependency or model is unavailable
-  //    the tier stays dormant and the snapshot is lexical-only, so a failure
-  //    here never blocks the build.
-  //    `full: true` regenerates every vector from the current model rather than
-  //    only filling gaps: it guarantees the shipped codes match the live
-  //    embedding width (a stale-width row from an older model would otherwise
-  //    be skipped at query time), overwrites any such rows, and stays
-  //    deterministic across the gate's two passes (model2vec is bit-identical).
+  // 0. Ship the offline embedding model — NOT the vectors. Snapshots carry no
+  //    document_chunks/document_vectors rows (snapshotBuild strips them; they
+  //    are ~0.5 GB of incompressible codes against GitHub's 2 GiB asset
+  //    ceiling); `apple-docs setup` rebuilds them locally from the shipped
+  //    sections + this model. With APPLE_DOCS_ALLOW_REMOTE_MODELS=1 (CI) the
+  //    model files are fetched on first use, probe-run, and sha256-verified
+  //    against the pins in src/search/model-integrity.js. A pin mismatch or a
+  //    missing model ABORTS a release build (fail closed — a model-less
+  //    snapshot would strand every consumer lexical-only); ad-hoc local builds
+  //    without the remote flag degrade to a skip.
   process.env.APPLE_DOCS_MODELS_DIR ??= join(dataDir, 'resources', 'models')
-  try {
-    const { indexEmbeddings } = await import('../src/commands/index-embeddings.js')
-    const res = await indexEmbeddings({ full: true }, { db, logger })
-    logger.info(
-      res.status === 'ok'
-        ? `Embeddings: ${res.indexed}/${res.total} indexed`
-        : `Embeddings skipped (lexical-only): ${res.message}`,
-    )
-  } catch (err) {
-    logger.warn(`Embeddings step failed (shipping lexical-only): ${err.message}`)
-  }
+  const { ensureEmbeddingModel } = await import('../src/search/model-integrity.js')
+  const modelCheck = await ensureEmbeddingModel({ logger })
+  logger.info(
+    modelCheck.status === 'ok'
+      ? `Embedding model verified: ${modelCheck.hfId} (${modelCheck.verified} files pinned)`
+      : `Embedding model skipped (lexical-only consumers): ${modelCheck.message}`,
+  )
 
   // 0b. Determinism guard for fonts. The workflow runs this orchestrator
   //     twice against the SAME dataDir (dist/ then dist-check/) and sha-diffs
@@ -134,6 +127,16 @@ try {
     },
     { db, dataDir, logger },
   )
+
+  // 1b. Asset-size guard: GitHub releases hard-reject files ≥ 2 GiB. Fail
+  //     here, with the levers, instead of a cryptic 422 at upload time.
+  const SIZE_CEILING_BYTES = Math.floor(1.9 * 1024 ** 3)
+  if (snapshot.archiveSize > SIZE_CEILING_BYTES) {
+    throw new Error(
+      `Snapshot ${snapshot.archiveName} is ${(snapshot.archiveSize / 1024 ** 3).toFixed(2)} GiB — over the 1.9 GiB guard ` +
+      '(GitHub asset ceiling is 2 GiB). Levers: prune corpus sources, drop document_raw from the artifact, or split assets.',
+    )
+  }
 
   // 2. Combined symbols archive (additive disclosure — does not replace the
   //    symbols included in the full snapshot; it's a smaller, focused asset

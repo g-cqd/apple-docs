@@ -9,8 +9,11 @@ import { status } from '../../src/commands/status.js'
 import { search } from '../../src/commands/search.js'
 import { lookup } from '../../src/commands/lookup.js'
 import { rebuildBody, rebuildTrigram } from '../../src/commands/index-rebuild.js'
+import { indexEmbeddings } from '../../src/commands/index-embeddings.js'
+import { semanticCandidates } from '../../src/search/semantic.js'
 import { createLogger } from '../../src/lib/logger.js'
 import { writeJSON, writeText } from '../../src/storage/files.js'
+import { topicEmbedder } from '../helpers/topic-embedder.js'
 
 const originalFetch = globalThis.fetch
 const logger = createLogger('error')
@@ -52,10 +55,14 @@ async function seedSnapshotSource(dataDir) {
     },
     sections: [
       { sectionKind: 'abstract', contentText: 'A type that represents part of your app UI.', sortOrder: 0 },
-      { sectionKind: 'discussion', heading: 'Overview', contentText: 'Use this to compose SwiftUI interfaces.', sortOrder: 1 },
+      { sectionKind: 'discussion', heading: 'Overview', contentText: 'Use this to compose SwiftUI interfaces. Views arrange layout on screen.', sortOrder: 1 },
     ],
     relationships: [],
   })
+
+  // Vector the SOURCE corpus: the artifact must strip these (vectors never
+  // ship); the install rebuilds its own from the shipped sections + embedder.
+  await indexEmbeddings({ full: true, embedder: topicEmbedder() }, { db, dataDir, logger })
 
   mkdirSync(join(dataDir, 'raw-json', 'swiftui'), { recursive: true })
   mkdirSync(join(dataDir, 'markdown', 'swiftui'), { recursive: true })
@@ -143,7 +150,7 @@ describe('setup release smoke', () => {
     const installDir = trackDir(mkdtempSync(join(tmpdir(), 'apple-docs-install-')))
 
     const setupCtx = openCtx(installDir)
-    const result = await setup({ skipResources: true, yes: true }, setupCtx)
+    const result = await setup({ skipResources: true, yes: true, embedder: topicEmbedder() }, setupCtx)
     expect(result.status).toBe('ok')
     expect(result.tier).toBe('full')
     expect(result.storageProfile).toBe('balanced')
@@ -174,6 +181,32 @@ describe('setup release smoke', () => {
 
     const bodyResult = await rebuildBody({}, liveCtx)
     expect(bodyResult.indexed).toBeGreaterThan(0)
+
+    // The artifact shipped zero vectors; setup rebuilt the chunk index
+    // locally. A body-only topical synonym (stack → layout) resolves via the
+    // discussion chunk — the anchor text never mentions layout.
+    expect(liveCtx.db.getChunkCount()).toBeGreaterThan(1)
+    expect(liveCtx.db.getVectorCount()).toBe(1)
+    const sem = await semanticCandidates({ ...liveCtx, embedder: topicEmbedder() }, 'stack', 5)
+    expect(sem.length).toBeGreaterThan(0)
+    liveCtx.db.close()
+  })
+
+  test('--skip-semantic installs lexical-only: shipped DB carries no vectors, none are built', async () => {
+    const fixture = await buildReleaseFixture()
+    installReleaseMock(fixture)
+    const installDir = trackDir(mkdtempSync(join(tmpdir(), 'apple-docs-install-skip-')))
+
+    const setupCtx = openCtx(installDir)
+    const result = await setup({ skipResources: true, yes: true, skipSemantic: true, embedder: topicEmbedder() }, setupCtx)
+    expect(result.status).toBe('ok')
+    setupCtx.db.close()
+
+    const liveCtx = openCtx(installDir)
+    expect(liveCtx.db.getChunkCount()).toBe(0)
+    expect(liveCtx.db.getVectorCount()).toBe(0)
+    const searchHit = await search({ query: 'View', noDeep: true }, liveCtx)
+    expect(searchHit.results[0].path).toBe('swiftui/view')
     liveCtx.db.close()
   })
 })

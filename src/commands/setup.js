@@ -112,7 +112,7 @@ async function installFromLocalArchive(ctx, opts) {
     }
   }
 
-  const result = await extractAndIndex(ctx, archivePath, { skipResources: opts.skipResources, profile: opts.profile, yes: opts.yes })
+  const result = await extractAndIndex(ctx, archivePath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, profile: opts.profile, yes: opts.yes })
   return {
     status: 'ok',
     source: 'local-archive',
@@ -211,7 +211,7 @@ async function installFromGithubRelease(ctx, opts) {
     }
     logger.info('Checksum verified.')
 
-    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, tag: release.tag, profile: opts.profile, yes: opts.yes })
+    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, tag: release.tag, profile: opts.profile, yes: opts.yes })
     return {
       status: 'ok',
       source: 'github-release',
@@ -237,7 +237,7 @@ async function installFromGithubRelease(ctx, opts) {
  * Source-specific concerns (network fetch, sidecar discovery, manifest
  * parsing) stay in the calling function.
  */
-async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, profile = null, yes = false } = {}) {
+async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, embedder, tag = null, profile = null, yes = false } = {}) {
   const { db, dataDir, logger } = ctx
   const dbPath = join(dataDir, 'apple-docs.db')
   const isSevenZip = archivePath.endsWith('.7z')
@@ -345,6 +345,20 @@ async function extractAndIndex(ctx, archivePath, { skipResources, tag = null, pr
         }
       } catch (e) {
         logger?.warn?.(`SF Symbols refresh skipped: ${e.message}`)
+      }
+    }
+
+    if (skipSemantic !== true) {
+      // Snapshots ship no vectors (GitHub asset-size headroom); the chunk
+      // index is rebuilt here from the shipped sections + model, offline.
+      // Any failure degrades to lexical-only search, never blocks install.
+      logger.info('Building semantic search index (a few minutes; skip with --skip-semantic)…')
+      try {
+        const { indexEmbeddings } = await import('./index-embeddings.js')
+        const sem = await indexEmbeddings({ full: true, embedder }, { db: verifyDb, dataDir, logger })
+        if (sem.status !== 'ok') logger.info(`Semantic index skipped (lexical-only): ${sem.message}`)
+      } catch (e) {
+        logger?.warn?.(`Semantic index build failed (search stays lexical-only): ${e.message}`)
       }
     }
 
