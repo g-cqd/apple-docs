@@ -151,6 +151,36 @@ this for every published snapshot, so installed snapshots already include it.
 Build your own portable snapshot with `apple-docs snapshot build --out dist`,
 install it with `apple-docs setup --archive <path>`.
 
+### Scoping the corpus (optional)
+
+The full corpus is ~10 GB on disk. If you only need a slice of it, drop a
+`scope.json` into your data directory (default `~/.apple-docs`) saying what
+to **keep**:
+
+```json
+{
+  "version": 1,
+  "sources": ["apple-docc", "hig", "swift-book"],
+  "appleDoccFrameworks": ["swiftui", "combine"],
+  "keepFonts": true,
+  "keepSymbols": false
+}
+```
+
+Every field is optional except `version` — omit `sources` to keep all
+sources, omit `appleDoccFrameworks` to keep every framework. Then:
+
+```bash
+apple-docs prune --dry-run   # preview what would be removed
+apple-docs prune             # trim the existing corpus, reclaim disk
+```
+
+`prune` deletes the out-of-scope pages (search indexes, semantic vectors,
+and on-disk files included) without re-crawling anything, and future
+`apple-docs sync` runs read the same file so the corpus stays scoped.
+Delete `scope.json` and `sync` to grow back to full coverage. No
+`scope.json` means nothing changes — full coverage is the default.
+
 ## What's in the corpus
 
 | Source | Coverage |

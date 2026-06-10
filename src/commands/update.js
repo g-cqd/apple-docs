@@ -8,6 +8,7 @@ import {
   validateRequestedSources,
 } from './command-helpers.js'
 import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
+import { scopeRootsFor } from '../lib/scope.js'
 import { updateDoccSource } from './update/docc.js'
 import { updateFlatSource } from './update/flat.js'
 import { updateGuidelinesSource } from './update/guidelines.js'
@@ -66,16 +67,19 @@ export async function update(opts, ctx) {
         }
 
         const discovery = discoveriesBySource.get(adapter.constructor.type)
+        // Explicit --roots wins; otherwise scope.json may narrow the
+        // apple-docc adapter (and only that one) to its framework list.
+        const adapterRoots = requestedRoots ?? scopeRootsFor(adapter, opts.scope ?? null)
         let counts
         switch (adapter.constructor.syncMode) {
           case 'snapshot':
-            counts = await updateGuidelinesSource(adapter, discovery, requestedRoots, adapterCtx)
+            counts = await updateGuidelinesSource(adapter, discovery, adapterRoots, adapterCtx)
             break
           case 'flat':
-            counts = await updateFlatSource(adapter, discovery, requestedRoots, concurrency, semaphore, adapterCtx)
+            counts = await updateFlatSource(adapter, discovery, adapterRoots, concurrency, semaphore, adapterCtx)
             break
           default:
-            counts = await updateDoccSource(adapter, discovery, requestedRoots, concurrency, parallel, semaphore, adapterCtx)
+            counts = await updateDoccSource(adapter, discovery, adapterRoots, concurrency, parallel, semaphore, adapterCtx)
             break
         }
 

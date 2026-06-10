@@ -39,7 +39,7 @@ export async function runBodyIndex({ db, dataDir, logger, fullRebuild }) {
  * Each task is wrapped in runStep so failures stay isolated and
  * activity tracking captures per-step duration.
  */
-export async function runResourcesPhase({ ctx, logger }) {
+export async function runResourcesPhase({ ctx, logger, scope }) {
   const failedSources = []
   let fontsResult = null
   let symbolsResult = null
@@ -50,33 +50,46 @@ export async function runResourcesPhase({ ctx, logger }) {
     return { failedSources, fontsResult, symbolsResult, symbolsRenderResult }
   }
 
+  // Corpus scope (scope.json) can drop the fonts/symbols resources
+  // entirely; `scope` here is the corpus scope — unrelated to the
+  // public/private VISIBILITY scope syncSfSymbols takes.
+  const keepFonts = scope?.keepFonts !== false
+  const keepSymbols = scope?.keepSymbols !== false
+  const skippedOutcome = (label) => ({ ok: true, label, result: null, ms: 0 })
+
   const downloadFonts = process.env.APPLE_DOCS_DOWNLOAD_FONTS === '1'
-  logger.info(`Syncing Apple typography${downloadFonts ? ' (downloading DMGs)' : ''}...`)
+  if (keepFonts) logger.info(`Syncing Apple typography${downloadFonts ? ' (downloading DMGs)' : ''}...`)
+  else logger.info('Scope: keepFonts=false — skipping Apple fonts sync')
 
-  const fontsTask = runStep(
-    'sync.apple-fonts',
-    () => syncAppleFonts({ downloadFonts }, ctx),
-    { logger },
-  )
+  const fontsTask = keepFonts
+    ? runStep(
+      'sync.apple-fonts',
+      () => syncAppleFonts({ downloadFonts }, ctx),
+      { logger },
+    )
+    : Promise.resolve(skippedOutcome('sync.apple-fonts'))
 
-  const symbolsTask = runStep(
-    'sync.sf-symbols-catalog',
-    async () => {
-      logger.info('Syncing SF Symbols catalog (public + private)...')
-      const [publicCount, privateCount] = await Promise.all([
-        syncSfSymbols({ scope: 'public' }, ctx),
-        syncSfSymbols({ scope: 'private' }, ctx),
-      ])
-      logger.info(`Synced ${publicCount} public + ${privateCount} private SF Symbols`)
-      return { public: publicCount, private: privateCount }
-    },
-    { logger },
-  )
+  if (!keepSymbols) logger.info('Scope: keepSymbols=false — skipping SF Symbols sync')
+  const symbolsTask = keepSymbols
+    ? runStep(
+      'sync.sf-symbols-catalog',
+      async () => {
+        logger.info('Syncing SF Symbols catalog (public + private)...')
+        const [publicCount, privateCount] = await Promise.all([
+          syncSfSymbols({ scope: 'public' }, ctx),
+          syncSfSymbols({ scope: 'private' }, ctx),
+        ])
+        logger.info(`Synced ${publicCount} public + ${privateCount} private SF Symbols`)
+        return { public: publicCount, private: privateCount }
+      },
+      { logger },
+    )
+    : Promise.resolve(skippedOutcome('sync.sf-symbols-catalog'))
 
   // Prerender only depends on the symbol catalog. Start it as soon as
   // symbols completes — does not wait for fonts.
   const prerenderTask = symbolsTask.then(async outcome => {
-    if (!outcome.ok) return { ok: true, label: 'sync.sf-symbols-prerender', result: null, ms: 0 }
+    if (!outcome.ok || !keepSymbols) return { ok: true, label: 'sync.sf-symbols-prerender', result: null, ms: 0 }
     return runStep(
       'sync.sf-symbols-prerender',
       async () => {
@@ -92,7 +105,7 @@ export async function runResourcesPhase({ ctx, logger }) {
   // Stamp needs SF-Pro.ttf extracted (fonts) AND sf_symbols rows
   // (symbols). Gracefully skips when either prerequisite failed.
   const stampTask = Promise.all([fontsTask, symbolsTask]).then(async ([_fOutcome, sOutcome]) => {
-    if (!sOutcome.ok) return { ok: true, label: 'sync.sf-symbols-stamp', result: null, ms: 0 }
+    if (!sOutcome.ok || !keepSymbols || !keepFonts) return { ok: true, label: 'sync.sf-symbols-stamp', result: null, ms: 0 }
     return runStep(
       'sync.sf-symbols-stamp',
       async () => stampSfSymbolCodepoints({}, ctx),

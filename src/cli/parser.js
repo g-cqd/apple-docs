@@ -19,6 +19,7 @@ const BOOLEAN_FLAGS = new Set([
   'downgrade',
   'read',
   'no-vacuum',
+  'dry-run',
   'no-deep',
   'no-eager',
   'no-fuzzy',

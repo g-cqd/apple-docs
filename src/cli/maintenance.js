@@ -107,6 +107,12 @@ async function dispatchIndex(subcommand, positional, flags, ctx) {
   return exitHelp('index')
 }
 
+async function dispatchPrune(flags, ctx) {
+  const { prune } = await import('../commands/prune.js')
+  const result = await prune({ dryRun: !!flags['dry-run'], noVacuum: !!flags['no-vacuum'] }, ctx)
+  return { result, formatter: summary('prune') }
+}
+
 async function dispatchVersion(ctx) {
   const { VERSION } = await import('../lib/version.js')
   const { getCommitHash } = await import('../lib/git-version.js')
@@ -135,7 +141,8 @@ export async function dispatchMaintenance(command, subcommand, positional, flags
   if (command === 'consolidate') return dispatchConsolidate(subcommand, positional, flags, ctx)
   if (command === 'index') return dispatchIndex(subcommand, positional, flags, ctx)
   if (command === 'version') return dispatchVersion(ctx)
+  if (command === 'prune') return dispatchPrune(flags, ctx)
   return null
 }
 
-export const MAINTENANCE_COMMANDS = ['storage', 'snapshot', 'consolidate', 'index', 'version']
+export const MAINTENANCE_COMMANDS = ['storage', 'snapshot', 'consolidate', 'index', 'version', 'prune']

@@ -15,6 +15,7 @@ import {
 } from '../../lib/flat-source-progress.js'
 import { pool } from '../../lib/pool.js'
 import { selectRootsForAdapter } from '../command-helpers.js'
+import { scopeRootsFor } from '../../lib/scope.js'
 
 /**
  * Run one adapter's crawl pipeline. Returns a result tuple the outer
@@ -39,7 +40,9 @@ export async function runAdapterStep(adapter, env) {
     }
 
     const discovery = discoveriesBySource.get(type)
-    const roots = selectRootsForAdapter(adapter, discovery, db, null)
+    // scope.json may narrow apple-docc to an allow-list of frameworks;
+    // every other adapter (and an absent scope) gets null = all roots.
+    const roots = selectRootsForAdapter(adapter, discovery, db, scopeRootsFor(adapter, env.scope ?? null))
 
     logger.info(`Starting ${displayName} (mode=${mode}, roots=${roots.length})`)
 

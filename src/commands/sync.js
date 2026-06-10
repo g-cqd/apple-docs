@@ -5,6 +5,7 @@ import { ValidationError } from '../lib/errors.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { runStep } from '../lib/run-step.js'
 import { getAllAdapters } from '../sources/registry.js'
+import { loadScope, filterAdaptersByScope } from '../lib/scope.js'
 import { ROOT_CATALOG_SOURCE_TYPES, filterPages, discoverAdaptersInParallel } from './command-helpers.js'
 import { update } from './update.js'
 import { consolidate } from './consolidate.js'
@@ -61,7 +62,12 @@ export async function sync(opts, ctx) {
   const parallel = Number.parseInt(process.env.APPLE_DOCS_PARALLEL ?? '10', 10)
   const semaphore = ctx.semaphore ?? new Semaphore(concurrency)
 
-  const adapters = ctx.adapters ?? getAllAdapters()
+  // Opt-in scope (<dataDir>/scope.json, issue #7): narrows sources and
+  // apple-docc roots so refreshes stay as small as a pruned corpus.
+  // Injected ctx.adapters (tests, harnesses) bypasses it entirely — no
+  // scope.json means byte-identical full-coverage behavior.
+  const scope = ctx.adapters ? null : loadScope(dataDir, { logger })
+  const adapters = ctx.adapters ?? filterAdaptersByScope(getAllAdapters(), scope)
   const adapterCtx = { ...ctx, rootCatalogReady: false, semaphore, fullSync: fullRebuild }
 
   db.setActivity('sync', null)
@@ -75,7 +81,7 @@ export async function sync(opts, ctx) {
     //    further down so the work doesn't run twice.
     const updateStep = await runStep(
       'sync.update',
-      () => update({ skipFonts: true, skipSymbols: true }, { ...ctx, semaphore, adapters }),
+      () => update({ skipFonts: true, skipSymbols: true, scope }, { ...ctx, semaphore, adapters }),
       { logger },
     )
     if (updateStep.ok) updateResult = updateStep.result
@@ -108,6 +114,7 @@ export async function sync(opts, ctx) {
         parallel,
         concurrency,
         crawlOpts,
+        scope,
       })),
     )
 
@@ -151,10 +158,11 @@ export async function sync(opts, ctx) {
     //    build below (title/trigram FTS are trigger-maintained on insert).
     //    Local asset only, unless APPLE_DOCS_ENRICH_FETCH=1 opts into the
     //    CDN download (snapshot CI). Non-fatal: no asset means skip.
-    //    Skipped entirely for scoped syncs (injected ctx.adapters — tests,
-    //    smoke harnesses): merging a ~350k-page asset into a partial corpus
-    //    would flood it with novel pages from sources that were never crawled.
-    const enrichResult = ctx.adapters
+    //    Skipped entirely for partial syncs — injected ctx.adapters (tests,
+    //    smoke harnesses) and scope.json-narrowed corpora alike: merging a
+    //    ~350k-page asset into a partial corpus would flood it with novel
+    //    pages from sources/roots that were deliberately excluded.
+    const enrichResult = (ctx.adapters || scope)
       ? { skipped: true }
       : await runEnrichPhase({ db, logger })
 
@@ -165,7 +173,7 @@ export async function sync(opts, ctx) {
     //    + Swift-worker I/O overlap between the two phases.
     const [idxOutcome, resOutcome] = await Promise.all([
       runBodyIndex({ db, dataDir, logger, fullRebuild }),
-      runResourcesPhase({ ctx, logger }),
+      runResourcesPhase({ ctx, logger, scope }),
     ])
     const bodyIndexed = idxOutcome.indexed
     for (const failure of resOutcome.failedSources) failedSources.push(failure)

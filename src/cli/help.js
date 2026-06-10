@@ -1,6 +1,9 @@
 import { GLOBAL } from './help-global.js'
+import { INDEX_HELP, PRUNE_HELP } from './help-maintenance.js'
 
 const COMMANDS = {
+  index: INDEX_HELP,
+  prune: PRUNE_HELP,
   search: `
 Usage: apple-docs search <query> [options]
 
@@ -364,31 +367,6 @@ Options (advanced — pipeline tuning):
 Resumable: re-run after interruption to continue from the last checkpoint.
 `.trim(),
 
-  index: `
-Usage: apple-docs index <subcommand> [target] [options]
-
-Rebuild a search index from existing data. Useful after recovering from a
-corrupted FTS5 / trigram table, or to (re)build the optional semantic tier.
-
-Subcommands:
-  rebuild body         Rebuild the full-body FTS5 index from documents.
-  rebuild trigram      Rebuild the trigram FTS5 index from document titles.
-  embeddings           Build the semantic index (document_chunks: per-chunk
-                       binary + int8 codes, plus the document_vectors anchor)
-                       with the model2vec embedder. Runs automatically at
-                       setup; needs the optional @huggingface/transformers
-                       dep + the local model, otherwise lexical-only.
-
-Options:
-  --full               (embeddings) Re-chunk + re-embed every document.
-                       Without it, only documents with no chunks yet are
-                       processed.
-
-Examples:
-  apple-docs index rebuild body
-  apple-docs index rebuild trigram
-  apple-docs index embeddings --full
-`.trim(),
 }
 
 export function showHelp(command) {

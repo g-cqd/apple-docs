@@ -79,6 +79,41 @@ once the payloads are dropped.
 `storage compact` refuses a `prebuilt` install unless `--force`, since adding
 per-read decompression to the fast path defeats the point of prebuilt.
 
+### Scoping the corpus (`scope.json`)
+
+A `scope.json` at the root of the data directory opts a corpus into
+**scoped coverage** — keep a few sources and frameworks instead of the
+whole ~350k-page set:
+
+```json
+{
+  "version": 1,
+  "sources": ["apple-docc", "hig", "swift-book"],
+  "appleDoccFrameworks": ["swiftui", "combine"],
+  "keepFonts": true,
+  "keepSymbols": false
+}
+```
+
+- `sources` — adapter types to keep (`apple-docs kinds` and the README's
+  corpus table list them); omitted = all sources.
+- `appleDoccFrameworks` — framework slugs for the `apple-docc` source
+  only (`apple-docs frameworks` lists slugs); omitted = all frameworks.
+- `keepFonts` / `keepSymbols` — whether the Apple fonts and SF Symbols
+  resources stay (default `true`).
+
+Two consumers read the file:
+
+| Command | Effect |
+| --- | --- |
+| `apple-docs prune [--dry-run] [--no-vacuum]` | Trim an EXISTING corpus to the scope without re-crawling: out-of-scope pages, documents, FTS rows, semantic vectors, and markdown/raw-json/html files are deleted, then the DB is VACUUMed. Requires `scope.json`; unknown framework slugs error with the valid list. |
+| `apple-docs sync` | Skips out-of-scope adapters and apple-docc roots, so refreshes never grow the corpus past the scope. Scoped corpora also skip the Xcode enrichment merge (it would flood out-of-scope pages back in). |
+
+No `scope.json` → both commands behave exactly as before (full coverage).
+A typical flow: `apple-docs setup` → write `scope.json` → `apple-docs
+prune` → periodic `apple-docs sync` stays scoped. Delete the file and
+`sync` to return to full coverage.
+
 ## Core
 
 | Variable | Default | Purpose |

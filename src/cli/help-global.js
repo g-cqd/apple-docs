@@ -35,6 +35,7 @@ Maintenance & Build:
   storage materialize  Render markdown/HTML/raw-json to disk on demand
   storage compact      Shrink an install (zstd sections, contentless FTS, drop raw; --keep-raw)
   index <subcommand>   rebuild <body|trigram> | embeddings (semantic vectors)
+  prune                Trim the corpus to <data-dir>/scope.json (see: prune --help)
 
 Global options:
   --json               Output raw JSON (for scripting)
