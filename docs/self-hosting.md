@@ -252,7 +252,7 @@ static CDN deploy stay in lockstep.
 | Content signals | `/robots.txt` + `Content-Signal` header | AI-usage policy (see below). |
 | API catalog (RFC 9727) | `/.well-known/api-catalog` | RFC 9264 linkset, `application/linkset+json`. |
 | MCP server card | `/.well-known/mcp/server-card.json` | Server identity, transport, tool/resource names. |
-| Markdown negotiation | `GET /docs/<key>` with `Accept: text/markdown` | Same body MCP `read_doc` returns; HTML stays the browser default. |
+| Markdown URLs | `GET /docs/<key>.md` | Same body MCP `read_doc` returns; the extension keeps CDN cache keys clean (no `Vary: Accept`). HTML stays at the extension-less URL. |
 | CDN headers | `_headers` (build output) | Mirrors the `Link`/`Vary`/`Content-Signal` headers on Cloudflare Pages / Netlify. |
 
 ### Content-Signal policy
@@ -271,12 +271,13 @@ Caddyfile, also update the `header Content-Signal …` line in
 
 ### Markdown over Caddy
 
-Under the bundled Caddyfile the prebuilt `/docs/*` HTML is served straight
-from disk, so an `Accept: text/markdown` request only reaches Bun because of
-the `@md_docs` matcher (it proxies markdown requests for `/docs/*` to the Bun
-backend). Without that matcher a Caddy-fronted prebuilt site would answer
-HTML regardless of `Accept`. `apple-docs web serve` (no Caddy) negotiates
-markdown for every corpus doc directly.
+Markdown lives at its own URL — `/docs/<key>.md` — rather than behind
+`Accept`-header negotiation. A path-addressed variant gets its own cache key
+at every layer (Caddy, Cloudflare, browser) with no `Vary: Accept`
+complexity, and agents can construct the URL without preflighting. The
+bundled Caddyfile proxies `.md` doc URLs to the Bun backend while serving
+prebuilt HTML straight from disk; `apple-docs web serve` (no Caddy) serves
+both forms directly.
 
 ### DNS-AID (operations, not code)
 

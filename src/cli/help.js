@@ -4,11 +4,12 @@ const COMMANDS = {
   search: `
 Usage: apple-docs search <query> [options]
 
-Search Apple documentation with typo tolerance and tiered ranking.
+Search Apple documentation with typo tolerance, tiered ranking, and a local
+semantic index — both exact symbol names ("NavigationStack") and plain
+questions ("how do I record audio in the background") work.
 
-Keep queries short and keyword-shaped. Use symbol names or API terms rather
-than natural-language questions, and apply filters (--framework, --source,
---platform, ...) to narrow results instead of stuffing them into the query.
+Prefer filters (--framework, --source, --platform, ...) over stuffing
+constraints into the query.
 
 Options:
   --framework <name>   Filter by framework (e.g. swiftui, design, app-store-review)

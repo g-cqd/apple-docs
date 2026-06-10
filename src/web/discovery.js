@@ -218,6 +218,7 @@ export function buildMcpServerCard(siteConfig = {}, version) {
   const origin = originOf(siteConfig)
   return {
     serverInfo: { name: 'apple-docs', version },
+    description: 'Search and read Apple developer documentation offline: DocC API reference, HIG, App Store Review Guidelines, Swift Evolution, WWDC sessions, sample code, SF Symbols, and Apple fonts. Read-only tools, token-lean definitions.',
     transport: { type: 'streamable-http', endpoint: url(origin, '/mcp') },
     capabilities: ['tools', 'resources'],
     endpoints: {

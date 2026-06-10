@@ -1,110 +1,105 @@
 # apple-docs
 
-`apple-docs` builds and serves a local, searchable copy of Apple's developer
-documentation, with three interfaces over the same corpus:
+**All of Apple's developer documentation, on your machine.** Search it from
+the terminal, browse it in your browser, and plug it into Claude, Codex,
+Cursor, or any other MCP client — fully offline once installed.
 
-- **CLI** — search, read, sync, and maintain the corpus.
-- **MCP server** — for Claude, Codex, Cursor, and other MCP clients.
-- **Local website** — browse in a browser, or publish a static site.
+One indexed corpus (~353,000 documents), three ways in:
 
-It covers Apple DocC docs, Human Interface Guidelines, App Store Review
-Guidelines, Swift Evolution, Swift.org, the Swift Book, WWDC sessions, Apple
-sample code, archived developer docs, and a Swift package catalog.
+- **CLI** — `apple-docs search "NavigationStack"` answers in milliseconds.
+- **MCP server** — your AI assistant cites real Apple docs instead of guessing.
+- **Local website** — browse and full-text search in the browser, or publish
+  it as a static site.
+
+It covers Apple's API reference (DocC), Human Interface Guidelines, App Store
+Review Guidelines, Swift Evolution, the Swift book, Swift.org, WWDC sessions
+(1997–2026, transcripts included), Apple sample code, archived documentation,
+a Swift package catalog, every SF Symbol, and Apple's fonts.
 
 ## Quick start
 
-Requirements: **Bun 1.1+**.
+You need [Bun](https://bun.sh) 1.1+.
 
 ```bash
 git clone https://github.com/g-cqd/apple-docs.git
 cd apple-docs
-bun run dev:setup          # bun install + bun link, plus test tooling
-apple-docs setup --compact # download + install a prebuilt snapshot
+bun run dev:setup    # install dependencies + link the CLI
+apple-docs setup     # download + install the latest snapshot
 ```
 
-Then `apple-docs search "NavigationStack"` works offline.
+`setup` downloads one verified archive (**1.62 GB**) and installs it in a few
+minutes. After that, everything works offline:
 
-`setup` downloads one verified snapshot (**1.53 GB**, 353,295 documents) and
-installs it — **about 5 minutes** end to end, depending on your download speed
-and system load. Pick the shape that fits with a single flag:
+```bash
+apple-docs search "NavigationStack"
+apple-docs search "how do I record audio in the background"
+apple-docs read swiftui/view
+```
 
-| Flag | Result | On disk¹ | Install² |
+Search takes both forms: exact symbol names and plain-English questions
+(a local semantic index is built during setup — no cloud, no API key).
+
+### Pick a disk/speed tradeoff (optional)
+
+`setup` asks which storage profile you want; flags skip the prompt:
+
+| | Command | Disk | Best for |
 | --- | --- | --- | --- |
-| `--compact` | Smallest. Fully compacted in one step (raw payloads dropped, contentless index). Renders on demand. | **~3 GB** (3.1) | +~2–3 min |
-| *(none)* | `balanced` default — snapshot as-is; caches Markdown on first read. | **~5.5 GB** (5.5) | +~1 min |
-| `--prebuilt` | Fastest. Markdown + HTML materialized up front. | **~8.6 GB** (8.6) | +~3–4 min |
+| Smallest | `apple-docs setup --compact` | ~3 GB | laptops, CI |
+| Default | `apple-docs setup` | ~5.5 GB | most setups |
+| Fastest reads | `apple-docs setup --prebuilt` | ~8.6 GB | serving the website |
 
-<sup>¹ Parenthesised values are measured (`du`) as of `snapshot-20260609` (353,295 docs). `balanced` is a 4.3 GiB DB + 1.3 GB of extracted fonts, SF Symbol renders, and the ~125 MB model2vec embedding model. `compact` more than halves the DB (→1.9 GiB). `prebuilt` adds ~3.2 GB of Markdown + HTML — only ~1.12 GB is content; the rest is 4 KB block rounding across 706,590 small files. `apple-docs storage stats` reports logical bytes, which run smaller. Add ~0.5 GB to the DB on every profile for the semantic chunk index, which is built locally (snapshots ship the model, never the vectors).</sup>
-
-
-<sup>² Post-download work, measured from a local archive; on top of the 1.53 GB download. Includes the semantic index build (~1.5–2 min for 353k docs on Apple Silicon; `--skip-semantic` opts out).</sup>
-
-Each profile finishes in that one `setup` call. See
-[`docs/configuration.md`](docs/configuration.md#storage-profiles) for the full
-tradeoff and how to switch later.
+All three contain the full corpus and search identically — they only trade
+disk for read speed. Details and how to switch later:
+[`docs/configuration.md`](docs/configuration.md#storage-profiles).
 
 > Prefer a standalone binary or a production self-host? See
 > [`docs/installing.md`](docs/installing.md).
 
-## Common usage
+## Everyday commands
 
 ```bash
-# Search
-apple-docs search "NavigationStack"
+# Search — filters beat clever queries
 apple-docs search "Swift Testing" --source wwdc --year 2024
-apple-docs search "privacy" --framework app-store-review --read
+apple-docs search "privacy" --framework app-store-review
+apple-docs search "scroll" --kind article --platform visionos
 
-# Read
+# Read a page (or just one section of it)
 apple-docs read swiftui/view
 apple-docs read View --framework swiftui
 apple-docs read swiftui/view --section Overview
 
-# Browse / inspect
-apple-docs frameworks
-apple-docs browse swiftui
-apple-docs status
-apple-docs storage stats
+# Explore
+apple-docs frameworks                  # every documentation root
+apple-docs browse swiftui              # a framework's pages
+apple-docs browse wwdc                 # WWDC years with session counts
+apple-docs browse wwdc --year 2025     # one year's sessions
+apple-docs status                      # corpus freshness + counts
 ```
 
-Built-in help is the exhaustive reference:
+`apple-docs --help` and `apple-docs <command> --help` are the exhaustive
+reference.
+
+## Use it from your AI tools (MCP)
 
 ```bash
-apple-docs --help
-apple-docs <command> --help
-```
-
-## Local website
-
-```bash
-apple-docs web serve              # http://127.0.0.1:3000
-apple-docs web build --out dist/web   # static site
-```
-
-`web serve` also answers agents: Markdown content negotiation on `/docs/*`
-(`Accept: text/markdown`), `robots.txt` content signals, an RFC 9727 API
-catalog at `/.well-known/api-catalog`, and an MCP server card at
-`/.well-known/mcp/server-card.json`. Deployment notes:
-`apple-docs web deploy <github-pages|cloudflare|vercel|netlify>`.
-
-## MCP server
-
-```bash
-apple-docs mcp install            # write local MCP client config
+apple-docs mcp install            # prints ready-to-paste client config
 apple-docs mcp start              # stdio server
-apple-docs mcp serve --port 3031  # Streamable HTTP
+apple-docs mcp serve --port 3031  # Streamable HTTP server
 ```
 
-**Tools:** `search_docs`, `read_doc`, `list_frameworks`, `browse`,
+Nine read-only tools: `search_docs`, `read_doc`, `list_frameworks`, `browse`,
 `list_taxonomy`, `search_sf_symbols`, `list_apple_fonts`, `render_sf_symbol`,
-`render_font_text`.
+`render_font_text` — plus resources for docs, frameworks, SF Symbol renders,
+and font files.
 
-**Resources:** `apple-docs://doc/{key}`, `apple-docs://framework/{slug}`,
-`apple-docs://sf-symbol/{scope}/{name}.{format}`, `apple-docs://font/{id}`.
+The tool surface is deliberately **context-cheap**: definitions cost ~2.2k
+tokens total (about a quarter of a typical multi-tool MCP server), responses
+are compact JSON with pagination built in, and a CI budget test keeps it that
+way. Your context window stays available for actual work.
 
-HTTP MCP has no built-in auth — keep it on loopback unless a reverse proxy,
-tunnel, or private network handles access control. With `--allow-origin`
-omitted, browser `Origin` requests are denied except loopback; native clients
-(no `Origin` header) are allowed.
+HTTP mode has no built-in auth — keep it on loopback unless a reverse proxy
+or tunnel handles access control.
 
 ### Public instance
 
@@ -115,73 +110,73 @@ claude mcp add -s user --transport http apple-docs https://apple-docs-mcp.everes
 codex mcp add apple-docs -- bunx mcp-remote https://apple-docs-mcp.everest.mt/mcp
 ```
 
-## Build the corpus yourself
-
-Instead of a snapshot, crawl Apple's docs directly:
+## Local website
 
 ```bash
-apple-docs sync          # resumable, idempotent full refresh
+apple-docs web serve                  # http://127.0.0.1:3000
+apple-docs web build --out dist/web   # static site
+```
+
+The server is agent-friendly out of the box: append `.md` to any doc URL for
+Markdown (`/docs/swiftui/view.md`), and discovery endpoints are served at
+`/robots.txt`, `/.well-known/api-catalog` (RFC 9727), and
+`/.well-known/mcp/server-card.json`. Deployment recipes:
+`apple-docs web deploy <github-pages|cloudflare|vercel|netlify>` and
+[`docs/self-hosting.md`](docs/self-hosting.md).
+
+## Keeping it fresh
+
+Snapshots are rebuilt weekly by CI. To update, re-run:
+
+```bash
+apple-docs setup --force
+```
+
+Or skip snapshots entirely and crawl Apple's docs yourself:
+
+```bash
+apple-docs sync          # resumable, idempotent refresh
 apple-docs sync --full   # clean rebuild
 ```
 
-Build a portable snapshot from an existing corpus with
-`apple-docs snapshot build --out dist` (writes a `.tar.zst` + `.sha256` +
-manifest). Install it with `apple-docs setup --archive <path> --force`.
+`sync` also merges Xcode's offline documentation asset when one is available
+locally (USRs and a few thousand pages the public crawl can't see) — CI does
+this for every published snapshot, so installed snapshots already include it.
 
-## Corpus sources
+Build your own portable snapshot with `apple-docs snapshot build --out dist`,
+install it with `apple-docs setup --archive <path>`.
 
-| Source type | Coverage |
+## What's in the corpus
+
+| Source | Coverage |
 | --- | --- |
-| `apple-docc` | Apple Developer Documentation: frameworks, APIs, technologies, release notes |
+| `apple-docc` | API reference: frameworks, technologies, release notes |
 | `hig` | Human Interface Guidelines |
 | `guidelines` | App Store Review Guidelines |
 | `swift-evolution` | Swift Evolution proposals |
 | `swift-book` | The Swift Programming Language |
-| `swift-docc` | Swift documentation archives (compiler, SwiftPM, migration guides) |
+| `swift-docc` | Swift toolchain docs (compiler, SwiftPM, migration guides) |
 | `swift-org` | Swift.org documentation and articles |
 | `apple-archive` | Archived Apple developer documentation |
-| `wwdc` | WWDC session catalog and transcripts |
+| `wwdc` | WWDC sessions with transcripts, browsable by year |
 | `sample-code` | Apple sample code catalog |
-| `packages` | Swift package catalog, enriched with repository README content |
-
-### Optional: enrich from Xcode's offline documentation
-
-Xcode 26+ ships the documentation corpus as a MobileAsset
-(`com.apple.MobileAsset.AppleDeveloperDocumentation`). It backfills two
-things the crawl can't see: each symbol's **USR** (`documents.usr`, stable
-across releases and shared by the Swift/Obj-C variants) and several thousand
-member/symbol pages the crawl missed. The merge is keyed,
-NULL-guarded, and idempotent: it never duplicates or overwrites crawled
-data. The asset is auto-resolved — a local Xcode install is used when
-present, otherwise it is downloaded (~650 MB, SHA-1-verified) from Apple's
-CDN, so it works on machines without Xcode.
-
-```bash
-bun scripts/enrich-xcode-docs.js            # dry-run (auto-resolve the asset)
-bun scripts/enrich-xcode-docs.js --apply    # write the merge
-bun scripts/enrich-xcode-docs.js --fetch --apply   # force the CDN download
-```
-
-The weekly snapshot build runs this automatically (always downloading, since
-CI has no Xcode), so published snapshots already carry the USRs and the
-extra pages.
-
-## Documentation
-
-- [Installing](docs/installing.md) — dev, standalone binary, or production self-host.
-- [Configuration](docs/configuration.md) — storage profiles, environment variables, tuning.
-- [Architecture](docs/architecture.md) — five-layer stack and projection boundary.
-- [Self-hosting](docs/self-hosting.md) — deployment topology, agent discovery, DNS-AID.
-- [Performance](docs/perf/index.md) · [Security policy](docs/security.md) · [Docs index](docs/README.md)
+| `packages` | Swift package catalog with README content |
 
 ## Development
 
 ```bash
-bun run ci         # lint + typecheck + tests
-bun run test:web   # web suite only
-bun run audit      # full audit (lint, types, unused, dup, coverage)
+bun run ci                          # lint + typecheck + tests
+bun run audit                       # + unused code, duplication, coverage
+bun scripts/verify-profiles.mjs     # full integration matrix: installs every
+                                    # storage profile from the latest snapshot
+                                    # and exercises CLI + web + MCP against each
 ```
+
+More docs: [architecture](docs/architecture.md) ·
+[configuration](docs/configuration.md) · [installing](docs/installing.md) ·
+[self-hosting](docs/self-hosting.md) · [performance](docs/perf/index.md) ·
+[security](docs/security.md) · [index](docs/README.md)
 
 ## License
 
-See [LICENSE](LICENSE).
+[MIT](LICENSE).

@@ -19,23 +19,18 @@ serving speed. `setup` applies it in one step; there is no follow-up command.
 
 | Profile | On disk¹ | What `setup` does | Reads |
 | --- | --- | --- | --- |
-| `compact` | ~3 GB (3.1) | Compresses sections, makes the body index contentless, drops the embedded raw payloads, VACUUMs | Rendered on demand |
-| `balanced` *(default)* | ~5.5 GB (5.5) | Ships the snapshot as-is | Markdown cached on first read (7-day TTL) |
-| `prebuilt` | ~8.6 GB (8.6) | Materializes Markdown + HTML | Served from disk (fastest) |
+| `compact` | ~3 GB | Compresses sections, makes the body index contentless, drops the embedded raw payloads, VACUUMs | Rendered on demand |
+| `balanced` *(default)* | ~5.5 GB | Ships the snapshot as-is | Markdown cached on first read (7-day TTL) |
+| `prebuilt` | ~8.6 GB | Materializes Markdown + HTML | Served from disk (fastest) |
 
-A full setup from a snapshot is **about 5 minutes** end to end, depending on
-download speed and system load (the ~1.53 GB download dominates; post-download
-work was ~1 min balanced, ~2–3 min compact, ~3–4 min prebuilt).
+A full setup from a snapshot is **a few minutes** end to end, depending on
+download speed and system load. Measured from a local archive on Apple
+Silicon as of `snapshot-20260609` (1.62 GB download, 353,313 documents),
+including the semantic index build: **159 s balanced**, **245 s compact**
+(body reindex + VACUUM), **262 s prebuilt** (renders all 353k docs to
+Markdown + HTML — 361,811 files each).
 
-<sup>¹ Parenthesised values are measured with `du` as of `snapshot-20260609` (1.53 GB download, 353,295 documents). All three carry the same ~1.3 GB of extracted fonts, SF Symbol renders, and the ~125 MB model2vec embedding model. The variable part is the DB and rendered files:</sup>
-
-| | DB | + Markdown | + HTML | total (`du`) |
-| --- | --- | --- | --- | --- |
-| `compact` | 1.9 GiB | — | — | **3.1 GB** |
-| `balanced` | 4.3 GiB | — | — | **5.5 GB** |
-| `prebuilt` | 4.2 GiB | 1.6 GB | 1.6 GB | **8.6 GB** |
-
-<sup>`compact` more than halves the DB (4.3 → 1.9 GiB) by dropping the 353,238 embedded raw payloads, making the body index contentless, and zstd-compressing sections. `prebuilt`'s Markdown + HTML are only ~1.12 GB of actual content (504 MB + 615 MB across 706,590 files); the rest of the ~3.2 GB `du` is 4 KB filesystem-block rounding on hundreds of thousands of tiny files. `apple-docs storage stats` totals logical content bytes, so it reads below the `du` "space consumed on the volume" figure. Install time after the ~1.53 GB download was ~1 min (balanced), ~2–3 min (compact: body reindex + VACUUM), and ~3–4 min (prebuilt: rendering all 353k docs).</sup>
+<sup>¹ `du` figures. All three carry the same ~1.3 GB of extracted fonts, SF Symbol renders, and the ~125 MB model2vec embedding model, plus ~0.5 GB of semantic chunk index built locally during setup (snapshots ship the model, never the vectors). The variable part is the DB (compact ~2.7 GB incl. semantic index vs balanced ~4.8 GB) and prebuilt's rendered files — only ~1.12 GB of actual content; the rest of its `du` is 4 KB block rounding across 700k+ small files. `apple-docs storage stats` totals logical bytes, so it reads lower: 3.4 GB compact / 6.0 GB balanced / 7.2 GB prebuilt.</sup>
 
 ```bash
 apple-docs setup --compact     # smallest, fully compacted in one step
