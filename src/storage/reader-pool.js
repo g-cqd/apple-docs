@@ -332,8 +332,13 @@ export function createReaderPool(opts = {}) {
       slot.alive = false
       try { await slot.worker.terminate?.() } catch {}
     }
-    for (let i = 0; i < size; i++) spawn(i)
-    await Promise.all(slots.map((s) => s?.ready).filter(Boolean))
+    // Serial respawn with per-slot retry — same Darwin WAL/SHM bring-up
+    // race start() guards against ("malformed sqlite_master" when N
+    // workers open the same file simultaneously); parallel spawn here
+    // reintroduced it on slow CI runners.
+    for (let i = 0; i < size; i++) {
+      await startSlot(i)
+    }
   }
 
   function statsSnapshot() {
