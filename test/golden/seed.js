@@ -77,7 +77,7 @@ export function seedDatabase(db) {
   const _swiftBook = db.upsertRoot('swift-book', 'The Swift Programming Language', 'collection', 'swift-book')
   const _swiftOrg = db.upsertRoot('swift-org', 'Swift.org Documentation', 'collection', 'swift-org')
   const _appleArchive = db.upsertRoot('apple-archive', 'Apple Developer Archive', 'collection', 'apple-archive')
-  const _wwdc = db.upsertRoot('wwdc', 'WWDC Session Transcripts', 'collection', 'wwdc')
+  const _wwdc = db.upsertRoot('wwdc', 'WWDC Sessions', 'collection', 'wwdc')
   const _sampleCode = db.upsertRoot('sample-code', 'Apple Sample Code', 'collection', 'sample-code')
 
   const normalizedDocs = [

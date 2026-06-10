@@ -38,12 +38,15 @@ import { ValidationError } from '../lib/errors.js'
 
 export class WwdcAdapter extends SourceAdapter {
   static type = 'wwdc'
-  static displayName = 'WWDC Session Transcripts'
+  static displayName = 'WWDC Sessions'
   static syncMode = 'flat'
+
+  /** @type {Map<number, Promise<Map<string, string>>>} year -> sessionId -> track */
+  #tracksByYear = new Map()
 
   async discover(ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
-      ctx.db.upsertRoot(ROOT_SLUG, 'WWDC Session Transcripts', 'collection', ROOT_SLUG)
+      ctx.db.upsertRoot(ROOT_SLUG, 'WWDC Sessions', 'collection', ROOT_SLUG)
     }
     const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
 
@@ -73,11 +76,29 @@ export class WwdcAdapter extends SourceAdapter {
     const keys = []
     await Promise.all(
       APPLE_YEARS.map(async (year) => {
-        const sessionIds = await fetchAppleYearIndex(year, ctx.rateLimiter)
+        const index = fetchAppleYearIndex(year, ctx.rateLimiter)
+        this.#tracksByYear.set(year, index.then(r => r.tracksBySession).catch(() => new Map()))
+        const { sessionIds } = await index
         for (const id of sessionIds) keys.push(buildKey(year, id))
       }),
     )
     return keys
+  }
+
+  /**
+   * Tracks live only on the year-index page, not on the play pages the
+   * per-session fetch downloads — memoize one index lookup per year so
+   * fetch() works with or without a prior discover().
+   */
+  async #lookupTrack(year, sessionId, rateLimiter) {
+    let tracks = this.#tracksByYear.get(year)
+    if (!tracks) {
+      tracks = fetchAppleYearIndex(year, rateLimiter)
+        .then(r => r.tracksBySession)
+        .catch(() => new Map())
+      this.#tracksByYear.set(year, tracks)
+    }
+    return (await tracks).get(sessionId) ?? null
   }
 
   /** Discover ASCIIwwdc session keys for years 1997-2019. */
@@ -110,6 +131,8 @@ export class WwdcAdapter extends SourceAdapter {
 
     if (year >= 2020) {
       const { payload, etag, lastModified } = await fetchAppleSession(year, sessionId, ctx.rateLimiter)
+      const track = await this.#lookupTrack(year, sessionId, ctx.rateLimiter)
+      if (track) payload.track = track
       return this.validateFetchResult({ key, payload, etag, lastModified })
     }
 
@@ -185,6 +208,9 @@ export class WwdcAdapter extends SourceAdapter {
     const description = extractAppleDescription(json)
     const { text: transcript, nodes: transcriptNodes } = extractAppleTranscript(json)
     const url = `${APPLE_BASE}/wwdc${year}/${sessionId}/`
+    const track = typeof json?.track === 'string' && json.track.trim() ? json.track.trim() : null
+    const sourceMetadata = { year, sessionId, source: 'apple' }
+    if (track) sourceMetadata.track = track
 
     const document = {
       sourceType: WwdcAdapter.type,
@@ -202,7 +228,7 @@ export class WwdcAdapter extends SourceAdapter {
       isDeprecated: false, isBeta: false, isReleaseNotes: false,
       urlDepth: key.split('/').length - 1,
       headings: null,
-      sourceMetadata: JSON.stringify({ year, sessionId, source: 'apple' }),
+      sourceMetadata: JSON.stringify(sourceMetadata),
     }
 
     const sections = []

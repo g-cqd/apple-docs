@@ -13,22 +13,32 @@ import {
   USER_AGENT,
 } from './constants.js'
 
-/** Fetch the year-level session index from Apple. */
+/**
+ * Fetch the year-level session index from Apple. Returns session IDs
+ * plus a sessionId -> track map; the per-session play pages never name
+ * their topic, so the index is the only scrape point for tracks.
+ */
 export async function fetchAppleYearIndex(year, rateLimiter) {
   const url = `${APPLE_VIDEOS_INDEX}/wwdc${year}/`
-  await rateLimiter.acquire()
-
   try {
+    await rateLimiter.acquire()
     const res = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT },
       signal: AbortSignal.timeout(DEFAULT_TIMEOUT),
     })
-    if (!res.ok) return []
+    if (!res.ok) return emptyYearIndex()
     const html = await res.text()
-    return extractSessionIdsFromHtml(html, year)
+    return {
+      sessionIds: extractSessionIdsFromHtml(html, year),
+      tracksBySession: extractSessionTracksFromHtml(html, year),
+    }
   } catch {
-    return []
+    return emptyYearIndex()
   }
+}
+
+function emptyYearIndex() {
+  return { sessionIds: [], tracksBySession: new Map() }
 }
 
 /**
@@ -42,6 +52,27 @@ function extractSessionIdsFromHtml(html, year) {
     ids.add(match[1])
   }
   return [...ids]
+}
+
+/**
+ * Extract sessionId -> track from a year-index page. Each session card
+ * is an `<a href="/videos/play/wwdc{year}/{id}/" class="vc-card" ...>`
+ * whose body carries the human-readable, pipe-separated topic names in
+ * a `data-filter-topics` attribute.
+ */
+function extractSessionTracksFromHtml(html, year) {
+  const tracks = new Map()
+  const anchorRe = new RegExp(`<a\\s[^>]*href="/videos/play/wwdc${year}/(\\d+)/?"[^>]*>`, 'gi')
+  const anchors = [...html.matchAll(anchorRe)]
+  for (const [i, anchor] of anchors.entries()) {
+    const sessionId = anchor[1]
+    if (tracks.has(sessionId)) continue
+    const card = html.slice(anchor.index, anchors[i + 1]?.index ?? html.length)
+    const topics = card.match(/data-filter-topics="([^"]*)"/i)
+    const track = topics ? decodeHtmlEntities(topics[1]).replace(/\s+/g, ' ').trim() : ''
+    if (track) tracks.set(sessionId, track)
+  }
+  return tracks
 }
 
 /** Fetch one Apple WWDC session page by scraping. */

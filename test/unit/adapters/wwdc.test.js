@@ -287,6 +287,111 @@ describe('WwdcAdapter.fetch', () => {
 })
 
 // ---------------------------------------------------------------------------
+// fetch — track extraction from the year index
+// ---------------------------------------------------------------------------
+
+const yearIndexHtml2024 = `<html><body>
+  <a href="/videos/play/wwdc2024/10061/" class="vc-card tile grid-item" data-released="true" data-category="app-services">
+    <h5 class="vc-card__title">What’s new in StoreKit and In-App Purchase</h5>
+    <span class="vc-card__keywords hidden"
+      data-filter-title="what’s new in storekit and in-app purchase"
+      data-filter-collectionid="wwdc24"
+      data-filter-topics="App Services|SwiftUI &amp; UI Frameworks|App Store, Distribution &amp; Marketing">
+    </span>
+  </a>
+  <a href="/videos/play/wwdc2024/10101/" class="vc-card tile grid-item" data-released="true" data-category="developer-tools">
+    <h5 class="vc-card__title">Session without topics</h5>
+    <span class="vc-card__keywords hidden" data-filter-collectionid="wwdc24"></span>
+  </a>
+</body></html>`
+
+const sessionHtml = `<html><body>
+  <h1>What’s new in StoreKit and In-App Purchase</h1>
+  <p>Learn how to build and deliver even better purchase experiences.</p>
+  <p>Hi, I’m Rudy, and welcome to What’s new in StoreKit and In-App Purchase.</p>
+</body></html>`
+
+function mockAppleFetch(counters = {}) {
+  globalThis.fetch = async (url) => {
+    const { pathname } = new URL(url)
+    if (pathname === '/videos/wwdc2024/') {
+      counters.yearIndex = (counters.yearIndex ?? 0) + 1
+      return new Response(yearIndexHtml2024, { status: 200 })
+    }
+    if (urlMatchesPrefix(url, 'developer.apple.com', '/videos/wwdc')) {
+      return new Response('<html><body></body></html>', { status: 200 })
+    }
+    if (urlMatchesPrefix(url, 'developer.apple.com', '/videos/play/wwdc2024/')) {
+      return new Response(sessionHtml, { status: 200, headers: { etag: '"abc"' } })
+    }
+    if (urlHasHost(url, 'api.github.com')) {
+      return new Response(JSON.stringify({ tree: [] }), { status: 200 })
+    }
+    return new Response('', { status: 404 })
+  }
+}
+
+describe('WwdcAdapter.fetch — track', () => {
+  test('attaches the track from the year index, decoding entities', async () => {
+    const adapter = new WwdcAdapter()
+    mockAppleFetch()
+
+    const result = await adapter.fetch('wwdc/wwdc2024-10061', { rateLimiter: makeRateLimiter() })
+
+    expect(result.payload.track).toBe('App Services|SwiftUI & UI Frameworks|App Store, Distribution & Marketing')
+    expect(result.payload.title).toBe('What’s new in StoreKit and In-App Purchase')
+  })
+
+  test('leaves track unset when the card has no data-filter-topics', async () => {
+    const adapter = new WwdcAdapter()
+    mockAppleFetch()
+
+    const result = await adapter.fetch('wwdc/wwdc2024-10101', { rateLimiter: makeRateLimiter() })
+
+    expect('track' in result.payload).toBe(false)
+  })
+
+  test('memoizes the year index across fetches', async () => {
+    const adapter = new WwdcAdapter()
+    const counters = {}
+    mockAppleFetch(counters)
+
+    await adapter.fetch('wwdc/wwdc2024-10061', { rateLimiter: makeRateLimiter() })
+    await adapter.fetch('wwdc/wwdc2024-10101', { rateLimiter: makeRateLimiter() })
+
+    expect(counters.yearIndex).toBe(1)
+  })
+
+  test('reuses the year index fetched during discover', async () => {
+    const adapter = new WwdcAdapter()
+    const counters = {}
+    mockAppleFetch(counters)
+
+    const discovery = await adapter.discover(makeCtx())
+    expect(discovery.keys).toContain('wwdc/wwdc2024-10061')
+
+    const result = await adapter.fetch('wwdc/wwdc2024-10061', { rateLimiter: makeRateLimiter() })
+
+    expect(result.payload.track).toBe('App Services|SwiftUI & UI Frameworks|App Store, Distribution & Marketing')
+    expect(counters.yearIndex).toBe(1)
+  })
+
+  test('never throws when the year index is unreachable', async () => {
+    const adapter = new WwdcAdapter()
+    globalThis.fetch = async (url) => {
+      const { pathname } = new URL(url)
+      if (pathname === '/videos/wwdc2024/') throw new Error('network down')
+      return new Response(sessionHtml, { status: 200 })
+    }
+
+    const result = await adapter.fetch('wwdc/wwdc2024-10061', { rateLimiter: makeRateLimiter() })
+
+    expect('track' in result.payload).toBe(false)
+    expect(result.payload.title).toBe('What’s new in StoreKit and In-App Purchase')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // normalize — Apple JSON (2020+)
 // ---------------------------------------------------------------------------
 
@@ -322,6 +427,26 @@ describe('WwdcAdapter.normalize — Apple JSON', () => {
     expect(meta.year).toBe(2024)
     expect(meta.sessionId).toBe('10001')
     expect(meta.source).toBe('apple')
+    expect('track' in meta).toBe(false)
+  })
+
+  test('encodes track in sourceMetadata when the payload carries one', () => {
+    const adapter = new WwdcAdapter()
+    const result = adapter.normalize('wwdc/wwdc2024-10001', {
+      title: 'Test',
+      track: 'Developer Tools|Swift',
+    })
+    const meta = JSON.parse(result.document.sourceMetadata)
+
+    expect(meta.track).toBe('Developer Tools|Swift')
+  })
+
+  test('omits track from sourceMetadata when the payload track is blank', () => {
+    const adapter = new WwdcAdapter()
+    const result = adapter.normalize('wwdc/wwdc2024-10001', { title: 'Test', track: '   ' })
+    const meta = JSON.parse(result.document.sourceMetadata)
+
+    expect('track' in meta).toBe(false)
   })
 
   test('produces an abstract section when description is present', () => {
@@ -424,6 +549,7 @@ describe('WwdcAdapter.normalize — ASCIIwwdc text', () => {
     expect(meta.year).toBe(2019)
     expect(meta.sessionId).toBe('234')
     expect(meta.source).toBe('asciiwwdc')
+    expect('track' in meta).toBe(false)
   })
 
   test('uses the first non-timestamp line as title when the payload is plain text', () => {
@@ -589,7 +715,7 @@ describe('WwdcAdapter.check', () => {
 describe('WwdcAdapter static properties', () => {
   test('has expected type, displayName, and syncMode', () => {
     expect(WwdcAdapter.type).toBe('wwdc')
-    expect(WwdcAdapter.displayName).toBe('WWDC Session Transcripts')
+    expect(WwdcAdapter.displayName).toBe('WWDC Sessions')
     expect(WwdcAdapter.syncMode).toBe('flat')
   })
 })

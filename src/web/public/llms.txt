@@ -57,7 +57,7 @@ own URL. Each HTML page advertises this with a
 - [WebKit](https://apple-docs.everest.mt/docs/webkit/)
 - [Human Interface Guidelines](https://apple-docs.everest.mt/docs/design/)
 - [Swift Evolution Proposals](https://apple-docs.everest.mt/docs/swift-evolution/)
-- [WWDC Session Transcripts](https://apple-docs.everest.mt/docs/wwdc/)
+- [WWDC Sessions](https://apple-docs.everest.mt/docs/wwdc/)
 
 ## Crawl etiquette
 
