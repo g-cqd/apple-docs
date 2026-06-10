@@ -132,11 +132,20 @@ async function installFromLocalArchive(ctx, opts) {
  * path can short-circuit before any network call.
  */
 async function installFromGithubRelease(ctx, opts) {
-  const { dataDir, logger } = ctx
+  const { db, dataDir, logger } = ctx
 
-  logger.info('Fetching latest release...')
-  const release = await fetchLatestRelease()
-  logger.info(`Found release: ${release.tag} (${release.date})`)
+  const channel = opts.beta ? 'beta' : 'stable'
+  // Beta installs refuse to regress to a stable built on an older macOS
+  // (the snapshot inherits the builder's SF Symbols catalog) — the
+  // installed corpus carries its build-host version in snapshot_meta.
+  let localBuildMacos = null
+  if (channel === 'beta') {
+    try { localBuildMacos = db.getSnapshotMeta('build_macos') ?? null } catch {}
+  }
+
+  logger.info(channel === 'beta' ? 'Fetching latest release (beta channel)...' : 'Fetching latest release...')
+  const release = await fetchLatestRelease({ channel, localBuildMacos })
+  logger.info(`Found release: ${release.tag} (${release.date})${release.prerelease ? ' [beta]' : ''}`)
 
   // Prefer `.tar.zst` (current format — zstd -9 is faster to build and
   // smaller than gzip -9, decompressed in-process via Bun's native zstd so

@@ -48,6 +48,19 @@ function deterministicCreatedAt(tag) {
 // `buildDir` (apple-docs.db, manifest.json) — `cp -c -R` already
 // preserves source mtimes for everything else, and tar embeds the
 // integer-seconds mtime into each member header.
+// `sw_vers -productVersion` on the build host (darwin only). Stable for
+// a given host, so the determinism re-build gate is unaffected.
+function buildHostMacosVersion() {
+  if (process.platform !== 'darwin') return null
+  try {
+    const r = Bun.spawnSync(['sw_vers', '-productVersion'])
+    const v = new TextDecoder().decode(r.stdout).trim()
+    return /^\d+(\.\d+)*$/.test(v) ? v : null
+  } catch {
+    return null
+  }
+}
+
 function deterministicMtimeSeconds(tag) {
   const m = /^snapshot-(\d{4})(\d{2})(\d{2})$/.exec(tag)
   if (m) return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 1000)
@@ -98,6 +111,7 @@ export async function snapshotBuild(opts, ctx) {
   }
   const schemaVersion = db.getSchemaVersion()
   const createdAt = deterministicCreatedAt(tag)
+  const buildMacos = buildHostMacosVersion()
 
   // 1. Validate corpus health
   const stats = db.getStats()
@@ -135,6 +149,13 @@ export async function snapshotBuild(opts, ctx) {
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_schema_version', String(schemaVersion)])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_document_count', String(documentCount)])
       copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['snapshot_page_count', String(pageCount)])
+      // Build-host macOS provenance: the SF Symbols catalog (CoreGlyphs)
+      // is whatever the building OS ships, so a snapshot from macOS 27
+      // carries symbols a macOS 26 build cannot. The beta update channel
+      // compares this to avoid regressing coverage.
+      if (buildMacos) {
+        copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['build_macos', buildMacos])
+      }
 
       // 4b. Embed raw upstream payloads (zstd) into the snapshot DB so the
       // single artifact carries everything; loose raw-json files are not
@@ -174,6 +195,7 @@ export async function snapshotBuild(opts, ctx) {
       documentCount,
       dbChecksum,
       dbSize,
+      ...(buildMacos ? { buildMacos } : {}),
       ...(embedModel ? { embedModel } : {}),
     }
 

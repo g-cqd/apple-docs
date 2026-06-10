@@ -7,6 +7,7 @@ import { snapshotBuild } from '../../../src/commands/snapshot.js'
 import { setup } from '../../../src/commands/setup.js'
 import { createLogger } from '../../../src/lib/logger.js'
 import { setResolvedGitHubToken } from '../../../src/lib/github.js'
+import { fetchLatestRelease, macosMajor } from '../../../src/commands/setup/helpers.js'
 
 let dataDir
 let db
@@ -254,5 +255,109 @@ describe('setup', () => {
     } finally {
       globalThis.fetch = originalFetch
     }
+  })
+})
+
+describe('fetchLatestRelease channels', () => {
+
+  const snapAsset = (tag) => ({
+    name: `apple-docs-full-${tag}.tar.zst`,
+    size: 1,
+    browser_download_url: `https://fake.github.com/${tag}.tar.zst`,
+  })
+  const statusAsset = (tag) => ({
+    name: 'status.json',
+    size: 1,
+    browser_download_url: `https://fake.github.com/${tag}-status.json`,
+  })
+
+  let originalFetch
+  beforeEach(() => { originalFetch = globalThis.fetch })
+  afterEach(() => { globalThis.fetch = originalFetch })
+
+  test('macosMajor parses versions', () => {
+    expect(macosMajor('27.1')).toBe(27)
+    expect(macosMajor('26')).toBe(26)
+    expect(macosMajor(null)).toBeNull()
+    expect(macosMajor('garbage')).toBeNull()
+  })
+
+  test('stable channel hits /releases/latest and never sees prereleases', async () => {
+    const urls = []
+    globalThis.fetch = mock(async (url) => {
+      urls.push(String(url))
+      return new Response(JSON.stringify({
+        tag_name: 'snapshot-20260609',
+        published_at: '2026-06-09T00:00:00Z',
+        prerelease: false,
+        assets: [snapAsset('snapshot-20260609')],
+      }), { status: 200 })
+    })
+    const r = await fetchLatestRelease()
+    expect(r.tag).toBe('snapshot-20260609')
+    expect(r.prerelease).toBe(false)
+    expect(urls[0]).toContain('/releases/latest')
+  })
+
+  test('beta channel takes the newest prerelease outright', async () => {
+    globalThis.fetch = mock(async (url) => {
+      expect(String(url)).toContain('/releases?')
+      return new Response(JSON.stringify([
+        { tag_name: 'snapshot-20260610-beta.1', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.1')] },
+        { tag_name: 'snapshot-20260609', published_at: '2026-06-09T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260609')] },
+      ]), { status: 200 })
+    })
+    const r = await fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.1' })
+    expect(r.tag).toBe('snapshot-20260610-beta.1')
+    expect(r.prerelease).toBe(true)
+  })
+
+  test('beta channel skips drafts and asset-less releases', async () => {
+    globalThis.fetch = mock(async () => new Response(JSON.stringify([
+      { tag_name: 'bad-draft', published_at: '2026-06-12T00:00:00Z', prerelease: true, draft: true, assets: [snapAsset('bad-draft')] },
+      { tag_name: 'binaries-1.0', published_at: '2026-06-11T00:00:00Z', prerelease: false, draft: false, assets: [{ name: 'apple-docs-darwin-arm64', size: 1, browser_download_url: 'https://fake.github.com/bin' }] },
+      { tag_name: 'snapshot-20260610-beta.1', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.1')] },
+    ]), { status: 200 }))
+    const r = await fetchLatestRelease({ channel: 'beta' })
+    expect(r.tag).toBe('snapshot-20260610-beta.1')
+  })
+
+  test('beta install refuses a newer stable from an older macOS', async () => {
+    globalThis.fetch = mock(async (url) => {
+      const u = String(url)
+      if (u.includes('-status.json')) {
+        return new Response(JSON.stringify({ buildMacos: '26.2' }), { status: 200 })
+      }
+      return new Response(JSON.stringify([
+        { tag_name: 'snapshot-20260614', published_at: '2026-06-14T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260614'), statusAsset('snapshot-20260614')] },
+      ]), { status: 200 })
+    })
+    await expect(
+      fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.1' }),
+    ).rejects.toThrow(/beta channel/)
+  })
+
+  test('beta install accepts a stable built on at least the same macOS', async () => {
+    globalThis.fetch = mock(async (url) => {
+      const u = String(url)
+      if (u.includes('-status.json')) {
+        return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
+      }
+      return new Response(JSON.stringify([
+        { tag_name: 'snapshot-20260614', published_at: '2026-06-14T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260614'), statusAsset('snapshot-20260614')] },
+        { tag_name: 'snapshot-20260610-beta.1', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.1')] },
+      ]), { status: 200 })
+    })
+    const r = await fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.1' })
+    expect(r.tag).toBe('snapshot-20260614')
+    expect(r.prerelease).toBe(false)
+  })
+
+  test('beta channel without local provenance takes the newest installable release', async () => {
+    globalThis.fetch = mock(async () => new Response(JSON.stringify([
+      { tag_name: 'snapshot-20260614', published_at: '2026-06-14T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260614')] },
+    ]), { status: 200 }))
+    const r = await fetchLatestRelease({ channel: 'beta' })
+    expect(r.tag).toBe('snapshot-20260614')
   })
 })

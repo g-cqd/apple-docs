@@ -73,23 +73,81 @@ export async function extractTarZst(archivePath, dataDir) {
   }
 }
 
-/**
- * Fetch the latest GitHub release of g-cqd/apple-docs. Returns the
- * tag, date, and asset list in a shape independent of the GitHub API
- * response so the caller doesn't see the raw payload.
- */
-export async function fetchLatestRelease() {
+function ghHeaders() {
   const token = getGitHubToken()
-  const headers = {
+  return {
     'User-Agent': USER_AGENT,
     Accept: 'application/vnd.github+json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
+}
 
-  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
-    headers,
-    signal: AbortSignal.timeout(15000),
-  })
+function shapeRelease(data) {
+  return {
+    tag: data.tag_name,
+    date: data.published_at?.slice(0, 10) ?? 'unknown',
+    prerelease: !!data.prerelease,
+    assets: (data.assets ?? []).map(a => ({
+      name: a.name,
+      size: a.size,
+      downloadUrl: a.browser_download_url,
+    })),
+  }
+}
+
+const SNAPSHOT_ASSET = /^apple-docs-full-.*\.tar\.zst$/
+
+/** Major component of a macOS version string ("27.1" → 27), or null. */
+export function macosMajor(version) {
+  const m = /^(\d+)/.exec(String(version ?? '').trim())
+  return m ? Number(m[1]) : null
+}
+
+/**
+ * Read a release's build-host macOS version from its tiny status.json
+ * asset. Stable releases older than the field (or without status.json)
+ * return null — callers treat that as unknown provenance.
+ */
+async function fetchReleaseBuildMacos(release) {
+  const status = release.assets.find(a => a.name === 'status.json')
+  if (!status) return null
+  try {
+    const res = await fetch(status.downloadUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(15000),
+      redirect: 'follow',
+    })
+    if (!res.ok) return null
+    const body = await res.json()
+    return typeof body.buildMacos === 'string' ? body.buildMacos : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fetch the release to install from g-cqd/apple-docs. Returns the tag,
+ * date, prerelease flag, and asset list in a shape independent of the
+ * GitHub API response so the caller doesn't see the raw payload.
+ *
+ * Channels:
+ *   - stable (default): GET /releases/latest — GitHub itself excludes
+ *     prereleases and drafts there, so betas are invisible.
+ *   - beta: walk /releases newest-first. Prereleases are always
+ *     eligible; a stable release is only eligible when its build-host
+ *     macOS (from its status.json) is at least `localBuildMacos` —
+ *     snapshots inherit the SF Symbols catalog of the macOS that built
+ *     them, so a newer stable from an older macOS would silently shed
+ *     symbols a beta install already has.
+ *
+ * @param {{ channel?: 'stable'|'beta', localBuildMacos?: string|null }} [opts]
+ */
+export async function fetchLatestRelease({ channel = 'stable', localBuildMacos = null } = {}) {
+  const url = channel === 'beta'
+    ? `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=15`
+    : `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
+
+  const res = await fetch(url, { headers: ghHeaders(), signal: AbortSignal.timeout(15000) })
 
   if (!res.ok) {
     if (res.status === 404) {
@@ -106,15 +164,22 @@ export async function fetchLatestRelease() {
   }
 
   const data = await res.json()
-  return {
-    tag: data.tag_name,
-    date: data.published_at?.slice(0, 10) ?? 'unknown',
-    assets: (data.assets ?? []).map(a => ({
-      name: a.name,
-      size: a.size,
-      downloadUrl: a.browser_download_url,
-    })),
+  if (channel !== 'beta') return shapeRelease(data)
+
+  const localMajor = macosMajor(localBuildMacos)
+  const candidates = (Array.isArray(data) ? data : [])
+    .filter(r => !r.draft && (r.assets ?? []).some(a => SNAPSHOT_ASSET.test(a.name)))
+    .map(shapeRelease)
+  for (const release of candidates) {
+    if (release.prerelease) return release
+    if (localMajor == null) return release
+    const releaseMajor = macosMajor(await fetchReleaseBuildMacos(release))
+    if (releaseMajor != null && releaseMajor >= localMajor) return release
   }
+  throw new NotFoundError(
+    `https://api.github.com/repos/${GITHUB_REPO}/releases`,
+    `No installable release on the beta channel matches this corpus (built on macOS ${localBuildMacos}). Newer stable releases from an older macOS would shed symbols this install already has.`,
+  )
 }
 
 /**

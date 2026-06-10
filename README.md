@@ -132,6 +132,11 @@ Snapshots are rebuilt weekly by CI. To update, re-run:
 apple-docs setup --force
 ```
 
+Running a newer macOS than CI? `apple-docs setup --beta --force` opts into
+prerelease snapshots built on developer machines, which carry SF Symbols the
+stable CI builds can't produce yet
+([details](docs/configuration.md#beta-channel)).
+
 Or skip snapshots entirely and crawl Apple's docs yourself:
 
 ```bash

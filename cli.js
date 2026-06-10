@@ -298,6 +298,7 @@ try {
         skipSemantic: !!flags['skip-semantic'],
         archive: flags.archive ?? null,
         profile: setupProfile,
+        beta: !!flags.beta,
         yes: !!flags.yes,
       }, ctx)
       formatter = formatSetup

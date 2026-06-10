@@ -38,6 +38,24 @@ apple-docs setup --prebuilt    # fastest, fully materialized
 apple-docs setup               # balanced (default); prompts on a TTY
 ```
 
+### Beta channel
+
+Snapshots inherit the SF Symbols catalog of the macOS that builds them, so a
+snapshot built on a newer or beta macOS carries symbols the stable CI builds
+cannot produce. Such builds ship as GitHub prereleases
+(`snapshot-YYYYMMDD-beta.N`, published with
+`bun scripts/publish-beta-snapshot.mjs`).
+
+```bash
+apple-docs setup --beta --force   # install/update on the beta channel
+```
+
+The stable channel (default) never sees prereleases. A beta install only
+updates to newer betas, or to a stable snapshot whose recorded build host
+(`status.json` → `buildMacos`, also stamped into the DB as
+`snapshot_meta.build_macos`) runs at least the same macOS — never to a
+stable that would shed symbols the install already has.
+
 `compact` is a one-way trade: it sheds redundant data (the raw payloads and
 the body index's duplicate text copy) in exchange for per-read decompression.
 Sections and search stay intact, so reading and searching are unaffected —

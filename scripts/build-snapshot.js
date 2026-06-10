@@ -190,6 +190,15 @@ try {
   }
   statusDoc.tag = tag
   statusDoc.archives = archives
+  // Build-host macOS provenance — the beta update channel reads this tiny
+  // asset to decide whether a stable release can supersede a beta install
+  // without shedding newer-OS SF Symbols.
+  if (process.platform === 'darwin') {
+    try {
+      const v = new TextDecoder().decode(Bun.spawnSync(['sw_vers', '-productVersion']).stdout).trim()
+      if (/^\d+(\.\d+)*$/.test(v)) statusDoc.buildMacos = v
+    } catch {}
+  }
   const statusOut = args['status-out'] ?? join(outDir, 'status.json')
   await writeJSON(statusOut, statusDoc)
 
