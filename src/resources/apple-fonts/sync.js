@@ -81,6 +81,12 @@ export async function extractDmgFonts(dmgPath, destinationDir, logger) {
   // out between the two determinism builds). Enumerate every mounted volume.
   const plist = await runCapture(['hdiutil', 'attach', '-readonly', '-nobrowse', '-noautoopen', '-plist', dmgPath])
   const mountPoints = parseHdiutilMountPoints(plist)
+  if (mountPoints.length === 0) {
+    // The attach may still have mounted something we failed to parse —
+    // a silent empty result here once shipped font-less snapshots (and
+    // leaked the mount, since the finally-detach iterates mountPoints).
+    throw new ValidationError(`hdiutil attached ${dmgPath} but no mount point was parsed`)
+  }
   try {
     for (const mp of mountPoints) {
       for (const pkg of findByExtension(mp, '.pkg')) {
@@ -145,7 +151,12 @@ async function run(args) {
 async function runCapture(args) {
   const { stdout, stderr, exitCode } = await spawnWithDeadline(args, { deadlineMs: 60_000 })
   if (exitCode !== 0) throw new ValidationError(stderr.trim() || `exited ${exitCode}`)
-  return typeof stdout === 'string' ? stdout : String(stdout ?? '')
+  // spawnWithDeadline returns stdout as an ArrayBuffer; the old
+  // `String(stdout)` here produced "[object ArrayBuffer]", so the plist
+  // never parsed, zero mount points were found, and every DMG extraction
+  // silently yielded nothing (font-less snapshots).
+  if (typeof stdout === 'string') return stdout
+  return new TextDecoder().decode(stdout ?? new ArrayBuffer(0))
 }
 
 export async function hashFile(path) {

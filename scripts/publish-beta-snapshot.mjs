@@ -84,6 +84,12 @@ logger.info(`Beta snapshot: ${tag} (macOS ${macos}, corpus ${dataDir})`)
 // --- 1. refresh local resources ----------------------------------------------
 if (!args.has('--skip-resources')) {
   logger.info('Refreshing Apple fonts + SF Symbols from the local OS…')
+  // Fonts must come from Apple's DMGs into the corpus (portable paths
+  // under dataDir), NOT from this machine's /Library/Fonts — those
+  // absolute system paths are dead on every other machine. Cached DMGs
+  // under resources/fonts/original/ make this a no-download re-extract
+  // after the first run.
+  process.env.APPLE_DOCS_DOWNLOAD_FONTS = '1'
   const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
   try {
     const res = await runResourcesPhase({ ctx: { db, dataDir, logger }, logger })
@@ -94,7 +100,27 @@ if (!args.has('--skip-resources')) {
   }
 }
 
-// --- 1b. ensure the embedding model ships --------------------------------------
+// --- 1b. font portability gate --------------------------------------------------
+// Purge font rows pointing outside the corpus and refuse to publish a
+// snapshot whose families have no on-disk in-corpus files (the exact
+// failure beta.1/beta.2 shipped). Shared with the CI orchestrator.
+{
+  const { enforceFontPortability } = await import('../src/resources/apple-fonts/portability.js')
+  const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
+  try {
+    const fontsCheck = enforceFontPortability(db, dataDir, { logger })
+    if (fontsCheck.missing.length > 0) {
+      console.error(`font catalog incomplete for: ${fontsCheck.missing.join(', ')} — `
+        + 'run without --skip-resources so the Apple DMG download populates resources/fonts/extracted, then retry')
+      process.exit(2)
+    }
+    logger.info(`Fonts portable: ${fontsCheck.kept} files across ${fontsCheck.families} families inside the corpus`)
+  } finally {
+    db.close()
+  }
+}
+
+// --- 1c. ensure the embedding model ships --------------------------------------
 // `sync` never fetches the model2vec model (only setup and the CI
 // orchestrator do), so a sync-built corpus would otherwise publish a
 // snapshot without it — consumers would silently degrade to
@@ -135,6 +161,15 @@ for (const f of [archive, sidecar, manifestPath]) {
   }
 }
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+
+// Same 1.9 GiB guard as the CI orchestrator: GitHub hard-rejects release
+// assets ≥ 2 GiB, and a cryptic 422 after a 30-minute upload is the worst
+// way to find out.
+const SIZE_CEILING_BYTES = Math.floor(1.9 * 1024 ** 3)
+if (Bun.file(archive).size > SIZE_CEILING_BYTES) {
+  console.error(`snapshot archive is ${(Bun.file(archive).size / 1024 ** 3).toFixed(2)} GiB — over the 1.9 GiB publish guard (GitHub asset ceiling is 2 GiB)`)
+  process.exit(2)
+}
 
 // --- 2b. compile CLI binaries (commit-stamped) ---------------------------------
 // Stable releases get binaries from the snapshot workflow's

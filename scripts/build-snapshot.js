@@ -34,6 +34,7 @@ import { join } from 'node:path'
 import { DocsDatabase } from '../src/storage/database.js'
 import { snapshotBuild } from '../src/commands/snapshot.js'
 import { ensureFontsExtracted } from '../src/resources/apple-assets.js'
+import { enforceFontPortability } from '../src/resources/apple-fonts/portability.js'
 import { createLogger } from '../src/lib/logger.js'
 import { ensureDir, readJSON, writeJSON } from '../src/storage/files.js'
 import { buildSymbolsArchive } from './build-symbols-archive.js'
@@ -114,6 +115,22 @@ try {
     }
   } catch (err) {
     logger.warn(`Font determinism guard failed (continuing): ${err.message}`)
+  }
+
+  // 0c. Font portability gate. Purges rows pointing outside dataDir
+  //     (the runner's system font dirs) and HARD-FAILS if any family is
+  //     left without an on-disk in-corpus file — a silent DMG-extraction
+  //     regression once shipped font-less snapshots for weeks (the
+  //     `runCapture` ArrayBuffer-decode bug in apple-fonts/sync.js).
+  {
+    const fontsCheck = enforceFontPortability(db, dataDir, { logger })
+    if (fontsCheck.missing.length > 0) {
+      throw new Error(
+        `font catalog is not portable — no in-corpus files for: ${fontsCheck.missing.join(', ')} ` +
+        '(did the DMG download/extraction fail? APPLE_DOCS_DOWNLOAD_FONTS=1 must be set for the sync step)',
+      )
+    }
+    logger.info(`Fonts portable: ${fontsCheck.kept} files / ${fontsCheck.families} families inside the corpus`)
   }
 
   // 1. Full snapshot (.tar.zst, zstd -9; replaces the old .tar.gz path).
