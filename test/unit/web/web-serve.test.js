@@ -725,6 +725,33 @@ describe('Dev Server (P7-E)', () => {
     // Frameworks now return {label, value} objects with display names
     const fwValues = data.frameworks.map(f => f.value)
     expect(fwValues).toContain('swiftui')
+    // No WWDC sessions in this corpus — facet degrades to an empty array
+    expect(data.wwdcYears).toEqual([])
+  })
+
+  test('/api/filters surfaces WWDC year facets with counts, newest first', async () => {
+    for (const [key, year] of [['wwdc/wwdc2024-10195', 2024], ['wwdc/wwdc2024-10134', 2024], ['wwdc/wwdc2023-10042', 2023]]) {
+      db.upsertNormalizedDocument({
+        document: {
+          sourceType: 'wwdc',
+          key,
+          title: `Session ${key}`,
+          kind: 'article',
+          role: 'article',
+          framework: 'wwdc',
+          sourceMetadata: { year, sessionId: key.split('-')[1], source: 'apple' },
+        },
+        sections: [],
+        relationships: [],
+      })
+    }
+    const res = await fetch(`${serverInfo.url}/api/filters`)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.wwdcYears).toEqual([
+      { year: 2024, count: 2 },
+      { year: 2023, count: 1 },
+    ])
   })
 })
 

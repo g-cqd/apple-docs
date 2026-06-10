@@ -83,7 +83,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
   `)
   const getIdByKeyStmt = db.query('SELECT id FROM documents WHERE key = ?')
   const getByRootSlugStmt = db.query(`
-    SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract
+    SELECT d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract, d.source_metadata
     FROM documents d
     JOIN pages p ON p.path = d.key
     JOIN roots r ON p.root_id = r.id

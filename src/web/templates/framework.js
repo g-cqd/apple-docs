@@ -10,6 +10,7 @@ import {
   renderTocHtml,
 } from '../templates.js'
 import { slugify } from '../../content/render-html.js'
+import { buildScopeGroups } from './framework-groups.js'
 
 export function buildFrameworkTreeData(_framework, documents, treeEdges, siteConfig) {
   if (!treeEdges || treeEdges.length === 0) return { json: '', hasTree: false }
@@ -104,40 +105,36 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     byRole.get(role).push(doc)
   }
 
-  const roleSections = []
-  for (const [role, docs] of byRole) {
-    const docItems = docs.map(doc => {
-      const docKey = doc.key ?? doc.path ?? ''
-      const href = `${siteConfig.baseUrl}/docs/${docKey}/`
-      const filterKind = doc.role_heading ?? doc.role ?? 'Other'
-      // Show role_heading as metadata to distinguish duplicates
-      // (e.g. .!=(_:_:) across types).
-      const meta = doc.role_heading
-        ? html`<span class="doc-item-meta">${doc.role_heading}</span>`
-        : null
-      const abstractText = doc.abstract_text ?? doc.abstract ?? ''
-      const isDeprecated = /\bDeprecated\b/i.test(abstractText)
-      const abstract = abstractText
-        ? html`<span class="doc-item-meta">— ${abstractText.length > 80 ? `${abstractText.slice(0, 80)}...` : abstractText}</span>`
-        : null
-      const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
-      const titleContent = isSymbol
-        ? html`<code>${doc.title ?? docKey}</code>`
-        : (doc.title ?? docKey)
-      return html`<li data-filter-kind="${filterKind}"${attr('data-deprecated', isDeprecated || null)}><a href="${href}">${titleContent}</a>${meta}${abstract}</li>`
-    })
+  // Non-framework scopes (WWDC, Swift Evolution, sample code) get
+  // scope-specific sections instead of the role buckets.
+  const scope = buildScopeGroups(framework, docList)
+  const listSections = scope
+    ? scope.sections
+    : [...byRole.entries()].map(([role, docs]) => ({ id: slugify(role), label: role, count: null, docs }))
 
-    const roleId = slugify(role)
-    roleSections.push(html`<section id="${roleId}" class="role-group" data-filter-kind="${role}">
-    <h2 class="role-heading">${role}</h2>
+  const roleSections = []
+  for (const { id, label, count, docs } of listSections) {
+    const docItems = docs.map(doc => renderDocItem(doc, siteConfig))
+    const heading = count != null
+      ? html`${label} <span class="group-count">(${count})</span>`
+      : html`${label}`
+    roleSections.push(html`<section id="${id}" class="role-group" data-filter-kind="${label}">
+    <h2 class="role-heading">${heading}</h2>
     <ul class="doc-list">
       ${interleave(docItems, html`\n      `)}
     </ul>
   </section>`)
   }
 
+  const jumpNav = scope?.nav?.length
+    ? html`<nav class="scope-jump-nav" aria-label="Jump to section">
+    ${interleave(scope.nav.map(n => html`<a href="${n.href}">${n.label} <span class="group-count">(${n.count})</span></a>`), html`\n    `)}
+  </nav>
+  `
+    : null
+
   const mainContent = roleSections.length > 0
-    ? interleave(roleSections, html`\n  `)
+    ? html`${jumpNav}${interleave(roleSections, html`\n  `)}`
     : html`<p>No documents found for this framework.</p>`
 
   // View toggle only shown when we have tree edges
@@ -152,8 +149,8 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
 
   const breadcrumbs = html`<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${fwName}</span></nav>`
 
-  // Build sidebar: original-resource block + TOC of role groups.
-  const tocItems = [...byRole.keys()].map(role => ({ id: slugify(role), label: role }))
+  // Build sidebar: original-resource block + TOC of list sections.
+  const tocItems = listSections.map(section => ({ id: section.id, label: section.label }))
   const hasSidebar = tocItems.length >= 2
   const sidebarBlocks = []
   const originalBlock = buildOriginalResourceBlock(frameworkOriginalUrl(framework))
@@ -272,6 +269,28 @@ ${buildFooter(siteConfig)}
 ${buildScripts(siteConfig, ['core', 'listing'])}
 </body>
 </html>`
+}
+
+function renderDocItem(doc, siteConfig) {
+  const docKey = doc.key ?? doc.path ?? ''
+  const href = `${siteConfig.baseUrl}/docs/${docKey}/`
+  const filterKind = doc.role_heading ?? doc.role ?? 'Other'
+  // Show role_heading (or the scope-specific meta line, e.g. SE number)
+  // as metadata to distinguish duplicates (e.g. .!=(_:_:) across types).
+  const metaText = doc.meta ?? doc.role_heading
+  const meta = metaText
+    ? html`<span class="doc-item-meta">${metaText}</span>`
+    : null
+  const abstractText = doc.abstract_text ?? doc.abstract ?? ''
+  const isDeprecated = /\bDeprecated\b/i.test(abstractText)
+  const abstract = abstractText
+    ? html`<span class="doc-item-meta">— ${abstractText.length > 80 ? `${abstractText.slice(0, 80)}...` : abstractText}</span>`
+    : null
+  const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
+  const titleContent = isSymbol
+    ? html`<code>${doc.title ?? docKey}</code>`
+    : (doc.title ?? docKey)
+  return html`<li data-filter-kind="${filterKind}"${attr('data-deprecated', isDeprecated || null)}><a href="${href}">${titleContent}</a>${meta}${abstract}</li>`
 }
 
 /**

@@ -1185,6 +1185,25 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   margin-bottom: 0.75rem;
 }
 
+.group-count {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 0.8125rem;
+}
+
+.scope-jump-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin: 1.25rem 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.scope-jump-nav a {
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
 .framework-list,
 .doc-list {
   list-style: none;

@@ -37,6 +37,10 @@ function init() {
       const data = await resp.json()
       populateSelect('filter-framework', data.frameworks)
       populateSelect('filter-kind', data.kinds)
+      populateSelect('filter-year', (data.wwdcYears || []).map(y => ({
+        value: String(y.year),
+        label: `${y.year} (${y.count})`,
+      })))
     } catch {
       // Filters unavailable (static mode) — dropdowns stay with "All" only
     }
@@ -159,7 +163,12 @@ function init() {
     for (const name of ['min_ios', 'min_macos', 'min_watchos', 'min_tvos', 'min_visionos', 'year', 'track']) {
       const el = form.querySelector(`[name="${name}"]`)
       const val = params.get(name)
-      if (el && val) el.value = val
+      if (el && val) {
+        // The year filter is a <select> populated async from /api/filters;
+        // make sure the restored value exists so assignment sticks.
+        if (el.tagName === 'SELECT') ensureSelectOption(el, val)
+        el.value = val
+      }
     }
     for (const name of ['fuzzy', 'deep', 'no_fuzzy', 'no_deep']) {
       const el = form.querySelector(`[name="${name}"]`)

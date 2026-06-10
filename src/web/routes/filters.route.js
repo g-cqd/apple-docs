@@ -18,7 +18,22 @@ export function filtersHandler(_request, ctx) {
     'SELECT DISTINCT role_heading FROM documents WHERE role_heading IS NOT NULL ORDER BY role_heading',
   ).all().map(r => r.role_heading)
   return jsonResponse(
-    { frameworks, kinds },
+    { frameworks, kinds, wwdcYears: queryWwdcYears(db) },
     { headers: { 'Cache-Control': API_CORPUS_CACHE_CONTROL } },
   )
+}
+
+function queryWwdcYears(db) {
+  try {
+    return db.db.query(
+      `SELECT CAST(json_extract(source_metadata, '$.year') AS INTEGER) as year, COUNT(*) as count
+       FROM documents
+       WHERE source_type = 'wwdc' AND json_extract(source_metadata, '$.year') IS NOT NULL
+       GROUP BY year ORDER BY year DESC`,
+    ).all().map(r => ({ year: r.year, count: r.count }))
+  } catch {
+    // Malformed source_metadata JSON aborts json_extract — degrade to no
+    // year facets rather than failing the whole filters payload.
+    return []
+  }
 }

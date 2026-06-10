@@ -21,7 +21,7 @@ export async function buildFrameworkPages({ roots, db, buildDir, siteConfig }) {
   let frameworksBuilt = 0
   for (const root of roots) {
     const docs = db.db.query(
-      'SELECT key, title, kind, role, role_heading, abstract_text FROM documents WHERE framework = ? ORDER BY title',
+      'SELECT key, title, kind, role, role_heading, abstract_text, source_metadata FROM documents WHERE framework = ? ORDER BY title',
     ).all(root.slug)
     if (docs.length === 0) continue
 

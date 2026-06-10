@@ -103,7 +103,10 @@ ${buildHeader(siteConfig)}
       <div class="filter-row">
         <div class="filter-group">
           <label class="filter-label" for="filter-year">WWDC Year</label>
-          <input class="filter-input filter-input-sm" id="filter-year" name="year" type="number" placeholder="e.g. 2024">
+          <select class="filter-select" id="filter-year" name="year" aria-describedby="filter-year-desc">
+            <option value="">Any</option>
+          </select>
+          <span id="filter-year-desc" class="sr-only">Filter results by WWDC session year</span>
         </div>
         <div class="filter-group">
           <label class="filter-label" for="filter-track">WWDC Track</label>
