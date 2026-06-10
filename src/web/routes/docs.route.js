@@ -1,4 +1,5 @@
 import { renderDocumentPage, renderFrameworkPage, buildFrameworkTreeData } from '../templates.js'
+import { loadScopeExtras } from '../scope-group-data.js'
 import { sha256 } from '../../lib/hash.js'
 import { BackpressureError } from '../../lib/errors.js'
 import { fetchDocPage } from '../../apple/api.js'
@@ -66,7 +67,8 @@ export async function docsHandler(request, ctx, url) {
         frameworkTreeBySlug.set(root.slug, hash)
         treeDataUrl = `${siteConfig.baseUrl || ''}/data/frameworks/${root.slug}/tree.${hash}.json`
       }
-      const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl })
+      const scopeExtras = loadScopeExtras(db, root)
+      const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl, scopeExtras })
       return textResponse(html.bytes(), HTML_HASHABLE)
     }
   }

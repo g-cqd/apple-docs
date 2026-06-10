@@ -7,6 +7,15 @@
  */
 
 import { slugify } from '../../content/render-html.js'
+import {
+  groupArchiveByCategory,
+  groupGuidelinesBySection,
+  groupHigByCategory,
+  groupPackagesByOwner,
+  groupReleaseNotesByVersion,
+  groupSwiftBookByPart,
+  sortTechnotes,
+} from './scope-groups-extra.js'
 
 const WWDC_PATH_YEAR = /^wwdc\/wwdc(\d{4})-/
 
@@ -169,15 +178,17 @@ export function groupSampleCodeByFramework(docs) {
  * Build scope-specific list sections for a root, or null when the root
  * should keep the default role-based grouping.
  *
- * @param {object|null} root Root record ({ slug, source_type, ... }).
+ * @param {object|null} root Root record ({ slug, kind, source_type, ... }).
  * @param {Array} docs Document rows for the root's page list.
+ * @param {{ higGroups?: Map }} [extras] Loaded by src/web/scope-group-data.js.
  * @returns {{ scope: string, sections: Array, nav?: Array<{href: string, label: string, count: number}> } | null}
  */
-export function buildScopeGroups(root, docs) {
+export function buildScopeGroups(root, docs, extras = {}) {
   const scope = root?.source_type ?? root?.slug
+  const slug = root?.slug
   const docList = docs ?? []
   if (docList.length === 0) return null
-  if (scope === 'wwdc' || root?.slug === 'wwdc') {
+  if (scope === 'wwdc' || slug === 'wwdc') {
     const sections = groupWwdcByYear(docList)
     return {
       scope: 'wwdc',
@@ -185,11 +196,45 @@ export function buildScopeGroups(root, docs) {
       nav: sections.map(s => ({ href: `#${s.id}`, label: s.label, count: s.count })),
     }
   }
-  if (scope === 'swift-evolution' || root?.slug === 'swift-evolution') {
+  if (scope === 'swift-evolution' || slug === 'swift-evolution') {
     return { scope: 'swift-evolution', sections: groupSwiftEvolutionByStatus(docList) }
   }
-  if (scope === 'sample-code' || root?.slug === 'sample-code') {
+  if (scope === 'sample-code' || slug === 'sample-code') {
     return { scope: 'sample-code', sections: groupSampleCodeByFramework(docList) }
+  }
+  if (scope === 'guidelines' || slug === 'app-store-review') {
+    return { scope: 'guidelines', sections: groupGuidelinesBySection(docList) }
+  }
+  if (root?.kind === 'release-notes') {
+    return { scope: 'release-notes', sections: groupReleaseNotesByVersion(docList) }
+  }
+  if (scope === 'swift-book' || slug === 'swift-book') {
+    return { scope: 'swift-book', sections: groupSwiftBookByPart(docList) }
+  }
+  if (scope === 'packages' || slug === 'packages') {
+    const sections = groupPackagesByOwner(docList)
+    return {
+      scope: 'packages',
+      sections,
+      // Owner jump-nav for the biggest catalogs only — hundreds of
+      // single-package owners would drown the nav.
+      nav: sections.filter(s => s.count >= 20).map(s => ({ href: `#${s.id}`, label: s.label, count: s.count })),
+    }
+  }
+  if (slug === 'technotes') {
+    return { scope: 'technotes', sections: sortTechnotes(docList) }
+  }
+  if (scope === 'apple-archive' || slug === 'apple-archive') {
+    const sections = groupArchiveByCategory(docList)
+    return {
+      scope: 'apple-archive',
+      sections,
+      nav: sections.map(s => ({ href: `#${s.id}`, label: s.label, count: s.count })),
+    }
+  }
+  if (scope === 'hig' || slug === 'design') {
+    const sections = groupHigByCategory(docList, extras.higGroups)
+    if (sections) return { scope: 'hig', sections }
   }
   return null
 }

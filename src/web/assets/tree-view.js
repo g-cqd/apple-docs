@@ -198,7 +198,9 @@ export function init() {
     })
   }
 
-  // Tree is the default view — kick off the build (and the data load if
-  // external) immediately.
-  setViewMode('tree')
+  // The server picks the default view: tree for symbol frameworks,
+  // list for scope-grouped roots (guidelines, HIG, release notes, ...)
+  // whose curated sections are the point. Kick off whichever build the
+  // markup asks for.
+  setViewMode(viewToggle?.getAttribute('data-default-view') === 'list' ? 'list' : 'tree')
 }

@@ -32,8 +32,11 @@ beforeEach(() => {
   // Phase 1 unified both paths through view-models/homepage.viewmodel.js, so
   // tests now have to reflect production page state.
   const swiftuiRoot = db.getRootBySlug('swiftui')
-  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'swiftui/view', '/documentation/swiftui/view', 'View', 'active')`, [swiftuiRoot.id])
-  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'swiftui/text', '/documentation/swiftui/text', 'Text', 'active')`, [swiftuiRoot.id])
+  // Page paths must equal document keys — the framework listing build
+  // resolves a root's docs through the pages join (root membership),
+  // exactly like the live route.
+  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'documentation/swiftui/view', '/documentation/swiftui/view', 'View', 'active')`, [swiftuiRoot.id])
+  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'documentation/swiftui/text', '/documentation/swiftui/text', 'Text', 'active')`, [swiftuiRoot.id])
   db.updateRootPageCount('swiftui')
 
   // Seed sections

@@ -105,9 +105,10 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     byRole.get(role).push(doc)
   }
 
-  // Non-framework scopes (WWDC, Swift Evolution, sample code) get
-  // scope-specific sections instead of the role buckets.
-  const scope = buildScopeGroups(framework, docList)
+  // Non-framework scopes (WWDC, Swift Evolution, sample code,
+  // guidelines, release notes, ...) get scope-specific sections
+  // instead of the role buckets.
+  const scope = buildScopeGroups(framework, docList, opts.scopeExtras ?? {})
   const listSections = scope
     ? scope.sections
     : [...byRole.entries()].map(([role, docs]) => ({ id: slugify(role), label: role, count: null, docs }))
@@ -140,12 +141,18 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   // View toggle only shown when we have tree edges
   const hasTree = treeEdges.length > 0
 
+  // Scope-grouped roots (guidelines sections, HIG categories, release-notes
+  // versions, ...) default to the curated list — that IS the organization;
+  // the tree stays one toggle away. Their lists are small, so the
+  // payload-bloat rationale below doesn't apply to them.
+  const listIsDefault = scope != null
+
   // When tree view is default, skip rendering the full list HTML server-side.
   // The list is hidden on load and contains thousands of <li> elements that bloat
   // the HTML payload (e.g., Swift stdlib: 10 MB HTML, 138k DOM nodes, 53s FCP).
   // Instead, collection-filters.js will build the list on-demand when the user
   // switches to list view.
-  const deferList = hasTree
+  const deferList = hasTree && !listIsDefault
 
   const breadcrumbs = html`<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${fwName}</span></nav>`
 
@@ -209,9 +216,9 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   const externalTreeDataUrl = opts.treeDataUrl ?? null
 
   const viewToggle = hasTree
-    ? html`<div class="view-toggle" role="group" aria-label="View mode">
-    <button data-view="list" aria-pressed="false">List</button>
-    <button class="active" data-view="tree" aria-pressed="true">Tree</button>
+    ? html`<div class="view-toggle" role="group" aria-label="View mode" data-default-view="${listIsDefault ? 'list' : 'tree'}">
+    <button${attr('class', listIsDefault ? 'active' : null)} data-view="list" aria-pressed="${listIsDefault ? 'true' : 'false'}">List</button>
+    <button${attr('class', listIsDefault ? null : 'active')} data-view="tree" aria-pressed="${listIsDefault ? 'false' : 'true'}">Tree</button>
   </div>`
     : null
 
@@ -257,7 +264,7 @@ ${buildHeader(siteConfig)}
   ${mobileToc}
   <article class="doc-article">
   <div id="collection-controls"${attr('class', deferList ? 'hidden' : null)}></div>
-  <div id="list-container"${attr('class', hasTree ? 'hidden' : null)}${attr('data-deferred', deferList || null)}>
+  <div id="list-container"${attr('class', hasTree && !listIsDefault ? 'hidden' : null)}${attr('data-deferred', deferList || null)}>
   ${deferList ? null : mainContent}
   </div>
   <div id="tree-container"${externalTreeDataUrl ? attr('data-tree-src', externalTreeDataUrl) : null}></div>

@@ -9,6 +9,7 @@
 
 import { dirname, join } from 'node:path'
 import { renderFrameworkPage, buildFrameworkTreeData } from '../templates.js'
+import { loadScopeExtras } from '../scope-group-data.js'
 import { ensureDir } from '../../storage/files.js'
 import { sha256 } from '../../lib/hash.js'
 import { maybePrecompress, PRECOMPRESS_THRESHOLD } from './io.js'
@@ -20,9 +21,11 @@ import { maybePrecompress, PRECOMPRESS_THRESHOLD } from './io.js'
 export async function buildFrameworkPages({ roots, db, buildDir, siteConfig }) {
   let frameworksBuilt = 0
   for (const root of roots) {
-    const docs = db.db.query(
-      'SELECT key, title, kind, role, role_heading, abstract_text, source_metadata FROM documents WHERE framework = ? ORDER BY title',
-    ).all(root.slug)
+    // Root membership (pages join), not `documents.framework = slug` —
+    // the archive root's documents carry their legacy category there
+    // (cocoa, carbon, ...), so the equality filter built no index page
+    // for it at all. Same query the live route uses.
+    const docs = db.getPagesByRoot(root.slug)
     if (docs.length === 0) continue
 
     const treeEdges = db.getFrameworkTree(root.slug)
@@ -40,7 +43,7 @@ export async function buildFrameworkPages({ roots, db, buildDir, siteConfig }) {
     // renderFrameworkPage returns HtmlString; `.bytes()` gives us a
     // single Uint8Array we can hand to both Bun.write and
     // maybePrecompress without paying a second UTF-8 encode pass.
-    const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl }).bytes()
+    const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl, scopeExtras: loadScopeExtras(db, root) }).bytes()
     const fwFilePath = join(buildDir, 'docs', root.slug, 'index.html')
     ensureDir(dirname(fwFilePath))
     await Bun.write(fwFilePath, html)
