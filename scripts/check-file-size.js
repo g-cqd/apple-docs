@@ -17,7 +17,7 @@ import { join, relative, resolve } from 'node:path'
 
 const DEFAULT_ROOT = resolve(import.meta.dir, '..')
 const DEFAULT_SOURCE_ROOTS = ['src', 'cli.js', 'index.js']
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage', '.stryker-tmp', 'reports'])
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage', 'reports'])
 const SOURCE_EXTS = ['.js', '.mjs', '.cjs']
 
 export function countLines(filePath) {
