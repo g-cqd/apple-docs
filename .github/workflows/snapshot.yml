@@ -14,15 +14,18 @@ permissions:
 
 jobs:
   build-snapshot:
-    # macos-latest tracks the newest GA runner image, which carries the
-    # newest CoreGlyphs / CoreGlyphsPrivate bundles — the snapshot ships
-    # every SF Symbol that macOS has shipped to date. The Swift toolchain
-    # there also exposes `vectorGlyph.drawInContext:` which our
-    # private-API SVG renderer depends on (see src/resources/
-    # symbol-pdf-to-svg.js). Pinning an older image would silently
-    # produce a smaller symbol catalog; anything newer than GA comes from
-    # the beta snapshot channel (scripts/publish-beta-snapshot.mjs).
-    runs-on: macos-latest
+    # Explicitly the newest GA image — GitHub's `macos-latest` label LAGS
+    # the newest releases (observed 2026-06-10: macos-latest resolved to
+    # macOS 15.7, and the snapshot's recorded buildMacos proved it). The
+    # newest image carries the newest CoreGlyphs / CoreGlyphsPrivate
+    # bundles so the snapshot ships every SF Symbol macOS has shipped to
+    # date, and its Swift toolchain exposes `vectorGlyph.drawInContext:`
+    # which our private-API SVG renderer depends on (see src/resources/
+    # symbol-pdf-to-svg.js). Catalog names the runner OS cannot draw are
+    # flagged render_unsupported and skipped by the completeness gate;
+    # anything newer than GA ships via the beta channel
+    # (scripts/publish-beta-snapshot.mjs).
+    runs-on: macos-26
     timeout-minutes: 240
     permissions:
       contents: write
