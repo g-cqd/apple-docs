@@ -166,3 +166,22 @@ describe('loadEnv', () => {
     expect(out.staticDir).toBe('/var/www/apple-docs')
   })
 })
+
+describe('SNAPSHOT_CHANNEL', () => {
+  test('defaults to stable', () => {
+    const out = loadEnv({ path: '/fake/.env', deps: fakeDeps({ fileText: envText(minimalEnv()) }) })
+    expect(out.vars.SNAPSHOT_CHANNEL).toBe('stable')
+  })
+
+  test('accepts beta', () => {
+    const out = loadEnv({ path: '/fake/.env', deps: fakeDeps({ fileText: envText(minimalEnv({ SNAPSHOT_CHANNEL: 'beta' })) }) })
+    expect(out.vars.SNAPSHOT_CHANNEL).toBe('beta')
+  })
+
+  test('rejects anything else', () => {
+    expect(() => loadEnv({
+      path: '/fake/.env',
+      deps: fakeDeps({ fileText: envText(minimalEnv({ SNAPSHOT_CHANNEL: 'nightly' })) }),
+    })).toThrow(EnvLoadError)
+  })
+})

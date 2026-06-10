@@ -209,3 +209,56 @@ function formatMB(bytes) { return `${(bytes / 1e6).toFixed(0)} MB` }
 async function safeText(res) {
   try { return (await res.text()).slice(0, 1024) } catch { return '' }
 }
+
+/**
+ * Channel-aware release resolution for the update flows. Stable keeps
+ * the exact `fetchLatest` behavior; beta delegates to the SAME policy
+ * implementation `apple-docs setup --beta` uses
+ * (src/commands/setup/helpers.js): newest release — prerelease or
+ * stable — whose build-host macOS (status.json `buildMacos`) is at
+ * least the installed corpus's `snapshot_meta.build_macos`.
+ *
+ * The local provenance is read from `${env.dataDir}/apple-docs.db`
+ * (readonly; missing DB/key → null → newest release outright).
+ * `deps.channelResolver` injects the policy in tests, mirroring
+ * `deps.fetcher`.
+ *
+ * @param {{ vars: Record<string,string>, dataDir: string }} env
+ * @param {{ fetcher?: typeof fetch, channelResolver?: Function,
+ *           readBuildMacos?: (dbPath: string) => string|null }} [deps]
+ * @returns {Promise<{ tagName: string, publishedAt?: string, prerelease?: boolean }>}
+ */
+export async function resolveChannelRelease(repo, env, deps = {}) {
+  const channel = env.vars?.SNAPSHOT_CHANNEL ?? 'stable'
+  if (channel !== 'beta') {
+    return fetchLatest(repo, deps)
+  }
+  const readBuildMacos = deps.readBuildMacos ?? defaultReadBuildMacos
+  const localBuildMacos = await readBuildMacos(`${env.dataDir}/apple-docs.db`)
+  const resolver = deps.channelResolver ?? (async (opts) => {
+    const { fetchLatestRelease } = await import('../../src/commands/setup/helpers.js')
+    return fetchLatestRelease(opts)
+  })
+  try {
+    const release = await resolver({ channel: 'beta', localBuildMacos })
+    return { tagName: release.tag, publishedAt: release.date, prerelease: !!release.prerelease }
+  } catch (err) {
+    throw new GhReleaseError(`beta channel resolution failed: ${err?.message ?? err}`, {
+      code: 'beta-resolution-failed',
+    })
+  }
+}
+
+async function defaultReadBuildMacos(dbPath) {
+  try {
+    const { Database } = await import('bun:sqlite')
+    const db = new Database(dbPath, { readonly: true })
+    try {
+      return db.query("SELECT value FROM snapshot_meta WHERE key = 'build_macos'").get()?.value ?? null
+    } finally {
+      db.close()
+    }
+  } catch {
+    return null
+  }
+}

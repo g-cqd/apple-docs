@@ -372,6 +372,23 @@ performs a short cut-over restart and smoke test.
 For atomic snapshot rollovers on a public instance, follow the
 [Public-instance update runbook](/runbooks/public-instance-update).
 
+### Channel selection
+
+`SNAPSHOT_CHANNEL` in `ops/.env` picks which releases the update flows
+track (`pull-snapshot` skip-detection, `deploy` auto-detection, and the
+`setup` invocation itself):
+
+| Channel | Resolves | Update rule |
+| --- | --- | --- |
+| `stable` *(default)* | `GET /releases/latest` | Always the latest release; prereleases are structurally invisible. |
+| `beta` | newest eligible release, prerelease or stable | A candidate is eligible only when its build-host macOS (`status.json` → `buildMacos`) is at least the installed corpus's `snapshot_meta.build_macos` — updates never shed SF Symbols the instance already serves. A stable built on the same-or-newer macOS supersedes the beta (the "de-beta" path). |
+
+Beta snapshots are published from a developer machine with
+`bun scripts/publish-beta-snapshot.mjs`; pass `--rollout <ssh-host>` (or
+set `APPLE_DOCS_BETA_ROLLOUT`) to push-update a beta-channel instance
+immediately after publishing — the weekly autoroll remains the fallback
+for missed pushes, and is channel-aware too.
+
 ## Observability
 
 | Endpoint | What it shows |

@@ -30,7 +30,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { loadEnv } from '../lib/env.js'
 import { createLogger } from '../lib/logger.js'
-import { fetchLatest, GhReleaseError } from '../lib/gh-release.js'
+import { GhReleaseError, resolveChannelRelease } from '../lib/gh-release.js'
 import { bootout, bootstrapOrKick } from '../lib/launchctl.js'
 import { runCmd, runCmdAllowFailure } from '../lib/run-cmd.js'
 import runSmokeTest from './smoke-test.js'
@@ -71,20 +71,24 @@ export default async function runPullSnapshot(ctx = {}) {
   const fs = deps.fs ?? defaultFs()
   const sleep = deps.sleep ?? ((ms) => new Promise(r => setTimeout(r, ms)))
 
-  logger.say(`=== pull-snapshot starting (force=${force ? 1 : 0}) ===`)
+  const channel = env.vars?.SNAPSHOT_CHANNEL ?? 'stable'
+  logger.say(`=== pull-snapshot starting (force=${force ? 1 : 0}, channel=${channel}) ===`)
 
-  // 1. Latest release.
-  const apiUrl = `https://api.github.com/repos/${GITHUB_REPO_SLUG}/releases/latest`
-  logger.say(`querying ${apiUrl}`)
+  // 1. Latest release on the configured channel (stable: /releases/latest;
+  // beta: the setup --beta policy — see ops/lib/gh-release.js).
   let release
   try {
-    release = await fetchLatest(GITHUB_REPO_SLUG, { fetcher })
+    release = await resolveChannelRelease(GITHUB_REPO_SLUG, env, {
+      fetcher,
+      channelResolver: deps.channelResolver,
+      readBuildMacos: deps.readBuildMacos,
+    })
   } catch (err) {
     if (err instanceof GhReleaseError) logger.error(`could not fetch latest release: ${err.message}`)
     else logger.error(`could not fetch latest release: ${err?.message ?? err}`)
     return 1
   }
-  logger.say(`latest release: ${release.tagName}`)
+  logger.say(`latest release: ${release.tagName}${release.prerelease ? ' [beta]' : ''}`)
 
   // 2. Compare against applied tag.
   const appliedFile = join(env.opsDir, 'state', 'applied-snapshot')
@@ -103,11 +107,13 @@ export default async function runPullSnapshot(ctx = {}) {
     await launchctl.bootout(label, { runCmdAllowFailure: runAllow })
   }
 
-  // 4. setup --force.
-  logger.say(`$ ${env.bunBin} run ${env.repoDir}/cli.js setup --force`)
+  // 4. setup --force (with --beta on the beta channel — setup re-resolves
+  // under the same policy and owns assets/checksum/extraction).
+  const setupArgs = [env.bunBin, 'run', `${env.repoDir}/cli.js`, 'setup', '--force', ...(channel === 'beta' ? ['--beta'] : [])]
+  logger.say(`$ ${setupArgs.join(' ')}`)
   let setupFailed = false
   try {
-    const r = await runner([env.bunBin, 'run', `${env.repoDir}/cli.js`, 'setup', '--force'], {
+    const r = await runner(setupArgs, {
       deadlineMs: 60 * 60_000,
       env: { ...process.env, PATH: `${dirname(env.bunBin)}:${process.env.PATH ?? ''}` },
     })

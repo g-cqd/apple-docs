@@ -21,6 +21,12 @@
  *   bun scripts/publish-beta-snapshot.mjs --no-publish    # build only
  *   bun scripts/publish-beta-snapshot.mjs --skip-resources  # trust current corpus
  *   bun scripts/publish-beta-snapshot.mjs --allow-incomplete-symbols
+ *   bun scripts/publish-beta-snapshot.mjs --rollout gc@host  # push-update an instance
+ *
+ * `--rollout <ssh-host>` (default: $APPLE_DOCS_BETA_ROLLOUT) fires the
+ * instance's `ops/cli.js pull-snapshot` over ssh after publishing —
+ * detached on the remote, so the publisher never blocks on the install.
+ * The instance must run SNAPSHOT_CHANNEL=beta to pick the prerelease up.
  *
  * Requires: a populated $APPLE_DOCS_HOME and an authenticated `gh`.
  */
@@ -35,8 +41,14 @@ import { sha256File } from '../src/lib/hash.js'
 
 const ROOT = join(import.meta.dir, '..')
 const args = new Set(process.argv.slice(2))
+const flagValue = (name) => {
+  const i = process.argv.indexOf(name)
+  const v = i > -1 ? process.argv[i + 1] : null
+  return v && !v.startsWith('--') ? v : null
+}
 const dataDir = process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
 const outDir = join(ROOT, 'dist-beta')
+const rolloutHost = flagValue('--rollout') ?? process.env.APPLE_DOCS_BETA_ROLLOUT ?? null
 const logger = createLogger('info')
 
 function sh(cmd, opts = {}) {
@@ -157,3 +169,18 @@ sh(['gh', 'release', 'create', tag,
   archive, sidecar, manifestPath, statusPath,
 ], { stdout: 'inherit', stderr: 'inherit' })
 logger.info(`Published: https://github.com/g-cqd/apple-docs/releases/tag/${tag}`)
+
+// Push-style rollout: poke the beta-channel instance, detached on the
+// remote so a ~15-minute install never blocks the publisher.
+if (rolloutHost) {
+  logger.info(`Triggering rollout on ${rolloutHost}…`)
+  const remoteLog = `~/beta-rollout-${tag}.log`
+  const r = sh(['ssh', '-o', 'BatchMode=yes', rolloutHost,
+    `bash -lc 'cd ~/Developer/apple-docs/ops && nohup bun cli.js pull-snapshot > ${remoteLog} 2>&1 & echo triggered'`,
+  ], { allowFailure: true })
+  if (r.code === 0) {
+    logger.info(`Rollout triggered — remote log: ${rolloutHost}:${remoteLog}`)
+  } else {
+    logger.warn(`Rollout trigger failed (${r.code}): ${r.stderr.slice(-200)} — the instance's autoroll will pick it up.`)
+  }
+}

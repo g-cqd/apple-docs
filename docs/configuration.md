@@ -50,11 +50,15 @@ cannot produce. Such builds ship as GitHub prereleases
 apple-docs setup --beta --force   # install/update on the beta channel
 ```
 
-The stable channel (default) never sees prereleases. A beta install only
-updates to newer betas, or to a stable snapshot whose recorded build host
+The stable channel (default) never sees prereleases. On the beta channel a
+candidate — beta or stable — is only eligible when its recorded build host
 (`status.json` → `buildMacos`, also stamped into the DB as
-`snapshot_meta.build_macos`) runs at least the same macOS — never to a
-stable that would shed symbols the install already has.
+`snapshot_meta.build_macos`) runs at least the same macOS as the installed
+corpus — an update never sheds symbols the install already has, and a
+stable built on the same-or-newer macOS supersedes the beta.
+
+Self-hosted instances opt in with `SNAPSHOT_CHANNEL=beta` in `ops/.env`
+(see [self-hosting → Channel selection](self-hosting.md#channel-selection)).
 
 `compact` is a one-way trade: it sheds redundant data (the raw payloads and
 the body index's duplicate text copy) in exchange for per-read decompression.

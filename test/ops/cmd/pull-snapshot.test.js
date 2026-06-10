@@ -232,3 +232,67 @@ describe('runPullSnapshot', () => {
     }
   })
 })
+
+describe('runPullSnapshot — beta channel', () => {
+  const betaEnv = () => ({ ...ENV, vars: { ...ENV.vars, SNAPSHOT_CHANNEL: 'beta' } })
+  const betaRelease = { tag: 'snapshot-20260610-beta.1', date: '2026-06-10', prerelease: true }
+
+  test('resolves via the channel resolver, installs with --beta, stamps the beta tag', async () => {
+    const fs = inMemoryFs({ '/fake/ops/state/applied-snapshot': 'snapshot-20260609\n' })
+    const runner = fakeRunner()
+    const resolverCalls = []
+    const code = await runPullSnapshot({
+      args: [], envLoader: betaEnv, logger: captureLogger(),
+      deps: {
+        channelResolver: async (opts) => { resolverCalls.push(opts); return betaRelease },
+        readBuildMacos: async () => '27.0',
+        fs,
+        runCmd: runner.fn,
+        runCmdAllowFailure: async () => ({ exitCode: 0 }),
+        bootout: async () => {}, bootstrapOrKick: async () => ({}),
+        smokeTest: async () => 0, cfPurge: async () => 0, sleep: async () => {},
+      },
+    })
+    expect(code).toBe(0)
+    expect(resolverCalls[0]).toEqual({ channel: 'beta', localBuildMacos: '27.0' })
+    const setup = runner.calls.find(c => c.args.includes('setup'))
+    expect(setup.args).toContain('--beta')
+    expect(fs.files.get('/fake/ops/state/applied-snapshot')).toBe('snapshot-20260610-beta.1\n')
+  })
+
+  test('no-op when the applied tag already is the resolved beta', async () => {
+    const log = captureLogger()
+    const code = await runPullSnapshot({
+      args: [], envLoader: betaEnv, logger: log,
+      deps: {
+        channelResolver: async () => betaRelease,
+        readBuildMacos: async () => '27.0',
+        fs: inMemoryFs({ '/fake/ops/state/applied-snapshot': 'snapshot-20260610-beta.1\n' }),
+        runCmd: fakeRunner().fn, runCmdAllowFailure: fakeRunner().fn,
+        bootout: async () => { throw new Error('must not stop daemons on a no-op') },
+        bootstrapOrKick: async () => ({}),
+        smokeTest: async () => 0, cfPurge: async () => 0, sleep: async () => {},
+      },
+    })
+    expect(code).toBe(0)
+    expect(log.lines.some(m => m.includes('nothing to do'))).toBe(true)
+  })
+
+  test('stable default keeps the legacy /releases/latest path and argv', async () => {
+    const runner = fakeRunner()
+    const code = await runPullSnapshot({
+      args: [], envLoader: () => ENV, logger: captureLogger(),
+      deps: {
+        fetcher: makeFetcher(releasePayload('snapshot-20260514')),
+        fs: inMemoryFs({ '/fake/ops/state/applied-snapshot': 'snapshot-20260513\n' }),
+        runCmd: runner.fn,
+        runCmdAllowFailure: async () => ({ exitCode: 0 }),
+        bootout: async () => {}, bootstrapOrKick: async () => ({}),
+        smokeTest: async () => 0, cfPurge: async () => 0, sleep: async () => {},
+      },
+    })
+    expect(code).toBe(0)
+    const setup = runner.calls.find(c => c.args.includes('setup'))
+    expect(setup.args).not.toContain('--beta')
+  })
+})

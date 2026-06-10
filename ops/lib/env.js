@@ -36,6 +36,7 @@ export const DERIVED_NAMES = Object.freeze([
   'LABEL_TUNNEL_WEB', 'LABEL_TUNNEL_MCP', 'LABEL_WATCHDOG', 'LABEL_AUTOROLL',
   'AUTOROLL_WEEKDAY', 'AUTOROLL_HOUR',
   'STATIC_DIR', 'APPLE_DOCS_MCP_CACHE_SCALE', 'LEGACY_LAUNCHD_LABELS',
+  'SNAPSHOT_CHANNEL',
 ])
 
 export class EnvLoadError extends Error {
@@ -207,6 +208,16 @@ function applyDerived(vars) {
   vars.STATIC_DIR = vars.STATIC_DIR || `${vars.REPO_DIR}/dist/web`
   vars.APPLE_DOCS_MCP_CACHE_SCALE = vars.APPLE_DOCS_MCP_CACHE_SCALE || '1'
   vars.LEGACY_LAUNCHD_LABELS = vars.LEGACY_LAUNCHD_LABELS || ''
+  // Snapshot update channel: 'stable' tracks /releases/latest (GitHub
+  // hides prereleases there); 'beta' also considers prereleases under the
+  // macOS-base policy implemented in src/commands/setup/helpers.js.
+  vars.SNAPSHOT_CHANNEL = vars.SNAPSHOT_CHANNEL || 'stable'
+  if (vars.SNAPSHOT_CHANNEL !== 'stable' && vars.SNAPSHOT_CHANNEL !== 'beta') {
+    throw new EnvLoadError(
+      `SNAPSHOT_CHANNEL must be "stable" or "beta", got "${vars.SNAPSHOT_CHANNEL}"`,
+      { code: 'bad-channel' },
+    )
+  }
 }
 
 function defaultOpsDir() {

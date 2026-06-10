@@ -26,7 +26,7 @@ import { join } from 'node:path'
 import { CryptoHasher } from 'bun'
 import { loadEnv } from '../lib/env.js'
 import { createLogger } from '../lib/logger.js'
-import { fetchLatest } from '../lib/gh-release.js'
+import { resolveChannelRelease } from '../lib/gh-release.js'
 import { bootstrapOrKick, kickstart, isLoaded } from '../lib/launchctl.js'
 import { runCmd, runCmdAllowFailure } from '../lib/run-cmd.js'
 import runRenderAll from './render-all.js'
@@ -221,7 +221,9 @@ async function chooseRefreshMode(procEnv, env, fs, fetcher, logger) {
   const appliedFile = join(env.opsDir, 'state', 'applied-snapshot')
   const applied = fs.exists(appliedFile) ? fs.readFile(appliedFile).trim() : ''
   try {
-    const release = await fetchLatest(GITHUB_REPO_SLUG, { fetcher })
+    // Channel-aware: a beta instance auto-detects new prereleases too,
+    // under the same macOS-base policy pull-snapshot installs with.
+    const release = await resolveChannelRelease(GITHUB_REPO_SLUG, env, { fetcher })
     if (release.tagName && release.tagName !== applied) {
       logger.say(`auto-detected new GH snapshot ${release.tagName} (was ${applied || '<none>'}) — using snapshot mode`)
       return true
