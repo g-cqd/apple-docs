@@ -121,6 +121,58 @@ describe('runSmokeTest', () => {
     void fetcher
   })
 
+  test('waits for local daemons to converge before asserting', async () => {
+    // Deploy race: web crash-loops on SQLITE_BUSY_RECOVERY while a
+    // build holds the DB, recovers right after. First two local-web
+    // healthz probes 503, then 200 — smoke must pass.
+    let webHealthz = 0
+    const fetcher = (url) => {
+      let host
+      try { host = new URL(url).host } catch { host = '' }
+      if (host === '127.0.0.1:3130' && url.endsWith('/healthz')) {
+        webHealthz++
+        if (webHealthz <= 2) return Promise.resolve(makeResp(503))
+      }
+      return Promise.resolve(makeResp(200))
+    }
+    const logger = captureLogger()
+    const code = await runSmokeTest({
+      envLoader: () => fakeEnv(),
+      logger,
+      deps: { fetcher, sleep: async () => {} },
+    })
+    expect(code).toBe(0)
+    expect(logger.out.some(m => m.includes('waiting for local readiness'))).toBe(true)
+    expect(logger.out.some(m => m.includes('local daemons ready after'))).toBe(true)
+  })
+
+  test('readiness wait is attempt-bounded and smoke still fails honestly', async () => {
+    const env = fakeEnv()
+    env.vars.SMOKE_READY_TIMEOUT_MS = '1000'
+    env.vars.SMOKE_READY_POLL_MS = '100'
+    let localWebProbes = 0
+    const fetcher = (url) => {
+      let host
+      try { host = new URL(url).host } catch { host = '' }
+      if (host === '127.0.0.1:3130' && url.endsWith('/healthz')) {
+        localWebProbes++
+        return Promise.resolve(makeResp(503))
+      }
+      return Promise.resolve(makeResp(200))
+    }
+    const logger = captureLogger()
+    const code = await runSmokeTest({
+      envLoader: () => env,
+      logger,
+      deps: { fetcher, sleep: async () => {} },
+    })
+    expect(code).toBe(1)
+    // 10 readiness attempts + 1 assertion probe.
+    expect(localWebProbes).toBe(11)
+    expect(logger.out.some(m => m.startsWith('WARN:') && m.includes('not ready'))).toBe(true)
+    expect(logger.out.some(m => m.includes('local web') && m.includes('HTTP 503'))).toBe(true)
+  })
+
   test('warmup fetch failure does not count against smoke', async () => {
     // The warmup is the FIRST POST to /mcp; everything before it (4
     // healthz probes) is GET. We fail only that very first POST and

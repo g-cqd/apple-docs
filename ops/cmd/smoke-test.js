@@ -1,7 +1,15 @@
 /**
  * Smoke-test battery for a live apple-docs deploy. Ports
- * ops/bin/smoke-test.sh. Runs three independent checks:
+ * ops/bin/smoke-test.sh. Runs a readiness gate plus three checks:
  *
+ *  0. Bounded readiness wait on the LOCAL daemons. Deploy flows call
+ *     smoke seconds after a cutover or a long `web build` releases the
+ *     DB lock, while launchd is still restart-throttling a daemon that
+ *     crash-looped on SQLITE_BUSY_RECOVERY during the build — a
+ *     point-in-time probe at that instant reports 503 on a deploy that
+ *     converges moments later. Waiting (default ≤180 s, poll 5 s)
+ *     makes smoke assert the converged state; if the wait times out
+ *     the assertions below still run and fail honestly.
  *  1. Healthz against local + Cloudflare-fronted web/mcp daemons.
  *  2. A burst of 16 search_docs JSON-RPC calls against MCP, with a
  *     ~10ms stagger, to flush out sustained-concurrency regressions
@@ -37,8 +45,22 @@ export default async function runSmokeTest(ctx = {}) {
   const burstSize = parseIntEnv(env.vars.SMOKE_BURST_SIZE, 16)
   const burstStaggerMs = parseIntEnv(env.vars.SMOKE_BURST_STAGGER_MS, 10)
   const healthzSamples = parseIntEnv(env.vars.SMOKE_HEALTHZ_SAMPLES, 5)
+  const readyTimeoutMs = parseIntEnv(env.vars.SMOKE_READY_TIMEOUT_MS, 180_000)
+  const readyPollMs = parseIntEnv(env.vars.SMOKE_READY_POLL_MS, 5_000)
 
   let failed = 0
+
+  // 0. Readiness gate on the local daemons (edge follows once local is up).
+  await waitForLocalReadiness({
+    urls: [
+      `http://127.0.0.1:${env.vars.WEB_PORT}/healthz`,
+      `http://127.0.0.1:${env.vars.MCP_PORT}/healthz`,
+    ],
+    timeoutMs: readyTimeoutMs,
+    pollMs: readyPollMs,
+    logger,
+    deps: { fetcher, clock, sleep },
+  })
 
   // 1. Healthz probes.
   const targets = [
@@ -105,6 +127,40 @@ export default async function runSmokeTest(ctx = {}) {
   if (burstFail > 0) failed++
 
   return failed > 0 ? 1 : 0
+}
+
+/**
+ * Poll the local healthz endpoints until every one answers 2xx/3xx or
+ * the attempt budget runs out. Attempt-bounded (not wall-clock-bounded)
+ * so injected test clocks/sleeps cannot spin it forever. Never fails
+ * the smoke by itself — the assertions that follow do that honestly.
+ */
+async function waitForLocalReadiness({ urls, timeoutMs, pollMs, logger, deps }) {
+  const { fetcher, clock, sleep } = deps
+  const start = clock()
+  const maxAttempts = Math.max(1, Math.ceil(timeoutMs / pollMs))
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const results = await Promise.all(
+      urls.map(u => probe(u, { deadlineMs: 5_000, deps: { fetcher, clock } })),
+    )
+    const pending = urls.filter((_, i) => {
+      const s = results[i].status
+      return !(typeof s === 'number' && s >= 200 && s < 400)
+    })
+    if (pending.length === 0) {
+      if (attempt > 1) {
+        logger.say(`local daemons ready after ${Math.round((clock() - start) / 1000)}s (${attempt} probes)`)
+      }
+      return true
+    }
+    if (attempt === maxAttempts) break
+    if (attempt === 1 || attempt % 6 === 0) {
+      logger.say(`waiting for local readiness (attempt ${attempt}/${maxAttempts}): ${pending.join(', ')}`)
+    }
+    await sleep(pollMs)
+  }
+  logger.warn(`local daemons not ready after ~${Math.round(timeoutMs / 1000)}s — asserting current state`)
+  return false
 }
 
 async function issueSearchDocs(url, query, id, { fetcher, deadlineMs }) {
