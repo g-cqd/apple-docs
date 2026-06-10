@@ -14,12 +14,6 @@ import {
 } from '../../resources/apple-assets.js'
 import { createMcpTextResult } from '../pagination.js'
 import {
-  listAppleFontsOutputSchema,
-  renderFontTextOutputSchema,
-  renderSfSymbolOutputSchema,
-  searchSfSymbolsOutputSchema,
-} from '../../output/schemas.js'
-import {
   projectListAppleFonts,
   projectRenderFontText,
   projectRenderSfSymbol,
@@ -37,12 +31,11 @@ export function registerAssetTools(server, ctx, cache) {
   server.registerTool(
     'search_sf_symbols',
     {
-      description: 'Search indexed SF Symbols by name, category, alias, or keyword. Run `apple-docs setup` or `apple-docs sync` first if no symbols are indexed.',
+      description: 'Search SF Symbols by name, category, alias, or keyword.',
       annotations: READ_ONLY_HINTS,
-      outputSchema: searchSfSymbolsOutputSchema,
       inputSchema: {
-        query: z.string().optional().describe('Symbol name or keyword. Empty returns ordered symbols.'),
-        scope: z.enum(['public', 'private']).optional().describe('Restrict to public or private symbols.'),
+        query: z.string().optional().describe('Name or keyword; empty lists all.'),
+        scope: z.enum(['public', 'private']).optional(),
         limit: z.coerce.number().int().min(1).max(500).optional().describe('Max results (default 100).'),
       },
     },
@@ -54,9 +47,8 @@ export function registerAssetTools(server, ctx, cache) {
   server.registerTool(
     'list_apple_fonts',
     {
-      description: 'List indexed Apple font families and font files, including download-ready file identifiers. Run `apple-docs setup` or `apple-docs sync` first if no fonts are indexed.',
+      description: 'List Apple font families and files (ids feed render_font_text).',
       annotations: READ_ONLY_HINTS,
-      outputSchema: listAppleFontsOutputSchema,
       inputSchema: {},
     },
     cache.wrap('list_apple_fonts', async () => {
@@ -67,18 +59,17 @@ export function registerAssetTools(server, ctx, cache) {
   server.registerTool(
     'render_sf_symbol',
     {
-      description: 'Render an indexed SF Symbol to SVG or PNG. SVG content is inlined; PNG bytes are available via the returned resource URI.',
+      description: 'Render an SF Symbol to SVG (inlined) or PNG (fetch via returned resource URI).',
       annotations: READ_ONLY_HINTS,
-      outputSchema: renderSfSymbolOutputSchema,
       inputSchema: {
-        name: z.string().describe('SF Symbol name (e.g. pencil.and.sparkles).'),
-        scope: z.enum(['public', 'private']).optional().describe('Symbol scope (default public).'),
-        format: z.enum(['svg', 'png']).optional().describe('Output format (default png).'),
-        size: z.coerce.number().int().min(8).max(1024).optional().describe('Square output size in points/pixels.'),
-        color: z.string().optional().describe('Foreground hex (e.g. #000000). SVG also accepts "currentColor".'),
-        background: z.string().optional().describe('Background hex (e.g. #ffffff), "transparent", or empty for none.'),
-        weight: z.enum(SYMBOL_WEIGHTS).optional().describe('Public symbol weight variant (ignored for private).'),
-        scale: z.enum(SYMBOL_SCALES).optional().describe('Public symbol scale variant (ignored for private).'),
+        name: z.string().describe('Symbol name, e.g. pencil.and.sparkles.'),
+        scope: z.enum(['public', 'private']).optional().describe('Default public.'),
+        format: z.enum(['svg', 'png']).optional().describe('Default png.'),
+        size: z.coerce.number().int().min(8).max(1024).optional().describe('Square size in px.'),
+        color: z.string().optional().describe('Foreground hex or "currentColor" (svg).'),
+        background: z.string().optional().describe('Background hex or "transparent".'),
+        weight: z.enum(SYMBOL_WEIGHTS).optional().describe('Public symbols only.'),
+        scale: z.enum(SYMBOL_SCALES).optional().describe('Public symbols only.'),
       },
     },
     async (args) => {
@@ -97,11 +88,10 @@ export function registerAssetTools(server, ctx, cache) {
   server.registerTool(
     'render_font_text',
     {
-      description: 'Render a text preview using an indexed Apple font file. Returns SVG markup.',
+      description: 'Render a text preview as SVG using an Apple font.',
       annotations: READ_ONLY_HINTS,
-      outputSchema: renderFontTextOutputSchema,
       inputSchema: {
-        fontId: z.string().describe('Font file id from list_apple_fonts.'),
+        fontId: z.string().describe('Id from list_apple_fonts.'),
         text: z.string().optional().describe('Text to render.'),
         size: z.coerce.number().int().min(8).max(512).optional().describe('Point size.'),
       },

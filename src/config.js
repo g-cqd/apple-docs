@@ -142,7 +142,6 @@ export const config = loadConfig()
 
 /**
  * Convenience boolean: true when `APPLE_DOCS_DEBUG` is set. Used as the
- * default short-circuit in `src/output/projection.js` and as the
- * passthrough toggle in `src/output/schemas.js`.
+ * default short-circuit in `src/output/projection.js`.
  */
 export const DEBUG_PASSTHROUGH = config.APPLE_DOCS_DEBUG === true

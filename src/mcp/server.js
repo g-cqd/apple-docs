@@ -27,9 +27,14 @@ import { registerResources } from './server/resources.js'
  *   mode omits it and we create one per process.
  */
 export function createServer(ctx, deps = {}) {
+  // Instructions are injected once per session by MCP clients, so shared
+  // steering lives here instead of being repeated across tool descriptions.
   const server = new McpServer(
     { name: 'apple-docs', version: VERSION },
-    { capabilities: { resources: {}, tools: {} } },
+    {
+      capabilities: { resources: {}, tools: {} },
+      instructions: 'Local offline index of Apple developer documentation: DocC frameworks, HIG, App Store Review Guidelines, Swift Evolution/book/org, WWDC sessions, sample code, Swift packages, SF Symbols, Apple fonts. Typical flow: search_docs, then read_doc with a hit\'s path (paginate long pages with maxChars). browse/list_frameworks explore structure; list_taxonomy enumerates filter values. All tools are read-only and fast.',
+    },
   )
 
   const cache = deps.cacheRegistry ?? createCacheRegistry(ctx)

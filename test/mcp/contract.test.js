@@ -266,20 +266,27 @@ describe('MCP contract — tools', () => {
     }
   })
 
-  test('D.1: every tool advertises a JSON-Schema outputSchema', async () => {
+  test('D.1: tool definitions stay inside the context-token budget', async () => {
+    // The tools/list payload is loaded into the model's context by MCP
+    // clients on every session. outputSchema is intentionally NOT
+    // advertised (it tripled the payload; the projection layer +
+    // leak-guard tests are the output gate), descriptions are terse, and
+    // the whole surface must fit a hard byte budget so bloat cannot
+    // creep back in. ~10 KB ≈ 2.5k tokens for 9 tools.
     const result = await client.listTools()
+    const bytes = JSON.stringify(result.tools).length
+    expect(bytes).toBeLessThan(10 * 1024)
     for (const tool of result.tools) {
-      expect(tool.outputSchema).toBeDefined()
-      expect(tool.outputSchema.type).toBe('object')
+      expect(tool.outputSchema).toBeUndefined()
+      expect((tool.description ?? '').length).toBeLessThan(300)
     }
   })
 
-  test('D.1: callTool returns structuredContent matching the advertised shape', async () => {
-    // The SDK auto-validates structuredContent against the registered
-    // outputSchema before returning. A successful call therefore proves
-    // the contract holds for that input. search_docs covers the result
-    // shape; read_doc covers the metadata shape; list_frameworks covers
-    // the array-of-roots shape.
+  test('D.1: callTool returns structuredContent alongside text', async () => {
+    // No outputSchema is advertised, but structuredContent is still
+    // returned for programmatic consumers (text remains the canonical
+    // payload). The leak-guard suite walks these payloads against the
+    // public allowlist; here we only pin the envelope shape.
     const search = await client.callTool({ name: 'search_docs', arguments: { query: 'View' } })
     expect(search.isError).toBeFalsy()
     expect(search.structuredContent).toBeDefined()
@@ -494,16 +501,19 @@ describe('MCP contract — tools', () => {
   })
 
   test('read_doc supports focused match excerpts', async () => {
+    // 850 chars fits one compact-serialized excerpt per page (one match is
+    // ~615 chars with envelope; two exceed the budget), so the matched
+    // payload still spans multiple pages under compact serialization.
     const result = await client.callTool({
       name: 'read_doc',
       arguments: {
         path: 'swiftui/long-article',
         match: { query: 'Observation', max: 2 },
-        maxChars: 1000,
+        maxChars: 850,
       },
     })
     expect(result.isError).toBeFalsy()
-    expect(result.content[0].text.length).toBeLessThanOrEqual(1000)
+    expect(result.content[0].text.length).toBeLessThanOrEqual(850)
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.matches.length).toBeGreaterThan(0)
     // `pageInfo.strategy` is an infrastructure field stripped by projection;
@@ -571,9 +581,11 @@ describe('MCP contract — tools', () => {
   })
 
   test('maxChars too small for a single result returns descriptive error', async () => {
+    // Floor budget: a single compact-serialized result must still
+    // overflow 512 chars for the oversize error path to fire.
     const result = await client.callTool({
       name: 'search_docs',
-      arguments: { query: 'Mock', maxChars: 800 },
+      arguments: { query: 'Mock', maxChars: 512 },
     })
     expect(result.isError).toBe(true)
     expect(result.content[0].text).toContain('exceeds the maxChars budget')

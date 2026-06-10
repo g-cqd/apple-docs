@@ -10,11 +10,8 @@
  * serialisation.
  *
  * `APPLE_DOCS_DEBUG=1` in the environment short-circuits every
- * allowlist and returns the raw envelope unchanged. The MCP output
- * schemas (src/output/schemas.js) flip to `.passthrough()` under the
- * same flag so the SDK's structuredContent validation doesn't reject
- * the rich shape. Use for local debugging only — the public deployment
- * runs without it.
+ * allowlist and returns the raw envelope unchanged. Use for local
+ * debugging only — the public deployment runs without it.
  *
  * Per-call override: `{ debug: true }` on opts forces passthrough on
  * that single call (used by leak-guard tests).

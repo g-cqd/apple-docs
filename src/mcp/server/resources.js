@@ -11,6 +11,7 @@ import { renderSfSymbol } from '../../resources/apple-assets.js'
 import {
   paginateArrayField,
 } from '../pagination.js'
+import { serializePayload } from '../pagination/text-utils.js'
 import {
   projectBrowse,
   projectFrameworks,
@@ -66,7 +67,9 @@ export function registerResources(server, ctx) {
       return {
         contents: [{
           uri: uri.href,
-          text: JSON.stringify(projectBrowse(payload), null, 2),
+          // Same compact serialization as tool results — the pagination
+          // budget is computed on this exact byte count.
+          text: serializePayload(projectBrowse(payload)),
           mimeType: 'application/json',
         }],
       }

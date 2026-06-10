@@ -81,8 +81,11 @@ export function excerptAroundMatch(text, index, matchLength, contextChars) {
   return `${prefix}${excerpt}${suffix}`
 }
 
+// Compact on purpose: this serialized text is what MCP clients place in the
+// model's context window; 2-space indentation cost ~20% extra tokens on every
+// tool response for zero information gain.
 export function serializePayload(payload) {
-  return JSON.stringify(payload, null, 2)
+  return JSON.stringify(payload)
 }
 
 export function skipWhitespace(text, start) {

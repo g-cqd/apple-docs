@@ -63,8 +63,12 @@ process as a public response.
   status fields) and strips everything else.
 - `confidence.js` collapses the internal `matchQuality` cascade into the
   public three-level `'exact' | 'partial' | 'approximate'`.
-- `schemas.js` declares zod schemas the MCP SDK uses to validate
-  `structuredContent`.
+
+MCP tools intentionally advertise **no `outputSchema`** — it tripled the
+`tools/list` payload clients load into model context. The projection
+allowlist plus the leak-guard suites are the output contract; a budget
+test in `test/mcp/contract.test.js` keeps the whole tool surface under
+10 KB.
 
 `APPLE_DOCS_DEBUG=1` bypasses the projection allowlist for local
 debugging only. Leak-guard tests under `test/mcp/`,
