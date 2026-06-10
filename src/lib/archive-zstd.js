@@ -141,10 +141,14 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
  * seam for the truncation-detection regression test.
  */
 export async function countTarMembers(tarPath) {
-  const proc = Bun.spawn(['tar', '-tf', tarPath], { stdout: 'pipe', stderr: 'ignore' })
+  const proc = Bun.spawn(['tar', '-tf', tarPath], { stdout: 'pipe', stderr: 'pipe' })
   const listing = await new Response(proc.stdout).text()
   const code = await proc.exited
-  if (code !== 0) throw new ValidationError(`tar.zst integrity check: member listing failed (tar exit ${code})`)
+  if (code !== 0) {
+    throw new ValidationError(
+      `tar.zst integrity check: member listing failed (tar exit ${code}): ${await readStderr(proc)}`,
+    )
+  }
   let n = 0
   for (let i = 0; i < listing.length; i++) if (listing[i] === '\n') n++
   return n
