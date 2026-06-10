@@ -167,11 +167,10 @@ Profiles pick disk-vs-speed and finish in one step (no follow-up command):
 
 Options:
   --force            Overwrite existing corpus
-  --beta             Beta update channel: also consider prerelease snapshots
-                     (built on newer/beta macOS, so they carry SF Symbols the
-                     stable CI builds cannot). A beta install only updates to
-                     newer betas or to a stable built on at least the same
-                     macOS — never to one that would shed symbols.
+  --beta             Beta channel: also consider prerelease snapshots (built
+                     on newer/beta macOS, with SF Symbols stable CI lacks).
+                     Updates only to newer betas, or stables built on at
+                     least the same macOS — never one that sheds symbols.
   --profile <name>   compact | balanced | prebuilt (explicit; overrides the
                      --compact / --prebuilt shorthands). Prompts on a TTY;
                      otherwise balanced.

@@ -14,13 +14,15 @@ permissions:
 
 jobs:
   build-snapshot:
-    # macOS 26 gives us the latest CoreGlyphs / CoreGlyphsPrivate bundles
-    # so the snapshot ships every SF Symbol Apple has shipped to date.
-    # The Swift toolchain on macOS 26 also exposes `vectorGlyph.drawInContext:`
-    # which our private-API SVG renderer depends on (see src/resources/
-    # symbol-pdf-to-svg.js). Older runners would silently produce a
-    # smaller symbol catalog.
-    runs-on: macos-26
+    # macos-latest tracks the newest GA runner image, which carries the
+    # newest CoreGlyphs / CoreGlyphsPrivate bundles — the snapshot ships
+    # every SF Symbol that macOS has shipped to date. The Swift toolchain
+    # there also exposes `vectorGlyph.drawInContext:` which our
+    # private-API SVG renderer depends on (see src/resources/
+    # symbol-pdf-to-svg.js). Pinning an older image would silently
+    # produce a smaller symbol catalog; anything newer than GA comes from
+    # the beta snapshot channel (scripts/publish-beta-snapshot.mjs).
+    runs-on: macos-latest
     timeout-minutes: 240
     permissions:
       contents: write

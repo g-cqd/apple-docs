@@ -18,12 +18,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # No darwin-x64 leg: onnxruntime (via the optional
+          # @huggingface/transformers) ships no darwin/x64 napi binding,
+          # so the compile step cannot resolve it on Intel runners.
           - os: macos-latest
             target: bun-darwin-arm64
             name: apple-docs-macos-arm64
-          - os: macos-14
-            target: bun-darwin-x64
-            name: apple-docs-macos-x64
           - os: ubuntu-latest
             target: bun-linux-x64
             name: apple-docs-linux-x64
