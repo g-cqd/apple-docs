@@ -17,6 +17,8 @@
     "zod",
     "bun-types",
     "mermaid",
-    "@huggingface/transformers"
+    "@huggingface/transformers",
+    "onnxruntime-node",
+    "onnxruntime-web"
   ]
 }

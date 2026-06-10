@@ -93,6 +93,42 @@ function configureEnv(env, dir) {
  * @param {{ logger?: object, modelsDir?: string }} [opts]
  * @returns {Promise<{ embed(text: string, opts?: { isQuery?: boolean }): Promise<Float32Array>, embedBatch(texts: string[], opts?: { isQuery?: boolean }): Promise<Float32Array[]> } | null>}
  */
+let onnxFallbackInstalled = false
+
+/**
+ * transformers.js eagerly imports `onnxruntime-node`, whose napi binding
+ * does not ship for every platform (notably darwin-x64 — the import
+ * throws "Cannot find module …/darwin/x64/onnxruntime_binding.node"
+ * before any backend selection can happen). When the native runtime
+ * can't load, alias the specifier to the API-compatible
+ * `onnxruntime-web` WASM runtime via a Bun module plugin. model2vec is
+ * a static lookup + mean-pool, so WASM throughput is more than enough.
+ * `APPLE_DOCS_ONNX_WASM=1` forces the fallback (used by tests and for
+ * diagnosing WASM-path issues on platforms with a native binding).
+ */
+async function ensureOnnxRuntimeLoadable(logger) {
+  if (onnxFallbackInstalled) return
+  if (process.env.APPLE_DOCS_ONNX_WASM !== '1') {
+    try {
+      await import('onnxruntime-node')
+      return
+    } catch {
+      // fall through to the WASM alias
+    }
+  }
+  Bun.plugin({
+    name: 'onnxruntime-node-wasm-fallback',
+    setup(build) {
+      build.module('onnxruntime-node', async () => ({
+        exports: await import('onnxruntime-web'),
+        loader: 'object',
+      }))
+    },
+  })
+  onnxFallbackInstalled = true
+  logger?.info?.('onnxruntime native binding unavailable on this platform — using the WASM runtime (onnxruntime-web)')
+}
+
 export async function getEmbedder({ logger, modelsDir } = {}) {
   if (cached !== undefined) return cached
   if (process.env.APPLE_DOCS_SEMANTIC === 'off') {
@@ -101,8 +137,15 @@ export async function getEmbedder({ logger, modelsDir } = {}) {
   }
   const spec = resolveSpec()
   try {
+    await ensureOnnxRuntimeLoadable(logger)
     const tx = await import('@huggingface/transformers')
     configureEnv(tx.env, resolveModelsDir(modelsDir))
+    if (onnxFallbackInstalled) {
+      // Single-threaded WASM: Bun's worker support and ort-web's
+      // threaded dispatch don't agree on every platform, and model2vec
+      // doesn't need the parallelism anyway.
+      try { tx.env.backends.onnx.wasm.numThreads = 1 } catch {}
+    }
     cached = spec.backend === 'feature-extraction'
       ? await buildFeatureExtraction(tx, spec)
       : await buildModel2Vec(tx, spec)

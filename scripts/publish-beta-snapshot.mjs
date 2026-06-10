@@ -94,6 +94,24 @@ if (!args.has('--skip-resources')) {
   }
 }
 
+// --- 1b. ensure the embedding model ships --------------------------------------
+// `sync` never fetches the model2vec model (only setup and the CI
+// orchestrator do), so a sync-built corpus would otherwise publish a
+// snapshot without it — consumers would silently degrade to
+// lexical-only. Fetch + sha256-verify it into the corpus before
+// archiving, exactly like scripts/build-snapshot.js does on CI.
+{
+  const { ensureEmbeddingModel } = await import('../src/search/model-integrity.js')
+  process.env.APPLE_DOCS_ALLOW_REMOTE_MODELS = '1'
+  process.env.APPLE_DOCS_MODELS_DIR = join(dataDir, 'resources', 'models')
+  const modelCheck = await ensureEmbeddingModel({ logger })
+  if (modelCheck?.status !== 'ok') {
+    console.error(`embedding model unavailable: ${modelCheck?.message ?? 'unknown'} — refusing to publish a lexical-only snapshot`)
+    process.exit(2)
+  }
+  logger.info(`Embedding model ready: ${modelCheck.hfId} (${modelCheck.verified} files verified)`)
+}
+
 // --- 2. build ------------------------------------------------------------------
 mkdirSync(outDir, { recursive: true })
 const buildArgs = ['bun', join(ROOT, 'cli.js'), 'snapshot', 'build', '--out', outDir, '--tag', tag]
