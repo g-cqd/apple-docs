@@ -193,7 +193,7 @@ function init() {
         ? `<span class="result-card-quality" data-confidence="${esc(r.confidence)}">${esc(label)}</span>`
         : ''
       return `
-      <a href="/docs/${esc(r.path)}/" class="search-result-card">
+      <a href="/docs/${esc(r.webPath ?? r.path)}/" class="search-result-card">
         <div class="result-card-header">
           <span class="result-card-title">${esc(r.title)}</span>
           <span class="result-card-badges">

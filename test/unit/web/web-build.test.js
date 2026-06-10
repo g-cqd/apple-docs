@@ -3,8 +3,10 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, mkdirSync, 
 import { join } from 'node:path'
 import { rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { gunzipSync } from 'node:zlib'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { buildStaticSite, minifyCSS } from '../../../src/web/build.js'
+import { safeWebDocKey } from '../../../src/lib/safe-path.js'
 
 let db
 let tmpDir
@@ -435,6 +437,50 @@ describe('buildStaticSite — SEO surface (Phase 4)', () => {
     expect(html).toContain('<link rel="canonical" href="https://example.test/">')
     expect(html).toContain('"@type":"WebSite"')
     expect(html).toContain('"@type":"SearchAction"')
+  })
+})
+
+describe('buildStaticSite — ENAMETOOLONG-proof web paths', () => {
+  const longLeaf = `init(${'parameterlabel:'.repeat(20)})`
+  const longKey = `documentation/swiftui/view/${longLeaf}`
+
+  beforeEach(() => {
+    expect(Buffer.byteLength(longLeaf)).toBeGreaterThan(255)
+    const now = new Date().toISOString()
+    db.db.run(`INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
+      VALUES ('apple-docc', ?, 'init(parameterlabel:…)', 'symbol', 'symbol', 'Initializer', 'swiftui', 'A very long initializer', ?, ?)`, [longKey, now, now])
+    const swiftuiRoot = db.getRootBySlug('swiftui')
+    db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, ?, ?, 'init(parameterlabel:…)', 'active')`, [swiftuiRoot.id, longKey, `/${longKey}`])
+    db.updateRootPageCount('swiftui')
+  })
+
+  test('builds the page at the hashed path instead of failing with ENAMETOOLONG', async () => {
+    const result = await buildStaticSite({ out: outDir, baseUrl: 'https://example.test' }, ctx)
+    expect(result.pagesFailed).toBe(0)
+    expect(existsSync(join(outDir, 'build-failures.jsonl'))).toBe(false)
+
+    const webKey = safeWebDocKey(longKey)
+    expect(webKey).not.toBe(longKey)
+    expect(webKey).toMatch(/~[0-9a-f]{12}$/)
+    const pagePath = join(outDir, 'docs', ...webKey.split('/'), 'index.html')
+    expect(existsSync(pagePath)).toBe(true)
+
+    const html = readFileSync(pagePath, 'utf8')
+    expect(html).toContain(`<link rel="canonical" href="https://example.test/docs/${webKey}/">`)
+    expect(html).not.toContain(`/docs/${longKey}/`)
+  })
+
+  test('pages linking to the doc carry the hashed href', async () => {
+    await buildStaticSite({ out: outDir, baseUrl: 'https://example.test' }, ctx)
+    const webKey = safeWebDocKey(longKey)
+
+    const fwHtml = readFileSync(join(outDir, 'docs', 'swiftui', 'index.html'), 'utf8')
+    expect(fwHtml).toContain(`/docs/${webKey}/`)
+    expect(fwHtml).not.toContain(`/docs/${longKey}/`)
+
+    const sitemap = gunzipSync(readFileSync(join(outDir, 'sitemaps', 'swiftui.xml.gz'))).toString('utf8')
+    expect(sitemap).toContain(`https://example.test/docs/${webKey}/`)
+    expect(sitemap).not.toContain(`https://example.test/docs/${longKey}/`)
   })
 })
 

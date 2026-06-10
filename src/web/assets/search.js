@@ -133,7 +133,7 @@ export function init() {
     dropdown.innerHTML = `${hits
       .map(
         (hit, i) => `
-      <a href="/docs/${esc(hit.path)}/" class="search-result" role="option" id="search-result-${i}" data-index="${i}" aria-selected="false">
+      <a href="/docs/${esc(hit.webPath ?? hit.path)}/" class="search-result" role="option" id="search-result-${i}" data-index="${i}" aria-selected="false">
         <span class="result-title">${highlightMatch(hit.title, query)}</span>
         <span class="result-meta">${esc(hit.framework || '')}${hit.kind ? ` · ${esc(hit.kind)}` : ''}</span>
         ${hit.abstract ? `<span class="result-snippet">${esc(hit.abstract)}</span>` : ''}

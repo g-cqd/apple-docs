@@ -11,6 +11,7 @@ import { renderDocumentPage } from '../templates.js'
 import { ensureDir } from '../../storage/files.js'
 import { pool } from '../../lib/pool.js'
 import { sha256 } from '../../lib/hash.js'
+import { safeWebDocKey } from '../../lib/safe-path.js'
 import { batchFetchSections, computeSectionsDigest } from './checkpoint.js'
 import { renderSkiplistPlaceholder, renderWithTimeout } from './render-helpers.js'
 import { maybePrecompress } from './io.js'
@@ -65,7 +66,10 @@ export async function buildDocumentPages({
     await pool(docs, concurrency, async (doc) => {
       const sections = sectionsByDoc.get(doc.id) ?? []
       const sectionsDigest = computeSectionsDigest(sections)
-      const filePath = join(buildDir, 'docs', doc.key, 'index.html')
+      // safeWebDocKey keeps overlong Swift init segments under the 255-byte
+      // filesystem component limit; the live route resolves the same hashed
+      // path, so canonical URLs stay identical between live and static.
+      const filePath = join(buildDir, 'docs', ...safeWebDocKey(doc.key).split('/'), 'index.html')
 
       // Incremental skip. Two-tier:
       //   1. The render-index says nothing changed since the last

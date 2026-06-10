@@ -4,6 +4,8 @@
  * render path.
  */
 
+import { safeWebDocKey } from '../../lib/safe-path.js'
+
 export function renderWithTimeout(fn, ms) {
   let timer
   const renderPromise = Promise.resolve().then(fn)
@@ -27,7 +29,7 @@ export function renderSkiplistPlaceholder(doc, siteConfig) {
     .replaceAll('"', '&quot;')
   const title = esc(doc.title ?? doc.key)
   const description = esc(doc.abstract_text ?? `${doc.title ?? doc.key} — Apple developer documentation`)
-  const canonical = `${siteConfig.baseUrl || ''}/docs/${esc(doc.key)}/`
+  const canonical = `${siteConfig.baseUrl || ''}/docs/${esc(safeWebDocKey(doc.key))}/`
   const upstream = doc.url ? esc(doc.url) : null
   return `<!DOCTYPE html>
 <html lang="en" data-theme="auto">

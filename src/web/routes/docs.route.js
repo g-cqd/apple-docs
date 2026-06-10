@@ -9,8 +9,40 @@ import { lookup } from '../../commands/lookup.js'
 import { tooManyRequestsResponse } from '../middleware/rate-limit.js'
 import { textResponse, notFoundResponse } from '../responses.js'
 import { decodeSectionRow } from '../../storage/section-codec.js'
+import { safeWebDocKey, webKeyNeedsMapping, WEB_SEGMENT_MAX_BYTES } from '../../lib/safe-path.js'
 
 const HTML_HASHABLE = { contentType: 'text/html; charset=utf-8', hashable: true }
+
+/** A path segment carrying the `~<sha1-12>` tag safeWebSegment appends. */
+const HASHED_SEGMENT_RE = /~[0-9a-f]{12}(?:\/|$)/
+
+/** @type {WeakMap<object, Map<string, string>>} per-db hashed-web-path → raw-key map */
+const webKeyMaps = new WeakMap()
+
+/**
+ * Resolve a hashed web path (the canonical URL the static build and all
+ * server-rendered links use for overlong keys) back to its raw corpus key.
+ * The map is built lazily, once per db instance: the SQL prefilter pulls
+ * the few keys long enough to possibly contain an oversized segment
+ * (~100 rows in the production corpus), and the JS segment check narrows
+ * to those that actually map (~40). Returns null when the path carries no
+ * hash tag or no mapping exists.
+ */
+function resolveHashedWebKey(db, key) {
+  if (!HASHED_SEGMENT_RE.test(key)) return null
+  let map = webKeyMaps.get(db)
+  if (!map) {
+    map = new Map()
+    const rows = db.db.query(
+      'SELECT key FROM documents WHERE length(CAST(key AS BLOB)) > ?',
+    ).all(WEB_SEGMENT_MAX_BYTES)
+    for (const { key: raw } of rows) {
+      if (webKeyNeedsMapping(raw)) map.set(safeWebDocKey(raw), raw)
+    }
+    webKeyMaps.set(db, map)
+  }
+  return map.get(key) ?? null
+}
 
 const DOC_BASE_QUERY = `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.abstract_text, d.source_type, d.url,
        d.platforms_json, d.is_deprecated, d.is_beta,
@@ -38,7 +70,8 @@ export async function docsHandler(request, ctx, url) {
   // negotiation, which shared caches (Cloudflare) break by ignoring
   // `Vary: Accept`. Gated by config (`APPLE_DOCS_MARKDOWN_DOCS=0` disables).
   if (siteConfig.markdownDocs && key.endsWith('.md')) {
-    const md = await lookup({ path: key.slice(0, -3) }, ctx)
+    const mdKey = key.slice(0, -3)
+    const md = await lookup({ path: resolveHashedWebKey(db, mdKey) ?? mdKey }, ctx)
     if (md.found && md.content) return markdownResponse(md.content)
     return notFoundResponse(siteConfig)
   }
@@ -73,8 +106,14 @@ export async function docsHandler(request, ctx, url) {
     }
   }
 
-  // Try as document page.
+  // Try as document page — first the path verbatim, then (for paths
+  // carrying a `~<hex12>` segment that didn't resolve) the hashed-web-path
+  // map back to the raw overlong corpus key.
   let doc = db.db.query(DOC_BASE_QUERY).get(key)
+  if (!doc) {
+    const rawKey = resolveHashedWebKey(db, key)
+    if (rawKey) doc = db.db.query(DOC_BASE_QUERY).get(rawKey)
+  }
 
   // On-demand fetch from Apple if not in database. The cold path is
   // the SSRF amplifier; apply the composite gate before doing any

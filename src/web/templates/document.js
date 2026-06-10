@@ -15,6 +15,7 @@ import {
   renderTocHtml,
 } from '../templates.js'
 import { renderHtml } from '../../content/render-html.js'
+import { safeWebDocKey } from '../../lib/safe-path.js'
 
 export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   const sectionsList = sections ?? []
@@ -92,12 +93,13 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
 
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : null
 
-  const canonical = doc.key ? `${siteConfig.baseUrl || ''}/docs/${doc.key}/` : null
+  const webKey = doc.key ? safeWebDocKey(doc.key) : null
+  const canonical = webKey ? `${siteConfig.baseUrl || ''}/docs/${webKey}/` : null
   // Advertise the Markdown variant (served at /docs/<key>.md) so agents
   // discover it without sniffing. A distinct URL → distinct cache key, so it
   // caches cleanly alongside the HTML (no Vary: Accept hazard).
-  const mdAlternate = (siteConfig.markdownDocs && doc.key)
-    ? html`<link rel="alternate" type="text/markdown" href="${siteConfig.baseUrl || ''}/docs/${doc.key}.md">`
+  const mdAlternate = (siteConfig.markdownDocs && webKey)
+    ? html`<link rel="alternate" type="text/markdown" href="${siteConfig.baseUrl || ''}/docs/${webKey}.md">`
     : null
   const docDescription = doc.abstract_text || `${doc.title ?? ''} — Apple developer documentation`.trim()
   const platforms = parsePlatformsJson(doc.platforms_json) || {}

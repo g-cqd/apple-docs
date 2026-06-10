@@ -6,6 +6,7 @@
 // must always agree on the chain.
 
 import { html } from '../lib/html.js'
+import { safeWebDocKey } from '../../lib/safe-path.js'
 
 /**
  * Render the breadcrumb nav for a doc / framework key.
@@ -66,7 +67,7 @@ export function buildBreadcrumbs(key, opts = {}) {
       // for context but don't dangle a 404 link off it.
       parts.push(html`<span>${label}</span>`)
     } else {
-      const href = `/docs/${partialKey}/`
+      const href = `/docs/${safeWebDocKey(partialKey)}/`
       parts.push(html`<a href="${href}">${label}</a>`)
     }
   }
@@ -130,7 +131,7 @@ export function buildBreadcrumbListJsonLd(key, baseUrl, opts = {}) {
       name,
     }
     if (!isLast) {
-      entry.item = `${cleanBase}/docs/${partialKey}/`
+      entry.item = `${cleanBase}/docs/${safeWebDocKey(partialKey)}/`
     }
     items.push(entry)
   }

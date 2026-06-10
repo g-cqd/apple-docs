@@ -27,6 +27,8 @@ const HIT_ALLOWED = new Set([
   'abstract', 'declaration', 'platforms', 'language',
   'snippet', 'relatedCount', 'confidence',
   'isDeprecated', 'isBeta', 'isReleaseNotes',
+  // web-only: hashed site path when it differs from the corpus key
+  'webPath',
 ])
 
 function assertNoBlacklistedDeep(value, path = '$') {
@@ -58,6 +60,21 @@ beforeEach(() => {
     },
     sections: [
       { sectionKind: 'abstract', contentText: 'A type that represents part of your app\'s user interface.', sortOrder: 0 },
+    ],
+    relationships: [],
+  })
+
+  db.upsertNormalizedDocument({
+    document: {
+      sourceType: 'apple-docc',
+      key: `swiftui/zephyrview/init(${'parameterlabel:'.repeat(20)})`,
+      title: 'ZephyrView initializer',
+      kind: 'symbol', role: 'symbol', roleHeading: 'Initializer',
+      framework: 'swiftui',
+      abstractText: 'Synthetic overlong-key doc.',
+    },
+    sections: [
+      { sectionKind: 'abstract', contentText: 'Synthetic overlong-key doc.', sortOrder: 0 },
     ],
     relationships: [],
   })
@@ -111,6 +128,19 @@ describe('/api/search response respects public allowlist', () => {
       }
       expect(['exact', 'partial', 'approximate']).toContain(hit.confidence)
     }
+  })
+
+  test('overlong-key hits carry webPath (hashed site path) and stay allowlisted', async () => {
+    const out = await callSearch('ZephyrView')
+    const hit = (out.results ?? []).find(r => r.path.startsWith('swiftui/zephyrview/'))
+    expect(hit).toBeDefined()
+    expect(hit.webPath).toMatch(/~[0-9a-f]{12}$/)
+    expect(hit.webPath).not.toBe(hit.path)
+    expect(hit.path).toContain('parameterlabel:parameterlabel:')
+    for (const key of Object.keys(hit)) {
+      expect(HIT_ALLOWED.has(key)).toBe(true)
+    }
+    assertNoBlacklistedDeep(out)
   })
 
   test('cache-hit path also goes through projection', async () => {

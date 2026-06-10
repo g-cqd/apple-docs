@@ -58,6 +58,68 @@ export function safeFilename(basename, ext) {
 }
 
 /**
+ * Maximum UTF-8 bytes a web path segment may carry before it gets the
+ * truncate-and-hash treatment. Deliberately below the 255-byte
+ * filesystem component limit: the static build appends `/index.html`
+ * plus precompressed siblings, and some host filesystems count bytes
+ * differently — 200 leaves comfortable headroom everywhere.
+ */
+export const WEB_SEGMENT_MAX_BYTES = 200
+
+/**
+ * Bytes of the original segment preserved before the `~<sha1-12>` tag.
+ * 180 + 1 + 12 = 193 ≤ WEB_SEGMENT_MAX_BYTES, so a hashed segment never
+ * needs hashing again (idempotent for already-safe keys).
+ */
+const WEB_SEGMENT_TRUNCATE_BYTES = 180
+
+/**
+ * Map one URL path segment to a form that fits the filesystem component
+ * limit of the static build while staying deterministic, so the live
+ * server and the static site emit the IDENTICAL canonical URL. Segments
+ * that already fit are returned unchanged; long ones are truncated on a
+ * UTF-8 character boundary and tagged with a SHA-1 prefix of the FULL
+ * original segment (same `~<hex12>` style as safeFilename).
+ *
+ * @param {string} segment
+ * @returns {string}
+ */
+export function safeWebSegment(segment) {
+  if (Buffer.byteLength(segment, 'utf8') <= WEB_SEGMENT_MAX_BYTES) return segment
+  const hash = new Bun.CryptoHasher('sha1').update(segment).digest('hex').slice(0, HASH_PREFIX_LEN)
+  return `${truncateToBytes(segment, WEB_SEGMENT_TRUNCATE_BYTES)}~${hash}`
+}
+
+/**
+ * Fast check: does this corpus key need a hashed web path? Keys whose
+ * total byte length fits the threshold can't contain an oversized
+ * segment, so the hot path (350k render calls) costs one byteLength.
+ *
+ * @param {string} key slash-separated corpus key
+ * @returns {boolean}
+ */
+export function webKeyNeedsMapping(key) {
+  if (typeof key !== 'string' || Buffer.byteLength(key, 'utf8') <= WEB_SEGMENT_MAX_BYTES) {
+    return false
+  }
+  return key.split('/').some(seg => Buffer.byteLength(seg, 'utf8') > WEB_SEGMENT_MAX_BYTES)
+}
+
+/**
+ * Canonical web path for a corpus key: every oversized segment is
+ * replaced by its `safeWebSegment` form, everything else passes through
+ * verbatim. Returns the key itself (same reference, no allocations)
+ * when no segment exceeds the threshold.
+ *
+ * @param {string} key slash-separated corpus key
+ * @returns {string}
+ */
+export function safeWebDocKey(key) {
+  if (!webKeyNeedsMapping(key)) return key
+  return key.split('/').map(safeWebSegment).join('/')
+}
+
+/**
  * Reject storage keys that would let an attacker escape `dataDir` via
  * traversal segments (`..`), absolute roots (`/`, `~`, `C:\`), embedded
  * NULs, or backslash separators we don't otherwise interpret. Throws

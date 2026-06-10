@@ -4,6 +4,7 @@
 // because they call into each other through every level.
 
 import { normalizeIdentifier } from '../../apple/normalizer.js'
+import { safeWebDocKey } from '../../lib/safe-path.js'
 import { highlightCode } from '../highlight.js'
 import { escapeHtml, isSafeHref, readableNameFromKey, resolveReferenceUrl } from './helpers.js'
 
@@ -80,13 +81,13 @@ function renderBlockNodeToHtml(node) {
       return `<ul>${(node.items ?? []).map(item => {
         if (typeof item === 'object' && item?._resolvedKey) {
           const title = item._resolvedTitle ?? readableNameFromKey(item._resolvedKey)
-          return `<li><a href="/docs/${escapeHtml(item._resolvedKey)}/">${escapeHtml(title)}</a></li>`
+          return `<li><a href="/docs/${escapeHtml(safeWebDocKey(item._resolvedKey))}/">${escapeHtml(title)}</a></li>`
         }
         const id = typeof item === 'string' ? item : (item?.identifier ?? item?.title ?? '')
         const key = normalizeIdentifier(id)
         if (key) {
           const title = (typeof item === 'object' ? item?._resolvedTitle : null) ?? readableNameFromKey(key)
-          return `<li><a href="/docs/${escapeHtml(key)}/">${escapeHtml(title)}</a></li>`
+          return `<li><a href="/docs/${escapeHtml(safeWebDocKey(key))}/">${escapeHtml(title)}</a></li>`
         }
         // Try external URL / video reference
         const refUrl = resolveReferenceUrl(id)
@@ -163,7 +164,7 @@ function renderInlineNodeToHtml(node) {
       const key = node._resolvedKey ?? normalizeIdentifier(node.identifier)
       const title = node._resolvedTitle ?? (key ? readableNameFromKey(key) : null)
       if (key) {
-        return `<a href="/docs/${escapeHtml(key)}/">${escapeHtml(title)}</a>`
+        return `<a href="/docs/${escapeHtml(safeWebDocKey(key))}/">${escapeHtml(title)}</a>`
       }
       const refUrl = resolveReferenceUrl(node.identifier)
       if (refUrl) {
@@ -178,7 +179,7 @@ function renderInlineNodeToHtml(node) {
       // (e.g. https://developer.apple.com/library/archive/... → apple-archive/...)
       // so the user stays on this site.
       const internalKey = node._resolvedKey
-      const rawHref = internalKey ? `/docs/${internalKey}/` : (node.destination ?? '#')
+      const rawHref = internalKey ? `/docs/${safeWebDocKey(internalKey)}/` : (node.destination ?? '#')
       const href = isSafeHref(rawHref) ? rawHref : '#'
       const title = node.title ?? (renderInlineNodesToHtml(node.inlineContent ?? []) || href)
       return `<a href="${escapeHtml(href)}">${typeof title === 'string' ? escapeHtml(title) : title}</a>`

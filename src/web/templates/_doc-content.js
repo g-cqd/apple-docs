@@ -1,5 +1,6 @@
 import { html, raw } from '../lib/html.js'
 import { slugify } from '../../content/render-html.js'
+import { safeWebDocKey } from '../../lib/safe-path.js'
 
 /** @returns {import('../lib/html.js').HtmlString} */
 export function buildRelationshipContent(section) {
@@ -21,7 +22,7 @@ export function buildRelationshipContent(section) {
       }
       const items = (group?.items ?? []).map(item => {
         if (item?.key) {
-          return html`<li><a href="/docs/${item.key}/"><code>${item.title ?? item.key}</code></a></li>`
+          return html`<li><a href="/docs/${safeWebDocKey(item.key)}/"><code>${item.title ?? item.key}</code></a></li>`
         }
         return html`<li>${item?.title ?? item?.identifier ?? ''}</li>`
       })

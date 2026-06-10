@@ -70,7 +70,7 @@ export async function searchHandler(_request, ctx, url) {
   const cacheKey = searchResponseCacheKey(searchOpts, corpusStamp.get())
   const cached = searchCache.get(cacheKey)
   if (cached !== undefined) {
-    return jsonResponse(projectSearchResult(cached), {
+    return jsonResponse(projectSearchResult(cached, { webPaths: true }), {
       hashable: true,
       headers: { 'x-apple-docs-cache': 'hit', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
     })
@@ -83,7 +83,7 @@ export async function searchHandler(_request, ctx, url) {
       return await deepGate.run(async () => {
         const results = await search(searchOpts, searchCtx)
         searchCache.set(cacheKey, results)
-        return jsonResponse(projectSearchResult(results), {
+        return jsonResponse(projectSearchResult(results, { webPaths: true }), {
           hashable: true,
           headers: { 'x-apple-docs-cache': 'miss', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
         })
@@ -100,7 +100,7 @@ export async function searchHandler(_request, ctx, url) {
   }
   const results = await search(searchOpts, searchCtx)
   searchCache.set(cacheKey, results)
-  return jsonResponse(projectSearchResult(results), {
+  return jsonResponse(projectSearchResult(results, { webPaths: true }), {
     hashable: true,
     headers: { 'x-apple-docs-cache': 'miss', 'Cache-Control': API_CORPUS_CACHE_CONTROL },
   })

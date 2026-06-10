@@ -3,6 +3,7 @@
 // <section>…</section> markup. The dispatcher in render-html.js routes
 // each section through here based on its sectionKind.
 
+import { safeWebDocKey } from '../../lib/safe-path.js'
 import { highlightCode } from '../highlight.js'
 import { safeJson } from '../safe-json.js'
 import { escapeHtml, skipDuplicateHeading, slugify } from './helpers.js'
@@ -190,7 +191,7 @@ export function renderMentionedInHtml(section) {
   const sectionId = slugify(heading)
   const listItems = items.map(item => {
     if (item.key) {
-      return `<li><a href="/docs/${escapeHtml(item.key)}/">${escapeHtml(item.title ?? item.key)}</a></li>`
+      return `<li><a href="/docs/${escapeHtml(safeWebDocKey(item.key))}/">${escapeHtml(item.title ?? item.key)}</a></li>`
     }
     return `<li>${escapeHtml(item.title ?? item.identifier ?? '')}</li>`
   })
@@ -238,7 +239,7 @@ export function renderLinkSectionHtml(title, section) {
             ? ` data-filter-kind="${escapeHtml(item._resolvedRoleHeading)}"`
             : ''
           return item?.key
-            ? `<li${filterAttr}><a href="/docs/${escapeHtml(item.key)}/"><code>${escapeHtml(item.title ?? item.key)}</code></a></li>`
+            ? `<li${filterAttr}><a href="/docs/${escapeHtml(safeWebDocKey(item.key))}/"><code>${escapeHtml(item.title ?? item.key)}</code></a></li>`
             : `<li>${escapeHtml(item?.title ?? item?.identifier ?? '')}</li>`
         })
         .join('')

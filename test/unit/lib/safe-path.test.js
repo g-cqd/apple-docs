@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { ValidationError } from '../../../src/lib/errors.js'
-import { keyPath, safeFilename, validateStorageKey } from '../../../src/lib/safe-path.js'
+import {
+  keyPath,
+  safeFilename,
+  safeWebDocKey,
+  safeWebSegment,
+  validateStorageKey,
+  webKeyNeedsMapping,
+  WEB_SEGMENT_MAX_BYTES,
+} from '../../../src/lib/safe-path.js'
 
 describe('safeFilename', () => {
   test('returns the input verbatim when the result fits the temp-suffix budget', () => {
@@ -72,6 +80,72 @@ describe('keyPath', () => {
     // Belt-and-braces: validateStorageKey already catches `..` segments,
     // but the post-resolve invariant is the second line of defense.
     expect(() => keyPath('/data', 'raw-json', '../escape', '.json')).toThrow(ValidationError)
+  })
+})
+
+describe('safeWebSegment / safeWebDocKey / webKeyNeedsMapping', () => {
+  const longLeaf = `init(${'param:'.repeat(50)})`
+
+  test('segments at or under the threshold pass through unchanged', () => {
+    expect(safeWebSegment('view')).toBe('view')
+    const exactly = 'a'.repeat(WEB_SEGMENT_MAX_BYTES)
+    expect(safeWebSegment(exactly)).toBe(exactly)
+  })
+
+  test('oversized segments truncate and gain a ~hex12 tag within the byte budget', () => {
+    expect(Buffer.byteLength(longLeaf)).toBeGreaterThan(WEB_SEGMENT_MAX_BYTES)
+    const out = safeWebSegment(longLeaf)
+    expect(out).toMatch(/~[0-9a-f]{12}$/)
+    expect(out.startsWith('init(')).toBe(true)
+    expect(Buffer.byteLength(out)).toBeLessThanOrEqual(WEB_SEGMENT_MAX_BYTES)
+  })
+
+  test('deterministic: same input always maps to the same segment', () => {
+    expect(safeWebSegment(longLeaf)).toBe(safeWebSegment(longLeaf))
+    const key = `cloudkit/cksubscription/${longLeaf}`
+    expect(safeWebDocKey(key)).toBe(safeWebDocKey(key))
+  })
+
+  test('two distinct long segments sharing a 180-byte prefix do not collide', () => {
+    const base = 'init(' + 'param:'.repeat(45)
+    const a = safeWebSegment(`${base}alertbody:)`)
+    const b = safeWebSegment(`${base}collapseidkey:)`)
+    expect(a).not.toBe(b)
+  })
+
+  test('multi-byte UTF-8 segments truncate on a character boundary', () => {
+    const seg = 'é'.repeat(150) // 300 bytes
+    const out = safeWebSegment(seg)
+    expect(Buffer.byteLength(out)).toBeLessThanOrEqual(WEB_SEGMENT_MAX_BYTES)
+    const prefix = out.slice(0, out.indexOf('~'))
+    expect([...prefix].every(ch => ch === 'é')).toBe(true)
+    expect(Buffer.from(out).toString('utf8')).toBe(out)
+  })
+
+  test('safeWebDocKey fast path returns the identical string for safe keys', () => {
+    const key = 'swiftui/view/init(alertbody:title:)'
+    expect(safeWebDocKey(key)).toBe(key)
+    // A long key made of short segments needs no mapping either.
+    const deep = Array.from({ length: 30 }, (_, i) => `segment-${i}`).join('/')
+    expect(Buffer.byteLength(deep)).toBeGreaterThan(WEB_SEGMENT_MAX_BYTES)
+    expect(safeWebDocKey(deep)).toBe(deep)
+  })
+
+  test('only oversized segments are rewritten; the rest pass through', () => {
+    const key = `cloudkit/cksubscription/notificationinfo-swift.class/${longLeaf}`
+    const out = safeWebDocKey(key)
+    expect(out.startsWith('cloudkit/cksubscription/notificationinfo-swift.class/')).toBe(true)
+    expect(out).toMatch(/~[0-9a-f]{12}$/)
+    expect(out).not.toBe(key)
+    expect(safeWebDocKey(out)).toBe(out)
+  })
+
+  test('webKeyNeedsMapping matches safeWebDocKey behavior', () => {
+    expect(webKeyNeedsMapping('swiftui/view')).toBe(false)
+    expect(webKeyNeedsMapping(`metal/mtlindirectrendercommand/${longLeaf}`)).toBe(true)
+    const deep = Array.from({ length: 30 }, (_, i) => `segment-${i}`).join('/')
+    expect(webKeyNeedsMapping(deep)).toBe(false)
+    expect(webKeyNeedsMapping(null)).toBe(false)
   })
 })
 

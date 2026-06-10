@@ -3,6 +3,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { startDevServer } from '../../../src/web/serve.js'
+import { safeWebDocKey } from '../../../src/lib/safe-path.js'
 
 let db
 let ctx
@@ -853,6 +854,70 @@ describe('Dev Server — agent discovery + Markdown negotiation', () => {
     expect(etag).toBeTruthy()
     const second = await fetch(url, { headers: { 'If-None-Match': etag } })
     expect(second.status).toBe(304)
+  })
+})
+
+describe('Dev Server — hashed web paths for overlong doc keys', () => {
+  const longLeaf = `init(${'parameterlabel:'.repeat(20)})`
+  const longKey = `documentation/swiftui/view/${longLeaf}`
+  let lDb
+  let lServerInfo
+  let webKey
+
+  beforeEach(async () => {
+    lDb = new DocsDatabase(':memory:')
+    lDb.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+    lDb.upsertNormalizedDocument({
+      document: {
+        sourceType: 'apple-docc',
+        key: longKey,
+        title: 'init(parameterlabel:…)',
+        kind: 'symbol',
+        role: 'symbol',
+        roleHeading: 'Initializer',
+        framework: 'swiftui',
+        abstractText: 'A very long initializer signature.',
+      },
+      sections: [
+        { sectionKind: 'abstract', contentText: 'A very long initializer signature.', sortOrder: 0 },
+      ],
+      relationships: [],
+    })
+    webKey = safeWebDocKey(longKey)
+    lServerInfo = await startDevServer({ port: 0 }, { db: lDb, dataDir: '/tmp', logger: { info() {}, warn() {}, error() {} } })
+  })
+
+  afterEach(() => {
+    lServerInfo.server.stop(true)
+    lDb.close()
+  })
+
+  test('GET /docs/<hashed-path> serves the doc with the hashed canonical', async () => {
+    expect(webKey).not.toBe(longKey)
+    expect(webKey).toMatch(/~[0-9a-f]{12}$/)
+    const res = await fetch(`${lServerInfo.url}/docs/${webKey}/`)
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('init(parameterlabel:')
+    expect(html).toContain(`/docs/${webKey}/`)
+  })
+
+  test('GET the raw overlong URL still works on the live server', async () => {
+    const res = await fetch(`${lServerInfo.url}/docs/${longKey}`)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('init(parameterlabel:')
+  })
+
+  test('GET /docs/<hashed-path>.md serves the Markdown variant', async () => {
+    const res = await fetch(`${lServerInfo.url}/docs/${webKey}.md`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/markdown')
+    expect(await res.text()).toContain('A very long initializer signature.')
+  })
+
+  test('unknown hashed paths still 404', async () => {
+    const res = await fetch(`${lServerInfo.url}/docs/swiftui/nope~0123456789ab/`)
+    expect(res.status).toBe(404)
   })
 })
 

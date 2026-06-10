@@ -18,6 +18,7 @@
  */
 
 import { publicConfidence } from './confidence.js'
+import { safeWebDocKey } from '../lib/safe-path.js'
 import { DEBUG_PASSTHROUGH as CONFIG_DEBUG } from '../config.js'
 
 export const DEBUG_PASSTHROUGH = CONFIG_DEBUG
@@ -69,10 +70,19 @@ const SEARCH_HIT_KEEP = [
   'snippet', 'relatedCount',
 ]
 
-export function projectSearchHit(hit) {
+// `webPaths: true` (web /api/search only) adds a `webPath` field when the
+// site URL for a hit differs from its corpus key — a handful of overlong
+// Swift init keys whose web path carries a hashed segment. MCP and CLI
+// surfaces never pass the option: their `path` stays the raw corpus key
+// that read_doc accepts, and no webPath is emitted there.
+export function projectSearchHit(hit, opts) {
   if (!hit || typeof hit !== 'object') return hit
   const out = pick(hit, SEARCH_HIT_KEEP)
   out.confidence = publicConfidence(hit.matchQuality)
+  if (opts?.webPaths === true && typeof hit.path === 'string') {
+    const webPath = safeWebDocKey(hit.path)
+    if (webPath !== hit.path) out.webPath = webPath
+  }
   flagIf(out, hit, 'isDeprecated')
   flagIf(out, hit, 'isBeta')
   flagIf(out, hit, 'isReleaseNotes')
@@ -94,7 +104,7 @@ export function projectSearchResult(result, opts) {
     query: typeof result.query === 'string' ? result.query : '',
     total: typeof result.total === 'number' ? result.total : 0,
     ...(typeof result.hasMore === 'boolean' ? { hasMore: result.hasMore } : {}),
-    results: Array.isArray(result.results) ? result.results.map(projectSearchHit) : [],
+    results: Array.isArray(result.results) ? result.results.map(hit => projectSearchHit(hit, opts)) : [],
   }
 
   if (out.results.some(r => r.confidence === 'approximate')) out.approximate = true

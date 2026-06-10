@@ -2,6 +2,7 @@
 // (semantic kind + text + optional `_resolvedKey` for type linking) and
 // emits HTML with semantic CSS classes and per-type anchor links.
 
+import { safeWebDocKey } from '../../lib/safe-path.js'
 import { escapeHtml } from './helpers.js'
 
 const SEMANTIC_TOKEN_KINDS = new Set([
@@ -52,7 +53,7 @@ export function renderDeclarationTokens(tokens, knownKeys) {
     // Link resolved types to their documentation pages
     if (token._resolvedKey && (kind === 'typeIdentifier' || kind === 'attribute')) {
       if (knownKeys.has(token._resolvedKey)) {
-        spans.push(`<a href="/docs/${escapeHtml(token._resolvedKey)}/" class="code-type-link"><span class="decl-${kind}">${text}</span></a>`)
+        spans.push(`<a href="/docs/${escapeHtml(safeWebDocKey(token._resolvedKey))}/" class="code-type-link"><span class="decl-${kind}">${text}</span></a>`)
         continue
       }
     }
@@ -87,7 +88,7 @@ export function renderTypeTokens(tokens, knownKeys) {
     if (!text) return ''
     if (token.kind === 'typeIdentifier' && token._resolvedKey) {
       if (!knownKeys || knownKeys.has(token._resolvedKey)) {
-        return `<a href="/docs/${escapeHtml(token._resolvedKey)}/" class="code-type-link"><code>${text}</code></a>`
+        return `<a href="/docs/${escapeHtml(safeWebDocKey(token._resolvedKey))}/" class="code-type-link"><code>${text}</code></a>`
       }
     }
     if (token.kind === 'typeIdentifier') {

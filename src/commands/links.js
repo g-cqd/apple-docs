@@ -14,6 +14,7 @@ import { decodeSectionContent } from '../storage/section-codec.js'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { NotFoundError } from '../lib/errors.js'
+import { safeWebDocKey } from '../lib/safe-path.js'
 import { classifyLink, mapUrlToKey } from '../lib/link-resolver.js'
 
 const HREF_REGEX = /<a\s[^>]*href\s*=\s*"([^"]+)"/gi
@@ -111,10 +112,14 @@ export async function linksAudit(opts, ctx) {
   }
 
   // Build the knownKeys set from the DB. Includes every active page key
-  // regardless of source type.
-  const knownKeys = new Set(
-    db.db.query("SELECT path FROM pages WHERE status != 'deleted'").all().map(r => r.path),
-  )
+  // regardless of source type. Rendered HTML links overlong keys via their
+  // hashed web path, so those aliases count as known too.
+  const knownKeys = new Set()
+  for (const { path } of db.db.query("SELECT path FROM pages WHERE status != 'deleted'").all()) {
+    knownKeys.add(path)
+    const webKey = safeWebDocKey(path)
+    if (webKey !== path) knownKeys.add(webKey)
+  }
 
   logger?.info?.(`Auditing ${outDir} against ${knownKeys.size} known keys...`)
 

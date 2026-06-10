@@ -54,3 +54,4 @@ docs/.vitepress/cache/
 
 # Claude Code working tree (agent worktrees, plans, etc.)
 .claude/
+dist-beta/

@@ -10,6 +10,7 @@ import {
   renderTocHtml,
 } from '../templates.js'
 import { slugify } from '../../content/render-html.js'
+import { safeWebDocKey } from '../../lib/safe-path.js'
 import { buildScopeGroups } from './framework-groups.js'
 
 export function buildFrameworkTreeData(_framework, documents, treeEdges, siteConfig) {
@@ -25,7 +26,7 @@ export function buildFrameworkTreeData(_framework, documents, treeEdges, siteCon
     docLookup[docKey] = {
       title: doc.title ?? docKey,
       role_heading: doc.role_heading ?? doc.role ?? 'Other',
-      href: `${siteConfig.baseUrl ?? ''}/docs/${docKey}/`,
+      href: `${siteConfig.baseUrl ?? ''}/docs/${safeWebDocKey(docKey)}/`,
     }
   }
 
@@ -143,7 +144,7 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     docLookup[docKey] = {
       title: doc.title ?? docKey,
       role_heading: doc.role_heading ?? doc.role ?? 'Other',
-      href: `${siteConfig.baseUrl}/docs/${docKey}/`,
+      href: `${siteConfig.baseUrl}/docs/${safeWebDocKey(docKey)}/`,
     }
   }
 
@@ -227,7 +228,7 @@ ${buildScripts(siteConfig, ['core', 'listing'])}
 
 function renderDocItem(doc, siteConfig) {
   const docKey = doc.key ?? doc.path ?? ''
-  const href = `${siteConfig.baseUrl}/docs/${docKey}/`
+  const href = `${siteConfig.baseUrl}/docs/${safeWebDocKey(docKey)}/`
   const filterKind = doc.role_heading ?? doc.role ?? 'Other'
   // Show role_heading (or the scope-specific meta line, e.g. SE number)
   // as metadata to distinguish duplicates (e.g. .!=(_:_:) across types).

@@ -133,6 +133,23 @@ describe('projectSearchHit', () => {
     expect(projectSearchHit(null)).toBeNull()
     expect(projectSearchHit(42)).toBe(42)
   })
+
+  test('webPath is emitted only with webPaths:true and only for overlong keys', () => {
+    const longHit = {
+      title: 'X', matchQuality: 'exact',
+      path: `swiftui/view/init(${'parameterlabel:'.repeat(20)})`,
+    }
+    // Default (MCP / CLI): no webPath, raw corpus key untouched.
+    expect(projectSearchHit(longHit).webPath).toBeUndefined()
+    expect(projectSearchHit(longHit).path).toBe(longHit.path)
+    // Web: hashed webPath alongside the raw path.
+    const web = projectSearchHit(longHit, { webPaths: true })
+    expect(web.webPath).toMatch(/~[0-9a-f]{12}$/)
+    expect(web.path).toBe(longHit.path)
+    // Short keys never carry webPath, even on the web surface.
+    const short = projectSearchHit({ title: 'V', matchQuality: 'exact', path: 'swiftui/view' }, { webPaths: true })
+    expect(short.webPath).toBeUndefined()
+  })
 })
 
 // --- read_doc --------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { AssertionError } from '../lib/errors.js'
+import { safeWebDocKey } from '../lib/safe-path.js'
 import { ensureDir } from '../storage/files.js'
 
 /**
@@ -78,7 +79,7 @@ function buildFrameworkSitemapXml({ root, docs, baseUrl, lastmod }) {
   for (const doc of docs) {
     const isReleaseNotes = root.kind === 'release-notes' || ROLE_NOTES_HINT.test(doc.role_heading ?? '')
     entries.push(urlEntry({
-      loc: `${baseUrl}/docs/${doc.key}/`,
+      loc: `${baseUrl}/docs/${safeWebDocKey(doc.key)}/`,
       lastmod,
       changefreq: isReleaseNotes ? 'weekly' : DOC_DEFAULT.changefreq,
       priority: DOC_DEFAULT.priority,
