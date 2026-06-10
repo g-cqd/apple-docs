@@ -299,17 +299,25 @@ function init() {
         currentOffset += results.length
       }
 
+      // `total` from the API is the cascade's collected pool (bounded by
+      // offset+limit), not a corpus-wide count — `hasMore` is the real
+      // pagination signal. Fall back to the count comparison for static
+      // deployments serving an older API shape.
+      const hasMore = typeof data.hasMore === 'boolean'
+        ? data.hasMore
+        : currentResultCount < currentTotal
+
       if (results.length === 0 && offset === 0) {
         statusEl.textContent = 'No results found.'
         resultsEl.innerHTML = ''
       } else {
         const intentLabel = data.intent?.type ? ` · ${data.intent.type}` : ''
         const relaxedLabel = data.relaxed ? ' · best-effort (query relaxed)' : ''
-        statusEl.textContent = `${currentTotal} results${intentLabel}${relaxedLabel}`
+        statusEl.textContent = `${currentResultCount}${hasMore ? '+' : ''} results${intentLabel}${relaxedLabel}`
         renderResults(results, offset > 0)
       }
 
-      loadMoreBtn.hidden = currentResultCount >= currentTotal || results.length === 0
+      loadMoreBtn.hidden = !hasMore || results.length === 0
     } catch (error) {
       if (error?.name === 'AbortError') return
       statusEl.textContent = 'Search requires the live server. Run: apple-docs web serve'

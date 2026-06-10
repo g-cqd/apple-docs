@@ -19,7 +19,7 @@ const INFRA_BLACKLIST = new Set([
 ])
 
 const SEARCH_ALLOWED = new Set([
-  'query', 'total', 'results', 'approximate', 'truncated', 'pageInfo',
+  'query', 'total', 'hasMore', 'results', 'approximate', 'truncated', 'pageInfo',
 ])
 
 const HIT_ALLOWED = new Set([

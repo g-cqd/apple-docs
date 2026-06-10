@@ -326,6 +326,11 @@ export async function search(opts, ctx) {
   return {
     results: sliced,
     total: results.length,
+    // The cascade only collects up to its window (offset + limit), so
+    // `total` is a moving target, not a corpus-wide count. A full window
+    // means more matches likely exist beyond the slice; a short window
+    // means the result set is exhausted.
+    hasMore: results.length >= offset + limit && sliced.length === limit,
     query,
     intent,
     ...(relaxationTier != null ? { relaxed: true, relaxationTier } : {}),

@@ -14,7 +14,7 @@ let db, server, client, dataDir
 // in a public-mode response. Any extra key is treated as a leak.
 const ALLOWED = {
   search_docs: new Set([
-    'query', 'total', 'results',
+    'query', 'total', 'hasMore', 'results',
     'approximate', 'truncated',
     'pageInfo',
     // Doc-shaped variant (search --read)
@@ -24,7 +24,7 @@ const ALLOWED = {
     'found', 'metadata', 'content', 'sections', 'matches', 'note', 'bestMatch', 'pageInfo',
   ]),
   list_frameworks: new Set(['roots', 'total', 'pageInfo']),
-  browse: new Set(['framework', 'title', 'path', 'pages', 'children', 'total', 'pageInfo']),
+  browse: new Set(['framework', 'title', 'path', 'pages', 'children', 'total', 'pageInfo', 'groups', 'year']),
   list_taxonomy: new Set(['kind', 'role', 'docKind', 'roleHeading', 'sourceType']),
   search_sf_symbols: new Set(['results']),
   list_apple_fonts: new Set(['families']),

@@ -93,6 +93,7 @@ export function projectSearchResult(result, opts) {
   const out = {
     query: typeof result.query === 'string' ? result.query : '',
     total: typeof result.total === 'number' ? result.total : 0,
+    ...(typeof result.hasMore === 'boolean' ? { hasMore: result.hasMore } : {}),
     results: Array.isArray(result.results) ? result.results.map(projectSearchHit) : [],
   }
 
