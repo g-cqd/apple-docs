@@ -15,9 +15,12 @@ import { buildScopeGroups } from './framework-groups.js'
 export function buildFrameworkTreeData(_framework, documents, treeEdges, siteConfig) {
   if (!treeEdges || treeEdges.length === 0) return { json: '', hasTree: false }
 
-  const docList = documents ?? []
+  // Edges + the key→{title, role, href} lookup are all the tree view
+  // needs. The role-grouped flat list this JSON used to carry fed a
+  // client-built "List" view nobody used over the tree — dropping it
+  // shrinks the biggest tree payloads by roughly half.
   const docLookup = {}
-  for (const doc of docList) {
+  for (const doc of documents ?? []) {
     const docKey = doc.key ?? doc.path ?? ''
     docLookup[docKey] = {
       title: doc.title ?? docKey,
@@ -26,43 +29,8 @@ export function buildFrameworkTreeData(_framework, documents, treeEdges, siteCon
     }
   }
 
-  // Same role grouping the inline path emits when deferList is on (which is
-  // always true when hasTree is true).
-  const ROLE_LABELS = {
-    symbol: 'Symbols', collection: 'Collections', collectionGroup: 'Collection Groups',
-    sampleCode: 'Sample Code', article: 'Articles', dictionarySymbol: 'Dictionary Symbols',
-    overview: 'Overview', pseudoSymbol: 'Pseudo Symbols',
-    restRequestSymbol: 'REST Requests', link: 'Links',
-  }
-  const byRole = new Map()
-  for (const doc of docList) {
-    const rawRole = doc.role ?? doc.role_heading ?? 'Other'
-    const role = ROLE_LABELS[rawRole] ?? rawRole
-    if (!byRole.has(role)) byRole.set(role, [])
-    byRole.get(role).push(doc)
-  }
-  const roleGroups = []
-  for (const [role, roleDocs] of byRole) {
-    roleGroups.push({
-      role,
-      id: slugify(role),
-      docs: roleDocs.map(doc => {
-        const docKey = doc.key ?? doc.path ?? ''
-        const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
-        return {
-          key: docKey,
-          title: doc.title ?? docKey,
-          role_heading: doc.role_heading ?? doc.role ?? 'Other',
-          abstract: doc.abstract_text ?? doc.abstract ?? '',
-          deprecated: /\bDeprecated\b/i.test(doc.abstract_text ?? doc.abstract ?? ''),
-          symbol: isSymbol,
-        }
-      }),
-    })
-  }
-
   return {
-    json: JSON.stringify({ edges: treeEdges, docs: docLookup, roleGroups }),
+    json: JSON.stringify({ edges: treeEdges, docs: docLookup }),
     hasTree: true,
   }
 }
@@ -109,9 +77,25 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   // guidelines, release notes, ...) get scope-specific sections
   // instead of the role buckets.
   const scope = buildScopeGroups(framework, docList, opts.scopeExtras ?? {})
-  const listSections = scope
-    ? scope.sections
-    : [...byRole.entries()].map(([role, docs]) => ({ id: slugify(role), label: role, count: null, docs }))
+  const hasTree = treeEdges.length > 0
+
+  // Two page shapes, no client-built lists:
+  //   - Scope-grouped roots (guidelines sections, HIG categories,
+  //     release-notes versions, ...) render their curated list — that IS
+  //     the organization — with the tree one toggle away when edges exist.
+  //   - Everything else with tree edges is tree-only. The role-bucket
+  //     flat list those pages used to offer behind a "List" toggle was
+  //     never the better view, and skipping it avoids shipping thousands
+  //     of <li> rows (Swift stdlib: 10 MB HTML, 138k DOM nodes, 53s FCP).
+  //   - Treeless roots keep the server-rendered role list.
+  const listIsDefault = scope != null
+  const showList = !hasTree || listIsDefault
+
+  const listSections = showList
+    ? (scope
+        ? scope.sections
+        : [...byRole.entries()].map(([role, docs]) => ({ id: slugify(role), label: role, count: null, docs })))
+    : []
 
   const roleSections = []
   for (const { id, label, count, docs } of listSections) {
@@ -138,22 +122,6 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     ? html`${jumpNav}${interleave(roleSections, html`\n  `)}`
     : html`<p>No documents found for this framework.</p>`
 
-  // View toggle only shown when we have tree edges
-  const hasTree = treeEdges.length > 0
-
-  // Scope-grouped roots (guidelines sections, HIG categories, release-notes
-  // versions, ...) default to the curated list — that IS the organization;
-  // the tree stays one toggle away. Their lists are small, so the
-  // payload-bloat rationale below doesn't apply to them.
-  const listIsDefault = scope != null
-
-  // When tree view is default, skip rendering the full list HTML server-side.
-  // The list is hidden on load and contains thousands of <li> elements that bloat
-  // the HTML payload (e.g., Swift stdlib: 10 MB HTML, 138k DOM nodes, 53s FCP).
-  // Instead, collection-filters.js will build the list on-demand when the user
-  // switches to list view.
-  const deferList = hasTree && !listIsDefault
-
   const breadcrumbs = html`<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${fwName}</span></nav>`
 
   // Build sidebar: original-resource block + TOC of list sections.
@@ -179,35 +147,12 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     }
   }
 
-  // Build role grouping for deferred list rendering
-  const roleGroups = []
-  if (deferList) {
-    for (const [role, roleDocs] of byRole) {
-      roleGroups.push({
-        role,
-        id: slugify(role),
-        docs: roleDocs.map(doc => {
-          const docKey = doc.key ?? doc.path ?? ''
-          const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
-          return {
-            key: docKey,
-            title: doc.title ?? docKey,
-            role_heading: doc.role_heading ?? doc.role ?? 'Other',
-            abstract: doc.abstract_text ?? doc.abstract ?? '',
-            deprecated: /\bDeprecated\b/i.test(doc.abstract_text ?? doc.abstract ?? ''),
-            symbol: isSymbol,
-          }
-        }),
-      })
-    }
-  }
-
   // Plain JSON for the tree data. When the caller provides
   // `opts.treeDataUrl`, the framework page emits an external reference
   // instead of inlining this — see the `<div id="tree-container">` below
   // and `tree-view.js`. Inline emission still escapes HTML-significant
   // characters to prevent `</script>` breakout.
-  const treeDataObj = { edges: treeEdges, docs: docLookup, ...(deferList ? { roleGroups } : {}) }
+  const treeDataObj = { edges: treeEdges, docs: docLookup }
   const treeDataJsonInline = JSON.stringify(treeDataObj)
     .replaceAll('<', '\\u003c')
     .replaceAll('>', '\\u003e')
@@ -215,10 +160,12 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
     .replaceAll('&', '\\u0026')
   const externalTreeDataUrl = opts.treeDataUrl ?? null
 
-  const viewToggle = hasTree
-    ? html`<div class="view-toggle" role="group" aria-label="View mode" data-default-view="${listIsDefault ? 'list' : 'tree'}">
-    <button${attr('class', listIsDefault ? 'active' : null)} data-view="list" aria-pressed="${listIsDefault ? 'true' : 'false'}">List</button>
-    <button${attr('class', listIsDefault ? null : 'active')} data-view="tree" aria-pressed="${listIsDefault ? 'false' : 'true'}">Tree</button>
+  // The toggle exists only where both views exist: scope-grouped roots
+  // that also have tree edges.
+  const viewToggle = hasTree && listIsDefault
+    ? html`<div class="view-toggle" role="group" aria-label="View mode" data-default-view="list">
+    <button class="active" data-view="list" aria-pressed="true">List</button>
+    <button data-view="tree" aria-pressed="false">Tree</button>
   </div>`
     : null
 
@@ -263,10 +210,10 @@ ${buildHeader(siteConfig)}
   <h1>${fwName}${viewToggle}</h1>
   ${mobileToc}
   <article class="doc-article">
-  <div id="collection-controls"${attr('class', deferList ? 'hidden' : null)}></div>
-  <div id="list-container"${attr('class', hasTree && !listIsDefault ? 'hidden' : null)}${attr('data-deferred', deferList || null)}>
-  ${deferList ? null : mainContent}
-  </div>
+  ${showList ? html`<div id="collection-controls"></div>
+  <div id="list-container">
+  ${mainContent}
+  </div>` : null}
   <div id="tree-container"${externalTreeDataUrl ? attr('data-tree-src', externalTreeDataUrl) : null}></div>
   ${hasTree && !externalTreeDataUrl ? html`<script type="application/json" id="tree-data">${raw(treeDataJsonInline)}</script>` : null}
   </article>

@@ -191,12 +191,14 @@ describe('Dev Server (P7-E)', () => {
     const res = await fetch(`${serverInfo.url}/docs/swiftui`)
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).toContain('View')
-    // The framework page now externalises the tree-view JSON: HTML
-    // carries a `data-tree-src=…/tree.<hash>.json` reference and the
+    expect(html).toContain('SwiftUI')
+    // The framework page externalises the tree-view JSON: HTML carries a
+    // `data-tree-src=…/tree.<hash>.json` reference and the
     // /data/frameworks/<slug>/tree.<hash>.json route serves the JSON.
+    // Doc titles live in that JSON, not the HTML — tree-edged frameworks
+    // are tree-only (no list, no view toggle).
     expect(html).toMatch(/data-tree-src="[^"]*\/data\/frameworks\/swiftui\/tree\.[0-9a-f]{10}\.json"/)
-    expect(html).toContain('class="view-toggle"')
+    expect(html).not.toContain('class="view-toggle"')
   })
 
   test('serves /data/search/search-manifest.json + the hashed artifacts it points at', async () => {

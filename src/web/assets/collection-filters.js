@@ -1,7 +1,6 @@
 // Framework-listing filter UI: kind chips, fuzzy text filter, deep-link
-// state via the URL hash. Watches `list-container:ready` so it reuses
-// the original markup the tree-view controller swapped out when the
-// user toggles back to the flat list.
+// state via the URL hash. Operates on the server-rendered list only —
+// tree-only pages render neither the list nor these controls.
 //
 // State + URL serialization lives in collection-filters/state.js; DOM
 // rendering in collection-filters/render.js. This module owns the
@@ -23,12 +22,11 @@ import {
 
 export function init() {
   const listContainer = document.getElementById('list-container')
-  const isDeferred = listContainer?.hasAttribute('data-deferred')
   const filterableItems = document.querySelectorAll('[data-filter-kind]')
-  if (filterableItems.length === 0 && !isDeferred) return
+  if (filterableItems.length === 0) return
 
-  const kindCounts = collectKindCounts({ isDeferred, filterableItems })
-  if (kindCounts.size <= 1 && !isDeferred) return
+  const kindCounts = collectKindCounts({ filterableItems })
+  if (kindCounts.size <= 1) return
 
   const sortedKinds = [...kindCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]))
 
@@ -106,17 +104,6 @@ export function init() {
     if (state.searchQuery) searchInput.value = state.searchQuery
     if (state.hideDeprecated) deprecatedCb.checked = true
     applyAll()
-  }
-
-  // When list is deferred, re-capture original HTML once the list is built
-  // (the tree-view controller dispatches `list-container:ready` after
-  // building from the inline JSON).
-  if (isDeferred) {
-    document.addEventListener('list-container:ready', () => {
-      originalListHtml = listContainer ? listContainer.innerHTML : null
-      restore()
-      syncToc()
-    }, { once: true })
   }
 
   restore()

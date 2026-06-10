@@ -1,7 +1,7 @@
 // Tree-view controller for framework listing pages. Loads the
-// hierarchical JSON, switches between flat-list and tree modes, and
-// emits `list-container:ready` so collection-filters.js knows when
-// to re-bind handlers against the rebuilt list.
+// hierarchical JSON and renders the tree; on scope-grouped roots
+// (which server-render their curated list) it also drives the
+// list/tree toggle.
 //
 // Data loading lives in tree-view/data.js, state derivation in
 // tree-view/state.js, DOM rendering in tree-view/render.js. This module
@@ -11,16 +11,18 @@ import { createTreeDataLoader, hasTreeData } from './tree-view/data.js'
 import { buildTreeState } from './tree-view/state.js'
 import {
   applyTreeFilters,
-  escapeHtml,
   expandLazy,
   renderNode,
 } from './tree-view/render.js'
 
 export function init() {
   const treeContainer = document.getElementById('tree-container')
-  const listContainer = document.getElementById('list-container')
-  if (!treeContainer || !listContainer) return
+  if (!treeContainer) return
 
+  // Present only on scope-grouped roots, where the server renders the
+  // curated list and the tree is the optional view. Tree-only pages
+  // (symbol frameworks) ship neither list nor toggle.
+  const listContainer = document.getElementById('list-container')
   const collectionControls = document.getElementById('collection-controls')
 
   // Bail out early if no tree data exists at all (legacy frameworks without
@@ -33,15 +35,14 @@ export function init() {
   // ---- View toggle (sync; data load is gated downstream) ----
   function setViewMode(mode) {
     if (mode === 'tree') {
-      listContainer.classList.add('hidden')
+      listContainer?.classList.add('hidden')
       treeContainer.classList.remove('hidden')
       if (collectionControls) collectionControls.classList.add('hidden')
       ensureTreeBuilt()
-    } else {
+    } else if (listContainer) {
       treeContainer.classList.add('hidden')
       listContainer.classList.remove('hidden')
       if (collectionControls) collectionControls.classList.remove('hidden')
-      ensureListBuilt()
     }
   }
 
@@ -60,47 +61,6 @@ export function init() {
       btn.setAttribute('aria-pressed', 'true')
 
       setViewMode(mode)
-    })
-  }
-
-  // ---- Deferred list rendering ----
-  // When the server skips the list HTML (data-deferred), build it client-
-  // side from the `roleGroups` array in the tree JSON.
-  let listBuilt = !listContainer.hasAttribute('data-deferred')
-
-  function ensureListBuilt() {
-    if (listBuilt) return
-    listBuilt = true
-    listContainer.removeAttribute('data-deferred')
-    listContainer.innerHTML = '<p class="loading">Loading…</p>'
-    loader.load().then(data => {
-      if (!data?.roleGroups || data.roleGroups.length === 0) {
-        listContainer.innerHTML = '<p>No documents found for this framework.</p>'
-        return
-      }
-
-      const html = data.roleGroups.map(group => {
-        const items = group.docs.map(doc => {
-          const titleHtml = doc.symbol ? `<code>${escapeHtml(doc.title)}</code>` : escapeHtml(doc.title)
-          const meta = doc.role_heading ? `<span class="doc-item-meta">${escapeHtml(doc.role_heading)}</span>` : ''
-          const abstractText = doc.abstract
-          const abstract = abstractText
-            ? `<span class="doc-item-meta">— ${escapeHtml(abstractText.length > 80 ? `${abstractText.slice(0, 80)}...` : abstractText)}</span>`
-            : ''
-          const deprecatedAttr = doc.deprecated ? ' data-deprecated="true"' : ''
-          return `<li data-filter-kind="${escapeHtml(doc.role_heading)}"${deprecatedAttr}><a href="/docs/${escapeHtml(doc.key)}/">${titleHtml}</a>${meta}${abstract}</li>`
-        }).join('\n      ')
-
-        return `<section id="${escapeHtml(group.id)}" class="role-group" data-filter-kind="${escapeHtml(group.role)}">
-    <h2 class="role-heading">${escapeHtml(group.role)}</h2>
-    <ul class="doc-list">
-      ${items}
-    </ul>
-  </section>`
-      }).join('\n  ')
-
-      listContainer.innerHTML = html
-      document.dispatchEvent(new CustomEvent('list-container:ready'))
     })
   }
 
@@ -198,9 +158,12 @@ export function init() {
     })
   }
 
-  // The server picks the default view: tree for symbol frameworks,
-  // list for scope-grouped roots (guidelines, HIG, release notes, ...)
-  // whose curated sections are the point. Kick off whichever build the
-  // markup asks for.
-  setViewMode(viewToggle?.getAttribute('data-default-view') === 'list' ? 'list' : 'tree')
+  // The server picks the default view: scope-grouped roots ship their
+  // curated list (with a toggle when tree edges exist); everything else
+  // is tree-only. Without a toggle the tree IS the page — build it now.
+  if (viewToggle?.getAttribute('data-default-view') === 'list') {
+    setViewMode('list')
+  } else {
+    setViewMode('tree')
+  }
 }

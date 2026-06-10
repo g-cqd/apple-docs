@@ -17,34 +17,13 @@ export function slugify(text) {
     .replace(/^-|-$/g, '')
 }
 
-/**
- * Build the kind → count map from either the rendered list (sync mode)
- * or the inline tree-data JSON (deferred mode where the list HTML hasn't
- * been built yet).
- */
-export function collectKindCounts({ isDeferred, filterableItems }) {
+/** Build the kind → count map from the server-rendered list items. */
+export function collectKindCounts({ filterableItems }) {
   const kindCounts = new Map()
-  if (isDeferred) {
-    const dataEl = document.getElementById('tree-data')
-    if (dataEl) {
-      try {
-        const td = JSON.parse(dataEl.textContent || '')
-        if (td.roleGroups) {
-          for (const group of td.roleGroups) {
-            for (const doc of group.docs) {
-              const kind = doc.role_heading || 'Other'
-              kindCounts.set(kind, (kindCounts.get(kind) || 0) + 1)
-            }
-          }
-        }
-      } catch { /* ignore */ }
-    }
-  } else {
-    for (const el of filterableItems) {
-      if (el.tagName !== 'LI') continue
-      const kind = el.getAttribute('data-filter-kind')
-      kindCounts.set(kind, (kindCounts.get(kind) || 0) + 1)
-    }
+  for (const el of filterableItems) {
+    if (el.tagName !== 'LI') continue
+    const kind = el.getAttribute('data-filter-kind')
+    kindCounts.set(kind, (kindCounts.get(kind) || 0) + 1)
   }
   return kindCounts
 }

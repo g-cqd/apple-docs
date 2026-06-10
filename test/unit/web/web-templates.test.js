@@ -669,13 +669,15 @@ describe('renderFrameworkPage', () => {
     expect(page).toContain('collection-filters.js')
   })
 
-  test('renders a tree toggle and serialized tree data when tree edges are provided', () => {
+  test('tree-edged frameworks render tree-only (no toggle, no list)', () => {
     const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig, {
       treeEdges: [
         { from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' },
       ],
     }).toString()
-    expect(page).toContain('class="view-toggle"')
+    // The role-bucket "List" alternative was removed — the tree IS the page.
+    expect(page).not.toContain('class="view-toggle"')
+    expect(page).not.toContain('id="list-container"')
     expect(page).toContain('id="tree-data"')
     expect(page).toContain('tree-view.js')
   })
@@ -694,21 +696,19 @@ describe('renderFrameworkPage', () => {
     expect(json.docs).toBeObject()
   })
 
-  test('defers list rendering when tree edges are provided', () => {
+  test('tree data carries only edges + doc lookup (no roleGroups)', () => {
     const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig, {
       treeEdges: [
         { from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' },
       ],
     }).toString()
-    // List container should be empty with data-deferred attribute
-    expect(page).toContain('data-deferred')
-    expect(page).not.toMatch(/<div id="list-container"[^>]*>[\s]*<section/)
-    // Tree data should include roleGroups for client-side list building
     const match = page.match(/<script type="application\/json" id="tree-data">([\s\S]*?)<\/script>/)
     const json = JSON.parse(match[1])
-    expect(json.roleGroups).toBeArray()
-    expect(json.roleGroups.length).toBeGreaterThan(0)
-    expect(json.roleGroups[0].docs).toBeArray()
+    expect(json.edges).toBeArray()
+    expect(json.docs).toBeObject()
+    // The role-grouped flat list that fed the removed client-built
+    // "List" view must not ship — it roughly doubled big payloads.
+    expect(json.roleGroups).toBeUndefined()
   })
 
   test('renders list HTML server-side when no tree edges are provided', () => {
