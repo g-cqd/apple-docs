@@ -35,8 +35,8 @@ fixes land on `main` and reach users through:
 
 - The **next weekly snapshot** (`snapshot-YYYYMMDD` GitHub release) —
   rerun `apple-docs setup` to pick it up.
-- The **next standalone binary build** (`release-binaries.yml`) —
-  re-download from the latest release.
+- The **next standalone binary build** (attached to each snapshot
+  release by `snapshot.yml`) — re-download from the latest release.
 - A `git pull` for source installs.
 
 If you are running an older snapshot or binary, the supported remedy is

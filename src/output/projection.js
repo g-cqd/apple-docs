@@ -310,6 +310,7 @@ export function projectRenderFontText(result, opts) {
 const STATUS_KEEP_USER = [
   'dataDir',
   'databaseSize',
+  'snapshot',
   'rawJson', 'markdown',
   'lastSync', 'lastAction',
 ]

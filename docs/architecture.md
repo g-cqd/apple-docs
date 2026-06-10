@@ -160,9 +160,10 @@ flowchart LR
   Markdown/HTML and loose raw-JSON are materialized on device
   (`storage materialize`), not shipped.
 - **Standalone binary** compiles `cli.js` into a single executable via
-  `bun build --compile`. The `release-binaries.yml` workflow attaches
-  `darwin-arm64`, `linux-x64`, and `linux-arm64` binaries to GitHub
-  releases alongside the snapshot tarball.
+  `bun build --compile`. The snapshot workflow (`snapshot.yml`) builds
+  `darwin-arm64` and `linux-x64` binaries — commit-stamped via
+  `--define` — and attaches them to the release alongside the snapshot
+  tarball.
 
 ## Observability
 

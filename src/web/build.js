@@ -113,6 +113,9 @@ export async function buildStaticSite(opts, ctx) {
     siteName: opts.siteName || 'Apple Developer Docs',
     buildDate: new Date().toISOString().split('T')[0],
     snapshotTag,
+    // The macOS that built the snapshot decides its SF Symbols catalog
+    // and fonts — shown next to the tag in the footer.
+    buildMacos: db.getSnapshotMeta?.('build_macos') ?? null,
     commitHash: getCommitHash(),
     bundled: true,
     // Emit the `<link rel="alternate" type="text/markdown">` discovery hint on

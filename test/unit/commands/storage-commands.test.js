@@ -129,6 +129,27 @@ describe('storage profile / materialize (maintenance dispatch)', () => {
   })
 })
 
+describe('version (maintenance dispatch)', () => {
+  test('reports tool version and corpus provenance when stamped', async () => {
+    db.setSnapshotMeta('snapshot_tag', 'snapshot-20260611-beta.1')
+    db.setSnapshotMeta('build_macos', '27.0')
+    const d = await dispatchMaintenance('version', null, [], {}, ctx)
+    expect(d.result.version).toMatch(/^\d+\.\d+\.\d+/)
+    expect(d.result.snapshot).toBe('snapshot-20260611-beta.1')
+    expect(d.result.snapshotBuildMacos).toBe('27.0')
+    const text = d.formatter(d.result)
+    expect(text).toContain(`apple-docs ${d.result.version}`)
+    expect(text).toContain('built on macOS 27.0')
+  })
+
+  test('works without any corpus provenance', async () => {
+    const d = await dispatchMaintenance('version', null, [], {}, ctx)
+    expect(d.result.version).toMatch(/^\d+\.\d+\.\d+/)
+    expect(d.result.snapshot).toBeUndefined()
+    expect(d.formatter(d.result)).not.toContain('corpus:')
+  })
+})
+
 describe('storageGc', () => {
   test('GC with drop markdown removes markdown directory contents', () => {
     const testFile = join(dataDir, 'markdown', 'test-doc.md')

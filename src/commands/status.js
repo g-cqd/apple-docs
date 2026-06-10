@@ -90,6 +90,14 @@ export async function status(opts, ctx) {
     updateAvailable = await checkForUpdate(db)
   }
 
+  // Snapshot provenance: which release this corpus came from and which
+  // macOS built it (decides the SF Symbols catalog + font set).
+  const snapshotTag = db.getSnapshotMeta('snapshot_tag') ?? db.getSnapshotMeta('snapshot_version') ?? null
+  const snapshotBuildMacos = db.getSnapshotMeta('build_macos') ?? null
+  const snapshot = snapshotTag || snapshotBuildMacos
+    ? { tag: snapshotTag, buildMacos: snapshotBuildMacos }
+    : null
+
   const tier = db.getTier()
   const capabilities = {
     search: true,
@@ -101,6 +109,7 @@ export async function status(opts, ctx) {
   return {
     dataDir,
     tier,
+    snapshot,
     capabilities,
     databaseSize: dbSize,
     rawJson: { size: rawJsonSize, files: rawJsonFiles },

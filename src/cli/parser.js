@@ -35,6 +35,11 @@ const BOOLEAN_FLAGS = new Set([
  */
 export function parseArgs(argv) {
   const args = argv.slice(2) // skip runtime and script path
+  // `--version` / `-V` are the conventional spellings; route them to the
+  // `version` command so there is a single implementation.
+  if (args[0] === '--version' || args[0] === '-V') {
+    return { command: 'version', subcommand: null, positional: [], flags: {} }
+  }
   const command = args[0] && !args[0].startsWith('-') ? args[0] : null
 
   // Check for subcommand on command families

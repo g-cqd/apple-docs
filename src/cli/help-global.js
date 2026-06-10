@@ -12,6 +12,7 @@ Query:
   frameworks           List known documentation roots
   kinds                List taxonomy values for filters
   status               Show corpus statistics
+  version              Show tool version, commit, and corpus provenance
 
 Setup & Sync:
   setup                Download a pre-built documentation snapshot
@@ -39,6 +40,7 @@ Global options:
   --json               Output raw JSON (for scripting)
   --home <path>        Override data directory (default: ~/.apple-docs)
   --verbose            Verbose logging
+  --version, -V        Show version (same as the version command)
   --help               Show help
 
 Environment:

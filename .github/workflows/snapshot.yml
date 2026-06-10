@@ -14,6 +14,9 @@ permissions:
 
 jobs:
   build-snapshot:
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      build_macos: ${{ steps.provenance.outputs.build_macos }}
     # Explicitly the newest GA image — GitHub's `macos-latest` label LAGS
     # the newest releases (observed 2026-06-10: macos-latest resolved to
     # macOS 15.7, and the snapshot's recorded buildMacos proved it). The
@@ -154,6 +157,15 @@ jobs:
           rm -rf dist-check
           if [ "$fail" != "0" ]; then exit 1; fi
 
+      # Surface the build host's macOS version (recorded by the build as
+      # `buildMacos` in status.json) so the release title and the
+      # binaries job can carry the snapshot's provenance explicitly —
+      # the SF Symbols catalog and fonts are exactly what that macOS
+      # provides, so consumers should see it at a glance.
+      - name: Read build provenance
+        id: provenance
+        run: echo "build_macos=$(jq -r '.buildMacos // empty' dist/status.json)" >> "$GITHUB_OUTPUT"
+
       # Generate the release-notes body via a dedicated script. The
       # previous in-step `bun run --silent <<EOF ... EOF` was a stdin
       # invocation `bun run` does not support; it printed bun's CLI
@@ -177,7 +189,7 @@ jobs:
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: 'Snapshot (${{ steps.tag.outputs.tag }})'
+          name: 'Snapshot (${{ steps.tag.outputs.tag }}, macOS ${{ steps.provenance.outputs.build_macos }})'
           body_path: dist/release-body.md
           files: |
             dist/apple-docs-full-${{ steps.tag.outputs.tag }}.tar.zst
@@ -186,5 +198,61 @@ jobs:
             dist/status.json
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Compiled CLI binaries ride the SAME release as the snapshot. They
+  # used to live in a separate `release-binaries.yml` workflow triggered
+  # on `release: published` — which NEVER fired for these releases: the
+  # create-release step above authenticates with the workflow's
+  # GITHUB_TOKEN, and GitHub suppresses events produced by workflow-token
+  # actions (recursion guard). Net effect: every scheduled stable
+  # snapshot shipped without binaries; only locally-published (PAT)
+  # prereleases got them. Building the binaries here closes that gap and
+  # also lets us stamp the exact commit into each binary.
+  build-binaries:
+    needs: build-snapshot
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # No darwin-x64 leg: onnxruntime (via the optional
+          # @huggingface/transformers) ships no darwin/x64 napi binding,
+          # so the compile step cannot resolve it for Intel targets.
+          - os: macos-latest
+            target: bun-darwin-arm64
+            name: apple-docs-macos-arm64
+          - os: ubuntu-latest
+            target: bun-linux-x64
+            name: apple-docs-linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: ./.github/actions/setup
+
+      # `--define` inlines the short SHA into the binary at the exact
+      # expression src/lib/git-version.js reads
+      # (`process.env.APPLE_DOCS_COMMIT`), so `apple-docs --version`
+      # reports the commit from a standalone binary — no git checkout or
+      # runtime env needed.
+      - name: Compile binary (commit-stamped)
+        run: |
+          bun build --compile --minify --sourcemap --target=${{ matrix.target }} \
+            --define "process.env.APPLE_DOCS_COMMIT=\"${GITHUB_SHA:0:7}\"" \
+            cli.js --outfile ${{ matrix.name }}
+
+      - name: Generate checksum
+        run: shasum -a 256 ${{ matrix.name }} > ${{ matrix.name }}.sha256
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
+        with:
+          tag_name: ${{ needs.build-snapshot.outputs.tag }}
+          files: |
+            ${{ matrix.name }}
+            ${{ matrix.name }}.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -180,7 +180,7 @@ function renderFooter(siteConfig) {
   // — not a styling decision; the earlier "no <code>" feedback was about a
   // bare tag with no link, which read as gratuitous monospace styling.
   const snapshotLine = siteConfig.snapshotTag
-    ? html`<span class="footer-snapshot">Snapshot <a href="https://github.com/g-cqd/apple-docs/releases/tag/${siteConfig.snapshotTag}" rel="noopener noreferrer"><code>${siteConfig.snapshotTag}</code></a></span>`
+    ? html`<span class="footer-snapshot">Snapshot <a href="https://github.com/g-cqd/apple-docs/releases/tag/${siteConfig.snapshotTag}" rel="noopener noreferrer"><code>${siteConfig.snapshotTag}</code></a>${siteConfig.buildMacos ? html` (macOS ${siteConfig.buildMacos})` : null}</span>`
     : null
   // Commit the instance is serving — the code SHA captured at web-build time.
   const commitLine = siteConfig.commitHash

@@ -1,15 +1,22 @@
 import { jsonResponse } from '../responses.js'
+import { VERSION } from '../../lib/version.js'
+import { getCommitHash } from '../../lib/git-version.js'
+
+// Resolved once at module load (getCommitHash memoizes, but hoisting it
+// keeps the liveness handler free of even one-time subprocess work).
+const COMMIT = getCommitHash()
 
 /**
  * Liveness probe. Must not touch the DB or any cache so a stuck request
  * handler does not also fail the upstream health check. `no-store` so a
- * cached 200 cannot mask a wedged origin.
+ * cached 200 cannot mask a wedged origin. Carries the code identity
+ * (version + commit) so "what is this instance running" is one curl away.
  *
  * @type {import('../route-registry.js').RouteHandler}
  */
 export function healthHandler() {
   return jsonResponse(
-    { ok: true, service: 'apple-docs-web' },
+    { ok: true, service: 'apple-docs-web', version: VERSION, commit: COMMIT },
     { headers: { 'Cache-Control': 'no-store' } },
   )
 }

@@ -136,6 +136,34 @@ for (const f of [archive, sidecar, manifestPath]) {
 }
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 
+// --- 2b. compile CLI binaries (commit-stamped) ---------------------------------
+// Stable releases get binaries from the snapshot workflow's
+// build-binaries job. Prereleases are published from this machine, so
+// cross-compile both targets here (bun cross-compiles in seconds) and
+// stamp the publishing commit via the same `--define` the CI job uses —
+// `apple-docs --version` then reports it from the standalone binary.
+const commit = sh(['git', '-C', ROOT, 'rev-parse', '--short', 'HEAD']).stdout
+const binaryAssets = []
+for (const [target, name] of [
+  ['bun-darwin-arm64', 'apple-docs-macos-arm64'],
+  ['bun-linux-x64', 'apple-docs-linux-x64'],
+]) {
+  const outFile = join(outDir, name)
+  logger.info(`Compiling ${name} (${target}, commit ${commit})…`)
+  const compile = Bun.spawnSync(['bun', 'build', '--compile', '--minify', '--sourcemap',
+    `--target=${target}`,
+    '--define', `process.env.APPLE_DOCS_COMMIT="${commit}"`,
+    join(ROOT, 'cli.js'), '--outfile', outFile], {
+    cwd: ROOT, stdout: 'inherit', stderr: 'inherit',
+  })
+  if (compile.exitCode !== 0) {
+    console.error(`binary compile failed for ${target}`)
+    process.exit(compile.exitCode || 2)
+  }
+  writeFileSync(`${outFile}.sha256`, `${await sha256File(outFile)}  ${name}\n`)
+  binaryAssets.push(outFile, `${outFile}.sha256`)
+}
+
 // --- 3. status.json + notes ----------------------------------------------------
 const statusPath = join(outDir, 'status.json')
 writeFileSync(statusPath, JSON.stringify({
@@ -172,6 +200,9 @@ apple-docs setup --beta --force
 The beta channel updates through newer betas, or a stable snapshot whose
 build host runs at least the same macOS — never a stable that would shed
 symbols this build already carries.
+
+Standalone CLI binaries (\`apple-docs-macos-arm64\`, \`apple-docs-linux-x64\`)
+are attached, built from commit \`${commit}\`.
 `)
 
 // --- 4. publish ------------------------------------------------------------------
@@ -184,7 +215,7 @@ sh(['gh', 'release', 'create', tag,
   '--prerelease',
   '--title', `Snapshot (${tag}, macOS ${macos})`,
   '--notes-file', notesPath,
-  archive, sidecar, manifestPath, statusPath,
+  archive, sidecar, manifestPath, statusPath, ...binaryAssets,
 ], { stdout: 'inherit', stderr: 'inherit' })
 logger.info(`Published: https://github.com/g-cqd/apple-docs/releases/tag/${tag}`)
 

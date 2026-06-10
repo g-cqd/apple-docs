@@ -107,12 +107,35 @@ async function dispatchIndex(subcommand, positional, flags, ctx) {
   return exitHelp('index')
 }
 
+async function dispatchVersion(ctx) {
+  const { VERSION } = await import('../lib/version.js')
+  const { getCommitHash } = await import('../lib/git-version.js')
+  const result = { version: VERSION, commit: getCommitHash() }
+  // Corpus provenance is a bonus — `version` must work on a machine
+  // with no corpus at all (fresh install, standalone binary).
+  try {
+    const tag = ctx.db.getSnapshotMeta('snapshot_tag') ?? ctx.db.getSnapshotMeta('snapshot_version')
+    const buildMacos = ctx.db.getSnapshotMeta('build_macos')
+    if (tag) result.snapshot = tag
+    if (buildMacos) result.snapshotBuildMacos = buildMacos
+  } catch { /* no corpus — version info stands alone */ }
+  const formatter = (r) => {
+    const lines = [`apple-docs ${r.version}${r.commit ? ` (${r.commit})` : ''}`]
+    if (r.snapshot) {
+      lines.push(`corpus: ${r.snapshot}${r.snapshotBuildMacos ? ` (built on macOS ${r.snapshotBuildMacos})` : ''}`)
+    }
+    return lines.join('\n')
+  }
+  return { result, formatter }
+}
+
 export async function dispatchMaintenance(command, subcommand, positional, flags, ctx) {
   if (command === 'storage') return dispatchStorage(subcommand, positional, flags, ctx)
   if (command === 'snapshot') return dispatchSnapshot(subcommand, positional, flags, ctx)
   if (command === 'consolidate') return dispatchConsolidate(subcommand, positional, flags, ctx)
   if (command === 'index') return dispatchIndex(subcommand, positional, flags, ctx)
+  if (command === 'version') return dispatchVersion(ctx)
   return null
 }
 
-export const MAINTENANCE_COMMANDS = ['storage', 'snapshot', 'consolidate', 'index']
+export const MAINTENANCE_COMMANDS = ['storage', 'snapshot', 'consolidate', 'index', 'version']

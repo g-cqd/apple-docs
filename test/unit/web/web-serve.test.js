@@ -174,7 +174,12 @@ describe('Dev Server (P7-E)', () => {
       const res = await fetch(`${local.url}/healthz`)
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toBe('no-store')
-      expect(await res.json()).toEqual({ ok: true, service: 'apple-docs-web' })
+      const body = await res.json()
+      expect(body.ok).toBe(true)
+      expect(body.service).toBe('apple-docs-web')
+      // Code identity rides along (commit may be null outside a checkout).
+      expect(body.version).toMatch(/^\d+\.\d+\.\d+/)
+      expect('commit' in body).toBe(true)
     } finally {
       local.server.stop(true)
     }

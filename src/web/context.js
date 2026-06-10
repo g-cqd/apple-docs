@@ -11,6 +11,7 @@ import { createWebRenderCache } from './render-cache.js'
 import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
 import { buildCsp } from './csp.js'
 import { createPyftsubsetPool } from './lib/font-subset/pyftsubset-pool.js'
+import { getCommitHash } from '../lib/git-version.js'
 
 /**
  * @typedef {object} WebContext
@@ -55,11 +56,26 @@ export async function createWebContext(opts, ctx) {
   // `dist/web/assets/`; the request never reaches Bun. For local preview
   // (`apple-docs web serve` standalone, no dist on disk) the /assets/ route
   // synthesises the bundles on the fly from `src/web/assets/`.
+  // Same provenance the static build stamps into the footer
+  // (src/web/build.js) so dynamically-rendered pages match. Defensive:
+  // the server must come up even on a corpus without snapshot_meta (or a
+  // DB handed over mid-rebuild) — the footer then omits provenance.
+  let snapshotTag = null
+  let buildMacos = null
+  try {
+    snapshotTag = db.getSnapshotMeta?.('snapshot_tag')
+      ?? db.getSnapshotMeta?.('snapshot_version')
+      ?? null
+    buildMacos = db.getSnapshotMeta?.('build_macos') ?? null
+  } catch { /* provenance unavailable */ }
   const siteConfig = {
     baseUrl: opts.baseUrl || '',
     siteName: opts.siteName || 'Apple Developer Docs',
     buildDate: new Date().toISOString().split('T')[0],
     assetVersion: Date.now().toString(36),
+    snapshotTag,
+    buildMacos,
+    commitHash: getCommitHash(),
     bundled: true,
     // Serve Markdown at `/docs/<key>.md` (a distinct URL → distinct cache key,
     // so it sidesteps the `Vary: Accept` caching hazard of header

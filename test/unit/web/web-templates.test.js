@@ -269,6 +269,29 @@ describe('renderDocumentPage', () => {
     expect(page).toMatch(/href="https:\/\/github\.com\/g-cqd\/apple-docs\/releases\/tag\/snapshot-20260511"[^>]*rel="noopener noreferrer"><code>snapshot-20260511<\/code><\/a>/)
   })
 
+  test('footer shows the snapshot build macOS next to the tag', () => {
+    const page = renderDocumentPage(mockDoc, mockSections, {
+      ...siteConfig,
+      snapshotTag: 'snapshot-20260511',
+      buildMacos: '27.0',
+    }).toString()
+    expect(page).toContain('(macOS 27.0)')
+  })
+
+  test('footer omits the macOS suffix without buildMacos (and without a tag)', () => {
+    const tagOnly = renderDocumentPage(mockDoc, mockSections, {
+      ...siteConfig,
+      snapshotTag: 'snapshot-20260511',
+    }).toString()
+    expect(tagOnly).not.toContain('(macOS')
+    // buildMacos alone (no tag) must not render a dangling suffix.
+    const macosOnly = renderDocumentPage(mockDoc, mockSections, {
+      ...siteConfig,
+      buildMacos: '27.0',
+    }).toString()
+    expect(macosOnly).not.toContain('(macOS')
+  })
+
   test('footer omits snapshot tag when corpus lacks one', () => {
     const page = renderDocumentPage(mockDoc, mockSections, siteConfig).toString()
     // No snapshotTag → no "Snapshot" prefix nor a stray empty <code>.

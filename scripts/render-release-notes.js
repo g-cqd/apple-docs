@@ -45,9 +45,16 @@ const rows = [
 ]
 const table = rows.map(r => '| ' + r.join(' | ') + ' |').join('\n')
 
+const buildMacos = status.buildMacos ?? null
+
 const body = [
   prologue,
   '',
+  // Provenance up front: the SF Symbols catalog and Apple fonts are
+  // exactly what the build host's macOS ships, so consumers must see it.
+  ...(buildMacos
+    ? [`**Built on macOS ${buildMacos}** — the snapshot carries the SF Symbols catalog and Apple fonts exactly as that macOS provides them.`, '']
+    : []),
   'Single-tier snapshot — ships the full corpus, every Apple font, and the complete pre-rendered SF Symbols matrix in one `.tar.zst`.',
   '',
   '## Artifact',

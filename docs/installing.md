@@ -101,8 +101,8 @@ bun run docs:preview  # serves the built site for verification
 A single-file Bun-compiled executable. Use this for personal CLI or MCP
 use when a full Bun toolchain on the host is undesirable.
 
-Build it from a dev checkout, or download from a GitHub release once
-the `release-binaries.yml` workflow has attached one:
+Build it from a dev checkout, or download one from a GitHub release —
+every snapshot release ships them:
 
 ```bash
 # From a dev checkout:

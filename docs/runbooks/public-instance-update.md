@@ -189,8 +189,8 @@ daemons stay up across the swap.
 
 ## Related
 
-- `snapshot.yml` workflow — produces the artefacts.
-- `release-binaries.yml` workflow — attaches standalone CLI binaries.
+- `snapshot.yml` workflow — produces the artefacts and attaches
+  standalone CLI binaries to the same release.
 - [Installing](/installing) — install paths (dev / standalone /
   production).
 - [Self-hosting](/self-hosting) — full deployment reference (launchd,

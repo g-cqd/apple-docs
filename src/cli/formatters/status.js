@@ -20,9 +20,14 @@ export function formatStatus(result) {
   // `tier` only appears when `apple-docs status --advanced` is passed.
   const tierLabel = result.tier ? ` [${result.tier} tier]` : ''
 
+  const snapshotLine = result.snapshot
+    ? `${result.snapshot.tag ?? 'unknown tag'}${result.snapshot.buildMacos ? ` (built on macOS ${result.snapshot.buildMacos})` : ''}`
+    : null
+
   const lines = [
     bold(`Apple Documentation Corpus${tierLabel}`),
     `  Data directory:  ${result.dataDir}`,
+    ...(snapshotLine ? [`  Snapshot:        ${snapshotLine}`] : []),
     `  Database:        ${fmt(result.databaseSize ?? 0)}`,
     `  Raw JSON:        ${fmt(rawJson.size)} (${rawJson.files} files)`,
     `  Markdown:        ${fmt(markdown.size)} (${markdown.files} files)`,
@@ -99,7 +104,9 @@ export function formatStatus(result) {
     if (f.lastSyncAt) {
       const staleLabel = f.isStale ? ' (STALE)' : ''
       lines.push(`  Last sync:       ${f.daysSinceSync} days ago${staleLabel}`)
-      if (f.staleRoots.length > 0) {
+      // The user projection drops `staleRoots` (projectStatus) — only
+      // `--advanced` envelopes carry it.
+      if (f.staleRoots?.length > 0) {
         lines.push(`  Stale roots:     ${f.staleRoots.map(r => `${r.slug} (${r.daysSince}d)`).join(', ')}`)
       }
     } else {
