@@ -108,8 +108,12 @@ Usage: apple-docs sync [options]
 Refresh the entire Apple documentation corpus end-to-end. Single command,
 full coverage. Resumable: re-run after interruption to continue.
 
-Stages: HEAD-check → discover → crawl → download → convert → body index →
-fonts → SF Symbols → migrations + cleanup + minify.
+Stages: HEAD-check → discover → crawl → download → convert → Xcode-docs
+enrich → body index → fonts → SF Symbols → migrations + cleanup + minify.
+
+The enrich stage merges Xcode's offline documentation asset (symbol USRs +
+pages the public crawl can't see) when a local Xcode install provides one;
+set APPLE_DOCS_ENRICH_FETCH=1 to allow the ~650 MB CDN download instead.
 
 Options:
   --full               Force a clean rebuild from scratch

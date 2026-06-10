@@ -56,9 +56,20 @@ jobs:
       # dir each run, so there's no prior corpus to fall back on). The workflow
       # token lifts the limit to 5000 req/hr; public-repo reads need no extra
       # scope beyond the default `contents: read`.
-      - name: Sync corpus
+      #
+      # APPLE_DOCS_ENRICH_FETCH=1 lets sync's enrichment phase download
+      # Xcode's offline Developer Documentation asset (~650 MB, verified)
+      # from Apple's CDN — the runner has no Xcode. The phase runs BETWEEN
+      # convert and indexing, so USR backfills and novel pages flow through
+      # the normal body-index build (no post-hoc FTS repair), and both
+      # determinism passes below see the same enriched DB. Non-fatal by
+      # design — a stale pin or CDN hiccup logs a warning and ships an
+      # un-enriched (but fully functional) snapshot rather than breaking
+      # the weekly release.
+      - name: Sync corpus (incl. Xcode-docs enrichment)
         env:
           APPLE_DOCS_DOWNLOAD_FONTS: '1'
+          APPLE_DOCS_ENRICH_FETCH: '1'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun run cli.js sync --full
         timeout-minutes: 120
@@ -66,19 +77,6 @@ jobs:
       - name: Determine tag
         id: tag
         run: echo "tag=snapshot-$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
-
-      # Enrich the crawled corpus from Xcode's offline Developer Documentation
-      # asset BEFORE the two-pass build, so both determinism passes VACUUM the
-      # same enriched DB. The runner has no Xcode, so --fetch downloads the
-      # asset zip from Apple's public CDN (manifest URL when present, else the
-      # SHA-1-pinned fallback in src/sources/mobileasset-fetch.js) and verifies
-      # it. Backfills symbol USRs + per-platform versions and inserts the few
-      # pages absent from the crawl; keyed, NULL-guarded, idempotent. Non-fatal
-      # by design — a stale pin or CDN hiccup logs a warning and ships an
-      # un-enriched (but fully functional) snapshot rather than breaking the
-      # weekly release.
-      - name: Enrich from Xcode documentation
-        run: bun run scripts/enrich-xcode-docs.js --fetch --apply
 
       # Build all archives (full snapshot + combined symbols + per-family
       # fonts + fonts-all). The orchestrator also emits a unified

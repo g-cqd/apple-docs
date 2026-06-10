@@ -113,6 +113,7 @@ requirement.
 | `APPLE_DOCS_PACKAGES_FETCH` | `raw` | `raw` README fetch or `api` (richer GitHub metadata) |
 | `APPLE_DOCS_PACKAGES_LIMIT` | unset | Cap package count during discovery |
 | `APPLE_DOCS_SKIP_RESOURCES` | `false` | Skip post-extract font + SF Symbols re-index |
+| `APPLE_DOCS_ENRICH_FETCH` | unset | `1` lets `sync`'s Xcode-docs enrichment phase download the ~650 MB asset from Apple's CDN when no local Xcode asset exists (the snapshot CI sets it; local syncs use a local asset or skip) |
 | `APPLE_DOCS_DOWNLOAD_FONTS` | unset | Force-download Apple fonts even if system-installed |
 | `APPLE_DOCS_SYMBOLS_OFFLINE` | `false` | Skip the live SF Symbols renderer (use bundled prerenders only) |
 

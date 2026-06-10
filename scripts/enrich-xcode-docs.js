@@ -4,9 +4,14 @@
  * corpus — USR + platform backfill on the keyed overlap, plus truly-novel
  * pages. Duplication-safe and idempotent (see sources/mobileasset-docs.js).
  *
+ * `apple-docs sync` now runs this merge as a pipeline phase BEFORE indexing
+ * (src/commands/sync/enrich.js), so a normal sync needs no separate step.
+ * This script remains the post-hoc / manual path for an already-built
+ * corpus — which is why it rebuilds the body FTS itself after inserting.
+ *
  * Asset resolution is automatic: a locally-installed Xcode asset is used when
  * present, otherwise the asset is downloaded from Apple's CDN — so it works on
- * a GitHub Actions runner with no Xcode (the snapshot build relies on this).
+ * a GitHub Actions runner with no Xcode.
  * Dry-run by default; nothing is written without --apply.
  *
  *   bun scripts/enrich-xcode-docs.js              # auto-resolve, report only

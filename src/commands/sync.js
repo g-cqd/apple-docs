@@ -9,6 +9,7 @@ import { ROOT_CATALOG_SOURCE_TYPES, filterPages, discoverAdaptersInParallel } fr
 import { update } from './update.js'
 import { consolidate } from './consolidate.js'
 import { runAdapterStep } from './sync/adapters.js'
+import { runEnrichPhase } from './sync/enrich.js'
 import { runBodyIndex, runResourcesPhase } from './sync/phases.js'
 
 /**
@@ -18,8 +19,9 @@ import { runBodyIndex, runResourcesPhase } from './sync/phases.js'
  *   2. Discover roots (catalog sources) and adapter pages
  *   3. Crawl every adapter end-to-end (all adapters in parallel; per-root parallelism inside)
  *   4. Download missing raw payloads, convert to Markdown
- *   5. Body index (FTS) + resources (fonts, SF Symbols, prerender) run concurrently
- *   6. Run schema migrations, clean invalid entries, re-resolve failures, minify raw JSON
+ *   5. Enrich from Xcode's offline documentation asset (USR backfill + novel pages)
+ *   6. Body index (FTS) + resources (fonts, SF Symbols, prerender) run concurrently
+ *   7. Run schema migrations, clean invalid entries, re-resolve failures, minify raw JSON
  *
  * Always full coverage. The only flag is `--full`, which forces a clean re-crawl
  * (resets failed entries everywhere, ignores incremental shortcuts) instead of
@@ -144,7 +146,19 @@ export async function sync(opts, ctx) {
       cvResult = await convertAll(db, dataDir, logger, null, filters, { semaphore })
     }
 
-    // 5. Body index + resources run concurrently. They touch disjoint tables
+    // 5. Merge Xcode's offline Developer Documentation asset BEFORE the
+    //    index phase so novel pages flow through the normal body-index
+    //    build below (title/trigram FTS are trigger-maintained on insert).
+    //    Local asset only, unless APPLE_DOCS_ENRICH_FETCH=1 opts into the
+    //    CDN download (snapshot CI). Non-fatal: no asset means skip.
+    //    Skipped entirely for scoped syncs (injected ctx.adapters — tests,
+    //    smoke harnesses): merging a ~350k-page asset into a partial corpus
+    //    would flood it with novel pages from sources that were never crawled.
+    const enrichResult = ctx.adapters
+      ? { skipped: true }
+      : await runEnrichPhase({ db, logger })
+
+    // 6. Body index + resources run concurrently. They touch disjoint tables
     //    (body index: documents_body_fts + schema_meta; resources:
     //    sf_symbols + apple_font_*). bun:sqlite serialises SQL on the
     //    single connection, but the wall-clock win comes from the disk + network
@@ -159,7 +173,7 @@ export async function sync(opts, ctx) {
     const symbolsResult = resOutcome.symbolsResult
     const symbolsRenderResult = resOutcome.symbolsRenderResult
 
-    // 6. Schema migrations + invalid-entry cleanup + parent-ref re-resolution +
+    // 7. Schema migrations + invalid-entry cleanup + parent-ref re-resolution +
     // raw JSON minification. Idempotent and cheap when there's nothing to do.
     const doctorStep = await runStep(
       'sync.consolidate',
@@ -184,6 +198,7 @@ export async function sync(opts, ctx) {
       failedSources,
       guidelines: guidelinesResult,
       downloaded: dlResult.downloaded,
+      enrich: enrichResult,
       bodyIndexed,
       converted: cvResult.converted,
       update: updateResult,
