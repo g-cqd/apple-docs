@@ -1545,6 +1545,18 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   margin-bottom: 1rem;
 }
 
+/* Page-level headings outside .doc-article (search, listings, 404).
+   Fluid size + a break opportunity: at 200% font scale on a 375px
+   viewport a single word ("Documentation") otherwise ink-overflows the
+   page — text overflow never widens the h1 box, it just forces a
+   horizontal scrollbar. */
+.search-page h1,
+.not-found-page h1,
+.main-content.listing h1 {
+  font-size: clamp(1.5rem, 5vw + 0.5rem, 2rem);
+  overflow-wrap: anywhere;
+}
+
 /* 404 fallback page. Mirrors search-page chrome so the user lands on a
  * familiar layout. The inline JS pre-fills #not-found-q with a query
  * derived from the requested URL. */
@@ -1623,6 +1635,11 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .filter-row-query .filter-input {
   font-size: 1rem;
   padding: 0.5rem 0.75rem;
+  /* Inputs default to a ~20ch intrinsic width and refuse to shrink,
+     overflowing 375px viewports at 200% font scale. */
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .filter-group {
@@ -1791,6 +1808,14 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-weight: 600;
   font-size: 0.9375rem;
   color: var(--accent);
+}
+
+/* Result cards quote symbol names and package-README fragments — long
+   unbreakable tokens (DoubleColumnNavigationViewStyle, URLs) that ink
+   past narrow viewports at large font scales without a break
+   opportunity. Inherited, so it covers title/abstract/footer alike. */
+.search-result-card {
+  overflow-wrap: anywhere;
 }
 
 .result-card-badges {
@@ -2911,9 +2936,16 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   padding: 0.15rem 0.4rem;
   border-radius: var(--radius-sm);
   white-space: nowrap;
+  /* Bounded + hidden from layout when idle: opacity alone left thousands
+     of long nowrap labels contributing to horizontal overflow at the
+     grid's right edge. */
+  max-width: min(220px, 80vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  visibility: hidden;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity 120ms ease, visibility 0s 120ms;
   z-index: 5;
 }
 
@@ -2921,6 +2953,8 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 .symbol-tile:focus-visible .symbol-tile__tooltip,
 .symbol-tile:focus-within .symbol-tile__tooltip {
   opacity: 1;
+  visibility: visible;
+  transition: opacity 120ms ease;
 }
 
 /* -- Inspector (≥1024 only by default; mobile gets a route) -- */
