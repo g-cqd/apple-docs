@@ -46,7 +46,16 @@ beforeAll(() => {
   dataDir = mkdtempSync(join(tmpdir(), 'apple-docs-leak-'))
   // Seed a minimal DB at the data-dir path the CLI will use.
   const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
-  db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+  const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+  // frameworks lists roots by live page count — the root needs a page row.
+  db.upsertPage({
+    rootId: root.id,
+    url: 'https://example.com/swiftui/view',
+    path: 'swiftui/view',
+    title: 'View',
+    role: 'symbol',
+    abstract: 'A type that represents part of your app\'s user interface.',
+  })
   db.upsertNormalizedDocument({
     document: {
       sourceType: 'apple-docc', key: 'swiftui/view', title: 'View',
