@@ -68,12 +68,21 @@ Options:
   browse: `
 Usage: apple-docs browse <framework> [options]
 
-Browse the documentation tree for a framework.
+Browse the documentation tree for a framework or collection root.
+
+The wwdc root is year-aware: \`browse wwdc\` lists years with session
+counts, \`browse wwdc --year 2024\` lists that year's sessions.
 
 Options:
   --path <path>        Show children of a specific page
+  --year <yyyy>        WWDC only: list one year's sessions
   --limit <n>          Max pages to return (default: all)
   --json               Output raw JSON
+
+Examples:
+  apple-docs browse swiftui
+  apple-docs browse swiftui --path swiftui/view
+  apple-docs browse wwdc --year 2025
 `.trim(),
 
   kinds: `

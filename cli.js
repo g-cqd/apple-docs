@@ -143,7 +143,12 @@ try {
     case 'browse': {
       const fw = positional[0]
       if (!fw) { showHelp('browse'); process.exit(1) }
-      result = await browse({ framework: fw, path: flags.path, limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined }, ctx)
+      result = await browse({
+        framework: fw,
+        path: flags.path,
+        limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined,
+        year: flags.year ? Number.parseInt(flags.year, 10) : undefined,
+      }, ctx)
       formatter = formatBrowse
       break
     }

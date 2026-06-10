@@ -42,7 +42,18 @@ export function formatBrowse(result) {
     return lines.join('\n')
   }
 
-  const lines = [`${bold(result.framework)} ${dim(`(${result.slug}, ${result.kind})`)}\n`]
+  if (result.groups) {
+    const lines = [`${bold(result.framework)} ${dim(`(${result.slug}, ${result.kind})`)}\n`]
+    for (const g of result.groups) {
+      lines.push(`  ${bold(String(g.year))}  ${dim(`${g.count} sessions`)}`)
+    }
+    lines.push(`\n${result.total} sessions across ${result.groups.length} years`)
+    lines.push(dim(`Use \`browse ${result.slug} --year <year>\` to list one year.`))
+    return lines.join('\n')
+  }
+
+  const scope = result.year ? `${result.slug}, ${result.year}` : `${result.slug}, ${result.kind}`
+  const lines = [`${bold(result.framework)} ${dim(`(${scope})`)}\n`]
   for (const p of result.pages.slice(0, 50)) {
     const kind = p.kind ? dim(` [${p.kind}]`) : ''
     lines.push(`  ${p.title ?? p.path}${kind}`)

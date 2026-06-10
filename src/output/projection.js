@@ -199,7 +199,12 @@ export function projectBrowse(result, opts) {
   if (result.framework !== undefined) out.framework = result.framework
   if (result.title !== undefined) out.title = result.title
   if (result.path !== undefined) out.path = result.path
+  if (typeof result.year === 'number') out.year = result.year
 
+  if (Array.isArray(result.groups)) {
+    out.groups = result.groups.map(g => ({ year: g.year, count: g.count }))
+    if (typeof result.total === 'number') out.total = result.total
+  }
   if (Array.isArray(result.pages)) {
     out.pages = result.pages.map(p => pick(p, BROWSE_PAGE_KEEP))
     if (typeof result.total === 'number') out.total = result.total
