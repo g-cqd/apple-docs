@@ -191,6 +191,16 @@ logger.info(`Published: https://github.com/g-cqd/apple-docs/releases/tag/${tag}`
 // Push-style rollout: poke the beta-channel instance, detached on the
 // remote so a ~15-minute install never blocks the publisher.
 if (rolloutHost) {
+  // `gh release create` returns before the /releases LIST endpoint
+  // serves the new tag (observed: a trigger 2s after publish resolved
+  // the PREVIOUS beta and no-opped). Wait until the list actually
+  // carries it so the instance's channel resolver can see it.
+  for (let attempt = 1; attempt <= 12; attempt++) {
+    const listed = sh(['gh', 'api', 'repos/g-cqd/apple-docs/releases?per_page=5', '--jq', '.[].tag_name'], { allowFailure: true })
+    if (listed.stdout.split('\n').includes(tag)) break
+    if (attempt === 12) logger.warn(`release ${tag} still not in the list API after ~60s — triggering anyway`)
+    await Bun.sleep(5000)
+  }
   logger.info(`Triggering rollout on ${rolloutHost}…`)
   const remoteLog = `~/beta-rollout-${tag}.log`
   const r = sh(['ssh', '-o', 'BatchMode=yes', rolloutHost,
