@@ -29,6 +29,7 @@ export function validateSymbolMatrixComplete(ctx, opts = {}) {
   const symbols = ctx.db?.listSfSymbolsCatalog?.() ?? []
   const counts = { public: 0, private: 0 }
   const skippedBitmapOnly = { public: 0, private: 0 }
+  const skippedRenderUnsupported = { public: 0, private: 0 }
   const missing = []
   let missingCount = 0
 
@@ -42,6 +43,14 @@ export function validateSymbolMatrixComplete(ctx, opts = {}) {
       skippedBitmapOnly[scope]++
       continue
     }
+    // v27: cataloged by a newer SF Symbols.app than the building macOS
+    // can draw (every prerender variant failed — see sync.js
+    // markUnrenderableSymbols). Render surfaces explain availability;
+    // the gate must not block the build on them.
+    if (symbol.renderUnsupported) {
+      skippedRenderUnsupported[scope]++
+      continue
+    }
     for (const variant of symbolVariantMatrix(scope)) {
       const path = getPrerenderedSymbolPath(ctx, scope, symbol.name, variant)
       if (existsSync(path)) continue
@@ -52,5 +61,5 @@ export function validateSymbolMatrixComplete(ctx, opts = {}) {
     }
   }
 
-  return { complete: missingCount === 0, missingCount, missing, counts, skippedBitmapOnly }
+  return { complete: missingCount === 0, missingCount, missing, counts, skippedBitmapOnly, skippedRenderUnsupported }
 }

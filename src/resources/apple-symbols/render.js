@@ -102,6 +102,12 @@ export async function renderSfSymbol(opts, ctx) {
 
   const symbol = ctx.db.getSfSymbol(scope, opts.name)
   if (!symbol) throw new NotFoundError(`${scope}/${opts.name}`, `SF Symbol not found: ${scope}/${opts.name}`)
+  if (symbol.renderUnsupported ?? symbol.render_unsupported) {
+    throw new NotFoundError(
+      `${scope}/${opts.name}`,
+      `SF Symbol ${scope}/${opts.name} is cataloged but not renderable from this snapshot — its glyph ships with a newer macOS than the build host. Beta snapshots built on that macOS carry it (apple-docs setup --beta).`,
+    )
+  }
 
   const renderDir = join(ctx.dataDir, 'resources', 'symbol-renders', scope)
   ensureDir(renderDir)

@@ -28,6 +28,7 @@ import {
   symbolVariantMatrix,
 } from './cache-key.js'
 import { symbolSnapshotNeedsReset } from './snapshot-meta.js'
+import { markUnrenderableSymbols } from './mark-unrenderable.js'
 import { stampSfSymbolCodepoints } from './codepoint-stamp.js'
 import { SYMBOL_RENDERER_VERSION } from './render.js'
 
@@ -145,6 +146,7 @@ export async function prerenderSfSymbols(opts, ctx) {
       onProgress: opts.onProgress,
       result,
     })
+    markUnrenderableSymbols({ ctx, scope, variants, result, logger })
   }
 
   await Bun.write(join(baseDir, 'meta.json'), JSON.stringify({

@@ -46,7 +46,7 @@ export function createAssetsSymbolsRepo(db) {
   )
   const getSymbolStmt = db.query('SELECT * FROM sf_symbols WHERE scope = ? AND name = ?')
   const listCatalogStmt = db.query(`
-    SELECT name, scope, categories_json, keywords_json, bitmap_only, codepoint, codepoint_version
+    SELECT name, scope, categories_json, keywords_json, bitmap_only, render_unsupported, codepoint, codepoint_version
     FROM sf_symbols
     ORDER BY scope, COALESCE(order_index, 999999), name
   `)
@@ -56,6 +56,12 @@ export function createAssetsSymbolsRepo(db) {
   // reports the symbol has no vector form.
   const markBitmapOnlyStmt = db.query(
     'UPDATE sf_symbols SET bitmap_only = 1 WHERE scope = $scope AND name = $name',
+  )
+  // v27: the catalog (current SF Symbols.app) can list names the build
+  // host's macOS cannot draw at all; the prerender loop flags them when
+  // every variant fails so the completeness gate skips them.
+  const markRenderUnsupportedStmt = db.query(
+    'UPDATE sf_symbols SET render_unsupported = 1 WHERE scope = $scope AND name = $name',
   )
   // v19: stamp the resolved Private Use Area codepoint at sync time.
   // Pass NULL to clear (e.g., when the dump can't reach the symbol
@@ -159,12 +165,16 @@ export function createAssetsSymbolsRepo(db) {
         categories: parseJsonArray(row.categories_json),
         keywords: parseJsonArray(row.keywords_json),
         bitmapOnly: !!row.bitmap_only,
+        renderUnsupported: !!row.render_unsupported,
         codepoint: row.codepoint ?? null,
         codepointVersion: row.codepoint_version ?? null,
       }))
     },
     markBitmapOnly(scope, name) {
       markBitmapOnlyStmt.run({ $scope: scope, $name: name })
+    },
+    markRenderUnsupported(scope, name) {
+      markRenderUnsupportedStmt.run({ $scope: scope, $name: name })
     },
     /** Stamp the resolved PUA codepoint + the SF Symbols version it came from
      *  (so the codepoint can be matched to the shipped font). Pass null to clear. */

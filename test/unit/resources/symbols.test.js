@@ -290,3 +290,57 @@ function escapeXml(value) {
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;')
 }
+
+describe('render_unsupported gate (v27)', () => {
+  test('validator skips flagged symbols but still fails on unflagged gaps', async () => {
+    const { validateSymbolMatrixComplete } = await import('../../../src/resources/apple-symbols/validate.js')
+    db.upsertSfSymbol({ name: 'f1', scope: 'private', categories: [], keywords: [], orderIndex: 0 })
+    db.upsertSfSymbol({ name: 'gauge.future', scope: 'private', categories: [], keywords: [], orderIndex: 1 })
+
+    const before = validateSymbolMatrixComplete(ctx)
+    expect(before.complete).toBe(false)
+    expect(before.missingCount).toBe(54) // 2 symbols x 27 private variants
+
+    db.assetsSymbols.markRenderUnsupported('private', 'f1')
+    const after = validateSymbolMatrixComplete(ctx)
+    expect(after.complete).toBe(false)
+    expect(after.missingCount).toBe(27)
+    expect(after.skippedRenderUnsupported.private).toBe(1)
+
+    db.assetsSymbols.markRenderUnsupported('private', 'gauge.future')
+    const done = validateSymbolMatrixComplete(ctx)
+    expect(done.complete).toBe(true)
+    expect(done.skippedRenderUnsupported.private).toBe(2)
+  })
+
+  test('catalog exposes the flag and render refuses with an availability message', async () => {
+    db.upsertSfSymbol({ name: 'f1', scope: 'private', categories: [], keywords: [], orderIndex: 0 })
+    db.assetsSymbols.markRenderUnsupported('private', 'f1')
+
+    const flagged = db.listSfSymbolsCatalog().find(s => s.name === 'f1')
+    expect(flagged.renderUnsupported).toBe(true)
+
+    await expect(
+      renderSfSymbol({ name: 'f1', scope: 'private', format: 'svg' }, ctx),
+    ).rejects.toThrow(/newer macOS|setup --beta/)
+  })
+})
+
+describe('markUnrenderableSymbols', () => {
+  test('flags only symbols whose every variant failed', async () => {
+    const { markUnrenderableSymbols } = await import('../../../src/resources/apple-symbols/mark-unrenderable.js')
+    db.upsertSfSymbol({ name: 'f1', scope: 'private', categories: [], keywords: [], orderIndex: 0 })
+    db.upsertSfSymbol({ name: 'partial', scope: 'private', categories: [], keywords: [], orderIndex: 1 })
+    const variants = [{ weight: 'regular', scale: 'small' }, { weight: 'regular', scale: 'medium' }]
+    const result = { failures: [
+      { scope: 'private', name: 'f1', weight: 'regular', scale: 'small', error: 'x' },
+      { scope: 'private', name: 'f1', weight: 'regular', scale: 'medium', error: 'x' },
+      { scope: 'private', name: 'partial', weight: 'regular', scale: 'small', error: 'x' },
+      { scope: 'public', name: 'f1', weight: 'regular', scale: 'small', error: 'wrong scope' },
+    ] }
+    markUnrenderableSymbols({ ctx, scope: 'private', variants, result, logger: ctx.logger })
+    const catalog = db.listSfSymbolsCatalog()
+    expect(catalog.find(s => s.name === 'f1').renderUnsupported).toBe(true)
+    expect(catalog.find(s => s.name === 'partial').renderUnsupported).toBe(false)
+  })
+})
