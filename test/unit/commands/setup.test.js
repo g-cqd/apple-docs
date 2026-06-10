@@ -299,17 +299,39 @@ describe('fetchLatestRelease channels', () => {
     expect(urls[0]).toContain('/releases/latest')
   })
 
-  test('beta channel takes the newest prerelease outright', async () => {
+  test('beta channel takes the newest same-or-newer-base prerelease', async () => {
     globalThis.fetch = mock(async (url) => {
-      expect(String(url)).toContain('/releases?')
+      const u = String(url)
+      if (u.includes('beta.1-status.json')) {
+        return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
+      }
+      expect(u.includes('/releases?') || u.includes('-status.json')).toBe(true)
       return new Response(JSON.stringify([
-        { tag_name: 'snapshot-20260610-beta.1', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.1')] },
+        { tag_name: 'snapshot-20260610-beta.1', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.1'), statusAsset('snapshot-20260610-beta.1')] },
         { tag_name: 'snapshot-20260609', published_at: '2026-06-09T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260609')] },
       ]), { status: 200 })
     })
     const r = await fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.1' })
     expect(r.tag).toBe('snapshot-20260610-beta.1')
     expect(r.prerelease).toBe(true)
+  })
+
+  test('beta channel skips a beta from an OLDER macOS base', async () => {
+    globalThis.fetch = mock(async (url) => {
+      const u = String(url)
+      if (u.includes('old-beta-status.json')) {
+        return new Response(JSON.stringify({ buildMacos: '26.2' }), { status: 200 })
+      }
+      if (u.includes('good-beta-status.json')) {
+        return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
+      }
+      return new Response(JSON.stringify([
+        { tag_name: 'old-beta', published_at: '2026-06-12T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('old-beta'), statusAsset('old-beta')] },
+        { tag_name: 'good-beta', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('good-beta'), statusAsset('good-beta')] },
+      ]), { status: 200 })
+    })
+    const r = await fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.0' })
+    expect(r.tag).toBe('good-beta')
   })
 
   test('beta channel skips drafts and asset-less releases', async () => {

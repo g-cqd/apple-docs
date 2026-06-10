@@ -133,12 +133,14 @@ async function fetchReleaseBuildMacos(release) {
  * Channels:
  *   - stable (default): GET /releases/latest — GitHub itself excludes
  *     prereleases and drafts there, so betas are invisible.
- *   - beta: walk /releases newest-first. Prereleases are always
- *     eligible; a stable release is only eligible when its build-host
- *     macOS (from its status.json) is at least `localBuildMacos` —
- *     snapshots inherit the SF Symbols catalog of the macOS that built
- *     them, so a newer stable from an older macOS would silently shed
- *     symbols a beta install already has.
+ *   - beta: walk /releases newest-first and take the first candidate —
+ *     prerelease or stable — whose build-host macOS (from its
+ *     status.json) is at least `localBuildMacos`. Snapshots inherit the
+ *     SF Symbols catalog of the macOS that built them, so anything from
+ *     an older base would silently shed symbols this install already
+ *     has; a stable from the SAME (now GA) or newer base supersedes the
+ *     beta. Candidates without provenance count as older-base, except
+ *     prereleases when the local provenance is itself unknown.
  *
  * @param {{ channel?: 'stable'|'beta', localBuildMacos?: string|null }} [opts]
  */
@@ -171,14 +173,17 @@ export async function fetchLatestRelease({ channel = 'stable', localBuildMacos =
     .filter(r => !r.draft && (r.assets ?? []).some(a => SNAPSHOT_ASSET.test(a.name)))
     .map(shapeRelease)
   for (const release of candidates) {
-    if (release.prerelease) return release
-    if (localMajor == null) return release
+    if (localMajor == null) {
+      // Nothing to protect yet — first install on the channel takes the
+      // newest release outright.
+      return release
+    }
     const releaseMajor = macosMajor(await fetchReleaseBuildMacos(release))
     if (releaseMajor != null && releaseMajor >= localMajor) return release
   }
   throw new NotFoundError(
     `https://api.github.com/repos/${GITHUB_REPO}/releases`,
-    `No installable release on the beta channel matches this corpus (built on macOS ${localBuildMacos}). Newer stable releases from an older macOS would shed symbols this install already has.`,
+    `No installable release on the beta channel matches this corpus (built on macOS ${localBuildMacos}). Releases from an older macOS base would shed symbols this install already has.`,
   )
 }
 

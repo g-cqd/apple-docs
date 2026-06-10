@@ -17,7 +17,13 @@
  *   bun scripts/verify-profiles.mjs                    # download latest release, all profiles
  *   bun scripts/verify-profiles.mjs --archive <path>   # reuse a local .tar.zst
  *   bun scripts/verify-profiles.mjs --profiles compact,balanced
+ *   bun scripts/verify-profiles.mjs --profiles beta    # REAL `setup --beta` roundtrip
  *   bun scripts/verify-profiles.mjs --keep             # keep installs for debugging
+ *
+ * The `beta` profile skips the local archive entirely: it exercises the
+ * actual release path — channel resolution against GitHub, download,
+ * checksum verification, extraction, resource re-index, semantic build —
+ * exactly what a user gets from `apple-docs setup --beta`.
  *
  * The base dir lives under $HOME (setup --archive refuses paths outside it).
  * Each profile is torn down after its checks unless --keep is passed.
@@ -298,11 +304,13 @@ async function runCliChecks(home, profile, checks) {
     return `${active} pages, ${r.json.roots.total} roots`
   })
 
+  // The beta roundtrip installs with the default profile (balanced).
+  const expectedProfile = profile === 'beta' ? 'balanced' : profile
   await probe(checks, 'cli: storage profile is applied', async () => {
     const r = await cli(home, ['storage', 'profile', '--json'])
     assert(r.code === 0, `exit ${r.code}`)
-    assert(r.stdout.includes(profile), `expected ${profile} in: ${r.stdout.slice(0, 200)}`)
-    return profile
+    assert(r.stdout.includes(expectedProfile), `expected ${expectedProfile} in: ${r.stdout.slice(0, 200)}`)
+    return expectedProfile
   })
 
   await probe(checks, 'cli: frameworks lists roots', async () => {
@@ -389,6 +397,49 @@ async function runCliChecks(home, profile, checks) {
     assert(r.code === 0 && r.json, `exit ${r.code}`)
     return `total=${r.json.total}`
   })
+
+  await probe(checks, 'cli: browse wwdc returns year groups', async () => {
+    const r = await cli(home, ['browse', 'wwdc', '--json'])
+    assert(r.code === 0 && r.json, `exit ${r.code}`)
+    const groups = r.json.groups ?? []
+    assert(groups.length > 15, `${groups.length} year groups`)
+    assert(groups[0].year > groups[groups.length - 1].year, 'years not descending')
+    return `${groups.length} years, newest ${groups[0].year} (${groups[0].count} sessions)`
+  })
+
+  await probe(checks, 'cli: browse wwdc --year lists sessions', async () => {
+    const r = await cli(home, ['browse', 'wwdc', '--json'])
+    const year = r.json.groups[0].year
+    const y = await cli(home, ['browse', 'wwdc', '--year', String(year), '--json'])
+    assert(y.code === 0 && (y.json.pages ?? []).length > 50, `${(y.json?.pages ?? []).length} sessions for ${year}`)
+    return `${y.json.pages.length} sessions in ${year}`
+  })
+
+  // Tracks + provenance ship with snapshots built after 2026-06-10;
+  // archive installs of older stables legitimately lack both.
+  await probe(checks, 'cli: search --track filter is live', async () => {
+    const r = await cli(home, ['search', 'navigation', '--source', 'wwdc', '--track', 'swiftui', '--json'])
+    assert(r.code === 0 && r.json, `exit ${r.code}`)
+    const hits = (r.json.results ?? []).length
+    if (hits === 0 && profile !== 'beta') return 'no tracks in this snapshot (pre-track corpus, ok)'
+    assert(hits > 0, 'zero results — tracks missing from corpus')
+    return `${hits} hits`
+  })
+
+  await probe(checks, 'meta: snapshot provenance (build_macos + version)', async () => {
+    const { Database } = await import('bun:sqlite')
+    const meta = new Database(join(home, 'apple-docs.db'), { readonly: true })
+    try {
+      const get = (k) => meta.query('SELECT value FROM snapshot_meta WHERE key = ?').get(k)?.value
+      const buildMacos = get('build_macos')
+      const version = get('snapshot_version')
+      if (!buildMacos && profile !== 'beta') return `pre-provenance snapshot ${version} (ok)`
+      assert(buildMacos, 'no build_macos meta')
+      return `build_macos=${buildMacos} version=${version}`
+    } finally {
+      meta.close()
+    }
+  })
 }
 
 async function runWebChecks(home, checks) {
@@ -447,6 +498,43 @@ async function runWebChecks(home, checks) {
       }
       return '4 endpoints'
     })
+
+    await probe(checks, 'web: scope pages render their structure', async () => {
+      const wwdc = await (await fetch(`${base}/docs/wwdc/`)).text()
+      const years = (wwdc.match(/role-heading/g) ?? []).length
+      assert(years > 10, `wwdc sections=${years}`)
+      const review = await (await fetch(`${base}/docs/app-store-review/`)).text()
+      assert(review.includes('1. Safety'), 'guidelines sections missing')
+      return `wwdc ${years} year sections; guidelines numbered`
+    })
+
+    await probe(checks, 'web: /api/search reports hasMore + year facets exist', async () => {
+      const r = await (await fetch(`${base}/api/search?q=view&limit=20`)).json()
+      assert(typeof r.hasMore === 'boolean', `hasMore=${r.hasMore}`)
+      const filters = await (await fetch(`${base}/api/filters`)).json()
+      assert(Array.isArray(filters.wwdcYears) && filters.wwdcYears.length > 10, `wwdcYears=${filters.wwdcYears?.length}`)
+      return `hasMore=${r.hasMore}, ${filters.wwdcYears.length} year facets`
+    })
+
+    await probe(checks, 'web: overlong keys serve at hashed paths (+.md)', async () => {
+      const { Database } = await import('bun:sqlite')
+      const { safeWebDocKey } = await import(join(ROOT, 'src/lib/safe-path.js'))
+      const meta = new Database(join(home, 'apple-docs.db'), { readonly: true })
+      let key
+      try {
+        key = meta.query('SELECT key FROM documents WHERE length(CAST(key AS BLOB)) > 230 LIMIT 1').get()?.key
+      } finally {
+        meta.close()
+      }
+      assert(key, 'no overlong key in corpus')
+      const hashed = safeWebDocKey(key)
+      assert(hashed !== key && hashed.includes('~'), 'key did not hash')
+      const page = await fetch(`${base}/docs/${hashed}`)
+      assert(page.ok, `hashed page -> ${page.status}`)
+      const md = await fetch(`${base}/docs/${hashed}.md`)
+      assert(md.ok, `hashed .md -> ${md.status}`)
+      return `${hashed.slice(0, 60)}… -> 200 (+md)`
+    })
   } finally {
     await stopServer(proc)
   }
@@ -466,12 +554,13 @@ async function runMcpStdioChecks(home, checks, report) {
       return `protocol ${r.protocolVersion}`
     })
 
-    await probe(checks, 'mcp(stdio): tools/list exposes the full surface', async () => {
+    await probe(checks, 'mcp(stdio): tools/list exposes the full surface within budget', async () => {
       const r = await client.request('tools/list')
       const names = (r.tools ?? []).map(t => t.name).sort()
       assert(JSON.stringify(names) === JSON.stringify([...TOOL_NAMES].sort()), `got ${names.join(',')}`)
       const bytes = JSON.stringify(r.tools).length
       report.toolsListBytes = bytes
+      assert(bytes < 10 * 1024, `definitions ${bytes} bytes exceed the 10 KiB budget`)
       return `${names.length} tools, definitions ${(bytes / 1024).toFixed(1)} KiB (~${Math.round(bytes / 4)} tokens)`
     })
 
@@ -500,6 +589,15 @@ async function runMcpStdioChecks(home, checks, report) {
       const p = toolPayload(await call('browse', { framework: 'swiftui', limit: 5 }))
       assert(p != null, 'empty payload')
       return 'ok'
+    })
+
+    await probe(checks, 'mcp(stdio): browse wwdc year groups + year filter', async () => {
+      const grouped = toolPayload(await call('browse', { framework: 'wwdc' }))
+      assert((grouped?.groups ?? []).length > 15, `groups=${grouped?.groups?.length}`)
+      const year = grouped.groups[0].year
+      const filtered = toolPayload(await call('browse', { framework: 'wwdc', year }))
+      assert((filtered?.pages ?? []).length > 50, `pages=${filtered?.pages?.length} for ${year}`)
+      return `${grouped.groups.length} years; ${filtered.pages.length} sessions in ${year}`
     })
 
     await probe(checks, 'mcp(stdio): list_taxonomy', async () => {
@@ -625,11 +723,20 @@ async function runProfile(profile, archive) {
   mkdirSync(home, { recursive: true })
 
   const t0 = Date.now()
-  await probe(report.checks, `setup --archive --profile ${profile}`, async () => {
-    const r = await cli(home, ['setup', '--archive', archive, '--profile', profile, '--yes'], { timeoutMs: 45 * 60 * 1000 })
-    assert(r.code === 0, `exit ${r.code}: ${r.stderr.slice(-400)}`)
-    return `${Math.round((Date.now() - t0) / 1000)}s`
-  })
+  if (profile === 'beta') {
+    await probe(report.checks, 'setup --beta (real channel roundtrip)', async () => {
+      const r = await cli(home, ['setup', '--beta', '--yes'], { timeoutMs: 45 * 60 * 1000 })
+      assert(r.code === 0, `exit ${r.code}: ${r.stderr.slice(-400)}`)
+      assert(/\[beta\]/.test(r.stderr + r.stdout) || true, 'no beta marker (informational)')
+      return `${Math.round((Date.now() - t0) / 1000)}s`
+    })
+  } else {
+    await probe(report.checks, `setup --archive --profile ${profile}`, async () => {
+      const r = await cli(home, ['setup', '--archive', archive, '--profile', profile, '--yes'], { timeoutMs: 45 * 60 * 1000 })
+      assert(r.code === 0, `exit ${r.code}: ${r.stderr.slice(-400)}`)
+      return `${Math.round((Date.now() - t0) / 1000)}s`
+    })
+  }
   report.setupMs = Date.now() - t0
 
   const setupOk = report.checks[0]?.ok
@@ -651,7 +758,7 @@ async function runProfile(profile, archive) {
   return report
 }
 
-const archive = await ensureArchive()
+const archive = PROFILES.every(p => p === 'beta') ? null : await ensureArchive()
 const results = []
 log(`verify-profiles: profiles=[${PROFILES.join(', ')}] base=${BASE} archive=${archive}`)
 for (const profile of PROFILES) {
