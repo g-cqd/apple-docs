@@ -13,9 +13,15 @@ const BASE_SCORES = {
   'relaxed-token': 5,
 }
 
+// Corpus `kind` values are Apple's raw identifiers (struct, func, instm,
+// econst, tdef, ...), not display names — keep both spellings so the boost
+// fires on real rows regardless of which pipeline wrote them.
 const SYMBOL_KINDS = new Set([
-  'symbol', 'class', 'structure', 'protocol', 'enum', 'enumeration',
-  'property wrapper', 'type alias', 'function', 'method',
+  'symbol', 'class', 'cl', 'structure', 'struct', 'structp', 'protocol',
+  'enum', 'enumeration', 'econst', 'case', 'union',
+  'property wrapper', 'property', 'instp', 'var',
+  'type alias', 'typealias', 'tdef',
+  'function', 'func', 'method', 'instm', 'clm', 'init', 'op', 'macro',
 ])
 
 const SOURCE_PREFERENCE_MULTIPLIERS = {
@@ -47,10 +53,13 @@ export function rerank(results, query, intent) {
     const sourceType = (r.sourceType ?? '').toLowerCase()
     let score = BASE_SCORES[r.matchQuality] ?? 50
 
-    // R1: Exact path/identifier match
+    // R1: Exact path/identifier match. Case-sensitive title equality gets a
+    // further edge: for symbols, case IS identity (NavigationStack the struct
+    // vs ToolbarRole.navigationStack the property).
     const lastSegment = r.path?.split('/').pop()?.toLowerCase() ?? ''
     if (lastSegment === lowerQuery || (r.title ?? '').toLowerCase() === lowerQuery) {
       score *= 3.0
+      if (r.title === query) score *= 1.1
     }
 
     // R2: Symbol kind boost — when intent is symbol and result is a symbol kind

@@ -96,7 +96,17 @@ function assertNestedAllowlist(value, allowed, path) {
 
 beforeEach(async () => {
   db = new DocsDatabase(':memory:')
-  db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+  const swiftuiRoot = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+  // The frameworks command lists roots by live page count, so the root
+  // needs at least one active page to appear at all.
+  db.upsertPage({
+    rootId: swiftuiRoot.id,
+    url: 'https://example.com/swiftui/view',
+    path: 'swiftui/view',
+    title: 'View',
+    role: 'symbol',
+    abstract: 'A type that represents part of your app\'s user interface.',
+  })
 
   // Seed: View doc with relationships.
   db.upsertNormalizedDocument({

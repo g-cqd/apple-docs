@@ -143,7 +143,13 @@ beforeEach(async () => {
     })
   }
 
-  db.upsertRoot('wwdc', 'WWDC Session Transcripts', 'collection', 'test')
+  const wwdcRoot = db.upsertRoot('wwdc', 'WWDC Sessions', 'collection', 'test')
+  seedPage(wwdcRoot.id, {
+    path: 'wwdc/wwdc2024-10001',
+    title: 'Meet Swift Testing',
+    role: 'article',
+    abstract: 'Learn about the Swift Testing framework.',
+  })
   db.upsertNormalizedDocument({
     document: {
       sourceType: 'wwdc',
@@ -160,7 +166,13 @@ beforeEach(async () => {
     ],
     relationships: [],
   })
-  db.upsertRoot('sample-code', 'Apple Sample Code', 'collection', 'test')
+  const sampleRoot = db.upsertRoot('sample-code', 'Apple Sample Code', 'collection', 'test')
+  seedPage(sampleRoot.id, {
+    path: 'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
+    title: 'Food Truck: Building a SwiftUI Multiplatform App',
+    role: 'sampleCode',
+    abstract: 'Create a multiplatform SwiftUI sample app.',
+  })
   db.upsertNormalizedDocument({
     document: {
       sourceType: 'sample-code',
@@ -179,7 +191,16 @@ beforeEach(async () => {
   })
 
   for (let i = 0; i < 8; i++) {
-    db.upsertRoot(`extra-root-${i}`, `Extra Root ${i}`, 'framework', 'test')
+    // Real corpora never carry page-less roots through to listings (the
+    // frameworks command filters on live page counts), so every fixture
+    // root gets at least one page.
+    const extraRoot = db.upsertRoot(`extra-root-${i}`, `Extra Root ${i}`, 'framework', 'test')
+    seedPage(extraRoot.id, {
+      path: `extra-root-${i}/index`,
+      title: `Extra Root ${i}`,
+      role: 'collection',
+      abstract: `Landing page for extra root ${i}.`,
+    })
   }
 
   db.upsertSfSymbol({
