@@ -1,5 +1,6 @@
-import { weightedRRF, hybridFusion, mmrSelect } from './fusion.js'
-import { hamming } from './embedding.js'
+// fusion-native dispatches to libAppleDocsCore when APPLE_DOCS_NATIVE
+// enables the fusion module; ./fusion.js stays the normative JS reference.
+import { hammingSim, hybridFusion, mmrSelect, weightedRRF } from './fusion-native.js'
 import { matchesSearchFilters } from './filters.js'
 import { formatResult } from './format.js'
 
@@ -84,10 +85,7 @@ export function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, re
     const reordered = mmrSelect(
       results.slice(0, window),
       (r) => vecByPath.get(r.path) ?? null,
-      (a, b) => {
-        const w = Math.min(a.length, b.length)
-        return 1 - hamming(a, b, 0, w) / (w * 8)
-      },
+      hammingSim,
       { lambda },
     )
     results.splice(0, window, ...reordered)
