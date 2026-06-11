@@ -242,6 +242,11 @@ construction). Open: ranking rules, snippet extraction.
 > Phase 1 (tokenizer parity) done 2026-06-11: `ADEmbed` WordPiece pipeline,
 > 100% token-id equality with transformers.js on 180 committed fixtures
 > (RFC 0002 §6a).
+>
+> Phase 2 (matrix + pooling) done 2026-06-11: ADMX weights artifact + mmap
+> reader + bit-exact mean/normalize/quantize — vectors AND codes reproduce
+> the JS/onnx reference bit-for-bit on 180 cases + 2,000 corpus chunks
+> (RFC 0002 §6b).
 
 model2vec inference in Swift: tokenizer (the model's tokenizer.json,
 unigram/WordPiece — implemented with swift-parsing), embedding-matrix
