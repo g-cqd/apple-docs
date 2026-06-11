@@ -29,9 +29,12 @@ public enum ResultBuffer {
     status: ADStatus, format: ADFormat, payload: UnsafeRawBufferPointer?
   ) -> UnsafeMutableRawPointer? {
     let count = payload?.count ?? 0
-    guard let (base, dest) = allocate(status: status, format: format, payloadCount: count) else { return nil }
+    guard let (base, _) = allocate(status: status, format: format, payloadCount: count) else { return nil }
     if let src = payload?.baseAddress, count > 0 {
-      memcpy(dest.baseAddress, src, count)
+      // Non-optional pointer arithmetic: Glibc imports memcpy's dst as
+      // non-nullable (Darwin doesn't), so `dest.baseAddress` won't compile
+      // on Linux.
+      memcpy(base + headerSize, src, count)
     }
     return base
   }
