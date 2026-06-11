@@ -17,10 +17,13 @@ let package = Package(
     .target(name: "ADBase"),
     .target(name: "ADSearch"),
     .target(name: "ADArchive"),
+    // Phase-1 spike (RFC 0002): not yet part of the ADCore product surface.
+    .target(name: "ADEmbed"),
     .target(name: "ADCore", dependencies: ["ADBase", "ADSearch", "ADArchive"]),
     .testTarget(name: "ADBaseTests", dependencies: ["ADBase"]),
     .testTarget(name: "ADSearchTests", dependencies: ["ADSearch"]),
     .testTarget(name: "ADArchiveTests", dependencies: ["ADArchive"]),
     .testTarget(name: "ADCoreTests", dependencies: ["ADCore"]),
+    .testTarget(name: "ADEmbedTests", dependencies: ["ADEmbed"]),
   ]
 )
