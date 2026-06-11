@@ -16,8 +16,9 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { generateMatrixArtifact } from '../src/lib/admx.js'
+import { sha256File } from '../src/lib/hash.js'
 import { resolveActiveSpec } from '../src/search/embedder.js'
-import { PINNED_MODEL_FILES, verifyPinnedModelFiles } from '../src/search/model-integrity.js'
+import { LEGACY_ONNX_SHA256, PINNED_MODEL_FILES, verifyPinnedModelFiles } from '../src/search/model-integrity.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const FIXTURES = join(ROOT, 'test', 'fixtures')
@@ -37,9 +38,20 @@ const modelsDir =
   process.env.APPLE_DOCS_MODELS_DIR ??
   join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
 
-await verifyPinnedModelFiles(modelsDir, spec.hfId)
+// Tokenizer pins + the legacy onnx sha explicitly — the FULL pin set now
+// includes the admx this script is about to (re)generate.
+await verifyPinnedModelFiles(modelsDir, spec.hfId, {
+  [spec.hfId]: {
+    'tokenizer.json': PINNED_MODEL_FILES[spec.hfId]['tokenizer.json'],
+    'tokenizer_config.json': PINNED_MODEL_FILES[spec.hfId]['tokenizer_config.json'],
+  },
+})
 const onnxPath = join(modelsDir, spec.hfId, 'onnx', 'model.onnx')
-const sourceShaHex = PINNED_MODEL_FILES[spec.hfId]['onnx/model.onnx']
+const onnxSha = await sha256File(onnxPath)
+if (onnxSha !== LEGACY_ONNX_SHA256) {
+  throw new Error(`model.onnx failed its legacy derivation pin: ${onnxSha} != ${LEGACY_ONNX_SHA256}`)
+}
+const sourceShaHex = LEGACY_ONNX_SHA256
 
 for (const mode of modes) {
   let outPath
