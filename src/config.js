@@ -110,8 +110,10 @@ const configSchema = z.object({
   APPLE_DOCS_RENDER_CACHE_TTL_DAYS: nonNegInt().optional(),
 
   // -- Native bridge (Swift libAppleDocsCore via bun:ffi) -------------------
-  // Kill switch: '' (default) = JS everywhere; '1'/'on' = all migrated
-  // modules; comma list ('fusion') = only those modules. The loader
+  // Native-by-default (RFC 0002 phase 5): '' (default)/'1'/'on' = native
+  // serves wherever the dylib + artifacts exist (outputs bit-identical, JS
+  // serves silently otherwise); 'off'/'0' = the escape hatch, JS everywhere;
+  // comma list ('fusion,archive,embed') = exactly those modules. The loader
   // (src/native/loader.js) parses the value.
   APPLE_DOCS_NATIVE: z.string().default(''),
   // Operator override: absolute path to a libAppleDocsCore build.

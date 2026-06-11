@@ -65,7 +65,7 @@ const baseEnv = {
 console.log('indexing leg A (JS / transformers)…')
 const legA = await run(
   ['bun', 'cli.js', 'index', 'embeddings', '--full', '--home', homes.js],
-  { ...baseEnv, APPLE_DOCS_NATIVE: '' },
+  { ...baseEnv, APPLE_DOCS_NATIVE: 'off' }, // explicit: '' means native-on since the default flip
   'leg A',
 )
 
