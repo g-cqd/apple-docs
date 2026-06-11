@@ -256,6 +256,10 @@ construction). Open: ranking rules, snippet extraction.
 > codes over the bridge, setup ordering fixed, and the full-corpus
 > equivalence gate — 831k chunks byte-identical, golden-eval metrics
 > identical (RFC 0002 §6d).
+>
+> Phase 5 flip shipped 2026-06-11: `APPLE_DOCS_NATIVE` defaults ON for
+> fusion/archive/embed (`off` = escape hatch); stable snapshot builds go
+> native (embed-pinned one cycle); kills gated on the soak (RFC 0002 §6e).
 
 model2vec inference in Swift: tokenizer (the model's tokenizer.json,
 unigram/WordPiece — implemented with swift-parsing), embedding-matrix

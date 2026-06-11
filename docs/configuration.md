@@ -230,16 +230,24 @@ is available and degrades to raw README fetching when it is not.
 | `APPLE_DOCS_MD_MAX_BYTES` | unset | Cap rendered Markdown payload size |
 | `APPLE_DOCS_RENDER_CACHE_BYTES` / `APPLE_DOCS_RENDER_CACHE_TTL_DAYS` | runtime-derived | Render cache sizing |
 
-## Native bridge (experimental)
+## Native bridge
 
-Swift-native implementations (`libAppleDocsCore`, loaded via `bun:ffi`)
-behind a kill switch that defaults off — unset means pure JS everywhere,
-with identical behavior. Background: `rfcs/0001-swift-native-transition.md`
-in the repository (not part of this site).
+**Native is the default.** Swift-native implementations (`libAppleDocsCore`,
+loaded via `bun:ffi`) serve wherever the library and its data artifacts
+exist; everywhere else the JavaScript implementations serve silently —
+never an error, never different results. Outputs are **bit-identical** by
+construction: the native embed path was proven byte-identical to the JS
+path over the full production corpus (831k chunks, identical retrieval
+metrics — `scripts/verify-embed-equivalence.mjs`), and fusion/archive carry
+their own parity gates. Background: `rfcs/0001-swift-native-transition.md`
+and `rfcs/0002-swift-embedder.md` in the repository (not part of this site).
+
+> **Opting out**: set `APPLE_DOCS_NATIVE=off` to force pure JavaScript
+> everywhere. Nothing else changes — same results, same APIs.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `APPLE_DOCS_NATIVE` | unset (off) | `1`/`on` enables every migrated module; a comma list (`fusion,archive,embed`) enables selected modules; `0`/`off` forces JS |
+| `APPLE_DOCS_NATIVE` | unset (**on**) | unset/`''`/`1`/`on` → native where available; **`off`/`0` → pure JS everywhere (the escape hatch)**; a comma list (`fusion,archive,embed`) enables exactly those modules |
 | `APPLE_DOCS_NATIVE_LIB` | unset | Absolute path to a `libAppleDocsCore` build. When set it is the only load candidate — a wrong path falls back to JS with a warning, never to another build |
 
 Checkout installs can fetch the prebuilt library for their host from the

@@ -113,17 +113,23 @@ smoke tests.
 empty `resources/symbols/` directory; the snapshot path is the
 supported acquisition method on Linux and Windows hosts.
 
-### Enabling Swift-native modules (experimental)
+### Swift-native modules (on by default)
 
-Checkout installs can opt into the Swift-native implementations:
+Native implementations are **the default**: with `APPLE_DOCS_NATIVE` unset,
+every migrated module (`fusion`, `archive`, `embed`) serves natively
+wherever `libAppleDocsCore` and its data artifacts exist, and falls back to
+the identical JavaScript implementations otherwise — absent bundle, ABI
+drift after a code-only deploy (re-run `pull-snapshot` to refresh), or any
+load failure logs one warning and serves the same results (outputs are
+bit-identical; see the equivalence gate in `rfcs/0002-swift-embedder.md`).
+
+**Escape hatch**: `APPLE_DOCS_NATIVE=off` in `ops/.env` (rendered into both
+service plists) forces pure JavaScript everywhere. A comma list
+(`fusion,archive,embed`) pins exactly those modules instead.
+
 `apple-docs setup --native` fetches the host's `libAppleDocsCore` bundle
-from the installed release (sha256-verified) into `dist/native/`, and
-`APPLE_DOCS_NATIVE=fusion` in `ops/.env` (rendered into both service
-plists) switches the listed modules over. Everything falls back to JS —
-absent bundle, ABI drift after a code-only deploy (re-run
-`pull-snapshot` to refresh), or any load failure logs one warning and
-serves identically. See `rfcs/0001-swift-native-transition.md` in the
-repository.
+from the installed release (sha256-verified) into `dist/native/` and
+pre-derives the embed weights artifact so first boot pays nothing.
 
 ### Linux host packages (full feature parity)
 

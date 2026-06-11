@@ -257,6 +257,9 @@ restrictions) — record before any such change.
    byte-identical, golden-eval metrics identical. §6d.
 5. **Default flip + kills**: native-by-default one release cycle → remove
    transformers/onnxruntime for the default model path (D-0002-4 caveat).
+   **Flip shipped 2026-06-11** — `APPLE_DOCS_NATIVE` unset/'' now means
+   native-on; `off` is the loudly-documented escape hatch. The soak cycle
+   starts with the next release; the kills stay gated on it. §6e.
 
 ### 6a. Phase-1 record — tokenizer parity (done 2026-06-11)
 
@@ -430,6 +433,47 @@ Remaining for phase 5: snapshot-build native enablement, default flip +
 one release cycle, transformers/onnxruntime kill for the default path
 (snapshots may then ship ADMX instead of model.onnx, −124 MB), mm18 soak,
 Intel/WASM ≥5× measurement.
+
+### 6e. Phase-5 record — native-by-default (flip shipped 2026-06-11; kills gated)
+
+**Flip semantics** (src/native/loader.js): unset/''/'1'/'on' → every
+migrated module serves natively wherever the dylib + artifacts exist, JS
+serves bit-identically otherwise; '0'/'off' → JS everywhere (the escape
+hatch, documented in configuration.md, self-hosting.md, ops/.env.example,
+and a release-notes callout); csv → exactly those modules. The full test
+suite passed default-on with ZERO pinning needed — the never-throws
+builders and bit-identical outputs absorbed the entire blast radius.
+
+**Release machinery**:
+- Stable snapshot builds (snapshot.yml) now build the dylib in-job and pin
+  **`APPLE_DOCS_NATIVE: embed` at the JOB level** — transitional for one
+  cycle (the archiver stays beta-first), and job-level so the
+  build-twice determinism re-build runs the identical config.
+- Local/beta builds (publish-beta-snapshot.mjs) inherit full default-on
+  via the dev dylib — the archiver's beta-first enablement happens here.
+- **ADMX is excluded from snapshot archives this cycle**
+  (src/commands/snapshot.js filters matrix-v1.admx* after the models
+  copy): the build host derives it under native-embed, but shipping
+  +129 MB of poorly-compressing f32 against the release-asset ceiling
+  must be a deliberate decision — it is the kill-step design below.
+- Scripts that encoded "unset = off" were flipped in the same commit:
+  verify-embed-equivalence leg A pins 'off'; embed-bench's baseline pins
+  'off' and its dylib gate honors APPLE_DOCS_NATIVE_LIB (mm18 has only
+  the installed bundle).
+
+**Soak**: mm18 runs `APPLE_DOCS_NATIVE=fusion,archive,embed` explicitly
+(runbook executed by the operator); the Intel/WASM ≥5× measurement runs
+there (the transformers leg on darwin-x64 IS the WASM fallback). Numbers
+land here when measured.
+
+**Stage C — the kills (GATED on one clean native-by-default release
+cycle, NOT executed)**: snapshots ship the ADMX artifact INSTEAD of
+model.onnx (−124 MB; PINNED_MODEL_FILES pins the artifact + tokenizer
+files; setup/model-integrity verify it; on-demand generation retires);
+@huggingface/transformers + onnxruntime + the WASM fallback demote to
+gated-models-only (D-0002-4); the default-model JS embed path is removed.
+Entry criteria: one stable release built native, mm18 soak clean, no
+field reports against the escape hatch.
 
 ## 7. Risks
 

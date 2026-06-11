@@ -32,9 +32,34 @@ jobs:
     timeout-minutes: 240
     permissions:
       contents: write
+    env:
+      # Transitional (RFC 0002 phase 5): stable builds pin embed-only — the
+      # archiver stays beta-first for one cycle. Job-level on purpose: the
+      # 'Verify determinism' re-build must run the identical config, and a
+      # step-level pin would compare a native-embed build against a
+      # default-on rebuild.
+      APPLE_DOCS_NATIVE: embed
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/setup
+
+      # Native bridge for the corpus build: embedding through
+      # libAppleDocsCore is byte-identical to the JS path (proven by
+      # scripts/verify-embed-equivalence.mjs over the full corpus) and
+      # ~2x faster end-to-end. A build failure here would surface in
+      # 'Build archives' as the loader's one-line warning + JS serving —
+      # never a broken snapshot.
+      - name: Cache SwiftPM build
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: |
+            ~/.swiftpm
+            swift/.build
+          key: swift-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('swift/Package.swift', 'swift/.swift-version') }}
+
+      - name: Build libAppleDocsCore (release)
+        working-directory: swift
+        run: swift build -c release
 
       # Archive pipeline: snapshots ship as `.tar.zst` with `zstd -9 -T3`
       # — ~15% smaller and ~5x faster than the prior `gzip -9`, which
