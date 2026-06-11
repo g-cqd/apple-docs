@@ -31,7 +31,7 @@
  * Requires: a populated $APPLE_DOCS_HOME and an authenticated `gh`.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { DocsDatabase } from '../src/storage/database.js'
@@ -197,6 +197,41 @@ for (const [target, name] of [
   }
   writeFileSync(`${outFile}.sha256`, `${await sha256File(outFile)}  ${name}\n`)
   binaryAssets.push(outFile, `${outFile}.sha256`)
+}
+
+// --- 2c. native dylib bundle (darwin-universal) ---------------------------------
+// macOS cross-arch is first-class, so this arm64 publisher can produce the
+// universal dylib the Intel beta instance loads. Linux bundles only ship
+// from the CI snapshot workflow (Linux dylibs cannot be cross-compiled —
+// see rfcs/0001-swift-native-transition/p0/toolchain.md). Absent bundle =
+// JS fallback on consumers, so a Swift-toolchain-less publisher just skips.
+if (Bun.which('swift')) {
+  const bundleName = 'apple-docs-native-darwin-universal'
+  logger.info(`Building ${bundleName} (universal dylib)…`)
+  const archArgs = ['-c', 'release', '--arch', 'arm64', '--arch', 'x86_64']
+  const build = Bun.spawnSync(['swift', 'build', ...archArgs], {
+    cwd: join(ROOT, 'swift'), stdout: 'inherit', stderr: 'inherit',
+  })
+  if (build.exitCode !== 0) {
+    console.error('native dylib build failed')
+    process.exit(build.exitCode || 2)
+  }
+  const binPath = sh(['swift', 'build', ...archArgs, '--show-bin-path'], { cwd: join(ROOT, 'swift') }).stdout
+  const stageDir = join(outDir, bundleName)
+  mkdirSync(stageDir, { recursive: true })
+  cpSync(join(binPath, 'libAppleDocsCore.dylib'), join(stageDir, 'libAppleDocsCore.dylib'))
+  const bundlePath = join(outDir, `${bundleName}.tar.zst`)
+  const pack = Bun.spawnSync(['bash', '-c',
+    `tar -C ${JSON.stringify(outDir)} -cf - ${JSON.stringify(bundleName)} | zstd -9 -q -f -o ${JSON.stringify(bundlePath)}`,
+  ], { stdout: 'inherit', stderr: 'inherit' })
+  if (pack.exitCode !== 0) {
+    console.error('native bundle packing failed')
+    process.exit(pack.exitCode || 2)
+  }
+  writeFileSync(`${bundlePath}.sha256`, `${await sha256File(bundlePath)}  ${bundleName}.tar.zst\n`)
+  binaryAssets.push(bundlePath, `${bundlePath}.sha256`)
+} else {
+  logger.warn('swift toolchain not found — publishing without the native dylib bundle')
 }
 
 // --- 3. status.json + notes ----------------------------------------------------
