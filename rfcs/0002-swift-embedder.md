@@ -129,6 +129,81 @@ CI verifies at snapshot build.
 | D-0002-2 | Tokenizer implementation: from scratch vs `pointfreeco/swift-parsing` for tokenizer.json parsing | from scratch first (the JSON subset + Unigram/WordPiece trie is small); swift-parsing only if the parser grows |
 | D-0002-3 | Which tokenizer algorithm does `potion-retrieval-32M` actually use (tokenizer.json declares it) — Unigram or WordPiece — and is normalization (NFC? lowercase? metaspace?) fully captured by tokenizer.json | settle in the spike, FIRST |
 | D-0002-4 | Do gated registry models (EmbeddingGemma, Qwen3 — real transformers) stay on transformers.js | yes — out of scope; the kill list applies to the default model only, and the optionalDependency stays until those are dropped or P2b exists |
+| D-0002-5 | **Default embedding model** — measured bake-off on our golden eval (no pre-committed threshold; the user decides on the numbers) | **DECIDED 2026-06-11: potion-retrieval-32M stays the default; the from-scratch Swift path (this RFC) proceeds unchanged.** The bake-off measured the cost wall before the quality columns completed, and the user vetoed the entire transformer-on-consumer class as operationally unacceptable (§5a). Transformer-quality models may only re-enter behind the **ship-vectors architecture** (§5c) — i.e. when consumers never embed documents — as gated registry options (D-0002-4). |
+| D-0002-6 | **Inference runtime per platform** (only if a transformer model wins D-0002-5) | **Moot for the default path** (from-scratch Swift, runtime-free). The §5b matrix is retained as the decision record for any future ship-vectors revisit. |
+
+### 5a. D-0002-5 — the model bake-off
+
+Recommendation source: external advice favored EmbeddingGemma-300M (MTEB
+retrieval ~69.7 En v2, #1 under 500M params vs potion's static-model ~35–36
+retrieval score). MTEB transfers imperfectly to this corpus (exact-symbol
+heavy, English-only, 50 ms p95 search budget, CPU-only serving), so the call
+is made on OUR eval: `scripts/eval-embed-bakeoff.mjs` — same pruned subset
+corpus (~66k docs / ~187k chunks: swiftui/foundation/uikit/combine/swift +
+all small sources), per-model child processes, lexical-only control row,
+trap guards against the silent lexical-degradation failure mode, query
+micro-bench over the curated judgments.
+
+Ladder (smallest-first, per cost analysis): `potion-retrieval-32M`
+(32M static) → `bge-small-en-v1.5` (33M transformer, 384-dim, CLS pooling —
+the classic middle class the 32M→300M jump skipped) →
+`embeddinggemma-300m-q8` (QAT int8 — the realistic CPU-serving dtype;
+fp32 is a quality ceiling, measured separately only if needed).
+
+Results recorded (subset, hybrid+mmr, k=10). The ladder was **terminated by
+user decision** after the cost columns landed: every transformer rung costs
+hours of consumer-side CPU per install, which was judged operationally
+unacceptable regardless of the quality columns (left unmeasured by design —
+the cost veto precedes them).
+
+| model | dims | index wall | chunks/s | query p50/p95 | recall@10 | ndcg@10 | mrr | ndcg curated/anchor |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| lexical-only (control) | — | — | — | — | 0.6790 | 0.5783 | 0.5490 | — |
+| potion-retrieval-32M | 512 | **0.3 min** | 9,801 | **0.1 / 0.2 ms** | 0.6914 | 0.5791 | 0.5463 | 0.2801 / 0.6031 |
+| bge-small-en-v1.5 | 384 | aborted at 75% (~2 h projected) | ~27 | *(unmeasured)* | — | — | — | — |
+| embeddinggemma-300m-q8 | 768 | never started (~3–4 h projected) | — | — | — | — | — | — |
+| embeddinggemma-300m (fp32, ceiling) | 768 | aborted (≈9.5 h projected) | 5.2 | — | — | — | — | — |
+
+Readings:
+- **Cost wall**: 18 s (static) vs ~2 h (33M transformer) vs ~9.5 h (300M
+  fp32) for the same ~187k-chunk subset — a 400–1,900× spread. Per-consumer
+  re-embedding (today's setup architecture) only tolerates the static class.
+- Potion's semantic lift is real but concentrated: overall hybrid+mmr ≈
+  lexical (ndcg +0.0008) with the value in curated NL queries and a small
+  MRR cost — improving the *retrieval pipeline* (chunking, rescore, fusion
+  weights) likely pays more than swapping models at consumer prices.
+- Any future quality re-match happens **only behind §5c ship-vectors**
+  (build-host embeds once); the committed harness
+  (`scripts/eval-embed-bakeoff.mjs`) and the bge/gemma-q8 registry rungs
+  remain in place for that day.
+
+### 5b. D-0002-6 — runtime matrix (doctrine: SOTA on macOS AND Linux)
+
+The production platform doctrine (recorded user decision, 2026-06-11): the
+project runs state-of-the-art performance/efficiency/accuracy on BOTH
+macOS and Linux; a cloud relocation of the public instance is a
+later-stage, RFC-triggering iteration — no platform is demoted now.
+
+| Runtime | Fit | Notes |
+| --- | --- | --- |
+| **From-scratch Swift** (this RFC's core) | static models (potion class) only | Runtime-free, Linux-perfect, µs-class; cannot run transformers |
+| **Vendored ggml/llama.cpp** | transformer models, CPU both OSes | Official ggml-org EmbeddingGemma GGUFs (incl. QAT + dense modules); dependency-policy exception required (vendored C, BSD-class); **verification gate: open llama.cpp embedding-accuracy issue #19040** (Jan 2026, divergence vs transformers reference) must be re-checked on our parity fixtures before adoption |
+| **onnxruntime C API via dlopen** | transformer models, CPU both OSes | The middle path: kills the napi/npm packaging mess (incl. the darwin-x64 gap) while keeping ORT's kernels; same dlopen discipline as the libzstd binding |
+| **MLX / mlx-swift** | darwin (Metal); Linux only via CUDA (NVIDIA) | Not a CPU-serving answer; mlx-swift CUDA support is a proposal. Position: optional **build-host accelerator** (snapshot builds run on Apple-Silicon CI) — pairs with §5c. Claimed constant-RSS under concurrent users (second-hand, unverified here) |
+
+### 5c. Ship-vectors option (orthogonal, either model)
+
+Precomputed chunk vectors as a **separate release asset**
+(`apple-docs-vectors-<tag>.tar.zst`): int8+binary for ~860k chunks ≈
+0.7 GB — under GitHub's 2 GiB per-asset ceiling that forced "snapshots ship
+no vectors". Kills the consumer-side re-embed entirely (today's setup
+rebuild = minutes for potion, hours for any transformer — which makes this
+option near-mandatory if D-0002-5 picks a transformer). Embedding then
+happens once, on the build host, where Metal/MLX acceleration is available.
+Licensing flag: shipping Gemma-derived *vectors* is model output (fine);
+shipping Gemma *weights* in snapshots or pinning them in
+`PINNED_MODEL_FILES` triggers Gemma Terms-of-Use obligations (notice +
+restrictions) — record before any such change.
 
 ## 6. Phases
 

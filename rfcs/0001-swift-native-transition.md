@@ -337,6 +337,12 @@ land; each phase's completion gets a dated entry here.
   ABI contract v0 validated on macOS arm64 + Linux arm64; §4 products, §5
   toolchain, and the risk register corrected from experiments E0–E7;
   thirteen decisions logged (D-P0-1…13). P0 implementation not started.
+- **2026-06-11 — platform doctrine recorded**: the project targets
+  state-of-the-art performance/efficiency/accuracy on macOS AND Linux,
+  permanently; a possible relocation of the public instance to a Linux
+  cloud (Amazon/Oracle) is a **later-stage, RFC-triggering iteration** —
+  it does not demote darwin serving today. (Context: embedder runtime
+  choices in [RFC 0002 §5b](0002-swift-embedder.md).)
 - **2026-06-11 — P0 implemented + P1 fusion shipped (default off)**: the
   `swift/` package landed with the common bases target (`ADBase` — result
   buffers, status enums, bounds-checked request reader, build info — the
