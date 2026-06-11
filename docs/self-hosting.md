@@ -113,6 +113,18 @@ smoke tests.
 empty `resources/symbols/` directory; the snapshot path is the
 supported acquisition method on Linux and Windows hosts.
 
+### Enabling Swift-native modules (experimental)
+
+Checkout installs can opt into the Swift-native implementations:
+`apple-docs setup --native` fetches the host's `libAppleDocsCore` bundle
+from the installed release (sha256-verified) into `dist/native/`, and
+`APPLE_DOCS_NATIVE=fusion` in `ops/.env` (rendered into both service
+plists) switches the listed modules over. Everything falls back to JS —
+absent bundle, ABI drift after a code-only deploy (re-run
+`pull-snapshot` to refresh), or any load failure logs one warning and
+serves identically. See `rfcs/0001-swift-native-transition.md` in the
+repository.
+
 ### Linux host packages (full feature parity)
 
 Everything serves out of the box from a snapshot except two render

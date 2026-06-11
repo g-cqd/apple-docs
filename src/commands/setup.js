@@ -142,6 +142,11 @@ async function installFromGithubRelease(ctx, opts) {
     logger.info('Checksum verified.')
 
     const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, tag: release.tag, profile: opts.profile, yes: opts.yes })
+    let native
+    if (opts.native) {
+      const { installNativeBundle } = await import('./setup/native.js')
+      native = await installNativeBundle(release, { logger })
+    }
     return {
       status: 'ok',
       source: 'github-release',
@@ -150,6 +155,7 @@ async function installFromGithubRelease(ctx, opts) {
       documentCount: result.documentCount,
       schemaVersion: result.schemaVersion,
       storageProfile: result.storageProfile,
+      ...(native ? { native: native.status } : {}),
       dataDir,
     }
   } finally {

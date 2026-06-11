@@ -35,7 +35,7 @@ export const DERIVED_NAMES = Object.freeze([
   'LABEL_PROXY', 'LABEL_WEB', 'LABEL_MCP',
   'LABEL_TUNNEL_WEB', 'LABEL_TUNNEL_MCP', 'LABEL_WATCHDOG', 'LABEL_AUTOROLL',
   'AUTOROLL_WEEKDAY', 'AUTOROLL_HOUR',
-  'STATIC_DIR', 'APPLE_DOCS_MCP_CACHE_SCALE', 'LEGACY_LAUNCHD_LABELS',
+  'STATIC_DIR', 'APPLE_DOCS_MCP_CACHE_SCALE', 'APPLE_DOCS_NATIVE', 'LEGACY_LAUNCHD_LABELS',
   'SNAPSHOT_CHANNEL',
 ])
 
@@ -207,6 +207,8 @@ function applyDerived(vars) {
   vars.AUTOROLL_HOUR = vars.AUTOROLL_HOUR || '14'
   vars.STATIC_DIR = vars.STATIC_DIR || `${vars.REPO_DIR}/dist/web`
   vars.APPLE_DOCS_MCP_CACHE_SCALE = vars.APPLE_DOCS_MCP_CACHE_SCALE || '1'
+  // Swift-native kill switch; '' = JS everywhere (rfcs/0001).
+  vars.APPLE_DOCS_NATIVE = vars.APPLE_DOCS_NATIVE || ''
   vars.LEGACY_LAUNCHD_LABELS = vars.LEGACY_LAUNCHD_LABELS || ''
   // Snapshot update channel: 'stable' tracks /releases/latest (GitHub
   // hides prereleases there); 'beta' also considers prereleases under the

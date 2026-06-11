@@ -54,6 +54,8 @@
         <string>/Users/${USER_NAME}</string>
         <key>APPLE_DOCS_HOME</key>
         <string>${DATA_DIR}</string>
+        <key>APPLE_DOCS_NATIVE</key>
+        <string>${APPLE_DOCS_NATIVE}</string>
     </dict>
 </dict>
 </plist>

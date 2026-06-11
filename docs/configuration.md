@@ -241,3 +241,8 @@ in the repository (not part of this site).
 | --- | --- | --- |
 | `APPLE_DOCS_NATIVE` | unset (off) | `1`/`on` enables every migrated module; a comma list (`fusion`) enables selected modules; `0`/`off` forces JS |
 | `APPLE_DOCS_NATIVE_LIB` | unset | Absolute path to a `libAppleDocsCore` build. When set it is the only load candidate — a wrong path falls back to JS with a warning, never to another build |
+
+Checkout installs can fetch the prebuilt library for their host from the
+release they install (`apple-docs setup --native` — sha256-verified, unpacked
+into `dist/native/`); compiled-binary installs skip it. An absent or stale
+bundle is never an error: the JS implementations serve.

@@ -109,7 +109,7 @@ export default async function runPullSnapshot(ctx = {}) {
 
   // 4. setup --force (with --beta on the beta channel — setup re-resolves
   // under the same policy and owns assets/checksum/extraction).
-  const setupArgs = [env.bunBin, 'run', `${env.repoDir}/cli.js`, 'setup', '--force', ...(channel === 'beta' ? ['--beta'] : [])]
+  const setupArgs = [env.bunBin, 'run', `${env.repoDir}/cli.js`, 'setup', '--force', '--native', ...(channel === 'beta' ? ['--beta'] : [])]
   logger.say(`$ ${setupArgs.join(' ')}`)
   let setupFailed = false
   try {
