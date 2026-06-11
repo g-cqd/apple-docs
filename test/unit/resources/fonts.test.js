@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { ensureFontsExtracted, inspectSfntFile, listAppleFonts, parseFontFilename } from '../../../src/resources/apple-assets.js'
+import { renderFontText } from '../../../src/resources/apple-fonts/render.js'
+import { NotFoundError } from '../../../src/lib/errors.js'
 
 let db
 let tmp
@@ -21,6 +23,13 @@ afterEach(async () => {
 })
 
 describe('Apple fonts', () => {
+  test('renderFontText throws NotFoundError (not ReferenceError) for an unknown font id', async () => {
+    // Regression: the NotFoundError import was missing, so this path
+    // crashed with "NotFoundError is not defined" instead.
+    await expect(renderFontText({ fontId: 'nope', text: 'Hi' }, ctx)).rejects.toBeInstanceOf(NotFoundError)
+  })
+
+
   test('upserts and lists Apple font families/files', () => {
     db.upsertAppleFontFamily({
       id: 'sf-pro',

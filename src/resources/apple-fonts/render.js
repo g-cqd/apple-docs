@@ -19,6 +19,7 @@ import {
 import { isLikelySfnt } from './sfnt.js'
 import { assertFontPathContained } from './safe-font-path.js'
 import { FONT_TEXT_SCRIPT } from '../swift-templates.js'
+import { NotFoundError } from '../../lib/errors.js'
 
 export async function renderFontText(opts, ctx) {
   const font = ctx.db.getAppleFontFile(opts.fontId)
