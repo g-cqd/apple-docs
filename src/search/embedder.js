@@ -45,6 +45,28 @@ const REGISTRY = {
     queryPrefix: 'task: search result | query: ',
     docPrefix: 'title: none | text: ',
   },
+  // Same weights at the QAT int8 dtype — the realistic CPU-serving point
+  // (fp32 above is the quality ceiling).
+  'embeddinggemma-300m-q8': {
+    hfId: 'onnx-community/embeddinggemma-300m-ONNX',
+    backend: 'feature-extraction',
+    dims: 768,
+    dtype: 'q8',
+    pooling: 'mean',
+    queryPrefix: 'task: search result | query: ',
+    docPrefix: 'title: none | text: ',
+  },
+  // The 33M/384-dim middle rung: real-transformer retrieval quality at
+  // ~1/10th of gemma's compute. BGE pools the [CLS] token and prefixes
+  // queries only.
+  'bge-small-en-v1.5': {
+    hfId: 'Xenova/bge-small-en-v1.5',
+    backend: 'feature-extraction',
+    dims: 384,
+    pooling: 'cls',
+    queryPrefix: 'Represent this sentence for searching relevant passages: ',
+    docPrefix: '',
+  },
   'Qwen3-Embedding-0.6B': {
     hfId: 'onnx-community/Qwen3-Embedding-0.6B-ONNX',
     backend: 'feature-extraction',
@@ -219,7 +241,11 @@ async function buildFeatureExtraction(tx, spec) {
     for (let i = 0; i < n; i++) {
       const seqData = hidden.data.subarray(i * seq * dim, (i + 1) * seq * dim)
       const mask = maskData ? maskRow(maskData, i, seq) : null
-      const pooled = spec.pooling === 'last' ? lastTokenPool(seqData, dim, mask) : meanPool(seqData, dim, mask)
+      const pooled = spec.pooling === 'last'
+        ? lastTokenPool(seqData, dim, mask)
+        : spec.pooling === 'cls'
+          ? Float32Array.from(seqData.subarray(0, dim)) // first token ([CLS])
+          : meanPool(seqData, dim, mask)
       results[i] = l2normalize(truncate(pooled, spec.targetDims))
     }
     return results
