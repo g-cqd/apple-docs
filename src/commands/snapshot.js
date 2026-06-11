@@ -256,9 +256,9 @@ export async function snapshotBuild(opts, ctx) {
     if (existsSync(fontsExtractedDir)) {
       copyTreeFast(fontsExtractedDir, join(buildDir, 'resources', 'fonts', 'extracted'))
     }
-    // Offline query-embedding model (model2vec, ~126 MB fp32). Ships so a
-    // fresh install runs the semantic tier with no network. Absent → tier
-    // dormant (lexical-only). Static files → deterministic.
+    // Offline query-embedding model. Ships so a fresh install runs the
+    // semantic tier with no network. Absent → tier dormant (lexical-only).
+    // Static files → deterministic.
     //
     // ONLY the active pinned model ships: the models dir doubles as the
     // transformers download cache (bake-off and gated-variant models land
@@ -266,18 +266,25 @@ export async function snapshotBuild(opts, ctx) {
     // the 2 GiB GitHub asset ceiling). Gated variants build their own
     // artifacts when promoted (model-integrity.js).
     const { resolveActiveSpec } = await import('../search/embedder.js')
-    const activeHfId = resolveActiveSpec().hfId
-    const activeModelDir = join(dataDir, 'resources', 'models', activeHfId)
+    const activeSpec = resolveActiveSpec()
+    const activeModelDir = join(dataDir, 'resources', 'models', activeSpec.hfId)
     if (existsSync(activeModelDir)) {
-      copyTreeFast(activeModelDir, join(buildDir, 'resources', 'models', activeHfId))
-      // The ADMX weights artifact is derived ON the build host when native
-      // embedding runs (RFC 0002 phase 5) but must NOT ship this cycle:
-      // +~129 MB of poorly-compressing f32 against the release-asset
-      // ceiling, and consumers already derive it on demand from the pinned
-      // model.onnx. Shipping ADMX INSTEAD of the onnx is the phase-5 kill
-      // step, done deliberately later.
-      for (const entry of ['matrix-v1.admx', 'matrix-v1.admx.sha256']) {
-        rmSync(join(buildDir, 'resources', 'models', activeHfId, entry), { force: true })
+      copyTreeFast(activeModelDir, join(buildDir, 'resources', 'models', activeSpec.hfId))
+      // Stage C (RFC 0002 §6f): the DEFAULT model ships the deterministic
+      // ADMX weights artifact INSTEAD of model.onnx (−124 MB; the native
+      // embedder consumes ADMX directly, and ensureEmbeddingModel derives
+      // it for older onnx-bearing snapshots). Gated feature-extraction
+      // variants still need their onnx — the inversion is scoped.
+      if (activeSpec.backend !== 'feature-extraction') {
+        const shippedAdmx = join(buildDir, 'resources', 'models', activeSpec.hfId, 'matrix-v1.admx')
+        if (!existsSync(shippedAdmx)) {
+          // Neither onnx nor admx would leave the semantic tier dead for
+          // every fresh install of this snapshot.
+          throw new ValidationError(
+            'snapshot build: matrix-v1.admx missing from the models dir — the build host must derive it (native embed / ensureEmbeddingModel) before archiving',
+          )
+        }
+        rmSync(join(buildDir, 'resources', 'models', activeSpec.hfId, 'onnx'), { recursive: true, force: true })
       }
     }
 

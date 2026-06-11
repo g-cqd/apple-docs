@@ -278,24 +278,59 @@ describe('snapshotBuild', () => {
     }
   })
 
-  test('ships the offline query-embedding model when present (F4)', async () => {
-    // Stage a stand-in for the q8 ONNX model tree (resources/models/<modelId>/…)
-    // so the snapshot picks it up for offline semantic search.
+  test('ships ADMX instead of onnx for the default model (F4, Stage C)', async () => {
     const modelBase = join(dataDir, 'resources', 'models', 'minishlab', 'potion-retrieval-32M')
     mkdirSync(join(modelBase, 'onnx'), { recursive: true })
-    writeFileSync(join(modelBase, 'config.json'), '{"model_type":"bert"}')
     writeFileSync(join(modelBase, 'tokenizer.json'), '{}')
-    writeFileSync(join(modelBase, 'onnx', 'model_quantized.onnx'), 'ONNX-BYTES')
+    writeFileSync(join(modelBase, 'tokenizer_config.json'), '{}')
+    writeFileSync(join(modelBase, 'onnx', 'model.onnx'), 'ONNX-BYTES')
+    writeFileSync(join(modelBase, 'matrix-v1.admx'), 'ADMX-BYTES')
+    writeFileSync(join(modelBase, 'matrix-v1.admx.sha256'), 'abc\n')
 
     const result = await snapshotBuild({ out: outDir, tag: 'test-model' }, { db, dataDir, logger })
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-model-'))
     try {
       await extractTarZst(result.archivePath, extractDir)
       const shipped = join(extractDir, 'resources', 'models', 'minishlab', 'potion-retrieval-32M')
-      expect(existsSync(join(shipped, 'config.json'))).toBe(true)
-      expect(existsSync(join(shipped, 'onnx', 'model_quantized.onnx'))).toBe(true)
+      expect(existsSync(join(shipped, 'tokenizer.json'))).toBe(true)
+      expect(existsSync(join(shipped, 'matrix-v1.admx'))).toBe(true)
+      expect(existsSync(join(shipped, 'matrix-v1.admx.sha256'))).toBe(true)
+      expect(existsSync(join(shipped, 'onnx'))).toBe(false) // the kill
     } finally {
       rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
+  test('hard-fails when the default model dir lacks the ADMX artifact', async () => {
+    const modelBase = join(dataDir, 'resources', 'models', 'minishlab', 'potion-retrieval-32M')
+    mkdirSync(join(modelBase, 'onnx'), { recursive: true })
+    writeFileSync(join(modelBase, 'tokenizer.json'), '{}')
+    writeFileSync(join(modelBase, 'onnx', 'model.onnx'), 'ONNX-BYTES')
+    await expect(snapshotBuild({ out: outDir, tag: 'test-noadmx' }, { db, dataDir, logger })).rejects.toThrow(
+      /matrix-v1\.admx missing/,
+    )
+  })
+
+  test('gated feature-extraction models keep their onnx (scope guard)', async () => {
+    const prev = process.env.APPLE_DOCS_EMBED_MODEL
+    process.env.APPLE_DOCS_EMBED_MODEL = 'bge-small-en-v1.5'
+    const modelBase = join(dataDir, 'resources', 'models', 'Xenova', 'bge-small-en-v1.5')
+    mkdirSync(join(modelBase, 'onnx'), { recursive: true })
+    writeFileSync(join(modelBase, 'tokenizer.json'), '{}')
+    writeFileSync(join(modelBase, 'onnx', 'model.onnx'), 'GATED-ONNX')
+    try {
+      const result = await snapshotBuild({ out: outDir, tag: 'test-gated' }, { db, dataDir, logger })
+      const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-gated-'))
+      try {
+        await extractTarZst(result.archivePath, extractDir)
+        const shipped = join(extractDir, 'resources', 'models', 'Xenova', 'bge-small-en-v1.5')
+        expect(existsSync(join(shipped, 'onnx', 'model.onnx'))).toBe(true)
+      } finally {
+        rmSync(extractDir, { recursive: true, force: true })
+      }
+    } finally {
+      if (prev === undefined) delete process.env.APPLE_DOCS_EMBED_MODEL
+      else process.env.APPLE_DOCS_EMBED_MODEL = prev
     }
   })
 
