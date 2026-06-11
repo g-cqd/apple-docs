@@ -13,12 +13,17 @@ afterEach(() => {
 })
 
 describe('isNativeEnabled', () => {
-  test('off by default and for explicit off values', () => {
+  test('native by default; off only for the explicit escape hatch', () => {
+    // RFC 0002 phase 5: unset/'' mean native-on (JS still serves wherever
+    // the dylib or its artifacts are absent — outputs are bit-identical).
     delete process.env.APPLE_DOCS_NATIVE
-    expect(isNativeEnabled('fusion')).toBe(false)
-    for (const value of ['', '0', 'off', ' OFF ']) {
+    expect(isNativeEnabled('fusion')).toBe(true)
+    process.env.APPLE_DOCS_NATIVE = ''
+    expect(isNativeEnabled('embed')).toBe(true)
+    for (const value of ['0', 'off', ' OFF ']) {
       process.env.APPLE_DOCS_NATIVE = value
       expect(isNativeEnabled('fusion')).toBe(false)
+      expect(isNativeEnabled('embed')).toBe(false)
     }
   })
 

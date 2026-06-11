@@ -1,12 +1,16 @@
 /**
  * libAppleDocsCore loader — the only place that dlopens the Swift dylib.
  *
- * Kill switch (`APPLE_DOCS_NATIVE`) defaults off: unset/'0'/'off' means no
- * module ever touches native code and this file never dlopens anything.
- * Resolution order is a strict allowlist (security.md §1): the operator
- * override, the install tree, then the dev build tree — never DATA_DIR,
- * never CWD, never library search paths. Any failure memoizes null and the
- * caller's JS implementation serves, with one structured warning.
+ * Kill switch (`APPLE_DOCS_NATIVE`) defaults ON since RFC 0002 phase 5:
+ * unset/'' means every migrated module serves natively WHERE the dylib and
+ * its data artifacts exist, and JS serves identically otherwise (outputs
+ * are bit-identical — see the embed equivalence gate). `off`/'0' is the
+ * escape hatch: no module ever touches native code and this file never
+ * dlopens anything. Resolution order is a strict allowlist (security.md
+ * §1): the operator override, the install tree, then the dev build tree —
+ * never DATA_DIR, never CWD, never library search paths. Any failure
+ * memoizes null and the caller's JS implementation serves, with one
+ * structured warning.
  */
 import { existsSync } from 'node:fs'
 import { dlopen, suffix } from 'bun:ffi'
@@ -55,16 +59,17 @@ function candidatePaths() {
 }
 
 /**
- * Per-module kill switch. `APPLE_DOCS_NATIVE`: ''/'0'/'off' → false for
- * everything; '1'/'on' → true for every migrated module; otherwise a
- * comma-separated module list ('fusion').
+ * Per-module kill switch — native-by-default (RFC 0002 phase 5).
+ * `APPLE_DOCS_NATIVE`: unset/''/'1'/'on' → true for every migrated module;
+ * '0'/'off' → false for everything; otherwise a comma-separated module
+ * list ('fusion,archive,embed') enables exactly those.
  *
  * @param {string} module
  */
 export function isNativeEnabled(module) {
   const raw = (process.env.APPLE_DOCS_NATIVE ?? '').trim().toLowerCase()
-  if (raw === '' || raw === '0' || raw === 'off') return false
-  if (raw === '1' || raw === 'on') return true
+  if (raw === '0' || raw === 'off') return false
+  if (raw === '' || raw === '1' || raw === 'on') return true
   return raw.split(',').some((entry) => entry.trim() === module)
 }
 

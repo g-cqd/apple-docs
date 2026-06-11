@@ -25,8 +25,9 @@ const modelsDir =
   join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
 const HF_ID = 'minishlab/potion-retrieval-32M'
 
-if (!existsSync(DEV_LIB)) {
-  console.error(`no dylib at ${DEV_LIB} — build it first`)
+const LIB = process.env.APPLE_DOCS_NATIVE_LIB ?? DEV_LIB
+if (!existsSync(LIB)) {
+  console.error(`no dylib at ${LIB} — build it (or point APPLE_DOCS_NATIVE_LIB at an installed bundle)`)
   process.exit(1)
 }
 if (!existsSync(join(modelsDir, HF_ID, 'onnx', 'model.onnx'))) {
@@ -34,7 +35,7 @@ if (!existsSync(join(modelsDir, HF_ID, 'onnx', 'model.onnx'))) {
   process.exit(1)
 }
 
-process.env.APPLE_DOCS_NATIVE_LIB ??= DEV_LIB
+process.env.APPLE_DOCS_NATIVE_LIB ??= LIB
 _resetNativeLoader()
 
 const corpus = JSON.parse(readFileSync(`${ROOT}test/fixtures/embed-parity/corpus-texts.json`, 'utf8')).map(
@@ -92,7 +93,7 @@ console.log(
 )
 
 // --- transformers.js baseline (fresh embedder, native disabled) ---
-delete process.env.APPLE_DOCS_NATIVE
+process.env.APPLE_DOCS_NATIVE = 'off' // unset means native-on since the default flip
 const { getEmbedder, _resetEmbedder } = await import('../../src/search/embedder.js')
 _resetEmbedder()
 const js = await getEmbedder({})
