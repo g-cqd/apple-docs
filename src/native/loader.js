@@ -26,6 +26,9 @@ const SYMBOLS = {
   ad_fusion_hybrid: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_fusion_mmr: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_archive_tar_zst: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_embed_init: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_embed_batch: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_embed_reset: { args: [], returns: 'void' },
 }
 
 const ROOT = new URL('../../', import.meta.url).pathname

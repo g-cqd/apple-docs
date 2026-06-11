@@ -239,10 +239,16 @@ in the repository (not part of this site).
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `APPLE_DOCS_NATIVE` | unset (off) | `1`/`on` enables every migrated module; a comma list (`fusion`) enables selected modules; `0`/`off` forces JS |
+| `APPLE_DOCS_NATIVE` | unset (off) | `1`/`on` enables every migrated module; a comma list (`fusion,archive,embed`) enables selected modules; `0`/`off` forces JS |
 | `APPLE_DOCS_NATIVE_LIB` | unset | Absolute path to a `libAppleDocsCore` build. When set it is the only load candidate — a wrong path falls back to JS with a warning, never to another build |
 
 Checkout installs can fetch the prebuilt library for their host from the
 release they install (`apple-docs setup --native` — sha256-verified, unpacked
 into `dist/native/`); compiled-binary installs skip it. An absent or stale
 bundle is never an error: the JS implementations serve.
+
+Modules: `fusion` (result fusion math), `archive` (snapshot tar.zst writer),
+`embed` (the default embedding model's tokenizer + matrix pipeline). On
+first native-embed use the ~129 MB weights artifact is derived once from the
+snapshot's pinned `model.onnx` (integrity-verified, atomic) next to the
+model files; if anything is missing the transformers.js path serves.
