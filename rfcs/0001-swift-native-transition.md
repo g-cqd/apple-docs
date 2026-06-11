@@ -231,7 +231,19 @@ runs on Bun's native CryptoHasher; nothing to win.
 tar.zst through a runtime-dlopen'd libzstd (no tar/zstd host binaries, no
 multi-GB temp tar) behind `APPLE_DOCS_NATIVE=archive`; parity gates are
 extraction-equality + rebuild-twice (bsdtar byte-equality is impossible by
-construction). Open: ranking rules, snippet extraction.
+construction). Pax extended headers added 2026-06-11 after a production
+fallback (a 103-byte SF Symbols FILENAME no 155+100 split can represent) —
+the writer now covers every production path (273k-file tree verified).
+**P1 CLOSED (2026-06-11)** — ranking and snippets stay JS by measurement:
+`rerank` costs 158.8 µs at the maximum realistic input (300 results, real
+corpus rows, intent included) = **0.04 %** of a natural-language lexical
+query (p50 372 ms on the full corpus) and ~2 % of even the hot-cache
+symbol-lookup floor (0.44 ms, ~10-row inputs where rerank is single-digit
+µs). An FFI port would be marshalling-bound (string-heavy inputs; the
+fusion n=10 lesson) and would have to reproduce exact JS double semantics
+around the 0.001-epsilon sort — all risk, no measurable win. Snippets
+(38 LOC of integer/string ops on ≤100 post-slice rows) and highlighting
+(static-build path, not query-time) close with it. See §9.
 
 ### P2 — Embedder from scratch (the flagship)
 > **Superseded by [RFC 0002](0002-swift-embedder.md)** (2026-06-11), which
@@ -373,3 +385,12 @@ land; each phase's completion gets a dated entry here.
   `src/native/loader.js` + `src/search/fusion-native.js` behind
   `APPLE_DOCS_NATIVE`; CI `native` job on all three targets. Parity:
   `Object.is`-exact across fixtures + 400 seeded property cases.
+- **2026-06-11 — P1 CLOSED (ranking/snippets stay JS, by measurement)**:
+  `rerank` = 158.8 µs at the maximum realistic input (300 real-corpus
+  rows incl. intent detection) — **0.04 %** of a natural-language lexical
+  query (372 ms p50, full corpus) and ~2 % of the hot symbol-lookup floor
+  (0.44 ms, ~10-row inputs). A port would be marshalling-bound (the fusion
+  n=10 lesson) and must reproduce exact JS double semantics around the
+  0.001-epsilon sort: all risk, no win. Snippets (38 LOC, post-slice
+  string ops) and highlighting (static-build path) close with it. P1's
+  shipped scope — fusion + archiver (now pax-complete) — is final.
