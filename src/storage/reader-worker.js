@@ -1,4 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads'
+import { getNativeLib, isNativeEnabled } from '../native/loader.js'
 import { DocsDatabase } from './database.js'
 
 /**
@@ -62,7 +63,17 @@ if (parentPort) {
 
   // Signal readiness so the pool can start dispatching. Without this the pool
   // would race the DB open and send work to a half-initialized worker.
-  parentPort.postMessage({ type: 'ready' })
+  // Native provenance rides along: announce lines logged INSIDE the worker go
+  // to a stderr nobody routes, so the pool logs one parent-process line
+  // instead (visible in launchd service logs).
+  let native = []
+  try {
+    const enabled = ['fusion', 'archive', 'embed'].filter((m) => isNativeEnabled(m))
+    if (enabled.length > 0 && getNativeLib()) native = enabled
+  } catch {
+    // provenance is informational — never block readiness
+  }
+  parentPort.postMessage({ type: 'ready', native })
 
   parentPort.on('message', (msg) => {
     if (!msg || typeof msg !== 'object') return

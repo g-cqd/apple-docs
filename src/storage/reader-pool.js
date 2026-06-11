@@ -101,6 +101,16 @@ export function createReaderPool(opts = {}) {
     worker.on('message', (msg) => {
       if (!msg || typeof msg !== 'object') return
       if (msg.type === 'ready') {
+        // One provenance line for the whole pool (worker 0): announce lines
+        // logged INSIDE workers land on unrouted worker stderr.
+        if (index === 0 && Array.isArray(msg.native)) {
+          log?.(
+            'info',
+            msg.native.length > 0
+              ? `reader workers: native libAppleDocsCore serves ${msg.native.join(',')}`
+              : 'reader workers: js implementations serve (native off or unavailable)',
+          )
+        }
         slot.readyResolve?.()
         return
       }
