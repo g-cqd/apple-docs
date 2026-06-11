@@ -114,7 +114,11 @@ explicit `--profile`.
 Because `deploy-update.sh` refreshes the corpus itself, the standalone
 `pull-snapshot.sh` / `render-all.sh` steps above are only for a **corpus-only**
 or **config-only** refresh. For a normal roll, run `deploy-update.sh` alone.
-Force snapshot mode with `USE_SNAPSHOT=1` (or crawl mode with `USE_SNAPSHOT=0`).
+When the published snapshot tag matches the applied stamp, the deploy is
+**code-only**: it skips the corpus refresh entirely (pull → render → static
+rebuild → cutover → smoke). Force snapshot mode with `USE_SNAPSHOT=1`, or an
+on-host crawl with `USE_CRAWL=1` (legacy `USE_SNAPSHOT=0` still means crawl) —
+a crawl never happens implicitly.
 If a deploy changed any `launchd/*.tpl`, the run warns about plist drift —
 `kickstart` won't pick up new plists, so run `apple-docs-ops install`.
 

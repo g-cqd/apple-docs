@@ -332,10 +332,12 @@ describe('runDeployUpdate', () => {
     expect(pullSnapshotCalled).toBe(true)
   })
 
-  test('USE_SNAPSHOT=auto picks crawl when applied tag matches the latest GH tag', async () => {
+  test('USE_SNAPSHOT=auto skips the corpus refresh when applied tag matches the latest GH tag (code-only deploy)', async () => {
     let pullSnapshotCalled = false
     let syncCalled = false
+    const log = captureLogger()
     await runDeployUpdate(defaults({
+      logger: log,
       env: {},
       deps: {
         fs: inMemoryFs({
@@ -352,10 +354,31 @@ describe('runDeployUpdate', () => {
       },
     }))
     expect(pullSnapshotCalled).toBe(false)
+    expect(syncCalled).toBe(false)
+    expect(log.lines.some(m => m.includes('code-only deploy'))).toBe(true)
+  })
+
+  test('USE_CRAWL=1 forces the crawl even with an unchanged tag', async () => {
+    let syncCalled = false
+    await runDeployUpdate(defaults({
+      env: { USE_CRAWL: '1' },
+      deps: {
+        fs: inMemoryFs({
+          '/fake/repo': '',
+          '/fake/ops/caddy/Caddyfile': 'c',
+          '/fake/ops/state/applied-snapshot': 'snapshot-20260513\n',
+        }),
+        fetcher: makeFetcher(releasePayload('snapshot-20260513')),
+        runCmd: async (args) => {
+          if (args.includes('sync') && args[1] === 'run') syncCalled = true
+          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+        },
+      },
+    }))
     expect(syncCalled).toBe(true)
   })
 
-  test('USE_SNAPSHOT=auto falls back to crawl when GH releases endpoint errors out', async () => {
+  test('USE_SNAPSHOT=auto skips the corpus refresh when the GH releases endpoint errors out', async () => {
     let syncCalled = false
     const log = captureLogger()
     await runDeployUpdate(defaults({
@@ -374,23 +397,30 @@ describe('runDeployUpdate', () => {
         },
       },
     }))
-    expect(syncCalled).toBe(true)
+    expect(syncCalled).toBe(false)
     expect(log.lines.some(m => m.startsWith('W:') && m.includes('GH'))).toBe(true)
   })
 
-  test('pullSnapshot failure falls back to cli.js sync', async () => {
+  test('pullSnapshot failure keeps serving the existing corpus — no implicit crawl', async () => {
     let syncCalled = false
+    let webBuilt = false
+    const log = captureLogger()
     await runDeployUpdate(defaults({
+      logger: log,
       env: { USE_SNAPSHOT: '1' },
       deps: {
         pullSnapshot: async () => 2,
         runCmd: async (args) => {
           if (args.includes('sync') && args[1] === 'run') syncCalled = true
+          if (args.includes('build') && args[3] === 'web') webBuilt = true
           return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
         },
       },
     }))
-    expect(syncCalled).toBe(true)
+    expect(syncCalled).toBe(false)
+    // The deploy still completes its code-side steps (static rebuild).
+    expect(webBuilt).toBe(true)
+    expect(log.lines.some(m => m.startsWith('W:') && m.includes('existing corpus'))).toBe(true)
   })
 
   test('--full uses --full build flag instead of --incremental', async () => {

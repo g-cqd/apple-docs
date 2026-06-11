@@ -143,9 +143,9 @@ export default async function runDeployUpdate(ctx = {}) {
     warnOnPlistDrift(env, fs, logger)
   }
 
-  // 5. Auto-detect snapshot vs crawl.
-  const useSnapshot = await chooseRefreshMode(procEnv, env, fs, fetcher, logger)
-  if (useSnapshot) {
+  // 5. Corpus refresh: snapshot install, explicit crawl, or skip (code-only).
+  const refreshMode = await chooseRefreshMode(procEnv, env, fs, fetcher, logger)
+  if (refreshMode === 'snapshot') {
     const rcSnap = await pullSnapshot({ env: procEnv, envLoader: () => env, logger, deps: { fetcher, runCmd: runner, runCmdAllowFailure: runAllow, sleep } })
       .catch(err => { logger.error(`pull-snapshot threw: ${err?.message ?? err}`); return 1 })
     if (rcSnap === 0) {
@@ -156,10 +156,10 @@ export default async function runDeployUpdate(ctx = {}) {
       logger.say('=== deploy-update done (snapshot refresh handled by pull-snapshot) ===')
       return 0
     }
-    logger.warn('pull-snapshot failed; falling back to crawl-on-host refresh')
-    await runner([env.bunBin, 'run', `${repoDir}/cli.js`, 'sync'], { cwd: repoDir, deadlineMs: 4 * 60 * 60_000 })
-      .catch(err => logger.warn(`sync exited: ${err?.message ?? err}`))
-  } else {
+    // The corpus we have keeps serving; a crawl is never an implicit
+    // recovery (it once turned a failed download into an hours-long sync).
+    logger.warn('pull-snapshot failed — continuing with the existing corpus (retry: ops pull-snapshot; or USE_CRAWL=1)')
+  } else if (refreshMode === 'crawl') {
     await runner([env.bunBin, 'run', `${repoDir}/cli.js`, 'sync'], { cwd: repoDir, deadlineMs: 4 * 60 * 60_000 })
       .catch(err => logger.warn(`sync exited: ${err?.message ?? err}`))
   }
@@ -212,11 +212,23 @@ async function cutoverOne(label, runner, runAllow, logger) {
   }
 }
 
+/**
+ * Pick the corpus-refresh mode: 'snapshot' (newer release available),
+ * 'skip' (tag unchanged → code-only deploy), or 'crawl' (explicitly
+ * forced). Crawling on an unchanged tag used to be the implicit default
+ * and twice launched multi-hour on-host syncs after pure code pushes —
+ * a deploy now refreshes the corpus only when there is a corpus to
+ * refresh to, unless USE_CRAWL=1 (or the legacy USE_SNAPSHOT=0) asks.
+ */
 async function chooseRefreshMode(procEnv, env, fs, fetcher, logger) {
   const forced = procEnv.USE_SNAPSHOT
-  if (forced === '1' || forced === '0') {
-    logger.say(`USE_SNAPSHOT=${forced} forced by env`)
-    return forced === '1'
+  if (forced === '1') {
+    logger.say('USE_SNAPSHOT=1 forced by env')
+    return 'snapshot'
+  }
+  if (forced === '0' || procEnv.USE_CRAWL === '1') {
+    logger.say(`${forced === '0' ? 'USE_SNAPSHOT=0' : 'USE_CRAWL=1'} forced by env — crawl-on-host refresh`)
+    return 'crawl'
   }
   const appliedFile = join(env.opsDir, 'state', 'applied-snapshot')
   const applied = fs.exists(appliedFile) ? fs.readFile(appliedFile).trim() : ''
@@ -226,13 +238,13 @@ async function chooseRefreshMode(procEnv, env, fs, fetcher, logger) {
     const release = await resolveChannelRelease(GITHUB_REPO_SLUG, env, { fetcher })
     if (release.tagName && release.tagName !== applied) {
       logger.say(`auto-detected new GH snapshot ${release.tagName} (was ${applied || '<none>'}) — using snapshot mode`)
-      return true
+      return 'snapshot'
     }
-    logger.say('no newer GH snapshot found — using crawl-on-host mode')
-    return false
+    logger.say(`snapshot tag unchanged (${applied || '<none>'}) — code-only deploy, corpus refresh skipped (USE_CRAWL=1 to force a crawl)`)
+    return 'skip'
   } catch (err) {
-    logger.warn(`could not query GH releases (${err?.message ?? err}) — defaulting to crawl-on-host`)
-    return false
+    logger.warn(`could not query GH releases (${err?.message ?? err}) — skipping corpus refresh (USE_CRAWL=1 to force a crawl)`)
+    return 'skip'
   }
 }
 

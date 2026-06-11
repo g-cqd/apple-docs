@@ -15,13 +15,14 @@ binary and the production launchd plists run Bun internally; operators
 do not need it on their interactive `PATH` afterwards.
 
 > [!NOTE]
-> **Linux SF Symbol parity.** SF Symbol pre-rendering needs the macOS
+> **Linux feature parity.** SF Symbol pre-rendering needs the macOS
 > SF Symbols system bundle, so `apple-docs sync` on Linux produces an
 > empty `resources/symbols/` directory. Linux installs should use the
 > snapshot path (`apple-docs setup`) — every published snapshot ships
-> the full pre-rendered SVG matrix and works offline. PNG variants
-> still need `rsvg-convert` (librsvg) on the host at request time; see
-> [Self-hosting → Snapshot consumer requirements](self-hosting.md#snapshot-consumer-requirements).
+> the full pre-rendered SVG matrix and works offline. For the two
+> render endpoints that use host tools (PNG symbols via `rsvg-convert`,
+> real font-text glyphs via HarfBuzz's `hb-view`), see
+> [Self-hosting → Linux host packages](self-hosting.md#linux-host-packages-full-feature-parity).
 
 ## Prerequisites
 

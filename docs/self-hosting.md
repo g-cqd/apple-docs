@@ -102,15 +102,42 @@ request time from the same pre-rendered SVG via:
 If neither rasterizer is available, PNG requests return 404 with a
 clear error in the access log; SVG requests still work.
 
-To verify your snapshot is self-sufficient (no live-render fallback),
-set `APPLE_DOCS_SYMBOLS_OFFLINE=1` before starting `web serve`. Any
-request that would have spawned the Swift / AppKit live renderer
-returns 404 instead, so a misshipped snapshot fails loud during smoke
-tests rather than serving a placeholder.
+Non-macOS hosts run in offline mode automatically (the Swift / AppKit
+live renderer cannot exist there) — misses serve a clear 404 instead of
+a placeholder. On macOS, set `APPLE_DOCS_SYMBOLS_OFFLINE=1` before
+starting `web serve` to verify a snapshot is self-sufficient: any
+request that would have spawned the live renderer fails loud during
+smoke tests.
 
 `apple-docs sync` on a host without the SF Symbols bundle produces an
 empty `resources/symbols/` directory; the snapshot path is the
 supported acquisition method on Linux and Windows hosts.
+
+### Linux host packages (full feature parity)
+
+Everything serves out of the box from a snapshot except two render
+endpoints that shell out to host tools. Install these for 100% of the
+feature set:
+
+| Package (Debian/Ubuntu) | Tool | Enables |
+| --- | --- | --- |
+| `librsvg2-bin` | `rsvg-convert` | PNG output for `/api/symbols/...png` and `render_sf_symbol` |
+| `libharfbuzz-bin` | `hb-view` | Real glyph rendering (full text shaping, incl. RTL/complex scripts) for `/api/fonts/text.svg` and `render_font_text`; without it a plain-`<text>` placeholder SVG is served |
+| `python3-fonttools` | `pyftsubset` | `/api/fonts/subset` variable-font subsetting (returns a clear 503 when absent) |
+
+On macOS none of these are needed (CoreText and `sips` cover the same
+paths natively; fonttools is still required for subsetting).
+
+Features that only run on a macOS **build host** — their results ship
+inside snapshots, so consumers never need them: Apple font DMG
+download/extraction (`hdiutil`), SF Symbols catalog + pre-render +
+codepoint stamping (SF Symbols.app, CoreGlyphs, Swift).
+
+Container sizing: a first `setup` peaks during extraction + the final
+VACUUM — give the VM/container **8 GB+ RAM** for the full snapshot
+(the VACUUM runs with file-backed temp storage, but the page cache
+still wants room). Concurrent first boots (web + MCP on one fresh
+volume) are safe: schema setup retries on `SQLITE_BUSY` for up to 30s.
 
 ## Run the web server
 
