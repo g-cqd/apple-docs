@@ -207,7 +207,9 @@ function applyDerived(vars) {
   vars.AUTOROLL_HOUR = vars.AUTOROLL_HOUR || '14'
   vars.STATIC_DIR = vars.STATIC_DIR || `${vars.REPO_DIR}/dist/web`
   vars.APPLE_DOCS_MCP_CACHE_SCALE = vars.APPLE_DOCS_MCP_CACHE_SCALE || '1'
-  // Swift-native kill switch; '' = JS everywhere (rfcs/0001).
+  // Swift-native switch. '' = follow the app default, which is native-on
+  // since RFC 0002 phase 5 (JS serves identically wherever the dylib or
+  // artifacts are absent). 'off' is the escape hatch; a csv pins modules.
   vars.APPLE_DOCS_NATIVE = vars.APPLE_DOCS_NATIVE || ''
   vars.LEGACY_LAUNCHD_LABELS = vars.LEGACY_LAUNCHD_LABELS || ''
   // Snapshot update channel: 'stable' tracks /releases/latest (GitHub

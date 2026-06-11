@@ -70,6 +70,12 @@ const body = [
   '```',
   '',
   'To extract manually: `zstd -d apple-docs-full-<tag>.tar.zst -c | tar -xf -` (stock `tar` on macOS cannot read zstd directly).',
+  '',
+  '## Native bridge is now the default',
+  '',
+  'Swift-native implementations (`libAppleDocsCore`) now serve **by default** wherever the library and its data artifacts exist; the JavaScript implementations serve identically everywhere else. Outputs are bit-identical (proven over the full corpus — see `rfcs/0002-swift-embedder.md` §6e in the repo).',
+  '',
+  '**Opting out**: set `APPLE_DOCS_NATIVE=off` for pure JavaScript everywhere. Checkout installs fetch the library with `apple-docs setup --native`; without it, nothing changes.',
 ].join('\n')
 
 process.stdout.write(body)

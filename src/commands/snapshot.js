@@ -262,6 +262,15 @@ export async function snapshotBuild(opts, ctx) {
     const modelsDir = join(dataDir, 'resources', 'models')
     if (existsSync(modelsDir)) {
       copyTreeFast(modelsDir, join(buildDir, 'resources', 'models'))
+      // The ADMX weights artifact is derived ON the build host when native
+      // embedding runs (RFC 0002 phase 5) but must NOT ship this cycle:
+      // +~129 MB of poorly-compressing f32 against the release-asset
+      // ceiling, and consumers already derive it on demand from the pinned
+      // model.onnx. Shipping ADMX INSTEAD of the onnx is the phase-5 kill
+      // step, done deliberately later.
+      for (const entry of ['matrix-v1.admx', 'matrix-v1.admx.sha256']) {
+        rmSync(join(buildDir, 'resources', 'models', 'minishlab', 'potion-retrieval-32M', entry), { force: true })
+      }
     }
 
     ensureDir(outDir)
