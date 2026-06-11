@@ -41,7 +41,8 @@ export async function indexEmbeddings(opts, ctx) {
   if (!embedder) {
     return {
       status: 'error',
-      message: 'Semantic embedder unavailable — the embedding model was not found locally. It ships with `apple-docs setup`; set APPLE_DOCS_ALLOW_REMOTE_MODELS=1 to fetch it.',
+      message:
+        'Semantic embedder unavailable. The default model is native: fetch the bundle with `apple-docs setup --native` and keep APPLE_DOCS_NATIVE enabled (gated models additionally need `bun add @huggingface/transformers`).',
     }
   }
 

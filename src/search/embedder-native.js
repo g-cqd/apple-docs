@@ -5,7 +5,8 @@
  * transformers.js path, D-0002-4).
  *
  * `buildNativeModel2Vec` NEVER throws: every failure logs a reason and
- * returns null so getEmbedder falls through to the transformers path. Once
+ * returns null so getEmbedder degrades to lexical-only (Stage C: the JS
+ * default-model embed path no longer exists). Once
  * built, embed/embedBatch THROW on native errors instead of silently
  * re-dispatching — the whole-embedder selection already happened, and both
  * call sites degrade cleanly (query path catches → lexical-only; the index
@@ -299,6 +300,6 @@ export async function buildNativeModel2Vec(spec, modelsDir, opts = {}) {
 
 function logAndNull(reasons) {
   announce(false)
-  log().warn(`embed: native path unavailable (${reasons.join('; ')}) — transformers.js serves`)
+  log().warn(`embed: native path unavailable (${reasons.join('; ')}) — semantic tier dormant (lexical-only)`)
   return null
 }
