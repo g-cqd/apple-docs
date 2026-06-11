@@ -204,16 +204,30 @@ runner + benchmark wiring). *Gates*: artifacts load on all three platform
 targets; `bun run ci` green with the shim present-but-unused.
 **Research complete (2026-06-11)** — ABI contract v0, loader design, CI
 design, security model, and measured boundary costs live in
-[`p0/`](0001-swift-native-transition/p0/README.md); its exit-gate checklist
-leaves only the implementation itself open.
+[`p0/`](0001-swift-native-transition/p0/README.md).
+**Implemented (2026-06-11)** — `swift/` package (ADBase common bases +
+ADSearch + ADCore → `libAppleDocsCore`), `src/native/loader.js` +
+`APPLE_DOCS_NATIVE`/`APPLE_DOCS_NATIVE_LIB`, and the `native` CI job
+(macos-26 / ubuntu-latest / ubuntu-24.04-arm: build, swift test, staged
+$ORIGIN bundle, JS↔Swift parity). All P0 gates met; release-asset
+attachment stays deferred until a module defaults to native.
 
 ### P1 — Leaf hot functions (pure compute)
 Ranking/fusion math (`search/ranking.js`, `fuse-semantic.js` — weightedRRF,
-MMR, score shaping), snippet extraction, content hashing, and the tar.zst
-archive writer (system `zstd`, preserving byte determinism). All pure
-functions with exact JS reference outputs. *Kills*: nothing yet (prep).
-*Gates*: bit-identical outputs on recorded fixtures; search benchmark p50
-not worse; snapshot determinism gate green with the native archiver.
+MMR, score shaping), snippet extraction, and the tar.zst archive writer
+(system `zstd`, preserving byte determinism). All pure functions with exact
+JS reference outputs. *Kills*: nothing yet (prep). *Gates*: bit-identical
+outputs on recorded fixtures; search benchmark p50 not worse; snapshot
+determinism gate green with the native archiver.
+**Partial (2026-06-11)** — fusion shipped behind the kill switch:
+`ADSearch` mirrors `fusion.js` with `Object.is`-exact parity (400 seeded
+property cases + fixtures, Map order identical), `fuse-semantic.js`
+dispatches through `src/search/fusion-native.js`. Measured (arm64 Mac):
+MMR 1.4–1.8× faster native; hybridFusion +8 % at n=100, slower at n=10
+(packing dominates tiny payloads — the p0 batching rule, observed).
+Default stays JS. Content hashing is **dropped from P1**: `sha256` already
+runs on Bun's native CryptoHasher; nothing to win. Open: ranking rules,
+snippet extraction, archiver.
 
 ### P2 — Embedder from scratch (the flagship)
 model2vec inference in Swift: tokenizer (the model's tokenizer.json,
@@ -314,3 +328,11 @@ land; each phase's completion gets a dated entry here.
   ABI contract v0 validated on macOS arm64 + Linux arm64; §4 products, §5
   toolchain, and the risk register corrected from experiments E0–E7;
   thirteen decisions logged (D-P0-1…13). P0 implementation not started.
+- **2026-06-11 — P0 implemented + P1 fusion shipped (default off)**: the
+  `swift/` package landed with the common bases target (`ADBase` — result
+  buffers, status enums, bounds-checked request reader, build info — the
+  cross-platform layer every later module and the migrating renderer
+  scripts build on), `ADSearch` fusion math, `ADCore` exports;
+  `src/native/loader.js` + `src/search/fusion-native.js` behind
+  `APPLE_DOCS_NATIVE`; CI `native` job on all three targets. Parity:
+  `Object.is`-exact across fixtures + 400 seeded property cases.
