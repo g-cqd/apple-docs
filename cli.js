@@ -299,6 +299,7 @@ try {
         archive: flags.archive ?? null,
         profile: setupProfile,
         beta: !!flags.beta,
+        native: !!flags.native,
         yes: !!flags.yes,
       }, ctx)
       formatter = formatSetup

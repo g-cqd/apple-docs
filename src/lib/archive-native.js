@@ -41,7 +41,7 @@ function nativeLib(logger) {
   const lib = getNativeLib()
   if (!announced) {
     const log = logger ?? createLogger(process.env.APPLE_DOCS_LOG_LEVEL || 'info')
-    log.debug?.(`archive: served by ${lib ? 'native libAppleDocsCore' : 'js (native unavailable)'}`)
+    log.info?.(`archive: served by ${lib ? 'native libAppleDocsCore' : 'js (native unavailable)'}`)
     announced = true
   }
   return lib
