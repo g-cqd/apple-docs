@@ -25,6 +25,7 @@ const SYMBOLS = {
   ad_fusion_rrf: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_fusion_hybrid: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_fusion_mmr: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_archive_tar_zst: { args: ['buffer', 'i64'], returns: 'ptr' },
 }
 
 const ROOT = new URL('../../', import.meta.url).pathname
