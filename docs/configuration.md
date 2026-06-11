@@ -229,3 +229,15 @@ is available and degrades to raw README fetching when it is not.
 | `APPLE_DOCS_HIGHLIGHT_MAX` | unset | Cap input chars sent through Shiki |
 | `APPLE_DOCS_MD_MAX_BYTES` | unset | Cap rendered Markdown payload size |
 | `APPLE_DOCS_RENDER_CACHE_BYTES` / `APPLE_DOCS_RENDER_CACHE_TTL_DAYS` | runtime-derived | Render cache sizing |
+
+## Native bridge (experimental)
+
+Swift-native implementations (`libAppleDocsCore`, loaded via `bun:ffi`)
+behind a kill switch that defaults off — unset means pure JS everywhere,
+with identical behavior. Background: `rfcs/0001-swift-native-transition.md`
+in the repository (not part of this site).
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APPLE_DOCS_NATIVE` | unset (off) | `1`/`on` enables every migrated module; a comma list (`fusion`) enables selected modules; `0`/`off` forces JS |
+| `APPLE_DOCS_NATIVE_LIB` | unset | Absolute path to a `libAppleDocsCore` build. When set it is the only load candidate — a wrong path falls back to JS with a warning, never to another build |
