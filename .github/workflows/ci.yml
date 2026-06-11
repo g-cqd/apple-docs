@@ -134,6 +134,14 @@ jobs:
             swift build -c release
           fi
 
+      - name: Ensure libzstd (archive module runtime dep)
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ldconfig -p | grep -q libzstd.so.1 || sudo apt-get install -y libzstd1
+          else
+            brew list zstd >/dev/null 2>&1 || brew install zstd
+          fi
+
       - name: Swift tests
         working-directory: swift
         run: swift test
@@ -159,12 +167,29 @@ jobs:
 
       - name: JS↔Swift parity against the staged artifact
         env:
-          APPLE_DOCS_NATIVE: fusion
+          APPLE_DOCS_NATIVE: fusion,archive
         run: |
           ext=so
           [ "${{ runner.os }}" = "macOS" ] && ext=dylib
           export APPLE_DOCS_NATIVE_LIB="$PWD/dist/native/${{ matrix.target }}/libAppleDocsCore.$ext"
-          bun test test/unit/native/ test/unit/search/fusion-parity.test.js test/unit/search/fusion.test.js
+          bun test test/unit/native/ test/unit/search/fusion-parity.test.js test/unit/search/fusion.test.js \
+            test/unit/lib/archive-native-parity.test.js test/unit/lib/archive-zstd.test.js
+
+      - name: zstd self-test of a native-built archive
+        env:
+          APPLE_DOCS_NATIVE: archive
+        run: |
+          ext=so
+          [ "${{ runner.os }}" = "macOS" ] && ext=dylib
+          export APPLE_DOCS_NATIVE_LIB="$PWD/dist/native/${{ matrix.target }}/libAppleDocsCore.$ext"
+          mkdir -p /tmp/ad-selftest/tree && printf 'self-test' > /tmp/ad-selftest/tree/a.txt
+          bun -e "
+            import { _forceImpl, createTarZstArchive } from './src/lib/archive-native.js'
+            _forceImpl('native')
+            const r = await createTarZstArchive({ sourceDir: '/tmp/ad-selftest/tree', outputPath: '/tmp/ad-selftest/out.tar.zst' })
+            if (r.fileCount !== 1) throw new Error('unexpected member count')
+          "
+          zstd -t /tmp/ad-selftest/out.tar.zst
 
   # Mutation testing was removed in June 2026: the nightly Stryker run
   # had not produced a single green report in over two weeks (ten ~1-min
