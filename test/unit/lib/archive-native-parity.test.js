@@ -81,6 +81,7 @@ describe.skipIf(!nativeReady)('archive native/js parity', () => {
     const r1 = await createTarZstArchive({ sourceDir: join(work, 'src'), outputPath: out1 })
     const r2 = await createTarZstArchive({ sourceDir: join(work, 'src'), outputPath: out2 })
     expect(r1.fileCount).toBe(5)
+    expect(r2.fileCount).toBe(5)
     expect(await sha256File(out1)).toBe(await sha256File(out2))
 
     const dest = join(work, 'extract-native')

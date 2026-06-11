@@ -256,3 +256,74 @@ jobs:
             ${{ matrix.name }}.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Native dylib bundles (libAppleDocsCore) ride the same release:
+  # `apple-docs setup --native` fetches the host-matching bundle into
+  # dist/native/ (checkout installs only; the kill switch stays off by
+  # default). The darwin asset is one universal (arm64+x86_64) dylib — the
+  # Swift runtime ships in macOS, so it travels alone; Linux bundles carry
+  # the stripped Swift runtime set resolved from ldd with an $ORIGIN rpath.
+  build-native:
+    needs: build-snapshot
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-26
+            target: darwin-universal
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Swift (swiftly)
+        if: runner.os == 'Linux'
+        uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
+        with:
+          toolchain: '6.3.2' # keep in sync with swift/.swift-version
+
+      - name: Build, test, stage
+        run: |
+          set -euo pipefail
+          dest="stage/apple-docs-native-${{ matrix.target }}"
+          mkdir -p "$dest"
+          cd swift
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            swift build -c release -Xlinker -rpath -Xlinker '$ORIGIN'
+            swift test
+            cp .build/release/libAppleDocsCore.so "../$dest/"
+            for dep in $(ldd "../$dest/libAppleDocsCore.so" | awk '$1 ~ /^lib(swift|Foundation|dispatch|BlocksRuntime|_)/ {print $3}'); do
+              cp "$dep" "../$dest/"
+            done
+            strip --strip-unneeded "../$dest"/*.so
+          else
+            swift test
+            swift build -c release --arch arm64 --arch x86_64
+            bin=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
+            cp "$bin/libAppleDocsCore.dylib" "../$dest/"
+            lipo -info "../$dest/libAppleDocsCore.dylib"
+          fi
+          cd ..
+          ls -lh "$dest"
+
+      - name: Pack + checksum
+        run: |
+          name="apple-docs-native-${{ matrix.target }}.tar.zst"
+          tar -C stage -cf - "apple-docs-native-${{ matrix.target }}" | zstd -9 -q -f -o "$name"
+          shasum -a 256 "$name" > "$name.sha256"
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
+        with:
+          tag_name: ${{ needs.build-snapshot.outputs.tag }}
+          files: |
+            apple-docs-native-${{ matrix.target }}.tar.zst
+            apple-docs-native-${{ matrix.target }}.tar.zst.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
