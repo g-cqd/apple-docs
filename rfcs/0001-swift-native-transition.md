@@ -234,7 +234,10 @@ extraction-equality + rebuild-twice (bsdtar byte-equality is impossible by
 construction). Pax extended headers added 2026-06-11 after a production
 fallback (a 103-byte SF Symbols FILENAME no 155+100 split can represent) —
 the writer now covers every production path (273k-file tree verified).
-**P1 CLOSED (2026-06-11)** — ranking and snippets stay JS by measurement:
+**P1 CLOSED (2026-06-11)** — ranking and snippets stay JS **for the bridge
+era** by measurement (NOT a transition exemption — they migrate with P6's
+search-orchestrator move, where they live inside the Swift process and the
+FFI boundary tax that disqualifies them here does not exist):
 `rerank` costs 158.8 µs at the maximum realistic input (300 results, real
 corpus rows, intent included) = **0.04 %** of a natural-language lexical
 query (p50 372 ms on the full corpus) and ~2 % of even the hot-cache
@@ -385,7 +388,9 @@ land; each phase's completion gets a dated entry here.
   `src/native/loader.js` + `src/search/fusion-native.js` behind
   `APPLE_DOCS_NATIVE`; CI `native` job on all three targets. Parity:
   `Object.is`-exact across fixtures + 400 seeded property cases.
-- **2026-06-11 — P1 CLOSED (ranking/snippets stay JS, by measurement)**:
+- **2026-06-11 — P1 CLOSED (ranking/snippets stay JS for the bridge era,
+  by measurement; they ride P6's orchestrator migration — the full-Swift
+  end state is unchanged)**:
   `rerank` = 158.8 µs at the maximum realistic input (300 real-corpus
   rows incl. intent detection) — **0.04 %** of a natural-language lexical
   query (372 ms p50, full corpus) and ~2 % of the hot symbol-lookup floor
