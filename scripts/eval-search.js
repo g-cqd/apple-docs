@@ -113,9 +113,7 @@ async function scoreConfig(config, ctx, judgments, k) {
   const restore = applyEnv(config.env)
   _resetEmbedder()
   _resetVectorCache()
-  const recalls = []
-  const ndcgs = []
-  const mrrs = []
+  const perKind = { all: [], curated: [], anchor: [] }
   const latencies = []
   try {
     for (const j of judgments) {
@@ -123,9 +121,13 @@ async function scoreConfig(config, ctx, judgments, k) {
       const res = await search({ query: j.query, limit: Math.max(k, 20), noDeep: false, fuzzy: true }, ctx)
       latencies.push(performance.now() - t0)
       const paths = res.results.map(r => r.path)
-      recalls.push(recallAtK(paths, j.relevant, k))
-      ndcgs.push(ndcgAtK(paths, j.relevant, k))
-      mrrs.push(mrr(paths, j.relevant))
+      const scored = {
+        recall: recallAtK(paths, j.relevant, k),
+        ndcg: ndcgAtK(paths, j.relevant, k),
+        mrr: mrr(paths, j.relevant),
+      }
+      perKind.all.push(scored)
+      perKind[j.kind]?.push(scored)
     }
   } finally {
     restore()
@@ -134,12 +136,19 @@ async function scoreConfig(config, ctx, judgments, k) {
   }
   latencies.sort((a, b) => a - b)
   const p50 = latencies.length ? latencies[Math.floor(latencies.length * 0.5)] : 0
+  const agg = (rows) =>
+    rows.length
+      ? { n: rows.length, recall: mean(rows.map(r => r.recall)), ndcg: mean(rows.map(r => r.ndcg)), mrr: mean(rows.map(r => r.mrr)) }
+      : { n: 0, recall: 0, ndcg: 0, mrr: 0 }
+  const all = agg(perKind.all)
   return {
     name: config.name,
-    recall: mean(recalls),
-    ndcg: mean(ndcgs),
-    mrr: mean(mrrs),
+    recall: all.recall,
+    ndcg: all.ndcg,
+    mrr: all.mrr,
     p50,
+    curated: agg(perKind.curated),
+    anchor: agg(perKind.anchor),
   }
 }
 
@@ -188,16 +197,33 @@ async function main() {
     const chunkCount = db.getChunkCount?.() ?? 0
     const idxBytes = indexBytes(db)
 
-    console.log(`corpus:     ${source}`)
-    console.log(`documents:  ${paths.size}`)
-    console.log(`vectors:    ${vectorCount}  chunks: ${chunkCount}  (semantic ${vectorCount > 0 || chunkCount > 0 ? 'active' : 'dormant'})`)
-    console.log(`judgments:  ${judgments.length} resolvable (${all.length - judgments.length} skipped — relevant paths absent)`)
-    if (seeded) console.log('note:       seeded corpus has no embedding model — configs differ only when a real snapshot ships vectors.')
-    console.log('')
+    // --json: machine-readable result on stdout, info lines on stderr —
+    // the embed-model bake-off harness consumes this.
+    const emit = args.json ? console.error : console.log
+    emit(`corpus:     ${source}`)
+    emit(`documents:  ${paths.size}`)
+    emit(`vectors:    ${vectorCount}  chunks: ${chunkCount}  (semantic ${vectorCount > 0 || chunkCount > 0 ? 'active' : 'dormant'})`)
+    emit(`judgments:  ${judgments.length} resolvable (${all.length - judgments.length} skipped — relevant paths absent)`)
+    if (seeded) emit('note:       seeded corpus has no embedding model — configs differ only when a real snapshot ships vectors.')
+    emit('')
 
     const rows = []
     for (const config of CONFIGS) rows.push(await scoreConfig(config, ctx, judgments, k))
-    printTable(rows, k, idxBytes)
+    if (args.json) {
+      let embedMeta = {}
+      try {
+        embedMeta = {
+          embedModel: db.getSnapshotMeta('embed_model') ?? null,
+          embedDims: db.getSnapshotMeta('embed_dims') ?? null,
+        }
+      } catch { /* meta table absent on seeded DBs */ }
+      console.log(JSON.stringify({
+        source, documents: paths.size, vectors: vectorCount, chunks: chunkCount,
+        indexBytes: idxBytes, k, judgments: judgments.length, ...embedMeta, rows,
+      }))
+    } else {
+      printTable(rows, k, idxBytes)
+    }
   } finally {
     db.close()
   }
