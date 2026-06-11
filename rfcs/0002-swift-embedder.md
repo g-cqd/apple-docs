@@ -488,6 +488,54 @@ gated-models-only (D-0002-4); the default-model JS embed path is removed.
 Entry criteria: one stable release built native, mm18 soak clean, no
 field reports against the escape hatch.
 
+### 6f. Stage-C design — the kills (GATED; design recorded ahead of execution)
+
+**Entry criteria (all required):** one stable release built with
+native-embed (snapshot.yml job pin, §6e); the mm18 soak clean for that
+cycle (no native-attributed errors, healthz steady, announce lines
+present); no field reports against the `APPLE_DOCS_NATIVE=off` escape
+hatch.
+
+**1. Snapshots ship ADMX instead of model.onnx (−124 MB).**
+- The snapshot build (already native) runs `gen-embed-matrix --full`
+  semantics via `ensureMatrixArtifact` and INCLUDES
+  `matrix-v1.admx(.sha256)` in `resources/models/<hfId>/` while EXCLUDING
+  `onnx/` (inverting the §6e filter). Net: −124 MB onnx + +129 MB admx ≈
+  par on disk, −124 MB once the onnx leaves; admx compresses poorly but
+  onnx leaves entirely.
+- `PINNED_MODEL_FILES` (src/search/model-integrity.js) becomes
+  {tokenizer.json, tokenizer_config.json, matrix-v1.admx}; the admx pin
+  is stable because the artifact bytes are deterministic (proven §6b).
+  `verifyPinnedModelFiles` keeps its shape.
+- `ensureEmbeddingModel` probes via the NATIVE embedder (getEmbedder
+  already dispatches); the release-build hard-fail path keys on the
+  native embedder being available instead of transformers.
+- Compat (one cycle): `ensureMatrixArtifact`'s derive-from-onnx path
+  stays so consumers on older onnx-bearing snapshots keep working; it
+  retires the cycle after.
+
+**2. transformers.js / onnxruntime demotion (D-0002-4 caveat).**
+- `getEmbedder`'s default-model path becomes native-or-null (lexical
+  degradation) — the buildModel2Vec transformers branch is deleted along
+  with `ensureOnnxRuntimeLoadable`'s WASM fallback FOR THE DEFAULT PATH.
+  Every supported platform ships a dylib bundle, so null means "bundle
+  missing", same degradation story as today without the dep.
+- `@huggingface/transformers` + `onnxruntime-*` remain optionalDeps used
+  ONLY by the gated feature-extraction registry entries (gemma/bge…);
+  the WASM fallback moves inside that branch. knip ignoreDependencies
+  unchanged.
+- Fixture/guard impact: the tokenizer/embed-parity JS replay tests keep
+  transformers as their reference — they already skipIf the dep/model is
+  absent, so CI shape is unchanged.
+
+**3. Cleanups riding along:** docs (configuration/self-hosting) drop the
+"derived from model.onnx" language for new snapshots; `setup --skip-semantic`
+note unchanged; RFC 0001 §3's "runtime dependencies to eliminate" item 1
+gets its done-mark.
+
+Execution is a single slice once the criteria hold; nothing here is
+ambiguous enough to need re-design at that point.
+
 ## 7. Risks
 
 | Risk | Mitigation |
