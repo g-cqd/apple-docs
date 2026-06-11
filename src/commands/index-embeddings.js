@@ -41,7 +41,8 @@ export async function indexEmbeddings(opts, ctx) {
   if (!embedder) {
     return {
       status: 'error',
-      message: 'Semantic embedder unavailable. Install the optional dependency: `bun add @huggingface/transformers`.',
+      message:
+        'Semantic embedder unavailable. The default model is native: fetch the bundle with `apple-docs setup --native` and keep APPLE_DOCS_NATIVE enabled (gated models additionally need `bun add @huggingface/transformers`).',
     }
   }
 

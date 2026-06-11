@@ -92,16 +92,7 @@ console.log(
     ` (embedder-attributable ≈ ${((rssAfterRun - rssBeforeInit) / 1e6).toFixed(0)}MB; the 129MB matrix is mmap'd — §3 gate: ≤ matrix + 32MiB)`,
 )
 
-// --- transformers.js baseline (fresh embedder, native disabled) ---
-process.env.APPLE_DOCS_NATIVE = 'off' // unset means native-on since the default flip
-const { getEmbedder, _resetEmbedder } = await import('../../src/search/embedder.js')
-_resetEmbedder()
-const js = await getEmbedder({})
-if (!js) {
-  console.error('transformers.js embedder unavailable for the baseline')
-  process.exit(1)
-}
-const jsRate = await throughput('transformers.js', (texts) => js.embedBatch(texts))
-await latency('transformers.js', (text) => js.embed(text), 200)
-
-console.log(`\nthroughput ratio: ${(nativeRate / jsRate).toFixed(2)}x f32, ${(nativeCodesRate / jsRate).toFixed(2)}x codes (gate ≥ 2x on arm64)`)
+// Historical baselines (the JS default path died with Stage C — RFC 0002
+// §6c/§6e record them): transformers.js ~9,9k chunks/s arm64 / ~3.95k
+// Intel; ratios 2.0–2.7x f32, 2.5–3.3x codes.
+console.log(`\nnative: ${nativeRate.toFixed(0)} chunks/s f32, ${nativeCodesRate.toFixed(0)} chunks/s codes (historical JS baselines in RFC 0002 §6c/§6e)`)

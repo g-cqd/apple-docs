@@ -117,18 +117,56 @@ function configureEnv(env, dir) {
  * @param {{ logger?: object, modelsDir?: string }} [opts]
  * @returns {Promise<{ embed(text: string, opts?: { isQuery?: boolean }): Promise<Float32Array>, embedBatch(texts: string[], opts?: { isQuery?: boolean }): Promise<Float32Array[]> } | null>}
  */
+export async function getEmbedder({ logger, modelsDir } = {}) {
+  if (cached !== undefined) return cached
+  if (process.env.APPLE_DOCS_SEMANTIC === 'off') {
+    cached = null
+    return cached
+  }
+  const spec = resolveSpec()
+
+  if (spec.backend !== 'feature-extraction') {
+    // The DEFAULT model is native-only since Stage C (RFC 0002 §6f): the
+    // bit-exact Swift pipeline serves wherever the dylib + ADMX artifact
+    // exist, and the semantic tier degrades to lexical-only otherwise —
+    // the JS/transformers model2vec path is gone. The builder never throws.
+    if (isNativeEnabled('embed')) {
+      cached = await buildNativeModel2Vec(spec, resolveModelsDir(modelsDir))
+    } else {
+      logger?.info?.('semantic tier disabled: APPLE_DOCS_NATIVE is off and the default embed path is native-only (lexical-only search)')
+      cached = null
+    }
+    return cached
+  }
+
+  // Gated transformer models (D-0002-4) keep the transformers.js path —
+  // each would need its own tokenizer family natively, and none is the
+  // shipped default.
+  try {
+    await ensureOnnxRuntimeLoadable(logger)
+    const tx = await import('@huggingface/transformers')
+    configureEnv(tx.env, resolveModelsDir(modelsDir))
+    if (onnxFallbackInstalled) {
+      // Single-threaded WASM: Bun's worker support and ort-web's
+      // threaded dispatch don't agree on every platform.
+      try { tx.env.backends.onnx.wasm.numThreads = 1 } catch {}
+    }
+    cached = await buildFeatureExtraction(tx, spec)
+  } catch (err) {
+    logger?.debug?.(`semantic embedder unavailable (${err.message}) — lexical-only`)
+    cached = null
+  }
+  return cached
+}
+
 let onnxFallbackInstalled = false
 
 /**
- * transformers.js eagerly imports `onnxruntime-node`, whose napi binding
- * does not ship for every platform (notably darwin-x64 — the import
- * throws "Cannot find module …/darwin/x64/onnxruntime_binding.node"
- * before any backend selection can happen). When the native runtime
- * can't load, alias the specifier to the API-compatible
- * `onnxruntime-web` WASM runtime via a Bun module plugin. model2vec is
- * a static lookup + mean-pool, so WASM throughput is more than enough.
- * `APPLE_DOCS_ONNX_WASM=1` forces the fallback (used by tests and for
- * diagnosing WASM-path issues on platforms with a native binding).
+ * Gated-models-only since Stage C. transformers.js eagerly imports
+ * `onnxruntime-node`, whose napi binding does not ship for every platform
+ * (notably darwin-x64). When the native runtime can't load, alias the
+ * specifier to the API-compatible `onnxruntime-web` WASM runtime via a Bun
+ * module plugin. `APPLE_DOCS_ONNX_WASM=1` forces the fallback.
  */
 async function ensureOnnxRuntimeLoadable(logger) {
   if (onnxFallbackInstalled) return
@@ -151,82 +189,6 @@ async function ensureOnnxRuntimeLoadable(logger) {
   })
   onnxFallbackInstalled = true
   logger?.info?.('onnxruntime native binding unavailable on this platform — using the WASM runtime (onnxruntime-web)')
-}
-
-export async function getEmbedder({ logger, modelsDir } = {}) {
-  if (cached !== undefined) return cached
-  if (process.env.APPLE_DOCS_SEMANTIC === 'off') {
-    cached = null
-    return cached
-  }
-  const spec = resolveSpec()
-  // Native path (RFC 0002 phase 3): default model only, kill switch off by
-  // default; the builder never throws — null falls through to transformers.
-  // Deliberately OUTSIDE the try: a bug here must not set cached = null.
-  if (spec.backend !== 'feature-extraction' && isNativeEnabled('embed')) {
-    const native = await buildNativeModel2Vec(spec, resolveModelsDir(modelsDir))
-    if (native) {
-      cached = native
-      return cached
-    }
-  }
-  try {
-    await ensureOnnxRuntimeLoadable(logger)
-    const tx = await import('@huggingface/transformers')
-    configureEnv(tx.env, resolveModelsDir(modelsDir))
-    if (onnxFallbackInstalled) {
-      // Single-threaded WASM: Bun's worker support and ort-web's
-      // threaded dispatch don't agree on every platform, and model2vec
-      // doesn't need the parallelism anyway.
-      try { tx.env.backends.onnx.wasm.numThreads = 1 } catch {}
-    }
-    cached = spec.backend === 'feature-extraction'
-      ? await buildFeatureExtraction(tx, spec)
-      : await buildModel2Vec(tx, spec)
-  } catch (err) {
-    logger?.debug?.(`semantic embedder unavailable (${err.message}) — lexical-only`)
-    cached = null
-  }
-  return cached
-}
-
-/**
- * Static model2vec EmbeddingBag backend (the default). Tokenize → row lookup →
- * mean-pool, no neural forward pass. transformers.js may log "Unknown model
- * class model2vec, attempting to construct from base class" — it constructs and
- * runs correctly; we pin model_type so a future lib version can't reroute it.
- * Sign-quantization keys off each dim's sign (L2-scale invariant), so no
- * normalize step is needed and the additive `opts` (query/doc prefix) is
- * ignored — the static space is symmetric.
- */
-async function buildModel2Vec(tx, spec) {
-  const { AutoModel, AutoTokenizer, Tensor } = tx
-  const model = await AutoModel.from_pretrained(spec.hfId, { config: { model_type: 'model2vec' }, dtype: 'fp32' })
-  const tokenizer = await AutoTokenizer.from_pretrained(spec.hfId)
-  const run = async (texts) => {
-    const enc = await tokenizer(texts, { add_special_tokens: false, return_tensor: false })
-    const ids = enc.input_ids.map(a => (a.length ? a : [0])) // EmbeddingBag needs ≥1 token
-    const flat = ids.flat()
-    const offsets = [0]
-    for (let i = 0; i < ids.length - 1; i++) offsets.push(offsets[offsets.length - 1] + ids[i].length)
-    const out = await model({
-      input_ids: new Tensor('int64', BigInt64Array.from(flat.map(x => BigInt(x))), [flat.length]),
-      offsets: new Tensor('int64', BigInt64Array.from(offsets.map(x => BigInt(x))), [offsets.length]),
-    })
-    const t = out.embeddings ?? Object.values(out).find(v => v?.dims)
-    const dim = t.dims[t.dims.length - 1]
-    const n = t.dims[0]
-    const result = new Array(n)
-    for (let i = 0; i < n; i++) result[i] = t.data.subarray(i * dim, (i + 1) * dim)
-    return result
-  }
-  return {
-    async embed(text) { return (await run([text ?? '']))[0] },
-    async embedBatch(texts) {
-      if (!texts || texts.length === 0) return []
-      return run(texts.map(t => t ?? ''))
-    },
-  }
 }
 
 /**
