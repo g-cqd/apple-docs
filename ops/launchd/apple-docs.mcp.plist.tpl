@@ -55,6 +55,8 @@
         <string>/Users/${USER_NAME}</string>
         <key>APPLE_DOCS_HOME</key>
         <string>${DATA_DIR}</string>
+        <key>APPLE_DOCS_NATIVE</key>
+        <string>${APPLE_DOCS_NATIVE}</string>
         <!-- Cap concurrent heavy tool calls (search_docs, read_doc, browse)
              so the Bun event loop stays responsive for initialize / ping /
              tools/list under load. With the reader pool enabled below, heavy
