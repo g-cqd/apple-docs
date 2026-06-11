@@ -38,7 +38,8 @@ enum Normalizer {
 
     var stripped: [Unicode.Scalar] = []
     stripped.reserveCapacity(lowered.count)
-    for s in NFD.decompose(lowered) where !UnicodeSets.isNonspacingMark(s.value) {
+    // Lowest Mn scalar is U+0300 — cheap bail before the range search.
+    for s in NFD.decompose(lowered) where s.value < 0x300 || !UnicodeSets.isNonspacingMark(s.value) {
       stripped.append(s)
     }
     return stripped
