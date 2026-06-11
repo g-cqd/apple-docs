@@ -31,6 +31,17 @@ function stageTree(root) {
   put('nested/deep/dir/beta.svg', `<svg>${'x'.repeat(4000)}</svg>`)
   put(`long/${'segment-'.repeat(10)}/leaf-${'y'.repeat(60)}.txt`, 'long path member\n')
   put('binary.dat', Buffer.from(Array.from({ length: 2048 }, (_, i) => i % 256)))
+  // pax territory (ustar 155+100 cannot represent these — the native writer
+  // emits POSIX extended headers; system tar must extract them identically):
+  // 1. the exact production path whose FILENAME alone is 103 bytes;
+  put(
+    'resources/symbols/public/black-large/figure.seated.side.left.windshield.front.and.heat.waves.air.distribution.upper.and.middle.and.lower.svg',
+    '<svg>production long basename</svg>',
+  )
+  // 2. a prefix that exceeds 155 bytes with a short leaf;
+  put(`${'verydeep/'.repeat(20)}leaf.txt`, 'prefix overflow\n')
+  // 3. both violated at once.
+  put(`${'p'.repeat(120)}/${'q'.repeat(120)}.txt`, 'both violated\n')
 }
 
 async function extractTree(archivePath, dest) {
@@ -80,8 +91,8 @@ describe.skipIf(!nativeReady)('archive native/js parity', () => {
     const out2 = join(work, 'n2.tar.zst')
     const r1 = await createTarZstArchive({ sourceDir: join(work, 'src'), outputPath: out1 })
     const r2 = await createTarZstArchive({ sourceDir: join(work, 'src'), outputPath: out2 })
-    expect(r1.fileCount).toBe(5)
-    expect(r2.fileCount).toBe(5)
+    expect(r1.fileCount).toBe(8)
+    expect(r2.fileCount).toBe(8)
     expect(await sha256File(out1)).toBe(await sha256File(out2))
 
     const dest = join(work, 'extract-native')
@@ -124,7 +135,7 @@ describe.skipIf(!nativeReady)('archive native/js parity', () => {
     _forceImpl('js')
     const out = join(work, 'forced-js.tar.zst')
     const result = await createTarZstArchive({ sourceDir: join(work, 'src'), outputPath: out })
-    expect(result.fileCount).toBe(5)
+    expect(result.fileCount).toBe(8)
     expect(statSync(out).size).toBe(result.size)
   })
 })

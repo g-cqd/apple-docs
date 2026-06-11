@@ -145,6 +145,9 @@ public enum ArchiveWriter {
       #else
       let mtime = Int64(st.st_mtim.tv_sec)
       #endif
+      guard relative.utf8.count <= 4096 else {
+        throw ArchiveFailure.invalid("path exceeds 4096 bytes: \(relative)")
+      }
       let meta = FileMeta(
         relativePath: relative,
         absolutePath: absolute,
@@ -152,18 +155,20 @@ public enum ArchiveWriter {
         mtime: mtime,
         executable: (st.st_mode & 0o100) != 0,
       )
-      // Header representability (size/mtime/name-split) checked up front.
-      var probe = [UInt8](repeating: 0, count: Tar.blockSize)
+      // Representability (size/mtime) + EXACT prelude byte count up front —
+      // encodeMember is the single owner of header/pax byte math, so the
+      // zstd pledged-size integrity check can never drift from streamTar.
       do {
-        try Tar.writeHeader(
-          into: &probe, path: meta.relativePath, size: meta.size, mtime: meta.mtime,
+        let prelude = try Tar.encodeMember(
+          path: meta.relativePath, size: meta.size, mtime: meta.mtime,
           executable: meta.executable,
         )
+        tarBytes += prelude.reduce(into: Int64(0)) { $0 += Int64($1.count) }
       } catch TarFailure.unrepresentable(let message) {
         throw ArchiveFailure.invalid(message)
       }
       metas.append(meta)
-      tarBytes += 512 + ((meta.size + 511) / 512) * 512
+      tarBytes += ((meta.size + 511) / 512) * 512
     }
     tarBytes += 1024 // two zero EOF blocks
     let recordRemainder = tarBytes % Int64(Tar.recordSize)
@@ -175,7 +180,6 @@ public enum ArchiveWriter {
   /// record padding) into any sink — tests use a raw sink to inspect the
   /// uncompressed structure.
   static func streamTar(metas: [FileMeta], into sink: inout some ByteSink) throws {
-    var header = [UInt8](repeating: 0, count: Tar.blockSize)
     let zeroes = [UInt8](repeating: 0, count: Tar.recordSize)
     let chunkSize = 1 << 20
     let buffer = UnsafeMutableRawBufferPointer.allocate(byteCount: chunkSize, alignment: 16)
@@ -195,14 +199,16 @@ public enum ArchiveWriter {
     }
 
     for meta in metas {
-      try Tar.writeHeader(
-        into: &header, path: meta.relativePath, size: meta.size, mtime: meta.mtime,
+      let prelude = try Tar.encodeMember(
+        path: meta.relativePath, size: meta.size, mtime: meta.mtime,
         executable: meta.executable,
       )
-      try header.withUnsafeBufferPointer { raw in
-        try sink.write(UnsafeRawBufferPointer(raw))
+      for block in prelude {
+        try block.withUnsafeBufferPointer { raw in
+          try sink.write(UnsafeRawBufferPointer(raw))
+        }
+        produced += Int64(block.count)
       }
-      produced += Int64(Tar.blockSize)
 
       let fd = open(meta.absolutePath, O_RDONLY)
       guard fd >= 0 else { throw ArchiveFailure.runtime("cannot open \(meta.relativePath): errno \(errno)") }
