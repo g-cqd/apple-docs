@@ -259,12 +259,19 @@ logger.info(`Published: https://github.com/g-cqd/apple-docs/releases/tag/${tag}`
 if (rolloutHost) {
   // `gh release create` returns before the /releases LIST endpoint
   // serves the new tag (observed: a trigger 2s after publish resolved
-  // the PREVIOUS beta and no-opped). Wait until the list actually
-  // carries it so the instance's channel resolver can see it.
-  for (let attempt = 1; attempt <= 12; attempt++) {
+  // the PREVIOUS beta and no-opped). Wait until the list carries it AND
+  // the status.json asset actually serves — the instance's channel
+  // resolver downloads it to read buildMacos, and freshly-uploaded
+  // assets 404 for a while (observed: beta.3's trigger no-opped because
+  // the asset probe failed and the candidate was skipped).
+  const assetUrl = `https://github.com/g-cqd/apple-docs/releases/download/${tag}/status.json`
+  for (let attempt = 1; attempt <= 24; attempt++) {
     const listed = sh(['gh', 'api', 'repos/g-cqd/apple-docs/releases?per_page=5', '--jq', '.[].tag_name'], { allowFailure: true })
-    if (listed.stdout.split('\n').includes(tag)) break
-    if (attempt === 12) logger.warn(`release ${tag} still not in the list API after ~60s — triggering anyway`)
+    if (listed.stdout.split('\n').includes(tag)) {
+      const probe = await fetch(assetUrl, { method: 'HEAD', redirect: 'follow' }).catch(() => null)
+      if (probe?.ok) break
+    }
+    if (attempt === 24) logger.warn(`release ${tag} still not fully visible after ~2min — triggering anyway`)
     await Bun.sleep(5000)
   }
   logger.info(`Triggering rollout on ${rolloutHost}…`)
