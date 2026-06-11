@@ -11,7 +11,23 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { suffix } from 'bun:ffi'
 import { _resetNativeLoader } from '../../../src/native/loader.js'
-import { _resetNativeEmbedder, buildNativeModel2Vec } from '../../../src/search/embedder-native.js'
+import {
+  _resetNativeEmbedder,
+  buildNativeModel2Vec,
+  pregenerateMatrixArtifact,
+} from '../../../src/search/embedder-native.js'
+
+test('pregenerateMatrixArtifact is warn-only without a model', async () => {
+  const empty = mkdtempSync(join(tmpdir(), 'pregen-'))
+  const warnings = []
+  try {
+    const result = await pregenerateMatrixArtifact(empty, { warn: (m) => warnings.push(m) })
+    expect(result).toBeNull()
+    expect(warnings.length).toBe(1)
+  } finally {
+    rmSync(empty, { recursive: true, force: true })
+  }
+})
 
 const DEV_LIB = new URL(`../../../swift/.build/release/libAppleDocsCore.${suffix}`, import.meta.url).pathname
 const FIXTURES = join(import.meta.dir, '..', '..', 'fixtures')
@@ -46,6 +62,28 @@ describe.skipIf(!existsSync(DEV_LIB))('embedder-native round trip', () => {
       if (!got.equals(want.subarray(i * 2048, (i + 1) * 2048))) mismatches.push(cases[i].name)
     }
     expect(mismatches).toEqual([])
+  })
+
+  test('all 180 case codes are byte-exact through the FFI', async () => {
+    const embedder = await buildNativeModel2Vec(SPEC, '/nonexistent-models', SEAMS)
+    expect(embedder.dims).toBe(512)
+    const { cases } = JSON.parse(readFileSync(join(FIXTURES, 'tokenizer-parity', 'cases.json'), 'utf8'))
+    const want = readFileSync(join(FIXTURES, 'embed-parity', 'case-codes.bin'))
+    const stride = 64 + 512 + 4
+    const codes = await embedder.embedBatchCodes(cases.map((c) => c.text))
+    const mismatches = []
+    for (let i = 0; i < codes.length; i++) {
+      const { vecBin, vecI8 } = codes[i]
+      const slice = want.subarray(i * stride, (i + 1) * stride)
+      if (
+        !Buffer.from(vecBin.buffer, vecBin.byteOffset, 64).equals(slice.subarray(0, 64)) ||
+        !Buffer.from(vecI8.buffer, vecI8.byteOffset, 516).equals(slice.subarray(64))
+      ) {
+        mismatches.push(cases[i].name)
+      }
+    }
+    expect(mismatches).toEqual([])
+    expect(await embedder.embedBatchCodes([])).toEqual([])
   })
 
   test('empty and nullish texts use the pad row', async () => {

@@ -53,6 +53,43 @@ describe('indexEmbeddings', () => {
     expect(db.getVectorCount()).toBe(5)
   })
 
+  test('code-capable embedders store their blobs verbatim (native path shape)', async () => {
+    // Mirror of the native bridge contract: embedBatchCodes returns the
+    // storage blobs as OFFSET subarray views over one shared buffer — the
+    // read-back below proves bun:sqlite binds views offset-correctly.
+    const stride = VECTOR_DIMS / 8 + VECTOR_DIMS + 4
+    const backing = new Uint8Array(stride * 64)
+    const codesEmbedder = {
+      dims: VECTOR_DIMS,
+      async embedBatchCodes(texts) {
+        return texts.map((text, i) => {
+          const base = i * stride
+          for (let b = 0; b < stride; b++) backing[base + b] = (text.length * 31 + i * 7 + b) & 0xff
+          return {
+            vecBin: new Uint8Array(backing.buffer, base, VECTOR_DIMS / 8),
+            vecI8: new Uint8Array(backing.buffer, base + VECTOR_DIMS / 8, VECTOR_DIMS + 4),
+          }
+        })
+      },
+    }
+    const res = await indexEmbeddings({ embedder: codesEmbedder }, ctx)
+    expect(res.status).toBe('ok')
+    expect(res.indexed).toBe(5)
+    expect(db.getSnapshotMeta('embed_dims')).toBe(String(VECTOR_DIMS))
+    const stored = db.db.query('SELECT document_id, ord, vec_bin, vec_i8 FROM document_chunks ORDER BY document_id, ord').all()
+    expect(stored.length).toBeGreaterThan(0)
+    for (const row of stored) {
+      expect(row.vec_bin.length).toBe(VECTOR_DIMS / 8)
+      expect(row.vec_i8.length).toBe(VECTOR_DIMS + 4)
+    }
+    // Anchor vectors mirror ord-0 chunk codes byte-for-byte.
+    const anchors = db.getAllVectors()
+    const ordZero = new Map(stored.filter((r) => r.ord === 0).map((r) => [r.document_id, r.vec_bin]))
+    for (const anchor of anchors) {
+      expect(Buffer.from(anchor.vec).equals(Buffer.from(ordZero.get(anchor.document_id)))).toBe(true)
+    }
+  })
+
   test('errors clearly when no embedder is available', async () => {
     const prev = process.env.APPLE_DOCS_SEMANTIC
     process.env.APPLE_DOCS_SEMANTIC = 'off' // forces getEmbedder() → null

@@ -82,6 +82,18 @@ async function ensureMatrixArtifact(modelsDir, hfId, reasons) {
   }
 }
 
+/**
+ * Setup-time wrapper around the on-demand artifact derivation: best-effort,
+ * warn-only (a missing model or read-only dir just means the artifact gets
+ * derived lazily at first native-embed use instead).
+ */
+export async function pregenerateMatrixArtifact(modelsDir, logger) {
+  const reasons = []
+  const path = await ensureMatrixArtifact(modelsDir, DEFAULT_HF_ID, reasons)
+  if (!path) logger?.warn?.(`native embed artifact not pre-generated (${reasons.join('; ')})`)
+  return path
+}
+
 /** Parse the sha-pinned tokenizer.json without touching transformers.js. */
 function loadTokenizerConfig(modelDir, reasons) {
   try {
@@ -234,12 +246,35 @@ export async function buildNativeModel2Vec(spec, modelsDir, opts = {}) {
       for (let i = 0; i < texts.length; i++) out[i] = floats.subarray(i * dims, (i + 1) * dims)
       return out
     }
+    // The exact storage blobs (sign + int8+scale) the index pipeline writes —
+    // 580 B/chunk across the bridge instead of the 2 KB f32 vector plus a JS
+    // quantize pass. Views are stable: readNativeResult copies per call.
+    const codeStride = dims / 8 + dims + 4
+    const embedBatchCodes = async (texts) => {
+      if (!texts || texts.length === 0) return []
+      const { bytes, length } = packBatchRequest(texts.map((t) => t ?? ''))
+      const result = readNativeResult(lib, lib.symbols.ad_embed_batch_codes(bytes, BigInt(length)))
+      if (result.status !== NATIVE_STATUS_OK) {
+        throw new Error(`native embed failed: ${nativeErrorMessage(result)}`)
+      }
+      const out = new Array(texts.length)
+      for (let i = 0; i < texts.length; i++) {
+        const base = result.bytes.byteOffset + i * codeStride
+        out[i] = {
+          vecBin: new Uint8Array(result.bytes.buffer, base, dims / 8),
+          vecI8: new Uint8Array(result.bytes.buffer, base + dims / 8, dims + 4),
+        }
+      }
+      return out
+    }
     announce(true)
     return {
+      dims,
       async embed(text) {
         return (await embedBatch([text ?? '']))[0]
       },
       embedBatch,
+      embedBatchCodes,
     }
   } catch (error) {
     // Defensive: nothing above should throw, but this builder must not.

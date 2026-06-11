@@ -251,6 +251,11 @@ construction). Open: ranking rules, snippet extraction.
 > Phase 3 (FFI + dispatch) done 2026-06-11: `ad_embed_*` exports +
 > `embedder-native.js` behind `APPLE_DOCS_NATIVE=embed`; gates met at
 > 2.68× index throughput / 0.021 ms p50 (RFC 0002 §6c).
+>
+> Phase 4 (codes + retrieval equivalence) done 2026-06-11: native sign/int8
+> codes over the bridge, setup ordering fixed, and the full-corpus
+> equivalence gate — 831k chunks byte-identical, golden-eval metrics
+> identical (RFC 0002 §6d).
 
 model2vec inference in Swift: tokenizer (the model's tokenizer.json,
 unigram/WordPiece — implemented with swift-parsing), embedding-matrix

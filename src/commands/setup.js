@@ -44,6 +44,8 @@ export async function setup(opts, ctx) {
       const release = await fetchLatestRelease({ channel, localBuildMacos })
       const { installNativeBundle } = await import('./setup/native.js')
       native = await installNativeBundle(release, { logger: ctx.logger })
+      const { pregenerateMatrixArtifact } = await import('../search/embedder-native.js')
+      await pregenerateMatrixArtifact(join(ctx.dataDir, 'resources', 'models'), ctx.logger)
     }
     return {
       status: 'exists',
@@ -155,11 +157,20 @@ async function installFromGithubRelease(ctx, opts) {
     }
     logger.info('Checksum verified.')
 
-    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, tag: release.tag, profile: opts.profile, yes: opts.yes })
+    // The native bundle lands BEFORE the semantic index build so that, with
+    // the kill switch on, getEmbedder inside extractAndIndex dispatches
+    // native (and lazily derives the weights artifact) for the build itself.
     let native
     if (opts.native) {
       const { installNativeBundle } = await import('./setup/native.js')
       native = await installNativeBundle(release, { logger })
+    }
+    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, tag: release.tag, profile: opts.profile, yes: opts.yes })
+    if (opts.native) {
+      // Models exist only after extraction — derive the weights artifact now
+      // (warn-only) so the first server boot doesn't pay the generation.
+      const { pregenerateMatrixArtifact } = await import('../search/embedder-native.js')
+      await pregenerateMatrixArtifact(join(dataDir, 'resources', 'models'), logger)
     }
     return {
       status: 'ok',
