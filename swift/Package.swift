@@ -5,6 +5,11 @@ import PackageDescription
 
 let package = Package(
   name: "AppleDocsCore",
+  // Floor matches the repo's stated macOS 13+ support; without it the
+  // toolchain defaults the deployment target to the SDK (macOS 27), which
+  // would refuse to load on the macOS 26 production host and deprecates
+  // the x86_64 slice the universal artifact exists for.
+  platforms: [.macOS(.v13)],
   products: [
     .library(name: "AppleDocsCore", type: .dynamic, targets: ["ADCore"])
   ],
