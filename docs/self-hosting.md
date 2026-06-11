@@ -124,8 +124,10 @@ load failure logs one warning and serves the same results (outputs are
 bit-identical; see the equivalence gate in `rfcs/0002-swift-embedder.md`).
 
 **Escape hatch**: `APPLE_DOCS_NATIVE=off` in `ops/.env` (rendered into both
-service plists) forces pure JavaScript everywhere. A comma list
-(`fusion,archive,embed`) pins exactly those modules instead.
+service plists) forces the JavaScript implementations. Note (Stage C): the
+default embedding model is native-only — with native off, semantic search
+degrades to lexical-only; fusion/archive still serve identically from JS.
+A comma list (`fusion,archive,embed`) pins exactly those modules instead.
 
 `apple-docs setup --native` fetches the host's `libAppleDocsCore` bundle
 from the installed release (sha256-verified) into `dist/native/` and

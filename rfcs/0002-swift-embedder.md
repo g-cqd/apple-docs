@@ -488,13 +488,25 @@ gated-models-only (D-0002-4); the default-model JS embed path is removed.
 Entry criteria: one stable release built native, mm18 soak clean, no
 field reports against the escape hatch.
 
-### 6f. Stage-C design — the kills (GATED; design recorded ahead of execution)
+### 6f. Stage-C design — the kills (EXECUTED 2026-06-11)
 
-**Entry criteria (all required):** one stable release built with
-native-embed (snapshot.yml job pin, §6e); the mm18 soak clean for that
-cycle (no native-attributed errors, healthz steady, announce lines
-present); no field reports against the `APPLE_DOCS_NATIVE=off` escape
-hatch.
+**Entry criteria disposition:** the operator compressed the gate by
+manually dispatching the stable release (snapshot.yml workflow_dispatch,
+run 27372218651 from pre-Stage-C main) — that release is the LAST
+onnx-bearing snapshot, so consumers still receive one full compat cycle
+before the first ADMX-only snapshot (the next build). mm18 soak was
+clean at execution time; no escape-hatch reports existed.
+
+**Execution record (commits 640ff86 / 0f200d9 / 994035b + docs):** as
+designed below, plus the validation-driven additions — the release
+build's model acquisition moved into model-integrity.js (pin-verified
+direct huggingface fetches; transformers' from_pretrained had been the
+de-facto CI downloader), `LEGACY_ONNX_SHA256` survives as the immutable
+derivation source pin, and the escape-hatch docs now state plainly that
+`off` means lexical-only for the default model (fusion/archive still
+serve identically from JS). The 831k-chunk equivalence script retired
+with its purpose fulfilled; the committed fixtures are the frozen
+transformers reference and the replay guard is native-vs-fixtures.
 
 **1. Snapshots ship ADMX instead of model.onnx (−124 MB).**
 - The snapshot build (already native) runs `gen-embed-matrix --full`
