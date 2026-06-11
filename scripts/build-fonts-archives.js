@@ -24,7 +24,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createLogger } from '../src/lib/logger.js'
 import { writeSha256Sidecar } from '../src/lib/archive-7z.js'
-import { createTarZstArchive } from '../src/lib/archive-zstd.js'
+import { createTarZstArchive } from '../src/lib/archive-native.js'
 import { ensureDir } from '../src/storage/files.js'
 
 /** Mirror of `APPLE_FONT_FAMILIES` ids in src/resources/apple-assets.js. */
