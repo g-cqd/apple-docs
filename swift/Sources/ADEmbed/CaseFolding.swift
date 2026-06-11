@@ -19,9 +19,13 @@ enum CaseFolding {
         out.append(s.value >= 0x41 && s.value <= 0x5A ? Unicode.Scalar(s.value + 32)! : s)
       } else if s.value == sigma {
         out.append(isFinalSigma(scalars, at: i) ? finalSmallSigma : smallSigma)
-      } else {
-        // Full mapping (İ → i + U+0307, ẞ → ß, …); identity when uncased.
+      } else if s.properties.changesWhenLowercased {
+        // Full mapping (İ → i + U+0307, ẞ → ß, …).
         out.append(contentsOf: s.properties.lowercaseMapping.unicodeScalars)
+      } else {
+        // Already-lowercase/uncased fast path: lowercaseMapping would
+        // allocate an identity String per scalar.
+        out.append(s)
       }
     }
     return out

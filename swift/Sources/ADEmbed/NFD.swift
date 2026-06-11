@@ -21,6 +21,12 @@ enum NFD {
 
   private static func appendDecomposition(of s: Unicode.Scalar, to out: inout [Unicode.Scalar]) {
     let v = s.value
+    if v < 0xC0 {
+      // Below U+00C0 nothing decomposes (lowest table entry is À) — skip
+      // the binary search for the ASCII bulk of real corpora.
+      out.append(s)
+      return
+    }
     if v >= 0xAC00, v <= 0xD7A3 {
       // Hangul syllable → L V [T] jamo.
       let sIndex = v - 0xAC00
@@ -43,6 +49,9 @@ enum NFD {
   static func canonicalReorder(_ scalars: inout [Unicode.Scalar]) {
     guard scalars.count > 1 else { return }
     for i in 1..<scalars.count {
+      // Every nonzero-ccc scalar is ≥ U+0300 — skip the (comparatively
+      // costly) stdlib property lookup for ASCII/Latin-1.
+      guard scalars[i].value >= 0x300 else { continue }
       let ccc = combiningClass(scalars[i])
       guard ccc > 0 else { continue }
       var j = i
