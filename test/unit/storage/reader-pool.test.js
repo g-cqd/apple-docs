@@ -67,6 +67,27 @@ describe('createReaderPool', () => {
     await pool.close()
   })
 
+  test('ready-message native provenance logs ONE parent-process line', async () => {
+    const lines = []
+    const log = (level, msg) => lines.push(`${level}:${msg}`)
+    // Worker 0 reports native modules; the pool logs once on its ready.
+    let spawned = 0
+    const WorkerCtor = makeFakeCtor({
+      onSpawn: (worker) => {
+        // The plain autoReady message carries no provenance (logs nothing);
+        // this second ready does — the pool handler tolerates repeats.
+        const native = spawned === 0 ? ['fusion', 'embed'] : []
+        spawned++
+        emit(worker, { type: 'ready', native })
+      },
+    })
+    const pool = createReaderPool({ dbPath: DB_PATH, size: 2, WorkerCtor, log })
+    await pool.start()
+    const provenance = lines.filter((l) => l.includes('reader workers:'))
+    expect(provenance).toEqual(['info:reader workers: native libAppleDocsCore serves fusion,embed'])
+    await pool.close()
+  })
+
   test('run() dispatches to a worker and resolves with the result payload', async () => {
     const handler = (worker, msg) => {
       if (msg.type !== 'call') return

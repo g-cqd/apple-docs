@@ -48,7 +48,22 @@ const flagValue = (name) => {
 }
 const dataDir = process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
 const outDir = join(ROOT, 'dist-beta')
-const rolloutHost = flagValue('--rollout') ?? process.env.APPLE_DOCS_BETA_ROLLOUT ?? null
+
+/**
+ * Soft fallback for vars the operator keeps in fish universal scope
+ * (invisible to non-interactive shells): the gitignored ops/.env, parsed
+ * with the ops loader's lenient parser.
+ */
+async function opsEnvFallback(key) {
+  try {
+    const { parseEnvFile } = await import('../ops/lib/env.js')
+    return parseEnvFile(readFileSync(join(ROOT, 'ops', '.env'), 'utf8'))[key] ?? null
+  } catch {
+    return null
+  }
+}
+const rolloutHost =
+  flagValue('--rollout') ?? process.env.APPLE_DOCS_BETA_ROLLOUT ?? (await opsEnvFallback('APPLE_DOCS_BETA_ROLLOUT'))
 const logger = createLogger('info')
 
 function sh(cmd, opts = {}) {
