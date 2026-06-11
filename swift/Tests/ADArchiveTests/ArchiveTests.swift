@@ -156,6 +156,116 @@ func writeTarZstIsDeterministicAndFramed() throws {
   #expect(Int64(bytes1.count) == done.size)
 }
 
+// The exact path that fell back in production: the FILENAME alone is 103
+// bytes, which no 155+100 split can represent.
+private let productionLongPath =
+  "resources/symbols/public/black-large/"
+  + "figure.seated.side.left.windshield.front.and.heat.waves.air.distribution.upper.and.middle.and.lower.svg"
+
+@Test func paxRecordLengthIsSelfReferentialAcrossTheDigitGap() {
+  // fixed overhead = 7 (space + "path=" + newline) + digits of the length.
+  let r90 = Tar.paxPathRecord([UInt8](repeating: UInt8(ascii: "a"), count: 90))
+  #expect(r90.count == 99)
+  #expect(String(decoding: r90.prefix(3), as: UTF8.self) == "99 ")
+  // A 91-byte value admits 101 but NEVER 100 — the classic gap.
+  let r91 = Tar.paxPathRecord([UInt8](repeating: UInt8(ascii: "a"), count: 91))
+  #expect(r91.count == 101)
+  #expect(String(decoding: r91.prefix(4), as: UTF8.self) == "101 ")
+  #expect(r91.last == UInt8(ascii: "\n"))
+  let r5 = Tar.paxPathRecord(Array("a/b.c".utf8))
+  #expect(String(decoding: r5, as: UTF8.self) == "14 path=a/b.c\n")
+}
+
+@Test func encodeMemberMatchesWriteHeaderForUstarFitPaths() throws {
+  let blocks = try Tar.encodeMember(path: "docs/readme.md", size: 5, mtime: 1_700_000_000, executable: false)
+  #expect(blocks.count == 1)
+  var classic = [UInt8](repeating: 0, count: 512)
+  try Tar.writeHeader(into: &classic, path: "docs/readme.md", size: 5, mtime: 1_700_000_000, executable: false)
+  #expect(blocks[0] == classic)
+}
+
+@Test func encodeMemberEmitsPaxForTheProductionPath() throws {
+  let blocks = try Tar.encodeMember(path: productionLongPath, size: 1234, mtime: 1_700_000_000, executable: false)
+  #expect(blocks.count == 3) // xhdr + one data block + file header
+
+  let xhdr = blocks[0]
+  #expect(xhdr.count == 512)
+  #expect(xhdr[156] == UInt8(ascii: "x"))
+  let paxName = cString(field(xhdr[...], 0, 100))
+  #expect(paxName.hasPrefix("PaxHeaders/figure.seated"))
+  #expect(Array(paxName.utf8).count <= 100)
+  let record = Tar.paxPathRecord(Array(productionLongPath.utf8))
+  #expect(Int(cString(field(xhdr[...], 124, 12)), radix: 8) == record.count) // size pre-padding
+  // Checksum is valid under the spaces-while-summing rule.
+  var copy = xhdr
+  for i in 148..<156 { copy[i] = UInt8(ascii: " ") }
+  #expect(Int(cString(field(xhdr[...], 148, 7)), radix: 8) == copy.reduce(0) { $0 + Int($1) })
+
+  let data = blocks[1]
+  #expect(data.count == 512)
+  #expect(Array(data.prefix(record.count)) == record)
+  #expect(data.dropFirst(record.count).allSatisfy { $0 == 0 })
+  #expect(
+    String(decoding: record, as: UTF8.self)
+      == "\(record.count) path=\(productionLongPath)\n")
+
+  let fileHeader = blocks[2]
+  #expect(fileHeader[156] == UInt8(ascii: "0"))
+  #expect(Int(cString(field(fileHeader[...], 124, 12)), radix: 8) == 1234)
+  let truncated = cString(field(fileHeader[...], 0, 100))
+  #expect(Array(truncated.utf8) == Array(productionLongPath.utf8.prefix(100)))
+  // Determinism: same input, same bytes.
+  let again = try Tar.encodeMember(path: productionLongPath, size: 1234, mtime: 1_700_000_000, executable: false)
+  #expect(again == blocks)
+}
+
+@Test func streamTarPlacesPaxBlocksAndKeepsByteAccounting() throws {
+  let root = try makeTree([
+    (productionLongPath, Array("svg-bytes".utf8), false),
+    ("a.txt", Array("hi".utf8), false),
+  ])
+  defer { try? FileManager.default.removeItem(at: root) }
+  let metas = [meta(root: root, "a.txt"), meta(root: root, productionLongPath)]
+  var sink = CollectSink()
+  try ArchiveWriter.streamTar(metas: metas, into: &sink)
+  let bytes = sink.bytes
+  #expect(bytes.count % Tar.recordSize == 0)
+  // a.txt: header @0, data @512. pax member: xhdr @1024, pax data @1536,
+  // file header @2048, file data @2560.
+  #expect(cString(field(bytes[0..<512], 0, 100)) == "a.txt")
+  #expect(bytes[1024 + 156] == UInt8(ascii: "x"))
+  #expect(cString(field(bytes[1024..<1536], 0, 100)).hasPrefix("PaxHeaders/"))
+  let record = Tar.paxPathRecord(Array(productionLongPath.utf8))
+  #expect(Array(bytes[1536..<(1536 + record.count)]) == record)
+  #expect(bytes[2048 + 156] == UInt8(ascii: "0"))
+  #expect(Array(bytes[2560..<2569]) == Array("svg-bytes".utf8))
+}
+
+@Test(.enabled(if: Zstd.shared != nil))
+func writeTarZstHandlesPaxPathsWithPledgedSizeIntact() throws {
+  // End-to-end through the pledged-size integrity check: any prepass-vs-
+  // stream byte drift makes zstd error at finish, so success here IS the
+  // shared-encoder invariant.
+  let bothViolated = String(repeating: "p", count: 120) + "/" + String(repeating: "q", count: 120) + ".txt"
+  let root = try makeTree([
+    (productionLongPath, [UInt8](repeating: 9, count: 700), false),
+    (bothViolated, Array("deep".utf8), false),
+    ("short.txt", Array("ok".utf8), false),
+  ])
+  defer { try? FileManager.default.removeItem(at: root) }
+  let files = [productionLongPath, bothViolated, "short.txt"].sorted()
+  let out1 = root.appendingPathComponent("p1.tar.zst").path
+  let out2 = root.appendingPathComponent("p2.tar.zst").path
+  let r1 = ArchiveWriter.writeTarZst(.init(sourceDir: root.path, outputPath: out1, files: files, level: 9, workers: 3))
+  let r2 = ArchiveWriter.writeTarZst(.init(sourceDir: root.path, outputPath: out2, files: files, level: 9, workers: 3))
+  guard case .success(let done) = r1, case .success = r2 else {
+    Issue.record("pax archive build failed: \(r1) / \(r2)")
+    return
+  }
+  #expect(done.fileCount == 3) // pax blocks are not members
+  #expect(try Data(contentsOf: URL(fileURLWithPath: out1)) == Data(contentsOf: URL(fileURLWithPath: out2)))
+}
+
 @Test func writeTarZstRejectsBadInputs() {
   let result = ArchiveWriter.writeTarZst(
     .init(sourceDir: "/nonexistent", outputPath: "/tmp/never.tar.zst", files: ["../escape"], level: 9, workers: 3),
