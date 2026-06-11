@@ -50,6 +50,24 @@ function nativeLib() {
   return lib
 }
 
+// Request packing reuses one grow-only scratch buffer: at production sizes
+// (n≈10–100) allocation dominated the packing cost. Safe because calls are
+// synchronous and single-threaded — the native side consumes the bytes
+// before the call returns, and at most one packed request is live.
+let scratch = new ArrayBuffer(4096)
+let scratchU8 = new Uint8Array(scratch)
+let scratchView = new DataView(scratch)
+
+function ensureScratch(byteLength) {
+  if (scratch.byteLength < byteLength) {
+    let size = scratch.byteLength * 2
+    while (size < byteLength) size *= 2
+    scratch = new ArrayBuffer(size)
+    scratchU8 = new Uint8Array(scratch)
+    scratchView = new DataView(scratch)
+  }
+}
+
 /**
  * Packs lists into the fusion request. Interning scans lists in order and
  * ranks in order, first-seen wins — reproducing the JS Maps' insertion
@@ -81,8 +99,9 @@ function packFusion(lists, k, beta, useScores) {
   const scoresOffset = rankedOffset + 4 * rankedTotal + ((8 - ((rankedOffset + 4 * rankedTotal) % 8)) % 8)
   let scoreCount = 0
   if (useScores) for (const list of lists) if (list.scores) scoreCount += list.ranked.length
-  const request = new Uint8Array(scoresOffset + 8 * scoreCount)
-  const view = new DataView(request.buffer)
+  const totalBytes = scoresOffset + 8 * scoreCount
+  ensureScratch(totalBytes)
+  const view = scratchView
 
   view.setUint32(0, lists.length, true)
   view.setUint32(4, ids.length, true)
@@ -108,7 +127,9 @@ function packFusion(lists, k, beta, useScores) {
       }
     }
   }
-  return { request, ids }
+  // Pad bytes between ranked and scores stay dirty — the decoder skips them
+  // without reading (RequestReader.align8).
+  return { request: scratchU8.subarray(0, totalBytes), ids }
 }
 
 function callFusion(lib, symbol, packed) {
@@ -168,20 +189,24 @@ function packMmr(ranked, vecOf, lambda, limit) {
   if (dim === -1) dim = 0
   const bitmapBytes = (n + 7) >> 3
   const rowsOffset = 24 + bitmapBytes
-  const request = new Uint8Array(rowsOffset + n * dim)
-  const view = new DataView(request.buffer)
+  const totalBytes = rowsOffset + n * dim
+  ensureScratch(totalBytes)
+  const view = scratchView
   view.setUint32(0, n, true)
   view.setUint32(4, dim, true)
   view.setFloat64(8, lambda, true)
   view.setUint32(16, limit, true)
   view.setUint32(20, 0, true)
+  // The bitmap is built with |=, so its region must start zeroed; rows of
+  // absent vectors stay arbitrary by contract (the decoder never reads them).
+  scratchU8.fill(0, 24, rowsOffset)
   for (let i = 0; i < n; i++) {
     const vec = vecs[i]
     if (!vec) continue
-    request[24 + (i >> 3)] |= 1 << (i & 7)
-    request.set(vec, rowsOffset + i * dim)
+    scratchU8[24 + (i >> 3)] |= 1 << (i & 7)
+    scratchU8.set(vec, rowsOffset + i * dim)
   }
-  return request
+  return scratchU8.subarray(0, totalBytes)
 }
 
 /**
