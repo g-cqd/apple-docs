@@ -10,6 +10,7 @@ let package = Package(
     .library(name: "P0Probe", type: .dynamic, targets: ["P0Probe"])
   ],
   targets: [
-    .target(name: "P0Probe")
+    .target(name: "P0Probe"),
+    .testTarget(name: "P0ProbeTests", dependencies: ["P0Probe"]),
   ]
 )
