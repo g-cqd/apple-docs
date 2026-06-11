@@ -68,22 +68,36 @@ CI verifies at snapshot build.
 - Tokenizer tables built once at load; load time ≤ 500 ms.
 
 ### Acceleration
-- One internal API, two backends: **Accelerate/vDSP (`vDSP_vadd`/BLAS) on
-  darwin**, **portable SIMD (`SIMD32<Float>` / manual unrolling) on Linux** —
-  selected at compile time, never at the call site.
-- The accumulation order MUST stay fixed and documented per backend: mean
-  pooling is a float sum, and parity tolerances (below) assume a stable
-  summation order per platform. SIMD reordering is allowed ONLY because the
-  gate is tolerance-based, not bit-based — the tolerance is the contract.
+- **Amended (Phase 2, 2026-06-11)** — the probed graph semantics (§6b) made
+  bit-exactness attainable, which inverts the original
+  tolerance-because-SIMD-reorders rationale: **bit-equality is now the
+  contract, and acceleration may only exist where it preserves it.** The
+  per-dim accumulation chains are independent, so vectorizing ACROSS dims
+  (auto-vectorization, SIMD lanes, or elementwise vDSP_vadd) keeps every
+  chain sequential and is allowed; the L2-norm sum of squares is ONE chain
+  and stays scalar-sequential. Swift never reassociates float math, so the
+  portable loop is exact on every platform; vDSP is deferred until a
+  measured phase-3 bottleneck demands it.
+- The accumulation order is fixed and documented in Pooling.swift: f32
+  sequential row adds in bag order → f32 divide by count → f32 sequential
+  sum of squares → f32 sqrt (IEEE-correctly-rounded) → f32 divide.
 - Quantizers (sign-bit, int8+scale) move native in the same phase: they are
   trivially parallel and keep the f32 → storage path on one side of the
   boundary. Their outputs ARE bit-exact gates (comparisons and clamps only).
+  *Done in Phase 2* — including the ECMA Math.round mirror (half toward +∞;
+  Swift's `.toNearestOrAwayFromZero` is wrong at negative halves, and naive
+  `floor(x+0.5)` double-rounds at 0.49999999999999994).
 
 ### Parity / determinism
 - **Vectors**: per-component |Δ| ≤ 1e-5 against the JS/onnx reference on a
   recorded fixture set (≥ 2k real corpus chunks, committed as
   `test/fixtures/embed-parity/` inputs + reference vectors generated once by
   the current pipeline).
+  **Outcome (Phase 2, 2026-06-11): exceeded — BIT-EXACT** (Float byte
+  equality) on all 180 case fixtures (CI native matrix, subset artifact)
+  and all 2,000 corpus chunks (full artifact, local/snapshot). The 1e-5
+  bound remains the documented fallback only if a future platform
+  disproves IEEE-correct f32 sqrt/divide.
 - **Quantized codes**: bit-identical (binary) and byte-identical (int8+scale)
   for vectors within tolerance — if a component sits exactly on a sign/scale
   boundary the fixture is replaced, not the gate.
@@ -104,6 +118,16 @@ CI verifies at snapshot build.
   and shipped in snapshots. **Leaning (b)**: dumber artifact, trivially
   mmap-able, keeps the ONNX format knowledge out of the runtime; the
   converter runs under the existing model-integrity gate.
+  **DECIDED 2026-06-11: (a)+(b) combined** — `scripts/gen-embed-matrix.mjs`
+  does the varint walk at GENERATOR time (JS, dev/snapshot-build; the
+  runtime never sees ONNX) and re-exports the "ADMX" v1 artifact: header
+  {magic, version, flags(sparse), dtype, rows, dims, sourceSha256 of
+  model.onnx} + optional ascending id table + 64-aligned row-major f32 LE,
+  with a `.sha256` sidecar. Extraction is mandatory, not optional: the
+  graph L2-normalizes its outputs, so raw row magnitudes are unrecoverable
+  from inference (§6b). A committed SPARSE subset (the 608 token ids the
+  tokenizer fixtures touch, ~1.2 MB) lets the CI native matrix gate vector
+  parity without the 129 MB full artifact.
 
 ## 4. Packaging: internal subpackage first
 
@@ -217,6 +241,10 @@ restrictions) — record before any such change.
    180 fixture cases, 100% token-id equality on the first full run. §6a.
 2. **Matrix + pooling**: weights artifact (D-0002-1), mmap reader, mean-pool
    with both acceleration backends; vector parity gate on fixtures.
+   **Done 2026-06-11** — gate exceeded: bit-exact vectors AND byte-exact
+   sign/int8 codes on 180 case fixtures (CI) + 2,000 corpus chunks (full
+   artifact). Backend plan amended (§3 Acceleration): one portable
+   bit-exact kernel, vDSP deferred. §6b.
 3. **FFI + dispatch**: `ad_embed_batch`, `embedder-native.js`, kill switch,
    batch-boundary benches; index-build throughput gate.
 4. **Quantizers + retrieval gates**: native sign/int8 codes, golden eval,
@@ -270,6 +298,48 @@ raw ids are recorded (`[]` for empty — the `[0]` pad is embedder-level).
 Deferred by design: FFI export + dispatch (phase 3), the runtime vocab
 artifact format (phase 3 — the id-ordered array is its prototype), matrix
 + pooling (phase 2), performance gates (phase 2).
+
+### 6b. Phase-2 record — matrix + pooling (done 2026-06-11)
+
+Deliverables: `swift/Sources/ADEmbed/{MatrixArtifact,Pooling,Quantize,
+Embedder}.swift` (Foundation-free; mmap via raw Darwin/Glibc syscalls),
+`scripts/gen-embed-matrix.mjs` (protobuf walk + ADMX v1 export, full +
+sparse-subset modes), `scripts/gen-embed-fixtures.mjs` (case + 2k-corpus
+legs through the EXACT production embed path), committed
+`test/fixtures/embed-parity/` (~7.6 MB: sparse matrix subset, case/corpus
+vectors + codes, re-derived chunk texts, provenance index), the drift alarm
+`test/unit/search/embed-parity-fixtures.test.js`, and the Swift gates in
+`ADEmbedTests`.
+
+**The graph finding that shaped the phase**: potion's model.onnx is NOT a
+plain EmbeddingBag — probing single-token bags against raw initializer rows
+proved the output is **f32-sequential mean → f32 L2-normalize**, bit-exact
+across bag sizes (f64 accumulation drifts ~1.5e-8). Consequences:
+- raw row magnitudes are unrecoverable from inference → initializer
+  extraction is mandatory (D-0002-1);
+- outputs are unit-norm → the JS path correctly adds no normalization, and
+  both quantizers are scale-invariant by construction;
+- bit-exactness became attainable → §3's parity and acceleration contracts
+  were amended (bit-equality is the contract; portable kernel only).
+
+Corpus fixtures: chunk text is not stored in the DB (`text: null` in the
+indexer), so the 2,000 chunks are re-derived through the indexer's own path
+(lowest document ids → `getSectionsByDocumentIds` → `chunkDocument`,
+(docId, ord) order) and committed alongside their vectors — regenerable,
+provenance-stamped (transformers 4.2.0 + onnxruntime-node 1.24.3 + model
+sha; the WASM ort fallback is rejected outright by the generators since it
+is a different runtime).
+
+Gate split: the CI native matrix runs the 180-case gate against the
+committed sparse subset (no model needed); the 2,000-chunk gate runs
+wherever `matrix-v1.admx` exists (dev machines, future snapshot builds) via
+`.enabled(if:)`. Regeneration protocol mirrors the tokenizer one: an
+ort/transformers bump that changes reference bits fails the JS guard →
+regenerate both generators' outputs → every Swift gate must re-pass.
+
+Deferred to phase 3: FFI export + dispatch, snapshot-pipeline artifact
+shipping, perf/RSS/load-time gates (the corpus gate's ~150 chunks/s is a
+DEBUG-build, unbatched number — not a baseline).
 
 ## 7. Risks
 
