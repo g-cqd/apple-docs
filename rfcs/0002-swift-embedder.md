@@ -54,7 +54,7 @@ CI verifies at snapshot build.
 ### Performance
 | Metric | Gate | Baseline source |
 | --- | --- | --- |
-| Index-build embedding throughput (chunks/s, batch=64, full corpus shape) | **≥ 2× transformers.js** on arm64 Mac; **≥ 5×** vs the WASM fallback on Intel | **Measured 2026-06-11 (phase 3, arm64 M-series, release build, the committed 2k-chunk corpus): native 26,636 chunks/s vs transformers.js 9,929 → 2.68×. GATE MET.** The Intel/WASM ≥5× leg needs an Intel host (mm18) — pending, non-blocking. `bun test/benchmarks/embed-bench.js` |
+| Index-build embedding throughput (chunks/s, batch=64, full corpus shape) | **≥ 2× transformers.js** on arm64 Mac; **≥ 5×** vs the WASM fallback on Intel | **Measured 2026-06-11 (phase 3, arm64 M-series, release build, the committed 2k-chunk corpus): native 26,636 chunks/s vs transformers.js 9,929 → 2.68×. GATE MET.** **Intel (mm18, phase 5): native codes 12,898/s, f32 9.4–13.7k/s vs transformers.js 3,953–3,966/s → 3.3–3.5× — with a premise correction: the WASM-forced and native-ort baselines are INDISTINGUISHABLE (the bottleneck is transformers.js's JS tokenizer, not ort inference, for a static EmbeddingBag model), so the literal ≥5×-vs-WASM target was mis-modeled; the measured 3.3–3.5× end-to-end Intel win is the honest number.** `bun test/benchmarks/embed-bench.js` |
 | Query-time single embed p50 | **≤ 1 ms** on arm64 Mac, ≤ 3 ms Linux arm64 (it is one tokenization + ≤~64 row-sums) | **Measured: p50 0.021 ms, p95 0.089 ms (47× under the gate); transformers.js baseline p50 0.093 ms.** `test/benchmarks/embed-bench.js` |
 | Boundary | batch API crosses FFI **once per batch** (texts in, packed f32 matrix out, 16-byte-aligned per contract v0 — Float32Array view without copy-realignment) | p0/ffi-bridge.md |
 
@@ -461,10 +461,23 @@ builders and bit-identical outputs absorbed the entire blast radius.
   'off' and its dylib gate honors APPLE_DOCS_NATIVE_LIB (mm18 has only
   the installed bundle).
 
-**Soak**: mm18 runs `APPLE_DOCS_NATIVE=fusion,archive,embed` explicitly
-(runbook executed by the operator); the Intel/WASM ≥5× measurement runs
-there (the transformers leg on darwin-x64 IS the WASM fallback). Numbers
-land here when measured.
+**Soak — LIVE 2026-06-11** (ops/runbooks/native-embed-soak.md, executed
+end-to-end): snapshot-20260611-beta.3 published (after a size-guard catch:
+the bake-off's cached gemma/bge had been shipping in `resources/models` —
+snapshots now copy ONLY the active pinned model's subtree) and deployed to
+mm18 via `ops deploy`. The Intel host derived `matrix-v1.admx` itself
+(129 MB, during setup --native), services bootstrapped after the bundle
+landed, healthz 200 local+edge, and both `embed`/`fusion: served by native`
+announce in-process. Intel measurements (darwin-x64, installed universal
+bundle): native codes 12,898 chunks/s, single p50 0.040 ms, init ~112 ms,
+RSS-attributable ≈122 MB (≤ the 161 MB ceiling). Baselines: transformers.js
+3,966/s (native ort) and 3,953/s with `APPLE_DOCS_ONNX_WASM=1` —
+**indistinguishable, because the baseline bottleneck is the JS tokenizer,
+not ort inference**, which corrects the original ≥5×-vs-WASM premise; the
+honest Intel number is 3.3–3.5× end-to-end. Also observed in the wild: the
+native archiver correctly refused an ustar-unrepresentable long path
+(155+100 split) during the snapshot build and the JS writer served — pax
+long-name support is a known archiver gap, tracked for a later cycle.
 
 **Stage C — the kills (GATED on one clean native-by-default release
 cycle, NOT executed)**: snapshots ship the ADMX artifact INSTEAD of
