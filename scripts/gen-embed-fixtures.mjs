@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url'
 import { getEmbedder, resolveActiveSpec } from '../src/search/embedder.js'
 import { quantizeI8, quantizeTo } from '../src/search/embedding.js'
 import { chunkDocument } from '../src/search/chunker.js'
-import { PINNED_MODEL_FILES, verifyPinnedModelFiles } from '../src/search/model-integrity.js'
+import { LEGACY_ONNX_SHA256, PINNED_MODEL_FILES, verifyPinnedModelFiles } from '../src/search/model-integrity.js'
 import { DocsDatabase } from '../src/storage/database.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -54,7 +54,15 @@ try {
 
 const home = process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
 const modelsDir = process.env.APPLE_DOCS_MODELS_DIR ?? join(home, 'resources', 'models')
-await verifyPinnedModelFiles(modelsDir, spec.hfId)
+// Tokenizer pins + the legacy onnx sha (the full pin set now carries the
+// derived admx, which is not an input of THIS generator).
+await verifyPinnedModelFiles(modelsDir, spec.hfId, {
+  [spec.hfId]: {
+    'tokenizer.json': PINNED_MODEL_FILES[spec.hfId]['tokenizer.json'],
+    'tokenizer_config.json': PINNED_MODEL_FILES[spec.hfId]['tokenizer_config.json'],
+    'onnx/model.onnx': LEGACY_ONNX_SHA256,
+  },
+})
 
 const embedder = await getEmbedder({ modelsDir })
 if (!embedder) throw new Error('embedder unavailable (optional @huggingface/transformers missing?)')
@@ -155,7 +163,7 @@ writeFileSync(
           readFileSync(join(ROOT, 'node_modules', 'onnxruntime-node', 'package.json'), 'utf8'),
         ).version,
         runtime: 'onnxruntime-node',
-        modelOnnxSha256: PINNED_MODEL_FILES[spec.hfId]['onnx/model.onnx'],
+        modelOnnxSha256: LEGACY_ONNX_SHA256,
         snapshotVersion,
         sourceDb: { documentCount: docStats.count, maxDocumentId: docStats.maxId },
         caseCount: cases.length,

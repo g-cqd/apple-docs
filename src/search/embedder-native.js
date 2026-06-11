@@ -21,10 +21,11 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { generateMatrixArtifact } from '../lib/admx.js'
+import { sha256File } from '../lib/hash.js'
 import { createLogger } from '../lib/logger.js'
 import { getNativeLib } from '../native/loader.js'
 import { NATIVE_STATUS_OK, nativeErrorMessage, readNativeResult } from '../native/result.js'
-import { PINNED_MODEL_FILES, verifyPinnedModelFiles } from './model-integrity.js'
+import { LEGACY_ONNX_SHA256, PINNED_MODEL_FILES, verifyPinnedModelFiles } from './model-integrity.js'
 
 const DEFAULT_HF_ID = 'minishlab/potion-retrieval-32M'
 const encoder = new TextEncoder()
@@ -67,12 +68,25 @@ async function ensureMatrixArtifact(modelsDir, hfId, reasons) {
     return null
   }
   try {
-    // Full integrity gate before deriving anything from the file.
-    await verifyPinnedModelFiles(modelsDir, hfId)
+    // Integrity gates before deriving: the tokenizer pins from the active
+    // pin set, and the LEGACY onnx sha explicitly — the onnx left
+    // PINNED_MODEL_FILES with Stage C (snapshots ship the artifact), but it
+    // remains the immutable derivation source on older snapshots.
+    await verifyPinnedModelFiles(modelsDir, hfId, {
+      [hfId]: {
+        'tokenizer.json': PINNED_MODEL_FILES[hfId]['tokenizer.json'],
+        'tokenizer_config.json': PINNED_MODEL_FILES[hfId]['tokenizer_config.json'],
+      },
+    })
+    const got = await sha256File(onnxPath)
+    if (got !== LEGACY_ONNX_SHA256) {
+      reasons.push(`model.onnx failed its legacy derivation pin: ${got}`)
+      return null
+    }
     const { rows, dims } = await generateMatrixArtifact({
       onnxPath,
       outPath: matrixPath,
-      sourceShaHex: PINNED_MODEL_FILES[hfId]['onnx/model.onnx'],
+      sourceShaHex: LEGACY_ONNX_SHA256,
     })
     log().info(`embed: generated ${matrixPath} (${rows}×${dims}) from the pinned model.onnx`)
     return matrixPath

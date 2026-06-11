@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { quantizeI8, quantizeTo } from '../../../src/search/embedding.js'
-import { PINNED_MODEL_FILES } from '../../../src/search/model-integrity.js'
+import { LEGACY_ONNX_SHA256 } from '../../../src/search/model-integrity.js'
 
 const FIXTURES = join(import.meta.dir, '..', '..', 'fixtures', 'embed-parity')
 const HF_ID = 'minishlab/potion-retrieval-32M'
@@ -55,7 +55,7 @@ describe('embed-parity fixtures', () => {
     const rows = admx.readUInt32LE(16)
     const dims = admx.readUInt32LE(20)
     expect(dims).toBe(DIMS)
-    expect(admx.subarray(32, 64).toString('hex')).toBe(PINNED_MODEL_FILES[HF_ID]['onnx/model.onnx'])
+    expect(admx.subarray(32, 64).toString('hex')).toBe(LEGACY_ONNX_SHA256)
     const headerBytes = 64
     let prev = -1
     for (let i = 0; i < rows; i++) {
@@ -73,7 +73,7 @@ describe('embed-parity fixtures', () => {
     expect(index.meta.model).toBe(HF_ID)
     expect(index.meta.dims).toBe(DIMS)
     expect(index.meta.runtime).toBe('onnxruntime-node')
-    expect(index.meta.modelOnnxSha256).toBe(PINNED_MODEL_FILES[HF_ID]['onnx/model.onnx'])
+    expect(index.meta.modelOnnxSha256).toBe(LEGACY_ONNX_SHA256)
     expect(index.meta.codeStride).toBe(CODE_STRIDE)
     expect(index.caseNames.length).toBe(index.meta.caseCount)
     expect(caseVectors.length).toBe(index.meta.caseCount * DIMS * 4)
