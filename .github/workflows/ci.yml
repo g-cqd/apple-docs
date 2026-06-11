@@ -106,7 +106,11 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
+      # macOS uses the image's Xcode toolchain (ci.md allows it when it
+      # satisfies the pin); the swiftly action's prerequisite script can't
+      # drive a package manager on macos-26 images.
       - name: Install Swift (swiftly)
+        if: runner.os == 'Linux'
         uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
         with:
           toolchain: '6.3.2' # keep in sync with swift/.swift-version
