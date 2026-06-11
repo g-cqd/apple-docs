@@ -1,0 +1,3062 @@
+{
+ "meta": {
+  "model": "minishlab/potion-retrieval-32M",
+  "transformersVersion": "4.2.0",
+  "tokenizerSha256": "7d75cbc54318138807c401b0f0c9721117c628b39de8e8e0edb6cb17e0ee7d18"
+ },
+ "cases": [
+  {
+   "name": "greek-odos",
+   "text": "ΟΔΟΣ",
+   "ids": [
+    175,
+    28728,
+    14303
+   ]
+  },
+  {
+   "name": "greek-sigma-words",
+   "text": "ΣΟΦΟΣ ΣΑΣ ΣΟΦΗΣ",
+   "ids": [
+    179,
+    28736,
+    28742,
+    14303,
+    179,
+    13614,
+    18585,
+    179,
+    28736,
+    28742,
+    28161
+   ]
+  },
+  {
+   "name": "greek-sigma-solo",
+   "text": "Σ",
+   "ids": [
+    179
+   ]
+  },
+  {
+   "name": "greek-sigma-punct",
+   "text": "ΟΔΟΣ. ΟΔΟΣ' (ΟΔΟΣ)",
+   "ids": [
+    175,
+    28728,
+    14303,
+    18,
+    175,
+    28728,
+    14303,
+    11,
+    12,
+    175,
+    28728,
+    14303,
+    13
+   ]
+  },
+  {
+   "name": "greek-sigma-marks",
+   "text": "ΑΣ́Α ΑΣ́",
+   "ids": [
+    161,
+    28739,
+    13614,
+    161,
+    18585
+   ]
+  },
+  {
+   "name": "greek-mixed",
+   "text": "Ὀδυσσεύς ΛΌΓΟΣ λόγος",
+   "ids": [
+    175,
+    28728,
+    28741,
+    28739,
+    28739,
+    28729,
+    28741,
+    18585,
+    171,
+    28736,
+    28727,
+    14303,
+    171,
+    28736,
+    28727,
+    14303
+   ]
+  },
+  {
+   "name": "turkish-dotted-i",
+   "text": "İstanbul İ I ı i",
+   "ids": [
+    8966,
+    51,
+    51,
+    110,
+    51
+   ]
+  },
+  {
+   "name": "sharp-s",
+   "text": "STRASSE Straße ẞ ß",
+   "ids": [
+    35211,
+    26247,
+    35211,
+    1056,
+    16505,
+    102,
+    102
+   ]
+  },
+  {
+   "name": "micro-sign",
+   "text": "µm µμ Μμ",
+   "ids": [
+    41609,
+    91,
+    28734,
+    172,
+    28734
+   ]
+  },
+  {
+   "name": "titlecase-digraph",
+   "text": "ǅungla ǄUNGLA ǆ",
+   "ids": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "accents-nfc-nfd",
+   "text": "café café naïve naïve résumé",
+   "ids": [
+    6674,
+    6674,
+    14749,
+    14749,
+    12752
+   ]
+  },
+  {
+   "name": "angstrom",
+   "text": "Å Å Å 10Å",
+   "ids": [
+    43,
+    43,
+    43,
+    45405
+   ]
+  },
+  {
+   "name": "hebrew-niqqud",
+   "text": "שָׁלוֹם עִבְרִית",
+   "ids": [
+    272,
+    28805,
+    28798,
+    28806,
+    265,
+    28795,
+    28817,
+    28802,
+    28819
+   ]
+  },
+  {
+   "name": "arabic-diacritics",
+   "text": "مُحَمَّد العَرَبِيَّة",
+   "ids": [
+    301,
+    28826,
+    21198,
+    14400,
+    276,
+    22679,
+    28836,
+    16155,
+    28822,
+    13504,
+    18439
+   ]
+  },
+  {
+   "name": "devanagari",
+   "text": "हिन्दी कृपया क्षत्रिय",
+   "ids": [
+    345,
+    28883,
+    28869,
+    28867,
+    28884,
+    321,
+    28870,
+    28874,
+    28882,
+    321,
+    28879,
+    28865,
+    28875,
+    28883,
+    28874
+   ]
+  },
+  {
+   "name": "thai",
+   "text": "ภาษาไทย กรุงเทพมหานคร",
+   "ids": [
+    1,
+    1
+   ]
+  },
+  {
+   "name": "vietnamese",
+   "text": "Tiếng Việt Hà Nội phở",
+   "ids": [
+    51502,
+    1296,
+    18716,
+    4298,
+    40452,
+    37609
+   ]
+  },
+  {
+   "name": "multi-marks-order",
+   "text": "q̖́ q̖́ á̧",
+   "ids": [
+    59,
+    59,
+    43
+   ]
+  },
+  {
+   "name": "ligatures",
+   "text": "ﬁle ﬂow ﬃ",
+   "ids": [
+    990,
+    1577,
+    991,
+    4010,
+    1
+   ]
+  },
+  {
+   "name": "combining-enclosing",
+   "text": "a⃝ b⃣",
+   "ids": [
+    1,
+    1
+   ]
+  },
+  {
+   "name": "cjk-han",
+   "text": "中文分词测试 漢字",
+   "ids": [
+    752,
+    867,
+    781,
+    1,
+    1,
+    1,
+    910,
+    1
+   ]
+  },
+  {
+   "name": "cjk-mixed-latin",
+   "text": "Swift中文API设计",
+   "ids": [
+    8176,
+    752,
+    867,
+    16934,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "cjk-astral",
+   "text": "𠀀𠀁 中𠮷文",
+   "ids": [
+    1,
+    752,
+    1,
+    867
+   ]
+  },
+  {
+   "name": "cjk-compat",
+   "text": "豈 更 切",
+   "ids": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "kana",
+   "text": "ひらがな カタカナ・テスト",
+   "ids": [
+    679,
+    29217,
+    29183,
+    29199,
+    706,
+    29241,
+    29232,
+    29247,
+    744,
+    719,
+    29239,
+    29246
+   ]
+  },
+  {
+   "name": "hangul",
+   "text": "한국어 형태소 분석",
+   "ids": [
+    475,
+    29012,
+    29027,
+    28997,
+    29020,
+    29026,
+    29005,
+    29014,
+    475,
+    29016,
+    29031,
+    29009,
+    29013,
+    29003,
+    29017,
+    466,
+    29020,
+    29027,
+    29003,
+    29014,
+    29026
+   ]
+  },
+  {
+   "name": "hangul-jamo-direct",
+   "text": "한",
+   "ids": [
+    475,
+    29012,
+    29027
+   ]
+  },
+  {
+   "name": "emoji-basic",
+   "text": "Hello 👋 world 🌍!",
+   "ids": [
+    6598,
+    1,
+    1094,
+    1,
+    5
+   ]
+  },
+  {
+   "name": "emoji-zwj",
+   "text": "👨‍👩‍👧‍👦 family 🏳️‍🌈",
+   "ids": [
+    1,
+    1161,
+    1
+   ]
+  },
+  {
+   "name": "emoji-skin-tone",
+   "text": "👍🏽 🙏🏿",
+   "ids": [
+    1,
+    1
+   ]
+  },
+  {
+   "name": "emoji-flags",
+   "text": "🇫🇷 🇺🇸 flags",
+   "ids": [
+    1,
+    1,
+    8251
+   ]
+  },
+  {
+   "name": "emoji-keycap",
+   "text": "1️⃣ #⃣",
+   "ids": [
+    1,
+    7,
+    1
+   ]
+  },
+  {
+   "name": "ws-zs",
+   "text": "a b c　d e f",
+   "ids": [
+    43,
+    44,
+    45,
+    46,
+    47,
+    48
+   ]
+  },
+  {
+   "name": "ws-removed-controls",
+   "text": "a\u000bb\fc﻿d​e­f‍g",
+   "ids": [
+    58088,
+    11885,
+    1296
+   ]
+  },
+  {
+   "name": "ws-kept",
+   "text": "a\tb\nc\rd e",
+   "ids": [
+    43,
+    44,
+    45,
+    46,
+    47
+   ]
+  },
+  {
+   "name": "control-c0",
+   "text": "a\u0001b\u0007c\u001fd",
+   "ids": [
+    58088
+   ]
+  },
+  {
+   "name": "nul-fffd",
+   "text": "a\u0000b�c",
+   "ids": [
+    4931
+   ]
+  },
+  {
+   "name": "soft-hyphen-word",
+   "text": "hy­phen­ation",
+   "ids": [
+    47517,
+    2376
+   ]
+  },
+  {
+   "name": "ws-only",
+   "text": "   ",
+   "ids": []
+  },
+  {
+   "name": "ws-only-mixed",
+   "text": "\t\n 　",
+   "ids": []
+  },
+  {
+   "name": "empty",
+   "text": "",
+   "ids": []
+  },
+  {
+   "name": "single-space",
+   "text": " ",
+   "ids": []
+  },
+  {
+   "name": "special-cls",
+   "text": "[CLS]",
+   "ids": [
+    2
+   ]
+  },
+  {
+   "name": "special-inline",
+   "text": "x[SEP]y",
+   "ids": [
+    66,
+    3,
+    67
+   ]
+  },
+  {
+   "name": "special-adjacent",
+   "text": "[MASK][MASK]",
+   "ids": [
+    4,
+    4
+   ]
+  },
+  {
+   "name": "special-partial",
+   "text": "[CLS",
+   "ids": [
+    37,
+    47055
+   ]
+  },
+  {
+   "name": "special-lowercase",
+   "text": "[cls]",
+   "ids": [
+    37,
+    47055,
+    39
+   ]
+  },
+  {
+   "name": "special-nested",
+   "text": "[[SEP]]",
+   "ids": [
+    37,
+    3,
+    39
+   ]
+  },
+  {
+   "name": "special-spaced",
+   "text": " [PAD] padded [UNK] ",
+   "ids": [
+    0,
+    19639,
+    1
+   ]
+  },
+  {
+   "name": "special-inside-word",
+   "text": "pre[MASK]post",
+   "ids": [
+    2659,
+    4,
+    1701
+   ]
+  },
+  {
+   "name": "punct-ascii",
+   "text": "a+b=c <T> x|y ~z ^2 $5 a_b `code`",
+   "ids": [
+    43,
+    15,
+    44,
+    33,
+    45,
+    32,
+    62,
+    34,
+    66,
+    70,
+    67,
+    72,
+    68,
+    40,
+    22,
+    8,
+    25,
+    43,
+    41,
+    44,
+    42,
+    2648,
+    42
+   ]
+  },
+  {
+   "name": "punct-unicode",
+   "text": "«guillemets» — em-dash … ¿qué? ¡sí! ‽",
+   "ids": [
+    83,
+    25464,
+    5222,
+    10374,
+    1021,
+    96,
+    523,
+    6867,
+    17,
+    10460,
+    535,
+    100,
+    9867,
+    35,
+    73,
+    8039,
+    5,
+    1
+   ]
+  },
+  {
+   "name": "punct-currency",
+   "text": "€100 £50 ¥1000 ₹99",
+   "ids": [
+    580,
+    17619,
+    26819,
+    1698,
+    77,
+    17619,
+    1698,
+    582,
+    1689,
+    1689
+   ]
+  },
+  {
+   "name": "punct-underscore",
+   "text": "snake_case_name __init__",
+   "ids": [
+    6494,
+    41,
+    1559,
+    41,
+    1177,
+    41,
+    41,
+    36350,
+    41,
+    41
+   ]
+  },
+  {
+   "name": "math-symbols",
+   "text": "ℕ ℝ ∑ ∂ ≠ ≤ ½ ² ① Ⓐ",
+   "ids": [
+    1,
+    585,
+    1,
+    598,
+    33,
+    614,
+    98,
+    88,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "word-99",
+   "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "ids": [
+    12366,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063,
+    10063
+   ]
+  },
+  {
+   "name": "word-100",
+   "text": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "ids": [
+    33807,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    9328,
+    1503
+   ]
+  },
+  {
+   "name": "word-101",
+   "text": "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+   "ids": [
+    1
+   ]
+  },
+  {
+   "name": "word-101-astral",
+   "text": "𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜",
+   "ids": [
+    1
+   ]
+  },
+  {
+   "name": "word-100-astral-mixed",
+   "text": "𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "ids": [
+    1
+   ]
+  },
+  {
+   "name": "hash-prefix",
+   "text": "##test ## ###x c## #selector",
+   "ids": [
+    7,
+    7,
+    2237,
+    7,
+    7,
+    7,
+    7,
+    7,
+    66,
+    45,
+    7,
+    7,
+    7,
+    26006
+   ]
+  },
+  {
+   "name": "subwords",
+   "text": "tokenization pretokenizers unbelievable counterintuitive",
+   "ids": [
+    18210,
+    2995,
+    58506,
+    10051,
+    2496,
+    15756,
+    22659,
+    47113
+   ]
+  },
+  {
+   "name": "code-swift-generic",
+   "text": "func map<T: Hashable>(_ transform: (Element) -> T) -> [T] { fatalError() }",
+   "ids": [
+    51931,
+    3955,
+    32,
+    62,
+    30,
+    22331,
+    2091,
+    34,
+    12,
+    41,
+    9944,
+    30,
+    12,
+    4789,
+    13,
+    17,
+    34,
+    62,
+    13,
+    17,
+    34,
+    37,
+    62,
+    39,
+    69,
+    9617,
+    1127,
+    28171,
+    12,
+    13,
+    71
+   ]
+  },
+  {
+   "name": "code-swift-attrs",
+   "text": "@MainActor final class ViewModel: ObservableObject { @Published var items: [Item] = [] }",
+   "ids": [
+    36,
+    1370,
+    17914,
+    1959,
+    1351,
+    1471,
+    2199,
+    4308,
+    8253,
+    30,
+    39749,
+    15435,
+    19620,
+    69,
+    36,
+    1411,
+    12081,
+    4173,
+    30,
+    37,
+    7881,
+    39,
+    33,
+    37,
+    39,
+    71
+   ]
+  },
+  {
+   "name": "code-url",
+   "text": "https://developer.apple.com/documentation/swiftui/view?language=swift#overview",
+   "ids": [
+    15776,
+    30,
+    19,
+    19,
+    8728,
+    18,
+    5213,
+    18,
+    3018,
+    19,
+    11659,
+    19,
+    8176,
+    9185,
+    19,
+    2199,
+    35,
+    1659,
+    33,
+    8176,
+    7,
+    18190
+   ]
+  },
+  {
+   "name": "code-email-version",
+   "text": "support@example.com iOS 26.1.2 v3.14",
+   "ids": [
+    1496,
+    36,
+    1748,
+    18,
+    3018,
+    15386,
+    1662,
+    18,
+    21,
+    18,
+    22,
+    31796,
+    18,
+    1409
+   ]
+  },
+  {
+   "name": "code-raw-string",
+   "text": "#\"raw \\(string)\"# and ##\"double\"##",
+   "ids": [
+    7,
+    6,
+    5321,
+    38,
+    12,
+    4170,
+    13,
+    6,
+    7,
+    1004,
+    7,
+    7,
+    6,
+    2319,
+    6,
+    7,
+    7
+   ]
+  },
+  {
+   "name": "mixed-paragraph",
+   "text": "The Σ-algebra of 测试 cases: café ☕️ at 36.5°C — `body` 屬性 returns [CLS]-free 한국어 text… (naïve‽) £3.50",
+   "ids": [
+    1002,
+    179,
+    17,
+    10214,
+    1003,
+    1,
+    1,
+    2578,
+    30,
+    6674,
+    1,
+    1018,
+    3035,
+    18,
+    25,
+    6743,
+    1284,
+    523,
+    42,
+    1309,
+    42,
+    1,
+    1,
+    4657,
+    2,
+    17,
+    1495,
+    475,
+    29012,
+    29027,
+    28997,
+    29020,
+    29026,
+    29005,
+    29014,
+    2799,
+    535,
+    12,
+    14749,
+    1,
+    13,
+    27188,
+    18,
+    1759
+   ]
+  },
+  {
+   "name": "query-exact-symbol-view",
+   "text": "View",
+   "ids": [
+    2199
+   ]
+  },
+  {
+   "name": "query-exact-symbol-navigationstack",
+   "text": "NavigationStack",
+   "ids": [
+    8169,
+    8159,
+    2606
+   ]
+  },
+  {
+   "name": "query-exact-symbol-urlsession",
+   "text": "URLSession",
+   "ids": [
+    31084,
+    6977,
+    2264
+   ]
+  },
+  {
+   "name": "query-exact-symbol-publisher",
+   "text": "Publisher",
+   "ids": [
+    5680
+   ]
+  },
+  {
+   "name": "query-prefix-navig",
+   "text": "Navig",
+   "ids": [
+    38413,
+    1296
+   ]
+  },
+  {
+   "name": "query-camelcase-navigationsplitview",
+   "text": "NavigationSplitView",
+   "ids": [
+    8169,
+    12108,
+    14915,
+    7590
+   ]
+  },
+  {
+   "name": "query-multi-word-async-await",
+   "text": "async await",
+   "ids": [
+    49314,
+    25757
+   ]
+  },
+  {
+   "name": "query-multi-word-in-app-purchase",
+   "text": "in-app purchase",
+   "ids": [
+    1005,
+    17,
+    9445,
+    4315
+   ]
+  },
+  {
+   "name": "query-framework-scoped-list-swiftui",
+   "text": "List",
+   "ids": [
+    1868
+   ]
+  },
+  {
+   "name": "query-framework-scoped-view-uikit",
+   "text": "UIView",
+   "ids": [
+    20324,
+    7590
+   ]
+  },
+  {
+   "name": "query-abstract-search-byte-buffer",
+   "text": "byte buffer",
+   "ids": [
+    23886,
+    16704
+   ]
+  },
+  {
+   "name": "query-abstract-search-notification-center",
+   "text": "notification center",
+   "ids": [
+    25834,
+    1421
+   ]
+  },
+  {
+   "name": "query-declaration-search-protocol",
+   "text": "protocol Publisher",
+   "ids": [
+    7784,
+    5680
+   ]
+  },
+  {
+   "name": "query-hig-accessibility",
+   "text": "accessibility",
+   "ids": [
+    22667
+   ]
+  },
+  {
+   "name": "query-hig-typography",
+   "text": "typography",
+   "ids": [
+    32159
+   ]
+  },
+  {
+   "name": "query-guidelines-data-collection",
+   "text": "data collection",
+   "ids": [
+    1957,
+    2080
+   ]
+  },
+  {
+   "name": "query-guidelines-design",
+   "text": "Design",
+   "ids": [
+    1646
+   ]
+  },
+  {
+   "name": "query-property-wrapper-search",
+   "text": "EnvironmentObject",
+   "ids": [
+    3050,
+    15435,
+    19620
+   ]
+  },
+  {
+   "name": "query-concurrency-sendable",
+   "text": "Sendable",
+   "ids": [
+    3610,
+    2091
+   ]
+  },
+  {
+   "name": "query-fuzzy-typo-publsher",
+   "text": "Publsher",
+   "ids": [
+    8053,
+    3883,
+    4892
+   ]
+  },
+  {
+   "name": "query-swift-evolution-se-number",
+   "text": "SE-0296",
+   "ids": [
+    6373,
+    17,
+    52297,
+    1581
+   ]
+  },
+  {
+   "name": "query-swift-evolution-proposal-topic",
+   "text": "Observation",
+   "ids": [
+    7095
+   ]
+  },
+  {
+   "name": "query-swift-evolution-sendable-proposal",
+   "text": "Sendable closures",
+   "ids": [
+    3610,
+    2091,
+    30902
+   ]
+  },
+  {
+   "name": "query-swift-book-chapter",
+   "text": "Closures",
+   "ids": [
+    30902
+   ]
+  },
+  {
+   "name": "query-swift-book-concurrency",
+   "text": "task groups actors",
+   "ids": [
+    3714,
+    1973,
+    4895
+   ]
+  },
+  {
+   "name": "query-swift-org-api-design",
+   "text": "API Design Guidelines",
+   "ids": [
+    16934,
+    1646,
+    10600
+   ]
+  },
+  {
+   "name": "query-swift-org-swift6-migration",
+   "text": "Swift 6 migration",
+   "ids": [
+    8176,
+    26,
+    8236
+   ]
+  },
+  {
+   "name": "query-apple-archive-memory-management",
+   "text": "memory management",
+   "ids": [
+    2644,
+    1974
+   ]
+  },
+  {
+   "name": "query-apple-archive-kvo",
+   "text": "key-value observing",
+   "ids": [
+    2151,
+    17,
+    2649,
+    13164
+   ]
+  },
+  {
+   "name": "query-apple-archive-mvc",
+   "text": "Model-View-Controller",
+   "ids": [
+    1950,
+    17,
+    2199,
+    17,
+    10492
+   ]
+  },
+  {
+   "name": "query-wwdc-session-title",
+   "text": "Swift Testing",
+   "ids": [
+    8176,
+    4610
+   ]
+  },
+  {
+   "name": "query-wwdc-observation-session",
+   "text": "Observable macro",
+   "ids": [
+    39749,
+    25638
+   ]
+  },
+  {
+   "name": "query-sample-code-food-truck",
+   "text": "Food Truck multiplatform",
+   "ids": [
+    1839,
+    3750,
+    3806,
+    23765,
+    3023,
+    13198
+   ]
+  },
+  {
+   "name": "query-sample-code-realitykit",
+   "text": "Swift Splash",
+   "ids": [
+    8176,
+    16630
+   ]
+  },
+  {
+   "name": "query-source-filter-wwdc",
+   "text": "Swift Testing",
+   "ids": [
+    8176,
+    4610
+   ]
+  },
+  {
+   "name": "query-source-filter-sample-code",
+   "text": "Food Truck",
+   "ids": [
+    1839,
+    3750
+   ]
+  },
+  {
+   "name": "query-platform-filter-ios16-navigationstack",
+   "text": "NavigationStack",
+   "ids": [
+    8169,
+    8159,
+    2606
+   ]
+  },
+  {
+   "name": "query-platform-filter-ios12-excludes-navigationstack",
+   "text": "NavigationStack",
+   "ids": [
+    8169,
+    8159,
+    2606
+   ]
+  },
+  {
+   "name": "query-language-filter-swift",
+   "text": "View",
+   "ids": [
+    2199
+   ]
+  },
+  {
+   "name": "query-language-filter-objc-uiview",
+   "text": "UIView",
+   "ids": [
+    20324,
+    7590
+   ]
+  },
+  {
+   "name": "query-platform-shorthand-ios",
+   "text": "View",
+   "ids": [
+    2199
+   ]
+  },
+  {
+   "name": "query-synonym-coreanimation-quartzcore",
+   "text": "Layer",
+   "ids": [
+    5747
+   ]
+  },
+  {
+   "name": "judgment-0",
+   "text": "how do I push navigation screens onto a stack",
+   "ids": [
+    1135,
+    1085,
+    51,
+    4251,
+    8169,
+    11123,
+    2037,
+    43,
+    8997
+   ]
+  },
+  {
+   "name": "judgment-1",
+   "text": "navigate between screens in swiftui",
+   "ids": [
+    21155,
+    1096,
+    11123,
+    1005,
+    8176,
+    9185
+   ]
+  },
+  {
+   "name": "judgment-2",
+   "text": "two column split layout",
+   "ids": [
+    1054,
+    4936,
+    2981,
+    8627
+   ]
+  },
+  {
+   "name": "judgment-3",
+   "text": "show a scrollable list of rows",
+   "ids": [
+    1271,
+    43,
+    16192,
+    2091,
+    1868,
+    1003,
+    9287
+   ]
+  },
+  {
+   "name": "judgment-4",
+   "text": "display read only text on screen",
+   "ids": [
+    3659,
+    2197,
+    1075,
+    2799,
+    1012,
+    2904
+   ]
+  },
+  {
+   "name": "judgment-5",
+   "text": "tappable control that runs an action",
+   "ids": [
+    10118,
+    3508,
+    2474,
+    1497,
+    1014,
+    2222,
+    1025,
+    1901
+   ]
+  },
+  {
+   "name": "judgment-6",
+   "text": "on off switch control",
+   "ids": [
+    1012,
+    1131,
+    5948,
+    1497
+   ]
+  },
+  {
+   "name": "judgment-7",
+   "text": "share an observable object down the view hierarchy",
+   "ids": [
+    2751,
+    1025,
+    39749,
+    3880,
+    1097,
+    1002,
+    2199,
+    11577
+   ]
+  },
+  {
+   "name": "judgment-8",
+   "text": "make network requests and download data",
+   "ids": [
+    1197,
+    1903,
+    10192,
+    1004,
+    7822,
+    1957
+   ]
+  },
+  {
+   "name": "judgment-9",
+   "text": "encode a swift type to json",
+   "ids": [
+    37157,
+    43,
+    8176,
+    1834,
+    1006,
+    30710
+   ]
+  },
+  {
+   "name": "judgment-10",
+   "text": "raw bytes buffer in memory",
+   "ids": [
+    5321,
+    26513,
+    16704,
+    1005,
+    2644
+   ]
+  },
+  {
+   "name": "judgment-11",
+   "text": "identify the location of a resource by address",
+   "ids": [
+    5715,
+    1002,
+    2301,
+    1003,
+    43,
+    6698,
+    1017,
+    3775
+   ]
+  },
+  {
+   "name": "judgment-12",
+   "text": "unicode collection of characters",
+   "ids": [
+    26266,
+    2080,
+    1003,
+    2500
+   ]
+  },
+  {
+   "name": "judgment-13",
+   "text": "manage a rectangular area of the screen in uikit",
+   "ids": [
+    5139,
+    43,
+    9812,
+    1187,
+    1003,
+    1002,
+    2904,
+    1005,
+    20324,
+    22621
+   ]
+  },
+  {
+   "name": "judgment-14",
+   "text": "manage a view hierarchy in uikit",
+   "ids": [
+    5139,
+    43,
+    2199,
+    11577,
+    1005,
+    20324,
+    22621
+   ]
+  },
+  {
+   "name": "judgment-15",
+   "text": "table of rows in uikit",
+   "ids": [
+    1801,
+    1003,
+    9287,
+    1005,
+    20324,
+    22621
+   ]
+  },
+  {
+   "name": "judgment-16",
+   "text": "transmit a sequence of values over time",
+   "ids": [
+    18824,
+    43,
+    4543,
+    1003,
+    4306,
+    1064,
+    1057
+   ]
+  },
+  {
+   "name": "judgment-17",
+   "text": "async await asynchronous programming",
+   "ids": [
+    49314,
+    25757,
+    35932,
+    3736
+   ]
+  },
+  {
+   "name": "judgment-18",
+   "text": "pass values safely across concurrency domains",
+   "ids": [
+    2419,
+    4306,
+    8695,
+    1414,
+    23160,
+    12106
+   ]
+  },
+  {
+   "name": "judgment-19",
+   "text": "protect mutable state with an actor",
+   "ids": [
+    3053,
+    60587,
+    1116,
+    1013,
+    1025,
+    2370
+   ]
+  },
+  {
+   "name": "judgment-20",
+   "text": "replace combine observableobject with the observation framework",
+   "ids": [
+    4678,
+    10512,
+    39749,
+    15435,
+    19620,
+    1013,
+    1002,
+    7095,
+    6711
+   ]
+  },
+  {
+   "name": "judgment-21",
+   "text": "screen layout consistency guidelines",
+   "ids": [
+    2904,
+    8627,
+    17706,
+    10600
+   ]
+  },
+  {
+   "name": "judgment-22",
+   "text": "choosing fonts and san francisco system font",
+   "ids": [
+    9555,
+    29797,
+    1004,
+    1630,
+    2805,
+    1297,
+    14495
+   ]
+  },
+  {
+   "name": "judgment-23",
+   "text": "using color in your interface",
+   "ids": [
+    1484,
+    2615,
+    1005,
+    1121,
+    7284
+   ]
+  },
+  {
+   "name": "judgment-24",
+   "text": "assistive technologies and accessible design",
+   "ids": [
+    34590,
+    5792,
+    1004,
+    6807,
+    1646
+   ]
+  },
+  {
+   "name": "judgment-25",
+   "text": "write unit tests for swift packages",
+   "ids": [
+    3345,
+    2137,
+    4858,
+    1011,
+    8176,
+    13561
+   ]
+  },
+  {
+   "name": "judgment-26",
+   "text": "low data mode websocket urlsession improvements",
+   "ids": [
+    1665,
+    1957,
+    4555,
+    36887,
+    6438,
+    2394,
+    31084,
+    6977,
+    2264,
+    7383
+   ]
+  },
+  {
+   "name": "judgment-27",
+   "text": "building a multiplatform swiftui sample app",
+   "ids": [
+    1317,
+    43,
+    3806,
+    23765,
+    3023,
+    13198,
+    8176,
+    9185,
+    6105,
+    9445
+   ]
+  },
+  {
+   "name": "judgment-28",
+   "text": "3d water game on vision pro with realitykit",
+   "ids": [
+    6611,
+    1306,
+    1214,
+    1012,
+    3438,
+    3019,
+    1013,
+    3513,
+    22621
+   ]
+  },
+  {
+   "name": "judgment-29",
+   "text": "naming conventions clarity at the point of call",
+   "ids": [
+    9330,
+    11478,
+    14569,
+    1018,
+    1002,
+    1397,
+    1003,
+    1661
+   ]
+  },
+  {
+   "name": "judgment-30",
+   "text": "migrate project to swift 6 strict concurrency",
+   "ids": [
+    21812,
+    1628,
+    1006,
+    8176,
+    26,
+    8390,
+    23160
+   ]
+  },
+  {
+   "name": "judgment-31",
+   "text": "automatic reference counting memory allocation",
+   "ids": [
+    5888,
+    3437,
+    9326,
+    2644,
+    15175
+   ]
+  },
+  {
+   "name": "judgment-32",
+   "text": "observe changes to object properties",
+   "ids": [
+    10955,
+    2437,
+    1006,
+    3880,
+    4150
+   ]
+  },
+  {
+   "name": "judgment-33",
+   "text": "model view controller design pattern",
+   "ids": [
+    1950,
+    2199,
+    10492,
+    1646,
+    4424
+   ]
+  },
+  {
+   "name": "judgment-34",
+   "text": "in app purchase rules for unlocking features",
+   "ids": [
+    1005,
+    9445,
+    4315,
+    2519,
+    1011,
+    31014,
+    1844
+   ]
+  },
+  {
+   "name": "judgment-35",
+   "text": "user consent for collecting personal data",
+   "ids": [
+    4316,
+    8625,
+    1011,
+    8340,
+    2173,
+    1957
+   ]
+  },
+  {
+   "name": "judgment-36",
+   "text": "group code that runs together without a named function",
+   "ids": [
+    1183,
+    2648,
+    1014,
+    2222,
+    1368,
+    1308,
+    43,
+    1321,
+    2859
+   ]
+  },
+  {
+   "name": "doc-excerpt-0",
+   "text": "Presents a visual picker interface that contains events and images that a person can select",
+   "ids": [
+    6540,
+    43,
+    4113,
+    37048,
+    7284,
+    1014,
+    2403,
+    1830,
+    1004,
+    3877,
+    1014,
+    43,
+    1717,
+    1070,
+    6282
+   ]
+  },
+  {
+   "name": "doc-excerpt-1",
+   "text": "Declares the view as dependent on the status of an auto-renewable subscription group, and",
+   "ids": [
+    17812,
+    1002,
+    2199,
+    1010,
+    6796,
+    1012,
+    1002,
+    2576,
+    1003,
+    1025,
+    7291,
+    17,
+    12924,
+    14008,
+    1183,
+    16,
+    1004
+   ]
+  },
+  {
+   "name": "doc-excerpt-2",
+   "text": "Presents an “Add to Shared Album” sheet that allows the user to post the given items to a shared album.",
+   "ids": [
+    6540,
+    1025,
+    529,
+    4593,
+    1006,
+    3213,
+    1207,
+    530,
+    6129,
+    1014,
+    3479,
+    1002,
+    4316,
+    1006,
+    1701,
+    1002,
+    1451,
+    4173,
+    1006,
+    43,
+    3213,
+    1207,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-3",
+   "text": "Determines whether pressing a link displays a preview of the destination for the link.",
+   "ids": [
+    15469,
+    2257,
+    6833,
+    43,
+    3963,
+    7840,
+    43,
+    18242,
+    1003,
+    1002,
+    6694,
+    1011,
+    1002,
+    3963,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-4",
+   "text": "Creates a mapScope that SwiftUI uses to connect map controls to an associated map.",
+   "ids": [
+    8011,
+    43,
+    6347,
+    15192,
+    1014,
+    8176,
+    9185,
+    2600,
+    1006,
+    6538,
+    3955,
+    6717,
+    1006,
+    1025,
+    2384,
+    3955,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-5",
+   "text": "Selects the introductory offer eligibility preference to apply to a purchase a customer makes from a subscription store view.",
+   "ids": [
+    26040,
+    1002,
+    22895,
+    2755,
+    10401,
+    11163,
+    1006,
+    5617,
+    1006,
+    43,
+    4315,
+    43,
+    7019,
+    2090,
+    1019,
+    43,
+    14008,
+    2579,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-6",
+   "text": "Called when a payment method has changed and asks for an update payment request.",
+   "ids": [
+    1176,
+    1049,
+    43,
+    6915,
+    3124,
+    1044,
+    1910,
+    1004,
+    4182,
+    1011,
+    1025,
+    9657,
+    6915,
+    4233,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-7",
+   "text": "Add a function to call before initiating a purchase from StoreKit view within this view, providing a set",
+   "ids": [
+    4593,
+    43,
+    2859,
+    1006,
+    1661,
+    1083,
+    25622,
+    43,
+    4315,
+    1019,
+    2579,
+    22621,
+    2199,
+    1312,
+    1029,
+    2199,
+    16,
+    3352,
+    43,
+    1281
+   ]
+  },
+  {
+   "name": "doc-excerpt-8",
+   "text": "Add an action to perform when a purchase initiated from a StoreKit view within this view completes.",
+   "ids": [
+    4593,
+    1025,
+    1901,
+    1006,
+    3691,
+    1049,
+    43,
+    4315,
+    6537,
+    1019,
+    43,
+    2579,
+    22621,
+    2199,
+    1312,
+    1029,
+    2199,
+    27129,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-9",
+   "text": "Specifies the visibility of the webpage’s natural background color within this view.",
+   "ids": [
+    26177,
+    1002,
+    15482,
+    1003,
+    1002,
+    29926,
+    527,
+    61,
+    2025,
+    3287,
+    2615,
+    1312,
+    1029,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-10",
+   "text": "Add an action to perform when a user triggers the purchase button on a StoreKit view within this",
+   "ids": [
+    4593,
+    1025,
+    1901,
+    1006,
+    3691,
+    1049,
+    43,
+    4316,
+    26105,
+    1002,
+    4315,
+    5468,
+    1012,
+    43,
+    2579,
+    22621,
+    2199,
+    1312,
+    1029
+   ]
+  },
+  {
+   "name": "doc-excerpt-11",
+   "text": "Determines whether horizontal swipe gestures trigger backward and forward page navigation.",
+   "ids": [
+    15469,
+    2257,
+    8882,
+    30831,
+    17333,
+    8501,
+    7854,
+    1004,
+    1836,
+    2937,
+    8169,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-12",
+   "text": "Sets the background shape and style for subscription store view picker items within a view.",
+   "ids": [
+    3526,
+    1002,
+    3287,
+    3344,
+    1004,
+    1812,
+    1011,
+    14008,
+    2579,
+    2199,
+    37048,
+    4173,
+    1312,
+    43,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-13",
+   "text": "Selects a promotional offer to apply to a purchase a customer makes from a subscription store view.",
+   "ids": [
+    26040,
+    43,
+    9325,
+    2755,
+    1006,
+    5617,
+    1006,
+    43,
+    4315,
+    43,
+    7019,
+    2090,
+    1019,
+    43,
+    14008,
+    2579,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-14",
+   "text": "Sets a value for the specified tip anchor to be used to anchor a tip view to the ",
+   "ids": [
+    3526,
+    43,
+    2649,
+    1011,
+    1002,
+    8681,
+    4961,
+    7139,
+    1006,
+    1028,
+    1115,
+    1006,
+    7139,
+    43,
+    4961,
+    2199,
+    1006,
+    1002
+   ]
+  },
+  {
+   "name": "doc-excerpt-15",
+   "text": "Associates a binding to be updated when the 3D chart’s pose is changed by an interaction.",
+   "ids": [
+    8234,
+    43,
+    7037,
+    1006,
+    1028,
+    6178,
+    1049,
+    1002,
+    6611,
+    2679,
+    527,
+    61,
+    12388,
+    1009,
+    1910,
+    1017,
+    1025,
+    7296,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-16",
+   "text": "Declares the view as dependent on an In-App Purchase product and returns a modified view.",
+   "ids": [
+    17812,
+    1002,
+    2199,
+    1010,
+    6796,
+    1012,
+    1025,
+    1005,
+    17,
+    9445,
+    4315,
+    3037,
+    1004,
+    4657,
+    43,
+    5316,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-17",
+   "text": "Declares the view as dependent on the entitlement of an In-App Purchase product, and returns a",
+   "ids": [
+    17812,
+    1002,
+    2199,
+    1010,
+    6796,
+    1012,
+    1002,
+    32489,
+    1003,
+    1025,
+    1005,
+    17,
+    9445,
+    4315,
+    3037,
+    16,
+    1004,
+    4657,
+    43
+   ]
+  },
+  {
+   "name": "doc-excerpt-18",
+   "text": "The default actions for the document group launch scene and the document launch view.",
+   "ids": [
+    1002,
+    11404,
+    3512,
+    1011,
+    1002,
+    5260,
+    1183,
+    3894,
+    2502,
+    1004,
+    1002,
+    5260,
+    3894,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-19",
+   "text": "Set a standard effect to use for the background of subscription store view controls within the view.",
+   "ids": [
+    1281,
+    43,
+    2121,
+    2472,
+    1006,
+    1230,
+    1011,
+    1002,
+    3287,
+    1003,
+    14008,
+    2579,
+    2199,
+    6717,
+    1312,
+    1002,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-20",
+   "text": "Adds an action to be performed when a value, created from a scroll geometry, changes.",
+   "ids": [
+    8915,
+    1025,
+    1901,
+    1006,
+    1028,
+    1870,
+    1049,
+    43,
+    2649,
+    16,
+    1586,
+    1019,
+    43,
+    16192,
+    9994,
+    16,
+    2437,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-21",
+   "text": "Sets the tip’s view background to a style. Currently this only applies to inline tips, not popover tips.",
+   "ids": [
+    3526,
+    1002,
+    4961,
+    527,
+    61,
+    2199,
+    3287,
+    1006,
+    43,
+    1812,
+    18,
+    1753,
+    1029,
+    1075,
+    11039,
+    1006,
+    22887,
+    9253,
+    16,
+    1031,
+    2775,
+    6846,
+    9253,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-22",
+   "text": "nearby continuity device through a button interface or other form of activation.",
+   "ids": [
+    2524,
+    12723,
+    4086,
+    1089,
+    43,
+    5468,
+    7284,
+    1036,
+    1066,
+    1439,
+    1003,
+    12797,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-23",
+   "text": "On tvOS, this presents a fullscreen continuity device picker experience when selected.",
+   "ids": [
+    1012,
+    1700,
+    1897,
+    16,
+    1029,
+    6540,
+    43,
+    43504,
+    12723,
+    4086,
+    37048,
+    2331,
+    1049,
+    2485,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-24",
+   "text": "Adds an action to perform when a person uses the sign-in button on a subscription store view within a view.",
+   "ids": [
+    8915,
+    1025,
+    1901,
+    1006,
+    3691,
+    1049,
+    43,
+    1717,
+    2600,
+    1002,
+    2702,
+    17,
+    1005,
+    5468,
+    1012,
+    43,
+    14008,
+    2579,
+    2199,
+    1312,
+    43,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-25",
+   "text": "Sets the control style and control placement for subscription store views within a view.",
+   "ids": [
+    3526,
+    1002,
+    1497,
+    1812,
+    1004,
+    1497,
+    10079,
+    1011,
+    14008,
+    2579,
+    4334,
+    1312,
+    43,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-26",
+   "text": "Configures a URL as the destination for a policy button action in subscription store views.",
+   "ids": [
+    56795,
+    43,
+    29572,
+    1010,
+    1002,
+    6694,
+    1011,
+    43,
+    2349,
+    5468,
+    1901,
+    1005,
+    14008,
+    2579,
+    4334,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-27",
+   "text": "Sets the background style for picker items of the subscription store view instances within a view.",
+   "ids": [
+    3526,
+    1002,
+    3287,
+    1812,
+    1011,
+    37048,
+    4173,
+    1003,
+    1002,
+    14008,
+    2579,
+    2199,
+    11113,
+    1312,
+    43,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-excerpt-28",
+   "text": "Selects a subscription offer to apply to a purchase that a customer makes from a subscription",
+   "ids": [
+    26040,
+    43,
+    14008,
+    2755,
+    1006,
+    5617,
+    1006,
+    43,
+    4315,
+    1014,
+    43,
+    7019,
+    2090,
+    1019,
+    43,
+    14008
+   ]
+  },
+  {
+   "name": "doc-excerpt-29",
+   "text": "Specifies the visibility of auxiliary buttons that store view and subscription store view instances may use.",
+   "ids": [
+    26177,
+    1002,
+    15482,
+    1003,
+    8836,
+    10293,
+    1014,
+    2579,
+    2199,
+    1004,
+    14008,
+    2579,
+    2199,
+    11113,
+    1095,
+    1230,
+    18
+   ]
+  },
+  {
+   "name": "doc-long-0",
+   "text": "Presents a visual picker interface that contains events and images that a person can select Declares the view as dependent on the status of an auto-renewable subscription group, and Presents an “Add to Shared Album” sheet that allows the user to post the given items to a shared album. Determines whether pressing a link displays a preview of the destination for the link. Creates a mapScope that SwiftUI uses to connect map controls to an associated map. Selects the introductory offer eligibility preference to apply to a purchase a customer makes from a subscription store view. Called when a payment method has changed and asks for an update payment request. Add a function to call before initiating a purchase from StoreKit view within this view, providing a set Add an action to perform when a purchase initiated from a StoreKit view within this view completes. Specifies the visibility of the webpage’s natural background color within this view.",
+   "ids": [
+    6540,
+    43,
+    4113,
+    37048,
+    7284,
+    1014,
+    2403,
+    1830,
+    1004,
+    3877,
+    1014,
+    43,
+    1717,
+    1070,
+    6282,
+    17812,
+    1002,
+    2199,
+    1010,
+    6796,
+    1012,
+    1002,
+    2576,
+    1003,
+    1025,
+    7291,
+    17,
+    12924,
+    14008,
+    1183,
+    16,
+    1004,
+    6540,
+    1025,
+    529,
+    4593,
+    1006,
+    3213,
+    1207,
+    530,
+    6129,
+    1014,
+    3479,
+    1002,
+    4316,
+    1006,
+    1701,
+    1002,
+    1451,
+    4173,
+    1006,
+    43,
+    3213,
+    1207,
+    18,
+    15469,
+    2257,
+    6833,
+    43,
+    3963,
+    7840,
+    43,
+    18242,
+    1003,
+    1002,
+    6694,
+    1011,
+    1002,
+    3963,
+    18,
+    8011,
+    43,
+    6347,
+    15192,
+    1014,
+    8176,
+    9185,
+    2600,
+    1006,
+    6538,
+    3955,
+    6717,
+    1006,
+    1025,
+    2384,
+    3955,
+    18,
+    26040,
+    1002,
+    22895,
+    2755,
+    10401,
+    11163,
+    1006,
+    5617,
+    1006,
+    43,
+    4315,
+    43,
+    7019,
+    2090,
+    1019,
+    43,
+    14008,
+    2579,
+    2199,
+    18,
+    1176,
+    1049,
+    43,
+    6915,
+    3124,
+    1044,
+    1910,
+    1004,
+    4182,
+    1011,
+    1025,
+    9657,
+    6915,
+    4233,
+    18,
+    4593,
+    43,
+    2859,
+    1006,
+    1661,
+    1083,
+    25622,
+    43,
+    4315,
+    1019,
+    2579,
+    22621,
+    2199,
+    1312,
+    1029,
+    2199,
+    16,
+    3352,
+    43,
+    1281,
+    4593,
+    1025,
+    1901,
+    1006,
+    3691,
+    1049,
+    43,
+    4315,
+    6537,
+    1019,
+    43,
+    2579,
+    22621,
+    2199,
+    1312,
+    1029,
+    2199,
+    27129,
+    18,
+    26177,
+    1002,
+    15482,
+    1003,
+    1002,
+    29926,
+    527,
+    61,
+    2025,
+    3287,
+    2615,
+    1312,
+    1029,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-long-1",
+   "text": "Add an action to perform when a user triggers the purchase button on a StoreKit view within this Determines whether horizontal swipe gestures trigger backward and forward page navigation. Sets the background shape and style for subscription store view picker items within a view. Selects a promotional offer to apply to a purchase a customer makes from a subscription store view. Sets a value for the specified tip anchor to be used to anchor a tip view to the  Associates a binding to be updated when the 3D chart’s pose is changed by an interaction. Declares the view as dependent on an In-App Purchase product and returns a modified view. Declares the view as dependent on the entitlement of an In-App Purchase product, and returns a The default actions for the document group launch scene and the document launch view. Set a standard effect to use for the background of subscription store view controls within the view.",
+   "ids": [
+    4593,
+    1025,
+    1901,
+    1006,
+    3691,
+    1049,
+    43,
+    4316,
+    26105,
+    1002,
+    4315,
+    5468,
+    1012,
+    43,
+    2579,
+    22621,
+    2199,
+    1312,
+    1029,
+    15469,
+    2257,
+    8882,
+    30831,
+    17333,
+    8501,
+    7854,
+    1004,
+    1836,
+    2937,
+    8169,
+    18,
+    3526,
+    1002,
+    3287,
+    3344,
+    1004,
+    1812,
+    1011,
+    14008,
+    2579,
+    2199,
+    37048,
+    4173,
+    1312,
+    43,
+    2199,
+    18,
+    26040,
+    43,
+    9325,
+    2755,
+    1006,
+    5617,
+    1006,
+    43,
+    4315,
+    43,
+    7019,
+    2090,
+    1019,
+    43,
+    14008,
+    2579,
+    2199,
+    18,
+    3526,
+    43,
+    2649,
+    1011,
+    1002,
+    8681,
+    4961,
+    7139,
+    1006,
+    1028,
+    1115,
+    1006,
+    7139,
+    43,
+    4961,
+    2199,
+    1006,
+    1002,
+    8234,
+    43,
+    7037,
+    1006,
+    1028,
+    6178,
+    1049,
+    1002,
+    6611,
+    2679,
+    527,
+    61,
+    12388,
+    1009,
+    1910,
+    1017,
+    1025,
+    7296,
+    18,
+    17812,
+    1002,
+    2199,
+    1010,
+    6796,
+    1012,
+    1025,
+    1005,
+    17,
+    9445,
+    4315,
+    3037,
+    1004,
+    4657,
+    43,
+    5316,
+    2199,
+    18,
+    17812,
+    1002,
+    2199,
+    1010,
+    6796,
+    1012,
+    1002,
+    32489,
+    1003,
+    1025,
+    1005,
+    17,
+    9445,
+    4315,
+    3037,
+    16,
+    1004,
+    4657,
+    43,
+    1002,
+    11404,
+    3512,
+    1011,
+    1002,
+    5260,
+    1183,
+    3894,
+    2502,
+    1004,
+    1002,
+    5260,
+    3894,
+    2199,
+    18,
+    1281,
+    43,
+    2121,
+    2472,
+    1006,
+    1230,
+    1011,
+    1002,
+    3287,
+    1003,
+    14008,
+    2579,
+    2199,
+    6717,
+    1312,
+    1002,
+    2199,
+    18
+   ]
+  },
+  {
+   "name": "doc-long-2",
+   "text": "Adds an action to be performed when a value, created from a scroll geometry, changes. Sets the tip’s view background to a style. Currently this only applies to inline tips, not popover tips. nearby continuity device through a button interface or other form of activation. On tvOS, this presents a fullscreen continuity device picker experience when selected. Adds an action to perform when a person uses the sign-in button on a subscription store view within a view. Sets the control style and control placement for subscription store views within a view. Configures a URL as the destination for a policy button action in subscription store views. Sets the background style for picker items of the subscription store view instances within a view. Selects a subscription offer to apply to a purchase that a customer makes from a subscription Specifies the visibility of auxiliary buttons that store view and subscription store view instances may use.",
+   "ids": [
+    8915,
+    1025,
+    1901,
+    1006,
+    1028,
+    1870,
+    1049,
+    43,
+    2649,
+    16,
+    1586,
+    1019,
+    43,
+    16192,
+    9994,
+    16,
+    2437,
+    18,
+    3526,
+    1002,
+    4961,
+    527,
+    61,
+    2199,
+    3287,
+    1006,
+    43,
+    1812,
+    18,
+    1753,
+    1029,
+    1075,
+    11039,
+    1006,
+    22887,
+    9253,
+    16,
+    1031,
+    2775,
+    6846,
+    9253,
+    18,
+    2524,
+    12723,
+    4086,
+    1089,
+    43,
+    5468,
+    7284,
+    1036,
+    1066,
+    1439,
+    1003,
+    12797,
+    18,
+    1012,
+    1700,
+    1897,
+    16,
+    1029,
+    6540,
+    43,
+    43504,
+    12723,
+    4086,
+    37048,
+    2331,
+    1049,
+    2485,
+    18,
+    8915,
+    1025,
+    1901,
+    1006,
+    3691,
+    1049,
+    43,
+    1717,
+    2600,
+    1002,
+    2702,
+    17,
+    1005,
+    5468,
+    1012,
+    43,
+    14008,
+    2579,
+    2199,
+    1312,
+    43,
+    2199,
+    18,
+    3526,
+    1002,
+    1497,
+    1812,
+    1004,
+    1497,
+    10079,
+    1011,
+    14008,
+    2579,
+    4334,
+    1312,
+    43,
+    2199,
+    18,
+    56795,
+    43,
+    29572,
+    1010,
+    1002,
+    6694,
+    1011,
+    43,
+    2349,
+    5468,
+    1901,
+    1005,
+    14008,
+    2579,
+    4334,
+    18,
+    3526,
+    1002,
+    3287,
+    1812,
+    1011,
+    37048,
+    4173,
+    1003,
+    1002,
+    14008,
+    2579,
+    2199,
+    11113,
+    1312,
+    43,
+    2199,
+    18,
+    26040,
+    43,
+    14008,
+    2755,
+    1006,
+    5617,
+    1006,
+    43,
+    4315,
+    1014,
+    43,
+    7019,
+    2090,
+    1019,
+    43,
+    14008,
+    26177,
+    1002,
+    15482,
+    1003,
+    8836,
+    10293,
+    1014,
+    2579,
+    2199,
+    1004,
+    14008,
+    2579,
+    2199,
+    11113,
+    1095,
+    1230,
+    18
+   ]
+  }
+ ]
+}
