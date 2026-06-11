@@ -111,8 +111,9 @@ double-build + sha256 diff), 2,400+ unit/integration tests.
 
 - **One SwiftPM package** at `swift/` producing `libAppleDocsCore` (dynamic
   for the bridge era; static-linked into the final binary in P7). Products
-  are per-platform artifacts: `macos-arm64`, `macos-x86_64` (universal),
-  `linux-x86_64`, `linux-aarch64` (musl, fully static).
+  are per-platform artifacts: `darwin-arm64` (dylib alone), `linux-x64` and
+  `linux-arm64` (glibc `.so` + bundled Swift runtime set, rpath `$ORIGIN` —
+  see §5 correction).
 - **C ABI boundary**: `@_cdecl` exports with length-prefixed byte buffers
   (UTF-8 JSON for cold/complex payloads, packed structs/Float32 arrays for
   hot ones — embedding vectors, ranking inputs). Every export returns a
@@ -139,20 +140,33 @@ double-build + sha256 diff), 2,400+ unit/integration tests.
 
 ## 5. Toolchain and cross-compilation
 
-- **Swift 6.2+** (latest stable at each phase), managed via `swiftly`;
-  `.swift-version` pinned in-repo.
-- **Linux**: swift.org **Static Linux SDK** (musl) — fully static binaries
-  with no distro dependence, cross-compiled FROM the macOS CI runners
-  (`swift build --swift-sdk aarch64-swift-linux-musl` etc.). This folds into
-  the existing release pipeline: the same job that compiles the bun
-  binaries gains two `swift build` invocations.
-- **macOS**: universal (arm64 + x86_64) via `-arch` pairs and `lipo`.
+> **Corrected 2026-06-11 by the P0 research**
+> ([`p0/`](0001-swift-native-transition/p0/README.md), experiment E6): the
+> Static Linux SDK (musl) supports **no dynamic linking** — it cannot emit
+> the `.so` the bridge era needs — and `--static-swift-stdlib` is not
+> honored for shared-library products either. The musl SDK returns in P7
+> for the single static executable.
+
+- **Swift 6.3.x pinned** (current stable; `.swift-version` in-repo, swiftly
+  honors it); upgrades are their own PRs (D-P0-2).
+- **Linux**: plain glibc dynamic builds, made **natively on Linux runners**
+  (`ubuntu-latest` x64, `ubuntu-24.04-arm` arm64), shipped as a
+  self-contained bundle: the `.so` linked with rpath `$ORIGIN` plus the
+  stripped Swift runtime `.so` set beside it (9.4 MB stdlib-only → 16 MB
+  with FoundationEssentials → 61 MB with full Foundation/ICU; glibc floor
+  2.17). Verified end to end under `oven/bun` with no Swift on the host
+  (D-P0-1). `apple/swift-sdk-generator` (glibc cross-compile from macOS)
+  stays a developer convenience, not the artifact path.
+- **macOS**: `swift build -c release`; the OS ships the Swift runtime, the
+  arm64 linker ad-hoc signs. darwin-arm64 first; universal only when the
+  bun-binary matrix grows x86_64.
 - **Windows**: explicitly later (P8+); Swift's Windows toolchain is
   workable but our renderers and ops layers assume POSIX today. Tracked,
   not planned.
-- **CI**: a `swift-ci` job matrix (macos + ubuntu) running swift-format
-  lint, `swift test` (swift-testing), and the cross-builds. Sccache-style
-  caching via the SwiftPM build cache.
+- **CI**: a `swift-ci` job matrix (macos-26 + both ubuntu runners) running
+  swift-format lint, `swift test` (swift-testing), and the native builds;
+  `.build` cached on the package manifests. Full design:
+  [`p0/ci.md`](0001-swift-native-transition/p0/ci.md).
 
 ## 6. State-of-the-art Swift guidelines
 
@@ -184,10 +198,14 @@ the `APPLE_DOCS_NATIVE` kill switch; phases are independently shippable.
 
 ### P0 — Toolchain, CI, FFI skeleton
 `swift/` package + `Sources/ADCore` with a trivial exported function
-(`ad_version()`); bun:ffi loader shim with the kill switch + impl logging;
-CI matrix (build, test, cross-compile, artifact upload); parity-test rig
-(A/B runner + benchmark wiring). *Gates*: artifacts load on all four
-platform targets; `bun run ci` green with the shim present-but-unused.
+(`ad_abi_version()`); bun:ffi loader shim with the kill switch + impl
+logging; CI matrix (build, test, artifact upload); parity-test rig (A/B
+runner + benchmark wiring). *Gates*: artifacts load on all three platform
+targets; `bun run ci` green with the shim present-but-unused.
+**Research complete (2026-06-11)** — ABI contract v0, loader design, CI
+design, security model, and measured boundary costs live in
+[`p0/`](0001-swift-native-transition/p0/README.md); its exit-gate checklist
+leaves only the implementation itself open.
 
 ### P1 — Leaf hot functions (pure compute)
 Ranking/fusion math (`search/ranking.js`, `fuse-semantic.js` — weightedRRF,
@@ -272,10 +290,10 @@ untouched.
 | FFI marshalling eats the native win on chatty paths | Batch boundaries (P1 design rule: one call per query, not per document); packed buffers for hot data; benchmarks gate every phase |
 | Two-runtime debugging is painful | Impl logging on every shim; `APPLE_DOCS_NATIVE=0` reproduces any bug on pure JS; parity tests pin behavior before perf work |
 | Linux text shaping fidelity (P3) | HarfBuzz is the industry shaper; fixture-diff against CoreText output with tolerance rules; hb-view path already proved the pipeline |
-| Static Linux SDK gaps (FoundationNetworking, sqlite linkage) | P0 proves the full link matrix before any feature work; system sqlite3 vendored into the static build if needed |
+| Linux runtime-set weight (61 MB with full Foundation) | Keep P1 modules stdlib-only (9.4 MB set); FoundationEssentials, not the umbrella, when Foundation becomes unavoidable (16 MB, no ICU) — measured in P0 research E6 |
 | Contributor onboarding (Swift + JS during bridge) | Module map in this RFC stays current; one module = one owner-of-record during its migration |
 | swift-testing / toolchain churn | Pinned toolchains; upgrades are their own PRs, never inside a phase |
-| CI cost (4 platform targets × A/B suites) | Cross-compile from macOS (no Linux build hosts needed until P6 perf runs); A/B only on touched modules per PR, full matrix nightly |
+| CI cost (3 platform targets × A/B suites) | Native Linux runners are free for public repos (incl. arm64); Swift lane gated on `swift/**` paths per PR, full matrix on snapshot runs; A/B only on touched modules per PR, full matrix nightly |
 
 ## 9. Decision log / open questions
 
@@ -285,9 +303,14 @@ untouched.
 | D2 | Highlighting engine for non-Swift languages (TextMate in-house vs tree-sitter exception vs reduced set) | **Open — P4 spike** |
 | D3 | Windows timing | Deferred until after P7 |
 | D4 | swift-structured-queries (pointfreeco) for the storage query layer vs raw C interop | Open — decide in P5 design |
-| D5 | Dylib distribution vs build-from-source for `setup` consumers | Leaning dylib-in-release (sha256-pinned, like the embedding model); revisit in P0 |
+| D5 | Dylib distribution vs build-from-source for `setup` consumers | **Settled by P0 research (2026-06-11)**: artifacts-in-release with sha256 sidecars; compiled binaries embed the dylib (`dlopen` accepts the embedded path directly); Linux ships `$ORIGIN`-rpath runtime bundles. Details: [`p0/decisions.md`](0001-swift-native-transition/p0/decisions.md) D-P0-1/9/10 |
 
 ---
 
 *Maintenance*: update the inventory (§3) and decision log (§9) as phases
 land; each phase's completion gets a dated entry here.
+
+- **2026-06-11 — P0 research complete** ([`p0/`](0001-swift-native-transition/p0/README.md)):
+  ABI contract v0 validated on macOS arm64 + Linux arm64; §4 products, §5
+  toolchain, and the risk register corrected from experiments E0–E7;
+  thirteen decisions logged (D-P0-1…13). P0 implementation not started.
