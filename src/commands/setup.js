@@ -32,10 +32,24 @@ export async function setup(opts, ctx) {
 
   const stats = db.getStats()
   if (stats.totalPages > 0 && !force) {
+    // `setup --native` on an existing install fetches just the native
+    // bundle for the release the channel resolves — no corpus touch.
+    let native
+    if (opts.native) {
+      const channel = opts.beta ? 'beta' : 'stable'
+      let localBuildMacos = null
+      if (channel === 'beta') {
+        try { localBuildMacos = db.getSnapshotMeta('build_macos') ?? null } catch {}
+      }
+      const release = await fetchLatestRelease({ channel, localBuildMacos })
+      const { installNativeBundle } = await import('./setup/native.js')
+      native = await installNativeBundle(release, { logger: ctx.logger })
+    }
     return {
       status: 'exists',
       dataDir: ctx.dataDir,
       pages: stats.totalPages,
+      ...(native ? { native: native.status } : {}),
     }
   }
 
