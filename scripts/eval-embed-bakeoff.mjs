@@ -24,6 +24,19 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Database } from 'bun:sqlite'
+import { resolveActiveSpec } from '../src/search/embedder.js'
+
+/** Registry spec for a model name (env-scoped resolveActiveSpec call). */
+function specFor(model) {
+  const prev = process.env.APPLE_DOCS_EMBED_MODEL
+  process.env.APPLE_DOCS_EMBED_MODEL = model
+  try {
+    return resolveActiveSpec()
+  } finally {
+    if (prev === undefined) delete process.env.APPLE_DOCS_EMBED_MODEL
+    else process.env.APPLE_DOCS_EMBED_MODEL = prev
+  }
+}
 
 const ROOT = new URL('..', import.meta.url).pathname
 const DEFAULT_MODELS = ['potion-retrieval-32M', 'embeddinggemma-300m']
@@ -112,11 +125,14 @@ async function prepareScratch() {
   writeFileSync(marker, `${new Date().toISOString()}\n`)
 }
 
-function startEtaWatcher(expectedTotal) {
+function startEtaWatcher(expectedTotal, vecBinWidth) {
+  // Counting by THIS model's vector width keeps the rate visible when
+  // --full re-embeds over a previous model's chunks (delete+insert nets
+  // a flat total count).
   const samples = []
   const timer = setInterval(() => {
     try {
-      const chunks = roQuery('SELECT COUNT(*) AS c FROM document_chunks').c
+      const chunks = roQuery(`SELECT COUNT(*) AS c FROM document_chunks WHERE LENGTH(vec_bin) = ${vecBinWidth}`).c
       samples.push({ t: Date.now(), chunks })
       if (samples.length >= 2) {
         const first = samples[0]
@@ -136,9 +152,9 @@ function startEtaWatcher(expectedTotal) {
 
 async function indexLeg(model) {
   const docs = roQuery('SELECT COUNT(*) AS c FROM documents').c
-  const expectedChunks = Math.round(docs * 2.44)
+  const expectedChunks = Math.round(docs * 2.83)
   log(`=== ${model}: index ${docs} docs (~${expectedChunks} chunks expected) ===`)
-  const stopEta = startEtaWatcher(expectedChunks)
+  const stopEta = startEtaWatcher(expectedChunks, Math.ceil(specFor(model).dims / 8))
   const t0 = Date.now()
   const proc = Bun.spawn(['/usr/bin/time', '-l', 'bun', 'cli.js', 'index', 'embeddings', '--full', '--home', scratch], {
     cwd: ROOT,
@@ -233,8 +249,7 @@ async function queryBenchLeg(model) {
 }
 
 function modelArtifacts(model) {
-  // Registry hfIds: keep in sync with src/search/embedder.js REGISTRY.
-  const hfId = model === 'potion-retrieval-32M' ? 'minishlab/potion-retrieval-32M' : `onnx-community/${model}-ONNX`
+  const hfId = specFor(model).hfId
   const dir = join(modelsDir, hfId)
   let bytes = 0
   const walk = (d) => {
