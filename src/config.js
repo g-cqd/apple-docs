@@ -109,6 +109,14 @@ const configSchema = z.object({
   APPLE_DOCS_RENDER_CACHE_BYTES: posInt().optional(),
   APPLE_DOCS_RENDER_CACHE_TTL_DAYS: nonNegInt().optional(),
 
+  // -- Native bridge (Swift libAppleDocsCore via bun:ffi) -------------------
+  // Kill switch: '' (default) = JS everywhere; '1'/'on' = all migrated
+  // modules; comma list ('fusion') = only those modules. The loader
+  // (src/native/loader.js) parses the value.
+  APPLE_DOCS_NATIVE: z.string().default(''),
+  // Operator override: absolute path to a libAppleDocsCore build.
+  APPLE_DOCS_NATIVE_LIB: z.string().optional(),
+
   // -- Internal -----------------------------------------------------------
   BUN_BIN: z.string().optional(),
   HOME: z.string().optional(),
