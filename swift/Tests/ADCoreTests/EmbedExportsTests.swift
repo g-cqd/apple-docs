@@ -136,6 +136,32 @@ struct EmbedExportsTests {
     }
   }
 
+  @Test func batchCodesReproduceFixtureCodes() throws {
+    adEmbedReset()
+    _ = Fixture.initRequest(vocab: try Fixture.vocab()).call(adEmbedInit)
+    let cases = try Fixture.cases()
+    let codes = try Data(contentsOf: fixturesRoot.appendingPathComponent("embed-parity/case-codes.bin"))
+    let stride = 64 + 512 + 4
+    let sample = [0, 7, 42, 100, cases.count - 1]
+    let batch = Fixture.batchRequest(sample.map { cases[$0].text }).call(adEmbedBatchCodes)
+    #expect(batch?.status == 0, batch.map { Comment(rawValue: $0.message) } ?? "no result")
+    let payload = batch!.payload
+    #expect(payload.count == sample.count * stride)
+    for (k, caseIndex) in sample.enumerated() {
+      let got = Array(payload[k * stride..<(k + 1) * stride])
+      let want = [UInt8](codes.subdata(in: caseIndex * stride..<(caseIndex + 1) * stride))
+      #expect(got == want, "case \(cases[caseIndex].name) codes diverged")
+    }
+  }
+
+  @Test func batchCodesGuards() {
+    adEmbedReset()
+    #expect(Fixture.batchRequest(["x"]).call(adEmbedBatchCodes)?.status == 1)
+    var truncated = RequestWriter()
+    truncated.u32(1)
+    #expect(truncated.call(adEmbedBatchCodes)?.status == 1)
+  }
+
   @Test func emptyTextUsesPadRow() throws {
     adEmbedReset()
     _ = Fixture.initRequest(vocab: try Fixture.vocab()).call(adEmbedInit)

@@ -145,33 +145,49 @@ public func adEmbedInit(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutab
   return base
 }
 
-@_cdecl("ad_embed_batch")
-public func adEmbedBatch(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
-  guard len > 0, len <= maxInputBytes, let ptr else {
-    return ResultBuffer.error(.invalidInput, "empty or oversized batch request (\(len) bytes)")
+private struct BatchDecodeFailure: Error {
+  let message: String
+}
+
+/// Shared batch-request decode for ad_embed_batch / ad_embed_batch_codes.
+private func decodeBatchRequest(
+  _ ptr: UnsafePointer<UInt8>?, _ len: Int
+) -> Result<(embedder: Embedder, texts: [String]), BatchDecodeFailure> {
+  guard len > 0, len <= maxInputBytes, ptr != nil else {
+    return .failure(BatchDecodeFailure(message: "empty or oversized batch request (\(len) bytes)"))
   }
   guard let (embedder, _) = EmbedRuntime.shared.snapshot() else {
-    return ResultBuffer.error(.invalidInput, "embedder not initialized (call ad_embed_init first)")
+    return .failure(BatchDecodeFailure(message: "embedder not initialized (call ad_embed_init first)"))
   }
-  var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
+  var reader = RequestReader(UnsafeRawBufferPointer(start: ptr!, count: len))
   guard let version = reader.u32(), version == 1 else {
-    return ResultBuffer.error(.invalidInput, "unsupported embed batch version")
+    return .failure(BatchDecodeFailure(message: "unsupported embed batch version"))
   }
   guard let rawCount = reader.u32(), rawCount <= maxBatchTexts else {
-    return ResultBuffer.error(.invalidInput, "batch text count out of bounds")
+    return .failure(BatchDecodeFailure(message: "batch text count out of bounds"))
   }
   var texts: [String] = []
   texts.reserveCapacity(Int(rawCount))
   for _ in 0..<rawCount {
     guard let text = readString(&reader, max: maxInputBytes) else {
-      return ResultBuffer.error(.invalidInput, "truncated batch text")
+      return .failure(BatchDecodeFailure(message: "truncated batch text"))
     }
     texts.append(text)
   }
   guard reader.remaining == 0 else {
-    return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes in batch request")
+    return .failure(BatchDecodeFailure(message: "\(reader.remaining) trailing bytes in batch request"))
   }
+  return .success((embedder, texts))
+}
 
+@_cdecl("ad_embed_batch")
+public func adEmbedBatch(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
+  let decoded: (embedder: Embedder, texts: [String])
+  switch decodeBatchRequest(ptr, len) {
+  case .failure(let failure): return ResultBuffer.error(.invalidInput, failure.message)
+  case .success(let value): decoded = value
+  }
+  let (embedder, texts) = decoded
   let dims = embedder.dims
   guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: texts.count * dims * 4) else {
     return nil
@@ -182,6 +198,45 @@ public func adEmbedBatch(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMuta
       let rowOffset = index * dims * 4
       for i in 0..<dims {
         payload.storeBytes(of: vector[i].bitPattern.littleEndian, toByteOffset: rowOffset + i * 4, as: UInt32.self)
+      }
+    } catch {
+      free(base)
+      return ResultBuffer.error(.internalError, "embed failed for text \(index): \(error)")
+    }
+  }
+  return base
+}
+
+/// Same request as ad_embed_batch; payload = count × (dims/8 sign-code bytes
+/// + dims+4 int8+scale bytes) — the exact blobs the index pipeline stores
+/// (src/commands/index-embeddings.js), so only 580 B/chunk cross the bridge
+/// instead of the 2 KB f32 vector plus a JS quantize pass.
+@_cdecl("ad_embed_batch_codes")
+public func adEmbedBatchCodes(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
+  let decoded: (embedder: Embedder, texts: [String])
+  switch decodeBatchRequest(ptr, len) {
+  case .failure(let failure): return ResultBuffer.error(.invalidInput, failure.message)
+  case .success(let value): decoded = value
+  }
+  let (embedder, texts) = decoded
+  let dims = embedder.dims
+  let stride = dims / 8 + dims + 4
+  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: texts.count * stride) else {
+    return nil
+  }
+  for (index, text) in texts.enumerated() {
+    do {
+      let vector = try embedder.embed(text)
+      let sign = Quantize.signCode(vector)
+      let i8 = Quantize.i8Code(vector)
+      var offset = index * stride
+      for byte in sign {
+        payload.storeBytes(of: byte, toByteOffset: offset, as: UInt8.self)
+        offset += 1
+      }
+      for byte in i8 {
+        payload.storeBytes(of: byte, toByteOffset: offset, as: UInt8.self)
+        offset += 1
       }
     } catch {
       free(base)
