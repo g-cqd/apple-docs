@@ -23,6 +23,7 @@ import { join } from 'node:path'
 import { ValidationError } from '../lib/errors.js'
 import { loadScope, SCOPE_FILE } from '../lib/scope.js'
 import { keyPath } from '../lib/safe-path.js'
+import { withFileTempStore } from '../storage/pragmas.js'
 
 const BATCH = 900 // SQLite bound-parameter headroom (default cap 999)
 
@@ -103,7 +104,7 @@ export async function prune(opts, ctx) {
 
     if (!opts.noVacuum) {
       logger.info('Reclaiming free pages (VACUUM)…')
-      db.db.run('VACUUM')
+      withFileTempStore(db.db, () => db.db.run('VACUUM'))
       db.db.run('PRAGMA wal_checkpoint(TRUNCATE)')
     }
   } finally {

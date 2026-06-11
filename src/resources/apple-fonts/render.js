@@ -19,7 +19,35 @@ import {
 import { isLikelySfnt } from './sfnt.js'
 import { assertFontPathContained } from './safe-font-path.js'
 import { FONT_TEXT_SCRIPT } from '../swift-templates.js'
-import { NotFoundError } from '../../lib/errors.js'
+import { NotFoundError, ValidationError } from '../../lib/errors.js'
+
+const ENGINE_ENV = 'APPLE_DOCS_FONT_RENDERER'
+let enginesCache // string[] | undefined
+
+/**
+ * Ordered glyph-render engines for this host. darwin: CoreText first
+ * (Apple's own shaping), hb-view second so a Mac without the Swift
+ * toolchain still renders real glyphs. Elsewhere: hb-view (HarfBuzz —
+ * full shaping incl. RTL/complex scripts) when installed. The
+ * placeholder `<text>` SVG stays the terminal fallback either way.
+ * `APPLE_DOCS_FONT_RENDERER=coretext|hb-view|fallback` pins one engine
+ * (tests, diagnostics).
+ */
+export function _resolveFontTextEngines() {
+  const forced = process.env[ENGINE_ENV]
+  if (forced) return forced === 'fallback' ? [] : [forced]
+  if (enginesCache) return enginesCache
+  const engines = []
+  if (process.platform === 'darwin') engines.push('coretext')
+  if (Bun.which('hb-view')) engines.push('hb-view')
+  enginesCache = engines
+  return engines
+}
+
+/** Test seam: drop the memoized engine probe. */
+export function _resetFontTextEngines() {
+  enginesCache = undefined
+}
 
 export async function renderFontText(opts, ctx) {
   const font = ctx.db.getAppleFontFile(opts.fontId)
@@ -49,15 +77,20 @@ export async function renderFontText(opts, ctx) {
   // fixtures and corrupt downloads short-circuit straight to the placeholder
   // SVG without spawning Swift.
   const valid = await isLikelySfnt(safeFontPath)
-  if (!valid) {
-    content = renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize })
-  } else {
-    try {
-      content = await renderFontTextSvgCurves({ fontPath: safeFontPath, text, pointSize })
-    } catch (error) {
-      ctx.logger?.warn?.(`CoreText outline render failed for ${font.file_name}: ${error.message}`)
-      content = renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize })
+  if (valid) {
+    for (const engine of _resolveFontTextEngines()) {
+      try {
+        content = engine === 'hb-view'
+          ? await renderFontTextSvgHarfBuzz({ fontPath: safeFontPath, text, pointSize })
+          : await renderFontTextSvgCurves({ fontPath: safeFontPath, text, pointSize })
+        if (content) break
+      } catch (error) {
+        ctx.logger?.warn?.(`${engine} outline render failed for ${font.file_name}: ${error.message}`)
+      }
     }
+  }
+  if (!content) {
+    content = renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize })
   }
   return {
     font,
@@ -75,6 +108,29 @@ function renderFontTextSvgFallback({ fontFamily, text, pointSize }) {
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(text)}">
   <text x="0" y="${Math.ceil(pointSize * 1.1)}" font-family="${escapeXml(fontFamily)}" font-size="${pointSize}" fill="black">${escapeXml(text)}</text>
 </svg>`
+}
+
+/**
+ * HarfBuzz path: `hb-view` lays the text out with full shaping and emits
+ * an SVG of glyph outlines — black glyphs on a transparent background,
+ * the same visual contract as the CoreText script. `--text=` (not a
+ * positional) so user text starting with `-` cannot become an option.
+ */
+async function renderFontTextSvgHarfBuzz({ fontPath, text, pointSize }) {
+  const { stdout, stderr, exitCode } = await spawnWithDeadline(
+    ['hb-view', '--output-format=svg', '--background=FFFFFF00', `--font-size=${pointSize}`, `--text=${text}`, fontPath],
+    { deadlineMs: 10_000 },
+  )
+  if (exitCode !== 0) throw new ValidationError(stderr.trim() || `hb-view exited ${exitCode}`)
+  const svg = new TextDecoder().decode(stdout)
+  if (!svg.includes('<svg')) throw new ValidationError('hb-view produced no SVG output')
+  // hb-view exits 0 even when the font yields no outlines (corrupt file →
+  // empty glyph defs). Visible text with zero paths is a failed render —
+  // let the chain fall through to the next engine / the placeholder.
+  if (/\S/.test(text) && !svg.includes('<path')) {
+    throw new ValidationError('hb-view produced no glyph outlines (font unreadable?)')
+  }
+  return svg
 }
 
 async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {

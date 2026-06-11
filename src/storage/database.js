@@ -4,7 +4,7 @@ import { dirname } from 'node:path'
 import { AssertionError } from '../lib/errors.js'
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
 import { runMigrations } from './migrations/index.js'
-import { applyPragmas, enableForeignKeys } from './pragmas.js'
+import { applyPragmas, enableForeignKeys, withBusyRetry } from './pragmas.js'
 import { createAssetsFontsRepo } from './repos/assets-fonts.js'
 import { createAssetsSymbolsRepo } from './repos/assets-symbols.js'
 import { createChunksRepo } from './repos/chunks.js'
@@ -31,7 +31,7 @@ export class DocsDatabase {
 
     this.dbPath = dbPath
     this.db = new Database(dbPath)
-    this._effectiveMmapSize = applyPragmas(this.db)
+    this._effectiveMmapSize = withBusyRetry(() => applyPragmas(this.db))
     this._migrate()
     this._prepareStatements()
     this.operations = createOperationsRepo(this.db)

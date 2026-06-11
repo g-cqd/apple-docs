@@ -8,6 +8,7 @@ import { listFilesSorted, writeSha256Sidecar } from '../lib/archive-7z.js'
 import { createTarZstArchive } from '../lib/archive-zstd.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { copyTreeFast, ensureDir, writeJSON } from '../storage/files.js'
+import { withFileTempStore } from '../storage/pragmas.js'
 import { encodeSectionContent } from '../storage/section-codec.js'
 import { keyPath } from '../lib/safe-path.js'
 
@@ -126,7 +127,7 @@ export async function snapshotBuild(opts, ctx) {
   const copyPath = join(buildDir, 'apple-docs.db')
 
   try {
-    db.db.run(`VACUUM INTO '${copyPath.replace(/'/g, "''")}'`)
+    withFileTempStore(db.db, () => db.db.run(`VACUUM INTO '${copyPath.replace(/'/g, "''")}'`))
 
     // 3. Truncate operational tables (keep schema so DocsDatabase can open)
     const copyDb = new Database(copyPath)
@@ -177,7 +178,9 @@ export async function snapshotBuild(opts, ctx) {
         logger.info(`Embedded ${packed} raw payloads into the snapshot DB.`)
       }
 
-      copyDb.run('VACUUM')
+      // copyDb is a raw handle with no pragmas applied — be explicit so
+      // the rebuild temp never lands in RAM regardless of compile defaults.
+      withFileTempStore(copyDb, () => copyDb.run('VACUUM'))
     } finally {
       copyDb.close()
     }

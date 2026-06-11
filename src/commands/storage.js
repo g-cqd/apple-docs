@@ -6,6 +6,7 @@ import { renderHtml } from '../content/render-html.js'
 import { pool } from '../lib/pool.js'
 import { keyPath } from '../lib/safe-path.js'
 import { decodeSectionContent } from '../storage/section-codec.js'
+import { withFileTempStore } from '../storage/pragmas.js'
 
 /**
  * Returns a storage breakdown: DB file size, rendered output dirs, raw JSON,
@@ -124,7 +125,7 @@ export function storageGc(opts, ctx) {
   orphansCleaned += db.db.query('SELECT changes() as c').get().c
 
   if (vacuum) {
-    db.db.run('VACUUM')
+    withFileTempStore(db.db, () => db.db.run('VACUUM'))
     logger?.info?.('VACUUM complete')
   }
 

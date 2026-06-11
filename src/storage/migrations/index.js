@@ -10,6 +10,7 @@
  */
 
 import { ValidationError } from '../../lib/errors.js'
+import { withBusyRetry } from '../pragmas.js'
 import { up as v1Up } from './v1-initial-schema.js'
 import { up as v2Up } from './v2-activity-table.js'
 import { up as v3Up } from './v3-roots-seed-path.js'
@@ -74,8 +75,18 @@ export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version
  * Run any pending migrations on `db`. Idempotent — a current DB returns
  * without writing anything. Throws on a future-version DB (downgrade
  * protection) or any migration failure (transaction rolls back).
+ *
+ * Retries on SQLITE_BUSY: two processes booting on the same fresh corpus
+ * (web + MCP started together — observed over virtiofs in a Linux
+ * container) contend on the schema transaction beyond `busy_timeout`.
+ * Retrying is always safe: each attempt re-reads schema_version, and a
+ * sibling that finished the work turns this into a no-op.
  */
 export function runMigrations(db) {
+  return withBusyRetry(() => applyMigrations(db))
+}
+
+function applyMigrations(db) {
   db.run('CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
   const row = db.query('SELECT value FROM schema_meta WHERE key = ?').get('schema_version')
   const current = row ? Number.parseInt(row.value, 10) : 0
@@ -96,7 +107,9 @@ export function runMigrations(db) {
     db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)", [String(SCHEMA_VERSION)])
     db.run('COMMIT')
   } catch (e) {
-    db.run('ROLLBACK')
+    // BEGIN itself may have been the failing statement — a rollback then
+    // has no transaction to act on; never mask the original error.
+    try { db.run('ROLLBACK') } catch { /* no active transaction */ }
     throw new ValidationError(`Migration from v${current} to v${SCHEMA_VERSION} failed: ${e.message}`)
   }
 }

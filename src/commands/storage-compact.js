@@ -1,6 +1,7 @@
 import { ValidationError } from '../lib/errors.js'
 import { encodeSectionContent } from '../storage/section-codec.js'
 import { getProfile, setProfile } from '../storage/profiles.js'
+import { withFileTempStore } from '../storage/pragmas.js'
 
 // Contentless body FTS: stops storing a second full copy of every body.
 // `contentless_delete=1` (SQLite ≥3.43) keeps the incremental sync
@@ -93,7 +94,7 @@ export async function storageCompact(opts, ctx) {
   db.setSnapshotMeta('sections_compressed', '1')
   if (profileBefore !== 'compact') setProfile(db, 'compact')
   logger?.info?.('Reclaiming free pages (VACUUM)…')
-  db.db.run('VACUUM')
+  withFileTempStore(db.db, () => db.db.run('VACUUM'))
   // VACUUM commits via the WAL; truncate it so the freed space is realized on
   // disk immediately instead of lingering as a multi-MB stale `-wal` file.
   db.db.run('PRAGMA wal_checkpoint(TRUNCATE)')

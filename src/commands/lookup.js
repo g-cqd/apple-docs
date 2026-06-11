@@ -1,4 +1,5 @@
 import { readText, readJSON, writeText } from '../storage/files.js'
+import { normalizeIdentifier } from '../apple/normalizer.js'
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { normalize } from '../content/normalize.js'
 import { renderMarkdown } from '../content/render-markdown.js'
@@ -49,6 +50,13 @@ export async function lookup(opts, ctx) {
 
   if (opts.path) {
     page = db.getPage(opts.path)
+    if (!page) {
+      // Accept the spellings people naturally paste — `documentation/...`
+      // prefixes, `/documentation/...`, `doc://` URIs, mixed case — by
+      // retrying with the canonical key form before giving up.
+      const normalized = normalizeIdentifier(opts.path)
+      if (normalized && normalized !== opts.path) page = db.getPage(normalized)
+    }
   } else if (opts.symbol) {
     page = db.searchByTitle(opts.symbol, opts.framework ?? null)
   }

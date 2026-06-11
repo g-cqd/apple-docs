@@ -14,10 +14,7 @@
     "!test/fixtures/**"
   ],
   "ignoreDependencies": [
-    "zod",
     "bun-types",
-    "mermaid",
-    "@huggingface/transformers",
     "onnxruntime-node",
     "onnxruntime-web"
   ]

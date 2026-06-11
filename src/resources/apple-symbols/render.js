@@ -66,6 +66,10 @@ export const SYMBOL_RENDERER_VERSION = 8
  * actually self-sufficient by failing loud on misses.
  */
 function symbolsOfflineMode() {
+  // Non-darwin hosts have no CoreGlyphs bundle and no Swift toolchain —
+  // the live render paths are impossible, so offline mode (snapshot
+  // pre-renders only, loud misses) is simply the truth there.
+  if (process.platform !== 'darwin') return true
   return process.env.APPLE_DOCS_SYMBOLS_OFFLINE === '1'
 }
 
@@ -248,10 +252,14 @@ async function renderPngFromSvg(svg, { pointSize }) {
     if (rsvg.ok) return await readRasterizedPng(pngPath)
     errors.push(`rsvg-convert: ${rsvg.error}`)
 
-    await rm(pngPath, { force: true }).catch(() => {})
-    const sips = await runRasterCommand(['/usr/bin/sips', '-s', 'format', 'png', svgPath, '--out', pngPath])
-    if (sips.ok) return await readRasterizedPng(pngPath)
-    errors.push(`sips: ${sips.error}`)
+    if (process.platform === 'darwin') {
+      await rm(pngPath, { force: true }).catch(() => {})
+      const sips = await runRasterCommand(['/usr/bin/sips', '-s', 'format', 'png', svgPath, '--out', pngPath])
+      if (sips.ok) return await readRasterizedPng(pngPath)
+      errors.push(`sips: ${sips.error}`)
+    } else {
+      errors.push('sips: skipped (macOS-only) — install rsvg-convert (librsvg) for PNG output on this host')
+    }
 
     throw new ValidationError(errors.join('; '))
   } finally {

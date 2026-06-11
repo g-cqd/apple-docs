@@ -15,11 +15,14 @@
  *  bytes (0 when the platform's bun:sqlite build caps mmap below the
  *  requested 10 GB — surfaces via DocsDatabase.getEffectiveMmapSize()). */
 export function applyPragmas(db) {
+  // busy_timeout FIRST: `journal_mode = WAL` is a write that needs the
+  // lock — with the timeout set after it, a concurrent first boot
+  // (web + MCP starting together) threw "database is locked" instantly.
+  db.run('PRAGMA busy_timeout = 5000')
   db.run('PRAGMA journal_mode = WAL')
   db.run('PRAGMA synchronous = NORMAL')
   db.run('PRAGMA cache_size = -64000')
   db.run('PRAGMA temp_store = MEMORY')
-  db.run('PRAGMA busy_timeout = 5000')
   // 10 GB virtual address space for memory-mapped I/O. SQLite caps this at
   // both the compiled SQLITE_MAX_MMAP_SIZE and the actual DB file size, so
   // a small corpus simply maps the whole file. Pages are demand-paged via
@@ -44,4 +47,41 @@ export function applyPragmas(db) {
 /** Turn FK enforcement on. Idempotent. Call AFTER runMigrations. */
 export function enableForeignKeys(db) {
   db.run('PRAGMA foreign_keys = ON')
+}
+
+/**
+ * Run `fn` with `temp_store = FILE`, restoring MEMORY afterwards (even on
+ * throw). VACUUM builds its transient copy in temp storage; under the
+ * global MEMORY setting a multi-GB database VACUUM allocates that copy in
+ * RAM — which OOM-killed a first install inside a 6 GB Linux VM. FILE
+ * keeps the temp b-tree on disk for the duration of the maintenance
+ * operation only; query-time temp behavior is unaffected.
+ */
+export function withFileTempStore(db, fn) {
+  db.run('PRAGMA temp_store = FILE')
+  try {
+    return fn()
+  } finally {
+    db.run('PRAGMA temp_store = MEMORY')
+  }
+}
+
+const BUSY_RE = /database is locked|SQLITE_BUSY/i
+
+/**
+ * Retry `fn` on SQLITE_BUSY with linear backoff inside a time budget.
+ * Boot-path helper: a sibling process running the full fresh-corpus
+ * migration can hold the write lock well past `busy_timeout`; callers
+ * must be idempotent (pragmas and the migration runner both are).
+ */
+export function withBusyRetry(fn, { budgetMs = 30_000 } = {}) {
+  const deadline = Date.now() + budgetMs
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return fn()
+    } catch (e) {
+      if (!BUSY_RE.test(String(e?.message ?? e)) || Date.now() >= deadline) throw e
+      Bun.sleepSync(Math.min(250 * (attempt + 1), 2000))
+    }
+  }
 }
