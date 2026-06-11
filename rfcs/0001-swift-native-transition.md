@@ -77,10 +77,12 @@ committed, and CI fails on resolution drift.
 
 **Runtime dependencies to eliminate** (the entire third-party JS surface):
 
-1. `@huggingface/transformers` + `onnxruntime-*` — used only by
-   `search/embedder.js` for model2vec inference. The model is an
-   EmbeddingBag: tokenizer → row lookups → mean-pool. **No neural forward
-   pass**; a from-scratch Swift implementation is small and exact.
+1. `@huggingface/transformers` + `onnxruntime-*` — **scoped-DONE
+   2026-06-11 (RFC 0002 Stage C)**: the default model runs the from-scratch
+   Swift pipeline exclusively (bit-exact, proven over 831k chunks); the
+   deps remain optionalDependencies used ONLY by gated non-default
+   experiment models (D-0002-4) and leave entirely when those are dropped
+   or get Swift inference.
 2. `shiki` — syntax highlighting in `content/highlight.js`.
 3. `@modelcontextprotocol/sdk` — MCP server plumbing; the protocol
    (JSON-RPC 2.0 over stdio / Streamable HTTP) is small and we already

@@ -116,8 +116,10 @@ jobs:
       # status.json with sha256 + size + url for every artefact.
       #
       # APPLE_DOCS_ALLOW_REMOTE_MODELS=1 lets the model step (run inside
-      # build-snapshot.js) fetch the model2vec embedding model once into
-      # $APPLE_DOCS_HOME/resources/models so it ships in the snapshot.
+      # build-snapshot.js) acquire the embedding inputs: pin-verified direct
+      # fetches from huggingface.co (model-integrity.js — fail-closed shas),
+      # then derives the deterministic matrix-v1.admx weights artifact.
+      # Stage C: the snapshot ships the ARTIFACT, not the onnx (−124 MB).
       # Vectors themselves do NOT ship — `apple-docs setup` rebuilds them
       # locally (the per-chunk codes would blow GitHub's 2 GiB asset ceiling).
       # The step probe-runs the model and sha256-verifies its files against

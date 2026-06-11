@@ -65,5 +65,7 @@ session — it gets recorded in RFC 0002 §3 + §6e.
 ## Rollback
 
 `APPLE_DOCS_NATIVE=off` in ops/.env → `bun ops/cli.js render-all` →
-`sudo bin/apple-docs-ops install` → restart services. Pure JS serves
-identically (bit-identical outputs; the switch is the only change).
+`sudo bin/apple-docs-ops install` → restart services. Fusion/archive serve
+identically from JS. Note (Stage C, 2026-06-11): the default embedding
+model is native-only — with native off, semantic search degrades to
+lexical-only rather than switching implementations.

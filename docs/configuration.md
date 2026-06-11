@@ -242,8 +242,11 @@ metrics — `scripts/verify-embed-equivalence.mjs`), and fusion/archive carry
 their own parity gates. Background: `rfcs/0001-swift-native-transition.md`
 and `rfcs/0002-swift-embedder.md` in the repository (not part of this site).
 
-> **Opting out**: set `APPLE_DOCS_NATIVE=off` to force pure JavaScript
-> everywhere. Nothing else changes — same results, same APIs.
+> **Opting out**: set `APPLE_DOCS_NATIVE=off` to force the JavaScript
+> implementations. Since the Stage-C cleanup, the DEFAULT embedding model
+> has no JavaScript path anymore — with native off, semantic search
+> degrades to lexical-only (results stay correct, the semantic tier goes
+> dormant). Fusion/archive still serve identically from JS.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -256,7 +259,9 @@ into `dist/native/`); compiled-binary installs skip it. An absent or stale
 bundle is never an error: the JS implementations serve.
 
 Modules: `fusion` (result fusion math), `archive` (snapshot tar.zst writer),
-`embed` (the default embedding model's tokenizer + matrix pipeline). On
-first native-embed use the ~129 MB weights artifact is derived once from the
-snapshot's pinned `model.onnx` (integrity-verified, atomic) next to the
-model files; if anything is missing the transformers.js path serves.
+`embed` (the default embedding model's tokenizer + matrix pipeline — the
+ONLY implementation for the default model since Stage C). New snapshots
+ship the ~129 MB weights artifact (`matrix-v1.admx`) directly; on older
+onnx-bearing snapshots it is derived once (integrity-verified, atomic)
+next to the model files. `@huggingface/transformers`/onnxruntime remain
+optional dependencies used solely by gated non-default models.
