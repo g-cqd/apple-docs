@@ -62,3 +62,4 @@ Entry points:
 | Security policy + hardened defaults | [`docs/security.md`](docs/security.md) |
 | Reference self-hosted ops layer (launchd, Caddy, cloudflared) | [`ops/README.md`](ops/README.md) |
 | Swift-native transition strategy (repo-internal RFC, not on the docs site) | [`rfcs/0001-swift-native-transition.md`](rfcs/0001-swift-native-transition.md) |
+| Swift-native embedder contract (repo-internal RFC) | [`rfcs/0002-swift-embedder.md`](rfcs/0002-swift-embedder.md) |
