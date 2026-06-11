@@ -226,10 +226,19 @@ dispatches through `src/search/fusion-native.js`. Measured (arm64 Mac):
 MMR 1.4–1.8× faster native; hybridFusion +8 % at n=100, slower at n=10
 (packing dominates tiny payloads — the p0 batching rule, observed).
 Default stays JS. Content hashing is **dropped from P1**: `sha256` already
-runs on Bun's native CryptoHasher; nothing to win. Open: ranking rules,
-snippet extraction, archiver.
+runs on Bun's native CryptoHasher; nothing to win.
+**Archiver shipped (2026-06-11)** — `ADArchive` streams synthesized-ustar
+tar.zst through a runtime-dlopen'd libzstd (no tar/zstd host binaries, no
+multi-GB temp tar) behind `APPLE_DOCS_NATIVE=archive`; parity gates are
+extraction-equality + rebuild-twice (bsdtar byte-equality is impossible by
+construction). Open: ranking rules, snippet extraction.
 
 ### P2 — Embedder from scratch (the flagship)
+> **Superseded by [RFC 0002](0002-swift-embedder.md)** (2026-06-11), which
+> is the P2 contract: hard performance/memory/acceleration gates, the
+> weights-artifact and tokenizer decisions, and `ADEmbed`
+> internal-subpackage-first packaging. The sketch below is historical.
+
 model2vec inference in Swift: tokenizer (the model's tokenizer.json,
 unigram/WordPiece — implemented with swift-parsing), embedding-matrix
 mmap (safetensors reader), mean-pool + SIMD dot products; batch API for
