@@ -113,24 +113,33 @@ function renderFontTextSvgFallback({ fontFamily, text, pointSize }) {
 /**
  * HarfBuzz path: `hb-view` lays the text out with full shaping and emits
  * an SVG of glyph outlines — black glyphs on a transparent background,
- * the same visual contract as the CoreText script. `--text=` (not a
- * positional) so user text starting with `-` cannot become an option.
+ * the same visual contract as the CoreText script. The text travels via
+ * a temp FILE, not argv: argv conversion needs a UTF-8 locale (C-locale
+ * Linux containers reject non-ASCII arguments with "Invalid byte
+ * sequence"), and a file can never be parsed as an option either.
  */
 async function renderFontTextSvgHarfBuzz({ fontPath, text, pointSize }) {
-  const { stdout, stderr, exitCode } = await spawnWithDeadline(
-    ['hb-view', '--output-format=svg', '--background=FFFFFF00', `--font-size=${pointSize}`, `--text=${text}`, fontPath],
-    { deadlineMs: 10_000 },
-  )
-  if (exitCode !== 0) throw new ValidationError(stderr.trim() || `hb-view exited ${exitCode}`)
-  const svg = new TextDecoder().decode(stdout)
-  if (!svg.includes('<svg')) throw new ValidationError('hb-view produced no SVG output')
-  // hb-view exits 0 even when the font yields no outlines (corrupt file →
-  // empty glyph defs). Visible text with zero paths is a failed render —
-  // let the chain fall through to the next engine / the placeholder.
-  if (/\S/.test(text) && !svg.includes('<path')) {
-    throw new ValidationError('hb-view produced no glyph outlines (font unreadable?)')
+  const stagingDir = mkdtempSync(join(tmpdir(), 'apple-docs-hb-text-'))
+  const textPath = join(stagingDir, 'text.txt')
+  await Bun.write(textPath, text)
+  try {
+    const { stdout, stderr, exitCode } = await spawnWithDeadline(
+      ['hb-view', '--output-format=svg', '--background=FFFFFF00', `--font-size=${pointSize}`, `--text-file=${textPath}`, fontPath],
+      { deadlineMs: 10_000 },
+    )
+    if (exitCode !== 0) throw new ValidationError(stderr.trim() || `hb-view exited ${exitCode}`)
+    const svg = new TextDecoder().decode(stdout)
+    if (!svg.includes('<svg')) throw new ValidationError('hb-view produced no SVG output')
+    // hb-view exits 0 even when the font yields no outlines (corrupt file →
+    // empty glyph defs). Visible text with zero paths is a failed render —
+    // let the chain fall through to the next engine / the placeholder.
+    if (/\S/.test(text) && !svg.includes('<path')) {
+      throw new ValidationError('hb-view produced no glyph outlines (font unreadable?)')
+    }
+    return svg
+  } finally {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => {})
   }
-  return svg
 }
 
 async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
