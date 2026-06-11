@@ -126,8 +126,8 @@ CI verifies at snapshot build.
 | ID | Question | Leaning |
 | --- | --- | --- |
 | D-0002-1 | Weights artifact: ONNX-initializer reader vs raw-matrix re-export at snapshot build | (b) re-export, sha256-pinned |
-| D-0002-2 | Tokenizer implementation: from scratch vs `pointfreeco/swift-parsing` for tokenizer.json parsing | from scratch first (the JSON subset + Unigram/WordPiece trie is small); swift-parsing only if the parser grows |
-| D-0002-3 | Which tokenizer algorithm does `potion-retrieval-32M` actually use (tokenizer.json declares it) — Unigram or WordPiece — and is normalization (NFC? lowercase? metaspace?) fully captured by tokenizer.json | settle in the spike, FIRST |
+| D-0002-2 | Tokenizer implementation: from scratch vs `pointfreeco/swift-parsing` for tokenizer.json parsing | **DECIDED 2026-06-11: from scratch** — better than planned: the shipped target parses no JSON at all (vocab arrives as an id-ordered string array, config through the init signature), so swift-parsing never enters (§6a) |
+| D-0002-3 | Which tokenizer algorithm does `potion-retrieval-32M` actually use (tokenizer.json declares it) — Unigram or WordPiece — and is normalization (NFC? lowercase? metaspace?) fully captured by tokenizer.json | **DECIDED 2026-06-11: WordPiece + BertNormalizer** (vocab 63,091, `##` continuation, max 100, `[UNK]`; clean_text + handle_chinese_chars + strip_accents:null + lowercase:true; BertPreTokenizer; 5 added tokens all `normalized:false`; TemplateProcessing inert under production `add_special_tokens:false`). Fully captured by tokenizer.json — but the **normative semantics are the installed transformers.js 4.2.0**, which diverges from the HF Rust reference in load-bearing ways (§6a) |
 | D-0002-4 | Do gated registry models (EmbeddingGemma, Qwen3 — real transformers) stay on transformers.js | yes — out of scope; the kill list applies to the default model only, and the optionalDependency stays until those are dropped or P2b exists |
 | D-0002-5 | **Default embedding model** — measured bake-off on our golden eval (no pre-committed threshold; the user decides on the numbers) | **DECIDED 2026-06-11: potion-retrieval-32M stays the default; the from-scratch Swift path (this RFC) proceeds unchanged.** The bake-off measured the cost wall before the quality columns completed, and the user vetoed the entire transformer-on-consumer class as operationally unacceptable (§5a). Transformer-quality models may only re-enter behind the **ship-vectors architecture** (§5c) — i.e. when consumers never embed documents — as gated registry options (D-0002-4). |
 | D-0002-6 | **Inference runtime per platform** (only if a transformer model wins D-0002-5) | **Moot for the default path** (from-scratch Swift, runtime-free). The §5b matrix is retained as the decision record for any future ship-vectors revisit. |
@@ -211,6 +211,10 @@ restrictions) — record before any such change.
    package tokenizing the fixture corpus; gate = token-id sequences identical
    to transformers.js on 100% of fixtures. Settles D-0002-3. *This is the
    highest-risk item; nothing else starts until it is green.*
+   **Done 2026-06-11** — amended shape: a library target (`ADEmbed`) +
+   Swift Testing gate instead of a CLI tool (strictly stronger: the gate
+   runs in the three-runner CI native matrix on every push). Gate held —
+   180 fixture cases, 100% token-id equality on the first full run. §6a.
 2. **Matrix + pooling**: weights artifact (D-0002-1), mmap reader, mean-pool
    with both acceleration backends; vector parity gate on fixtures.
 3. **FFI + dispatch**: `ad_embed_batch`, `embedder-native.js`, kill switch,
@@ -220,11 +224,58 @@ restrictions) — record before any such change.
 5. **Default flip + kills**: native-by-default one release cycle → remove
    transformers/onnxruntime for the default model path (D-0002-4 caveat).
 
+### 6a. Phase-1 record — tokenizer parity (done 2026-06-11)
+
+Deliverables: `swift/Sources/ADEmbed/` (Foundation-free: `Tokenizer`,
+`Normalizer`, `CaseFolding`, `NFD`, `PreTokenizer`, `WordPiece`, byte-keyed
+`Vocab`, `GeneratedUnicodeTables`), `swift/Tests/ADEmbedTests/` (stage units
++ the parity gate), `scripts/gen-unicode-tables.mjs`,
+`scripts/gen-tokenizer-fixtures.mjs`, committed fixtures under
+`test/fixtures/tokenizer-parity/` (~2.3 MB: sha-pinned
+tokenizer{,_config}.json copies, id-ordered vocab.json, 180-case
+cases.json), and the drift alarm `test/unit/search/tokenizer-fixtures.test.js`.
+
+**The parity target is the installed transformers.js (4.2.0), not the HF
+Rust reference.** Divergences the Swift mirror reproduces deliberately:
+
+- normalizer order is lowercase → strip_accents (Rust strips first);
+- `tokenize_chinese_chars` iterates UTF-16 units, so astral CJK
+  (U+20000+) is never spaced — the astral ranges in its source are dead
+  code; the generated table is BMP-only on purpose;
+- clean_text removes Cc/Cf/Co outright (VT, FF, FEFF, ZWSP, SHY, ZWJ —
+  no space survives); only `\t` `\n` `\r` reach the whitespace→' ' branch;
+- strip_accents = NFD + full `\p{Mn}` removal (variation selectors strip);
+- JS toLowerCase applies Final_Sigma ("ΟΔΟΣ"→"οδος"); Swift `lowercased()`
+  does not → per-scalar `lowercaseMapping` plus an explicit Final_Sigma
+  context rule (stdlib Cased/Case_Ignorable).
+
+Swift-side traps closed: `Dictionary<String,_>` conflates canonically
+equivalent keys while JS Maps key on exact code units — and the vocab
+carries 18 NFD-form Korean entries — so `Vocab` keys on UTF-8 bytes; Swift
+6.3 exposes no public NFD API, so canonical decompositions are
+table-driven (Hangul algorithmic).
+
+**Skew elimination**: every character-class decision (Mn, Bert punctuation,
+JS `\s`, control-removal set, NFD decompositions, chinese ranges) is
+generated from the same JavaScriptCore engine that produces the fixtures;
+the Swift stdlib contributes only canonical combining classes (reordering)
+and the Final_Sigma properties, both fixture-covered.
+
+**Regeneration protocol**: a transformers.js bump that changes tokenization
+fails `tokenizer-fixtures.test.js` (version stamp + full 180-case replay)
+→ rerun both generators, commit the diff, and the Swift gate must re-pass
+at 100%. The committed model copies stay pinned to `PINNED_MODEL_FILES`;
+raw ids are recorded (`[]` for empty — the `[0]` pad is embedder-level).
+
+Deferred by design: FFI export + dispatch (phase 3), the runtime vocab
+artifact format (phase 3 — the id-ordered array is its prototype), matrix
++ pooling (phase 2), performance gates (phase 2).
+
 ## 7. Risks
 
 | Risk | Mitigation |
 | --- | --- |
-| Tokenizer mismatch long-tail (normalizers, byte-level quirks) | Phase-1 spike gates on 100% token-id equality before any math exists; fixtures drawn from real corpus incl. code snippets, CJK, emoji |
+| Tokenizer mismatch long-tail (normalizers, byte-level quirks) | Phase-1 spike gates on 100% token-id equality before any math exists; fixtures drawn from real corpus incl. code snippets, CJK, emoji — **outcome: gate held on the first full run (§6a)** |
 | Float-sum drift beyond 1e-5 under SIMD reordering | tolerance gate measured per backend in CI; if a backend can't hold 1e-5, its summation order gets fixed (pairwise/Kahan) before relaxing any gate |
 | mmap on the data dir vs security policy | weights are DATA (read-only mmap, no PROT_EXEC) — loading data from DATA_DIR is fine; the code-loading prohibition (p0/security.md) is untouched |
 | Setup regression if native absent on first install | dispatch defaults to JS; `setup` only uses native when the kill switch enables it — identical degradation story to fusion/archive |

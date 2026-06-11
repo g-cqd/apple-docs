@@ -238,6 +238,10 @@ construction). Open: ranking rules, snippet extraction.
 > is the P2 contract: hard performance/memory/acceleration gates, the
 > weights-artifact and tokenizer decisions, and `ADEmbed`
 > internal-subpackage-first packaging. The sketch below is historical.
+>
+> Phase 1 (tokenizer parity) done 2026-06-11: `ADEmbed` WordPiece pipeline,
+> 100% token-id equality with transformers.js on 180 committed fixtures
+> (RFC 0002 §6a).
 
 model2vec inference in Swift: tokenizer (the model's tokenizer.json,
 unigram/WordPiece — implemented with swift-parsing), embedding-matrix
