@@ -252,6 +252,9 @@ restrictions) — record before any such change.
    §6c.
 4. **Quantizers + retrieval gates**: native sign/int8 codes, golden eval,
    cross-platform CI legs; `setup` uses native embedding when enabled.
+   **Done 2026-06-11** — codes over the bridge (2.49× vs transformers.js),
+   setup ordering fixed, and the equivalence gate: 831,216 chunks
+   byte-identical, golden-eval metrics identical. §6d.
 5. **Default flip + kills**: native-by-default one release cycle → remove
    transformers/onnxruntime for the default model path (D-0002-4 caveat).
 
@@ -383,6 +386,50 @@ chunks/s vs transformers.js 9,929 (2.68×); single p50 0.021 ms / p95
 RSS 193 MB with the 129 MB matrix mapped. Pending: the Intel/WASM ≥5× leg
 (needs mm18) and the formal RSS-attribution harness (both non-blocking;
 production enablement is a later, separate decision).
+
+### 6d. Phase-4 record — codes + retrieval equivalence (done 2026-06-11)
+
+Deliverables: `ad_embed_batch_codes` (count × 580 B sign+int8 blobs — the
+exact storage shapes, so the index path crosses 580 B/chunk instead of the
+2 KB f32 vector plus a JS quantize pass), `embedBatchCodes`/`dims` on the
+native embedder, the index-pipeline capability branch
+(src/commands/index-embeddings.js — injected test embedders and the
+transformers path untouched), `pregenerateMatrixArtifact` in `setup
+--native` (both install paths), and `scripts/verify-embed-equivalence.mjs`.
+
+**Setup ordering fix**: `installNativeBundle` previously ran AFTER the
+semantic index build — a fresh install embedded via JS even with the kill
+switch on. The bundle now lands first; the artifact pre-generates after
+extraction (warn-only).
+
+**The equivalence gate (the phase's retrieval proof)** — full live corpus,
+single-backup methodology (two sequential backups of a moving DB seeded
+the legs differently on the first attempt — the server processes write):
+
+- 831,216 chunks: **0 blob mismatches, 0 unmatched rows, 0 anchor
+  mismatches**, embed_dims equal — the native-built index is
+  byte-identical to the JS-built index, hence retrieval-identical forever.
+- Golden eval on both legs: all quality metrics (recall/ndcg/mrr, curated
+  + anchor splits, all four configs) **identical to the last digit**; only
+  wall-clock p50 differs.
+- End-to-end `index embeddings --full` over 831k chunks: **2.09× faster**
+  native (47 s vs 93–98 s — DB writes and chunking included).
+
+Bench additions (arm64, release): codes throughput 24,820 chunks/s
+(**2.49×** vs transformers.js 9,958; f32 leg 2.0–2.7× across runs); RSS
+before init 43 MB → after full pass 194 MB — embedder-attributable
+≈ 151 MB against the §3 ceiling of matrix + 32 MiB = 161 MB → **memory
+gate met** (the matrix stays mmap'd; the attribution includes corpus
+strings and JS runtime growth).
+
+ABI stance recorded: growing the SYMBOLS table makes a STALE installed
+bundle fail dlopen cleanly (JS serves, one warning) until `setup --native`
+refreshes it — accepted; bundle and code ship together in releases.
+
+Remaining for phase 5: snapshot-build native enablement, default flip +
+one release cycle, transformers/onnxruntime kill for the default path
+(snapshots may then ship ADMX instead of model.onnx, −124 MB), mm18 soak,
+Intel/WASM ≥5× measurement.
 
 ## 7. Risks
 

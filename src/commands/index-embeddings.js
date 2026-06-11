@@ -75,11 +75,17 @@ export async function indexEmbeddings(opts, ctx) {
       for (let ord = 0; ord < chunks.length; ord++) flat.push({ docId: r.id, ord, text: chunks[ord] })
     }
     const texts = flat.map(f => f.text)
-    const vecs = embedder.embedBatch
-      ? await embedder.embedBatch(texts)
-      : await sequentialEmbed(embedder, texts)
-    if (!dims && vecs.length) {
-      dims = vecs[0].length
+    // Code-capable embedders (the native bridge) return the storage blobs
+    // directly — byte-identical to the JS quantizers by the embed-parity
+    // gates, at 580 B/chunk across the FFI instead of the 2 KB f32 vector.
+    const codeRows = embedder.embedBatchCodes ? await embedder.embedBatchCodes(texts) : null
+    const vecs = codeRows
+      ? null
+      : embedder.embedBatch
+        ? await embedder.embedBatch(texts)
+        : await sequentialEmbed(embedder, texts)
+    if (!dims && flat.length) {
+      dims = codeRows ? embedder.dims : vecs[0].length
       // Written with the first batch (idempotent) so an interrupted run never
       // leaves chunks on disk with absent/stale model meta.
       db.setSnapshotMeta('embed_dims', String(dims))
@@ -91,9 +97,16 @@ export async function indexEmbeddings(opts, ctx) {
       for (const r of batch) db.deleteChunksByDocId(r.id) // clear stale ords on re-index
       for (let k = 0; k < flat.length; k++) {
         const { docId, ord } = flat[k]
-        const vec = vecs[k]
-        const vecBin = quantizeTo(vec, vec.length)
-        db.upsertChunk({ documentId: docId, ord, text: null, vecBin, vecI8: quantizeI8(vec) })
+        let vecBin
+        let vecI8
+        if (codeRows) {
+          ;({ vecBin, vecI8 } = codeRows[k])
+        } else {
+          const vec = vecs[k]
+          vecBin = quantizeTo(vec, vec.length)
+          vecI8 = quantizeI8(vec)
+        }
+        db.upsertChunk({ documentId: docId, ord, text: null, vecBin, vecI8 })
         if (ord === 0) anchorUpsert.run({ $id: docId, $vec: vecBin })
       }
       db.db.run('COMMIT')

@@ -28,6 +28,7 @@ const SYMBOLS = {
   ad_archive_tar_zst: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_embed_init: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_embed_batch: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_embed_batch_codes: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_embed_reset: { args: [], returns: 'void' },
 }
 

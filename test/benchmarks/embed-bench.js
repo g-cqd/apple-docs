@@ -72,6 +72,7 @@ async function latency(label, embed, iterations = 500) {
 }
 
 // --- native ---
+const rssBeforeInit = process.memoryUsage.rss()
 const initStart = performance.now()
 const native = await buildNativeModel2Vec({ hfId: HF_ID, dims: 512 }, modelsDir, {})
 const initMs = performance.now() - initStart
@@ -79,10 +80,16 @@ if (!native) {
   console.error('native embedder unavailable — see warnings above')
   process.exit(1)
 }
+const rssAfterInit = process.memoryUsage.rss()
 console.log(`native init (pack + mmap + vocab table): ${initMs.toFixed(0)}ms (gate ≤ 500ms)`)
-const nativeRate = await throughput('native', native.embedBatch)
+const nativeRate = await throughput('native f32', native.embedBatch)
+const nativeCodesRate = await throughput('native codes', native.embedBatchCodes)
 await latency('native', native.embed)
-console.log(`rss after native run: ${(process.memoryUsage.rss() / 1e6).toFixed(0)}MB (matrix is 129MB, mmap'd)`)
+const rssAfterRun = process.memoryUsage.rss()
+console.log(
+  `rss: before init ${(rssBeforeInit / 1e6).toFixed(0)}MB → after init ${(rssAfterInit / 1e6).toFixed(0)}MB → after full pass ${(rssAfterRun / 1e6).toFixed(0)}MB` +
+    ` (embedder-attributable ≈ ${((rssAfterRun - rssBeforeInit) / 1e6).toFixed(0)}MB; the 129MB matrix is mmap'd — §3 gate: ≤ matrix + 32MiB)`,
+)
 
 // --- transformers.js baseline (fresh embedder, native disabled) ---
 delete process.env.APPLE_DOCS_NATIVE
@@ -96,4 +103,4 @@ if (!js) {
 const jsRate = await throughput('transformers.js', (texts) => js.embedBatch(texts))
 await latency('transformers.js', (text) => js.embed(text), 200)
 
-console.log(`\nthroughput ratio: ${(nativeRate / jsRate).toFixed(2)}x (gate ≥ 2x on arm64)`)
+console.log(`\nthroughput ratio: ${(nativeRate / jsRate).toFixed(2)}x f32, ${(nativeCodesRate / jsRate).toFixed(2)}x codes (gate ≥ 2x on arm64)`)
