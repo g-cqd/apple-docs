@@ -54,8 +54,8 @@ CI verifies at snapshot build.
 ### Performance
 | Metric | Gate | Baseline source |
 | --- | --- | --- |
-| Index-build embedding throughput (chunks/s, batch=64, full corpus shape) | **≥ 2× transformers.js** on arm64 Mac; **≥ 5×** vs the WASM fallback on Intel | measured before P2 starts and recorded in the RFC (TBD-baseline, owner: P2 spike) |
-| Query-time single embed p50 | **≤ 1 ms** on arm64 Mac, ≤ 3 ms Linux arm64 (it is one tokenization + ≤~64 row-sums) | new micro-bench in `test/benchmarks/` |
+| Index-build embedding throughput (chunks/s, batch=64, full corpus shape) | **≥ 2× transformers.js** on arm64 Mac; **≥ 5×** vs the WASM fallback on Intel | **Measured 2026-06-11 (phase 3, arm64 M-series, release build, the committed 2k-chunk corpus): native 26,636 chunks/s vs transformers.js 9,929 → 2.68×. GATE MET.** The Intel/WASM ≥5× leg needs an Intel host (mm18) — pending, non-blocking. `bun test/benchmarks/embed-bench.js` |
+| Query-time single embed p50 | **≤ 1 ms** on arm64 Mac, ≤ 3 ms Linux arm64 (it is one tokenization + ≤~64 row-sums) | **Measured: p50 0.021 ms, p95 0.089 ms (47× under the gate); transformers.js baseline p50 0.093 ms.** `test/benchmarks/embed-bench.js` |
 | Boundary | batch API crosses FFI **once per batch** (texts in, packed f32 matrix out, 16-byte-aligned per contract v0 — Float32Array view without copy-realignment) | p0/ffi-bridge.md |
 
 ### Memory
@@ -247,6 +247,9 @@ restrictions) — record before any such change.
    bit-exact kernel, vDSP deferred. §6b.
 3. **FFI + dispatch**: `ad_embed_batch`, `embedder-native.js`, kill switch,
    batch-boundary benches; index-build throughput gate.
+   **Done 2026-06-11** — gates met: 2.68× throughput, p50 0.021 ms, init
+   54 ms, matrix mmap'd (RSS 193 MB total process with the 129 MB map).
+   §6c.
 4. **Quantizers + retrieval gates**: native sign/int8 codes, golden eval,
    cross-platform CI legs; `setup` uses native embedding when enabled.
 5. **Default flip + kills**: native-by-default one release cycle → remove
@@ -340,6 +343,46 @@ regenerate both generators' outputs → every Swift gate must re-pass.
 Deferred to phase 3: FFI export + dispatch, snapshot-pipeline artifact
 shipping, perf/RSS/load-time gates (the corpus gate's ~150 chunks/s is a
 DEBUG-build, unbatched number — not a baseline).
+
+### 6c. Phase-3 record — FFI + dispatch (done 2026-06-11)
+
+Deliverables: `swift/Sources/ADCore/EmbedExports.swift`
+(`ad_embed_init`/`ad_embed_batch`/`ad_embed_reset`; ADCore now depends on
+ADEmbed), `src/search/embedder-native.js` (never-throws builder, announce-
+once, scratch batch packer), the `getEmbedder` insertion (default model
+only, outside the try so a dispatch bug can't kill the transformers
+fallback), `src/lib/admx.js` (shared protobuf walk + atomic artifact
+writer), the JS↔FFI↔Swift round-trip test (CI: 180 cases bit-exact through
+the bridge, no model needed), and `test/benchmarks/embed-bench.js`.
+
+Decisions recorded:
+- **State model**: one process-wide embedder behind a pthread mutex;
+  re-init is idempotent-ignore; `ad_embed_reset` is a test seam. In-flight
+  batches survive a reset because they hold their own matrix reference
+  (munmap on last release) — row pointers never dangle.
+- **On-demand weights artifact**: consumers derive `matrix-v1.admx` once
+  from the snapshot-shipped pinned model.onnx (full
+  `verifyPinnedModelFiles` first, temp+rename atomic). Snapshots do not
+  grow. Phase-5 option: ship ADMX *instead of* model.onnx (−124 MB) once
+  transformers.js dies for the default path.
+- **No per-call JS fallback**: after a native embedder is built, embed
+  errors THROW. The whole-embedder choice happened at build time; the
+  query path catches and degrades to lexical, `index embeddings` rolls
+  back its batch and stays resumable. Fusion's per-call fallback suits
+  stateless math, not a stateful embedder.
+- **Throughput work**: the 1.42× first probe was lifted to 2.68× by
+  removing per-candidate allocations from the WordPiece greedy loop
+  (flat-arena FNV-1a vocab table probed by (prefix, slice) pairs),
+  gating `lowercaseMapping` behind `changesWhenLowercased`, and ASCII
+  bails before NFD/ccc/Mn lookups — all under the bit-exact gates, which
+  never flickered.
+
+Measured (arm64 M-series, release, committed 2k corpus): native 26,636
+chunks/s vs transformers.js 9,929 (2.68×); single p50 0.021 ms / p95
+0.089 ms; init 54 ms (0.7 MB vocab marshal + mmap + table build); process
+RSS 193 MB with the 129 MB matrix mapped. Pending: the Intel/WASM ≥5× leg
+(needs mm18) and the formal RSS-attribution harness (both non-blocking;
+production enablement is a later, separate decision).
 
 ## 7. Risks
 

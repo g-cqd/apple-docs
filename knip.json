@@ -3,13 +3,13 @@
   "entry": [
     "src/**/*.js",
     "test/**/*.js",
-    "scripts/**/*.js",
+    "scripts/**/*.{js,mjs}",
     "docs/.vitepress/config.mjs"
   ],
   "project": [
     "src/**/*.js",
     "test/**/*.js",
-    "scripts/**/*.js",
+    "scripts/**/*.{js,mjs}",
     "docs/.vitepress/**/*.{js,mjs}",
     "!test/fixtures/**"
   ],

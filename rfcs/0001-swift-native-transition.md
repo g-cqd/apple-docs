@@ -247,6 +247,10 @@ construction). Open: ranking rules, snippet extraction.
 > reader + bit-exact mean/normalize/quantize — vectors AND codes reproduce
 > the JS/onnx reference bit-for-bit on 180 cases + 2,000 corpus chunks
 > (RFC 0002 §6b).
+>
+> Phase 3 (FFI + dispatch) done 2026-06-11: `ad_embed_*` exports +
+> `embedder-native.js` behind `APPLE_DOCS_NATIVE=embed`; gates met at
+> 2.68× index throughput / 0.021 ms p50 (RFC 0002 §6c).
 
 model2vec inference in Swift: tokenizer (the model's tokenizer.json,
 unigram/WordPiece — implemented with swift-parsing), embedding-matrix

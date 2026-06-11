@@ -25,6 +25,8 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { isNativeEnabled } from '../native/loader.js'
+import { buildNativeModel2Vec } from './embedder-native.js'
 import { meanPool, lastTokenPool, l2normalize, truncate } from './pooling.js'
 
 // Model registry. `APPLE_DOCS_EMBED_MODEL` selects a key; `APPLE_DOCS_EMBED_DIMS`
@@ -158,6 +160,16 @@ export async function getEmbedder({ logger, modelsDir } = {}) {
     return cached
   }
   const spec = resolveSpec()
+  // Native path (RFC 0002 phase 3): default model only, kill switch off by
+  // default; the builder never throws — null falls through to transformers.
+  // Deliberately OUTSIDE the try: a bug here must not set cached = null.
+  if (spec.backend !== 'feature-extraction' && isNativeEnabled('embed')) {
+    const native = await buildNativeModel2Vec(spec, resolveModelsDir(modelsDir))
+    if (native) {
+      cached = native
+      return cached
+    }
+  }
   try {
     await ensureOnnxRuntimeLoadable(logger)
     const tx = await import('@huggingface/transformers')
