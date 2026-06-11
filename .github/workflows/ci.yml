@@ -87,6 +87,81 @@ jobs:
           flags: unittests
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  # Builds libAppleDocsCore on every bridge target and proves JS↔Swift
+  # parity through the staged artifact. Runs unconditionally — parity
+  # involves both sides, so a fusion.js-only change must pass it too —
+  # and public-repo runners (incl. ubuntu-24.04-arm) are free.
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-26
+            target: darwin-arm64
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Swift (swiftly)
+        uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
+        with:
+          toolchain: '6.3.2' # keep in sync with swift/.swift-version
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: |
+            ~/.swiftpm
+            swift/.build
+          key: swift-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('swift/Package.swift', 'swift/.swift-version') }}
+
+      - name: Build libAppleDocsCore (release)
+        working-directory: swift
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            # $ORIGIN rpath: the staged bundle resolves the Swift runtime
+            # .so set from its own directory (D-P0-1).
+            swift build -c release -Xlinker -rpath -Xlinker '$ORIGIN'
+          else
+            swift build -c release
+          fi
+
+      - name: Swift tests
+        working-directory: swift
+        run: swift test
+
+      - name: Stage native artifact
+        run: |
+          dest="dist/native/${{ matrix.target }}"
+          mkdir -p "$dest"
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            cp swift/.build/release/libAppleDocsCore.so "$dest/"
+            # Bundle the Swift runtime libs from ldd's actual resolved
+            # paths (the swiftly toolchain location varies by install).
+            for dep in $(ldd "$dest/libAppleDocsCore.so" | awk '$1 ~ /^lib(swift|Foundation|dispatch|BlocksRuntime|_)/ {print $3}'); do
+              cp "$dep" "$dest/"
+            done
+            strip --strip-unneeded "$dest"/*.so
+          else
+            cp swift/.build/release/libAppleDocsCore.dylib "$dest/"
+          fi
+          ls -lh "$dest"
+
+      - uses: ./.github/actions/setup
+
+      - name: JS↔Swift parity against the staged artifact
+        env:
+          APPLE_DOCS_NATIVE: fusion
+        run: |
+          ext=so
+          [ "${{ runner.os }}" = "macOS" ] && ext=dylib
+          export APPLE_DOCS_NATIVE_LIB="$PWD/dist/native/${{ matrix.target }}/libAppleDocsCore.$ext"
+          bun test test/unit/native/ test/unit/search/fusion-parity.test.js test/unit/search/fusion.test.js
+
   # Mutation testing was removed in June 2026: the nightly Stryker run
   # had not produced a single green report in over two weeks (ten ~1-min
   # config failures, then 5h-timeout kills once it started mutating —
