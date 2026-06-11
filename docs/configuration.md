@@ -19,18 +19,20 @@ serving speed. `setup` applies it in one step; there is no follow-up command.
 
 | Profile | On disk¹ | What `setup` does | Reads |
 | --- | --- | --- | --- |
-| `compact` | ~3 GB | Compresses sections, makes the body index contentless, drops the embedded raw payloads, VACUUMs | Rendered on demand |
-| `balanced` *(default)* | ~5.5 GB | Ships the snapshot as-is | Markdown cached on first read (7-day TTL) |
-| `prebuilt` | ~8.6 GB | Materializes Markdown + HTML | Served from disk (fastest) |
+| `compact` | ~4.6 GB | Compresses sections, makes the body index contentless, drops the embedded raw payloads, VACUUMs | Rendered on demand |
+| `balanced` *(default)* | ~7.1 GB | Ships the snapshot as-is | Markdown cached on first read (7-day TTL) |
+| `prebuilt` | ~10.5 GB | Materializes Markdown + HTML | Served from disk (fastest) |
 
 A full setup from a snapshot is **a few minutes** end to end, depending on
 download speed and system load. Measured from a local archive on Apple
-Silicon as of `snapshot-20260609` (1.62 GB download, 353,313 documents),
-including the semantic index build: **159 s balanced**, **245 s compact**
-(body reindex + VACUUM), **262 s prebuilt** (renders all 353k docs to
-Markdown + HTML — 361,811 files each).
+Silicon as of `snapshot-20260611` (1.89 GB download, 353,325 documents),
+including the semantic index build: **178 s balanced**, **322 s compact**
+(body reindex + VACUUM), **304 s prebuilt** (materializes the full document
+set to Markdown + HTML — 361,823 files each). The beta snapshot of the same
+week (`snapshot-20260610-beta.3`, 1.90 GB, built on macOS 27) measures
+within ~1.5% of these figures on every profile.
 
-<sup>¹ `du` figures. All three carry the same ~1.3 GB of extracted fonts, SF Symbol renders, and the ~125 MB model2vec embedding model, plus ~0.5 GB of semantic chunk index built locally during setup (snapshots ship the model, never the vectors). The variable part is the DB (compact ~2.7 GB incl. semantic index vs balanced ~4.8 GB) and prebuilt's rendered files — only ~1.12 GB of actual content; the rest of its `du` is 4 KB block rounding across 700k+ small files. `apple-docs storage stats` totals logical bytes, so it reads lower: 3.4 GB compact / 6.0 GB balanced / 7.2 GB prebuilt.</sup>
+<sup>¹ `du` figures. All three carry the same ~1.3 GB of extracted fonts, SF Symbol renders, and the ~125 MB model2vec embedding model (~1.9 GB allocated on disk — 4 KB block rounding across 266k+ small resource files), plus ~0.7 GB of semantic chunk index built locally during setup (snapshots ship the model, never the vectors). The variable part is the DB (compact ~2.7 GB incl. semantic index vs balanced ~5.2 GB) and prebuilt's rendered files — only ~1.2 GB of actual content; the rest of its `du` is block rounding across 720k+ small files. `apple-docs storage stats` totals logical bytes, so it reads lower: 4.0 GB compact / 6.5 GB balanced / 7.7 GB prebuilt.</sup>
 
 ```bash
 apple-docs setup --compact     # smallest, fully compacted in one step
@@ -55,7 +57,10 @@ candidate — beta or stable — is only eligible when its recorded build host
 (`status.json` → `buildMacos`, also stamped into the DB as
 `snapshot_meta.build_macos`) runs at least the same macOS as the installed
 corpus — an update never sheds symbols the install already has, and a
-stable built on the same-or-newer macOS supersedes the beta.
+stable built on the same-or-newer macOS supersedes the beta. A fresh
+install (no corpus yet) picks the candidate with the newest build-host
+macOS, ties broken by release recency — so a weekly stable published after
+a beta but built on an older macOS never shadows that beta.
 
 Self-hosted instances opt in with `SNAPSHOT_CHANNEL=beta` in `ops/.env`
 (see [self-hosting → Channel selection](self-hosting.md#channel-selection)).
@@ -127,7 +132,7 @@ prune` → periodic `apple-docs sync` stays scoped. Delete the file and
 Snapshots ship the model2vec embedding model but **no vectors** — `setup`
 builds the chunk index locally after extraction (`--skip-semantic` opts out;
 `apple-docs index embeddings --full` builds or rebuilds it later). The chunk
-store adds roughly 0.5–0.7 GB to the local DB on the full corpus. Defaults
+store adds roughly 0.7 GB to the local DB on the full corpus. Defaults
 preserve prior behavior; every knob below is an escape hatch, not a tuning
 requirement.
 

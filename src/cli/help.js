@@ -154,7 +154,7 @@ Examples:
   setup: `
 Usage: apple-docs setup [options]
 
-Download a pre-built documentation snapshot (~1.5 GB). No
+Download a pre-built documentation snapshot (~1.9 GB). No
 crawling required — ready in a few minutes, mostly the download. After
 extraction, setup builds the semantic search index locally (snapshots ship
 the embedding model but no vectors); --compact and --prebuilt do extra
@@ -163,7 +163,7 @@ one-time work after that (see below).
 Profiles pick disk-vs-speed and finish in one step (no follow-up command):
   --compact          Smallest disk. Compacts the install now: compresses
                      sections, makes the body index contentless, drops the
-                     embedded raw payloads, VACUUMs (DB ~4.3 → ~1.9 GiB).
+                     embedded raw payloads, VACUUMs (DB ~5.2 → ~2.7 GB).
                      Renders on demand.
   --prebuilt         Fastest. Materializes Markdown + HTML now (largest disk).
   (default)          balanced — snapshot as-is; caches Markdown on first read.

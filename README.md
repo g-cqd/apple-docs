@@ -27,7 +27,7 @@ bun run dev:setup    # install dependencies + link the CLI
 apple-docs setup     # download + install the latest snapshot
 ```
 
-`setup` downloads one verified archive (**1.62 GB**) and installs it in a few
+`setup` downloads one verified archive (**1.89 GB**) and installs it in a few
 minutes. After that, everything works offline:
 
 ```bash
@@ -45,9 +45,9 @@ Search takes both forms: exact symbol names and plain-English questions
 
 | | Command | Disk | Best for |
 | --- | --- | --- | --- |
-| Smallest | `apple-docs setup --compact` | ~3 GB | laptops, CI |
-| Default | `apple-docs setup` | ~5.5 GB | most setups |
-| Fastest reads | `apple-docs setup --prebuilt` | ~8.6 GB | serving the website |
+| Smallest | `apple-docs setup --compact` | ~4.6 GB | laptops, CI |
+| Default | `apple-docs setup` | ~7.1 GB | most setups |
+| Fastest reads | `apple-docs setup --prebuilt` | ~10.5 GB | serving the website |
 
 All three contain the full corpus and search identically — they only trade
 disk for read speed. Details and how to switch later:
@@ -153,7 +153,8 @@ install it with `apple-docs setup --archive <path>`.
 
 ### Scoping the corpus (optional)
 
-The full corpus is ~10 GB on disk. If you only need a slice of it, drop a
+The full corpus is ~4.6–10.5 GB on disk depending on the storage profile.
+If you only need a slice of it, drop a
 `scope.json` into your data directory (default `~/.apple-docs`) saying what
 to **keep**:
 
