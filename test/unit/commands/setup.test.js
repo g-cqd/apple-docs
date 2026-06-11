@@ -382,4 +382,42 @@ describe('fetchLatestRelease channels', () => {
     const r = await fetchLatestRelease({ channel: 'beta' })
     expect(r.tag).toBe('snapshot-20260614')
   })
+
+  test('fresh beta install prefers the newest build-host macOS over a newer stable', async () => {
+    // Real-world shape: the weekly stable lands AFTER the beta but is built
+    // on an older macOS. A fresh `setup --beta` must still get the beta —
+    // an existing beta install would refuse the older-base stable anyway.
+    globalThis.fetch = mock(async (url) => {
+      const u = String(url)
+      if (u.includes('snapshot-20260611-status.json')) {
+        return new Response(JSON.stringify({ buildMacos: '26.4' }), { status: 200 })
+      }
+      if (u.includes('beta.3-status.json')) {
+        return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
+      }
+      return new Response(JSON.stringify([
+        { tag_name: 'snapshot-20260611', published_at: '2026-06-11T02:48:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260611'), statusAsset('snapshot-20260611')] },
+        { tag_name: 'snapshot-20260610-beta.3', published_at: '2026-06-10T23:51:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.3'), statusAsset('snapshot-20260610-beta.3')] },
+      ]), { status: 200 })
+    })
+    const r = await fetchLatestRelease({ channel: 'beta' })
+    expect(r.tag).toBe('snapshot-20260610-beta.3')
+    expect(r.prerelease).toBe(true)
+  })
+
+  test('fresh beta install: a stable from the same base supersedes the beta', async () => {
+    globalThis.fetch = mock(async (url) => {
+      const u = String(url)
+      if (u.includes('-status.json')) {
+        return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
+      }
+      return new Response(JSON.stringify([
+        { tag_name: 'snapshot-20260614', published_at: '2026-06-14T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260614'), statusAsset('snapshot-20260614')] },
+        { tag_name: 'snapshot-20260610-beta.3', published_at: '2026-06-10T23:51:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.3'), statusAsset('snapshot-20260610-beta.3')] },
+      ]), { status: 200 })
+    })
+    const r = await fetchLatestRelease({ channel: 'beta' })
+    expect(r.tag).toBe('snapshot-20260614')
+    expect(r.prerelease).toBe(false)
+  })
 })

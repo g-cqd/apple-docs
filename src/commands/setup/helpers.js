@@ -141,6 +141,11 @@ async function fetchReleaseBuildMacos(release) {
  *     has; a stable from the SAME (now GA) or newer base supersedes the
  *     beta. Candidates without provenance count as older-base, except
  *     prereleases when the local provenance is itself unknown.
+ *     Fresh installs (no local provenance) pick the candidate with the
+ *     newest build-host macOS, ties broken by release recency — the same
+ *     corpus an existing beta-channel install would converge on. A newer
+ *     stable from an older base never shadows a beta with more symbols;
+ *     when no candidate carries provenance, the newest release wins.
  *
  * @param {{ channel?: 'stable'|'beta', localBuildMacos?: string|null }} [opts]
  */
@@ -172,12 +177,24 @@ export async function fetchLatestRelease({ channel = 'stable', localBuildMacos =
   const candidates = (Array.isArray(data) ? data : [])
     .filter(r => !r.draft && (r.assets ?? []).some(a => SNAPSHOT_ASSET.test(a.name)))
     .map(shapeRelease)
-  for (const release of candidates) {
-    if (localMajor == null) {
-      // Nothing to protect yet — first install on the channel takes the
-      // newest release outright.
-      return release
+  if (localMajor == null && candidates.length > 0) {
+    // Fresh install — nothing to protect yet, but "newest release" is the
+    // wrong pick when a beta from a newer macOS base exists: the channel
+    // exists to deliver those extra symbols, and an existing beta install
+    // would refuse the older-base stable anyway. Pick the candidate with
+    // the newest build host; ties (same major) go to the newest release,
+    // so a stable from the same-or-newer base still supersedes the beta.
+    // No provenance anywhere → newest release, as before.
+    const majors = await Promise.all(
+      candidates.map(async release => macosMajor(await fetchReleaseBuildMacos(release))),
+    )
+    let best = 0
+    for (let i = 1; i < candidates.length; i++) {
+      if ((majors[i] ?? -1) > (majors[best] ?? -1)) best = i
     }
+    return candidates[best]
+  }
+  for (const release of candidates) {
     const releaseMajor = macosMajor(await fetchReleaseBuildMacos(release))
     if (releaseMajor != null && releaseMajor >= localMajor) return release
   }

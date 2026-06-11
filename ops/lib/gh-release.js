@@ -219,7 +219,8 @@ async function safeText(res) {
  * least the installed corpus's `snapshot_meta.build_macos`.
  *
  * The local provenance is read from `${env.dataDir}/apple-docs.db`
- * (readonly; missing DB/key → null → newest release outright).
+ * (readonly; missing DB/key → null → the candidate with the newest
+ * build-host macOS wins, ties broken by release recency).
  * `deps.channelResolver` injects the policy in tests, mirroring
  * `deps.fetcher`.
  *
