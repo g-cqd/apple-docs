@@ -61,6 +61,7 @@ itself it is never built or indexed by the docs site.
    signing policy set (E7/D-P0-10).
 5. ☑ RFC 0001 corrected (musl SDK demoted to P7; runtime-set bundles;
    6.3.x pin — see the RFC's §5 and decision log).
-6. ☐ Loader + `swift/` package implemented per ffi-bridge.md §2–3, with the
-   A/B parity rig wired into `bun run ci` — **this is P0-implementation
-   itself**, the only box this research leaves open.
+6. ☑ Loader + `swift/` package implemented per ffi-bridge.md §2–3, with the
+   A/B parity rig wired into CI — **done 2026-06-11**: `src/native/loader.js`
+   + the `swift/` package shipped with fusion (and since: archive, embed);
+   the parity suites run in the CI `native` job on all three targets.
