@@ -1,0 +1,128 @@
+# RFC 0003 — Swift render service (RFC 0001 P3)
+
+- **Status**: Draft (living document) — carries RFC 0001 §7 P3 the way
+  RFC 0002 carried P2.
+- **Audience**: maintainers. Lives in `rfcs/` deliberately: repo
+  documentation, not product documentation; not built or indexed by the
+  docs site.
+
+## 1. Motivation
+
+Five inline Swift scripts (~725 LOC under `src/resources/swift/`) do all
+symbol/font rendering today, JIT-spawned via `Bun.spawn swift <script>`:
+
+- Query-time one-shots (`symbol-pdf`, `symbol-png`, `font-text`) pay
+  ~200 ms of Swift JIT cold-start per call under a 10 s deadline — the
+  user-visible pain when a render misses the caches.
+- Build-time workers (`symbol-worker`, `symbol-codepoint-worker`) already
+  amortize the cold-start through pooling/long-living, but carry process
+  plumbing (length-prefixed stdout frames, stdin line protocols, restart
+  logic) that the FFI bridge made obsolete elsewhere.
+- Linux font rendering depends on the **hb-view host binary** — the last
+  host-package requirement the parity work left behind.
+
+P3 consolidates rendering into `libAppleDocsCore` as a persistent service
+behind the established bridge (loader, kill switch, contract v0) and
+replaces hb-view with an in-house HarfBuzz/FreeType shaper on Linux.
+P5 (storage) is gated on P2+P3 native-by-default, so this RFC sits on the
+transition's critical path.
+
+## 2. Inventory (surveyed 2026-06-11)
+
+| Script | LOC | Output | Mode | Spawn site |
+| --- | --- | --- | --- | --- |
+| symbol-worker | 133 | PDF frames | pooled (4–16), stdin names | apple-symbols/sync.js:266 |
+| symbol-pdf | 87 | PDF | one-shot, argv | apple-symbols/render.js:221 |
+| symbol-png | 95 | PNG | one-shot, argv | apple-symbols/render.js:198 |
+| font-text | 168 | SVG | one-shot, argv | apple-fonts/render.js:155 |
+| symbol-codepoint-worker | 242 | JSON lines | long-lived, stdin names | apple-symbols/codepoint-dump.js:318 |
+
+Imports: AppKit + CoreGraphics + ObjectiveC (symbol-worker/pdf), AppKit
+(png), CoreText + CoreGraphics (font-text), **private swiftinterfaces**
+(SFSymbolsShared, CoreGlyphsLib — codepoint-worker only).
+
+Caching layers (unchanged by this RFC): `sf_symbol_renders` DB table
+(sha-keyed params), pre-rendered snapshot SVGs (~273k files: 27
+weight×scale variants per symbol across public+private scopes,
+`resources/symbols/...`). Query-time flow checks DB → snapshot file →
+live render fallback.
+
+Linux font path: `hb-view --output-format=svg` (apple-fonts/
+render.js:126-131, text via temp file for C-locale safety); darwin uses
+CoreText first. Engine selection via `APPLE_DOCS_FONT_RENDERER`;
+`<text>`-element SVG placeholder as the final fallback either way.
+
+## 3. Hard criteria
+
+| Metric | Gate |
+| --- | --- |
+| Warm query-time render (symbol PDF→SVG, font text SVG) | **≥ 5× faster than the spawn path p50** (eliminating ~200 ms JIT; measure both, record here) |
+| Snapshot prerender throughput (symbols/s, full catalog shape) | **≥ the pooled-worker path** on the macOS build host |
+| darwin output parity | **byte-clean fixture diffs** — same CoreText/CoreGraphics/AppKit calls, now in-process |
+| Linux font-text parity | tolerance-based vs recorded hb-view goldens (different shaper build), plus structural gates (glyph count, advance monotonicity, bbox within ε); exact tolerances set by the phase-1 spike |
+| Platform builds | Linux dylib builds with **no AppKit/CoreText** (`#if canImport`) — symbol rendering stays darwin-only by nature (SF Symbols assets are macOS) |
+| Bridge conduct | contract v0; no-trap exports; kill-switch module token `render`; absent dylib/symbols → spawn path serves (the scripts stay until the kill phase) |
+| Memory | render-service RSS bounded across a full prerender (measured like the §3 RSS gates in RFC 0002) |
+
+## 4. Architecture
+
+New `ADRender` target in `swift/`, platform-split:
+
+- **darwin**: symbol PDF render (the symbol-worker/symbol-pdf core),
+  font-text via CoreText — direct ports of the script bodies behind
+  `ad_render_*` exports; the EmbedExports singleton/mutex pattern hosts
+  any cached state (loaded fonts, symbol catalogs).
+- **both platforms**: the font shaper interface; on Linux backed by
+  HarfBuzz + FreeType (per D-0003-2), emitting the same SVG contract
+  hb-view produces today (black outlines, transparent background).
+- JS dispatch: `src/resources/render-native.js` shim mirroring
+  fusion-native conventions (announce-once, `_forceImpl`, per-call
+  fallback to the spawn path — renders are stateless request/response,
+  so fusion-style per-call fallback fits here, unlike the embedder).
+- Codecs: requests are small (names, paths, sizes, colors — len-prefixed
+  utf8 + u32/f64 fields); responses are binary payloads (PDF/PNG bytes,
+  SVG utf8) — contract v0 handles multi-MB payloads (proven by the
+  archive module).
+
+## 5. Open decisions
+
+| ID | Question | Leaning |
+| --- | --- | --- |
+| D-0003-1 | codepoint-worker in-dylib vs stays-spawned — it links PRIVATE swiftinterfaces (SFSymbolsShared/CoreGlyphsLib); baking private-framework linkage into the SHIPPED dylib raises distribution + OS-version fragility | **stays-spawned**: build-time only, already long-lived/amortized (<0.5 ms/symbol after warmup); revisit only if it ever blocks |
+| D-0003-2 | Linux shaper binding: HarfBuzz+FreeType via runtime dlopen vs SwiftPM systemLibrary | **dlopen** (the proven libzstd pattern): zero build deps, absent libs degrade to the placeholder path with one warning |
+| D-0003-3 | AppKit thread model in-dylib: the scripts own their processes' main threads; FFI calls arrive on Bun's JS thread. CoreText/CoreGraphics are thread-safe; `NSImage`-based PNG rasterization may not be | settle by spike: try CG-only rasterization (CGBitmapContext) for png; if AppKit is truly required, png stays spawned (it is the rarest path) |
+| D-0003-4 | FFI result buffers vs socketpair for large payloads | **FFI buffers** (contract v0; copy-then-free; archive proved multi-MB results) — socketpair only if prerender batching measures poorly |
+
+## 6. Phases
+
+1. **Linux shaper spike** *(highest novelty — nothing else starts until
+   its gates hold)*: dlopen bindings for harfbuzz/freetype; shape → glyph
+   outlines → SVG paths; tolerance harness vs recorded hb-view goldens
+   across a font/text/size matrix incl. RTL, combining marks, emoji
+   fallback behavior. Output: tolerance numbers + go/no-go on replacing
+   hb-view. Settles D-0003-2 empirically.
+2. **darwin exports + dispatch**: `ad_render_symbol_pdf`,
+   `ad_render_font_text` (+`ad_render_symbol_png` pending D-0003-3);
+   render-native.js behind `render`; byte-clean fixture gates; warm-path
+   bench vs spawn (≥5× gate).
+3. **Prerender switch**: sync.js pooled spawns → batched FFI calls;
+   throughput + RSS gates on the full catalog; spawn path remains the
+   fallback.
+4. **Kills + records**: hb-view requirement dropped (docs,
+   self-hosting Linux packages section); one-shot scripts deleted after a
+   release cycle at render-native default; RFC 0001 §3/§7 updated.
+   codepoint-worker disposition per D-0003-1.
+
+## 7. Risks
+
+| Risk | Mitigation |
+| --- | --- |
+| Shaper fidelity vs hb-view (ligatures, marks, fallback) | phase-1 spike is gate-first; hb-view goldens recorded BEFORE any kill; placeholder fallback unchanged |
+| AppKit off-main-thread UB | D-0003-3 spike; CG-only rewrite preferred; worst case the affected script stays spawned |
+| Private-framework drift (codepoint) | stays-spawned per D-0003-1 leaning; version-probed at spawn as today |
+| Prerender at 273k-file scale through FFI | batched requests (names-in, frames-out per call); the archive module's at-scale lesson (one streaming pass, measured before flip) |
+| Dylib size growth | render code is small (~1k LOC ported); no new bundled runtimes — dlopen'd system libs only |
+
+---
+*Maintenance*: decisions D-0003-* get dated entries; phase completions
+update RFC 0001 §7 P3 with one line each.

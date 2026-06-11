@@ -286,6 +286,11 @@ reference on the full eval set; NDCG/MRR unchanged; index build ≥ 2× faster
 than transformers.js (expected: far more).
 
 ### P3 — Renderers (consolidate the existing Swift)
+> **Carried by [RFC 0003](0003-swift-render-service.md)** (2026-06-11):
+> inventory, hard criteria, D-0003-1..4 (private-framework codepoint
+> worker, dlopen shaper binding, AppKit thread model, payload transport),
+> and the four-phase plan. The sketch below is historical.
+
 The five inline Swift scripts (725 LOC: symbol worker, symbol-pdf,
 symbol-png, font-text, codepoint worker) move into the package as a
 persistent actor-based render service (one process, request/response over
