@@ -111,6 +111,7 @@ highlight p50 0.15 ms/call; max `content_json` observed 804 KB
 | D-0004-3 | Highlight engine for non-Swift languages (carries RFC 0001 §9 D2) | **Leaning (operator, 2026-06-12): in-house TextMate-style engine** for the ~13 grammars — maximal fidelity; alternatives recorded: tree-sitter (system lib, §9 exception), reduced language set, swift-syntax-for-Swift + plain rest. Phase-4 spike decides on measurements |
 | D-0004-4 | swift-markdown / swift-cmark adoption | **Decided: NO** — corrects RFC 0001 §7 P4. Output markdown is hand-assembled; the input-side parser (render-html/markdown.js) is ported as the same regex engine, byte-exactly |
 | D-0004-5 | Phase-4 session state: the static build consults a ~358k-entry `knownKeys` set per token, and link emission needs SHA-1 (safe-path safeWebSegment) | embed-init-style session export (init once, render many); settled at phase-4 design. The sync-FFI render budget replaces `renderWithTimeout` (a JS watchdog cannot interrupt a sync native call — the shiki-pin incident's protection moves INSIDE Swift) |
+| D-0004-6 | Dispatch shape + rollout stage | **DECIDED by measurement (2026-06-12, phases 1-2 record below)**: per-call payload marshalling LOSES to in-process JS on every content surface — the data already lives in JS memory and the FFI tax (encode+copy+decode+re-parse) exceeds the entire JS render. Even the batched IO-ownership shape (`ad_content_convert_pages`: paths in, Swift owns read+parse+render) reaches only 0.44× of JS — JSC's `JSON.parse` outclasses the hand-rolled parser. `content` therefore ships at the **OPT-IN rollout stage** (RFC 0001 §4: unset = each module's stage default): only an explicit `APPLE_DOCS_NATIVE=…,content` engages it. Flipping requires an arena/lazy-string parser (zero-copy spans) measured ≥ JS — registered as the precondition |
 
 ## 6. Phases
 
@@ -121,21 +122,62 @@ highlight p50 0.15 ms/call; max `content_json` observed 804 KB
    app-store-review); lone-surrogate audit of document_raw; kill-switch
    token `content`; parity tests for both implementations.
 2. **Crawl markdown** — `ad_content_page_markdown` (renderPage +
-   relativePath); full-corpus A/B replay from document_raw; convert
-   bench (pages/s) ≥ JS. Phases 1-2 ship together in this RFC's first
-   execution slice (operator decision 2026-06-12).
+   relativePath) + the batched `ad_content_convert_pages`; full-corpus
+   A/B replay; convert bench (pages/s) ≥ JS. Phases 1-2 ship together in
+   this RFC's first execution slice (operator decision 2026-06-12).
+
+### 6a. Phases 1-2 — EXECUTED 2026-06-12 (parity ✓, perf gate NOT met → opt-in)
+
+Everything landed parity-complete and byte-gated; the performance gate
+**failed honestly**, so the module ships at the opt-in stage (D-0004-6).
+
+- **Parity**: 96 doc cases + 33 page cases across all 12 source_types
+  (committed goldens, generated FROM the JS reference) pass for BOTH
+  implementations. Full-corpus A/B: **358,371 docs × doc-markdown,
+  358,371 × plaintext, 352,542 raw-page replays — 0 byte mismatches**
+  (301.8 s, both implementations per call). JS-pinned Swift unit
+  suites cover the JSON parser (ordered/dup-key/lone-surrogate/depth-64
+  semantics) and the renderer edge cases (`undefined 1.0+` platform
+  interpolation, trailing-colon trims, inactive-reference backticks,
+  `../..` relative paths, ΣWIFT final-sigma lowercase).
+- **Lone-surrogate audit**: 363,603 raw files — **zero** true unpaired
+  surrogate escapes (one double-escaped lookalike in an Apple Music API
+  code sample). The parser's U+FFFD pin is semantics-by-construction
+  (a JS string materializes U+FFFD at every UTF-8 boundary; verified
+  `61efbfbd62` for `a\ud800b`).
+- **Performance (arm64, local corpus)**: JS is microseconds-fast on
+  every surface — doc-markdown 29,952/s, plaintext 288,266/s,
+  page-markdown (pre-parsed) 35,417/s, file-convert (read+parse+render)
+  6,518/s. Native (after a byte-level string rewrite that already won
+  ~5-10× over scalar-based code): 16,032/s (0.54×), 95,183/s (0.33×),
+  2,624/s (0.07×), batched file-convert 2,874/s (0.44×). Fat-doc probe
+  (280 KB sections): JS 0.115 ms vs native 3.7 ms — the gap is parser +
+  marshalling, not the FFI call itself.
+- **The economics finding** (the P1 lesson, content edition): the
+  "≈27 ms/page" pipeline number was IO/download-dominated, NOT render
+  CPU — the conversion surfaces cost JS ~0.15-0.5 ms/page. The
+  hours-long static build's cost therefore lives in phase-4 territory
+  (templates + render-html + highlight) or outside render entirely —
+  **phases 3-4 are gated on a static-build CPU profile before any
+  further porting** (rfcs/README.md updated).
 3. **Normalize** — normalizeDocC + refs + metadata; the serialization
    dragon (D-0004-2); the WHATWG-URL used-subset
    (link-resolver.js:151 `new URL()` reached from refs.js) ported
    against recorded fixtures; gate = corpus-wide contentHash stability.
+   **GATED (2026-06-12)** on the §6a economics: requires the
+   static-build profile + the arena-parser precondition (D-0004-6)
+   before any work starts.
 4. **HTML + highlight** — render-html/* + the markdown.js regex parser
    (byte-exact) + the D2 engine per D-0004-3 + knownKeys session init +
    in-Swift render budget; sampled static-build byte-diff + web-build
    bench ≥ JS. *Kills*: `shiki` (after a release cycle at native
-   default).
+   default). **GATED (2026-06-12)**: a static-build CPU profile decides
+   whether the hours live here (regex-heavy highlighting is the one
+   place compute plausibly dominates marshalling) — profile first,
+   port second.
 5. **Kills + records** — JS converters deleted per surface after a
    release cycle at content-native default (RFC 0002 Stage-C pattern);
-   RFC 0001 §3/§7 updated.
+   RFC 0001 §3/§7 updated. Unreachable until a flip ever happens.
 
 ## 7. Risks
 
