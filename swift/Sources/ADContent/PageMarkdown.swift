@@ -1,9 +1,10 @@
 // Port of src/apple/renderer.js renderPage — raw DocC JSON → the crawl
-// markdown file (normative JS until the phase-5 kill).
+// markdown file (normative JS until the phase-5 kill). Tape + writer
+// implementation (RFC 0004 §6b): no per-node objects, no intermediate
+// Strings on the hot path.
 //
-// `convertFile` is the batch-convert unit (RFC 0004 D-0004-6): Swift owns
-// the read+parse+render so page bytes never round-trip through JS — the
-// shape that actually beats the in-process JS pipeline.
+// `convertFile` is the batch-convert unit (D-0004-6): Swift owns the
+// read+parse+render so page bytes never round-trip through JS.
 
 import ADBase
 
@@ -14,15 +15,17 @@ import Glibc
 #endif
 
 public enum PageMarkdown {
-  /// Read + parse + render one raw DocC JSON file. nil on any trouble
-  /// (unreadable, oversized, malformed, too deep) — the JS path serves
+  /// Read + parse + render one raw DocC JSON file into `out` (the final
+  /// finished document bytes). false on any trouble — the JS path serves
   /// that page instead.
-  public static func convertFile(absolutePath: String, canonicalPath: String) -> String? {
+  public static func convertFile(
+    absolutePath: String, canonicalPath: String, scratch: inout ByteWriter, out: inout [UInt8]
+  ) -> Bool {
     let fd = open(absolutePath, O_RDONLY)
-    guard fd >= 0 else { return nil }
+    guard fd >= 0 else { return false }
     defer { close(fd) }
     var info = stat()
-    guard fstat(fd, &info) == 0, info.st_size >= 0, info.st_size <= 1 << 30 else { return nil }
+    guard fstat(fd, &info) == 0, info.st_size >= 0, info.st_size <= 1 << 30 else { return false }
     var bytes = [UInt8](repeating: 0, count: Int(info.st_size))
     var done = 0
     let wanted = bytes.count
@@ -34,319 +37,631 @@ public enum PageMarkdown {
       }
       return true
     }
-    guard ok else { return nil }
-    guard let parsed = try? Json.parse(bytes, maxContainerDepth: 512) else { return nil }
-    return render(json: parsed, canonicalPath: canonicalPath)
+    guard ok else { return false }
+    return bytes.withUnsafeBytes { raw -> Bool in
+      guard let tape = try? JsonTape.parse(ByteSpan(raw), maxContainerDepth: 512) else { return false }
+      scratch.removeAll()
+      render(tape: tape, canonicalPath: canonicalPath, into: &scratch)
+      ByteOps.finishDocument(scratch.bytes, into: &out, trailingNewline: true)
+      return true
+    }
   }
 
-  public static func render(json: JsonValue, canonicalPath: String) -> String {
-    let root = json.asObject ?? JsonObject()
-    let meta = root["metadata"]?.asObject ?? JsonObject()
-    let refs = root["references"]?.asObject ?? JsonObject()
-    var parts: [String] = []
+  /// Test/compat wrapper: full render to a String.
+  public static func render(tape: JsonTape, canonicalPath: String) -> String {
+    var writer = ByteWriter()
+    render(tape: tape, canonicalPath: canonicalPath, into: &writer)
+    var out: [UInt8] = []
+    ByteOps.finishDocument(writer.bytes, into: &out, trailingNewline: true)
+    return String(decoding: out, as: UTF8.self)
+  }
 
-    parts.append(frontMatter(meta: meta, canonicalPath: canonicalPath))
-    parts.append("")
+  /// Renders the UNFINISHED parts stream (caller applies
+  /// ByteOps.finishDocument — `parts.join('\n').replace(/\n{3,}/).trim()+'\n'`).
+  public static func render(tape: JsonTape, canonicalPath: String, into w: inout ByteWriter) {
+    let root = tape.root
+    let isObject = tape.kind(root) == .object
+    let meta = isObject ? tape.member(root, "metadata") : nil
+    let refs = Refs(tape: tape, object: isObject ? tape.member(root, "references") : nil)
+    var parts = PartsWriter()
 
-    if let title = meta["title"], title.isTruthy {
-      parts.append("# \(title.jsStringCoercion)")
-      parts.append("")
+    parts.begin(&w)
+    frontMatter(tape: tape, meta: meta, canonicalPath: canonicalPath, into: &w)
+    parts.begin(&w) // the '' part after front matter
+
+    if let title = member(tape, meta, "title"), tape.isTruthy(title) {
+      parts.begin(&w)
+      w.append("# ")
+      w.appendCoercion(tape: tape, title)
+      parts.begin(&w)
     }
 
-    if let abstract = root["abstract"]?.asArray, !abstract.isEmpty {
-      parts.append(renderInline(.array(abstract), refs: refs, fromPath: canonicalPath))
-      parts.append("")
+    if let abstract = member(tape, root, "abstract"), tape.kind(abstract) == .array,
+      tape.childCount(abstract) > 0 {
+      parts.begin(&w)
+      renderInline(tape, abstract, refs, canonicalPath, &w)
+      parts.begin(&w)
     }
 
-    for section in root["primaryContentSections"]?.asArray ?? [] {
-      let obj = section.asObject ?? JsonObject()
-      switch obj["kind"]?.asString {
-      case "declarations":
-        parts.append(renderDeclarations(obj))
-      case "parameters":
-        parts.append(renderParameters(obj))
-      case "content":
-        parts.append(renderContentNodes(obj["content"] ?? .array([]), refs: refs, fromPath: canonicalPath))
-      case "mentions":
-        break // metadata, not content
-      default:
-        if let content = obj["content"] {
-          parts.append(renderContentNodes(content, refs: refs, fromPath: canonicalPath))
+    if let sections = member(tape, root, "primaryContentSections"), tape.kind(sections) == .array {
+      tape.forEachElement(sections) { section in
+        // Non-object sections have no kind/content — JS's default branch
+        // pushes nothing.
+        guard tape.kind(section) == .object else { return }
+        let kind = tape.member(section, "kind")
+        if let kind, tape.stringEquals(kind, "declarations") {
+          parts.begin(&w)
+          renderDeclarations(tape, section, &w)
+        } else if let kind, tape.stringEquals(kind, "parameters") {
+          parts.begin(&w)
+          renderParameters(tape, section, &w)
+        } else if let kind, tape.stringEquals(kind, "content") {
+          parts.begin(&w)
+          renderContentNodes(tape, tape.member(section, "content"), refs, canonicalPath, &w)
+        } else if let kind, tape.stringEquals(kind, "mentions") {
+          // metadata, not content — JS pushes nothing for this section
+        } else if let content = tape.member(section, "content") {
+          parts.begin(&w)
+          renderContentNodes(tape, content, refs, canonicalPath, &w)
         }
       }
     }
 
-    let linkBlocks: [(String, String)] = [
+    let linkBlocks: [(StaticString, StaticString)] = [
       ("topicSections", "## Topics"),
       ("relationshipsSections", "## Relationships"),
       ("seeAlsoSections", "## See Also"),
     ]
     for (field, heading) in linkBlocks {
-      guard let sections = root[field]?.asArray, !sections.isEmpty else { continue }
-      parts.append(heading)
-      parts.append("")
-      for section in sections {
-        parts.append(renderLinkSection(section.asObject ?? JsonObject(), refs: refs, fromPath: canonicalPath))
-      }
-    }
-
-    return JsString.trim(JsString.collapseBlankRuns(parts.joined(separator: "\n"))) + "\n"
-  }
-
-  static func frontMatter(meta: JsonObject, canonicalPath: String) -> String {
-    var fields: [(String, FrontMatter.Value?)] = []
-    fields.append(("title", meta["title"]?.nullish.map { .scalar($0.jsStringCoercion) }))
-    let frameworkName = meta["modules"]?.asArray?.first?.asObject?["name"]
-    fields.append(("framework", frameworkName?.nullish.map { .scalar($0.jsStringCoercion) }))
-    fields.append(("role", meta["role"]?.nullish.map { .scalar($0.jsStringCoercion) }))
-    fields.append(("role_heading", meta["roleHeading"]?.nullish.map { .scalar($0.jsStringCoercion) }))
-    let platforms = (meta["platforms"]?.asArray ?? []).compactMap { platform -> String? in
-      let obj = platform.asObject
-      let introduced = obj?["introducedAt"]
-      let name = obj?["name"]
-      if let introduced, introduced.isTruthy {
-        // `${p.name} ${p.introducedAt}+` — a missing name interpolates as
-        // "undefined", faithfully.
-        return "\(JsonValue.templateString(name)) \(introduced.jsStringCoercion)+"
-      }
-      // p.name with filter(Boolean): non-truthy values drop out.
-      guard let name, name.isTruthy else { return nil }
-      return name.jsStringCoercion
-    }
-    fields.append(("platforms", .list(platforms)))
-    fields.append(("path", .scalar(canonicalPath)))
-    return FrontMatter.render(fields)
-  }
-
-  static func renderDeclarations(_ section: JsonObject) -> String {
-    var lines = ["## Declaration", ""]
-    for declaration in section["declarations"]?.asArray ?? [] {
-      let obj = declaration.asObject
-      let code = (obj?["tokens"]?.asArray ?? []).map { token in
-        JsonValue.templateString(token.asObject?["text"])
-      }.joined()
-      let language = obj?["languages"]?.asArray?.first?.nullish?.jsStringCoercion ?? "swift"
-      lines.append("```\(language)")
-      lines.append(code)
-      lines.append("```")
-      lines.append("")
-    }
-    return lines.joined(separator: "\n")
-  }
-
-  static func renderParameters(_ section: JsonObject) -> String {
-    var lines = ["## Parameters", ""]
-    for parameter in section["parameters"]?.asArray ?? [] {
-      let obj = parameter.asObject
-      let name = obj?["name"]?.nullish?.jsStringCoercion ?? ""
-      var description = ""
-      if let content = obj?["content"], content.isTruthy {
-        description = JsString.trim(
-          (content.asArray ?? []).map { node in
-            renderContentNode(node, refs: JsonObject(), fromPath: "")
-          }.joined(separator: " "))
-      }
-      lines.append("- `\(name)`: \(description)")
-    }
-    lines.append("")
-    return lines.joined(separator: "\n")
-  }
-
-  static func renderLinkSection(_ section: JsonObject, refs: JsonObject, fromPath: String) -> String {
-    var lines: [String] = []
-    if let title = section["title"], title.isTruthy {
-      lines.append("### \(title.jsStringCoercion)")
-      lines.append("")
-    }
-    for idValue in section["identifiers"]?.asArray ?? [] {
-      let id = idValue.asString
-      let ref = id.flatMap { refs[$0]?.asObject }
-      let normPath = Identifier.normalize(id)
-      // `ref?.title ?? normPath ?? id` — a null id interpolates as "null".
-      let title =
-        ref?["title"]?.nullish?.jsStringCoercion ?? normPath ?? idValue.jsStringCoercion
-      if let normPath {
-        let rel = relativePath(from: fromPath, to: normPath)
-        lines.append("- [\(title)](\(rel).md)")
-      } else {
-        lines.append("- \(title)")
-      }
-    }
-    lines.append("")
-    return lines.joined(separator: "\n")
-  }
-
-  static func renderContentNodes(_ nodes: JsonValue, refs: JsonObject, fromPath: String) -> String {
-    (nodes.asArray ?? []).map { renderContentNode($0, refs: refs, fromPath: fromPath) }
-      .joined(separator: "\n")
-  }
-
-  static func renderContentNode(_ node: JsonValue, refs: JsonObject, fromPath: String) -> String {
-    guard let obj = node.asObject else { return "" }
-    switch obj["type"]?.asString {
-    case "paragraph":
-      return renderInline(obj["inlineContent"] ?? .array([]), refs: refs, fromPath: fromPath) + "\n"
-
-    case "heading":
-      let level = obj["level"]?.asNumber ?? 2
-      let hashes = String(repeating: "#", count: max(0, Int(level)))
-      let text =
-        obj["text"]?.nullish?.jsStringCoercion
-        ?? renderInline(obj["inlineContent"] ?? .array([]), refs: refs, fromPath: fromPath)
-      return "\(hashes) \(text)\n"
-
-    case "codeListing":
-      let lang = obj["syntax"]?.nullish?.jsStringCoercion ?? ""
-      let code = (obj["code"]?.asArray ?? []).map { line -> String in
-        if case .null = line { return "" }
-        return line.jsStringCoercion
-      }.joined(separator: "\n")
-      return "```\(lang)\n\(code)\n```\n"
-
-    case "unorderedList":
-      let items = (obj["items"]?.asArray ?? []).map { item in
-        renderListItem(item, prefix: "- ", refs: refs, fromPath: fromPath)
-      }
-      return items.joined(separator: "\n") + "\n"
-
-    case "orderedList":
-      let items = (obj["items"]?.asArray ?? []).enumerated().map { index, item in
-        renderListItem(item, prefix: "\(index + 1). ", refs: refs, fromPath: fromPath)
-      }
-      return items.joined(separator: "\n") + "\n"
-
-    case "aside":
-      let style = obj["style"]?.nullish?.jsStringCoercion ?? "Note"
-      let content = JsString.trim(
-        renderContentNodes(obj["content"] ?? .array([]), refs: refs, fromPath: fromPath))
-      return "> **\(style):** \(content)\n"
-
-    case "table":
-      return renderTable(obj, refs: refs, fromPath: fromPath)
-
-    case "links":
-      let items = (obj["items"]?.asArray ?? []).map { idValue -> String in
-        let id = idValue.asString
-        let ref = id.flatMap { refs[$0]?.asObject }
-        let normPath = Identifier.normalize(id)
-        let title =
-          ref?["title"]?.nullish?.jsStringCoercion ?? normPath ?? idValue.jsStringCoercion
-        if let normPath {
-          return "- [\(title)](\(relativePath(from: fromPath, to: normPath)).md)"
+      guard let sections = member(tape, root, field), tape.kind(sections) == .array,
+        tape.childCount(sections) > 0
+      else { continue }
+      parts.begin(&w)
+      w.append(heading)
+      parts.begin(&w)
+      tape.forEachElement(sections) { section in
+        parts.begin(&w)
+        if tape.kind(section) == .object {
+          renderLinkSection(tape, section, refs, canonicalPath, &w)
+        } else {
+          // JS renderLinkSection on a non-object pushes just the trailing ''.
         }
-        return "- \(title)"
       }
-      return items.joined(separator: "\n") + "\n"
-
-    default:
-      // JS truthiness: [] is truthy, '' / null are not.
-      if let inline = obj["inlineContent"], inline.isTruthy {
-        return renderInline(inline, refs: refs, fromPath: fromPath) + "\n"
-      }
-      if let content = obj["content"], content.isTruthy {
-        return renderContentNodes(content, refs: refs, fromPath: fromPath)
-      }
-      return ""
     }
   }
 
-  static func renderListItem(_ item: JsonValue, prefix: String, refs: JsonObject, fromPath: String)
-    -> String {
-    let content = JsString.trim(
-      (item.asObject?["content"]?.asArray ?? []).map { node in
-        renderContentNode(node, refs: refs, fromPath: fromPath)
-      }.joined())
-    return prefix + content
+  /// `obj?.[key]` over an optional object index.
+  @inline(__always)
+  static func member(_ tape: JsonTape, _ object: Int?, _ key: StaticString) -> Int? {
+    guard let object, tape.kind(object) == .object else { return nil }
+    return tape.member(object, key)
   }
 
-  static func renderTable(_ node: JsonObject, refs: JsonObject, fromPath: String) -> String {
-    let rows = node["rows"]?.asArray ?? []
-    if rows.isEmpty { return "" }
-
-    func rowCells(_ row: JsonValue) -> [JsonValue] {
-      if let array = row.asArray { return array }
-      return row.asObject?["cells"]?.asArray ?? []
+  static func frontMatter(tape: JsonTape, meta: Int?, canonicalPath: String, into w: inout ByteWriter) {
+    w.append("---")
+    func field(_ name: StaticString, _ index: Int?) {
+      guard let index, !tape.isNull(index) else { return }
+      w.append(0x0A)
+      w.append(name)
+      w.append(": ")
+      appendYamlScalar(tape: tape, index, &w)
     }
-    func renderCell(_ cell: JsonValue) -> String {
-      let rendered = (cell.asObject?["content"]?.asArray ?? []).map { node in
-        renderContentNode(node, refs: refs, fromPath: fromPath)
-      }.joined()
-      var flattened = ""
-      for ch in JsString.trim(rendered).unicodeScalars {
-        flattened.unicodeScalars.append(ch == "\n" ? " " : ch)
+    field("title", member(tape, meta, "title"))
+    let modules = member(tape, meta, "modules")
+    let firstModule = modules.flatMap { tape.firstElement($0) }
+    field("framework", firstModule.flatMap { tape.kind($0) == .object ? tape.member($0, "name") : nil })
+    field("role", member(tape, meta, "role"))
+    field("role_heading", member(tape, meta, "roleHeading"))
+    // platforms: always present (`?? []`) — emitted even when empty.
+    w.append("\nplatforms: [")
+    var first = true
+    if let platforms = member(tape, meta, "platforms"), tape.kind(platforms) == .array {
+      tape.forEachElement(platforms) { platform in
+        let obj = tape.kind(platform) == .object ? platform : nil
+        let introduced = obj.flatMap { tape.member($0, "introducedAt") }
+        let name = obj.flatMap { tape.member($0, "name") }
+        if let introduced, tape.isTruthy(introduced) {
+          if !first { w.append(", ") }
+          first = false
+          // `${p.name} ${p.introducedAt}+` — missing name interpolates as
+          // "undefined", faithfully. Quoting applies to the whole item.
+          var item = ByteWriter(capacity: 64)
+          if let name {
+            item.appendCoercion(tape: tape, name)
+          } else {
+            item.append("undefined")
+          }
+          item.append(0x20)
+          item.appendCoercion(tape: tape, introduced)
+          item.append(0x2B) // '+'
+          appendYamlQuoted(item.bytes, &w)
+        } else if let name, tape.isTruthy(name) {
+          if !first { w.append(", ") }
+          first = false
+          var item = ByteWriter(capacity: 32)
+          item.appendCoercion(tape: tape, name)
+          appendYamlQuoted(item.bytes, &w)
+        }
       }
-      return flattened
     }
-
-    let headerCells = rowCells(rows[0]).map(renderCell)
-    var lines = [
-      "| \(headerCells.joined(separator: " | ")) |",
-      "| \(headerCells.map { _ in "---" }.joined(separator: " | ")) |",
-    ]
-    for row in rows.dropFirst() {
-      let cells = rowCells(row).map(renderCell)
-      lines.append("| \(cells.joined(separator: " | ")) |")
-    }
-    lines.append("")
-    return lines.joined(separator: "\n")
+    w.append(0x5D) // ']'
+    w.append("\npath: ")
+    var item = ByteWriter(capacity: canonicalPath.utf8.count)
+    item.append(canonicalPath)
+    appendYamlQuoted(item.bytes, &w)
+    w.append("\n---")
   }
 
-  static func renderInline(_ nodes: JsonValue, refs: JsonObject, fromPath: String) -> String {
-    guard let items = nodes.asArray else { return "" }
-    return items.map { renderInlineNode($0, refs: refs, fromPath: fromPath) }.joined()
+  /// toFrontMatter scalar: String(value) then quoteIfNeeded.
+  static func appendYamlScalar(tape: JsonTape, _ index: Int, _ w: inout ByteWriter) {
+    var item = ByteWriter(capacity: 64)
+    item.appendCoercion(tape: tape, index)
+    appendYamlQuoted(item.bytes, &w)
   }
 
-  static func renderInlineNode(_ node: JsonValue, refs: JsonObject, fromPath: String) -> String {
-    guard let obj = node.asObject else { return "" }
-    switch obj["type"]?.asString {
-    case "text":
-      return obj["text"]?.nullish?.jsStringCoercion ?? ""
+  /// yaml.js quoteIfNeeded over raw bytes.
+  static func appendYamlQuoted(_ value: [UInt8], _ w: inout ByteWriter) {
+    if FrontMatter.needsQuotingBytes(value) {
+      w.append(0x22)
+      for byte in value {
+        if byte == UInt8(ascii: "\\") {
+          w.append("\\\\")
+        } else if byte == 0x22 {
+          w.append("\\\"")
+        } else {
+          w.append(byte)
+        }
+      }
+      w.append(0x22)
+    } else {
+      w.bytes.append(contentsOf: value)
+    }
+  }
 
-    case "codeVoice":
-      return "`\(obj["code"]?.nullish?.jsStringCoercion ?? "")`"
+  static func renderDeclarations(_ tape: JsonTape, _ section: Int, _ w: inout ByteWriter) {
+    w.append("## Declaration\n")
+    if let declarations = tape.member(section, "declarations"), tape.kind(declarations) == .array {
+      tape.forEachElement(declarations) { declaration in
+        w.append(0x0A)
+        let obj = tape.kind(declaration) == .object ? declaration : nil
+        w.append("```")
+        appendFirstLanguage(tape, obj, &w)
+        w.append(0x0A)
+        if let tokens = obj.flatMap({ tape.member($0, "tokens") }), tape.kind(tokens) == .array {
+          tape.forEachElement(tokens) { token in
+            // `.map(t => t.text).join('')` — join coerces undefined/null
+            // elements to '' (NOT "undefined").
+            if tape.kind(token) == .object, let text = tape.member(token, "text"),
+              !tape.isNull(text) {
+              w.appendCoercion(tape: tape, text)
+            }
+          }
+        }
+        w.append("\n```\n")
+      }
+    }
+    // The trailing '' line of lines.join('\n') is the final \n already
+    // appended per block; JS also leaves one trailing '' element — the
+    // outer parts machinery reproduces it via the next separator.
+  }
 
-    case "emphasis":
-      return "*\(renderInline(obj["inlineContent"] ?? .array([]), refs: refs, fromPath: fromPath))*"
+  static func appendFirstLanguage(_ tape: JsonTape, _ declaration: Int?, _ w: inout ByteWriter) {
+    if let languages = declaration.flatMap({ tape.member($0, "languages") }),
+      let first = tape.firstElement(languages), !tape.isNull(first) {
+      w.appendCoercion(tape: tape, first)
+    } else {
+      w.append("swift")
+    }
+  }
 
-    case "strong", "newTerm", "inlineHead":
-      return "**\(renderInline(obj["inlineContent"] ?? .array([]), refs: refs, fromPath: fromPath))**"
+  static func renderParameters(_ tape: JsonTape, _ section: Int, _ w: inout ByteWriter) {
+    w.append("## Parameters\n")
+    if let parameters = tape.member(section, "parameters"), tape.kind(parameters) == .array {
+      tape.forEachElement(parameters) { parameter in
+        let obj = tape.kind(parameter) == .object ? parameter : nil
+        w.append("\n- `")
+        if let name = obj.flatMap({ tape.member($0, "name") }), !tape.isNull(name) {
+          w.appendCoercion(tape: tape, name)
+        }
+        w.append("`: ")
+        if let content = obj.flatMap({ tape.member($0, "content") }), tape.isTruthy(content) {
+          // map(renderContentNode).join(' ') then trim.
+          let mark = w.count
+          var firstNode = true
+          tape.forEachElement(content) { node in
+            if !firstNode { w.append(0x20) }
+            firstNode = false
+            renderContentNode(tape, node, .none, "", &w)
+          }
+          w.trim(since: mark)
+        }
+      }
+    }
+    w.append(0x0A)
+  }
 
-    case "reference":
-      let id = obj["identifier"]?.asString
-      let ref = id.flatMap { refs[$0]?.asObject }
-      let title =
-        ref?["title"]?.nullish?.jsStringCoercion
-        ?? obj["identifier"]?.nullish?.jsStringCoercion ?? ""
-      // normalizeIdentifier type-guards on string — non-strings yield null.
-      let normSource = (obj["identifier"]?.nullish ?? ref?["url"]?.nullish)?.asString
+  static func renderLinkSection(_ tape: JsonTape, _ section: Int, _ refs: Refs, _ fromPath: String, _ w: inout ByteWriter) {
+    var first = true
+    func line() {
+      if !first { w.append(0x0A) }
+      first = false
+    }
+    if let title = tape.member(section, "title"), tape.isTruthy(title) {
+      line()
+      w.append("### ")
+      w.appendCoercion(tape: tape, title)
+      line() // ''
+    }
+    if let identifiers = tape.member(section, "identifiers"), tape.kind(identifiers) == .array {
+      tape.forEachElement(identifiers) { idValue in
+        line()
+        appendLinkItem(tape, idValue, refs, fromPath, &w)
+      }
+    }
+    line() // trailing ''
+  }
+
+  /// One `- [title](rel.md)` / `- title` line (shared by link sections and
+  /// the `links` content node).
+  static func appendLinkItem(_ tape: JsonTape, _ idValue: Int, _ refs: Refs, _ fromPath: String, _ w: inout ByteWriter) {
+    let id = tape.kind(idValue) == .string ? tape.string(idValue) : nil
+    let ref = id.flatMap { refs.lookup(tape, $0) }
+    let normPath = Identifier.normalize(id)
+    w.append("- ")
+    if let normPath {
+      w.append(0x5B) // '['
+      if let title = ref.flatMap({ tape.member($0, "title") }), !tape.isNull(title) {
+        w.appendCoercion(tape: tape, title)
+      } else {
+        w.append(normPath)
+      }
+      w.append("](")
+      w.append(relativePath(from: fromPath, to: normPath))
+      w.append(".md)")
+    } else {
+      if let title = ref.flatMap({ tape.member($0, "title") }), !tape.isNull(title) {
+        w.appendCoercion(tape: tape, title)
+      } else {
+        w.appendCoercion(tape: tape, idValue) // `?? id` — null → "null"
+      }
+    }
+  }
+
+  /// The references map: keys are looked up by DYNAMIC id many times per
+  /// page (big pages carry hundreds of refs × hundreds of reference
+  /// nodes), so one Dictionary built per page replaces per-node linear
+  /// scans — the one place hashing pays for itself.
+  public struct Refs: Sendable {
+    let index: [String: Int]?
+
+    init(tape: JsonTape, object: Int?) {
+      guard let object, tape.kind(object) == .object else {
+        index = nil
+        return
+      }
+      var built: [String: Int] = Dictionary(minimumCapacity: tape.childCount(object))
+      tape.forEachMember(object) { key, value in
+        // First occurrence wins position; dup keys were already routed
+        // through the eager parser, so plain insert-if-absent is exact.
+        let keyString = tape.string(key)
+        if built[keyString] == nil { built[keyString] = value }
+      }
+      index = built
+    }
+
+    static let none = Refs(index: nil)
+
+    private init(index: [String: Int]?) {
+      self.index = index
+    }
+
+    func lookup(_ tape: JsonTape, _ id: String) -> Int? {
+      guard let found = index?[id], tape.kind(found) == .object else { return nil }
+      return found
+    }
+  }
+
+  static func renderContentNodes(_ tape: JsonTape, _ nodes: Int?, _ refs: Refs, _ fromPath: String, _ w: inout ByteWriter) {
+    guard let nodes, tape.kind(nodes) == .array else { return }
+    var first = true
+    tape.forEachElement(nodes) { node in
+      if !first { w.append(0x0A) }
+      first = false
+      renderContentNode(tape, node, refs, fromPath, &w)
+    }
+  }
+
+  static func renderContentNode(_ tape: JsonTape, _ node: Int, _ refs: Refs, _ fromPath: String, _ w: inout ByteWriter) {
+    guard tape.kind(node) == .object else { return }
+    let type = tape.member(node, "type")
+
+    if let type, tape.stringEquals(type, "paragraph") {
+      renderInline(tape, tape.member(node, "inlineContent"), refs, fromPath, &w)
+      w.append(0x0A)
+      return
+    }
+    if let type, tape.stringEquals(type, "heading") {
+      let level = tape.member(node, "level").map { tape.numberValue($0) } ?? 2
+      // '#'.repeat(ToInteger(level)) — NaN/∞/huge must not trap (no-trap
+      // rule; Int(Double) aborts beyond Int64). Real levels are 1-6; the
+      // 2^20 ceiling only guards adversarial JSON.
+      let hashes = level.isFinite ? max(0, Int(min(level, 1_048_576))) : 0
+      for _ in 0..<hashes { w.append(0x23) }
+      w.append(0x20)
+      if let text = tape.member(node, "text"), !tape.isNull(text) {
+        w.appendCoercion(tape: tape, text)
+      } else {
+        renderInline(tape, tape.member(node, "inlineContent"), refs, fromPath, &w)
+      }
+      w.append(0x0A)
+      return
+    }
+    if let type, tape.stringEquals(type, "codeListing") {
+      w.append("```")
+      if let syntax = tape.member(node, "syntax"), !tape.isNull(syntax) {
+        w.appendCoercion(tape: tape, syntax)
+      }
+      w.append(0x0A)
+      if let code = tape.member(node, "code"), tape.kind(code) == .array {
+        var first = true
+        tape.forEachElement(code) { line in
+          if !first { w.append(0x0A) }
+          first = false
+          if !tape.isNull(line) { w.appendCoercion(tape: tape, line) }
+        }
+      }
+      w.append("\n```\n")
+      return
+    }
+    if let type, tape.stringEquals(type, "unorderedList") {
+      renderList(tape, node, refs, fromPath, ordered: false, &w)
+      return
+    }
+    if let type, tape.stringEquals(type, "orderedList") {
+      renderList(tape, node, refs, fromPath, ordered: true, &w)
+      return
+    }
+    if let type, tape.stringEquals(type, "aside") {
+      w.append("> **")
+      if let style = tape.member(node, "style"), !tape.isNull(style) {
+        w.appendCoercion(tape: tape, style)
+      } else {
+        w.append("Note")
+      }
+      w.append(":** ")
+      let mark = w.count
+      renderContentNodes(tape, tape.member(node, "content"), refs, fromPath, &w)
+      w.trim(since: mark)
+      w.append(0x0A)
+      return
+    }
+    if let type, tape.stringEquals(type, "table") {
+      renderTable(tape, node, refs, fromPath, &w)
+      return
+    }
+    if let type, tape.stringEquals(type, "links") {
+      if let items = tape.member(node, "items"), tape.kind(items) == .array {
+        var first = true
+        tape.forEachElement(items) { idValue in
+          if !first { w.append(0x0A) }
+          first = false
+          appendLinkItem(tape, idValue, refs, fromPath, &w)
+        }
+      }
+      w.append(0x0A)
+      return
+    }
+    // default: truthy inlineContent → inline + \n; truthy content → nodes.
+    if let inline = tape.member(node, "inlineContent"), tape.isTruthy(inline) {
+      renderInline(tape, inline, refs, fromPath, &w)
+      w.append(0x0A)
+      return
+    }
+    if let content = tape.member(node, "content"), tape.isTruthy(content) {
+      renderContentNodes(tape, content, refs, fromPath, &w)
+    }
+  }
+
+  static func renderList(_ tape: JsonTape, _ node: Int, _ refs: Refs, _ fromPath: String, ordered: Bool, _ w: inout ByteWriter) {
+    if let items = tape.member(node, "items"), tape.kind(items) == .array {
+      var index = 0
+      tape.forEachElement(items) { item in
+        if index > 0 { w.append(0x0A) }
+        if ordered {
+          w.append(Json.ecmaNumberToString(Double(index + 1)))
+          w.append(". ")
+        } else {
+          w.append("- ")
+        }
+        let mark = w.count
+        if tape.kind(item) == .object, let content = tape.member(item, "content"),
+          tape.kind(content) == .array {
+          tape.forEachElement(content) { child in
+            renderContentNode(tape, child, refs, fromPath, &w)
+          }
+        }
+        w.trim(since: mark)
+        index += 1
+      }
+    }
+    w.append(0x0A)
+  }
+
+  static func renderTable(_ tape: JsonTape, _ node: Int, _ refs: Refs, _ fromPath: String, _ w: inout ByteWriter) {
+    guard let rows = tape.member(node, "rows"), tape.kind(rows) == .array,
+      let firstRow = tape.firstElement(rows)
+    else { return }
+
+    func forEachCell(_ row: Int, _ body: (Int) -> Void) {
+      if tape.kind(row) == .array {
+        tape.forEachElement(row, body)
+      } else if tape.kind(row) == .object, let cells = tape.member(row, "cells"),
+        tape.kind(cells) == .array {
+        tape.forEachElement(cells, body)
+      }
+    }
+    func renderCell(_ cell: Int) {
+      let mark = w.count
+      if tape.kind(cell) == .object, let content = tape.member(cell, "content"),
+        tape.kind(content) == .array {
+        tape.forEachElement(content) { child in
+          renderContentNode(tape, child, refs, fromPath, &w)
+        }
+      }
+      w.trim(since: mark)
+      w.newlinesToSpaces(since: mark)
+    }
+
+    var headerCount = 0
+    w.append("| ")
+    var firstCell = true
+    forEachCell(firstRow) { cell in
+      if !firstCell { w.append(" | ") }
+      firstCell = false
+      renderCell(cell)
+      headerCount += 1
+    }
+    w.append(" |\n| ")
+    for i in 0..<headerCount {
+      if i > 0 { w.append(" | ") }
+      w.append("---")
+    }
+    w.append(" |")
+    var skippedFirst = false
+    tape.forEachElement(rows) { row in
+      if !skippedFirst {
+        skippedFirst = true
+        return
+      }
+      w.append("\n| ")
+      var first = true
+      forEachCell(row) { cell in
+        if !first { w.append(" | ") }
+        first = false
+        renderCell(cell)
+      }
+      w.append(" |")
+    }
+    w.append(0x0A)
+  }
+
+  static func renderInline(_ tape: JsonTape, _ nodes: Int?, _ refs: Refs, _ fromPath: String, _ w: inout ByteWriter) {
+    guard let nodes, tape.kind(nodes) == .array else { return }
+    tape.forEachElement(nodes) { node in
+      renderInlineNode(tape, node, refs, fromPath, &w)
+    }
+  }
+
+  static func renderInlineNode(_ tape: JsonTape, _ node: Int, _ refs: Refs, _ fromPath: String, _ w: inout ByteWriter) {
+    guard tape.kind(node) == .object else { return }
+    let type = tape.member(node, "type")
+
+    if let type, tape.stringEquals(type, "text") {
+      if let text = tape.member(node, "text"), !tape.isNull(text) {
+        w.appendCoercion(tape: tape, text)
+      }
+      return
+    }
+    if let type, tape.stringEquals(type, "codeVoice") {
+      w.append(0x60)
+      if let code = tape.member(node, "code"), !tape.isNull(code) {
+        w.appendCoercion(tape: tape, code)
+      }
+      w.append(0x60)
+      return
+    }
+    if let type, tape.stringEquals(type, "emphasis") {
+      w.append(0x2A)
+      renderInline(tape, tape.member(node, "inlineContent"), refs, fromPath, &w)
+      w.append(0x2A)
+      return
+    }
+    if let type,
+      tape.stringEquals(type, "strong") || tape.stringEquals(type, "newTerm")
+        || tape.stringEquals(type, "inlineHead") {
+      w.append("**")
+      renderInline(tape, tape.member(node, "inlineContent"), refs, fromPath, &w)
+      w.append("**")
+      return
+    }
+    if let type, tape.stringEquals(type, "reference") {
+      let identifier = tape.member(node, "identifier")
+      let id = identifier.flatMap { tape.kind($0) == .string ? tape.string($0) : nil }
+      let ref = id.flatMap { refs.lookup(tape, $0) }
+      // normalizeIdentifier(node.identifier ?? ref?.url) — string-guarded.
+      var normSource: String? = id
+      if normSource == nil, identifier == nil || tape.isNull(identifier!) {
+        if let url = ref.flatMap({ tape.member($0, "url") }), tape.kind(url) == .string {
+          normSource = tape.string(url)
+        }
+      }
       let normPath = Identifier.normalize(normSource)
-      let isActiveFalse = obj["isActive"].map { value -> Bool in
-        if case .bool(false) = value { return true }
-        return false
-      } ?? false
-      if let normPath, !isActiveFalse {
-        return "[\(title)](\(relativePath(from: fromPath, to: normPath)).md)"
+      var isActiveFalse = false
+      if let isActive = tape.member(node, "isActive"), tape.kind(isActive) == .bool,
+        !tape.isTruthy(isActive) {
+        isActiveFalse = true
       }
-      return "`\(title)`"
-
-    case "link":
-      let destination = obj["destination"]?.nullish?.jsStringCoercion
-      let title = obj["title"]?.nullish?.jsStringCoercion ?? destination ?? ""
-      return "[\(title)](\(destination ?? ""))"
-
-    case "superscript", "subscript":
-      return renderInline(obj["inlineContent"] ?? .array([]), refs: refs, fromPath: fromPath)
-
-    case "strikethrough":
-      return "~~\(renderInline(obj["inlineContent"] ?? .array([]), refs: refs, fromPath: fromPath))~~"
-
-    case "image":
-      let alt = obj["alt"]?.nullish?.jsStringCoercion ?? ""
-      let source = obj["source"]?.nullish?.jsStringCoercion ?? ""
-      return "![\(alt)](\(source))"
-
-    default:
-      return obj["text"]?.nullish?.jsStringCoercion ?? obj["code"]?.nullish?.jsStringCoercion ?? ""
+      func appendTitle() {
+        if let title = ref.flatMap({ tape.member($0, "title") }), !tape.isNull(title) {
+          w.appendCoercion(tape: tape, title)
+        } else if let identifier, !tape.isNull(identifier) {
+          w.appendCoercion(tape: tape, identifier)
+        }
+      }
+      if let normPath, !isActiveFalse {
+        w.append(0x5B)
+        appendTitle()
+        w.append("](")
+        w.append(relativePath(from: fromPath, to: normPath))
+        w.append(".md)")
+      } else {
+        w.append(0x60)
+        appendTitle()
+        w.append(0x60)
+      }
+      return
+    }
+    if let type, tape.stringEquals(type, "link") {
+      let destination = tape.member(node, "destination")
+      let hasDestination = destination.map { !tape.isNull($0) } ?? false
+      w.append(0x5B)
+      if let title = tape.member(node, "title"), !tape.isNull(title) {
+        w.appendCoercion(tape: tape, title)
+      } else if hasDestination {
+        w.appendCoercion(tape: tape, destination!)
+      }
+      w.append("](")
+      if hasDestination { w.appendCoercion(tape: tape, destination!) }
+      w.append(0x29)
+      return
+    }
+    if let type, tape.stringEquals(type, "superscript") || tape.stringEquals(type, "subscript") {
+      renderInline(tape, tape.member(node, "inlineContent"), refs, fromPath, &w)
+      return
+    }
+    if let type, tape.stringEquals(type, "strikethrough") {
+      w.append("~~")
+      renderInline(tape, tape.member(node, "inlineContent"), refs, fromPath, &w)
+      w.append("~~")
+      return
+    }
+    if let type, tape.stringEquals(type, "image") {
+      w.append("![")
+      if let alt = tape.member(node, "alt"), !tape.isNull(alt) {
+        w.appendCoercion(tape: tape, alt)
+      }
+      w.append("](")
+      if let source = tape.member(node, "source"), !tape.isNull(source) {
+        w.appendCoercion(tape: tape, source)
+      }
+      w.append(0x29)
+      return
+    }
+    // default: text ?? code ?? ''
+    if let text = tape.member(node, "text"), !tape.isNull(text) {
+      w.appendCoercion(tape: tape, text)
+    } else if let code = tape.member(node, "code"), !tape.isNull(code) {
+      w.appendCoercion(tape: tape, code)
     }
   }
 
@@ -372,5 +687,17 @@ public enum PageMarkdown {
     parts.append(contentsOf: toDir.dropFirst(common))
     parts.append(toFile)
     return parts.joined(separator: "/")
+  }
+}
+
+/// `parts: []` + `parts.join('\n')` reproduced as a separator protocol:
+/// every `parts.push(x)` is `begin()` (separator when not first) followed
+/// by the content writes; pushing '' is a bare `begin()`.
+struct PartsWriter {
+  var first = true
+
+  mutating func begin(_ w: inout ByteWriter) {
+    if !first { w.append(0x0A) }
+    first = false
   }
 }

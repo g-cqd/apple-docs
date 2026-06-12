@@ -30,15 +30,17 @@ export function _forceImpl(impl) {
 }
 
 /**
- * Rollout stage: OPT-IN (RFC 0004 D-0004-6). Per-call payload dispatch
- * measured SLOWER than in-process JS for the query-time surfaces (the
- * data already lives in JS memory; the FFI tax exceeds the whole render),
- * so `content` engages only when the kill switch NAMES it — unlike the
- * default-on modules. The batched file-convert path is where native wins.
+ * Rollout stage: DEFAULT-ON since the §6b perf round (RFC 0004) — every
+ * production-engaged surface measures ≥ JS: per-call doc-markdown 1.3×,
+ * batched doc-markdown 2.9×, batched plaintext 1.07×, parallel
+ * file-convert 2.97×. The per-call page/plaintext shapes still lose to
+ * in-process JS (data already in JS memory), so those two dispatch ONLY
+ * under the test seam — their production callers use the batches.
  */
 function moduleEnabled() {
   const raw = (process.env.APPLE_DOCS_NATIVE ?? '').trim().toLowerCase()
-  if (raw === '0' || raw === 'off' || raw === '' || raw === '1' || raw === 'on') return false
+  if (raw === '0' || raw === 'off') return false
+  if (raw === '' || raw === '1' || raw === 'on') return true
   return raw.split(',').some((entry) => entry.trim() === MODULE)
 }
 
@@ -56,65 +58,61 @@ function nativeLib() {
 
 // Grow-only scratch (fusion-native.js pattern): calls are synchronous and
 // single-threaded; the native side consumes the bytes before returning.
-let scratch = new ArrayBuffer(16384)
+// The packer writes DIRECTLY into the scratch with encodeInto (no
+// per-field descriptor objects or intermediate Uint8Arrays — RFC 0004
+// §6b); growth copies the already-written prefix.
+let scratch = new ArrayBuffer(65536)
 let scratchU8 = new Uint8Array(scratch)
 let scratchView = new DataView(scratch)
 
-function ensureScratch(byteLength) {
-  if (scratch.byteLength < byteLength) {
-    let size = scratch.byteLength * 2
-    while (size < byteLength) size *= 2
-    scratch = new ArrayBuffer(size)
-    scratchU8 = new Uint8Array(scratch)
-    scratchView = new DataView(scratch)
-  }
+function growScratch(minimum) {
+  let size = scratch.byteLength * 2
+  while (size < minimum) size *= 2
+  const next = new ArrayBuffer(size)
+  const nextU8 = new Uint8Array(next)
+  nextU8.set(scratchU8) // preserve the written prefix
+  scratch = next
+  scratchU8 = nextU8
+  scratchView = new DataView(scratch)
 }
 
 class Packer {
   constructor() {
-    this.parts = [] // [u8len, Uint8Array|null, f64|null, u32|null] descriptors
-    this.total = 0
+    this.offset = 0
+  }
+
+  ensure(extra) {
+    if (this.offset + extra > scratch.byteLength) growScratch(this.offset + extra)
   }
 
   u32(value) {
-    this.parts.push({ kind: 'u32', value })
-    this.total += 4
+    this.ensure(4)
+    scratchView.setUint32(this.offset, value, true)
+    this.offset += 4
   }
 
   f64(value) {
-    this.parts.push({ kind: 'f64', value })
-    this.total += 8
+    this.ensure(8)
+    scratchView.setFloat64(this.offset, value, true)
+    this.offset += 8
   }
 
   /** Nullable string: null/undefined → sentinel; anything else coerced. */
   string(value) {
     if (value === null || value === undefined) {
-      this.parts.push({ kind: 'u32', value: NULL_SENTINEL })
-      this.total += 4
+      this.u32(NULL_SENTINEL)
       return
     }
-    const utf8 = encoder.encode(typeof value === 'string' ? value : String(value))
-    this.parts.push({ kind: 'u32', value: utf8.length })
-    this.parts.push({ kind: 'bytes', value: utf8 })
-    this.total += 4 + utf8.length
+    const text = typeof value === 'string' ? value : String(value)
+    // utf8 length ≤ 3× UTF-16 length; reserve worst case + the length word.
+    this.ensure(4 + text.length * 3)
+    const { written } = encoder.encodeInto(text, scratchU8.subarray(this.offset + 4))
+    scratchView.setUint32(this.offset, written, true)
+    this.offset += 4 + written
   }
 
   finish() {
-    ensureScratch(this.total)
-    let offset = 0
-    for (const part of this.parts) {
-      if (part.kind === 'u32') {
-        scratchView.setUint32(offset, part.value, true)
-        offset += 4
-      } else if (part.kind === 'f64') {
-        scratchView.setFloat64(offset, part.value, true)
-        offset += 8
-      } else {
-        scratchU8.set(part.value, offset)
-        offset += part.value.length
-      }
-    }
-    return { bytes: scratchU8, length: this.total }
+    return { bytes: scratchU8, length: this.offset }
   }
 }
 
@@ -137,15 +135,9 @@ function call(symbol, packer) {
  * Native renderMarkdown(document, sections, opts) — null means "use JS".
  * Coercions mirror render-markdown.js coerceDocument/coerceSection.
  */
-export function nativeDocMarkdown(document, sections, opts = {}) {
-  if (forced === 'js') return null
+function packDocBody(packer, document, sections) {
   const platformsJson = document?.platformsJson ?? document?.platforms_json ?? null
-  if (!isStringOrNullish(platformsJson)) return null // pre-parsed object — JS path
-  const packer = new Packer()
-  packer.u32(1)
-  const includeFrontMatter = opts.includeFrontMatter !== false
-  const includeTitle = opts.includeTitle !== false
-  packer.u32((includeFrontMatter ? 1 : 0) | (includeTitle ? 2 : 0))
+  if (!isStringOrNullish(platformsJson)) return false // pre-parsed object — JS path
   packer.string(document?.key ?? document?.path ?? null)
   packer.string(document?.title ?? null)
   packer.string(document?.framework ?? null)
@@ -157,23 +149,20 @@ export function nativeDocMarkdown(document, sections, opts = {}) {
   packer.u32(list.length)
   for (const section of list) {
     const contentJson = section?.contentJson ?? section?.content_json ?? null
+    const contentText = section?.contentText ?? section?.content_text ?? ''
     const sortOrder = section?.sortOrder ?? section?.sort_order
-    if (!isStringOrNullish(contentJson)) return null
-    if (sortOrder !== null && sortOrder !== undefined && typeof sortOrder !== 'number') return null
+    if (!isStringOrNullish(contentJson) || typeof contentText !== 'string') return false
+    if (sortOrder !== null && sortOrder !== undefined && typeof sortOrder !== 'number') return false
     packer.string(section?.sectionKind ?? section?.section_kind ?? null)
     packer.string(section?.heading ?? null)
-    packer.string(section?.contentText ?? section?.content_text ?? '')
+    packer.string(contentText)
     packer.string(contentJson ?? null)
     packer.f64(sortOrder ?? 0)
   }
-  return call('ad_content_doc_markdown', packer)
+  return true
 }
 
-/** Native renderPlainText(document, sections) — null means "use JS". */
-export function nativePlainText(document, sections) {
-  if (forced === 'js') return null
-  const packer = new Packer()
-  packer.u32(1)
+function packPlainBody(packer, document, sections) {
   packer.string(document?.title ?? null)
   packer.string(document?.abstractText ?? document?.abstract_text ?? null)
   packer.string(document?.declarationText ?? document?.declaration_text ?? null)
@@ -181,22 +170,117 @@ export function nativePlainText(document, sections) {
   const list = Array.isArray(sections) ? sections : []
   packer.u32(list.length)
   for (const section of list) {
+    const contentText = section?.contentText ?? section?.content_text ?? ''
     const sortOrder = section?.sortOrder ?? section?.sort_order
-    if (sortOrder !== null && sortOrder !== undefined && typeof sortOrder !== 'number') return null
+    if (typeof contentText !== 'string') return false
+    if (sortOrder !== null && sortOrder !== undefined && typeof sortOrder !== 'number') return false
     packer.string(section?.heading ?? null)
-    packer.string(section?.contentText ?? section?.content_text ?? '')
+    packer.string(contentText)
     packer.f64(sortOrder ?? 0)
   }
-  return call('ad_content_plaintext', packer)
+  return true
+}
+
+function docFlags(opts) {
+  const includeFrontMatter = opts.includeFrontMatter !== false
+  const includeTitle = opts.includeTitle !== false
+  return (includeFrontMatter ? 1 : 0) | (includeTitle ? 2 : 0)
+}
+
+export function nativeDocMarkdown(document, sections, opts = {}) {
+  if (forced === 'js') return null
+  const packer = new Packer()
+  packer.u32(1)
+  packer.u32(docFlags(opts))
+  if (!packDocBody(packer, document, sections)) return null
+  return call('ad_content_doc_markdown', packer)
 }
 
 /**
- * Native renderPage(json, canonicalPath) — null means "use JS". The caller
- * holds a parsed object; the value graph round-trips losslessly through
- * JSON.stringify (insertion order preserved, numbers re-parse identically).
+ * Native renderPlainText(document, sections) — TEST SEAM ONLY (the
+ * per-call shape loses to in-process JS at 0.48×; index-body's batch is
+ * the production path). null means "use JS".
+ */
+export function nativePlainText(document, sections) {
+  if (forced !== 'native') return null
+  const packer = new Packer()
+  packer.u32(1)
+  if (!packPlainBody(packer, document, sections)) return null
+  return call('ad_content_plaintext', packer)
+}
+
+/** Decode count × [u32 len][utf8] (sentinel = null entry). */
+function decodeLenPrefixed(result, count) {
+  const view = new DataView(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength)
+  const out = new Array(count)
+  let offset = 0
+  for (let i = 0; i < count; i++) {
+    const len = view.getUint32(offset, true)
+    offset += 4
+    if (len === NULL_SENTINEL) {
+      out[i] = null
+      continue
+    }
+    out[i] = decoder.decode(result.bytes.subarray(offset, offset + len))
+    offset += len
+  }
+  return out
+}
+
+function callBatch(symbol, packer, count) {
+  const lib = nativeLib()
+  if (!lib?.symbols?.[symbol]) return null
+  try {
+    const { bytes, length } = packer.finish()
+    const result = readNativeResult(lib, lib.symbols[symbol](bytes, BigInt(length)))
+    if (result.status !== NATIVE_STATUS_OK) return null
+    return decodeLenPrefixed(result, count)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Batched renderMarkdown over `[{ document, sections }]` — Swift renders
+ * the batch in parallel. Returns aligned strings (null = render that doc
+ * in JS), or null entirely when native is unavailable / inputs sit
+ * outside the codec.
+ */
+export function nativeDocMarkdownBatch(docs, opts = {}) {
+  if (forced === 'js') return null
+  if (!Array.isArray(docs) || docs.length === 0) return null
+  const packer = new Packer()
+  packer.u32(1)
+  packer.u32(docFlags(opts))
+  packer.u32(docs.length)
+  for (const { document, sections } of docs) {
+    if (!packDocBody(packer, document, sections)) return null
+  }
+  return callBatch('ad_content_doc_markdown_batch', packer, docs.length)
+}
+
+/** Batched renderPlainText over `[{ document, sections }]`. */
+export function nativePlainTextBatch(docs) {
+  if (forced === 'js') return null
+  if (!Array.isArray(docs) || docs.length === 0) return null
+  const packer = new Packer()
+  packer.u32(1)
+  packer.u32(docs.length)
+  for (const { document, sections } of docs) {
+    if (!packPlainBody(packer, document, sections)) return null
+  }
+  return callBatch('ad_content_plaintext_batch', packer, docs.length)
+}
+
+/**
+ * Native renderPage(json, canonicalPath) — TEST SEAM ONLY (the caller
+ * holds a parsed object, so this shape pays stringify+reparse and loses
+ * at 0.14×; convertAll's parallel file batch is the production path).
+ * The value graph round-trips losslessly through JSON.stringify
+ * (insertion order preserved, numbers re-parse identically).
  */
 export function nativePageMarkdown(json, canonicalPath) {
-  if (forced === 'js') return null
+  if (forced !== 'native') return null
   if (!json || typeof json !== 'object') return null
   let raw
   try {
@@ -235,20 +319,7 @@ export function nativeConvertPages(entries) {
     const { bytes, length } = packer.finish()
     const result = readNativeResult(lib, lib.symbols.ad_content_convert_pages(bytes, BigInt(length)))
     if (result.status !== NATIVE_STATUS_OK) return null
-    const view = new DataView(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength)
-    const out = new Array(entries.length)
-    let offset = 0
-    for (let i = 0; i < entries.length; i++) {
-      const len = view.getUint32(offset, true)
-      offset += 4
-      if (len === NULL_SENTINEL) {
-        out[i] = null
-        continue
-      }
-      out[i] = decoder.decode(result.bytes.subarray(offset, offset + len))
-      offset += len
-    }
-    return out
+    return decodeLenPrefixed(result, entries.length)
   } catch {
     return null
   }

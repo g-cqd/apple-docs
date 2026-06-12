@@ -1,3 +1,4 @@
+import { nativePlainTextBatch } from '../content/content-native.js'
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { renderPlainText } from '../content/render-text.js'
 import { decodeSectionContent } from '../storage/section-codec.js'
@@ -73,7 +74,10 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
 
     if (documents.length === 0) break
 
-    const inserts = []
+    // Two passes: prepare sections (SQL + the ensureNormalized fallback),
+    // then render — batched natively when the `content` module is enabled
+    // (Swift renders the whole batch in parallel), per-doc JS otherwise.
+    const prepared = []
     for (const document of documents) {
       try {
         let sections = db.db.query(`
@@ -93,8 +97,19 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
           await ensureNormalizedDocument(db, dataDir, document.key, document.source_type ?? 'apple-docc')
           sections = db.getDocumentSections(document.key)
         }
+        prepared.push({ document, sections })
+      } catch {
+        errors++
+      }
+      lastDocumentId = document.id
+    }
 
-        const body = renderPlainText(document, sections)
+    const batched = nativePlainTextBatch(prepared)
+    const inserts = []
+    for (let i = 0; i < prepared.length; i++) {
+      try {
+        const { document, sections } = prepared[i]
+        const body = batched?.[i] ?? renderPlainText(document, sections)
         if (body.length > 0) {
           inserts.push({ id: document.id, body })
           indexed++
@@ -102,7 +117,6 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
       } catch {
         errors++
       }
-      lastDocumentId = document.id
     }
 
     if (inserts.length > 0) {

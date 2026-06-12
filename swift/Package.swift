@@ -3,6 +3,14 @@
 // Zero dependencies by policy; ABI contract v0 (rfcs/.../p0/ffi-bridge.md).
 import PackageDescription
 
+// Release builds inline across module boundaries (RFC 0004 §6b): the
+// content hot path calls tiny ADBase tape accessors from ADContent, and
+// without CMO every one is an opaque cross-module call. Root package, so
+// unsafeFlags is legal; debug/test builds are unaffected.
+let releaseCMO: [SwiftSetting] = [
+  .unsafeFlags(["-cross-module-optimization"], .when(configuration: .release))
+]
+
 let package = Package(
   name: "AppleDocsCore",
   // Floor matches the repo's stated macOS 13+ support; without it the
@@ -14,18 +22,20 @@ let package = Package(
     .library(name: "AppleDocsCore", type: .dynamic, targets: ["ADCore"])
   ],
   targets: [
-    .target(name: "ADBase"),
-    .target(name: "ADSearch"),
-    .target(name: "ADArchive"),
-    .target(name: "ADEmbed"),
+    .target(name: "ADBase", swiftSettings: releaseCMO),
+    .target(name: "ADSearch", swiftSettings: releaseCMO),
+    .target(name: "ADArchive", swiftSettings: releaseCMO),
+    .target(name: "ADEmbed", swiftSettings: releaseCMO),
     // Content pipeline (RFC 0004): reuses ADEmbed's engine-derived JS
     // string semantics (CaseFolding = JS toLowerCase, jsWhitespace = JS
     // trim/\s) and ADBase's ordered JSON.
-    .target(name: "ADContent", dependencies: ["ADBase", "ADEmbed"]),
+    .target(name: "ADContent", dependencies: ["ADBase", "ADEmbed"], swiftSettings: releaseCMO),
     // Dev-only reference dump for the flipped fixture generator (RFC 0002
     // §6h); not shipped — the dylib product above is unchanged.
     .executableTarget(name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump"),
-    .target(name: "ADCore", dependencies: ["ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent"]),
+    .target(
+      name: "ADCore", dependencies: ["ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent"],
+      swiftSettings: releaseCMO),
     .testTarget(name: "ADBaseTests", dependencies: ["ADBase"]),
     .testTarget(name: "ADSearchTests", dependencies: ["ADSearch"]),
     .testTarget(name: "ADArchiveTests", dependencies: ["ADArchive"]),

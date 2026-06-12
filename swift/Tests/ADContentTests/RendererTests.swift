@@ -8,32 +8,130 @@ import Testing
 @testable import ADBase
 @testable import ADContent
 
-struct DocMarkdownTests {
-  static let doc = ContentDocument(
-    key: "swiftui/view", title: "View", framework: "swiftui", frameworkDisplay: nil,
-    role: "symbol", roleHeading: "Protocol",
-    platformsJson: #"{"ios":"13.0","macos":"10.15","weird":null}"#)
+// MARK: - Span shims (tests speak Strings; the renderers speak spans)
 
-  static let sections = [
-    ContentSection(
-      sectionKind: "discussion", contentText: "Line one\nline two\n\nPara two.", sortOrder: 2),
-    ContentSection(
-      sectionKind: "abstract", contentText: "  A type that represents a view.  ", sortOrder: 0),
-    ContentSection(
-      sectionKind: "declaration", contentText: "",
-      contentJson: #"[{"tokens":[{"text":"protocol "},{"text":"View"}],"languages":["swift"]}]"#,
-      sortOrder: 1),
-    ContentSection(
-      sectionKind: "topics", contentText: "",
-      contentJson: #"[{"title":"Creating","items":[{"key":"swiftui/text","title":"Text"},{"title":"No key"}]}]"#,
-      sortOrder: 3),
-    ContentSection(sectionKind: "custom_kind", contentText: "custom body", sortOrder: 4),
-    ContentSection(
-      sectionKind: "parameters", contentText: "",
-      contentJson:
-        #"[{"name":"content","content":[{"type":"paragraph","inlineContent":[{"type":"text","text":"The  content"}]}]},{}]"#,
-      sortOrder: 5),
+private struct Arena {
+  var bytes: [UInt8] = []
+  var ranges: [Range<Int>?] = []
+
+  mutating func add(_ value: String?) -> Int {
+    guard let value else {
+      ranges.append(nil)
+      return ranges.count - 1
+    }
+    let start = bytes.count
+    bytes.append(contentsOf: Array(value.utf8))
+    ranges.append(start..<bytes.count)
+    return ranges.count - 1
+  }
+
+  func span(_ buffer: UnsafeRawBufferPointer, _ index: Int) -> ByteSpan? {
+    guard let range = ranges[index] else { return nil }
+    return ByteSpan(rebasing: buffer[range])
+  }
+}
+
+private func renderDoc(
+  key: String?, title: String?, framework: String?, frameworkDisplay: String?,
+  role: String?, roleHeading: String?, platformsJson: String?,
+  sections: [(kind: String?, heading: String?, text: String, json: String?, sort: Double)],
+  includeFrontMatter: Bool = true, includeTitle: Bool = true
+) -> String {
+  var arena = Arena()
+  let docIdx = [key, title, framework, frameworkDisplay, role, roleHeading, platformsJson].map {
+    arena.add($0)
+  }
+  let sectIdx = sections.map {
+    (arena.add($0.kind), arena.add($0.heading), arena.add($0.text), arena.add($0.json), $0.sort)
+  }
+  let arenaBytes = arena.bytes
+  return arenaBytes.withUnsafeBytes { raw in
+    let buffer = ByteSpan(raw)
+    let empty = ByteSpan(start: nil, count: 0)
+    let document = DocFieldSpans(
+      key: arena.span(buffer, docIdx[0]), title: arena.span(buffer, docIdx[1]),
+      framework: arena.span(buffer, docIdx[2]), frameworkDisplay: arena.span(buffer, docIdx[3]),
+      role: arena.span(buffer, docIdx[4]), roleHeading: arena.span(buffer, docIdx[5]),
+      platformsJson: arena.span(buffer, docIdx[6]))
+    let sects = sectIdx.map { idx in
+      SectionSpans(
+        kind: arena.span(buffer, idx.0), heading: arena.span(buffer, idx.1),
+        text: arena.span(buffer, idx.2) ?? empty, json: arena.span(buffer, idx.3),
+        sortOrder: idx.4)
+    }
+    var w = ByteWriter()
+    var sectionW = ByteWriter()
+    var out: [UInt8] = []
+    DocMarkdown.render(
+      document: document, sections: sects, includeFrontMatter: includeFrontMatter,
+      includeTitle: includeTitle, w: &w, sectionW: &sectionW, out: &out)
+    return String(decoding: out, as: UTF8.self)
+  }
+}
+
+private func renderPlain(
+  title: String?, abstractText: String?, declarationText: String?, headings: String?,
+  sections: [(heading: String?, text: String, sort: Double)]
+) -> String {
+  var arena = Arena()
+  let docIdx = [title, abstractText, declarationText, headings].map { arena.add($0) }
+  let sectIdx = sections.map { (arena.add($0.heading), arena.add($0.text), $0.sort) }
+  let arenaBytes = arena.bytes
+  return arenaBytes.withUnsafeBytes { raw in
+    let buffer = ByteSpan(raw)
+    let empty = ByteSpan(start: nil, count: 0)
+    let document = PlainTextSpans(
+      title: arena.span(buffer, docIdx[0]), abstractText: arena.span(buffer, docIdx[1]),
+      declarationText: arena.span(buffer, docIdx[2]), headings: arena.span(buffer, docIdx[3]))
+    let sects = sectIdx.map { idx in
+      PlainSectionSpans(
+        heading: arena.span(buffer, idx.0), text: arena.span(buffer, idx.1) ?? empty,
+        sortOrder: idx.2)
+    }
+    var w = ByteWriter()
+    var out: [UInt8] = []
+    PlainText.render(document: document, sections: sects, w: &w, out: &out)
+    return String(decoding: out, as: UTF8.self)
+  }
+}
+
+private func renderPageString(_ json: String, path: String) throws -> String {
+  let bytes = Array(json.utf8)
+  return try bytes.withUnsafeBytes { raw in
+    let tape = try JsonTape.parse(ByteSpan(raw))
+    return PageMarkdown.render(tape: tape, canonicalPath: path)
+  }
+}
+
+// MARK: - Tests
+
+struct DocMarkdownTests {
+  static let sections: [(kind: String?, heading: String?, text: String, json: String?, sort: Double)] = [
+    ("discussion", nil, "Line one\nline two\n\nPara two.", nil, 2),
+    ("abstract", nil, "  A type that represents a view.  ", nil, 0),
+    (
+      "declaration", nil, "",
+      #"[{"tokens":[{"text":"protocol "},{"text":"View"}],"languages":["swift"]}]"#, 1
+    ),
+    (
+      "topics", nil, "",
+      #"[{"title":"Creating","items":[{"key":"swiftui/text","title":"Text"},{"title":"No key"}]}]"#, 3
+    ),
+    ("custom_kind", nil, "custom body", nil, 4),
+    (
+      "parameters", nil, "",
+      #"[{"name":"content","content":[{"type":"paragraph","inlineContent":[{"type":"text","text":"The  content"}]}]},{}]"#,
+      5
+    ),
   ]
+
+  static func render(includeFrontMatter: Bool = true, includeTitle: Bool = true) -> String {
+    renderDoc(
+      key: "swiftui/view", title: "View", framework: "swiftui", frameworkDisplay: nil,
+      role: "symbol", roleHeading: "Protocol",
+      platformsJson: #"{"ios":"13.0","macos":"10.15","weird":null}"#,
+      sections: sections, includeFrontMatter: includeFrontMatter, includeTitle: includeTitle)
+  }
 
   @Test func fullDocumentMatchesJs() {
     let want = """
@@ -79,27 +177,22 @@ struct DocMarkdownTests {
       - `Value`:
 
       """
-    #expect(DocMarkdown.render(document: Self.doc, sections: Self.sections) == want)
+    #expect(Self.render() == want)
   }
 
   @Test func bareDocumentSkipsFrontMatterAndTitle() {
-    let rendered = DocMarkdown.render(
-      document: Self.doc, sections: Self.sections, includeFrontMatter: false, includeTitle: false)
+    let rendered = Self.render(includeFrontMatter: false, includeTitle: false)
     #expect(rendered.hasPrefix("A type that represents a view.\n"))
     #expect(!rendered.contains("---"))
     #expect(!rendered.contains("# View"))
   }
 
   @Test func plainTextMatchesJs() {
-    let document = PlainTextDocument(
+    let got = renderPlain(
       title: "View", abstractText: "Abstract here", declarationText: "protocol View",
-      headings: "h1\nh2")
-    let sections = [
-      PlainTextSection(heading: "Over", contentText: "Body\n\n\n\ntext", sortOrder: 1),
-      PlainTextSection(heading: "", contentText: "   ", sortOrder: 0),
-    ]
-    let want = "View\n\nAbstract here\n\nprotocol View\n\nh1\nh2\n\nOver\nBody\n\ntext"
-    #expect(PlainText.render(document: document, sections: sections) == want)
+      headings: "h1\nh2",
+      sections: [("Over", "Body\n\n\n\ntext", 1), ("", "   ", 0)])
+    #expect(got == "View\n\nAbstract here\n\nprotocol View\n\nh1\nh2\n\nOver\nBody\n\ntext")
   }
 }
 
@@ -154,8 +247,7 @@ struct PageMarkdownTests {
       - doc://x/not-a-doc
 
       """
-    let parsed = try Json.parse(Array(pageJson.utf8))
-    #expect(PageMarkdown.render(json: parsed, canonicalPath: "swiftui/view") == want)
+    #expect(try renderPageString(pageJson, path: "swiftui/view") == want)
   }
 
   @Test func relativePathMatchesJs() {

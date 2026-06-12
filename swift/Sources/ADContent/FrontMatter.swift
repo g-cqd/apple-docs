@@ -36,21 +36,51 @@ public enum FrontMatter {
   }
 
   private static func needsQuoting(_ s: String) -> Bool {
-    if s.isEmpty || s == "true" || s == "false" || s == "null" { return true }
-    // /^[\d.]+$/ — ASCII digits and dots only.
+    var s = s
+    return s.withUTF8 { needsQuotingBytes(UnsafeBufferPointer(rebasing: $0[...])) }
+  }
+
+  /// yaml.js quoting predicate over raw UTF-8 (all trigger chars are ASCII,
+  /// so byte scanning is exact).
+  public static func needsQuotingBytes<C: Collection>(_ bytes: C) -> Bool where C.Element == UInt8 {
+    if bytes.isEmpty { return true }
+    if equalsAscii(bytes, "true") || equalsAscii(bytes, "false") || equalsAscii(bytes, "null") {
+      return true
+    }
     var allDigitsDots = true
-    for ch in s.unicodeScalars {
-      if !((ch >= "0" && ch <= "9") || ch == ".") {
+    for byte in bytes {
+      switch byte {
+      case UInt8(ascii: "0")...UInt8(ascii: "9"), UInt8(ascii: "."):
+        continue
+      default:
         allDigitsDots = false
-        break
       }
+      if !allDigitsDots { break }
     }
     if allDigitsDots { return true }
-    // /[:{}[\],&*?|>!%#@`"']/ or a newline anywhere.
-    let special: Set<Unicode.Scalar> = [
-      ":", "{", "}", "[", "]", ",", "&", "*", "?", "|", ">", "!", "%", "#", "@", "`", "\"", "'", "\n",
-    ]
-    for ch in s.unicodeScalars where special.contains(ch) { return true }
+    for byte in bytes {
+      switch byte {
+      case UInt8(ascii: ":"), UInt8(ascii: "{"), UInt8(ascii: "}"), UInt8(ascii: "["),
+        UInt8(ascii: "]"), UInt8(ascii: ","), UInt8(ascii: "&"), UInt8(ascii: "*"),
+        UInt8(ascii: "?"), UInt8(ascii: "|"), UInt8(ascii: ">"), UInt8(ascii: "!"),
+        UInt8(ascii: "%"), UInt8(ascii: "#"), UInt8(ascii: "@"), UInt8(ascii: "`"),
+        UInt8(ascii: "\""), UInt8(ascii: "'"), 0x0A:
+        return true
+      default:
+        continue
+      }
+    }
     return false
+  }
+
+  private static func equalsAscii<C: Collection>(_ bytes: C, _ literal: StaticString) -> Bool
+  where C.Element == UInt8 {
+    guard bytes.count == literal.utf8CodeUnitCount else { return false }
+    var i = 0
+    for byte in bytes {
+      if byte != literal.utf8Start[i] { return false }
+      i += 1
+    }
+    return true
   }
 }
