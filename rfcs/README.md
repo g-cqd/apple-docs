@@ -12,7 +12,7 @@ built or indexed by the docs site.
 | [0001 — Swift-native transition](0001-swift-native-transition.md) | The master plan: phases P0–P7, bridge architecture, dependency policy, **§10 improvement track** | Living |
 | [0002 — Swift embedder](0002-swift-embedder.md) | P2 | **COMPLETE** (2026-06-12, Stage C: default model native-only, snapshots ship ADMX, transformers demoted to gated models; §6h: embedding v2 + reference flip executed) |
 | [0003 — Swift render service](0003-swift-render-service.md) | P3 | Active, **reordered**: darwin-first side slice; Linux shaper + hb-view kill deferred (phase 4, revisit-triggered) |
-| 0004 — Content pipeline *(planned)* | P4 | Authored at slice start, the way 0002/0003 carried P2/P3 |
+| [0004 — Swift content pipeline](0004-content-pipeline.md) | P4 | **Active** (authored 2026-06-12): corrects 0001's sketch (no swift-markdown/cmark; shiki kill deferred to its phase 4); phases 1-2 in execution |
 
 ## Evidence behind the current order (measured 2026-06-12)
 
@@ -35,9 +35,12 @@ built or indexed by the docs site.
    fix + rounding change, order/VS16 retained on evidence; reference
    flip executed (Swift is its own reference; transformers.js =
    divergence recorder); `embed_version` coordination landed.
-2. **RFC 0004 + P4 content pipeline** — author the RFC, then the phased
-   port (swift-markdown/swift-cmark; D2 highlighting spike: swift-syntax
-   for Swift code, engine decision for the rest). **← next**
+2. **RFC 0004 + P4 content pipeline** — **IN EXECUTION** (2026-06-12):
+   RFC authored (survey corrected the 0001 sketch — no
+   swift-markdown/cmark, zero new deps through phase 2; D2 leaning:
+   in-house TextMate-style, D-0004-3); phases 1-2 (leaf renderers +
+   crawl markdown, byte-parity + full-corpus A/B) land in this slice.
+   Next: phase 3 (normalize — the serialization dragon, D-0004-2). **← here**
 
 **Side slice (parallel)**
 - **P3-darwin** (RFC 0003 phases 1–3): render exports + dispatch behind
