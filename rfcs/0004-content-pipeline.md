@@ -160,6 +160,70 @@ Everything landed parity-complete and byte-gated; the performance gate
   (templates + render-html + highlight) or outside render entirely —
   **phases 3-4 are gated on a static-build CPU profile before any
   further porting** (rfcs/README.md updated).
+
+### 6b. Perf round — gates MET, `content` default-on (2026-06-12)
+
+Same-day follow-up under §10's pure-performance category (parity suites
+unchanged throughout; goldens + a fresh full-corpus A/B gate every step).
+Operator direction: per-arch/macOS optimization unconstrained; a JSC
+spike authorized then **skipped** (see D-0004-7).
+
+What moved the needle, in profile order:
+
+1. **Tape parser** (ADBase/JsonTape.swift — the D-0004-6 precondition):
+   one pass → packed UInt64 records; escape-free strings are zero-copy
+   spans into the input; escaped ones decode once into a per-parse
+   scratch; object lookup is a linear UTF-8 compare (~3-10 keys — kills
+   the Hasher/Dictionary column). Correctness fallbacks: duplicate keys
+   / span limits / invalid UTF-8 re-route through the eager JsonValue
+   parser and adopt onto the tape (last-wins-first-position and
+   String(decoding:) repair stay byte-faithful); the safeJson entry
+   keeps depth-64 → nil.
+2. **Writer rendering**: all four renderers emit into one reusable
+   [UInt8] with in-place ranged transforms (trim/\s+/\n→space);
+   `finishDocument` streams the collapse+trim straight into the payload
+   — no intermediate Strings anywhere on the hot path.
+3. **Per-page refs index**: the references map is the ONE dynamic-key
+   lookup hot enough to hash — a single Dictionary built per page
+   (replacing per-node scans that went quadratic on big pages).
+4. **Exclusivity**: tape build moved into a struct builder and storage
+   became `let` — class-ivar `var` access was paying swift_beginAccess
+   per byte (top profile entry, ~900 samples, after the above landed).
+5. **CMO**: `-cross-module-optimization` on release builds + @inlinable
+   tape accessors (ADContent calls tiny ADBase methods per node).
+6. **Parallel batches**: `concurrentPerform` inside
+   `ad_content_convert_pages` and the NEW `ad_content_doc_markdown_batch`
+   / `ad_content_plaintext_batch`; storage-materialize and index-body
+   feed the batches. JS packing rewrote to two-pass `encodeInto` direct
+   writes (no per-field descriptors).
+
+**Measured (arm64, 2,000-doc + 500-page corpus, same-run ratios)**:
+per-call doc-markdown **2.04×** JS (48k/s), parallel file-convert
+**2.65×** (13.3k/s vs 5.0k), batched doc-markdown **3.18×** (75k/s),
+batched plaintext **1.15×** (253k/s vs JS's 219k). Per-call
+page-markdown (0.29×) and plaintext (0.52×) still lose to in-process JS
+— those two shapes are TEST-SEAM ONLY (their production callers use the
+batches), which makes every production-engaged surface ≥ JS.
+
+**Parity re-proven on the final build**: full-corpus A/B — 358,371 docs
+× doc-markdown + plaintext plus 352,542 raw-page replays — **0 byte
+mismatches** (239 s; the §6a run took 302 s on the same machine, so the
+tape build is also ~25% faster end-to-end through the per-call seam).
+
+**Stage decision (gate-driven, operator 2026-06-12)**: `content` joins
+the default-on modules. The CI native matrix now runs the content
+goldens against the freshly built dylib (previously a gap).
+
+| D-0004-6 | **UPDATED**: the arena-parser precondition was met and the flip executed — dispatch shapes recorded above |
+| D-0004-7 | JSC kernels (bundle the normative JS renderers into JavaScriptCore contexts in-dylib, darwin-only) — **SKIPPED by operator (2026-06-12)**: native cleared every gate first. Remains a recorded option for phases 3-4 (parallel UNPORTED JS without the serialization dragons) and the P7 story, requiring a dual-JSC-in-process probe (Bun statically embeds its own JSC) and a §2/§9 decision before any adoption |
+
+**The P7 corollary**: the surviving per-call losses are pure BOUNDARY
+tax (encode + copy + re-parse across the FFI), not render speed — the
+batched numbers show Swift's actual pace once marshalling amortizes.
+When P5/P7 put storage and the binary itself in Swift, sections are born
+in Swift memory, the tax disappears for every surface, and the content
+renderers inherit batched-or-better economics by default — this round's
+code IS the P7 renderer, already byte-proven at corpus scale.
 3. **Normalize** — normalizeDocC + refs + metadata; the serialization
    dragon (D-0004-2); the WHATWG-URL used-subset
    (link-resolver.js:151 `new URL()` reached from refs.js) ported

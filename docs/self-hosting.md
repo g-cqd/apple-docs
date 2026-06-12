@@ -116,21 +116,20 @@ supported acquisition method on Linux and Windows hosts.
 ### Swift-native modules (on by default)
 
 Native implementations are **the default**: with `APPLE_DOCS_NATIVE` unset,
-every migrated module (`fusion`, `archive`, `embed`) serves natively
-wherever `libAppleDocsCore` and its data artifacts exist, and falls back to
-the identical JavaScript implementations otherwise — absent bundle, ABI
-drift after a code-only deploy (re-run `pull-snapshot` to refresh), or any
-load failure logs one warning and serves the same results (outputs are
-bit-identical; see the equivalence gate in `rfcs/0002-swift-embedder.md`).
+every migrated module (`fusion`, `archive`, `embed`, `content`) serves
+natively wherever `libAppleDocsCore` and its data artifacts exist, and
+falls back to the identical JavaScript implementations otherwise — absent
+bundle, ABI drift after a code-only deploy (re-run `pull-snapshot` to
+refresh), or any load failure logs one warning and serves the same results
+(outputs are bit-identical; see the equivalence gates in
+`rfcs/0002-swift-embedder.md` and `rfcs/0004-content-pipeline.md`).
 
 **Escape hatch**: `APPLE_DOCS_NATIVE=off` in `ops/.env` (rendered into both
 service plists) forces the JavaScript implementations. Note (Stage C): the
 default embedding model is native-only — with native off, semantic search
 degrades to lexical-only; fusion/archive still serve identically from JS.
-A comma list (`fusion,archive,embed`) pins exactly those modules instead.
-The `content` module (markdown/plaintext rendering) exists but is OPT-IN
-via the comma list only — byte-identical, currently slower than the
-in-process JS it mirrors (RFC 0004 D-0004-6).
+A comma list (`fusion,archive,embed,content`) pins exactly those modules
+instead.
 
 `apple-docs setup --native` fetches the host's `libAppleDocsCore` bundle
 from the installed release (sha256-verified) into `dist/native/` and
