@@ -171,8 +171,10 @@ public final class JsonTape: @unchecked Sendable {
   /// Byte-compare a string node against an ASCII literal.
   @inlinable public func stringEquals(_ index: Int, _ literal: StaticString) -> Bool {
     guard kind(index) == .string, spanLength(index) == literal.utf8CodeUnitCount else { return false }
+    if literal.utf8CodeUnitCount == 0 { return true }
     return withStringBytes(index) { bytes in
-      memcmp(bytes.baseAddress, literal.utf8Start, literal.utf8CodeUnitCount) == 0
+      guard let base = bytes.baseAddress else { return false }
+      return memcmp(base, literal.utf8Start, literal.utf8CodeUnitCount) == 0
     }
   }
 

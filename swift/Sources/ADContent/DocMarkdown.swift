@@ -234,7 +234,9 @@ public enum DocMarkdown {
 
   static func spanEquals(_ span: ByteSpan?, _ literal: StaticString) -> Bool {
     guard let span, span.count == literal.utf8CodeUnitCount else { return false }
-    return memcmp(span.baseAddress, literal.utf8Start, literal.utf8CodeUnitCount) == 0
+    if literal.utf8CodeUnitCount == 0 { return true }
+    guard let base = span.baseAddress else { return false }
+    return memcmp(base, literal.utf8Start, literal.utf8CodeUnitCount) == 0
   }
 
   /// renderTitledSection(title, normalizeParagraphs(text)) — empty body →
