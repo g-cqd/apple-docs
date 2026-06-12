@@ -9,7 +9,8 @@
 //   [u32 len][unkToken utf8]
 //   [u32 len][continuingSubwordPrefix utf8]
 //   [u32 maxInputCharsPerWord]
-// result payload: [u32 dims][u32 rows]
+// result payload: [u32 dims][u32 rows][u32 behaviorVersion] — pre-v2 dylibs
+// emit 8 bytes; JS treats a missing third field as behavior v1.
 //
 // batch request: [u32 version=1][u32 textCount] then per text { u32 len,
 // utf8 }; result payload: textCount × dims f32 LE (unit-norm vectors).
@@ -137,11 +138,12 @@ public func adEmbedInit(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutab
   )
   let adopted = EmbedRuntime.shared.adopt(Embedder(tokenizer: tokenizer, matrix: matrix), rows: matrix.rows)
 
-  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: 8) else {
+  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: 12) else {
     return nil
   }
   payload.storeBytes(of: UInt32(adopted.dims).littleEndian, toByteOffset: 0, as: UInt32.self)
   payload.storeBytes(of: UInt32(adopted.rows).littleEndian, toByteOffset: 4, as: UInt32.self)
+  payload.storeBytes(of: EmbedBehavior.version.littleEndian, toByteOffset: 8, as: UInt32.self)
   return base
 }
 

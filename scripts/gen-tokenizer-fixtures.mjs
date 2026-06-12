@@ -1,13 +1,14 @@
 /**
- * Generate test/fixtures/tokenizer-parity/ — the committed parity corpus for
- * the Swift tokenizer spike (RFC 0002 Phase 1).
+ * Generate test/fixtures/tokenizer-parity/ — the committed self-regression
+ * corpus for the Swift tokenizer.
  *
- * Replays the EXACT production tokenize path (src/search/embedder.js:
- * AutoTokenizer.from_pretrained(spec.hfId) then
- * tokenizer(texts, { add_special_tokens: false, return_tensor: false })) over
- * a corpus chosen to exercise every captured transformers.js v4.2.0 quirk
- * (see scripts/gen-unicode-tables.mjs header), and records the RAW input_ids
- * (the `[0]` pad for empty outputs is embedder-level, out of scope here).
+ * REFERENCE FLIPPED at embedding v2 (RFC 0001 §10, RFC 0002 §6h): the ids
+ * are recorded from the Swift implementation itself (swift/Sources/ADEmbed
+ * via the ad-embed-dump tool), not from transformers.js. transformers.js
+ * 4.2.0 is still replayed as the DIVERGENCE RECORDER: every case where
+ * Swift deliberately differs is listed in meta.divergences and validated
+ * against EXPECTED_DIVERGENT_CASES below — a Swift regression cannot
+ * silently license itself as a new divergence.
  *
  * Emits:
  *   models/<hfId>/{tokenizer.json,tokenizer_config.json} — sha-pinned copies
@@ -16,23 +17,35 @@
  *     keys, and the vocab carries 18 NFD-form Korean entries)
  *   cases.json — { meta, cases: [{ name, text, ids }] }
  *
- * Requires the real pinned model on disk (dev machine / models dir); never
- * fetches. Deterministic: running twice yields byte-identical output.
- * Invisible/ambiguous characters are written as \u escapes so the corpus is
- * reviewable.
+ * Requires the real pinned model on disk plus the Swift toolchain (dev
+ * machine); never fetches. Deterministic: running twice yields
+ * byte-identical output. Invisible/ambiguous characters are written as \u
+ * escapes so the corpus is reviewable.
  */
 
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { AutoTokenizer, env } from '@huggingface/transformers'
 import { sha256File } from '../src/lib/hash.js'
 import { resolveActiveSpec } from '../src/search/embedder.js'
 import { PINNED_MODEL_FILES, verifyPinnedModelFiles } from '../src/search/model-integrity.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT_DIR = join(ROOT, 'test', 'fixtures', 'tokenizer-parity')
+
+// The hand-written divergence contract: exactly these cases must differ from
+// the transformers.js replay, all via astral-CJK spacing (the v2 fix) —
+// anything else failing the replay is a Swift regression, not a divergence.
+const EXPECTED_DIVERGENT_CASES = [
+  'cjk-astral',
+  'cjk-astral-latin-glue',
+  'cjk-astral-run',
+  'cjk-astral-compat',
+  'judgment-37', // "…𠮷stack" eval query
+  'judgment-38', // "…𠮷json" eval query
+  'judgment-39', // "𠀀𠀁 …" eval query
+]
 
 const spec = resolveActiveSpec()
 if (spec.hfId !== 'minishlab/potion-retrieval-32M') {
@@ -45,13 +58,6 @@ const modelsDir =
 
 // Fail closed on upstream drift before deriving anything from the files.
 await verifyPinnedModelFiles(modelsDir, spec.hfId)
-
-env.localModelPath = modelsDir
-env.cacheDir = modelsDir
-env.allowLocalModels = true
-env.allowRemoteModels = false
-
-const tokenizer = await AutoTokenizer.from_pretrained(spec.hfId)
 
 // --- case corpus -------------------------------------------------------------
 
@@ -138,6 +144,12 @@ const synthesized = [
     'mixed-paragraph',
     'The Σ-algebra of 测试 cases: café \u{2615}\u{fe0f} at 36.5°C — `body` 屬性 returns [CLS]-free 한국어 text… (naïve‽) £3.50',
   ],
+  // Embedding v2 (RFC 0002 §6h): astral CJK is spaced since the v2
+  // divergence — these pin the neighbor-recovery behavior (v1 glued
+  // see𠮷docs into one whole-word UNK, swallowing the Latin signal).
+  ['cjk-astral-latin-glue', 'see\u{20bb7}docs and the \u{20bb7}stack'],
+  ['cjk-astral-run', '\u{20000}\u{20001}\u{20002}'],
+  ['cjk-astral-compat', '\u{2f800}郎 and\u{2f800}then'],
 ]
 
 /** Deterministically harvest prose strings from a committed doc fixture. */
@@ -179,15 +191,8 @@ const cases = [
 const duplicateNames = cases.length - new Set(cases.map((c) => c.name)).size
 if (duplicateNames > 0) throw new Error(`${duplicateNames} duplicate case names`)
 
-// --- tokenize (production call shape) ----------------------------------------
-
-const enc = await tokenizer(
-  cases.map((c) => c.text),
-  { add_special_tokens: false, return_tensor: false },
-)
-for (const [i, ids] of enc.input_ids.entries()) cases[i].ids = ids
-
-// --- vocab as id-ordered array -----------------------------------------------
+// --- vocab as id-ordered array + pinned model copies (the dump tool reads
+// --- these from OUT_DIR, so they are written before tokenization) ------------
 
 const tokenizerJsonPath = join(modelsDir, spec.hfId, 'tokenizer.json')
 const vocabObj = JSON.parse(readFileSync(tokenizerJsonPath, 'utf8')).model.vocab
@@ -202,8 +207,6 @@ for (const [token, id] of entries) {
 const byteDistinct = new Set(vocab.map((t) => Buffer.from(t, 'utf8').toString('hex')))
 if (byteDistinct.size !== vocab.length) throw new Error('vocab tokens are not byte-distinct')
 
-// --- write -------------------------------------------------------------------
-
 const modelOut = join(OUT_DIR, 'models', spec.hfId)
 mkdirSync(modelOut, { recursive: true })
 for (const rel of ['tokenizer.json', 'tokenizer_config.json']) {
@@ -213,19 +216,64 @@ for (const rel of ['tokenizer.json', 'tokenizer_config.json']) {
   const got = await sha256File(dest)
   if (got !== want) throw new Error(`${rel} copy drifted from pin: ${got} != ${want}`)
 }
+writeFileSync(join(OUT_DIR, 'vocab.json'), JSON.stringify(vocab, null, 1))
+
+// --- tokenize: the Swift implementation is the reference -----------------------
+
+const build = Bun.spawnSync(
+  ['swift', 'build', '--package-path', join(ROOT, 'swift'), '-c', 'release', '--product', 'ad-embed-dump'],
+  { stdout: 'inherit', stderr: 'inherit' },
+)
+if (build.exitCode !== 0) throw new Error('swift build of ad-embed-dump failed')
+const dump = Bun.spawnSync(
+  [join(ROOT, 'swift', '.build', 'release', 'ad-embed-dump'), OUT_DIR],
+  { stdin: Buffer.from(JSON.stringify(cases.map((c) => c.text))), stderr: 'inherit' },
+)
+if (dump.exitCode !== 0) throw new Error('ad-embed-dump failed')
+const { behaviorVersion, ids: swiftIds } = JSON.parse(dump.stdout.toString())
+for (const [i, ids] of swiftIds.entries()) cases[i].ids = ids
+
+// --- divergence record: replay transformers.js and validate the contract ------
+
+const { AutoTokenizer, env } = await import('@huggingface/transformers')
+env.localModelPath = modelsDir
+env.cacheDir = modelsDir
+env.allowLocalModels = true
+env.allowRemoteModels = false
+const txTokenizer = await AutoTokenizer.from_pretrained(spec.hfId)
+const enc = await txTokenizer(
+  cases.map((c) => c.text),
+  { add_special_tokens: false, return_tensor: false },
+)
+const divergences = cases
+  .filter((c, i) => JSON.stringify(enc.input_ids[i]) !== JSON.stringify(c.ids))
+  .map((c) => c.name)
+const unexpected = divergences.filter((n) => !EXPECTED_DIVERGENT_CASES.includes(n))
+const missing = EXPECTED_DIVERGENT_CASES.filter((n) => !divergences.includes(n))
+if (unexpected.length > 0 || missing.length > 0) {
+  throw new Error(
+    `divergence contract violated — unexpected: [${unexpected.join(', ')}], expected-but-absent: [${missing.join(', ')}]. ` +
+      'A new deliberate divergence needs EXPECTED_DIVERGENT_CASES updated WITH its RFC record; anything else is a Swift regression.',
+  )
+}
+
+// --- write ---------------------------------------------------------------------
 
 const meta = {
   model: spec.hfId,
+  reference: 'swift-ADEmbed',
+  behaviorVersion,
   transformersVersion: JSON.parse(
     readFileSync(join(ROOT, 'node_modules', '@huggingface', 'transformers', 'package.json'), 'utf8'),
   ).version,
   tokenizerSha256: PINNED_MODEL_FILES[spec.hfId]['tokenizer.json'],
+  divergences,
 }
 
-writeFileSync(join(OUT_DIR, 'vocab.json'), JSON.stringify(vocab, null, 1))
 writeFileSync(join(OUT_DIR, 'cases.json'), JSON.stringify({ meta, cases }, null, 1))
 
 console.log(`wrote ${OUT_DIR}`)
 console.log(`  cases: ${cases.length} (${synthesized.length} synthesized)`)
 console.log(`  vocab: ${vocab.length} tokens`)
 console.log(`  total ids: ${cases.reduce((n, c) => n + c.ids.length, 0)}`)
+console.log(`  behavior v${behaviorVersion}; divergences from transformers.js: ${divergences.join(', ') || 'none'}`)

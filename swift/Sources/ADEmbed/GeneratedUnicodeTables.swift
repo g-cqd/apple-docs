@@ -10,7 +10,7 @@
 // jsWhitespace: 25 scalars / 10 ranges
 // nonspacingMark: 2059 scalars / 365 ranges
 // bertPunctuation: 865 scalars / 194 ranges
-// chineseChar: 28096 scalars / 3 ranges
+// chineseChar: 81520 scalars / 6 ranges
 // nfd: 2081 entries / 3450 payload scalars
 
 /// Engine-derived character classes and canonical decompositions for the
@@ -150,7 +150,8 @@ enum UnicodeTables {
   ]
 
   static let chineseChar: [UInt32] = [
-    0x3400, 0x4DBF, 0x4E00, 0x9FFF, 0xF900, 0xFAFF,
+    0x3400, 0x4DBF, 0x4E00, 0x9FFF, 0xF900, 0xFAFF, 0x20000, 0x2A6DF, 0x2A700, 0x2CEAF,
+    0x2F800, 0x2FA1F,
   ]
 
   /// Scalars with a non-trivial canonical decomposition (Hangul syllables

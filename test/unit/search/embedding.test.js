@@ -53,6 +53,15 @@ describe('quantizeI8 / dotI8', () => {
     expect(i8[2]).toBe(-127) // the absmax maps to ±127
   })
 
+  test('exact halves round away from zero (v2 semantics, mirrors Quantize.swift)', () => {
+    // amax 2 → inv 63.5: ±1 hits exactly ±63.5. ECMA Math.round (the v1
+    // mirror) sent -63.5 to -63; v2 rounds halves away from zero (RFC 0002 §6h).
+    const packed = quantizeI8(new Float32Array([2, 1, -1]))
+    const i8 = new Int8Array(packed.buffer, packed.byteOffset, 3)
+    expect(i8[1]).toBe(64)
+    expect(i8[2]).toBe(-64)
+  })
+
   test('round-trips a vector dot to ≈ ||v||² within int8 tolerance', () => {
     const v = new Float32Array(VECTOR_DIMS)
     for (let i = 0; i < VECTOR_DIMS; i++) v[i] = Math.sin(i) // deterministic spread

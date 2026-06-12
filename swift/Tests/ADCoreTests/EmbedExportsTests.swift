@@ -2,6 +2,7 @@
 // exports share one process-wide embedder (by design), so tests must not
 // interleave init/reset.
 
+import ADEmbed
 import Foundation
 import Testing
 
@@ -121,6 +122,11 @@ struct EmbedExportsTests {
     #expect(initResult?.status == 0, initResult.map { Comment(rawValue: $0.message) } ?? "no result")
     let dims = initResult!.payload.withUnsafeBytes { UInt32(littleEndian: $0.load(as: UInt32.self)) }
     #expect(dims == 512)
+    #expect(initResult!.payload.count == 12)
+    let behavior = initResult!.payload.withUnsafeBytes {
+      UInt32(littleEndian: $0.load(fromByteOffset: 8, as: UInt32.self))
+    }
+    #expect(behavior == EmbedBehavior.version)
 
     let cases = try Fixture.cases()
     let vectors = try Fixture.caseVectors()

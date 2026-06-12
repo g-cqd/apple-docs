@@ -14,8 +14,9 @@ import { _resetVectorCache } from '../search/semantic.js'
  *
  * The anchor code is also upserted into `document_vectors` so old whole-doc
  * readers and the cheap `getVectorCount()` availability gate keep working.
- * `embed_model` / `embed_dims` are recorded in snapshot_meta so the reader can
- * width-guard against a mismatched snapshot.
+ * `embed_model` / `embed_dims` / `embed_version` are recorded in
+ * snapshot_meta so the reader can width-guard against a mismatched snapshot
+ * and version drift is observable (and self-heals on the next index run).
  *
  * Resumable: without `--full`, only documents with no chunks are processed.
  * The embedder is injectable (`opts.embedder`) so tests use a deterministic
@@ -46,7 +47,18 @@ export async function indexEmbeddings(opts, ctx) {
     }
   }
 
-  const full = !!opts?.full
+  let full = !!opts?.full
+  // A deliberate embedding-behavior change (RFC 0001 §10; stamped as
+  // `embed_version`) invalidates stored chunks wholesale — resuming would
+  // mix versions in one table. Checked BEFORE the resume query so an
+  // "up to date" v1 store still re-embeds under a v2 embedder.
+  if (!full && embedder.embedVersion !== undefined && typeof db.getChunkCount === 'function' && db.getChunkCount() > 0) {
+    const stored = db.getSnapshotMeta?.('embed_version') ?? '1'
+    if (stored !== String(embedder.embedVersion)) {
+      logger?.info?.(`Embedding behavior changed (stored v${stored} → live v${embedder.embedVersion}) — full re-embed.`)
+      full = true
+    }
+  }
   const rows = (full
     ? db.db.query('SELECT id, title, abstract_text, headings FROM documents ORDER BY id')
     : db.db.query('SELECT id, title, abstract_text, headings FROM documents WHERE id NOT IN (SELECT document_id FROM document_chunks) ORDER BY id')
@@ -91,6 +103,9 @@ export async function indexEmbeddings(opts, ctx) {
       // leaves chunks on disk with absent/stale model meta.
       db.setSnapshotMeta('embed_dims', String(dims))
       db.setSnapshotMeta('embed_model', process.env.APPLE_DOCS_EMBED_MODEL ?? 'potion-retrieval-32M')
+      if (embedder.embedVersion !== undefined) {
+        db.setSnapshotMeta('embed_version', String(embedder.embedVersion))
+      }
     }
 
     db.db.run('BEGIN')

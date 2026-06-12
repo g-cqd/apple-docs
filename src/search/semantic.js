@@ -112,6 +112,19 @@ export async function semanticCandidates(ctx, query, topK = 50) {
   const store = loadVectors(db)
   if (!store) return []
 
+  // Behavior-version drift (RFC 0001 §10): still serve — v1↔v2 deltas are
+  // confined to astral-CJK inputs (measured: 0/2000 corpus chunks) — but say
+  // so once per store; the next `index embeddings` run self-heals.
+  if (embedder.embedVersion !== undefined && !store.versionChecked) {
+    store.versionChecked = true
+    const stored = (typeof db.getSnapshotMeta === 'function' && db.getSnapshotMeta('embed_version')) || '1'
+    if (stored !== String(embedder.embedVersion)) {
+      logger?.info?.(
+        `semantic index was embedded at behavior v${stored}, live embedder is v${embedder.embedVersion} — serving; re-index to upgrade`,
+      )
+    }
+  }
+
   // isQuery selects the query-side instruction prefix on asymmetric models
   // (potion ignores it) — without it queries embed in document space.
   const qFp32 = await embedder.embed(query, { isQuery: true })

@@ -1,15 +1,17 @@
 /**
- * Guards for the committed embed-parity fixtures (RFC 0002 Phase 2).
+ * Guards for the committed embed-parity fixtures.
  *
- * The Swift embedder's bit-exact gate runs against these fixtures, so they
- * must stay an exact record of the production embed path. Three layers:
+ * SELF-REGRESSION GOLDENS since embedding v2 (RFC 0002 §6h): the fixtures
+ * record the native Swift pipeline's own output — any unintended change to
+ * tokenization/pooling/quantization breaks the replay. Layers:
  *   - always-on: ADMX artifact header + pin coherence, byte-size sanity,
  *     and full code self-consistency (sign/int8 codes re-derived from the
- *     committed vectors with the JS reference quantizers — no model needed);
- *   - replay (skipped without the optional transformers dep + local model):
- *     bit-exact reproduction of case vectors and a corpus sample. Alarms on
- *     transformers/onnxruntime bumps; regenerate via
- *     `bun scripts/gen-embed-{matrix,fixtures}.mjs` and re-pass the Swift gate.
+ *     committed vectors with the JS quantizers — the cross-implementation
+ *     lockstep check, no model needed);
+ *   - replay (skipped without the dylib + local model): bit-exact
+ *     reproduction of case vectors and a corpus sample. Regenerate via
+ *     `bun scripts/gen-embed-{matrix,fixtures}.mjs` ONLY with a deliberate,
+ *     RFC-recorded behavior change.
  */
 
 import { describe, expect, test } from 'bun:test'
@@ -26,9 +28,9 @@ const DIMS = 512
 const SIGN_BYTES = DIMS / 8
 const CODE_STRIDE = SIGN_BYTES + DIMS + 4
 
-// Stage C: the default embed path is native-only — the committed fixtures
-// ARE the frozen transformers reference (generated pre-kill, provenance in
-// index.json), and the replay proves the production path reproduces them.
+// Stage C: the default embed path is native-only; since v2 the committed
+// fixtures are the pipeline's own prior output (provenance in index.json),
+// and the replay proves the production path still reproduces them.
 const DEV_LIB = new URL(`../../../swift/.build/release/libAppleDocsCore.${suffix}`, import.meta.url).pathname
 const nativeAvailable = !!process.env.APPLE_DOCS_NATIVE_LIB || existsSync(DEV_LIB)
 const modelsDir =
@@ -72,7 +74,8 @@ describe('embed-parity fixtures', () => {
   test('index meta and binary sizes are consistent', () => {
     expect(index.meta.model).toBe(HF_ID)
     expect(index.meta.dims).toBe(DIMS)
-    expect(index.meta.runtime).toBe('onnxruntime-node')
+    expect(index.meta.runtime).toBe('native-libAppleDocsCore')
+    expect(index.meta.behaviorVersion).toBeGreaterThanOrEqual(2)
     expect(index.meta.modelOnnxSha256).toBe(LEGACY_ONNX_SHA256)
     expect(index.meta.codeStride).toBe(CODE_STRIDE)
     expect(index.caseNames.length).toBe(index.meta.caseCount)
@@ -107,7 +110,7 @@ describe('embed-parity fixtures', () => {
     }
   })
 
-  describe.skipIf(!nativeAvailable || !modelPresent)('production replay (native vs the frozen fixture reference)', () => {
+  describe.skipIf(!nativeAvailable || !modelPresent)('production replay (native vs its own committed goldens)', () => {
     test('case vectors reproduce bit-exactly', async () => {
       const { getEmbedder } = await import('../../../src/search/embedder.js')
       const embedder = await getEmbedder({ modelsDir })

@@ -30,16 +30,21 @@ struct NormalizerTests {
     #expect(text(Normalizer.normalize(input)) == "a b c d e")
   }
 
-  @Test func chineseSpacingIsBmpOnly() {
+  @Test func chineseSpacingIncludesAstral() {
     #expect(text(Normalizer.normalize(scalars("x中y"))) == "x 中 y")
-    // Astral CJK is untouched: transformers.js iterates UTF-16 units.
-    #expect(text(Normalizer.normalize(scalars("x\u{20000}y"))) == "x\u{20000}y")
+    // Astral CJK is spaced since embedding v2 (RFC 0002 §6h) — transformers.js
+    // never reaches these ranges (per-UTF-16-unit iteration, v1 mirrored that).
+    #expect(text(Normalizer.normalize(scalars("x\u{20000}y"))) == "x \u{20000} y")
+    #expect(text(Normalizer.normalize(scalars("see\u{20BB7}docs"))) == "see \u{20BB7} docs")
     // Kana and Hangul are outside the ranges.
     #expect(text(Normalizer.normalize(scalars("xあy"))) == "xあy")
   }
 
   @Test func lowercaseRunsBeforeStripAccents() {
     // İ → i + U+0307 (full mapping), then the dot above strips as Mn.
+    // Order RETAINED at v2: an exhaustive scan (all scalars × sigma/mark
+    // context templates) found lowercase∘strip ≡ strip∘lowercase — the swap
+    // would have been pure churn (RFC 0002 §6h).
     #expect(text(Normalizer.normalize(scalars("İ"))) == "i")
     #expect(text(Normalizer.normalize(scalars("Café"))) == "cafe")
     // U+212B angstrom decomposes to a + ring; the ring strips.

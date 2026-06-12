@@ -362,6 +362,7 @@ describe('snapshotBuild', () => {
     await indexEmbeddings({ full: true, embedder: topicEmbedder() }, { db, dataDir, logger })
     expect(db.getChunkCount()).toBeGreaterThan(0)
     expect(db.getVectorCount()).toBeGreaterThan(0)
+    db.setSnapshotMeta('embed_version', '2') // fakes don't stamp; the strip must cover it
 
     const result = await snapshotBuild({ out: outDir, tag: 'test-strip' }, { db, dataDir, logger })
     const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-strip-'))
@@ -373,6 +374,7 @@ describe('snapshotBuild', () => {
         expect(edb.getVectorCount()).toBe(0)
         expect(edb.getSnapshotMeta('embed_dims')).toBeFalsy()
         expect(edb.getSnapshotMeta('embed_model')).toBeFalsy()
+        expect(edb.getSnapshotMeta('embed_version')).toBeFalsy()
       } finally {
         edb.close()
       }
