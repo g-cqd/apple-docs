@@ -1,15 +1,15 @@
 // Port of src/content/render-text.js renderPlainText — the FTS body text
-// (normative JS until the phase-5 kill).
+// (normative JS until the phase-5 kill). Span + writer implementation.
 
-public struct PlainTextDocument: Sendable {
-  public var title: String?
-  public var abstractText: String?
-  public var declarationText: String?
-  public var headings: String?
+public struct PlainTextSpans {
+  public var title: ByteSpan?
+  public var abstractText: ByteSpan?
+  public var declarationText: ByteSpan?
+  public var headings: ByteSpan?
 
   public init(
-    title: String? = nil, abstractText: String? = nil, declarationText: String? = nil,
-    headings: String? = nil
+    title: ByteSpan? = nil, abstractText: ByteSpan? = nil, declarationText: ByteSpan? = nil,
+    headings: ByteSpan? = nil
   ) {
     self.title = title
     self.abstractText = abstractText
@@ -18,37 +18,62 @@ public struct PlainTextDocument: Sendable {
   }
 }
 
-public struct PlainTextSection: Sendable {
-  public var heading: String?
-  public var contentText: String
+public struct PlainSectionSpans {
+  public var heading: ByteSpan?
+  public var text: ByteSpan
   public var sortOrder: Double
 
-  public init(heading: String? = nil, contentText: String = "", sortOrder: Double = 0) {
+  public init(heading: ByteSpan? = nil, text: ByteSpan, sortOrder: Double = 0) {
     self.heading = heading
-    self.contentText = contentText
+    self.text = text
     self.sortOrder = sortOrder
   }
 }
 
 public enum PlainText {
-  public static func render(document: PlainTextDocument, sections: [PlainTextSection]) -> String {
-    let ordered = sections.enumerated().sorted {
-      $0.element.sortOrder != $1.element.sortOrder
-        ? $0.element.sortOrder < $1.element.sortOrder
-        : $0.offset < $1.offset
-    }.map(\.element)
+  public static func render(
+    document: PlainTextSpans, sections: [PlainSectionSpans],
+    w: inout ByteWriter, out: inout [UInt8]
+  ) {
+    w.removeAll()
+    var first = true
+    func part(_ body: (inout ByteWriter) -> Void) {
+      let sep = first ? 0 : 2
+      if !first { w.append("\n\n") }
+      let mark = w.count
+      body(&w)
+      if w.count == mark {
+        w.truncate(to: w.count - sep) // body contributed nothing — drop part
+      } else {
+        first = false
+      }
+    }
 
-    var parts: [String] = []
     for field in [document.title, document.abstractText, document.declarationText, document.headings] {
-      if let field, !field.isEmpty { parts.append(field) }
+      if let field, !field.isEmpty {
+        part { $0.append(span: field) }
+      }
     }
-    for section in ordered {
-      var body: [String] = []
-      if let heading = section.heading, !heading.isEmpty { body.append(heading) }
-      if !section.contentText.isEmpty { body.append(section.contentText) }
-      let joined = JsString.trim(body.joined(separator: "\n"))
-      if !joined.isEmpty { parts.append(joined) }
+
+    let order = sections.indices.sorted {
+      sections[$0].sortOrder != sections[$1].sortOrder
+        ? sections[$0].sortOrder < sections[$1].sortOrder
+        : $0 < $1
     }
-    return JsString.trim(JsString.collapseBlankRuns(parts.joined(separator: "\n\n")))
+    for index in order {
+      let section = sections[index]
+      part { w in
+        // [heading, contentText].filter(Boolean).join('\n') → trim → ||null
+        let mark = w.count
+        if let heading = section.heading, !heading.isEmpty {
+          w.append(span: heading)
+          if !section.text.isEmpty { w.append(0x0A) }
+        }
+        if !section.text.isEmpty { w.append(span: section.text) }
+        w.trim(since: mark)
+      }
+    }
+
+    ByteOps.finishDocument(w.bytes, into: &out, trailingNewline: false)
   }
 }

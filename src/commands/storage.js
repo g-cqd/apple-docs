@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { statSync, existsSync, rmSync } from 'node:fs'
 import { dirSize, fileCount, ensureDir, writeText } from '../storage/files.js'
+import { nativeDocMarkdownBatch } from '../content/content-native.js'
 import { renderMarkdown } from '../content/render-markdown.js'
 import { renderHtml } from '../content/render-html.js'
 import { pool } from '../lib/pool.js'
@@ -235,7 +236,39 @@ export async function storageMaterialize(opts, ctx) {
     return { format, materialized: 0, total: docsRows.length }
   }
 
-  await pool(docsRows, 50, async (doc) => {
+  // Markdown leg: batched native render when the `content` module is
+  // enabled (Swift renders the batch in parallel; JS keeps the writes).
+  // Any null — module off, dylib absent, codec mismatch — falls through
+  // to the per-doc pool unchanged.
+  let remaining = docsRows
+  if (format !== 'html') {
+    const BATCH = 100
+    let nativeServed = true
+    for (let start = 0; start < docsRows.length && nativeServed; start += BATCH) {
+      const chunk = docsRows.slice(start, start + BATCH)
+      const entries = chunk.map((doc) => ({ document: doc, sections: getSections.all(doc.id) }))
+      const rendered = nativeDocMarkdownBatch(entries)
+      if (rendered === null) {
+        remaining = docsRows.slice(start)
+        nativeServed = false
+        break
+      }
+      for (let i = 0; i < chunk.length; i++) {
+        const doc = chunk[i]
+        const content = rendered[i] ?? renderMarkdown(entries[i].document, entries[i].sections)
+        const outPath = keyPath(dataDir, 'markdown', doc.key, '.md')
+        try {
+          await writeText(outPath, content)
+          materialized++
+        } catch (err) {
+          logger?.error?.(`Failed to write ${outPath}: ${err.message}`)
+        }
+      }
+    }
+    if (nativeServed) remaining = []
+  }
+
+  await pool(remaining, 50, async (doc) => {
     const sections = getSections.all(doc.id)
 
     let content

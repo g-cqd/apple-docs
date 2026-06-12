@@ -14,7 +14,12 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { suffix } from 'bun:ffi'
 import { DocsDatabase } from '../../src/storage/database.js'
-import { _forceImpl, nativeConvertPages } from '../../src/content/content-native.js'
+import {
+  _forceImpl,
+  nativeConvertPages,
+  nativeDocMarkdownBatch,
+  nativePlainTextBatch,
+} from '../../src/content/content-native.js'
 import { renderMarkdown } from '../../src/content/render-markdown.js'
 import { renderPlainText } from '../../src/content/render-text.js'
 import { renderPage } from '../../src/apple/renderer.js'
@@ -145,7 +150,24 @@ if (convertEntries.length > 0) {
 }
 db.close?.()
 
+// Batched surfaces (the build-path shapes: Swift renders batches in
+// parallel; the JS comparison is the same per-doc loop the callers ran).
+const batchEntries = workload.map((w) => ({ document: w.document, sections: w.sections }))
+const plainEntries = workload.map((w) => ({ document: w.plainDocument, sections: w.sections }))
+_forceImpl('native')
+let t0 = performance.now()
+const mdBatch = nativeDocMarkdownBatch(batchEntries)
+let seconds = (performance.now() - t0) / 1000
+const docBatchNative = mdBatch ? Math.round(batchEntries.length / seconds) : 0
+console.log(`doc-markdown-batch native: ${batchEntries.length} in ${seconds.toFixed(2)}s → ${docBatchNative}/s`)
+t0 = performance.now()
+const ptBatch = nativePlainTextBatch(plainEntries)
+seconds = (performance.now() - t0) / 1000
+const textBatchNative = ptBatch ? Math.round(plainEntries.length / seconds) : 0
+console.log(`plaintext-batch native: ${plainEntries.length} in ${seconds.toFixed(2)}s → ${textBatchNative}/s`)
+_forceImpl(null)
+
 const ratio = (a, b) => (b > 0 ? (a / b).toFixed(2) : 'n/a')
 console.log(
-  `ratios native/js: doc ${ratio(docNative, docJs)}× text ${ratio(textNative, textJs)}× page ${ratio(pageNative, pageJs)}× file-convert ${ratio(convertNative, convertJs)}×`,
+  `ratios native/js: doc ${ratio(docNative, docJs)}× text ${ratio(textNative, textJs)}× page ${ratio(pageNative, pageJs)}× file-convert ${ratio(convertNative, convertJs)}× | batched: doc ${ratio(docBatchNative, docJs)}× text ${ratio(textBatchNative, textJs)}×`,
 )

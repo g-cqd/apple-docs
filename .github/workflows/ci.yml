@@ -167,13 +167,14 @@ jobs:
 
       - name: JS↔Swift parity against the staged artifact
         env:
-          APPLE_DOCS_NATIVE: fusion,archive,embed
+          APPLE_DOCS_NATIVE: fusion,archive,embed,content
         run: |
           ext=so
           [ "${{ runner.os }}" = "macOS" ] && ext=dylib
           export APPLE_DOCS_NATIVE_LIB="$PWD/dist/native/${{ matrix.target }}/libAppleDocsCore.$ext"
           bun test test/unit/native/ test/unit/search/fusion-parity.test.js test/unit/search/fusion.test.js \
-            test/unit/lib/archive-native-parity.test.js test/unit/lib/archive-zstd.test.js
+            test/unit/lib/archive-native-parity.test.js test/unit/lib/archive-zstd.test.js \
+            test/unit/content/content-native-parity.test.js
 
       - name: zstd self-test of a native-built archive
         env:
