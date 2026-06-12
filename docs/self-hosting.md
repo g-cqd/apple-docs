@@ -128,6 +128,9 @@ service plists) forces the JavaScript implementations. Note (Stage C): the
 default embedding model is native-only — with native off, semantic search
 degrades to lexical-only; fusion/archive still serve identically from JS.
 A comma list (`fusion,archive,embed`) pins exactly those modules instead.
+The `content` module (markdown/plaintext rendering) exists but is OPT-IN
+via the comma list only — byte-identical, currently slower than the
+in-process JS it mirrors (RFC 0004 D-0004-6).
 
 `apple-docs setup --native` fetches the host's `libAppleDocsCore` bundle
 from the installed release (sha256-verified) into `dist/native/` and
