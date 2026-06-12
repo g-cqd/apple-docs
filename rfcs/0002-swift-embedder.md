@@ -630,6 +630,13 @@ of its clean variant. Perf: same-machine same-hour A/B — v1 dylib
 26.6k figure above was a cooler machine state, not a regression);
 `UnicodeSets.contains` gained a bounds bail; p50 0.020 ms, init ~60 ms.
 
+**Rollout (same day).** `snapshot-20260612-beta.1` published (1.87 GB,
+prerelease) and mm18 deployed: code at the v2 commit, setup re-embedded
+the full corpus with the v2 bundle (`embed_version=2` stamped,
+`behavior v2` announced), web+mcp healthz green, smoke battery 16/16.
+Intel bench with the shipped darwin-x64 slice: 13,103 codes/s (v1
+baseline 12,898), p50 0.040 ms — no regression, slight win.
+
 Adjacent observations (pre-existing, out of scope, recorded for later
 slices): 31/43 curated eval judgments never resolved against live
 corpora (`documentation/`-prefixed paths vs unprefixed live keys — the

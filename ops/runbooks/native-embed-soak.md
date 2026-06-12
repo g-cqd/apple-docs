@@ -35,8 +35,9 @@ sudo bin/apple-docs-ops install 2>/dev/null || sudo ops/bin/apple-docs-ops insta
 # (setup --force --native --beta; pre-generates matrix-v1.admx; restarts)
 bun ops/cli.js pull-snapshot
 
-# verify
-curl -fsS http://127.0.0.1:8080/healthz && echo " local healthz OK"
+# verify (caddy fronts WEB_PORT/MCP_PORT from ops/.env — 3030/3031 on mm18)
+curl -fsS http://127.0.0.1:3030/healthz && echo " web healthz OK"
+curl -fsS http://127.0.0.1:3031/healthz && echo " mcp healthz OK"
 ls -la ~/.apple-docs/resources/models/minishlab/potion-retrieval-32M/matrix-v1.admx
 APPLE_DOCS_LOG_LEVEL=info bun cli.js search "swiftui animation" 2>&1 | grep -E "served by"
 '
