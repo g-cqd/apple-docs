@@ -1,13 +1,15 @@
 /**
- * Guards for the committed tokenizer-parity fixtures (RFC 0002 Phase 1).
+ * Guards for the committed tokenizer-parity fixtures.
  *
- * The Swift tokenizer's 100%-parity gate runs against
- * test/fixtures/tokenizer-parity/cases.json, so the fixtures must stay an
- * exact record of what production tokenization does. This file alarms when
- * either input drifts: the pinned model files (sha against
- * PINNED_MODEL_FILES) or transformers.js itself (full case replay + version
- * stamp). On a transformers bump that changes behavior: regenerate via
- * `bun scripts/gen-tokenizer-fixtures.mjs` and make the Swift suite re-pass.
+ * REFERENCE FLIPPED at embedding v2 (RFC 0002 §6h): cases.json records the
+ * Swift tokenizer's own output (self-regression goldens, gated by the Swift
+ * suite). transformers.js stays on as the DIVERGENCE RECORDER: every case in
+ * meta.divergences must DIFFER from the replay (each divergence stays real
+ * and deliberate), every other case must still MATCH (an upstream
+ * transformers bump that changes anything else still alarms here). On a
+ * legitimate change: regenerate via `bun scripts/gen-tokenizer-fixtures.mjs`
+ * (which validates divergences against its hand-written expected list) and
+ * make the Swift suite re-pass.
  */
 
 import { describe, expect, test } from 'bun:test'
@@ -41,6 +43,15 @@ describe('tokenizer-parity fixtures', () => {
     expect(meta.tokenizerSha256).toBe(PINNED_MODEL_FILES[HF_ID]['tokenizer.json'])
   })
 
+  test('fixtures record the Swift reference and its divergence list', () => {
+    expect(meta.reference).toBe('swift-ADEmbed')
+    expect(meta.behaviorVersion).toBeGreaterThanOrEqual(2)
+    expect(Array.isArray(meta.divergences)).toBe(true)
+    expect(meta.divergences.length).toBeGreaterThan(0)
+    const names = new Set(cases.map((c) => c.name))
+    for (const name of meta.divergences) expect(names.has(name)).toBe(true)
+  })
+
   test('vocab.json is the id-ordered mirror of tokenizer.json', () => {
     const vocab = JSON.parse(readFileSync(join(FIXTURES, 'vocab.json'), 'utf8'))
     const declared = JSON.parse(
@@ -55,12 +66,12 @@ describe('tokenizer-parity fixtures', () => {
     }
   })
 
-  describe.skipIf(!transformers)('transformers.js replay', () => {
-    test('installed version matches the fixture stamp', () => {
+  describe.skipIf(!transformers)('transformers.js divergence record', () => {
+    test('installed version matches the comparison vintage', () => {
       expect(transformers.env.version).toBe(meta.transformersVersion)
     })
 
-    test('every case reproduces its recorded ids', async () => {
+    test('non-divergent cases match the replay; divergent cases differ', async () => {
       const { AutoTokenizer, env } = transformers
       env.localModelPath = join(FIXTURES, 'models')
       env.cacheDir = join(FIXTURES, 'models')
@@ -71,10 +82,16 @@ describe('tokenizer-parity fixtures', () => {
         cases.map((c) => c.text),
         { add_special_tokens: false, return_tensor: false },
       )
-      const mismatches = cases
-        .filter((c, i) => JSON.stringify(enc.input_ids[i]) !== JSON.stringify(c.ids))
-        .map((c) => c.name)
-      expect(mismatches).toEqual([])
+      const divergent = new Set(meta.divergences)
+      const unexpectedMismatches = []
+      const staleDivergences = []
+      for (const [i, c] of cases.entries()) {
+        const matches = JSON.stringify(enc.input_ids[i]) === JSON.stringify(c.ids)
+        if (divergent.has(c.name) && matches) staleDivergences.push(c.name)
+        if (!divergent.has(c.name) && !matches) unexpectedMismatches.push(c.name)
+      }
+      expect(unexpectedMismatches).toEqual([])
+      expect(staleDivergences).toEqual([])
     })
   })
 })

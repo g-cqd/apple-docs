@@ -73,6 +73,10 @@ export function hamming(a, b, offsetB = 0, width = a.length) {
  * order-independent and corpus-calibration-free → snapshot-stable / bit-
  * identical across the determinism gate's two passes.
  *
+ * Mirrors swift/Sources/ADEmbed/Quantize.swift (normative since embedding
+ * v2): exact halves round AWAY FROM ZERO, not ECMA Math.round's toward-+∞
+ * (RFC 0002 §6h) — change both sides together.
+ *
  * @param {Float32Array|number[]} vec
  * @returns {Uint8Array} length `vec.length + 4`
  */
@@ -88,7 +92,8 @@ export function quantizeI8(vec) {
   const scale = amax > 0 ? amax / 127 : 1
   const inv = amax > 0 ? 127 / amax : 0
   for (let i = 0; i < n; i++) {
-    let q = Math.round(vec[i] * inv)
+    const x = vec[i] * inv
+    let q = Math.sign(x) * Math.round(Math.abs(x))
     if (q > 127) q = 127
     else if (q < -127) q = -127
     i8[i] = q

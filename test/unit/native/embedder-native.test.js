@@ -14,6 +14,7 @@ import { _resetNativeLoader } from '../../../src/native/loader.js'
 import {
   _resetNativeEmbedder,
   buildNativeModel2Vec,
+  EXPECTED_EMBED_VERSION,
   pregenerateMatrixArtifact,
 } from '../../../src/search/embedder-native.js'
 
@@ -50,9 +51,10 @@ describe.skipIf(!existsSync(DEV_LIB))('embedder-native round trip', () => {
     _resetNativeLoader()
   })
 
-  test('all 180 case vectors are bit-exact through the FFI', async () => {
+  test('every case vector is bit-exact through the FFI', async () => {
     const embedder = await buildNativeModel2Vec(SPEC, '/nonexistent-models', SEAMS)
     expect(embedder).not.toBeNull()
+    expect(embedder.embedVersion).toBe(EXPECTED_EMBED_VERSION)
     const { cases } = JSON.parse(readFileSync(join(FIXTURES, 'tokenizer-parity', 'cases.json'), 'utf8'))
     const want = readFileSync(join(FIXTURES, 'embed-parity', 'case-vectors.bin'))
     const vecs = await embedder.embedBatch(cases.map((c) => c.text))
@@ -64,7 +66,7 @@ describe.skipIf(!existsSync(DEV_LIB))('embedder-native round trip', () => {
     expect(mismatches).toEqual([])
   })
 
-  test('all 180 case codes are byte-exact through the FFI', async () => {
+  test('every case code is byte-exact through the FFI', async () => {
     const embedder = await buildNativeModel2Vec(SPEC, '/nonexistent-models', SEAMS)
     expect(embedder.dims).toBe(512)
     const { cases } = JSON.parse(readFileSync(join(FIXTURES, 'tokenizer-parity', 'cases.json'), 'utf8'))

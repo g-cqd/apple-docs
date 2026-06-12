@@ -44,6 +44,20 @@ describe('semanticCandidates', () => {
     expect(top.path).toBe('fw/alpha')
   })
 
+  test('behavior-version drift logs once but still serves (RFC 0002 §6h)', async () => {
+    // Store stamped v1 (no embed_version meta), live embedder claims v2.
+    const lines = []
+    const vctx = {
+      db,
+      logger: { debug() {}, info: (m) => lines.push(m) },
+      embedder: { ...topicEmbedder(), embedVersion: 2 },
+    }
+    const res = await semanticCandidates(vctx, 'sound', 3)
+    expect(res.length).toBeGreaterThan(0) // serving, not degraded
+    await semanticCandidates(vctx, 'sound', 3)
+    expect(lines.filter((m) => m.includes('behavior v1')).length).toBe(1) // once per store
+  })
+
   test('dormant when APPLE_DOCS_SEMANTIC=off', async () => {
     const prev = process.env.APPLE_DOCS_SEMANTIC
     process.env.APPLE_DOCS_SEMANTIC = 'off'

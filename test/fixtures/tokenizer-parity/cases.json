@@ -1,8 +1,19 @@
 {
  "meta": {
   "model": "minishlab/potion-retrieval-32M",
+  "reference": "swift-ADEmbed",
+  "behaviorVersion": 2,
   "transformersVersion": "4.2.0",
-  "tokenizerSha256": "7d75cbc54318138807c401b0f0c9721117c628b39de8e8e0edb6cb17e0ee7d18"
+  "tokenizerSha256": "7d75cbc54318138807c401b0f0c9721117c628b39de8e8e0edb6cb17e0ee7d18",
+  "divergences": [
+   "cjk-astral",
+   "cjk-astral-latin-glue",
+   "cjk-astral-run",
+   "cjk-astral-compat",
+   "judgment-37",
+   "judgment-38",
+   "judgment-39"
+  ]
  },
  "cases": [
   {
@@ -286,6 +297,7 @@
    "name": "cjk-astral",
    "text": "𠀀𠀁 中𠮷文",
    "ids": [
+    1,
     1,
     752,
     1,
@@ -998,6 +1010,39 @@
     27188,
     18,
     1759
+   ]
+  },
+  {
+   "name": "cjk-astral-latin-glue",
+   "text": "see𠮷docs and the 𠮷stack",
+   "ids": [
+    1162,
+    1,
+    30204,
+    1004,
+    1002,
+    1,
+    8997
+   ]
+  },
+  {
+   "name": "cjk-astral-run",
+   "text": "𠀀𠀁𠀂",
+   "ids": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "cjk-astral-compat",
+   "text": "丽郎 and丽then",
+   "ids": [
+    1,
+    964,
+    1004,
+    1,
+    1065
    ]
   },
   {
@@ -1814,6 +1859,89 @@
     43,
     1321,
     2859
+   ]
+  },
+  {
+   "name": "judgment-37",
+   "text": "push navigation screens onto a 𠮷stack",
+   "ids": [
+    4251,
+    8169,
+    11123,
+    2037,
+    43,
+    1,
+    8997
+   ]
+  },
+  {
+   "name": "judgment-38",
+   "text": "encode a swift type to 𠮷json",
+   "ids": [
+    37157,
+    43,
+    8176,
+    1834,
+    1006,
+    1,
+    30710
+   ]
+  },
+  {
+   "name": "judgment-39",
+   "text": "𠀀𠀁 make network requests and download data",
+   "ids": [
+    1,
+    1,
+    1197,
+    1903,
+    10192,
+    1004,
+    7822,
+    1957
+   ]
+  },
+  {
+   "name": "judgment-40",
+   "text": "显示 可滚动 列表 list rows",
+   "ids": [
+    1,
+    929,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1868,
+    9287
+   ]
+  },
+  {
+   "name": "judgment-41",
+   "text": "tappable button that runs an action 👍",
+   "ids": [
+    10118,
+    3508,
+    2474,
+    5468,
+    1014,
+    2222,
+    1025,
+    1901,
+    1
+   ]
+  },
+  {
+   "name": "judgment-42",
+   "text": "display read only text on screen ❤️",
+   "ids": [
+    3659,
+    2197,
+    1075,
+    2799,
+    1012,
+    2904,
+    1
    ]
   },
   {

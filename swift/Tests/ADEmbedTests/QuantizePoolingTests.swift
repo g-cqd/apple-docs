@@ -19,23 +19,17 @@ struct QuantizeTests {
   }
 
   @Test func i8CodeHalvesAndClamp() {
-    // amax = 254 → inv = 0.5: 1.5 → 2 (half up), -1.5 → -1 (half toward +∞),
+    // amax = 254 → inv = 0.5 exactly: halves round AWAY FROM ZERO since
+    // embedding v2 (RFC 0002 §6h — v1 mirrored ECMA's half-toward-+∞,
+    // which sent -1.5 to -1): 1.5 → 2, -1.5 → -2, 0.5 → 1, -0.5 → -1,
     // 254 → 127 exactly; scale = 254/127 = 2.0.
-    let code = Quantize.i8Code([3, -3, 254])
+    let code = Quantize.i8Code([3, -3, 1, -1, 254])
     #expect(code[0] == 2)
-    #expect(code[1] == UInt8(bitPattern: -1))
-    #expect(code[2] == 127)
-    #expect(Array(code[3...]) == [0x00, 0x00, 0x00, 0x40])
-  }
-
-  @Test func jsRoundMatchesEcma() {
-    #expect(Quantize.jsRound(0.5) == 1)
-    #expect(Quantize.jsRound(-0.5) == 0)
-    #expect(Quantize.jsRound(-1.5) == -1)
-    #expect(Quantize.jsRound(2.5) == 3)
-    // The floor(x+0.5) double-rounding trap: JS yields 0 here.
-    #expect(Quantize.jsRound(0.49999999999999994) == 0)
-    #expect(Quantize.jsRound(-0.49999999999999994) == 0)
+    #expect(code[1] == UInt8(bitPattern: -2))
+    #expect(code[2] == 1)
+    #expect(code[3] == UInt8(bitPattern: -1))
+    #expect(code[4] == 127)
+    #expect(Array(code[5...]) == [0x00, 0x00, 0x00, 0x40])
   }
 }
 

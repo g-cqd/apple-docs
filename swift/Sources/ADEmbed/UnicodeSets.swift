@@ -7,6 +7,11 @@
 
 enum UnicodeSets {
   static func contains(_ ranges: [UInt32], _ value: UInt32) -> Bool {
+    // Bounds bail: ASCII/Latin scalars dominate real corpora and sit below
+    // every CJK/mark range — one compare instead of a full search. (The v2
+    // astral ranges deepened the chineseChar search; this more than pays
+    // that back.)
+    if value < ranges[0] || value > ranges[ranges.count - 1] { return false }
     var lo = 0
     var hi = ranges.count / 2 - 1
     while lo <= hi {

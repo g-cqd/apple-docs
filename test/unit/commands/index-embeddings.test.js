@@ -53,6 +53,23 @@ describe('indexEmbeddings', () => {
     expect(db.getVectorCount()).toBe(5)
   })
 
+  test('stamps embed_version and keeps resume a no-op at the same version', async () => {
+    const versioned = { ...fakeEmbedder(), embedVersion: 2 }
+    await indexEmbeddings({ embedder: versioned }, ctx)
+    expect(db.getSnapshotMeta('embed_version')).toBe('2')
+    const res2 = await indexEmbeddings({ embedder: versioned }, ctx)
+    expect(res2.indexed).toBe(0)
+  })
+
+  test('a behavior-version mismatch forces a full re-embed in resume mode', async () => {
+    // v1-era store: chunks exist but no embed_version stamp (reads as '1').
+    await indexEmbeddings({ embedder: fakeEmbedder() }, ctx)
+    expect(db.getSnapshotMeta('embed_version')).toBeFalsy()
+    const res = await indexEmbeddings({ embedder: { ...fakeEmbedder(), embedVersion: 2 } }, ctx)
+    expect(res.indexed).toBe(5) // not the resume no-op
+    expect(db.getSnapshotMeta('embed_version')).toBe('2')
+  })
+
   test('code-capable embedders store their blobs verbatim (native path shape)', async () => {
     // Mirror of the native bridge contract: embedBatchCodes returns the
     // storage blobs as OFFSET subarray views over one shared buffer — the

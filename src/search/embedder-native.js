@@ -29,6 +29,11 @@ import { NATIVE_STATUS_OK, nativeErrorMessage, readNativeResult } from '../nativ
 import { LEGACY_ONNX_SHA256, PINNED_MODEL_FILES, verifyPinnedModelFiles } from './model-integrity.js'
 
 const DEFAULT_HF_ID = 'minishlab/potion-retrieval-32M'
+// The embedding behavior version this JS expects from the dylib (mirrors
+// swift/Sources/ADEmbed/EmbedBehavior.swift). The dylib's REPORTED version
+// is what gets stamped into snapshot_meta — a stale APPLE_DOCS_NATIVE_LIB
+// override must stamp what it actually computes.
+export const EXPECTED_EMBED_VERSION = 2
 const encoder = new TextEncoder()
 
 let forced = null // 'js' | 'native' | null
@@ -50,9 +55,9 @@ export function _resetNativeEmbedder() {
   announced = false
 }
 
-function announce(served) {
+function announce(served, version) {
   if (announced) return
-  log().info(`embed: served by ${served ? 'native libAppleDocsCore' : 'js (native unavailable)'}`)
+  log().info(`embed: served by ${served ? `native libAppleDocsCore (behavior v${version})` : 'js (native unavailable)'}`)
   announced = true
 }
 
@@ -248,6 +253,14 @@ export async function buildNativeModel2Vec(spec, modelsDir, opts = {}) {
       reasons.push(`native dims ${dims} != spec dims ${spec.dims}`)
       return logAndNull(reasons)
     }
+    // Pre-v2 dylibs emit an 8-byte payload — treat as behavior v1.
+    const embedVersion = init.bytes.byteLength >= 12 ? view.getUint32(8, true) : 1
+    if (embedVersion !== EXPECTED_EMBED_VERSION) {
+      log().warn(
+        `embed: dylib reports behavior v${embedVersion}, this build expects v${EXPECTED_EMBED_VERSION} ` +
+          '(stale APPLE_DOCS_NATIVE_LIB override?) — embeddings will stamp the reported version',
+      )
+    }
 
     const embedBatch = async (texts) => {
       if (!texts || texts.length === 0) return []
@@ -282,9 +295,10 @@ export async function buildNativeModel2Vec(spec, modelsDir, opts = {}) {
       }
       return out
     }
-    announce(true)
+    announce(true, embedVersion)
     return {
       dims,
+      embedVersion,
       async embed(text) {
         return (await embedBatch([text ?? '']))[0]
       },

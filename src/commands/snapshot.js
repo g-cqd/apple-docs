@@ -138,7 +138,7 @@ export async function snapshotBuild(opts, ctx) {
       }
       // Vector meta describes rows we just stripped — drop it so the
       // installed DB's embed_* meta always comes from the local build.
-      copyDb.run("DELETE FROM snapshot_meta WHERE key IN ('embed_dims', 'embed_model')")
+      copyDb.run("DELETE FROM snapshot_meta WHERE key IN ('embed_dims', 'embed_model', 'embed_version')")
 
       // 4. Write snapshot_meta
       documentCount = copyDb.query('SELECT COUNT(*) as c FROM documents').get().c

@@ -19,9 +19,10 @@
  *   - whitespace → ' ' mapping: /^\s$/
  *   - strip_accents filter: /\p{Mn}/gu
  *   - Bert punctuation: \p{P} plus ASCII ! - / : - @ [ - ` { - ~
- *   - tokenize_chinese_chars iterates UTF-16 UNITS, so the astral CJK ranges
- *     in its source are dead code: only BMP scalars can ever match. The
- *     emitted set mirrors that quirk (astral CJK is intentionally absent).
+ *   - tokenize_chinese_chars: transformers.js iterates UTF-16 UNITS, so the
+ *     astral CJK ranges in its source are dead code there. Embedding v2
+ *     (RFC 0002 §6h) deliberately diverges: the emitted set includes the
+ *     astral ranges, implementing the intent the upstream iteration broke.
  *   - NFD: String.normalize("NFD"); Hangul syllables (U+AC00–U+D7A3) are
  *     omitted from the table — Swift decomposes them algorithmically.
  *
@@ -59,8 +60,9 @@ const isMn = (char) => /^\p{Mn}$/u.test(char)
 const isBertPunctuation = (char) =>
   /^[\p{P}!-/:-@[-`{-~]$/u.test(char)
 
-// Ranges as they appear in the library source; astral entries are unreachable
-// there because the iteration is per UTF-16 unit.
+// Ranges as they appear in the library source. The astral entries are
+// unreachable there (per-UTF-16-unit iteration); since embedding v2 the
+// emitted set keeps them — the first deliberate divergence (RFC 0002 §6h).
 const isChineseChar = (cp) =>
   (cp >= 0x4e00 && cp <= 0x9fff) ||
   (cp >= 0x3400 && cp <= 0x4dbf) ||
@@ -70,7 +72,6 @@ const isChineseChar = (cp) =>
   (cp >= 0x2b820 && cp <= 0x2ceaf) ||
   (cp >= 0xf900 && cp <= 0xfaff) ||
   (cp >= 0x2f800 && cp <= 0x2fa1f)
-const isEffectiveChinese = (cp) => cp <= 0xffff && isChineseChar(cp)
 
 // --- scan --------------------------------------------------------------------
 
@@ -92,7 +93,7 @@ for (let cp = 0; cp <= MAX_SCALAR; cp++) {
   if (isJsWhitespace(char)) sets.jsWhitespace.push(cp)
   if (isMn(char)) sets.nonspacingMark.push(cp)
   if (isBertPunctuation(char)) sets.bertPunctuation.push(cp)
-  if (isEffectiveChinese(cp)) sets.chineseChar.push(cp)
+  if (isChineseChar(cp)) sets.chineseChar.push(cp)
   if (!isHangulSyllable(cp)) {
     const d = char.normalize('NFD')
     if (d !== char) nfd.push([cp, [...d].map((c) => c.codePointAt(0))])

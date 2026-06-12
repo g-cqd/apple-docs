@@ -1,14 +1,16 @@
 /**
- * Generate test/fixtures/embed-parity/ — the committed vector/code parity
- * corpus for the Swift embedder (RFC 0002 Phase 2, §3 parity gates).
+ * Generate test/fixtures/embed-parity/ — the committed vector/code
+ * self-regression corpus for the Swift embedder.
  *
- * Two legs, both through the EXACT production embed path (getEmbedder →
- * model2vec ONNX graph; the graph itself L2-normalizes, JS adds nothing):
+ * REFERENCE FLIPPED at embedding v2 (RFC 0002 §6h): vectors come from the
+ * NATIVE embedder (libAppleDocsCore through the production getEmbedder
+ * path) — the Swift pipeline is its own reference now; transformers.js/
+ * onnxruntime are not inputs. Codes are computed by the JS quantizers,
+ * which doubles as the cross-implementation lockstep check (the native
+ * tests round-trip the same bins through ad_embed_batch_codes).
  *
- *   cases  — the 180 tokenizer-parity texts → vectors + sign/int8 codes.
- *            Together with matrix-subset.admx this is the CI gate: the Swift
- *            pipeline must reproduce every vector BIT-EXACTLY (probed: the
- *            graph is f32-sequential mean → f32 L2-normalize).
+ *   cases  — the tokenizer-parity texts → vectors + sign/int8 codes.
+ *            Together with matrix-subset.admx this is the CI gate.
  *   corpus — ≥2,000 real chunks re-derived exactly like the indexer
  *            (src/commands/index-embeddings.js: lowest document ids →
  *            getSectionsByDocumentIds → chunkDocument, (docId, ord) order;
@@ -19,9 +21,6 @@
  * Layouts: vectors.bin = N×512 f32 LE; codes.bin = N × (64 B sign code +
  * 516 B int8+scale code); index.json carries names/(docId,ord) in order +
  * provenance meta.
- *
- * Bit-exactness requires the NATIVE onnxruntime — the WASM fallback is a
- * different runtime and is rejected outright.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -32,6 +31,7 @@ import { getEmbedder, resolveActiveSpec } from '../src/search/embedder.js'
 import { quantizeI8, quantizeTo } from '../src/search/embedding.js'
 import { chunkDocument } from '../src/search/chunker.js'
 import { LEGACY_ONNX_SHA256, PINNED_MODEL_FILES, verifyPinnedModelFiles } from '../src/search/model-integrity.js'
+import { isNativeEnabled } from '../src/native/loader.js'
 import { DocsDatabase } from '../src/storage/database.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -43,29 +43,17 @@ const spec = resolveActiveSpec()
 if (spec.hfId !== 'minishlab/potion-retrieval-32M') {
   throw new Error(`fixtures target the default model; unset APPLE_DOCS_EMBED_MODEL (got ${spec.hfId})`)
 }
-if (process.env.APPLE_DOCS_ONNX_WASM === '1') {
-  throw new Error('APPLE_DOCS_ONNX_WASM=1 — fixtures must come from the native onnxruntime')
-}
-try {
-  await import('onnxruntime-node')
-} catch {
-  throw new Error('onnxruntime-node failed to load — the WASM fallback would produce non-reference bits')
+if (!isNativeEnabled('embed')) {
+  throw new Error('native embed is disabled — the reference is the Swift pipeline (unset APPLE_DOCS_NATIVE=off)')
 }
 
 const home = process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs')
 const modelsDir = process.env.APPLE_DOCS_MODELS_DIR ?? join(home, 'resources', 'models')
-// Tokenizer pins + the legacy onnx sha (the full pin set now carries the
-// derived admx, which is not an input of THIS generator).
-await verifyPinnedModelFiles(modelsDir, spec.hfId, {
-  [spec.hfId]: {
-    'tokenizer.json': PINNED_MODEL_FILES[spec.hfId]['tokenizer.json'],
-    'tokenizer_config.json': PINNED_MODEL_FILES[spec.hfId]['tokenizer_config.json'],
-    'onnx/model.onnx': LEGACY_ONNX_SHA256,
-  },
-})
+// The full pin set: tokenizers + the derived admx the native embedder mmaps.
+await verifyPinnedModelFiles(modelsDir, spec.hfId)
 
 const embedder = await getEmbedder({ modelsDir })
-if (!embedder) throw new Error('embedder unavailable (optional @huggingface/transformers missing?)')
+if (!embedder) throw new Error('native embedder unavailable (build the dylib: swift build --package-path swift -c release)')
 
 /** Embed in moderate batches; bags are independent in the graph. */
 async function embedAll(texts) {
@@ -92,7 +80,9 @@ function packLeg(vecs) {
 
 // --- case leg -----------------------------------------------------------------
 
-const { cases } = JSON.parse(readFileSync(join(ROOT, 'test', 'fixtures', 'tokenizer-parity', 'cases.json'), 'utf8'))
+const { meta: tokenizerMeta, cases } = JSON.parse(
+  readFileSync(join(ROOT, 'test', 'fixtures', 'tokenizer-parity', 'cases.json'), 'utf8'),
+)
 const caseVecs = await embedAll(cases.map((c) => c.text))
 const caseLeg = packLeg(caseVecs)
 
@@ -156,13 +146,8 @@ writeFileSync(
       meta: {
         model: spec.hfId,
         dims: DIMS,
-        transformersVersion: JSON.parse(
-          readFileSync(join(ROOT, 'node_modules', '@huggingface', 'transformers', 'package.json'), 'utf8'),
-        ).version,
-        onnxruntimeVersion: JSON.parse(
-          readFileSync(join(ROOT, 'node_modules', 'onnxruntime-node', 'package.json'), 'utf8'),
-        ).version,
-        runtime: 'onnxruntime-node',
+        runtime: 'native-libAppleDocsCore',
+        behaviorVersion: tokenizerMeta.behaviorVersion,
         modelOnnxSha256: LEGACY_ONNX_SHA256,
         snapshotVersion,
         sourceDb: { documentCount: docStats.count, maxDocumentId: docStats.maxId },
