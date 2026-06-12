@@ -1,4 +1,5 @@
 import { toFrontMatter } from '../lib/yaml.js'
+import { nativeDocMarkdown } from './content-native.js'
 import { renderContentNodesToText } from './normalize.js'
 import { safeJson } from './safe-json.js'
 
@@ -9,6 +10,8 @@ const LINK_SECTION_TITLES = {
 }
 
 export function renderMarkdown(document, sections = [], opts = {}) {
+  const native = nativeDocMarkdown(document, sections, opts)
+  if (native !== null) return native
   const {
     includeFrontMatter = true,
     includeTitle = true,

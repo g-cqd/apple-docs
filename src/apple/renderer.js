@@ -1,5 +1,6 @@
 import { normalizeIdentifier } from './normalizer.js'
 import { toFrontMatter } from '../lib/yaml.js'
+import { nativePageMarkdown } from '../content/content-native.js'
 
 /**
  * Render a full Apple DocC JSON page to Markdown.
@@ -8,6 +9,8 @@ import { toFrontMatter } from '../lib/yaml.js'
  * @returns {string} Complete Markdown document
  */
 export function renderPage(json, canonicalPath) {
+  const native = nativePageMarkdown(json, canonicalPath)
+  if (native !== null) return native
   const meta = json.metadata ?? {}
   const refs = json.references ?? {}
   const parts = []
