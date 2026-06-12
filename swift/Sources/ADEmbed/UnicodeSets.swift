@@ -5,7 +5,7 @@
 // the parity fixtures (scripts/gen-unicode-tables.mjs), so every character
 // class decision here matches transformers.js by construction.
 
-enum UnicodeSets {
+public enum UnicodeSets {
   static func contains(_ ranges: [UInt32], _ value: UInt32) -> Bool {
     // Bounds bail: ASCII/Latin scalars dominate real corpora and sit below
     // every CJK/mark range — one compare instead of a full search. (The v2
@@ -28,7 +28,7 @@ enum UnicodeSets {
   }
 
   static func isCleanTextRemoved(_ v: UInt32) -> Bool { contains(UnicodeTables.cleanTextRemoval, v) }
-  static func isJsWhitespace(_ v: UInt32) -> Bool { contains(UnicodeTables.jsWhitespace, v) }
+  public static func isJsWhitespace(_ v: UInt32) -> Bool { contains(UnicodeTables.jsWhitespace, v) }
   static func isNonspacingMark(_ v: UInt32) -> Bool { contains(UnicodeTables.nonspacingMark, v) }
   static func isBertPunctuation(_ v: UInt32) -> Bool { contains(UnicodeTables.bertPunctuation, v) }
   static func isChinese(_ v: UInt32) -> Bool { contains(UnicodeTables.chineseChar, v) }

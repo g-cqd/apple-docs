@@ -34,6 +34,10 @@ const SYMBOLS = {
   ad_embed_batch: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_embed_batch_codes: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_embed_reset: { args: [], returns: 'void' },
+  ad_content_doc_markdown: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_content_plaintext: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_content_page_markdown: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_content_convert_pages: { args: ['buffer', 'i64'], returns: 'ptr' },
 }
 
 const ROOT = new URL('../../', import.meta.url).pathname

@@ -6,12 +6,12 @@
 // "ΟΔΟΣ" → "οδοσ" where JS yields "οδος"), so Σ is handled explicitly with
 // the stdlib's Cased/Case_Ignorable properties.
 
-enum CaseFolding {
+public enum CaseFolding {
   private static let sigma: UInt32 = 0x3A3
   private static let smallSigma = Unicode.Scalar(0x3C3)!
   private static let finalSmallSigma = Unicode.Scalar(0x3C2)!
 
-  static func lowercase(_ scalars: [Unicode.Scalar]) -> [Unicode.Scalar] {
+  public static func lowercase(_ scalars: [Unicode.Scalar]) -> [Unicode.Scalar] {
     var out: [Unicode.Scalar] = []
     out.reserveCapacity(scalars.count)
     for (i, s) in scalars.enumerated() {

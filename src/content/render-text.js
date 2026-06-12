@@ -1,9 +1,12 @@
 import { coerceDocument as _coerceDocument, coerceSection as _coerceSection } from './coercion.js'
+import { nativePlainText } from './content-native.js'
 
 const coerceDocument = (document) => _coerceDocument(document, { includeKey: true })
 const coerceSection = (section) => _coerceSection(section)
 
 export function renderPlainText(document, sections = []) {
+  const native = nativePlainText(document, sections)
+  if (native !== null) return native
   const doc = coerceDocument(document)
   const orderedSections = sections
     .map(coerceSection)
