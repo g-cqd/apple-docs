@@ -28,11 +28,15 @@
 **Non-goals**
 
 - No big-bang rewrite. Every phase ships behind parity gates on `main`.
-- No format changes: the corpus database schema, snapshot archives
-  (`.tar.zst`, determinism gate included), CLI surface, MCP tool contracts,
-  and web routes stay byte-compatible throughout. A Swift module is an
-  implementation swap, never a behavior change.
-- No new product features ride along with a migration phase.
+- No format changes DURING a swap: the corpus database schema, snapshot
+  archives (`.tar.zst`, determinism gate included), CLI surface, MCP tool
+  contracts, and web routes stay byte-compatible through each migration.
+  A Swift module port is an implementation swap, never a behavior change.
+  **Deliberate improvements come AFTER parity as separate evidence-gated
+  slices — the §10 improvement track owns those (including re-embeds and
+  format changes, each under its gate category).**
+- No new product features ride along with a migration phase. (Product
+  improvements have a sanctioned home: §10.)
 
 ## 2. Dependency policy
 
@@ -45,10 +49,12 @@ Swift package dependencies are allowed **only** from:
 | `pointfreeco/*` | swift-parsing, swift-dependencies, swift-custom-dump, swift-snapshot-testing, swift-case-paths |
 
 **Vetted exceptions**: anything outside these orgs requires an explicit
-decision recorded in §9. *Vapor* (`vapor/*`) is the one named candidate, for
-the server phase only, pending the P6 research spike — the alternative is an
-in-house HTTP layer directly on SwiftNIO. Both outcomes are acceptable; the
-spike decides on evidence (§7 P6).
+decision recorded in §9. The previously-named *Vapor* candidate is
+**withdrawn (operator decision 2026-06-12, §9 D1)**: the server phase is
+fully custom — an in-house HTTP layer directly on SwiftNIO — and the
+dependency universe stays apple/* + swiftlang/* + pointfreeco/* (+ the §2
+system C libraries) only. The exception MECHANISM remains for future
+cases.
 
 **System C libraries** (linked via module maps, not package dependencies)
 are allowed: `sqlite3`, `zstd`, and — on Linux — `harfbuzz`/`freetype` for
@@ -291,7 +297,12 @@ than transformers.js (expected: far more).
 > **Carried by [RFC 0003](0003-swift-render-service.md)** (2026-06-11):
 > inventory, hard criteria, D-0003-1..4 (private-framework codepoint
 > worker, dlopen shaper binding, AppKit thread model, payload transport),
-> and the four-phase plan. The sketch below is historical.
+> and the phased plan. The sketch below is historical.
+>
+> **Reordered 2026-06-12 (rfcs/README.md)**: P3 runs **darwin-first as a
+> SIDE slice** in parallel with P4; the Linux shaper (and with it the
+> hb-view kill, which requires it) is DEFERRED — hb-view keeps serving
+> Linux until the deferred phase's revisit triggers fire.
 
 The five inline Swift scripts (725 LOC: symbol worker, symbol-pdf,
 symbol-png, font-text, codepoint worker) move into the package as a
@@ -304,6 +315,12 @@ spawn latency; the `hb-view` host package requirement. *Gates*: SVG
 fixture diffs clean on both OSes; render service p50 < the spawn path.
 
 ### P4 — Content pipeline
+> **MAIN LINE since 2026-06-12** (evidence in rfcs/README.md): content
+> conversion is the dominant remaining hot path — ≈27 ms/page × 358k
+> pages of JS+shiki CPU per full build — while query latency measured
+> ~99% inside SQLite (ports win nothing there; §10(B) does). Gets its own
+> RFC 0004 at slice start, the way RFC 0002/0003 carried P2/P3.
+
 DocC JSON → Markdown/HTML on swift-markdown/swift-cmark; syntax
 highlighting replaces shiki — swift-syntax for Swift code; a research
 spike picks the approach for other languages (in-house TextMate-grammar
@@ -322,15 +339,17 @@ facade — its 13 call sites in `database.js` are the entire surface),
 concurrency benchmark ≥ JS; WAL/locking behavior verified under the
 container contention test.
 
-### P6 — Servers (research spike, then implementation)
-**Spike first**: Vapor vs SwiftNIO-direct for the web + MCP HTTP layer.
-Criteria: third-party surface (Vapor pulls ~10 packages — weigh against
-§2), throughput/latency on our recorded burst loads vs `Bun.serve`
-baselines, Streamable-HTTP/SSE ergonomics, static-file serving quality,
-maintenance horizon. Decision recorded in §9, then: web server (routes
-are already per-file handlers — port them 1:1), MCP server with the
-protocol implemented in-house (JSON-RPC 2.0, stdio + stateless Streamable
-HTTP, tool schemas as `Codable` + generated JSON Schema). *Kills*:
+### P6 — Servers (fully custom, in-house on SwiftNIO)
+> **D1 settled 2026-06-12 (operator decision)**: no Vapor — the spike is
+> cancelled. The web + MCP HTTP layer is built from scratch directly on
+> SwiftNIO (+ swift-http-types/swift-nio-ssl as needed), keeping the
+> dependency universe at apple/* + swiftlang/* + pointfreeco/* only.
+
+Implementation: web server (routes are already per-file handlers — port
+them 1:1; benchmark throughput/latency on our recorded burst loads vs
+`Bun.serve` baselines, incl. the §10(C) burst-stall findings), MCP server
+with the protocol implemented in-house (JSON-RPC 2.0, stdio + stateless
+Streamable HTTP, tool schemas as `Codable` + generated JSON Schema). *Kills*:
 `@modelcontextprotocol/sdk`, `zod`, `Bun.serve`. *Gates*: MCP contract
 tests (tool-budget bytes, pagination geometry) green; web smoke + UI
 audit green; burst benchmarks ≥ Bun baselines on both OSes.
@@ -346,7 +365,10 @@ the Swift binary on macOS + Linux; ops smoke on the public instance.
 ### Sequencing
 
 P0 → P1 → P2 ship serially (each ~independent value). P3/P4 can proceed in
-parallel after P1. P5 starts once P2+P3 are native-by-default. P6 after P5.
+parallel after P1. P5 starts once P2 + P3-**darwin** are native-by-default
+(the Linux shaper is deferred per RFC 0003 and does not gate P5). P6 after
+P5. The LIVE sequencing — parallel tracks, the improvement slices of §10,
+and the deferred-Linux bucket — is maintained in [rfcs/README.md](README.md).
 P7 last. At every point `main` is releasable and the snapshot cadence is
 untouched.
 
@@ -366,11 +388,70 @@ untouched.
 
 | # | Question | Status |
 | --- | --- | --- |
-| D1 | Server framework: Vapor (vetted exception) vs SwiftNIO-direct | **Open — P6 spike** |
+| D1 | Server framework: Vapor (vetted exception) vs SwiftNIO-direct | **SETTLED 2026-06-12 (operator decision): fully custom in-house on SwiftNIO — no Vapor, no spike; deps stay apple/swiftlang/pointfreeco only (§2)** |
 | D2 | Highlighting engine for non-Swift languages (TextMate in-house vs tree-sitter exception vs reduced set) | **Open — P4 spike** |
 | D3 | Windows timing | Deferred until after P7 |
 | D4 | swift-structured-queries (pointfreeco) for the storage query layer vs raw C interop | Open — decide in P5 design |
 | D5 | Dylib distribution vs build-from-source for `setup` consumers | **Settled by P0 research (2026-06-11)**: artifacts-in-release with sha256 sidecars; compiled binaries embed the dylib (`dlopen` accepts the embedded path directly); Linux ships `$ORIGIN`-rpath runtime bundles. Details: [`p0/decisions.md`](0001-swift-native-transition/p0/decisions.md) D-P0-1/9/10 |
+
+## 10. Beyond parity — the improvement track
+
+The bit-identical discipline of §4 is the TRANSITION tool: it proves a
+swap is safe. It is not the ceiling. This section sanctions deliberate
+improvements — bug fixes, performance, quality — under one rule and a
+gate matrix.
+
+**The two-step rule.** A port lands bit-identical first; improvements are
+separate, evidence-gated slices afterward. Never both in one change — a
+regression inside a combined change is unattributable.
+
+**Gate matrix** (every improvement slice declares its category up front):
+
+| Category | Gates |
+| --- | --- |
+| Pure performance (no output change) | benchmarks beat the baseline; ALL parity suites unchanged |
+| Output-changing, non-embedding | golden-fixture update reviewed WITH the change + written rationale; eval metrics where applicable |
+| Embedding-changing | full re-embed; golden-eval no-regress PLUS stated improvement targets up front; new PINNED set; fixture regeneration; snapshot/schema coordination (template: RFC 0002 §6f's compat cycle) |
+| Schema/format-changing | compat cycle + derive/upgrade-path strategy (template: RFC 0002 §6f); determinism gates re-proven |
+| Operational/architectural | smoke/ops evidence on the affected host class; rollback path stated |
+
+Any improvement that adds a dependency or touches security posture
+additionally routes through §2 and a §9 decision, regardless of category.
+
+**The reference-flip rule.** At the FIRST deliberate divergence in a
+domain, that domain's frozen-external-reference guards (e.g. the
+transformers.js replay suites) convert to self-regression goldens: the
+Swift implementation becomes its own reference, and fixtures regenerate
+FROM it. RFC 0002 §6g records the embedder instance of this rule.
+
+**Candidate registry** (one line + evidence pointer; execution requires a
+planned slice):
+
+- **(A) Embedding v2 — AUTHORIZED near-term (operator, 2026-06-12),
+  scoped to tokenizer/rounding fixes ONLY**: un-copy the upstream
+  transformers.js quirks — UTF-16 chinese-chars iteration (astral CJK
+  never gets spaced; RFC 0002 §6a), VS16/Mn stripping semantics review
+  (§6a), Math.round ECMA-mirror semantics review (§3 — a deliberate
+  mirror, weaker claim than the others). One re-embed event; eval gates
+  with CJK/emoji query targets stated up front; full re-pin per the
+  matrix.
+- **(B) SQLite query-layer round-trips**: a CPU profile (2026-06-12)
+  put ~99% of NL-search latency inside `Statement.all/get` — cascade
+  statement count, snippet batch shape, FTS config experiments. Gates:
+  search-bench p50 + golden eval unchanged-or-better.
+- **(C) Burst-stall architecture**: ~3 s event-loop stall at burst onset
+  + healthz sharing waiting-room 503s
+  (ops/runbooks/mcp-burst-healthz.md) — yield points, queue shaping,
+  liveness exemption. Gates: smoke burst healthz clean, no throughput
+  loss.
+- **(D) Prerender batching**: folds into RFC 0003 phase 2.
+- **(E) Snapshot/storage size**: the 2.47 GB asset-ceiling scare;
+  raw-payload and compaction strategy.
+- **(F) Chunking-parameter revisit** (src/search/chunker.js:59 —
+  maxChunks 8 / windowChars 880 / overlapChars 160): SEPARATE eval unit
+  from (A); may ride (A)'s re-embed transport only if its independent
+  eval passes first — boundary moves change the corpus shape, and a
+  bundled regression is unattributable.
 
 ---
 

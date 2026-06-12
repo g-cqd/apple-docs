@@ -548,6 +548,23 @@ gets its done-mark.
 Execution is a single slice once the criteria hold; nothing here is
 ambiguous enough to need re-design at that point.
 
+### 6g. Improvement candidates + the reference flip (2026-06-12)
+
+The faithfully-mirrored upstream quirks recorded in §6a (lowercase-then-
+strip order, UTF-16 chinese-chars iteration that never spaces astral CJK,
+Cc/Cf removal incl. the VS16/Mn stripping) and §3's ECMA Math.round
+mirror are **registered improvement candidates** — see RFC 0001 §10,
+candidate (A) "embedding v2" (AUTHORIZED near-term, scoped to
+tokenizer/rounding fixes only; one re-embed, eval-gated, full re-pin).
+
+When (A) executes, the §6a regeneration protocol INVERTS per RFC 0001
+§10's reference-flip rule: transformers.js stops being the reference for
+the changed behavior — the Swift implementation becomes its own
+reference, fixtures regenerate FROM it, and the frozen-transformers
+replay guards convert to self-regression goldens. Chunking-parameter
+changes are a SEPARATE candidate (RFC 0001 §10 (F)) that may share (A)'s
+re-embed transport only after passing its own eval.
+
 ## 7. Risks
 
 | Risk | Mitigation |
