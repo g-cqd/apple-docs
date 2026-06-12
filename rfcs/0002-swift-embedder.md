@@ -304,6 +304,11 @@ fails `tokenizer-fixtures.test.js` (version stamp + full 180-case replay)
 at 100%. The committed model copies stay pinned to `PINNED_MODEL_FILES`;
 raw ids are recorded (`[]` for empty — the `[0]` pad is embedder-level).
 
+> **INVERTED at embedding v2 (§6h, 2026-06-12)**: the Swift
+> implementation is the reference now — ids regenerate FROM it
+> (`ad-embed-dump`), and the transformers replay survives only as the
+> divergence recorder for the cases listed in `meta.divergences`.
+
 Deferred by design: FFI export + dispatch (phase 3), the runtime vocab
 artifact format (phase 3 — the id-ordered array is its prototype), matrix
 + pooling (phase 2), performance gates (phase 2).
@@ -564,6 +569,72 @@ reference, fixtures regenerate FROM it, and the frozen-transformers
 replay guards convert to self-regression goldens. Chunking-parameter
 changes are a SEPARATE candidate (RFC 0001 §10 (F)) that may share (A)'s
 re-embed transport only after passing its own eval.
+
+**→ Executed as §6h (2026-06-12).**
+
+### 6h. Embedding v2 — the first deliberate divergence (EXECUTED 2026-06-12)
+
+Candidate (A), category **Embedding-changing** (RFC 0001 §10 gate
+matrix). Operator scope decision: full un-copy; each registered review
+closed on evidence:
+
+| Review | Outcome | Evidence |
+| --- | --- | --- |
+| UTF-16 chinese-chars (astral CJK never spaced) | **FIXED** — `gen-unicode-tables.mjs` BMP mask dropped; chineseChar table 3 → 6 ranges (28,096 → 81,520 scalars) | the vocab has ZERO astral tokens, so the win is **neighbor recovery**: v1 glued `see𠮷docs` into one whole-word UNK; v2 yields `see` + UNK + `docs` (fixture `cjk-astral-latin-glue`) |
+| ECMA Math.round mirror (i8 halves toward +∞) | **CHANGED** to half-away-from-zero (`Quantize.swift` + `embedding.js` in lockstep) | measured incidence ZERO: 0 code bytes differ across every non-divergent case and the entire 2,000-chunk corpus fixture — the cleanup is observably free; pinned by ±63.5 unit tests both sides |
+| lowercase→strip order (Rust strips first) | **RETAINED** | exhaustive commute scan — all 1.1M scalars × 8 sigma/mark context templates + 874 cased bases × 2,059 Mn marks, plus a 0-count of Mn scalars whose lowercase escapes Mn — found **zero** inputs where the orders differ; the swap would be pure churn |
+| VS16/Mn stripping | **RETAINED** | NFD + full Mn removal is shared HF-Rust semantics and matches training-time tokenization — nothing JS-specific to un-copy |
+
+**Reference flip executed.** `gen-tokenizer-fixtures.mjs` records ids
+from the Swift tokenizer (new `ad-embed-dump` executable target;
+dev-only, not in the dylib); transformers.js 4.2.0 stays on as the
+**divergence recorder** — the generator replays it and validates the
+divergence set against a hand-written `EXPECTED_DIVERGENT_CASES`
+(anti-self-licensing: a Swift regression cannot register itself as a new
+divergence). `tokenizer-fixtures.test.js` asserts equality for
+non-divergent cases (upstream-drift alarm retained) and INEQUALITY for
+divergent ones (each divergence stays real). `gen-embed-fixtures.mjs`
+embeds through the native pipeline; embed-parity fixtures are
+self-regression goldens; codes in the bins come from the JS quantizers —
+a standing cross-implementation lockstep check. Corpus: 189 cases (180 +
+3 astral synthesized + 6 eval-judgment queries); subset ADMX 608 → 613
+rows. Divergences (7): `cjk-astral`, `cjk-astral-latin-glue`,
+`cjk-astral-run`, `cjk-astral-compat`, `judgment-37/38/39`. Fixture-diff
+attribution: among the prior 180 cases exactly ONE (`cjk-astral`)
+changed; corpus texts byte-identical, corpus vectors 0/2000 differ.
+
+**Version machinery.** `EmbedBehavior.version = 2` (ADEmbed);
+`ad_embed_init` result payload is now `[u32 dims][u32 rows][u32
+behaviorVersion]` (8-byte legacy payloads read as v1; a stale
+`APPLE_DOCS_NATIVE_LIB` override warns and stamps what it actually
+computes). `index embeddings` stamps `snapshot_meta.embed_version` and
+force-fulls resume runs on mismatch — verified live: `stored v1 → live
+v2 — full re-embed`, 831,216 chunks in 61 s. The query path serves
+across a version mismatch with one log line per store (deltas are
+astral-only, measured 0/2000); `snapshot build` strips `embed_version`
+with the other embed meta. Snapshots ship no embeddings, so every
+install self-converts at its next setup; artifact pins are UNCHANGED
+(tokenizer/config/admx inputs identical — the behavior lives in code and
+is captured by the init payload + meta stamp).
+
+**Eval gate** (168 judgments = 150 anchors + 18 curated, incl. 6 new
+CJK/emoji/astral rows with dual-form relevant paths so they resolve
+against live corpora AND the seeded harness): lexical-only identical;
+every semantic config recall/ndcg unchanged with mrr strictly up
+(baseline-rrf 0.6586 → 0.6591, hybrid 0.6538 → 0.6543, hybrid+mmr
+0.6414 → 0.6419; curated-set mrr +0.0042…+0.0046). Tier-level recovery:
+cos(`𠮷stack`, `stack`) = −0.0247 under v1 semantics (the glued word IS
+the UNK row) → **0.9895** under v2; an astral-glued query sits at 0.9970
+of its clean variant. Perf: same-machine same-hour A/B — v1 dylib
+22,380 f32 / 20,333 codes vs v2 22,940 / 21,788 chunks/s (v2 ≥ v1; the
+26.6k figure above was a cooler machine state, not a regression);
+`UnicodeSets.contains` gained a bounds bail; p50 0.020 ms, init ~60 ms.
+
+Adjacent observations (pre-existing, out of scope, recorded for later
+slices): 31/43 curated eval judgments never resolved against live
+corpora (`documentation/`-prefixed paths vs unprefixed live keys — the
+new rows ship both forms); the fuzzy-title FTS path logs a safeCall'd
+`unterminated string` on astral-bearing queries in v1 and v2 alike.
 
 ## 7. Risks
 

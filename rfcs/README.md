@@ -10,7 +10,7 @@ built or indexed by the docs site.
 | RFC | Carries | Status |
 | --- | --- | --- |
 | [0001 — Swift-native transition](0001-swift-native-transition.md) | The master plan: phases P0–P7, bridge architecture, dependency policy, **§10 improvement track** | Living |
-| [0002 — Swift embedder](0002-swift-embedder.md) | P2 | **COMPLETE** (2026-06-12, Stage C: default model native-only, snapshots ship ADMX, transformers demoted to gated models) |
+| [0002 — Swift embedder](0002-swift-embedder.md) | P2 | **COMPLETE** (2026-06-12, Stage C: default model native-only, snapshots ship ADMX, transformers demoted to gated models; §6h: embedding v2 + reference flip executed) |
 | [0003 — Swift render service](0003-swift-render-service.md) | P3 | Active, **reordered**: darwin-first side slice; Linux shaper + hb-view kill deferred (phase 4, revisit-triggered) |
 | 0004 — Content pipeline *(planned)* | P4 | Authored at slice start, the way 0002/0003 carried P2/P3 |
 
@@ -31,13 +31,13 @@ built or indexed by the docs site.
 ## Current tracks
 
 **Main line**
-1. **Embedding v2** — RFC 0001 §10 (A), authorized: un-copy the upstream
-   tokenizer quirks (one re-embed, eval-gated with CJK/emoji targets,
-   full re-pin; reference-flip per RFC 0002 §6g). Best done while the
-   parity machinery is fresh.
+1. ~~**Embedding v2**~~ — **DONE 2026-06-12** (RFC 0002 §6h): astral-CJK
+   fix + rounding change, order/VS16 retained on evidence; reference
+   flip executed (Swift is its own reference; transformers.js =
+   divergence recorder); `embed_version` coordination landed.
 2. **RFC 0004 + P4 content pipeline** — author the RFC, then the phased
    port (swift-markdown/swift-cmark; D2 highlighting spike: swift-syntax
-   for Swift code, engine decision for the rest).
+   for Swift code, engine decision for the rest). **← next**
 
 **Side slice (parallel)**
 - **P3-darwin** (RFC 0003 phases 1–3): render exports + dispatch behind
