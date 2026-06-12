@@ -77,12 +77,26 @@ async function fetchPinned(dir, hfId, rel, wantSha, logger) {
   const url = `https://huggingface.co/${hfId}/resolve/main/${rel}`
   const dest = join(dir, hfId, rel)
   mkdirSync(dirname(dest), { recursive: true })
-  const response = await fetch(url)
+  // 15-minute hard deadline: a hung CDN stream must fail the release build
+  // loudly, never hang it. Chunk-streamed to disk (Bun.write(path, response)
+  // was observed stalling indefinitely on multi-MB HF bodies).
+  const response = await fetch(url, { signal: AbortSignal.timeout(15 * 60_000) })
   if (!response.ok) {
     throw new ValidationError(`model fetch failed (${response.status}): ${url}`)
   }
   const temp = `${dest}.fetch-${process.pid}`
-  await Bun.write(temp, response)
+  const sink = Bun.file(temp).writer()
+  let received = 0
+  let lastLogged = 0
+  for await (const chunk of response.body) {
+    sink.write(chunk)
+    received += chunk.length
+    if (received - lastLogged >= 32 * 1024 * 1024) {
+      lastLogged = received
+      logger?.info?.(`Fetching ${rel}: ${(received / 1e6).toFixed(0)} MB…`)
+    }
+  }
+  await sink.end()
   const got = await sha256File(temp)
   if (got !== wantSha) {
     rmSync(temp, { force: true })
