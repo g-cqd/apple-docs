@@ -22,10 +22,14 @@ symbol/font rendering today, JIT-spawned via `Bun.spawn swift <script>`:
   host-package requirement the parity work left behind.
 
 P3 consolidates rendering into `libAppleDocsCore` as a persistent service
-behind the established bridge (loader, kill switch, contract v0) and
-replaces hb-view with an in-house HarfBuzz/FreeType shaper on Linux.
-P5 (storage) is gated on P2+P3 native-by-default, so this RFC sits on the
-transition's critical path.
+behind the established bridge (loader, kill switch, contract v0).
+**Reordered 2026-06-12 (rfcs/README.md)**: the darwin work runs first as
+a SIDE slice in parallel with P4; the Linux HarfBuzz/FreeType shaper —
+and the hb-view kill that depends on it — is DEFERRED (hb-view keeps
+serving Linux; it works, the host-package dependency is accepted until
+the revisit triggers fire). P5's gate is correspondingly P2 +
+P3-**darwin** native-by-default; the deferred Linux phase does not sit on
+the critical path.
 
 ## 2. Inventory (surveyed 2026-06-11)
 
@@ -59,8 +63,8 @@ CoreText first. Engine selection via `APPLE_DOCS_FONT_RENDERER`;
 | Warm query-time render (symbol PDF→SVG, font text SVG) | **≥ 5× faster than the spawn path p50** (eliminating ~200 ms JIT; measure both, record here) |
 | Snapshot prerender throughput (symbols/s, full catalog shape) | **≥ the pooled-worker path** on the macOS build host |
 | darwin output parity | **byte-clean fixture diffs** — same CoreText/CoreGraphics/AppKit calls, now in-process |
-| Linux font-text parity | tolerance-based vs recorded hb-view goldens (different shaper build), plus structural gates (glyph count, advance monotonicity, bbox within ε); exact tolerances set by the phase-1 spike |
-| Platform builds | Linux dylib builds with **no AppKit/CoreText** (`#if canImport`) — symbol rendering stays darwin-only by nature (SF Symbols assets are macOS) |
+| Linux font-text parity *(DEFERRED phase 4)* | tolerance-based vs recorded hb-view goldens (different shaper build), plus structural gates (glyph count, advance monotonicity, bbox within ε); exact tolerances set by the deferred spike |
+| Platform builds *(NOW — prevents bitrot)* | Linux dylib builds with **no AppKit/CoreText** (`#if canImport`) from phase 1 onward — symbol rendering stays darwin-only by nature (SF Symbols assets are macOS) |
 | Bridge conduct | contract v0; no-trap exports; kill-switch module token `render`; absent dylib/symbols → spawn path serves (the scripts stay until the kill phase) |
 | Memory | render-service RSS bounded across a full prerender (measured like the §3 RSS gates in RFC 0002) |
 
@@ -93,31 +97,33 @@ New `ADRender` target in `swift/`, platform-split:
 | D-0003-3 | AppKit thread model in-dylib: the scripts own their processes' main threads; FFI calls arrive on Bun's JS thread. CoreText/CoreGraphics are thread-safe; `NSImage`-based PNG rasterization may not be | settle by spike: try CG-only rasterization (CGBitmapContext) for png; if AppKit is truly required, png stays spawned (it is the rarest path) |
 | D-0003-4 | FFI result buffers vs socketpair for large payloads | **FFI buffers** (contract v0; copy-then-free; archive proved multi-MB results) — socketpair only if prerender batching measures poorly |
 
-## 6. Phases
+## 6. Phases (reordered 2026-06-12 — darwin first, Linux deferred)
 
-1. **Linux shaper spike** *(highest novelty — nothing else starts until
-   its gates hold)*: dlopen bindings for harfbuzz/freetype; shape → glyph
-   outlines → SVG paths; tolerance harness vs recorded hb-view goldens
-   across a font/text/size matrix incl. RTL, combining marks, emoji
-   fallback behavior. Output: tolerance numbers + go/no-go on replacing
-   hb-view. Settles D-0003-2 empirically.
-2. **darwin exports + dispatch**: `ad_render_symbol_pdf`,
+1. **darwin exports + dispatch**: `ad_render_symbol_pdf`,
    `ad_render_font_text` (+`ad_render_symbol_png` pending D-0003-3);
    render-native.js behind `render`; byte-clean fixture gates; warm-path
-   bench vs spawn (≥5× gate).
-3. **Prerender switch**: sync.js pooled spawns → batched FFI calls;
+   bench vs spawn (≥5× gate). darwin font-text keeps CoreText — no shaper
+   dependency.
+2. **Prerender switch**: sync.js pooled spawns → batched FFI calls;
    throughput + RSS gates on the full catalog; spawn path remains the
-   fallback.
-4. **Kills + records**: hb-view requirement dropped (docs,
-   self-hosting Linux packages section); one-shot scripts deleted after a
-   release cycle at render-native default; RFC 0001 §3/§7 updated.
-   codepoint-worker disposition per D-0003-1.
+   fallback. (Improvement candidate D of RFC 0001 §10 folds in here.)
+3. **darwin kills + records**: the one-shot spawn scripts deleted after a
+   release cycle at render-native default; RFC 0001 §3/§7 updated;
+   codepoint-worker disposition per D-0003-1. hb-view is NOT killed here.
+4. **DEFERRED — Linux shaper spike + hb-view kill**: dlopen bindings for
+   harfbuzz/freetype; shape → glyph outlines → SVG paths; tolerance
+   harness vs recorded hb-view goldens across a font/text/size matrix
+   incl. RTL, combining marks, emoji fallback. Settles D-0003-2
+   empirically, then drops the hb-view host-package requirement (docs,
+   self-hosting Linux section). **Revisit triggers**: Linux host friction
+   with hb-view, or P7's single-binary requirement. Until then Linux
+   serves via hb-view exactly as today.
 
 ## 7. Risks
 
 | Risk | Mitigation |
 | --- | --- |
-| Shaper fidelity vs hb-view (ligatures, marks, fallback) | phase-1 spike is gate-first; hb-view goldens recorded BEFORE any kill; placeholder fallback unchanged |
+| Shaper fidelity vs hb-view (ligatures, marks, fallback) | the deferred phase-4 spike is gate-first; hb-view goldens recorded BEFORE any kill; placeholder fallback unchanged |
 | AppKit off-main-thread UB | D-0003-3 spike; CG-only rewrite preferred; worst case the affected script stays spawned |
 | Private-framework drift (codepoint) | stays-spawned per D-0003-1 leaning; version-probed at spawn as today |
 | Prerender at 273k-file scale through FFI | batched requests (names-in, frames-out per call); the archive module's at-scale lesson (one streaming pass, measured before flip) |
