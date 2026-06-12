@@ -427,14 +427,15 @@ FROM it. RFC 0002 §6g records the embedder instance of this rule.
 **Candidate registry** (one line + evidence pointer; execution requires a
 planned slice):
 
-- **(A) Embedding v2 — AUTHORIZED near-term (operator, 2026-06-12),
-  scoped to tokenizer/rounding fixes ONLY**: un-copy the upstream
-  transformers.js quirks — UTF-16 chinese-chars iteration (astral CJK
-  never gets spaced; RFC 0002 §6a), VS16/Mn stripping semantics review
-  (§6a), Math.round ECMA-mirror semantics review (§3 — a deliberate
-  mirror, weaker claim than the others). One re-embed event; eval gates
-  with CJK/emoji query targets stated up front; full re-pin per the
-  matrix.
+- **(A) Embedding v2 — EXECUTED 2026-06-12 (record: RFC 0002 §6h)**:
+  astral-CJK spacing fixed; i8 rounding changed to half-away-from-zero
+  (measured incidence zero); lowercase→strip order and VS16/Mn stripping
+  RETAINED on evidence (exhaustive commute scan / shared-Rust
+  semantics). The reference flip landed with it — fixtures regenerate
+  from the Swift implementation, transformers.js survives as the
+  divergence recorder — plus `embed_version` stamping with
+  mismatch-forced re-embed. Eval: no-regress, mrr strictly up;
+  cos(`𠮷stack`, `stack`) −0.02 → 0.99.
 - **(B) SQLite query-layer round-trips**: a CPU profile (2026-06-12)
   put ~99% of NL-search latency inside `Statement.all/get` — cascade
   statement count, snippet batch shape, FTS config experiments. Gates:

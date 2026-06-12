@@ -69,3 +69,19 @@ session — it gets recorded in RFC 0002 §3 + §6e.
 identically from JS. Note (Stage C, 2026-06-11): the default embedding
 model is native-only — with native off, semantic search degrades to
 lexical-only rather than switching implementations.
+
+## Embedding v2 (2026-06-12, RFC 0002 §6h)
+
+The announce line now carries the behavior version (`embed: served by
+native libAppleDocsCore (behavior v2)`) and the index stamps
+`snapshot_meta.embed_version`. After a code upgrade onto a v1-embedded
+store, the first `index embeddings` run (or the next `setup`/
+`pull-snapshot`) logs `Embedding behavior changed (stored v1 → live v2)
+— full re-embed` and rebuilds (~1 min arm64, a few min on mm18). Until
+then queries still serve — v1↔v2 deltas are confined to astral-CJK
+inputs (measured 0/2000 corpus chunks). Verify after a refresh:
+
+```bash
+sqlite3 ~/.apple-docs/apple-docs.db \
+  "SELECT value FROM snapshot_meta WHERE key='embed_version'"  # → 2
+```

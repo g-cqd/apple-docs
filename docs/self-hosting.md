@@ -133,6 +133,12 @@ A comma list (`fusion,archive,embed`) pins exactly those modules instead.
 from the installed release (sha256-verified) into `dist/native/` and
 pre-derives the embed weights artifact so first boot pays nothing.
 
+Embedding behavior is versioned (`embed_version` in the snapshot meta).
+After upgrading across an embedding-behavior release, the first
+`apple-docs index embeddings` run (and every `setup`) detects the
+version change and re-embeds the local index automatically — about a
+minute on Apple silicon. Queries keep serving in the meantime.
+
 ### Linux host packages (full feature parity)
 
 Everything serves out of the box from a snapshot except two render
