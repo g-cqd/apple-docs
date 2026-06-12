@@ -37,6 +37,12 @@
     { "query": "model view controller design pattern", "relevant": ["apple-archive/documentation/General/Conceptual/DevPedia-CocoaCore/MVC"] },
     { "query": "in app purchase rules for unlocking features", "relevant": ["app-store-review/3.1.1"] },
     { "query": "user consent for collecting personal data", "relevant": ["app-store-review/5.1.1"] },
-    { "query": "group code that runs together without a named function", "relevant": ["swift-book/Closures"] }
+    { "query": "group code that runs together without a named function", "relevant": ["swift-book/Closures"] },
+    { "query": "push navigation screens onto a 𠮷stack", "relevant": ["documentation/swiftui/navigationstack", "documentation/swiftui/navigationlink", "swiftui/navigationstack", "swiftui/navigationlink"] },
+    { "query": "encode a swift type to 𠮷json", "relevant": ["documentation/foundation/jsonencoder", "foundation/jsonencoder"] },
+    { "query": "𠀀𠀁 make network requests and download data", "relevant": ["documentation/foundation/urlsession", "foundation/urlsession"] },
+    { "query": "显示 可滚动 列表 list rows", "relevant": ["documentation/swiftui/list", "swiftui/list"] },
+    { "query": "tappable button that runs an action 👍", "relevant": ["documentation/swiftui/button", "swiftui/button"] },
+    { "query": "display read only text on screen ❤️", "relevant": ["documentation/swiftui/text", "swiftui/text"] }
   ]
 }
