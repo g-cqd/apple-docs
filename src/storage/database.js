@@ -219,8 +219,7 @@ export class DocsDatabase {
   getVectorCount() { return this.search.getVectorCount() }
   getAllVectors() { return this.search.getAllVectors() }
   getChunkCount() { return this.chunks.getChunkCount() }
-  /** Bust the memoized vector/chunk counts after a re-embed (§10(B)). */
-  resetSemanticCountCaches() { this.search.resetCountCache(); this.chunks.resetCountCache() }
+  resetSemanticCountCaches() { this.search.resetCountCache(); this.chunks.resetCountCache() } // §10(B)
   getAllChunkVectors() { return this.chunks.getAllChunkVectors() }
   getChunkI8Batch(chunkIds) { return this.chunks.getChunkI8Batch(chunkIds) }
   upsertChunk(params) { this.chunks.upsertChunk(params) }

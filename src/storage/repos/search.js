@@ -163,10 +163,8 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
 
   // Body-index maintenance
   const bodyCountStmt = hasBodyFtsTable ? db.query('SELECT COUNT(*) as c FROM documents_body_fts') : null
-  // Availability probe: `SELECT 1 … LIMIT 1` stops at the first row, where
-  // `COUNT(*)` on an FTS5 table scans the whole index (~130 ms warm on the
-  // 358k-row corpus — 43% of per-search CPU; §10(B) profile). hasBody only
-  // needs the boolean, so the probe is output-identical and ~instant.
+  // Availability probe (§10(B)): LIMIT 1 stops at the first row; COUNT(*)
+  // on this FTS5 index scans all 358k rows (~130ms warm, 43% of search CPU).
   const bodyExistsStmt = hasBodyFtsTable ? db.query('SELECT 1 FROM documents_body_fts LIMIT 1') : null
   const bodyInsertStmt = hasBodyFtsTable
     ? db.query('INSERT OR REPLACE INTO documents_body_fts(rowid, body) VALUES ($id, $body)')
@@ -245,10 +243,8 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
   return {
     hasTrigramTable,
     hasBodyFtsTable,
-    /** Row count of the semantic vector table; 0 ⇒ tier dormant. MEMOIZED
-     *  (§10(B)): the count is read per semantic search (availability + the
-     *  store cache key) but changes only at index time — `resetCountCache`
-     *  busts it after a re-embed (wired through the db facade). */
+    /** Row count of the semantic vector table; 0 ⇒ tier dormant. Memoized
+     *  (§10(B)): read per search, changes only at index time. */
     getVectorCount() {
       if (vectorCountMemo === undefined) {
         vectorCountMemo = safeCall(() => vectorCountStmt.get().c, { default: 0, log: 'warn-once', label: 'search.vectorCount' })
@@ -343,9 +339,8 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         label: 'search.bodyIndexCount',
       })
     },
-    /** Cheap "is the body tier populated" boolean — the per-search hot path.
-     *  Avoids the full-index COUNT(*) (§10(B)); use getBodyIndexCount only
-     *  when the actual row count is needed. */
+    /** Cheap "is the body tier populated" boolean (§10(B)) — avoids the
+     *  full-index COUNT(*); getBodyIndexCount stays for the actual count. */
     hasBodyIndex() {
       if (!bodyExistsStmt) return false
       return safeCall(() => bodyExistsStmt.get() != null, {

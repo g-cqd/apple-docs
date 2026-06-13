@@ -10,8 +10,8 @@
     },
     {
       "path": "src/storage/database.js",
-      "lines": 404,
-      "_reason": "DocsDatabase is the thin delegation facade over the per-domain repos — it accretes one-line pass-throughs as features land (v25 added the chunk-vector tier). Statements live in repos/*; splitting the facade itself would only scatter the delegation map. Pinned to 404."
+      "lines": 406,
+      "_reason": "DocsDatabase is the thin delegation facade over the per-domain repos — it accretes one-line pass-throughs as features land (v25 added the chunk-vector tier; §10(B) added hasBodyIndex + resetSemanticCountCaches). Statements live in repos/*; splitting the facade itself would only scatter the delegation map. Pinned to 406."
     }
   ]
 }
