@@ -442,10 +442,24 @@ planned slice):
   divergence recorder — plus `embed_version` stamping with
   mismatch-forced re-embed. Eval: no-regress, mrr strictly up;
   cos(`𠮷stack`, `stack`) −0.02 → 0.99.
-- **(B) SQLite query-layer round-trips**: a CPU profile (2026-06-12)
-  put ~99% of NL-search latency inside `Statement.all/get` — cascade
-  statement count, snippet batch shape, FTS config experiments. Gates:
-  search-bench p50 + golden eval unchanged-or-better.
+- **(B) SQLite query-layer round-trips — EXECUTED 2026-06-13**: a caller
+  attribution of the ~99%-in-`Statement.all/get` profile found the cost
+  was NOT the hypothesized snippet/fuzzy round-trips (~1% combined) but
+  three per-search AVAILABILITY checks each running `COUNT(*)` over a
+  large table — `getBodyIndexCount` (`COUNT(*)` on the 358k-row body-FTS5
+  index, ~130 ms warm) alone was **43%** of search CPU. Fix (output-
+  identical): `hasBodyIndex()` existence probe (`SELECT 1 … LIMIT 1`) for
+  the boolean-only body check; memoize the vector/chunk counts (value
+  preserved, busted on re-embed); plus the fuzzy N→1 batch
+  (`getSearchRecordsByIds`). Result, recall/ndcg/mrr **byte-flat** across
+  168 judgments × 4 configs, p50 **276→53 ms (5.2×, lexical)** /
+  **487→115 ms (4.2×, rrf)** / **261→106 ms (2.5×, hybrid)**. The
+  measure-first discipline is the lesson: the profile's leaf (`Statement`)
+  hid the real culprit until self-time was attributed to its JS caller.
+  Remaining cost is legitimate cascade-FTS + the semantic Hamming scan
+  (`semantic.js:213 insertSorted`, ~14%) — a separate future lever.
+  Tooling: `scripts/profile-cpuprofile.mjs` gained native-frame caller
+  attribution.
 - **(C) Burst-stall architecture**: ~3 s event-loop stall at burst onset
   + healthz sharing waiting-room 503s
   (ops/runbooks/mcp-burst-healthz.md) — yield points, queue shaping,
