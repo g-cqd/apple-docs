@@ -118,10 +118,46 @@ public enum Cascade {
   /// (convenience for tests; the server fans the tiers in parallel + calls
   /// `assemble`).
   public static func search(_ conn: StorageConnection, _ params: SearchParams) -> [UInt8] {
-    guard let p = prepare(params) else { return emptyEnvelope }
+    guard let prepared = prepare(params) else { return emptyEnvelope }
+    // Framework-synonym expansion (search.js:137): run each strict tier once per
+    // framework (canonical + synonyms) and concatenate, and widen the
+    // matchesFrameworkFilter set to the same list.
+    let frameworks = resolveFrameworks(conn, nonEmptyValue(params.framework))
+    var filters = prepared.activeFilters
+    filters.frameworks = frameworks
+    let p = PreparedSearch(
+      q: prepared.q, ftsParams: prepared.ftsParams, trigramParams: prepared.trigramParams,
+      limit: prepared.limit, offset: prepared.offset, activeFilters: filters)
     return assemble(
-      p, conn: conn, titleExact: conn.titleExactRows(p.ftsParams) ?? [],
-      fts: conn.ftsRows(p.ftsParams) ?? [], trigram: conn.trigramRows(p.trigramParams) ?? [])
+      p, conn: conn, titleExact: fanout(frameworks, p.ftsParams) { conn.titleExactRows($0) },
+      fts: fanout(frameworks, p.ftsParams) { conn.ftsRows($0) },
+      trigram: fanout(frameworks, p.trigramParams) { conn.trigramRows($0) })
+  }
+
+  /// [framework] expanded with its synonyms (deduped, canonical first); [nil]
+  /// when no framework filter (the single no-filter query).
+  private static func resolveFrameworks(_ conn: StorageConnection, _ base: String?) -> [String?] {
+    guard let base else { return [nil] }
+    var frameworks: [String?] = [base]
+    for synonym in conn.getFrameworkSynonyms(base) where !frameworks.contains(synonym) {
+      frameworks.append(synonym)
+    }
+    return frameworks
+  }
+
+  /// Runs `tier` once per framework (overriding `$framework`) and concatenates
+  /// in framework order (the JS `frameworks.map(...).flat()`).
+  private static func fanout(
+    _ frameworks: [String?], _ params: SearchPagesParams,
+    _ tier: (SearchPagesParams) -> [SearchRow]?
+  ) -> [SearchRow] {
+    var out: [SearchRow] = []
+    for framework in frameworks {
+      var params = params
+      params.framework = framework
+      out.append(contentsOf: tier(params) ?? [])
+    }
+    return out
   }
 
   /// Merges the three tiers (title-exact → FTS → trigram, dedup-by-path
@@ -180,7 +216,7 @@ public enum Cascade {
       // tiers haven't filled the requested window. `bodyRows` self-guards on the
       // table's presence (→ [] when absent), matching the JS hasBody gate.
       if results.count < limit + offset {
-        addRows(conn.bodyRows(p.ftsParams) ?? []) { _ in "body" }
+        addRows(fanout(filters.frameworks, p.ftsParams) { conn.bodyRows($0) }) { _ in "body" }
       }
 
       // Relaxation cascade R1-R3 (cascade.js runRelaxationCascade) — only when
@@ -194,14 +230,14 @@ public enum Cascade {
           if pruned.count >= 1 {
             var params = p.ftsParams
             params.query = FtsQuery.build(pruned.joined(separator: " "))
-            addRows(conn.ftsRows(params) ?? []) { _ in "relaxed" }
+            addRows(fanout(filters.frameworks, params) { conn.ftsRows($0) }) { _ in "relaxed" }
           }
           // R2 — pruned OR (lowercased, quote-stripped, OR-joined)
           if results.isEmpty, pruned.count >= 2 {
             var params = p.ftsParams
             params.query =
               pruned.map { "\"\(stripQuotes(JsString.lowercase($0)))\"" }.joined(separator: " OR ")
-            addRows(conn.ftsRows(params) ?? []) { _ in "relaxed-or" }
+            addRows(fanout(filters.frameworks, params) { conn.ftsRows($0) }) { _ in "relaxed-or" }
           }
           // R3 — trigram on a single high-signal token
           if results.isEmpty {
@@ -209,7 +245,7 @@ public enum Cascade {
             if let signal = Relaxation.pickHighSignalToken(pool), signal.utf16.count >= 3 {
               var params = p.trigramParams
               params.query = FtsQuery.trigram(signal)
-              addRows(conn.trigramRows(params) ?? []) { _ in "relaxed-token" }
+              addRows(fanout(filters.frameworks, params) { conn.trigramRows($0) }) { _ in "relaxed-token" }
             }
           }
         }

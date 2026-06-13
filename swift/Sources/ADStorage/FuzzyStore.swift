@@ -29,6 +29,24 @@ extension StorageConnection {
     return out
   }
 
+  /// Framework synonyms (search.js framework expansion): aliases of a canonical
+  /// + canonicals of an alias. [] when the table is absent (prepareUncached nil).
+  public func getFrameworkSynonyms(_ slug: String) -> [String] {
+    let sql = """
+      SELECT alias FROM framework_synonyms WHERE canonical = ?
+      UNION
+      SELECT canonical FROM framework_synonyms WHERE alias = ?
+      """
+    guard let stmt = conn.prepareUncached(sql) else { return [] }
+    stmt.bindText(1, slug)
+    stmt.bindText(2, slug)
+    var out: [String] = []
+    while stmt.step() == SQLite.row {
+      if let value = stmt.text(0) { out.append(value) }
+    }
+    return out
+  }
+
   /// Batched full records by document id, keyed by id (search.js
   /// getSearchRecordsByIds). Decoded as SearchRow (the trailing `d.id` is read
   /// separately; the row decoder reads RESULT_COLUMNS only).
