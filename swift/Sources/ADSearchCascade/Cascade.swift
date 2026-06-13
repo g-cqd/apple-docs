@@ -93,12 +93,29 @@ public enum Cascade {
     }
     addRows(trigram) { _ in "substring" }
 
-    // Tier 4: body FTS (search.js:276) — merge only when the strict tiers
-    // haven't filled the requested window. `bodyRows` self-guards on the table's
-    // presence (→ [] when absent), matching the JS hasBody gate's output. Needs
-    // the connection; skipped in the pure (conn == nil) path.
-    if let conn, results.count < limit + offset {
-      addRows(conn.bodyRows(p.ftsParams) ?? []) { _ in "body" }
+    // Deep tiers need the connection (skipped in the pure conn == nil path).
+    if let conn {
+      // Tier 3: fuzzy Levenshtein (search.js:249) — only when T1+T2 produced < 5
+      // hits and the query is >= 4 UTF-16 units. Candidates in distance order,
+      // deduped, merged with matchQuality 'fuzzy'.
+      if results.count < 5, q.utf16.count >= 4 {
+        let ids = Fuzzy.matchTitles(conn, query: q, limit: Int(p.ftsParams.limit))
+        if !ids.isEmpty {
+          let records = conn.searchRecordsByIds(ids)
+          for id in ids {
+            guard let record = records[id], seen.insert(record.path).inserted else { continue }
+            var hit = ResultHit(record, matchQuality: "fuzzy")
+            hit.origIndex = results.count
+            results.append(hit)
+          }
+        }
+      }
+      // Tier 4: body FTS (search.js:276) — merge only when the strict + fuzzy
+      // tiers haven't filled the requested window. `bodyRows` self-guards on the
+      // table's presence (→ [] when absent), matching the JS hasBody gate.
+      if results.count < limit + offset {
+        addRows(conn.bodyRows(p.ftsParams) ?? []) { _ in "body" }
+      }
     }
 
     let intent = IntentDetector.detect(q)
@@ -145,6 +162,12 @@ public enum Cascade {
     w.openArray()
     for hit in hits { projectHit(&w, hit) }
     w.closeArray()
+    // projectSearchResult: `approximate: true` when any projected hit's
+    // confidence is 'approximate' (fuzzy / relaxed). Emitted after `results`.
+    if hits.contains(where: { publicConfidence($0.matchQuality) == "approximate" }) {
+      w.key("approximate")
+      w.raw("true")
+    }
     w.closeObject()
     return w.bytes
   }
