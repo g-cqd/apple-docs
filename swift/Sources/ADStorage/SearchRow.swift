@@ -86,6 +86,13 @@ extension StorageConnection {
     return rows(sql: searchTrigramSQL, params: params, hasRankTier: false)
   }
 
+  /// T4 body FTS; [] when documents_body_fts is absent or empty. The SQL adds a
+  /// bm25 rank for ORDER BY only — the decoder ignores it (hasRankTier: false).
+  public func bodyRows(_ params: SearchPagesParams) -> [SearchRow]? {
+    guard conn.hasBodyFts else { return [] }
+    return rows(sql: searchBodySQL, params: params, hasRankTier: false)
+  }
+
   private func rows(sql: String, params: SearchPagesParams, hasRankTier: Bool) -> [SearchRow]? {
     guard let stmt = conn.statement(sql) else { return nil }
     bindSearchPages(stmt, params)
