@@ -45,6 +45,9 @@ const SYMBOLS = {
   ad_render_symbol_pdf: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_render_symbol_pdf_batch: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_render_symbol_png: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_storage_open: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_storage_close: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_storage_search_pages: { args: ['buffer', 'i64'], returns: 'ptr' },
 }
 
 const ROOT = new URL('../../', import.meta.url).pathname

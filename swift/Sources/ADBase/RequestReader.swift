@@ -20,6 +20,13 @@ public struct RequestReader {
     return UInt32(littleEndian: value)
   }
 
+  public mutating func u64() -> UInt64? {
+    guard remaining >= 8, let base = buf.baseAddress else { return nil }
+    let value = base.loadUnaligned(fromByteOffset: offset, as: UInt64.self)
+    offset += 8
+    return UInt64(littleEndian: value)
+  }
+
   public mutating func f64() -> Double? {
     guard remaining >= 8, let base = buf.baseAddress else { return nil }
     let bits = base.loadUnaligned(fromByteOffset: offset, as: UInt64.self)

@@ -23,7 +23,7 @@ indexed by the docs site.
 | **P2** | Embedder ([RFC 0002](0002-swift-embedder.md)) | ✅ Complete |
 | **P3** | Render service ([RFC 0003](0003-swift-render-service.md)) | ◑ Phases 1/2/4 done; **phase 3 held** |
 | **P4** | Content pipeline ([RFC 0004](0004-content-pipeline.md)) | ✅ Main line done; phases 3-4 NO-GO |
-| **P5** | Storage — SQLite C-interop, reader pool → native actors | ⬜ **Next** (gate met) |
+| **P5** | Storage — SQLite C-interop, reader pool → native actors | ◑ Foundation shipped (token-gated **off**); bridge-flip NO-GO, deferred to P6 |
 | **P6** | Servers — web + MCP on SwiftNIO (no Vapor) | ⬜ Not started |
 | **P7** | CLI + single static binary; Bun retired | ⬜ Not started |
 
@@ -35,10 +35,14 @@ Every bridge-era module — `fusion`, `archive`, `embed`, `content`,
 ## Work ahead
 
 **Main line (sequential):**
-- **P5 — Storage** (next; gate met = P2 + P3-darwin native-by-default):
-  native SQLite C-interop + reader-pool actors; *kills* `bun:sqlite` (the
-  `database.js` facade) + the `Worker` reader-pool. D4 (swift-structured-
-  queries vs raw C) decided in its design.
+- **P5 — Storage** (first slice done; flip deferred): the native read
+  foundation (`ADStorage`, dlopen'd libsqlite3) + `searchPages` shipped
+  **token-gated off** — byte-parity + WAL-safe, but native-via-FFI is
+  ~7-16% slower than the already-native bun:sqlite (NO-GO for a bridge-era
+  flip; the win is P6/P7-coupled). D4 settled: raw C interop. The
+  foundation is the P6 prerequisite. *Kills* (`bun:sqlite`, the `Worker`
+  pool) are P7-coupled (unkillable while Bun is runtime + writer). Records:
+  [p5](0001-swift-native-transition/p5/records.md).
 - **P6 — Servers**: in-house SwiftNIO web + MCP; *kills*
   `@modelcontextprotocol/sdk`, `zod`, `Bun.serve`. Ranking/snippets fold in.
 - **P7 — CLI + single binary**: swift-argument-parser, ops ports, one static

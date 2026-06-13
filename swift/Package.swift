@@ -34,11 +34,16 @@ let package = Package(
     // links CoreText/AppKit; the Linux slice compiles to stubs (#if
     // canImport) so the dylib still builds with no AppKit/CoreText.
     .target(name: "ADRender", dependencies: ["ADBase"], swiftSettings: releaseCMO),
+    // Storage layer (RFC 0001 P5): SQLite C-interop via runtime dlopen
+    // (NOT a systemLibrary — same policy as ADArchive/Zstd: absent → JS
+    // bun:sqlite serves). The read path; the bun:sqlite writer is untouched.
+    .target(name: "ADStorage", dependencies: ["ADBase"], swiftSettings: releaseCMO),
     // Dev-only reference dump for the flipped fixture generator (RFC 0002
     // §6h); not shipped — the dylib product above is unchanged.
     .executableTarget(name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump"),
     .target(
-      name: "ADCore", dependencies: ["ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent", "ADRender"],
+      name: "ADCore",
+      dependencies: ["ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent", "ADRender", "ADStorage"],
       swiftSettings: releaseCMO),
     .testTarget(name: "ADBaseTests", dependencies: ["ADBase"]),
     .testTarget(name: "ADSearchTests", dependencies: ["ADSearch"]),
@@ -46,5 +51,6 @@ let package = Package(
     .testTarget(name: "ADCoreTests", dependencies: ["ADCore", "ADEmbed"]),
     .testTarget(name: "ADEmbedTests", dependencies: ["ADEmbed"]),
     .testTarget(name: "ADContentTests", dependencies: ["ADContent"]),
+    .testTarget(name: "ADStorageTests", dependencies: ["ADStorage"]),
   ]
 )
