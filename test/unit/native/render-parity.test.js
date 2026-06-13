@@ -21,8 +21,8 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { suffix } from 'bun:ffi'
 import { _resetNativeLoader } from '../../../src/native/loader.js'
-import { _forceImpl, nativeFontTextSvg, nativeSymbolPdf } from '../../../src/resources/render-native.js'
-import { FONT_TEXT_SCRIPT, SYMBOL_PDF_SCRIPT } from '../../../src/resources/swift-templates.js'
+import { _forceImpl, nativeFontTextSvg, nativeSymbolPdf, nativeSymbolPdfBatch, nativeSymbolPng } from '../../../src/resources/render-native.js'
+import { FONT_TEXT_SCRIPT, SYMBOL_PDF_SCRIPT, SYMBOL_PNG_SCRIPT } from '../../../src/resources/swift-templates.js'
 import { symbolPdfToSvg } from '../../../src/resources/symbol-pdf-to-svg.js'
 
 const DEV_LIB = new URL(`../../../swift/.build/release/libAppleDocsCore.${suffix}`, import.meta.url).pathname
@@ -71,6 +71,57 @@ describe.skipIf(!isDarwin || !nativeAvailable)('render-native', () => {
       const nativeSvg = symbolPdfToSvg(nativePdf, { name: c.symbol })
       const spawnSvg = symbolPdfToSvg(new Uint8Array(spawnPdf), { name: c.symbol })
       expect(nativeSvg).toBe(spawnSvg)
+    })
+  }
+
+  // symbol-pdf batch (RFC 0003 phase 2): ≥8 symbols forces the dylib's
+  // DispatchQueue.concurrentPerform path — the single-symbol leg above only
+  // ever runs serially, so this is the actual concurrent-AppKit gate
+  // (D-0003-3). Proves the batch framing + that concurrent in-dylib rendering
+  // is byte-identical to the serial single + spawn output.
+  const BATCH_SYMBOLS = ['heart.fill', 'star', 'house.fill', 'gear', 'pencil', 'trash', 'folder', 'bell', 'bookmark', 'tag', 'flag', 'bolt']
+  test('symbol-pdf batch == singles (concurrent path) + spawn anchor', () => {
+    const items = BATCH_SYMBOLS.map(name => ({ name, scope: 'public' }))
+    const batch = nativeSymbolPdfBatch(items)
+    expect(batch).not.toBeNull()
+    expect(batch.length).toBe(items.length)
+    let compared = 0
+    for (let i = 0; i < items.length; i++) {
+      const name = items[i].name
+      const single = nativeSymbolPdf(items[i])
+      // Native batch (concurrent) and native single (serial) must agree on
+      // renderability AND on the served SVG, byte-for-byte.
+      expect(batch[i] === null).toBe(single === null)
+      if (single === null) continue
+      const batchSvg = symbolPdfToSvg(batch[i], { name })
+      expect(batchSvg).toBe(symbolPdfToSvg(single, { name }))
+      // Anchor the first few to the spawn renderer (the rest lean on the
+      // single-symbol leg's own spawn parity); spawns are ~200 ms each.
+      if (i < 3) {
+        const spawnSvg = symbolPdfToSvg(new Uint8Array(spawnScript(SYMBOL_PDF_SCRIPT, [name, 'public', 'regular', 'medium'])), { name })
+        expect(batchSvg).toBe(spawnSvg)
+      }
+      compared++
+    }
+    expect(compared).toBeGreaterThanOrEqual(8) // proves concurrentPerform actually ran
+  }, 30_000)
+
+  // symbol-png (RFC 0003 phase 2, D-0003-3 PNG case): native NSBitmap
+  // rasterization == spawn, byte-for-byte. PNG is deterministic (no metadata
+  // noise — verified by the probe), so this compares raw bytes. Public
+  // symbols → real CI macOS coverage.
+  const PNG_CASES = [
+    { name: 'heart.fill', scope: 'public', pointSize: 64, color: '#1d1d1f', weight: 'regular', scale: 'medium' },
+    { name: 'star', scope: 'public', pointSize: 96, color: '#ff3b30', weight: 'bold', scale: 'large' },
+    { name: 'gear', scope: 'public', pointSize: 48, color: '#34c759', background: '#ffffff', weight: 'thin', scale: 'small' },
+  ]
+  for (const c of PNG_CASES) {
+    test(`symbol-png native == spawn: ${c.name}`, () => {
+      const native = nativeSymbolPng(c)
+      expect(native).not.toBeNull()
+      const spawnPng = spawnScript(SYMBOL_PNG_SCRIPT, [c.name, c.scope, String(c.pointSize), c.color, c.background ?? '', c.weight, c.scale])
+      expect(spawnPng).not.toBeNull()
+      expect(Buffer.from(native).equals(Buffer.from(spawnPng))).toBe(true)
     })
   }
 
