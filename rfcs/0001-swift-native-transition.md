@@ -512,11 +512,24 @@ planned slice):
   **Lesson: trust direct timing over sampler self-time** (the §10(B)
   measure-first discipline, one level deeper). A hardware-POPCNT native
   scan (~further 2–3×) remains a possible future slice.
-- **(C) Burst-stall architecture**: ~3 s event-loop stall at burst onset
-  + healthz sharing waiting-room 503s
-  (ops/runbooks/mcp-burst-healthz.md) — yield points, queue shaping,
-  liveness exemption. Gates: smoke burst healthz clean, no throughput
-  loss.
+- **(C) Burst-stall architecture — measured 2026-06-13: primary symptom
+  RESOLVED, onset stall NON-REPRODUCING (no new code).** The two mm18
+  symptoms were healthz waiting-room 503s and a ~3 s onset event-loop
+  stall (ops/runbooks/mcp-burst-healthz.md). Confirm-first against the
+  real `startHttpServer` over the full 831k-chunk DB: (1) **`/healthz` is
+  structurally exempt** — http-server.js:154 returns the health body
+  before the `/mcp` route + the heavy semaphore (it's a sibling route at
+  the origin, not under the transport), so it never shares the
+  waiting-room — the saturation-503 issue is already gone (covered by an
+  existing unit test); (2) a 16× `search_docs` burst kept healthz at
+  **1 ms, 8/8 200** — the onset stall did **not** reproduce on arm64 (fast
+  native embed + the §10(B′) 3× search speedup; the mm18 measurement was
+  Intel + cold). The only residual is that narrow Intel-cold-start window,
+  which the runbook itself deprioritizes ("only worth it if real traffic
+  ever looks like the probe"); shipping unvalidated yield points would
+  violate the operational gate (evidence on the affected host class — not
+  obtainable locally). **Deferred** pending prod-monitor signal on the
+  Intel host; no speculative change made.
 - **(D) Prerender batching**: folds into RFC 0003 phase 2.
 - **(E) Snapshot/storage size**: the 2.47 GB asset-ceiling scare;
   raw-payload and compaction strategy.
