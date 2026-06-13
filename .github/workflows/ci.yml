@@ -142,6 +142,16 @@ jobs:
             brew list zstd >/dev/null 2>&1 || brew install zstd
           fi
 
+      # Linux only: the HarfBuzz shaper (RFC 0003 phase 4) dlopens
+      # libharfbuzz at runtime, and shaper-parity.test.js compares it to
+      # hb-view (rasterised via rsvg-convert + ImageMagick) on a DejaVu test
+      # font. darwin uses CoreText, so the shaper + its parity test skip there.
+      - name: Ensure HarfBuzz + render tooling (Linux shaper + parity)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libharfbuzz0b libharfbuzz-bin librsvg2-bin imagemagick fonts-dejavu-core
+
       - name: Swift tests
         working-directory: swift
         run: swift test

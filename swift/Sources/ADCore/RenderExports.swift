@@ -53,6 +53,36 @@ public func adRenderFontText(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Unsafe
   #endif
 }
 
+// ad_render_font_text_shaped request (RFC 0003 phase 4 — Linux shaper):
+//   [u32 version=1][nullable fontPath][nullable text][f64 pointSize]
+// result payload: SVG utf8. HarfBuzz is dlopen'd at runtime; absent (or a
+// font that won't shape) → .invalidInput → JS falls back to the hb-view
+// spawn / placeholder. Cross-platform (no AppKit/CoreText) — the Linux
+// dylib serves this; darwin keeps CoreText for its own font-text path.
+@_cdecl("ad_render_font_text_shaped")
+public func adRenderFontTextShaped(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
+  guard len > 0, len <= maxInputBytes, let ptr else {
+    return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
+  }
+  var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
+  guard let version = reader.u32(), version == 1 else {
+    return ResultBuffer.error(.invalidInput, "unsupported render request version")
+  }
+  guard let fontPathField = readRenderString(&reader), let textField = readRenderString(&reader),
+    let pointSize = reader.f64()
+  else { return ResultBuffer.error(.invalidInput, "truncated shaped font-text request") }
+  guard reader.remaining == 0 else {
+    return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
+  }
+  guard let fontPath = fontPathField, let text = textField else {
+    return ResultBuffer.error(.invalidInput, "null fontPath or text")
+  }
+  guard let svg = HarfBuzzShaper.renderSVG(fontPath: fontPath, text: text, pointSize: pointSize) else {
+    return ResultBuffer.error(.invalidInput, "shaped font-text render produced no output")
+  }
+  return svg.withUnsafeBytes { ResultBuffer.make(status: .ok, format: .utf8, payload: $0) }
+}
+
 // ad_render_symbol_pdf request:
 //   [u32 version=1][nullable name][nullable scope][nullable weight][nullable scale]
 // result payload: vector PDF bytes (format .bytes). darwin-only (AppKit);

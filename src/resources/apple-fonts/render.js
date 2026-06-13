@@ -19,7 +19,7 @@ import {
 import { isLikelySfnt } from './sfnt.js'
 import { assertFontPathContained } from './safe-font-path.js'
 import { FONT_TEXT_SCRIPT } from '../swift-templates.js'
-import { nativeFontTextSvg } from '../render-native.js'
+import { nativeFontTextShaped, nativeFontTextSvg, nativeRenderAvailable } from '../render-native.js'
 import { NotFoundError, ValidationError } from '../../lib/errors.js'
 
 const ENGINE_ENV = 'APPLE_DOCS_FONT_RENDERER'
@@ -27,12 +27,13 @@ let enginesCache // string[] | undefined
 
 /**
  * Ordered glyph-render engines for this host. darwin: CoreText first
- * (Apple's own shaping), hb-view second so a Mac without the Swift
- * toolchain still renders real glyphs. Elsewhere: hb-view (HarfBuzz —
- * full shaping incl. RTL/complex scripts) when installed. The
- * placeholder `<text>` SVG stays the terminal fallback either way.
- * `APPLE_DOCS_FONT_RENDERER=coretext|hb-view|fallback` pins one engine
- * (tests, diagnostics).
+ * (Apple's own shaping). Then `hb-native` — the in-dylib HarfBuzz shaper
+ * (RFC 0003 phase 4), available wherever libAppleDocsCore + libharfbuzz
+ * load, which is what lets Linux render real glyphs WITHOUT the hb-view
+ * host binary. `hb-view` stays as the spawn fallback when installed. The
+ * placeholder `<text>` SVG is the terminal fallback either way.
+ * `APPLE_DOCS_FONT_RENDERER=coretext|hb-native|hb-view|fallback` pins one
+ * engine (tests, diagnostics).
  */
 export function _resolveFontTextEngines() {
   const forced = process.env[ENGINE_ENV]
@@ -40,6 +41,7 @@ export function _resolveFontTextEngines() {
   if (enginesCache) return enginesCache
   const engines = []
   if (process.platform === 'darwin') engines.push('coretext')
+  if (nativeRenderAvailable()) engines.push('hb-native')
   if (Bun.which('hb-view')) engines.push('hb-view')
   enginesCache = engines
   return engines
@@ -81,9 +83,11 @@ export async function renderFontText(opts, ctx) {
   if (valid) {
     for (const engine of _resolveFontTextEngines()) {
       try {
-        content = engine === 'hb-view'
-          ? await renderFontTextSvgHarfBuzz({ fontPath: safeFontPath, text, pointSize })
-          : await renderFontTextSvgCurves({ fontPath: safeFontPath, text, pointSize })
+        content = engine === 'hb-native'
+          ? nativeFontTextShaped({ fontPath: safeFontPath, text, pointSize })
+          : engine === 'hb-view'
+            ? await renderFontTextSvgHarfBuzz({ fontPath: safeFontPath, text, pointSize })
+            : await renderFontTextSvgCurves({ fontPath: safeFontPath, text, pointSize })
         if (content) break
       } catch (error) {
         ctx.logger?.warn?.(`${engine} outline render failed for ${font.file_name}: ${error.message}`)

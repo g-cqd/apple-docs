@@ -166,6 +166,24 @@ export function nativeFontTextSvg({ fontPath, text, pointSize }) {
 }
 
 /**
+ * Native HarfBuzz-shaped font-text → SVG (RFC 0003 phase 4 — the Linux
+ * path that replaces the hb-view host binary). Returns the SVG string or
+ * null (HarfBuzz absent / font won't shape → use the hb-view spawn /
+ * placeholder). Cross-platform; on darwin the engine chain prefers
+ * CoreText, so this is exercised on Linux + by the parity gate.
+ */
+export function nativeFontTextShaped({ fontPath, text, pointSize }) {
+  if (forced === 'js') return null
+  if (typeof fontPath !== 'string' || typeof text !== 'string') return null
+  const packer = new Packer()
+  packer.u32(1)
+  packer.string(fontPath)
+  packer.string(text)
+  packer.f64(Number(pointSize) || 0)
+  return callUtf8('ad_render_font_text_shaped', packer)
+}
+
+/**
  * Native SF Symbol → vector PDF bytes (Uint8Array) or null (use the spawn
  * path). darwin-only (AppKit). D-0003-3: only engaged after the probe
  * confirms the in-process AppKit render is crash-free + byte-identical.

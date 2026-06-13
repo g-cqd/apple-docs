@@ -22,6 +22,10 @@ function stubPlatform(value) {
 beforeEach(() => {
   _resetFontTextEngines()
   delete process.env.APPLE_DOCS_FONT_RENDERER
+  // Pin native render OFF so the engine-ordering contract is deterministic
+  // regardless of whether a dev dylib is present (the in-dylib `hb-native`
+  // engine is covered by shaper-parity.test.js). One case below flips it on.
+  process.env.APPLE_DOCS_NATIVE = 'off'
   db = new DocsDatabase(':memory:')
   dataDir = mkdtempSync(join(tmpdir(), 'apple-docs-fontengine-'))
 })
@@ -30,6 +34,7 @@ afterEach(() => {
   Bun.which = realWhich
   stubPlatform(realPlatform)
   delete process.env.APPLE_DOCS_FONT_RENDERER
+  delete process.env.APPLE_DOCS_NATIVE
   _resetFontTextEngines()
   db.close()
   rmSync(dataDir, { recursive: true, force: true })

@@ -41,6 +41,7 @@ const SYMBOLS = {
   ad_content_doc_markdown_batch: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_content_plaintext_batch: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_render_font_text: { args: ['buffer', 'i64'], returns: 'ptr' },
+  ad_render_font_text_shaped: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_render_symbol_pdf: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_render_symbol_pdf_batch: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_render_symbol_png: { args: ['buffer', 'i64'], returns: 'ptr' },
