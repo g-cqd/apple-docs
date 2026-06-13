@@ -81,6 +81,30 @@ private func respond(
       defer { pool.checkin(conn) }
       return Cascade.search(conn, params)
     }
+  } else if path == "/search-rawscan" || path == "/search-decode" {
+    // DIAGNOSTIC (RFC 0001 P6 probe — to be removed): isolate the stages of the
+    // cascade to localize the concurrency contention. -rawscan = the 3 tier
+    // SQL, COUNT only (SQLite scan, no String decode). -decode = + the
+    // SearchRow String decode (no merge/rerank/JSON). vs /search = full.
+    let params = parseCascadeParams(head.uri)
+    let rawscan = path == "/search-rawscan"
+    status = .ok
+    contentType = "application/json"
+    body = try await threadPool.runIfActive {
+      guard let p = Cascade.prepare(params), let conn = pool.checkout() else {
+        return Array(#"{"n":0}"#.utf8)
+      }
+      defer { pool.checkin(conn) }
+      let n: Int
+      if rawscan {
+        n = conn.rawScanCount(fts: p.ftsParams, trigram: p.trigramParams)
+      } else {
+        n = (conn.titleExactRows(p.ftsParams)?.count ?? 0)
+          + (conn.ftsRows(p.ftsParams)?.count ?? 0)
+          + (conn.trigramRows(p.trigramParams)?.count ?? 0)
+      }
+      return Array("{\"n\":\(n)}".utf8)
+    }
   } else {
     status = .notFound
     contentType = "text/plain"

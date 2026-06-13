@@ -99,4 +99,22 @@ extension StorageConnection {
     }
     return out
   }
+
+  /// DIAGNOSTIC (RFC 0001 P6 probe — not used by the cascade): run the 3 tier
+  /// queries and COUNT rows only, with NO column extraction / `SearchRow`
+  /// decode — to isolate the SQLite scan cost from the Swift `String` decode
+  /// under concurrency.
+  public func rawScanCount(fts: SearchPagesParams, trigram: SearchPagesParams) -> Int {
+    func count(_ sql: String, _ p: SearchPagesParams) -> Int {
+      guard let stmt = conn.statement(sql) else { return 0 }
+      bindSearchPages(stmt, p)
+      defer { stmt.reset() }
+      var n = 0
+      while stmt.step() == SQLite.row { n += 1 }
+      return n
+    }
+    var total = count(searchTitleExactSQL, fts) + count(searchPagesSQL, fts)
+    if conn.hasTrigram { total += count(searchTrigramSQL, trigram) }
+    return total
+  }
 }

@@ -539,8 +539,17 @@ land; each phase's completion gets a dated entry here.
   sequential work) then found the classic `@unchecked` handler **no faster than
   the safe async model** (c=1..16 statistically identical, async marginally
   ahead) → the classic handler + `--serving` switch were removed; `ad-server`
-  carries **no `@unchecked`** beyond the contained `StorageConnection`. Fork
-  (open): profile + alloc/ARC-light rewrite ("make Swift win") vs search
-  serving stays Bun, cascade banked for P7. Operator chose to **pin the cause
-  first** (cheap profiling probe). Detail:
-  [p6/records.md](0001-swift-native-transition/p6/records.md).
+  carries **no `@unchecked`** beyond the contained `StorageConnection`. Then a
+  **stage-isolation probe** (operator chose "pin the cause first") swept three
+  granularities of the same request — `/search-rawscan` (3 tier SQL, count
+  only), `/search-decode` (+ String decode), `/search` (full): **all converge
+  to ~390 req/s at c=16** (c=1: 845 / 733 / 608). This **exonerates the cascade
+  code** — the decode/rerank/JSON costs only at c=1, NOT the c=16 ceiling, which
+  is the **SQLite FTS scan + host topology** (8 thread-pool threads + 2 loops +
+  the same-host `ab` on 10 cores; thread-sweep oversubscription signature). The
+  Bun gap is apples-to-apples (Bun runs the same 3 unfiltered tiers). So the
+  alloc/ARC-light rewrite is **off the table** (won't lift the ceiling); the
+  residual is a SQLite-concurrency / thread-topology / same-host-measurement
+  question a **clean load-generator host** would settle. Fork (open): clean-host
+  re-measure vs search serving stays Bun (cascade + serving proven good, banked
+  for P7). Detail: [p6/records.md](0001-swift-native-transition/p6/records.md).

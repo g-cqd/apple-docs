@@ -298,12 +298,12 @@ per-request cascade work is less concurrency-efficient than Bun's** under
 load. Ruled out: the nano allocator (exp. 4) and SQLite's WAL `-shm` (Bun's
 reader pool opens the same file from N workers and scales fine, so shared
 `-shm` is not the blocker). Remaining suspects, all per-row and
-matchset-correlated, need Instruments to pin: the String-heavy row decode (~24
-`String`s/row), `free`/scalable-zone churn beyond the nano zone, ARC atomic
-refcount traffic on the shared static rerank tables (`BASE_SCORES` dict /
-`SOURCE_PREFERENCE_ORDER` array, touched per row), or the `Set<String>` dedup.
-Bun sidesteps all of these: per-isolate bump allocation + cheap JSC strings,
-and it parallelizes decode across workers while reranking on one main thread.
+matchset-correlated *— these were DISPROVEN by the stage isolation below; the
+contention is the SQLite scan + host topology, NOT the post-processing —* were:
+the String-heavy row decode (~24 `String`s/row), `free`/scalable-zone churn
+beyond the nano zone, ARC atomic refcount traffic on the shared static rerank
+tables (`BASE_SCORES` dict / `SOURCE_PREFERENCE_ORDER` array, touched per row),
+or the `Set<String>` dedup.
 
 **Measurement caveat (honest):** `ab` runs on the SAME 10-core host, so at high
 concurrency the client competes with the server for cores — some of the c=1→16
@@ -347,8 +347,52 @@ model is irrelevant to throughput, which independently re-confirms the
 localization (the cost is the cascade WORK, not the handler). So the
 `@unchecked` buys nothing → **reverted to the async model**; `Handler.swift`
 (the classic handler) + the `--serving` switch were removed. `ad-server` now
-carries no `@unchecked` beyond the contained `StorageConnection`. Enrichment
-(snippet/relatedCount/zstd-decompress) is moot until the fork above is chosen.
+carries no `@unchecked` beyond the contained `StorageConnection`.
+
+### Stage isolation — the actual pin (CORRECTS the String/ARC suspicion above)
+
+The operator chose "pin the cause first." Three diagnostic granularities of the
+SAME per-request work were exposed and swept (`/search-rawscan` = the 3 tier SQL
+COUNT-only, no decode; `/search-decode` = + the `SearchRow` String decode, no
+merge/rerank/JSON; `/search` = full), `ab -k`, threads=8:
+
+| stage | c=1 | c=4 | c=8 | c=16 | c16/c1 |
+| --- | --- | --- | --- | --- | --- |
+| `/search-rawscan` (SQLite scan only) | 845 | 487 | 394 | 396 | 0.47× |
+| `/search-decode` (+ String decode) | 733 | 493 | 385 | 379 | 0.52× |
+| `/search` (full + rerank + JSON) | 608 | 507 | 376 | 375 | 0.62× |
+
+**All three converge to ~375–396 at c=16**, regardless of how much Swift work
+they do. The decode + rerank + JSON cost shows ONLY at c=1 (845 → 608); at
+concurrency the ceiling is identical and sits at/below the **SQLite FTS scan**.
+This **disproves the suspects listed above** (the String decode, ARC on the
+shared rerank tables, `Set<String>` dedup, the JSONWriter): `/search-rawscan`
+does NONE of them and degrades just as hard. So the cascade post-processing is
+**not** the concurrency bottleneck, and an alloc/ARC-light rewrite would lift
+only the c=1 number, **not** the c=16 ceiling — that fork option is off the
+table.
+
+The Bun comparison is fair (apples-to-apples): with no framework filter Bun's
+`frameworks = [undefined]` → it runs the SAME 3 unfiltered tier queries
+(`cascade.js`; trigram included since `q.length ≥ 3`), not a per-framework
+fan-out. So Bun (574 → 1167) genuinely scales while Swift (everything → ~390)
+does not, on the SAME 3-scan workload.
+
+**What's left as the cause** is the SQLite read concurrency + the host topology:
+Swift's `~390` ceiling is 8 thread-pool threads running the FTS scans on a
+10-core box ALSO running 2 event loops, the cooperative pool, the Bun seed, and
+— the confound — the `ab` client itself (same-host load competes for cores; the
+thread sweep showed threads=4 → 514 > 8 → 392, the oversubscription signature).
+Bun's worker-pool topology evidently extracts more throughput per core here.
+The honest position: the cascade CODE is exonerated; the residual is a
+SQLite-concurrency / thread-topology / same-host-measurement question that a
+**clean separate load-generator host** would settle — not something the cascade
+rewrite can fix.
+
+Enrichment (snippet/relatedCount/zstd-decompress) is moot until the fork is
+chosen. The diagnostic routes (`/search-rawscan`, `/search-decode`) +
+`ADStorage.rawScanCount` + `scripts/p6-isolate.mjs` are scaffolding — remove if
+the fork is "stays Bun".
 
 ### Artifacts
 
