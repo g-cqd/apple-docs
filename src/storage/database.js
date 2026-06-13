@@ -219,6 +219,8 @@ export class DocsDatabase {
   getVectorCount() { return this.search.getVectorCount() }
   getAllVectors() { return this.search.getAllVectors() }
   getChunkCount() { return this.chunks.getChunkCount() }
+  /** Bust the memoized vector/chunk counts after a re-embed (§10(B)). */
+  resetSemanticCountCaches() { this.search.resetCountCache(); this.chunks.resetCountCache() }
   getAllChunkVectors() { return this.chunks.getAllChunkVectors() }
   getChunkI8Batch(chunkIds) { return this.chunks.getChunkI8Batch(chunkIds) }
   upsertChunk(params) { this.chunks.upsertChunk(params) }
@@ -230,6 +232,7 @@ export class DocsDatabase {
   getRawPayloadByKey(key) { return this.search.getRawPayloadByKey(key) }
 
   getBodyIndexCount() { return this.search.getBodyIndexCount() }
+  hasBodyIndex() { return this.search.hasBodyIndex() }
   insertBody(documentId, body) { this.search.insertBody(documentId, body) }
   clearBodyIndex() { this.search.clearBodyIndex() }
   getTrigramCandidates(trigram) { return this.search.getTrigramCandidates(trigram) }

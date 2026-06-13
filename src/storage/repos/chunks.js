@@ -17,6 +17,7 @@ import { safeCall } from '../../lib/safe-call.js'
 
 export function createChunksRepo(db) {
   const countStmt = db.query('SELECT COUNT(*) AS c FROM document_chunks')
+  let countMemo // undefined = unread; busted by the write paths below + resetCountCache
   const allBinStmt = db.query('SELECT chunk_id, document_id, vec_bin FROM document_chunks ORDER BY document_id, ord')
   const upsertStmt = db.query(
     'INSERT OR REPLACE INTO document_chunks(document_id, ord, text, vec_bin, vec_i8) VALUES ($doc, $ord, $text, $bin, $i8)',
@@ -24,9 +25,18 @@ export function createChunksRepo(db) {
   const deleteByDocStmt = db.query('DELETE FROM document_chunks WHERE document_id = ?')
 
   return {
-    /** Row count of the per-chunk vector table; 0 ⇒ legacy whole-doc path. */
+    /** Row count of the per-chunk vector table; 0 ⇒ legacy whole-doc path.
+     *  MEMOIZED (§10(B)): read per semantic search (availability + store
+     *  cache key) but mutated only by the writes below — both bust it. */
     getChunkCount() {
-      return safeCall(() => countStmt.get().c, { default: 0, log: 'warn-once', label: 'chunks.count' })
+      if (countMemo === undefined) {
+        countMemo = safeCall(() => countStmt.get().c, { default: 0, log: 'warn-once', label: 'chunks.count' })
+      }
+      return countMemo
+    },
+    /** Bust the memoized chunk count (after a re-embed via a non-repo path). */
+    resetCountCache() {
+      countMemo = undefined
     },
     /** All chunk binary codes: `[{ chunk_id, document_id, vec_bin }]` (doc/ord order). */
     getAllChunkVectors() {
@@ -49,10 +59,12 @@ export function createChunksRepo(db) {
     /** Upsert one chunk's codes (keyed on document_id+ord). */
     upsertChunk({ documentId, ord, text = null, vecBin, vecI8 = null }) {
       upsertStmt.run({ $doc: documentId, $ord: ord, $text: text, $bin: vecBin, $i8: vecI8 })
+      countMemo = undefined
     },
     /** Drop every chunk of a document (re-index / delete path). */
     deleteChunksByDocId(documentId) {
       deleteByDocStmt.run(documentId)
+      countMemo = undefined
     },
   }
 }

@@ -7,6 +7,7 @@ function makeCtx(calls) {
     resolveRoot: () => null,
     getFrameworkSynonyms: () => [],
     getBodyIndexCount: () => 1,
+    hasBodyIndex: () => true,
     searchPages: (_ftsQuery, _rawQuery, opts) => {
       calls.push(opts)
       return []
@@ -15,6 +16,7 @@ function makeCtx(calls) {
     searchBody: () => [],
     getAllTitlesForFuzzy: () => [],
     getSearchRecordById: () => null,
+    getSearchRecordsByIds: () => [],
     hasTable: () => false,
     getTier: () => 'standard',
     getDocumentSnippetData: () => new Map(),
@@ -145,7 +147,8 @@ describe('search command', () => {
   test('fuzzy fallback still respects displayed kind filters', async () => {
     const ctx = makeCtx([])
     ctx.db.getAllTitlesForFuzzy = () => [{ id: 1, title: 'Testing Guide' }]
-    ctx.db.getSearchRecordById = () => ({
+    ctx.db.getSearchRecordsByIds = (ids) => ids.map(id => ({
+      id,
       path: 'documentation/testfw/testing-guide',
       title: 'Testing Guide',
       role_heading: 'Article',
@@ -154,7 +157,7 @@ describe('search command', () => {
       root_slug: 'testfw',
       source_type: 'apple-docc',
       url_depth: 2,
-    })
+    }))
 
     const result = await search({
       query: 'Testing Guide',

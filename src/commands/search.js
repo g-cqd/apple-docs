@@ -191,7 +191,7 @@ export async function search(opts, ctx) {
   }
 
   // Tier 4 metadata check stays on main thread — one cheap call.
-  const hasBody = !noDeep && ctx.db.getBodyIndexCount() > 0
+  const hasBody = !noDeep && ctx.db.hasBodyIndex()
   const { runFts, runTitleExact, runTrigram, runBody } = buildCascadeRunners({
     ctx, q, ftsQuery, frameworks, filterOpts, hasBody,
   })
@@ -249,11 +249,13 @@ export async function search(opts, ctx) {
   if (results.length < 5 && q.length >= 4 && fuzzy) {
     try {
       const fuzzyMatches = await runRead(ctx, 'fuzzyMatchTitles', [q, { framework, kind, limit: searchLimit }])
-      const fuzzyRecords = await Promise.all(
-        fuzzyMatches.map(fm => runRead(ctx, 'getSearchRecordById', [fm.id]).then(record => ({ fm, record }))),
-      )
-      parseRowPlatforms(fuzzyRecords.map(({ record }) => record).filter(Boolean))
-      for (const { fm, record } of fuzzyRecords) {
+      // One batched fetch instead of N per-candidate round-trips (§10(B)).
+      const records = await runRead(ctx, 'getSearchRecordsByIds', [fuzzyMatches.map(fm => fm.id)])
+      const recordById = new Map(records.map(r => [r.id, r]))
+      parseRowPlatforms(records)
+      // Iterate fuzzyMatches (distance order preserved) so output is identical.
+      for (const fm of fuzzyMatches) {
+        const record = recordById.get(fm.id)
         if (!record) continue
         if (!matchesSearchFilters(record, activeFilters)) continue
         if (seen.has(record.path)) continue
