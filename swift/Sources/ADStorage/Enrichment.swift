@@ -109,6 +109,6 @@ private func decodeSectionContent(_ stmt: PreparedStatement, _ col: Int32) -> St
   }
 }
 
-private func placeholders(_ count: Int) -> String {
+func placeholders(_ count: Int) -> String {
   Array(repeating: "?", count: count).joined(separator: ",")
 }

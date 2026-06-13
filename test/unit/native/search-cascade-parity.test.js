@@ -39,7 +39,7 @@ const DOCS = [
   // both `...` ellipses (the term is not at index 0 and the text exceeds 220).
   { key: 'swiftui/layout-guide', title: 'SwiftUI Layout', framework: 'swiftui', sourceType: 'apple-docc', role: 'article', roleHeading: 'Article', kind: 'article', language: 'swift', abstractText: 'Build adaptive, data-driven interfaces that fit every Apple platform and device size class, and learn how to compose a navigation hierarchy that moves between screens while preserving scroll position, deep links, and accessibility focus across the entire user journey from launch through to a detail screen.', urlDepth: 2 },
 ]
-const QUERIES = ['view', 'View', 'ViewBuilder', 'building views', 'uiview', 'guide', 'design', 'nonexistentxyz', 'AVAudioSession.RouteSharingPolicy', 'navigation', 'frobnicator']
+const QUERIES = ['view', 'View', 'ViewBuilder', 'building views', 'uiview', 'guide', 'design', 'nonexistentxyz', 'AVAudioSession.RouteSharingPolicy', 'navigation', 'frobnicator', 'uivew', 'contentvieww']
 
 if (existsSync(AD_SERVER)) {
   dir = mkdtempSync(join(tmpdir(), 'cascade-parity-'))
@@ -89,7 +89,7 @@ describe.skipIf(!existsSync(AD_SERVER))('search-cascade parity (Swift /search ==
   for (const q of QUERIES) {
     test(`byte-identical: "${q}"`, async () => {
       const ctx = { db, logger: { debug() {}, warn() {}, info() {} } }
-      const result = await search({ query: q, limit: 10, offset: 0, noDeep: false, fuzzy: false }, ctx)
+      const result = await search({ query: q, limit: 10, offset: 0, noDeep: false, fuzzy: true }, ctx)
       const projected = projectSearchResult(result, { webPaths: false })
       const expected = JSON.stringify(projected)
       const swift = await (await fetch(`http://127.0.0.1:${PORT}/search?q=${encodeURIComponent(q)}&limit=10`)).text()
