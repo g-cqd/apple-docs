@@ -496,8 +496,12 @@ land; each phase's completion gets a dated entry here.
   `SearchRow` + searchTitleExact/searchTrigram). **Byte-parity PASS** (10/10 —
   the projection strips floats → labels, so parity is ordering + fields, and
   rerank scores are bit-identical). **Perf NO-GO**: Swift full cascade ~3×
-  SLOWER than Bun (ab) — Bun runs the 3 tiers in PARALLEL across reader-pool
-  workers; Swift runs them sequentially in one offload. The amortization
-  premise missed Bun's per-tier worker parallelism. Next: a tier-parallel
-  cascade (dedicated reader-thread pool, swift-async-algorithms fan-out),
-  re-measure. Detail: [p6/records.md](0001-swift-native-transition/p6/records.md).
+  SLOWER than Bun (ab). Made it **tier-parallel** (3 tiers via `async let`
+  offloads) — STILL ~3×. A concurrency sweep localized it: Swift is comparable
+  at c=1 (~2 ms cascade) but **throughput DEGRADES under concurrency** while
+  Bun scales — the bottleneck is the **SwiftNIO async serving model**
+  (`NIOAsyncChannel` + per-request `Task` + offloads thrash under load; healthz,
+  offload-free, scaled to 67k), NOT the cascade or tier execution. Fork: a
+  classic EL-confined handler (no per-request Task; needs `@unchecked`) vs
+  search serving stays Bun (cascade waits for P7). Detail:
+  [p6/records.md](0001-swift-native-transition/p6/records.md).

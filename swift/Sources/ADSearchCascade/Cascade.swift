@@ -19,35 +19,62 @@ public struct SearchParams: Sendable {
   }
 }
 
+/// A query prepared for tier execution — the per-tier params + the slice
+/// bounds. nil from `prepare` means an empty query (emit `emptyEnvelope`).
+public struct PreparedSearch: Sendable {
+  public let q: String
+  public let ftsParams: SearchPagesParams  // also used by title-exact (it ignores $query)
+  public let trigramParams: SearchPagesParams
+  public let limit: Int
+  public let offset: Int
+}
+
 public enum Cascade {
   private static let tierLabels = ["exact", "prefix", "contains", "match"]
 
-  /// Runs the cascade on `conn` and returns the projected JSON envelope.
-  public static func search(_ conn: StorageConnection, _ params: SearchParams) -> [UInt8] {
+  /// The projected envelope for an empty query.
+  public static let emptyEnvelope = Array(#"{"query":"","total":0,"results":[]}"#.utf8)
+
+  /// Builds the per-tier params, or nil for an empty query. Pure — the caller
+  /// runs the tiers (sequentially or in parallel) then calls `assemble`.
+  public static func prepare(_ params: SearchParams) -> PreparedSearch? {
     let q = trimWS(params.query)
-    if q.isEmpty {
-      return Array(#"{"query":"","total":0,"results":[]}"#.utf8)
-    }
+    if q.isEmpty { return nil }
     let limit = max(params.limit, 1)
     let offset = max(params.offset, 0)
     let requestedWindow = limit + offset
-
-    let ftsQuery = FtsQuery.build(q)
-    let trigramQuery = FtsQuery.trigram(q)
-
     // Phase 1: single query, no JS post-filters → searchLimit = requestedWindow,
     // no framework / source / kind / platform filters.
     let base = SearchPagesParams(
-      query: ftsQuery, raw: q, limit: Int64(requestedWindow), framework: nil, sourceType: nil,
-      sourcesJson: nil, kind: nil, language: nil, year: nil, trackLike: nil,
+      query: FtsQuery.build(q), raw: q, limit: Int64(requestedWindow), framework: nil,
+      sourceType: nil, sourcesJson: nil, kind: nil, language: nil, year: nil, trackLike: nil,
       deprecatedMode: "include", minIos: nil, minMacos: nil, minWatchos: nil, minTvos: nil,
       minVisionos: nil)
-    var trigramParams = base
-    trigramParams.query = trigramQuery
+    var trigram = base
+    trigram.query = FtsQuery.trigram(q)
+    return PreparedSearch(q: q, ftsParams: base, trigramParams: trigram, limit: limit, offset: offset)
+  }
 
-    let titleExact = conn.titleExactRows(base) ?? []
-    let fts = conn.ftsRows(base) ?? []
-    let trigram = conn.trigramRows(trigramParams) ?? []
+  /// Runs the cascade on `conn` SEQUENTIALLY and returns the JSON envelope
+  /// (convenience for tests; the server fans the tiers in parallel + calls
+  /// `assemble`).
+  public static func search(_ conn: StorageConnection, _ params: SearchParams) -> [UInt8] {
+    guard let p = prepare(params) else { return emptyEnvelope }
+    return assemble(
+      p, titleExact: conn.titleExactRows(p.ftsParams) ?? [], fts: conn.ftsRows(p.ftsParams) ?? [],
+      trigram: conn.trigramRows(p.trigramParams) ?? [])
+  }
+
+  /// Merges the three tiers (title-exact → FTS → trigram, dedup-by-path
+  /// keep-first), reranks, slices, and projects to the JSON envelope. Pure —
+  /// identical regardless of how the tiers were executed, so byte-parity is
+  /// independent of the parallel/sequential choice.
+  public static func assemble(
+    _ p: PreparedSearch, titleExact: [SearchRow], fts: [SearchRow], trigram: [SearchRow]
+  ) -> [UInt8] {
+    let q = p.q
+    let limit = p.limit
+    let offset = p.offset
 
     var results: [ResultHit] = []
     var seen: Set<String> = []

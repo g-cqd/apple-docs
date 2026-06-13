@@ -85,16 +85,33 @@ private func respond(
   return keepAlive
 }
 
-/// Runs the FULL lexical cascade (all tiers + merge + rerank + projection) in
-/// ONE offload on the thread pool — the amortization the host spike showed is
-/// needed. The connection is checked out INSIDE the closure (one per thread).
+/// Runs the lexical cascade with the 3 tiers in PARALLEL — each tier is its
+/// own thread-pool offload on its own connection (checked out inside, so a
+/// thread holds ≤1 connection → pool sized = thread count never starves).
+/// This matches Bun's per-tier reader-pool parallelism in-process. The
+/// merge/rerank/projection (`assemble`) is pure + identical to the sequential
+/// path, so byte-parity is unchanged.
 private func runSearch(
   uri: String, pool: ConnectionPool, threadPool: NIOThreadPool
 ) async throws -> [UInt8] {
   let params = parseCascadeParams(uri)
-  return try await threadPool.runIfActive {
-    guard let conn = pool.checkout() else { return Array(#"{"query":"","total":0,"results":[]}"#.utf8) }
+  guard let prepared = Cascade.prepare(params) else { return Cascade.emptyEnvelope }
+  let ftsParams = prepared.ftsParams
+  let trigramParams = prepared.trigramParams
+  async let titleExact = runTier(pool, threadPool) { $0.titleExactRows(ftsParams) }
+  async let fts = runTier(pool, threadPool) { $0.ftsRows(ftsParams) }
+  async let trigram = runTier(pool, threadPool) { $0.trigramRows(trigramParams) }
+  let (te, ft, tr) = try await (titleExact, fts, trigram)
+  return Cascade.assemble(prepared, titleExact: te, fts: ft, trigram: tr)
+}
+
+private func runTier(
+  _ pool: ConnectionPool, _ threadPool: NIOThreadPool,
+  _ body: @Sendable @escaping (StorageConnection) -> [SearchRow]?
+) async throws -> [SearchRow] {
+  try await threadPool.runIfActive {
+    guard let conn = pool.checkout() else { return [] }
     defer { pool.checkin(conn) }
-    return Cascade.search(conn, params)
+    return body(conn) ?? []
   }
 }

@@ -196,18 +196,43 @@ amortizes the hops" reasoning held for the HOPS, but missed that Bun's per-tier
 **worker parallelism** is the real thing to beat — and a single sequential
 in-process offload can't.
 
-### Verdict — cascade is byte-portable; the serving win needs tier parallelism
+### Tier-parallel attempt + the scaling finding (the real bottleneck)
 
-The cascade IS portable byte-exact (a real, reusable result + the basis for
-P6/P7). But the inversion does NOT win as a single sequential offload. To beat
-Bun, the Swift server must **parallelize the tiers** — the dedicated
-reader-thread pool from the first-slice records (N threads each owning a
-`StorageConnection`, the 3 tiers fanned out concurrently via
-`swift-async-algorithms`, results merged), OR accept that search serving is
-reader-pool-bound and Bun's pool is already good (the SwiftNIO host wins
-healthz, but search is dominated by the parallel SQLite scans, which Bun
-already parallelizes). **Next slice: tier-parallel cascade, re-measure.**
-Enrichment (snippet + renderPlainText + relatedCount + the zstd-decompress
-binding) is moot until the perf path is chosen. The byte-perfect cascade +
-`ADSearchCascade` ship as the foundation; `/search` is inert to production
+The cascade was then made TIER-PARALLEL — `ad-server` fans the 3 tiers via
+`async let` to 3 thread-pool offloads (one connection each; pool sized = thread
+count so a thread holds ≤1 connection and never starves), matching Bun's
+per-tier parallelism in-process. Parity unchanged (10/10 — `assemble` is the
+same). **It did NOT help: still ~368 vs ~1150 req/s.** A concurrency sweep
+(`ab -c{1,4,8,16}`) localized why:
+
+| concurrency | Swift req/s | Bun req/s |
+| --- | --- | --- |
+| 1 | **476** (2.1 ms) | 530 (1.9 ms) |
+| 4 | 419 | 1030 |
+| 8 | 351 | 907 |
+| 16 | 366 | 1148 |
+
+**At c=1 Swift is comparable to Bun** (~2 ms cascade — so the cascade WORK,
+incl. the row decode + rerank + JSON, is fine). But **Swift throughput
+DEGRADES under concurrency while Bun SCALES.** Sequential and tier-parallel
+degrade identically, so it is NOT tier execution. The bottleneck is the
+**async serving model's concurrency scaling**: `NIOAsyncChannel` + a
+per-request `Task` + `runIfActive` offloads + the Swift cooperative executor,
+oversubscribed against the NIO event loops, thrash under load. (Contrast:
+`/healthz`, served ON the event loop with no offload/Task, scaled to 67k.)
+
+### Verdict — cascade is byte-portable; the SwiftNIO ASYNC serving model doesn't scale
+
+The cascade IS portable byte-exact (a real, reusable result — the P7 path
+when Bun is gone). But the **SwiftNIO async-offload serving model does not
+scale under concurrency** for these DB-bound requests; tier-parallelism is a
+red herring. Two paths remain: (1) a **lower-overhead serving model** — the
+classic `ChannelInboundHandler` + `EventLoopFuture` offload (no per-request
+`Task`/cooperative-executor, EL-confined; needs the EL-confined `@unchecked
+Sendable` the operator discouraged) which scaled for healthz and may scale
+here; or (2) **accept that search serving stays Bun** — its reader pool is
+already good, the SwiftNIO host wins only the offload-free routes (healthz),
+and the byte-perfect cascade waits for P7 (single binary, no Bun, where it's
+the only path). Enrichment (snippet + renderPlainText + relatedCount + zstd-
+decompress) is moot until that's decided. `/search` is inert to production
 (not wired into cli.js/ops/Caddy).
