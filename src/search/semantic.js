@@ -17,7 +17,7 @@
  */
 
 import { join } from 'node:path'
-import { quantize, quantizeTo, hamming, dotI8, VECTOR_DIMS, VECTOR_BYTES } from './embedding.js'
+import { quantize, quantizeTo, hamming, hammingU32, dotI8, VECTOR_DIMS, VECTOR_BYTES } from './embedding.js'
 import { getEmbedder } from './embedder.js'
 
 // Per-DB packed vector store (WeakMap → no cross-instance collision, auto-GC).
@@ -191,35 +191,75 @@ function chunkSearch(db, store, qFp32, topK, logger) {
   return out.slice(0, topK)
 }
 
-/** Bounded selection of the K smallest Hamming distances (single pass). */
+/**
+ * Bounded selection of the K smallest Hamming distances (single pass).
+ *
+ * A fixed-size binary max-heap keyed by (dist, idx) — the root is the
+ * "worst" kept candidate (largest distance; ties broken by largest index).
+ * This replaces an O(K)-splice insertion sort that measured at ~94% of
+ * search self-time at K=200 over the 831k-code store (RFC 0001 §10 slice 1
+ * — the popcount the lever was assumed to be is only ~3%). Output-identical
+ * to the splice version:
+ *   - admit iff `d < root distance` (strict — matches the old `d < worst`);
+ *   - evict the (max dist, max idx) element (matches popping the sorted tail);
+ *   - return sorted ascending by (dist, idx) (matches the old `<=` insert
+ *     order + ascending scan).
+ */
 function shortlistByHamming(qBin, packed, width, n, K) {
-  const idx = []
-  const dist = []
-  let worst = Infinity
+  const heapDist = new Int32Array(K)
+  const heapIdx = new Int32Array(K)
+  let size = 0
+  // SWAR popcount over 32-bit words when the code width is word-aligned
+  // (all current widths are; the store is a fresh packed Uint8Array at
+  // byteOffset 0). Views built once; the byte-LUT path is the fallback.
+  const words = width >> 2
+  const swar = (width & 3) === 0 && (packed.byteOffset & 3) === 0 && (qBin.byteOffset & 3) === 0
+  const pW = swar ? new Uint32Array(packed.buffer, packed.byteOffset, n * words) : null
+  const qW = swar ? new Uint32Array(qBin.buffer, qBin.byteOffset, words) : null
   for (let i = 0; i < n; i++) {
-    const d = hamming(qBin, packed, i * width, width)
-    if (idx.length < K) {
-      insertSorted(idx, dist, i, d)
-      worst = dist[dist.length - 1]
-    } else if (d < worst) {
-      idx.pop(); dist.pop()
-      insertSorted(idx, dist, i, d)
-      worst = dist[dist.length - 1]
+    const d = swar ? hammingU32(qW, pW, i * words, words) : hamming(qBin, packed, i * width, width)
+    if (size < K) {
+      // sift up: bubble (d, i) toward the root while parents are smaller.
+      let c = size++
+      while (c > 0) {
+        const p = (c - 1) >> 1
+        if (heapDist[p] > d || (heapDist[p] === d && heapIdx[p] > i)) break
+        heapDist[c] = heapDist[p]
+        heapIdx[c] = heapIdx[p]
+        c = p
+      }
+      heapDist[c] = d
+      heapIdx[c] = i
+    } else if (d < heapDist[0]) {
+      // replace the root, then sift down by (dist, idx).
+      let c = 0
+      for (;;) {
+        const l = 2 * c + 1
+        const r = l + 1
+        let bigDist = d
+        let bigIdx = i
+        let big = -1
+        if (l < K && (heapDist[l] > bigDist || (heapDist[l] === bigDist && heapIdx[l] > bigIdx))) {
+          big = l
+          bigDist = heapDist[l]
+          bigIdx = heapIdx[l]
+        }
+        if (r < K && (heapDist[r] > bigDist || (heapDist[r] === bigDist && heapIdx[r] > bigIdx))) {
+          big = r
+        }
+        if (big === -1) break
+        heapDist[c] = heapDist[big]
+        heapIdx[c] = heapIdx[big]
+        c = big
+      }
+      heapDist[c] = d
+      heapIdx[c] = i
     }
   }
-  return idx.map((j, r) => ({ idx: j, dist: dist[r] }))
-}
-
-function insertSorted(idxArr, distArr, j, d) {
-  let lo = 0
-  let hi = distArr.length
-  while (lo < hi) {
-    const m = (lo + hi) >> 1
-    if (distArr[m] <= d) lo = m + 1
-    else hi = m
-  }
-  idxArr.splice(lo, 0, j)
-  distArr.splice(lo, 0, d)
+  const out = new Array(size)
+  for (let r = 0; r < size; r++) out[r] = { idx: heapIdx[r], dist: heapDist[r] }
+  out.sort((a, b) => a.dist - b.dist || a.idx - b.idx)
+  return out
 }
 
 function clampInt(value, fallback, min, max) {
@@ -233,3 +273,6 @@ function clampInt(value, fallback, min, max) {
 export function _resetVectorCache() {
   caches = new WeakMap()
 }
+
+/** Test seam: the bounded Hamming top-K selection (RFC 0001 §10 slice 1). */
+export const _test = { shortlistByHamming }

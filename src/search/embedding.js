@@ -62,6 +62,29 @@ export function hamming(a, b, offsetB = 0, width = a.length) {
 }
 
 /**
+ * Hamming distance over 32-bit words via a SWAR popcount — same result as
+ * `hamming` (verified bit-for-bit) but ~2.6× faster on the resident-store
+ * scan: 16 word ops vs 64 byte-LUT lookups for a 64-byte code (RFC 0001
+ * §10 slice 1, the measured popcount lever). The caller builds aligned
+ * `Uint32Array` views once and passes a word offset; requires the byte
+ * width to be a multiple of 4 (true for all current code widths).
+ * @param {Uint32Array} qWords query code as 32-bit words
+ * @param {Uint32Array} packedWords resident codes as 32-bit words
+ * @param {number} base word offset of this doc's code (= docIndex * words)
+ * @param {number} words words per code (= byteWidth / 4)
+ */
+export function hammingU32(qWords, packedWords, base, words) {
+  let d = 0
+  for (let k = 0; k < words; k++) {
+    let v = qWords[k] ^ packedWords[base + k]
+    v = v - ((v >>> 1) & 0x5555_5555)
+    v = (v & 0x3333_3333) + ((v >>> 2) & 0x3333_3333)
+    d += (((v + (v >>> 4)) & 0x0f0f_0f0f) * 0x0101_0101) >>> 24
+  }
+  return d
+}
+
+/**
  * Per-vector int8 quantization for the rescore stage of the SOTA
  * "binary-retrieve → int8-rescore" pipeline. The binary code answers *which*
  * docs to consider (cheap Hamming); int8 recovers the magnitude the sign bits
