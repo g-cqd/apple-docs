@@ -189,3 +189,17 @@ let searchTrigramSQL = """
     \(filterPredicates)
   LIMIT $limit
   """
+
+// MUST match search.js searchBodyStmt (RESULT_COLUMNS + a body bm25 rank, no
+// tier; the row decoder reads RESULT_COLUMNS only and ignores the trailing rank).
+let searchBodySQL = """
+  SELECT \(resultColumns),
+    bm25(documents_body_fts, 1.0) as rank
+  FROM documents_body_fts
+  JOIN documents d ON documents_body_fts.rowid = d.id
+  LEFT JOIN roots r ON r.slug = d.framework
+  WHERE documents_body_fts MATCH $query
+    \(filterPredicates)
+  ORDER BY rank
+  LIMIT $limit
+  """

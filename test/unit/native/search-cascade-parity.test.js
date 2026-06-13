@@ -39,7 +39,7 @@ const DOCS = [
   // both `...` ellipses (the term is not at index 0 and the text exceeds 220).
   { key: 'swiftui/layout-guide', title: 'SwiftUI Layout', framework: 'swiftui', sourceType: 'apple-docc', role: 'article', roleHeading: 'Article', kind: 'article', language: 'swift', abstractText: 'Build adaptive, data-driven interfaces that fit every Apple platform and device size class, and learn how to compose a navigation hierarchy that moves between screens while preserving scroll position, deep links, and accessibility focus across the entire user journey from launch through to a detail screen.', urlDepth: 2 },
 ]
-const QUERIES = ['view', 'View', 'ViewBuilder', 'building views', 'uiview', 'guide', 'design', 'nonexistentxyz', 'AVAudioSession.RouteSharingPolicy', 'navigation']
+const QUERIES = ['view', 'View', 'ViewBuilder', 'building views', 'uiview', 'guide', 'design', 'nonexistentxyz', 'AVAudioSession.RouteSharingPolicy', 'navigation', 'frobnicator']
 
 if (existsSync(AD_SERVER)) {
   dir = mkdtempSync(join(tmpdir(), 'cascade-parity-'))
@@ -61,6 +61,9 @@ if (existsSync(AD_SERVER)) {
     { toKey: 'swiftui/viewbuilder', relationType: 'seeAlso' },
     { toKey: 'swiftui/contentview', relationType: 'conformsTo' },
   ])
+  // Body index (T4 fallback): a term that appears ONLY in the body, so a query
+  // for it misses T1+T2 (title/abstract) and is found via the body tier.
+  seed.insertBody(viewId, 'An extended discussion covering frobnicator internals, gizmo lifecycles, and widget composition patterns.')
   seed.close()
   db = new DocsDatabase(dbPath)
   server = Bun.spawn([AD_SERVER, '--db', dbPath, '--port', String(PORT), '--threads', '2'], { stdout: 'ignore', stderr: 'ignore' })
@@ -86,7 +89,7 @@ describe.skipIf(!existsSync(AD_SERVER))('search-cascade parity (Swift /search ==
   for (const q of QUERIES) {
     test(`byte-identical: "${q}"`, async () => {
       const ctx = { db, logger: { debug() {}, warn() {}, info() {} } }
-      const result = await search({ query: q, limit: 10, offset: 0, noDeep: true, fuzzy: false }, ctx)
+      const result = await search({ query: q, limit: 10, offset: 0, noDeep: false, fuzzy: false }, ctx)
       const projected = projectSearchResult(result, { webPaths: false })
       const expected = JSON.stringify(projected)
       const swift = await (await fetch(`http://127.0.0.1:${PORT}/search?q=${encodeURIComponent(q)}&limit=10`)).text()

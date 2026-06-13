@@ -93,6 +93,14 @@ public enum Cascade {
     }
     addRows(trigram) { _ in "substring" }
 
+    // Tier 4: body FTS (search.js:276) — merge only when the strict tiers
+    // haven't filled the requested window. `bodyRows` self-guards on the table's
+    // presence (→ [] when absent), matching the JS hasBody gate's output. Needs
+    // the connection; skipped in the pure (conn == nil) path.
+    if let conn, results.count < limit + offset {
+      addRows(conn.bodyRows(p.ftsParams) ?? []) { _ in "body" }
+    }
+
     let intent = IntentDetector.detect(q)
     Rerank.apply(&results, query: q, intent: intent)
 
