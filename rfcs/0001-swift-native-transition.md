@@ -272,7 +272,7 @@ reader-pool→native-actors move, and the *kills* (`bun:sqlite`, the `Worker`
 pool — unkillable while Bun is runtime + writer). Detail:
 [p5/records.md](0001-swift-native-transition/p5/records.md).
 
-### P6 — Servers (fully custom, in-house on SwiftNIO) — **host spike done; serving-win pending the cascade slice** → [p6 records](0001-swift-native-transition/p6/records.md)
+### P6 — Servers (fully custom, in-house on SwiftNIO) — **host GO + cascade byte-exact; search serving-win blocked on a cascade-work concurrency fix (fork open)** → [p6 records](0001-swift-native-transition/p6/records.md)
 > **D1 settled 2026-06-12 (operator decision)**: no Vapor — the spike is
 > cancelled. The web + MCP HTTP layer is built from scratch directly on
 > SwiftNIO (+ swift-http-types/swift-nio-ssl as needed), keeping the
@@ -291,6 +291,24 @@ killing Bun's *per-tier* worker round-trips), so **the next slice ports the
 cascade and re-measures full-search vs full-search** (or evaluates a
 lower-hop serving model). Do NOT do a naive per-op port. Detail:
 [p6/records.md](0001-swift-native-transition/p6/records.md).
+
+**Second + third slices EXECUTED 2026-06-13 (lexical cascade + scaling
+localization)**: the JS lexical cascade (T1+T2, merge, intent, rerank,
+projection) ported **byte-exact** into a Swift `/search` (new server-only
+`ADSearchCascade`; ADStorage gained `SearchRow` + tier queries) — **10/10
+byte-parity** (the projection strips floats → labels, so parity is ordering +
+fields; rerank scores are bit-identical). The classic EL-confined handler is
+**faster than Bun at c=1** (636 vs 574 req/s) but **degrades under
+concurrency** while Bun scales. Four experiments localized this OFF the
+serving model (a 0-match query runs the full offload path at 1082 req/s @ c16,
+healthz 78k, ELG 2–10 identical, classic ≈ async) and OFF the nano allocator
+(`MallocNanoZone=0` no help) and SQLite `-shm` (Bun shares the file fine): the
+residual is Swift's String/ARC-heavy decode+rerank+JSON being **less
+concurrency-efficient than Bun's per-isolate runtime** (negative thread
+scaling). **Fork open**: profile + alloc/ARC-light rewrite ("make Swift win")
+vs search serving stays Bun with the byte-perfect cascade banked for P7. The
+host, the in-process cascade, and the bench harness ship inert (not wired into
+cli.js/ops/Caddy).
 
 Implementation (remaining): web server (routes are already per-file handlers
 — port them 1:1; benchmark throughput/latency on our recorded burst loads vs
@@ -499,9 +517,24 @@ land; each phase's completion gets a dated entry here.
   SLOWER than Bun (ab). Made it **tier-parallel** (3 tiers via `async let`
   offloads) — STILL ~3×. A concurrency sweep localized it: Swift is comparable
   at c=1 (~2 ms cascade) but **throughput DEGRADES under concurrency** while
-  Bun scales — the bottleneck is the **SwiftNIO async serving model**
-  (`NIOAsyncChannel` + per-request `Task` + offloads thrash under load; healthz,
-  offload-free, scaled to 67k), NOT the cascade or tier execution. Fork: a
-  classic EL-confined handler (no per-request Task; needs `@unchecked`) vs
-  search serving stays Bun (cascade waits for P7). Detail:
+  Bun scales. Blamed the **SwiftNIO async serving model** — *but the third
+  slice (below) DISPROVES that*; the serving model is fine. Detail:
   [p6/records.md](0001-swift-native-transition/p6/records.md).
+- **2026-06-13 — P6 third slice (classic EL-handler + scaling localization)**:
+  reverted the serving path to a classic EL-confined `ChannelInboundHandler`
+  (`@unchecked`, one `EventLoopFuture` offload — no per-request `Task`/
+  cooperative executor). It is **faster than Bun at c=1** (636 vs 574) but
+  **still degrades** under concurrency — so the async machinery was NOT the
+  cause. Four experiments relocated the bottleneck OFF the serving model: (1)
+  ELG count 2–10 identical; (2) a 0-match query traverses the full
+  offload/pool/EL path at **1082 req/s** @ c16 (healthz 78k) and throughput
+  tracks the **FTS matchset size** → the cost is the per-request cascade WORK,
+  not the host; (3) **negative thread scaling** (threads=4 → 514 > 8 → 392) =
+  shared-resource contention; (4) `MallocNanoZone=0` did not help → not the
+  nano allocator. SQLite `-shm` ruled out (Bun shares the same file from
+  workers and scales). Residual = Swift's String/ARC-heavy decode+rerank+JSON
+  being **less concurrency-efficient than Bun's per-isolate runtime** (needs
+  Instruments to pin; `ab`-on-same-host is a measurement confound, but Bun
+  under the same client scales). Fork: profile + alloc/ARC-light rewrite
+  ("make Swift win") vs search serving stays Bun, cascade banked for P7.
+  Detail: [p6/records.md](0001-swift-native-transition/p6/records.md).

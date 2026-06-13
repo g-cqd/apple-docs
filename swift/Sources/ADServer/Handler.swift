@@ -1,12 +1,22 @@
-// Async HTTP/1.1 connection handling over NIOAsyncChannel (RFC 0001 P6 host
-// spike). Fully structured concurrency — no ChannelInboundHandler, no
-// NIOLoopBound, no @unchecked: each connection is an async task, the blocking
-// searchPages read is offloaded to the NIOThreadPool with an actor-acquired
-// connection, and responses are written back with async/await. Two routes:
-//   GET /healthz → static JSON
-//   GET /search  → searchPages, framed as JSON IN-PROCESS by ADStorage
-// Keep-alive: the inbound loop serves successive requests on one connection
-// until the client closes or a `Connection: close` response.
+// Classic event-loop-confined HTTP/1.1 handler (RFC 0001 P6 — the serving-model
+// experiment). The async NIOAsyncChannel model (a per-request Task + offloads on
+// the Swift cooperative executor, oversubscribed against the event loops) did
+// NOT scale under concurrency — throughput DEGRADED while Bun scaled, even
+// though the cascade WORK is comparable at c=1. This reverts to the model that
+// scaled /healthz to ~67k rps: a `ChannelInboundHandler` running ON the event
+// loop, with the one blocking cascade offloaded via a single
+// `NIOThreadPool.runIfActive(eventLoop:)` (an `EventLoopFuture`, no Task, no
+// cooperative executor), the response written back on the loop. The handler is
+// `@unchecked Sendable` — discouraged in general, but here it is the contained,
+// EL-confinement-safe kind: NIO guarantees `channelRead` and the future
+// callbacks run on this channel's single event loop, so the `requestHead`
+// mutable state is never touched concurrently. `NIOLoopBound` carries the
+// (non-Sendable) context across the offload's completion, which fires on the
+// same loop.
+//
+// One offload per request runs the WHOLE cascade sequentially on ONE connection
+// (tier parallelism was measured irrelevant — the cascade is ~2 ms at c=1); the
+// CPU work (merge/rerank/JSON) stays off the event loop.
 
 import NIOCore
 import NIOHTTP1
@@ -14,104 +24,98 @@ import NIOPosix
 import ADSearchCascade
 import ADStorage
 
-func serveConnection(
-  _ channel: NIOAsyncChannel<HTTPServerRequestPart, HTTPServerResponsePart>,
-  pool: ConnectionPool,
-  threadPool: NIOThreadPool
-) async {
-  do {
-    try await channel.executeThenClose { inbound, outbound in
-      var requestHead: HTTPRequestHead?
-      for try await part in inbound {
-        switch part {
-        case .head(let head):
-          requestHead = head
-        case .body:
-          continue
-        case .end:
-          guard let head = requestHead else { continue }
-          requestHead = nil
-          let keepAlive = try await respond(
-            to: head, outbound: outbound, pool: pool, threadPool: threadPool)
-          if !keepAlive { return }
-        }
+final class CascadeHandler: ChannelInboundHandler, @unchecked Sendable {
+  typealias InboundIn = HTTPServerRequestPart
+  typealias OutboundOut = HTTPServerResponsePart
+
+  private let pool: ConnectionPool
+  private let threadPool: NIOThreadPool
+  private var requestHead: HTTPRequestHead?
+
+  init(pool: ConnectionPool, threadPool: NIOThreadPool) {
+    self.pool = pool
+    self.threadPool = threadPool
+  }
+
+  func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+    switch unwrapInboundIn(data) {
+    case .head(let head):
+      requestHead = head
+    case .body:
+      break
+    case .end:
+      guard let head = requestHead else { return }
+      requestHead = nil
+      route(context: context, head: head)
+    }
+  }
+
+  private func route(context: ChannelHandlerContext, head: HTTPRequestHead) {
+    let keepAlive = head.isKeepAlive
+    let version = head.version
+    let path = head.uri.prefix { $0 != "?" }
+
+    guard head.method == .GET else {
+      respond(
+        context: context, status: .methodNotAllowed, contentType: "text/plain",
+        body: Array("method not allowed\n".utf8), keepAlive: keepAlive, version: version)
+      return
+    }
+
+    if path == "/healthz" {
+      respond(
+        context: context, status: .ok, contentType: "application/json",
+        body: Array(#"{"ok":true,"service":"ad-server"}"#.utf8), keepAlive: keepAlive,
+        version: version)
+      return
+    }
+
+    if path == "/search" {
+      let params = parseCascadeParams(head.uri)
+      let pool = self.pool
+      let eventLoop = context.eventLoop
+      let boundContext = NIOLoopBound(context, eventLoop: eventLoop)
+      let boundSelf = NIOLoopBound(self, eventLoop: eventLoop)
+      // ONE offload: the whole sequential cascade on one connection, off the
+      // event loop. Checkout happens INSIDE so a thread holds ≤1 connection
+      // (pool sized = thread count → never starves).
+      threadPool.runIfActive(eventLoop: eventLoop) { () -> [UInt8] in
+        guard let conn = pool.checkout() else { return Cascade.emptyEnvelope }
+        defer { pool.checkin(conn) }
+        return Cascade.search(conn, params)
+      }.whenComplete { result in
+        let body = (try? result.get()) ?? Cascade.emptyEnvelope
+        boundSelf.value.respond(
+          context: boundContext.value, status: .ok, contentType: "application/json",
+          body: body, keepAlive: keepAlive, version: version)
+      }
+      return
+    }
+
+    respond(
+      context: context, status: .notFound, contentType: "text/plain",
+      body: Array("not found\n".utf8), keepAlive: keepAlive, version: version)
+  }
+
+  private func respond(
+    context: ChannelHandlerContext, status: HTTPResponseStatus, contentType: String,
+    body: [UInt8], keepAlive: Bool, version: HTTPVersion
+  ) {
+    var headers = HTTPHeaders()
+    headers.add(name: "content-type", value: contentType)
+    headers.add(name: "content-length", value: String(body.count))
+    headers.add(name: "connection", value: keepAlive ? "keep-alive" : "close")
+    context.write(
+      wrapOutboundOut(.head(HTTPResponseHead(version: version, status: status, headers: headers))),
+      promise: nil)
+    context.write(wrapOutboundOut(.body(.byteBuffer(ByteBuffer(bytes: body)))), promise: nil)
+    if keepAlive {
+      context.writeAndFlush(wrapOutboundOut(.end(nil)), promise: nil)
+    } else {
+      let channel = context.channel
+      context.writeAndFlush(wrapOutboundOut(.end(nil))).whenComplete { _ in
+        channel.close(promise: nil)
       }
     }
-  } catch {
-    // Connection-level error (client reset, malformed framing) — drop it.
-  }
-}
-
-/// Writes the response for one request; returns whether to keep the
-/// connection alive.
-private func respond(
-  to head: HTTPRequestHead,
-  outbound: NIOAsyncChannelOutboundWriter<HTTPServerResponsePart>,
-  pool: ConnectionPool,
-  threadPool: NIOThreadPool
-) async throws -> Bool {
-  let keepAlive = head.isKeepAlive
-  let path = head.uri.prefix { $0 != "?" }
-
-  let status: HTTPResponseStatus
-  let contentType: String
-  let body: [UInt8]
-
-  if head.method != .GET {
-    status = .methodNotAllowed
-    contentType = "text/plain"
-    body = Array("method not allowed\n".utf8)
-  } else if path == "/healthz" {
-    status = .ok
-    contentType = "application/json"
-    body = Array(#"{"ok":true,"service":"ad-server"}"#.utf8)
-  } else if path == "/search" {
-    status = .ok
-    contentType = "application/json"
-    body = try await runSearch(uri: head.uri, pool: pool, threadPool: threadPool)
-  } else {
-    status = .notFound
-    contentType = "text/plain"
-    body = Array("not found\n".utf8)
-  }
-
-  var headers = HTTPHeaders()
-  headers.add(name: "content-type", value: contentType)
-  headers.add(name: "content-length", value: String(body.count))
-  headers.add(name: "connection", value: keepAlive ? "keep-alive" : "close")
-  try await outbound.write(.head(HTTPResponseHead(version: head.version, status: status, headers: headers)))
-  try await outbound.write(.body(.byteBuffer(ByteBuffer(bytes: body))))
-  try await outbound.write(.end(nil))
-  return keepAlive
-}
-
-/// Runs the lexical cascade with the 3 tiers in PARALLEL — each tier is its
-/// own thread-pool offload on its own connection (checked out inside, so a
-/// thread holds ≤1 connection → pool sized = thread count never starves).
-/// This matches Bun's per-tier reader-pool parallelism in-process. The
-/// merge/rerank/projection (`assemble`) is pure + identical to the sequential
-/// path, so byte-parity is unchanged.
-private func runSearch(
-  uri: String, pool: ConnectionPool, threadPool: NIOThreadPool
-) async throws -> [UInt8] {
-  let params = parseCascadeParams(uri)
-  guard let prepared = Cascade.prepare(params) else { return Cascade.emptyEnvelope }
-  let ftsParams = prepared.ftsParams
-  let trigramParams = prepared.trigramParams
-  async let titleExact = runTier(pool, threadPool) { $0.titleExactRows(ftsParams) }
-  async let fts = runTier(pool, threadPool) { $0.ftsRows(ftsParams) }
-  async let trigram = runTier(pool, threadPool) { $0.trigramRows(trigramParams) }
-  let (te, ft, tr) = try await (titleExact, fts, trigram)
-  return Cascade.assemble(prepared, titleExact: te, fts: ft, trigram: tr)
-}
-
-private func runTier(
-  _ pool: ConnectionPool, _ threadPool: NIOThreadPool,
-  _ body: @Sendable @escaping (StorageConnection) -> [SearchRow]?
-) async throws -> [SearchRow] {
-  try await threadPool.runIfActive {
-    guard let conn = pool.checkout() else { return [] }
-    defer { pool.checkin(conn) }
-    return body(conn) ?? []
   }
 }
