@@ -60,6 +60,7 @@ struct SQLiteLib: @unchecked Sendable {
   let bindDouble: @convention(c) (OpaquePointer?, Int32, Double) -> Int32
   let bindNull: @convention(c) (OpaquePointer?, Int32) -> Int32
   let columnCount: @convention(c) (OpaquePointer?) -> Int32
+  let columnName: @convention(c) (OpaquePointer?, Int32) -> UnsafePointer<CChar>?
   let columnType: @convention(c) (OpaquePointer?, Int32) -> Int32
   let columnInt64: @convention(c) (OpaquePointer?, Int32) -> Int64
   let columnDouble: @convention(c) (OpaquePointer?, Int32) -> Double
@@ -133,6 +134,9 @@ enum SQLiteLoader {
           "sqlite3_bind_null", as: (@convention(c) (OpaquePointer?, Int32) -> Int32).self),
         let columnCount = sym(
           "sqlite3_column_count", as: (@convention(c) (OpaquePointer?) -> Int32).self),
+        let columnName = sym(
+          "sqlite3_column_name",
+          as: (@convention(c) (OpaquePointer?, Int32) -> UnsafePointer<CChar>?).self),
         let columnType = sym(
           "sqlite3_column_type", as: (@convention(c) (OpaquePointer?, Int32) -> Int32).self),
         let columnInt64 = sym(
@@ -155,9 +159,9 @@ enum SQLiteLoader {
         openV2: openV2, closeV2: closeV2, prepareV2: prepareV2, finalize: finalize, step: step,
         reset: reset, clearBindings: clearBindings, bindParameterIndex: bindParameterIndex,
         bindText: bindText, bindInt64: bindInt64, bindDouble: bindDouble, bindNull: bindNull,
-        columnCount: columnCount, columnType: columnType, columnInt64: columnInt64,
-        columnDouble: columnDouble, columnText: columnText, columnBlob: columnBlob,
-        columnBytes: columnBytes, errmsg: errmsg)
+        columnCount: columnCount, columnName: columnName, columnType: columnType,
+        columnInt64: columnInt64, columnDouble: columnDouble, columnText: columnText,
+        columnBlob: columnBlob, columnBytes: columnBytes, errmsg: errmsg)
     }
     return nil
   }()

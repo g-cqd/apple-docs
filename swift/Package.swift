@@ -1,6 +1,8 @@
 // swift-tools-version: 6.1
 // libAppleDocsCore — the Swift side of the bridge era (RFC 0001 §4).
-// Zero dependencies by policy; ABI contract v0 (rfcs/.../p0/ffi-bridge.md).
+// ABI contract v0 (rfcs/.../p0/ffi-bridge.md). The library product stays
+// zero-dependency; the FIRST SwiftPM dependency (apple/swift-nio — §2-allowed,
+// D1) is pulled ONLY by the P6 `ad-server` executable, not by ADCore.
 import PackageDescription
 
 // Release builds inline across module boundaries (RFC 0004 §6b): the
@@ -11,15 +13,31 @@ let releaseCMO: [SwiftSetting] = [
   .unsafeFlags(["-cross-module-optimization"], .when(configuration: .release))
 ]
 
+// Maximum concurrency safety for the P6 server code (operator directive):
+// Swift 6 language mode + complete strict-concurrency checking in EVERY
+// configuration (not just release), so all Sendable/data-race violations are
+// hard errors. Applied to the ad-server target.
+let strictConcurrency: [SwiftSetting] = [
+  .swiftLanguageMode(.v6),
+  .unsafeFlags(["-strict-concurrency=complete"]),
+]
+
 let package = Package(
   name: "AppleDocsCore",
-  // Floor matches the repo's stated macOS 13+ support; without it the
-  // toolchain defaults the deployment target to the SDK (macOS 27), which
-  // would refuse to load on the macOS 26 production host and deprecates
-  // the x86_64 slice the universal artifact exists for.
-  platforms: [.macOS(.v13)],
+  // Floor raised to macOS 15.6 (operator decision 2026-06-13): unlocks the
+  // Synchronization framework (Mutex/Atomic) + the modern concurrency APIs
+  // the P6 server leans on, while staying ≤ the macOS 26 production host
+  // (the dylib still loads there; x86_64 is not deprecated until the SDK's
+  // macOS 27 default, which the explicit floor still avoids). Linux unaffected.
+  platforms: [.macOS("15.6")],
   products: [
     .library(name: "AppleDocsCore", type: .dynamic, targets: ["ADCore"])
+  ],
+  // The package's first dependency (RFC 0001 P6). apple/swift-nio is within
+  // the §2 allow-list (apple/*); D1 settled on raw SwiftNIO, no Vapor. Used
+  // ONLY by the ad-server executable. Package.resolved is committed.
+  dependencies: [
+    .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0")
   ],
   targets: [
     .target(name: "ADBase", swiftSettings: releaseCMO),
@@ -41,6 +59,18 @@ let package = Package(
     // Dev-only reference dump for the flipped fixture generator (RFC 0002
     // §6h); not shipped — the dylib product above is unchanged.
     .executableTarget(name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump"),
+    // P6 first slice: the in-house SwiftNIO HTTP host spike (RFC 0001 P6).
+    // Stands up alongside the Bun servers; serves /healthz + /search over
+    // ADStorage IN-PROCESS (no FFI). Raw SwiftNIO HTTP/1.1 (NIOHTTP1), no Vapor.
+    .executableTarget(
+      name: "ad-server",
+      dependencies: [
+        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOPosix", package: "swift-nio"),
+        .product(name: "NIOHTTP1", package: "swift-nio"),
+        "ADStorage",
+      ],
+      path: "Sources/ADServer", swiftSettings: releaseCMO + strictConcurrency),
     .target(
       name: "ADCore",
       dependencies: ["ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent", "ADRender", "ADStorage"],

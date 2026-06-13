@@ -272,14 +272,28 @@ reader-pool→native-actors move, and the *kills* (`bun:sqlite`, the `Worker`
 pool — unkillable while Bun is runtime + writer). Detail:
 [p5/records.md](0001-swift-native-transition/p5/records.md).
 
-### P6 — Servers (fully custom, in-house on SwiftNIO)
+### P6 — Servers (fully custom, in-house on SwiftNIO) — **host spike done; serving-win pending the cascade slice** → [p6 records](0001-swift-native-transition/p6/records.md)
 > **D1 settled 2026-06-12 (operator decision)**: no Vapor — the spike is
 > cancelled. The web + MCP HTTP layer is built from scratch directly on
 > SwiftNIO (+ swift-http-types/swift-nio-ssl as needed), keeping the
 > dependency universe at apple/* + swiftlang/* + pointfreeco/* only.
 
-Implementation: web server (routes are already per-file handlers — port
-them 1:1; benchmark throughput/latency on our recorded burst loads vs
+**First slice EXECUTED 2026-06-13 (host spike)**: a standalone `ad-server`
+(first SwiftPM dep, `apple/swift-nio`; max strict concurrency, TSan-clean, no
+`@unchecked` beyond the contained C handle) serving `/healthz` + `/search`
+over ADStorage in-process. **Host GO** — SwiftNIO healthz 67k req/s (≥
+Bun.serve), no event-loop stall, query parity-fine (~1.16× bun:sqlite). **But
+single-query `/search` is ~2.5× SLOWER than the Bun worker pool** (`ab`):
+the per-request async-offload overhead (~0.3 ms of executor hops) rivals the
+tiny query (~0.3 ms) and dominates. The inversion win needs amortizing one
+offload over the FULL cascade (4 tiers + ranking + fusion in-process,
+killing Bun's *per-tier* worker round-trips), so **the next slice ports the
+cascade and re-measures full-search vs full-search** (or evaluates a
+lower-hop serving model). Do NOT do a naive per-op port. Detail:
+[p6/records.md](0001-swift-native-transition/p6/records.md).
+
+Implementation (remaining): web server (routes are already per-file handlers
+— port them 1:1; benchmark throughput/latency on our recorded burst loads vs
 `Bun.serve` baselines, incl. the §10(C) burst-stall findings), MCP server
 with the protocol implemented in-house (JSON-RPC 2.0, stdio + stateless
 Streamable HTTP, tool schemas as `Codable` + generated JSON Schema). *Kills*:
@@ -460,3 +474,19 @@ land; each phase's completion gets a dated entry here.
   `storage` ships **default-OFF**; the foundation is the P6 prerequisite (a
   SwiftNIO server can't call bun:sqlite). Detail:
   [p5/records.md](0001-swift-native-transition/p5/records.md).
+- **2026-06-13 — P6 first slice (SwiftNIO host spike)**: standalone
+  `ad-server` (first SwiftPM dep `apple/swift-nio`; Swift 6 + complete strict
+  concurrency, TSan-clean) serving `/healthz` + `/search` over ADStorage
+  in-process. **Host GO** (healthz 67k req/s ≥ Bun.serve, no event-loop
+  stall, query parity-fine), but single-query `/search` **~2.5× slower** than
+  the Bun worker pool — the per-request async-offload overhead rivals the
+  ~0.3 ms query at this granularity. The inversion win needs the full cascade
+  in-process (amortize one offload over all tiers); next slice ports it. Do
+  NOT do a naive per-op port. Detail:
+  [p6/records.md](0001-swift-native-transition/p6/records.md).
+- **2026-06-13 — platform floor raised macOS 13 → 15.6** (operator decision):
+  unlocks the `Synchronization` framework (`Mutex`/`Atomic`) + modern
+  structured-concurrency APIs package-wide for the P6+ server, staying ≤ the
+  macOS 26 production host. `ad-server`'s pool moved actor → `Mutex`; the
+  accept loop uses `DiscardingTaskGroup`. Next-slice toolkit: swift-atomics /
+  swift-collections / swift-async-algorithms (atomics/mutex/Deque over actors).
