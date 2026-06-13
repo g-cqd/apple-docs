@@ -30,11 +30,15 @@ let package = Package(
     // string semantics (CaseFolding = JS toLowerCase, jsWhitespace = JS
     // trim/\s) and ADBase's ordered JSON.
     .target(name: "ADContent", dependencies: ["ADBase", "ADEmbed"], swiftSettings: releaseCMO),
+    // Render service (RFC 0003 P3-darwin): symbol/font renderers. darwin
+    // links CoreText/AppKit; the Linux slice compiles to stubs (#if
+    // canImport) so the dylib still builds with no AppKit/CoreText.
+    .target(name: "ADRender", dependencies: ["ADBase"], swiftSettings: releaseCMO),
     // Dev-only reference dump for the flipped fixture generator (RFC 0002
     // §6h); not shipped — the dylib product above is unchanged.
     .executableTarget(name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump"),
     .target(
-      name: "ADCore", dependencies: ["ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent"],
+      name: "ADCore", dependencies: ["ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent", "ADRender"],
       swiftSettings: releaseCMO),
     .testTarget(name: "ADBaseTests", dependencies: ["ADBase"]),
     .testTarget(name: "ADSearchTests", dependencies: ["ADSearch"]),

@@ -19,6 +19,7 @@ import {
 import { isLikelySfnt } from './sfnt.js'
 import { assertFontPathContained } from './safe-font-path.js'
 import { FONT_TEXT_SCRIPT } from '../swift-templates.js'
+import { nativeFontTextSvg } from '../render-native.js'
 import { NotFoundError, ValidationError } from '../../lib/errors.js'
 
 const ENGINE_ENV = 'APPLE_DOCS_FONT_RENDERER'
@@ -143,6 +144,13 @@ async function renderFontTextSvgHarfBuzz({ fontPath, text, pointSize }) {
 }
 
 async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
+  // Native in-process CoreText render first (RFC 0003 P3-darwin): same
+  // Swift body, byte-identical output, no ~200 ms JIT spawn. null → the
+  // dylib is absent / native off / non-darwin / produced nothing, so fall
+  // through to the spawn path below unchanged.
+  const native = nativeFontTextSvg({ fontPath, text, pointSize })
+  if (native !== null) return native
+
   // Stage the Swift driver in a per-call mkdtemp dir so the script path
   // is unguessable (kernel-allocated random suffix, mode 0700). Closes
   // the symlink-race window an `apple-docs-render-font-<pid>-<n>.swift`

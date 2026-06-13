@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sha256 } from '../../lib/hash.js'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
+import { nativeSymbolPdf } from '../render-native.js'
 import { NotFoundError, ValidationError } from '../../lib/errors.js'
 import { ensureDir } from '../../storage/files.js'
 import {
@@ -211,6 +212,13 @@ async function renderSymbolSvgCurves({ name, scope, pointSize, weight = 'regular
 }
 
 async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale = 'medium' }) {
+  // Native in-process AppKit render first (RFC 0003 P3-darwin; D-0003-3
+  // probe confirmed crash-free + byte-identical post symbolPdfToSvg). null
+  // → dylib absent / native off / non-darwin / symbol unrenderable, so
+  // fall through to the spawn path unchanged.
+  const native = nativeSymbolPdf({ name, scope, weight, scale })
+  if (native !== null) return native
+
   // mkdtemp staging so the Swift PDF-driver script gets an
   // unpredictable, mode-0700 home (see renderSymbolPng for rationale).
   const stagingDir = await mkdtemp(join(tmpdir(), 'apple-docs-symbol-pdf-'))
