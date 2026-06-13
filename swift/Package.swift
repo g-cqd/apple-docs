@@ -52,10 +52,13 @@ let package = Package(
     // links CoreText/AppKit; the Linux slice compiles to stubs (#if
     // canImport) so the dylib still builds with no AppKit/CoreText.
     .target(name: "ADRender", dependencies: ["ADBase"], swiftSettings: releaseCMO),
+    // Tiny C shim to call the dlsym'd variadic `sqlite3_config` with the
+    // correct ABI (disables the global memstatus allocator mutex — RFC 0001 P6).
+    .target(name: "CSQLiteShim"),
     // Storage layer (RFC 0001 P5): SQLite C-interop via runtime dlopen
     // (NOT a systemLibrary — same policy as ADArchive/Zstd: absent → JS
     // bun:sqlite serves). The read path; the bun:sqlite writer is untouched.
-    .target(name: "ADStorage", dependencies: ["ADBase"], swiftSettings: releaseCMO),
+    .target(name: "ADStorage", dependencies: ["ADBase", "CSQLiteShim"], swiftSettings: releaseCMO),
     // Search cascade (RFC 0001 P6): the byte-exact in-process port of the JS
     // lexical search (fts-query-builder, intent, the tier merge, ranking,
     // projection). SERVER-ONLY — used by ad-server, NOT by the libAppleDocsCore

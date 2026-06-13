@@ -2,16 +2,14 @@
 // ad-server serving path. Fully structured concurrency: each connection is a
 // child task of the accept loop, the blocking cascade per request is offloaded
 // to the NIOThreadPool with a pool-acquired connection, responses are written
-// with async/await. NO `@unchecked Sendable`, no `NIOLoopBound` — a measured
-// head-to-head (RFC 0001 P6 records, third slice) found the EL-confined
-// `@unchecked ChannelInboundHandler` alternative no faster (identical
-// throughput at c=1..16), so the safe model is kept. The sole contained
-// `@unchecked` stays `ADStorage.StorageConnection` (the `sqlite3*` wrapper).
-// Two routes:
-//   GET /healthz → static JSON
-//   GET /search  → the lexical cascade (Cascade.search), framed in-process
-// Keep-alive: the inbound loop serves successive requests on one connection
-// until the client closes or a `Connection: close` response.
+// with async/await. NO `@unchecked Sendable`, no `NIOLoopBound`; the sole
+// contained `@unchecked` stays `ADStorage.StorageConnection` (the `sqlite3*`
+// wrapper).
+//
+// Routes: GET /healthz → static JSON; GET /search → the lexical cascade
+// (Cascade.search), framed in-process. Keep-alive: the inbound loop serves
+// successive requests on one connection until the client closes or a
+// `Connection: close` response.
 
 import NIOCore
 import NIOHTTP1
@@ -80,30 +78,6 @@ private func respond(
       guard let conn = pool.checkout() else { return Cascade.emptyEnvelope }
       defer { pool.checkin(conn) }
       return Cascade.search(conn, params)
-    }
-  } else if path == "/search-rawscan" || path == "/search-decode" {
-    // DIAGNOSTIC (RFC 0001 P6 probe — to be removed): isolate the stages of the
-    // cascade to localize the concurrency contention. -rawscan = the 3 tier
-    // SQL, COUNT only (SQLite scan, no String decode). -decode = + the
-    // SearchRow String decode (no merge/rerank/JSON). vs /search = full.
-    let params = parseCascadeParams(head.uri)
-    let rawscan = path == "/search-rawscan"
-    status = .ok
-    contentType = "application/json"
-    body = try await threadPool.runIfActive {
-      guard let p = Cascade.prepare(params), let conn = pool.checkout() else {
-        return Array(#"{"n":0}"#.utf8)
-      }
-      defer { pool.checkin(conn) }
-      let n: Int
-      if rawscan {
-        n = conn.rawScanCount(fts: p.ftsParams, trigram: p.trigramParams)
-      } else {
-        n = (conn.titleExactRows(p.ftsParams)?.count ?? 0)
-          + (conn.ftsRows(p.ftsParams)?.count ?? 0)
-          + (conn.trigramRows(p.trigramParams)?.count ?? 0)
-      }
-      return Array("{\"n\":\(n)}".utf8)
     }
   } else {
     status = .notFound
