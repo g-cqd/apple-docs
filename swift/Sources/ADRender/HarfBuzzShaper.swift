@@ -113,21 +113,22 @@ private final class GlyphPen {
   func close() { d += "Z" }
 }
 
-// Locale-free fixed-point formatter (3 decimals, trailing zeros stripped).
+// Locale-free fixed-point formatter, 6 decimals with trailing zeros
+// stripped. 6 decimals exactly represents the font's 26.6 fixed-point grid
+// (1/64 = 0.015625), so the emitted path keeps every bit of the outline
+// precision HarfBuzz delivers — matching hb-view's own serialisation.
+private let fmtScale = 1_000_000
 private func fmt(_ value: Double) -> String {
-  var n = Int64((value * 1000).rounded())
+  var n = Int64((value * Double(fmtScale)).rounded())
   if n == 0 { return "0" }
   let neg = n < 0
   if neg { n = -n }
-  let ip = n / 1000
-  var fp = n % 1000
+  let ip = n / Int64(fmtScale)
+  let fp = n % Int64(fmtScale)
   var frac = ""
   if fp != 0 {
-    let d0 = fp / 100
-    fp %= 100
-    let d1 = fp / 10
-    let d2 = fp % 10
-    var digits = "\(d0)\(d1)\(d2)"
+    var digits = "\(fp)"
+    while digits.count < 6 { digits = "0" + digits } // zero-pad to 6 places
     while digits.hasSuffix("0") { digits.removeLast() }
     frac = "." + digits
   }
