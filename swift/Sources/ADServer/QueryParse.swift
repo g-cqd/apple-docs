@@ -5,14 +5,27 @@
 import ADSearchCascade
 import ADStorage
 
-/// Parses ?q=&limit=&offset= into the cascade's SearchParams (phase 1 — the
-/// filter bag lands in a follow-on).
+/// Parses ?q=&limit=&offset= + the filter bag (framework/source/kind/language/
+/// platform/minVersion/year/track/deprecated) into the cascade's SearchParams.
 func parseCascadeParams(_ uri: String) -> SearchParams {
   let q = parseQuery(uri)
   return SearchParams(
     query: q["q"] ?? "",
     limit: Int(q["limit"] ?? "") ?? 100,
-    offset: Int(q["offset"] ?? "") ?? 0)
+    offset: Int(q["offset"] ?? "") ?? 0,
+    framework: q["framework"],
+    source: q["source"],
+    kind: q["kind"],
+    language: q["language"],
+    platform: q["platform"],
+    minIos: q["minIos"] ?? q["min-ios"],
+    minMacos: q["minMacos"] ?? q["min-macos"],
+    minWatchos: q["minWatchos"] ?? q["min-watchos"],
+    minTvos: q["minTvos"] ?? q["min-tvos"],
+    minVisionos: q["minVisionos"] ?? q["min-visionos"],
+    year: q["year"].flatMap { Int($0) },
+    track: q["track"],
+    deprecated: q["deprecated"])
 }
 
 func parseSearchParams(_ uri: String) -> SearchPagesParams {

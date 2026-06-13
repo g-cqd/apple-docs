@@ -38,8 +38,34 @@ const DOCS = [
   // Long abstract with the query term mid-text → exercises the snippet window +
   // both `...` ellipses (the term is not at index 0 and the text exceeds 220).
   { key: 'swiftui/layout-guide', title: 'SwiftUI Layout', framework: 'swiftui', sourceType: 'apple-docc', role: 'article', roleHeading: 'Article', kind: 'article', language: 'swift', abstractText: 'Build adaptive, data-driven interfaces that fit every Apple platform and device size class, and learn how to compose a navigation hierarchy that moves between screens while preserving scroll position, deep links, and accessibility focus across the entire user journey from launch through to a detail screen.', urlDepth: 2 },
+  // Platform-availability docs (slice 4) — exercise the platform '0' sentinel +
+  // the version compare. platview has iOS+macOS; deskview is macOS-only (so a
+  // platform=ios filter must EXCLUDE it via the explicit-keys check).
+  { key: 'swiftui/platview', title: 'PlatView', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Structure', kind: 'struct', language: 'swift', abstractText: 'A view available on iOS and macOS.', urlDepth: 2, platformsJson: { ios: '17.0', macos: '14.0', ipados: '17.0' }, minIos: '17.0', minMacos: '14.0' },
+  { key: 'swiftui/deskview', title: 'DeskView', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Structure', kind: 'struct', language: 'swift', abstractText: 'A desktop-only view for macOS apps.', urlDepth: 2, platformsJson: { macos: '15.0' }, minMacos: '15.0' },
 ]
 const QUERIES = ['view', 'View', 'ViewBuilder', 'building views', 'uiview', 'guide', 'design', 'nonexistentxyz', 'AVAudioSession.RouteSharingPolicy', 'navigation', 'frobnicator', 'uivew', 'contentvieww', 'how do you represent app interface parts', 'deprecated programming interface guidance']
+
+// Filtered queries (slice 4): { q, opts (JS search bag), qs (Swift query string) }.
+const FILTERED = [
+  { label: 'kind=protocol', q: 'view', opts: { kind: 'protocol' }, qs: 'kind=protocol' },
+  { label: 'kind=Article', q: 'views', opts: { kind: 'Article' }, qs: 'kind=Article' },
+  { label: 'kind=class', q: 'view', opts: { kind: 'class' }, qs: 'kind=class' },
+  { label: 'framework=uikit', q: 'view', opts: { framework: 'uikit' }, qs: 'framework=uikit' },
+  { label: 'framework=swiftui', q: 'view', opts: { framework: 'swiftui' }, qs: 'framework=swiftui' },
+  { label: 'source=hig', q: 'view', opts: { source: 'hig' }, qs: 'source=hig' },
+  { label: 'source=multi', q: 'view', opts: { source: 'apple-docc,sample-code' }, qs: 'source=' + encodeURIComponent('apple-docc,sample-code') },
+  { label: 'language=occ', q: 'view', opts: { language: 'occ' }, qs: 'language=occ' },
+  { label: 'language=swift', q: 'view', opts: { language: 'swift' }, qs: 'language=swift' },
+  { label: 'deprecated=only', q: 'view', opts: { deprecated: 'only' }, qs: 'deprecated=only' },
+  { label: 'deprecated=exclude', q: 'view', opts: { deprecated: 'exclude' }, qs: 'deprecated=exclude' },
+  { label: 'framework+kind', q: 'view', opts: { framework: 'swiftui', kind: 'struct' }, qs: 'framework=swiftui&kind=struct' },
+  { label: 'platform=ios', q: 'view', opts: { platform: 'ios' }, qs: 'platform=ios' },
+  { label: 'platform=tvos', q: 'view', opts: { platform: 'tvos' }, qs: 'platform=tvos' },
+  { label: 'minIos=18.0', q: 'view', opts: { minIos: '18.0' }, qs: 'minIos=18.0' },
+  { label: 'minIos=16.0', q: 'view', opts: { minIos: '16.0' }, qs: 'minIos=16.0' },
+  { label: 'minMacos=14.5', q: 'view', opts: { minMacos: '14.5' }, qs: 'minMacos=14.5' },
+]
 
 if (existsSync(AD_SERVER)) {
   dir = mkdtempSync(join(tmpdir(), 'cascade-parity-'))
@@ -93,6 +119,17 @@ describe.skipIf(!existsSync(AD_SERVER))('search-cascade parity (Swift /search ==
       const projected = projectSearchResult(result, { webPaths: false })
       const expected = JSON.stringify(projected)
       const swift = await (await fetch(`http://127.0.0.1:${PORT}/search?q=${encodeURIComponent(q)}&limit=10`)).text()
+      expect(swift).toBe(expected)
+    })
+  }
+
+  for (const f of FILTERED) {
+    test(`filtered byte-identical: ${f.label}`, async () => {
+      const ctx = { db, logger: { debug() {}, warn() {}, info() {} } }
+      const result = await search({ query: f.q, limit: 10, offset: 0, noDeep: false, fuzzy: true, ...f.opts }, ctx)
+      const projected = projectSearchResult(result, { webPaths: false })
+      const expected = JSON.stringify(projected)
+      const swift = await (await fetch(`http://127.0.0.1:${PORT}/search?q=${encodeURIComponent(f.q)}&limit=10&${f.qs}`)).text()
       expect(swift).toBe(expected)
     })
   }

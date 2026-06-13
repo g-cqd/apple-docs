@@ -68,7 +68,7 @@ let package = Package(
     // projection). SERVER-ONLY — used by ad-server, NOT by the libAppleDocsCore
     // dylib (which stays zero-dep). Max strict concurrency.
     .target(
-      name: "ADSearchCascade", dependencies: ["ADStorage", "ADContent"],
+      name: "ADSearchCascade", dependencies: ["ADStorage", "ADContent", "ADBase"],
       swiftSettings: releaseCMO + strictConcurrency),
     // Dev-only reference dump for the flipped fixture generator (RFC 0002
     // §6h); not shipped — the dylib product above is unchanged.
