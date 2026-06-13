@@ -24,7 +24,7 @@ indexed by the docs site.
 | **P3** | Render service ([RFC 0003](0003-swift-render-service.md)) | ◑ Phases 1/2/4 done; **phase 3 held** |
 | **P4** | Content pipeline ([RFC 0004](0004-content-pipeline.md)) | ✅ Main line done; phases 3-4 NO-GO |
 | **P5** | Storage — SQLite C-interop, reader pool → native actors | ◑ Foundation shipped (token-gated **off**); bridge-flip NO-GO, deferred to P6 |
-| **P6** | Servers — web + MCP on SwiftNIO (no Vapor) | ⬜ Not started |
+| **P6** | Servers — web + MCP on SwiftNIO (no Vapor) | ◑ Host spike done (SwiftNIO viable + safe); single-query serving −2.5× vs Bun — win pending the full-cascade slice |
 | **P7** | CLI + single static binary; Bun retired | ⬜ Not started |
 
 Every bridge-era module — `fusion`, `archive`, `embed`, `content`,

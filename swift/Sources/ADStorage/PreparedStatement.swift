@@ -22,6 +22,9 @@ final class PreparedStatement {
   private let lib: SQLiteLib
   private let db: OpaquePointer
   let stmt: OpaquePointer
+  // Column-name bytes are constant for a prepared statement — collect once on
+  // first runJSON (avoids ~N String allocations per call).
+  private var jsonNames: [[UInt8]]?
 
   init?(lib: SQLiteLib, db: OpaquePointer, sql: String) {
     self.lib = lib
@@ -95,6 +98,70 @@ final class PreparedStatement {
     return true
   }
 
+  /// Steps to completion, framing rows as a JSON array of objects keyed by
+  /// column name — hand-rolled to `out` (NO Foundation; JSONEncoder is ~57×
+  /// slower on Linux, P0 records E6). Per-cell typing mirrors bun:sqlite:
+  /// NULL/BLOB → null, INTEGER/REAL → number, TEXT → escaped string. Returns
+  /// false on a step error. Always resets + clears bindings.
+  func runJSON(into out: inout [UInt8]) -> Bool {
+    defer {
+      _ = lib.reset(stmt)
+      _ = lib.clearBindings(stmt)
+    }
+    let columnCount = lib.columnCount(stmt)
+    let names: [[UInt8]]
+    if let cached = jsonNames {
+      names = cached
+    } else {
+      var collected: [[UInt8]] = []
+      collected.reserveCapacity(Int(columnCount))
+      for i in 0..<columnCount {
+        collected.append(lib.columnName(stmt, i).map { Array(String(cString: $0).utf8) } ?? [])
+      }
+      jsonNames = collected
+      names = collected
+    }
+    out.append(UInt8(ascii: "["))
+    var firstRow = true
+    while true {
+      let rc = lib.step(stmt)
+      if rc == SQLite.done { break }
+      guard rc == SQLite.row else { return false }
+      if !firstRow { out.append(UInt8(ascii: ",")) }
+      firstRow = false
+      out.append(UInt8(ascii: "{"))
+      for col in 0..<columnCount {
+        if col > 0 { out.append(UInt8(ascii: ",")) }
+        out.append(UInt8(ascii: "\""))
+        names[Int(col)].withUnsafeBufferPointer { appendJSONEscaped(&out, $0) }
+        out.append(UInt8(ascii: "\""))
+        out.append(UInt8(ascii: ":"))
+        appendJSONCell(&out, column: col)
+      }
+      out.append(UInt8(ascii: "}"))
+    }
+    out.append(UInt8(ascii: "]"))
+    return true
+  }
+
+  private func appendJSONCell(_ out: inout [UInt8], column col: Int32) {
+    switch lib.columnType(stmt, col) {
+    case SQLite.typeInteger:
+      appendInt(&out, lib.columnInt64(stmt, col))
+    case SQLite.typeFloat:
+      let d = lib.columnDouble(stmt, col)
+      out.append(contentsOf: (d.isFinite ? String(d) : "null").utf8)
+    case SQLite.typeText:
+      let ptr = lib.columnText(stmt, col)
+      let n = Int(lib.columnBytes(stmt, col))
+      out.append(UInt8(ascii: "\""))
+      if n > 0, let ptr { appendJSONEscaped(&out, UnsafeBufferPointer(start: ptr, count: n)) }
+      out.append(UInt8(ascii: "\""))
+    default:  // NULL or BLOB (searchPages projects neither)
+      out.append(contentsOf: "null".utf8)
+    }
+  }
+
   private func appendCell(_ out: inout [UInt8], column col: Int32) {
     switch lib.columnType(stmt, col) {
     case SQLite.typeInteger:
@@ -152,5 +219,55 @@ func patchU32(_ out: inout [UInt8], at offset: Int, _ value: UInt32) {
   let le = value.littleEndian
   withUnsafeBytes(of: le) { bytes in
     for i in 0..<4 { out[offset + i] = bytes[i] }
+  }
+}
+
+/// Appends the base-10 ASCII of an Int64 with no heap allocation.
+func appendInt(_ out: inout [UInt8], _ value: Int64) {
+  if value == 0 {
+    out.append(UInt8(ascii: "0"))
+    return
+  }
+  let negative = value < 0
+  var mag = negative ? (0 &- UInt64(bitPattern: value)) : UInt64(bitPattern: value)
+  withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 20) { scratch in
+    var i = 20
+    while mag > 0 {
+      i -= 1
+      scratch[i] = UInt8(ascii: "0") + UInt8(mag % 10)
+      mag /= 10
+    }
+    if negative { out.append(UInt8(ascii: "-")) }
+    for j in i..<20 { out.append(scratch[j]) }
+  }
+}
+
+// MARK: - JSON string escaping (RFC 8259 §7), UTF-8 bytes passed through.
+
+private func hexDigit(_ v: UInt8) -> UInt8 {
+  v < 10 ? UInt8(ascii: "0") + v : UInt8(ascii: "a") + (v - 10)
+}
+
+func appendJSONEscaped(_ out: inout [UInt8], _ buf: UnsafeBufferPointer<UInt8>) {
+  let backslash = UInt8(ascii: "\\")
+  for b in buf {
+    switch b {
+    case 0x22: out.append(backslash); out.append(0x22)
+    case 0x5C: out.append(backslash); out.append(0x5C)
+    case 0x08: out.append(backslash); out.append(UInt8(ascii: "b"))
+    case 0x0C: out.append(backslash); out.append(UInt8(ascii: "f"))
+    case 0x0A: out.append(backslash); out.append(UInt8(ascii: "n"))
+    case 0x0D: out.append(backslash); out.append(UInt8(ascii: "r"))
+    case 0x09: out.append(backslash); out.append(UInt8(ascii: "t"))
+    case 0..<0x20:
+      out.append(backslash)
+      out.append(UInt8(ascii: "u"))
+      out.append(UInt8(ascii: "0"))
+      out.append(UInt8(ascii: "0"))
+      out.append(hexDigit(b >> 4))
+      out.append(hexDigit(b & 0xF))
+    default:
+      out.append(b)
+    }
   }
 }

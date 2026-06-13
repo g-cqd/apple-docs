@@ -12,7 +12,7 @@
 //   is_deprecated, is_beta, doc_kind, language, rank, tier
 
 /// Decoded `ad_storage_search_pages` request (filled by StorageExports).
-public struct SearchPagesParams {
+public struct SearchPagesParams: Sendable {
   public var query: String
   public var raw: String
   public var limit: Int64
@@ -71,28 +71,35 @@ public enum Storage {
   public static func searchPages(handle: UInt64, _ params: SearchPagesParams) -> [UInt8]? {
     ConnectionRegistry.shared.withConnection(handle) { conn -> [UInt8]? in
       guard let stmt = conn.statement(searchPagesSQL) else { return nil }
-      stmt.bind("$query", .text(params.query))
-      stmt.bind("$raw", .text(params.raw))
-      stmt.bind("$limit", .int(params.limit))
-      stmt.bind("$framework", nullableText(params.framework))
-      stmt.bind("$source_type", nullableText(params.sourceType))
-      stmt.bind("$sources_json", nullableText(params.sourcesJson))
-      stmt.bind("$kind", nullableText(params.kind))
-      stmt.bind("$language", nullableText(params.language))
-      stmt.bind("$year", nullableInt(params.year))
-      stmt.bind("$track_like", nullableText(params.trackLike))
-      stmt.bind("$deprecated_mode", .text(params.deprecatedMode))
-      stmt.bind("$min_ios", nullableInt(params.minIos))
-      stmt.bind("$min_macos", nullableInt(params.minMacos))
-      stmt.bind("$min_watchos", nullableInt(params.minWatchos))
-      stmt.bind("$min_tvos", nullableInt(params.minTvos))
-      stmt.bind("$min_visionos", nullableInt(params.minVisionos))
+      bindSearchPages(stmt, params)
       var out: [UInt8] = []
       out.reserveCapacity(4096)
       guard stmt.run(into: &out) else { return nil }
       return out
     } ?? nil
   }
+}
+
+/// Binds the 16 searchPages parameters. Shared by the FFI packed-binary path
+/// (`Storage.searchPages`) and the in-process JSON path
+/// (`StorageConnection.searchPagesJSON`).
+func bindSearchPages(_ stmt: PreparedStatement, _ params: SearchPagesParams) {
+  stmt.bind("$query", .text(params.query))
+  stmt.bind("$raw", .text(params.raw))
+  stmt.bind("$limit", .int(params.limit))
+  stmt.bind("$framework", nullableText(params.framework))
+  stmt.bind("$source_type", nullableText(params.sourceType))
+  stmt.bind("$sources_json", nullableText(params.sourcesJson))
+  stmt.bind("$kind", nullableText(params.kind))
+  stmt.bind("$language", nullableText(params.language))
+  stmt.bind("$year", nullableInt(params.year))
+  stmt.bind("$track_like", nullableText(params.trackLike))
+  stmt.bind("$deprecated_mode", .text(params.deprecatedMode))
+  stmt.bind("$min_ios", nullableInt(params.minIos))
+  stmt.bind("$min_macos", nullableInt(params.minMacos))
+  stmt.bind("$min_watchos", nullableInt(params.minWatchos))
+  stmt.bind("$min_tvos", nullableInt(params.minTvos))
+  stmt.bind("$min_visionos", nullableInt(params.minVisionos))
 }
 
 private func nullableText(_ value: String?) -> BindValue {
@@ -104,7 +111,7 @@ private func nullableInt(_ value: Int64?) -> BindValue {
 }
 
 // MUST match search.js searchFtsStmt (RESULT_COLUMNS + FILTER_PREDICATES).
-private let searchPagesSQL = """
+let searchPagesSQL = """
   SELECT
     d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
     d.declaration_text as declaration, d.platforms_json as platforms,
