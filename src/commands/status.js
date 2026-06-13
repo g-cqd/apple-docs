@@ -102,7 +102,7 @@ export async function status(opts, ctx) {
   const capabilities = {
     search: true,
     searchTrigram: db.hasTable('documents_trigram'),
-    searchBody: db.getBodyIndexCount() > 0,
+    searchBody: db.hasBodyIndex(),
     readContent: db.hasTable('document_sections'),
   }
 

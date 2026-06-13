@@ -163,6 +163,11 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
 
   // Body-index maintenance
   const bodyCountStmt = hasBodyFtsTable ? db.query('SELECT COUNT(*) as c FROM documents_body_fts') : null
+  // Availability probe: `SELECT 1 … LIMIT 1` stops at the first row, where
+  // `COUNT(*)` on an FTS5 table scans the whole index (~130 ms warm on the
+  // 358k-row corpus — 43% of per-search CPU; §10(B) profile). hasBody only
+  // needs the boolean, so the probe is output-identical and ~instant.
+  const bodyExistsStmt = hasBodyFtsTable ? db.query('SELECT 1 FROM documents_body_fts LIMIT 1') : null
   const bodyInsertStmt = hasBodyFtsTable
     ? db.query('INSERT OR REPLACE INTO documents_body_fts(rowid, body) VALUES ($id, $body)')
     : null
@@ -227,6 +232,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
   // so the statements prepare unconditionally. An empty document_vectors
   // table simply means the semantic tier is dormant.
   const vectorCountStmt = db.query('SELECT COUNT(*) AS c FROM document_vectors')
+  let vectorCountMemo // undefined = unread; busted by resetCountCache after a re-embed
   const allVectorsStmt = db.query('SELECT document_id, vec FROM document_vectors')
   const rawCountStmt = db.query('SELECT COUNT(*) AS c FROM document_raw')
   const rawUpsertStmt = db.query('INSERT OR REPLACE INTO document_raw(document_id, raw) VALUES (?, ?)')
@@ -239,9 +245,19 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
   return {
     hasTrigramTable,
     hasBodyFtsTable,
-    /** Row count of the semantic vector table; 0 ⇒ tier dormant. */
+    /** Row count of the semantic vector table; 0 ⇒ tier dormant. MEMOIZED
+     *  (§10(B)): the count is read per semantic search (availability + the
+     *  store cache key) but changes only at index time — `resetCountCache`
+     *  busts it after a re-embed (wired through the db facade). */
     getVectorCount() {
-      return safeCall(() => vectorCountStmt.get().c, { default: 0, log: 'warn-once', label: 'search.vectorCount' })
+      if (vectorCountMemo === undefined) {
+        vectorCountMemo = safeCall(() => vectorCountStmt.get().c, { default: 0, log: 'warn-once', label: 'search.vectorCount' })
+      }
+      return vectorCountMemo
+    },
+    /** Bust the memoized vector count (after a re-embed). */
+    resetCountCache() {
+      vectorCountMemo = undefined
     },
     /** All packed binary codes: `[{ document_id, vec: Uint8Array }]`. */
     getAllVectors() {
@@ -325,6 +341,17 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         default: 0,
         log: 'warn-once',
         label: 'search.bodyIndexCount',
+      })
+    },
+    /** Cheap "is the body tier populated" boolean — the per-search hot path.
+     *  Avoids the full-index COUNT(*) (§10(B)); use getBodyIndexCount only
+     *  when the actual row count is needed. */
+    hasBodyIndex() {
+      if (!bodyExistsStmt) return false
+      return safeCall(() => bodyExistsStmt.get() != null, {
+        default: false,
+        log: 'warn-once',
+        label: 'search.hasBodyIndex',
       })
     },
     insertBody(documentId, body) {

@@ -136,6 +136,7 @@ export async function indexEmbeddings(opts, ctx) {
   }
 
   _resetVectorCache() // in-process readers must rebuild from the new tables
+  db.resetSemanticCountCaches() // memoized vector/chunk counts are now stale (§10(B))
   logger?.info?.(`Embedding index built: ${chunkCount} chunks across ${indexed}/${total} documents.`)
   return { status: 'ok', indexed, total, chunks: chunkCount }
 }

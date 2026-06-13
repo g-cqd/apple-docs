@@ -78,6 +78,7 @@ describe('search partial-on-deep-timeout', () => {
     const dbProxy = new Proxy(db, {
       get(target, prop) {
         if (prop === 'getBodyIndexCount') return () => 1
+        if (prop === 'hasBodyIndex') return () => true
         const value = target[prop]
         return typeof value === 'function' ? value.bind(target) : value
       },
