@@ -323,6 +323,20 @@ than transformers.js (expected: far more).
 > Now every *darwin* render spawn lives in libAppleDocsCore except the
 > codepoint worker (D-0003-1). Phase 3 (spawn-script kills) waits a
 > release cycle; phase 4 (Linux shaper) stays deferred.
+>
+> **Phase 4 (Linux shaper) EXECUTED 2026-06-13 (RFC 0003 §6; un-deferred,
+> spike-first)**: `ADRender/HarfBuzzShaper.swift` dlopens libharfbuzz
+> alone (the HB 7+ draw API yields outlines — no FreeType), exposed as
+> `ad_render_font_text_shaped` and wired as the `hb-native` font engine,
+> reachable **without** hb-view. The spike (settling D-0003-2) is **GO**:
+> it runs the same HarfBuzz hb-view does, so layout is identical and the
+> supersampled raster diff is 0–1.1% across Latin/RTL/combining/mono. The
+> **hb-view host-package requirement is dropped** — the last render
+> host-binary, so Linux font rendering is now self-contained (libharfbuzz
+> is near-ubiquitous; absent → hb-view → placeholder). This is the **first
+> real Linux render code** in the dylib. Emoji (COLR) stays out of scope.
+> P3 is now substantially complete; only phase 3's darwin spawn-script
+> kills remain, held on the §4 release-cycle gate.
 
 The five inline Swift scripts (725 LOC: symbol worker, symbol-pdf,
 symbol-png, font-text, codepoint worker) move into the package as a
