@@ -253,20 +253,24 @@ build wall-time). *Killed*: nothing (shiki stays; swift-markdown NOT adopted,
 D-0004-4). *Remaining*: phase 3 (crawl-time normalize) — separate,
 independently gated. Detail + records in RFC 0004.
 
-### P5 — Storage — **NEXT (gate met: P2 + P3-darwin native-by-default)**
-SQLite C-interop module: prepared-statement cache, typed row decoding (D4 —
-pointfreeco's swift-structured-queries vs raw C interop, decided in the
-design); the reader pool becomes native actors, replacing the
-`worker_threads` pool at the FFI boundary. The query path is ~99% SQLite
-(README evidence), so this is where the storage layer goes native — but the
-win is architectural (one process, no Worker marshalling, prepared-stmt
-reuse), not raw SQLite speed (§10(B) already took the JS-side query
-round-trips). *Kills*: `bun:sqlite` (via the facade — its call sites in
-`src/storage/database.js` are the entire surface) and the `Worker`
-reader-pool (`src/storage/reader-*.js`). *Gates*: full unit suite A/B
-green; search concurrency benchmark ≥ JS; WAL/locking verified under the
-container contention test. First slice: the `database.js` facade behind the
-bridge with the read path on native prepared statements.
+### P5 — Storage — **Foundation shipped (token-gated OFF); bridge flip NO-GO** → [p5 records](0001-swift-native-transition/p5/records.md)
+SQLite C-interop via runtime-dlopen'd libsqlite3 (D4 settled: raw C interop,
+NOT swift-structured-queries; dlopen, NOT a systemLibrary — the Zstd policy).
+First slice EXECUTED 2026-06-13: the durable read foundation (`ADStorage` —
+dlopen binding, read connection, prepared-stmt cache, type-tagged row codec,
+handle registry) + `searchPages` ported end-to-end behind the bridge, served
+inside the `worker_threads` pool. **A/B byte-parity PASS** (bm25 `rank`
+bit-identical across SQLite builds) and **WAL coexistence PASS** (native
+readers + the live bun:sqlite writer, no SQLITE_BUSY, bounded WAL) — but the
+**concurrency gate is NO-GO**: native is ~7-16% SLOWER per call. bun:sqlite
+is already native C SQLite, so the FFI pack+frame+decode is pure boundary tax
+(the P4 "P7 corollary"); the architectural win is P6/P7-coupled (no FFI, rows
+born in Swift memory). So `storage` stays **default-OFF** (opt-in token); the
+foundation is the **P6 prerequisite** — a SwiftNIO server can't call
+bun:sqlite. *Remaining (P6/P7-coupled)*: the other 12 read ops, the
+reader-pool→native-actors move, and the *kills* (`bun:sqlite`, the `Worker`
+pool — unkillable while Bun is runtime + writer). Detail:
+[p5/records.md](0001-swift-native-transition/p5/records.md).
 
 ### P6 — Servers (fully custom, in-house on SwiftNIO)
 > **D1 settled 2026-06-12 (operator decision)**: no Vapor — the spike is
@@ -320,7 +324,7 @@ untouched.
 | D1 | Server framework: Vapor (vetted exception) vs SwiftNIO-direct | **SETTLED 2026-06-12 (operator decision): fully custom in-house on SwiftNIO — no Vapor, no spike; deps stay apple/swiftlang/pointfreeco only (§2)** |
 | D2 | Highlighting engine for non-Swift languages (TextMate in-house vs tree-sitter exception vs reduced set) | **Moot** while P4 phase 4 is shelved (NO-GO, RFC 0004 + records); re-opens only if P6/P7 serves HTML in-process |
 | D3 | Windows timing | Deferred until after P7 |
-| D4 | swift-structured-queries (pointfreeco) for the storage query layer vs raw C interop | Open — decide in P5 design |
+| D4 | swift-structured-queries (pointfreeco) for the storage query layer vs raw C interop | **SETTLED 2026-06-13 (P5 first slice): raw C interop** over runtime-dlopen'd libsqlite3 — parity needs the byte-identical hand-tuned FTS5 SQL; a builder risks divergence + a dep. A builder re-opens only if queries get rewritten post-parity (§10). Records: [p5](0001-swift-native-transition/p5/records.md) |
 | D5 | Dylib distribution vs build-from-source for `setup` consumers | **Settled by P0 research (2026-06-11)**: artifacts-in-release with sha256 sidecars; compiled binaries embed the dylib (`dlopen` accepts the embedded path directly); Linux ships `$ORIGIN`-rpath runtime bundles. Details: [`p0/decisions.md`](0001-swift-native-transition/p0/decisions.md) D-P0-1/9/10 |
 
 ## 10. Beyond parity — the improvement track
@@ -448,3 +452,11 @@ land; each phase's completion gets a dated entry here.
   status + contract + forward plan; this maintenance log completed;
   rfcs/README.md refreshed to a P0–P7 ladder. Audit (codebase vs docs)
   found **no drift**; no code changed.
+- **2026-06-13 — P5 first slice (storage foundation + `searchPages`
+  probe)**: `ADStorage` (runtime-dlopen'd libsqlite3, raw C interop — D4
+  settled) + the `searchPages` read path behind the bridge. A/B byte-parity
+  PASS (bm25 bit-identical), WAL coexistence PASS, concurrency **NO-GO**
+  (native ~7-16% slower — FFI boundary tax over already-native bun:sqlite).
+  `storage` ships **default-OFF**; the foundation is the P6 prerequisite (a
+  SwiftNIO server can't call bun:sqlite). Detail:
+  [p5/records.md](0001-swift-native-transition/p5/records.md).

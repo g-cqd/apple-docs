@@ -64,7 +64,11 @@ const FILTER_PREDICATES = `
   AND ($min_visionos IS NULL OR d.min_visionos_num IS NULL OR d.min_visionos_num <= $min_visionos)
 `
 
-function buildFilterParams({
+// Exported so the native storage shim (storage-native.js) packs byte-identical
+// filter values — the FTS5 statement is duplicated in Swift (StorageExports),
+// but the param derivation (encodeVersion, sources JSON, track LIKE) stays the
+// single JS source of truth.
+export function buildFilterParams({
   framework = null, kind = null, language = null, sourceType = null,
   sources = null, year = null, track = null, deprecatedMode = 'include',
   minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null,

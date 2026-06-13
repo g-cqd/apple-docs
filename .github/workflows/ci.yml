@@ -142,6 +142,13 @@ jobs:
             brew list zstd >/dev/null 2>&1 || brew install zstd
           fi
 
+      # The storage module (RFC 0001 P5) dlopens libsqlite3 at runtime — both
+      # `swift test` (ADStorageTests) and the JS parity test need it. Linux
+      # runners need libsqlite3-0 (ships SQLITE_ENABLE_FTS5); macOS has it.
+      - name: Ensure libsqlite3 (storage module runtime dep)
+        if: runner.os == 'Linux'
+        run: ldconfig -p | grep -q libsqlite3.so.0 || sudo apt-get install -y libsqlite3-0
+
       # Linux only: the HarfBuzz shaper (RFC 0003 phase 4) dlopens
       # libharfbuzz at runtime, and shaper-parity.test.js compares it to
       # hb-view (rasterised via rsvg-convert + ImageMagick) on a DejaVu test
@@ -184,7 +191,8 @@ jobs:
           export APPLE_DOCS_NATIVE_LIB="$PWD/dist/native/${{ matrix.target }}/libAppleDocsCore.$ext"
           bun test test/unit/native/ test/unit/search/fusion-parity.test.js test/unit/search/fusion.test.js \
             test/unit/lib/archive-native-parity.test.js test/unit/lib/archive-zstd.test.js \
-            test/unit/content/content-native-parity.test.js
+            test/unit/content/content-native-parity.test.js \
+            test/integration/storage-wal-contention.test.js
 
       - name: zstd self-test of a native-built archive
         env:

@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { getNativeLib, isNativeEnabled } from '../native/loader.js'
 import { DocsDatabase } from './database.js'
+import { nativeSearchPages, nativeStorageOpen } from './storage-native.js'
 
 /**
  * Whitelist of read-only methods the pool is allowed to invoke. Exported
@@ -63,6 +64,20 @@ if (parentPort) {
     process.exit(1)
   }
 
+  // RFC 0001 P5 first slice: open a native (libsqlite3 via bun:ffi) read
+  // handle for the searchPages path. Returns null unless `APPLE_DOCS_NATIVE`
+  // explicitly names `storage` AND the dylib + FTS5 are present, in which
+  // case searchPages keeps using bun:sqlite. Opened inside the pool's SERIAL
+  // boot so it inherits the WAL/SHM open-race fix. Read-only; the bun:sqlite
+  // writer is untouched. Not closed on terminate() — same lifecycle as the
+  // bun:sqlite reader handle above (both die with the process).
+  let storageHandle = null
+  try {
+    storageHandle = nativeStorageOpen(dbPath)
+  } catch {
+    storageHandle = null
+  }
+
   // Signal readiness so the pool can start dispatching. Without this the pool
   // would race the DB open and send work to a half-initialized worker.
   // Native provenance rides along: announce lines logged INSIDE the worker go
@@ -72,6 +87,7 @@ if (parentPort) {
   try {
     const enabled = ['fusion', 'archive', 'embed'].filter((m) => isNativeEnabled(m))
     if (enabled.length > 0 && getNativeLib()) native = enabled
+    if (storageHandle != null) native = [...native, 'storage']
   } catch {
     // provenance is informational — never block readiness
   }
@@ -101,7 +117,15 @@ if (parentPort) {
       return
     }
     try {
-      const data = fn.apply(db, Array.isArray(args) ? args : [])
+      const callArgs = Array.isArray(args) ? args : []
+      let data
+      if (op === 'searchPages' && storageHandle != null) {
+        // Native attempt; null → fall through to bun:sqlite for this call.
+        data = nativeSearchPages(storageHandle, ...callArgs)
+        if (data === null) data = fn.apply(db, callArgs)
+      } else {
+        data = fn.apply(db, callArgs)
+      }
       parentPort.postMessage({ type: 'result', id, ok: true, data })
     } catch (err) {
       parentPort.postMessage({
