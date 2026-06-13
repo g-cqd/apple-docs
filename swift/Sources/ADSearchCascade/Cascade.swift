@@ -6,6 +6,7 @@
 // snippet/relatedCount enrichment, no kind/platform JS filters, no framework
 // fan-out (single, no-filter query) — those land in follow-ons.
 
+import ADContent
 import ADStorage
 
 public struct SearchParams: Sendable {
@@ -116,6 +117,38 @@ public enum Cascade {
       if results.count < limit + offset {
         addRows(conn.bodyRows(p.ftsParams) ?? []) { _ in "body" }
       }
+
+      // Relaxation cascade R1-R3 (cascade.js runRelaxationCascade) — only when
+      // the strict + deep tiers produced NOTHING, the trimmed query is >= 4
+      // UTF-16 units with no `"`, and it tokenizes to >= 3 tokens.
+      if results.isEmpty, q.utf16.count >= 4, !q.contains("\"") {
+        let tokens = Relaxation.tokenize(q)
+        if tokens.count >= 3 {
+          let pruned = Relaxation.pruneStopwords(tokens)
+          // R1 — pruned AND
+          if pruned.count >= 1 {
+            var params = p.ftsParams
+            params.query = FtsQuery.build(pruned.joined(separator: " "))
+            addRows(conn.ftsRows(params) ?? []) { _ in "relaxed" }
+          }
+          // R2 — pruned OR (lowercased, quote-stripped, OR-joined)
+          if results.isEmpty, pruned.count >= 2 {
+            var params = p.ftsParams
+            params.query =
+              pruned.map { "\"\(stripQuotes(JsString.lowercase($0)))\"" }.joined(separator: " OR ")
+            addRows(conn.ftsRows(params) ?? []) { _ in "relaxed-or" }
+          }
+          // R3 — trigram on a single high-signal token
+          if results.isEmpty {
+            let pool = pruned.isEmpty ? tokens : pruned
+            if let signal = Relaxation.pickHighSignalToken(pool), signal.utf16.count >= 3 {
+              var params = p.trigramParams
+              params.query = FtsQuery.trigram(signal)
+              addRows(conn.trigramRows(params) ?? []) { _ in "relaxed-token" }
+            }
+          }
+        }
+      }
     }
 
     let intent = IntentDetector.detect(q)
@@ -199,5 +232,10 @@ public enum Cascade {
     if matchQuality == "fuzzy" { return "approximate" }
     if matchQuality.hasPrefix("relaxed") { return "approximate" }
     return "partial"
+  }
+
+  /// Removes every `"` (JS `.replace(/"/g, '')`) — for the R2 OR query terms.
+  private static func stripQuotes(_ s: String) -> String {
+    String(s.unicodeScalars.filter { $0 != "\"" })
   }
 }
