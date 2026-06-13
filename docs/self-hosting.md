@@ -143,14 +143,22 @@ minute on Apple silicon. Queries keep serving in the meantime.
 
 ### Linux host packages (full feature parity)
 
-Everything serves out of the box from a snapshot except two render
-endpoints that shell out to host tools. Install these for 100% of the
+Font-text rendering is **self-contained** since RFC 0003 phase 4:
+`libAppleDocsCore` shapes glyphs (full shaping incl. RTL/complex scripts)
+through the system **libharfbuzz**, dlopen'd at runtime — the same
+zero-build-dep pattern as libzstd, and `libharfbuzz.so.0` is already
+present on essentially every desktop/server image as a transitive
+dependency, so `/api/fonts/text.svg` and `render_font_text` need **no host
+binary**. If libharfbuzz is somehow absent it falls back to the `hb-view`
+binary (`libharfbuzz-bin`) when installed, then to a plain-`<text>`
+placeholder SVG.
+
+Two endpoints still shell out to host tools — install for 100% of the
 feature set:
 
 | Package (Debian/Ubuntu) | Tool | Enables |
 | --- | --- | --- |
 | `librsvg2-bin` | `rsvg-convert` | PNG output for `/api/symbols/...png` and `render_sf_symbol` |
-| `libharfbuzz-bin` | `hb-view` | Real glyph rendering (full text shaping, incl. RTL/complex scripts) for `/api/fonts/text.svg` and `render_font_text`; without it a plain-`<text>` placeholder SVG is served |
 | `python3-fonttools` | `pyftsubset` | `/api/fonts/subset` variable-font subsetting (returns a clear 503 when absent) |
 
 On macOS none of these are needed (CoreText and `sips` cover the same

@@ -51,7 +51,10 @@ symbol-png → in-dylib, default-on, per-call spawn fallback; symbol-worker
 darwin); symbol-codepoint-worker → **stays spawned** (D-0003-1). Every
 *darwin* render spawn is now consolidated into libAppleDocsCore except the
 codepoint worker. The spawn scripts remain as the fallback (phase-3 kills
-gated on a release cycle at default).
+gated on a release cycle at default). **Linux** (phase 4): font-text now
+shapes in-dylib via dlopen'd libharfbuzz (`hb-native` engine) — the
+hb-view host binary is no longer required; symbols on Linux still serve
+from prerendered snapshot SVGs.
 
 Caching layers (unchanged by this RFC): `sf_symbol_renders` DB table
 (sha-keyed params), pre-rendered snapshot SVGs (~273k files: 27
@@ -101,7 +104,7 @@ New `ADRender` target in `swift/`, platform-split:
 | ID | Question | Leaning |
 | --- | --- | --- |
 | D-0003-1 | codepoint-worker in-dylib vs stays-spawned — it links PRIVATE swiftinterfaces (SFSymbolsShared/CoreGlyphsLib); baking private-framework linkage into the SHIPPED dylib raises distribution + OS-version fragility | **stays-spawned**: build-time only, already long-lived/amortized (<0.5 ms/symbol after warmup); revisit only if it ever blocks |
-| D-0003-2 | Linux shaper binding: HarfBuzz+FreeType via runtime dlopen vs SwiftPM systemLibrary | **dlopen** (the proven libzstd pattern): zero build deps, absent libs degrade to the placeholder path with one warning |
+| D-0003-2 | Linux shaper binding: HarfBuzz+FreeType via runtime dlopen vs SwiftPM systemLibrary | **SETTLED dlopen (2026-06-13, §6 phase-4): HarfBuzz ALONE.** The libzstd dlopen pattern (zero build deps, absent → placeholder with one warning) — and the HB 7+ `hb_font_draw_glyph` draw API makes FreeType unnecessary (it yields outlines directly; no FT struct-mirroring). Spike GO: matches hb-view within tolerance (0–1.1% supersampled, identical layout) across Latin/RTL/combining/mono. |
 | D-0003-3 | AppKit thread model in-dylib: the scripts own their processes' main threads; FFI calls arrive on Bun's JS thread. CoreText/CoreGraphics are thread-safe; `NSImage`-based PNG rasterization may not be | **SETTLED for symbol-pdf (2026-06-13, §6 phase-1 probe): SAFE.** `NSImage(systemSymbolName:)` + the private `vectorGlyph`/`drawInContext:` + CGContext-PDF path runs crash/hang-free in the dlopen'd dylib on Bun's thread, byte-identical to spawn, even under `Promise.all` concurrency — these are off-screen image/vector ops, not event-loop-bound, so the absent AppKit runloop doesn't matter. **CONCURRENCY settled SAFE (2026-06-13, §6 phase-2 Probe A):** the phase-1 verdict only covered SERIAL calls (Bun FFI is synchronous on one JS thread, so phase-1's "Promise.all" ran serially). The batch export drives `DispatchQueue.concurrentPerform` → genuinely concurrent `NSImage`/`vectorGlyph` across GCD threads; 400 public symbols are byte-identical to the serial single + spawn, crash-free. **PNG settled SAFE (2026-06-13, §6 phase-2 Probe B):** in-dylib `NSBitmapImageRep` rasterization (`ad_render_symbol_png`) is byte-identical to the spawn across 6 colour/weight/scale cases, no crash — symbol-png is now native-first too. Only the codepoint worker (D-0003-1) stays spawned. |
 | D-0003-4 | FFI result buffers vs socketpair for large payloads | **FFI buffers** (contract v0; copy-then-free; archive proved multi-MB results) — socketpair only if prerender batching measures poorly. Phase-2 prerender chunks at 256 symbols/call → ~1 MB results, RSS bounded; no socketpair needed |
 
@@ -167,14 +170,37 @@ New `ADRender` target in `swift/`, platform-split:
 3. **darwin kills + records**: the one-shot spawn scripts deleted after a
    release cycle at render-native default; RFC 0001 §3/§7 updated;
    codepoint-worker disposition per D-0003-1. hb-view is NOT killed here.
-4. **DEFERRED — Linux shaper spike + hb-view kill**: dlopen bindings for
+4. **Linux shaper spike + hb-view kill**: dlopen bindings for
    harfbuzz/freetype; shape → glyph outlines → SVG paths; tolerance
    harness vs recorded hb-view goldens across a font/text/size matrix
    incl. RTL, combining marks, emoji fallback. Settles D-0003-2
    empirically, then drops the hb-view host-package requirement (docs,
-   self-hosting Linux section). **Revisit triggers**: Linux host friction
-   with hb-view, or P7's single-binary requirement. Until then Linux
-   serves via hb-view exactly as today.
+   self-hosting Linux section).
+   **EXECUTED 2026-06-13 (un-deferred by the operator; spike-first).**
+   `ADRender/HarfBuzzShaper.swift` dlopens **libharfbuzz alone** — the
+   HB 7+ `hb_font_draw_glyph` draw API yields glyph outlines, so FreeType
+   isn't needed (one fewer dep than D-0003-2 assumed; FreeType
+   struct-mirroring avoided). It runs the SAME HarfBuzz hb-view does
+   (`hb_shape` → glyph ids/advances/offsets; `hb_font_draw_glyph` →
+   cubic/quadratic path), so glyph selection + layout are identical; only
+   the SVG serialisation differs. Exposed as `ad_render_font_text_shaped`
+   (no AppKit/CoreText guard — the **first real Linux render code** in the
+   dylib); wired as the `hb-native` engine in apple-fonts/render.js,
+   ordered before `hb-view` and reachable **without** hb-view installed.
+   **Spike (scripts/shaper-spike.mjs) verdict: GO** — across Latin, mixed,
+   combining marks, mono, RTL Arabic, RTL Hebrew the trimmed raster dims
+   match hb-view exactly and, at 3× supersample, the meaningful-diff
+   (35%-fuzz, excludes anti-aliasing edges) is **0–1.1%** (the residual is
+   thin-stroke sub-pixel rasterisation phase, converging to 0 with more
+   supersampling — proven, not a geometry difference). Gate:
+   shaper-parity.test.js (tolerance: dims ±ε + diff < 2%, lib/tool-gated;
+   Linux CI installs libharfbuzz + hb-view + rsvg + ImageMagick + DejaVu).
+   The `hb-view` host-package requirement is dropped (self-hosting.md):
+   libharfbuzz.so.0 is near-ubiquitous, absent → hb-view spawn → placeholder.
+   **Emoji** (COLR/sbix) stays out of scope — outline-only, as planned.
+   EXPECTED_ABI unchanged (additive export).
+   **Original revisit triggers** (now moot): Linux host friction with
+   hb-view, or P7's single-binary requirement.
 
 ## 7. Risks
 
