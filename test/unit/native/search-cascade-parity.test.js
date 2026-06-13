@@ -65,6 +65,7 @@ const FILTERED = [
   { label: 'minIos=18.0', q: 'view', opts: { minIos: '18.0' }, qs: 'minIos=18.0' },
   { label: 'minIos=16.0', q: 'view', opts: { minIos: '16.0' }, qs: 'minIos=16.0' },
   { label: 'minMacos=14.5', q: 'view', opts: { minMacos: '14.5' }, qs: 'minMacos=14.5' },
+  { label: 'framework=su (synonym)', q: 'view', opts: { framework: 'su' }, qs: 'framework=su' },
 ]
 
 if (existsSync(AD_SERVER)) {
@@ -90,6 +91,11 @@ if (existsSync(AD_SERVER)) {
   // Body index (T4 fallback): a term that appears ONLY in the body, so a query
   // for it misses T1+T2 (title/abstract) and is found via the body tier.
   seed.insertBody(viewId, 'An extended discussion covering frobnicator internals, gizmo lifecycles, and widget composition patterns.')
+  // Framework synonym (slice 4b): swiftui ⇄ su, with a doc under the alias so a
+  // framework=swiftui (or =su) query fans out and finds both via the synonym.
+  seed.upsertRoot('su', 'SU', 'framework', 'seed')
+  seed.upsertDocument({ key: 'su/suview', title: 'SUView', framework: 'su', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Structure', kind: 'struct', language: 'swift', abstractText: 'A view in the su framework.', urlDepth: 2 })
+  try { seed.db.run("INSERT INTO framework_synonyms (canonical, alias) VALUES ('swiftui', 'su')") } catch {}
   seed.close()
   db = new DocsDatabase(dbPath)
   server = Bun.spawn([AD_SERVER, '--db', dbPath, '--port', String(PORT), '--threads', '2'], { stdout: 'ignore', stderr: 'ignore' })
