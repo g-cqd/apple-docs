@@ -303,6 +303,16 @@ than transformers.js (expected: far more).
 > SIDE slice** in parallel with P4; the Linux shaper (and with it the
 > hb-view kill, which requires it) is DEFERRED — hb-view keeps serving
 > Linux until the deferred phase's revisit triggers fire.
+>
+> **Phase 1 (darwin) EXECUTED 2026-06-13 (RFC 0003 §6)**: the `ADRender`
+> module — `ad_render_font_text` + `ad_render_symbol_pdf` exports, native
+> by default behind the `render` token, per-call spawn fallback. Warm p50
+> **163× (font-text) / 1497× (symbol-pdf)** over the `swift script.swift`
+> JIT; parity native==spawn==goldens, byte-identical (darwin-gated).
+> **D-0003-3 settled SAFE**: AppKit symbol-pdf runs crash-free in the
+> dlopen'd dylib on Bun's JS thread, even under concurrency. symbol-png
+> stays spawned. Phases 2–4 (prerender batching, spawn kills, the
+> deferred Linux shaper) unstarted.
 
 The five inline Swift scripts (725 LOC: symbol worker, symbol-pdf,
 symbol-png, font-text, codepoint worker) move into the package as a

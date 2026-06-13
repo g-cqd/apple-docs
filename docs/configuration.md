@@ -250,7 +250,7 @@ and `rfcs/0002-swift-embedder.md` in the repository (not part of this site).
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `APPLE_DOCS_NATIVE` | unset (**on**) | unset/`''`/`1`/`on` → native where available for every default-on module (`fusion`, `archive`, `embed`, `content`); **`off`/`0` → pure JS everywhere (the escape hatch)**; a comma list (`fusion,archive,embed,content`) enables exactly those modules |
+| `APPLE_DOCS_NATIVE` | unset (**on**) | unset/`''`/`1`/`on` → native where available for every default-on module (`fusion`, `archive`, `embed`, `content`, `render`); **`off`/`0` → pure JS everywhere (the escape hatch)**; a comma list (`fusion,archive,embed,content,render`) enables exactly those modules |
 | `APPLE_DOCS_NATIVE_LIB` | unset | Absolute path to a `libAppleDocsCore` build. When set it is the only load candidate — a wrong path falls back to JS with a warning, never to another build |
 
 Checkout installs can fetch the prebuilt library for their host from the

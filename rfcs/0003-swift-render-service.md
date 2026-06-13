@@ -94,7 +94,7 @@ New `ADRender` target in `swift/`, platform-split:
 | --- | --- | --- |
 | D-0003-1 | codepoint-worker in-dylib vs stays-spawned — it links PRIVATE swiftinterfaces (SFSymbolsShared/CoreGlyphsLib); baking private-framework linkage into the SHIPPED dylib raises distribution + OS-version fragility | **stays-spawned**: build-time only, already long-lived/amortized (<0.5 ms/symbol after warmup); revisit only if it ever blocks |
 | D-0003-2 | Linux shaper binding: HarfBuzz+FreeType via runtime dlopen vs SwiftPM systemLibrary | **dlopen** (the proven libzstd pattern): zero build deps, absent libs degrade to the placeholder path with one warning |
-| D-0003-3 | AppKit thread model in-dylib: the scripts own their processes' main threads; FFI calls arrive on Bun's JS thread. CoreText/CoreGraphics are thread-safe; `NSImage`-based PNG rasterization may not be | settle by spike: try CG-only rasterization (CGBitmapContext) for png; if AppKit is truly required, png stays spawned (it is the rarest path) |
+| D-0003-3 | AppKit thread model in-dylib: the scripts own their processes' main threads; FFI calls arrive on Bun's JS thread. CoreText/CoreGraphics are thread-safe; `NSImage`-based PNG rasterization may not be | **SETTLED for symbol-pdf (2026-06-13, §6 phase-1 probe): SAFE.** `NSImage(systemSymbolName:)` + the private `vectorGlyph`/`drawInContext:` + CGContext-PDF path runs crash/hang-free in the dlopen'd dylib on Bun's thread, byte-identical to spawn, even under `Promise.all` concurrency — these are off-screen image/vector ops, not event-loop-bound, so the absent AppKit runloop doesn't matter. **PNG (NSBitmapImageRep rasterization) is a SEPARATE, untested case** — stays spawned until its own probe; CG-only `CGBitmapContext` rewrite preferred if ever pursued |
 | D-0003-4 | FFI result buffers vs socketpair for large payloads | **FFI buffers** (contract v0; copy-then-free; archive proved multi-MB results) — socketpair only if prerender batching measures poorly |
 
 ## 6. Phases (reordered 2026-06-12 — darwin first, Linux deferred)
@@ -104,6 +104,27 @@ New `ADRender` target in `swift/`, platform-split:
    render-native.js behind `render`; byte-clean fixture gates; warm-path
    bench vs spawn (≥5× gate). darwin font-text keeps CoreText — no shaper
    dependency.
+   **EXECUTED 2026-06-13.** Shipped the `ADRender` target
+   (FontText.swift under `#if canImport(CoreText)`, SymbolPdf.swift under
+   `#if canImport(AppKit)`) + `ad_render_font_text`/`ad_render_symbol_pdf`
+   exports (ADCore/RenderExports.swift); render-native.js behind the
+   `render` token (default-on); native-first in apple-fonts/render.js
+   (`renderFontTextSvgCurves`) and apple-symbols/render.js
+   (`renderSymbolToPdfBytes`), per-call null→spawn fallback intact.
+   **D-0003-3 settled SAFE** for symbol-pdf by a standalone probe (6
+   public symbols, sequential + `Promise.all` concurrency: byte-identical
+   to spawn, no host crash/hang on Bun's runloop-less JS thread) — see §5.
+   Parity (test/unit/native/render-parity.test.js, darwin-gated): native
+   == spawn == committed goldens, byte-identical (symbol leg compares the
+   post-processed SVG, not the non-deterministic PDF; font leg skips
+   without corpus fonts so CI exercises the symbol leg). Bench
+   (test/benchmarks/render-bench.js, warm p50): **symbol-pdf 1497×,
+   font-text 163×** — ≥5× gate MET by three orders of magnitude (the
+   ~200 ms `swift script.swift` JIT collapses to a warm in-dylib call).
+   Linux builds the AppKit/CoreText-stripped dylib clean; its exports
+   return `.invalidInput` → JS spawn fallback (hb-view path unchanged).
+   `ad_render_symbol_png` stays spawned (separate untested NSBitmap case,
+   D-0003-3). EXPECTED_ABI unchanged (1). Phases 2–4 unstarted.
 2. **Prerender switch**: sync.js pooled spawns → batched FFI calls;
    throughput + RSS gates on the full catalog; spawn path remains the
    fallback. (Improvement candidate D of RFC 0001 §10 folds in here.)
