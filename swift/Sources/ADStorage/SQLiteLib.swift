@@ -8,6 +8,8 @@
 // `bun:sqlite` implementation serves. The C ABI used here is the stable
 // sqlite3 core + FTS5 is required at runtime (bm25 auxiliary function).
 
+import CSQLiteShim
+
 #if canImport(Darwin)
 import Darwin
 #else
@@ -155,6 +157,14 @@ enum SQLiteLoader {
           "sqlite3_errmsg",
           as: (@convention(c) (OpaquePointer?) -> UnsafePointer<CChar>?).self)
       else { continue }
+      // Disable SQLite memory statistics BEFORE the first open — removes a
+      // global allocator mutex that otherwise serializes every malloc/free
+      // across all reader connections (RFC 0001 P6: profiling showed concurrent
+      // FTS readers ~90% blocked in that one mutex via sqlite3Malloc, not
+      // executing SQL → ~6× throughput at c=16 on an alloc-bound corpus). Via a
+      // C shim because sqlite3_config is variadic; benign SQLITE_MISUSE if
+      // SQLite is already initialized (e.g. the dylib loaded into a Bun process).
+      _ = ad_sqlite_config_memstatus_off(dlsym(handle, "sqlite3_config"))
       return SQLiteLib(
         openV2: openV2, closeV2: closeV2, prepareV2: prepareV2, finalize: finalize, step: step,
         reset: reset, clearBindings: clearBindings, bindParameterIndex: bindParameterIndex,

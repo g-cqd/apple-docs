@@ -402,5 +402,105 @@ the fork is "stays Bun".
   switch were added for the head-to-head then removed.)
 - `scripts/p6-sweep.mjs` (c-sweep, Swift vs Bun), `p6-loops.mjs` (ELG sweep),
   `p6-alloc.mjs` (match-volume + thread sweeps), `p6-malloc.mjs` (allocator
-  attribution), `p6-serving.mjs` (classic-vs-async head-to-head). All
-  `ab`-driven on a seeded 480-doc corpus.
+  attribution). All `ab`-driven on a seeded 480-doc corpus.
+
+---
+
+## Fourth slice — the real bottleneck: a SQLite global mutex (one-line fix) — EXECUTED 2026-06-13
+
+### Scope
+
+The operator asked to design a custom task scheduler / dedicated reader-thread
+pool (the records-candidate above) to break the ~390 req/s c=16 ceiling. Plan
+mode + research (SE-0417 `TaskExecutor`, `withTaskExecutorPreference`,
+`NIOThreadPool` internals, Apple-Silicon QoS via `pthread_set_qos_class_self_np`,
+official Apple docs via the apple-docs MCP) produced a measure-first plan: cheap
+probes BEFORE building. The probes found the actual cause, which is NOT a
+scheduling problem — so the scheduler was never built.
+
+### The hunt (measure-first, each a GO/NO-GO)
+
+- **Phase A — confound check.** Deprioritizing the `ab` client (`taskpolicy -b`)
+  did NOT change the gap (0.33→0.34) → not the same-host client; it's
+  server-side. `threads=4` (449) > `threads=8` (366) → thread oversubscription
+  is involved.
+- **Phase B — QoS probe (`--offload gcd`).** Running the cascade on a
+  `.userInitiated` `DispatchQueue` (P-cores) instead of NIO's default-QoS pool
+  did NOT lift the ceiling (rawscan c16 354 vs 383). **QoS NO-GO** — and since a
+  custom pool at high QoS couldn't beat GCD, the scheduler was moot.
+- **The profiler (`/usr/bin/sample` under c=16 load) — the breakthrough.** The 8
+  reader threads were **~90% blocked in `__psynch_mutexwait`** (2602 samples) and
+  only **72** in `sqlite3VdbeExec`. Every blocked stack went through
+  `sqlite3Malloc` / `dbMallocRawFinish` / `sqlite3VdbeMemGrow`: **SQLite's global
+  memory-statistics allocator mutex.** With `SQLITE_CONFIG_MEMSTATUS` ON (the
+  default), every malloc/free takes a global mutex to update counters →
+  alloc-heavy FTS queries serialize all reader connections on one lock. Bun
+  doesn't hit it because `bun:sqlite` disables memstatus.
+
+### The fix
+
+`sqlite3_config(SQLITE_CONFIG_MEMSTATUS, 0)` once at loader init, before the
+first open (`ADStorage/SQLiteLib.swift`). `sqlite3_config` is variadic and
+cannot be called correctly through a fixed `@convention(c)` pointer on arm64
+(the trailing arg must go on the stack), so a 6-line C shim (`CSQLiteShim`)
+calls the dlsym'd pointer with the right ABI. No custom scheduler, no
+`@unchecked`, parity unchanged.
+
+### Results — `ab -k`, the SQLite-fix is decisive
+
+**Synthetic 480-doc corpus (alloc-bound — the FTS index fits in cache, so the
+cost is allocation):**
+
+| stage @ c=16 | before (memstatus ON) | after (OFF) |
+| --- | --- | --- |
+| `/search-rawscan` | 383 (0.45× scaling) | **2324 (2.51×)** |
+| `/search` (full) | 379 | **2263 (3.50×)** |
+
+Swift `/search` went from degrading-under-load to **scaling positively**, ~6× at
+c=16, and now ~**2× Bun** (Bun 1149). The P6 inversion win — in-process native
+serving beats the Bun worker pool — achieved, from one config call.
+
+**Real 4GB corpus (page-cache/scan-bound — ~18 ms/query):**
+
+| `/search` @ c=16 | memstatus ON | OFF (fix) | Bun |
+| --- | --- | --- | --- |
+| req/s | 27 | **51** | 58 |
+
+The fix still **~2×'s** throughput (27→51) and **stops the degradation**, bringing
+Swift to **parity with Bun (51 vs 58)**. The 6× synthetic win shrinks to 2×
+because the real corpus exposes a **SECOND global mutex** (below) that caps both
+runtimes.
+
+### The second mutex (documented; deferred — it caps Bun too)
+
+On the real corpus, with memstatus OFF, the threads are STILL ~90% in
+`__psynch_mutexwait` — but now via **`pcache1Fetch` / `getPageNormal` /
+`pcache1Unpin`**: SQLite's **pcache1 page-cache group mutex**. It is shared
+across connections when libsqlite3 is built with `SQLITE_ENABLE_MEMORY_MANAGEMENT`
+(Homebrew's build is; without it each connection gets a private cache group and
+no contention). The tiny synthetic corpus stayed fully cached so never showed it;
+the 4GB corpus churns pages constantly. **Deferred** because it caps Bun (~58)
+too — it is not a Swift-vs-Bun gap, and Swift already reaches parity. **Future
+lever:** dlopen macOS's *system* libsqlite3 (likely built without
+memory-management → per-connection cache → no group mutex) instead of Homebrew's
+— but the candidate order prefers Homebrew for its FTS5 guarantee, so this needs
+an FTS5-presence check on the system lib first (portability). Tracked as a
+P6/P7 storage optimization.
+
+### Verdict — custom scheduler OBSOLETE; the ceiling was a SQLite config
+
+The entire "build a custom task scheduler" plan is **unnecessary**: the ~390
+ceiling was never a Swift scheduling/QoS problem — it was SQLite's default global
+allocator mutex. One `sqlite3_config` call makes Swift scale positively and beat
+(synthetic) or match (real corpus) Bun. **TSan-clean** under 800 concurrent
+searches; parity 10/10. The probe scaffolding (`--offload`, `/search-rawscan|
+-decode`, `rawScanCount`, the env toggle, the one-off probe scripts) was removed;
+`ADStorage` keeps the fix + `CSQLiteShim`. `/search` stays inert to production.
+
+### Artifacts (fourth slice)
+
+- `swift/Sources/CSQLiteShim/` (the variadic-ABI shim) +
+  `ADStorage/SQLiteLib.swift` (the `memstatus_off` call) — the keeper.
+- `scripts/p6-sweep.mjs` — the surviving Swift-vs-Bun harness.
+- Plan: `~/.claude/plans/bubbly-cuddling-dream.md` (the custom-scheduler plan,
+  obsoleted by this finding).

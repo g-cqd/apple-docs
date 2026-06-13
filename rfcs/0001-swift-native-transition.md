@@ -272,7 +272,7 @@ reader-pool→native-actors move, and the *kills* (`bun:sqlite`, the `Worker`
 pool — unkillable while Bun is runtime + writer). Detail:
 [p5/records.md](0001-swift-native-transition/p5/records.md).
 
-### P6 — Servers (fully custom, in-house on SwiftNIO) — **host GO + cascade byte-exact; search serving-win blocked on a cascade-work concurrency fix (fork open)** → [p6 records](0001-swift-native-transition/p6/records.md)
+### P6 — Servers (fully custom, in-house on SwiftNIO) — **host GO + cascade byte-exact + serving-win achieved (Swift ≈2× Bun synthetic / ≈ Bun real corpus, via a 1-line SQLite mutex fix)** → [p6 records](0001-swift-native-transition/p6/records.md)
 > **D1 settled 2026-06-12 (operator decision)**: no Vapor — the spike is
 > cancelled. The web + MCP HTTP layer is built from scratch directly on
 > SwiftNIO (+ swift-http-types/swift-nio-ssl as needed), keeping the
@@ -305,10 +305,21 @@ healthz 78k, ELG 2–10 identical, classic ≈ async) and OFF the nano allocator
 (`MallocNanoZone=0` no help) and SQLite `-shm` (Bun shares the file fine): the
 residual is Swift's String/ARC-heavy decode+rerank+JSON being **less
 concurrency-efficient than Bun's per-isolate runtime** (negative thread
-scaling). **Fork open**: profile + alloc/ARC-light rewrite ("make Swift win")
-vs search serving stays Bun with the byte-perfect cascade banked for P7. The
-host, the in-process cascade, and the bench harness ship inert (not wired into
-cli.js/ops/Caddy).
+scaling).
+
+**Fourth slice (the real bottleneck) EXECUTED 2026-06-13**: the operator asked
+for a custom task scheduler; measure-first probes + a `sample` profiler instead
+revealed the ceiling was **SQLite's global `SQLITE_CONFIG_MEMSTATUS` allocator
+mutex** (8 reader threads ~90% blocked in `__psynch_mutexwait` via
+`sqlite3Malloc`, not the cascade, not QoS, not the scheduler). One
+`sqlite3_config(MEMSTATUS, 0)` at loader init (a 6-line `CSQLiteShim` for the
+variadic ABI) makes Swift `/search` **scale positively**: c=16 **383→2263 req/s**
+(synthetic, ~2× Bun) / **27→51** (real 4GB corpus, ≈ Bun 58). **The
+custom-scheduler plan is obsolete** — the serving-win is a SQLite config, not a
+concurrency rewrite. A second global mutex (`pcache1` group, from Homebrew's
+memory-management build) caps both runtimes on the real corpus — deferred
+(future lever: system libsqlite3). TSan-clean, parity 10/10. The host + cascade
+ship inert (not wired into cli.js/ops/Caddy).
 
 Implementation (remaining): web server (routes are already per-file handlers
 — port them 1:1; benchmark throughput/latency on our recorded burst loads vs
@@ -553,3 +564,21 @@ land; each phase's completion gets a dated entry here.
   question a **clean load-generator host** would settle. Fork (open): clean-host
   re-measure vs search serving stays Bun (cascade + serving proven good, banked
   for P7). Detail: [p6/records.md](0001-swift-native-transition/p6/records.md).
+- **2026-06-13 — P6 fourth slice (the real bottleneck: a SQLite global mutex —
+  one-line fix; custom-scheduler plan OBSOLETED)**: the operator asked to design
+  a custom task scheduler / dedicated reader pool. Plan-mode research (SE-0417
+  `TaskExecutor`, QoS, NIOThreadPool, apple-docs MCP for official docs) +
+  measure-first probes found the cause is **not scheduling**. A `sample`
+  profiler under c=16 load showed the 8 reader threads **~90% blocked in
+  `__psynch_mutexwait` via `sqlite3Malloc`** — SQLite's global
+  `SQLITE_CONFIG_MEMSTATUS` allocator mutex serializing every malloc/free across
+  connections (Bun disables it). Fix: `sqlite3_config(SQLITE_CONFIG_MEMSTATUS, 0)`
+  once at loader init (via a 6-line `CSQLiteShim` for the variadic ABI). Result:
+  Swift `/search` c=16 **383 → 2263 req/s** (synthetic, ~2× Bun) and **27 → 51**
+  (real 4GB corpus, ≈ Bun 58) — scales positively instead of degrading,
+  TSan-clean, parity 10/10. The **custom scheduler is unnecessary** — the ceiling
+  was a SQLite config, not Swift concurrency. A SECOND global mutex (`pcache1`
+  page-cache group, from Homebrew's `SQLITE_ENABLE_MEMORY_MANAGEMENT` build) caps
+  both runtimes (~50–58) on the real corpus — deferred (caps Bun too; future
+  lever = system libsqlite3, FTS5-portability caveat). Probe scaffolding removed.
+  Detail: [p6/records.md](0001-swift-native-transition/p6/records.md).
