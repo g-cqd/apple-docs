@@ -4,11 +4,13 @@
  *
  * The shaper runs the SAME HarfBuzz hb-view does, so glyph selection +
  * advances are identical; only the SVG serialisation differs. The gate is
- * therefore a TOLERANCE one (not byte-identical): rasterise both at 3×
- * supersample (washes out sub-pixel rasterisation phase), trim to the inked
- * glyphs, and assert the trimmed dimensions match and <2% of pixels differ
- * beyond a 35% fuzz (which excludes anti-aliasing edge noise — see
- * scripts/shaper-spike.mjs, the spike that settled D-0003-2).
+ * therefore a TOLERANCE one (not byte-identical): rasterise both at 5×
+ * supersample (washes out sub-pixel rasterisation phase — 3× left thin
+ * strokes at small sizes right at the edge across rasteriser versions),
+ * trim to the inked glyphs, and assert the trimmed dimensions match and
+ * <2% of pixels differ beyond a 35% fuzz (which excludes anti-aliasing
+ * edge noise — see scripts/shaper-spike.mjs, the spike that settled
+ * D-0003-2; at 5× every matrix case sits at ~0%).
  *
  * Gated on the dylib + hb-view + rsvg-convert + magick + a test font all
  * being present. Apple's fonts aren't redistributable, so the corpus path
@@ -55,7 +57,7 @@ function canon(svg, tag) {
   const sp = join(dir, `${tag}.svg`)
   const pp = join(dir, `${tag}.png`)
   writeFileSync(sp, svg)
-  if (!sh(`rsvg-convert -f png --zoom 3 "${sp}" | convert - -trim +repage -background white -flatten "${pp}"`).ok) return null
+  if (!sh(`rsvg-convert -f png --zoom 5 "${sp}" | convert - -trim +repage -background white -flatten "${pp}"`).ok) return null
   const id = sh(`identify -format '%w %h' "${pp}"`)
   const [w, h] = id.out.trim().split(' ').map(Number)
   return { pp, w, h }
@@ -102,10 +104,12 @@ describe.skipIf(!nativeAvailable || !tools || !FONT)('shaper-parity (native Harf
       expect(a).not.toBeNull()
       expect(b).not.toBeNull()
       // Same glyph layout (trimmed bbox within a few supersampled px)...
-      expect(Math.abs(a.w - b.w)).toBeLessThanOrEqual(6)
-      expect(Math.abs(a.h - b.h)).toBeLessThanOrEqual(6)
+      expect(Math.abs(a.w - b.w)).toBeLessThanOrEqual(10)
+      expect(Math.abs(a.h - b.h)).toBeLessThanOrEqual(10)
       // ...and visually equivalent (only sub-AA edges differ).
-      expect(diffFraction(a, b)).toBeLessThan(0.02)
+      const frac = diffFraction(a, b)
+      console.log(`  shaper-parity "${c.text}" @${c.size}: dims ${a.w}x${a.h} vs ${b.w}x${b.h}, meaningful-diff ${(frac * 100).toFixed(2)}%`)
+      expect(frac).toBeLessThan(0.02)
     })
   }
 })

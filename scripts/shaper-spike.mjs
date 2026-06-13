@@ -50,11 +50,12 @@ function toCanon(svg, tag) {
   const svgPath = join(dir, `${tag}.svg`)
   const pngPath = join(dir, `${tag}.png`)
   writeFileSync(svgPath, svg)
-  // 3× supersample: the two engines anchor glyphs at different fractional
-  // viewBox origins, so a 1× raster compares them at different sub-pixel
-  // phases (AA-edge noise). Supersampling washes the phase out — what's
-  // left is genuine geometry difference.
-  const r = sh(`rsvg-convert -f png --zoom 3 "${svgPath}" | magick - -trim +repage -background white -flatten "${pngPath}"`)
+  // 5× supersample: the two engines anchor glyphs at different fractional
+  // viewBox origins, so a low-res raster compares them at different
+  // sub-pixel phases (AA-edge noise). Supersampling washes the phase out —
+  // what's left is genuine geometry difference (3× left thin strokes at
+  // small sizes near the edge across rasteriser versions; 5× → ~0%).
+  const r = sh(`rsvg-convert -f png --zoom 5 "${svgPath}" | magick - -trim +repage -background white -flatten "${pngPath}"`)
   if (!r.ok) return null
   const id = sh(`magick identify -format '%w %h' "${pngPath}"`)
   const [w, h] = id.out.trim().split(' ').map(Number)
@@ -102,7 +103,7 @@ for (const c of CASES) {
   const a = toCanon(native, `${c.label}-n`)
   const b = toCanon(hv, `${c.label}-h`)
   if (!a || !b) { console.log(`  ${c.label.padEnd(12)} — rasterise failed`); failed++; continue }
-  const dimMatch = Math.abs(a.w - b.w) <= 6 && Math.abs(a.h - b.h) <= 6 // 3× supersample → ±6px
+  const dimMatch = Math.abs(a.w - b.w) <= 10 && Math.abs(a.h - b.h) <= 10 // 5× supersample → ±10px
   const { diffFrac, rmse } = compare(a, b)
   worst = Math.max(worst, diffFrac)
   const ok = dimMatch && diffFrac < THRESHOLD
