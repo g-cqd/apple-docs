@@ -13,10 +13,42 @@ public struct SearchParams: Sendable {
   public var query: String
   public var limit: Int
   public var offset: Int
-  public init(query: String, limit: Int = 100, offset: Int = 0) {
+  public var framework: String?
+  public var source: String?
+  public var kind: String?
+  public var language: String?
+  public var platform: String?
+  public var minIos: String?
+  public var minMacos: String?
+  public var minWatchos: String?
+  public var minTvos: String?
+  public var minVisionos: String?
+  public var year: Int?
+  public var track: String?
+  public var deprecated: String?
+  public init(
+    query: String, limit: Int = 100, offset: Int = 0, framework: String? = nil,
+    source: String? = nil, kind: String? = nil, language: String? = nil, platform: String? = nil,
+    minIos: String? = nil, minMacos: String? = nil, minWatchos: String? = nil,
+    minTvos: String? = nil, minVisionos: String? = nil, year: Int? = nil, track: String? = nil,
+    deprecated: String? = nil
+  ) {
     self.query = query
     self.limit = limit
     self.offset = offset
+    self.framework = framework
+    self.source = source
+    self.kind = kind
+    self.language = language
+    self.platform = platform
+    self.minIos = minIos
+    self.minMacos = minMacos
+    self.minWatchos = minWatchos
+    self.minTvos = minTvos
+    self.minVisionos = minVisionos
+    self.year = year
+    self.track = track
+    self.deprecated = deprecated
   }
 }
 
@@ -28,6 +60,7 @@ public struct PreparedSearch: Sendable {
   public let trigramParams: SearchPagesParams
   public let limit: Int
   public let offset: Int
+  let activeFilters: ActiveFilters  // JS-side re-check (internal — used only by assemble)
 }
 
 public enum Cascade {
@@ -44,16 +77,41 @@ public enum Cascade {
     let limit = max(params.limit, 1)
     let offset = max(params.offset, 0)
     let requestedWindow = limit + offset
-    // Phase 1: single query, no JS post-filters → searchLimit = requestedWindow,
-    // no framework / source / kind / platform filters.
+
+    // Normalize the filter bag (search.js + filters.js + buildFilterParams).
+    let framework = nonEmptyValue(params.framework)
+    let kind = nonEmptyValue(params.kind)
+    let language = nonEmptyValue(params.language)
+    let sources = Filters.normalizeSourceList(params.source)
+    let sqlSourceType = sources.count == 1 ? sources[0] : nil
+    let deprecated = Filters.normalizeDeprecatedFilter(params.deprecated)
+    let platformFilters = Filters.buildPlatformFilters(
+      platform: params.platform, minIos: nonEmptyValue(params.minIos),
+      minMacos: nonEmptyValue(params.minMacos), minWatchos: nonEmptyValue(params.minWatchos),
+      minTvos: nonEmptyValue(params.minTvos), minVisionos: nonEmptyValue(params.minVisionos))
+    // Only `kind` + platform-version stay JS-side → 3× over-fetch when active.
+    let hasJsPostFilters = kind != nil || platformFilters.any
+    let searchLimit = hasJsPostFilters ? min(max(requestedWindow * 3, 60), 300) : requestedWindow
+
+    // SQL params: framework / source / kind / language / year / track /
+    // deprecated push down; the `$min_*` stay nil — platform filtering is
+    // entirely JS-side (matchesSearchFilters), matching search.js's filterOpts.
     let base = SearchPagesParams(
-      query: FtsQuery.build(q), raw: q, limit: Int64(requestedWindow), framework: nil,
-      sourceType: nil, sourcesJson: nil, kind: nil, language: nil, year: nil, trackLike: nil,
-      deprecatedMode: "include", minIos: nil, minMacos: nil, minWatchos: nil, minTvos: nil,
+      query: FtsQuery.build(q), raw: q, limit: Int64(searchLimit), framework: framework,
+      sourceType: sqlSourceType, sourcesJson: Filters.sourcesJson(sources), kind: kind,
+      language: language, year: params.year.map(Int64.init), trackLike: Filters.trackLike(params.track),
+      deprecatedMode: deprecated, minIos: nil, minMacos: nil, minWatchos: nil, minTvos: nil,
       minVisionos: nil)
     var trigram = base
     trigram.query = FtsQuery.trigram(q)
-    return PreparedSearch(q: q, ftsParams: base, trigramParams: trigram, limit: limit, offset: offset)
+
+    let active = ActiveFilters(
+      frameworks: [framework], sourceTypes: sources.isEmpty ? nil : Set(sources), kind: kind,
+      language: language, platformFilters: platformFilters, year: params.year, track: params.track,
+      deprecated: deprecated)
+    return PreparedSearch(
+      q: q, ftsParams: base, trigramParams: trigram, limit: limit, offset: offset,
+      activeFilters: active)
   }
 
   /// Runs the cascade on `conn` SEQUENTIALLY and returns the JSON envelope
@@ -78,13 +136,18 @@ public enum Cascade {
     let limit = p.limit
     let offset = p.offset
 
+    let filters = p.activeFilters
     var results: [ResultHit] = []
     var seen: Set<String> = []
+    // addResults (search.js:183): JS-side filter THEN dedup-by-path keep-first.
     func addRows(_ rows: [SearchRow], quality: (SearchRow) -> String) {
-      for row in rows where seen.insert(row.path).inserted {
-        var hit = ResultHit(row, matchQuality: quality(row))
-        hit.origIndex = results.count
-        results.append(hit)
+      for row in rows {
+        if !Filters.matches(row, filters) { continue }
+        if seen.insert(row.path).inserted {
+          var hit = ResultHit(row, matchQuality: quality(row))
+          hit.origIndex = results.count
+          results.append(hit)
+        }
       }
     }
     addRows(titleExact) { _ in "exact" }
@@ -104,7 +167,9 @@ public enum Cascade {
         if !ids.isEmpty {
           let records = conn.searchRecordsByIds(ids)
           for id in ids {
-            guard let record = records[id], seen.insert(record.path).inserted else { continue }
+            guard let record = records[id], Filters.matches(record, filters),
+              seen.insert(record.path).inserted
+            else { continue }
             var hit = ResultHit(record, matchQuality: "fuzzy")
             hit.origIndex = results.count
             results.append(hit)
@@ -237,5 +302,11 @@ public enum Cascade {
   /// Removes every `"` (JS `.replace(/"/g, '')`) — for the R2 OR query terms.
   private static func stripQuotes(_ s: String) -> String {
     String(s.unicodeScalars.filter { $0 != "\"" })
+  }
+
+  /// nil for nil/empty (JS `value ?? null` where '' is falsy in the filter bag).
+  private static func nonEmptyValue(_ value: String?) -> String? {
+    guard let value, !value.isEmpty else { return nil }
+    return value
   }
 }
