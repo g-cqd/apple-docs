@@ -535,6 +535,12 @@ land; each phase's completion gets a dated entry here.
   workers and scales). Residual = Swift's String/ARC-heavy decode+rerank+JSON
   being **less concurrency-efficient than Bun's per-isolate runtime** (needs
   Instruments to pin; `ab`-on-same-host is a measurement confound, but Bun
-  under the same client scales). Fork: profile + alloc/ARC-light rewrite
-  ("make Swift win") vs search serving stays Bun, cascade banked for P7.
-  Detail: [p6/records.md](0001-swift-native-transition/p6/records.md).
+  under the same client scales). A serving-model head-to-head (identical
+  sequential work) then found the classic `@unchecked` handler **no faster than
+  the safe async model** (c=1..16 statistically identical, async marginally
+  ahead) → the classic handler + `--serving` switch were removed; `ad-server`
+  carries **no `@unchecked`** beyond the contained `StorageConnection`. Fork
+  (open): profile + alloc/ARC-light rewrite ("make Swift win") vs search
+  serving stays Bun, cascade banked for P7. Operator chose to **pin the cause
+  first** (cheap profiling probe). Detail:
+  [p6/records.md](0001-swift-native-transition/p6/records.md).
