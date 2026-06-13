@@ -313,6 +313,16 @@ than transformers.js (expected: far more).
 > dlopen'd dylib on Bun's JS thread, even under concurrency. symbol-png
 > stays spawned. Phases 2–4 (prerender batching, spawn kills, the
 > deferred Linux shaper) unstarted.
+>
+> **Phase 2 (darwin prerender) EXECUTED 2026-06-13 (RFC 0003 §6)**:
+> `ad_render_symbol_pdf_batch` (concurrentPerform across cores) replaces
+> the 4–16 `swift` worker pool — **2.0× throughput, byte-identical, RSS
+> bounded** (a single autoreleasepool-drained process); the pool stays the
+> fallback. **symbol-png also ported** (native-first). D-0003-3 extended:
+> concurrent in-dylib AppKit + NSBitmap PNG both settled SAFE by probe.
+> Now every *darwin* render spawn lives in libAppleDocsCore except the
+> codepoint worker (D-0003-1). Phase 3 (spawn-script kills) waits a
+> release cycle; phase 4 (Linux shaper) stays deferred.
 
 The five inline Swift scripts (725 LOC: symbol worker, symbol-pdf,
 symbol-png, font-text, codepoint worker) move into the package as a
