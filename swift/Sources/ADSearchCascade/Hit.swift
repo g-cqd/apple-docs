@@ -25,6 +25,11 @@ struct ResultHit {
   var score: Double = 0
   var origIndex: Int = 0  // insertion order, for a stable total-order sort
 
+  // Enrichment (phase 2) — nil = not enriched (omitted from the projection,
+  // matching JS where a thrown getRelatedDocCounts skips the whole block).
+  var snippet: String?
+  var relatedCount: Int?
+
   /// formatResult(row, matchQuality).
   init(_ row: SearchRow, matchQuality: String) {
     path = row.path

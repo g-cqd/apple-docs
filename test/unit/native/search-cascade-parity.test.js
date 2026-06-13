@@ -35,8 +35,11 @@ const DOCS = [
   { key: 'hig/views', title: 'Views', framework: 'hig', sourceType: 'hig', role: 'article', roleHeading: 'Article', kind: 'article', language: 'both', abstractText: 'Design guidance for views.', urlDepth: 2 },
   { key: 'samples/view-sample', title: 'View sample code', framework: 'swiftui', sourceType: 'sample-code', role: 'sample', roleHeading: 'Sample Code', kind: 'sample', language: 'swift', abstractText: 'A sample showing a view.', urlDepth: 2 },
   { key: 'swiftui/release-notes/2024', title: 'SwiftUI release notes', framework: 'swiftui', sourceType: 'apple-docc', role: 'article', roleHeading: 'Article', kind: 'article', language: 'swift', abstractText: 'What changed in views this year.', urlDepth: 3, isReleaseNotes: true },
+  // Long abstract with the query term mid-text → exercises the snippet window +
+  // both `...` ellipses (the term is not at index 0 and the text exceeds 220).
+  { key: 'swiftui/layout-guide', title: 'SwiftUI Layout', framework: 'swiftui', sourceType: 'apple-docc', role: 'article', roleHeading: 'Article', kind: 'article', language: 'swift', abstractText: 'Build adaptive, data-driven interfaces that fit every Apple platform and device size class, and learn how to compose a navigation hierarchy that moves between screens while preserving scroll position, deep links, and accessibility focus across the entire user journey from launch through to a detail screen.', urlDepth: 2 },
 ]
-const QUERIES = ['view', 'View', 'ViewBuilder', 'building views', 'uiview', 'guide', 'design', 'nonexistentxyz', 'AVAudioSession.RouteSharingPolicy']
+const QUERIES = ['view', 'View', 'ViewBuilder', 'building views', 'uiview', 'guide', 'design', 'nonexistentxyz', 'AVAudioSession.RouteSharingPolicy', 'navigation']
 
 if (existsSync(AD_SERVER)) {
   dir = mkdtempSync(join(tmpdir(), 'cascade-parity-'))
@@ -46,6 +49,18 @@ if (existsSync(AD_SERVER)) {
   seed.upsertRoot('uikit', 'UIKit', 'framework', 'seed')
   seed.upsertRoot('hig', 'Human Interface Guidelines', 'guide', 'seed')
   for (const d of DOCS) seed.upsertDocument(d)
+  // Enrichment fixtures (RFC 0001 P6 slice 1): sections (one plain TEXT, one
+  // zstd-compacted BLOB → exercises the section codec + the decompress binding)
+  // + relationships (relatedCount > 0). Both the Swift and JS paths read these.
+  const viewId = seed.db.query('SELECT id FROM documents WHERE key = ?').get('swiftui/view').id
+  seed.replaceDocumentSections(viewId, [
+    { sectionKind: 'discussion', heading: 'Overview', contentText: 'A view is the fundamental building block of a SwiftUI interface; you compose small views into a navigation hierarchy and layout that adapts to every device.', sortOrder: 0 },
+    { sectionKind: 'discussion', heading: 'Storage', contentText: Buffer.from(Bun.zstdCompressSync(Buffer.from('This discussion section is stored zstd-compacted to exercise the decompress binding from the Swift section codec, end to end.'))), sortOrder: 1 },
+  ])
+  seed.replaceDocumentRelationships('swiftui/view', [
+    { toKey: 'swiftui/viewbuilder', relationType: 'seeAlso' },
+    { toKey: 'swiftui/contentview', relationType: 'conformsTo' },
+  ])
   seed.close()
   db = new DocsDatabase(dbPath)
   server = Bun.spawn([AD_SERVER, '--db', dbPath, '--port', String(PORT), '--threads', '2'], { stdout: 'ignore', stderr: 'ignore' })
@@ -73,7 +88,6 @@ describe.skipIf(!existsSync(AD_SERVER))('search-cascade parity (Swift /search ==
       const ctx = { db, logger: { debug() {}, warn() {}, info() {} } }
       const result = await search({ query: q, limit: 10, offset: 0, noDeep: true, fuzzy: false }, ctx)
       const projected = projectSearchResult(result, { webPaths: false })
-      for (const r of projected.results) { delete r.snippet; delete r.relatedCount }
       const expected = JSON.stringify(projected)
       const swift = await (await fetch(`http://127.0.0.1:${PORT}/search?q=${encodeURIComponent(q)}&limit=10`)).text()
       expect(swift).toBe(expected)

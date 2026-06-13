@@ -16,6 +16,8 @@ final class Connection: @unchecked Sendable {
   let db: OpaquePointer
   let hasTrigram: Bool
   let hasBodyFts: Bool
+  let hasSections: Bool
+  let hasRelationships: Bool
   private var cache: [String: PreparedStatement] = [:]
 
   init?(path: String) {
@@ -52,6 +54,8 @@ final class Connection: @unchecked Sendable {
 
     self.hasTrigram = Connection.tableExists(lib, handle, "documents_trigram")
     self.hasBodyFts = Connection.tableExists(lib, handle, "documents_body_fts")
+    self.hasSections = Connection.tableExists(lib, handle, "document_sections")
+    self.hasRelationships = Connection.tableExists(lib, handle, "document_relationships")
   }
 
   deinit {
@@ -65,6 +69,13 @@ final class Connection: @unchecked Sendable {
     guard let prepared = PreparedStatement(lib: lib, db: db, sql: sql) else { return nil }
     cache[sql] = prepared
     return prepared
+  }
+
+  /// Prepares a statement WITHOUT caching (finalized when the result is
+  /// released). For variable-arity `IN (?,?,…)` enrichment queries whose SQL
+  /// text differs per result-count — caching them would churn the per-SQL cache.
+  func prepareUncached(_ sql: String) -> PreparedStatement? {
+    PreparedStatement(lib: lib, db: db, sql: sql)
   }
 
   // MARK: - boot helpers

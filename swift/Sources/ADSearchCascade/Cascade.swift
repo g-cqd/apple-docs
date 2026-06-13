@@ -61,8 +61,8 @@ public enum Cascade {
   public static func search(_ conn: StorageConnection, _ params: SearchParams) -> [UInt8] {
     guard let p = prepare(params) else { return emptyEnvelope }
     return assemble(
-      p, titleExact: conn.titleExactRows(p.ftsParams) ?? [], fts: conn.ftsRows(p.ftsParams) ?? [],
-      trigram: conn.trigramRows(p.trigramParams) ?? [])
+      p, conn: conn, titleExact: conn.titleExactRows(p.ftsParams) ?? [],
+      fts: conn.ftsRows(p.ftsParams) ?? [], trigram: conn.trigramRows(p.trigramParams) ?? [])
   }
 
   /// Merges the three tiers (title-exact → FTS → trigram, dedup-by-path
@@ -70,7 +70,8 @@ public enum Cascade {
   /// identical regardless of how the tiers were executed, so byte-parity is
   /// independent of the parallel/sequential choice.
   public static func assemble(
-    _ p: PreparedSearch, titleExact: [SearchRow], fts: [SearchRow], trigram: [SearchRow]
+    _ p: PreparedSearch, conn: StorageConnection? = nil, titleExact: [SearchRow], fts: [SearchRow],
+    trigram: [SearchRow]
   ) -> [UInt8] {
     let q = p.q
     let limit = p.limit
@@ -98,10 +99,28 @@ public enum Cascade {
     let total = results.count
     let start = min(offset, total)
     let end = min(offset + limit, total)
-    let sliced = Array(results[start..<end])
+    var sliced = Array(results[start..<end])
     let hasMore = total >= offset + limit && sliced.count == limit
 
+    if let conn { enrich(conn, &sliced, query: q) }
     return projectEnvelope(query: q, total: total, hasMore: hasMore, hits: sliced)
+  }
+
+  /// Snippet + relatedCount enrichment of the final page (mirrors
+  /// src/commands/search.js:309-326). Best-effort: a missing
+  /// document_relationships table → getRelatedDocCounts returns nil → the whole
+  /// block is skipped, exactly like the JS try/catch (neither field emitted).
+  private static func enrich(_ conn: StorageConnection, _ hits: inout [ResultHit], query: String) {
+    guard !hits.isEmpty else { return }
+    let keys = hits.map(\.path)
+    let snippetData = conn.getDocumentSnippetData(keys)
+    guard let counts = conn.getRelatedDocCounts(keys) else { return }
+    for i in hits.indices {
+      if let data = snippetData[hits[i].path] {
+        hits[i].snippet = Snippet.render(data, query: query)
+      }
+      hits[i].relatedCount = counts[hits[i].path] ?? 0
+    }
   }
 
   // MARK: - projection (projectSearchResult + projectSearchHit, webPaths:false)
@@ -134,6 +153,8 @@ public enum Cascade {
     w.key("declaration"); w.stringOrNull(h.declaration)
     w.key("platforms"); w.rawOrEmptyArray(h.platforms)  // raw platforms_json verbatim, or []
     w.key("language"); w.stringOrNull(h.language)
+    if let snippet = h.snippet { w.key("snippet"); w.string(snippet) }
+    if let relatedCount = h.relatedCount { w.key("relatedCount"); w.int(relatedCount) }
     w.key("confidence"); w.string(publicConfidence(h.matchQuality))
     if h.isDeprecated { w.key("isDeprecated"); w.raw("true") }
     if h.isBeta { w.key("isBeta"); w.raw("true") }

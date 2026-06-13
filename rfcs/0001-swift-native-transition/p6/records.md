@@ -504,3 +504,36 @@ searches; parity 10/10. The probe scaffolding (`--offload`, `/search-rawscan|
 - `scripts/p6-sweep.mjs` — the surviving Swift-vs-Bun harness.
 - Plan: `~/.claude/plans/bubbly-cuddling-dream.md` (the custom-scheduler plan,
   obsoleted by this finding).
+
+---
+
+## Fifth slice — enrichment (snippet + relatedCount) → FULL byte-parity — EXECUTED 2026-06-13
+
+First slice of "complete the Swift `/search`" (the remaining JS `search()` gap).
+Ported the hot-path enrichment (`src/commands/search.js:309-326`): after the
+page slice, `getDocumentSnippetData` + `getRelatedDocCounts` (batched, ported to
+`ADStorage/Enrichment.swift`) feed `renderSnippet` (`ADSearchCascade/Snippet.swift`),
+populating `snippet` + `relatedCount` on each hit. The parity test now compares
+**WITHOUT stripping** those fields — **byte-identical (11/11)**.
+
+Reuse + correctness:
+- **`renderPlainText` reused** — `ADContent.PlainText.render` (the P4-validated
+  span renderer) via a one-buffer/spans bridge; no re-port.
+- **Section codec** (`src/storage/section-codec.js`): type-directed — a TEXT
+  cell passes through, a BLOB with the 4-byte zstd magic is inflated via the new
+  **`ADArchive` decompress binding** (`ZSTD_decompress` + `ZSTD_getFrameContentSize`,
+  `ZstdDecoder`). Validated end-to-end (a zstd-compacted seed section round-trips
+  identically on both sides).
+- **Snippet windowing** replicates JS string semantics exactly — UTF-16 indices
+  for indexOf/slice/length, `JsString.lowercase`/`trim`, `Math.floor(maxLength *
+  0.35)` as the same IEEE op. Test exercises both `...` ellipses.
+- **Best-effort semantics matched**: a missing `document_relationships` table →
+  `getRelatedDocCounts` returns nil → the whole block is skipped (neither field
+  emitted), exactly like the JS try/catch where the unguarded query throws.
+
+Deps: `ADStorage`→`ADArchive` (zstd, dlopen — dylib stays zero-external-dep);
+`ADSearchCascade`→`ADContent` (PlainText/JsString; server-only). Perf no-regress:
+Swift `/search` with full enrichment c=16 **1864 rps** (vs 2263 phase-1; ~18% for
+2 batched queries + 100 snippet renders/req) — still scales 4.6× and beats the
+(enrichment-skipping) Bun reference (1131). All 57 native tests + `swift test`
+green. Next slices (open): fuzzy T3 + body T4, relaxation, filters + synonyms.

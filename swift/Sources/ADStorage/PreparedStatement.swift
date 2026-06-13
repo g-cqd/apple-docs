@@ -159,6 +159,35 @@ final class PreparedStatement {
 
   func isNull(_ col: Int32) -> Bool { lib.columnType(stmt, col) == SQLite.typeNull }
 
+  /// The dynamic SQLite type of a result column (SQLite.type*). Used by the
+  /// section codec to distinguish a TEXT cell (pass through) from a BLOB
+  /// (zstd-compacted) one.
+  func columnType(_ col: Int32) -> Int32 { lib.columnType(stmt, col) }
+
+  /// Raw BLOB bytes of a result column, or nil when NULL.
+  func blob(_ col: Int32) -> [UInt8]? {
+    guard lib.columnType(stmt, col) != SQLite.typeNull, let ptr = lib.columnBlob(stmt, col) else {
+      return nil
+    }
+    let n = Int(lib.columnBytes(stmt, col))
+    guard n > 0 else { return [] }
+    return Array(UnsafeRawBufferPointer(start: ptr, count: n).bindMemory(to: UInt8.self))
+  }
+
+  /// Binds a String to a positional (1-based) `?` parameter. SQLITE_TRANSIENT:
+  /// sqlite copies the bytes during the call.
+  func bindText(_ index: Int32, _ value: String) {
+    let bytes = Array(value.utf8)
+    bytes.withUnsafeBufferPointer { buf in
+      _ = lib.bindText(stmt, index, buf.baseAddress, Int32(buf.count), sqliteTransient)
+    }
+  }
+
+  /// Binds an Int64 to a positional (1-based) `?` parameter.
+  func bindInt64(_ index: Int32, _ value: Int64) {
+    _ = lib.bindInt64(stmt, index, value)
+  }
+
   func text(_ col: Int32) -> String? {
     guard lib.columnType(stmt, col) != SQLite.typeNull, let ptr = lib.columnText(stmt, col) else {
       return nil

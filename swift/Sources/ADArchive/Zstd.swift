@@ -50,10 +50,45 @@ struct ZstdLib: @unchecked Sendable {
   let isError: @convention(c) (Int) -> UInt32
   let getErrorName: @convention(c) (Int) -> UnsafePointer<CChar>?
   let cStreamOutSize: @convention(c) () -> Int
+  // One-shot decompression (the storage section codec). Context-free —
+  // ZSTD_decompress allocates its own DCtx internally; frame content size comes
+  // from the frame header (zstd writes it when contentSizeFlag is set, which the
+  // compactor does via Bun.zstdCompressSync).
+  let decompress: @convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int) -> Int
+  let getFrameContentSize: @convention(c) (UnsafeRawPointer?, Int) -> UInt64
 
   func errorName(_ code: Int) -> String {
     guard let cstr = getErrorName(code) else { return "zstd error \(code)" }
     return String(cString: cstr)
+  }
+
+  /// Decompresses a complete zstd frame. nil on a malformed frame, an
+  /// unknown/oversized content size, or a short write.
+  func decompressFrame(_ blob: [UInt8]) -> [UInt8]? {
+    guard !blob.isEmpty else { return nil }
+    return blob.withUnsafeBytes { src -> [UInt8]? in
+      guard let base = src.baseAddress else { return nil }
+      let size = getFrameContentSize(base, blob.count)
+      // ZSTD_CONTENTSIZE_UNKNOWN == ~0, _ERROR == ~0 - 1; cap to a sane ceiling.
+      guard size < 0xFFFF_FFFF_FFFF_FFFE, size <= 256 << 20 else { return nil }
+      let capacity = Int(size)
+      if capacity == 0 { return [] }
+      var out = [UInt8](repeating: 0, count: capacity)
+      let written = out.withUnsafeMutableBytes { dst in
+        decompress(dst.baseAddress, capacity, base, blob.count)
+      }
+      guard isError(written) == 0, written == capacity else { return nil }
+      return out
+    }
+  }
+}
+
+/// Public one-shot zstd decompression — the ADStorage section codec inflates
+/// zstd-compacted `document_sections.content_text` blobs. nil when libzstd is
+/// absent or the frame is malformed (the caller falls back to a raw decode).
+public enum ZstdDecoder {
+  public static func decompress(_ blob: [UInt8]) -> [UInt8]? {
+    Zstd.shared?.decompressFrame(blob)
   }
 }
 
@@ -91,7 +126,13 @@ enum Zstd {
         ),
         let isErr = sym("ZSTD_isError", as: (@convention(c) (Int) -> UInt32).self),
         let errName = sym("ZSTD_getErrorName", as: (@convention(c) (Int) -> UnsafePointer<CChar>?).self),
-        let outSize = sym("ZSTD_CStreamOutSize", as: (@convention(c) () -> Int).self)
+        let outSize = sym("ZSTD_CStreamOutSize", as: (@convention(c) () -> Int).self),
+        let decompress = sym(
+          "ZSTD_decompress",
+          as: (@convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int) -> Int).self),
+        let frameContentSize = sym(
+          "ZSTD_getFrameContentSize",
+          as: (@convention(c) (UnsafeRawPointer?, Int) -> UInt64).self)
       else { continue }
       // ZSTD_compressStream2 + the parameter API appeared in 1.4.0.
       guard version() >= 10400 else { continue }
@@ -99,7 +140,7 @@ enum Zstd {
         versionNumber: version, createCCtx: create, freeCCtx: free,
         setParameter: setParam, setPledgedSrcSize: setPledged,
         compressStream2: stream, isError: isErr, getErrorName: errName,
-        cStreamOutSize: outSize,
+        cStreamOutSize: outSize, decompress: decompress, getFrameContentSize: frameContentSize,
       )
     }
     return nil

@@ -58,13 +58,17 @@ let package = Package(
     // Storage layer (RFC 0001 P5): SQLite C-interop via runtime dlopen
     // (NOT a systemLibrary — same policy as ADArchive/Zstd: absent → JS
     // bun:sqlite serves). The read path; the bun:sqlite writer is untouched.
-    .target(name: "ADStorage", dependencies: ["ADBase", "CSQLiteShim"], swiftSettings: releaseCMO),
+    // ADArchive provides the zstd decompress used by the section codec
+    // (enrichment) — both dlopen'd, so the dylib stays zero external dep.
+    .target(
+      name: "ADStorage", dependencies: ["ADBase", "ADArchive", "CSQLiteShim"],
+      swiftSettings: releaseCMO),
     // Search cascade (RFC 0001 P6): the byte-exact in-process port of the JS
     // lexical search (fts-query-builder, intent, the tier merge, ranking,
     // projection). SERVER-ONLY — used by ad-server, NOT by the libAppleDocsCore
     // dylib (which stays zero-dep). Max strict concurrency.
     .target(
-      name: "ADSearchCascade", dependencies: ["ADStorage"],
+      name: "ADSearchCascade", dependencies: ["ADStorage", "ADContent"],
       swiftSettings: releaseCMO + strictConcurrency),
     // Dev-only reference dump for the flipped fixture generator (RFC 0002
     // §6h); not shipped — the dylib product above is unchanged.
