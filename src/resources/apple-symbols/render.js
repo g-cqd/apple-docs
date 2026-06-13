@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sha256 } from '../../lib/hash.js'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
-import { nativeSymbolPdf } from '../render-native.js'
+import { nativeSymbolPdf, nativeSymbolPng } from '../render-native.js'
 import { NotFoundError, ValidationError } from '../../lib/errors.js'
 import { ensureDir } from '../../storage/files.js'
 import {
@@ -188,6 +188,12 @@ export async function renderSfSymbol(opts, ctx) {
 }
 
 async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
+  // Native in-process AppKit NSBitmap render first (RFC 0003 phase 2;
+  // D-0003-3 Probe B confirmed crash-free + byte-identical). null → dylib
+  // absent / native off / non-darwin / symbol unrenderable → spawn fallback.
+  const native = nativeSymbolPng({ name, scope, pointSize, color, background, weight, scale })
+  if (native !== null) return native
+
   // mkdtemp the staging dir so the Swift script path is unpredictable
   // and the dir is mode 0700 — closes the symlink-race window CodeQL's
   // js/insecure-temporary-file rule flags on shared hosts.

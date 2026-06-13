@@ -11,26 +11,21 @@
  * runtime renderer can detect drift and bust the cache.
  */
 
-import { existsSync, statSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { existsSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { ValidationError } from '../../lib/errors.js'
 import { readPlist } from '../../lib/plist.js'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
 import { ensureDir } from '../../storage/files.js'
-import { symbolPdfToSvg } from '../symbol-pdf-to-svg.js'
-import { SYMBOL_WORKER_SCRIPT } from '../swift-templates.js'
 import { normalizeStringArray } from '../apple-fonts/sfnt.js'
 import { readBundleVersion, readStringsMap } from '../apple-fonts/sync.js'
-import {
-  getPrerenderedSymbolPath,
-  symbolVariantMatrix,
-} from './cache-key.js'
+import { symbolVariantMatrix } from './cache-key.js'
 import { symbolSnapshotNeedsReset } from './snapshot-meta.js'
 import { markUnrenderableSymbols } from './mark-unrenderable.js'
 import { stampSfSymbolCodepoints } from './codepoint-stamp.js'
 import { SYMBOL_RENDERER_VERSION } from './render.js'
+import { nativeRenderAvailable } from '../render-native.js'
+import { renderScopeBucket, renderScopeBucketNative, SYMBOL_DEFAULT_RENDER_SIZE } from './prerender-engine.js'
 
 export { stampSfSymbolCodepoints }
 
@@ -52,8 +47,6 @@ const SYMBOL_BUNDLES = {
 // pre-filter syncs doesn't surface the failure. Exported so a one-shot
 // cleanup script (or test) can also use the same source of truth.
 const CATALOG_META_NAMES = new Set(['symbols', 'year_to_release'])
-
-const SYMBOL_DEFAULT_RENDER_SIZE = 128
 
 export async function syncSfSymbols(opts, ctx) {
   const { db, logger } = ctx
@@ -136,7 +129,7 @@ export async function prerenderSfSymbols(opts, ctx) {
     ensureDir(scopeDir)
     const variants = symbolVariantMatrix(scope)
     result.total += buckets[scope].length * variants.length
-    await renderScopeBucket({
+    const bucket = {
       scope,
       symbols: buckets[scope],
       variants,
@@ -145,7 +138,15 @@ export async function prerenderSfSymbols(opts, ctx) {
       logger,
       onProgress: opts.onProgress,
       result,
-    })
+    }
+    // RFC 0003 phase 2: the in-dylib batch renderer (one process, fanned
+    // across cores) replaces the worker pool on darwin; the pool stays the
+    // fallback for the rare nulls and for non-native hosts.
+    if (nativeRenderAvailable()) {
+      await renderScopeBucketNative(bucket)
+    } else {
+      await renderScopeBucket(bucket)
+    }
     markUnrenderableSymbols({ ctx, scope, variants, result, logger })
   }
 
@@ -167,169 +168,6 @@ export async function prerenderSfSymbols(opts, ctx) {
 // the 400-line ceiling); imported above for prerenderSfSymbols and re-exported
 // here so callers that import it from this file keep working.
 export { symbolSnapshotNeedsReset }
-
-async function renderScopeBucket({ scope, symbols, variants, ctx, concurrency, logger, onProgress, result }) {
-  const queue = []
-  for (const symbol of symbols) {
-    for (const variant of variants) queue.push({ symbol, ...variant })
-  }
-  const workers = []
-  const startWorker = () => spawnSymbolWorker({ scope, logger })
-  for (let i = 0; i < concurrency; i++) {
-    const worker = await startWorker()
-    workers.push(processSymbolQueue({ worker, queue, ctx, scope, result, onProgress, logger, restart: startWorker }))
-  }
-  await Promise.all(workers)
-}
-
-async function processSymbolQueue({ worker, queue, ctx, scope, result, onProgress, logger, restart }) {
-  const dataDir = ctx.dataDir
-  let activeWorker = worker
-  while (queue.length > 0) {
-    const item = queue.shift()
-    if (!item) break
-    const { symbol, weight, scale } = item
-    const filePath = getPrerenderedSymbolPath({ dataDir }, scope, symbol.name, { weight, scale })
-    if (existsSync(filePath) && statSync(filePath).size > 0) {
-      result.skipped++
-      onProgress?.(result)
-      continue
-    }
-    // Split the failure surfaces: the Swift worker (renders the PDF on
-    // stdout) and the JS-side PDF→SVG parser are separate concerns.
-    // Restarting the Swift worker on a parser error costs ~200 ms of
-    // cold-start per call — irrelevant on the happy path, but a
-    // 30-minute prerender tax when the parser hits a recurring bug.
-    let pdfBytes
-    try {
-      pdfBytes = await activeWorker.render(symbol.name, weight, scale)
-    } catch (error) {
-      const msg = error.message ?? String(error)
-      // Bitmap-only symbols (most private/emoji.* entries, some
-      // private misc) genuinely don't have a vector form. The Swift
-      // worker reports this via respondsToSelector; log at debug so
-      // we don't flood at warn level. Treat as `skipped` rather than
-      // `failed`, and mark the catalog row so the snapshot validator
-      // doesn't flag the missing files as an error.
-      const bitmapOnly = msg.includes('bitmap-backed') || msg.includes('no vectorGlyph')
-      if (bitmapOnly) {
-        logger?.debug?.(`Skip ${scope}/${symbol.name} (${weight}/${scale}): no vector form`)
-        result.skipped++
-        try { ctx.db.markSfSymbolBitmapOnly(scope, symbol.name) } catch {}
-      } else {
-        logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name} (${weight}/${scale}): ${msg}`)
-        result.failed++
-        result.failures.push({ scope, name: symbol.name, weight, scale, error: msg })
-        // Worker actually died (broken pipe, crash, etc.) — restart.
-        try { activeWorker.close() } catch {}
-        activeWorker = await restart()
-      }
-      onProgress?.(result)
-      continue
-    }
-
-    try {
-      // Pre-rendered SVGs are used both as <img src> targets (where
-      // currentColor would resolve correctly) AND as CSS `mask-image`
-      // sources for the symbols-grid tiles (where the browser only reads
-      // the alpha channel — `currentColor` evaluates against a context
-      // that doesn't exist, yielding zero alpha). Bake an opaque color in
-      // so the mask has solid coverage, then have the API route swap it
-      // out when the user requests an explicit foreground.
-      const svg = await symbolPdfToSvg(pdfBytes, {
-        name: symbol.name,
-        pointSize: SYMBOL_DEFAULT_RENDER_SIZE,
-        color: '#000000',
-        background: null,
-      })
-      ensureDir(dirname(filePath))
-      await Bun.write(filePath, svg)
-      result.rendered++
-    } catch (error) {
-      // Parser failure — the Swift worker is healthy, no restart needed.
-      const msg = error.message ?? String(error)
-      logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name} (${weight}/${scale}): ${msg}`)
-      result.failed++
-      result.failures.push({ scope, name: symbol.name, weight, scale, error: msg })
-    }
-    onProgress?.(result)
-  }
-  try { activeWorker.close() } catch {}
-}
-
-async function spawnSymbolWorker({ scope, logger }) {
-  // Per-worker mkdtemp staging dir so the Swift script lives at an
-  // unguessable, mode-0700 path. The dir is torn down in close().
-  const stagingDir = await mkdtemp(join(tmpdir(), 'apple-docs-symbol-worker-'))
-  const scriptPath = join(stagingDir, 'symbol-worker.swift')
-  await Bun.write(scriptPath, SYMBOL_WORKER_SCRIPT)
-  const proc = Bun.spawn(['swift', scriptPath, scope], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-    stdin: 'pipe',
-  })
-  const reader = proc.stdout.getReader()
-  let buffer = new Uint8Array(0)
-
-  // Drain stderr into the logger so worker crashes are visible.
-  void (async () => {
-    try {
-      const text = await new Response(proc.stderr).text()
-      if (text.trim()) logger?.debug?.(`symbol worker stderr: ${text.trim()}`)
-    } catch {}
-  })()
-
-  async function readBytes(n) {
-    while (buffer.length < n) {
-      const { value, done } = await reader.read()
-      if (done) throw new ValidationError('worker exited')
-      const merged = new Uint8Array(buffer.length + value.length)
-      merged.set(buffer, 0)
-      merged.set(value, buffer.length)
-      buffer = merged
-    }
-    const out = buffer.slice(0, n)
-    buffer = buffer.slice(n)
-    return out
-  }
-
-  return {
-    async render(name, weight = 'regular', scale = 'medium') {
-      // Per-frame deadline. The worker is long-lived (one process per scope
-      // for the whole prerender), so we can't apply spawnWithDeadline here.
-      // Instead: wrap the read in a Promise.race against a 30s timeout. On
-      // timeout, the caller (processSymbolQueue) catches and restarts the
-      // worker. Generous bound — most symbols render in <100 ms; the long
-      // tail tops out around 5 s for the most complex cut-out symbols.
-      proc.stdin.write(`${name}\t${weight}\t${scale}\n`)
-      await proc.stdin.flush()
-      return await Promise.race([
-        (async () => {
-          const header = await readBytes(8)
-          const view = new DataView(header.buffer, header.byteOffset, header.byteLength)
-          const status = view.getUint32(0)
-          const length = view.getUint32(4)
-          const payload = await readBytes(length)
-          if (status !== 0) {
-            throw new ValidationError(new TextDecoder().decode(payload) || 'worker error')
-          }
-          return payload
-        })(),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`symbol worker frame timeout after 30s for ${scope}/${name}`)),
-            30_000,
-          ),
-        ),
-      ])
-    },
-    close() {
-      try { proc.stdin.end?.() } catch {}
-      try { proc.kill() } catch {}
-      void rm(stagingDir, { recursive: true, force: true }).catch(() => {})
-    },
-  }
-}
 
 async function getSymbolRenderProvenance() {
   return {

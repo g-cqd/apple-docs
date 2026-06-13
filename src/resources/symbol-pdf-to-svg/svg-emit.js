@@ -57,18 +57,23 @@ export function assembleSvg(fills, opts) {
   // accidentally re-add pixels, so masks are the more faithful primitive.
   const fillColor = String(color)
   const escapedName = escapeXml(name)
-  const idBase = `c${(Math.random().toString(36).slice(2, 8))}`
+  // Mask ids only have to be unique within one inlined SVG. Derive the
+  // prefix from the geometry (+ name) instead of Math.random so the
+  // prerendered SVG is byte-reproducible run-to-run — distinct symbols
+  // still get distinct prefixes (same collision resistance as the old
+  // 6-char random base, now deterministic).
+  const ds = fills.map(fill => subpathsToD(fill.subpaths, flipX, flipY))
+  const idBase = `c${fnv1a(`${name}|${vbW}x${vbH}|${ds.join('|')}`)}`
   let defs = ''
   let nodes = []
   fills.forEach((fill, idx) => {
     if (fill.alpha > 0) {
-      const d = subpathsToD(fill.subpaths, flipX, flipY)
       const ruleAttr = fillRuleAttr(fill.fillRule)
-      nodes.push(`<path d="${d}" fill="${fillColor}"${ruleAttr}/>`)
+      nodes.push(`<path d="${ds[idx]}" fill="${fillColor}"${ruleAttr}/>`)
     } else {
       if (nodes.length === 0) return
       const maskId = `${idBase}_${idx}`
-      const cutD = subpathsToD(fill.subpaths, flipX, flipY)
+      const cutD = ds[idx]
       defs += `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" mask-type="luminance" style="mask-type:luminance">`
         + `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="#fff"/>`
         + `<path d="${cutD}" fill="#000"${fillRuleAttr(fill.fillRule)}/>`
@@ -104,6 +109,15 @@ function subpathsToD(subpaths, flipX, flipY) {
     }
   }
   return parts.join(' ')
+}
+
+function fnv1a(str) {
+  let h = 0x811c9dc5
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(36)
 }
 
 function formatNumber(n) {

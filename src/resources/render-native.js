@@ -32,6 +32,13 @@ export function _forceImpl(impl) {
   announced = false
 }
 
+/** True when the dylib is loaded and the `render` token is on — the
+ * prerender uses this to pick the batched in-process path over the worker
+ * pool (per-chunk null still degrades to the pool). */
+export function nativeRenderAvailable() {
+  return nativeLib() !== null
+}
+
 function nativeLib() {
   if (forced === 'js') return null
   if (forced !== 'native' && !isNativeEnabled(MODULE)) return null
@@ -54,8 +61,10 @@ function ensure(byteLength) {
   if (scratch.byteLength < byteLength) {
     let size = scratch.byteLength * 2
     while (size < byteLength) size *= 2
-    scratch = new ArrayBuffer(size)
-    scratchU8 = new Uint8Array(scratch)
+    const next = new Uint8Array(size)
+    next.set(scratchU8) // preserve the written prefix (batch requests grow past 8 KB)
+    scratch = next.buffer
+    scratchU8 = next
     scratchView = new DataView(scratch)
   }
 }
@@ -108,6 +117,38 @@ function callUtf8(symbol, packer) {
   return bytes === null ? null : decoder.decode(bytes)
 }
 
+/** Decode count × [u32 len][bytes] (sentinel = null entry) into subarrays
+ * of the (JS-owned) result copy. */
+function decodeLenPrefixedBytes(result, count) {
+  const view = new DataView(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength)
+  const out = new Array(count)
+  let offset = 0
+  for (let i = 0; i < count; i++) {
+    const len = view.getUint32(offset, true)
+    offset += 4
+    if (len === NULL_SENTINEL) {
+      out[i] = null
+      continue
+    }
+    out[i] = result.bytes.subarray(offset, offset + len)
+    offset += len
+  }
+  return out
+}
+
+function callBatch(symbol, packer, count) {
+  const lib = nativeLib()
+  if (!lib?.symbols?.[symbol]) return null
+  try {
+    const { bytes, length } = packer.finish()
+    const result = readNativeResult(lib, lib.symbols[symbol](bytes, BigInt(length)))
+    if (result.status !== NATIVE_STATUS_OK) return null
+    return decodeLenPrefixedBytes(result, count)
+  } catch {
+    return null
+  }
+}
+
 /**
  * Native CoreText font-text → SVG. Returns the SVG string or null (use the
  * spawn path). darwin-only in the dylib; the JS caller's path-safety and
@@ -139,4 +180,49 @@ export function nativeSymbolPdf({ name, scope, weight = 'regular', scale = 'medi
   packer.string(weight)
   packer.string(scale)
   return callBytes('ad_render_symbol_pdf', packer)
+}
+
+/**
+ * Native SF Symbol → vector PDF, batched (RFC 0003 phase 2 — prerender
+ * switch). `items` is [{name, scope, weight?, scale?}]. Returns an array
+ * aligned to `items` of Uint8Array (PDF) | null (that one symbol didn't
+ * render natively → spawn it to classify), or null for the whole batch
+ * (native off / dylib absent / non-darwin / call failed → worker pool).
+ * One FFI call fans out across cores inside the dylib.
+ */
+export function nativeSymbolPdfBatch(items) {
+  if (forced === 'js') return null
+  if (!Array.isArray(items) || items.length === 0) return null
+  const packer = new Packer()
+  packer.u32(1)
+  packer.u32(items.length)
+  for (const it of items) {
+    if (typeof it?.name !== 'string' || typeof it?.scope !== 'string') return null
+    packer.string(it.name)
+    packer.string(it.scope)
+    packer.string(it.weight ?? 'regular')
+    packer.string(it.scale ?? 'medium')
+  }
+  return callBatch('ad_render_symbol_pdf_batch', packer, items.length)
+}
+
+/**
+ * Native SF Symbol → PNG bytes (Uint8Array) or null (use the spawn path).
+ * darwin-only (AppKit NSBitmap). The request mirrors SYMBOL_PNG_SCRIPT's
+ * argv exactly so the bytes match: color/background are nullable hex (null
+ * → labelColor / no background). D-0003-3 Probe B gates the wiring.
+ */
+export function nativeSymbolPng({ name, scope, pointSize, color, background, weight = 'regular', scale = 'medium' }) {
+  if (forced === 'js') return null
+  if (typeof name !== 'string' || typeof scope !== 'string') return null
+  const packer = new Packer()
+  packer.u32(1)
+  packer.string(name)
+  packer.string(scope)
+  packer.f64(Number(pointSize) || 0)
+  packer.string(color ?? null)
+  packer.string(background ?? null)
+  packer.string(weight)
+  packer.string(scale)
+  return callBytes('ad_render_symbol_png', packer)
 }

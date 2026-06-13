@@ -36,67 +36,9 @@
 
 import ADBase
 import ADContent
-import Dispatch
 
-#if canImport(Darwin)
-import Darwin
-#else
-import Glibc
-#endif
-
-private let nullSentinel: UInt32 = 0xFFFF_FFFF
-
-/// Parallelism threshold: tiny batches stay sequential (the dispatch fan
-/// costs more than it saves below this).
-private let parallelThreshold = 8
-
-/// count × [u32 len][bytes] with 0xFFFFFFFF for failed entries.
-private func lenPrefixedPayload(_ results: [[UInt8]?]) -> UnsafeMutableRawPointer? {
-  var payloadCount = 0
-  for result in results { payloadCount += 4 + (result?.count ?? 0) }
-  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: payloadCount) else {
-    return nil
-  }
-  var offset = 0
-  for result in results {
-    if let result {
-      payload.storeBytes(of: UInt32(result.count).littleEndian, toByteOffset: offset, as: UInt32.self)
-      offset += 4
-      if result.count > 0 {
-        result.withUnsafeBytes { src in
-          memcpy(payload.baseAddress! + offset, src.baseAddress!, src.count)
-        }
-        offset += result.count
-      }
-    } else {
-      payload.storeBytes(of: nullSentinel.littleEndian, toByteOffset: offset, as: UInt32.self)
-      offset += 4
-    }
-  }
-  return base
-}
-
-/// Render `count` independent jobs into an indexed results array,
-/// concurrently above the threshold (pure functions over request spans —
-/// the request buffer is valid for the whole synchronous call).
-private func renderIndexed(_ count: Int, _ job: @Sendable ([[UInt8]?].Index, inout [UInt8]) -> Bool) -> [[UInt8]?] {
-  var results = [[UInt8]?](repeating: nil, count: count)
-  if count >= parallelThreshold {
-    results.withUnsafeMutableBufferPointer { buffer in
-      let cell = ResultsCell(base: UnsafeMutableBufferPointer(rebasing: buffer[...]))
-      DispatchQueue.concurrentPerform(iterations: count) { i in
-        var out: [UInt8] = []
-        if job(i, &out) { cell.base[i] = out }
-      }
-    }
-  } else {
-    for i in 0..<count {
-      var out: [UInt8] = []
-      if job(i, &out) { results[i] = out }
-    }
-  }
-  return results
-}
+// nullSentinel, renderIndexed, and lenPrefixedPayload are the shared
+// contract-v0 batch primitives in ADBase/BatchResult.swift.
 
 private func readNullableSpan(_ reader: inout RequestReader, max: Int = maxInputBytes) -> ByteSpan?? {
   guard let length = reader.u32() else { return nil } // malformed
@@ -114,12 +56,6 @@ private func payload(from bytes: [UInt8]) -> UnsafeMutableRawPointer? {
   return bytes.withUnsafeBytes { raw -> UnsafeMutableRawPointer? in
     ResultBuffer.make(status: .ok, format: .utf8, payload: ByteSpan(raw))
   }
-}
-
-/// Distinct-index concurrent writes through a shared buffer (each
-/// iteration owns exactly results[i]).
-private struct ResultsCell: @unchecked Sendable {
-  let base: UnsafeMutableBufferPointer<[UInt8]?>
 }
 
 @_cdecl("ad_content_doc_markdown")
