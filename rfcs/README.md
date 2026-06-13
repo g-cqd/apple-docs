@@ -60,9 +60,12 @@ gate is closed):
 
 **Improvement slices (RFC 0001 §10 registry — evidence-gated, schedule
 opportunistically)**
-- (B) SQLite query-layer round-trips · (C) burst-stall architecture +
-  healthz liveness exemption · (E) snapshot/storage size · (F) chunking
-  parameters (separate eval; may ride (A)'s re-embed).
+- ~~(B) SQLite query-layer round-trips~~ — **DONE 2026-06-13**: a
+  per-search `COUNT(*)` over the 358k-row body-FTS index was 43% of
+  search CPU; an existence probe + count memoization cut p50 **2.5–5×**
+  with recall/ndcg/mrr byte-flat (RFC 0001 §10 (B)). · (C) burst-stall
+  architecture + healthz liveness exemption · (E) snapshot/storage size ·
+  (F) chunking parameters (separate eval; may ride (A)'s re-embed).
 
 **Deferred bucket (explicit, revisit-triggered)**
 - RFC 0003 phase 4: Linux HarfBuzz/FreeType shaper + the hb-view kill —
