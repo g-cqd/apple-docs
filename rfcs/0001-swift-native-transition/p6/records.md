@@ -328,16 +328,35 @@ core under contention. A clean number needs a separate load-generator host.
    can be done against a real corpus. Lower effort; matches the original
    decision tree (NO-GO → stays Bun).
 
-Sub-decision either way: keep the **classic `@unchecked` EL-handler** (faster
-at c=1, the cleaner foundation, the `/healthz`-scaling model) or revert to the
-**async no-`@unchecked`** model (honors the operator's "avoid all unsafe" —
-identical search result). Enrichment (snippet/relatedCount/zstd-decompress) is
-moot until the fork is chosen.
+### Sub-decision RESOLVED — reverted to the async no-`@unchecked` model
+
+Operator rule: "keep the `@unchecked` classic handler ONLY if it is measurably
+better." A head-to-head settled it — both serving models running the IDENTICAL
+one-offload sequential cascade (`--serving classic|async`, since removed),
+`ab -k`, byte-identical 27,232 B bodies:
+
+| model | c=1 | c=4 | c=8 | c=16 |
+| --- | --- | --- | --- | --- |
+| classic (`@unchecked` ChannelInboundHandler) | 619 | 499 | 385 | 385 |
+| async (NIOAsyncChannel + per-request Task, no `@unchecked`) | **622** | **512** | **390** | **388** |
+
+**Statistically identical — async is marginally AHEAD.** The earlier "classic
+wins at c=1 (636 vs 476)" was a confound: the 476 was the async *tier-parallel*
+variant (3 offloads), not async sequential. With identical work the serving
+model is irrelevant to throughput, which independently re-confirms the
+localization (the cost is the cascade WORK, not the handler). So the
+`@unchecked` buys nothing → **reverted to the async model**; `Handler.swift`
+(the classic handler) + the `--serving` switch were removed. `ad-server` now
+carries no `@unchecked` beyond the contained `StorageConnection`. Enrichment
+(snippet/relatedCount/zstd-decompress) is moot until the fork above is chosen.
 
 ### Artifacts
 
-- `swift/Sources/ADServer/{Handler,Main}.swift` — classic `CascadeHandler`
-  (EL-confined `@unchecked`, one `EventLoopFuture` offload) + `--loops` flag.
+- `swift/Sources/ADServer/{Serving,Main}.swift` — final async NIOAsyncChannel
+  serving (no `@unchecked`), one sequential-cascade offload per request; the
+  diagnostic `--loops` flag retained. (The classic `Handler.swift` + `--serving`
+  switch were added for the head-to-head then removed.)
 - `scripts/p6-sweep.mjs` (c-sweep, Swift vs Bun), `p6-loops.mjs` (ELG sweep),
   `p6-alloc.mjs` (match-volume + thread sweeps), `p6-malloc.mjs` (allocator
-  attribution). All `ab`-driven on a seeded 480-doc corpus.
+  attribution), `p6-serving.mjs` (classic-vs-async head-to-head). All
+  `ab`-driven on a seeded 480-doc corpus.

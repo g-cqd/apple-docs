@@ -1,10 +1,10 @@
 // ad-server — the RFC 0001 P6 SwiftNIO host. A raw HTTP/1.1 server (NIOHTTP1,
 // no Vapor) serving /healthz + /search over ADStorage IN-PROCESS (no FFI),
-// alongside the Bun servers, reading the same WAL corpus. Uses the classic
-// event-loop-confined serving model (ServerBootstrap + ChannelInboundHandler,
-// the one offload via EventLoopFuture) rather than NIOAsyncChannel + a
-// per-request Task: the async model did not scale under concurrency (see
-// Handler.swift / the P6 records). Blocking reads are offloaded to a
+// alongside the Bun servers, reading the same WAL corpus. Serving model:
+// NIOAsyncChannel + a per-request structured Task (Serving.swift) — fully
+// strict-concurrency, NO `@unchecked` (a measured head-to-head found the
+// EL-confined `@unchecked ChannelInboundHandler` no faster; the safe model
+// wins by default). The one blocking cascade per request is offloaded to a
 // NIOThreadPool; the event loops only do IO/framing/dispatch.
 
 import Dispatch
@@ -21,7 +21,7 @@ import Darwin
 
 @main
 struct ADServerMain {
-  static func main() throws {
+  static func main() async throws {
     var dbPath: String?
     var port = 3032
     var threadCount = max(2, System.coreCount - 2)
@@ -39,7 +39,7 @@ struct ADServerMain {
       }
     }
     guard let dbPath, !dbPath.isEmpty else {
-      print("usage: ad-server --db <corpus.db> [--port 3032] [--threads N] [--bench ITERS]")
+      print("usage: ad-server --db <corpus.db> [--port 3032] [--threads N] [--loops N] [--bench ITERS]")
       exit(2)
     }
 
@@ -70,21 +70,33 @@ struct ADServerMain {
     // only do IO/framing/dispatch. --loops sweeps this to test whether the ELG
     // (not the per-request async machinery) bounds concurrency scaling.
     let group = MultiThreadedEventLoopGroup(numberOfThreads: loopCount)
-    let bootstrap = ServerBootstrap(group: group)
+
+    // NIOAsyncChannel + a structured per-request Task — no @unchecked.
+    let serverChannel = try await ServerBootstrap(group: group)
       .serverChannelOption(ChannelOptions.backlog, value: 256)
       .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-      // TCP_NODELAY: without it, Nagle's algorithm + delayed ACKs add
-      // multi-ms latency to small keep-alive responses (Bun.serve sets this
-      // by default; matching it is required for a fair comparison).
+      // TCP_NODELAY: without it, Nagle's algorithm + delayed ACKs add multi-ms
+      // latency to small keep-alive responses (Bun.serve sets this by default;
+      // matching it is required for a fair comparison).
       .childChannelOption(ChannelOptions.socketOption(.tcp_nodelay), value: 1)
-      .childChannelInitializer { channel in
-        channel.pipeline.configureHTTPServerPipeline().flatMap {
-          channel.pipeline.addHandler(CascadeHandler(pool: pool, threadPool: threadPool))
+      .bind(host: "127.0.0.1", port: port) { childChannel in
+        childChannel.eventLoop.makeCompletedFuture {
+          try childChannel.pipeline.syncOperations.configureHTTPServerPipeline()
+          return try NIOAsyncChannel<HTTPServerRequestPart, HTTPServerResponsePart>(
+            wrappingChannelSynchronously: childChannel)
         }
       }
-
-    let serverChannel = try bootstrap.bind(host: "127.0.0.1", port: port).wait()
-    print("ad-server listening on 127.0.0.1:\(port) (threads=\(threadCount), loops=\(loopCount), classic EL handler)")
-    try serverChannel.closeFuture.wait()
+    print("ad-server listening on 127.0.0.1:\(port) (threads=\(threadCount), loops=\(loopCount))")
+    // Each connection is a child task of the accept loop (DiscardingTaskGroup
+    // auto-reaps completed connections).
+    try await withThrowingDiscardingTaskGroup { taskGroup in
+      try await serverChannel.executeThenClose { inbound in
+        for try await childChannel in inbound {
+          taskGroup.addTask {
+            await serveConnection(childChannel, pool: pool, threadPool: threadPool)
+          }
+        }
+      }
+    }
   }
 }

@@ -24,7 +24,7 @@ indexed by the docs site.
 | **P3** | Render service ([RFC 0003](0003-swift-render-service.md)) | ◑ Phases 1/2/4 done; **phase 3 held** |
 | **P4** | Content pipeline ([RFC 0004](0004-content-pipeline.md)) | ✅ Main line done; phases 3-4 NO-GO |
 | **P5** | Storage — SQLite C-interop, reader pool → native actors | ◑ Foundation shipped (token-gated **off**); bridge-flip NO-GO, deferred to P6 |
-| **P6** | Servers — web + MCP on SwiftNIO (no Vapor) | ◑ Host viable + safe; lexical cascade ported **byte-exact**, **wins at c=1** (classic EL-handler 636 > Bun 574) — but degrades under concurrency while Bun scales. Localized: **NOT the serving model** (0-match query 1082 rps, healthz 78k, ELG-irrelevant, classic≈async), NOT the nano-allocator — the residual is Swift's String/ARC-heavy decode+rerank+JSON being less concurrency-efficient than Bun's runtime. Fork: profile + alloc/ARC-light rewrite vs search stays Bun (cascade banked for P7) |
+| **P6** | Servers — web + MCP on SwiftNIO (no Vapor) | ◑ Host viable + safe (async, **no `@unchecked`** — classic EL-handler measured no faster, reverted); lexical cascade **byte-exact**, comparable at c=1 — but degrades under concurrency while Bun scales. Localized: **NOT the serving model** (0-match query 1082 rps, healthz 78k, ELG-irrelevant, classic≈async), NOT the nano-allocator — the residual is Swift's String/ARC-heavy decode+rerank+JSON being less concurrency-efficient than Bun's runtime. **Pinning the cause** (probe) before the fork: alloc/ARC-light rewrite vs search stays Bun (cascade banked for P7) |
 | **P7** | CLI + single static binary; Bun retired | ⬜ Not started |
 
 Every bridge-era module — `fusion`, `archive`, `embed`, `content`,
