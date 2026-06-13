@@ -491,9 +491,27 @@ planned slice):
   measure-first discipline is the lesson: the profile's leaf (`Statement`)
   hid the real culprit until self-time was attributed to its JS caller.
   Remaining cost is legitimate cascade-FTS + the semantic Hamming scan
-  (`semantic.js:213 insertSorted`, ~14%) — a separate future lever.
+  (`semantic.js` shortlist, ~14% by profile) — EXECUTED next.
   Tooling: `scripts/profile-cpuprofile.mjs` gained native-frame caller
   attribution.
+- **(B′) Semantic Hamming-scan popcount — EXECUTED 2026-06-13** (the lever
+  (B) named, output byte-identical). A measure-first redo: cpu-prof's
+  self-time attribution **misled** — it pinned 93.8% on `insertSorted`,
+  but direct wall-clock isolation showed the ~40 ms scan (831k × 64-byte
+  codes, K=200) is ~99% **popcount**, not selection (insertSorted ~1 ms).
+  Fix: (a) a **SWAR popcount over `Uint32` views** (`embedding.js`
+  `hammingU32`, 16 word-ops vs 64 byte-LUT lookups) — scan 40 → 15.6 ms;
+  (b) the O(K)-splice insertion sort → a fixed-size **max-heap keyed
+  (dist, idx)** (admit iff `d < root`, evict the max (dist, idx), final
+  sort (dist asc, idx asc)) — neutral at K=200 but O(K)→O(log K) protects
+  the configurable `APPLE_DOCS_SEMANTIC_SHORTLIST` (≤5000). End-to-end
+  semantic search **55.8 → 18.9 ms (3.0×)**; `eval:search` **byte-flat**
+  (recall/ndcg/mrr identical, 168 judgments × 4 configs); full-search
+  semantic p50 1.4–1.6×. Output-identity locked by a property test (heap
+  == the old insertSorted across tie-heavy / boundary / both code paths).
+  **Lesson: trust direct timing over sampler self-time** (the §10(B)
+  measure-first discipline, one level deeper). A hardware-POPCNT native
+  scan (~further 2–3×) remains a possible future slice.
 - **(C) Burst-stall architecture**: ~3 s event-loop stall at burst onset
   + healthz sharing waiting-room 503s
   (ops/runbooks/mcp-burst-healthz.md) — yield points, queue shaping,
