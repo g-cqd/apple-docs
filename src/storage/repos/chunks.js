@@ -26,8 +26,7 @@ export function createChunksRepo(db) {
 
   return {
     /** Row count of the per-chunk vector table; 0 ⇒ legacy whole-doc path.
-     *  MEMOIZED (§10(B)): read per semantic search (availability + store
-     *  cache key) but mutated only by the writes below — both bust it. */
+     *  Memoized (§10(B)); the writes below bust it. */
     getChunkCount() {
       if (countMemo === undefined) {
         countMemo = safeCall(() => countStmt.get().c, { default: 0, log: 'warn-once', label: 'chunks.count' })
