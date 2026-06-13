@@ -45,6 +45,14 @@ Imports: AppKit + CoreGraphics + ObjectiveC (symbol-worker/pdf), AppKit
 (png), CoreText + CoreGraphics (font-text), **private swiftinterfaces**
 (SFSymbolsShared, CoreGlyphsLib — codepoint-worker only).
 
+**Native status (2026-06-13, phases 1–2)**: symbol-pdf, font-text,
+symbol-png → in-dylib, default-on, per-call spawn fallback; symbol-worker
+→ in-dylib batch (`ad_render_symbol_pdf_batch`, the prerender default on
+darwin); symbol-codepoint-worker → **stays spawned** (D-0003-1). Every
+*darwin* render spawn is now consolidated into libAppleDocsCore except the
+codepoint worker. The spawn scripts remain as the fallback (phase-3 kills
+gated on a release cycle at default).
+
 Caching layers (unchanged by this RFC): `sf_symbol_renders` DB table
 (sha-keyed params), pre-rendered snapshot SVGs (~273k files: 27
 weight×scale variants per symbol across public+private scopes,
@@ -94,8 +102,8 @@ New `ADRender` target in `swift/`, platform-split:
 | --- | --- | --- |
 | D-0003-1 | codepoint-worker in-dylib vs stays-spawned — it links PRIVATE swiftinterfaces (SFSymbolsShared/CoreGlyphsLib); baking private-framework linkage into the SHIPPED dylib raises distribution + OS-version fragility | **stays-spawned**: build-time only, already long-lived/amortized (<0.5 ms/symbol after warmup); revisit only if it ever blocks |
 | D-0003-2 | Linux shaper binding: HarfBuzz+FreeType via runtime dlopen vs SwiftPM systemLibrary | **dlopen** (the proven libzstd pattern): zero build deps, absent libs degrade to the placeholder path with one warning |
-| D-0003-3 | AppKit thread model in-dylib: the scripts own their processes' main threads; FFI calls arrive on Bun's JS thread. CoreText/CoreGraphics are thread-safe; `NSImage`-based PNG rasterization may not be | **SETTLED for symbol-pdf (2026-06-13, §6 phase-1 probe): SAFE.** `NSImage(systemSymbolName:)` + the private `vectorGlyph`/`drawInContext:` + CGContext-PDF path runs crash/hang-free in the dlopen'd dylib on Bun's thread, byte-identical to spawn, even under `Promise.all` concurrency — these are off-screen image/vector ops, not event-loop-bound, so the absent AppKit runloop doesn't matter. **PNG (NSBitmapImageRep rasterization) is a SEPARATE, untested case** — stays spawned until its own probe; CG-only `CGBitmapContext` rewrite preferred if ever pursued |
-| D-0003-4 | FFI result buffers vs socketpair for large payloads | **FFI buffers** (contract v0; copy-then-free; archive proved multi-MB results) — socketpair only if prerender batching measures poorly |
+| D-0003-3 | AppKit thread model in-dylib: the scripts own their processes' main threads; FFI calls arrive on Bun's JS thread. CoreText/CoreGraphics are thread-safe; `NSImage`-based PNG rasterization may not be | **SETTLED for symbol-pdf (2026-06-13, §6 phase-1 probe): SAFE.** `NSImage(systemSymbolName:)` + the private `vectorGlyph`/`drawInContext:` + CGContext-PDF path runs crash/hang-free in the dlopen'd dylib on Bun's thread, byte-identical to spawn, even under `Promise.all` concurrency — these are off-screen image/vector ops, not event-loop-bound, so the absent AppKit runloop doesn't matter. **CONCURRENCY settled SAFE (2026-06-13, §6 phase-2 Probe A):** the phase-1 verdict only covered SERIAL calls (Bun FFI is synchronous on one JS thread, so phase-1's "Promise.all" ran serially). The batch export drives `DispatchQueue.concurrentPerform` → genuinely concurrent `NSImage`/`vectorGlyph` across GCD threads; 400 public symbols are byte-identical to the serial single + spawn, crash-free. **PNG settled SAFE (2026-06-13, §6 phase-2 Probe B):** in-dylib `NSBitmapImageRep` rasterization (`ad_render_symbol_png`) is byte-identical to the spawn across 6 colour/weight/scale cases, no crash — symbol-png is now native-first too. Only the codepoint worker (D-0003-1) stays spawned. |
+| D-0003-4 | FFI result buffers vs socketpair for large payloads | **FFI buffers** (contract v0; copy-then-free; archive proved multi-MB results) — socketpair only if prerender batching measures poorly. Phase-2 prerender chunks at 256 symbols/call → ~1 MB results, RSS bounded; no socketpair needed |
 
 ## 6. Phases (reordered 2026-06-12 — darwin first, Linux deferred)
 
@@ -124,10 +132,38 @@ New `ADRender` target in `swift/`, platform-split:
    Linux builds the AppKit/CoreText-stripped dylib clean; its exports
    return `.invalidInput` → JS spawn fallback (hb-view path unchanged).
    `ad_render_symbol_png` stays spawned (separate untested NSBitmap case,
-   D-0003-3). EXPECTED_ABI unchanged (1). Phases 2–4 unstarted.
+   D-0003-3). EXPECTED_ABI unchanged (1).
 2. **Prerender switch**: sync.js pooled spawns → batched FFI calls;
    throughput + RSS gates on the full catalog; spawn path remains the
    fallback. (Improvement candidate D of RFC 0001 §10 folds in here.)
+   **EXECUTED 2026-06-13.** `ad_render_symbol_pdf_batch`
+   (ADCore/RenderExports.swift) renders a chunk in one FFI call via
+   `DispatchQueue.concurrentPerform` (the generic batch helpers
+   `renderIndexed`/`lenPrefixedPayload` lifted to ADBase/BatchResult.swift,
+   shared with content; SymbolPdf.render now wraps each render in
+   `autoreleasepool`). The prerender engine moved to
+   apple-symbols/prerender-engine.js: `renderScopeBucketNative` chunks the
+   queue (256/call), writes the hits, and funnels the rare nulls
+   (bitmap-only / failures) to the **unchanged worker pool**, which
+   classifies them exactly as before; non-darwin / native-off /
+   whole-chunk-null degrade to the pool. **D-0003-3 concurrency settled
+   SAFE** (Probe A): 400 public symbols rendered concurrently in-dylib are
+   byte-identical to the serial single + spawn, crash-free — phase-1's
+   "Promise.all" probe had only ever run serially (Bun FFI is synchronous
+   on one JS thread), so this is the first real concurrent-AppKit proof.
+   **symbol-png ported** (SymbolPng.swift, `ad_render_symbol_png`,
+   native-first in `renderSymbolPng`): **D-0003-3 PNG case settled SAFE**
+   (Probe B): 6 cases byte-identical to spawn, no crash. Gates
+   (render-prerender-bench.js, 800×2 slice): **2.0× throughput** over the
+   4–16 worker pool, **byte-identical** output (1600/1600), **RSS bounded**
+   — 13.5k renders of 500 distinct symbols held 240 MB vs 588 MB for 4k
+   distinct (RSS tracks the glyph cache, not render count → the
+   per-render autoreleasepool works, no leak). **Prerequisite fix**:
+   svg-emit.js used `Math.random()` for SVG mask ids, so ~40% of
+   prerendered SVGs (the cut-out symbols) were never byte-reproducible
+   run-to-run; now a deterministic content hash (fnv1a of the geometry) —
+   distinct symbols still get distinct prefixes. EXPECTED_ABI unchanged
+   (1); the batch + png exports are additive.
 3. **darwin kills + records**: the one-shot spawn scripts deleted after a
    release cycle at render-native default; RFC 0001 §3/§7 updated;
    codepoint-worker disposition per D-0003-1. hb-view is NOT killed here.
