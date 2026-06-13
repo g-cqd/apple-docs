@@ -26,3 +26,21 @@ Possible follow-ups (separate decisions, NOT taken here):
 2. Chip at the onset stall (yield points around the synchronous burst
    work) — only worth it if real traffic ever looks like the probe.
 3. Teach smoke to count 503-with-Retry-After as "shedding", not failure.
+
+## Update 2026-06-13 (RFC 0001 §10(C), re-measured)
+
+- **#1 is DONE — structurally.** `/healthz` is a sibling route at the
+  server origin (`http-server.js:154` returns the health body *before* the
+  `/mcp` route and the heavy semaphore), so it never enters the
+  waiting-room. The saturation-503-on-healthz symptom is gone; an existing
+  unit test guards it. #3 is therefore moot for healthz (it returns 200,
+  not 503).
+- **The onset stall did not reproduce.** A 16× `search_docs` burst against
+  the real `startHttpServer` over the full 831k-chunk DB (arm64) held
+  healthz at **1 ms, 8/8 200** — no cut. The mm18 figure was Intel + cold;
+  arm64's fast native embed plus the §10(B′) 3× semantic-search speedup
+  appear to keep the first wave under the probe deadline.
+- **Disposition:** #2 (onset yield points) stays **deferred** — its
+  operational gate needs evidence on the affected host class (Intel),
+  which isn't reproducible here. Revisit only if a prod monitor on that
+  host actually flaps. No code change made.
