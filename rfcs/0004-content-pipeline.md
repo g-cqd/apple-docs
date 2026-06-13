@@ -216,6 +216,7 @@ goldens against the freshly built dylib (previously a gap).
 
 | D-0004-6 | **UPDATED**: the arena-parser precondition was met and the flip executed — dispatch shapes recorded above |
 | D-0004-7 | JSC kernels (bundle the normative JS renderers into JavaScriptCore contexts in-dylib, darwin-only) — **SKIPPED by operator (2026-06-12)**: native cleared every gate first. Remains a recorded option for phases 3-4 (parallel UNPORTED JS without the serialization dragons) and the P7 story, requiring a dual-JSC-in-process probe (Bun statically embeds its own JSC) and a §2/§9 decision before any adoption |
+| D-0004-8 | Phase 4 (render-html + highlight port) — pursue or not | **DECIDED: NO-GO by measurement (2026-06-13, §6c)**. The static build is 84% filesystem IO + 6.5% SQLite; the phase-4 render surfaces are ~6% (and ~4.2 of that is shiki's WASM, not the tree walk). A render port can't move build wall-time; IO parallelism (already shipped) does. Phase 4 is shelved unless a future need re-opens it (e.g. P6/P7 serving HTML in-process where the FFI/IO calculus differs). D-0004-3 (highlight engine) is moot while phase 4 is shelved |
 
 **The P7 corollary**: the surviving per-call losses are pure BOUNDARY
 tax (encode + copy + re-parse across the FFI), not render speed — the
@@ -228,20 +229,75 @@ code IS the P7 renderer, already byte-proven at corpus scale.
    dragon (D-0004-2); the WHATWG-URL used-subset
    (link-resolver.js:151 `new URL()` reached from refs.js) ported
    against recorded fixtures; gate = corpus-wide contentHash stability.
-   **GATED (2026-06-12)** on the §6a economics: requires the
-   static-build profile + the arena-parser precondition (D-0004-6)
-   before any work starts.
+   **GATED (2026-06-12; clarified §6c)**: normalize is a CRAWL-time cost
+   (not static-build), so the §6c build profile doesn't bear on it — its
+   own gate is a crawl-throughput profile + the contentHash-stability
+   risk, on its own evidence before any work starts.
 4. **HTML + highlight** — render-html/* + the markdown.js regex parser
    (byte-exact) + the D2 engine per D-0004-3 + knownKeys session init +
    in-Swift render budget; sampled static-build byte-diff + web-build
-   bench ≥ JS. *Kills*: `shiki` (after a release cycle at native
-   default). **GATED (2026-06-12)**: a static-build CPU profile decides
-   whether the hours live here (regex-heavy highlighting is the one
-   place compute plausibly dominates marshalling) — profile first,
-   port second.
+   bench ≥ JS. *Kills*: `shiki`. **NOT PURSUED (2026-06-13, §6c
+   profile)**: the gate fired NO-GO — the static build is IO-bound, not
+   render-bound; render is ~6% of build work and a Swift port can't move
+   build wall-time. See §6c + D-0004-8.
 5. **Kills + records** — JS converters deleted per surface after a
    release cycle at content-native default (RFC 0002 Stage-C pattern);
    RFC 0001 §3/§7 updated. Unreachable until a flip ever happens.
+
+### 6c. Static-build CPU profile — phase 4 gate fired NO-GO (2026-06-13)
+
+The profile that gated phases 3-4 (D-0004-6) ran. **Verdict: NO-GO on
+phase 4.** RFC 0004 §1 suspected the "hours-long build" headline was
+IO/template-bound, not render-CPU-bound; the measurement confirms it
+emphatically.
+
+**Method**: `bun --cpu-prof` over a real `web build --full --workers 1
+--concurrency 1` (single-thread forces all render into the profiled
+process and a clean flame graph) on a representative subset —
+`swiftui` (9k symbol/declaration/code-heavy pages) + `wwdc` (2.9k) +
+`swift-evolution` (558) + `swift-book` (43) = **12,509 pages**, fresh
+out dir + `--full` so every page renders (no incremental skips). 241 s,
+169,146 samples. Self-time bucketed by `callFrame.url` via the committed
+`scripts/profile-cpuprofile.mjs` (native frames attributed by name:
+bun:sqlite `all`/`run` → sqlite, shiki's oniguruma `.wasm-function[N]`
+→ highlight, libuv `writeSync`/`mkdirSync` → io-fs).
+
+**Attribution (self-time)**:
+
+| bucket | % | what it is |
+| --- | --- | --- |
+| **io-fs** | **84.3** | `writeSync` 81.7 + `write` 1.7 + `mkdirSync` 0.6 + `copyWithin` — writing ~25k files (12.5k `index.html` + 12.5k brotli `.br`) |
+| **sqlite** | **6.5** | bun:sqlite `all`/`run` — the batched section fetch + per-framework doc query + render-index upsert |
+| **highlight** | **4.2** | shiki's oniguruma WASM (the entire highlight cost — directly isolated via the `.wasm-function` frames; shiki is the build's ONLY WASM dep, so no ablation was needed) |
+| native/runtime | 2.6 | bun internals (parse/join/freeze/encode) |
+| regex-exec | 1.1 | markdown.js's regexes (the italic `/(?<!…)_(.+?)_(?!…)/g` alone is 0.9%) |
+| template | 0.4 | web/templates + web/build |
+| render-html | 0.2 | the tree walk (`escapeHtml` is the top leaf) |
+| markdown-parser (JS) | 0.2 | markdown.js JS frames (its regex time is in regex-exec) |
+
+**The phase-4 surfaces** (render-html + markdown.js + highlight + its
+regexes) total **~6%** of build self-time — and **~4.2 of that 6 is
+shiki's oniguruma WASM**, which a Swift port would have to REPLACE with
+an in-house TextMate engine (D-0004-3) for marginal gain. The render-html
+tree walk + markdown.js JS that phase 4 would actually port byte-for-byte
+are **~1.5% combined**. Porting them cannot meaningfully move build
+wall-time.
+
+**The real lever is IO, already parallelized.** The 84% `writeSync`
+dominance is a single-thread artifact of the clean-profile run; in
+production the build fans out (`--workers N` → N subprocesses, build.js
+worker-fanout) and the per-page pool overlaps async `Bun.write`. The
+"hours" are 346k file writes, addressed by parallelism (done) — not by a
+renderer port. Secondary IO levers if ever needed: skip/defer brotli
+precompress, or emit fewer files. None are P4.
+
+**Phase 3 (normalize) is untouched by this gate**: normalize runs at
+crawl/persist time, NOT at static-build time (the build reads
+already-normalized `document_sections`). Its payoff is a separate
+crawl-throughput question — deferred, not decided here.
+
+**Reusable artifact**: `scripts/profile-cpuprofile.mjs` (committed)
+buckets any V8 `.cpuprofile` for future build/CPU-perf measurement.
 
 ## 7. Risks
 

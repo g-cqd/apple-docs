@@ -315,19 +315,17 @@ spawn latency; the `hb-view` host package requirement. *Gates*: SVG
 fixture diffs clean on both OSes; render service p50 < the spawn path.
 
 ### P4 — Content pipeline
-> **Carried by [RFC 0004](0004-content-pipeline.md)** (2026-06-12):
-> inventory, hard criteria, D-0004-1..5, phases 1-5. The sketch below is
-> historical — and partly WRONG by survey: the hot path never parses
-> markdown (swift-markdown/swift-cmark are NOT adopted, D-0004-4; the
-> in-house regex markdown parser is ported byte-exactly instead), and
-> highlighting (0.15 ms/call) is not the bottleneck — the shiki kill
-> waits for RFC 0004 phase 4. D2's non-Swift engine: operator leaning
-> in-house TextMate-style (D-0004-3).
->
-> **MAIN LINE since 2026-06-12** (evidence in rfcs/README.md): content
-> conversion is the dominant remaining hot path — ≈27 ms/page × 358k
-> pages of JS CPU per full build — while query latency measured ~99%
-> inside SQLite (ports win nothing there; §10(B) does).
+> **Carried by [RFC 0004](0004-content-pipeline.md)**. Phases 1-2 + the
+> §6b perf round EXECUTED (2026-06-12): markdown/plaintext renderers
+> native + default-on (tape parser, parallel batches; byte-proven at
+> 358k-doc scale). **Phases 3-4 closed by measurement (2026-06-13,
+> §6c/D-0004-8): NO-GO** — the static build is 84% filesystem IO + 6.5%
+> SQLite; the render surfaces phase 4 would port are ~6% (mostly shiki
+> WASM), so a port can't move build wall-time. The sketch below is
+> historical (swift-markdown/cmark NOT adopted, D-0004-4; shiki not the
+> bottleneck). **P4's live work is done; the main line advances** (see
+> rfcs/README.md). Phase 3 (crawl-time normalize) remains a separate,
+> independently-gated question.
 
 DocC JSON → Markdown/HTML on swift-markdown/swift-cmark; syntax
 highlighting replaces shiki — swift-syntax for Swift code; a research

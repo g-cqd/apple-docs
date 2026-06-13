@@ -12,7 +12,7 @@ built or indexed by the docs site.
 | [0001 — Swift-native transition](0001-swift-native-transition.md) | The master plan: phases P0–P7, bridge architecture, dependency policy, **§10 improvement track** | Living |
 | [0002 — Swift embedder](0002-swift-embedder.md) | P2 | **COMPLETE** (2026-06-12, Stage C: default model native-only, snapshots ship ADMX, transformers demoted to gated models; §6h: embedding v2 + reference flip executed) |
 | [0003 — Swift render service](0003-swift-render-service.md) | P3 | Active, **reordered**: darwin-first side slice; Linux shaper + hb-view kill deferred (phase 4, revisit-triggered) |
-| [0004 — Swift content pipeline](0004-content-pipeline.md) | P4 | **Active** (authored 2026-06-12): phases 1-2 + §6b perf round EXECUTED — parity at corpus scale AND every gate met (tape parser, parallel batches) → `content` default-on; phases 3-4 gated on a static-build profile |
+| [0004 — Swift content pipeline](0004-content-pipeline.md) | P4 | **Main line DONE** (2026-06-12/13): phases 1-2 + §6b perf round → `content` default-on (parity at corpus scale, every perf gate met); phases 3-4 closed **NO-GO** by the §6c static-build profile (build is IO-bound, render ~6%). Phase 3 = separate crawl-time question |
 
 ## Evidence behind the current order (measured 2026-06-12)
 
@@ -35,15 +35,24 @@ built or indexed by the docs site.
    fix + rounding change, order/VS16 retained on evidence; reference
    flip executed (Swift is its own reference; transformers.js =
    divergence recorder); `embed_version` coordination landed.
-2. **RFC 0004 + P4 content pipeline** — phases 1-2 EXECUTED + the §6b
-   perf round (both 2026-06-12): tape parser + writer rendering +
-   parallel batches met every gate (per-call doc 2.04×, file-convert
-   2.65×, batches 3.18×/1.15×) → **`content` is default-on**. JSC
-   kernels skipped (D-0004-7 — native won first; recorded option for
-   phases 3-4/P7). Phases 3-4 remain **gated on a static-build CPU
-   profile** (where the build hours actually live). **← next: that
-   profile decides P4's continuation, or the main line moves to §10
-   candidates (B/C/E) / P3-darwin / P5.**
+2. ~~**RFC 0004 + P4 content pipeline**~~ — **DONE for the main line**.
+   Phases 1-2 + §6b perf round (2026-06-12): tape parser + parallel
+   batches → `content` default-on, byte-proven at 358k-doc scale.
+   Phases 3-4 **closed NO-GO by the static-build profile** (2026-06-13,
+   §6c/D-0004-8): the build is 84% filesystem IO + 6.5% SQLite; render
+   surfaces are ~6% (mostly shiki WASM) → a render port can't move build
+   wall-time, IO parallelism (shipped) does. Phase 3 (crawl-time
+   normalize) is a separate, independently-gated question.
+
+**Main line advances → pick the next slice** (all independent; the P4
+gate is closed):
+- **§10 (B) SQLite query round-trips** — the only lever on the
+  user-facing 372 ms p50 (~99% in SQLite); a confirmed N+1
+  (per-result snippet + related-count fetch) is the concrete target.
+- **P3-darwin** (RFC 0003 phases 1-3) — the side slice that gates P5;
+  kills ~200 ms JIT spawn per cache-miss render.
+- **§10 (C) burst-stall + healthz** / **(E) snapshot size** — smaller
+  operational improvements.
 
 **Side slice (parallel)**
 - **P3-darwin** (RFC 0003 phases 1–3): render exports + dispatch behind
