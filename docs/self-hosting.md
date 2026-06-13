@@ -116,8 +116,8 @@ supported acquisition method on Linux and Windows hosts.
 ### Swift-native modules (on by default)
 
 Native implementations are **the default**: with `APPLE_DOCS_NATIVE` unset,
-every migrated module (`fusion`, `archive`, `embed`, `content`) serves
-natively wherever `libAppleDocsCore` and its data artifacts exist, and
+every migrated module (`fusion`, `archive`, `embed`, `content`, `render`)
+serves natively wherever `libAppleDocsCore` and its data artifacts exist, and
 falls back to the identical JavaScript implementations otherwise — absent
 bundle, ABI drift after a code-only deploy (re-run `pull-snapshot` to
 refresh), or any load failure logs one warning and serves the same results
@@ -128,8 +128,8 @@ refresh), or any load failure logs one warning and serves the same results
 service plists) forces the JavaScript implementations. Note (Stage C): the
 default embedding model is native-only — with native off, semantic search
 degrades to lexical-only; fusion/archive still serve identically from JS.
-A comma list (`fusion,archive,embed,content`) pins exactly those modules
-instead.
+A comma list (`fusion,archive,embed,content,render`) pins exactly those
+modules instead.
 
 `apple-docs setup --native` fetches the host's `libAppleDocsCore` bundle
 from the installed release (sha256-verified) into `dist/native/` and
