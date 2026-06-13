@@ -538,6 +538,19 @@ planned slice):
   from (A); may ride (A)'s re-embed transport only if its independent
   eval passes first — boundary moves change the corpus shape, and a
   bundled regression is unattributable.
+  **EVAL SWEEP 2026-06-13 → NO-GO** (`scripts/chunk-sweep.mjs`): a full
+  358k-doc re-embed per candidate (on a DB copy) + `eval-search` over the
+  168 judgments × 4 configs. Control holds — `lexical-only` is identical
+  across all candidates (chunk-independent), so the harness is sound. On
+  the semantic configs **no candidate robustly beats baseline**: the
+  deltas are ≤0.5% AND inconsistent across fusion modes — `16/880/160`
+  (+4.6% chunks) is the best on baseline-rrf (Δmrr +0.0047, Δndcg +0.0038)
+  but *regresses* hybrid+mmr (Δmrr −0.0009); `12/600/120` (+7.5% chunks)
+  is mixed (Δndcg +0.0017 on hybrid+mmr, neutral mrr); `8/880/320` is
+  neutral-to-negative. A noise-level, config-dependent gain bought with
+  more chunks (storage + scan cost) doesn't clear the embedding-changing
+  bar. **Keep 8/880/160.** The defaults are near-optimal; the sweep
+  harness stays for a future re-test if the model or corpus shifts.
 
 ---
 
