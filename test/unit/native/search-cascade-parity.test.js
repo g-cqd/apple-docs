@@ -39,7 +39,7 @@ const DOCS = [
   // both `...` ellipses (the term is not at index 0 and the text exceeds 220).
   { key: 'swiftui/layout-guide', title: 'SwiftUI Layout', framework: 'swiftui', sourceType: 'apple-docc', role: 'article', roleHeading: 'Article', kind: 'article', language: 'swift', abstractText: 'Build adaptive, data-driven interfaces that fit every Apple platform and device size class, and learn how to compose a navigation hierarchy that moves between screens while preserving scroll position, deep links, and accessibility focus across the entire user journey from launch through to a detail screen.', urlDepth: 2 },
 ]
-const QUERIES = ['view', 'View', 'ViewBuilder', 'building views', 'uiview', 'guide', 'design', 'nonexistentxyz', 'AVAudioSession.RouteSharingPolicy', 'navigation', 'frobnicator', 'uivew', 'contentvieww']
+const QUERIES = ['view', 'View', 'ViewBuilder', 'building views', 'uiview', 'guide', 'design', 'nonexistentxyz', 'AVAudioSession.RouteSharingPolicy', 'navigation', 'frobnicator', 'uivew', 'contentvieww', 'how do you represent app interface parts', 'deprecated programming interface guidance']
 
 if (existsSync(AD_SERVER)) {
   dir = mkdtempSync(join(tmpdir(), 'cascade-parity-'))
