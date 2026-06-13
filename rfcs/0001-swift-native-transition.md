@@ -204,180 +204,69 @@ double-build + sha256 diff), 2,400+ unit/integration tests.
 Every phase lists: scope → dependencies killed → gates. Rollback is always
 the `APPLE_DOCS_NATIVE` kill switch; phases are independently shippable.
 
-### P0 — Toolchain, CI, FFI skeleton
-`swift/` package + `Sources/ADCore` with a trivial exported function
-(`ad_abi_version()`); bun:ffi loader shim with the kill switch + impl
-logging; CI matrix (build, test, artifact upload); parity-test rig (A/B
-runner + benchmark wiring). *Gates*: artifacts load on all three platform
-targets; `bun run ci` green with the shim present-but-unused.
-**Research complete (2026-06-11)** — ABI contract v0, loader design, CI
-design, security model, and measured boundary costs live in
+### P0 — Toolchain, CI, FFI skeleton — **DONE (2026-06-11)**
+`swift/` package (ADBase common bases + ADSearch + ADCore →
+`libAppleDocsCore`), `src/native/loader.js` +
+`APPLE_DOCS_NATIVE`/`APPLE_DOCS_NATIVE_LIB`, the three-target `native` CI
+job (macos-26 / ubuntu-latest / ubuntu-24.04-arm: build, swift test, staged
+$ORIGIN bundle, JS↔Swift parity). All gates met. ABI contract v0 + the
+loader/CI/security/boundary research live in
 [`p0/`](0001-swift-native-transition/p0/README.md).
-**Implemented (2026-06-11)** — `swift/` package (ADBase common bases +
-ADSearch + ADCore → `libAppleDocsCore`), `src/native/loader.js` +
-`APPLE_DOCS_NATIVE`/`APPLE_DOCS_NATIVE_LIB`, and the `native` CI job
-(macos-26 / ubuntu-latest / ubuntu-24.04-arm: build, swift test, staged
-$ORIGIN bundle, JS↔Swift parity). All P0 gates met; release-asset
-attachment stays deferred until a module defaults to native.
 
-### P1 — Leaf hot functions (pure compute)
-Ranking/fusion math (`search/ranking.js`, `fuse-semantic.js` — weightedRRF,
-MMR, score shaping), snippet extraction, and the tar.zst archive writer
-(system `zstd`, preserving byte determinism). All pure functions with exact
-JS reference outputs. *Kills*: nothing yet (prep). *Gates*: bit-identical
-outputs on recorded fixtures; search benchmark p50 not worse; snapshot
-determinism gate green with the native archiver.
-**Partial (2026-06-11)** — fusion shipped behind the kill switch:
-`ADSearch` mirrors `fusion.js` with `Object.is`-exact parity (400 seeded
-property cases + fixtures, Map order identical), `fuse-semantic.js`
-dispatches through `src/search/fusion-native.js`. Measured (arm64 Mac):
-MMR 1.4–1.8× faster native; hybridFusion +8 % at n=100, slower at n=10
-(packing dominates tiny payloads — the p0 batching rule, observed).
-Default stays JS. Content hashing is **dropped from P1**: `sha256` already
-runs on Bun's native CryptoHasher; nothing to win.
-**Archiver shipped (2026-06-11)** — `ADArchive` streams synthesized-ustar
-tar.zst through a runtime-dlopen'd libzstd (no tar/zstd host binaries, no
-multi-GB temp tar) behind `APPLE_DOCS_NATIVE=archive`; parity gates are
-extraction-equality + rebuild-twice (bsdtar byte-equality is impossible by
-construction). Pax extended headers added 2026-06-11 after a production
-fallback (a 103-byte SF Symbols FILENAME no 155+100 split can represent) —
-the writer now covers every production path (273k-file tree verified).
-**P1 CLOSED (2026-06-11)** — ranking and snippets stay JS **for the bridge
-era** by measurement (NOT a transition exemption — they migrate with P6's
-search-orchestrator move, where they live inside the Swift process and the
-FFI boundary tax that disqualifies them here does not exist):
-`rerank` costs 158.8 µs at the maximum realistic input (300 results, real
-corpus rows, intent included) = **0.04 %** of a natural-language lexical
-query (p50 372 ms on the full corpus) and ~2 % of even the hot-cache
-symbol-lookup floor (0.44 ms, ~10-row inputs where rerank is single-digit
-µs). An FFI port would be marshalling-bound (string-heavy inputs; the
-fusion n=10 lesson) and would have to reproduce exact JS double semantics
-around the 0.001-epsilon sort — all risk, no measurable win. Snippets
-(38 LOC of integer/string ops on ≤100 post-slice rows) and highlighting
-(static-build path, not query-time) close with it. See §9.
+### P1 — Leaf hot functions — **DONE / CLOSED (2026-06-11)**
+Fusion math (`ADSearch`, `Object.is`-exact vs `fusion.js`: 400 seeded
+property cases + fixtures) + the tar.zst archiver (`ADArchive`, runtime-
+dlopen'd libzstd, no host binaries, pax-complete: a 273k-file tree
+verified) shipped behind the kill switch (`fusion`, `archive`). Content
+hashing dropped from P1 (Bun's CryptoHasher already native).
+**Ranking + snippets stay JS for the bridge era by measurement** — NOT an
+exemption: they migrate with P6's orchestrator move (inside the Swift
+process the FFI tax disappears). `rerank` is 158.8 µs at the maximum
+realistic input = **0.04%** of a 372 ms lexical query; an FFI port would be
+marshalling-bound (the fusion n=10 lesson) and must reproduce exact JS
+double semantics — all risk, no win. Snippets + highlighting close with it.
+See §9.
 
-### P2 — Embedder from scratch (the flagship)
-> **Superseded by [RFC 0002](0002-swift-embedder.md)** (2026-06-11), which
-> is the P2 contract: hard performance/memory/acceleration gates, the
-> weights-artifact and tokenizer decisions, and `ADEmbed`
-> internal-subpackage-first packaging. The sketch below is historical.
->
-> Phase 1 (tokenizer parity) done 2026-06-11: `ADEmbed` WordPiece pipeline,
-> 100% token-id equality with transformers.js on 180 committed fixtures
-> (RFC 0002 §6a).
->
-> Phase 2 (matrix + pooling) done 2026-06-11: ADMX weights artifact + mmap
-> reader + bit-exact mean/normalize/quantize — vectors AND codes reproduce
-> the JS/onnx reference bit-for-bit on 180 cases + 2,000 corpus chunks
-> (RFC 0002 §6b).
->
-> Phase 3 (FFI + dispatch) done 2026-06-11: `ad_embed_*` exports +
-> `embedder-native.js` behind `APPLE_DOCS_NATIVE=embed`; gates met at
-> 2.68× index throughput / 0.021 ms p50 (RFC 0002 §6c).
->
-> Phase 4 (codes + retrieval equivalence) done 2026-06-11: native sign/int8
-> codes over the bridge, setup ordering fixed, and the full-corpus
-> equivalence gate — 831k chunks byte-identical, golden-eval metrics
-> identical (RFC 0002 §6d).
->
-> Phase 5 flip shipped 2026-06-11: `APPLE_DOCS_NATIVE` defaults ON for
-> fusion/archive/embed (`off` = escape hatch); stable snapshot builds go
-> native (embed-pinned one cycle); kills gated on the soak (RFC 0002 §6e).
+### P2 — Embedder — **COMPLETE** → [RFC 0002](0002-swift-embedder.md)
+model2vec inference in `ADEmbed`, native-by-default (`embed` token);
+Stage-C kills executed (transformers/onnxruntime gated-only, snapshots ship
+the ADMX artifact instead of model.onnx); embedding v2 + the reference flip.
+*Killed* (default model): `@huggingface/transformers`,
+`onnxruntime-node`/`-web`, the WASM fallback, the darwin-x64 gap. Detail +
+records in RFC 0002.
 
-model2vec inference in Swift: tokenizer (the model's tokenizer.json,
-unigram/WordPiece — implemented with swift-parsing), embedding-matrix
-mmap (safetensors reader), mean-pool + SIMD dot products; batch API for
-index builds. *Kills*: `@huggingface/transformers`, `onnxruntime-node`,
-`onnxruntime-web`, the Bun WASM fallback plugin, and the platform-binding
-matrix that broke darwin-x64. *Gates*: vectors within 1e-5 of the JS/ONNX
-reference on the full eval set; NDCG/MRR unchanged; index build ≥ 2× faster
-than transformers.js (expected: far more).
+### P3 — Render service — **Phases 1/2/4 DONE; phase 3 held** → [RFC 0003](0003-swift-render-service.md)
+darwin font-text + symbol-pdf + symbol-png + the symbol prerender, all
+native-by-default (`render` token, warm 163×/1497× over the JIT spawn; the
+prerender batch 2.0× over the worker pool). The Linux HarfBuzz shaper
+(dlopen'd libharfbuzz) **dropped the hb-view host binary**. *Remaining*:
+phase 3 — delete the darwin spawn scripts, gated on a release cycle at
+native-default (they are the `=off` escape hatch's fallback). Detail +
+records in RFC 0003.
 
-### P3 — Renderers (consolidate the existing Swift)
-> **Carried by [RFC 0003](0003-swift-render-service.md)** (2026-06-11):
-> inventory, hard criteria, D-0003-1..4 (private-framework codepoint
-> worker, dlopen shaper binding, AppKit thread model, payload transport),
-> and the phased plan. The sketch below is historical.
->
-> **Reordered 2026-06-12 (rfcs/README.md)**: P3 runs **darwin-first as a
-> SIDE slice** in parallel with P4; the Linux shaper (and with it the
-> hb-view kill, which requires it) is DEFERRED — hb-view keeps serving
-> Linux until the deferred phase's revisit triggers fire.
->
-> **Phase 1 (darwin) EXECUTED 2026-06-13 (RFC 0003 §6)**: the `ADRender`
-> module — `ad_render_font_text` + `ad_render_symbol_pdf` exports, native
-> by default behind the `render` token, per-call spawn fallback. Warm p50
-> **163× (font-text) / 1497× (symbol-pdf)** over the `swift script.swift`
-> JIT; parity native==spawn==goldens, byte-identical (darwin-gated).
-> **D-0003-3 settled SAFE**: AppKit symbol-pdf runs crash-free in the
-> dlopen'd dylib on Bun's JS thread, even under concurrency. symbol-png
-> stays spawned. Phases 2–4 (prerender batching, spawn kills, the
-> deferred Linux shaper) unstarted.
->
-> **Phase 2 (darwin prerender) EXECUTED 2026-06-13 (RFC 0003 §6)**:
-> `ad_render_symbol_pdf_batch` (concurrentPerform across cores) replaces
-> the 4–16 `swift` worker pool — **2.0× throughput, byte-identical, RSS
-> bounded** (a single autoreleasepool-drained process); the pool stays the
-> fallback. **symbol-png also ported** (native-first). D-0003-3 extended:
-> concurrent in-dylib AppKit + NSBitmap PNG both settled SAFE by probe.
-> Now every *darwin* render spawn lives in libAppleDocsCore except the
-> codepoint worker (D-0003-1). Phase 3 (spawn-script kills) waits a
-> release cycle; phase 4 (Linux shaper) stays deferred.
->
-> **Phase 4 (Linux shaper) EXECUTED 2026-06-13 (RFC 0003 §6; un-deferred,
-> spike-first)**: `ADRender/HarfBuzzShaper.swift` dlopens libharfbuzz
-> alone (the HB 7+ draw API yields outlines — no FreeType), exposed as
-> `ad_render_font_text_shaped` and wired as the `hb-native` font engine,
-> reachable **without** hb-view. The spike (settling D-0003-2) is **GO**:
-> it runs the same HarfBuzz hb-view does, so layout is identical and the
-> supersampled raster diff is 0–1.1% across Latin/RTL/combining/mono. The
-> **hb-view host-package requirement is dropped** — the last render
-> host-binary, so Linux font rendering is now self-contained (libharfbuzz
-> is near-ubiquitous; absent → hb-view → placeholder). This is the **first
-> real Linux render code** in the dylib. Emoji (COLR) stays out of scope.
-> P3 is now substantially complete; only phase 3's darwin spawn-script
-> kills remain, held on the §4 release-cycle gate.
+### P4 — Content pipeline — **Main line DONE; phases 3-4 NO-GO** → [RFC 0004](0004-content-pipeline.md)
+markdown/plaintext renderers native + default-on (`content` token, tape
+parser + parallel batches; byte-proven at 358k-doc scale, 2–3.2× batched).
+**Phases 3-4 closed NO-GO** by the static-build CPU profile (84% filesystem
+IO + 6.5% SQLite; render surfaces ~6%, mostly shiki WASM — a port can't move
+build wall-time). *Killed*: nothing (shiki stays; swift-markdown NOT adopted,
+D-0004-4). *Remaining*: phase 3 (crawl-time normalize) — separate,
+independently gated. Detail + records in RFC 0004.
 
-The five inline Swift scripts (725 LOC: symbol worker, symbol-pdf,
-symbol-png, font-text, codepoint worker) move into the package as a
-persistent actor-based render service (one process, request/response over
-the FFI boundary or a socketpair — no more JIT `swift script.swift` spawns,
-which cost ~300ms each). Adds the **cross-platform text shaper** on
-HarfBuzz/FreeType for Linux, replacing the hb-view host-binary dependency
-introduced by the parity work; darwin keeps CoreText. *Kills*: swift JIT
-spawn latency; the `hb-view` host package requirement. *Gates*: SVG
-fixture diffs clean on both OSes; render service p50 < the spawn path.
-
-### P4 — Content pipeline
-> **Carried by [RFC 0004](0004-content-pipeline.md)**. Phases 1-2 + the
-> §6b perf round EXECUTED (2026-06-12): markdown/plaintext renderers
-> native + default-on (tape parser, parallel batches; byte-proven at
-> 358k-doc scale). **Phases 3-4 closed by measurement (2026-06-13,
-> §6c/D-0004-8): NO-GO** — the static build is 84% filesystem IO + 6.5%
-> SQLite; the render surfaces phase 4 would port are ~6% (mostly shiki
-> WASM), so a port can't move build wall-time. The sketch below is
-> historical (swift-markdown/cmark NOT adopted, D-0004-4; shiki not the
-> bottleneck). **P4's live work is done; the main line advances** (see
-> rfcs/README.md). Phase 3 (crawl-time normalize) remains a separate,
-> independently-gated question.
-
-DocC JSON → Markdown/HTML on swift-markdown/swift-cmark; syntax
-highlighting replaces shiki — swift-syntax for Swift code; a research
-spike picks the approach for other languages (in-house TextMate-grammar
-engine vs tree-sitter [system lib, would need a §9 exception] vs reduced
-language set). *Kills*: `shiki`. *Gates*: rendered-page fixture corpus
-diffs (the 353k-page static build is its own gate: byte-diff a sampled
-build), web-build benchmark ≥ JS.
-
-### P5 — Storage
-SQLite C-interop module (prepared-statement cache, typed row decoding —
-possibly pointfreeco's swift-structured-queries for the query layer);
-reader pool becomes actors on the native side, replacing the
-worker_threads pool at the FFI boundary. *Kills*: `bun:sqlite` (via the
-facade — its 13 call sites in `database.js` are the entire surface),
-`Worker` reader-pool. *Gates*: full unit suite A/B green; search-real
-concurrency benchmark ≥ JS; WAL/locking behavior verified under the
-container contention test.
+### P5 — Storage — **NEXT (gate met: P2 + P3-darwin native-by-default)**
+SQLite C-interop module: prepared-statement cache, typed row decoding (D4 —
+pointfreeco's swift-structured-queries vs raw C interop, decided in the
+design); the reader pool becomes native actors, replacing the
+`worker_threads` pool at the FFI boundary. The query path is ~99% SQLite
+(README evidence), so this is where the storage layer goes native — but the
+win is architectural (one process, no Worker marshalling, prepared-stmt
+reuse), not raw SQLite speed (§10(B) already took the JS-side query
+round-trips). *Kills*: `bun:sqlite` (via the facade — its call sites in
+`src/storage/database.js` are the entire surface) and the `Worker`
+reader-pool (`src/storage/reader-*.js`). *Gates*: full unit suite A/B
+green; search concurrency benchmark ≥ JS; WAL/locking verified under the
+container contention test. First slice: the `database.js` facade behind the
+bridge with the read path on native prepared statements.
 
 ### P6 — Servers (fully custom, in-house on SwiftNIO)
 > **D1 settled 2026-06-12 (operator decision)**: no Vapor — the spike is
@@ -429,7 +318,7 @@ untouched.
 | # | Question | Status |
 | --- | --- | --- |
 | D1 | Server framework: Vapor (vetted exception) vs SwiftNIO-direct | **SETTLED 2026-06-12 (operator decision): fully custom in-house on SwiftNIO — no Vapor, no spike; deps stay apple/swiftlang/pointfreeco only (§2)** |
-| D2 | Highlighting engine for non-Swift languages (TextMate in-house vs tree-sitter exception vs reduced set) | **Open — P4 spike** |
+| D2 | Highlighting engine for non-Swift languages (TextMate in-house vs tree-sitter exception vs reduced set) | **Moot** while P4 phase 4 is shelved (NO-GO, RFC 0004 + records); re-opens only if P6/P7 serves HTML in-process |
 | D3 | Windows timing | Deferred until after P7 |
 | D4 | swift-structured-queries (pointfreeco) for the storage query layer vs raw C interop | Open — decide in P5 design |
 | D5 | Dylib distribution vs build-from-source for `setup` consumers | **Settled by P0 research (2026-06-11)**: artifacts-in-release with sha256 sidecars; compiled binaries embed the dylib (`dlopen` accepts the embedded path directly); Linux ships `$ORIGIN`-rpath runtime bundles. Details: [`p0/decisions.md`](0001-swift-native-transition/p0/decisions.md) D-P0-1/9/10 |
@@ -451,8 +340,8 @@ regression inside a combined change is unattributable.
 | --- | --- |
 | Pure performance (no output change) | benchmarks beat the baseline; ALL parity suites unchanged |
 | Output-changing, non-embedding | golden-fixture update reviewed WITH the change + written rationale; eval metrics where applicable |
-| Embedding-changing | full re-embed; golden-eval no-regress PLUS stated improvement targets up front; new PINNED set; fixture regeneration; snapshot/schema coordination (template: RFC 0002 §6f's compat cycle) |
-| Schema/format-changing | compat cycle + derive/upgrade-path strategy (template: RFC 0002 §6f); determinism gates re-proven |
+| Embedding-changing | full re-embed; golden-eval no-regress PLUS stated improvement targets up front; new PINNED set; fixture regeneration; snapshot/schema coordination (template: RFC 0002 records, Stage-C compat cycle) |
+| Schema/format-changing | compat cycle + derive/upgrade-path strategy (template: RFC 0002 records, Stage-C); determinism gates re-proven |
 | Operational/architectural | smoke/ops evidence on the affected host class; rollback path stated |
 
 Any improvement that adds a dependency or touches security posture
@@ -462,95 +351,43 @@ additionally routes through §2 and a §9 decision, regardless of category.
 domain, that domain's frozen-external-reference guards (e.g. the
 transformers.js replay suites) convert to self-regression goldens: the
 Swift implementation becomes its own reference, and fixtures regenerate
-FROM it. RFC 0002 §6g records the embedder instance of this rule.
+FROM it. The RFC 0002 records hold the embedder instance of this rule.
 
 **Candidate registry** (one line + evidence pointer; execution requires a
 planned slice):
 
-- **(A) Embedding v2 — EXECUTED 2026-06-12 (record: RFC 0002 §6h)**:
-  astral-CJK spacing fixed; i8 rounding changed to half-away-from-zero
-  (measured incidence zero); lowercase→strip order and VS16/Mn stripping
-  RETAINED on evidence (exhaustive commute scan / shared-Rust
-  semantics). The reference flip landed with it — fixtures regenerate
-  from the Swift implementation, transformers.js survives as the
-  divergence recorder — plus `embed_version` stamping with
-  mismatch-forced re-embed. Eval: no-regress, mrr strictly up;
-  cos(`𠮷stack`, `stack`) −0.02 → 0.99.
-- **(B) SQLite query-layer round-trips — EXECUTED 2026-06-13**: a caller
-  attribution of the ~99%-in-`Statement.all/get` profile found the cost
-  was NOT the hypothesized snippet/fuzzy round-trips (~1% combined) but
-  three per-search AVAILABILITY checks each running `COUNT(*)` over a
-  large table — `getBodyIndexCount` (`COUNT(*)` on the 358k-row body-FTS5
-  index, ~130 ms warm) alone was **43%** of search CPU. Fix (output-
-  identical): `hasBodyIndex()` existence probe (`SELECT 1 … LIMIT 1`) for
-  the boolean-only body check; memoize the vector/chunk counts (value
-  preserved, busted on re-embed); plus the fuzzy N→1 batch
-  (`getSearchRecordsByIds`). Result, recall/ndcg/mrr **byte-flat** across
-  168 judgments × 4 configs, p50 **276→53 ms (5.2×, lexical)** /
-  **487→115 ms (4.2×, rrf)** / **261→106 ms (2.5×, hybrid)**. The
-  measure-first discipline is the lesson: the profile's leaf (`Statement`)
-  hid the real culprit until self-time was attributed to its JS caller.
-  Remaining cost is legitimate cascade-FTS + the semantic Hamming scan
-  (`semantic.js` shortlist, ~14% by profile) — EXECUTED next.
-  Tooling: `scripts/profile-cpuprofile.mjs` gained native-frame caller
-  attribution.
-- **(B′) Semantic Hamming-scan popcount — EXECUTED 2026-06-13** (the lever
-  (B) named, output byte-identical). A measure-first redo: cpu-prof's
-  self-time attribution **misled** — it pinned 93.8% on `insertSorted`,
-  but direct wall-clock isolation showed the ~40 ms scan (831k × 64-byte
-  codes, K=200) is ~99% **popcount**, not selection (insertSorted ~1 ms).
-  Fix: (a) a **SWAR popcount over `Uint32` views** (`embedding.js`
-  `hammingU32`, 16 word-ops vs 64 byte-LUT lookups) — scan 40 → 15.6 ms;
-  (b) the O(K)-splice insertion sort → a fixed-size **max-heap keyed
-  (dist, idx)** (admit iff `d < root`, evict the max (dist, idx), final
-  sort (dist asc, idx asc)) — neutral at K=200 but O(K)→O(log K) protects
-  the configurable `APPLE_DOCS_SEMANTIC_SHORTLIST` (≤5000). End-to-end
-  semantic search **55.8 → 18.9 ms (3.0×)**; `eval:search` **byte-flat**
-  (recall/ndcg/mrr identical, 168 judgments × 4 configs); full-search
-  semantic p50 1.4–1.6×. Output-identity locked by a property test (heap
-  == the old insertSorted across tie-heavy / boundary / both code paths).
-  **Lesson: trust direct timing over sampler self-time** (the §10(B)
-  measure-first discipline, one level deeper). A hardware-POPCNT native
-  scan (~further 2–3×) remains a possible future slice.
-- **(C) Burst-stall architecture — measured 2026-06-13: primary symptom
-  RESOLVED, onset stall NON-REPRODUCING (no new code).** The two mm18
-  symptoms were healthz waiting-room 503s and a ~3 s onset event-loop
-  stall (ops/runbooks/mcp-burst-healthz.md). Confirm-first against the
-  real `startHttpServer` over the full 831k-chunk DB: (1) **`/healthz` is
-  structurally exempt** — http-server.js:154 returns the health body
-  before the `/mcp` route + the heavy semaphore (it's a sibling route at
-  the origin, not under the transport), so it never shares the
-  waiting-room — the saturation-503 issue is already gone (covered by an
-  existing unit test); (2) a 16× `search_docs` burst kept healthz at
-  **1 ms, 8/8 200** — the onset stall did **not** reproduce on arm64 (fast
-  native embed + the §10(B′) 3× search speedup; the mm18 measurement was
-  Intel + cold). The only residual is that narrow Intel-cold-start window,
-  which the runbook itself deprioritizes ("only worth it if real traffic
-  ever looks like the probe"); shipping unvalidated yield points would
-  violate the operational gate (evidence on the affected host class — not
-  obtainable locally). **Deferred** pending prod-monitor signal on the
-  Intel host; no speculative change made.
-- **(D) Prerender batching**: folds into RFC 0003 phase 2.
-- **(E) Snapshot/storage size**: the 2.47 GB asset-ceiling scare;
-  raw-payload and compaction strategy.
-- **(F) Chunking-parameter revisit** (src/search/chunker.js:59 —
-  maxChunks 8 / windowChars 880 / overlapChars 160): SEPARATE eval unit
-  from (A); may ride (A)'s re-embed transport only if its independent
-  eval passes first — boundary moves change the corpus shape, and a
-  bundled regression is unattributable.
-  **EVAL SWEEP 2026-06-13 → NO-GO** (`scripts/chunk-sweep.mjs`): a full
-  358k-doc re-embed per candidate (on a DB copy) + `eval-search` over the
-  168 judgments × 4 configs. Control holds — `lexical-only` is identical
-  across all candidates (chunk-independent), so the harness is sound. On
-  the semantic configs **no candidate robustly beats baseline**: the
-  deltas are ≤0.5% AND inconsistent across fusion modes — `16/880/160`
-  (+4.6% chunks) is the best on baseline-rrf (Δmrr +0.0047, Δndcg +0.0038)
-  but *regresses* hybrid+mmr (Δmrr −0.0009); `12/600/120` (+7.5% chunks)
-  is mixed (Δndcg +0.0017 on hybrid+mmr, neutral mrr); `8/880/320` is
-  neutral-to-negative. A noise-level, config-dependent gain bought with
-  more chunks (storage + scan cost) doesn't clear the embedding-changing
-  bar. **Keep 8/880/160.** The defaults are near-optimal; the sweep
-  harness stays for a future re-test if the model or corpus shifts.
+- **(A) Embedding v2** — *embedding-changing* — **DONE 2026-06-12**:
+  astral-CJK fix + i8 rounding (incidence zero); order/VS16 retained on
+  evidence; the reference flip landed (Swift is its own reference;
+  transformers.js = divergence recorder). Eval no-regress, mrr up;
+  cos(`𠮷stack`,`stack`) −0.02 → 0.99. Record: [RFC 0002 records](0002-swift-embedder/records.md).
+- **(B) SQLite query round-trips** — *pure-perf* — **DONE 2026-06-13**: a
+  per-search `COUNT(*)` over the 358k-row body-FTS index was **43%** of
+  search CPU; an existence probe (`hasBodyIndex`) + count memoization (+ a
+  fuzzy N→1 batch) cut p50 **2.5–5×**, recall/ndcg/mrr byte-flat. Lesson:
+  attribute self-time to the JS caller (`profile-cpuprofile.mjs --callers`).
+- **(B′) Semantic Hamming-scan popcount** — *pure-perf* — **DONE 2026-06-13**:
+  cpu-prof mis-attributed (claimed `insertSorted` 93.8%); direct timing
+  showed the scan is ~99% popcount. A SWAR `Uint32` popcount
+  (`embedding.js hammingU32`) + a max-heap took semantic search **55.8 →
+  18.9 ms (3.0×)**, eval byte-flat (property-test-locked). Lesson: trust
+  direct timing over sampler self-time. A hardware-POPCNT native scan stays
+  a possible further slice.
+- **(C) Burst-stall** — *operational* — **measured 2026-06-13: RESOLVED /
+  non-reproducing, no code**: `/healthz` is structurally exempt (a sibling
+  origin route before the `/mcp` semaphore — saturation-503 already gone);
+  a 16-burst held healthz at 1 ms, 8/8 200 on arm64 (the mm18 stall was
+  Intel + cold). Onset yield-points deferred pending affected-host
+  evidence. Runbook: ops/runbooks/mcp-burst-healthz.md.
+- **(D) Prerender batching** — folded into RFC 0003 phase 2 (**DONE**).
+- **(E) Snapshot/storage size** — *schema/format* — **OPEN** (not yet
+  attempted): the 2.47 GB asset-ceiling; raw-payload + compaction strategy.
+- **(F) Chunking-parameter revisit** — *embedding-changing* — **EVAL SWEEP
+  2026-06-13 → NO-GO** (`scripts/chunk-sweep.mjs`): a full 358k-doc re-embed
+  per candidate + `eval-search`; no set robustly beats baseline (deltas
+  ≤0.5%, inconsistent across fusion modes — `16/880/160` helps baseline-rrf
+  Δmrr +0.0047 but regresses hybrid+mmr −0.0009; at +4.6–7.5% chunks).
+  **Keep 8/880/160.** Harness retained for re-test.
 
 ---
 
@@ -566,7 +403,7 @@ land; each phase's completion gets a dated entry here.
   permanently; a possible relocation of the public instance to a Linux
   cloud (Amazon/Oracle) is a **later-stage, RFC-triggering iteration** —
   it does not demote darwin serving today. (Context: embedder runtime
-  choices in [RFC 0002 §5b](0002-swift-embedder.md).)
+  choices in [RFC 0002 records](0002-swift-embedder/records.md).)
 - **2026-06-11 — P0 implemented + P1 fusion shipped (default off)**: the
   `swift/` package landed with the common bases target (`ADBase` — result
   buffers, status enums, bounds-checked request reader, build info — the
@@ -586,3 +423,28 @@ land; each phase's completion gets a dated entry here.
   0.001-epsilon sort: all risk, no win. Snippets (38 LOC, post-slice
   string ops) and highlighting (static-build path) close with it. P1's
   shipped scope — fusion + archiver (now pax-complete) — is final.
+- **2026-06-11 — P2 EXECUTED (embedder phases 1–5)**: `ADEmbed` model2vec
+  inference native-by-default (`embed` token); 831k-chunk equivalence
+  byte-identical; Stage-C kills executed (transformers/onnxruntime
+  gated-only; snapshots ship the ADMX artifact instead of model.onnx).
+  → [RFC 0002](0002-swift-embedder.md) + its records.
+- **2026-06-12 — P2 COMPLETE + P4 main line**: embedding v2 + the reference
+  flip (RFC 0002 — Swift is its own reference now); content
+  markdown/plaintext native + default-on after the §10 perf round
+  (`content` token, 2–3.2× batched, byte-proven at 358k-doc scale —
+  RFC 0004). §10(A) embedding v2 + §10(B) SQLite query round-trips (43% of
+  search CPU was a `COUNT(*)`; p50 2.5–5×, byte-flat).
+- **2026-06-13 — P3-darwin + P4 close + §10 slices**: P3 phases 1/2/4 —
+  font-text + symbol-pdf + symbol-png + the symbol prerender native, and
+  the Linux HarfBuzz shaper that **dropped the hb-view host binary**
+  ([RFC 0003](0003-swift-render-service.md)). P4 phases 3-4 **NO-GO** by the
+  static-build profile (IO-bound, render ~6% — RFC 0004). §10: **(B′)**
+  Hamming-scan popcount (search **3×**, byte-flat), **(C)** burst-stall
+  resolved/non-reproducing, **(F)** chunking sweep NO-GO. The only P3
+  remainder is phase 3 (darwin spawn-script kills), held on the §4
+  release-cycle gate.
+- **2026-06-13 — RFC docs reorg**: per-RFC `records.md` archives
+  (0002/0003/0004) extending the `p0/` precedent; living RFCs condensed to
+  status + contract + forward plan; this maintenance log completed;
+  rfcs/README.md refreshed to a P0–P7 ladder. Audit (codebase vs docs)
+  found **no drift**; no code changed.

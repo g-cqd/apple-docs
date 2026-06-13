@@ -1,317 +1,102 @@
 # RFC 0004 — Swift content pipeline (RFC 0001 P4)
 
-- **Status**: Active (living document) — carries RFC 0001 §7 P4 the way
-  RFC 0002/0003 carried P2/P3.
-- **Audience**: maintainers. Lives in `rfcs/` deliberately: repo
-  documentation, not product documentation; not built or indexed by the
-  docs site.
+- **Status: MAIN LINE DONE** (2026-06-12/13). Phases 1–2 → `content`
+  default-on (byte-proven at 358k-doc scale; every perf gate met after the
+  perf round). **Phases 3–4 closed NO-GO** by the static-build CPU profile
+  (the build is IO-bound, render ~6%). **Phase 3 (crawl-time normalize)** is
+  the one remaining, independently-gated question.
+- **Detailed execution records**: [`records.md`](0004-content-pipeline/records.md)
+  (phases 1–2, the perf round, the static-build profile, D-0004-6/7/8).
+- Carries RFC 0001 §7 P4. Repo documentation; not built or indexed.
 
 ## 1. Motivation
 
-Content conversion is the dominant remaining hot path (evidence in
-rfcs/README.md, measured 2026-06-12): ≈27 ms/page × ~358k pages of
-JS CPU per full build — pipeline-bench p50 18.1 ms/page including IO,
-full static builds measured in hours — while query latency sits ~99%
-inside SQLite where ports win nothing.
-
-**Survey corrections to RFC 0001 §7 P4's sketch** (this RFC supersedes
-it):
-
-- The hot path **never parses markdown to render docs** — it is a
-  custom DocC-JSON walker (~1,640 LOC of string assembly).
-  **swift-markdown / swift-cmark are NOT adopted** (D-0004-4): the one
-  real markdown parser in the stack (`src/content/render-html/
-  markdown.js`, 220 LOC of regexes, used for swift-book/WWDC/evolution
-  sources and HTML-source abstracts) must be ported **byte-exactly** in
-  phase 4 — a conformant CommonMark engine would *break* parity.
-- Syntax highlighting measures 0.15 ms/call (p50, recorded bench) —
-  **not** the bottleneck. The shiki kill waits for phase 4; phases 1-3
-  don't touch it (the markdown and plaintext surfaces have no
-  highlighting at all).
-- Phases 1-2 require **zero new SwiftPM dependencies** — the package's
-  zero-deps / no-Foundation-in-shipped-targets posture survives at
-  least until phase 4's highlight engine decision.
+Content conversion looked like the dominant remaining hot path (≈27 ms/page
+× ~358k pages). The static-build profile corrected that: the build is 84%
+filesystem IO + 6.5% SQLite; the render surfaces are ~6% (mostly shiki
+WASM). The conversion *renderers* are µs-fast — so the live win was the
+opt-in→default flip (phases 1–2) and the IO parallelism already shipped, not
+a deeper render port.
 
 ## 2. Inventory (surveyed 2026-06-12)
 
-Four conversion surfaces share the DocC-walk core:
+Four conversion surfaces share a DocC-JSON walk core (NOT a markdown
+parser — D-0004-4):
 
-| # | Surface | Code | LOC | Callers |
-| --- | --- | --- | --- | --- |
-| 1 | Doc markdown + plaintext (leaf renderers) | src/content/render-markdown.js, src/content/normalize/render-content.js, src/pipeline/index-body.js `renderPlainText` | ~330 | MCP read_doc fallback (lookup.js:85-101), web `.md` route, page-builder (`includeFrontMatter`/`includeTitle` opts), FTS body indexing, snippets (render-snippet.js) |
-| 2 | Crawl markdown | src/apple/renderer.js `renderPage` (+ `relativePath`) | 327 | pipeline/convert.js `convertAll`, pipeline/persist.js, commands/consolidate.js |
-| 3 | Normalize | src/content/normalize/{docc,refs,metadata}.js | ~700 | persist (crawl), lookup re-normalize at read time, hydrate |
-| 4 | HTML + highlight | src/content/render-html{,.js}/* + highlight.js (shiki) + render-html/markdown.js | ~1,200 | web static build (~346k pages via web/build/document-pages.js), dynamic serve fallback |
+| # | Surface | Native status |
+| --- | --- | --- |
+| 1 | Doc markdown + plaintext (leaf renderers) | → `ad_content_doc_markdown` / `ad_content_plaintext` (+ batches), default-on |
+| 2 | Crawl markdown (`renderPage`) | → `ad_content_page_markdown` + `ad_content_convert_pages`, default-on |
+| 3 | Normalize (docc/refs/metadata) | **JS — phase 3, gated** (crawl-time; contentHash-stability risk) |
+| 4 | HTML + highlight (shiki) | **JS — phase 4 NO-GO** (render ~6% of an IO-bound build) |
 
-Shared helpers dragged by 1-2: `normalizeIdentifier`
-(src/apple/normalizer.js — regex strip + full-Unicode lowercase),
-`toFrontMatter` (src/lib/yaml.js — quoting rules), `safeJson`
-(src/content/safe-json.js — parse-or-null with a **depth-64 freeze
-limit**: depth >64 throws inside the wrapper → null → fallback
-rendering; a Swift parser that *succeeds* there would diverge).
+Storage/IO stays JS in every phase (file IO, DB, caches, sync orchestration).
+The one input-side markdown parser (`render-html/markdown.js`, 220 LOC of
+regexes) would be ported byte-exactly in phase 4 — a conformant CommonMark
+engine would *break* parity (D-0004-4).
 
-Storage/IO that **stays JS in every phase**: file IO + atomic writes,
-DB reads/writes, `stableStringify`, the LRU caches (safeJson's cache is
-perf-only; the markdown LRU keys on path), sync orchestration and
-concurrency pools.
+## 3. Hard criteria (gates)
 
-Measured numbers (recorded baselines): pipeline-bench p50 18.1 ms /
-p95 27.0 ms per page (download+convert+IO, 25-page fixture);
-highlight p50 0.15 ms/call; max `content_json` observed 804 KB
-(contract v0 maxInputBytes is 1 GB — ample).
-
-## 3. Hard criteria
-
-| Surface / phase | Gate |
-| --- | --- |
-| Phases 1-2 markdown/plaintext | **byte-identical** to the JS implementation: committed golden corpus (all source_types) passes for BOTH implementations, plus a full-corpus A/B replay (≈358k docs; doc-markdown + plaintext from DB rows, page-markdown from document_raw) with **0 byte mismatches** (embed's 831k-chunk precedent) |
-| Phase 2 throughput | convert-only bench (pages/s) native ≥ JS; numbers recorded here |
-| Phase 3 normalize | corpus replay produces **identical contentHash for every row** (sha256(stableStringify) — any byte drift churns the whole corpus); zero re-upsert churn |
-| Phase 4 HTML | sampled static-build byte-diff clean; web-build benchmark ≥ JS (RFC 0001 P4 gate) |
-| Bridge conduct | contract v0; no-trap exports; kill-switch token `content`; absent dylib/symbols → JS serves identically (dispatch inside the existing modules — call sites untouched) |
-| Memory | RSS bounded across a full-corpus conversion pass (measured like RFC 0002 §3) |
+| Surface / phase | Gate | Result |
+| --- | --- | --- |
+| Phases 1-2 markdown/plaintext | **byte-identical** to JS (goldens + full-corpus A/B) | **0 byte mismatches** across 358,371 docs × 2 + 352,542 raw-page replays |
+| Phase 2 throughput | convert native ≥ JS | batched 2–3.2×; per-call doc-markdown 2.04× (per-call page/plaintext are test-seam only) |
+| Phase 4 HTML | static-build byte-diff + web-build ≥ JS | **NO-GO** — render is ~6% of an IO-bound build (records) |
+| Phase 3 normalize | identical contentHash every row | gated separately (crawl-throughput, not static-build) |
+| Bridge conduct | contract v0; no-trap; `content` token; absent dylib → JS serves | met (dispatch inside the existing renderers — call sites untouched) |
 
 ## 4. Architecture
 
-- **`ADContent` target** in `swift/` (depends on `ADBase` + `ADEmbed` —
-  reusing `CaseFolding.lowercase`, the JS `toLowerCase` mirror, for
-  `normalizeIdentifier`, and `UnicodeTables.jsWhitespace` for JS
-  `trim()` semantics incl. U+FEFF). Exports live in
-  `ADCore/ContentExports.swift`.
-- **Ordered JSON parser in `ADBase`** (D-0004-1) — shipped targets have
-  no Foundation; the parser is the module's substrate.
-- **FFI shapes (phases 1-2)**: text-in/text-out, contract v0.
-  `ad_content_doc_markdown` (u32 flags for
-  includeFrontMatter/includeTitle + nullable document fields + sections
-  as {kind, heading, contentText, contentJson, sortOrder});
-  `ad_content_page_markdown` (canonical path + raw DocC JSON bytes);
-  `ad_content_plaintext` (document + sections). Responses are UTF-8
-  payloads.
-- **JS dispatch**: `src/content/content-native.js` on the
-  fusion-native pattern (announce-once, `_forceImpl` seam, per-call
-  fallback). The native attempt lives INSIDE `renderMarkdown` /
-  `renderPlainText` / `renderPage`, so every caller — MCP, web, sync,
-  consolidate, tests — is untouched.
-- **JS-semantics contract** the port must reproduce (fixture-pinned):
-  `/\n{3,}/` collapse + JS `trim()` + trailing `\n` finishers;
-  `normalizeParagraphs` `/\n{2,}/` splits; `humanize`'s ASCII-`\b\w`
-  capitalization; yaml.js quoting regexes; template-literal `String()`
-  coercions; `'#'.repeat(level ?? 2)`; `isActive !== false`; table cell
-  `\n→space`; **stable section sort** — JS `Array.sort` is stable and
-  (document_id, sort_order) duplicates exist in production, so Swift
-  sorts by (sortOrder, originalIndex); reference-map lookups are plain
-  gets on the ordered map.
+`ADContent` target (depends ADBase + ADEmbed — reuses `CaseFolding.lowercase`
++ `UnicodeTables.jsWhitespace` for JS `toLowerCase`/`trim` semantics);
+exports in ADCore/ContentExports.swift. The **tape JSON parser**
+(ADBase/JsonTape.swift) is the substrate — one pass → packed UInt64 records,
+zero-copy spans for escape-free strings, linear UTF-8 key compare; the eager
+`JsonValue` parser is the correctness fallback (dup keys / span limits /
+invalid UTF-8 / safeJson depth-64 → nil). All four renderers emit into one
+reusable `[UInt8]` (no intermediate Strings). JS dispatch
+`src/content/content-native.js` (announce-once, `_forceImpl`, per-call
+fallback) lives INSIDE `renderMarkdown`/`renderPlainText`/`renderPage`. The
+port reproduces JS string semantics exactly (fixture-pinned: `/\n{3,}/`
+collapse, `trim()`, stable section sort by (sortOrder, originalIndex), etc.).
 
-## 5. Open decisions
+## 5. Decisions (settled — detail in records.md)
 
-| ID | Question | State |
+| ID | Question | Decision |
 | --- | --- | --- |
-| D-0004-1 | JSON parsing without Foundation | **Decided**: hand-rolled parser in ADBase — ordered, duplicate-key-aware (JSON.parse semantics: last value wins at the FIRST key position), unpaired `\uD8xx` escapes decode to U+FFFD (incidence pinned by the phase-1 audit; Swift String cannot hold lone surrogates), plus a `safeJson`-equivalent wrapper: parse error → nil, depth >64 → nil (mirroring the freeze-limit throw) |
-| D-0004-2 | Phase-3 serialization: `content_json` is `JSON.stringify` over trees REBUILT in JS (spread-clones) — porting normalize means reproducing ECMA number canonicalization (`1.0→1`, `1e2→100`, shortest-round-trip dtoa) and insertion-order keys, or emitting binary rows and letting JS stringify | **Open** — settled by the phase-3 spike under the contentHash-stability gate |
-| D-0004-3 | Highlight engine for non-Swift languages (carries RFC 0001 §9 D2) | **Leaning (operator, 2026-06-12): in-house TextMate-style engine** for the ~13 grammars — maximal fidelity; alternatives recorded: tree-sitter (system lib, §9 exception), reduced language set, swift-syntax-for-Swift + plain rest. Phase-4 spike decides on measurements |
-| D-0004-4 | swift-markdown / swift-cmark adoption | **Decided: NO** — corrects RFC 0001 §7 P4. Output markdown is hand-assembled; the input-side parser (render-html/markdown.js) is ported as the same regex engine, byte-exactly |
-| D-0004-5 | Phase-4 session state: the static build consults a ~358k-entry `knownKeys` set per token, and link emission needs SHA-1 (safe-path safeWebSegment) | embed-init-style session export (init once, render many); settled at phase-4 design. The sync-FFI render budget replaces `renderWithTimeout` (a JS watchdog cannot interrupt a sync native call — the shiki-pin incident's protection moves INSIDE Swift) |
-| D-0004-6 | Dispatch shape + rollout stage | **DECIDED by measurement (2026-06-12, phases 1-2 record below)**: per-call payload marshalling LOSES to in-process JS on every content surface — the data already lives in JS memory and the FFI tax (encode+copy+decode+re-parse) exceeds the entire JS render. Even the batched IO-ownership shape (`ad_content_convert_pages`: paths in, Swift owns read+parse+render) reaches only 0.44× of JS — JSC's `JSON.parse` outclasses the hand-rolled parser. `content` therefore ships at the **OPT-IN rollout stage** (RFC 0001 §4: unset = each module's stage default): only an explicit `APPLE_DOCS_NATIVE=…,content` engages it. Flipping requires an arena/lazy-string parser (zero-copy spans) measured ≥ JS — registered as the precondition |
+| D-0004-1 | JSON without Foundation | hand-rolled ordered, dup-key-aware parser in ADBase; unpaired `\uD8xx` → U+FFFD; safeJson wrapper (error/depth>64 → nil) |
+| D-0004-2 | Phase-3 serialization (ECMA number canonicalization) | **open** — settled by the phase-3 spike under contentHash stability (binary-rows-out fallback keeps JSON.stringify in JS) |
+| D-0004-3 | Highlight engine (non-Swift) | **moot while phase 4 is shelved** (leaning: in-house TextMate engine, if ever) |
+| D-0004-4 | swift-markdown/cmark adoption | **NO** — output is hand-assembled; the input regex parser ports byte-exactly |
+| D-0004-6 | Dispatch shape + rollout | the tape-parser precondition was met → flip executed; production uses the batches |
+| D-0004-7 | JSC kernels (darwin-only) | **SKIPPED** — native cleared the gates; recorded as a P7 option |
+| D-0004-8 | Phase 4 (render-html + highlight) | **NO-GO by measurement** (records) — shelved unless P6/P7 changes the FFI/IO calculus |
 
 ## 6. Phases
 
-1. **Leaf renderers** — `ad_content_doc_markdown` +
-   `ad_content_plaintext`; ADBase JSON parser; goldens harvested across
-   ALL source_types (apple-docc, design/hig, swift-book,
-   swift-evolution, wwdc, sample-code, swift-org, apple-archive,
-   app-store-review); lone-surrogate audit of document_raw; kill-switch
-   token `content`; parity tests for both implementations.
-2. **Crawl markdown** — `ad_content_page_markdown` (renderPage +
-   relativePath) + the batched `ad_content_convert_pages`; full-corpus
-   A/B replay; convert bench (pages/s) ≥ JS. Phases 1-2 ship together in
-   this RFC's first execution slice (operator decision 2026-06-12).
+1–2. **Leaf + crawl renderers** — **DONE** (default-on, byte-proven; perf
+   round 2–3.2× batched; records.md). Folds in nothing else.
+4. **HTML + highlight** — **NO-GO** (records.md, static-build profile; D-0004-8).
+5. **Kills** — JS converters deleted per surface after a release cycle at
+   content-native default (RFC 0002 Stage-C pattern). Held on the gate (like
+   P3 phase 3).
 
-### 6a. Phases 1-2 — EXECUTED 2026-06-12 (parity ✓, perf gate NOT met → opt-in)
+### Phase 3 — normalize (OPEN, independently gated)
 
-Everything landed parity-complete and byte-gated; the performance gate
-**failed honestly**, so the module ships at the opt-in stage (D-0004-6).
-
-- **Parity**: 96 doc cases + 33 page cases across all 12 source_types
-  (committed goldens, generated FROM the JS reference) pass for BOTH
-  implementations. Full-corpus A/B: **358,371 docs × doc-markdown,
-  358,371 × plaintext, 352,542 raw-page replays — 0 byte mismatches**
-  (301.8 s, both implementations per call). JS-pinned Swift unit
-  suites cover the JSON parser (ordered/dup-key/lone-surrogate/depth-64
-  semantics) and the renderer edge cases (`undefined 1.0+` platform
-  interpolation, trailing-colon trims, inactive-reference backticks,
-  `../..` relative paths, ΣWIFT final-sigma lowercase).
-- **Lone-surrogate audit**: 363,603 raw files — **zero** true unpaired
-  surrogate escapes (one double-escaped lookalike in an Apple Music API
-  code sample). The parser's U+FFFD pin is semantics-by-construction
-  (a JS string materializes U+FFFD at every UTF-8 boundary; verified
-  `61efbfbd62` for `a\ud800b`).
-- **Performance (arm64, local corpus)**: JS is microseconds-fast on
-  every surface — doc-markdown 29,952/s, plaintext 288,266/s,
-  page-markdown (pre-parsed) 35,417/s, file-convert (read+parse+render)
-  6,518/s. Native (after a byte-level string rewrite that already won
-  ~5-10× over scalar-based code): 16,032/s (0.54×), 95,183/s (0.33×),
-  2,624/s (0.07×), batched file-convert 2,874/s (0.44×). Fat-doc probe
-  (280 KB sections): JS 0.115 ms vs native 3.7 ms — the gap is parser +
-  marshalling, not the FFI call itself.
-- **The economics finding** (the P1 lesson, content edition): the
-  "≈27 ms/page" pipeline number was IO/download-dominated, NOT render
-  CPU — the conversion surfaces cost JS ~0.15-0.5 ms/page. The
-  hours-long static build's cost therefore lives in phase-4 territory
-  (templates + render-html + highlight) or outside render entirely —
-  **phases 3-4 are gated on a static-build CPU profile before any
-  further porting** (rfcs/README.md updated).
-
-### 6b. Perf round — gates MET, `content` default-on (2026-06-12)
-
-Same-day follow-up under §10's pure-performance category (parity suites
-unchanged throughout; goldens + a fresh full-corpus A/B gate every step).
-Operator direction: per-arch/macOS optimization unconstrained; a JSC
-spike authorized then **skipped** (see D-0004-7).
-
-What moved the needle, in profile order:
-
-1. **Tape parser** (ADBase/JsonTape.swift — the D-0004-6 precondition):
-   one pass → packed UInt64 records; escape-free strings are zero-copy
-   spans into the input; escaped ones decode once into a per-parse
-   scratch; object lookup is a linear UTF-8 compare (~3-10 keys — kills
-   the Hasher/Dictionary column). Correctness fallbacks: duplicate keys
-   / span limits / invalid UTF-8 re-route through the eager JsonValue
-   parser and adopt onto the tape (last-wins-first-position and
-   String(decoding:) repair stay byte-faithful); the safeJson entry
-   keeps depth-64 → nil.
-2. **Writer rendering**: all four renderers emit into one reusable
-   [UInt8] with in-place ranged transforms (trim/\s+/\n→space);
-   `finishDocument` streams the collapse+trim straight into the payload
-   — no intermediate Strings anywhere on the hot path.
-3. **Per-page refs index**: the references map is the ONE dynamic-key
-   lookup hot enough to hash — a single Dictionary built per page
-   (replacing per-node scans that went quadratic on big pages).
-4. **Exclusivity**: tape build moved into a struct builder and storage
-   became `let` — class-ivar `var` access was paying swift_beginAccess
-   per byte (top profile entry, ~900 samples, after the above landed).
-5. **CMO**: `-cross-module-optimization` on release builds + @inlinable
-   tape accessors (ADContent calls tiny ADBase methods per node).
-6. **Parallel batches**: `concurrentPerform` inside
-   `ad_content_convert_pages` and the NEW `ad_content_doc_markdown_batch`
-   / `ad_content_plaintext_batch`; storage-materialize and index-body
-   feed the batches. JS packing rewrote to two-pass `encodeInto` direct
-   writes (no per-field descriptors).
-
-**Measured (arm64, 2,000-doc + 500-page corpus, same-run ratios)**:
-per-call doc-markdown **2.04×** JS (48k/s), parallel file-convert
-**2.65×** (13.3k/s vs 5.0k), batched doc-markdown **3.18×** (75k/s),
-batched plaintext **1.15×** (253k/s vs JS's 219k). Per-call
-page-markdown (0.29×) and plaintext (0.52×) still lose to in-process JS
-— those two shapes are TEST-SEAM ONLY (their production callers use the
-batches), which makes every production-engaged surface ≥ JS.
-
-**Parity re-proven on the final build**: full-corpus A/B — 358,371 docs
-× doc-markdown + plaintext plus 352,542 raw-page replays — **0 byte
-mismatches** (239 s; the §6a run took 302 s on the same machine, so the
-tape build is also ~25% faster end-to-end through the per-call seam).
-
-**Stage decision (gate-driven, operator 2026-06-12)**: `content` joins
-the default-on modules. The CI native matrix now runs the content
-goldens against the freshly built dylib (previously a gap).
-
-| D-0004-6 | **UPDATED**: the arena-parser precondition was met and the flip executed — dispatch shapes recorded above |
-| D-0004-7 | JSC kernels (bundle the normative JS renderers into JavaScriptCore contexts in-dylib, darwin-only) — **SKIPPED by operator (2026-06-12)**: native cleared every gate first. Remains a recorded option for phases 3-4 (parallel UNPORTED JS without the serialization dragons) and the P7 story, requiring a dual-JSC-in-process probe (Bun statically embeds its own JSC) and a §2/§9 decision before any adoption |
-| D-0004-8 | Phase 4 (render-html + highlight port) — pursue or not | **DECIDED: NO-GO by measurement (2026-06-13, §6c)**. The static build is 84% filesystem IO + 6.5% SQLite; the phase-4 render surfaces are ~6% (and ~4.2 of that is shiki's WASM, not the tree walk). A render port can't move build wall-time; IO parallelism (already shipped) does. Phase 4 is shelved unless a future need re-opens it (e.g. P6/P7 serving HTML in-process where the FFI/IO calculus differs). D-0004-3 (highlight engine) is moot while phase 4 is shelved |
-
-**The P7 corollary**: the surviving per-call losses are pure BOUNDARY
-tax (encode + copy + re-parse across the FFI), not render speed — the
-batched numbers show Swift's actual pace once marshalling amortizes.
-When P5/P7 put storage and the binary itself in Swift, sections are born
-in Swift memory, the tax disappears for every surface, and the content
-renderers inherit batched-or-better economics by default — this round's
-code IS the P7 renderer, already byte-proven at corpus scale.
-3. **Normalize** — normalizeDocC + refs + metadata; the serialization
-   dragon (D-0004-2); the WHATWG-URL used-subset
-   (link-resolver.js:151 `new URL()` reached from refs.js) ported
-   against recorded fixtures; gate = corpus-wide contentHash stability.
-   **GATED (2026-06-12; clarified §6c)**: normalize is a CRAWL-time cost
-   (not static-build), so the §6c build profile doesn't bear on it — its
-   own gate is a crawl-throughput profile + the contentHash-stability
-   risk, on its own evidence before any work starts.
-4. **HTML + highlight** — render-html/* + the markdown.js regex parser
-   (byte-exact) + the D2 engine per D-0004-3 + knownKeys session init +
-   in-Swift render budget; sampled static-build byte-diff + web-build
-   bench ≥ JS. *Kills*: `shiki`. **NOT PURSUED (2026-06-13, §6c
-   profile)**: the gate fired NO-GO — the static build is IO-bound, not
-   render-bound; render is ~6% of build work and a Swift port can't move
-   build wall-time. See §6c + D-0004-8.
-5. **Kills + records** — JS converters deleted per surface after a
-   release cycle at content-native default (RFC 0002 Stage-C pattern);
-   RFC 0001 §3/§7 updated. Unreachable until a flip ever happens.
-
-### 6c. Static-build CPU profile — phase 4 gate fired NO-GO (2026-06-13)
-
-The profile that gated phases 3-4 (D-0004-6) ran. **Verdict: NO-GO on
-phase 4.** RFC 0004 §1 suspected the "hours-long build" headline was
-IO/template-bound, not render-CPU-bound; the measurement confirms it
-emphatically.
-
-**Method**: `bun --cpu-prof` over a real `web build --full --workers 1
---concurrency 1` (single-thread forces all render into the profiled
-process and a clean flame graph) on a representative subset —
-`swiftui` (9k symbol/declaration/code-heavy pages) + `wwdc` (2.9k) +
-`swift-evolution` (558) + `swift-book` (43) = **12,509 pages**, fresh
-out dir + `--full` so every page renders (no incremental skips). 241 s,
-169,146 samples. Self-time bucketed by `callFrame.url` via the committed
-`scripts/profile-cpuprofile.mjs` (native frames attributed by name:
-bun:sqlite `all`/`run` → sqlite, shiki's oniguruma `.wasm-function[N]`
-→ highlight, libuv `writeSync`/`mkdirSync` → io-fs).
-
-**Attribution (self-time)**:
-
-| bucket | % | what it is |
-| --- | --- | --- |
-| **io-fs** | **84.3** | `writeSync` 81.7 + `write` 1.7 + `mkdirSync` 0.6 + `copyWithin` — writing ~25k files (12.5k `index.html` + 12.5k brotli `.br`) |
-| **sqlite** | **6.5** | bun:sqlite `all`/`run` — the batched section fetch + per-framework doc query + render-index upsert |
-| **highlight** | **4.2** | shiki's oniguruma WASM (the entire highlight cost — directly isolated via the `.wasm-function` frames; shiki is the build's ONLY WASM dep, so no ablation was needed) |
-| native/runtime | 2.6 | bun internals (parse/join/freeze/encode) |
-| regex-exec | 1.1 | markdown.js's regexes (the italic `/(?<!…)_(.+?)_(?!…)/g` alone is 0.9%) |
-| template | 0.4 | web/templates + web/build |
-| render-html | 0.2 | the tree walk (`escapeHtml` is the top leaf) |
-| markdown-parser (JS) | 0.2 | markdown.js JS frames (its regex time is in regex-exec) |
-
-**The phase-4 surfaces** (render-html + markdown.js + highlight + its
-regexes) total **~6%** of build self-time — and **~4.2 of that 6 is
-shiki's oniguruma WASM**, which a Swift port would have to REPLACE with
-an in-house TextMate engine (D-0004-3) for marginal gain. The render-html
-tree walk + markdown.js JS that phase 4 would actually port byte-for-byte
-are **~1.5% combined**. Porting them cannot meaningfully move build
-wall-time.
-
-**The real lever is IO, already parallelized.** The 84% `writeSync`
-dominance is a single-thread artifact of the clean-profile run; in
-production the build fans out (`--workers N` → N subprocesses, build.js
-worker-fanout) and the per-page pool overlaps async `Bun.write`. The
-"hours" are 346k file writes, addressed by parallelism (done) — not by a
-renderer port. Secondary IO levers if ever needed: skip/defer brotli
-precompress, or emit fewer files. None are P4.
-
-**Phase 3 (normalize) is untouched by this gate**: normalize runs at
-crawl/persist time, NOT at static-build time (the build reads
-already-normalized `document_sections`). Its payoff is a separate
-crawl-throughput question — deferred, not decided here.
-
-**Reusable artifact**: `scripts/profile-cpuprofile.mjs` (committed)
-buckets any V8 `.cpuprofile` for future build/CPU-perf measurement.
+`normalizeDocC + refs + metadata` is a **crawl-time** cost (the static build
+reads already-normalized `document_sections`), so the static-build profile's IO-bound finding
+doesn't bear on it. Its own gate is a crawl-throughput profile + the
+**contentHash-stability** risk (D-0004-2: ECMA number canonicalization,
+`new URL()` used-subset) — measured on its own evidence before any work
+starts. Deferred, not decided.
 
 ## 7. Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| ECMA number canonicalization (phase 3) | binary-rows-out fallback keeps `JSON.stringify` in JS; decision gated by contentHash stability (D-0004-2) |
-| Lone surrogates: Bun's two lossy paths (utf8 write → U+FFFD; sqlite bind → mangled pairs) | phase-1 audit pins incidence + semantics; parser decodes unpaired escapes to U+FFFD; DB inputs arrive as already-materialized UTF-8 |
-| `safeJson` depth-64 / parse-failure fallbacks | wrapper reproduces nil-on-depth>64 and nil-on-error; fixture cases for both |
-| Sort instability on duplicate sort_orders | explicit (sortOrder, originalIndex) comparator; production duplicates verified to exist |
-| Old dylib + new JS (3 new symbols) | loader's whole-native fallback on missing symbols is established behavior; code+dylib ship together |
-| Sync FFI blocks the event loop on big batches | build paths are CLI (blocking fine); query paths send single-doc requests; phase-4 budgets live in Swift |
-| Fixture corpus misses a source_type's quirks | harvest samples EVERY source_type + the full-corpus A/B is the real gate |
+Phases 1–2 risks retired (records.md). Live: phase 3's contentHash-stability
+risk (D-0004-2) — any byte drift in `content_json` churns the whole corpus,
+so the binary-rows-out fallback (keep `JSON.stringify` in JS) is the safety
+valve, gated before any normalize port.
 
 ---
-*Maintenance*: decisions D-0004-* get dated entries; phase completions
-update RFC 0001 §7 P4 with one line each; measured numbers land in a
-record subsection per phase.
+*Maintenance*: phase-3 completion (if pursued) updates RFC 0001 §3/§7. Full
+history in [`records.md`](0004-content-pipeline/records.md) + git.
