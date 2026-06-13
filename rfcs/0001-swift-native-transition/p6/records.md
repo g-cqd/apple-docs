@@ -221,18 +221,123 @@ per-request `Task` + `runIfActive` offloads + the Swift cooperative executor,
 oversubscribed against the NIO event loops, thrash under load. (Contrast:
 `/healthz`, served ON the event loop with no offload/Task, scaled to 67k.)
 
-### Verdict — cascade is byte-portable; the SwiftNIO ASYNC serving model doesn't scale
+### Verdict — cascade is byte-portable; serving-model suspicion (CORRECTED in slice 3)
 
 The cascade IS portable byte-exact (a real, reusable result — the P7 path
-when Bun is gone). But the **SwiftNIO async-offload serving model does not
-scale under concurrency** for these DB-bound requests; tier-parallelism is a
-red herring. Two paths remain: (1) a **lower-overhead serving model** — the
-classic `ChannelInboundHandler` + `EventLoopFuture` offload (no per-request
-`Task`/cooperative-executor, EL-confined; needs the EL-confined `@unchecked
-Sendable` the operator discouraged) which scaled for healthz and may scale
-here; or (2) **accept that search serving stays Bun** — its reader pool is
-already good, the SwiftNIO host wins only the offload-free routes (healthz),
-and the byte-perfect cascade waits for P7 (single binary, no Bun, where it's
-the only path). Enrichment (snippet + renderPlainText + relatedCount + zstd-
-decompress) is moot until that's decided. `/search` is inert to production
-(not wired into cli.js/ops/Caddy).
+when Bun is gone). The slice-2 hypothesis was that the **SwiftNIO async
+serving model** (per-request `Task` + cooperative executor) doesn't scale —
+**slice 3 DISPROVES this**: a classic EL-handler degrades identically, so the
+serving model is not the cause. See the next section for the corrected
+localization. `/search` is inert to production (not wired into
+cli.js/ops/Caddy).
+
+---
+
+## Third slice — classic EL-handler + scaling localization — EXECUTED 2026-06-13
+
+### Scope
+
+The slice-2 verdict blamed the async serving model (`NIOAsyncChannel` +
+per-request `Task` + cooperative executor). This slice tested that directly by
+reverting to the **classic event-loop-confined serving model** — a
+`ChannelInboundHandler` (`@unchecked Sendable`, EL-confined — NIO guarantees
+`channelRead` + the future callbacks run on the one event loop) running the
+cascade in a single `NIOThreadPool.runIfActive(eventLoop:)` offload
+(`EventLoopFuture`, no per-request `Task`, no cooperative executor — the model
+that scaled `/healthz` to 67k), the response written back on the loop via
+`NIOLoopBound`. Then a four-experiment sweep to localize the bottleneck.
+Operator authorized the EL-confined `@unchecked` for this experiment.
+
+### The classic handler did NOT fix scaling — but it relocated the bottleneck
+
+`ab -k`, 480-doc corpus, full cascade vs Bun `/search-core`:
+
+| concurrency | Swift classic req/s | Bun req/s |
+| --- | --- | --- |
+| 1 | **636** (beats Bun) | 574 |
+| 4 | 519 | 1057 |
+| 8 | 389 | 893 |
+| 16 | 390 | 1167 |
+
+The classic handler is **faster than Bun at c=1** (636 vs 574; the async model
+was 476) and is the cleaner foundation — but it **still degrades** under
+concurrency while Bun scales. So removing the `Task`/cooperative-executor was
+not the fix. Four experiments then localized the real cause:
+
+1. **Event-loop count is irrelevant.** Sweeping `--loops` 2/4/6/8/10 at
+   c=1/8/16: **identical** (638→389 vs 642→389). The ELG does not bound it.
+2. **The serving machinery is NOT the bottleneck.** At c=16, threads=8, a
+   query that matches NOTHING (`zzznomatch`) traverses the FULL path (offload,
+   pool checkout, 3 SQLite queries returning 0 rows, empty rerank, project
+   empty) yet hits **1082 req/s**; `/healthz` (no offload) hits **78,829**.
+   Throughput tracks the **FTS matchset size**, monotonically:
+
+   | query (FTS matches) | req/s @ c=16 |
+   | --- | --- |
+   | zzznomatch (0) | 1082 |
+   | metal (~60) | 808 |
+   | controller (~120) | 603 |
+   | view (~480) | 392 |
+
+   So the cost is the **per-request cascade WORK** (SQLite bm25 scan over the
+   matchset + the row decode + rerank + JSON), not the host/offload/EL.
+3. **Negative thread scaling.** At c=16 on `view`, **fewer threads = MORE
+   throughput**: threads=4 → 514, 6 → 402, 8 → 392, 10 → 406. Adding workers
+   makes it worse — the signature of a shared resource, not CPU starvation.
+4. **Not the nano allocator.** `MallocNanoZone=0` (disables macOS's nano
+   allocator, whose per-magazine locks are the usual small-alloc contention
+   culprit) did **not** help — it was slightly worse (c16 353 vs 393), and the
+   negative scaling persisted. So the contention is not the nano-zone lock
+   specifically.
+
+### Corrected verdict — the residual is the cascade WORK's concurrency-efficiency, not the serving model
+
+The serving model is **fine** (proved four ways: classic ≈ async; zzznomatch
+1082; healthz 78k; ELG irrelevant). The residual deficit is that **Swift's
+per-request cascade work is less concurrency-efficient than Bun's** under
+load. Ruled out: the nano allocator (exp. 4) and SQLite's WAL `-shm` (Bun's
+reader pool opens the same file from N workers and scales fine, so shared
+`-shm` is not the blocker). Remaining suspects, all per-row and
+matchset-correlated, need Instruments to pin: the String-heavy row decode (~24
+`String`s/row), `free`/scalable-zone churn beyond the nano zone, ARC atomic
+refcount traffic on the shared static rerank tables (`BASE_SCORES` dict /
+`SOURCE_PREFERENCE_ORDER` array, touched per row), or the `Set<String>` dedup.
+Bun sidesteps all of these: per-isolate bump allocation + cheap JSC strings,
+and it parallelizes decode across workers while reranking on one main thread.
+
+**Measurement caveat (honest):** `ab` runs on the SAME 10-core host, so at high
+concurrency the client competes with the server for cores — some of the c=1→16
+"degradation" is shared-host oversubscription, not purely the server. But Bun
+is measured identically and SCALES, so the RELATIVE result (same client, Swift
+degrades while Bun scales) is valid; Swift simply extracts less throughput per
+core under contention. A clean number needs a separate load-generator host.
+
+### Decision fork (for the operator)
+
+1. **Profile + fix the cascade-work contention** — Instruments (time-profiler
+   + allocations/ARC) under concurrent load, or a raw-scan isolation route, to
+   pin malloc-vs-ARC-vs-String, then an alloc/ARC-light rewrite of the decode +
+   rerank + projection (one byte-buffer copy per row + byte-range columns +
+   byte-spanned JSON; immortal/captured scoring tables). The serving model is
+   already proven good (wins at c=1), so this is the "make Swift win" path —
+   higher effort, promising but uncertain, and partly gated on a clean bench
+   host.
+2. **Bank the byte-perfect cascade for P7; search serving stays Bun now** — its
+   reader pool scales, the SwiftNIO host wins the offload-free routes, and the
+   cascade is the only path once Bun is retired (P7), where the contention fix
+   can be done against a real corpus. Lower effort; matches the original
+   decision tree (NO-GO → stays Bun).
+
+Sub-decision either way: keep the **classic `@unchecked` EL-handler** (faster
+at c=1, the cleaner foundation, the `/healthz`-scaling model) or revert to the
+**async no-`@unchecked`** model (honors the operator's "avoid all unsafe" —
+identical search result). Enrichment (snippet/relatedCount/zstd-decompress) is
+moot until the fork is chosen.
+
+### Artifacts
+
+- `swift/Sources/ADServer/{Handler,Main}.swift` — classic `CascadeHandler`
+  (EL-confined `@unchecked`, one `EventLoopFuture` offload) + `--loops` flag.
+- `scripts/p6-sweep.mjs` (c-sweep, Swift vs Bun), `p6-loops.mjs` (ELG sweep),
+  `p6-alloc.mjs` (match-volume + thread sweeps), `p6-malloc.mjs` (allocator
+  attribution). All `ab`-driven on a seeded 480-doc corpus.
