@@ -537,3 +537,36 @@ Swift `/search` with full enrichment c=16 **1864 rps** (vs 2263 phase-1; ~18% fo
 2 batched queries + 100 snippet renders/req) — still scales 4.6× and beats the
 (enrichment-skipping) Bun reference (1131). All 57 native tests + `swift test`
 green. Next slices (open): fuzzy T3 + body T4, relaxation, filters + synonyms.
+
+---
+
+## Sixth slice — `/search` COMPLETED (tiers + relaxation + filters + synonyms) — EXECUTED 2026-06-14
+
+The remaining JS `search()` gap, ported byte-exact in parity-gated commits — the
+Swift `/search` now matches `projectSearchResult(search(opts,ctx))` for the full
+lexical pipeline (semantic/vector tier still out of scope). Parity grew to
+**34/34** (15 plain + 19 filtered queries):
+
+- **Body T4** (`searchBodySQL` on `documents_body_fts`, merged when T1+T2 < window).
+- **Fuzzy T3** (`lib/fuzzy.js`): trigram-OR bm25 candidates + Levenshtein (≤2,
+  early-exit, UTF-16) → matchQuality `fuzzy` → `approximate` confidence + the
+  envelope `approximate` flag.
+- **Relaxation R1-R3** (`cascade.js` + `relaxation.js`): pruned-AND → pruned-OR →
+  trigram-on-token when the strict+deep tiers return nothing on a ≥3-token,
+  ≥4-char, unquoted query (`relaxed*` matchQualities; `relaxed`/`relaxationTier`
+  are not projected).
+- **JS post-filters** (`filters.js`): `matchesSearchFilters` — kind taxonomy,
+  platform-version (the `'0'` sentinel reads `platforms_json` keys via
+  `ADBase.Json`, else `compareVersions`), language, source, deprecated, metadata
+  — applied at every merge point, layered on the SQL `FILTER_PREDICATES` (filter
+  bag parsed in `QueryParse`/`prepare`, 3× over-fetch when kind/platform active).
+- **Framework-synonym fan-out** (`getFrameworkSynonyms`): each tier (strict +
+  body + relaxation; not fuzzy) runs once per framework (canonical + synonyms),
+  concatenated.
+
+Reuse: `ADContent.PlainText` (snippet), `ADBase.Json` (platforms_json),
+`FtsQuery`/`Rerank`/`Intent`, `JsString`/`CaseFolding`. Deep tiers gated
+(results<5 / <window / ==0), so the hot path (a full window) never runs them.
+All 80 native tests + `swift test` green. `/search` stays inert to production
+(not wired into cli.js/ops/Caddy) until the web slice. Remaining P6: MCP protocol
+(SDK+zod kill) + web routes/wiring; deferred storage perf (pcache mutex).
