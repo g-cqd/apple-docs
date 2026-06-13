@@ -1,0 +1,60 @@
+{
+ "note": "fonts referenced by corpus-relative path (replay skips when absent); symbols are public SF Symbols present on the build OS",
+ "fontCases": [
+  {
+   "name": "case-0.svg",
+   "font": "sf-pro/SF-Pro-Italic.ttf",
+   "text": "Typography Hé!",
+   "size": 96,
+   "bytes": 8763
+  },
+  {
+   "name": "case-1.svg",
+   "font": "sf-pro/SF-Pro-Display-Thin.otf",
+   "text": "Aa Bb 0123",
+   "size": 128,
+   "bytes": 4109
+  },
+  {
+   "name": "case-2.svg",
+   "font": "sf-compact/SF-Compact-Rounded-Medium.otf",
+   "text": "Render & <Test>",
+   "size": 72,
+   "bytes": 8644
+  }
+ ],
+ "symbolCases": [
+  {
+   "name": "symbol-0.svg",
+   "symbol": "heart.fill",
+   "scope": "public",
+   "weight": "regular",
+   "scale": "medium",
+   "bytes": 601
+  },
+  {
+   "name": "symbol-1.svg",
+   "symbol": "star",
+   "scope": "public",
+   "weight": "regular",
+   "scale": "medium",
+   "bytes": 1746
+  },
+  {
+   "name": "symbol-2.svg",
+   "symbol": "house.fill",
+   "scope": "public",
+   "weight": "regular",
+   "scale": "medium",
+   "bytes": 1302
+  },
+  {
+   "name": "symbol-3.svg",
+   "symbol": "gear",
+   "scope": "public",
+   "weight": "regular",
+   "scale": "medium",
+   "bytes": 6650
+  }
+ ]
+}

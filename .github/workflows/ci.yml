@@ -167,7 +167,7 @@ jobs:
 
       - name: JS↔Swift parity against the staged artifact
         env:
-          APPLE_DOCS_NATIVE: fusion,archive,embed,content
+          APPLE_DOCS_NATIVE: fusion,archive,embed,content,render
         run: |
           ext=so
           [ "${{ runner.os }}" = "macOS" ] && ext=dylib
