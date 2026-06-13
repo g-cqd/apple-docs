@@ -490,3 +490,14 @@ land; each phase's completion gets a dated entry here.
   macOS 26 production host. `ad-server`'s pool moved actor → `Mutex`; the
   accept loop uses `DiscardingTaskGroup`. Next-slice toolkit: swift-atomics /
   swift-collections / swift-async-algorithms (atomics/mutex/Deque over actors).
+- **2026-06-13 — P6 second slice (lexical-cascade port)**: the JS lexical
+  search (T1+T2, merge, intent, rerank, projection) ported byte-exact into a
+  Swift `/search` (new server-only `ADSearchCascade`; ADStorage gained
+  `SearchRow` + searchTitleExact/searchTrigram). **Byte-parity PASS** (10/10 —
+  the projection strips floats → labels, so parity is ordering + fields, and
+  rerank scores are bit-identical). **Perf NO-GO**: Swift full cascade ~3×
+  SLOWER than Bun (ab) — Bun runs the 3 tiers in PARALLEL across reader-pool
+  workers; Swift runs them sequentially in one offload. The amortization
+  premise missed Bun's per-tier worker parallelism. Next: a tier-parallel
+  cascade (dedicated reader-thread pool, swift-async-algorithms fan-out),
+  re-measure. Detail: [p6/records.md](0001-swift-native-transition/p6/records.md).

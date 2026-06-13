@@ -11,6 +11,7 @@
 import NIOCore
 import NIOHTTP1
 import NIOPosix
+import ADSearchCascade
 import ADStorage
 
 func serveConnection(
@@ -84,16 +85,16 @@ private func respond(
   return keepAlive
 }
 
-/// Runs the blocking searchPages OFF the event loop on the thread pool. The
-/// connection is checked out INSIDE the closure (one per thread, sync), so
-/// nothing serializes ahead of the offload.
+/// Runs the FULL lexical cascade (all tiers + merge + rerank + projection) in
+/// ONE offload on the thread pool — the amortization the host spike showed is
+/// needed. The connection is checked out INSIDE the closure (one per thread).
 private func runSearch(
   uri: String, pool: ConnectionPool, threadPool: NIOThreadPool
 ) async throws -> [UInt8] {
-  let params = parseSearchParams(uri)
+  let params = parseCascadeParams(uri)
   return try await threadPool.runIfActive {
-    guard let conn = pool.checkout() else { return Array("[]".utf8) }
+    guard let conn = pool.checkout() else { return Array(#"{"query":"","total":0,"results":[]}"#.utf8) }
     defer { pool.checkin(conn) }
-    return conn.searchPagesJSON(params) ?? Array("[]".utf8)
+    return Cascade.search(conn, params)
   }
 }

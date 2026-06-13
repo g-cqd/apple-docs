@@ -144,3 +144,70 @@ TLS stays upstream (Caddy/Cloudflare); the spike is plaintext localhost.
 swift-network-evolution) is a **P7+/HTTP-3 watch item** — relevant only if
 apple-docs ever terminates TLS in-process without swift-nio-ssl's BoringSSL
 C-dep, or if SwiftNetwork matures into a swift-nio alternative.
+
+---
+
+## Second slice — lexical-cascade port — EXECUTED 2026-06-13
+
+### Scope
+
+The host spike's amortization hypothesis: a real `/api/search` does ~5 Bun
+worker round-trips that collapse into ONE in-process offload in Swift. This
+slice ported the **lexical cascade** (T1 title-exact + FTS, T2 trigram, the
+merge, intent, rerank, projection — the 99%-of-queries hot path) into a real
+Swift `/search`, to PROVE the inversion. Enrichment (snippet/relatedCount) +
+fuzzy/body/relaxation/semantic + filters were deferred.
+
+### Byte-parity — SUCCESS (the port is correct)
+
+**The cascade ports byte-exactly.** `test/unit/native/search-cascade-parity.test.js`:
+Swift `/search` JSON == JS `search()`→`projectSearchResult` JSON, byte for
+byte, across the query matrix (every intent, tier boundary 0-3, miss, dotted
+symbol). The key enabler: `projectSearchResult` strips ALL internal floats —
+each hit is strings/ints/bools + a `confidence` *label*, never a raw score —
+so the float-notation fight is AVOIDED; parity = ordering + projected fields.
+The rerank scores are bit-identical (same IEEE `*=` ops in `ranking.js`
+order), and a 4-key TOTAL-order sort (orig-index tie-break) reproduces JS's
+stable sort. The FTS query builders (`buildFtsQuery`/`sanitizeTrigramQuery`,
+insertion-ordered term dedup), `detectIntent` (regex, `nonisolated(unsafe)`
+compiled patterns — the contained Regex-isn't-Sendable exception), the merge
+(title-exact→FTS→trigram, dedup-by-path keep-first), and the hand-framed JSON
+all match. New SERVER-ONLY `ADSearchCascade` target (keeps libAppleDocsCore
+zero-dep); ADStorage gained `SearchRow` + `searchTitleExact`/`searchTrigram`.
+
+### Performance — NO-GO (the amortization premise was wrong)
+
+`ab -k -c16` over a 480-doc corpus, full-cascade vs full-cascade (Bun
+`/search-core` = `search()` via the reader pool, enrichment skipped to match):
+
+| | req/s | p50 |
+| --- | --- | --- |
+| Swift full cascade `/search` | **365-410** | 38-44 ms |
+| Bun full cascade `/search-core` | **1066-1345** | 12-15 ms |
+
+**Swift is ~3× SLOWER.** Cause: **Bun runs the 3 tiers in PARALLEL across
+reader-pool workers** (`cascade.js` `Promise.all`), while Swift runs them
+SEQUENTIALLY on one connection/thread in the single offload. On this corpus
+`view` matches all 480 docs, so each FTS/trigram scan is heavy (~5 ms); 3
+sequential ≈ 15 ms (Swift) vs ~max ≈ 5 ms (Bun parallel). More threads (10 vs
+6) did NOT help (oversubscription); limit 20 vs 100 barely moved it (so it's
+the per-tier QUERY cost, not the row decode). The host-spike "one offload
+amortizes the hops" reasoning held for the HOPS, but missed that Bun's per-tier
+**worker parallelism** is the real thing to beat — and a single sequential
+in-process offload can't.
+
+### Verdict — cascade is byte-portable; the serving win needs tier parallelism
+
+The cascade IS portable byte-exact (a real, reusable result + the basis for
+P6/P7). But the inversion does NOT win as a single sequential offload. To beat
+Bun, the Swift server must **parallelize the tiers** — the dedicated
+reader-thread pool from the first-slice records (N threads each owning a
+`StorageConnection`, the 3 tiers fanned out concurrently via
+`swift-async-algorithms`, results merged), OR accept that search serving is
+reader-pool-bound and Bun's pool is already good (the SwiftNIO host wins
+healthz, but search is dominated by the parallel SQLite scans, which Bun
+already parallelizes). **Next slice: tier-parallel cascade, re-measure.**
+Enrichment (snippet + renderPlainText + relatedCount + the zstd-decompress
+binding) is moot until the perf path is chosen. The byte-perfect cascade +
+`ADSearchCascade` ship as the foundation; `/search` is inert to production
+(not wired into cli.js/ops/Caddy).
