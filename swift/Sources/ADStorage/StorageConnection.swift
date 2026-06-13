@@ -7,7 +7,7 @@
 // is unsynchronized and SQLite is opened NOMUTEX).
 
 public final class StorageConnection: @unchecked Sendable {
-  private let conn: Connection
+  let conn: Connection  // internal so the cascade tier methods (SearchRow.swift) can reach it
 
   /// Opens a read connection for `path`; nil if libsqlite3/FTS5/the file is
   /// unavailable.

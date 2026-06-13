@@ -110,15 +110,47 @@ private func nullableInt(_ value: Int64?) -> BindValue {
   value.map { .int($0) } ?? .null
 }
 
-// MUST match search.js searchFtsStmt (RESULT_COLUMNS + FILTER_PREDICATES).
+// The shared column projection + filter clauses (search.js RESULT_COLUMNS +
+// FILTER_PREDICATES), interpolated into each tier's statement below. Order is
+// pinned — the cascade decodes rows positionally (SearchRow.decode).
+let resultColumns = """
+  d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
+  d.declaration_text as declaration, d.platforms_json as platforms,
+  d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
+  COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
+  d.source_type as source_type, d.source_metadata as source_metadata,
+  d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language
+  """
+
+let filterPredicates = """
+  AND ($framework IS NULL OR d.framework = $framework)
+  AND ($source_type IS NULL OR d.source_type = $source_type)
+  AND ($sources_json IS NULL OR d.source_type IN (SELECT value FROM json_each($sources_json)))
+  AND (
+    $kind IS NULL
+    OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
+    OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
+    OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
+  )
+  AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
+  AND ($year IS NULL OR CAST(json_extract(d.source_metadata, '$.year') AS INTEGER) = $year)
+  AND ($track_like IS NULL OR LOWER(COALESCE(json_extract(d.source_metadata, '$.track'), '')) LIKE $track_like)
+  AND (
+    $deprecated_mode = 'include'
+    OR ($deprecated_mode = 'exclude' AND COALESCE(d.is_deprecated, 0) = 0)
+    OR ($deprecated_mode = 'only'    AND COALESCE(d.is_deprecated, 0) = 1)
+  )
+  AND ($min_ios IS NULL OR d.min_ios_num IS NULL OR d.min_ios_num <= $min_ios)
+  AND ($min_macos IS NULL OR d.min_macos_num IS NULL OR d.min_macos_num <= $min_macos)
+  AND ($min_watchos IS NULL OR d.min_watchos_num IS NULL OR d.min_watchos_num <= $min_watchos)
+  AND ($min_tvos IS NULL OR d.min_tvos_num IS NULL OR d.min_tvos_num <= $min_tvos)
+  AND ($min_visionos IS NULL OR d.min_visionos_num IS NULL OR d.min_visionos_num <= $min_visionos)
+  """
+
+// MUST match search.js searchFtsStmt.
 let searchPagesSQL = """
   SELECT
-    d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
-    d.declaration_text as declaration, d.platforms_json as platforms,
-    d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
-    COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
-    d.source_type as source_type, d.source_metadata as source_metadata,
-    d.url_depth, d.is_release_notes, d.is_deprecated, d.is_beta, d.kind as doc_kind, d.language,
+    \(resultColumns),
     bm25(documents_fts, 10.0, 5.0, 3.0, 2.0, 1.0) as rank,
     CASE
       WHEN LOWER(d.title) = LOWER($raw) THEN 0
@@ -131,28 +163,29 @@ let searchPagesSQL = """
   JOIN documents d ON documents_fts.rowid = d.id
   LEFT JOIN roots r ON r.slug = d.framework
   WHERE documents_fts MATCH $query
-    AND ($framework IS NULL OR d.framework = $framework)
-    AND ($source_type IS NULL OR d.source_type = $source_type)
-    AND ($sources_json IS NULL OR d.source_type IN (SELECT value FROM json_each($sources_json)))
-    AND (
-      $kind IS NULL
-      OR LOWER(COALESCE(d.role_heading, '')) = LOWER($kind)
-      OR LOWER(COALESCE(d.kind, '')) = LOWER($kind)
-      OR LOWER(COALESCE(d.role, '')) = LOWER($kind)
-    )
-    AND ($language IS NULL OR d.language IS NULL OR d.language = $language OR d.language = 'both')
-    AND ($year IS NULL OR CAST(json_extract(d.source_metadata, '$.year') AS INTEGER) = $year)
-    AND ($track_like IS NULL OR LOWER(COALESCE(json_extract(d.source_metadata, '$.track'), '')) LIKE $track_like)
-    AND (
-      $deprecated_mode = 'include'
-      OR ($deprecated_mode = 'exclude' AND COALESCE(d.is_deprecated, 0) = 0)
-      OR ($deprecated_mode = 'only'    AND COALESCE(d.is_deprecated, 0) = 1)
-    )
-    AND ($min_ios IS NULL OR d.min_ios_num IS NULL OR d.min_ios_num <= $min_ios)
-    AND ($min_macos IS NULL OR d.min_macos_num IS NULL OR d.min_macos_num <= $min_macos)
-    AND ($min_watchos IS NULL OR d.min_watchos_num IS NULL OR d.min_watchos_num <= $min_watchos)
-    AND ($min_tvos IS NULL OR d.min_tvos_num IS NULL OR d.min_tvos_num <= $min_tvos)
-    AND ($min_visionos IS NULL OR d.min_visionos_num IS NULL OR d.min_visionos_num <= $min_visionos)
+    \(filterPredicates)
   ORDER BY tier, rank
+  LIMIT $limit
+  """
+
+// MUST match search.js searchTitleExactStmt (adds 0 as rank/tier; ORDER differs).
+let searchTitleExactSQL = """
+  SELECT \(resultColumns), 0 as rank, 0 as tier
+  FROM documents d
+  LEFT JOIN roots r ON r.slug = d.framework
+  WHERE d.title = $raw COLLATE NOCASE
+    \(filterPredicates)
+  ORDER BY tier, CASE WHEN d.role = 'symbol' OR d.kind = 'symbol' THEN 0 ELSE 1 END, length(d.key)
+  LIMIT $limit
+  """
+
+// MUST match search.js searchTrigramStmt (RESULT_COLUMNS only — no rank/tier).
+let searchTrigramSQL = """
+  SELECT \(resultColumns)
+  FROM documents_trigram
+  JOIN documents d ON documents_trigram.rowid = d.id
+  LEFT JOIN roots r ON r.slug = d.framework
+  WHERE documents_trigram MATCH $query
+    \(filterPredicates)
   LIMIT $limit
   """

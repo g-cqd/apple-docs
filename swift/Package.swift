@@ -56,6 +56,13 @@ let package = Package(
     // (NOT a systemLibrary — same policy as ADArchive/Zstd: absent → JS
     // bun:sqlite serves). The read path; the bun:sqlite writer is untouched.
     .target(name: "ADStorage", dependencies: ["ADBase"], swiftSettings: releaseCMO),
+    // Search cascade (RFC 0001 P6): the byte-exact in-process port of the JS
+    // lexical search (fts-query-builder, intent, the tier merge, ranking,
+    // projection). SERVER-ONLY — used by ad-server, NOT by the libAppleDocsCore
+    // dylib (which stays zero-dep). Max strict concurrency.
+    .target(
+      name: "ADSearchCascade", dependencies: ["ADStorage"],
+      swiftSettings: releaseCMO + strictConcurrency),
     // Dev-only reference dump for the flipped fixture generator (RFC 0002
     // §6h); not shipped — the dylib product above is unchanged.
     .executableTarget(name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump"),
@@ -69,6 +76,7 @@ let package = Package(
         .product(name: "NIOPosix", package: "swift-nio"),
         .product(name: "NIOHTTP1", package: "swift-nio"),
         "ADStorage",
+        "ADSearchCascade",
       ],
       path: "Sources/ADServer", swiftSettings: releaseCMO + strictConcurrency),
     .target(

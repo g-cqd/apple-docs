@@ -10,6 +10,8 @@
 import { DocsDatabase } from '../src/storage/database.js'
 import { createReaderPools } from '../src/storage/reader-pools.js'
 import { runRead } from '../src/storage/reader-pool-runread.js'
+import { search } from '../src/commands/search.js'
+import { projectSearchResult } from '../src/output/projection.js'
 
 const dbPath = process.argv[2]
 const port = Number(process.argv[3] ?? 3033)
@@ -23,6 +25,13 @@ const db = new DocsDatabase(dbPath)
 const readerPool = createReaderPools({ dbPath, strictSize: poolSize, deepSize: Math.max(1, poolSize >> 1) })
 await readerPool.start()
 const ctx = { db, readerPool }
+
+// Core-cascade ctx: enrichment (getDocumentSnippetData) throws so search()'s
+// try/catch skips snippet+relatedCount — matching the Swift phase-1 cascade
+// for a fair full-cascade-vs-full-cascade amortization comparison.
+const coreDb = Object.create(db)
+coreDb.getDocumentSnippetData = () => { throw new Error('skip enrichment') }
+const coreCtx = { db: coreDb, readerPool, logger: { debug() {}, warn() {}, info() {} } }
 
 function optsFrom(url) {
   const framework = url.searchParams.get('framework')
@@ -41,6 +50,15 @@ Bun.serve({
     }
     if (url.pathname === '/search-pool') {
       return Response.json(await runRead(ctx, 'searchPages', [q, q, optsFrom(url)]))
+    }
+    if (url.pathname === '/search-core') {
+      // Full lexical cascade via the reader pool (the production serving path),
+      // enrichment skipped — the apples-to-apples opponent for Swift /search.
+      const limit = Number(url.searchParams.get('limit') ?? 100)
+      const result = await search({ query: q, limit, offset: 0, noDeep: true, fuzzy: false }, coreCtx)
+      return new Response(JSON.stringify(projectSearchResult(result, { webPaths: false })), {
+        headers: { 'content-type': 'application/json' },
+      })
     }
     return new Response('not found', { status: 404 })
   },

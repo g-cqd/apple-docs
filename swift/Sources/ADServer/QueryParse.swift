@@ -2,7 +2,18 @@
 // Foundation. Builds a SearchPagesParams from ?q=&framework=&limit=… ; the
 // spike exercises the FTS5 read path, so the unused filter fields stay nil.
 
+import ADSearchCascade
 import ADStorage
+
+/// Parses ?q=&limit=&offset= into the cascade's SearchParams (phase 1 — the
+/// filter bag lands in a follow-on).
+func parseCascadeParams(_ uri: String) -> SearchParams {
+  let q = parseQuery(uri)
+  return SearchParams(
+    query: q["q"] ?? "",
+    limit: Int(q["limit"] ?? "") ?? 100,
+    offset: Int(q["offset"] ?? "") ?? 0)
+}
 
 func parseSearchParams(_ uri: String) -> SearchPagesParams {
   let q = parseQuery(uri)

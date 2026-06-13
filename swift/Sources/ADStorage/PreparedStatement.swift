@@ -144,6 +144,37 @@ final class PreparedStatement {
     return true
   }
 
+  // MARK: - row iteration (for the in-process cascade, RFC 0001 P6)
+
+  /// Steps once; returns the raw sqlite rc (SQLite.row / .done / error).
+  func step() -> Int32 { lib.step(stmt) }
+
+  /// Resets + clears bindings (call after a step loop).
+  func reset() {
+    _ = lib.reset(stmt)
+    _ = lib.clearBindings(stmt)
+  }
+
+  func columnCount() -> Int32 { lib.columnCount(stmt) }
+
+  func isNull(_ col: Int32) -> Bool { lib.columnType(stmt, col) == SQLite.typeNull }
+
+  func text(_ col: Int32) -> String? {
+    guard lib.columnType(stmt, col) != SQLite.typeNull, let ptr = lib.columnText(stmt, col) else {
+      return nil
+    }
+    let n = Int(lib.columnBytes(stmt, col))
+    return String(decoding: UnsafeBufferPointer(start: ptr, count: n), as: UTF8.self)
+  }
+
+  func int(_ col: Int32) -> Int64? {
+    lib.columnType(stmt, col) == SQLite.typeNull ? nil : lib.columnInt64(stmt, col)
+  }
+
+  func double(_ col: Int32) -> Double? {
+    lib.columnType(stmt, col) == SQLite.typeNull ? nil : lib.columnDouble(stmt, col)
+  }
+
   private func appendJSONCell(_ out: inout [UInt8], column col: Int32) {
     switch lib.columnType(stmt, col) {
     case SQLite.typeInteger:
