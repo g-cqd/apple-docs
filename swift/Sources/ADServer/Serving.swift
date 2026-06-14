@@ -134,6 +134,29 @@ private func respond(
       return WebRoutes.symbolsSearch(conn, query: rawQuery, scope: scope, limit: limit)
     }
     response = .json(body, hashable: true)
+  case "/data/search/search-manifest.json":
+    let body = try await threadPool.runIfActive { () -> [UInt8] in
+      guard let conn = pool.checkout() else {
+        return Array(#"{"version":2,"titleCount":0,"aliasCount":0,"shardCount":0,"files":{},"generatedAt":""}"#.utf8)
+      }
+      defer { pool.checkin(conn) }
+      return WebRoutes.searchManifest(conn)
+    }
+    response = .json(body, cacheControl: "no-cache", hashable: true)
+  case "/data/search/title-index.json":
+    let body = try await threadPool.runIfActive { () -> [UInt8] in
+      guard let conn = pool.checkout() else { return Array("{}".utf8) }
+      defer { pool.checkin(conn) }
+      return WebRoutes.titleIndexBytes(conn)
+    }
+    response = .json(body)
+  case "/data/search/aliases.json":
+    let body = try await threadPool.runIfActive { () -> [UInt8] in
+      guard let conn = pool.checkout() else { return Array("{}".utf8) }
+      defer { pool.checkin(conn) }
+      return WebRoutes.aliasMapBytes(conn)
+    }
+    response = .json(body)
   case "/robots.txt":
     response = .text(
       Discovery.robotsTxt(config), contentType: "text/plain; charset=utf-8",
@@ -157,6 +180,13 @@ private func respond(
         return WebRoutes.symbolMetadata(conn, scope: scope, name: name)
       }
       response = body.map { .json($0, hashable: true) } ?? .plain(.notFound, "Not Found")
+    } else if let base = matchHashedSearchArtifact(path) {
+      let body = try await threadPool.runIfActive { () -> [UInt8] in
+        guard let conn = pool.checkout() else { return Array("{}".utf8) }
+        defer { pool.checkin(conn) }
+        return base == "title-index" ? WebRoutes.titleIndexBytes(conn) : WebRoutes.aliasMapBytes(conn)
+      }
+      response = .json(body, cacheControl: "public, max-age=31536000, immutable", hashable: true)
     } else {
       response = .plain(.notFound, "not found\n")
     }

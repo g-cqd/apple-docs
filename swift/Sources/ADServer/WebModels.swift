@@ -27,3 +27,28 @@ struct FontsResponse: Encodable {
   }
   let families: [Family]
 }
+
+// GET /data/search/title-index[.<hash>].json (search-artifacts.js buildTitleIndex):
+// columnar v2, no null-valued fields → a struct.
+struct TitleIndexResponse: Encodable {
+  let v: Int
+  let frameworks: [String]
+  let keys: [String]
+  let titles: [String]
+  let abstracts: [String]
+  let fwIndices: [Int]
+  let kinds: [String]
+  let roleHeadings: [String]
+}
+
+// GET /data/search/search-manifest.json (context.js getSearchManifest). `files`
+// is a dict (the keys are hyphenated, e.g. "title-index"); the filename hashes are
+// `sha256(artifact-bytes).slice(0,10)` — ad-server's own, self-coherent (D2).
+struct SearchManifest: Encodable {
+  let version: Int
+  let titleCount: Int
+  let aliasCount: Int
+  let shardCount: Int
+  let files: [String: String]
+  let generatedAt: String
+}

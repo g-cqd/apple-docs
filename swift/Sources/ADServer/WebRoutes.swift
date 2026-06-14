@@ -5,6 +5,7 @@
 
 import ADJSON
 import ADStorage
+import Foundation
 
 enum WebRoutes {
   /// GET /api/filters body (src/web/routes/filters.route.js).
@@ -120,6 +121,35 @@ enum WebRoutes {
     return encodeJSONValue(.object(obj))
   }
 
+  /// GET /data/search/title-index[.<hash>].json (search-data.route.js).
+  static func titleIndexBytes(_ conn: StorageConnection) -> [UInt8] {
+    WebJSON.encode(titleIndexResponse(conn.buildTitleIndex()))
+  }
+
+  /// GET /data/search/aliases[.<hash>].json — {alias: canonical} (a Dictionary,
+  /// order-free under intrinsic).
+  static func aliasMapBytes(_ conn: StorageConnection) -> [UInt8] {
+    WebJSON.encode(conn.buildAliasMap())
+  }
+
+  /// GET /data/search/search-manifest.json (context.js getSearchManifest). The
+  /// title-index/aliases filename hashes are `sha256(artifact-bytes).slice(0,10)` —
+  /// ad-server's own bytes (self-coherent; differ from JS under intrinsic, D2).
+  static func searchManifest(_ conn: StorageConnection) -> [UInt8] {
+    let titleIndex = conn.buildTitleIndex()
+    let aliasMap = conn.buildAliasMap()
+    let titleBytes = WebJSON.encode(titleIndexResponse(titleIndex))
+    let aliasBytes = WebJSON.encode(aliasMap)
+    let manifest = SearchManifest(
+      version: 2, titleCount: titleIndex.keys.count, aliasCount: aliasMap.count, shardCount: 0,
+      files: [
+        "title-index": "title-index.\(String(sha256HexLower(titleBytes).prefix(10))).json",
+        "aliases": "aliases.\(String(sha256HexLower(aliasBytes).prefix(10))).json",
+      ],
+      generatedAt: ISO8601DateFormatter().string(from: Date()))
+    return WebJSON.encode(manifest)
+  }
+
   /// GET /readyz — instance readiness (the DB probe). Instance-identified shape
   /// (like /healthz), not parity-gated; 503 when the read pool can't answer.
   static func readyz(dbOk: Bool) -> WebResponse {
@@ -231,6 +261,30 @@ func matchSymbolMetadataPath(_ path: Substring) -> (scope: String, name: String)
     let nameEnd = path.index(path.endIndex, offsetBy: -5)
     guard nameStart < nameEnd else { continue }
     return (scope, percentDecode(String(path[nameStart..<nameEnd])))
+  }
+  return nil
+}
+
+private func titleIndexResponse(_ ti: TitleIndex) -> TitleIndexResponse {
+  TitleIndexResponse(
+    v: 2, frameworks: ti.frameworks, keys: ti.keys, titles: ti.titles, abstracts: ti.abstracts,
+    fwIndices: ti.fwIndices, kinds: ti.kinds, roleHeadings: ti.roleHeadings)
+}
+
+/// Matches `^/data/search/(title-index|aliases)\.[0-9a-f]{10}\.json$` → the base
+/// name. The <hash> is cache-busting only — the route serves the CURRENT artifact
+/// (search-data.route.js searchHashedArtifactHandler).
+func matchHashedSearchArtifact(_ path: Substring) -> String? {
+  for base in ["title-index", "aliases"] {
+    let prefix = "/data/search/\(base)."
+    guard path.hasPrefix(prefix), path.hasSuffix(".json") else { continue }
+    let hashStart = path.index(path.startIndex, offsetBy: prefix.count)
+    let hashEnd = path.index(path.endIndex, offsetBy: -5)
+    let hash = path[hashStart..<hashEnd]
+    guard hash.count == 10,
+      hash.allSatisfy({ ($0 >= "0" && $0 <= "9") || ($0 >= "a" && $0 <= "f") })
+    else { continue }
+    return base
   }
   return nil
 }
