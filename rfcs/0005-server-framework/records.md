@@ -245,4 +245,18 @@ native **112/112**. **Phase C's six cheap tools are all native** (search_docs, b
 list_taxonomy, list_frameworks, search_sf_symbols, list_apple_fonts); read_doc + render +
 Streamable HTTP `/mcp` + resources are Phase D.
 
-### Records D–E — to be filled as the phases execute.
+### Record D1 — Streamable HTTP `POST /mcp` — DONE (2026-06-14)
+The second MCP transport, on the same SwiftNIO engine, reusing the dispatcher. **Engine:**
+the serve loop now accumulates the request body (1 MiB cap → 413); `ResponseContent.full` lets
+a route supply its own headers (applied over the envelope — CORS / the MCP set);
+`MCPDispatcher.handle(line:context:)` takes the context per call, so stdio uses a fixed
+connection and HTTP a per-request pooled one (the dispatcher + registry are built once,
+shared). **DSL:** `POST`/`OPTIONS` constructors + `ctx.body`. **App (`MCPHTTP.swift`):**
+`POST /mcp` origin-gates (loopback-allowed, else 403 + `-32000`) and dispatches the JSON-RPC
+body → `application/json` + the MCP/CORS headers; `OPTIONS /mcp` → 204 preflight. The default
+`ad-server` (HTTP) now serves the web routes **and** `/mcp`; `ad-server mcp` stays stdio.
+**Deferred to D1b:** the heavy-tool semaphore (8 permits / 64 queue → `-32003`) + JSON-RPC batch
+arrays. **Gate:** mcp-parity extended to drive the same JSON-RPC over `POST /mcp`
+(initialize / tools/call / origin-deny / OPTIONS) — full native **117/117**.
+
+### Records D2–E — to be filled as the phases execute.

@@ -38,6 +38,8 @@ let dir
 let db
 let proc
 let client
+let httpProc
+const HTTP_PORT = 3046
 
 function makeClient(child) {
   const decoder = new TextDecoder()
@@ -111,6 +113,8 @@ if (existsSync(AD_SERVER)) {
     stdin: 'pipe', stdout: 'pipe', stderr: 'ignore',
   })
   client = makeClient(proc)
+  // The default (HTTP) server also serves POST /mcp (the second transport).
+  httpProc = Bun.spawn([AD_SERVER, '--db', dbPath, '--port', String(HTTP_PORT), '--app-version', VERSION], { stdout: 'ignore', stderr: 'ignore' })
 }
 
 describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP tools)', () => {
@@ -124,8 +128,6 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
   })
   afterAll(() => {
     proc?.kill()
-    db?.close()
-    if (dir) rmSync(dir, { recursive: true, force: true })
   })
 
   test('initialize — serverInfo + protocolVersion + capabilities + instructions', async () => {
@@ -275,5 +277,55 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
   test('unknown method → -32601', async () => {
     const res = await client.request({ jsonrpc: '2.0', id: 15, method: 'nope/nope' })
     expect(res.error.code).toBe(-32601)
+  })
+})
+
+describe.skipIf(!existsSync(AD_SERVER))('mcp over HTTP (POST /mcp == same dispatcher)', () => {
+  let httpReady = false
+  beforeAll(async () => {
+    for (let i = 0; i < 100; i++) {
+      try { if ((await fetch(`http://127.0.0.1:${HTTP_PORT}/healthz`)).ok) { httpReady = true; break } } catch {}
+      await Bun.sleep(80)
+    }
+  })
+  afterAll(() => {
+    httpProc?.kill()
+    db?.close()
+    if (dir) rmSync(dir, { recursive: true, force: true })
+  })
+
+  function mcpPost(message, headers = {}) {
+    return fetch(`http://127.0.0.1:${HTTP_PORT}/mcp`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(message),
+    })
+  }
+
+  test('http server reachable', () => { expect(httpReady).toBe(true) })
+
+  test('POST /mcp initialize', async () => {
+    const res = await mcpPost({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } } })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const json = await res.json()
+    expect(json.result.serverInfo).toEqual({ name: 'apple-docs', version: VERSION })
+    expect(json.result.protocolVersion).toBe('2025-06-18')
+  })
+
+  test('POST /mcp tools/call == projection (same dispatcher as stdio)', async () => {
+    const res = await mcpPost({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'search_sf_symbols', arguments: {} } })
+    const json = await res.json()
+    expect(json.result.structuredContent).toEqual(projectSearchSfSymbols(searchSfSymbols('', {}, { db })))
+  })
+
+  test('POST /mcp origin denied → 403 + -32000', async () => {
+    const res = await mcpPost({ jsonrpc: '2.0', id: 3, method: 'ping' }, { origin: 'https://evil.example' })
+    expect(res.status).toBe(403)
+    expect((await res.json()).error.code).toBe(-32000)
+  })
+
+  test('OPTIONS /mcp preflight → 204 + CORS', async () => {
+    const res = await fetch(`http://127.0.0.1:${HTTP_PORT}/mcp`, { method: 'OPTIONS' })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-methods')).toContain('POST')
   })
 })

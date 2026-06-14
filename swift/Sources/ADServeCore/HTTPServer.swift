@@ -80,16 +80,31 @@ public struct HTTPServer: Sendable {
     do {
       try await channel.executeThenClose { inbound, outbound in
         var requestHead: HTTPRequest?
+        var body: [UInt8] = []
+        var overflow = false
         for try await part in inbound {
           switch part {
           case .head(let head):
             requestHead = head
-          case .body:
-            continue
+            body = []
+            overflow = false
+          case .body(let buffer):
+            if !overflow {
+              body.append(contentsOf: buffer.readableBytesView)
+              if body.count > Self.maxBodyBytes { overflow = true; body = [] }
+            }
           case .end:
             guard let head = requestHead else { continue }
             requestHead = nil
-            let keepAlive = try await respond(to: head, outbound: outbound, threadPool: threadPool)
+            let keepAlive: Bool
+            if overflow {
+              try await writeBodyTooLarge(to: head, outbound: outbound)
+              keepAlive = false
+            } else {
+              keepAlive = try await respond(
+                to: head, body: body, outbound: outbound, threadPool: threadPool)
+            }
+            body = []
             if !keepAlive { return }
           }
         }
@@ -99,15 +114,28 @@ public struct HTTPServer: Sendable {
     }
   }
 
+  /// 1 MiB request-body cap (matches the JS MCP `http-body.js`). Larger → 413 + close.
+  private static let maxBodyBytes = 1_000_000
+
+  private func writeBodyTooLarge(
+    to head: HTTPRequest, outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>
+  ) async throws {
+    try await write(
+      .plain(HTTPResponse.Status(code: 413), "request too large\n"), cache: .unset,
+      requestHeaders: head.headerFields, requestID: resolveRequestID(head.headerFields),
+      keepAlive: false, outbound: outbound)
+  }
+
   /// Resolves + runs the route for one request, then writes the response. Returns
   /// whether to keep the connection alive.
   private func respond(
-    to head: HTTPRequest, outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>,
-    threadPool: NIOThreadPool
+    to head: HTTPRequest, body: [UInt8],
+    outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>, threadPool: NIOThreadPool
   ) async throws -> Bool {
     let keepAlive = isKeepAlive(head)
     let target = head.path ?? "/"
-    let request = ServerRequest(method: head.method, target: target, headers: head.headerFields)
+    let request = ServerRequest(
+      method: head.method, target: target, headers: head.headerFields, body: body)
     let requestID = resolveRequestID(head.headerFields)
 
     let content: ResponseContent
@@ -148,7 +176,7 @@ public struct HTTPServer: Sendable {
     _ content: ResponseContent, cache: CachePolicy, requestHeaders: HTTPFields, requestID: String,
     keepAlive: Bool, outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>
   ) async throws {
-    var (status, contentType, body) = materialize(content)
+    var (status, contentType, body, extraHeaders) = materialize(content)
     var headers = HTTPFields()
     var emitEntity = true
 
@@ -171,6 +199,8 @@ public struct HTTPServer: Sendable {
     headers.append(contentsOf: envelope)
     headers[requestIDName] = requestID
     headers[.connection] = keepAlive ? "keep-alive" : "close"
+    // Route-supplied headers override the envelope (CORS / the MCP `/mcp` set).
+    for field in extraHeaders { headers[field.name] = field.value }
 
     try await outbound.write(.head(HTTPResponse(status: status, headerFields: headers)))
     if !body.isEmpty { try await outbound.write(.body(ByteBuffer(bytes: body))) }
@@ -178,12 +208,15 @@ public struct HTTPServer: Sendable {
   }
 
   private func materialize(_ content: ResponseContent)
-    -> (status: HTTPResponse.Status, contentType: String, body: [UInt8])
+    -> (status: HTTPResponse.Status, contentType: String, body: [UInt8], headers: HTTPFields)
   {
     switch content {
-    case .raw(let b, let ct, let st): return (st, ct, b)
-    case .notFound: return (.notFound, "text/plain; charset=utf-8", Array("Not Found".utf8))
-    case .plain(let st, let msg): return (st, "text/plain; charset=utf-8", Array(msg.utf8))
+    case .raw(let b, let ct, let st): return (st, ct, b, HTTPFields())
+    case .notFound:
+      return (.notFound, "text/plain; charset=utf-8", Array("Not Found".utf8), HTTPFields())
+    case .plain(let st, let msg):
+      return (st, "text/plain; charset=utf-8", Array(msg.utf8), HTTPFields())
+    case .full(let b, let ct, let st, let h): return (st, ct, b, h)
     }
   }
 

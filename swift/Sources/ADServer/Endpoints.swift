@@ -11,8 +11,9 @@ import ADServeDSL
 import ADStorage
 import HTTPTypes
 
-/// The full route table, closing over the site config (discovery + tree hrefs).
-func endpoints(config: SiteConfig) -> RouteTable {
+/// The full route table, closing over the site config (discovery + tree hrefs) and the
+/// shared MCP dispatcher (the HTTP `/mcp` transport — Phase D1).
+func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> RouteTable {
   RouteTable {
     // Liveness — static, no storage, never cached.
     GET("/healthz").cache(.noStore)
@@ -94,6 +95,12 @@ func endpoints(config: SiteConfig) -> RouteTable {
         WebRoutes.frameworkTree(ctx.connection, slug: slug, baseUrl: config.baseUrl)
           .map { ResponseContent.text($0, contentType: "application/json; charset=utf-8") } ?? .notFound
       }
+
+    // MCP over HTTP (Phase D1) — the second transport, on the same engine.
+    POST("/mcp").storage.cache(.noStore)
+      .respond { ctx in handleMCPPost(ctx, dispatcher: mcpDispatcher) }
+    OPTIONS("/mcp")
+      .respond { ctx in handleMCPOptions(ctx) }
   }
 }
 
