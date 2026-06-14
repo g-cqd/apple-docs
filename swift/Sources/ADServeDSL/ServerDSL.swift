@@ -23,7 +23,7 @@
 
 public import ADServeCore
 public import ADStorage
-public import HTTPTypes
+import HTTPTypes
 
 // MARK: - Pool (type-safe storage)
 

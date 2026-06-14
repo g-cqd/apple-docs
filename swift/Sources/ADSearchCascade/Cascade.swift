@@ -6,7 +6,7 @@
 // snippet/relatedCount enrichment, no kind/platform JS filters, no framework
 // fan-out (single, no-filter query) — those land in follow-ons.
 
-public import ADContent
+import ADContent
 public import ADStorage
 
 public struct SearchParams: Sendable {

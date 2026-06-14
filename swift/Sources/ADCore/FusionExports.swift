@@ -16,8 +16,8 @@
 //   N × D u8 vector rows
 // result payload: N × u32 output permutation
 
-public import ADBase
-public import ADSearch
+import ADBase
+import ADSearch
 
 private let maxLists = 1024
 private let maxIds = 16_777_216

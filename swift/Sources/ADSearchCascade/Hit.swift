@@ -3,7 +3,7 @@
 // scores them, projection emits them. Only the fields rerank + the projection
 // allowlist need are kept.
 
-public import ADStorage
+import ADStorage
 
 struct ResultHit {
   var path: String

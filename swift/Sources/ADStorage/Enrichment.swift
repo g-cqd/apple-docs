@@ -6,7 +6,7 @@
 // `storage compact` profile). Best-effort: a missing table → empty result, so a
 // lite-tier corpus never sinks a search response.
 
-public import ADArchive
+import ADArchive
 
 public struct SnippetSection: Sendable {
   public let heading: String?

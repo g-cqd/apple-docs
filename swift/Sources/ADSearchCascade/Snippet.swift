@@ -6,8 +6,8 @@
 // the UTF-16 view + JsString. (A window boundary landing mid-surrogate-pair is
 // the one known divergence — JS keeps a lone surrogate, Swift cannot.)
 
-public import ADContent
-public import ADStorage
+import ADContent
+import ADStorage
 
 enum Snippet {
   static func render(_ doc: SnippetDoc, query: String, maxLength: Int = 220) -> String {

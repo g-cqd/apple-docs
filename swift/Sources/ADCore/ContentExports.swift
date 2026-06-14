@@ -34,7 +34,7 @@
 // result payload: count × [u32 len][markdown utf8], len 0xFFFFFFFF for a
 // page that failed (unreadable/malformed) — JS converts THAT page itself.
 
-public import ADBase
+import ADBase
 public import ADContent
 
 // nullSentinel, renderIndexed, and lenPrefixedPayload are the shared

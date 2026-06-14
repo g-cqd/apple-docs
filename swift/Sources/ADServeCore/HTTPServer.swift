@@ -22,7 +22,7 @@ import NIOHTTPTypesHTTP2
 import NIOPosix
 import NIOSSL
 import Synchronization
-public import ADStorage
+import ADStorage
 
 #if canImport(Darwin)
 import Darwin
@@ -213,7 +213,7 @@ public struct HTTPServer: Sendable {
   }
 
   /// The plaintext HTTP/1.1 child pipeline — shared by both transports.
-  private func plainInitializer() -> @Sendable (Channel) -> EventLoopFuture<EngineConnection> {
+  private func plainInitializer() -> @Sendable (any Channel) -> EventLoopFuture<EngineConnection> {
     { childChannel in
       childChannel.eventLoop.makeCompletedFuture {
         try childChannel.pipeline.syncOperations.configureHTTPServerPipeline()
@@ -442,11 +442,10 @@ public struct HTTPServer: Sendable {
       if route.needsStorage {
         let pool = self.pool
         content = try await threadPool.runIfActive {
-          guard let conn = pool.checkout() else { return .plain(.serviceUnavailable, "") }
-          defer { pool.checkin(conn) }
+          guard let lease = pool.lease() else { return .plain(.serviceUnavailable, "") }
           return route.run(
             HandlerInput(
-              request: input.request, connection: conn, logger: input.logger,
+              request: input.request, connection: lease.connection, logger: input.logger,
               requestID: input.requestID))
         }
       } else {
