@@ -1,7 +1,7 @@
 // libAppleDocsCore mandatory exports (ABI contract v0, ffi-bridge.md §2).
 // No-trap rule: nothing here may abort on input — validate, return status.
 
-import ADBase
+public import ADBase
 
 let abiVersion: UInt32 = 1
 let maxInputBytes = 1 << 30

@@ -2,7 +2,7 @@
 // nodes to plain text, walking the references map for titles (normative
 // JS until the phase-5 kill). Tape + writer implementation.
 
-import ADBase
+public import ADBase
 
 public enum ContentText {
   /// renderContentNodesToText: blocks joined with '' (no separators).

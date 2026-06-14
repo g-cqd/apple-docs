@@ -27,9 +27,9 @@
 //   boxed numbers (adopted trees only): payload in the FOLLOWING word.
 
 #if canImport(Darwin)
-import Darwin
+public import Darwin
 #else
-import Glibc
+public import Glibc
 #endif
 
 /// @unchecked Sendable: a tape is IMMUTABLE after `parse` returns (all

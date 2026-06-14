@@ -9,8 +9,8 @@
 // failure returns .invalidInput — the JS side falls back to the spawn /
 // hb-view / placeholder chain.
 
-import ADBase
-import ADRender
+public import ADBase
+public import ADRender
 
 #if canImport(CoreGraphics)
 import CoreGraphics

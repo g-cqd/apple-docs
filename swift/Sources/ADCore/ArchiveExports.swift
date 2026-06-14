@@ -11,8 +11,8 @@
 // interpolation — no parser needed). This call BLOCKS for the duration of
 // the archive build; it is only ever reached from CLI snapshot tooling.
 
-import ADArchive
-import ADBase
+public import ADArchive
+public import ADBase
 
 private let archiveCodecVersion: UInt32 = 1
 

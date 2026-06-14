@@ -5,10 +5,10 @@
 // the engine dispatches, and the `RouteTable` (`HTTPHandling`) it dispatches against. The
 // DSL sees only ADServeCore's public surface — it cannot touch engine internals.
 
-import ADServeCore
-import ADStorage
-import HTTPTypes
-import Logging
+public import ADServeCore
+public import ADStorage
+public import HTTPTypes
+public import Logging
 
 // MARK: - Handler contexts
 
