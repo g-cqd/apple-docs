@@ -9,7 +9,7 @@
 // UNCHANGED (one listener, the shared pool) and the parity suites stay the contract.
 //
 //   Server {
-//     Listen(pool: .shared) {                    // the central shared pool
+//     App(pool: .shared) {                        // an application on a port; the central shared pool
 //       GET("search") { ctx in .json(…, as: .jsonRaw) }
 //       Group("api") {                            // → /api/*
 //         GET("filters") { ctx in .json(WebRoutes.filters(ctx.db)) }.cache(.apiCorpus)
@@ -157,43 +157,38 @@ private func exactRoute<P: PoolScope>(
   }
 }
 
-// MARK: - Listener + Server
+// MARK: - App + Server
 
-/// A listener's pool config (the engine binds one listener in the PoC). `.shared` = the
-/// central pool on the shared process threads; `.concurrent` = an independent pool (future);
-/// `.none` = no DB.
+/// An app's pool config (the engine binds one app/port in the PoC). `.shared` = the central
+/// pool on the shared process threads; `.concurrent` = an independent pool (future); `.none`
+/// = no DB.
 public enum PoolRef: Sendable { case shared, concurrent, none }
 
-public struct Listener: Sendable {
+/// An application served on a port — the lowered form of an `App { … }`.
+public struct Application: Sendable {
   let routes: [CompiledRoute]
 }
 
-/// A listener. `port:` is accepted for the future multi-listener engine; the PoC binds the
-/// one port from the server configuration.
-public func Listen(
+/// An application served on a port. `port:` is accepted for the future multi-app engine; the
+/// PoC binds the one port from the server configuration.
+public func App(
   port: Int? = nil, pool: PoolRef = .shared, @RouteGroupBuilder _ routes: () -> [RouteNode]
-) -> Listener {
-  Listener(routes: routes().flatMap { $0.build(prefix: "") })
+) -> Application {
+  Application(routes: routes().flatMap { $0.build(prefix: "") })
 }
 
 @resultBuilder
 public enum ServerBuilder {
-  public static func buildExpression(_ listener: Listener) -> [Listener] { [listener] }
-  public static func buildBlock(_ parts: [Listener]...) -> [Listener] { parts.flatMap { $0 } }
-  public static func buildArray(_ parts: [[Listener]]) -> [Listener] { parts.flatMap { $0 } }
+  public static func buildExpression(_ app: Application) -> [Application] { [app] }
+  public static func buildBlock(_ parts: [Application]...) -> [Application] { parts.flatMap { $0 } }
+  public static func buildArray(_ parts: [[Application]]) -> [Application] { parts.flatMap { $0 } }
 }
 
-/// The server definition → the lowered routes. PoC: the listeners' routes merge (one bound
-/// port). Returning `[CompiledRoute]` lets the PoC concatenate new-DSL routes with the
-/// remaining current-DSL ones; the multi-listener `Server → engine` form is a later step.
-public func Server(@ServerBuilder _ build: () -> [Listener]) -> [CompiledRoute] {
+/// The server definition → the lowered routes. PoC: the apps' routes merge (one bound port).
+/// Returning `[CompiledRoute]` keeps the lowering at the existing `RouteTable` seam; the
+/// multi-app `Server → engine` form (a port per `App`) is a later step.
+public func Server(@ServerBuilder _ build: () -> [Application]) -> [CompiledRoute] {
   build().flatMap(\.routes)
-}
-
-/// The current (flat) DSL lowered to `[CompiledRoute]` — so the PoC can `+`-merge it with
-/// the new `Server { … }` routes into one `RouteTable`.
-public func routes(@RouteBuilder _ build: () -> [CompiledRoute]) -> [CompiledRoute] {
-  build()
 }
 
 // MARK: - helpers

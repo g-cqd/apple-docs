@@ -1,8 +1,10 @@
-// The ad-server endpoint declarations (RFC 0005). This is the whole route surface,
-// expressed in the ADServeDSL: each route is `GET(...)`/`route(.get, match:)` →
-// `.storage`/`.cache`/`.respond { … }`. The engine applies the cross-cutting envelope
-// (built below) to every response; routes only opt into cache/ETag. Business logic
-// stays in WebRoutes/Discovery/Cascade — the declarations just wire path → logic.
+// The ad-server endpoint declarations (RFC 0005), in the hierarchical ADServeDSL:
+// `Server { App(pool:) { Group(prefix) { GET(subpath, pool:) { ctx in … }.cache(…) } } }`.
+// The pool is a typed parameter that picks the handler context (`.shared` → `ctx.db`,
+// `.none` → no DB); handlers are trailing closures; output is a typed `MediaType`. The
+// engine applies the cross-cutting envelope (built below) to every response; routes only
+// opt into cache/ETag. Business logic stays in WebRoutes/Discovery/Cascade — declarations
+// just wire path → logic.
 
 import ADJSON
 import ADSearchCascade
@@ -14,105 +16,90 @@ import HTTPTypes
 /// The full route table, closing over the site config (discovery + tree hrefs) and the
 /// shared MCP dispatcher (the HTTP `/mcp` transport — Phase D1).
 func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> RouteTable {
-  // PoC (RFC 0005): a handful of routes re-expressed in the new hierarchical, type-safe
-  // DSL — `Server { Listen(pool:) { Group(prefix) { GET(subpath) { ctx in … } } } }`. The
-  // pool is a typed PARAMETER that picks the handler's context (a `.none` route's `ctx` has
-  // no `db`, compile-enforced), handlers are trailing closures, and output is a typed
-  // `MediaType`. It lowers to the same `[CompiledRoute]` as the flat DSL below, so the two
-  // merge into one table and the parity suites are the contract.
-  let preview = Server {
-    Listen(pool: .shared) {                                  // PoC: one listener, the central shared pool
-      GET("search") { ctx in
-        .json(Cascade.search(ctx.db, parseCascadeParams(ctx.target)), as: .jsonRaw)
+  // The whole route surface in the hierarchical, type-safe DSL (RFC 0005): `Server { App(pool:)
+  // { Group(prefix) { GET(subpath) { ctx in … } } } }`. The pool is a typed PARAMETER that picks
+  // the handler's context (a `.none` route's `ctx` has no `db`, compile-enforced), handlers are
+  // trailing closures, and output is a typed `MediaType`. It lowers to `[CompiledRoute]`/
+  // `RouteTable` — the engine (one app/port, the shared pool) is unchanged, parity is the gate.
+  RouteTable(routes:
+    Server {
+      App(pool: .shared) {                                    // an application on a port; the central shared pool
+        // Liveness — static, no storage, never cached.
+        GET("healthz", pool: .none) { _ in
+          .json(Array(#"{"ok":true,"service":"ad-server"}"#.utf8), as: .json)
+        }.cache(.noStore)
+
+        // Lexical search cascade. `application/json` (no charset) + no cache, as Bun.
+        GET("search") { ctx in
+          .json(Cascade.search(ctx.db, parseCascadeParams(ctx.target)), as: .jsonRaw)
+        }
+
+        // Readiness — the DB probe; status carries ok/503, the route carries `no-store`.
+        GET("readyz") { ctx in WebRoutes.readyz(dbOk: ctx.db.probe()) }.cache(.noStore)
+
+        Group("api") {
+          GET("filters") { ctx in .json(WebRoutes.filters(ctx.db), as: .json) }.cache(.apiCorpus)
+          GET("fonts") { ctx in .json(WebRoutes.fonts(ctx.db), as: .json) }.etag
+          GET("fonts/faces.css") { ctx in
+            .text(WebRoutes.fontFacesCss(ctx.db, baseUrl: config.baseUrl), as: .css)
+          }.cache(.apiCorpus, etag: true)
+          Group("symbols") {
+            GET("index.json") { ctx in .json(WebRoutes.symbolsIndex(ctx.db), as: .json) }.etag
+            GET("search") { ctx in
+              let query = parseQuery(ctx.target)
+              return .json(
+                WebRoutes.symbolsSearch(
+                  ctx.db, query: query["q"] ?? "", scope: nonEmptyScope(query["scope"]),
+                  limit: clampSymbolLimit(query["limit"])), as: .json)
+            }.etag
+          }
+        }
+
+        Group("data/search") {
+          GET("search-manifest.json") { ctx in
+            .json(WebRoutes.searchManifest(ctx.db), as: .json)
+          }.cache(.noCache, etag: true)
+          GET("title-index.json") { ctx in .json(WebRoutes.titleIndexBytes(ctx.db), as: .json) }
+          GET("aliases.json") { ctx in .json(WebRoutes.aliasMapBytes(ctx.db), as: .json) }
+        }
+
+        // ---- discovery (pure siteConfig, no storage) ----
+        GET("robots.txt", pool: .none) { _ in
+          .text(Discovery.robotsTxt(config), as: .text)
+        }.cache(.discovery, etag: true)
+        GET("opensearch.xml", pool: .none) { _ in
+          .text(Discovery.openSearchXml(config), as: .openSearch)
+        }.cache(.discovery, etag: true)
+        Group(".well-known") {
+          GET("api-catalog", pool: .none) { _ in
+            .text(Discovery.apiCatalog(config), as: .linkset)
+          }.cache(.discovery, etag: true)
+          GET("mcp/server-card.json", pool: .none) { _ in
+            .json(Discovery.mcpServerCard(config), as: .json)
+          }.cache(.discovery, etag: true)
+        }
+
+        // ---- pattern routes (typed matchers; irregular grammar) ----
+        GET(match: matchSymbolMetadataPath) { ctx, symbol in
+          WebRoutes.symbolMetadata(ctx.db, scope: symbol.scope, name: symbol.name)
+            .map { ResponseContent.json($0, as: .json) } ?? .notFound
+        }.etag
+        GET(match: matchHashedSearchArtifact) { ctx, base in
+          .json(
+            base == "title-index" ? WebRoutes.titleIndexBytes(ctx.db) : WebRoutes.aliasMapBytes(ctx.db),
+            as: .json)
+        }.cache(.immutable, etag: true)
+        GET(match: matchFrameworkTreePath) { ctx, slug in
+          WebRoutes.frameworkTree(ctx.db, slug: slug, baseUrl: config.baseUrl)
+            .map { ResponseContent.text($0, as: .jsonSpaced) } ?? .notFound
+        }.cache(.immutable)
+
+        // MCP over HTTP (Phase D1) — the second transport, on the same engine.
+        POST("mcp") { ctx in handleMCPPost(ctx, dispatcher: mcpDispatcher) }.cache(.noStore)
+        OPTIONS("mcp") { ctx in handleMCPOptions(ctx) }
       }
-      Group("api") {                                         // → /api/*
-        GET("filters") { ctx in .json(WebRoutes.filters(ctx.db), as: .json) }.cache(.apiCorpus)
-      }
-      GET("robots.txt", pool: .none) { _ in                  // pure-config route: no `ctx.db`
-        .text(Discovery.robotsTxt(config), as: .text)
-      }.cache(.discovery, etag: true)
     }
-  }
-
-  // The remaining routes stay on the current flat DSL; both lower to `[CompiledRoute]`.
-  let rest = routes {
-    // Liveness — static, no storage, never cached.
-    GET("/healthz").cache(.noStore)
-      .respond { _ in .json(Array(#"{"ok":true,"service":"ad-server"}"#.utf8)) }
-
-    // Readiness — the DB probe; status carries ok/503, the route carries `no-store`.
-    GET("/readyz").storage.cache(.noStore)
-      .respond { ctx in WebRoutes.readyz(dbOk: ctx.connection.probe()) }
-
-    // ---- /api ----
-    GET("/api/fonts").storage.etag
-      .respond { ctx in .json(WebRoutes.fonts(ctx.connection)) }
-
-    GET("/api/fonts/faces.css").storage.cache(.apiCorpus, etag: true)
-      .respond { ctx in
-        .text(WebRoutes.fontFacesCss(ctx.connection, baseUrl: config.baseUrl), contentType: "text/css; charset=utf-8")
-      }
-
-    GET("/api/symbols/index.json").storage.etag
-      .respond { ctx in .json(WebRoutes.symbolsIndex(ctx.connection)) }
-
-    GET("/api/symbols/search").storage.etag
-      .respond { ctx in
-        let query = parseQuery(ctx.target)
-        return .json(
-          WebRoutes.symbolsSearch(
-            ctx.connection, query: query["q"] ?? "", scope: nonEmptyScope(query["scope"]),
-            limit: clampSymbolLimit(query["limit"])))
-      }
-
-    // ---- /data/search ----
-    GET("/data/search/search-manifest.json").storage.cache(.noCache, etag: true)
-      .respond { ctx in .json(WebRoutes.searchManifest(ctx.connection)) }
-
-    GET("/data/search/title-index.json").storage
-      .respond { ctx in .json(WebRoutes.titleIndexBytes(ctx.connection)) }
-
-    GET("/data/search/aliases.json").storage
-      .respond { ctx in .json(WebRoutes.aliasMapBytes(ctx.connection)) }
-
-    // ---- discovery (pure siteConfig, no storage) ----
-    GET("/opensearch.xml").cache(.discovery, etag: true)
-      .respond { _ in
-        .text(Discovery.openSearchXml(config), contentType: "application/opensearchdescription+xml")
-      }
-
-    GET("/.well-known/api-catalog").cache(.discovery, etag: true)
-      .respond { _ in .text(Discovery.apiCatalog(config), contentType: "application/linkset+json") }
-
-    GET("/.well-known/mcp/server-card.json").cache(.discovery, etag: true)
-      .respond { _ in .json(Discovery.mcpServerCard(config)) }
-
-    // ---- pattern routes (typed matchers; irregular grammar → explicit matchers) ----
-    route(.get, match: matchSymbolMetadataPath).storage.etag
-      .respond { ctx, symbol in
-        WebRoutes.symbolMetadata(ctx.connection, scope: symbol.scope, name: symbol.name)
-          .map { ResponseContent.json($0) } ?? .notFound
-      }
-
-    route(.get, match: matchHashedSearchArtifact).storage.cache(.immutable, etag: true)
-      .respond { ctx, base in
-        .json(base == "title-index" ? WebRoutes.titleIndexBytes(ctx.connection) : WebRoutes.aliasMapBytes(ctx.connection))
-      }
-
-    route(.get, match: matchFrameworkTreePath).storage.cache(.immutable)
-      .respond { ctx, slug in
-        WebRoutes.frameworkTree(ctx.connection, slug: slug, baseUrl: config.baseUrl)
-          .map { ResponseContent.text($0, contentType: "application/json; charset=utf-8") } ?? .notFound
-      }
-
-    // MCP over HTTP (Phase D1) — the second transport, on the same engine.
-    POST("/mcp").storage.cache(.noStore)
-      .respond { ctx in handleMCPPost(ctx, dispatcher: mcpDispatcher) }
-    OPTIONS("/mcp")
-      .respond { ctx in handleMCPOptions(ctx) }
-  }
-
-  return RouteTable(routes: preview + rest)
+  )
 }
 
 // MARK: - The response envelope (constant headers on every response)
