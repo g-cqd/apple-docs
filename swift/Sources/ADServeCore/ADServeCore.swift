@@ -93,6 +93,12 @@ public final class ServerReadiness: Sendable {
   public func set(_ value: Bool) { ready.withLock { $0 = value } }
 }
 
+/// The network transport the engine binds on. `.nio` = NIOPosix (BSD sockets) + NIOSSL TLS —
+/// cross-platform, the proven default. `.network` = NIOTransportServices (Network.framework,
+/// Apple-native), where TLS + the future HTTP/3 path live; available only where
+/// `canImport(Network)` (Apple platforms), else the engine falls back to `.nio`.
+public enum EngineTransport: String, Sendable { case nio, network }
+
 // MARK: - Connection pool
 
 /// A fixed pool of `StorageConnection`s. Checkout happens INSIDE the offload work
