@@ -87,6 +87,9 @@ public struct RouteNode: Sendable {
 @resultBuilder
 public enum RouteGroupBuilder {
   public static func buildExpression(_ node: RouteNode) -> [RouteNode] { [node] }
+  /// Splice a pre-built list (lets a `@RouteGroupBuilder` helper compose into an `App` — e.g.
+  /// share one route set across a loopback `App` and a TLS `App`).
+  public static func buildExpression(_ nodes: [RouteNode]) -> [RouteNode] { nodes }
   public static func buildBlock(_ parts: [RouteNode]...) -> [RouteNode] { parts.flatMap { $0 } }
   public static func buildArray(_ parts: [[RouteNode]]) -> [RouteNode] { parts.flatMap { $0 } }
   public static func buildOptional(_ part: [RouteNode]?) -> [RouteNode] { part ?? [] }
@@ -164,19 +167,23 @@ private func exactRoute<P: PoolScope>(
 /// = no DB.
 public enum PoolRef: Sendable { case shared, concurrent, none }
 
-/// An application served on a port — the lowered form of an `App { … }`. A nil `port` means
-/// "the process default port" (resolved by `listeners(_:defaultPort:)`).
+/// An application served on a port — the lowered form of an `App { … }`. A nil `port` binds
+/// the process default; a nil `wire` inherits the `Server`'s default protocol. Both are
+/// resolved by `Server(protocol:)` + `listeners(_:defaultPort:)`.
 public struct Application: Sendable {
   public let port: Int?
+  public let wire: Wire?
   let routes: [CompiledRoute]
 }
 
 /// An application served on a port. Omit `port` to bind the process default; give distinct
 /// ports for multiple `App`s under one `Server` (e.g. a TLS listener + the loopback listener).
+/// `protocol:` overrides the `Server`-level default `Wire` (HTTP version(s) × TLS).
 public func App(
-  port: Int? = nil, pool: PoolRef = .shared, @RouteGroupBuilder _ routes: () -> [RouteNode]
+  port: Int? = nil, `protocol` wire: Wire? = nil, pool: PoolRef = .shared,
+  @RouteGroupBuilder _ routes: () -> [RouteNode]
 ) -> Application {
-  Application(port: port, routes: routes().flatMap { $0.build(prefix: "") })
+  Application(port: port, wire: wire, routes: routes().flatMap { $0.build(prefix: "") })
 }
 
 @resultBuilder
@@ -184,21 +191,29 @@ public enum ServerBuilder {
   public static func buildExpression(_ app: Application) -> [Application] { [app] }
   public static func buildBlock(_ parts: [Application]...) -> [Application] { parts.flatMap { $0 } }
   public static func buildArray(_ parts: [[Application]]) -> [Application] { parts.flatMap { $0 } }
+  public static func buildOptional(_ part: [Application]?) -> [Application] { part ?? [] }
+  public static func buildEither(first: [Application]) -> [Application] { first }
+  public static func buildEither(second: [Application]) -> [Application] { second }
 }
 
-/// The server definition → its applications (one NIO listener each). Lower to engine
+/// The server definition → its applications (one NIO listener each). `protocol:` is the
+/// default `Wire` applied to every `App` that didn't set its own. Lower to engine
 /// `ListenerConfig`s with `listeners(_:defaultPort:)`.
-public func Server(@ServerBuilder _ build: () -> [Application]) -> [Application] {
-  build()
+public func Server(
+  `protocol` wire: Wire = .http1, @ServerBuilder _ build: () -> [Application]
+) -> [Application] {
+  build().map { Application(port: $0.port, wire: $0.wire ?? wire, routes: $0.routes) }
 }
 
 /// Lower the `Server { … }` applications to engine `ListenerConfig`s: each `App` becomes one
-/// listener (its own `port`, else `defaultPort`) over a `RouteTable` of its routes.
+/// listener (its own `port`/`wire`, else the defaults) over a `RouteTable` of its routes.
 public func listeners(
   _ apps: [Application], defaultPort: Int, host: String = "127.0.0.1"
 ) -> [ListenerConfig] {
   apps.map {
-    ListenerConfig(host: host, port: $0.port ?? defaultPort, routes: RouteTable(routes: $0.routes))
+    ListenerConfig(
+      host: host, port: $0.port ?? defaultPort, wire: $0.wire ?? .http1,
+      routes: RouteTable(routes: $0.routes))
   }
 }
 

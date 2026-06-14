@@ -16,6 +16,7 @@ import NIOHTTP1
 import NIOHTTPTypes
 import NIOHTTPTypesHTTP1
 import NIOPosix
+import NIOSSL
 public import ADStorage
 
 /// The ad-server engine. Binds one NIO listener per `ListenerConfig`, all sharing the
@@ -64,26 +65,55 @@ public struct HTTPServer: Sendable {
     }
   }
 
-  /// Binds one plaintext HTTP/1.1 listener. (The TLS + HTTP/2 `Wire` variants — ALPN
-  /// negotiation via `configureAsyncHTTPServerPipeline` + NIOSSL — land in F1b.)
+  /// Binds one listener. Plaintext HTTP/1.1, or — when the `Wire` carries TLS — TLS 1.3 with
+  /// the HTTP/1.1 pipeline (F1b-i). (HTTP/2 over ALPN via `configureAsyncHTTPServerPipeline`
+  /// lands in F1b-ii; both yield the same `HTTPRequestPart`/`HTTPResponsePart` stream.)
   private func bind(
     _ listener: ListenerConfig, group: MultiThreadedEventLoopGroup
   ) async throws -> NIOAsyncChannel<NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>, Never> {
-    try await ServerBootstrap(group: group)
+    let bootstrap = ServerBootstrap(group: group)
       .serverChannelOption(ChannelOptions.backlog, value: 256)
       .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
       // TCP_NODELAY: without it Nagle + delayed ACKs add multi-ms latency to small
       // keep-alive responses (Bun.serve sets this; matching it is required).
       .childChannelOption(ChannelOptions.socketOption(.tcp_nodelay), value: 1)
-      .bind(host: listener.host, port: listener.port) { childChannel in
+
+    if let tls = listener.wire.tls {
+      let sslContext = try makeTLSContext(tls, alpn: listener.wire.alpn)
+      return try await bootstrap.bind(host: listener.host, port: listener.port) { childChannel in
         childChannel.eventLoop.makeCompletedFuture {
+          // TLS first; then the HTTP/1.1 pipeline over the decrypted stream (`secure: true`
+          // so the bridge reports `:scheme https`).
+          try childChannel.pipeline.syncOperations.addHandler(
+            NIOSSLServerHandler(context: sslContext))
           try childChannel.pipeline.syncOperations.configureHTTPServerPipeline()
-          // Bridge NIO's HTTP/1 parts ↔ swift-http-types parts (server, plaintext).
-          try childChannel.pipeline.syncOperations.addHandler(HTTP1ToHTTPServerCodec(secure: false))
+          try childChannel.pipeline.syncOperations.addHandler(HTTP1ToHTTPServerCodec(secure: true))
           return try NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>(
             wrappingChannelSynchronously: childChannel)
         }
       }
+    }
+
+    return try await bootstrap.bind(host: listener.host, port: listener.port) { childChannel in
+      childChannel.eventLoop.makeCompletedFuture {
+        try childChannel.pipeline.syncOperations.configureHTTPServerPipeline()
+        // Bridge NIO's HTTP/1 parts ↔ swift-http-types parts (server, plaintext).
+        try childChannel.pipeline.syncOperations.addHandler(HTTP1ToHTTPServerCodec(secure: false))
+        return try NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>(
+          wrappingChannelSynchronously: childChannel)
+      }
+    }
+  }
+
+  /// Builds a TLS 1.3 server context from PEM material, advertising the listener's ALPN ids.
+  private func makeTLSContext(_ tls: TLSSource, alpn: [ALPN]) throws -> NIOSSLContext {
+    let chain = try NIOSSLCertificate.fromPEMFile(tls.certificatePath)
+    let key = try NIOSSLPrivateKey(file: tls.privateKeyPath, format: .pem)
+    var config = TLSConfiguration.makeServerConfiguration(
+      certificateChain: chain.map { .certificate($0) }, privateKey: .privateKey(key))
+    config.minimumTLSVersion = .tlsv13
+    config.applicationProtocols = alpn.map(\.rawValue)
+    return try NIOSSLContext(configuration: config)
   }
 
   /// The accept loop for one listener: each accepted connection becomes a child task.

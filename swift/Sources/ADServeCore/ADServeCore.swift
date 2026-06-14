@@ -16,19 +16,69 @@ import Synchronization
 public import UniformTypeIdentifiers
 #endif
 
+// MARK: - Wire (per-listener transport: HTTP version(s) × TLS)
+
+/// An ALPN-negotiable application protocol. The raw value is the ALPN identifier the TLS
+/// handshake advertises/selects.
+public enum ALPN: String, Sendable {
+  case http1 = "http/1.1"
+  case http2 = "h2"
+  // case http3 = "h3"   // F6 — QUIC, gated on the macOS 26 floor.
+}
+
+/// TLS material: a PEM certificate chain + private key on disk (NIOSSL-native).
+public struct TLSSource: Sendable {
+  public let certificatePath: String
+  public let privateKeyPath: String
+
+  public init(certificatePath: String, privateKeyPath: String) {
+    self.certificatePath = certificatePath
+    self.privateKeyPath = privateKeyPath
+  }
+
+  /// A PEM certificate-chain file + PEM private-key file.
+  public static func pem(certificate: String, privateKey: String) -> TLSSource {
+    TLSSource(certificatePath: certificate, privateKeyPath: privateKey)
+  }
+}
+
+/// A listener's wire protocol — the ALPN-offered HTTP version(s) × optional TLS. `tls == nil`
+/// is plaintext. Shaped to admit `.http3` later with no surface churn.
+public struct Wire: Sendable {
+  public let alpn: [ALPN]
+  public let tls: TLSSource?
+
+  public init(alpn: [ALPN], tls: TLSSource?) {
+    self.alpn = alpn
+    self.tls = tls
+  }
+
+  /// Plaintext HTTP/1.1 (the loopback-behind-Caddy default).
+  public static let http1 = Wire(alpn: [.http1], tls: nil)
+  /// TLS 1.3 with ALPN (h2 + http/1.1 by default; pass `alpn:` to constrain, e.g. `[.http1]`).
+  public static func https(_ tls: TLSSource, alpn: [ALPN] = [.http2, .http1]) -> Wire {
+    Wire(alpn: alpn, tls: tls)
+  }
+}
+
 // MARK: - Configuration
 
-/// One bound listener: a host/port + the route table the engine dispatches against for it.
-/// The connection pool + response envelope are engine-wide (shared across listeners — the
-/// central shared pool the operator wanted), so they go to `HTTPServer`, not here.
+/// One bound listener: a host/port, its `Wire` (HTTP version(s) × TLS), and the route table
+/// the engine dispatches against for it. The connection pool + response envelope are
+/// engine-wide (shared across listeners — the central shared pool), so they go to
+/// `HTTPServer`, not here.
 public struct ListenerConfig: Sendable {
   public let host: String
   public let port: Int
+  public let wire: Wire
   public let routes: any HTTPHandling
 
-  public init(host: String = "127.0.0.1", port: Int, routes: any HTTPHandling) {
+  public init(
+    host: String = "127.0.0.1", port: Int, wire: Wire = .http1, routes: any HTTPHandling
+  ) {
     self.host = host
     self.port = port
+    self.wire = wire
     self.routes = routes
   }
 }
