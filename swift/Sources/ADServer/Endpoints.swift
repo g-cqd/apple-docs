@@ -13,16 +13,15 @@ import ADServeDSL
 import ADStorage
 import HTTPTypes
 
-/// The full route table, closing over the site config (discovery + tree hrefs) and the
-/// shared MCP dispatcher (the HTTP `/mcp` transport — Phase D1).
-func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> RouteTable {
-  // The whole route surface in the hierarchical, type-safe DSL (RFC 0005): `Server { App(pool:)
-  // { Group(prefix) { GET(subpath) { ctx in … } } } }`. The pool is a typed PARAMETER that picks
-  // the handler's context (a `.none` route's `ctx` has no `db`, compile-enforced), handlers are
-  // trailing closures, and output is a typed `MediaType`. It lowers to `[CompiledRoute]`/
-  // `RouteTable` — the engine (one app/port, the shared pool) is unchanged, parity is the gate.
-  RouteTable(routes:
-    Server {
+/// The server's applications — one per `App`, each binding one NIO listener. Closes over the
+/// site config (discovery + tree hrefs) + the shared MCP dispatcher (the HTTP `/mcp` transport).
+func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> [Application] {
+  // The whole route surface in the hierarchical, type-safe DSL (RFC 0005/0007): `Server { App(port:,
+  // pool:) { Group(prefix) { GET(subpath) { ctx in … } } } }`. The pool is a typed PARAMETER that
+  // picks the handler's context (`.none` ⇒ no `ctx.db`, compile-enforced); handlers are trailing
+  // closures; output is a typed `MediaType`. Each `App` lowers to one engine listener via
+  // `listeners(_:defaultPort:)`; the shared connection pool spans them all.
+  Server {
       App(pool: .shared) {                                    // an application on a port; the central shared pool
         // Liveness — static, no storage, never cached.
         GET("healthz", pool: .none) { _ in
@@ -99,7 +98,6 @@ func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> RouteTable {
         OPTIONS("mcp") { ctx in handleMCPOptions(ctx) }
       }
     }
-  )
 }
 
 // MARK: - The response envelope (constant headers on every response)

@@ -18,19 +18,18 @@ public import UniformTypeIdentifiers
 
 // MARK: - Configuration
 
-/// Engine bootstrap parameters (host/port/pool sizing). siteConfig + the response
-/// envelope are the app's concern, passed in separately.
-public struct ServerConfiguration: Sendable {
-  public var host: String
-  public var port: Int
-  public var threadCount: Int
-  public var loopCount: Int
+/// One bound listener: a host/port + the route table the engine dispatches against for it.
+/// The connection pool + response envelope are engine-wide (shared across listeners — the
+/// central shared pool the operator wanted), so they go to `HTTPServer`, not here.
+public struct ListenerConfig: Sendable {
+  public let host: String
+  public let port: Int
+  public let routes: any HTTPHandling
 
-  public init(host: String = "127.0.0.1", port: Int = 3032, threadCount: Int, loopCount: Int = 2) {
+  public init(host: String = "127.0.0.1", port: Int, routes: any HTTPHandling) {
     self.host = host
     self.port = port
-    self.threadCount = max(1, threadCount)
-    self.loopCount = max(1, loopCount)
+    self.routes = routes
   }
 }
 

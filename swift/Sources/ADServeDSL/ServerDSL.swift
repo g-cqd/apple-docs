@@ -164,17 +164,19 @@ private func exactRoute<P: PoolScope>(
 /// = no DB.
 public enum PoolRef: Sendable { case shared, concurrent, none }
 
-/// An application served on a port — the lowered form of an `App { … }`.
+/// An application served on a port — the lowered form of an `App { … }`. A nil `port` means
+/// "the process default port" (resolved by `listeners(_:defaultPort:)`).
 public struct Application: Sendable {
+  public let port: Int?
   let routes: [CompiledRoute]
 }
 
-/// An application served on a port. `port:` is accepted for the future multi-app engine; the
-/// PoC binds the one port from the server configuration.
+/// An application served on a port. Omit `port` to bind the process default; give distinct
+/// ports for multiple `App`s under one `Server` (e.g. a TLS listener + the loopback listener).
 public func App(
   port: Int? = nil, pool: PoolRef = .shared, @RouteGroupBuilder _ routes: () -> [RouteNode]
 ) -> Application {
-  Application(routes: routes().flatMap { $0.build(prefix: "") })
+  Application(port: port, routes: routes().flatMap { $0.build(prefix: "") })
 }
 
 @resultBuilder
@@ -184,11 +186,20 @@ public enum ServerBuilder {
   public static func buildArray(_ parts: [[Application]]) -> [Application] { parts.flatMap { $0 } }
 }
 
-/// The server definition → the lowered routes. PoC: the apps' routes merge (one bound port).
-/// Returning `[CompiledRoute]` keeps the lowering at the existing `RouteTable` seam; the
-/// multi-app `Server → engine` form (a port per `App`) is a later step.
-public func Server(@ServerBuilder _ build: () -> [Application]) -> [CompiledRoute] {
-  build().flatMap(\.routes)
+/// The server definition → its applications (one NIO listener each). Lower to engine
+/// `ListenerConfig`s with `listeners(_:defaultPort:)`.
+public func Server(@ServerBuilder _ build: () -> [Application]) -> [Application] {
+  build()
+}
+
+/// Lower the `Server { … }` applications to engine `ListenerConfig`s: each `App` becomes one
+/// listener (its own `port`, else `defaultPort`) over a `RouteTable` of its routes.
+public func listeners(
+  _ apps: [Application], defaultPort: Int, host: String = "127.0.0.1"
+) -> [ListenerConfig] {
+  apps.map {
+    ListenerConfig(host: host, port: $0.port ?? defaultPort, routes: RouteTable(routes: $0.routes))
+  }
 }
 
 // MARK: - helpers

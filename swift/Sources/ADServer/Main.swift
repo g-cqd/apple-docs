@@ -71,11 +71,13 @@ struct ADServerMain {
     let dispatcher = MCPDispatcher(
       serverInfo: mcpServerInfo(version: siteConfig.appVersion), tools: mcpToolRegistry())
     let server = HTTPServer(
-      configuration: ServerConfiguration(port: port, threadCount: threadCount, loopCount: loopCount),
+      listeners: listeners(
+        endpoints(config: siteConfig, mcpDispatcher: dispatcher), defaultPort: port),
       pool: pool,
-      routes: endpoints(config: siteConfig, mcpDispatcher: dispatcher),
       envelope: buildEnvelope(),
-      logger: logger)
+      logger: logger,
+      threadCount: threadCount,
+      loopCount: loopCount)
     try await server.run()
   }
 
