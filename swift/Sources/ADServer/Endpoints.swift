@@ -22,9 +22,9 @@ func endpoints(
   Server {
     // Loopback (plaintext HTTP/1.1, behind Caddy) on the process default port.
     App(pool: .shared) { siteRoutes(config: config, mcpDispatcher: mcpDispatcher) }
-    // Optional in-process TLS listener (HTTPS + HTTP/1.1; F1b-ii adds h2) on `tlsPort`.
+    // Optional in-process TLS listener — TLS 1.3 with ALPN (HTTP/2 + HTTP/1.1) on `tlsPort`.
     if let tls {
-      App(port: tlsPort, protocol: .https(tls, alpn: [.http1]), pool: .shared) {
+      App(port: tlsPort, protocol: .https(tls), pool: .shared) {
         siteRoutes(config: config, mcpDispatcher: mcpDispatcher)
       }
     }
