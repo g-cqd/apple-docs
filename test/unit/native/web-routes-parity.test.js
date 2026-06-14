@@ -17,6 +17,7 @@ import { filtersHandler } from '../../../src/web/routes/filters.route.js'
 import { listFontsHandler, fontFacesCssHandler } from '../../../src/web/routes/fonts.route.js'
 import { symbolsIndexHandler } from '../../../src/web/routes/symbols-index.route.js'
 import { symbolsSearchHandler, symbolMetadataHandler } from '../../../src/web/routes/symbols.route.js'
+import { buildTitleIndex, buildAliasMap } from '../../../src/web/search-artifacts.js'
 import { buildRobotsTxt, buildOpenSearchXml, buildApiCatalog, buildMcpServerCard } from '../../../src/web/discovery.js'
 import { VERSION } from '../../../src/lib/version.js'
 import { sha256 } from '../../../src/lib/hash.js'
@@ -78,6 +79,9 @@ if (existsSync(AD_SERVER)) {
   seed.assetsSymbols.upsertSymbol({ name: 'circle.fill', scope: 'public', categories: ['shapes'], keywords: ['circle', 'fill'], aliases: ['filled.circle'], availability: { ios: '13.0' }, orderIndex: 1, bundlePath: 'sym/ci', bundleVersion: '13.0' })
   seed.assetsSymbols.upsertSymbol({ name: 'lock.shield', scope: 'private', categories: [], keywords: ['lock', 'shield'], aliases: [], availability: null, orderIndex: 0 })
   seed.assetsSymbols.updateCodepoint('public', 'circle.fill', 59440, '13.0')
+  // Framework synonyms (Phase 3 aliases map).
+  try { seed.db.run("INSERT INTO framework_synonyms (canonical, alias) VALUES ('swiftui', 'su')") } catch {}
+  try { seed.db.run("INSERT INTO framework_synonyms (canonical, alias) VALUES ('uikit', 'uk')") } catch {}
   seed.close()
   db = new DocsDatabase(dbPath)
   server = Bun.spawn([
@@ -215,5 +219,37 @@ describe.skipIf(!existsSync(AD_SERVER))('web-routes parity (Swift ad-server == J
   test('GET /api/symbols/<scope>/<name>.json — 404 on miss', async () => {
     const res = await fetch(`http://127.0.0.1:${PORT}/api/symbols/public/does.not.exist.json`)
     expect(res.status).toBe(404)
+  })
+
+  test('GET /data/search/title-index.json — intrinsic (columnar)', async () => {
+    const expected = JSON.stringify(buildTitleIndex(db))
+    const res = await fetch(`http://127.0.0.1:${PORT}/data/search/title-index.json`)
+    expectIntrinsic(await res.text(), expected)
+  })
+
+  test('GET /data/search/aliases.json — intrinsic (alias map)', async () => {
+    const expected = JSON.stringify(buildAliasMap(db))
+    const res = await fetch(`http://127.0.0.1:${PORT}/data/search/aliases.json`)
+    expectIntrinsic(await res.text(), expected)
+  })
+
+  test('GET /data/search/search-manifest.json — counts + self-coherent hash', async () => {
+    const titleIndex = buildTitleIndex(db)
+    const aliasMap = buildAliasMap(db)
+    const res = await fetch(`http://127.0.0.1:${PORT}/data/search/search-manifest.json`)
+    expect(res.headers.get('cache-control')).toBe('no-cache')
+    const manifest = await res.json()
+    expect(manifest.version).toBe(2)
+    expect(manifest.titleCount).toBe(titleIndex.keys.length)
+    expect(manifest.aliasCount).toBe(Object.keys(aliasMap).length)
+    expect(manifest.shardCount).toBe(0)
+    // self-coherence (D2): the manifest filename hash == sha256 of the served
+    // artifact, and that artifact is intrinsically the JS title index.
+    const titleFile = manifest.files['title-index']
+    const titleRes = await fetch(`http://127.0.0.1:${PORT}/data/search/${titleFile}`)
+    const titleBody = await titleRes.text()
+    expect(titleFile).toBe(`title-index.${sha256(titleBody).slice(0, 10)}.json`)
+    expect(titleRes.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expectIntrinsic(titleBody, JSON.stringify(titleIndex))
   })
 })
