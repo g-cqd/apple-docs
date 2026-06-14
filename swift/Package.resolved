@@ -1,6 +1,24 @@
 {
-  "originHash" : "6591081f5fca23c7ab8d3d6d2193a565199f85bfb3488f562e3fe8ab748b70e8",
+  "originHash" : "0bae62e6ceb672439dd7d325941f80769dfa0e31125d17698c98459cce88d02c",
   "pins" : [
+    {
+      "identity" : "adjson",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/ADJSON.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "f20ee39f1e52775c330b2e22cf65a8f8c84c5f11"
+      }
+    },
+    {
+      "identity" : "swift-asn1",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-asn1.git",
+      "state" : {
+        "revision" : "a9a5efd40eaf558a2bcd48d64b1d1646be686008",
+        "version" : "1.7.1"
+      }
+    },
     {
       "identity" : "swift-atomics",
       "kind" : "remoteSourceControl",
@@ -20,12 +38,30 @@
       }
     },
     {
+      "identity" : "swift-crypto",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-crypto.git",
+      "state" : {
+        "revision" : "95ba0316a9b733e92bb6b071255ff46263bbe7dc",
+        "version" : "3.15.1"
+      }
+    },
+    {
       "identity" : "swift-nio",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-nio.git",
       "state" : {
         "revision" : "77b84ac2cd2ac9e4ac67d19f045fd5b434f56967",
         "version" : "2.101.0"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "0687f71944021d616d34d922343dcef086855920",
+        "version" : "600.0.1"
       }
     },
     {

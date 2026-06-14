@@ -37,7 +37,20 @@ let package = Package(
   // the §2 allow-list (apple/*); D1 settled on raw SwiftNIO, no Vapor. Used
   // ONLY by the ad-server executable. Package.resolved is committed.
   dependencies: [
-    .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0")
+    .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
+    // Second SwiftPM dependency (RFC 0001 P6 web slice). apple/swift-crypto is
+    // §2-allowed (apple/*); used ONLY by ad-server for SHA-256 — `hashable`
+    // ETags + the /data/search/*.<hash>.json artifact filenames must be
+    // byte-identical to the JS `Bun.CryptoHasher('sha256').digest('hex')`. NOT
+    // pulled by ADCore (the dylib stays zero-external-dep).
+    .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+    // ad-server-only (RFC 0001 P6 web slice): the operator's tape-based JSON
+    // engine, dogfooded for the new web-route JSON. `ADJSON.JSONEncoder` emits
+    // byte-identical-to-`JSON.stringify` bytes for fixed-shape Encodable payloads
+    // (escaping + integer formatting match; field order = declaration order; nil
+    // Optionals omitted). Branch dep — no release tag yet; Package.resolved pins
+    // the commit. NOT pulled by ADCore (the dylib stays zero-external-dep).
+    .package(url: "https://github.com/g-cqd/ADJSON.git", branch: "main")
   ],
   targets: [
     .target(name: "ADBase", swiftSettings: releaseCMO),
@@ -82,6 +95,8 @@ let package = Package(
         .product(name: "NIOCore", package: "swift-nio"),
         .product(name: "NIOPosix", package: "swift-nio"),
         .product(name: "NIOHTTP1", package: "swift-nio"),
+        .product(name: "Crypto", package: "swift-crypto"),
+        .product(name: "ADJSON", package: "ADJSON"),
         "ADStorage",
         "ADSearchCascade",
       ],

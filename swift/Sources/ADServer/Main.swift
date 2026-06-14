@@ -27,6 +27,7 @@ struct ADServerMain {
     var threadCount = max(2, System.coreCount - 2)
     var loopCount = 2
     var benchIters: Int?
+    var siteConfig = SiteConfig()
     var args = CommandLine.arguments.dropFirst().makeIterator()
     while let arg = args.next() {
       switch arg {
@@ -35,6 +36,11 @@ struct ADServerMain {
       case "--threads": if let v = args.next(), let t = Int(v) { threadCount = max(1, t) }
       case "--loops": if let v = args.next(), let l = Int(v) { loopCount = max(1, l) }
       case "--bench": if let v = args.next(), let n = Int(v) { benchIters = n }
+      case "--base-url": if let v = args.next() { siteConfig.baseUrl = v }
+      case "--site-name": if let v = args.next() { siteConfig.siteName = v }
+      case "--search-short-name": if let v = args.next() { siteConfig.searchShortName = v }
+      case "--content-signal": if let v = args.next() { siteConfig.contentSignal = v }
+      case "--app-version": if let v = args.next() { siteConfig.appVersion = v }
       default: break
       }
     }
@@ -87,13 +93,14 @@ struct ADServerMain {
         }
       }
     print("ad-server listening on 127.0.0.1:\(port) (threads=\(threadCount), loops=\(loopCount))")
+    let config = siteConfig
     // Each connection is a child task of the accept loop (DiscardingTaskGroup
     // auto-reaps completed connections).
     try await withThrowingDiscardingTaskGroup { taskGroup in
       try await serverChannel.executeThenClose { inbound in
         for try await childChannel in inbound {
           taskGroup.addTask {
-            await serveConnection(childChannel, pool: pool, threadPool: threadPool)
+            await serveConnection(childChannel, pool: pool, threadPool: threadPool, config: config)
           }
         }
       }
