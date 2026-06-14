@@ -4,8 +4,10 @@
 // (ADStorage returns facets/rows); presentation lives here.
 
 import ADJSON
+import ADServeCore
 import ADStorage
 import Foundation
+import HTTPTypes
 
 enum WebRoutes {
   /// GET /api/filters body (src/web/routes/filters.route.js).
@@ -172,8 +174,9 @@ enum WebRoutes {
   }
 
   /// GET /readyz — instance readiness (the DB probe). Instance-identified shape
-  /// (like /healthz), not parity-gated; 503 when the read pool can't answer.
-  static func readyz(dbOk: Bool) -> WebResponse {
+  /// (like /healthz), not parity-gated; 503 when the read pool can't answer. The
+  /// `no-store` cache policy is declared on the route; this just carries the status.
+  static func readyz(dbOk: Bool) -> ResponseContent {
     var w = JSONStreamWriter(capacity: 96)
     w.beginObject()
     w.key("ok")
@@ -185,9 +188,9 @@ enum WebRoutes {
     w.key("readerPool")
     w.null()
     w.endObject()
-    return WebResponse(
-      status: dbOk ? .ok : .serviceUnavailable,
-      contentType: "application/json;charset=utf-8", cacheControl: "no-store", body: w.finish())
+    return .raw(
+      body: w.finish(), contentType: "application/json;charset=utf-8",
+      status: dbOk ? .ok : .serviceUnavailable)
   }
 }
 

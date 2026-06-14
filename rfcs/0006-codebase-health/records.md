@@ -93,4 +93,24 @@ This audit + the §3 matrix + the §5 backlog written. H1–H4 are scheduled to 
 RFC 0005 Phase B (the framework adopts the safe types); H5 at Phase E; H6–H11 as their
 own gated slices. No code changed in this record.
 
-### Records B+ — to be filled as backlog items land.
+### Record B — H1/H2/H3/H5 landed with RFC 0005 Phase B (2026-06-14)
+The new server framework adopted the safe-type vocabulary from day one:
+- **H1** — all headers/status flow through swift-http-types (`HTTPFields`/`HTTPField.Name`/
+  `HTTPResponse.Status`); the `[(String,String)]` tuples are gone (the constant envelope
+  is built once as `HTTPFields` in `Endpoints.swift`).
+- **H2** — server startup/listen logs go through swift-log (`Logger`); usage/errors go to
+  stderr (`FileHandle`); the only remaining `print` is the `--bench` result line (a CLI
+  diagnostic, intentional stdout).
+- **H3** — request-id minting is `UUID().uuidString.lowercased()` (the hand-rolled v4 is
+  gone). The SHA-256→hex helper keeps a manual lowercase loop deliberately — it must be
+  byte-exact to JS `digest('hex')`, and Crypto's digest has no stable hex rendering to
+  rely on.
+- **H5** — `WebResponse.swift`, `Serving.swift`, and the app's `ConnectionPool.swift` are
+  deleted; the dispatch switch + the hand-built envelope are gone. `WebRoutes.swift`
+  remains as the JSON-builder business logic (it no longer mixes routing).
+- **H4 deferred** — the routing is type-safe (typed matcher captures, the `StorageContext`
+  connection invariant), but domain params (`scope`, slug, key) stay `String`; introducing
+  `SymbolScope`/`Tagged` would push types into ADStorage signatures (scope creep for the
+  refactor). The swift-tagged dependency was **removed** (unused) until that slice lands.
+
+### Records C+ — to be filled as backlog items land.

@@ -102,4 +102,60 @@ four verified deps wired (swift-http-types 1.6, swift-log 1.13.2, swift-nio-extr
 53/53** (19 web-routes + 34 search-cascade). No serving logic changed — the engine + DSL
 land in Phase B.
 
-### Records B–E — to be filled as the phases execute.
+### Record B — HTTP engine + route DSL + port — DONE (2026-06-14)
+
+The whole HTTP surface moved off the `Serving.swift` switch onto the DSL, behind the
+existing parity gates.
+
+**Engine (`ADServeCore`):** `HTTPServer` (NIO bootstrap + the structured accept loop +
+the per-connection serve loop, lifted from `Main`/`Serving`); the response envelope
+(`write` — ETag-once → 304, content-type/length, cache-control, the constant header
+set, request-id, connection); `ServerRequest`/`ResponseContent`/`CachePolicy`/
+`HandlerInput`/`MatchedRoute`/`HTTPHandling` value types; the moved `ConnectionPool`;
+and the engine-generic helpers `sha256HexLower`/`matchesIfNoneMatch`/`resolveRequestID`.
+
+**DSL (`ADServeDSL`):** `@RouteBuilder` → `RouteTable` (exact O(1) index + ordered
+patterns, conforms `HTTPHandling`); `GET(_:)` + `route(_:match:)`; the `.storage` /
+`.cache` / `.cache(_:etag:)` / `.etag` / `.respond` modifiers; `RequestContext` +
+`StorageContext` (both `@dynamicMemberLookup`, the latter with a non-optional
+`connection` so you can't reach a connection without `.storage`).
+
+**App (`ADServer`):** `Endpoints.swift` declares all 18 routes (the headline — the
+whole surface is now declarative) + builds the envelope as `HTTPFields` + the
+`apiCorpus`/`discovery` cache presets; `Main.swift` slimmed to flag-parse → config →
+`HTTPServer.run()` (+ the `--bench` diagnostic). `WebRoutes.readyz` now returns a
+`ResponseContent`; `searchManifest` uses the engine's `sha256HexLower`. **Deleted**:
+`Serving.swift`, `WebResponse.swift`, `ConnectionPool.swift` (the app copy).
+
+**Decisions taken during the build (D-0005-7..9):**
+- **D-0005-7 — full HTTPTypes serving path.** Adopted the `NIOHTTPTypesHTTP1`
+  `HTTP1ToHTTPServerCodec` bridge so the engine speaks `HTTPRequest`/`HTTPResponse`/
+  `HTTPFields` end-to-end (`NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>`). The
+  current server already emitted lowercase header names (== HTTPTypes canonical), and
+  the parity test compares header *values* (fetch normalizes names) — so the wire
+  behavior is unchanged. The swift-nio floor moved to ≥ 2.94 (nio-extras 1.34.1).
+- **D-0005-8 — explicit typed matchers over a `Path { }` builder (for now).** The three
+  pattern routes have irregular grammar (embedded 10-hex hashes, rest-until-`.json`,
+  percent-decoded names) that a segment/capture builder fits poorly; the proven
+  matchers (`matchSymbolMetadataPath` etc.) are reused as typed `@Sendable (Substring)
+  -> Captures?` closures — equally type-safe, no premature abstraction. The declarative
+  `Path { Capture(…) }` builder + `Group` prefixing + a `.query(T)` decoder + a
+  `ServerApp` config builder are **recorded as future ergonomics**, unbuilt (YAGNI).
+- **D-0005-9 — synchronous handlers.** Route `run` is sync (all business logic is sync),
+  so the `.storage` offload stays the proven `threadPool.runIfActive { checkout; defer
+  checkin; run }` shape. An async variant can be added when a route needs it.
+
+**Per-route fidelity preserved exactly:** `/search` keeps `application/json` (no charset)
++ no cache; `/api/*` JSON keeps `application/json;charset=utf-8`; the framework-tree keeps
+`application/json; charset=utf-8` (with space) + immutable + no ETag; the two 404 bodies
+stay distinct (`Not Found` for a route-level miss via `.notFound`, `not found\n` for an
+unmatched path). `UUID().uuidString.lowercased()` satisfies the lowercase-v4 request-id
+regex.
+
+**Gates (all green):** web-routes parity **19/19** + search-cascade **34/34** (intrinsic
+JSON + deterministic headers), full native suite **99/99**, `swift test` clean. Perf
+sweep (480-doc synthetic, `ab -k`, q=view&limit=100): SwiftNIO rps 244 / 905 / 972 / 718
+at c=1/4/8/16 vs Bun 364 / 734 / 735 / 670 — scales positively, ad-server ≥ Bun at c≥4;
+the c=1 gap is the known per-request offload overhead, not a refactor regression.
+
+### Records C–E — to be filled as the phases execute.
