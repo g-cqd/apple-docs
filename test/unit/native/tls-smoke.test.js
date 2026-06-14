@@ -5,7 +5,8 @@
  * simultaneously up (two listeners, one shared pool), TLS negotiates TLSv1.3 + ALPN http/1.1.
  *
  * Capability test (no JS equivalent), not a byte-parity gate. Skipped when the release binary
- * or openssl is absent. F1b-i is HTTP/1.1-over-TLS; HTTP/2 ALPN lands in F1b-ii.
+ * or openssl is absent. The TLS listener advertises ALPN h2 + http/1.1; both serve the same
+ * routes, and h1 falls back when the client doesn't offer h2.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
@@ -79,12 +80,41 @@ describe.skipIf(!enabled)('TLS 1.3 + multi-App (ad-server terminates HTTPS + loo
     expect(await res.text()).toBe(HEALTH)
   })
 
-  test('TLS handshake negotiates TLSv1.3 + ALPN http/1.1', () => {
+  test('TLS handshake negotiates TLSv1.3 + ALPN h2', () => {
     const out = Bun.spawnSync([
       'sh', '-c',
       `echo Q | openssl s_client -connect 127.0.0.1:${TLS_PORT} -alpn h2,http/1.1 2>&1`,
     ]).stdout.toString()
     expect(out).toContain('TLSv1.3')
-    expect(out).toContain('ALPN protocol: http/1.1')
+    expect(out).toContain('ALPN protocol: h2')
+  })
+
+  test('HTTP/2 over TLS — curl --http2 serves /healthz as h2', () => {
+    const ver = Bun.spawnSync([
+      'curl', '-sk', '--http2', '-o', '/dev/null', '-w', '%{http_version}',
+      `https://127.0.0.1:${TLS_PORT}/healthz`,
+    ]).stdout.toString().trim()
+    expect(ver).toBe('2')
+    const body = Bun.spawnSync([
+      'curl', '-sk', '--http2', `https://127.0.0.1:${TLS_PORT}/healthz`,
+    ]).stdout.toString()
+    expect(body).toBe(HEALTH)
+  })
+
+  test('HTTP/2 multiplexing serves a DB-backed route (/readyz) as h2', () => {
+    const out = Bun.spawnSync([
+      'curl', '-sk', '--http2', '-w', '\\n%{http_version}',
+      `https://127.0.0.1:${TLS_PORT}/readyz`,
+    ]).stdout.toString().trim().split('\n')
+    expect(out[1]).toBe('2')
+    expect(JSON.parse(out[0]).db).toBe(true)
+  })
+
+  test('ALPN fallback — curl --http1.1 still serves over TLS', () => {
+    const ver = Bun.spawnSync([
+      'curl', '-sk', '--http1.1', '-o', '/dev/null', '-w', '%{http_version}',
+      `https://127.0.0.1:${TLS_PORT}/healthz`,
+    ]).stdout.toString().trim()
+    expect(ver).toBe('1.1')
   })
 })
