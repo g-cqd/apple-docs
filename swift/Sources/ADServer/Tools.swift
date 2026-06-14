@@ -11,6 +11,7 @@
 // ADJSON schema requirements land (R1-R3/R5). tools/call behavior is the parity gate.
 
 import ADJSON
+import ADSearchCascade
 import ADServeCore
 import ADServeDSL
 import ADStorage
@@ -41,10 +42,43 @@ struct SearchSfSymbolsInput: Decodable {
   var limit: Int?
 }
 
+// search_docs BASE — read/maxChars/page/match (inline + pagination + excerpts) ride
+// Phase D, so they are intentionally omitted (nothing advertised-but-unimplemented).
+@Schemable
+struct SearchDocsInput: Decodable {
+  var query: String
+  var framework: String?
+  var source: String?
+  var kind: String?
+  var language: String?
+  var platform: String?
+  var minVersion: MinVersion?
+  var limit: Int?
+  var year: Int?
+  var track: String?
+  var deprecated: String?
+}
+
+@Schemable
+struct MinVersion: Decodable {
+  var ios: String?
+  var macos: String?
+  var watchos: String?
+  var tvos: String?
+  var visionos: String?
+}
+
 // MARK: - Tool surface
 
 func mcpToolRegistry() -> ToolRegistry {
   ToolRegistry {
+    Tool(
+      "search_docs",
+      "Search Apple developer docs (keyword + semantic). Prefer compact symbol/API terms; put constraints in filter args, not the query. Set read=true to inline the top hit's content."
+    )
+    .input(SearchDocsInput.self)
+    .respond { input, ctx in searchDocs(input, ctx) }
+
     Tool(
       "list_taxonomy",
       "List distinct taxonomy values with counts (top 20 per field). Use to pick valid search_docs kind filters."
@@ -115,6 +149,21 @@ private func searchSfSymbols(_ input: SearchSfSymbolsInput, _ ctx: MCPToolContex
     "results": .array(rows.map { .object(["name": .string($0.name), "scope": .string($0.scope)]) })
   ])
   return encodePayload(payload)
+}
+
+private func searchDocs(_ input: SearchDocsInput, _ ctx: MCPToolContext) -> MCPToolResult {
+  // The cascade already emits projectSearchResult(webPaths:false) — the MCP variant —
+  // and search()'s defaults (fuzzy on, noDeep off) match the cascade's always-on
+  // behavior, so the bytes ARE the search_docs payload. limit default 25 (MCP).
+  let params = SearchParams(
+    query: input.query, limit: input.limit ?? 25, offset: 0,
+    framework: input.framework, source: input.source, kind: input.kind,
+    language: input.language, platform: input.platform,
+    minIos: input.minVersion?.ios, minMacos: input.minVersion?.macos,
+    minWatchos: input.minVersion?.watchos, minTvos: input.minVersion?.tvos,
+    minVisionos: input.minVersion?.visionos,
+    year: input.year, track: input.track, deprecated: input.deprecated)
+  return .ok(Cascade.search(ctx.connection, params))
 }
 
 // MARK: - helpers

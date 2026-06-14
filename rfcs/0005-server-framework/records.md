@@ -211,4 +211,14 @@ method → -32601. **9/9**; full native suite **108/108** (the HTTP path unregre
 deferred — `Decodable` decoding already enforces types + required; enum/bounds rejection
 lands with the richer schema.
 
+**search_docs added (2026-06-14).** The cascade-backed tool reuses `Cascade.search` bytes
+directly: the Swift cascade already projects with **`webPaths:false`** (the MCP variant — the
+web `/search` route uses `webPaths:true`), and `search()`'s defaults (`fuzzy !== false` → on,
+`noDeep` → off) match the cascade's always-on behavior, so the bytes ARE
+`projectSearchResult(search(…), {webPaths:false})`. The only glue is the MCP param mapping
+(limit default 25, `minVersion.{ios…}` → `minIos…`). `read=true` / `maxChars` / `match`
+(inline + pagination + excerpts) ride Phase D and are **omitted from the schema** (nothing
+advertised-but-unimplemented). mcp-parity **10/10**, full native **109/109**. Left in Phase C:
+**browse**.
+
 ### Records D–E — to be filled as the phases execute.
