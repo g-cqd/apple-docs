@@ -158,4 +158,57 @@ sweep (480-doc synthetic, `ab -k`, q=view&limit=100): SwiftNIO rps 244 / 905 / 9
 at c=1/4/8/16 vs Bun 364 / 734 / 735 / 670 — scales positively, ad-server ≥ Bun at c≥4;
 the c=1 gap is the known per-request offload overhead, not a refactor regression.
 
-### Records C–E — to be filled as the phases execute.
+### Record C — MCP core + stdio + the first 4 native tools — first cut DONE (2026-06-14)
+
+The native MCP server stands up; the SDK + zod are gone for the implemented tools.
+
+**Core (`ADServeCore/MCP.swift`):** in-house JSON-RPC 2.0 built on ADJSON `JSONValue`
+(parse a line → dispatch → encode a line). `MCPDispatcher` handles `initialize`
+(echoes the client's `protocolVersion` if supported else `2025-11-25`; capabilities
+`{resources,tools: {listChanged:true}}`; serverInfo + instructions), `ping` (`{}`),
+`tools/list`, `tools/call` (`{content:[{type:text,text}], structuredContent}` on success;
+`{content,isError:true}` on failure), `notifications/initialized` (no response), and
+`-32601` for unknown methods — the exact SDK wire shapes (mapped from
+`node_modules/@modelcontextprotocol/sdk` + an in-memory drive). `StdioMCPTransport` is a
+synchronous `readLine` loop (newline-delimited JSON; logs forced to STDERR so STDOUT
+carries only JSON-RPC). The tool surface is an `MCPToolProviding` (engine ⇄ DSL seam).
+
+**Tool DSL (`ADServeDSL/Tool.swift`):** `Tool("name","desc").input(SomeInput.self)
+.respond { input, ctx in … }` → `@ToolBuilder` → `ToolRegistry` (declaration order for
+tools/list, O(1) by-name for tools/call). Mirrors the route DSL.
+
+**Tools + Services (`ADServer/Tools.swift`):** list_taxonomy + list_frameworks (new
+ADStorage queries `taxonomyCounts`/`listFrameworkRoots`), search_sf_symbols +
+list_apple_fonts (reuse the existing `searchSfSymbols`/`WebRoutes.fonts`). Each handler
+projects to the exact `project*()` shape (the lean `projectSearchSfSymbols`
+`{results:[{name,scope}]}`, `projectTaxonomy`, `projectFrameworks`,
+`projectListAppleFonts`). `ad-server mcp --db … --app-version …` runs the stdio server.
+
+### D-0005-10 — tool schemas via ADJSON `@Schemable` (operator, 2026-06-14)
+The Tool DSL initially carried a hand-rolled `Schema.*` JSON-Schema builder (and the RFC
+had planned a bespoke `@ToolInput` macro). The operator redirected: **use ADJSON's
+existing `@Schemable` macro directly on `Decodable` input structs** — it derives the
+schema AND gives typed decoding, so the builder + the bespoke macro are both dropped.
+`.input(T.self)` reads `T.__adjsonSchemaText`; `.respond` receives the decoded `T`.
+
+**Caveat — `@Schemable` is structural today.** It emits `{type,properties,required,items,
+additionalProperties}` (no `$schema`, descriptions, enums, or numeric bounds), so the
+`tools/list` schema is leaner than the SDK's zod (draft-07, rich) schema. So the
+**mcp-parity gate is the tools/call behavior + the tool metadata** (name/description/
+annotations/execution) + a structurally-coherent inputSchema — NOT the schema text. A
+schema-requirements spec was written and forwarded to the ADJSON team (R1 doc-comment
+descriptions, R2 enum-from-Swift-enum, R3 numeric bounds, R5 draft-07 `$schema`, R8 a
+public schema accessor, R11 nested-field descriptions); when those land the schemas
+enrich toward byte-parity with zod, no DSL change.
+
+### Gate
+New `test/unit/native/mcp-parity.test.js` boots `ad-server mcp` over stdio and drives the
+JSON-RPC: initialize (protocolVersion/serverInfo/capabilities/instructions), ping,
+tools/list (the 4 tools' metadata + structural schema), tools/call (each result's
+`structuredContent` + `content[0].text` deep-equal the JS command+projection), unknown
+method → -32601. **9/9**; full native suite **108/108** (the HTTP path unregressed);
+`swift test` clean. Arg-schema *validation* (the SDK's zod rejection of bad args) is
+deferred — `Decodable` decoding already enforces types + required; enum/bounds rejection
+lands with the richer schema.
+
+### Records D–E — to be filled as the phases execute.

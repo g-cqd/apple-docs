@@ -5,6 +5,7 @@
 // just the app's composition root. `--bench` keeps the in-process read diagnostic.
 
 import ADServeCore
+import ADServeDSL
 import ADStorage
 import Dispatch
 import Foundation
@@ -19,7 +20,11 @@ struct ADServerMain {
     var loopCount = 2
     var benchIters: Int?
     var siteConfig = SiteConfig()
-    var args = CommandLine.arguments.dropFirst().makeIterator()
+    // `ad-server mcp …` runs the stdio MCP server; otherwise the HTTP server.
+    var rawArgs = Array(CommandLine.arguments.dropFirst())
+    let mcpMode = rawArgs.first == "mcp"
+    if mcpMode { rawArgs.removeFirst() }
+    var args = rawArgs.makeIterator()
     while let arg = args.next() {
       switch arg {
       case "--db": dbPath = args.next()
@@ -36,7 +41,15 @@ struct ADServerMain {
       }
     }
     guard let dbPath, !dbPath.isEmpty else {
-      fail("usage: ad-server --db <corpus.db> [--port 3032] [--threads N] [--loops N] [--bench ITERS]", code: 2)
+      fail(
+        "usage: ad-server [mcp] --db <corpus.db> [--port 3032] [--threads N] [--loops N] [--bench ITERS]",
+        code: 2)
+    }
+
+    // `ad-server mcp` — the stdio MCP server (one serial client; no HTTP).
+    if mcpMode {
+      runMCP(dbPath: dbPath, version: siteConfig.appVersion)
+      return
     }
 
     // Diagnostic: time searchPagesJSON in-process (no NIO/offload/HTTP) to isolate the
@@ -72,6 +85,21 @@ struct ADServerMain {
     for _ in 0..<iters { _ = conn.searchPagesJSON(params) }
     let ns = (DispatchTime.now().uptimeNanoseconds - t0) / UInt64(max(1, iters))
     print("searchPagesJSON in-process: \(ns) ns/call (\(Double(ns) / 1000.0) µs, \(iters) iters)")
+  }
+
+  /// Runs the stdio MCP server. Logs go to STDERR so STDOUT carries only JSON-RPC.
+  private static func runMCP(dbPath: String, version: String) {
+    LoggingSystem.bootstrap(StreamLogHandler.standardError)
+    guard let connection = StorageConnection(path: dbPath) else {
+      fail("ad-server: cannot open \(dbPath)", code: 1)
+    }
+    var logger = Logger(label: "ad-server-mcp")
+    logger.logLevel = .info
+    let serverInfo = MCPServerInfo(name: "apple-docs", version: version, instructions: mcpInstructions)
+    let dispatcher = MCPDispatcher(
+      serverInfo: serverInfo, tools: mcpToolRegistry(),
+      context: MCPToolContext(connection: connection, logger: logger))
+    StdioMCPTransport(dispatcher: dispatcher).run()
   }
 }
 

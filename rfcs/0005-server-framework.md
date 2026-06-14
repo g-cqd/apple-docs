@@ -128,12 +128,17 @@ compiler-enforced modules (`ADServeCore`/`ADServeDSL`/app).
   stdin/stdout — the primary local-client path, Claude Desktop/CLI via the bin)
   first; then **Streamable HTTP** `POST /mcp` (stateless) mounted as a route on the
   *same* HTTP engine.
-- **Tool DSL + the zod-killer.** `Tool("search_docs", "…").input(SearchDocsInput.self)
-  .respond { … }`, where `SearchDocsInput` is a `Codable` struct and a **`@ToolInput`**
-  macro (swift-syntax, already in-tree via ADJSON) synthesizes its JSON Schema from
-  stored properties + doc-comments + constraint wrappers — replacing zod's
-  `.int().min().max().describe()`. `tools/list` serves the derived schema; `tools/call`
-  decodes the struct. Fallback if the macro slips: a hand-written `static var jsonSchema`.
+- **Tool DSL + the zod-killer.** `Tool("search_sf_symbols", "…").input(SearchSfSymbolsInput.self)
+  .respond { input, ctx in … }`, where `SearchSfSymbolsInput` is an **ADJSON
+  `@Schemable & Decodable`** struct: the macro derives the JSON Schema from the stored
+  properties AND gives typed decoding (D-0005-10) — no zod, no hand-rolled builder.
+  `tools/list` serves the derived schema; `tools/call` decodes the struct.
+  **Caveat (2026-06-14):** `@Schemable` today emits a *structural* schema (type /
+  properties / required / nesting; no descriptions / enums / bounds / `$schema`), so
+  `tools/list` schemas are leaner than the SDK's zod schemas — a schema-requirements
+  spec (descriptions, enums, bounds, draft-07, a public accessor) was sent to the ADJSON
+  team to close the gap; until then the **`tools/call` behavior is the parity gate**, not
+  the schema text.
 - **Result shaping**: `{content:[{type:text,text}], structuredContent}` + image
   content (SVG / PNG base64) for render tools + `isError`. The **projection +
   pagination** business logic (`src/output/projection.js`, `src/mcp/pagination.js`)
@@ -151,7 +156,7 @@ compiler-enforced modules (`ADServeCore`/`ADServeDSL`/app).
 | D-0005-1 | DSL shape: unified HTTP+MCP "capability", two sibling DSLs, or HTTP-first | **HTTP route DSL first** (operator), MCP `Tool` DSL second; both over the same engine + shared Services. The unified single-declaration "capability" is a later option, not built now |
 | D-0005-2 | How endpoints are declared | **Result builders + SwiftUI-style modifiers + a URLBuilder-style typed `Path`** (RegexBuilder typed captures); `@dynamicMemberLookup RequestContext`; everything compile-checked. Engine/DSL/logic are **three modules** (the decoupling is enforced by the compiler, not convention) |
 | D-0005-3 | Type vocabulary | **Adopt the safe types from day one** (RFC 0006): swift-http-types headers/status, swift-log, typed `throws` + rich error enums, `Tagged`/domain enums for params, `Foundation.URL`, `UUID`. New code sets the bar; existing modules are a scheduled backlog |
-| D-0005-4 | MCP protocol + schema | **In-house JSON-RPC 2.0**, transports **both (stdio-first)**, tool schemas via a **`@ToolInput` macro** + `Codable` (no zod). *Kills* `@modelcontextprotocol/sdk` + `zod` |
+| D-0005-4 | MCP protocol + schema | **In-house JSON-RPC 2.0**, transports **both (stdio-first)**, tool schemas via **ADJSON's `@Schemable` macro** on `Decodable` input structs (D-0005-10, operator 2026-06-14 — no zod, no hand-rolled builder; the macro also gives typed decoding). *Kills* `@modelcontextprotocol/sdk` + `zod` |
 | D-0005-5 | Parity discipline | The route refactor is **behavior-preserving**: the web-routes (19) + search-cascade (34) parity suites are the invariant, re-run after every port. MCP adds an **intrinsic contract test** (deep-equal `tools/call` results + `tools/list` schemas vs the JS MCP) |
 | D-0005-6 | Build scope | **Full build, phased A–E** (operator), each phase independently committable behind the gates; `ad-server` stays **inert to production** until the operator enables the flip |
 
@@ -200,7 +205,14 @@ The `libAppleDocsCore` dylib stays zero-external-dep — these are `ad-server`-o
   **Gates green**: web-routes 19/19 + search-cascade 34/34 (intrinsic body + headers),
   full native suite 99/99, `swift test` clean; `/search` perf scales positively and
   ad-server ≥ Bun at c≥4. Detail: [Records B](0005-server-framework/records.md).
-- Phases C–E: see §6 + the records.
+- **Phase C (in progress) — first cut DONE** (2026-06-14): the MCP core (in-house
+  JSON-RPC 2.0 + a newline-delimited stdio transport + initialize / ping / tools/list /
+  tools/call), the `Tool` DSL on ADJSON `@Schemable`, and the first four native tools
+  (list_taxonomy, list_frameworks, search_sf_symbols, list_apple_fonts). **`mcp-parity`
+  9/9** (tools/call intrinsic-identical to the JS commands+projections), full native
+  108/108, `swift test` clean. Left in C: search_docs (cascade-backed) + browse.
+  Detail: [Records C](0005-server-framework/records.md).
+- Phases D–E: see §6 + the records.
 
 ---
 *Maintenance*: update this contract's Status + §9 as phases land; dated execution
