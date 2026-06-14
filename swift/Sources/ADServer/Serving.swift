@@ -97,6 +97,23 @@ private func respond(
       return conn.probe()
     }
     response = WebRoutes.readyz(dbOk: dbOk)
+  case "/api/fonts":
+    let body = try await threadPool.runIfActive { () -> [UInt8] in
+      guard let conn = pool.checkout() else { return Array(#"{"families":[]}"#.utf8) }
+      defer { pool.checkin(conn) }
+      return WebRoutes.fonts(conn)
+    }
+    response = .json(body, hashable: true)
+  case "/api/fonts/faces.css":
+    let baseUrl = config.baseUrl
+    let body = try await threadPool.runIfActive { () -> [UInt8] in
+      guard let conn = pool.checkout() else { return [] }
+      defer { pool.checkin(conn) }
+      return WebRoutes.fontFacesCss(conn, baseUrl: baseUrl)
+    }
+    response = .text(
+      body, contentType: "text/css; charset=utf-8",
+      cacheControl: WebConst.apiCorpusCacheControl, hashable: true)
   case "/robots.txt":
     response = .text(
       Discovery.robotsTxt(config), contentType: "text/plain; charset=utf-8",

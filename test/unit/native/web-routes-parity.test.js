@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { filtersHandler } from '../../../src/web/routes/filters.route.js'
+import { listFontsHandler, fontFacesCssHandler } from '../../../src/web/routes/fonts.route.js'
 import { buildRobotsTxt, buildOpenSearchXml, buildApiCatalog, buildMcpServerCard } from '../../../src/web/discovery.js'
 import { VERSION } from '../../../src/lib/version.js'
 import { sha256 } from '../../../src/lib/hash.js'
@@ -32,6 +33,13 @@ let dir
 let db
 let server
 let ready = false
+
+// JSON routes are gated on INTRINSIC identity — deep-equal on the PARSED JSON
+// (D2), not byte. (Array order is still semantic and must match.) Text routes
+// (robots/opensearch/faces.css) have no canonical parse → byte-compared.
+function expectIntrinsic(actual, expected) {
+  expect(JSON.parse(actual)).toEqual(JSON.parse(expected))
+}
 
 if (existsSync(AD_SERVER)) {
   dir = mkdtempSync(join(tmpdir(), 'web-parity-'))
@@ -55,6 +63,13 @@ if (existsSync(AD_SERVER)) {
   stampYear.run(JSON.stringify({ year: 2024 }), 'wwdc/talk1')
   stampYear.run(JSON.stringify({ year: 2024 }), 'wwdc/talk2')
   stampYear.run(JSON.stringify({ year: 2023 }), 'wwdc/talk3')
+  // Fonts (Phase 2): families ORDER BY display_name (New York < SF Pro), each
+  // family's files ORDER BY file_name (SF-Pro-Bold < SF-Pro-Regular).
+  seed.assetsFonts.upsertFontFamily({ id: 'sf-pro', displayName: 'SF Pro' })
+  seed.assetsFonts.upsertFontFamily({ id: 'ny', displayName: 'New York' })
+  seed.assetsFonts.upsertFontFile({ id: 'sf-pro-bold', familyId: 'sf-pro', fileName: 'SF-Pro-Bold.otf', filePath: '/x/SF-Pro-Bold.otf', format: 'otf' })
+  seed.assetsFonts.upsertFontFile({ id: 'sf-pro-regular', familyId: 'sf-pro', fileName: 'SF-Pro-Regular.otf', filePath: '/x/SF-Pro-Regular.otf', format: 'otf' })
+  seed.assetsFonts.upsertFontFile({ id: 'ny-regular', familyId: 'ny', fileName: 'NewYork.ttf', filePath: '/x/NewYork.ttf', format: 'ttf' })
   seed.close()
   db = new DocsDatabase(dbPath)
   server = Bun.spawn([
@@ -140,5 +155,23 @@ describe.skipIf(!existsSync(AD_SERVER))('web-routes parity (Swift ad-server == J
     const res = await fetch(`http://127.0.0.1:${PORT}/.well-known/mcp/server-card.json`)
     expect(await res.text()).toBe(expected)
     expect(res.headers.get('content-type')).toBe('application/json;charset=utf-8')
+  })
+
+  test('GET /api/fonts — intrinsic-identical (ADJSON model)', async () => {
+    const jsResp = await listFontsHandler(new Request('http://x/api/fonts'), { db })
+    const expected = await jsResp.text()
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/fonts`)
+    expectIntrinsic(await res.text(), expected)
+    expect(res.headers.get('content-type')).toBe(jsResp.headers.get('content-type'))
+    expect(res.headers.get('etag')).toMatch(/^"[0-9a-f]{16}"$/)
+  })
+
+  test('GET /api/fonts/faces.css — byte-identical body', async () => {
+    const jsResp = await fontFacesCssHandler(new Request('http://x/api/fonts/faces.css'), { db, siteConfig: SITE })
+    const expected = await jsResp.text()
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/fonts/faces.css`)
+    expect(await res.text()).toBe(expected)
+    expect(res.headers.get('content-type')).toBe('text/css; charset=utf-8')
+    expect(res.headers.get('cache-control')).toBe('public, max-age=300, stale-while-revalidate=3600')
   })
 })
