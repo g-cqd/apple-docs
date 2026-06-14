@@ -79,11 +79,11 @@ The canonical "use the Apple-native safe type" list. New code conforms; the back
 
 | # | Item | Where | Status |
 | --- | --- | --- | --- |
-| H1 | Headers/status → swift-http-types | ADServeCore (new) | **adopt in RFC 0005 Phase B** |
-| H2 | `print()` → swift-log | ADServeCore (new) + Main | **adopt in RFC 0005 Phase B** |
-| H3 | UUID/hex → `UUID` + Crypto hex | ADServeCore (new) | **adopt in RFC 0005 Phase B** |
-| H4 | Domain enums/`Tagged` for params | ADServeDSL (new) | **adopt in RFC 0005 Phase B** |
-| H5 | Delete dead `WebRoutes`/`WebResponse` after the DSL port | ADServer | RFC 0005 Phase E |
+| H1 | Headers/status → swift-http-types | ADServeCore | **DONE** (Phase B) |
+| H2 | `print()` → swift-log | ADServeCore + Main | **DONE** (Phase B — server logs on swift-log; usage/errors → stderr; the `--bench` result stays a CLI `print`) |
+| H3 | UUID/hex → `UUID` + Crypto hex | ADServeCore | **DONE** (`UUID` minted; the SHA-256 hex stays a manual lowercase loop — byte-exact to JS, kept) |
+| H4 | Domain enums/`Tagged` for params | ADServeDSL | **deferred** (Phase B routing is type-safe but `scope`/slug stay `String`; the swift-tagged dep was removed until this slice lands) |
+| H5 | Delete `WebResponse`/`Serving`/the app pool after the DSL port | ADServer | **DONE** (Phase B; `WebRoutes` stays — the JSON-builder logic, no longer mixing routing) |
 | H6 | Shared `RowDecoder` (dedup column extraction) | ADStorage | scheduled |
 | H7 | Shared util module for `JsString`/`CaseFolding` | new ADText (or ADBase) | scheduled |
 | H8 | Split the concern-mixing files | PageMarkdown / PreparedStatement / Cascade | scheduled |

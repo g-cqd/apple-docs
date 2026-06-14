@@ -55,12 +55,12 @@ let package = Package(
     // pointfreeco/*). swift-http-types: type-safe HTTP headers/status; swift-log:
     // structured logging; swift-nio-extras: the NIO↔HTTPTypes HTTP/1 bridge
     // (`HTTP1ToHTTPServerCodec`) — requires swift-nio ≥ 2.94.0, so the `from:
-    // "2.65.0"` above resolves up; swift-tagged: domain newtypes (pre-1.0, pinned in
-    // Package.resolved). NONE pulled by ADCore (the dylib stays zero-external-dep).
+    // "2.65.0"` above resolves up. NONE pulled by ADCore (the dylib stays
+    // zero-external-dep). (swift-tagged is deferred with RFC 0006 H4 — re-added when
+    // domain newtypes/the MCP Tool DSL actually use it.)
     .package(url: "https://github.com/apple/swift-http-types.git", from: "1.6.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.13.2"),
-    .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.34.1"),
-    .package(url: "https://github.com/pointfreeco/swift-tagged.git", from: "0.10.0")
+    .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.34.1")
   ],
   targets: [
     .target(name: "ADBase", swiftSettings: releaseCMO),
@@ -124,7 +124,6 @@ let package = Package(
       dependencies: [
         "ADServeCore",
         .product(name: "HTTPTypes", package: "swift-http-types"),
-        .product(name: "Tagged", package: "swift-tagged"),
         .product(name: "ADJSON", package: "ADJSON"),
       ],
       swiftSettings: releaseCMO + strictConcurrency),

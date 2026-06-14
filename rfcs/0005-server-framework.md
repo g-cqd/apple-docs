@@ -80,11 +80,13 @@ What the DSL buys (the boilerplate it deletes):
 - **The envelope is automatic.** The engine applies the security set + `Link` +
   `Vary` + `X-Request-Id` to every response; routes only opt into `.cache(…)` /
   `etag:`. No route touches a header.
-- **`ctx`** is a `@dynamicMemberLookup RequestContext`: `.query` (typed via
-  `RouteQuery`), `.path` (typed RegexBuilder captures), `.connection`, `.config`,
-  `.logger`, `.requestID`.
-- **`ResponseContent`**: `.json(Encodable)` (ADJSON) / `.json(rawBytes:)` /
-  `.json(JSONValue)` / `.text` / `.bytes` / `.notFound` / `.status`.
+- **`ctx`** is a `@dynamicMemberLookup` context (`RequestContext`, or `StorageContext`
+  after `.storage`, where `connection` is non-optional): it forwards `.target`/`.path`/
+  `.method`/`.headers` to the request and carries `.logger`/`.requestID`. Pattern
+  captures arrive as the matcher's typed return value.
+- **`ResponseContent`**: `.json(bytes, contentType:)` / `.text(bytes, contentType:)` /
+  `.raw(body:contentType:status:)` / `.plain(status, message)` / `.notFound` (routes
+  pass pre-serialized ADJSON bytes from WebRoutes/Cascade).
 - Static paths match by exact-map (fast); only `Path { … }` routes pay regex.
 
 Bootstrap becomes declarative (engine owns NIO; flags still parse into a value):
@@ -100,6 +102,21 @@ Bootstrap becomes declarative (engine owns NIO; flags still parse into a value):
   }
 }
 ```
+
+**As built (Phase B, 2026-06-14).** The snippets above are the design intent; the
+shipped DSL differs in three ergonomics, deferred as not-yet-needed (recorded in
+[Records B](0005-server-framework/records.md)). (1) Pattern routes use an explicit
+typed matcher — `route(.get, match: matchSymbolMetadataPath).storage.etag.respond { ctx, symbol in … }`
+— not a `Path { Capture(…) }` builder + `Group`; the routes' irregular grammar
+(embedded 10-hex hashes, rest-until-suffix, percent-decoded names) is clearer as a
+matcher closure, and just as type-safe. (2) The search route reads its typed query via
+`parseCascadeParams(ctx.target)`, not a `.query(T)` decoder. (3) The composition root
+(`Main.swift`) wires `HTTPServer(configuration:pool:routes:envelope:logger:)`
+imperatively, not via a `ServerApp` result builder. The `Path { }` capture builder,
+`.query(T)`, and the `ServerApp` builder are recorded as future ergonomics. The
+headline shipped: the `@RouteBuilder` table, the `.storage`/`.cache`/`.etag` modifiers,
+the `@dynamicMemberLookup` contexts, the automatic envelope, and the three
+compiler-enforced modules (`ADServeCore`/`ADServeDSL`/app).
 
 ## 4. MCP (Phases C–D; D-0005-4)
 
@@ -175,7 +192,15 @@ The `libAppleDocsCore` dylib stays zero-external-dep — these are `ad-server`-o
 
 ## 9. Outcome
 
-*To be filled as phases A–E land — see [`records.md`](0005-server-framework/records.md).*
+- **Phase A — DONE** (2026-06-14, `71f44c2`): the two RFCs + dashboard restructure + the
+  `ADServeCore`/`ADServeDSL` scaffold + the four deps.
+- **Phase B — DONE** (2026-06-14): the engine + DSL shipped; all 18 routes ported off the
+  `Serving.swift` switch (deleted, with `WebResponse` + the app's pool). Headers/status on
+  swift-http-types, logging on swift-log, request-id on `UUID` (RFC 0006 H1–H4 adopted).
+  **Gates green**: web-routes 19/19 + search-cascade 34/34 (intrinsic body + headers),
+  full native suite 99/99, `swift test` clean; `/search` perf scales positively and
+  ad-server ≥ Bun at c≥4. Detail: [Records B](0005-server-framework/records.md).
+- Phases C–E: see §6 + the records.
 
 ---
 *Maintenance*: update this contract's Status + §9 as phases land; dated execution
