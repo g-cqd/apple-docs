@@ -23,7 +23,9 @@ public import UniformTypeIdentifiers
 public enum ALPN: String, Sendable {
   case http1 = "http/1.1"
   case http2 = "h2"
-  // case http3 = "h3"   // F6 — QUIC, gated on the macOS 26 floor.
+  /// HTTP/3 (QUIC) — realized only in an `AD_HTTP3` build (which raises the floor to macOS 26
+  /// and pulls swift-nio-http3); a harmless ALPN id otherwise. See `#if AD_HTTP3` in HTTPServer.
+  case http3 = "h3"
 }
 
 /// TLS material: a PEM certificate chain + private key on disk (NIOSSL-native).
