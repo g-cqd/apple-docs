@@ -39,6 +39,21 @@ let timingWarningFlags: [SwiftSetting] = [
 let actorDataRaceChecks: [SwiftSetting] = [.unsafeFlags(["-enable-actor-data-race-checks"])]
 let testSettings: [SwiftSetting] = [strictSettings, timingWarningFlags, actorDataRaceChecks].flatMap { $0 }
 
+// HTTP/3 (RFC 0007 F6) is env-gated because apple/swift-nio-http3 floors at macOS 26 — SPM
+// rejects it at the macOS-15 default (verified: "NIOHTTP3 requires macOS 26, target supports
+// 15"), and `@available` can't gate a link nor can `platforms:` differ per target. So a build
+// with `AD_HTTP3=1` (on a 2025 SDK) RAISES the macOS floor to 26, pulls the QUIC/HTTP3 stack,
+// and defines `AD_HTTP3` for the `#if AD_HTTP3` engine code; the default macOS-15 build is
+// untouched (no h3 deps, no floor bump). This is the conditional-manifest pattern, not
+// `@available`.
+let http3 = Context.environment["AD_HTTP3"] != nil
+let macOSFloor: SupportedPlatform = http3 ? .macOS("26.0") : .macOS(.v15)
+let http3PackageDependencies: [Package.Dependency] =
+  http3 ? [.package(url: "https://github.com/apple/swift-nio-http3.git", branch: "main")] : []
+let http3TargetDependencies: [Target.Dependency] =
+  http3 ? [.product(name: "NIOHTTP3", package: "swift-nio-http3")] : []
+let http3Settings: [SwiftSetting] = http3 ? [.define("AD_HTTP3")] : []
+
 let package = Package(
   name: "AppleDocsCore",
   // Aligned to g-cqd/ADJSON (operator directive): macOS one generation below the device
@@ -46,7 +61,7 @@ let package = Package(
   // so 15.0 suffices; the 2025-SDK-gated InlineArray/UTF8Span are intentionally not adopted.
   // Linux unaffected (the dylib stays cross-platform; only ad-server is Apple-native).
   platforms: [
-    .macOS(.v15), .iOS(.v26), .tvOS(.v26), .watchOS(.v26), .visionOS(.v26),
+    macOSFloor, .iOS(.v26), .tvOS(.v26), .watchOS(.v26), .visionOS(.v26),
   ],
   products: [
     .library(name: "AppleDocsCore", type: .dynamic, targets: ["ADCore"])
@@ -84,8 +99,12 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.0"),
     .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.44.0"),
     // RFC 0007 F3: Network.framework transport (Apple-native) — apple/*, allow-list-clean.
-    .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.28.0")
-  ],
+    .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.28.0"),
+    // ad-server CLI flag parsing (RFC 0001 P7 groundwork): apple/swift-argument-parser
+    // is §2 allow-list-clean (apple/*). Used ONLY by the ad-server executable for its
+    // serve/mcp/bench subcommands; NOT pulled by ADCore (the dylib stays zero-external-dep).
+    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0")
+  ] + http3PackageDependencies,
   targets: [
     .target(name: "ADBase", swiftSettings: releaseCMO + strictSettings),
     .target(name: "ADSearch", swiftSettings: releaseCMO + strictSettings),
@@ -143,8 +162,8 @@ let package = Package(
         .product(name: "Crypto", package: "swift-crypto"),
         .product(name: "ADJSON", package: "ADJSON"),
         "ADStorage",
-      ],
-      swiftSettings: releaseCMO + strictSettings),
+      ] + http3TargetDependencies,
+      swiftSettings: releaseCMO + strictSettings + http3Settings),
     // RFC 0005 — the endpoint DSL: @RouteBuilder, Route/Group, the typed Path
     // (RegexBuilder captures), RequestContext, RouteQuery, ResponseContent, the
     // .cache/.storage modifiers (and the Tool DSL in Phase C). Sees only
@@ -168,6 +187,7 @@ let package = Package(
         .product(name: "NIOHTTP1", package: "swift-nio"),
         .product(name: "Crypto", package: "swift-crypto"),
         .product(name: "ADJSON", package: "ADJSON"),
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
         "ADServeCore",
         "ADServeDSL",
         "ADStorage",
