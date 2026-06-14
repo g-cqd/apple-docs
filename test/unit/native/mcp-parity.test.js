@@ -18,8 +18,10 @@ import { DocsDatabase } from '../../../src/storage/database.js'
 import { taxonomy } from '../../../src/commands/taxonomy.js'
 import { frameworks } from '../../../src/commands/frameworks.js'
 import { listAppleFonts, searchSfSymbols } from '../../../src/resources/apple-assets.js'
+import { browse } from '../../../src/commands/browse.js'
 import { search } from '../../../src/commands/search.js'
 import {
+  projectBrowse,
   projectFrameworks,
   projectListAppleFonts,
   projectSearchResult,
@@ -98,6 +100,11 @@ if (existsSync(AD_SERVER)) {
     seed.upsertPage({ rootId: treeRootId, path, url: `https://x/${path}`, title, role: 'symbol', roleHeading: 'Class' })
   }
   seed.db.run("UPDATE documents SET framework = 'treefw' WHERE key LIKE 'treefw%'")
+  // Make swiftui docs browsable (pages + a child relationship) for the browse tool.
+  const sfRootId = seed.getRootBySlug('swiftui').id
+  seed.upsertPage({ rootId: sfRootId, path: 'swiftui/view', url: 'https://x/swiftui/view', title: 'View', role: 'symbol', roleHeading: 'Protocol' })
+  seed.upsertPage({ rootId: sfRootId, path: 'swiftui/stack', url: 'https://x/swiftui/stack', title: 'Stack', role: 'symbol', roleHeading: 'Structure' })
+  seed.replaceDocumentRelationships('swiftui/view', [{ toKey: 'swiftui/stack', relationType: 'child', section: 'Topics' }])
   seed.close()
   db = new DocsDatabase(dbPath)
   proc = Bun.spawn([AD_SERVER, 'mcp', '--db', dbPath, '--app-version', VERSION], {
@@ -190,6 +197,15 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
         desc: 'List Apple font families and files (ids feed render_font_text).',
         schema: obj({}),
       },
+      browse: {
+        desc: "Walk the documentation topic tree: a root's pages, or one page's children via path. wwdc root returns per-year groups; pass year for that year's sessions.",
+        schema: obj({
+          framework: { type: 'string', description: 'Root slug, e.g. swiftui, design, wwdc.' },
+          path: { type: 'string', description: 'Drill into a page, e.g. swiftui/view.' },
+          year: { type: 'integer', description: 'WWDC sessions of one year.' },
+          limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Max pages (default 100, cap 200).' },
+        }, ['framework']),
+      },
     }
     for (const [name, { desc, schema }] of Object.entries(EXPECTED)) {
       const t = byName[name]
@@ -238,6 +254,22 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
     const got = await callTool(16, 'search_docs', { query: 'view', limit: 10 })
     const result = await search({ query: 'view', limit: 10, offset: 0 }, { db })
     expect(got).toEqual(projectSearchResult(result, { webPaths: false }))
+  })
+
+  test('tools/call browse (pages) == projectBrowse(browse())', async () => {
+    const got = await callTool(17, 'browse', { framework: 'swiftui' })
+    expect(got).toEqual(projectBrowse(await browse({ framework: 'swiftui', defaultLimit: 100 }, { db })))
+  })
+
+  test('tools/call browse (children via path) == projectBrowse(browse(path))', async () => {
+    const got = await callTool(18, 'browse', { framework: 'swiftui', path: 'swiftui/view' })
+    expect(got).toEqual(projectBrowse(await browse({ framework: 'swiftui', path: 'swiftui/view', defaultLimit: 100 }, { db })))
+  })
+
+  test('tools/call browse unknown framework → isError', async () => {
+    const res = await client.request({ jsonrpc: '2.0', id: 19, method: 'tools/call', params: { name: 'browse', arguments: { framework: 'zzz-nonexistent' } } })
+    expect(res.result.isError).toBe(true)
+    expect(res.result.content[0].text).toBe('Unknown framework: zzz-nonexistent')
   })
 
   test('unknown method → -32601', async () => {
