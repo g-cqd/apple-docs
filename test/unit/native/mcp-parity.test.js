@@ -139,26 +139,66 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
     expect(res.result).toEqual({})
   })
 
-  test('tools/list — the implemented tools, structurally coherent', async () => {
+  test('tools/list — metadata + draft-07 inputSchema (deep-equal vs zod)', async () => {
     const res = await client.request({ jsonrpc: '2.0', id: 4, method: 'tools/list' })
     const byName = Object.fromEntries(res.result.tools.map(t => [t.name, t]))
     const READ_ONLY = { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false }
-    for (const [name, desc] of [
-      ['search_docs', "Search Apple developer docs (keyword + semantic). Prefer compact symbol/API terms; put constraints in filter args, not the query. Set read=true to inline the top hit's content."],
-      ['list_taxonomy', 'List distinct taxonomy values with counts (top 20 per field). Use to pick valid search_docs kind filters.'],
-      ['list_frameworks', 'List indexed documentation roots (frameworks, HIG, guidelines, WWDC, tooling, ...) with page counts.'],
-      ['search_sf_symbols', 'Search SF Symbols by name, category, alias, or keyword.'],
-      ['list_apple_fonts', 'List Apple font families and files (ids feed render_font_text).'],
-    ]) {
+    const D7 = 'http://json-schema.org/draft-07/schema#'
+    const obj = (properties, required) => ({ $schema: D7, type: 'object', properties, ...(required ? { required } : {}) })
+    // search_docs's read/maxChars/page/match ride Phase D → omitted (subset of zod's schema).
+    const EXPECTED = {
+      search_docs: {
+        desc: "Search Apple developer docs (keyword + semantic). Prefer compact symbol/API terms; put constraints in filter args, not the query. Set read=true to inline the top hit's content.",
+        schema: obj({
+          query: { type: 'string', description: 'Search terms, e.g. "NavigationStack".' },
+          framework: { type: 'string', description: 'Framework slug, e.g. swiftui, app-store-review.' },
+          source: { type: 'string', description: 'Source slug(s), comma-separated: apple-docc, hig, wwdc, sample-code, swift-evolution, ...' },
+          kind: { type: 'string', description: 'Page kind (values via list_taxonomy).' },
+          language: { type: 'string', enum: ['swift', 'objc'] },
+          platform: { type: 'string', enum: ['ios', 'macos', 'watchos', 'tvos', 'visionos'] },
+          minVersion: { type: 'object', properties: { ios: { type: 'string' }, macos: { type: 'string' }, watchos: { type: 'string' }, tvos: { type: 'string' }, visionos: { type: 'string' } }, description: 'Min version per platform, e.g. {"ios":"17.0"}.' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Max results (default 25).' },
+          year: { type: 'number', description: 'WWDC session year.' },
+          track: { type: 'string', description: 'WWDC track.' },
+          deprecated: { type: 'string', enum: ['include', 'exclude', 'only'], description: 'Default include; use exclude when writing code.' },
+        }, ['query']),
+      },
+      list_taxonomy: {
+        desc: 'List distinct taxonomy values with counts (top 20 per field). Use to pick valid search_docs kind filters.',
+        schema: obj({
+          field: { type: 'string', enum: ['kind', 'role', 'docKind', 'roleHeading', 'sourceType'], description: 'Single field instead of all five.' },
+          all: { type: 'boolean', description: 'Full distribution, not top 20.' },
+        }),
+      },
+      list_frameworks: {
+        desc: 'List indexed documentation roots (frameworks, HIG, guidelines, WWDC, tooling, ...) with page counts.',
+        schema: obj({
+          kind: { type: 'string', description: 'Filter: framework, technology, tooling, collection, release-notes, tutorial, guidelines, design.' },
+          maxChars: { type: 'integer', minimum: 512, description: 'Page size in chars (min 512).' },
+          page: { type: 'integer', minimum: 1, description: '1-based page; needs maxChars.' },
+        }),
+      },
+      search_sf_symbols: {
+        desc: 'Search SF Symbols by name, category, alias, or keyword.',
+        schema: obj({
+          query: { type: 'string', description: 'Name or keyword; empty lists all.' },
+          scope: { type: 'string', enum: ['public', 'private'] },
+          limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Max results (default 100).' },
+        }),
+      },
+      list_apple_fonts: {
+        desc: 'List Apple font families and files (ids feed render_font_text).',
+        schema: obj({}),
+      },
+    }
+    for (const [name, { desc, schema }] of Object.entries(EXPECTED)) {
       const t = byName[name]
       expect(t, `tool ${name} present`).toBeDefined()
       expect(t.description).toBe(desc)
       expect(t.annotations).toEqual(READ_ONLY)
       expect(t.execution).toEqual({ taskSupport: 'forbidden' })
-      expect(t.inputSchema.type).toBe('object')
+      expect(t.inputSchema, `${name} inputSchema`).toEqual(schema)
     }
-    // search_sf_symbols schema carries its (structural) properties.
-    expect(Object.keys(byName.search_sf_symbols.inputSchema.properties).sort()).toEqual(['limit', 'query', 'scope'])
   })
 
   // tools/call — structuredContent + content text intrinsic-equal to JS command+projection.

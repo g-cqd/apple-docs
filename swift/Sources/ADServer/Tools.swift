@@ -1,14 +1,14 @@
 // The ad-server MCP tool surface (RFC 0005 Phase C). Each tool's input is an ADJSON
 // `@Schemable & Decodable` struct — the macro derives the JSON Schema (the zod
-// replacement, D-0005-10) AND gives typed decoding; the handler calls the existing
-// ADStorage queries / WebRoutes builders and projects to the exact `project*()` shapes
-// (src/output/projection.js). The payload bytes flow back through the MCP dispatcher as
-// `{content:[{type:text,text}], structuredContent}`.
+// replacement, D-0005-10) AND gives typed decoding; handlers call the existing
+// ADStorage queries / Cascade / WebRoutes builders and project to the exact
+// `project*()` shapes (src/output/projection.js). Result payload bytes flow back
+// through the MCP dispatcher as `{content:[{type:text,text}], structuredContent}`.
 //
-// Shipped here: list_taxonomy, list_frameworks, search_sf_symbols, list_apple_fonts.
-// search_docs (cascade-backed) + read_doc/render (Phase D) follow. NOTE: `@Schemable`
-// today emits a STRUCTURAL schema (no descriptions/enums/bounds); those enrich when the
-// ADJSON schema requirements land (R1-R3/R5). tools/call behavior is the parity gate.
+// Schemas use `@Schemable(dialect: .draft7)` + `@SchemaInfo`/`@SchemaNumber` + Swift
+// enums so `tools/list` is byte-for-byte (intrinsic) equal to the SDK's zod schemas.
+// Shipped: search_docs (base), list_taxonomy, list_frameworks, search_sf_symbols,
+// list_apple_fonts. browse + read_doc/render (Phase D) follow.
 
 import ADJSON
 import ADSearchCascade
@@ -20,43 +20,37 @@ import ADStorage
 let mcpInstructions =
   "Local offline index of Apple developer documentation: DocC frameworks, HIG, App Store Review Guidelines, Swift Evolution/book/org, WWDC sessions, sample code, Swift packages, SF Symbols, Apple fonts. Typical flow: search_docs, then read_doc with a hit's path (paginate long pages with maxChars). browse/list_frameworks explore structure; list_taxonomy enumerates filter values. All tools are read-only and fast."
 
-// MARK: - Input schemas (the zod replacement)
+// MARK: - Enum fields (→ string `enum`, declaration order)
 
-@Schemable
-struct ListTaxonomyInput: Decodable {
-  var field: String?
-  var all: Bool?
-}
+enum SymbolScope: String, Codable, CaseIterable { case `public`, `private` }
+enum TaxonomyField: String, Codable, CaseIterable { case kind, role, docKind, roleHeading, sourceType }
+enum SearchLanguage: String, Codable, CaseIterable { case swift, objc }
+enum SearchPlatform: String, Codable, CaseIterable { case ios, macos, watchos, tvos, visionos }
+enum DeprecatedFilter: String, Codable, CaseIterable { case include, exclude, only }
 
-@Schemable
-struct ListFrameworksInput: Decodable {
-  var kind: String?
-  var maxChars: Int?
-  var page: Int?
-}
+// MARK: - Input schemas (ADJSON @Schemable, draft-07 to match the MCP SDK)
 
-@Schemable
-struct SearchSfSymbolsInput: Decodable {
-  var query: String?
-  var scope: String?
-  var limit: Int?
-}
-
-// search_docs BASE — read/maxChars/page/match (inline + pagination + excerpts) ride
-// Phase D, so they are intentionally omitted (nothing advertised-but-unimplemented).
-@Schemable
+@Schemable(dialect: .draft7)
 struct SearchDocsInput: Decodable {
-  var query: String
+  // read/maxChars/page/match (inline + pagination + excerpts) ride Phase D — omitted.
+  @SchemaInfo(description: #"Search terms, e.g. "NavigationStack"."#) var query: String
+  /// Framework slug, e.g. swiftui, app-store-review.
   var framework: String?
+  /// Source slug(s), comma-separated: apple-docc, hig, wwdc, sample-code, swift-evolution, ...
   var source: String?
+  /// Page kind (values via list_taxonomy).
   var kind: String?
-  var language: String?
-  var platform: String?
-  var minVersion: MinVersion?
-  var limit: Int?
-  var year: Int?
+  var language: SearchLanguage?
+  var platform: SearchPlatform?
+  @SchemaInfo(description: #"Min version per platform, e.g. {"ios":"17.0"}."#) var minVersion: MinVersion?
+  /// Max results (default 25).
+  @SchemaNumber(1...100) var limit: Int?
+  /// WWDC session year.
+  @SchemaNumber(type: .number) var year: Int?
+  /// WWDC track.
   var track: String?
-  var deprecated: String?
+  /// Default include; use exclude when writing code.
+  var deprecated: DeprecatedFilter?
 }
 
 @Schemable
@@ -67,6 +61,36 @@ struct MinVersion: Decodable {
   var tvos: String?
   var visionos: String?
 }
+
+@Schemable(dialect: .draft7)
+struct ListTaxonomyInput: Decodable {
+  /// Single field instead of all five.
+  var field: TaxonomyField?
+  /// Full distribution, not top 20.
+  var all: Bool?
+}
+
+@Schemable(dialect: .draft7)
+struct ListFrameworksInput: Decodable {
+  /// Filter: framework, technology, tooling, collection, release-notes, tutorial, guidelines, design.
+  var kind: String?
+  /// Page size in chars (min 512).
+  @SchemaNumber(512...) var maxChars: Int?
+  /// 1-based page; needs maxChars.
+  @SchemaNumber(1...) var page: Int?
+}
+
+@Schemable(dialect: .draft7)
+struct SearchSfSymbolsInput: Decodable {
+  /// Name or keyword; empty lists all.
+  var query: String?
+  var scope: SymbolScope?
+  /// Max results (default 100).
+  @SchemaNumber(1...500) var limit: Int?
+}
+
+@Schemable(dialect: .draft7)
+struct ListAppleFontsInput: Decodable {}
 
 // MARK: - Tool surface
 
@@ -98,11 +122,27 @@ func mcpToolRegistry() -> ToolRegistry {
       .respond { input, ctx in searchSfSymbols(input, ctx) }
 
     Tool("list_apple_fonts", "List Apple font families and files (ids feed render_font_text).")
-      .respond { ctx in .ok(WebRoutes.fonts(ctx.connection)) }
+      .input(ListAppleFontsInput.self)
+      .respond { _, ctx in .ok(WebRoutes.fonts(ctx.connection)) }
   }
 }
 
 // MARK: - Handlers (project to the exact projection.js shapes)
+
+private func searchDocs(_ input: SearchDocsInput, _ ctx: MCPToolContext) -> MCPToolResult {
+  // The cascade already emits projectSearchResult(webPaths:false) — the MCP variant —
+  // and search()'s defaults (fuzzy on, noDeep off) match the cascade's always-on
+  // behavior, so the bytes ARE the search_docs payload. limit default 25 (MCP).
+  let params = SearchParams(
+    query: input.query, limit: input.limit ?? 25, offset: 0,
+    framework: input.framework, source: input.source, kind: input.kind,
+    language: input.language?.rawValue, platform: input.platform?.rawValue,
+    minIos: input.minVersion?.ios, minMacos: input.minVersion?.macos,
+    minWatchos: input.minVersion?.watchos, minTvos: input.minVersion?.tvos,
+    minVisionos: input.minVersion?.visionos,
+    year: input.year, track: input.track, deprecated: input.deprecated?.rawValue)
+  return .ok(Cascade.search(ctx.connection, params))
+}
 
 private func listTaxonomy(_ input: ListTaxonomyInput, _ ctx: MCPToolContext) -> MCPToolResult {
   let limit: Int? = (input.all ?? false) ? nil : 20
@@ -117,7 +157,7 @@ private func listTaxonomy(_ input: ListTaxonomyInput, _ ctx: MCPToolContext) -> 
         .object(["value": .string($0.value), "count": .number(Double($0.count))])
       })
   }
-  if let field = input.field, let match = fields.first(where: { $0.name == field }) {
+  if let field = input.field?.rawValue, let match = fields.first(where: { $0.name == field }) {
     return encodePayload(.object([field: entries(match.column)]))
   }
   var out: [String: JSONValue] = [:]
@@ -142,28 +182,12 @@ private func listFrameworks(_ input: ListFrameworksInput, _ ctx: MCPToolContext)
 
 private func searchSfSymbols(_ input: SearchSfSymbolsInput, _ ctx: MCPToolContext) -> MCPToolResult {
   let rows = ctx.connection.searchSfSymbols(
-    query: input.query ?? "", scope: nonEmptyArg(input.scope),
-    limit: clampSymbolLimitInt(input.limit))
+    query: input.query ?? "", scope: input.scope?.rawValue, limit: clampSymbolLimitInt(input.limit))
   // projectSearchSfSymbols: lean {results:[{name,scope}]} (NOT the full row).
   let payload = JSONValue.object([
     "results": .array(rows.map { .object(["name": .string($0.name), "scope": .string($0.scope)]) })
   ])
   return encodePayload(payload)
-}
-
-private func searchDocs(_ input: SearchDocsInput, _ ctx: MCPToolContext) -> MCPToolResult {
-  // The cascade already emits projectSearchResult(webPaths:false) — the MCP variant —
-  // and search()'s defaults (fuzzy on, noDeep off) match the cascade's always-on
-  // behavior, so the bytes ARE the search_docs payload. limit default 25 (MCP).
-  let params = SearchParams(
-    query: input.query, limit: input.limit ?? 25, offset: 0,
-    framework: input.framework, source: input.source, kind: input.kind,
-    language: input.language, platform: input.platform,
-    minIos: input.minVersion?.ios, minMacos: input.minVersion?.macos,
-    minWatchos: input.minVersion?.watchos, minTvos: input.minVersion?.tvos,
-    minVisionos: input.minVersion?.visionos,
-    year: input.year, track: input.track, deprecated: input.deprecated)
-  return .ok(Cascade.search(ctx.connection, params))
 }
 
 // MARK: - helpers
