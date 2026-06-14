@@ -24,7 +24,7 @@ indexed by the docs site.
 | **P3** | Render service ([RFC 0003](0003-swift-render-service.md)) | ◑ Phases 1/2/4 done; **phase 3 held** |
 | **P4** | Content pipeline ([RFC 0004](0004-content-pipeline.md)) | ✅ Main line done; phases 3-4 NO-GO |
 | **P5** | Storage — SQLite C-interop, reader pool → native actors | ◑ Foundation shipped (token-gated **off**); bridge-flip NO-GO, deferred to P6 |
-| **P6** | Servers — web + MCP on SwiftNIO (no Vapor) | ◑ Host viable + safe (async, **no `@unchecked`**); **serving-win achieved** + **`/search` COMPLETE — full byte-parity** (34/34): enrichment (snippet+relatedCount, zstd codec), all tiers (title-exact/FTS/trigram/fuzzy/body), relaxation R1-R3, filters (kind/source/language/platform/deprecated), framework synonyms — vs JS `search()` (semantic tier out of scope). The ~390 c16 ceiling was **SQLite's global `MEMSTATUS` allocator mutex** — one `sqlite3_config(MEMSTATUS,0)` (C shim): c16 **383→2263** (synthetic, ~2× Bun) / **27→51** (real 4GB, ≈ Bun 58), TSan-clean. **Custom-scheduler plan obsoleted.** 2nd mutex (`pcache1` group, Homebrew build) caps both on real corpus — deferred. Remaining P6: MCP protocol (SDK+zod kill) + web routes/wiring |
+| **P6** | Servers — web + MCP on SwiftNIO (no Vapor) | ◑ Host viable + safe (async, **no `@unchecked`**); **serving-win achieved** + **`/search` COMPLETE — full byte-parity** (34/34): enrichment (snippet+relatedCount, zstd codec), all tiers (title-exact/FTS/trigram/fuzzy/body), relaxation R1-R3, filters (kind/source/language/platform/deprecated), framework synonyms — vs JS `search()` (semantic tier out of scope). The ~390 c16 ceiling was **SQLite's global `MEMSTATUS` allocator mutex** — one `sqlite3_config(MEMSTATUS,0)` (C shim): c16 **383→2263** (synthetic, ~2× Bun) / **27→51** (real 4GB, ≈ Bun 58), TSan-clean. **Custom-scheduler plan obsoleted.** 2nd mutex (`pcache1` group, Homebrew build) caps both on real corpus — deferred. **Web API backend COMPLETE** (`91fc3e6`→`cf0c813`): the 13 cheap `/api/*`+`/data/*`+discovery routes ported to ad-server, **intrinsically identical** to the Bun handlers (19 parity cases) — JSON via **ADJSON** (`g-cqd/ADJSON`: `Encodable` models + `JSONValue`; the `JSONStreamWriter` byte-parity SPI co-designed + shipped to ADJSON). Gate relaxed byte→**intrinsic** (deep-equal parsed JSON) per operator. Live flip operator-gated (Caddy upstream-split + launchd unit wired-ready, off). Remaining P6: MCP protocol (SDK+zod kill); the flip; optional filters/discovery retrofit |
 | **P7** | CLI + single static binary; Bun retired | ⬜ Not started |
 
 Every bridge-era module — `fusion`, `archive`, `embed`, `content`,
@@ -45,6 +45,9 @@ Every bridge-era module — `fusion`, `archive`, `embed`, `content`,
   [p5](0001-swift-native-transition/p5/records.md).
 - **P6 — Servers**: in-house SwiftNIO web + MCP; *kills*
   `@modelcontextprotocol/sdk`, `zod`, `Bun.serve`. Ranking/snippets fold in.
+  **Web routes done** (`/search` + the 13 cheap `/api/*`+`/data/*`+discovery, all
+  intrinsically Bun-identical, JSON via ADJSON); left: the MCP protocol, the
+  operator-gated Caddy/launchd flip, the optional filters/discovery model retrofit.
 - **P7 — CLI + single binary**: swift-argument-parser, ops ports, one static
   Swift binary per platform; retires Bun + all `package.json` runtime deps.
 
