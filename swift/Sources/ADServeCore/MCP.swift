@@ -96,12 +96,10 @@ public protocol MCPToolProviding: Sendable {
 public struct MCPDispatcher: Sendable {
   let serverInfo: MCPServerInfo
   let tools: any MCPToolProviding
-  let context: MCPToolContext
 
-  public init(serverInfo: MCPServerInfo, tools: any MCPToolProviding, context: MCPToolContext) {
+  public init(serverInfo: MCPServerInfo, tools: any MCPToolProviding) {
     self.serverInfo = serverInfo
     self.tools = tools
-    self.context = context
   }
 
   /// The protocol versions the SDK supports (newest first); we echo the client's if it
@@ -110,7 +108,7 @@ public struct MCPDispatcher: Sendable {
     "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07",
   ]
 
-  public func handle(line: String) -> [UInt8]? {
+  public func handle(line: String, context: MCPToolContext) -> [UInt8]? {
     let trimmed = line.hasSuffix("\r") ? String(line.dropLast()) : line
     if trimmed.isEmpty { return nil }
     guard let request = try? JSONValue(parsing: trimmed), let object = jsonObject(request) else {
@@ -130,7 +128,7 @@ public struct MCPDispatcher: Sendable {
     case "tools/list":
       return respond(id, toolsListResult())
     case "tools/call":
-      return respond(id, toolsCallResult(params))
+      return respond(id, toolsCallResult(params, context: context))
     default:
       guard let id else { return nil }
       return encodeLine(rpcError(id, code: -32601, message: "Method not found"))
@@ -171,7 +169,7 @@ public struct MCPDispatcher: Sendable {
     ])
   }
 
-  private func toolsCallResult(_ params: JSONValue) -> JSONValue {
+  private func toolsCallResult(_ params: JSONValue, context: MCPToolContext) -> JSONValue {
     guard let name = jsonString(jsonMember(params, "name")) else {
       return errorContent("Missing tool name")
     }
@@ -225,12 +223,16 @@ public struct MCPDispatcher: Sendable {
 /// serial client; synchronous read loop (the process exists to serve stdin).
 public struct StdioMCPTransport: Sendable {
   let dispatcher: MCPDispatcher
-  public init(dispatcher: MCPDispatcher) { self.dispatcher = dispatcher }
+  let context: MCPToolContext
+  public init(dispatcher: MCPDispatcher, context: MCPToolContext) {
+    self.dispatcher = dispatcher
+    self.context = context
+  }
 
   public func run() {
     let out = FileHandle.standardOutput
     while let line = readLine(strippingNewline: true) {
-      if let response = dispatcher.handle(line: line) {
+      if let response = dispatcher.handle(line: line, context: context) {
         out.write(Data(response))
       }
     }

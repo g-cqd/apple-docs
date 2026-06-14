@@ -66,10 +66,14 @@ struct ADServerMain {
     var logger = Logger(label: "ad-server")
     logger.logLevel = .info
 
+    // The MCP dispatcher is shared by the HTTP `/mcp` transport (per-request pooled
+    // connection) and the stdio mode (a fixed connection).
+    let dispatcher = MCPDispatcher(
+      serverInfo: mcpServerInfo(version: siteConfig.appVersion), tools: mcpToolRegistry())
     let server = HTTPServer(
       configuration: ServerConfiguration(port: port, threadCount: threadCount, loopCount: loopCount),
       pool: pool,
-      routes: endpoints(config: siteConfig),
+      routes: endpoints(config: siteConfig, mcpDispatcher: dispatcher),
       envelope: buildEnvelope(),
       logger: logger)
     try await server.run()
@@ -95,11 +99,9 @@ struct ADServerMain {
     }
     var logger = Logger(label: "ad-server-mcp")
     logger.logLevel = .info
-    let serverInfo = MCPServerInfo(name: "apple-docs", version: version, instructions: mcpInstructions)
-    let dispatcher = MCPDispatcher(
-      serverInfo: serverInfo, tools: mcpToolRegistry(),
-      context: MCPToolContext(connection: connection, logger: logger))
-    StdioMCPTransport(dispatcher: dispatcher).run()
+    let dispatcher = MCPDispatcher(serverInfo: mcpServerInfo(version: version), tools: mcpToolRegistry())
+    let context = MCPToolContext(connection: connection, logger: logger)
+    StdioMCPTransport(dispatcher: dispatcher, context: context).run()
   }
 }
 

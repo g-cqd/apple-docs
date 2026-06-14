@@ -154,8 +154,22 @@ extension RouteStub where Captures == Void {
 
 /// An exact-path GET route.
 public func GET(_ path: String) -> RouteStub<RequestContext, Void> {
+  exact(.get, path)
+}
+
+/// An exact-path POST route (the handler reads the body via `ctx.body`).
+public func POST(_ path: String) -> RouteStub<RequestContext, Void> {
+  exact(.post, path)
+}
+
+/// An exact-path OPTIONS route (CORS preflight).
+public func OPTIONS(_ path: String) -> RouteStub<RequestContext, Void> {
+  exact(.options, path)
+}
+
+private func exact(_ method: HTTPRequest.Method, _ path: String) -> RouteStub<RequestContext, Void> {
   RouteStub(
-    method: .get, exactPath: path, matcher: { $0 == path[...] ? () : nil }, needsStorage: false,
+    method: method, exactPath: path, matcher: { $0 == path[...] ? () : nil }, needsStorage: false,
     cache: .unset)
 }
 

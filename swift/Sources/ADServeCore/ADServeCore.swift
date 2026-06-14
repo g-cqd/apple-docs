@@ -63,11 +63,14 @@ public struct ServerRequest: Sendable {
   /// The request target (path + optional `?query`), i.e. the `:path` pseudo-header.
   public let target: String
   public let headers: HTTPFields
+  /// The accumulated request body (empty for GET; capped by the engine). Reach via `ctx.body`.
+  public let body: [UInt8]
 
-  public init(method: HTTPRequest.Method, target: String, headers: HTTPFields) {
+  public init(method: HTTPRequest.Method, target: String, headers: HTTPFields, body: [UInt8] = []) {
     self.method = method
     self.target = target
     self.headers = headers
+    self.body = body
   }
 
   /// The path with any `?query` stripped.
@@ -84,6 +87,10 @@ public enum ResponseContent: Sendable {
   case notFound
   /// A `text/plain` status response (405, the engine's 404, a 503 fallback, …).
   case plain(HTTPResponse.Status, String)
+  /// A body + explicit status + EXTRA response headers, applied OVER the envelope (they
+  /// can override an envelope header). For routes that need their own header set — the
+  /// CORS + MCP header set on `POST /mcp` / `OPTIONS /mcp`.
+  case full(body: [UInt8], contentType: String, status: HTTPResponse.Status, headers: HTTPFields)
 
   /// JSON body. Defaults to Bun's `Response.json` content-type; pass `contentType`
   /// to override (e.g. `/search` emits `application/json` with no charset).

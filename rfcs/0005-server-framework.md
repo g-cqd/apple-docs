@@ -213,7 +213,13 @@ The `libAppleDocsCore` dylib stays zero-external-dep — these are `ad-server`-o
   intrinsic-identical to the JS MCP), full native 112/112, `swift test` clean. read_doc +
   render tools + Streamable HTTP `/mcp` + resources → Phase D. Detail:
   [Records C](0005-server-framework/records.md).
-- Phases D–E: see §6 + the records.
+- **Phase D1 — DONE** (2026-06-14): Streamable HTTP `POST /mcp` (the 2nd MCP transport) on the
+  same engine — request-body accumulation (1 MiB cap), per-route response headers (CORS / the MCP
+  set), origin gating, and the dispatcher **shared with stdio** (a per-request pooled connection
+  via `handle(line:context:)`). The default `ad-server` now serves the web routes + `/mcp`. Full
+  native 117/117. D2 (render) / D3 (read_doc) / D4 (resources) + a developer-friendly DSL
+  proof-of-concept follow.
+- Phases D2–E: see §6 + the records.
 
 ---
 *Maintenance*: update this contract's Status + §9 as phases land; dated execution

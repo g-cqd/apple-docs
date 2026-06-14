@@ -20,6 +20,11 @@ import ADStorage
 let mcpInstructions =
   "Local offline index of Apple developer documentation: DocC frameworks, HIG, App Store Review Guidelines, Swift Evolution/book/org, WWDC sessions, sample code, Swift packages, SF Symbols, Apple fonts. Typical flow: search_docs, then read_doc with a hit's path (paginate long pages with maxChars). browse/list_frameworks explore structure; list_taxonomy enumerates filter values. All tools are read-only and fast."
 
+/// The MCP server identity, shared by the stdio + HTTP transports.
+func mcpServerInfo(version: String) -> MCPServerInfo {
+  MCPServerInfo(name: "apple-docs", version: version, instructions: mcpInstructions)
+}
+
 // MARK: - Enum fields (→ string `enum`, declaration order)
 
 enum SymbolScope: String, Codable, CaseIterable { case `public`, `private` }
