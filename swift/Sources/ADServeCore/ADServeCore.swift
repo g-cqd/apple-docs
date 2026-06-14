@@ -83,6 +83,16 @@ public struct ListenerConfig: Sendable {
   }
 }
 
+/// A thread-safe readiness flag — `true` once the server is serving, `false` while draining.
+/// The app shares one instance between the engine (which flips it across the lifecycle) and
+/// the `/readyz` route (which fails fast while draining, so orchestrators stop new traffic).
+public final class ServerReadiness: Sendable {
+  private let ready = Mutex(false)
+  public init() {}
+  public var isReady: Bool { ready.withLock { $0 } }
+  public func set(_ value: Bool) { ready.withLock { $0 = value } }
+}
+
 // MARK: - Connection pool
 
 /// A fixed pool of `StorageConnection`s. Checkout happens INSIDE the offload work

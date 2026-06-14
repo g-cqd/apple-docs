@@ -80,15 +80,19 @@ struct ADServerMain {
     // else the loopback plaintext listener alone (Caddy terminates TLS in production).
     let tls: TLSSource? =
       if let tlsCert, let tlsKey { .pem(certificate: tlsCert, privateKey: tlsKey) } else { nil }
+    let readiness = ServerReadiness()
     let server = HTTPServer(
       listeners: listeners(
-        endpoints(config: siteConfig, mcpDispatcher: dispatcher, tls: tls, tlsPort: tlsPort),
+        endpoints(
+          config: siteConfig, mcpDispatcher: dispatcher, tls: tls, tlsPort: tlsPort,
+          readiness: readiness),
         defaultPort: port),
       pool: pool,
       envelope: buildEnvelope(),
       logger: logger,
       threadCount: threadCount,
-      loopCount: loopCount)
+      loopCount: loopCount,
+      readiness: readiness)
     try await server.run()
   }
 
