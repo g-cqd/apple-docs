@@ -30,6 +30,12 @@ import Darwin
 import Glibc
 #endif
 
+// NIOTransportServices (Network.framework) is Apple-only; the engine falls back to NIOPosix
+// elsewhere so the package still builds on Linux (the dylib + CI stay cross-platform).
+#if canImport(Network)
+import NIOTransportServices
+#endif
+
 /// One accepted connection (h1) or h2 stream: streams `HTTPRequestPart`/`HTTPResponsePart`.
 private typealias EngineConnection = NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>
 /// The ALPN outcome on a TLS connection: an h1 connection, or an h2 connection whose stream
@@ -49,6 +55,9 @@ private final class ActiveRequests: Sendable {
   var count: Int { value.load(ordering: .relaxed) }
 }
 
+/// A lightweight engine error with a message (startup/config failures).
+private struct EngineError: Error { let message: String }
+
 /// The ad-server engine. Binds one NIO listener per `ListenerConfig`, all sharing the
 /// event-loop group + offload pool + connection pool + envelope; serves until cancelled.
 /// The app builds the listeners (DSL) + the response `envelope` and hands them in.
@@ -62,12 +71,15 @@ public struct HTTPServer: Sendable {
   let loopCount: Int
   /// Flipped true once all listeners are bound, false when draining (read by `/readyz`).
   let readiness: ServerReadiness?
+  /// The bound transport — `.network` uses NIOTransportServices on Apple, else `.nio`.
+  let transport: EngineTransport
   /// In-flight request count, so a drain waits for real work, not idle keep-alive connections.
   private let active = ActiveRequests()
 
   public init(
     listeners: [ListenerConfig], pool: ConnectionPool, envelope: HTTPFields, logger: Logger,
-    threadCount: Int, loopCount: Int = 2, readiness: ServerReadiness? = nil
+    threadCount: Int, loopCount: Int = 2, readiness: ServerReadiness? = nil,
+    transport: EngineTransport = .nio
   ) {
     self.listeners = listeners
     self.pool = pool
@@ -76,12 +88,13 @@ public struct HTTPServer: Sendable {
     self.threadCount = max(1, threadCount)
     self.loopCount = max(1, loopCount)
     self.readiness = readiness
+    self.transport = transport
   }
 
   public func run() async throws {
     let threadPool = NIOThreadPool(numberOfThreads: threadCount)
     threadPool.start()
-    let group = MultiThreadedEventLoopGroup(numberOfThreads: loopCount)
+    let group = makeEventLoopGroup()
 
     // Bind every listener up front, keeping the underlying server channels so a shutdown can
     // stop accepting (closing a listening channel ends its accept loop; existing connections
@@ -181,7 +194,16 @@ public struct HTTPServer: Sendable {
     }
   }
 
-  private func baseBootstrap(_ group: MultiThreadedEventLoopGroup) -> ServerBootstrap {
+  /// The event-loop group for the configured transport: NIOTransportServices
+  /// (Network.framework) on Apple when `.network`, else NIOPosix.
+  private func makeEventLoopGroup() -> any EventLoopGroup {
+    #if canImport(Network)
+    if transport == .network { return NIOTSEventLoopGroup(loopCount: loopCount) }
+    #endif
+    return MultiThreadedEventLoopGroup(numberOfThreads: loopCount)
+  }
+
+  private func baseBootstrap(_ group: any EventLoopGroup) -> ServerBootstrap {
     ServerBootstrap(group: group)
       .serverChannelOption(ChannelOptions.backlog, value: 256)
       .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
@@ -190,11 +212,9 @@ public struct HTTPServer: Sendable {
       .childChannelOption(ChannelOptions.socketOption(.tcp_nodelay), value: 1)
   }
 
-  /// Binds one plaintext HTTP/1.1 listener (the loopback-behind-Caddy path).
-  private func bindPlain(
-    _ listener: ListenerConfig, group: MultiThreadedEventLoopGroup
-  ) async throws -> NIOAsyncChannel<EngineConnection, Never> {
-    try await baseBootstrap(group).bind(host: listener.host, port: listener.port) { childChannel in
+  /// The plaintext HTTP/1.1 child pipeline — shared by both transports.
+  private func plainInitializer() -> @Sendable (Channel) -> EventLoopFuture<EngineConnection> {
+    { childChannel in
       childChannel.eventLoop.makeCompletedFuture {
         try childChannel.pipeline.syncOperations.configureHTTPServerPipeline()
         // Bridge NIO's HTTP/1 parts ↔ swift-http-types parts (server, plaintext).
@@ -204,14 +224,34 @@ public struct HTTPServer: Sendable {
     }
   }
 
+  /// Binds one plaintext HTTP/1.1 listener on the configured transport.
+  private func bindPlain(
+    _ listener: ListenerConfig, group: any EventLoopGroup
+  ) async throws -> NIOAsyncChannel<EngineConnection, Never> {
+    #if canImport(Network)
+    if transport == .network {
+      return try await NIOTSListenerBootstrap(group: group)
+        .bind(
+          host: listener.host, port: listener.port, childChannelInitializer: plainInitializer())
+    }
+    #endif
+    return try await baseBootstrap(group)
+      .bind(host: listener.host, port: listener.port, childChannelInitializer: plainInitializer())
+  }
+
   /// Binds one TLS 1.3 listener that negotiates HTTP/1.1 or HTTP/2 by ALPN. Each child's
   /// output is the *negotiation future* — the initializer returns as soon as the ALPN handler
   /// is installed, so the channel activates and the handshake (which the negotiation depends
   /// on) can proceed; `serveSecureListener` awaits the result per connection. `autoRead` lets
   /// the handshake bytes flow before the inner per-connection channel takes over reads.
   private func bindSecure(
-    _ listener: ListenerConfig, group: MultiThreadedEventLoopGroup
+    _ listener: ListenerConfig, group: any EventLoopGroup
   ) async throws -> NIOAsyncChannel<EventLoopFuture<EngineNegotiated>, Never> {
+    #if canImport(Network)
+    if transport == .network {
+      throw EngineError(message: "TLS over the .network transport is not yet implemented (F3b)")
+    }
+    #endif
     let sslContext = try makeTLSContext(listener.wire.tls!, alpn: listener.wire.alpn)
     return try await baseBootstrap(group)
       .childChannelOption(ChannelOptions.autoRead, value: true)

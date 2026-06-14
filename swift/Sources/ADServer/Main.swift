@@ -22,6 +22,7 @@ struct ADServerMain {
     var tlsCert: String?
     var tlsKey: String?
     var tlsPort = 8443
+    var transport: EngineTransport = .nio
     var siteConfig = SiteConfig()
     // `ad-server mcp …` runs the stdio MCP server; otherwise the HTTP server.
     var rawArgs = Array(CommandLine.arguments.dropFirst())
@@ -37,6 +38,7 @@ struct ADServerMain {
       case "--tls-cert": tlsCert = args.next()
       case "--tls-key": tlsKey = args.next()
       case "--tls-port": if let v = args.next(), let p = Int(v) { tlsPort = p }
+      case "--transport": if let v = args.next(), let t = EngineTransport(rawValue: v) { transport = t }
       case "--bench": if let v = args.next(), let n = Int(v) { benchIters = n }
       case "--base-url": if let v = args.next() { siteConfig.baseUrl = v }
       case "--site-name": if let v = args.next() { siteConfig.siteName = v }
@@ -92,7 +94,8 @@ struct ADServerMain {
       logger: logger,
       threadCount: threadCount,
       loopCount: loopCount,
-      readiness: readiness)
+      readiness: readiness,
+      transport: transport)
     try await server.run()
   }
 
