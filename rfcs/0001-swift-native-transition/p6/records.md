@@ -570,3 +570,69 @@ Reuse: `ADContent.PlainText` (snippet), `ADBase.Json` (platforms_json),
 All 80 native tests + `swift test` green. `/search` stays inert to production
 (not wired into cli.js/ops/Caddy) until the web slice. Remaining P6: MCP protocol
 (SDK+zod kill) + web routes/wiring; deferred storage perf (pcache mutex).
+
+---
+
+## Seventh slice — web API backend (the cheap routes) — EXECUTED 2026-06-14
+
+`ad-server` grew from `/healthz`+`/search` into a real web backend by porting the
+**13 cheap, corpus-derived `/api/*` + `/data/*` + discovery routes** from the Bun
+web server (`src/web/`). Five commits (`91fc3e6` → `cf0c813`); 19 parity cases +
+`swift test` green; inert to production (Caddy/launchd flip operator-gated).
+
+### Routes (all matched to the Bun handlers)
+
+- **Response foundation** (`WebResponse.swift`): every response now carries the
+  constant security-header set (`context.js:231-239`) + RFC 8288 `Link` + `Vary:
+  Accept` + a minted `X-Request-Id`, and a `hashable` response gets a SHA-256-prefix
+  `ETag` with a 304 on `If-None-Match` (`responses.js:finalizeResponse`). The
+  dispatch is a `switch` in `Serving.swift` + three pattern matchers (symbol
+  metadata, hashed search artifact, framework tree).
+- **API**: `/api/filters` (3 facet queries), `/api/fonts` + `/api/fonts/faces.css`,
+  `/api/symbols/{index.json, search (FTS5+LIKE fallback), <scope>/<name>.json}`.
+- **Data**: `/data/search/{search-manifest.json, title-index[.<hash>].json,
+  aliases[.<hash>].json}`, `/data/frameworks/<slug>/tree.<hash>.json`.
+- **Discovery**: `/robots.txt`, `/opensearch.xml`, `/.well-known/api-catalog`,
+  `/.well-known/mcp/server-card.json` (pure siteConfig builders, plumbed via flags).
+- **Health**: `/readyz` (instance-identified, not parity-gated).
+- New ad-server deps: `apple/swift-crypto` (SHA-256) + `g-cqd/ADJSON` (below). The
+  `libAppleDocsCore` dylib stays zero-external-dep.
+
+### Two operator-directed reframings (the substance of this slice)
+
+1. **JSON engine → ADJSON (`g-cqd/ADJSON`), fully.** The byte-exact JS-`stringify`
+   need first drove a hand-rolled writer; mid-slice the operator pointed at ADJSON,
+   their tape-based JSON engine. ADJSON's public emit API didn't yet fit the
+   byte-exact "ordered + raw-splice" requirement, so a **`JSONStreamWriter`** SPI was
+   **co-designed with the ADJSON team** (the JS-`JSON.stringify` byte-parity profile:
+   ECMA-262 numbers, `nil`-omit, `raw`/`rawOrEmptyArray` splice, `consuming finish()`)
+   and shipped to ADJSON `main`; ad-server adopted it (the interim writer was deleted).
+2. **Parity = INTRINSIC, not byte (D2).** The operator then relaxed the gate from
+   byte-identity to **deep-equal on the parsed JSON** (object key order / whitespace
+   / serialization are free; array order + null-vs-omit stay semantic; text routes
+   stay byte; hashed artifacts assert internal coherence, not hash==JS). This
+   **unlocked ADJSON's Codable models NOW** (not post-Bun): fixed shapes →
+   `Encodable` structs via `ADJSON.JSONEncoder`; dynamic / null-emitting / full-row
+   shapes (the alias map, framework-tree `docs`, the full SF-Symbol row) →
+   **`ADJSON.JSONValue`** (the stored `*_json` columns parsed via `JSONValue(parsing:)`
+   and embedded). `JSONStreamWriter` is no longer needed for routes. Found along the
+   way: synthesized `Encodable` OMITS nil Optionals (JS `undefined`), so `null`-emit
+   fields go through `JSONValue.null`, not `T?`.
+
+### Gate + state
+
+`test/unit/native/web-routes-parity.test.js` boots `ad-server` against a seeded
+corpus and diffs each route vs the imported Bun handler — **JSON deep-equal
+(intrinsic), text byte-exact, + the deterministic headers (Content-Type /
+Cache-Control / ETag) + the manifest↔artifact hash coherence**. 19 cases; the
+`/search` cascade parity (34) is unchanged. ADStorage gained the typed queries
+(`Filters`/`Assets`/`SearchArtifacts`/`FrameworkTree`.swift) — the model seam.
+
+**Remaining P6:** the live flip — a Caddy upstream-split (route `/api/*` [except
+`fonts/file|family|subset`] + `/data/*` + discovery to `127.0.0.1:3032`) behind an
+`APPLE_DOCS_NATIVE` stanza + an `ad-server` launchd unit, **operator-gated** (the
+slice is wired-ready but not enabled). Optional: retrofit the committed
+filters/discovery-JSON routes from `JSONStreamWriter` → models (one server-wide
+approach). Still open: the MCP protocol (SDK+zod kill); the pcache1 storage perf.
+`safeWebDocKey` ships identity (≤200-byte keys); the oversized-segment SHA-1
+mapping is noted-unported (rare).
