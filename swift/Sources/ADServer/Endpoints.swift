@@ -14,25 +14,37 @@ import HTTPTypes
 /// The full route table, closing over the site config (discovery + tree hrefs) and the
 /// shared MCP dispatcher (the HTTP `/mcp` transport — Phase D1).
 func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> RouteTable {
-  RouteTable {
+  // PoC (RFC 0005): a handful of routes re-expressed in the new hierarchical, type-safe
+  // DSL — `Server { Listen(pool:) { Group(prefix) { GET(subpath) { ctx in … } } } }`. The
+  // pool is a typed PARAMETER that picks the handler's context (a `.none` route's `ctx` has
+  // no `db`, compile-enforced), handlers are trailing closures, and output is a typed
+  // `MediaType`. It lowers to the same `[CompiledRoute]` as the flat DSL below, so the two
+  // merge into one table and the parity suites are the contract.
+  let preview = Server {
+    Listen(pool: .shared) {                                  // PoC: one listener, the central shared pool
+      GET("search") { ctx in
+        .json(Cascade.search(ctx.db, parseCascadeParams(ctx.target)), as: .jsonRaw)
+      }
+      Group("api") {                                         // → /api/*
+        GET("filters") { ctx in .json(WebRoutes.filters(ctx.db), as: .json) }.cache(.apiCorpus)
+      }
+      GET("robots.txt", pool: .none) { _ in                  // pure-config route: no `ctx.db`
+        .text(Discovery.robotsTxt(config), as: .text)
+      }.cache(.discovery, etag: true)
+    }
+  }
+
+  // The remaining routes stay on the current flat DSL; both lower to `[CompiledRoute]`.
+  let rest = routes {
     // Liveness — static, no storage, never cached.
     GET("/healthz").cache(.noStore)
       .respond { _ in .json(Array(#"{"ok":true,"service":"ad-server"}"#.utf8)) }
-
-    // Lexical search cascade. `application/json` (no charset) + no cache, as Bun.
-    GET("/search").storage
-      .respond { ctx in
-        .json(Cascade.search(ctx.connection, parseCascadeParams(ctx.target)), contentType: "application/json")
-      }
 
     // Readiness — the DB probe; status carries ok/503, the route carries `no-store`.
     GET("/readyz").storage.cache(.noStore)
       .respond { ctx in WebRoutes.readyz(dbOk: ctx.connection.probe()) }
 
     // ---- /api ----
-    GET("/api/filters").storage.cache(.apiCorpus)
-      .respond { ctx in .json(WebRoutes.filters(ctx.connection)) }
-
     GET("/api/fonts").storage.etag
       .respond { ctx in .json(WebRoutes.fonts(ctx.connection)) }
 
@@ -64,9 +76,6 @@ func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> RouteTable {
       .respond { ctx in .json(WebRoutes.aliasMapBytes(ctx.connection)) }
 
     // ---- discovery (pure siteConfig, no storage) ----
-    GET("/robots.txt").cache(.discovery, etag: true)
-      .respond { _ in .text(Discovery.robotsTxt(config), contentType: "text/plain; charset=utf-8") }
-
     GET("/opensearch.xml").cache(.discovery, etag: true)
       .respond { _ in
         .text(Discovery.openSearchXml(config), contentType: "application/opensearchdescription+xml")
@@ -102,6 +111,8 @@ func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> RouteTable {
     OPTIONS("/mcp")
       .respond { ctx in handleMCPOptions(ctx) }
   }
+
+  return RouteTable(routes: preview + rest)
 }
 
 // MARK: - The response envelope (constant headers on every response)
