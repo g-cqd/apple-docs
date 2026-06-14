@@ -13,16 +13,29 @@ import ADServeDSL
 import ADStorage
 import HTTPTypes
 
-/// The server's applications — one per `App`, each binding one NIO listener. Closes over the
-/// site config (discovery + tree hrefs) + the shared MCP dispatcher (the HTTP `/mcp` transport).
-func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> [Application] {
-  // The whole route surface in the hierarchical, type-safe DSL (RFC 0005/0007): `Server { App(port:,
-  // pool:) { Group(prefix) { GET(subpath) { ctx in … } } } }`. The pool is a typed PARAMETER that
-  // picks the handler's context (`.none` ⇒ no `ctx.db`, compile-enforced); handlers are trailing
-  // closures; output is a typed `MediaType`. Each `App` lowers to one engine listener via
-  // `listeners(_:defaultPort:)`; the shared connection pool spans them all.
+/// The server's applications — the plaintext loopback (behind Caddy) + an optional in-process
+/// TLS listener (the operator's "Both" model), both sharing `siteRoutes`. Closes over the site
+/// config + the shared MCP dispatcher (the HTTP `/mcp` transport).
+func endpoints(
+  config: SiteConfig, mcpDispatcher: MCPDispatcher, tls: TLSSource?, tlsPort: Int
+) -> [Application] {
   Server {
-      App(pool: .shared) {                                    // an application on a port; the central shared pool
+    // Loopback (plaintext HTTP/1.1, behind Caddy) on the process default port.
+    App(pool: .shared) { siteRoutes(config: config, mcpDispatcher: mcpDispatcher) }
+    // Optional in-process TLS listener (HTTPS + HTTP/1.1; F1b-ii adds h2) on `tlsPort`.
+    if let tls {
+      App(port: tlsPort, protocol: .https(tls, alpn: [.http1]), pool: .shared) {
+        siteRoutes(config: config, mcpDispatcher: mcpDispatcher)
+      }
+    }
+  }
+}
+
+/// The whole route surface, shared by every `App`/listener. The pool picks the handler context
+/// (`.shared` → `ctx.db`; `.none` → no DB); handlers are trailing closures; output is a typed
+/// `MediaType`. The engine applies the cross-cutting envelope to every response.
+@RouteGroupBuilder
+func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> [RouteNode] {
         // Liveness — static, no storage, never cached.
         GET("healthz", pool: .none) { _ in
           .json(Array(#"{"ok":true,"service":"ad-server"}"#.utf8), as: .json)
@@ -96,8 +109,6 @@ func endpoints(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> [Application
         // MCP over HTTP (Phase D1) — the second transport, on the same engine.
         POST("mcp") { ctx in handleMCPPost(ctx, dispatcher: mcpDispatcher) }.cache(.noStore)
         OPTIONS("mcp") { ctx in handleMCPOptions(ctx) }
-      }
-    }
 }
 
 // MARK: - The response envelope (constant headers on every response)

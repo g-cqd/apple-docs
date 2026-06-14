@@ -19,6 +19,9 @@ struct ADServerMain {
     var threadCount = max(2, ProcessInfo.processInfo.activeProcessorCount - 2)
     var loopCount = 2
     var benchIters: Int?
+    var tlsCert: String?
+    var tlsKey: String?
+    var tlsPort = 8443
     var siteConfig = SiteConfig()
     // `ad-server mcp …` runs the stdio MCP server; otherwise the HTTP server.
     var rawArgs = Array(CommandLine.arguments.dropFirst())
@@ -31,6 +34,9 @@ struct ADServerMain {
       case "--port": if let v = args.next(), let p = Int(v) { port = p }
       case "--threads": if let v = args.next(), let t = Int(v) { threadCount = max(1, t) }
       case "--loops": if let v = args.next(), let l = Int(v) { loopCount = max(1, l) }
+      case "--tls-cert": tlsCert = args.next()
+      case "--tls-key": tlsKey = args.next()
+      case "--tls-port": if let v = args.next(), let p = Int(v) { tlsPort = p }
       case "--bench": if let v = args.next(), let n = Int(v) { benchIters = n }
       case "--base-url": if let v = args.next() { siteConfig.baseUrl = v }
       case "--site-name": if let v = args.next() { siteConfig.siteName = v }
@@ -70,9 +76,14 @@ struct ADServerMain {
     // connection) and the stdio mode (a fixed connection).
     let dispatcher = MCPDispatcher(
       serverInfo: mcpServerInfo(version: siteConfig.appVersion), tools: mcpToolRegistry())
+    // Both cert + key present ⇒ an in-process TLS listener on `tlsPort` (the "Both" model);
+    // else the loopback plaintext listener alone (Caddy terminates TLS in production).
+    let tls: TLSSource? =
+      if let tlsCert, let tlsKey { .pem(certificate: tlsCert, privateKey: tlsKey) } else { nil }
     let server = HTTPServer(
       listeners: listeners(
-        endpoints(config: siteConfig, mcpDispatcher: dispatcher), defaultPort: port),
+        endpoints(config: siteConfig, mcpDispatcher: dispatcher, tls: tls, tlsPort: tlsPort),
+        defaultPort: port),
       pool: pool,
       envelope: buildEnvelope(),
       logger: logger,

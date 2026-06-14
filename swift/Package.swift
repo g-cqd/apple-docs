@@ -78,7 +78,11 @@ let package = Package(
     // domain newtypes/the MCP Tool DSL actually use it.)
     .package(url: "https://github.com/apple/swift-http-types.git", from: "1.6.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.13.2"),
-    .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.34.1")
+    .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.34.1"),
+    // RFC 0007 F1b: TLS 1.3 (NIOSSL) + HTTP/2 (NIOHTTP2) for the per-App `Wire`.
+    // Both apple/* (allow-list-clean) and already resolved transitively.
+    .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.0"),
+    .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.44.0")
   ],
   targets: [
     .target(name: "ADBase", swiftSettings: releaseCMO + strictSettings),
@@ -128,6 +132,9 @@ let package = Package(
         .product(name: "NIOHTTP1", package: "swift-nio"),
         .product(name: "NIOHTTPTypes", package: "swift-nio-extras"),
         .product(name: "NIOHTTPTypesHTTP1", package: "swift-nio-extras"),
+        .product(name: "NIOHTTPTypesHTTP2", package: "swift-nio-extras"),
+        .product(name: "NIOSSL", package: "swift-nio-ssl"),
+        .product(name: "NIOHTTP2", package: "swift-nio-http2"),
         .product(name: "HTTPTypes", package: "swift-http-types"),
         .product(name: "Logging", package: "swift-log"),
         .product(name: "Crypto", package: "swift-crypto"),
