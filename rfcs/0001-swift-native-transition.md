@@ -321,14 +321,18 @@ memory-management build) caps both runtimes on the real corpus — deferred
 (future lever: system libsqlite3). TSan-clean, parity 10/10. The host + cascade
 ship inert (not wired into cli.js/ops/Caddy).
 
-Implementation (remaining): web server (routes are already per-file handlers
-— port them 1:1; benchmark throughput/latency on our recorded burst loads vs
-`Bun.serve` baselines, incl. the §10(C) burst-stall findings), MCP server
-with the protocol implemented in-house (JSON-RPC 2.0, stdio + stateless
-Streamable HTTP, tool schemas as `Codable` + generated JSON Schema). *Kills*:
-`@modelcontextprotocol/sdk`, `zod`, `Bun.serve`. *Gates*: MCP contract
-tests (tool-budget bytes, pagination geometry) green; web smoke + UI
-audit green; burst benchmarks ≥ Bun baselines on both OSes.
+**Web slice DONE 2026-06-14** (the 13 cheap `/api/*`+`/data/*`+discovery routes +
+`/search`, intrinsically Bun-identical, JSON via ADJSON —
+[p6/records.md](0001-swift-native-transition/p6/records.md)). The remaining server
+work now runs as **[RFC 0005](0005-server-framework.md)**: a **type-safe server DSL**
+(result builders + a URLBuilder-style typed `Path` + SwiftUI-style modifiers) that
+decouples the engine / endpoint definitions / business logic into
+`ADServeCore`/`ADServeDSL`/`Services`, and the **MCP protocol** in-house (JSON-RPC 2.0,
+stdio + stateless Streamable HTTP, tool schemas as `Codable` + a `@ToolInput` macro
+instead of `zod`). The codebase-health/conformance pass it triggered is
+**[RFC 0006](0006-codebase-health.md)**. *Kills*: `@modelcontextprotocol/sdk`, `zod`,
+`Bun.serve`. *Gates*: the route refactor stays behind the web-routes (19) +
+search-cascade (34) parity; MCP adds an intrinsic contract test vs the JS MCP.
 
 ### P7 — CLI, ops, single binary
 swift-argument-parser CLI mirroring `cli.js` verb-for-verb; ops layer
@@ -582,3 +586,14 @@ land; each phase's completion gets a dated entry here.
   both runtimes (~50–58) on the real corpus — deferred (caps Bun too; future
   lever = system libsqlite3, FTS5-portability caveat). Probe scaffolding removed.
   Detail: [p6/records.md](0001-swift-native-transition/p6/records.md).
+- **2026-06-14 — P6 web slice DONE + RFC 0005/0006 opened**: the 13 cheap
+  `/api/*`+`/data/*`+discovery routes + `/search` shipped intrinsically
+  Bun-identical (JSON via ADJSON; `apple/swift-crypto` for ETag/artifact hashes) —
+  19 web + 34 search parity green, inert to production. The remaining server work
+  forked into two RFCs: **[RFC 0005](0005-server-framework.md)** — a type-safe server
+  DSL (result builders + typed `Path` + SwiftUI-style modifiers) decoupling
+  engine/endpoints/logic into `ADServeCore`/`ADServeDSL`/`Services`, plus the native
+  **MCP protocol** (stdio + Streamable HTTP; a `@ToolInput` macro kills `zod`, in-house
+  JSON-RPC kills `@modelcontextprotocol/sdk`) — and
+  **[RFC 0006](0006-codebase-health.md)** — the codebase-health/conformance track
+  (Apple-native safe-type adoption, concern separation). Detail: the two new records.
