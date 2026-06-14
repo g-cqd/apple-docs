@@ -18,9 +18,11 @@ import { DocsDatabase } from '../../../src/storage/database.js'
 import { taxonomy } from '../../../src/commands/taxonomy.js'
 import { frameworks } from '../../../src/commands/frameworks.js'
 import { listAppleFonts, searchSfSymbols } from '../../../src/resources/apple-assets.js'
+import { search } from '../../../src/commands/search.js'
 import {
   projectFrameworks,
   projectListAppleFonts,
+  projectSearchResult,
   projectSearchSfSymbols,
   projectTaxonomy,
 } from '../../../src/output/projection.js'
@@ -142,6 +144,7 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
     const byName = Object.fromEntries(res.result.tools.map(t => [t.name, t]))
     const READ_ONLY = { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false }
     for (const [name, desc] of [
+      ['search_docs', "Search Apple developer docs (keyword + semantic). Prefer compact symbol/API terms; put constraints in filter args, not the query. Set read=true to inline the top hit's content."],
       ['list_taxonomy', 'List distinct taxonomy values with counts (top 20 per field). Use to pick valid search_docs kind filters.'],
       ['list_frameworks', 'List indexed documentation roots (frameworks, HIG, guidelines, WWDC, tooling, ...) with page counts.'],
       ['search_sf_symbols', 'Search SF Symbols by name, category, alias, or keyword.'],
@@ -189,6 +192,12 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
   test('tools/call list_apple_fonts == projectListAppleFonts(listAppleFonts())', async () => {
     const got = await callTool(14, 'list_apple_fonts', {})
     expect(got).toEqual(projectListAppleFonts(listAppleFonts({ db })))
+  })
+
+  test('tools/call search_docs == projectSearchResult(search(), webPaths:false)', async () => {
+    const got = await callTool(16, 'search_docs', { query: 'view', limit: 10 })
+    const result = await search({ query: 'view', limit: 10, offset: 0 }, { db })
+    expect(got).toEqual(projectSearchResult(result, { webPaths: false }))
   })
 
   test('unknown method → -32601', async () => {

@@ -205,13 +205,13 @@ The `libAppleDocsCore` dylib stays zero-external-dep — these are `ad-server`-o
   **Gates green**: web-routes 19/19 + search-cascade 34/34 (intrinsic body + headers),
   full native suite 99/99, `swift test` clean; `/search` perf scales positively and
   ad-server ≥ Bun at c≥4. Detail: [Records B](0005-server-framework/records.md).
-- **Phase C (in progress) — first cut DONE** (2026-06-14): the MCP core (in-house
-  JSON-RPC 2.0 + a newline-delimited stdio transport + initialize / ping / tools/list /
-  tools/call), the `Tool` DSL on ADJSON `@Schemable`, and the first four native tools
-  (list_taxonomy, list_frameworks, search_sf_symbols, list_apple_fonts). **`mcp-parity`
-  9/9** (tools/call intrinsic-identical to the JS commands+projections), full native
-  108/108, `swift test` clean. Left in C: search_docs (cascade-backed) + browse.
-  Detail: [Records C](0005-server-framework/records.md).
+- **Phase C (in progress)** (2026-06-14): the MCP core (in-house JSON-RPC 2.0 + a
+  newline-delimited stdio transport + initialize / ping / tools/list / tools/call), the
+  `Tool` DSL on ADJSON `@Schemable`, and **five native tools** (search_docs [cascade],
+  list_taxonomy, list_frameworks, search_sf_symbols, list_apple_fonts). **`mcp-parity`
+  10/10** (tools/call intrinsic-identical to the JS commands+projections), full native
+  109/109, `swift test` clean. **Left in C: browse.** Detail:
+  [Records C](0005-server-framework/records.md).
 - Phases D–E: see §6 + the records.
 
 ---
