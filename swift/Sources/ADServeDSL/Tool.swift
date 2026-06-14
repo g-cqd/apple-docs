@@ -35,7 +35,9 @@ public struct TypedToolStub<Input: ADJSONSchemaProviding & Decodable> {
     _ handler: @escaping @Sendable (Input, MCPToolContext) -> MCPToolResult
   ) -> ToolDeclaration {
     let name = self.name
-    let schema = (try? JSONValue(parsing: Input.__adjsonSchemaText)) ?? emptyObjectSchema
+    // `jsonSchemaText` is the public rooted document (carries `$schema` when the input's
+    // `@Schemable(dialect:)` requests one); the `__adjsonSchemaText` SPI is the bare fragment.
+    let schema = (try? JSONValue(parsing: Input.jsonSchemaText)) ?? emptyObjectSchema
     return ToolDeclaration(
       definition: MCPToolDefinition(
         name: name, description: description, inputSchema: schema, annotations: annotations),

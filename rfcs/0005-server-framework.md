@@ -132,13 +132,13 @@ compiler-enforced modules (`ADServeCore`/`ADServeDSL`/app).
   .respond { input, ctx in … }`, where `SearchSfSymbolsInput` is an **ADJSON
   `@Schemable & Decodable`** struct: the macro derives the JSON Schema from the stored
   properties AND gives typed decoding (D-0005-10) — no zod, no hand-rolled builder.
-  `tools/list` serves the derived schema; `tools/call` decodes the struct.
-  **Caveat (2026-06-14):** `@Schemable` today emits a *structural* schema (type /
-  properties / required / nesting; no descriptions / enums / bounds / `$schema`), so
-  `tools/list` schemas are leaner than the SDK's zod schemas — a schema-requirements
-  spec (descriptions, enums, bounds, draft-07, a public accessor) was sent to the ADJSON
-  team to close the gap; until then the **`tools/call` behavior is the parity gate**, not
-  the schema text.
+  `tools/list` serves the derived schema (`jsonSchemaText`); `tools/call` decodes the
+  struct. **Full schema parity (2026-06-14):** the ADJSON team shipped the rich-schema
+  API co-designed here; `@Schemable(dialect: .draft7)` + `@SchemaInfo` / `@SchemaNumber`
+  + Swift `CaseIterable` enums now produce `tools/list` schemas **byte-for-byte
+  (intrinsic) equal to the SDK's zod `z.toJSONSchema(…, {target:"draft-7"})`** —
+  descriptions, string enums, numeric bounds, `$schema`, nested objects, all matched. So
+  `tools/list` AND `tools/call` are both parity-gated.
 - **Result shaping**: `{content:[{type:text,text}], structuredContent}` + image
   content (SVG / PNG base64) for render tools + `isError`. The **projection +
   pagination** business logic (`src/output/projection.js`, `src/mcp/pagination.js`)

@@ -221,4 +221,15 @@ web `/search` route uses `webPaths:true`), and `search()`'s defaults (`fuzzy !==
 advertised-but-unimplemented). mcp-parity **10/10**, full native **109/109**. Left in Phase C:
 **browse**.
 
+**Schema enrichment landed (2026-06-14).** The ADJSON team shipped the rich-schema API
+(`57cc659`) co-designed in the sign-off thread: `@Schemable(dialect: .draft7)` +
+`@SchemaInfo` / `@SchemaNumber(range)` + Swift `CaseIterable` enums + the public
+`jsonSchemaText` accessor + both edge cases (E1 field-less → `properties:{}`, E2
+`SchemaNumber(type: .number)` for `search_docs.year`). The input structs were enriched and
+the DSL flipped from the `__adjsonSchemaText` SPI to `jsonSchemaText`; the mcp-parity
+`tools/list` test now **deep-equals each tool's inputSchema against the exact zod draft-07
+schema** — **10/10**, full native **109/109**. The D-0005-10 structural caveat is
+**RESOLVED**: `tools/list` is byte-for-byte (intrinsic) zod-equal, with no zod, no
+hand-rolled builder, and no bespoke macro.
+
 ### Records D–E — to be filled as the phases execute.
