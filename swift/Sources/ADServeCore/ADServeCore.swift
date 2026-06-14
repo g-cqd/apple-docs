@@ -12,6 +12,10 @@ import Logging
 import ADStorage
 import Synchronization
 
+#if canImport(UniformTypeIdentifiers)
+import UniformTypeIdentifiers
+#endif
+
 // MARK: - Configuration
 
 /// Engine bootstrap parameters (host/port/pool sizing). siteConfig + the response
@@ -104,6 +108,52 @@ public enum ResponseContent: Sendable {
   public static func text(_ bytes: [UInt8], contentType: String) -> ResponseContent {
     .raw(body: bytes, contentType: contentType, status: .ok)
   }
+
+  /// JSON body with a typed media type (the type-safe output-format path).
+  public static func json(_ bytes: [UInt8], as type: MediaType) -> ResponseContent {
+    .raw(body: bytes, contentType: type.value, status: .ok)
+  }
+
+  /// A body with a typed media type.
+  public static func text(_ bytes: [UInt8], as type: MediaType) -> ResponseContent {
+    .raw(body: bytes, contentType: type.value, status: .ok)
+  }
+}
+
+/// Type-safe output format — the response content-type as a value, not a raw string.
+/// Built from an Apple `UTType` (the type-safe, Apple-native path) where that suffices;
+/// the apple-docs presets are explicit strings because `UTType.preferredMIMEType` carries
+/// no charset and the surface uses inconsistent charset spacing + non-registered forms
+/// (`application/opensearchdescription+xml`, `application/linkset+json`).
+public struct MediaType: Sendable {
+  public let value: String
+  private init(value: String) { self.value = value }
+
+  /// `;charset=utf-8` vs `; charset=utf-8` — the apple-docs surface uses both spellings.
+  public enum Charset: Sendable {
+    case utf8, utf8Spaced
+    fileprivate var suffix: String { self == .utf8 ? ";charset=utf-8" : "; charset=utf-8" }
+  }
+
+  #if canImport(UniformTypeIdentifiers)
+  /// From an Apple `UTType` (+ optional charset) — the type-safe, Apple-native constructor.
+  @available(macOS 11.0, *)
+  public init(_ type: UTType, charset: Charset? = nil) {
+    let mime = type.preferredMIMEType ?? "application/octet-stream"
+    value = charset.map { mime + $0.suffix } ?? mime
+  }
+  #endif
+
+  /// An explicit content-type (the non-`UTType`-expressible cases + the parity strings).
+  public static func custom(_ value: String) -> MediaType { MediaType(value: value) }
+
+  public static let json = MediaType(value: "application/json;charset=utf-8")
+  public static let jsonRaw = MediaType(value: "application/json")
+  public static let jsonSpaced = MediaType(value: "application/json; charset=utf-8")
+  public static let text = MediaType(value: "text/plain; charset=utf-8")
+  public static let css = MediaType(value: "text/css; charset=utf-8")
+  public static let openSearch = MediaType(value: "application/opensearchdescription+xml")
+  public static let linkset = MediaType(value: "application/linkset+json")
 }
 
 /// Per-route cache policy: the `Cache-Control` value (if any) + whether to attach a
