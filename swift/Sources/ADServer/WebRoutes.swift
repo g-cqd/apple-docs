@@ -72,6 +72,54 @@ enum WebRoutes {
     return Array(rules.joined(separator: "\n").utf8)
   }
 
+  /// GET /api/symbols/index.json (symbols-index.route.js → listCatalog). Built as
+  /// `JSONValue` because codepoint/codepointVersion EMIT `null` (not omit).
+  static func symbolsIndex(_ conn: StorageConnection) -> [UInt8] {
+    let rows = conn.listSfSymbolsCatalog()
+    let symbols: [JSONValue] = rows.map { row in
+      .object([
+        "name": .string(row.name),
+        "scope": .string(row.scope),
+        "categories": parsedArray(row.categoriesJson),
+        "keywords": parsedArray(row.keywordsJson),
+        "bitmapOnly": .bool((row.bitmapOnly ?? 0) != 0),
+        "renderUnsupported": .bool((row.renderUnsupported ?? 0) != 0),
+        "codepoint": intOrNull(row.codepoint),
+        "codepointVersion": strOrNull(row.codepointVersion),
+      ])
+    }
+    return encodeJSONValue(
+      .object(["count": .number(Double(rows.count)), "symbols": .array(symbols)]))
+  }
+
+  /// GET /api/symbols/search (symbols.route.js → searchSfSymbols). `query` is the
+  /// RAW q param (echoed un-trimmed); `scope` nil = all; `limit` already clamped.
+  static func symbolsSearch(
+    _ conn: StorageConnection, query: String, scope: String?, limit: Int
+  ) -> [UInt8] {
+    let results = conn.searchSfSymbols(query: query, scope: scope, limit: limit)
+      .map { JSONValue.object(symbolRowObject($0)) }
+    var obj: [String: JSONValue] = [:]
+    obj["results"] = .array(results)
+    obj["query"] = .string(query)
+    obj["scope"] = scope.map { .string($0) } ?? .null
+    return encodeJSONValue(.object(obj))
+  }
+
+  /// GET /api/symbols/<scope>/<name>.json (symbols.route.js → getSfSymbol). nil =
+  /// 404. Adds `codepoint_display` when codepoint is set, else OMITs `codepoint` +
+  /// `codepoint_display`.
+  static func symbolMetadata(_ conn: StorageConnection, scope: String, name: String) -> [UInt8]? {
+    guard let row = conn.getSfSymbol(scope: scope, name: name) else { return nil }
+    var obj = symbolRowObject(row)
+    if let cp = row.codepoint {
+      obj["codepoint_display"] = .string(codepointDisplay(cp))
+    } else {
+      obj["codepoint"] = nil
+    }
+    return encodeJSONValue(.object(obj))
+  }
+
   /// GET /readyz — instance readiness (the DB probe). Instance-identified shape
   /// (like /healthz), not parity-gated; 503 when the read pool can't answer.
   static func readyz(dbOk: Bool) -> WebResponse {
@@ -119,4 +167,70 @@ private func encodeURIComponent(_ s: String) -> String {
     }
   }
   return String(decoding: out, as: UTF8.self)
+}
+
+/// Encodes a `JSONValue` to bytes (ADJSON); `null` on the impossible throw.
+private func encodeJSONValue(_ value: JSONValue) -> [UInt8] {
+  (try? value.encoded()).map { Array($0) } ?? Array("null".utf8)
+}
+
+/// The full `sf_symbols` row as JS emits it (`...row` + the 4 parsed `*_json`):
+/// every column verbatim (`bitmap_only`/`render_unsupported` stay 0/1 ints), then
+/// the parsed categories/keywords/aliases/availability.
+private func symbolRowObject(_ row: SfSymbolRow) -> [String: JSONValue] {
+  var obj: [String: JSONValue] = [:]
+  obj["name"] = .string(row.name)
+  obj["scope"] = .string(row.scope)
+  obj["categories_json"] = strOrNull(row.categoriesJson)
+  obj["keywords_json"] = strOrNull(row.keywordsJson)
+  obj["aliases_json"] = strOrNull(row.aliasesJson)
+  obj["availability_json"] = strOrNull(row.availabilityJson)
+  obj["order_index"] = intOrNull(row.orderIndex)
+  obj["bundle_path"] = strOrNull(row.bundlePath)
+  obj["bundle_version"] = strOrNull(row.bundleVersion)
+  obj["updated_at"] = strOrNull(row.updatedAt)
+  obj["codepoint"] = intOrNull(row.codepoint)
+  obj["codepoint_version"] = strOrNull(row.codepointVersion)
+  obj["bitmap_only"] = intOrNull(row.bitmapOnly)
+  obj["render_unsupported"] = intOrNull(row.renderUnsupported)
+  obj["categories"] = parsedArray(row.categoriesJson)
+  obj["keywords"] = parsedArray(row.keywordsJson)
+  obj["aliases"] = parsedArray(row.aliasesJson)
+  obj["availability"] = parsedValue(row.availabilityJson)
+  return obj
+}
+
+private func strOrNull(_ s: String?) -> JSONValue { s.map { JSONValue.string($0) } ?? .null }
+private func intOrNull(_ n: Int64?) -> JSONValue { n.map { JSONValue.number(Double($0)) } ?? .null }
+
+/// parseJsonArray: the parsed value if it's an array, else `[]`.
+private func parsedArray(_ json: String?) -> JSONValue {
+  guard let json, let v = try? JSONValue(parsing: json), case .array = v else { return .array([]) }
+  return v
+}
+
+/// parseJsonValue: the parsed value, or `null`.
+private func parsedValue(_ json: String?) -> JSONValue {
+  guard let json, let v = try? JSONValue(parsing: json) else { return .null }
+  return v
+}
+
+/// `U+XXXX` (symbols.route.js: `codepoint.toString(16).toUpperCase().padStart(4,'0')`).
+private func codepointDisplay(_ cp: Int64) -> String {
+  let hex = String(cp, radix: 16, uppercase: true)
+  let padded = hex.count < 4 ? String(repeating: "0", count: 4 - hex.count) + hex : hex
+  return "U+\(padded)"
+}
+
+/// Matches `^/api/symbols/(public|private)/(.+)\.json$` → (scope, decoded name).
+func matchSymbolMetadataPath(_ path: Substring) -> (scope: String, name: String)? {
+  for scope in ["public", "private"] {
+    let prefix = "/api/symbols/\(scope)/"
+    guard path.hasPrefix(prefix), path.hasSuffix(".json") else { continue }
+    let nameStart = path.index(path.startIndex, offsetBy: prefix.count)
+    let nameEnd = path.index(path.endIndex, offsetBy: -5)
+    guard nameStart < nameEnd else { continue }
+    return (scope, percentDecode(String(path[nameStart..<nameEnd])))
+  }
+  return nil
 }

@@ -114,6 +114,26 @@ private func respond(
     response = .text(
       body, contentType: "text/css; charset=utf-8",
       cacheControl: WebConst.apiCorpusCacheControl, hashable: true)
+  case "/api/symbols/index.json":
+    let body = try await threadPool.runIfActive { () -> [UInt8] in
+      guard let conn = pool.checkout() else { return Array(#"{"count":0,"symbols":[]}"#.utf8) }
+      defer { pool.checkin(conn) }
+      return WebRoutes.symbolsIndex(conn)
+    }
+    response = .json(body, hashable: true)
+  case "/api/symbols/search":
+    let params = parseQuery(head.uri)
+    let rawQuery = params["q"] ?? ""
+    let scope = nonEmptyScope(params["scope"])
+    let limit = clampSymbolLimit(params["limit"])
+    let body = try await threadPool.runIfActive { () -> [UInt8] in
+      guard let conn = pool.checkout() else {
+        return Array(#"{"results":[],"query":"","scope":null}"#.utf8)
+      }
+      defer { pool.checkin(conn) }
+      return WebRoutes.symbolsSearch(conn, query: rawQuery, scope: scope, limit: limit)
+    }
+    response = .json(body, hashable: true)
   case "/robots.txt":
     response = .text(
       Discovery.robotsTxt(config), contentType: "text/plain; charset=utf-8",
@@ -130,8 +150,30 @@ private func respond(
     response = .json(
       Discovery.mcpServerCard(config), cacheControl: WebConst.discoveryCacheControl, hashable: true)
   default:
-    response = .plain(.notFound, "not found\n")
+    if let (scope, name) = matchSymbolMetadataPath(path) {
+      let body = try await threadPool.runIfActive { () -> [UInt8]? in
+        guard let conn = pool.checkout() else { return nil }
+        defer { pool.checkin(conn) }
+        return WebRoutes.symbolMetadata(conn, scope: scope, name: name)
+      }
+      response = body.map { .json($0, hashable: true) } ?? .plain(.notFound, "Not Found")
+    } else {
+      response = .plain(.notFound, "not found\n")
+    }
   }
   try await writeWeb(response, to: head, keepAlive: keepAlive, outbound: outbound)
   return keepAlive
+}
+
+/// `url.searchParams.get('scope') || undefined` — empty/absent → nil.
+private func nonEmptyScope(_ s: String?) -> String? {
+  guard let s, !s.isEmpty else { return nil }
+  return s
+}
+
+/// `Math.min(Math.max(parseInt(limit ?? 100) || 100, 1), 500)` (assets-symbols.js).
+private func clampSymbolLimit(_ s: String?) -> Int {
+  let parsed = s.flatMap { Int($0) } ?? 100
+  let base = parsed == 0 ? 100 : parsed
+  return min(max(base, 1), 500)
 }
