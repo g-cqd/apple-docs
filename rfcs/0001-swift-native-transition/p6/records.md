@@ -636,3 +636,25 @@ filters/discovery-JSON routes from `JSONStreamWriter` → models (one server-wid
 approach). Still open: the MCP protocol (SDK+zod kill); the pcache1 storage perf.
 `safeWebDocKey` ships identity (≤200-byte keys); the oversized-segment SHA-1
 mapping is noted-unported (rare).
+
+---
+
+## P6 closeout — web/search done; MCP + the server-DSL refactor → RFC 0005 (2026-06-14)
+
+The P6 **web + `/search`** line is complete and parity-clean (19 web + 34 search
+cases, intrinsic). The two remaining P6 threads now have dedicated RFCs and continue
+their records there:
+
+- **[RFC 0005 — server framework + MCP](../../0005-server-framework.md)** carries the
+  **MCP protocol** (the `@modelcontextprotocol/sdk` + `zod` kill) **and** a type-safe
+  server DSL that refactors this slice's `Serving.swift` switch / `WebResponse` /
+  `WebRoutes` into a decoupled engine (`ADServeCore`) + endpoint DSL (`ADServeDSL`) +
+  `Services`. The web slice above is RFC 0005's behavior-preserving baseline — the
+  19+34 parity suites are the invariant the refactor must hold.
+- **[RFC 0006 — codebase health & conformance](../../0006-codebase-health.md)** carries
+  the safe-type adoption (swift-http-types / swift-log / typed throws / `Tagged`) and
+  the concern-separation backlog the audit found (incl. the dissolving `WebRoutes.swift`).
+
+Still owned by P6 (deferred): the operator-gated Caddy/launchd flip (wired-ready, off);
+the `pcache1` storage-perf lever. This file remains the record for the P6 host +
+cascade + web slices; new server work appends to the RFC 0005 records.

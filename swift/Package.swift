@@ -50,7 +50,17 @@ let package = Package(
     // (escaping + integer formatting match; field order = declaration order; nil
     // Optionals omitted). Branch dep — no release tag yet; Package.resolved pins
     // the commit. NOT pulled by ADCore (the dylib stays zero-external-dep).
-    .package(url: "https://github.com/g-cqd/ADJSON.git", branch: "main")
+    .package(url: "https://github.com/g-cqd/ADJSON.git", branch: "main"),
+    // RFC 0005 (server framework) — ad-server-only, all §2-compliant (apple/* +
+    // pointfreeco/*). swift-http-types: type-safe HTTP headers/status; swift-log:
+    // structured logging; swift-nio-extras: the NIO↔HTTPTypes HTTP/1 bridge
+    // (`HTTP1ToHTTPServerCodec`) — requires swift-nio ≥ 2.94.0, so the `from:
+    // "2.65.0"` above resolves up; swift-tagged: domain newtypes (pre-1.0, pinned in
+    // Package.resolved). NONE pulled by ADCore (the dylib stays zero-external-dep).
+    .package(url: "https://github.com/apple/swift-http-types.git", from: "1.6.0"),
+    .package(url: "https://github.com/apple/swift-log.git", from: "1.13.2"),
+    .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.34.1"),
+    .package(url: "https://github.com/pointfreeco/swift-tagged.git", from: "0.10.0")
   ],
   targets: [
     .target(name: "ADBase", swiftSettings: releaseCMO),
@@ -86,9 +96,41 @@ let package = Package(
     // Dev-only reference dump for the flipped fixture generator (RFC 0002
     // §6h); not shipped — the dylib product above is unchanged.
     .executableTarget(name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump"),
-    // P6 first slice: the in-house SwiftNIO HTTP host spike (RFC 0001 P6).
-    // Stands up alongside the Bun servers; serves /healthz + /search over
-    // ADStorage IN-PROCESS (no FFI). Raw SwiftNIO HTTP/1.1 (NIOHTTP1), no Vapor.
+    // RFC 0005 — the server ENGINE (the optimizable layer): NIO bootstrap, HTTP/1.1
+    // on swift-http-types, the response envelope + middleware, the `.storage`
+    // offload, swift-log, and (Phase C+) the MCP JSON-RPC core + transports.
+    // ad-server-only; knows nothing route-specific. Max strict concurrency.
+    .target(
+      name: "ADServeCore",
+      dependencies: [
+        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOPosix", package: "swift-nio"),
+        .product(name: "NIOHTTP1", package: "swift-nio"),
+        .product(name: "NIOHTTPTypes", package: "swift-nio-extras"),
+        .product(name: "NIOHTTPTypesHTTP1", package: "swift-nio-extras"),
+        .product(name: "HTTPTypes", package: "swift-http-types"),
+        .product(name: "Logging", package: "swift-log"),
+        .product(name: "Crypto", package: "swift-crypto"),
+        .product(name: "ADJSON", package: "ADJSON"),
+        "ADStorage",
+      ],
+      swiftSettings: releaseCMO + strictConcurrency),
+    // RFC 0005 — the endpoint DSL: @RouteBuilder, Route/Group, the typed Path
+    // (RegexBuilder captures), RequestContext, RouteQuery, ResponseContent, the
+    // .cache/.storage modifiers (and the Tool DSL in Phase C). Sees only
+    // ADServeCore's public surface — the engine internals stay out of reach.
+    .target(
+      name: "ADServeDSL",
+      dependencies: [
+        "ADServeCore",
+        .product(name: "HTTPTypes", package: "swift-http-types"),
+        .product(name: "Tagged", package: "swift-tagged"),
+        .product(name: "ADJSON", package: "ADJSON"),
+      ],
+      swiftSettings: releaseCMO + strictConcurrency),
+    // P6 first slice: the in-house SwiftNIO HTTP host spike (RFC 0001 P6), now the
+    // RFC 0005 app layer — endpoint declarations + Services over the engine + DSL.
+    // Serves /healthz + /search + the web routes over ADStorage IN-PROCESS (no FFI).
     .executableTarget(
       name: "ad-server",
       dependencies: [
@@ -97,6 +139,8 @@ let package = Package(
         .product(name: "NIOHTTP1", package: "swift-nio"),
         .product(name: "Crypto", package: "swift-crypto"),
         .product(name: "ADJSON", package: "ADJSON"),
+        "ADServeCore",
+        "ADServeDSL",
         "ADStorage",
         "ADSearchCascade",
       ],
