@@ -12,6 +12,7 @@
 
 public import HTTPTypes
 public import Logging
+import Dispatch
 import NIOCore
 import NIOHTTP1
 import NIOHTTP2
@@ -20,7 +21,14 @@ import NIOHTTPTypesHTTP1
 import NIOHTTPTypesHTTP2
 import NIOPosix
 import NIOSSL
+import Synchronization
 public import ADStorage
+
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 
 /// One accepted connection (h1) or h2 stream: streams `HTTPRequestPart`/`HTTPResponsePart`.
 private typealias EngineConnection = NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>
@@ -29,6 +37,17 @@ private typealias EngineConnection = NIOAsyncChannel<HTTPRequestPart, HTTPRespon
 private typealias EngineNegotiated = NIONegotiatedHTTPVersion<
   EngineConnection, (Void, NIOHTTP2Handler.AsyncStreamMultiplexer<EngineConnection>)
 >
+
+/// A shared count of requests actively being handled — so a drain waits for real in-flight
+/// work (not idle keep-alive connections, which linger until force-closed). A lock-free
+/// `Atomic` (the counter is hot: every request brackets it); boxed in a class so the
+/// `~Copyable` atomic lives behind a shared reference the (copied) engine value carries.
+private final class ActiveRequests: Sendable {
+  private let value = Atomic<Int>(0)
+  func enter() { value.wrappingAdd(1, ordering: .relaxed) }
+  func leave() { value.wrappingSubtract(1, ordering: .relaxed) }
+  var count: Int { value.load(ordering: .relaxed) }
+}
 
 /// The ad-server engine. Binds one NIO listener per `ListenerConfig`, all sharing the
 /// event-loop group + offload pool + connection pool + envelope; serves until cancelled.
@@ -41,10 +60,14 @@ public struct HTTPServer: Sendable {
   let logger: Logger
   let threadCount: Int
   let loopCount: Int
+  /// Flipped true once all listeners are bound, false when draining (read by `/readyz`).
+  let readiness: ServerReadiness?
+  /// In-flight request count, so a drain waits for real work, not idle keep-alive connections.
+  private let active = ActiveRequests()
 
   public init(
     listeners: [ListenerConfig], pool: ConnectionPool, envelope: HTTPFields, logger: Logger,
-    threadCount: Int, loopCount: Int = 2
+    threadCount: Int, loopCount: Int = 2, readiness: ServerReadiness? = nil
   ) {
     self.listeners = listeners
     self.pool = pool
@@ -52,6 +75,7 @@ public struct HTTPServer: Sendable {
     self.logger = logger
     self.threadCount = max(1, threadCount)
     self.loopCount = max(1, loopCount)
+    self.readiness = readiness
   }
 
   public func run() async throws {
@@ -59,28 +83,101 @@ public struct HTTPServer: Sendable {
     threadPool.start()
     let group = MultiThreadedEventLoopGroup(numberOfThreads: loopCount)
 
-    try await withThrowingDiscardingTaskGroup { taskGroup in
-      for listener in listeners {
-        let routes = listener.routes
-        logger.info(
-          "ad-server listening",
-          metadata: [
-            "host": "\(listener.host)", "port": "\(listener.port)",
-            "tls": "\(listener.wire.tls != nil)", "alpn": "\(listener.wire.alpn.map(\.rawValue))",
-            "threads": "\(threadCount)", "loops": "\(loopCount)",
-          ])
-        if listener.wire.tls != nil {
-          let serverChannel = try await bindSecure(listener, group: group)
-          taskGroup.addTask {
-            await serveSecureListener(serverChannel, routes: routes, threadPool: threadPool)
-          }
-        } else {
-          let serverChannel = try await bindPlain(listener, group: group)
-          taskGroup.addTask {
-            await servePlainListener(serverChannel, routes: routes, threadPool: threadPool)
-          }
+    // Bind every listener up front, keeping the underlying server channels so a shutdown can
+    // stop accepting (closing a listening channel ends its accept loop; existing connections
+    // are untouched and drain on their own).
+    var serverChannels: [any Channel] = []
+    var serveTasks: [@Sendable () async -> Void] = []
+    for listener in listeners {
+      let routes = listener.routes
+      logger.info(
+        "ad-server listening",
+        metadata: [
+          "host": "\(listener.host)", "port": "\(listener.port)",
+          "tls": "\(listener.wire.tls != nil)", "alpn": "\(listener.wire.alpn.map(\.rawValue))",
+          "threads": "\(threadCount)", "loops": "\(loopCount)",
+        ])
+      if listener.wire.tls != nil {
+        let serverChannel = try await bindSecure(listener, group: group)
+        serverChannels.append(serverChannel.channel)
+        serveTasks.append {
+          await serveSecureListener(serverChannel, routes: routes, threadPool: threadPool)
+        }
+      } else {
+        let serverChannel = try await bindPlain(listener, group: group)
+        serverChannels.append(serverChannel.channel)
+        serveTasks.append {
+          await servePlainListener(serverChannel, routes: routes, threadPool: threadPool)
         }
       }
+    }
+    readiness?.set(true)
+
+    // Graceful lifecycle: serve until SIGTERM/SIGINT, then stop accepting and let in-flight
+    // requests drain (bounded by `drainSeconds`), then force-close. Finally shut the ELG +
+    // offload pool down cleanly.
+    let channelsToClose = serverChannels
+    let tasks = serveTasks
+    await withTaskGroup(of: ShutdownPhase.self) { taskGroup in
+      taskGroup.addTask {
+        await withDiscardingTaskGroup { serving in
+          for serve in tasks { serving.addTask { await serve() } }
+        }
+        return .listenersFinished
+      }
+      taskGroup.addTask { await Self.awaitShutdownSignal(logger: logger); return .signal }
+
+      if await taskGroup.next() == .signal {
+        readiness?.set(false)
+        logger.info("ad-server draining (stop accepting)")
+        for channel in channelsToClose { channel.close(promise: nil) }
+        // Wait for in-flight requests to finish (idle keep-alive connections are ignored),
+        // bounded by the drain deadline; then force-close everything.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(Self.drainSeconds))
+        while active.count > 0 && ContinuousClock.now < deadline {
+          try? await Task.sleep(for: .milliseconds(50))
+        }
+        if active.count > 0 {
+          logger.warning(
+            "ad-server drain deadline exceeded; forcing close",
+            metadata: ["inflight": "\(active.count)"])
+        }
+      }
+      taskGroup.cancelAll()
+    }
+
+    try? await group.shutdownGracefully()
+    try? await threadPool.shutdownGracefully()
+    logger.info("ad-server stopped")
+  }
+
+  /// Max seconds to let in-flight requests finish after a shutdown signal before forcing close.
+  private static let drainSeconds = 25
+
+  private enum ShutdownPhase: Sendable, Equatable { case listenersFinished, signal }
+
+  /// Suspends until SIGTERM or SIGINT.
+  private static func awaitShutdownSignal(logger: Logger) async {
+    for await sig in shutdownSignals() {
+      logger.info("ad-server received signal \(sig); shutting down")
+      return
+    }
+  }
+
+  /// SIGTERM/SIGINT as an `AsyncStream` — Dispatch signal sources (the default handlers are
+  /// ignored so the sources receive them) bridged to Swift concurrency.
+  private static func shutdownSignals() -> AsyncStream<CInt> {
+    AsyncStream { continuation in
+      signal(SIGTERM, SIG_IGN)
+      signal(SIGINT, SIG_IGN)
+      let queue = DispatchQueue(label: "ad-server.signals")
+      let sources = [SIGTERM, SIGINT].map { sig -> any DispatchSourceSignal in
+        let source = DispatchSource.makeSignalSource(signal: sig, queue: queue)
+        source.setEventHandler { continuation.yield(sig) }
+        source.resume()
+        return source
+      }
+      continuation.onTermination = { _ in sources.forEach { $0.cancel() } }
     }
   }
 
@@ -249,6 +346,8 @@ public struct HTTPServer: Sendable {
           case .end:
             guard let head = requestHead else { continue }
             requestHead = nil
+            active.enter()
+            defer { active.leave() }
             let keepAlive: Bool
             if overflow {
               try await writeBodyTooLarge(to: head, outbound: outbound, isHTTP2: isHTTP2)

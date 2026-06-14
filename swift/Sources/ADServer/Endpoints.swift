@@ -17,15 +17,16 @@ import HTTPTypes
 /// TLS listener (the operator's "Both" model), both sharing `siteRoutes`. Closes over the site
 /// config + the shared MCP dispatcher (the HTTP `/mcp` transport).
 func endpoints(
-  config: SiteConfig, mcpDispatcher: MCPDispatcher, tls: TLSSource?, tlsPort: Int
+  config: SiteConfig, mcpDispatcher: MCPDispatcher, tls: TLSSource?, tlsPort: Int,
+  readiness: ServerReadiness
 ) -> [Application] {
   Server {
     // Loopback (plaintext HTTP/1.1, behind Caddy) on the process default port.
-    App(pool: .shared) { siteRoutes(config: config, mcpDispatcher: mcpDispatcher) }
+    App(pool: .shared) { siteRoutes(config: config, mcpDispatcher: mcpDispatcher, readiness: readiness) }
     // Optional in-process TLS listener — TLS 1.3 with ALPN (HTTP/2 + HTTP/1.1) on `tlsPort`.
     if let tls {
       App(port: tlsPort, protocol: .https(tls), pool: .shared) {
-        siteRoutes(config: config, mcpDispatcher: mcpDispatcher)
+        siteRoutes(config: config, mcpDispatcher: mcpDispatcher, readiness: readiness)
       }
     }
   }
@@ -35,7 +36,9 @@ func endpoints(
 /// (`.shared` → `ctx.db`; `.none` → no DB); handlers are trailing closures; output is a typed
 /// `MediaType`. The engine applies the cross-cutting envelope to every response.
 @RouteGroupBuilder
-func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> [RouteNode] {
+func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher, readiness: ServerReadiness)
+  -> [RouteNode]
+{
         // Liveness — static, no storage, never cached.
         GET("healthz", pool: .none) { _ in
           .json(Array(#"{"ok":true,"service":"ad-server"}"#.utf8), as: .json)
@@ -46,8 +49,11 @@ func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher) -> [RouteNode]
           .json(Cascade.search(ctx.db, parseCascadeParams(ctx.target)), as: .jsonRaw)
         }
 
-        // Readiness — the DB probe; status carries ok/503, the route carries `no-store`.
-        GET("readyz") { ctx in WebRoutes.readyz(dbOk: ctx.db.probe()) }.cache(.noStore)
+        // Readiness — 503 while draining (orchestrators stop new traffic), else the DB probe.
+        GET("readyz") { ctx in
+          readiness.isReady
+            ? WebRoutes.readyz(dbOk: ctx.db.probe()) : .plain(.serviceUnavailable, "draining\n")
+        }.cache(.noStore)
 
         Group("api") {
           GET("filters") { ctx in .json(WebRoutes.filters(ctx.db), as: .json) }.cache(.apiCorpus)
