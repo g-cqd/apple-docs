@@ -15,6 +15,8 @@ import { join } from 'node:path'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { filtersHandler } from '../../../src/web/routes/filters.route.js'
 import { listFontsHandler, fontFacesCssHandler } from '../../../src/web/routes/fonts.route.js'
+import { symbolsIndexHandler } from '../../../src/web/routes/symbols-index.route.js'
+import { symbolsSearchHandler, symbolMetadataHandler } from '../../../src/web/routes/symbols.route.js'
 import { buildRobotsTxt, buildOpenSearchXml, buildApiCatalog, buildMcpServerCard } from '../../../src/web/discovery.js'
 import { VERSION } from '../../../src/lib/version.js'
 import { sha256 } from '../../../src/lib/hash.js'
@@ -70,6 +72,12 @@ if (existsSync(AD_SERVER)) {
   seed.assetsFonts.upsertFontFile({ id: 'sf-pro-bold', familyId: 'sf-pro', fileName: 'SF-Pro-Bold.otf', filePath: '/x/SF-Pro-Bold.otf', format: 'otf' })
   seed.assetsFonts.upsertFontFile({ id: 'sf-pro-regular', familyId: 'sf-pro', fileName: 'SF-Pro-Regular.otf', filePath: '/x/SF-Pro-Regular.otf', format: 'otf' })
   seed.assetsFonts.upsertFontFile({ id: 'ny-regular', familyId: 'ny', fileName: 'NewYork.ttf', filePath: '/x/NewYork.ttf', format: 'ttf' })
+  // SF Symbols (Phase 2): catalog + FTS index; circle.fill gets a PUA codepoint
+  // (→ codepoint_display on metadata), square.grid.2x2 stays null (→ omitted).
+  seed.assetsSymbols.upsertSymbol({ name: 'square.grid.2x2', scope: 'public', categories: ['ui', 'grid'], keywords: ['square', 'grid'], aliases: [], availability: { ios: '14.0', macos: '11.0' }, orderIndex: 0, bundlePath: 'sym/sq', bundleVersion: '14.6' })
+  seed.assetsSymbols.upsertSymbol({ name: 'circle.fill', scope: 'public', categories: ['shapes'], keywords: ['circle', 'fill'], aliases: ['filled.circle'], availability: { ios: '13.0' }, orderIndex: 1, bundlePath: 'sym/ci', bundleVersion: '13.0' })
+  seed.assetsSymbols.upsertSymbol({ name: 'lock.shield', scope: 'private', categories: [], keywords: ['lock', 'shield'], aliases: [], availability: null, orderIndex: 0 })
+  seed.assetsSymbols.updateCodepoint('public', 'circle.fill', 59440, '13.0')
   seed.close()
   db = new DocsDatabase(dbPath)
   server = Bun.spawn([
@@ -173,5 +181,39 @@ describe.skipIf(!existsSync(AD_SERVER))('web-routes parity (Swift ad-server == J
     expect(await res.text()).toBe(expected)
     expect(res.headers.get('content-type')).toBe('text/css; charset=utf-8')
     expect(res.headers.get('cache-control')).toBe('public, max-age=300, stale-while-revalidate=3600')
+  })
+
+  test('GET /api/symbols/index.json — intrinsic (ADJSON model)', async () => {
+    const jsResp = await symbolsIndexHandler(new Request('http://x/api/symbols/index.json'), { db })
+    const expected = await jsResp.text()
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/symbols/index.json`)
+    expectIntrinsic(await res.text(), expected)
+  })
+
+  test('GET /api/symbols/search — intrinsic (full-row ADJSON JSONValue)', async () => {
+    const url = new URL('http://x/api/symbols/search?q=grid')
+    const jsResp = await symbolsSearchHandler(new Request(url), { db }, url)
+    const expected = await jsResp.text()
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/symbols/search?q=grid`)
+    expectIntrinsic(await res.text(), expected)
+  })
+
+  test('GET /api/symbols/<scope>/<name>.json — codepoint_display present', async () => {
+    const jsResp = await symbolMetadataHandler(new Request('http://x'), { db }, null, [null, 'public', 'circle.fill'])
+    const expected = await jsResp.text()
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/symbols/public/circle.fill.json`)
+    expectIntrinsic(await res.text(), expected)
+  })
+
+  test('GET /api/symbols/<scope>/<name>.json — codepoint omitted when null', async () => {
+    const jsResp = await symbolMetadataHandler(new Request('http://x'), { db }, null, [null, 'public', 'square.grid.2x2'])
+    const expected = await jsResp.text()
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/symbols/public/square.grid.2x2.json`)
+    expectIntrinsic(await res.text(), expected)
+  })
+
+  test('GET /api/symbols/<scope>/<name>.json — 404 on miss', async () => {
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/symbols/public/does.not.exist.json`)
+    expect(res.status).toBe(404)
   })
 })
