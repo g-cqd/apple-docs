@@ -232,4 +232,17 @@ schema** — **10/10**, full native **109/109**. The D-0005-10 structural caveat
 **RESOLVED**: `tools/list` is byte-for-byte (intrinsic) zod-equal, with no zod, no
 hand-rolled builder, and no bespoke macro.
 
+**browse added — Phase C tool set complete (2026-06-14).** The most involved cheap tool:
+new ADStorage `Browse.swift` queries (`resolveRoot` exact→fuzzy, `pagesByRoot`,
+`browsePage` [document→active-page fallback], `documentChildren`) + the full browse.js
+branch logic ported (path→children; bare WWDC→per-year `groups`; WWDC+year→filtered pages;
+flat pages with the MCP `defaultLimit:100`), projected to the exact `projectBrowse` shape
+(slug/root-kind/limited dropped; children keep {path,title,section}; pages keep
+{path,title,kind=role_heading??role,abstract}). Error messages match the JS NotFoundError
+text (`Unknown framework: …`, `Page not found: …`, `No WWDC sessions indexed for …`).
+mcp-parity **13/13** (pages, children, unknown-framework `isError`, draft-07 schema), full
+native **112/112**. **Phase C's six cheap tools are all native** (search_docs, browse,
+list_taxonomy, list_frameworks, search_sf_symbols, list_apple_fonts); read_doc + render +
+Streamable HTTP `/mcp` + resources are Phase D.
+
 ### Records D–E — to be filled as the phases execute.

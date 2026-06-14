@@ -92,6 +92,19 @@ struct SearchSfSymbolsInput: Decodable {
 @Schemable(dialect: .draft7)
 struct ListAppleFontsInput: Decodable {}
 
+@Schemable(dialect: .draft7)
+struct BrowseInput: Decodable {
+  // maxChars/page (pagination) ride Phase D — omitted.
+  /// Root slug, e.g. swiftui, design, wwdc.
+  var framework: String
+  /// Drill into a page, e.g. swiftui/view.
+  var path: String?
+  /// WWDC sessions of one year.
+  var year: Int?
+  /// Max pages (default 100, cap 200).
+  @SchemaNumber(1...200) var limit: Int?
+}
+
 // MARK: - Tool surface
 
 func mcpToolRegistry() -> ToolRegistry {
@@ -124,6 +137,13 @@ func mcpToolRegistry() -> ToolRegistry {
     Tool("list_apple_fonts", "List Apple font families and files (ids feed render_font_text).")
       .input(ListAppleFontsInput.self)
       .respond { _, ctx in .ok(WebRoutes.fonts(ctx.connection)) }
+
+    Tool(
+      "browse",
+      "Walk the documentation topic tree: a root's pages, or one page's children via path. wwdc root returns per-year groups; pass year for that year's sessions."
+    )
+    .input(BrowseInput.self)
+    .respond { input, ctx in browse(input, ctx) }
   }
 }
 
@@ -188,6 +208,82 @@ private func searchSfSymbols(_ input: SearchSfSymbolsInput, _ ctx: MCPToolContex
     "results": .array(rows.map { .object(["name": .string($0.name), "scope": .string($0.scope)]) })
   ])
   return encodePayload(payload)
+}
+
+private func browse(_ input: BrowseInput, _ ctx: MCPToolContext) -> MCPToolResult {
+  let conn = ctx.connection
+  guard let root = conn.resolveRoot(input.framework) else {
+    return .failure("Unknown framework: \(input.framework)")
+  }
+  let isWwdc = root.sourceType == "wwdc"
+  if input.year != nil && !isWwdc {
+    return .failure("year only applies to the wwdc root")
+  }
+
+  // Drill into a page → its children (projectBrowse keeps {path, title, section}).
+  if let path = nonEmptyArg(input.path) {
+    guard let page = conn.browsePage(path) else { return .failure("Page not found: \(path)") }
+    let children = conn.documentChildren(page.path).map { child in
+      JSONValue.object([
+        "path": .string(child.targetPath),
+        "title": child.title.map(JSONValue.string) ?? .null,
+        "section": child.section.map(JSONValue.string) ?? .null,
+      ])
+    }
+    return encodePayload(
+      .object([
+        "framework": .string(root.displayName), "path": .string(path),
+        "title": page.title.map(JSONValue.string) ?? .null, "children": .array(children),
+      ]))
+  }
+
+  var allPages = conn.pagesByRoot(root.slug)
+
+  if isWwdc, let year = input.year {
+    allPages = allPages.filter { $0.path.hasPrefix("wwdc/wwdc\(year)-") }
+    if allPages.isEmpty { return .failure("No WWDC sessions indexed for \(year)") }
+  } else if isWwdc && input.limit == nil {
+    // Bare WWDC → per-year groups (a flat 2,800-session list is useless).
+    var counts: [Int: Int] = [:]
+    for page in allPages { if let year = wwdcYear(page.path) { counts[year, default: 0] += 1 } }
+    let groups = counts.keys.sorted(by: >).map { year in
+      JSONValue.object(["year": .number(Double(year)), "count": .number(Double(counts[year]!))])
+    }
+    return encodePayload(
+      .object([
+        "framework": .string(root.displayName), "groups": .array(groups),
+        "total": .number(Double(allPages.count)),
+      ]))
+  }
+
+  // Flat pages — MCP passes defaultLimit 100; an explicit limit is clamped ≥ 1.
+  let limit = input.limit.map { max($0, 1) } ?? 100
+  let pages = Array(allPages.prefix(limit))
+  var out: [String: JSONValue] = ["framework": .string(root.displayName)]
+  if let year = input.year { out["year"] = .number(Double(year)) }
+  out["pages"] = .array(
+    pages.map { page in
+      JSONValue.object([
+        "path": .string(page.path),
+        "title": page.title.map(JSONValue.string) ?? .null,
+        "kind": (page.roleHeading ?? page.role).map(JSONValue.string) ?? .null,
+        "abstract": page.abstract.map(JSONValue.string) ?? .null,
+      ])
+    })
+  out["total"] = .number(Double(allPages.count))
+  return encodePayload(.object(out))
+}
+
+/// `/^wwdc\/wwdc(\d{4})-/` → the 4-digit year (browse.js WWDC_PATH_YEAR).
+private func wwdcYear(_ path: String) -> Int? {
+  let prefix = "wwdc/wwdc"
+  guard path.hasPrefix(prefix) else { return nil }
+  let rest = path.dropFirst(prefix.count)
+  let digits = rest.prefix(4)
+  guard digits.count == 4, digits.allSatisfy(\.isNumber), rest.dropFirst(4).first == "-" else {
+    return nil
+  }
+  return Int(digits)
 }
 
 // MARK: - helpers
