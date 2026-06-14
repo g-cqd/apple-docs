@@ -187,6 +187,19 @@ private func respond(
         return base == "title-index" ? WebRoutes.titleIndexBytes(conn) : WebRoutes.aliasMapBytes(conn)
       }
       response = .json(body, cacheControl: "public, max-age=31536000, immutable", hashable: true)
+    } else if let slug = matchFrameworkTreePath(path) {
+      let baseUrl = config.baseUrl
+      let body = try await threadPool.runIfActive { () -> [UInt8]? in
+        guard let conn = pool.checkout() else { return nil }
+        defer { pool.checkin(conn) }
+        return WebRoutes.frameworkTree(conn, slug: slug, baseUrl: baseUrl)
+      }
+      response =
+        body.map {
+          .text(
+            $0, contentType: "application/json; charset=utf-8",
+            cacheControl: "public, max-age=31536000, immutable")
+        } ?? .plain(.notFound, "Not Found")
     } else {
       response = .plain(.notFound, "not found\n")
     }
