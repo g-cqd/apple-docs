@@ -1,10 +1,13 @@
 // The NIO bootstrap + the async serving loop + the response-writing envelope
-// (RFC 0005 engine). HTTP/1.1 framing rides NIO, bridged to swift-http-types value
+// (RFC 0005/0007 engine). One NIO listener per `ListenerConfig`, all sharing one
+// event-loop group, offload thread pool, connection pool, and response envelope (the
+// central shared pool). HTTP/1.1 framing rides NIO, bridged to swift-http-types value
 // types via `HTTP1ToHTTPServerCodec` so the whole engine speaks `HTTPRequest`/
-// `HTTPResponse`/`HTTPFields` (RFC 0006 H1). Fully structured concurrency: each
-// connection is a child task of the accept loop; the one blocking handler per
-// `.storage` request is offloaded to the NIOThreadPool with a pooled connection.
-// NO `@unchecked` (the sole contained one stays `ADStorage.StorageConnection`).
+// `HTTPResponse`/`HTTPFields` (RFC 0006 H1). Fully structured concurrency: each listener
+// is a child task of `run()`; each connection a child task of its accept loop; the one
+// blocking handler per `.storage` request is offloaded to the NIOThreadPool with a pooled
+// connection. NO `@unchecked` (the sole contained one stays `ADStorage.StorageConnection`).
+// (TLS 1.3 + HTTP/2 per-listener `Wire` variants land in F1b.)
 
 public import HTTPTypes
 public import Logging
@@ -15,40 +18,64 @@ import NIOHTTPTypesHTTP1
 import NIOPosix
 public import ADStorage
 
-/// The ad-server engine. Holds the immutable serving deps; `run()` binds the socket
-/// and serves until cancelled. The app builds the `routes` table (DSL) + the response
-/// `envelope` (the constant header set) and hands them in.
+/// The ad-server engine. Binds one NIO listener per `ListenerConfig`, all sharing the
+/// event-loop group + offload pool + connection pool + envelope; serves until cancelled.
+/// The app builds the listeners (DSL) + the response `envelope` and hands them in.
 public struct HTTPServer: Sendable {
-  let configuration: ServerConfiguration
+  let listeners: [ListenerConfig]
   let pool: ConnectionPool
-  let routes: any HTTPHandling
   /// The constant headers applied to every response (security set + Link + Vary).
   let envelope: HTTPFields
   let logger: Logger
+  let threadCount: Int
+  let loopCount: Int
 
   public init(
-    configuration: ServerConfiguration, pool: ConnectionPool, routes: any HTTPHandling,
-    envelope: HTTPFields, logger: Logger
+    listeners: [ListenerConfig], pool: ConnectionPool, envelope: HTTPFields, logger: Logger,
+    threadCount: Int, loopCount: Int = 2
   ) {
-    self.configuration = configuration
+    self.listeners = listeners
     self.pool = pool
-    self.routes = routes
     self.envelope = envelope
     self.logger = logger
+    self.threadCount = max(1, threadCount)
+    self.loopCount = max(1, loopCount)
   }
 
   public func run() async throws {
-    let threadPool = NIOThreadPool(numberOfThreads: configuration.threadCount)
+    let threadPool = NIOThreadPool(numberOfThreads: threadCount)
     threadPool.start()
-    let group = MultiThreadedEventLoopGroup(numberOfThreads: configuration.loopCount)
+    let group = MultiThreadedEventLoopGroup(numberOfThreads: loopCount)
 
-    let serverChannel = try await ServerBootstrap(group: group)
+    try await withThrowingDiscardingTaskGroup { taskGroup in
+      for listener in listeners {
+        let serverChannel = try await bind(listener, group: group)
+        let routes = listener.routes
+        logger.info(
+          "ad-server listening",
+          metadata: [
+            "host": "\(listener.host)", "port": "\(listener.port)",
+            "threads": "\(threadCount)", "loops": "\(loopCount)",
+          ])
+        taskGroup.addTask {
+          await serveListener(serverChannel, routes: routes, threadPool: threadPool)
+        }
+      }
+    }
+  }
+
+  /// Binds one plaintext HTTP/1.1 listener. (The TLS + HTTP/2 `Wire` variants — ALPN
+  /// negotiation via `configureAsyncHTTPServerPipeline` + NIOSSL — land in F1b.)
+  private func bind(
+    _ listener: ListenerConfig, group: MultiThreadedEventLoopGroup
+  ) async throws -> NIOAsyncChannel<NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>, Never> {
+    try await ServerBootstrap(group: group)
       .serverChannelOption(ChannelOptions.backlog, value: 256)
       .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
       // TCP_NODELAY: without it Nagle + delayed ACKs add multi-ms latency to small
       // keep-alive responses (Bun.serve sets this; matching it is required).
       .childChannelOption(ChannelOptions.socketOption(.tcp_nodelay), value: 1)
-      .bind(host: configuration.host, port: configuration.port) { childChannel in
+      .bind(host: listener.host, port: listener.port) { childChannel in
         childChannel.eventLoop.makeCompletedFuture {
           try childChannel.pipeline.syncOperations.configureHTTPServerPipeline()
           // Bridge NIO's HTTP/1 parts ↔ swift-http-types parts (server, plaintext).
@@ -57,25 +84,32 @@ public struct HTTPServer: Sendable {
             wrappingChannelSynchronously: childChannel)
         }
       }
-    logger.info(
-      "ad-server listening",
-      metadata: [
-        "host": "\(configuration.host)", "port": "\(configuration.port)",
-        "threads": "\(configuration.threadCount)", "loops": "\(configuration.loopCount)",
-      ])
+  }
 
-    try await withThrowingDiscardingTaskGroup { taskGroup in
-      try await serverChannel.executeThenClose { inbound in
-        for try await childChannel in inbound {
-          taskGroup.addTask { await serveConnection(childChannel, threadPool: threadPool) }
+  /// The accept loop for one listener: each accepted connection becomes a child task.
+  private func serveListener(
+    _ serverChannel: NIOAsyncChannel<NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>, Never>,
+    routes: any HTTPHandling, threadPool: NIOThreadPool
+  ) async {
+    do {
+      try await withThrowingDiscardingTaskGroup { taskGroup in
+        try await serverChannel.executeThenClose { inbound in
+          for try await childChannel in inbound {
+            taskGroup.addTask {
+              await serveConnection(childChannel, routes: routes, threadPool: threadPool)
+            }
+          }
         }
       }
+    } catch {
+      // Listener-level error (group shutdown, accept failure) — stop this listener.
     }
   }
 
   /// Serves successive requests on one connection until close / `Connection: close`.
   private func serveConnection(
-    _ channel: NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>, threadPool: NIOThreadPool
+    _ channel: NIOAsyncChannel<HTTPRequestPart, HTTPResponsePart>, routes: any HTTPHandling,
+    threadPool: NIOThreadPool
   ) async {
     do {
       try await channel.executeThenClose { inbound, outbound in
@@ -102,7 +136,7 @@ public struct HTTPServer: Sendable {
               keepAlive = false
             } else {
               keepAlive = try await respond(
-                to: head, body: body, outbound: outbound, threadPool: threadPool)
+                to: head, body: body, routes: routes, outbound: outbound, threadPool: threadPool)
             }
             body = []
             if !keepAlive { return }
@@ -129,7 +163,7 @@ public struct HTTPServer: Sendable {
   /// Resolves + runs the route for one request, then writes the response. Returns
   /// whether to keep the connection alive.
   private func respond(
-    to head: HTTPRequest, body: [UInt8],
+    to head: HTTPRequest, body: [UInt8], routes: any HTTPHandling,
     outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>, threadPool: NIOThreadPool
   ) async throws -> Bool {
     let keepAlive = isKeepAlive(head)
