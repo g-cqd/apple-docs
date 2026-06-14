@@ -4,10 +4,10 @@
 // the tool surface is provided by the DSL (`MCPToolProviding`). Everything is built on
 // ADJSON `JSONValue` so the wire shapes stay intrinsic-identical to the SDK's output.
 
-import ADJSON
+public import ADJSON
 import Foundation
-import Logging
-import ADStorage
+public import Logging
+public import ADStorage
 
 // MARK: - JSONValue helpers (minimal, ADJSON-agnostic)
 

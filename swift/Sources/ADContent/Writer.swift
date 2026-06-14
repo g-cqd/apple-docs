@@ -3,8 +3,8 @@
 // \n→' ') run IN PLACE over a marked suffix, so no intermediate Strings
 // exist anywhere on the hot path.
 
-import ADBase
-import ADEmbed
+public import ADBase
+public import ADEmbed
 
 public typealias ByteSpan = UnsafeRawBufferPointer
 

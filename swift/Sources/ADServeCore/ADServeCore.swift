@@ -7,13 +7,13 @@
 
 import Crypto
 import Foundation
-import HTTPTypes
-import Logging
-import ADStorage
+public import HTTPTypes
+public import Logging
+public import ADStorage
 import Synchronization
 
 #if canImport(UniformTypeIdentifiers)
-import UniformTypeIdentifiers
+public import UniformTypeIdentifiers
 #endif
 
 // MARK: - Configuration

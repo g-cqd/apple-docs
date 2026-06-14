@@ -8,8 +8,8 @@
 // the JS whitespace set is decoded per scalar only on the rare ≥ 0x80
 // path. Scalar-by-scalar String building measured ~100× slower.
 
-import ADBase
-import ADEmbed
+public import ADBase
+public import ADEmbed
 
 public enum JsString {
   @inline(__always)

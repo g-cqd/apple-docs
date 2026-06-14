@@ -21,9 +21,9 @@
 //     }
 //   }
 
-import ADServeCore
-import ADStorage
-import HTTPTypes
+public import ADServeCore
+public import ADStorage
+public import HTTPTypes
 
 // MARK: - Pool (type-safe storage)
 

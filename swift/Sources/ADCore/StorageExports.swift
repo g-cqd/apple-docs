@@ -24,8 +24,8 @@
 //     0 NULL, 1 INTEGER [i64 LE], 2 REAL [f64 LE], 3 TEXT [u32 len][utf8],
 //     4 BLOB [u32 len][bytes] — reproducing bun:sqlite's row objects exactly.
 
-import ADBase
-import ADStorage
+public import ADBase
+public import ADStorage
 
 private let nullStringSentinel: UInt32 = 0xFFFF_FFFF
 private let nullU64Sentinel: UInt64 = 0xFFFF_FFFF_FFFF_FFFF

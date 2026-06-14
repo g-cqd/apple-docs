@@ -9,7 +9,7 @@
 // returning nil (the dispatch then falls back to hb-view / placeholder).
 
 #if canImport(CoreText)
-import CoreGraphics
+public import CoreGraphics
 import CoreText
 import Foundation
 

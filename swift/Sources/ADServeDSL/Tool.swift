@@ -9,8 +9,8 @@
 // descriptions/enums/bounds), so `tools/list` schemas are leaner than the JS MCP's zod
 // schemas — the parity gate is the `tools/call` behavior, not the schema text.
 
-import ADJSON
-import ADServeCore
+public import ADJSON
+public import ADServeCore
 
 /// The standard read-only tool annotations (every apple-docs tool is read-only).
 public enum ToolAnnotations {

@@ -1,4 +1,4 @@
-// swift-tools-version: 6.1
+// swift-tools-version: 6.3
 // libAppleDocsCore — the Swift side of the bridge era (RFC 0001 §4).
 // ABI contract v0 (rfcs/.../p0/ffi-bridge.md). The library product stays
 // zero-dependency; the FIRST SwiftPM dependency (apple/swift-nio — §2-allowed,
@@ -13,23 +13,41 @@ let releaseCMO: [SwiftSetting] = [
   .unsafeFlags(["-cross-module-optimization"], .when(configuration: .release))
 ]
 
-// Maximum concurrency safety for the P6 server code (operator directive):
-// Swift 6 language mode + complete strict-concurrency checking in EVERY
-// configuration (not just release), so all Sendable/data-race violations are
-// hard errors. Applied to the ad-server target.
-let strictConcurrency: [SwiftSetting] = [
+// Package settings aligned to g-cqd/ADJSON (operator directive — applied to EVERY target).
+// `.v6` language mode ⇒ complete strict-concurrency checking; the upcoming features tighten
+// existentials (`any`) + import visibility (`public import` for re-exports, direct imports for
+// member use). No InlineArray/UTF8Span (2025-SDK-gated — would raise the macOS floor);
+// Span/RawSpan back-deploy and stay.
+let strictSettings: [SwiftSetting] = [
   .swiftLanguageMode(.v6),
-  .unsafeFlags(["-strict-concurrency=complete"]),
+  .enableUpcomingFeature("ExistentialAny"),
+  .enableUpcomingFeature("InternalImportsByDefault"),
+  .enableUpcomingFeature("MemberImportVisibility"),
 ]
+
+// Compile-time type-check timing warnings (flag slow expressions / function bodies). These use
+// unsafe flags, so they live only on the internal (non-exported) test targets.
+let timingWarningFlags: [SwiftSetting] = [
+  .unsafeFlags([
+    "-Xfrontend", "-warn-long-function-bodies=100",
+    "-Xfrontend", "-warn-long-expression-type-checking=100",
+  ])
+]
+
+// Tests: strict + timing warnings + runtime actor data-race checks. (Built via `flatMap` to
+// avoid a slow `+`-chain type-check of the `[SwiftSetting]` literals in the manifest.)
+let actorDataRaceChecks: [SwiftSetting] = [.unsafeFlags(["-enable-actor-data-race-checks"])]
+let testSettings: [SwiftSetting] = [strictSettings, timingWarningFlags, actorDataRaceChecks].flatMap { $0 }
 
 let package = Package(
   name: "AppleDocsCore",
-  // Floor raised to macOS 15.6 (operator decision 2026-06-13): unlocks the
-  // Synchronization framework (Mutex/Atomic) + the modern concurrency APIs
-  // the P6 server leans on, while staying ≤ the macOS 26 production host
-  // (the dylib still loads there; x86_64 is not deprecated until the SDK's
-  // macOS 27 default, which the explicit floor still avoids). Linux unaffected.
-  platforms: [.macOS("15.6")],
+  // Aligned to g-cqd/ADJSON (operator directive): macOS one generation below the device
+  // platforms. Synchronization (Mutex/Atomic) ships in macOS 15 and Span/RawSpan back-deploy,
+  // so 15.0 suffices; the 2025-SDK-gated InlineArray/UTF8Span are intentionally not adopted.
+  // Linux unaffected (the dylib stays cross-platform; only ad-server is Apple-native).
+  platforms: [
+    .macOS(.v15), .iOS(.v26), .tvOS(.v26), .watchOS(.v26), .visionOS(.v26),
+  ],
   products: [
     .library(name: "AppleDocsCore", type: .dynamic, targets: ["ADCore"])
   ],
@@ -63,18 +81,18 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.34.1")
   ],
   targets: [
-    .target(name: "ADBase", swiftSettings: releaseCMO),
-    .target(name: "ADSearch", swiftSettings: releaseCMO),
-    .target(name: "ADArchive", swiftSettings: releaseCMO),
-    .target(name: "ADEmbed", swiftSettings: releaseCMO),
+    .target(name: "ADBase", swiftSettings: releaseCMO + strictSettings),
+    .target(name: "ADSearch", swiftSettings: releaseCMO + strictSettings),
+    .target(name: "ADArchive", swiftSettings: releaseCMO + strictSettings),
+    .target(name: "ADEmbed", swiftSettings: releaseCMO + strictSettings),
     // Content pipeline (RFC 0004): reuses ADEmbed's engine-derived JS
     // string semantics (CaseFolding = JS toLowerCase, jsWhitespace = JS
     // trim/\s) and ADBase's ordered JSON.
-    .target(name: "ADContent", dependencies: ["ADBase", "ADEmbed"], swiftSettings: releaseCMO),
+    .target(name: "ADContent", dependencies: ["ADBase", "ADEmbed"], swiftSettings: releaseCMO + strictSettings),
     // Render service (RFC 0003 P3-darwin): symbol/font renderers. darwin
     // links CoreText/AppKit; the Linux slice compiles to stubs (#if
     // canImport) so the dylib still builds with no AppKit/CoreText.
-    .target(name: "ADRender", dependencies: ["ADBase"], swiftSettings: releaseCMO),
+    .target(name: "ADRender", dependencies: ["ADBase"], swiftSettings: releaseCMO + strictSettings),
     // Tiny C shim to call the dlsym'd variadic `sqlite3_config` with the
     // correct ABI (disables the global memstatus allocator mutex — RFC 0001 P6).
     .target(name: "CSQLiteShim"),
@@ -85,17 +103,19 @@ let package = Package(
     // (enrichment) — both dlopen'd, so the dylib stays zero external dep.
     .target(
       name: "ADStorage", dependencies: ["ADBase", "ADArchive", "CSQLiteShim"],
-      swiftSettings: releaseCMO),
+      swiftSettings: releaseCMO + strictSettings),
     // Search cascade (RFC 0001 P6): the byte-exact in-process port of the JS
     // lexical search (fts-query-builder, intent, the tier merge, ranking,
     // projection). SERVER-ONLY — used by ad-server, NOT by the libAppleDocsCore
     // dylib (which stays zero-dep). Max strict concurrency.
     .target(
       name: "ADSearchCascade", dependencies: ["ADStorage", "ADContent", "ADBase"],
-      swiftSettings: releaseCMO + strictConcurrency),
+      swiftSettings: releaseCMO + strictSettings),
     // Dev-only reference dump for the flipped fixture generator (RFC 0002
     // §6h); not shipped — the dylib product above is unchanged.
-    .executableTarget(name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump"),
+    .executableTarget(
+      name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump",
+      swiftSettings: releaseCMO + strictSettings),
     // RFC 0005 — the server ENGINE (the optimizable layer): NIO bootstrap, HTTP/1.1
     // on swift-http-types, the response envelope + middleware, the `.storage`
     // offload, swift-log, and (Phase C+) the MCP JSON-RPC core + transports.
@@ -114,7 +134,7 @@ let package = Package(
         .product(name: "ADJSON", package: "ADJSON"),
         "ADStorage",
       ],
-      swiftSettings: releaseCMO + strictConcurrency),
+      swiftSettings: releaseCMO + strictSettings),
     // RFC 0005 — the endpoint DSL: @RouteBuilder, Route/Group, the typed Path
     // (RegexBuilder captures), RequestContext, RouteQuery, ResponseContent, the
     // .cache/.storage modifiers (and the Tool DSL in Phase C). Sees only
@@ -126,7 +146,7 @@ let package = Package(
         .product(name: "HTTPTypes", package: "swift-http-types"),
         .product(name: "ADJSON", package: "ADJSON"),
       ],
-      swiftSettings: releaseCMO + strictConcurrency),
+      swiftSettings: releaseCMO + strictSettings),
     // P6 first slice: the in-house SwiftNIO HTTP host spike (RFC 0001 P6), now the
     // RFC 0005 app layer — endpoint declarations + Services over the engine + DSL.
     // Serves /healthz + /search + the web routes over ADStorage IN-PROCESS (no FFI).
@@ -143,17 +163,17 @@ let package = Package(
         "ADStorage",
         "ADSearchCascade",
       ],
-      path: "Sources/ADServer", swiftSettings: releaseCMO + strictConcurrency),
+      path: "Sources/ADServer", swiftSettings: releaseCMO + strictSettings),
     .target(
       name: "ADCore",
       dependencies: ["ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent", "ADRender", "ADStorage"],
-      swiftSettings: releaseCMO),
-    .testTarget(name: "ADBaseTests", dependencies: ["ADBase"]),
-    .testTarget(name: "ADSearchTests", dependencies: ["ADSearch"]),
-    .testTarget(name: "ADArchiveTests", dependencies: ["ADArchive"]),
-    .testTarget(name: "ADCoreTests", dependencies: ["ADCore", "ADEmbed"]),
-    .testTarget(name: "ADEmbedTests", dependencies: ["ADEmbed"]),
-    .testTarget(name: "ADContentTests", dependencies: ["ADContent"]),
-    .testTarget(name: "ADStorageTests", dependencies: ["ADStorage"]),
+      swiftSettings: releaseCMO + strictSettings),
+    .testTarget(name: "ADBaseTests", dependencies: ["ADBase"], swiftSettings: testSettings),
+    .testTarget(name: "ADSearchTests", dependencies: ["ADSearch"], swiftSettings: testSettings),
+    .testTarget(name: "ADArchiveTests", dependencies: ["ADArchive"], swiftSettings: testSettings),
+    .testTarget(name: "ADCoreTests", dependencies: ["ADCore", "ADEmbed"], swiftSettings: testSettings),
+    .testTarget(name: "ADEmbedTests", dependencies: ["ADEmbed"], swiftSettings: testSettings),
+    .testTarget(name: "ADContentTests", dependencies: ["ADContent"], swiftSettings: testSettings),
+    .testTarget(name: "ADStorageTests", dependencies: ["ADStorage"], swiftSettings: testSettings),
   ]
 )

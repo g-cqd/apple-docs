@@ -2,7 +2,7 @@
 // src/search/relaxation.js. ASCII-centric by construction: JS `\w` is ASCII and
 // the CamelCase test is `[a-z][A-Z]`, so tokens (split on non-[\w.]) are ASCII.
 
-import ADContent
+public import ADContent
 
 enum Relaxation {
   static let stopwords: Set<String> = [

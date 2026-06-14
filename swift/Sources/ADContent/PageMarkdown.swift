@@ -6,7 +6,7 @@
 // `convertFile` is the batch-convert unit (D-0004-6): Swift owns the
 // read+parse+render so page bytes never round-trip through JS.
 
-import ADBase
+public import ADBase
 
 #if canImport(Darwin)
 import Darwin

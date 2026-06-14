@@ -34,8 +34,8 @@
 // result payload: count × [u32 len][markdown utf8], len 0xFFFFFFFF for a
 // page that failed (unreadable/malformed) — JS converts THAT page itself.
 
-import ADBase
-import ADContent
+public import ADBase
+public import ADContent
 
 // nullSentinel, renderIndexed, and lenPrefixedPayload are the shared
 // contract-v0 batch primitives in ADBase/BatchResult.swift.

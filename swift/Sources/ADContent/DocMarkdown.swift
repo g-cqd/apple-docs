@@ -4,7 +4,7 @@
 // request; contentJson parses onto a tape; sections render into a reused
 // section writer (the `if (rendered)` skip-if-empty protocol).
 
-import ADBase
+public import ADBase
 
 /// Nullable byte spans over the request buffer (nil = JS null/undefined).
 public struct DocFieldSpans {

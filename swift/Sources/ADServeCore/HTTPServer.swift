@@ -6,14 +6,14 @@
 // `.storage` request is offloaded to the NIOThreadPool with a pooled connection.
 // NO `@unchecked` (the sole contained one stays `ADStorage.StorageConnection`).
 
-import HTTPTypes
-import Logging
+public import HTTPTypes
+public import Logging
 import NIOCore
 import NIOHTTP1
 import NIOHTTPTypes
 import NIOHTTPTypesHTTP1
 import NIOPosix
-import ADStorage
+public import ADStorage
 
 /// The ad-server engine. Holds the immutable serving deps; `run()` binds the socket
 /// and serves until cancelled. The app builds the `routes` table (DSL) + the response
