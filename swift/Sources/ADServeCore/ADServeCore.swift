@@ -126,6 +126,33 @@ public final class ConnectionPool: Sendable {
   public func checkin(_ conn: StorageConnection) { free.withLock { $0.append(conn) } }
 }
 
+/// A single-owner, compile-enforced borrow of a pooled `StorageConnection`. Noncopyable, so
+/// it cannot be duplicated (no double-checkout) and the connection returns to the pool on
+/// `deinit` on every scope exit — replacing the manual `checkout()` + `defer { checkin() }`
+/// pair, where an early `return` between the two would silently leak a connection. Obtain one
+/// with `ConnectionPool.lease()`.
+public struct ConnectionLease: ~Copyable {
+  /// The borrowed connection — valid for the lease's lifetime; returned to the pool on `deinit`.
+  public let connection: StorageConnection
+  private let pool: ConnectionPool
+
+  fileprivate init(connection: StorageConnection, pool: ConnectionPool) {
+    self.connection = connection
+    self.pool = pool
+  }
+
+  deinit { pool.checkin(connection) }
+}
+
+extension ConnectionPool {
+  /// Borrow a connection as a noncopyable `ConnectionLease` that auto-returns on scope exit.
+  /// `nil` when the pool is momentarily drained (all `count` connections are checked out).
+  public func lease() -> ConnectionLease? {
+    guard let conn = checkout() else { return nil }
+    return ConnectionLease(connection: conn, pool: self)
+  }
+}
+
 // MARK: - Request / response value types
 
 /// The request as the DSL/app see it — pure swift-http-types, no NIO leakage.

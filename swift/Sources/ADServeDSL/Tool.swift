@@ -25,7 +25,7 @@ public enum ToolAnnotations {
 private let emptyObjectSchema: JSONValue = .object(["type": .string("object")])
 
 /// A tool with a typed `@Schemable` input. `.respond` finishes it.
-public struct TypedToolStub<Input: ADJSONSchemaProviding & Decodable> {
+public struct TypedToolStub<Input: ADJSONSchemaProviding & Decodable & Sendable> {
   let name: String
   let description: String
   let annotations: JSONValue
@@ -66,7 +66,7 @@ public struct ToolStub {
 
   /// Declare the tool's input type — `@Schemable & Decodable`. The schema is derived
   /// from the type; `.respond` receives the decoded value.
-  public func input<Input: ADJSONSchemaProviding & Decodable>(_ type: Input.Type)
+  public func input<Input: ADJSONSchemaProviding & Decodable & Sendable>(_ type: Input.Type)
     -> TypedToolStub<Input>
   {
     TypedToolStub(name: name, description: description, annotations: annotations)

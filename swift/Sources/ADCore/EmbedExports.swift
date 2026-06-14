@@ -22,8 +22,8 @@
 // reference to the mmap'd matrix (munmap runs when the last reference
 // drops), so row pointers never dangle.
 
-public import ADBase
-public import ADEmbed
+import ADBase
+import ADEmbed
 
 #if canImport(Darwin)
 import Darwin

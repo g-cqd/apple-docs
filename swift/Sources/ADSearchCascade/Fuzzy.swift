@@ -4,8 +4,8 @@
 // preserving candidate order for ties). framework/kind are deliberately ignored
 // here (the JS `_framework`/`_kind`) — filtering happens later on the records.
 
-public import ADContent
-public import ADStorage
+import ADContent
+import ADStorage
 
 enum Fuzzy {
   /// Levenshtein edit distance with early exit (returns maxDist+1 when exceeded).
