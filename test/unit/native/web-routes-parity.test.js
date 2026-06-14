@@ -18,6 +18,7 @@ import { listFontsHandler, fontFacesCssHandler } from '../../../src/web/routes/f
 import { symbolsIndexHandler } from '../../../src/web/routes/symbols-index.route.js'
 import { symbolsSearchHandler, symbolMetadataHandler } from '../../../src/web/routes/symbols.route.js'
 import { buildTitleIndex, buildAliasMap } from '../../../src/web/search-artifacts.js'
+import { buildFrameworkTreeData } from '../../../src/web/templates/framework.js'
 import { buildRobotsTxt, buildOpenSearchXml, buildApiCatalog, buildMcpServerCard } from '../../../src/web/discovery.js'
 import { VERSION } from '../../../src/lib/version.js'
 import { sha256 } from '../../../src/lib/hash.js'
@@ -82,6 +83,18 @@ if (existsSync(AD_SERVER)) {
   // Framework synonyms (Phase 3 aliases map).
   try { seed.db.run("INSERT INTO framework_synonyms (canonical, alias) VALUES ('swiftui', 'su')") } catch {}
   try { seed.db.run("INSERT INTO framework_synonyms (canonical, alias) VALUES ('uikit', 'uk')") } catch {}
+  // Framework tree (Phase 3b): a root + active pages + 'child' relationships.
+  seed.upsertRoot('treefw', 'TreeFW', 'framework', 'seed')
+  const treeRootId = seed.getRootBySlug('treefw').id
+  for (const [path, title, role, roleHeading] of [
+    ['treefw', 'TreeFW', 'collection', 'Framework'],
+    ['treefw/childa', 'ChildA', 'symbol', 'Class'],
+    ['treefw/childb', 'ChildB', 'symbol', 'Structure'],
+  ]) {
+    seed.upsertPage({ rootId: treeRootId, path, url: `https://x/${path}`, title, role, roleHeading })
+  }
+  seed.db.run("UPDATE documents SET framework = 'treefw' WHERE key LIKE 'treefw%'")
+  seed.replaceDocumentRelationships('treefw', [{ toKey: 'treefw/childa', relationType: 'child' }, { toKey: 'treefw/childb', relationType: 'child' }])
   seed.close()
   db = new DocsDatabase(dbPath)
   server = Bun.spawn([
@@ -251,5 +264,24 @@ describe.skipIf(!existsSync(AD_SERVER))('web-routes parity (Swift ad-server == J
     expect(titleFile).toBe(`title-index.${sha256(titleBody).slice(0, 10)}.json`)
     expect(titleRes.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
     expectIntrinsic(titleBody, JSON.stringify(titleIndex))
+  })
+
+  test('GET /data/frameworks/<slug>/tree.<hash>.json — intrinsic (edges + docs)', async () => {
+    const root = db.getRootBySlug('treefw')
+    const docs = db.getPagesByRoot('treefw')
+    const edges = db.getFrameworkTree('treefw')
+    const { json: expected, hasTree } = buildFrameworkTreeData(root, docs, edges, { baseUrl: SITE.baseUrl })
+    expect(hasTree).toBe(true)
+    const hash = sha256(expected).slice(0, 10)  // the <hash> is cache-busting; ad-server serves current
+    const res = await fetch(`http://127.0.0.1:${PORT}/data/frameworks/treefw/tree.${hash}.json`)
+    expect(res.status).toBe(200)
+    expectIntrinsic(await res.text(), expected)
+    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+  })
+
+  test('GET /data/frameworks/<slug>/tree.<hash>.json — 404 unknown framework', async () => {
+    const res = await fetch(`http://127.0.0.1:${PORT}/data/frameworks/nope/tree.0123456789.json`)
+    expect(res.status).toBe(404)
   })
 })

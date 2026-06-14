@@ -150,6 +150,27 @@ enum WebRoutes {
     return WebJSON.encode(manifest)
   }
 
+  /// GET /data/frameworks/<slug>/tree.<hash>.json (framework-tree.route.js +
+  /// framework.js buildFrameworkTreeData). nil = 404 (no root, or no child edges).
+  /// `docs` is a dynamic-key object (order-free under intrinsic).
+  static func frameworkTree(_ conn: StorageConnection, slug: String, baseUrl: String) -> [UInt8]? {
+    guard conn.frameworkRootExists(slug) else { return nil }
+    let edges = conn.frameworkTreeEdges(slug)
+    guard !edges.isEmpty else { return nil }
+    var docs: [String: JSONValue] = [:]
+    for doc in conn.frameworkTreeDocs(slug) {
+      docs[doc.path] = .object([
+        "title": .string(doc.title ?? doc.path),
+        "role_heading": .string(doc.roleHeading ?? doc.role ?? "Other"),
+        "href": .string("\(baseUrl)/docs/\(safeWebDocKey(doc.path))/"),
+      ])
+    }
+    let edgeValues: [JSONValue] = edges.map {
+      .object(["from_key": .string($0.fromKey), "to_key": .string($0.toKey)])
+    }
+    return encodeJSONValue(.object(["edges": .array(edgeValues), "docs": .object(docs)]))
+  }
+
   /// GET /readyz — instance readiness (the DB probe). Instance-identified shape
   /// (like /healthz), not parity-gated; 503 when the read pool can't answer.
   static func readyz(dbOk: Bool) -> WebResponse {
@@ -287,4 +308,24 @@ func matchHashedSearchArtifact(_ path: Substring) -> String? {
     return base
   }
   return nil
+}
+
+/// src/lib/safe-path.js safeWebDocKey — identity for keys ≤ 200 bytes (every real
+/// doc key). The oversized-segment SHA-1 hashing (a >200-byte path SEGMENT) is not
+/// ported (vanishingly rare); the parity gate covers the identity path.
+private func safeWebDocKey(_ key: String) -> String { key }
+
+/// Matches `^/data/frameworks/([^/]+)/tree\.([0-9a-f]{10})\.json$` → the slug.
+func matchFrameworkTreePath(_ path: Substring) -> String? {
+  let prefix = "/data/frameworks/"
+  guard path.hasPrefix(prefix), path.hasSuffix(".json") else { return nil }
+  let middle = path[
+    path.index(path.startIndex, offsetBy: prefix.count)..<path.index(path.endIndex, offsetBy: -5)]
+  guard let r = middle.range(of: "/tree.") else { return nil }
+  let slug = middle[..<r.lowerBound]
+  let hash = middle[r.upperBound...]
+  guard !slug.isEmpty, !slug.contains("/"), hash.count == 10,
+    hash.allSatisfy({ ($0 >= "0" && $0 <= "9") || ($0 >= "a" && $0 <= "f") })
+  else { return nil }
+  return String(slug)
 }
