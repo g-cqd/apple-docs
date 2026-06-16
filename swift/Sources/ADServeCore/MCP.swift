@@ -11,7 +11,7 @@ public import ADStorage
 
 // MARK: - JSONValue helpers (minimal, ADJSON-agnostic)
 
-public func jsonObject(_ value: JSONValue?) -> [String: JSONValue]? {
+public func jsonObject(_ value: JSONValue?) -> OrderedDictionary<String, JSONValue>? {
   if case .object(let object)? = value { return object }
   return nil
 }
@@ -140,7 +140,7 @@ public struct MCPDispatcher: Sendable {
   private func initializeResult(_ params: JSONValue) -> JSONValue {
     let requested = jsonString(jsonMember(params, "protocolVersion"))
     let version = (requested.map(Self.supportedVersions.contains) == true) ? requested! : "2025-11-25"
-    var result: [String: JSONValue] = [
+    var result: OrderedDictionary<String, JSONValue> = [
       "protocolVersion": .string(version),
       "capabilities": .object([
         "resources": .object(["listChanged": .bool(true)]),
