@@ -102,7 +102,7 @@ enum WebRoutes {
   ) -> [UInt8] {
     let results = conn.searchSfSymbols(query: query, scope: scope, limit: limit)
       .map { JSONValue.object(symbolRowObject($0)) }
-    var obj: [String: JSONValue] = [:]
+    var obj: OrderedDictionary<String, JSONValue> = [:]
     obj["results"] = .array(results)
     obj["query"] = .string(query)
     obj["scope"] = scope.map { .string($0) } ?? .null
@@ -159,7 +159,7 @@ enum WebRoutes {
     guard conn.frameworkRootExists(slug) else { return nil }
     let edges = conn.frameworkTreeEdges(slug)
     guard !edges.isEmpty else { return nil }
-    var docs: [String: JSONValue] = [:]
+    var docs: OrderedDictionary<String, JSONValue> = [:]
     for doc in conn.frameworkTreeDocs(slug) {
       docs[doc.path] = .object([
         "title": .string(doc.title ?? doc.path),
@@ -231,8 +231,8 @@ private func encodeJSONValue(_ value: JSONValue) -> [UInt8] {
 /// The full `sf_symbols` row as JS emits it (`...row` + the 4 parsed `*_json`):
 /// every column verbatim (`bitmap_only`/`render_unsupported` stay 0/1 ints), then
 /// the parsed categories/keywords/aliases/availability.
-private func symbolRowObject(_ row: SfSymbolRow) -> [String: JSONValue] {
-  var obj: [String: JSONValue] = [:]
+private func symbolRowObject(_ row: SfSymbolRow) -> OrderedDictionary<String, JSONValue> {
+  var obj: OrderedDictionary<String, JSONValue> = [:]
   obj["name"] = .string(row.name)
   obj["scope"] = .string(row.scope)
   obj["categories_json"] = strOrNull(row.categoriesJson)

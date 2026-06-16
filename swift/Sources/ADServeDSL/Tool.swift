@@ -42,8 +42,9 @@ public struct TypedToolStub<Input: ADJSONSchemaProviding & Decodable & Sendable>
       definition: MCPToolDefinition(
         name: name, description: description, inputSchema: schema, annotations: annotations),
       handler: { arguments, context in
-        guard let data = try? arguments.encoded(),
-          let decoded = try? ADJSON.JSONDecoder().decode(Input.self, from: data)
+        // Decode straight from the already-parsed `arguments` JSONValue — no
+        // re-serialize + re-parse round-trip (ADJSON `decode(_:from: JSONValue)`).
+        guard let decoded = try? ADJSON.JSONDecoder().decode(Input.self, from: arguments)
         else { return .failure("Invalid arguments for tool \(name).") }
         return handler(decoded, context)
       })

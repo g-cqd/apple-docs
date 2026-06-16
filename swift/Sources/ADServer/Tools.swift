@@ -185,7 +185,7 @@ private func listTaxonomy(_ input: ListTaxonomyInput, _ ctx: MCPToolContext) -> 
   if let field = input.field?.rawValue, let match = fields.first(where: { $0.name == field }) {
     return encodePayload(.object([field: entries(match.column)]))
   }
-  var out: [String: JSONValue] = [:]
+  var out: OrderedDictionary<String, JSONValue> = [:]
   for field in fields { out[field.name] = entries(field.column) }
   return encodePayload(.object(out))
 }
@@ -264,7 +264,7 @@ private func browse(_ input: BrowseInput, _ ctx: MCPToolContext) -> MCPToolResul
   // Flat pages — MCP passes defaultLimit 100; an explicit limit is clamped ≥ 1.
   let limit = input.limit.map { max($0, 1) } ?? 100
   let pages = Array(allPages.prefix(limit))
-  var out: [String: JSONValue] = ["framework": .string(root.displayName)]
+  var out: OrderedDictionary<String, JSONValue> = ["framework": .string(root.displayName)]
   if let year = input.year { out["year"] = .number(Double(year)) }
   out["pages"] = .array(
     pages.map { page in
