@@ -1,19 +1,19 @@
-// The NIO bootstrap + the async serving loop + the response-writing envelope
-// (RFC 0005/0007 engine). One NIO listener per `ListenerConfig`, all sharing one
-// event-loop group, offload thread pool, connection pool, and response envelope (the
-// central shared pool). Each listener speaks its `Wire`: plaintext HTTP/1.1, or — under
-// TLS — HTTP/1.1 and/or HTTP/2 chosen by ALPN. Both versions bridge to the SAME
-// `HTTPRequest`/`HTTPResponse`/`HTTPFields` value types (RFC 0006 H1) via the NIOHTTPTypes
-// codecs, so one `serveConnection` loop serves an h1 connection or an h2 stream identically.
-// Fully structured concurrency: each listener is a child task of `run()`; each connection (or
-// h2 stream) a child task of its accept loop; the one blocking handler per `.storage` request
-// is offloaded to the NIOThreadPool with a pooled connection. NO `@unchecked` (the sole
-// contained one stays `ADStorage.StorageConnection`).
+// The NIO bootstrap + the async serving loop + the response-writing envelope.
+// One NIO listener per `ListenerConfig`, all sharing one event-loop group,
+// offload thread pool, connection pool, and response envelope. Each listener
+// speaks its `Wire`: plaintext HTTP/1.1, or — under TLS — HTTP/1.1 and/or
+// HTTP/2 chosen by ALPN. Both versions bridge to the SAME
+// `HTTPRequest`/`HTTPResponse`/`HTTPFields` value types via the NIOHTTPTypes
+// codecs, so one `serveConnection` loop serves an h1 connection or an h2
+// stream identically. Fully structured concurrency: each listener is a child
+// task of `run()`; each connection (or h2 stream) a child task of its accept
+// loop; the one blocking handler per `.storage` request is offloaded to the
+// NIOThreadPool with a pooled connection.
 
 public import HTTPTypes
 public import Logging
-import Dispatch
 import NIOCore
+import NIOExtras
 import NIOHTTP1
 import NIOHTTP2
 import NIOHTTPTypes
@@ -21,14 +21,10 @@ import NIOHTTPTypesHTTP1
 import NIOHTTPTypesHTTP2
 import NIOPosix
 import NIOSSL
+import ServiceLifecycle
 import Synchronization
+import UnixSignals
 import ADStorage
-
-#if canImport(Darwin)
-import Darwin
-#else
-import Glibc
-#endif
 
 // NIOTransportServices (Network.framework) is Apple-only; the engine falls back to NIOPosix
 // elsewhere so the package still builds on Linux (the dylib + CI stay cross-platform).
@@ -96,13 +92,31 @@ public struct HTTPServer: Sendable {
     threadPool.start()
     let group = makeEventLoopGroup()
 
+    // Serve under a `ServiceGroup` in its own scope, so the listeners + quiescing helpers
+    // (each holds an event-loop promise) are released BEFORE the ELG is torn down — otherwise
+    // their teardown would schedule on an already-shutdown event loop.
+    try await serveUntilShutdown(group: group, threadPool: threadPool)
+
+    try? await group.shutdownGracefully()
+    try? await threadPool.shutdownGracefully()
+    logger.info("ad-server stopped")
+  }
+
+  /// Binds the listeners and serves them under a `ServiceGroup` until graceful shutdown. Scoped
+  /// so every NIO value that holds an event-loop promise (the listeners + quiescing helpers) is
+  /// released when this returns, before the caller tears the ELG down.
+  private func serveUntilShutdown(group: any EventLoopGroup, threadPool: NIOThreadPool) async throws {
     // Bind every listener up front, keeping the underlying server channels so a shutdown can
     // stop accepting (closing a listening channel ends its accept loop; existing connections
-    // are untouched and drain on their own).
+    // are untouched and drain on their own). One `ServerQuiescingHelper` per listener tracks
+    // its accepted child channels so a drain can close them cleanly (no task cancellation).
     var serverChannels: [any Channel] = []
+    var quiescers: [ServerQuiescingHelper] = []
     var serveTasks: [@Sendable () async -> Void] = []
     for listener in listeners {
       let routes = listener.routes
+      let quiesce = ServerQuiescingHelper(group: group)
+      quiescers.append(quiesce)
       logger.info(
         "ad-server listening",
         metadata: [
@@ -111,13 +125,13 @@ public struct HTTPServer: Sendable {
           "threads": "\(threadCount)", "loops": "\(loopCount)",
         ])
       if listener.wire.tls != nil {
-        let serverChannel = try await bindSecure(listener, group: group)
+        let serverChannel = try await bindSecure(listener, group: group, quiesce: quiesce)
         serverChannels.append(serverChannel.channel)
         serveTasks.append {
           await serveSecureListener(serverChannel, routes: routes, threadPool: threadPool)
         }
       } else {
-        let serverChannel = try await bindPlain(listener, group: group)
+        let serverChannel = try await bindPlain(listener, group: group, quiesce: quiesce)
         serverChannels.append(serverChannel.channel)
         serveTasks.append {
           await servePlainListener(serverChannel, routes: routes, threadPool: threadPool)
@@ -126,73 +140,22 @@ public struct HTTPServer: Sendable {
     }
     readiness?.set(true)
 
-    // Graceful lifecycle: serve until SIGTERM/SIGINT, then stop accepting and let in-flight
-    // requests drain (bounded by `drainSeconds`), then force-close. Finally shut the ELG +
-    // offload pool down cleanly.
-    let channelsToClose = serverChannels
-    let tasks = serveTasks
-    await withTaskGroup(of: ShutdownPhase.self) { taskGroup in
-      taskGroup.addTask {
-        await withDiscardingTaskGroup { serving in
-          for serve in tasks { serving.addTask { await serve() } }
-        }
-        return .listenersFinished
-      }
-      taskGroup.addTask { await Self.awaitShutdownSignal(logger: logger); return .signal }
-
-      if await taskGroup.next() == .signal {
-        readiness?.set(false)
-        logger.info("ad-server draining (stop accepting)")
-        for channel in channelsToClose { channel.close(promise: nil) }
-        // Wait for in-flight requests to finish (idle keep-alive connections are ignored),
-        // bounded by the drain deadline; then force-close everything.
-        let deadline = ContinuousClock.now.advanced(by: .seconds(Self.drainSeconds))
-        while active.count > 0 && ContinuousClock.now < deadline {
-          try? await Task.sleep(for: .milliseconds(50))
-        }
-        if active.count > 0 {
-          logger.warning(
-            "ad-server drain deadline exceeded; forcing close",
-            metadata: ["inflight": "\(active.count)"])
-        }
-      }
-      taskGroup.cancelAll()
+    // Serve: SIGTERM/SIGINT trigger graceful shutdown, which stops accepting, drains in-flight
+    // requests (bounded by `drainSeconds`), then quiesces the connections.
+    let service = ServingService(
+      serveTasks: serveTasks, channels: serverChannels, quiescers: quiescers, group: group,
+      active: active, readiness: readiness, drainSeconds: Self.drainSeconds, logger: logger)
+    let serviceGroup = ServiceGroup(
+      services: [service], gracefulShutdownSignals: [.sigterm, .sigint], logger: logger)
+    do {
+      try await serviceGroup.run()
+    } catch {
+      logger.error("ad-server service group failed", metadata: ["error": "\(error)"])
     }
-
-    try? await group.shutdownGracefully()
-    try? await threadPool.shutdownGracefully()
-    logger.info("ad-server stopped")
   }
 
   /// Max seconds to let in-flight requests finish after a shutdown signal before forcing close.
   private static let drainSeconds = 25
-
-  private enum ShutdownPhase: Sendable, Equatable { case listenersFinished, signal }
-
-  /// Suspends until SIGTERM or SIGINT.
-  private static func awaitShutdownSignal(logger: Logger) async {
-    for await sig in shutdownSignals() {
-      logger.info("ad-server received signal \(sig); shutting down")
-      return
-    }
-  }
-
-  /// SIGTERM/SIGINT as an `AsyncStream` — Dispatch signal sources (the default handlers are
-  /// ignored so the sources receive them) bridged to Swift concurrency.
-  private static func shutdownSignals() -> AsyncStream<CInt> {
-    AsyncStream { continuation in
-      signal(SIGTERM, SIG_IGN)
-      signal(SIGINT, SIG_IGN)
-      let queue = DispatchQueue(label: "ad-server.signals")
-      let sources = [SIGTERM, SIGINT].map { sig -> any DispatchSourceSignal in
-        let source = DispatchSource.makeSignalSource(signal: sig, queue: queue)
-        source.setEventHandler { continuation.yield(sig) }
-        source.resume()
-        return source
-      }
-      continuation.onTermination = { _ in sources.forEach { $0.cancel() } }
-    }
-  }
 
   /// The event-loop group for the configured transport: NIOTransportServices
   /// (Network.framework) on Apple when `.network`, else NIOPosix.
@@ -212,6 +175,19 @@ public struct HTTPServer: Sendable {
       .childChannelOption(ChannelOptions.socketOption(.tcp_nodelay), value: 1)
   }
 
+  /// Installs the quiescing helper's collector on a server channel, so the drain can close
+  /// every accepted child channel (each child closes on `ChannelShouldQuiesceEvent`).
+  private func quiesceInitializer(_ quiesce: ServerQuiescingHelper)
+    -> @Sendable (any Channel) -> EventLoopFuture<Void>
+  {
+    { channel in
+      channel.eventLoop.makeCompletedFuture {
+        try channel.pipeline.syncOperations.addHandler(
+          quiesce.makeServerChannelHandler(channel: channel))
+      }
+    }
+  }
+
   /// The plaintext HTTP/1.1 child pipeline — shared by both transports.
   private func plainInitializer() -> @Sendable (any Channel) -> EventLoopFuture<EngineConnection> {
     { childChannel in
@@ -219,6 +195,7 @@ public struct HTTPServer: Sendable {
         try childChannel.pipeline.syncOperations.configureHTTPServerPipeline()
         // Bridge NIO's HTTP/1 parts ↔ swift-http-types parts (server, plaintext).
         try childChannel.pipeline.syncOperations.addHandler(HTTP1ToHTTPServerCodec(secure: false))
+        try Self.addIdleTimeout(childChannel)
         return try EngineConnection(wrappingChannelSynchronously: childChannel)
       }
     }
@@ -226,16 +203,18 @@ public struct HTTPServer: Sendable {
 
   /// Binds one plaintext HTTP/1.1 listener on the configured transport.
   private func bindPlain(
-    _ listener: ListenerConfig, group: any EventLoopGroup
+    _ listener: ListenerConfig, group: any EventLoopGroup, quiesce: ServerQuiescingHelper
   ) async throws -> NIOAsyncChannel<EngineConnection, Never> {
     #if canImport(Network)
     if transport == .network {
       return try await NIOTSListenerBootstrap(group: group)
+        .serverChannelInitializer(quiesceInitializer(quiesce))
         .bind(
           host: listener.host, port: listener.port, childChannelInitializer: plainInitializer())
     }
     #endif
     return try await baseBootstrap(group)
+      .serverChannelInitializer(quiesceInitializer(quiesce))
       .bind(host: listener.host, port: listener.port, childChannelInitializer: plainInitializer())
   }
 
@@ -245,7 +224,7 @@ public struct HTTPServer: Sendable {
   /// on) can proceed; `serveSecureListener` awaits the result per connection. `autoRead` lets
   /// the handshake bytes flow before the inner per-connection channel takes over reads.
   private func bindSecure(
-    _ listener: ListenerConfig, group: any EventLoopGroup
+    _ listener: ListenerConfig, group: any EventLoopGroup, quiesce: ServerQuiescingHelper
   ) async throws -> NIOAsyncChannel<EventLoopFuture<EngineNegotiated>, Never> {
     #if canImport(Network)
     if transport == .network {
@@ -254,6 +233,7 @@ public struct HTTPServer: Sendable {
     #endif
     let sslContext = try makeTLSContext(listener.wire.tls!, alpn: listener.wire.alpn)
     return try await baseBootstrap(group)
+      .serverChannelInitializer(quiesceInitializer(quiesce))
       .childChannelOption(ChannelOptions.autoRead, value: true)
       .bind(host: listener.host, port: listener.port) { childChannel in
         childChannel.eventLoop.makeCompletedFuture {
@@ -267,6 +247,7 @@ public struct HTTPServer: Sendable {
             http1ConnectionInitializer: { channel in
               channel.eventLoop.makeCompletedFuture {
                 try channel.pipeline.syncOperations.addHandler(HTTP1ToHTTPServerCodec(secure: true))
+                try Self.addIdleTimeout(channel)
                 return try EngineConnection(wrappingChannelSynchronously: channel)
               }
             },
@@ -378,6 +359,14 @@ public struct HTTPServer: Sendable {
             requestHead = head
             body = []
             overflow = false
+            // Pre-size from Content-Length (capped at the body limit) so body
+            // accumulation doesn't repeatedly grow-and-copy; a lying length
+            // can't force an oversized reservation.
+            if let lengthField = head.headerFields[.contentLength], let length = Int(lengthField),
+              length > 0
+            {
+              body.reserveCapacity(min(length, Self.maxBodyBytes))
+            }
           case .body(let buffer):
             if !overflow {
               body.append(contentsOf: buffer.readableBytesView)
@@ -407,8 +396,22 @@ public struct HTTPServer: Sendable {
     }
   }
 
-  /// 1 MiB request-body cap (matches the JS MCP `http-body.js`). Larger → 413 + close.
+  /// 1 MiB request-body cap. Larger → 413 + close.
   private static let maxBodyBytes = 1_000_000
+
+  /// Read-idle deadline per connection/stream. Positioned after HTTP decoding, so
+  /// the timer resets on each decoded request part, not on raw bytes: a peer that
+  /// connects and stalls (or dribbles an incomplete request) is closed instead of
+  /// pinning a slot indefinitely (slowloris, CWE-400). Generous vs. the ms-scale
+  /// handler latency, so it never trips a legitimate in-flight request.
+  private static let idleTimeout = TimeAmount.seconds(60)
+
+  /// Installs the read-idle timeout + the close-on-idle handler at the tail of the
+  /// (already-built) HTTP child pipeline, just before the async-channel sink.
+  private static func addIdleTimeout(_ channel: any Channel) throws {
+    try channel.pipeline.syncOperations.addHandler(IdleStateHandler(readTimeout: idleTimeout))
+    try channel.pipeline.syncOperations.addHandler(IdleTimeoutHandler())
+  }
 
   private func writeBodyTooLarge(
     to head: HTTPRequest, outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>, isHTTP2: Bool
@@ -519,5 +522,101 @@ public struct HTTPServer: Sendable {
   private func isKeepAlive(_ head: HTTPRequest) -> Bool {
     guard let connection = head.headerFields[.connection]?.lowercased() else { return true }
     return !connection.contains("close")
+  }
+}
+
+/// The serving + graceful-drain lifecycle as a `swift-service-lifecycle` `Service`. The accept
+/// loops run inline (the task-group body); a single coordinator child task waits for graceful
+/// shutdown, then stops accepting (closes the server channels — the accept loops end naturally,
+/// no cancellation), drains in-flight requests (bounded by `drainSeconds`), and quiesces the
+/// connections (each child closes on `ChannelShouldQuiesceEvent`). The accept loops then return
+/// on their own; `cancelAll` only ever reaches the coordinator (the inline serving is already
+/// done by then), so no accept loop is cancelled mid-flight — which previously orphaned
+/// just-accepted `NIOAsyncChannel`s (their writers deinited without `finish()`).
+private struct ServingService: Service {
+  let serveTasks: [@Sendable () async -> Void]
+  let channels: [any Channel]
+  let quiescers: [ServerQuiescingHelper]
+  let group: any EventLoopGroup
+  let active: ActiveRequests
+  let readiness: ServerReadiness?
+  let drainSeconds: Int
+  let logger: Logger
+
+  private enum Phase: Sendable, Equatable { case served, signalled }
+
+  func run() async throws {
+    await withTaskGroup(of: Phase.self) { taskGroup in
+      // The accept loops; ends once every connection (and the listeners) close.
+      taskGroup.addTask {
+        await withDiscardingTaskGroup { serving in
+          for serve in serveTasks { serving.addTask { await serve() } }
+        }
+        return .served
+      }
+      // The graceful-shutdown waiter.
+      taskGroup.addTask {
+        do { try await gracefulShutdown() } catch {}
+        return .signalled
+      }
+
+      if await taskGroup.next() == .signalled {
+        readiness?.set(false)
+        logger.info("ad-server draining (stop accepting)")
+        // Stop READING new connections first (don't close the listeners yet): closing a
+        // listening channel while a child is mid-accept makes NIOAsyncChannelHandler drop
+        // that child's writer in `channelActive` (deinit-without-finish trap). With autoRead
+        // off, the kernel's accept queue stops draining into NIO, so no child is in flight
+        // when the quiescer finally closes the listeners.
+        for channel in channels { _ = channel.setOption(ChannelOptions.autoRead, value: false) }
+        try? await Task.sleep(for: .milliseconds(100))
+        // Wait for in-flight requests to finish (idle keep-alive connections are ignored),
+        // bounded by the drain deadline.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(drainSeconds))
+        while active.count > 0 && ContinuousClock.now < deadline {
+          try? await Task.sleep(for: .milliseconds(50))
+        }
+        if active.count > 0 {
+          logger.warning(
+            "ad-server drain deadline exceeded; forcing close",
+            metadata: ["inflight": "\(active.count)"])
+        }
+        // Quiesce (close the listeners + every still-open connection — each child closes on
+        // `ChannelShouldQuiesceEvent`) and AWAIT completion, so the ELG isn't torn down with
+        // channel-close work still pending (which would schedule on a shut-down event loop).
+        await withTaskGroup(of: Void.self) { quiesceGroup in
+          for quiesce in quiescers {
+            quiesceGroup.addTask {
+              let promise = group.next().makePromise(of: Void.self)
+              quiesce.initiateShutdown(promise: promise)
+              try? await promise.futureResult.get()
+            }
+          }
+        }
+        // Also await the listening channels' full close, so no channel-close work is still
+        // queued on the event loops when the caller tears the group down afterwards.
+        for channel in channels { try? await channel.closeFuture.get() }
+        _ = await taskGroup.next()  // the accept loops, now that connections have closed
+      } else {
+        // Listeners finished on their own; end the still-suspended graceful-shutdown waiter.
+        taskGroup.cancelAll()
+      }
+    }
+  }
+}
+
+/// Closes the connection on the read-idle deadline (`IdleStateHandler`) or when the server
+/// quiesces (`ChannelShouldQuiesceEvent`, fired by `ServerQuiescingHelper` during a drain —
+/// closing here ends the connection's inbound so `executeThenClose` finishes its writer
+/// cleanly); forwards every other inbound user event untouched.
+private final class IdleTimeoutHandler: ChannelInboundHandler {
+  typealias InboundIn = HTTPRequestPart
+
+  func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+    if event is IdleStateHandler.IdleStateEvent || event is ChannelShouldQuiesceEvent {
+      context.close(promise: nil)
+    } else {
+      context.fireUserInboundEventTriggered(event)
+    }
   }
 }
