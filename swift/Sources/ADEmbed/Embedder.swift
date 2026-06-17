@@ -1,7 +1,6 @@
 // The model2vec embedder: Tokenizer + MatrixArtifact → unit-norm f32
-// vectors, mirroring src/search/embedder.js buildModel2Vec bit-for-bit:
-// ids = tokenize(text) with the `[0]` ([PAD] row) substitution for empty
-// outputs, then normalize(mean(rows)) per the probed graph semantics
+// vectors. ids = tokenize(text) with the `[0]` ([PAD] row) substitution for
+// empty outputs, then normalize(mean(rows)) per the probed graph semantics
 // (Pooling.swift). No truncation, no extra normalization — the model2vec
 // path applies neither.
 
@@ -23,7 +22,10 @@ public struct Embedder: Sendable {
 
   public func embed(_ text: String) throws(EmbedError) -> [Float] {
     var ids = tokenizer.encode(text)
-    if ids.isEmpty { ids = [0] } // EmbeddingBag needs ≥1 token (embedder.js)
+    if ids.isEmpty { ids = [0] }  // EmbeddingBag needs ≥1 token
+    // The row pointers alias `self.matrix`'s mmap; the stored `matrix` keeps it
+    // alive for this whole synchronous call, and the pointers are consumed by
+    // `Pooling` below and never escape `embed`, so the borrow stays sound.
     var rows: [UnsafePointer<Float>] = []
     rows.reserveCapacity(ids.count)
     for id in ids {
