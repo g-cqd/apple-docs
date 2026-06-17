@@ -1,7 +1,6 @@
-// JSON framing for the in-process web routes (RFC 0001 P6 web slice). Each
-// builder emits bytes byte-identical to the Bun handler's `Response.json(...)`
-// body via the streaming writer (caller-ordered keys). Storage stays typed
-// (ADStorage returns facets/rows); presentation lives here.
+// JSON framing for the in-process web routes. Each builder emits bytes via the
+// streaming writer (caller-ordered keys). Storage stays typed (ADStorage returns
+// facets/rows); presentation lives here.
 
 import ADJSON
 import ADServeCore
@@ -10,7 +9,7 @@ import Foundation
 import HTTPTypes
 
 enum WebRoutes {
-  /// GET /api/filters body (src/web/routes/filters.route.js).
+  /// GET /api/filters body.
   static func filters(_ conn: StorageConnection) -> [UInt8] {
     let facets = conn.searchFilters()
     var w = JSONStreamWriter(capacity: 1024)
@@ -45,9 +44,8 @@ enum WebRoutes {
     return w.finish()
   }
 
-  /// GET /api/fonts (fonts.route.js → projectListAppleFonts): `{families:[{id,
-  /// files:[{id,file_name}]}]}`. The `name` key is never emitted — the schema has
-  /// `display_name`, not `name`, so projectListAppleFonts omits it.
+  /// GET /api/fonts: `{families:[{id, files:[{id,file_name}]}]}`. The `name` key is
+  /// never emitted — the schema has `display_name`, not `name`.
   static func fonts(_ conn: StorageConnection) -> [UInt8] {
     let families = conn.listAppleFonts().map { family in
       FontsResponse.Family(
@@ -57,7 +55,7 @@ enum WebRoutes {
     return WebJSON.encode(FontsResponse(families: families))
   }
 
-  /// GET /api/fonts/faces.css (fonts.route.js fontFacesCssHandler → buildFontFaceCss).
+  /// GET /api/fonts/faces.css.
   static func fontFacesCss(_ conn: StorageConnection, baseUrl: String) -> [UInt8] {
     let families = conn.listAppleFonts()
     var rules: [String] = []
@@ -75,8 +73,8 @@ enum WebRoutes {
     return Array(rules.joined(separator: "\n").utf8)
   }
 
-  /// GET /api/symbols/index.json (symbols-index.route.js → listCatalog). Built as
-  /// `JSONValue` because codepoint/codepointVersion EMIT `null` (not omit).
+  /// GET /api/symbols/index.json. Built as `JSONValue` because codepoint/codepointVersion
+  /// EMIT `null` (not omit).
   static func symbolsIndex(_ conn: StorageConnection) -> [UInt8] {
     let rows = conn.listSfSymbolsCatalog()
     let symbols: [JSONValue] = rows.map { row in
@@ -95,8 +93,8 @@ enum WebRoutes {
       .object(["count": .number(Double(rows.count)), "symbols": .array(symbols)]))
   }
 
-  /// GET /api/symbols/search (symbols.route.js → searchSfSymbols). `query` is the
-  /// RAW q param (echoed un-trimmed); `scope` nil = all; `limit` already clamped.
+  /// GET /api/symbols/search. `query` is the RAW q param (echoed un-trimmed);
+  /// `scope` nil = all; `limit` already clamped.
   static func symbolsSearch(
     _ conn: StorageConnection, query: String, scope: String?, limit: Int
   ) -> [UInt8] {
@@ -109,9 +107,8 @@ enum WebRoutes {
     return encodeJSONValue(.object(obj))
   }
 
-  /// GET /api/symbols/<scope>/<name>.json (symbols.route.js → getSfSymbol). nil =
-  /// 404. Adds `codepoint_display` when codepoint is set, else OMITs `codepoint` +
-  /// `codepoint_display`.
+  /// GET /api/symbols/<scope>/<name>.json. nil = 404. Adds `codepoint_display` when
+  /// codepoint is set, else OMITs `codepoint` + `codepoint_display`.
   static func symbolMetadata(_ conn: StorageConnection, scope: String, name: String) -> [UInt8]? {
     guard let row = conn.getSfSymbol(scope: scope, name: name) else { return nil }
     var obj = symbolRowObject(row)
@@ -123,20 +120,18 @@ enum WebRoutes {
     return encodeJSONValue(.object(obj))
   }
 
-  /// GET /data/search/title-index[.<hash>].json (search-data.route.js).
+  /// GET /data/search/title-index[.<hash>].json.
   static func titleIndexBytes(_ conn: StorageConnection) -> [UInt8] {
     WebJSON.encode(titleIndexResponse(conn.buildTitleIndex()))
   }
 
-  /// GET /data/search/aliases[.<hash>].json — {alias: canonical} (a Dictionary,
-  /// order-free under intrinsic).
+  /// GET /data/search/aliases[.<hash>].json — {alias: canonical}.
   static func aliasMapBytes(_ conn: StorageConnection) -> [UInt8] {
     WebJSON.encode(conn.buildAliasMap())
   }
 
-  /// GET /data/search/search-manifest.json (context.js getSearchManifest). The
-  /// title-index/aliases filename hashes are `sha256(artifact-bytes).slice(0,10)` —
-  /// ad-server's own bytes (self-coherent; differ from JS under intrinsic, D2).
+  /// GET /data/search/search-manifest.json. The title-index/aliases filename hashes
+  /// are `sha256(artifact-bytes).slice(0,10)` — ad-server's own bytes, self-coherent.
   static func searchManifest(_ conn: StorageConnection) -> [UInt8] {
     let titleIndex = conn.buildTitleIndex()
     let aliasMap = conn.buildAliasMap()
@@ -152,9 +147,8 @@ enum WebRoutes {
     return WebJSON.encode(manifest)
   }
 
-  /// GET /data/frameworks/<slug>/tree.<hash>.json (framework-tree.route.js +
-  /// framework.js buildFrameworkTreeData). nil = 404 (no root, or no child edges).
-  /// `docs` is a dynamic-key object (order-free under intrinsic).
+  /// GET /data/frameworks/<slug>/tree.<hash>.json. nil = 404 (no root, or no child edges).
+  /// `docs` is a dynamic-key object.
   static func frameworkTree(_ conn: StorageConnection, slug: String, baseUrl: String) -> [UInt8]? {
     guard conn.frameworkRootExists(slug) else { return nil }
     let edges = conn.frameworkTreeEdges(slug)
@@ -173,9 +167,8 @@ enum WebRoutes {
     return encodeJSONValue(.object(["edges": .array(edgeValues), "docs": .object(docs)]))
   }
 
-  /// GET /readyz — instance readiness (the DB probe). Instance-identified shape
-  /// (like /healthz), not parity-gated; 503 when the read pool can't answer. The
-  /// `no-store` cache policy is declared on the route; this just carries the status.
+  /// GET /readyz — instance readiness (the DB probe). 503 when the read pool can't
+  /// answer. The `no-store` cache policy is declared on the route.
   static func readyz(dbOk: Bool) -> ResponseContent {
     var w = JSONStreamWriter(capacity: 96)
     w.beginObject()
@@ -194,7 +187,7 @@ enum WebRoutes {
   }
 }
 
-/// CSS `format(...)` hint (src/web/lib/font-faces.js formatHint).
+/// CSS `format(...)` hint.
 private func formatHint(_ format: String?) -> String {
   switch (format ?? "").lowercased() {
   case "ttf": return "truetype"
@@ -204,8 +197,8 @@ private func formatHint(_ format: String?) -> String {
   }
 }
 
-/// JS `encodeURIComponent` — the unreserved set `A-Za-z0-9-_.!~*'()` passes
-/// through; every other byte becomes `%XX` (uppercase hex) over its UTF-8 bytes.
+/// `encodeURIComponent` — the unreserved set `A-Za-z0-9-_.!~*'()` passes through;
+/// every other byte becomes `%XX` (uppercase hex) over its UTF-8 bytes.
 private func encodeURIComponent(_ s: String) -> String {
   let unreserved = Set(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()".utf8)
@@ -228,9 +221,9 @@ private func encodeJSONValue(_ value: JSONValue) -> [UInt8] {
   (try? value.encoded()).map { Array($0) } ?? Array("null".utf8)
 }
 
-/// The full `sf_symbols` row as JS emits it (`...row` + the 4 parsed `*_json`):
-/// every column verbatim (`bitmap_only`/`render_unsupported` stay 0/1 ints), then
-/// the parsed categories/keywords/aliases/availability.
+/// The full `sf_symbols` row (`...row` + the 4 parsed `*_json`): every column verbatim
+/// (`bitmap_only`/`render_unsupported` stay 0/1 ints), then the parsed
+/// categories/keywords/aliases/availability.
 private func symbolRowObject(_ row: SfSymbolRow) -> OrderedDictionary<String, JSONValue> {
   var obj: OrderedDictionary<String, JSONValue> = [:]
   obj["name"] = .string(row.name)
@@ -269,7 +262,7 @@ private func parsedValue(_ json: String?) -> JSONValue {
   return v
 }
 
-/// `U+XXXX` (symbols.route.js: `codepoint.toString(16).toUpperCase().padStart(4,'0')`).
+/// `U+XXXX` display form (`codepoint.toString(16).toUpperCase().padStart(4,'0')`).
 private func codepointDisplay(_ cp: Int64) -> String {
   let hex = String(cp, radix: 16, uppercase: true)
   let padded = hex.count < 4 ? String(repeating: "0", count: 4 - hex.count) + hex : hex
@@ -296,8 +289,7 @@ private func titleIndexResponse(_ ti: TitleIndex) -> TitleIndexResponse {
 }
 
 /// Matches `^/data/search/(title-index|aliases)\.[0-9a-f]{10}\.json$` → the base
-/// name. The <hash> is cache-busting only — the route serves the CURRENT artifact
-/// (search-data.route.js searchHashedArtifactHandler).
+/// name. The <hash> is cache-busting only — the route serves the CURRENT artifact.
 func matchHashedSearchArtifact(_ path: Substring) -> String? {
   for base in ["title-index", "aliases"] {
     let prefix = "/data/search/\(base)."
@@ -313,9 +305,8 @@ func matchHashedSearchArtifact(_ path: Substring) -> String? {
   return nil
 }
 
-/// src/lib/safe-path.js safeWebDocKey — identity for keys ≤ 200 bytes (every real
-/// doc key). The oversized-segment SHA-1 hashing (a >200-byte path SEGMENT) is not
-/// ported (vanishingly rare); the parity gate covers the identity path.
+/// Identity for keys ≤ 200 bytes (every real doc key). The oversized-segment SHA-1
+/// hashing (a >200-byte path SEGMENT) is not ported (vanishingly rare).
 private func safeWebDocKey(_ key: String) -> String { key }
 
 /// Matches `^/data/frameworks/([^/]+)/tree\.([0-9a-f]{10})\.json$` → the slug.

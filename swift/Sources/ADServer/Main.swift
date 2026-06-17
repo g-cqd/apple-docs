@@ -1,8 +1,8 @@
-// ad-server — the RFC 0001 P6 / RFC 0005 host. Parses flags into the engine
-// configuration + siteConfig, opens the connection pool, and runs the ADServeCore
-// HTTP engine against the DSL-declared route table (Endpoints.swift). The serving
-// machinery (NIO, the response envelope, the offload) lives in ADServeCore; this is
-// just the app's composition root. Subcommands: `serve` (default), `mcp`, `bench`.
+// ad-server — the app host. Parses flags into the engine configuration + siteConfig,
+// opens the connection pool, and runs the ADServeCore HTTP engine against the
+// DSL-declared route table (Endpoints.swift). The serving machinery (NIO, the response
+// envelope, the offload) lives in ADServeCore; this is just the app's composition root.
+// Subcommands: `serve` (default), `mcp`, `bench`.
 
 import ADServeCore
 import ADServeDSL

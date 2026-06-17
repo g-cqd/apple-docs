@@ -1,7 +1,7 @@
-// Bag pooling mirrored BIT-FOR-BIT from the potion ONNX graph (probed, RFC
-// 0002 §6a/§3): per-dim f32 sequential accumulation over rows in bag order,
-// f32 divide by Float(count), then L2 normalize as a single sequential f32
-// sum-of-squares chain, f32 sqrt (IEEE-correctly-rounded), f32 divide.
+// Bag pooling mirrored BIT-FOR-BIT from the potion ONNX graph (probed):
+// per-dim f32 sequential accumulation over rows in bag order, f32 divide by
+// Float(count), then L2 normalize as a single sequential f32 sum-of-squares
+// chain, f32 sqrt (IEEE-correctly-rounded), f32 divide.
 //
 // Parity contract: the per-dim accumulation chains are independent, so
 // vectorizing ACROSS dims is allowed; the norm reduction is ONE chain and

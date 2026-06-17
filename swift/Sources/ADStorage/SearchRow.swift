@@ -1,8 +1,7 @@
-// A decoded search-cascade row (RFC 0001 P6). The in-process analogue of the
-// wide JS row from the storage layer — the lexical tiers produce [SearchRow],
-// the cascade (ADSearch) merges/reranks/projects them. Columns are decoded
-// POSITIONALLY in the pinned resultColumns order (SearchPages.swift); the
-// parity test catches any SQL drift.
+// A decoded search-cascade row. The lexical tiers produce [SearchRow], the
+// cascade (ADSearch) merges/reranks/projects them. Columns are decoded
+// POSITIONALLY in the pinned resultColumns order; the parity test catches
+// any SQL drift.
 
 public struct SearchRow: Sendable {
   public var path: String

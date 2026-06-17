@@ -1,5 +1,4 @@
-// Queries for the MCP browse tool (RFC 0005 Phase C). Ports the storage methods
-// src/commands/browse.js calls: resolveRoot (exact → fuzzy), getPagesByRoot,
+// Queries for the MCP browse tool: resolveRoot (exact → fuzzy), getPagesByRoot,
 // getPage (document then active-page fallback), getDocumentRelationships (children).
 
 public struct BrowseRoot: Sendable {

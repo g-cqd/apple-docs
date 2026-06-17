@@ -23,23 +23,35 @@ permissions:
 jobs:
   analyze:
     name: Analyze ${{ matrix.language }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        language: [javascript-typescript]
+        include:
+          # JS/TS is interpreted — no build step (build-mode: none).
+          - language: javascript-typescript
+            os: ubuntu-latest
+            build-mode: none
+          # Swift needs a compiler pass; build the package manually under the
+          # extractor (macos-26 carries the Xcode toolchain, as the native job).
+          - language: swift
+            os: macos-26
+            build-mode: manual
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Initialize CodeQL
         uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
           languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
           # `security-and-quality` is the recommended baseline; the
           # `security-extended` suite adds extra precision-3 queries.
           queries: security-and-quality
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+      - name: Build Swift (manual mode)
+        if: matrix.build-mode == 'manual'
+        working-directory: swift
+        run: swift build
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:

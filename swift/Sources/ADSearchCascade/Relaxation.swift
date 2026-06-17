@@ -1,6 +1,6 @@
-// Progressive-relaxation helpers (RFC 0001 P6, R1-R3) — byte-exact port of
-// src/search/relaxation.js. ASCII-centric by construction: JS `\w` is ASCII and
-// the CamelCase test is `[a-z][A-Z]`, so tokens (split on non-[\w.]) are ASCII.
+// Progressive-relaxation helpers — byte-exact port of the JS relaxation module.
+// ASCII-centric by construction: JS `\w` is ASCII and the CamelCase test is
+// `[a-z][A-Z]`, so tokens (split on non-[\w.]) are ASCII.
 
 import ADContent
 

@@ -51,6 +51,40 @@ jobs:
           path: reports/
           retention-days: 30
 
+  # Swift formatting gate — the analogue of Biome for the Swift side. `swift
+  # format` ships with the toolchain (no new dependency); `.swift-format` pins
+  # the project's style and `--strict` fails the build on any drift.
+  swift-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Install Swift (swiftly)
+        uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
+        with:
+          toolchain: '6.3.2' # keep in sync with swift/.swift-version
+      - name: Swift format lint
+        working-directory: swift
+        run: swift format lint --strict --recursive Sources Tests
+
+  # Sanitizer lane for the heavy Unsafe/FFI + concurrency surface (ASan catches
+  # the C-boundary OOB/overflow class; TSan any latent data race). Serial so a
+  # finding maps to one test. Informational (continue-on-error) until the first
+  # clean run is confirmed, then flip to a hard gate.
+  swift-sanitizers:
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, thread]
+    runs-on: macos-26
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Ensure libzstd (archive module runtime dep)
+        run: brew list zstd >/dev/null 2>&1 || brew install zstd
+      - name: swift test (--sanitize=${{ matrix.sanitizer }})
+        working-directory: swift
+        run: swift test --sanitize=${{ matrix.sanitizer }} --no-parallel
+
   test:
     strategy:
       fail-fast: false
@@ -161,7 +195,29 @@ jobs:
 
       - name: Swift tests
         working-directory: swift
-        run: swift test
+        run: swift test --enable-code-coverage
+
+      # Export the Swift test coverage (linux leg only) and merge it into the
+      # same Codecov project as the JS lcov. Non-fatal: a toolchain that can't
+      # locate llvm-cov must not fail the parity job.
+      - name: Export Swift coverage (lcov)
+        if: matrix.target == 'linux-x64'
+        working-directory: swift
+        run: |
+          bin="$(swift build --show-bin-path)"
+          testbin="$(find "$bin" -name '*PackageTests.xctest' | head -1)"
+          llvm-cov export -format=lcov \
+            -instr-profile "$bin/codecov/default.profdata" "$testbin" \
+            -ignore-filename-regex='\.build|Tests|checkouts' > swift-coverage.lcov || true
+
+      - name: Upload Swift coverage to Codecov
+        if: matrix.target == 'linux-x64'
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
+        with:
+          files: swift/swift-coverage.lcov
+          fail_ci_if_error: false
+          flags: swift
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Stage native artifact
         run: |

@@ -44,9 +44,10 @@ struct ZstdLib: @unchecked Sendable {
   let freeCCtx: @convention(c) (OpaquePointer?) -> Int
   let setParameter: @convention(c) (OpaquePointer?, Int32, Int32) -> Int
   let setPledgedSrcSize: @convention(c) (OpaquePointer?, UInt64) -> Int
-  let compressStream2: @convention(c) (
-    OpaquePointer?, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?, Int32
-  ) -> Int
+  let compressStream2:
+    @convention(c) (
+      OpaquePointer?, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?, Int32
+    ) -> Int
   let isError: @convention(c) (Int) -> UInt32
   let getErrorName: @convention(c) (Int) -> UnsafePointer<CChar>?
   let cStreamOutSize: @convention(c) () -> Int
@@ -70,7 +71,10 @@ struct ZstdLib: @unchecked Sendable {
       guard let base = src.baseAddress else { return nil }
       let size = getFrameContentSize(base, blob.count)
       // ZSTD_CONTENTSIZE_UNKNOWN == ~0, _ERROR == ~0 - 1; cap to a sane ceiling.
-      guard size < 0xFFFF_FFFF_FFFF_FFFE, size <= 256 << 20 else { return nil }
+      // 32 MiB dwarfs any real `document_sections.content_text` (KB–low-MB) while
+      // bounding the per-frame allocation a crafted/garbled frame can demand
+      // across pool threads (CWE-400 decompression amplification).
+      guard size < 0xFFFF_FFFF_FFFF_FFFE, size <= 32 << 20 else { return nil }
       let capacity = Int(size)
       if capacity == 0 { return [] }
       var out = [UInt8](repeating: 0, count: capacity)

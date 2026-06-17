@@ -1,9 +1,7 @@
-// siteConfig + the agent-discovery builders (RFC 0001 P6 web slice). Ports
-// src/web/discovery.js byte-for-byte: robots.txt, opensearch.xml, the RFC 9727
+// siteConfig + the agent-discovery builders: robots.txt, opensearch.xml, the RFC 9727
 // api-catalog linkset, and the MCP server card. Every builder is a pure function
 // of siteConfig (no DB), so it serves on the event loop (no offload). siteConfig
-// is plumbed from ad-server flags (Main.swift); defaults mirror the JS defaults
-// (src/web/context.js:71-84 + discovery.js constants).
+// is plumbed from ad-server flags (Main.swift).
 
 import ADJSON
 
@@ -15,7 +13,7 @@ struct SiteConfig: Sendable {
   var appVersion: String = "0.0.0"
 }
 
-/// Trim trailing slashes off the configured base URL (discovery.js originOf).
+/// Trim trailing slashes off the configured base URL.
 private func origin(_ baseUrl: String) -> String {
   var end = baseUrl.endIndex
   while end > baseUrl.startIndex, baseUrl[baseUrl.index(before: end)] == "/" {
@@ -24,12 +22,12 @@ private func origin(_ baseUrl: String) -> String {
   return String(baseUrl[..<end])
 }
 
-/// Absolute URL when an origin is configured, else the bare path (discovery.js url()).
+/// Absolute URL when an origin is configured, else the bare path.
 private func url(_ origin: String, _ path: String) -> String {
   origin.isEmpty ? path : origin + path
 }
 
-/// JS-order XML escape: & first, then < > " (discovery.js esc).
+/// XML escape: & first, then < > ".
 private func xmlEscape(_ s: String) -> String {
   var out = ""
   out.reserveCapacity(s.count)
@@ -65,42 +63,42 @@ enum Discovery {
     let signal = cfg.contentSignal
     let sitemap = url(origin(cfg.baseUrl), "/sitemap.xml")
     let body = """
-# As a condition of accessing this website, you agree to abide by the following
-# content signals:
+      # As a condition of accessing this website, you agree to abide by the following
+      # content signals:
 
-# (a)  If a content-signal = yes, you may collect content for the corresponding
-#      use.
-# (b)  If a content-signal = no, you may not collect content for the
-#      corresponding use.
-# (c)  If the website operator does not include a content signal for a
-#      corresponding use, the website operator neither grants nor restricts
-#      permission via content signal with respect to the corresponding use.
+      # (a)  If a content-signal = yes, you may collect content for the corresponding
+      #      use.
+      # (b)  If a content-signal = no, you may not collect content for the
+      #      corresponding use.
+      # (c)  If the website operator does not include a content signal for a
+      #      corresponding use, the website operator neither grants nor restricts
+      #      permission via content signal with respect to the corresponding use.
 
-# The content signals and their meanings are:
+      # The content signals and their meanings are:
 
-# search:   building a search index and providing search results (e.g., returning
-#           hyperlinks and short excerpts from your website's contents). Search does not
-#           include providing AI-generated search summaries.
-# ai-input: inputting content into one or more AI models (e.g., retrieval
-#           augmented generation, grounding, or other real-time taking of content for
-#           generative AI search answers).
-# ai-train: training or fine-tuning AI models.
+      # search:   building a search index and providing search results (e.g., returning
+      #           hyperlinks and short excerpts from your website's contents). Search does not
+      #           include providing AI-generated search summaries.
+      # ai-input: inputting content into one or more AI models (e.g., retrieval
+      #           augmented generation, grounding, or other real-time taking of content for
+      #           generative AI search answers).
+      # ai-train: training or fine-tuning AI models.
 
-# ANY RESTRICTIONS EXPRESSED VIA CONTENT SIGNALS ARE EXPRESS RESERVATIONS OF
-# RIGHTS UNDER ARTICLE 4 OF THE EUROPEAN UNION DIRECTIVE 2019/790 ON COPYRIGHT
-# AND RELATED RIGHTS IN THE DIGITAL SINGLE MARKET.
+      # ANY RESTRICTIONS EXPRESSED VIA CONTENT SIGNALS ARE EXPRESS RESERVATIONS OF
+      # RIGHTS UNDER ARTICLE 4 OF THE EUROPEAN UNION DIRECTIVE 2019/790 ON COPYRIGHT
+      # AND RELATED RIGHTS IN THE DIGITAL SINGLE MARKET.
 
-User-agent: *
-Content-Signal: \(signal)
-Allow: /
-Disallow: /api/
+      User-agent: *
+      Content-Signal: \(signal)
+      Allow: /
+      Disallow: /api/
 
-# The same content signals are also delivered as a Content-Signal HTTP
-# response header so spec-aware crawlers can read them per-response.
+      # The same content signals are also delivered as a Content-Signal HTTP
+      # response header so spec-aware crawlers can read them per-response.
 
-Sitemap: \(sitemap)
+      Sitemap: \(sitemap)
 
-"""
+      """
     return Array(body.utf8)
   }
 
@@ -110,17 +108,17 @@ Sitemap: \(sitemap)
     let longName = cfg.siteName.isEmpty ? "Apple Developer Docs" : cfg.siteName
     let shortName = sliceUTF16(cfg.searchShortName.isEmpty ? "Apple Docs" : cfg.searchShortName, 16)
     let body = """
-<?xml version="1.0" encoding="UTF-8"?>
-<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
-  <ShortName>\(xmlEscape(shortName))</ShortName>
-  <LongName>\(xmlEscape(longName))</LongName>
-  <Description>\(xmlEscape("Search \(longName)"))</Description>
-  <InputEncoding>UTF-8</InputEncoding>
-  <Url type="text/html" method="get" template="\(xmlEscape(url(o, "/search?q={searchTerms}")))"/>
-  <Url type="application/opensearchdescription+xml" rel="self" template="\(xmlEscape(url(o, "/opensearch.xml")))"/>
-</OpenSearchDescription>
+      <?xml version="1.0" encoding="UTF-8"?>
+      <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+        <ShortName>\(xmlEscape(shortName))</ShortName>
+        <LongName>\(xmlEscape(longName))</LongName>
+        <Description>\(xmlEscape("Search \(longName)"))</Description>
+        <InputEncoding>UTF-8</InputEncoding>
+        <Url type="text/html" method="get" template="\(xmlEscape(url(o, "/search?q={searchTerms}")))"/>
+        <Url type="application/opensearchdescription+xml" rel="self" template="\(xmlEscape(url(o, "/opensearch.xml")))"/>
+      </OpenSearchDescription>
 
-"""
+      """
     return Array(body.utf8)
   }
 

@@ -1,4 +1,4 @@
-// Byte-exact port of src/search/intent.js. Only `type` feeds rerank (and the
+// Byte-exact port of the JS intent detector. Only `type` feeds rerank (and the
 // output strips it), but confidence is ported too. `\w` is written as the
 // explicit ASCII class [A-Za-z0-9_] to match JS regex semantics on Linux.
 

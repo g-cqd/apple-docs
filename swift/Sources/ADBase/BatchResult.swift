@@ -1,8 +1,6 @@
-// Contract-v0 batch framing: a batch result payload is
-// count × [u32 len LE][bytes], with len = 0xFFFFFFFF marking a null/failed
-// entry (the JS side maps it back to null and handles that item itself).
-// Shared verbatim by every batch export (content, render); the per-item
-// request layout is each export's own concern.
+// Batch result payload: count × [u32 len LE][bytes], with len = 0xFFFFFFFF
+// marking a null/failed entry. The per-item request layout is each
+// export's own concern.
 
 import Dispatch
 
@@ -64,7 +62,8 @@ public func lenPrefixedPayload(_ results: [[UInt8]?]) -> UnsafeMutableRawPointer
       offset += 4
       if result.count > 0 {
         result.withUnsafeBytes { src in
-          _ = memcpy(payload.baseAddress! + offset, src.baseAddress!, src.count)
+          UnsafeMutableRawBufferPointer(rebasing: payload[offset..<offset + result.count])
+            .copyMemory(from: src)
         }
         offset += result.count
       }

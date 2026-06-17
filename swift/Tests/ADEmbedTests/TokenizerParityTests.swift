@@ -1,7 +1,7 @@
-// The Phase-1 gate (RFC 0002 §6): token-id equality with transformers.js on
-// 100% of the committed fixtures. A failure here after a fixture
-// regeneration means the Swift pipeline no longer mirrors the JS engine —
-// see the parity-trap notes in the ADEmbed sources before touching anything.
+// Token-id equality with transformers.js on 100% of the committed fixtures.
+// A failure here after a fixture regeneration means the Swift pipeline no
+// longer mirrors the JS engine — see the parity-trap notes in the ADEmbed
+// sources before touching anything.
 
 import Foundation
 import Testing

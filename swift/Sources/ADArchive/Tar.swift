@@ -23,7 +23,7 @@ enum TarFailure: Error {
 enum Tar {
   static let blockSize = 512
   static let recordSize = 10240
-  static let maxFileSize: Int64 = (1 << 33) - 1 // 8 GiB − 1: 11 octal digits
+  static let maxFileSize: Int64 = (1 << 33) - 1  // 8 GiB − 1: 11 octal digits
 
   /// Splits a relative path into (prefix, name) per ustar rules, on UTF-8
   /// byte lengths. Throws when no split fits (name > 100 with no usable
@@ -151,25 +151,25 @@ enum Tar {
       block[offset + width - 1] = 0
     }
 
-    put(name, at: 0) // name[100]
+    put(name, at: 0)  // name[100]
     putOctal(mode, width: 8, at: 100)
-    putOctal(0, width: 8, at: 108) // uid
-    putOctal(0, width: 8, at: 116) // gid
+    putOctal(0, width: 8, at: 108)  // uid
+    putOctal(0, width: 8, at: 116)  // gid
     putOctal(UInt64(size), width: 12, at: 124)
     putOctal(UInt64(mtime), width: 12, at: 136)
     // chksum[8] is spaces while summing.
     for i in 148..<156 { block[i] = UInt8(ascii: " ") }
     block[156] = typeflag
     // linkname[100] stays zero.
-    put(Array("ustar".utf8), at: 257) // magic "ustar\0"
+    put(Array("ustar".utf8), at: 257)  // magic "ustar\0"
     block[262] = 0
-    block[263] = UInt8(ascii: "0") // version "00"
+    block[263] = UInt8(ascii: "0")  // version "00"
     block[264] = UInt8(ascii: "0")
-    put(Array("root".utf8), at: 265) // uname[32]
-    put(Array("root".utf8), at: 297) // gname[32]
-    putOctal(0, width: 8, at: 329) // devmajor
-    putOctal(0, width: 8, at: 337) // devminor
-    put(prefix, at: 345) // prefix[155]
+    put(Array("root".utf8), at: 265)  // uname[32]
+    put(Array("root".utf8), at: 297)  // gname[32]
+    putOctal(0, width: 8, at: 329)  // devmajor
+    putOctal(0, width: 8, at: 337)  // devminor
+    put(prefix, at: 345)  // prefix[155]
 
     var checksum = 0
     for i in 0..<blockSize { checksum += Int(block[i]) }

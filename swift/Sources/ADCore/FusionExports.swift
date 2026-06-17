@@ -1,5 +1,5 @@
-// Fusion request codec. Byte layouts are shared verbatim with the JS shim
-// (src/search/fusion-native.js) — change both sides together and bump
+// Fusion request codec. Byte layouts are shared verbatim — change both sides
+// together and bump
 // `abiVersion` on any layout change.
 //
 // rrf/hybrid request (all little-endian):
@@ -59,18 +59,21 @@ private func decodeAndFuse(_ ptr: UnsafePointer<UInt8>?, _ len: Int, hybrid: Boo
     guard let rankedLen = reader.u32(), let hasScores = reader.u32(), let weight = reader.f64() else {
       return ResultBuffer.error(.invalidInput, "truncated list metadata")
     }
+    guard Int(rankedLen) <= idCount else {
+      return ResultBuffer.error(.invalidInput, "ranked list length \(rankedLen) exceeds id count \(idCount)")
+    }
     metas.append((Int(rankedLen), hasScores != 0, weight))
   }
 
   var rankedArrays: [[UInt32]] = []
   rankedArrays.reserveCapacity(listCount)
   for meta in metas {
-    guard let view = reader.bytes(meta.rankedLen * 4) else {
+    guard let byteLen = meta.rankedLen.checkedMultiplied(by: 4), let view = reader.bytes(byteLen) else {
       return ResultBuffer.error(.invalidInput, "truncated ranked array")
     }
     var ranked = [UInt32](repeating: 0, count: meta.rankedLen)
     for i in 0..<meta.rankedLen {
-      let value = UInt32(littleEndian: view.baseAddress!.loadUnaligned(fromByteOffset: i * 4, as: UInt32.self))
+      let value = UInt32(littleEndian: view.loadUnaligned(fromByteOffset: i * 4, as: UInt32.self))
       guard value < UInt32(idCount) else {
         return ResultBuffer.error(.invalidInput, "ranked index \(value) out of range (U=\(idCount))")
       }
@@ -86,12 +89,12 @@ private func decodeAndFuse(_ ptr: UnsafePointer<UInt8>?, _ len: Int, hybrid: Boo
   for (index, meta) in metas.enumerated() {
     var scores: [Double]?
     if meta.hasScores {
-      guard let view = reader.bytes(meta.rankedLen * 8) else {
+      guard let byteLen = meta.rankedLen.checkedMultiplied(by: 8), let view = reader.bytes(byteLen) else {
         return ResultBuffer.error(.invalidInput, "truncated score array")
       }
       var values = [Double](repeating: 0, count: meta.rankedLen)
       for i in 0..<meta.rankedLen {
-        let bits = view.baseAddress!.loadUnaligned(fromByteOffset: i * 8, as: UInt64.self)
+        let bits = view.loadUnaligned(fromByteOffset: i * 8, as: UInt64.self)
         values[i] = Double(bitPattern: UInt64(littleEndian: bits))
       }
       scores = values
@@ -103,10 +106,14 @@ private func decodeAndFuse(_ ptr: UnsafePointer<UInt8>?, _ len: Int, hybrid: Boo
     return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes in fusion request")
   }
 
-  let fused = hybrid
+  let fused =
+    hybrid
     ? Fusion.hybrid(lists, idCount: idCount, k: k, beta: beta)
     : Fusion.weightedRRF(lists, idCount: idCount, k: k)
-  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: idCount * 8) else {
+  guard let payloadBytes = idCount.checkedMultiplied(by: 8) else {
+    return ResultBuffer.error(.invalidInput, "fusion result size overflow (U=\(idCount))")
+  }
+  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: payloadBytes) else {
     return nil
   }
   for i in 0..<idCount {
@@ -143,7 +150,10 @@ public func adFusionMmr(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutab
     n: n, dim: dim, vectors: vectors, presence: presence,
     lambda: lambda, limit: Int(rawLimit),
   )
-  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: n * 4) else {
+  guard let payloadBytes = n.checkedMultiplied(by: 4) else {
+    return ResultBuffer.error(.invalidInput, "mmr result size overflow (N=\(n))")
+  }
+  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: payloadBytes) else {
     return nil
   }
   for i in 0..<n {

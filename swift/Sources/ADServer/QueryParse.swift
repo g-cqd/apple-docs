@@ -1,9 +1,21 @@
-// Minimal query-string parsing for /search (RFC 0001 P6 spike). No
-// Foundation. Builds a SearchPagesParams from ?q=&framework=&limit=… ; the
-// spike exercises the FTS5 read path, so the unused filter fields stay nil.
+// Minimal query-string parsing for /search. No Foundation. Builds a
+// SearchPagesParams from ?q=&framework=&limit=… ; unused filter fields stay nil.
 
 import ADSearchCascade
 import ADStorage
+
+/// Max accepted search-query length (bytes). Real queries are short symbol/API
+/// terms; rejecting multi-KB inputs at the edge stops a request-cheap /
+/// server-expensive regex + tokenize + MATCH from running on adversarial text.
+let maxSearchQueryBytes = 4096
+
+/// Clamps a requested search `limit` to the served window: lower bound 1 (JS
+/// `Math.max(_, 1)`), upper bound `upperBound` (JS web `Math.min(_, 200)`; MCP
+/// advertises 1...100). The advertised schema bounds are advisory, so enforce
+/// them server-side regardless of transport.
+func clampSearchLimit(_ value: Int, upperBound: Int = 200) -> Int {
+  min(max(value, 1), upperBound)
+}
 
 /// Parses ?q=&limit=&offset= + the filter bag (framework/source/kind/language/
 /// platform/minVersion/year/track/deprecated) into the cascade's SearchParams.
@@ -11,8 +23,8 @@ func parseCascadeParams(_ uri: String) -> SearchParams {
   let q = parseQuery(uri)
   return SearchParams(
     query: q["q"] ?? "",
-    limit: Int(q["limit"] ?? "") ?? 100,
-    offset: Int(q["offset"] ?? "") ?? 0,
+    limit: clampSearchLimit(Int(q["limit"] ?? "") ?? 100),
+    offset: max(Int(q["offset"] ?? "") ?? 0, 0),
     framework: q["framework"],
     source: q["source"],
     kind: q["kind"],
@@ -31,7 +43,7 @@ func parseCascadeParams(_ uri: String) -> SearchParams {
 func parseSearchParams(_ uri: String) -> SearchPagesParams {
   let q = parseQuery(uri)
   let query = q["q"] ?? ""
-  let limit = Int64(q["limit"] ?? "") ?? 100
+  let limit = Int64(clampSearchLimit(Int(q["limit"] ?? "") ?? 100))
   return SearchPagesParams(
     query: query, raw: query, limit: limit,
     framework: nonEmpty(q["framework"]), sourceType: nonEmpty(q["source"]),

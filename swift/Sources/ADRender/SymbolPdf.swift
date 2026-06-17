@@ -1,13 +1,10 @@
-// SF Symbol → vector PDF, lifted verbatim from
-// src/resources/swift/symbol-pdf.js (RFC 0003 phase 1). AppKit + private
-// `vectorGlyph`/`drawInContext:` selectors — DARWIN-ONLY (#if
-// canImport(AppKit)); the Linux slice has no symbol here.
+// SF Symbol → vector PDF. AppKit + private `vectorGlyph`/`drawInContext:`
+// selectors — DARWIN-ONLY (#if canImport(AppKit)); the Linux slice has no
+// symbol here.
 //
-// WARNING (D-0003-3): unlike the spawn (isolated process), this runs
-// in-process on the FFI-calling thread, which has no AppKit runloop. The
-// phase-1 probe (test/unit/native/render-symbol-probe.test.js) gates
-// whether this is wired into the dispatch — it must be crash/hang-free and
-// byte-identical (post symbolPdfToSvg) before any caller uses it.
+// Unlike the spawn (isolated process), this runs in-process on the
+// FFI-calling thread, which has no AppKit runloop — it must be
+// crash/hang-free before any caller uses it.
 
 #if canImport(AppKit)
 import AppKit

@@ -59,11 +59,11 @@ private func cString(_ bytes: [UInt8]) -> String {
   try Tar.writeHeader(into: &block, path: "docs/readme.md", size: 5, mtime: 1_700_000_000, executable: false)
   #expect(cString(field(block[...], 0, 100)) == "docs/readme.md")
   #expect(cString(field(block[...], 100, 8)) == "0000644")
-  #expect(cString(field(block[...], 108, 8)) == "0000000") // uid 0
-  #expect(cString(field(block[...], 124, 12)) == "00000000005") // size 5
-  #expect(field(block[...], 156, 1) == [UInt8(ascii: "0")]) // typeflag
-  #expect(field(block[...], 257, 6) == Array("ustar".utf8) + [0]) // magic
-  #expect(field(block[...], 263, 2) == Array("00".utf8)) // version
+  #expect(cString(field(block[...], 108, 8)) == "0000000")  // uid 0
+  #expect(cString(field(block[...], 124, 12)) == "00000000005")  // size 5
+  #expect(field(block[...], 156, 1) == [UInt8(ascii: "0")])  // typeflag
+  #expect(field(block[...], 257, 6) == Array("ustar".utf8) + [0])  // magic
+  #expect(field(block[...], 263, 2) == Array("00".utf8))  // version
   #expect(cString(field(block[...], 265, 32)) == "root")
   // Checksum: recompute with the chksum field as spaces and compare.
   var copy = block
@@ -87,7 +87,7 @@ private func cString(_ bytes: [UInt8]) -> String {
 
 @Test func unrepresentableNamesAndFieldsThrow() {
   var block = [UInt8](repeating: 0, count: 512)
-  let component = String(repeating: "x", count: 120) // single component > 100
+  let component = String(repeating: "x", count: 120)  // single component > 100
   #expect(throws: TarFailure.self) {
     try Tar.writeHeader(into: &block, path: "dir/\(component)", size: 0, mtime: 0, executable: false)
   }
@@ -114,12 +114,12 @@ private func cString(_ bytes: [UInt8]) -> String {
   try ArchiveWriter.streamTar(metas: metas, into: &sink)
   let bytes = sink.bytes
 
-  #expect(bytes.count % Tar.recordSize == 0) // padded to the 10240 record
+  #expect(bytes.count % Tar.recordSize == 0)  // padded to the 10240 record
 
   // Member 1: a.txt, 5 bytes, data at 512.
   #expect(cString(field(bytes[0..<512], 0, 100)) == "a.txt")
   #expect(Array(bytes[512..<517]) == Array("hello".utf8))
-  #expect(bytes[517..<1024].allSatisfy { $0 == 0 }) // body padding
+  #expect(bytes[517..<1024].allSatisfy { $0 == 0 })  // body padding
 
   // Member 2: empty.dat — header only, no data blocks.
   #expect(cString(field(bytes[1024..<1536], 0, 100)) == "empty.dat")
@@ -151,8 +151,8 @@ func writeTarZstIsDeterministicAndFramed() throws {
   #expect(done.fileCount == 2)
   let bytes1 = try Data(contentsOf: URL(fileURLWithPath: out1))
   let bytes2 = try Data(contentsOf: URL(fileURLWithPath: out2))
-  #expect([UInt8](bytes1.prefix(4)) == [0x28, 0xB5, 0x2F, 0xFD]) // zstd magic
-  #expect(bytes1 == bytes2) // rebuild-twice determinism
+  #expect([UInt8](bytes1.prefix(4)) == [0x28, 0xB5, 0x2F, 0xFD])  // zstd magic
+  #expect(bytes1 == bytes2)  // rebuild-twice determinism
   #expect(Int64(bytes1.count) == done.size)
 }
 
@@ -186,7 +186,7 @@ private let productionLongPath =
 
 @Test func encodeMemberEmitsPaxForTheProductionPath() throws {
   let blocks = try Tar.encodeMember(path: productionLongPath, size: 1234, mtime: 1_700_000_000, executable: false)
-  #expect(blocks.count == 3) // xhdr + one data block + file header
+  #expect(blocks.count == 3)  // xhdr + one data block + file header
 
   let xhdr = blocks[0]
   #expect(xhdr.count == 512)
@@ -195,7 +195,7 @@ private let productionLongPath =
   #expect(paxName.hasPrefix("PaxHeaders/figure.seated"))
   #expect(Array(paxName.utf8).count <= 100)
   let record = Tar.paxPathRecord(Array(productionLongPath.utf8))
-  #expect(Int(cString(field(xhdr[...], 124, 12)), radix: 8) == record.count) // size pre-padding
+  #expect(Int(cString(field(xhdr[...], 124, 12)), radix: 8) == record.count)  // size pre-padding
   // Checksum is valid under the spaces-while-summing rule.
   var copy = xhdr
   for i in 148..<156 { copy[i] = UInt8(ascii: " ") }
@@ -262,7 +262,7 @@ func writeTarZstHandlesPaxPathsWithPledgedSizeIntact() throws {
     Issue.record("pax archive build failed: \(r1) / \(r2)")
     return
   }
-  #expect(done.fileCount == 3) // pax blocks are not members
+  #expect(done.fileCount == 3)  // pax blocks are not members
   #expect(try Data(contentsOf: URL(fileURLWithPath: out1)) == Data(contentsOf: URL(fileURLWithPath: out2)))
 }
 

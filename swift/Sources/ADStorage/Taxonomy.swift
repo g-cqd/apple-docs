@@ -1,6 +1,6 @@
-// Taxonomy facet counts for the MCP list_taxonomy tool (RFC 0005 Phase C). Ports
-// src/commands/taxonomy.js: distinct values per column with counts, top-N by count.
-// The column is a FIXED enum (interpolated into SQL) — never user input.
+// Taxonomy facet counts for the MCP list_taxonomy tool: distinct values per
+// column with counts, top-N by count. The column is a FIXED enum
+// (interpolated into SQL) — never user input.
 
 public struct TaxonomyCount: Sendable {
   public let value: String

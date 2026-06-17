@@ -1,11 +1,10 @@
-// The searchPages read op (RFC 0001 P5 first slice). Runs the FTS5 main
-// planner statement against a handle's connection and frames the rows.
+// The searchPages read op. Runs the FTS5 main planner statement against a
+// handle's connection and frames the rows.
 //
-// The SQL below is the fully-interpolated form of search.js's
-// `searchFtsStmt` (RESULT_COLUMNS + bm25 + tier CASE + FILTER_PREDICATES).
-// It MUST stay byte-semantically identical to that statement — the A/B
-// parity test (test/unit/native/storage-search-pages.test.js) fails if it
-// drifts. Result columns, in order (the JS shim's positional map):
+// The SQL below is the fully-interpolated FTS planner statement
+// (RESULT_COLUMNS + bm25 + tier CASE + FILTER_PREDICATES). It MUST stay
+// semantically identical to the parity test's reference — the test fails if
+// it drifts. Result columns, in order (positional map):
 //   path, title, role, role_heading, abstract, declaration, platforms,
 //   min_ios, min_macos, min_watchos, min_tvos, min_visionos, framework,
 //   root_slug, source_type, source_metadata, url_depth, is_release_notes,
@@ -56,7 +55,7 @@ public struct SearchPagesParams: Sendable {
 }
 
 public enum Storage {
-  /// Opens a read connection for `path`; nil → JS serves.
+  /// Opens a read connection for `path`; nil → fallback serves.
   public static func open(path: String) -> UInt64? {
     ConnectionRegistry.shared.open(path: path)
   }
@@ -67,7 +66,7 @@ public enum Storage {
 
   /// Runs searchPages on `handle` and returns the framed row payload
   /// (`[u32 columnCount][u32 rowCount][rows…]`), or nil on any failure
-  /// (unknown handle, prepare error, step error) so the JS side falls back.
+  /// (unknown handle, prepare error, step error).
   public static func searchPages(handle: UInt64, _ params: SearchPagesParams) -> [UInt8]? {
     ConnectionRegistry.shared.withConnection(handle) { conn -> [UInt8]? in
       guard let stmt = conn.statement(searchPagesSQL) else { return nil }
@@ -110,7 +109,7 @@ private func nullableInt(_ value: Int64?) -> BindValue {
   value.map { .int($0) } ?? .null
 }
 
-// The shared column projection + filter clauses (search.js RESULT_COLUMNS +
+// The shared column projection + filter clauses (RESULT_COLUMNS +
 // FILTER_PREDICATES), interpolated into each tier's statement below. Order is
 // pinned — the cascade decodes rows positionally (SearchRow.decode).
 let resultColumns = """
@@ -147,7 +146,7 @@ let filterPredicates = """
   AND ($min_visionos IS NULL OR d.min_visionos_num IS NULL OR d.min_visionos_num <= $min_visionos)
   """
 
-// MUST match search.js searchFtsStmt.
+// MUST match the parity reference searchFtsStmt.
 let searchPagesSQL = """
   SELECT
     \(resultColumns),
@@ -168,7 +167,7 @@ let searchPagesSQL = """
   LIMIT $limit
   """
 
-// MUST match search.js searchTitleExactStmt (adds 0 as rank/tier; ORDER differs).
+// MUST match the parity reference searchTitleExactStmt (adds 0 as rank/tier; ORDER differs).
 let searchTitleExactSQL = """
   SELECT \(resultColumns), 0 as rank, 0 as tier
   FROM documents d
@@ -179,7 +178,7 @@ let searchTitleExactSQL = """
   LIMIT $limit
   """
 
-// MUST match search.js searchTrigramStmt (RESULT_COLUMNS only — no rank/tier).
+// MUST match the parity reference searchTrigramStmt (RESULT_COLUMNS only — no rank/tier).
 let searchTrigramSQL = """
   SELECT \(resultColumns)
   FROM documents_trigram
@@ -190,8 +189,9 @@ let searchTrigramSQL = """
   LIMIT $limit
   """
 
-// MUST match search.js searchBodyStmt (RESULT_COLUMNS + a body bm25 rank, no
-// tier; the row decoder reads RESULT_COLUMNS only and ignores the trailing rank).
+// MUST match the parity reference searchBodyStmt (RESULT_COLUMNS + a body bm25
+// rank, no tier; the row decoder reads RESULT_COLUMNS only and ignores the
+// trailing rank).
 let searchBodySQL = """
   SELECT \(resultColumns),
     bm25(documents_body_fts, 1.0) as rank

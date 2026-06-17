@@ -20,9 +20,9 @@ struct QuantizeTests {
 
   @Test func i8CodeHalvesAndClamp() {
     // amax = 254 → inv = 0.5 exactly: halves round AWAY FROM ZERO since
-    // embedding v2 (RFC 0002 §6h — v1 mirrored ECMA's half-toward-+∞,
-    // which sent -1.5 to -1): 1.5 → 2, -1.5 → -2, 0.5 → 1, -0.5 → -1,
-    // 254 → 127 exactly; scale = 254/127 = 2.0.
+    // embedding v2 (v1 mirrored ECMA's half-toward-+∞, which sent -1.5 to -1):
+    // 1.5 → 2, -1.5 → -2, 0.5 → 1, -0.5 → -1, 254 → 127 exactly;
+    // scale = 254/127 = 2.0.
     let code = Quantize.i8Code([3, -3, 1, -1, 254])
     #expect(code[0] == 2)
     #expect(code[1] == UInt8(bitPattern: -2))

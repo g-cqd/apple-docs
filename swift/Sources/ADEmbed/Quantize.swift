@@ -1,12 +1,10 @@
-// Storage quantizers. NORMATIVE since embedding v2 (RFC 0002 §6h, the
-// reference flip): src/search/embedding.js mirrors THIS file for the gated
-// transformer models and the query side. Bit-exact gates either way:
-// comparisons, clamps and one f64→f32 store — no float summation anywhere.
+// Storage quantizers. Bit-exact for comparisons, clamps and one f64→f32
+// store — no float summation anywhere.
 
 public enum Quantize {
-  /// Sign code (quantizeTo, embedding.js:37): bit i set iff vec[i] >= 0,
-  /// LSB-first within each byte. -0.0 sets the bit (-0.0 >= 0 in both
-  /// languages); NaN does not (NaN >= 0 is false in both).
+  /// Sign code: bit i set iff vec[i] >= 0, LSB-first within each byte.
+  /// -0.0 sets the bit (-0.0 >= 0 in both Swift and JS); NaN does not
+  /// (NaN >= 0 is false in both).
   public static func signCode(_ vec: [Float]) -> [UInt8] {
     var out = [UInt8](repeating: 0, count: (vec.count + 7) / 8)
     for i in 0..<vec.count where vec[i] >= 0 {
@@ -17,8 +15,7 @@ public enum Quantize {
 
   /// Int8+scale code: `[int8 × dims][f32 LE absmax/127 scale]`. All
   /// intermediates in f64; rounding is half away from zero (standard
-  /// quantizer semantics — embedding v2 dropped the ECMA half-toward-+∞
-  /// mirror, RFC 0002 §6h); clamp ±127; NaN components store 0.
+  /// quantizer semantics); clamp ±127; NaN components store 0.
   public static func i8Code(_ vec: [Float]) -> [UInt8] {
     let n = vec.count
     var out = [UInt8](repeating: 0, count: n + 4)

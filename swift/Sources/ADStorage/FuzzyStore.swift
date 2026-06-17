@@ -1,13 +1,11 @@
-// Storage queries for the fuzzy tier (RFC 0001 P6, T3). Ports
-// fuzzyTrigramCandidates (the OR-of-trigrams bm25 pre-filter) +
-// getSearchRecordsByIds (the by-id record fetch) from src/storage/repos/search.js.
-// The records SELECT uses `resultColumns` ORDER so `SearchRow.decode` aligns
-// (the JS searchRecordByIdStmt orders columns differently — only the values
-// matter, not the SELECT order).
+// Storage queries for the fuzzy tier: fuzzyTrigramCandidates (the
+// OR-of-trigrams bm25 pre-filter) + getSearchRecordsByIds (the by-id record
+// fetch). The records SELECT uses `resultColumns` ORDER so `SearchRow.decode`
+// aligns.
 
 extension StorageConnection {
-  /// OR-of-trigrams candidate pre-filter (search.js fuzzyCandidatesStmt): titles
-  /// ranked by trigram-overlap bm25. [] when documents_trigram is absent.
+  /// OR-of-trigrams candidate pre-filter: titles ranked by trigram-overlap
+  /// bm25. [] when documents_trigram is absent.
   public func fuzzyTrigramCandidates(_ orQuery: String, limit: Int) -> [(id: Int64, title: String)] {
     guard conn.hasTrigram else { return [] }
     let sql = """
@@ -29,8 +27,8 @@ extension StorageConnection {
     return out
   }
 
-  /// Framework synonyms (search.js framework expansion): aliases of a canonical
-  /// + canonicals of an alias. [] when the table is absent (prepareUncached nil).
+  /// Framework synonyms: aliases of a canonical + canonicals of an alias.
+  /// [] when the table is absent (prepareUncached nil).
   public func getFrameworkSynonyms(_ slug: String) -> [String] {
     let sql = """
       SELECT alias FROM framework_synonyms WHERE canonical = ?
@@ -47,9 +45,9 @@ extension StorageConnection {
     return out
   }
 
-  /// Batched full records by document id, keyed by id (search.js
-  /// getSearchRecordsByIds). Decoded as SearchRow (the trailing `d.id` is read
-  /// separately; the row decoder reads RESULT_COLUMNS only).
+  /// Batched full records by document id, keyed by id. Decoded as SearchRow
+  /// (the trailing `d.id` is read separately; the row decoder reads
+  /// RESULT_COLUMNS only).
   public func searchRecordsByIds(_ ids: [Int64]) -> [Int64: SearchRow] {
     guard !ids.isEmpty else { return [:] }
     let sql =

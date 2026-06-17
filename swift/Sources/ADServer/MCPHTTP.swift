@@ -1,8 +1,7 @@
-// The Streamable HTTP MCP transport (RFC 0005 Phase D1): POST /mcp + OPTIONS /mcp.
+// The Streamable HTTP MCP transport: POST /mcp + OPTIONS /mcp.
 // Stateless JSON-RPC over HTTP — reuses the in-house `MCPDispatcher` with a per-request
-// pooled connection (the `.storage` checkout). Ports the request/response behavior of
-// src/mcp/http-server.js (single `application/json` object, not SSE; origin check;
-// CORS). The heavy-tool semaphore + JSON-RPC body batching are a D1b follow-on.
+// pooled connection (the `.storage` checkout). Single `application/json` object, not SSE;
+// origin check; CORS.
 
 import ADJSON
 import ADServeCore
@@ -37,10 +36,38 @@ func handleMCPOptions(_ ctx: RequestContext) -> ResponseContent {
 private let originName = HTTPField.Name("origin")!
 
 /// Loopback origins (and an absent Origin) are allowed; no configured allow-list yet.
-private func originAllowed(_ origin: String?) -> Bool {
+/// Mirrors JS `isLoopbackOrigin`: an http(s) origin whose host is exactly
+/// localhost / 127.0.0.1 / [::1]. Substring matching is unsafe — `http://
+/// localhost.evil.com` must NOT pass (CWE-346/1385 DNS-rebinding bypass).
+func originAllowed(_ origin: String?) -> Bool {
   guard let origin else { return true }
+  guard let host = loopbackOriginHost(origin) else { return false }
+  return host == "localhost" || host == "127.0.0.1" || host == "[::1]"
+}
+
+/// The lowercased host of an `http(s)://` origin (IPv6 keeps its brackets, as
+/// WHATWG `URL.hostname` does), or nil if the string isn't such an origin.
+func loopbackOriginHost(_ origin: String) -> String? {
   let lower = origin.lowercased()
-  return lower.contains("localhost") || lower.contains("127.0.0.1") || lower.contains("[::1]")
+  let scheme: String
+  if lower.hasPrefix("http://") {
+    scheme = "http://"
+  } else if lower.hasPrefix("https://") {
+    scheme = "https://"
+  } else {
+    return nil
+  }
+  var authority = lower.dropFirst(scheme.count)
+  if let end = authority.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) {
+    authority = authority[..<end]
+  }
+  if let at = authority.lastIndex(of: "@") { authority = authority[authority.index(after: at)...] }
+  if authority.first == "[" {
+    guard let close = authority.firstIndex(of: "]") else { return nil }
+    return String(authority[...close])
+  }
+  if let colon = authority.firstIndex(of: ":") { return String(authority[..<colon]) }
+  return authority.isEmpty ? nil : String(authority)
 }
 
 private func field(_ name: String) -> HTTPField.Name { HTTPField.Name(name)! }

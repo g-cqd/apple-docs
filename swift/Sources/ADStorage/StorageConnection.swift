@@ -1,7 +1,5 @@
-// Public in-process surface (RFC 0001 P6). The FFI path (Storage.open /
-// search_pages over a u64 handle registry) exists for the bun:ffi boundary;
-// an in-process Swift host (the SwiftNIO server) holds a connection DIRECTLY
-// — no registry indirection, no FFI. One StorageConnection wraps one
+// Public in-process surface. An in-process Swift host holds a connection
+// DIRECTLY — no registry indirection. One StorageConnection wraps one
 // read-only Connection and is used by exactly one thread at a time (the
 // caller enforces this, e.g. a checkout pool — Connection's statement cache
 // is unsynchronized and SQLite is opened NOMUTEX).
@@ -9,8 +7,8 @@
 public final class StorageConnection: @unchecked Sendable {
   let conn: Connection  // internal so the cascade tier methods (SearchRow.swift) can reach it
 
-  /// Opens a read connection for `path`; nil if libsqlite3/FTS5/the file is
-  /// unavailable.
+  /// Opens a read connection for `path`; nil if libsqlite3 / FTS5 / the file
+  /// is unavailable.
   public init?(path: String) {
     guard let conn = Connection(path: path) else { return nil }
     self.conn = conn

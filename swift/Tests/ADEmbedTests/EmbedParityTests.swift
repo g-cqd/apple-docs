@@ -1,6 +1,5 @@
-// The Phase-2 gates (RFC 0002 §3): every committed fixture vector must be
-// reproduced BIT-EXACTLY (Float byte compare, not ==, so ±0/NaN can never
-// hide), and the sign/int8 codes byte-identically.
+// Every committed fixture vector must be reproduced BIT-EXACTLY (Float byte compare,
+// not ==, so ±0/NaN can never hide), and the sign/int8 codes byte-identically.
 //
 //   - case gate: 180 tokenizer-parity texts through matrix-subset.admx —
 //     runs everywhere, including the CI native matrix (no model needed).
@@ -54,7 +53,6 @@ enum EmbedFixtures {
 }
 
 struct MatrixArtifactTests {
-  // src/search/model-integrity.js PINNED_MODEL_FILES['onnx/model.onnx']
   static let modelPin = "e82f46335878dd5d72f9544a2a7c61061659c6273ceb8815e10ff952c2e07457"
 
   @Test func subsetHeaderAndPin() throws {
@@ -67,7 +65,7 @@ struct MatrixArtifactTests {
 
   @Test func sparseLookupHitsAndMisses() throws {
     let matrix = try MatrixArtifact(path: EmbedFixtures.subsetPath)
-    #expect(matrix.row(forTokenId: 0) != nil) // the [PAD] row is always included
+    #expect(matrix.row(forTokenId: 0) != nil)  // the [PAD] row is always included
     var missing: UInt32?
     for id in 0..<UInt32(63091) where matrix.row(forTokenId: id) == nil {
       missing = id

@@ -2,11 +2,11 @@
 #define CSQLITE_SHIM_H
 
 // Calls a dlsym'd `sqlite3_config(int, ...)` pointer with the CORRECT variadic
-// ABI to disable SQLite memory statistics (RFC 0001 P6). With memstatus ON
-// (the default) every `sqlite3Malloc`/`sqlite3_free` enters a GLOBAL mutex to
-// update usage counters, which serializes all allocation across connections —
-// under concurrent FTS queries the reader threads spend their time blocked on
-// that one lock instead of executing SQL. Disabling it makes SQLite call the
+// ABI to disable SQLite memory statistics. With memstatus ON (the default)
+// every `sqlite3Malloc`/`sqlite3_free` enters a GLOBAL mutex to update usage
+// counters, which serializes all allocation across connections — under
+// concurrent FTS queries the reader threads spend their time blocked on that
+// one lock instead of executing SQL. Disabling it makes SQLite call the
 // (already thread-safe, concurrent) system allocator directly.
 //
 // A C shim is required because a variadic C function cannot be called correctly

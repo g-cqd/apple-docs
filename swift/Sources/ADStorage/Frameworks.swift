@@ -1,7 +1,7 @@
-// Documentation roots for the MCP list_frameworks tool (RFC 0005 Phase C). Ports
-// src/commands/frameworks.js: roots joined to their live (active) page counts, only
-// those with at least one active page (zero-page catalog artifacts are noise). The
-// projection keeps slug/name/kind/pageCount (status + last_seen are dropped).
+// Documentation roots for the MCP list_frameworks tool: roots joined to
+// their live (active) page counts, only those with at least one active page
+// (zero-page catalog artifacts are noise). The projection keeps
+// slug/name/kind/pageCount (status + last_seen are dropped).
 
 public struct FrameworkRoot: Sendable {
   public let slug: String
