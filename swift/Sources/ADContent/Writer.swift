@@ -1,10 +1,10 @@
-// Byte writer for the tape renderers (RFC 0004 §6b): everything renders
-// into ONE growing [UInt8]; the JS string transforms (trim, \s+→' ',
-// \n→' ') run IN PLACE over a marked suffix, so no intermediate Strings
-// exist anywhere on the hot path.
+// Byte writer for the tape renderers: everything renders into ONE growing
+// [UInt8]; the JS string transforms (trim, \s+→' ', \n→' ') run IN PLACE
+// over a marked suffix, so no intermediate Strings exist anywhere on the
+// hot path.
 
-public import ADBase
 public import ADEmbed
+public import ADJSONCore
 
 public typealias ByteSpan = UnsafeRawBufferPointer
 
@@ -42,19 +42,22 @@ public struct ByteWriter {
     bytes.append(contentsOf: span.bindMemory(to: UInt8.self))
   }
 
-  public mutating func append(tape: JsonTape, string index: Int) {
-    tape.withStringBytes(index) { span in
-      bytes.append(contentsOf: span.bindMemory(to: UInt8.self))
+  /// Appends a string node's content. The unescaped fast path copies the raw
+  /// UTF-8 with no `String` allocation; an escaped node decodes once via `.string`.
+  public mutating func append(string node: JSON) {
+    if node.withUTF8Bytes({ bytes.append(contentsOf: $0.bindMemory(to: UInt8.self)) }) != nil {
+      return
     }
+    if let decoded = node.string { append(decoded) }
   }
 
-  /// `${value}` template coercion of an arbitrary tape node.
-  public mutating func appendCoercion(tape: JsonTape, _ index: Int) {
-    if tape.kind(index) == .string {
-      append(tape: tape, string: index)
-    } else {
-      append(tape.jsStringCoercion(index))
+  /// `${value}` template coercion of an arbitrary node: a string node appends its
+  /// content (zero-copy when unescaped); anything else is ECMAScript-coerced.
+  public mutating func appendCoercion(_ node: JSON) {
+    if node.withUTF8Bytes({ bytes.append(contentsOf: $0.bindMemory(to: UInt8.self)) }) != nil {
+      return
     }
+    if let decoded = node.string { append(decoded) } else { append(node.jsString) }
   }
 
   // MARK: - In-place JS transforms over a marked suffix
@@ -103,8 +106,7 @@ public struct ByteWriter {
     }
   }
 
-  /// normalizeParagraphs over a raw input span, appended to the writer
-  /// (render-markdown.js:142-149 semantics).
+  /// normalizeParagraphs over a raw input span, appended to the writer.
   public mutating func appendNormalizedParagraphs(_ span: ByteSpan) {
     let input = span.bindMemory(to: UInt8.self)
     let (start, end) = ByteOps.trimRange(input, 0, input.count)

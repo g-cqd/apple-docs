@@ -1,13 +1,13 @@
-// Post-cascade JS-side filtering (RFC 0001 P6 slice 4) — byte-exact port of
-// src/search/filters.js matchesSearchFilters + the version helpers
-// (lib/version-encode.js encodeVersion, the compareVersions in filters.js). The
-// SQL FILTER_PREDICATES push most filters down; this is the defense-in-depth /
-// precise re-check (kind taxonomy + platform-version sentinel) applied at every
-// merge point, exactly as the JS addResults does.
+// Post-cascade filtering — byte-exact port of matchesSearchFilters + version
+// helpers. The SQL predicates push most filters down; this is the precise
+// re-check (kind taxonomy + platform-version sentinel) applied at every merge
+// point.
 
-import ADBase  // Json — parse platforms_json for the '0' platform sentinel
+import ADBase  // CheckedMath — overflow-checked version-component parse
 import ADContent  // JsString — JS trim/toLowerCase
+import ADJSONCore  // JSONValue — parse platforms_json for the '0' platform sentinel
 import ADStorage  // SearchRow
+import OrderedCollections
 
 struct PlatformFilters: Sendable {
   var minIos: String?
@@ -18,7 +18,7 @@ struct PlatformFilters: Sendable {
   var any: Bool { minIos != nil || minMacos != nil || minWatchos != nil || minTvos != nil || minVisionos != nil }
 }
 
-/// The residual filters consulted post-cascade (search.js `activeFilters`).
+/// The residual filters consulted post-cascade.
 struct ActiveFilters: Sendable {
   var frameworks: [String?] = [nil]
   var sourceTypes: Set<String>?
@@ -126,9 +126,9 @@ enum Filters {
     let hasTrack = !(track ?? "").isEmpty
     if !hasYear && !hasTrack { return true }
     guard let metadata = parseObject(row.sourceMetadata) else { return false }
-    if hasYear, metadata["year"]?.asNumber != Double(year!) { return false }
+    if hasYear, numberValue(metadata["year"]) != Double(year!) { return false }
     if hasTrack {
-      let metaTrack = normalize(metadata["track"]?.asString ?? "")
+      let metaTrack = normalize(stringValue(metadata["track"]) ?? "")
       if !metaTrack.contains(normalize(track!)) { return false }
     }
     return true
@@ -140,15 +140,35 @@ enum Filters {
   static func normalize(_ value: String) -> String { JsString.lowercase(JsString.trim(value)) }
 
   private static func parsePlatformKeys(_ json: String?) -> [String] {
-    guard let json, !json.isEmpty, let value = try? Json.parse(Array(json.utf8)),
-      let object = value.asObject
+    guard let json, !json.isEmpty, let value = try? JSONValue(parsing: json),
+      let object = objectValue(value)
     else { return [] }
-    return object.keys
+    return Array(object.keys)
   }
 
-  private static func parseObject(_ json: String?) -> JsonObject? {
-    guard let json, !json.isEmpty, let value = try? Json.parse(Array(json.utf8)) else { return nil }
-    return value.asObject
+  private static func parseObject(_ json: String?) -> OrderedDictionary<String, JSONValue>? {
+    guard let json, !json.isEmpty, let value = try? JSONValue(parsing: json) else { return nil }
+    return objectValue(value)
+  }
+
+  /// JS Number coercion of an object member — JSON integers parse to `.int`,
+  /// non-integers to `.number`; both read back as `Double` (nil otherwise).
+  private static func numberValue(_ value: JSONValue?) -> Double? {
+    switch value {
+    case .number(let n): return n
+    case .int(let i): return Double(i)
+    default: return nil
+    }
+  }
+
+  private static func stringValue(_ value: JSONValue?) -> String? {
+    if case .string(let s) = value { return s }
+    return nil
+  }
+
+  private static func objectValue(_ value: JSONValue?) -> OrderedDictionary<String, JSONValue>? {
+    if case .object(let object) = value { return object }
+    return nil
   }
 
   /// compareVersions(left, right): componentwise over the \d+ runs.
@@ -158,19 +178,25 @@ enum Filters {
     for i in 0..<max(l.count, r.count) {
       let lp = i < l.count ? l[i] : 0
       let rp = i < r.count ? r[i] : 0
-      if lp != rp { return lp - rp }
+      if lp != rp { return lp < rp ? -1 : 1 }
     }
     return 0
   }
 
-  /// parseVersionParts: every \d+ run as an Int.
+  /// parseVersionParts: every \d+ run as an Int. Adversarial digit runs
+  /// saturate at `Int.max` rather than trapping (ordering is preserved).
   private static func versionParts(_ version: String) -> [Int] {
     var parts: [Int] = []
     var current = 0
     var inRun = false
     for s in version.unicodeScalars {
       if s.value >= 48 && s.value <= 57 {
-        current = current * 10 + Int(s.value - 48)
+        let digit = Int(s.value - 48)
+        if let scaled = current.checkedMultiplied(by: 10), let next = scaled.checkedAdded(digit) {
+          current = next
+        } else {
+          current = Int.max
+        }
         inRun = true
       } else if inRun {
         parts.append(current)
@@ -182,7 +208,7 @@ enum Filters {
     return parts
   }
 
-  // MARK: - filter-bag normalizers (filters.js + buildPlatformFilters)
+  // MARK: - filter-bag normalizers
 
   /// normalizeSourceFilter: comma-split, trim, lowercase, drop empties — ordered
   /// unique (the JSON array for `$sources_json` keeps this order; matching is
