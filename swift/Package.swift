@@ -1,11 +1,12 @@
 // swift-tools-version: 6.3
-// libAppleDocsCore — the Swift side of the bridge era (RFC 0001 §4).
-// ABI contract v0 (rfcs/.../p0/ffi-bridge.md). The library product stays
-// zero-dependency; the FIRST SwiftPM dependency (apple/swift-nio — §2-allowed,
-// D1) is pulled ONLY by the P6 `ad-server` executable, not by ADCore.
+// libAppleDocsCore — the Swift side of the bridge era. ABI contract v0. The library
+// product depends only on the first-party g-cqd/ADJSON (its `ADJSONCore` target —
+// Foundation-free, swift-syntax-free, static-linked, no runtime .so), which backs the
+// content pipeline; the server stack (apple/swift-nio, etc.) is pulled ONLY by the
+// `ad-server` executable, never by ADCore.
 import PackageDescription
 
-// Release builds inline across module boundaries (RFC 0004 §6b): the
+// Release builds inline across module boundaries: the
 // content hot path calls tiny ADBase tape accessors from ADContent, and
 // without CMO every one is an opaque cross-module call. Root package, so
 // unsafeFlags is legal; debug/test builds are unaffected.
@@ -13,7 +14,6 @@ let releaseCMO: [SwiftSetting] = [
   .unsafeFlags(["-cross-module-optimization"], .when(configuration: .release))
 ]
 
-// Package settings aligned to g-cqd/ADJSON (operator directive — applied to EVERY target).
 // `.v6` language mode ⇒ complete strict-concurrency checking; the upcoming features tighten
 // existentials (`any`) + import visibility (`public import` for re-exports, direct imports for
 // member use). No InlineArray/UTF8Span (2025-SDK-gated — would raise the macOS floor);
@@ -39,7 +39,7 @@ let timingWarningFlags: [SwiftSetting] = [
 let actorDataRaceChecks: [SwiftSetting] = [.unsafeFlags(["-enable-actor-data-race-checks"])]
 let testSettings: [SwiftSetting] = [strictSettings, timingWarningFlags, actorDataRaceChecks].flatMap { $0 }
 
-// HTTP/3 (RFC 0007 F6) is env-gated because apple/swift-nio-http3 floors at macOS 26 — SPM
+// HTTP/3 is env-gated because apple/swift-nio-http3 floors at macOS 26 — SPM
 // rejects it at the macOS-15 default (verified: "NIOHTTP3 requires macOS 26, target supports
 // 15"), and `@available` can't gate a link nor can `platforms:` differ per target. So a build
 // with `AD_HTTP3=1` (on a 2025 SDK) RAISES the macOS floor to 26, pulls the QUIC/HTTP3 stack,
@@ -54,11 +54,18 @@ let http3TargetDependencies: [Target.Dependency] =
   http3 ? [.product(name: "NIOHTTP3", package: "swift-nio-http3")] : []
 let http3Settings: [SwiftSetting] = http3 ? [.define("AD_HTTP3")] : []
 
+// ADJSON: `AD_ADJSON_LOCAL=1` points at the local sibling checkout for in-development work
+// against unreleased ADJSON changes; otherwise the pinned main branch (Package.resolved).
+let adjsonDependency: Package.Dependency =
+  Context.environment["AD_ADJSON_LOCAL"] != nil
+  ? .package(path: "../../ADJSON")
+  : .package(url: "https://github.com/g-cqd/ADJSON.git", branch: "main")
+
 let package = Package(
   name: "AppleDocsCore",
-  // Aligned to g-cqd/ADJSON (operator directive): macOS one generation below the device
-  // platforms. Synchronization (Mutex/Atomic) ships in macOS 15 and Span/RawSpan back-deploy,
-  // so 15.0 suffices; the 2025-SDK-gated InlineArray/UTF8Span are intentionally not adopted.
+  // macOS one generation below the device platforms. Synchronization (Mutex/Atomic) ships in
+  // macOS 15 and Span/RawSpan back-deploy, so 15.0 suffices; the 2025-SDK-gated
+  // InlineArray/UTF8Span are intentionally not adopted.
   // Linux unaffected (the dylib stays cross-platform; only ad-server is Apple-native).
   platforms: [
     macOSFloor, .iOS(.v26), .tvOS(.v26), .watchOS(.v26), .visionOS(.v26),
@@ -66,84 +73,101 @@ let package = Package(
   products: [
     .library(name: "AppleDocsCore", type: .dynamic, targets: ["ADCore"])
   ],
-  // The package's first dependency (RFC 0001 P6). apple/swift-nio is within
-  // the §2 allow-list (apple/*); D1 settled on raw SwiftNIO, no Vapor. Used
-  // ONLY by the ad-server executable. Package.resolved is committed.
+  // apple/swift-nio: used ONLY by the ad-server executable. Package.resolved is committed.
   dependencies: [
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
-    // Second SwiftPM dependency (RFC 0001 P6 web slice). apple/swift-crypto is
-    // §2-allowed (apple/*); used ONLY by ad-server for SHA-256 — `hashable`
+    // apple/swift-crypto: used ONLY by ad-server for SHA-256 — `hashable`
     // ETags + the /data/search/*.<hash>.json artifact filenames must be
     // byte-identical to the JS `Bun.CryptoHasher('sha256').digest('hex')`. NOT
     // pulled by ADCore (the dylib stays zero-external-dep).
     .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
-    // ad-server-only (RFC 0001 P6 web slice): the operator's tape-based JSON
-    // engine, dogfooded for the new web-route JSON. `ADJSON.JSONEncoder` emits
-    // byte-identical-to-`JSON.stringify` bytes for fixed-shape Encodable payloads
-    // (escaping + integer formatting match; field order = declaration order; nil
-    // Optionals omitted). Branch dep — no release tag yet; Package.resolved pins
-    // the commit. NOT pulled by ADCore (the dylib stays zero-external-dep).
-    .package(url: "https://github.com/g-cqd/ADJSON.git", branch: "main"),
-    // RFC 0005 (server framework) — ad-server-only, all §2-compliant (apple/* +
-    // pointfreeco/*). swift-http-types: type-safe HTTP headers/status; swift-log:
+    // The first-party tape JSON engine (g-cqd/ADJSON). Its `ADJSONCore` target
+    // (Foundation- and swift-syntax-free, static) backs the content pipeline
+    // (ADContent → ADCore → the dylib): the one dependency ADCore carries, static-linked,
+    // so no third-party runtime .so ships. The umbrella `ADJSON` (adds @Schemable + the
+    // `JSON.stringify`-identical `JSONEncoder`) is ad-server-only. Local checkout or pinned
+    // main via `AD_ADJSON_LOCAL` (see above).
+    adjsonDependency,
+    // ad-server-only. swift-http-types: type-safe HTTP headers/status; swift-log:
     // structured logging; swift-nio-extras: the NIO↔HTTPTypes HTTP/1 bridge
     // (`HTTP1ToHTTPServerCodec`) — requires swift-nio ≥ 2.94.0, so the `from:
     // "2.65.0"` above resolves up. NONE pulled by ADCore (the dylib stays
-    // zero-external-dep). (swift-tagged is deferred with RFC 0006 H4 — re-added when
-    // domain newtypes/the MCP Tool DSL actually use it.)
+    // zero-external-dep).
     .package(url: "https://github.com/apple/swift-http-types.git", from: "1.6.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.13.2"),
     .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.34.1"),
-    // RFC 0007 F1b: TLS 1.3 (NIOSSL) + HTTP/2 (NIOHTTP2) for the per-App `Wire`.
-    // Both apple/* (allow-list-clean) and already resolved transitively.
+    // TLS 1.3 (NIOSSL) + HTTP/2 (NIOHTTP2) for the per-App `Wire`.
+    // Both apple/* and already resolved transitively.
     .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.0"),
     .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.44.0"),
-    // RFC 0007 F3: Network.framework transport (Apple-native) — apple/*, allow-list-clean.
+    // Network.framework transport (Apple-native).
     .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.28.0"),
-    // ad-server CLI flag parsing (RFC 0001 P7 groundwork): apple/swift-argument-parser
-    // is §2 allow-list-clean (apple/*). Used ONLY by the ad-server executable for its
+    // apple/swift-argument-parser: used ONLY by the ad-server executable for its
     // serve/mcp/bench subcommands; NOT pulled by ADCore (the dylib stays zero-external-dep).
-    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0")
+    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
+    // apple/swift-collections — already resolved (1.6.0) transitively, so a direct dep
+    // adds no download or supply-chain surface. Used by the server side only
+    // (ADSearchCascade: OrderedSet for the FTS term builder); NOT pulled by ADCore
+    // (the dylib stays zero-external-dep).
+    .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
+    // apple/swift-algorithms — already resolved transitively (zero new download). Used by
+    // ADSearchCascade only (bounded top-K via min(count:sortedBy:)); NOT pulled by ADCore
+    // (the dylib stays zero-external-dep).
+    .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.0"),
+    // swift-server/swift-service-lifecycle — already resolved transitively. Used by
+    // ADServeCore only (ServiceGroup graceful shutdown); NOT pulled by ADCore
+    // (the dylib stays zero-external-dep).
+    .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0"),
   ] + http3PackageDependencies,
   targets: [
     .target(name: "ADBase", swiftSettings: releaseCMO + strictSettings),
     .target(name: "ADSearch", swiftSettings: releaseCMO + strictSettings),
     .target(name: "ADArchive", swiftSettings: releaseCMO + strictSettings),
     .target(name: "ADEmbed", swiftSettings: releaseCMO + strictSettings),
-    // Content pipeline (RFC 0004): reuses ADEmbed's engine-derived JS
-    // string semantics (CaseFolding = JS toLowerCase, jsWhitespace = JS
-    // trim/\s) and ADBase's ordered JSON.
-    .target(name: "ADContent", dependencies: ["ADBase", "ADEmbed"], swiftSettings: releaseCMO + strictSettings),
-    // Render service (RFC 0003 P3-darwin): symbol/font renderers. darwin
-    // links CoreText/AppKit; the Linux slice compiles to stubs (#if
-    // canImport) so the dylib still builds with no AppKit/CoreText.
+    // Content pipeline: reuses ADEmbed's engine-derived JS string semantics
+    // (CaseFolding = JS toLowerCase, jsWhitespace = JS trim/\s). The DocC JSON is
+    // parsed + walked via g-cqd/ADJSON's `ADJSONCore` tape (Foundation-free, static —
+    // it links into libAppleDocsCore with no third-party runtime dependency).
+    .target(
+      name: "ADContent",
+      dependencies: ["ADBase", "ADEmbed", .product(name: "ADJSONCore", package: "ADJSON")],
+      swiftSettings: releaseCMO + strictSettings),
+    // Render service: symbol/font renderers. darwin links CoreText/AppKit;
+    // the Linux slice compiles to stubs (#if canImport) so the dylib still
+    // builds with no AppKit/CoreText.
     .target(name: "ADRender", dependencies: ["ADBase"], swiftSettings: releaseCMO + strictSettings),
     // Tiny C shim to call the dlsym'd variadic `sqlite3_config` with the
-    // correct ABI (disables the global memstatus allocator mutex — RFC 0001 P6).
+    // correct ABI (disables the global memstatus allocator mutex).
     .target(name: "CSQLiteShim"),
-    // Storage layer (RFC 0001 P5): SQLite C-interop via runtime dlopen
-    // (NOT a systemLibrary — same policy as ADArchive/Zstd: absent → JS
-    // bun:sqlite serves). The read path; the bun:sqlite writer is untouched.
-    // ADArchive provides the zstd decompress used by the section codec
-    // (enrichment) — both dlopen'd, so the dylib stays zero external dep.
+    // Storage layer: SQLite C-interop via runtime dlopen (NOT a systemLibrary —
+    // same policy as ADArchive/Zstd: absent → JS bun:sqlite serves). The read
+    // path; the bun:sqlite writer is untouched. ADArchive provides the zstd
+    // decompress used by the section codec (enrichment) — both dlopen'd, so
+    // the dylib stays zero external dep.
     .target(
       name: "ADStorage", dependencies: ["ADBase", "ADArchive", "CSQLiteShim"],
       swiftSettings: releaseCMO + strictSettings),
-    // Search cascade (RFC 0001 P6): the byte-exact in-process port of the JS
-    // lexical search (fts-query-builder, intent, the tier merge, ranking,
-    // projection). SERVER-ONLY — used by ad-server, NOT by the libAppleDocsCore
-    // dylib (which stays zero-dep). Max strict concurrency.
+    // Search cascade: the byte-exact in-process port of the JS lexical search
+    // (fts-query-builder, intent, the tier merge, ranking, projection).
+    // SERVER-ONLY — used by ad-server, NOT by the libAppleDocsCore dylib
+    // (which stays zero-dep). Max strict concurrency.
     .target(
-      name: "ADSearchCascade", dependencies: ["ADStorage", "ADContent", "ADBase"],
+      name: "ADSearchCascade",
+      dependencies: [
+        "ADStorage", "ADContent", "ADBase",
+        .product(name: "OrderedCollections", package: "swift-collections"),
+        .product(name: "Algorithms", package: "swift-algorithms"),
+        .product(name: "ADJSONCore", package: "ADJSON"),
+      ],
       swiftSettings: releaseCMO + strictSettings),
-    // Dev-only reference dump for the flipped fixture generator (RFC 0002
-    // §6h); not shipped — the dylib product above is unchanged.
+    // Dev-only reference dump for the flipped fixture generator; not shipped —
+    // the dylib product above is unchanged.
     .executableTarget(
       name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump",
       swiftSettings: releaseCMO + strictSettings),
-    // RFC 0005 — the server ENGINE (the optimizable layer): NIO bootstrap, HTTP/1.1
+    // The server ENGINE (the optimizable layer): NIO bootstrap, HTTP/1.1
     // on swift-http-types, the response envelope + middleware, the `.storage`
-    // offload, swift-log, and (Phase C+) the MCP JSON-RPC core + transports.
+    // offload, swift-log, and the MCP JSON-RPC core + transports.
     // ad-server-only; knows nothing route-specific. Max strict concurrency.
     .target(
       name: "ADServeCore",
@@ -151,6 +175,7 @@ let package = Package(
         .product(name: "NIOCore", package: "swift-nio"),
         .product(name: "NIOPosix", package: "swift-nio"),
         .product(name: "NIOHTTP1", package: "swift-nio"),
+        .product(name: "NIOExtras", package: "swift-nio-extras"),
         .product(name: "NIOHTTPTypes", package: "swift-nio-extras"),
         .product(name: "NIOHTTPTypesHTTP1", package: "swift-nio-extras"),
         .product(name: "NIOHTTPTypesHTTP2", package: "swift-nio-extras"),
@@ -161,13 +186,15 @@ let package = Package(
         .product(name: "Logging", package: "swift-log"),
         .product(name: "Crypto", package: "swift-crypto"),
         .product(name: "ADJSON", package: "ADJSON"),
+        .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+        .product(name: "UnixSignals", package: "swift-service-lifecycle"),
         "ADStorage",
       ] + http3TargetDependencies,
       swiftSettings: releaseCMO + strictSettings + http3Settings),
-    // RFC 0005 — the endpoint DSL: @RouteBuilder, Route/Group, the typed Path
+    // The endpoint DSL: @RouteBuilder, Route/Group, the typed Path
     // (RegexBuilder captures), RequestContext, RouteQuery, ResponseContent, the
-    // .cache/.storage modifiers (and the Tool DSL in Phase C). Sees only
-    // ADServeCore's public surface — the engine internals stay out of reach.
+    // .cache/.storage modifiers (and the Tool DSL). Sees only ADServeCore's
+    // public surface — the engine internals stay out of reach.
     .target(
       name: "ADServeDSL",
       dependencies: [
@@ -176,8 +203,7 @@ let package = Package(
         .product(name: "ADJSON", package: "ADJSON"),
       ],
       swiftSettings: releaseCMO + strictSettings),
-    // P6 first slice: the in-house SwiftNIO HTTP host spike (RFC 0001 P6), now the
-    // RFC 0005 app layer — endpoint declarations + Services over the engine + DSL.
+    // The app layer — endpoint declarations + Services over the engine + DSL.
     // Serves /healthz + /search + the web routes over ADStorage IN-PROCESS (no FFI).
     .executableTarget(
       name: "ad-server",
@@ -203,7 +229,28 @@ let package = Package(
     .testTarget(name: "ADArchiveTests", dependencies: ["ADArchive"], swiftSettings: testSettings),
     .testTarget(name: "ADCoreTests", dependencies: ["ADCore", "ADEmbed"], swiftSettings: testSettings),
     .testTarget(name: "ADEmbedTests", dependencies: ["ADEmbed"], swiftSettings: testSettings),
-    .testTarget(name: "ADContentTests", dependencies: ["ADContent"], swiftSettings: testSettings),
+    .testTarget(
+      name: "ADContentTests",
+      dependencies: ["ADContent", .product(name: "ADJSONCore", package: "ADJSON")],
+      swiftSettings: testSettings),
     .testTarget(name: "ADStorageTests", dependencies: ["ADStorage"], swiftSettings: testSettings),
+    .testTarget(
+      name: "ADSearchCascadeTests", dependencies: ["ADSearchCascade"], swiftSettings: testSettings),
+    .testTarget(
+      name: "ADServeCoreTests",
+      dependencies: [
+        "ADServeCore", .product(name: "ADJSON", package: "ADJSON"),
+        .product(name: "HTTPTypes", package: "swift-http-types"),
+      ],
+      swiftSettings: testSettings),
+    .testTarget(
+      name: "ADServeDSLTests",
+      dependencies: [
+        "ADServeDSL", "ADServeCore", .product(name: "HTTPTypes", package: "swift-http-types"),
+      ],
+      swiftSettings: testSettings),
+    .testTarget(
+      name: "ADServerTests", dependencies: ["ad-server", "ADSearchCascade"],
+      swiftSettings: testSettings),
   ]
 )
