@@ -1,10 +1,10 @@
-// Port of src/content/render-snippet.js renderSnippet (RFC 0001 P6 enrichment).
-// renderPlainText reuses the validated ADContent.PlainText span renderer; the
-// windowing replicates JS string semantics exactly — UTF-16 indices for
-// indexOf/slice/length, JsString.lowercase for toLowerCase, JsString.trim for
-// trim. ASCII (the Apple-docs common case) is identity; non-ASCII matches via
-// the UTF-16 view + JsString. (A window boundary landing mid-surrogate-pair is
-// the one known divergence — JS keeps a lone surrogate, Swift cannot.)
+// Port of the JS renderSnippet function. renderPlainText reuses the validated
+// ADContent.PlainText span renderer; the windowing replicates JS string
+// semantics exactly — UTF-16 indices for indexOf/slice/length,
+// JsString.lowercase for toLowerCase, JsString.trim for trim. ASCII (the
+// Apple-docs common case) is identity; non-ASCII matches via the UTF-16 view +
+// JsString. (A window boundary landing mid-surrogate-pair is the one known
+// divergence — JS keeps a lone surrogate, Swift cannot.)
 
 import ADContent
 import ADStorage
@@ -87,15 +87,20 @@ enum Snippet {
   }
 
   private static func firstIndex(of needle: [UInt16], in haystack: [UInt16]) -> Int? {
-    if needle.isEmpty { return 0 }
+    guard let first = needle.first else { return 0 }
     if needle.count > haystack.count { return nil }
-    for start in 0...(haystack.count - needle.count) {
-      var matched = true
-      for j in 0..<needle.count where haystack[start + j] != needle[j] {
-        matched = false
-        break
+    let lastStart = haystack.count - needle.count
+    var start = 0
+    while start <= lastStart {
+      // First-unit skip: only verify the tail where needle[0] matches.
+      guard haystack[start] == first else {
+        start += 1
+        continue
       }
-      if matched { return start }
+      var j = 1
+      while j < needle.count, haystack[start + j] == needle[j] { j += 1 }
+      if j == needle.count { return start }
+      start += 1
     }
     return nil
   }
