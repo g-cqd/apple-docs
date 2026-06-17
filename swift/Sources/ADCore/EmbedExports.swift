@@ -24,6 +24,7 @@
 
 import ADBase
 import ADEmbed
+import ADFCore
 
 #if canImport(Darwin)
 import Darwin

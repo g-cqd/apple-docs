@@ -2,6 +2,7 @@
 // each test pins one of the documented parity traps so a parity failure
 // localizes to a stage instead of a 180-case diff.
 
+import ADFUnicode
 import Testing
 
 @testable import ADEmbed

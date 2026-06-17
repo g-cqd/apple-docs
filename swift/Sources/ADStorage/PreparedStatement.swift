@@ -3,6 +3,8 @@
 // of every execution so stale bindings from a prior call can never leak
 // into the next and silently return wrong rows.
 
+import ADJSONCore
+
 #if canImport(Darwin)
 import Darwin
 #else
@@ -299,31 +301,13 @@ func appendInt(_ out: inout [UInt8], _ value: Int64) {
   }
 }
 
-// MARK: - JSON string escaping, UTF-8 bytes passed through.
-
-private func hexDigit(_ v: UInt8) -> UInt8 {
-  v < 10 ? UInt8(ascii: "0") + v : UInt8(ascii: "a") + (v - 10)
-}
+// MARK: - JSON string escaping (delegated to ADJSON's single escaper); UTF-8 bytes pass through.
 
 func appendJSONEscaped(_ out: inout [UInt8], _ buf: UnsafeBufferPointer<UInt8>) {
-  let backslash = UInt8(ascii: "\\")
   for b in buf {
-    switch b {
-    case 0x22: out.append(backslash); out.append(0x22)
-    case 0x5C: out.append(backslash); out.append(0x5C)
-    case 0x08: out.append(backslash); out.append(UInt8(ascii: "b"))
-    case 0x0C: out.append(backslash); out.append(UInt8(ascii: "f"))
-    case 0x0A: out.append(backslash); out.append(UInt8(ascii: "n"))
-    case 0x0D: out.append(backslash); out.append(UInt8(ascii: "r"))
-    case 0x09: out.append(backslash); out.append(UInt8(ascii: "t"))
-    case 0..<0x20:
-      out.append(backslash)
-      out.append(UInt8(ascii: "u"))
-      out.append(UInt8(ascii: "0"))
-      out.append(UInt8(ascii: "0"))
-      out.append(hexDigit(b >> 4))
-      out.append(hexDigit(b & 0xF))
-    default:
+    if b < 0x20 || b == 0x22 || b == 0x5C {
+      JSONOutput.appendEscape(b, to: &out)
+    } else {
       out.append(b)
     }
   }

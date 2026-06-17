@@ -5,34 +5,11 @@
 // filtering happens later on the records.
 
 import ADContent
+import ADFText
 import ADStorage
 import Algorithms
 
 enum Fuzzy {
-  /// Levenshtein edit distance with early exit (returns maxDist+1 when exceeded).
-  static func levenshtein(_ a: [UInt16], _ b: [UInt16], maxDist: Int = 2) -> Int {
-    let m = a.count
-    let n = b.count
-    if abs(m - n) > maxDist { return maxDist + 1 }
-    if m == 0 { return n }
-    if n == 0 { return m }
-    var prev = Array(0...n)
-    var curr = [Int](repeating: 0, count: n + 1)
-    for i in 1...m {
-      curr[0] = i
-      var rowMin = i
-      for j in 1...n {
-        curr[j] =
-          a[i - 1] == b[j - 1]
-          ? prev[j - 1]
-          : 1 + Swift.min(prev[j], curr[j - 1], prev[j - 1])
-        if curr[j] < rowMin { rowMin = curr[j] }
-      }
-      if rowMin > maxDist { return maxDist + 1 }
-      swap(&prev, &curr)
-    }
-    return prev[n]
-  }
 
   /// Character trigrams of `JsString.lowercase(s)` over UTF-16 units, dedup'd
   /// (the OR query is order-insensitive, so first-occurrence order is fine).
@@ -74,7 +51,7 @@ enum Fuzzy {
       // by ≤ maxDist edits, so the candidate would be dropped anyway.
       if abs(loweredTitle.utf16.count - queryLower.count) > maxDist { continue }
       let titleLower = Array(loweredTitle.utf16)
-      let distance = levenshtein(queryLower, titleLower, maxDist: maxDist)
+      let distance = ADFText.editDistance(queryLower, titleLower, maxDistance: maxDist)
       if distance <= maxDist { matches.append((candidate.id, distance, orig)) }
     }
     // Bounded top-K by distance (JS Array.sort, stable) — preserve candidate

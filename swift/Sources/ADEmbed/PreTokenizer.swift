@@ -3,6 +3,8 @@
 // `$ + < = > ^ | ~` split, while € or ∑ stay word characters). The leading
 // trim is subsumed: unmatched whitespace never emits a token.
 
+import ADFUnicode
+
 enum PreTokenizer {
   static func split(_ scalars: [Unicode.Scalar]) -> [ArraySlice<Unicode.Scalar>] {
     var tokens: [ArraySlice<Unicode.Scalar>] = []

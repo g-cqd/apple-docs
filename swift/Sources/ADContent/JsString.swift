@@ -9,6 +9,7 @@
 
 public import ADBase
 public import ADEmbed
+public import ADFUnicode
 
 public enum JsString {
   @inline(__always)

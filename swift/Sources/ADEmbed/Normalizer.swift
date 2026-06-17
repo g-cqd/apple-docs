@@ -11,6 +11,8 @@
 //   - tokenize_chinese_chars iterates UTF-16 units in JS, so only BMP
 //     scalars can match; the generated chineseChar table is BMP-only.
 
+import ADFUnicode
+
 enum Normalizer {
   private static let space: Unicode.Scalar = " "
 

@@ -17,6 +17,7 @@
 // result payload: N × u32 output permutation
 
 import ADBase
+import ADFCore
 import ADSearch
 
 private let maxLists = 1024
