@@ -1,5 +1,4 @@
-// Content FFI surface (RFC 0004 phases 1-2, perf round §6b). Byte layouts
-// are shared verbatim with src/content/content-native.js — change both
+// Content FFI surface. Byte layouts are shared verbatim — change both
 // sides together.
 //
 // Nullable strings: [u32 len][utf8] with len = 0xFFFFFFFF meaning null
@@ -40,13 +39,6 @@ public import ADContent
 // nullSentinel, renderIndexed, and lenPrefixedPayload are the shared
 // contract-v0 batch primitives in ADBase/BatchResult.swift.
 
-private func readNullableSpan(_ reader: inout RequestReader, max: Int = maxInputBytes) -> ByteSpan?? {
-  guard let length = reader.u32() else { return nil } // malformed
-  if length == nullSentinel { return .some(nil) }
-  guard Int(length) <= max, let view = reader.bytes(Int(length)) else { return nil }
-  return .some(view)
-}
-
 private func spanString(_ span: ByteSpan?) -> String? {
   guard let span else { return nil }
   return String(decoding: span.bindMemory(to: UInt8.self), as: UTF8.self)
@@ -72,7 +64,7 @@ public func adContentDocMarkdown(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Un
   }
   var fields: [ByteSpan?] = []
   for _ in 0..<7 {
-    guard let field = readNullableSpan(&reader) else {
+    guard let field = reader.nullableSpan(max: maxInputBytes) else {
       return ResultBuffer.error(.invalidInput, "truncated document field")
     }
     fields.append(field)
@@ -88,10 +80,10 @@ public func adContentDocMarkdown(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Un
   var sections: [SectionSpans] = []
   sections.reserveCapacity(Int(sectionCount))
   for _ in 0..<sectionCount {
-    guard let kind = readNullableSpan(&reader),
-      let heading = readNullableSpan(&reader),
-      let contentText = readNullableSpan(&reader),
-      let contentJson = readNullableSpan(&reader),
+    guard let kind = reader.nullableSpan(max: maxInputBytes),
+      let heading = reader.nullableSpan(max: maxInputBytes),
+      let contentText = reader.nullableSpan(max: maxInputBytes),
+      let contentJson = reader.nullableSpan(max: maxInputBytes),
       let sortOrder = reader.f64()
     else { return ResultBuffer.error(.invalidInput, "truncated section") }
     sections.append(
@@ -123,7 +115,7 @@ public func adContentPlaintext(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Unsa
   }
   var fields: [ByteSpan?] = []
   for _ in 0..<4 {
-    guard let field = readNullableSpan(&reader) else {
+    guard let field = reader.nullableSpan(max: maxInputBytes) else {
       return ResultBuffer.error(.invalidInput, "truncated document field")
     }
     fields.append(field)
@@ -138,8 +130,8 @@ public func adContentPlaintext(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Unsa
   var sections: [PlainSectionSpans] = []
   sections.reserveCapacity(Int(sectionCount))
   for _ in 0..<sectionCount {
-    guard let heading = readNullableSpan(&reader),
-      let contentText = readNullableSpan(&reader),
+    guard let heading = reader.nullableSpan(max: maxInputBytes),
+      let contentText = reader.nullableSpan(max: maxInputBytes),
       let sortOrder = reader.f64()
     else { return ResultBuffer.error(.invalidInput, "truncated section") }
     sections.append(
@@ -163,7 +155,8 @@ public func adContentPageMarkdown(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> U
   guard let version = reader.u32(), version == 1 else {
     return ResultBuffer.error(.invalidInput, "unsupported content request version")
   }
-  guard let pathField = readNullableSpan(&reader), let rawField = readNullableSpan(&reader) else {
+  guard let pathField = reader.nullableSpan(max: maxInputBytes), let rawField = reader.nullableSpan(max: maxInputBytes)
+  else {
     return ResultBuffer.error(.invalidInput, "truncated page request")
   }
   guard reader.remaining == 0 else {
@@ -173,14 +166,10 @@ public func adContentPageMarkdown(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> U
   guard let raw = rawField else {
     return ResultBuffer.error(.invalidInput, "null raw JSON")
   }
-  let tape: JsonTape
-  do {
-    tape = try JsonTape.parse(raw, maxContainerDepth: 512)
-  } catch {
-    return ResultBuffer.error(.invalidInput, "page JSON rejected: \(error)")
-  }
   var w = ByteWriter(capacity: 8192)
-  PageMarkdown.render(tape: tape, canonicalPath: path, into: &w)
+  guard PageMarkdown.renderRawJSON(raw, canonicalPath: path, into: &w) else {
+    return ResultBuffer.error(.invalidInput, "page JSON rejected")
+  }
   var out: [UInt8] = []
   ByteOps.finishDocument(w.bytes, into: &out, trailingNewline: true)
   return payload(from: out)
@@ -201,8 +190,8 @@ public func adContentConvertPages(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> U
   var pages: [(canonicalPath: String, filePath: String)?] = []
   pages.reserveCapacity(Int(count))
   for _ in 0..<count {
-    guard let canonicalPath = readNullableSpan(&reader),
-      let filePath = readNullableSpan(&reader)
+    guard let canonicalPath = reader.nullableSpan(max: maxInputBytes),
+      let filePath = reader.nullableSpan(max: maxInputBytes)
     else { return ResultBuffer.error(.invalidInput, "truncated page entry") }
     if let canonicalPath = spanString(canonicalPath), let filePath = spanString(filePath) {
       pages.append((canonicalPath, filePath))
@@ -224,7 +213,7 @@ public func adContentConvertPages(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> U
   return lenPrefixedPayload(results)
 }
 
-// MARK: - Batched render exports (RFC 0004 §6b)
+// MARK: - Batched render exports
 //
 // ad_content_doc_markdown_batch request:
 //   [u32 version=1][u32 flags][u32 docCount] then per doc the SAME body
@@ -250,7 +239,7 @@ private struct PlainJob: @unchecked Sendable {
 private func decodeDocJob(_ reader: inout RequestReader) -> DocJob? {
   var fields: [ByteSpan?] = []
   for _ in 0..<7 {
-    guard let field = readNullableSpan(&reader) else { return nil }
+    guard let field = reader.nullableSpan(max: maxInputBytes) else { return nil }
     fields.append(field)
   }
   let document = DocFieldSpans(
@@ -261,10 +250,10 @@ private func decodeDocJob(_ reader: inout RequestReader) -> DocJob? {
   var sections: [SectionSpans] = []
   sections.reserveCapacity(Int(sectionCount))
   for _ in 0..<sectionCount {
-    guard let kind = readNullableSpan(&reader),
-      let heading = readNullableSpan(&reader),
-      let contentText = readNullableSpan(&reader),
-      let contentJson = readNullableSpan(&reader),
+    guard let kind = reader.nullableSpan(max: maxInputBytes),
+      let heading = reader.nullableSpan(max: maxInputBytes),
+      let contentText = reader.nullableSpan(max: maxInputBytes),
+      let contentJson = reader.nullableSpan(max: maxInputBytes),
       let sortOrder = reader.f64()
     else { return nil }
     sections.append(
@@ -278,7 +267,7 @@ private func decodeDocJob(_ reader: inout RequestReader) -> DocJob? {
 private func decodePlainJob(_ reader: inout RequestReader) -> PlainJob? {
   var fields: [ByteSpan?] = []
   for _ in 0..<4 {
-    guard let field = readNullableSpan(&reader) else { return nil }
+    guard let field = reader.nullableSpan(max: maxInputBytes) else { return nil }
     fields.append(field)
   }
   let document = PlainTextSpans(
@@ -288,8 +277,8 @@ private func decodePlainJob(_ reader: inout RequestReader) -> PlainJob? {
   var sections: [PlainSectionSpans] = []
   sections.reserveCapacity(Int(sectionCount))
   for _ in 0..<sectionCount {
-    guard let heading = readNullableSpan(&reader),
-      let contentText = readNullableSpan(&reader),
+    guard let heading = reader.nullableSpan(max: maxInputBytes),
+      let contentText = reader.nullableSpan(max: maxInputBytes),
       let sortOrder = reader.f64()
     else { return nil }
     sections.append(
