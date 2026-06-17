@@ -1,10 +1,4 @@
-// Port of src/content/render-markdown.js — document + sections → markdown
-// (normative JS until the phase-5 kill). Span + tape + writer
-// implementation (RFC 0004 §6b): fields stay as byte spans over the FFI
-// request; contentJson parses onto a tape; sections render into a reused
-// section writer (the `if (rendered)` skip-if-empty protocol).
-
-public import ADBase
+import ADJSONCore
 
 /// Nullable byte spans over the request buffer (nil = JS null/undefined).
 public struct DocFieldSpans {
@@ -34,7 +28,7 @@ public struct DocFieldSpans {
 public struct SectionSpans {
   public var kind: ByteSpan?
   public var heading: ByteSpan?
-  public var text: ByteSpan // contentText (coerced default '')
+  public var text: ByteSpan  // contentText (coerced default '')
   public var json: ByteSpan?
   public var sortOrder: Double
 
@@ -115,8 +109,8 @@ public enum DocMarkdown {
   /// formatPlatforms: array → element coercions; object → "Name version+"
   /// in insertion order; anything else → field skipped entirely.
   static func appendPlatforms(_ platformsJson: ByteSpan?, _ w: inout ByteWriter) {
-    guard let json = platformsJson, let tape = JsonTape.safeJson(json) else { return }
-    let root = tape.root
+    guard let json = platformsJson, let doc = try? ADJSON.parse(json, options: .init(maxDepth: 64)) else { return }
+    let root = doc.root
     var items = ByteWriter(capacity: 128)
     var first = true
     func appendItem(_ body: (inout ByteWriter) -> Void) {
@@ -126,17 +120,17 @@ public enum DocMarkdown {
       first = false
       appendQuotedBytes(item.bytes, &items)
     }
-    if tape.kind(root) == .array {
-      tape.forEachElement(root) { element in
-        appendItem { item in item.appendCoercion(tape: tape, element) }
+    if root.isArray {
+      root.forEachElement { element in
+        appendItem { item in item.appendCoercion(element) }
       }
-    } else if tape.kind(root) == .object {
-      tape.forEachMember(root) { key, value in
+    } else if root.isObject {
+      root.forEachMember { key, value in
         appendItem { item in
-          appendPrettyPlatform(tape, key, &item)
-          if tape.isTruthy(value) {
+          appendPrettyPlatform(key, &item)
+          if value.isTruthy {
             item.append(0x20)
-            item.appendCoercion(tape: tape, value)
+            item.appendCoercion(value)
             item.append(0x2B)
           }
         }
@@ -149,16 +143,16 @@ public enum DocMarkdown {
     w.append(0x5D)
   }
 
-  static func appendPrettyPlatform(_ tape: JsonTape, _ key: Int, _ w: inout ByteWriter) {
-    let pretty: [(StaticString, StaticString)] = [
+  static func appendPrettyPlatform(_ key: String, _ w: inout ByteWriter) {
+    let pretty: [(String, StaticString)] = [
       ("ios", "iOS"), ("macos", "macOS"), ("watchos", "watchOS"), ("tvos", "tvOS"),
       ("visionos", "visionOS"), ("maccatalyst", "Mac Catalyst"), ("ipados", "iPadOS"),
     ]
-    for (raw, display) in pretty where tape.stringEquals(key, raw) {
+    for (raw, display) in pretty where key == raw {
       w.append(display)
       return
     }
-    w.append(tape: tape, string: key)
+    w.append(key)
   }
 
   static func appendQuoted(span: ByteSpan, _ w: inout ByteWriter) {
@@ -252,7 +246,7 @@ public enum DocMarkdown {
     let mark = w.count
     w.appendNormalizedParagraphs(text)
     if w.count == mark {
-      w.removeAll() // body empty → renderTitledSection returns ''
+      w.removeAll()  // body empty → renderTitledSection returns ''
     }
   }
 
@@ -260,16 +254,17 @@ public enum DocMarkdown {
     var blocks = ByteWriter(capacity: 256)
     var code = ByteWriter(capacity: 256)
     var blockCount = 0
-    if let json = section.json, let tape = JsonTape.safeJson(json), tape.kind(tape.root) == .array {
-      tape.forEachElement(tape.root) { declaration in
-        let obj = tape.kind(declaration) == .object ? declaration : nil
+    if let json = section.json, let doc = try? ADJSON.parse(json, options: .init(maxDepth: 64)), doc.root.isArray {
+      doc.root.forEachElement { declaration in
+        let obj = declaration.isObject ? declaration : nil
         code.removeAll()
-        if let tokens = obj.flatMap({ tape.member($0, "tokens") }), tape.kind(tokens) == .array {
-          tape.forEachElement(tokens) { token in
+        if let tokens = obj.flatMap({ $0.member("tokens") }), tokens.isArray {
+          tokens.forEachElement { token in
             // `token.text ?? ''` — nullish only.
-            if tape.kind(token) == .object, let text = tape.member(token, "text"),
-              !tape.isNull(text) {
-              code.appendCoercion(tape: tape, text)
+            if token.isObject, let text = token.member("text"),
+              !text.isNull
+            {
+              code.appendCoercion(text)
             }
           }
         }
@@ -279,14 +274,15 @@ public enum DocMarkdown {
         if blockCount > 0 { blocks.append("\n\n") }
         blockCount += 1
         blocks.append("```")
-        if let languages = obj.flatMap({ tape.member($0, "languages") }),
-          let first = tape.firstElement(languages), !tape.isNull(first) {
-          blocks.appendCoercion(tape: tape, first)
+        if let languages = obj.flatMap({ $0.member("languages") }),
+          let first = languages.firstElement, !first.isNull
+        {
+          blocks.appendCoercion(first)
         } else {
           blocks.append("swift")
         }
         blocks.append(0x0A)
-        blocks.bytes.append(contentsOf: code.bytes) // raw code, untrimmed
+        blocks.bytes.append(contentsOf: code.bytes)  // raw code, untrimmed
         blocks.append("\n```")
       }
     }
@@ -306,21 +302,22 @@ public enum DocMarkdown {
   static func renderParameters(_ section: SectionSpans, _ w: inout ByteWriter) {
     w.append("## Parameters\n")
     var wrote = false
-    if let json = section.json, let tape = JsonTape.safeJson(json), tape.kind(tape.root) == .array,
-      tape.childCount(tape.root) > 0 {
-      tape.forEachElement(tape.root) { parameter in
-        let obj = tape.kind(parameter) == .object ? parameter : nil
+    if let json = section.json, let doc = try? ADJSON.parse(json, options: .init(maxDepth: 64)), doc.root.isArray,
+      doc.root.count > 0
+    {
+      doc.root.forEachElement { parameter in
+        let obj = parameter.isObject ? parameter : nil
         w.append(0x0A)
         let lineMark = w.count
         w.append("- `")
-        if let name = obj.flatMap({ tape.member($0, "name") }), !tape.isNull(name) {
-          w.appendCoercion(tape: tape, name)
+        if let name = obj.flatMap({ $0.member("name") }), !name.isNull {
+          w.appendCoercion(name)
         } else {
           w.append("Value")
         }
         w.append("`: ")
         let descMark = w.count
-        ContentText.renderNodes(tape, obj.flatMap { tape.member($0, "content") }, refs: .none, into: &w)
+        ContentText.renderNodes(obj.flatMap { $0.member("content") }, refs: .none, into: &w)
         w.collapseWhitespace(since: descMark)
         w.trim(since: descMark)
         w.trim(since: lineMark)
@@ -334,7 +331,7 @@ public enum DocMarkdown {
         var i = ts
         while i <= te {
           if i == te || textBytes[i] == 0x0A {
-            if i > lineStart { // `.filter(Boolean)` drops empty lines
+            if i > lineStart {  // `.filter(Boolean)` drops empty lines
               w.append("\n- ")
               w.bytes.append(contentsOf: textBytes[lineStart..<i])
               wrote = true
@@ -358,44 +355,46 @@ public enum DocMarkdown {
     w.append(title)
     w.append(0x0A)
     var usedGroups = false
-    if let json = section.json, let tape = JsonTape.safeJson(json), tape.kind(tape.root) == .array,
-      tape.childCount(tape.root) > 0 {
+    if let json = section.json, let doc = try? ADJSON.parse(json, options: .init(maxDepth: 64)), doc.root.isArray,
+      doc.root.count > 0
+    {
       usedGroups = true
-      tape.forEachElement(tape.root) { group in
-        let obj = tape.kind(group) == .object ? group : nil
-        if let groupTitle = obj.flatMap({ tape.member($0, "title") }), tape.isTruthy(groupTitle) {
+      doc.root.forEachElement { group in
+        let obj = group.isObject ? group : nil
+        if let groupTitle = obj.flatMap({ $0.member("title") }), groupTitle.isTruthy {
           w.append("\n### ")
-          w.appendCoercion(tape: tape, groupTitle)
+          w.appendCoercion(groupTitle)
           w.append(0x0A)
         }
-        if let items = obj.flatMap({ tape.member($0, "items") }), tape.kind(items) == .array {
-          tape.forEachElement(items) { item in
-            let itemObj = tape.kind(item) == .object ? item : nil
+        if let items = obj.flatMap({ $0.member("items") }), items.isArray {
+          items.forEachElement { item in
+            let itemObj = item.isObject ? item : nil
             w.append(0x0A)
-            if let key = itemObj.flatMap({ tape.member($0, "key") }), tape.isTruthy(key) {
+            if let key = itemObj.flatMap({ $0.member("key") }), key.isTruthy {
               w.append("- [")
-              if let itemTitle = itemObj.flatMap({ tape.member($0, "title") }), !tape.isNull(itemTitle) {
-                w.appendCoercion(tape: tape, itemTitle)
+              if let itemTitle = itemObj.flatMap({ $0.member("title") }), !itemTitle.isNull {
+                w.appendCoercion(itemTitle)
               } else {
-                w.appendCoercion(tape: tape, key)
+                w.appendCoercion(key)
               }
               w.append("](")
-              w.appendCoercion(tape: tape, key)
+              w.appendCoercion(key)
               w.append(".md)")
             } else {
               let lineMark = w.count
               w.append("- ")
-              if let itemTitle = itemObj.flatMap({ tape.member($0, "title") }), !tape.isNull(itemTitle) {
-                w.appendCoercion(tape: tape, itemTitle)
-              } else if let identifier = itemObj.flatMap({ tape.member($0, "identifier") }),
-                !tape.isNull(identifier) {
-                w.appendCoercion(tape: tape, identifier)
+              if let itemTitle = itemObj.flatMap({ $0.member("title") }), !itemTitle.isNull {
+                w.appendCoercion(itemTitle)
+              } else if let identifier = itemObj.flatMap({ $0.member("identifier") }),
+                !identifier.isNull
+              {
+                w.appendCoercion(identifier)
               }
               w.trim(since: lineMark)
             }
           }
         }
-        w.append(0x0A) // the group's trailing '' line
+        w.append(0x0A)  // the group's trailing '' line
       }
     }
     if !usedGroups {
