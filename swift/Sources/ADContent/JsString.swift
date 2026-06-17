@@ -1,6 +1,5 @@
-// JavaScript string-semantics helpers shared by the content renderers
-// (RFC 0004 §4). Each mirrors a specific construct in src/content/* —
-// change both sides together.
+// JavaScript string-semantics helpers shared by the content renderers.
+// Each mirrors a specific JS construct — change both sides together.
 //
 // Implementation note: everything operates on UTF-8 BYTES (the dylib's
 // boundary representation) — '\n' and all ASCII classes are single bytes
@@ -75,8 +74,7 @@ public enum JsString {
     return (start, end)
   }
 
-  /// `.replace(/\n{3,}/g, '\n\n')` — the shared finisher in
-  /// render-markdown.js:47, renderer.js:90 and render-text.js:23.
+  /// `.replace(/\n{3,}/g, '\n\n')` — collapses runs of 3+ newlines to two.
   public static func collapseBlankRuns(_ text: String) -> String {
     let bytes = Array(text.utf8)
     var out = [UInt8]()
@@ -101,9 +99,8 @@ public enum JsString {
     return String(decoding: out, as: UTF8.self)
   }
 
-  /// normalizeParagraphs (render-markdown.js:142-149): trim → split on
-  /// /\n{2,}/ → each paragraph's \n+ runs become one space, trimmed →
-  /// join '\n\n'.
+  /// normalizeParagraphs: trim → split on /\n{2,}/ → each paragraph's
+  /// \n+ runs become one space, trimmed → join '\n\n'.
   public static func normalizeParagraphs(_ text: String) -> String {
     let bytes = Array(text.utf8)
     let (start, end) = trimBounds(bytes)
@@ -145,8 +142,7 @@ public enum JsString {
     return String(decoding: out, as: UTF8.self)
   }
 
-  /// `.replace(/\s+/g, ' ')` — jsWhitespace runs become one space
-  /// (render-markdown.js:97).
+  /// `.replace(/\s+/g, ' ')` — jsWhitespace runs become one space.
   public static func collapseWhitespaceRuns(_ text: String) -> String {
     let bytes = Array(text.utf8)
     var out = [UInt8]()
@@ -170,9 +166,9 @@ public enum JsString {
     return String(decoding: out, as: UTF8.self)
   }
 
-  /// humanize (render-markdown.js:199-203): `_`→space, then uppercase
-  /// every `\b\w` match — an ASCII word char at a word boundary (JS \w
-  /// and \b are ASCII-only; non-ASCII bytes are all ≥ 0x80 = non-word).
+  /// humanize: `_`→space, then uppercase every `\b\w` match — an ASCII
+  /// word char at a word boundary (JS \w and \b are ASCII-only; non-ASCII
+  /// bytes are all ≥ 0x80 = non-word).
   public static func humanize(_ text: String) -> String {
     var out = Array(text.utf8)
     var previousIsWord = false
@@ -201,26 +197,5 @@ public enum JsString {
     var out = ""
     out.unicodeScalars.append(contentsOf: lowered)
     return out
-  }
-}
-
-extension JsonValue {
-  /// Template-literal interpolation of a possibly-missing value:
-  /// `${undefined}` → "undefined", `${null}` → "null", else ToString.
-  public static func templateString(_ value: JsonValue?) -> String {
-    guard let value else { return "undefined" }
-    return value.jsStringCoercion
-  }
-
-  /// `value ?? fallback` over JS nullish semantics (null/undefined).
-  public var nullish: JsonValue? {
-    if case .null = self { return nil }
-    return self
-  }
-
-  /// Truthy non-empty string or nil — the `x?.trim() ? … : …` shape.
-  public var truthyString: String? {
-    guard let s = asString, !s.isEmpty else { return nil }
-    return s
   }
 }

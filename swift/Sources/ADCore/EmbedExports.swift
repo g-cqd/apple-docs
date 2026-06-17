@@ -1,5 +1,5 @@
-// Embed FFI surface (RFC 0002 phase 3). Byte layouts are shared verbatim
-// with src/search/embedder-native.js — change both sides together.
+// Embed FFI surface. Byte layouts are shared verbatim — change both sides
+// together.
 //
 // init request (little-endian):
 //   [u32 version=1]
@@ -70,13 +70,6 @@ private final class EmbedRuntime: @unchecked Sendable {
   }
 }
 
-private func readString(_ reader: inout RequestReader, max: Int = 1 << 20) -> String? {
-  guard let length = reader.u32(), Int(length) <= max,
-    let view = reader.bytes(Int(length))
-  else { return nil }
-  return String(decoding: view, as: UTF8.self)
-}
-
 @_cdecl("ad_embed_init")
 public func adEmbedInit(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
   guard len > 0, len <= maxInputBytes, let ptr else {
@@ -86,7 +79,7 @@ public func adEmbedInit(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutab
   guard let version = reader.u32(), version == 1 else {
     return ResultBuffer.error(.invalidInput, "unsupported embed init version")
   }
-  guard let matrixPath = readString(&reader), !matrixPath.isEmpty else {
+  guard let matrixPath = reader.lengthString(max: 1 << 20), !matrixPath.isEmpty else {
     return ResultBuffer.error(.invalidInput, "truncated matrix path")
   }
   guard let rawVocabCount = reader.u32(), rawVocabCount <= maxVocabTokens else {
@@ -95,7 +88,7 @@ public func adEmbedInit(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutab
   var vocab: [String] = []
   vocab.reserveCapacity(Int(rawVocabCount))
   for _ in 0..<rawVocabCount {
-    guard let token = readString(&reader) else {
+    guard let token = reader.lengthString(max: 1 << 20) else {
       return ResultBuffer.error(.invalidInput, "truncated vocab token")
     }
     vocab.append(token)
@@ -106,13 +99,13 @@ public func adEmbedInit(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutab
   var added: [Tokenizer.AddedToken] = []
   added.reserveCapacity(Int(rawAddedCount))
   for _ in 0..<rawAddedCount {
-    guard let id = reader.u32(), let content = readString(&reader) else {
+    guard let id = reader.u32(), let content = reader.lengthString(max: 1 << 20) else {
       return ResultBuffer.error(.invalidInput, "truncated added token")
     }
     added.append(.init(content: content, id: Int32(bitPattern: id)))
   }
-  guard let unkToken = readString(&reader),
-    let prefix = readString(&reader),
+  guard let unkToken = reader.lengthString(max: 1 << 20),
+    let prefix = reader.lengthString(max: 1 << 20),
     let maxChars = reader.u32(),
     reader.remaining == 0
   else { return ResultBuffer.error(.invalidInput, "truncated embed init tail") }
@@ -171,7 +164,7 @@ private func decodeBatchRequest(
   var texts: [String] = []
   texts.reserveCapacity(Int(rawCount))
   for _ in 0..<rawCount {
-    guard let text = readString(&reader, max: maxInputBytes) else {
+    guard let text = reader.lengthString(max: maxInputBytes) else {
       return .failure(BatchDecodeFailure(message: "truncated batch text"))
     }
     texts.append(text)
@@ -191,13 +184,18 @@ public func adEmbedBatch(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMuta
   }
   let (embedder, texts) = decoded
   let dims = embedder.dims
-  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: texts.count * dims * 4) else {
+  guard let rowBytes = dims.checkedMultiplied(by: 4),
+    let payloadBytes = texts.count.checkedMultiplied(by: rowBytes)
+  else {
+    return ResultBuffer.error(.invalidInput, "embed result size overflow")
+  }
+  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: payloadBytes) else {
     return nil
   }
   for (index, text) in texts.enumerated() {
     do {
       let vector = try embedder.embed(text)
-      let rowOffset = index * dims * 4
+      let rowOffset = index * rowBytes
       for i in 0..<dims {
         payload.storeBytes(of: vector[i].bitPattern.littleEndian, toByteOffset: rowOffset + i * 4, as: UInt32.self)
       }
@@ -210,9 +208,9 @@ public func adEmbedBatch(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMuta
 }
 
 /// Same request as ad_embed_batch; payload = count × (dims/8 sign-code bytes
-/// + dims+4 int8+scale bytes) — the exact blobs the index pipeline stores
-/// (src/commands/index-embeddings.js), so only 580 B/chunk cross the bridge
-/// instead of the 2 KB f32 vector plus a JS quantize pass.
+/// + dims+4 int8+scale bytes) — the exact blobs the index pipeline stores,
+/// so only 580 B/chunk cross the bridge instead of the 2 KB f32 vector plus
+/// a JS quantize pass.
 @_cdecl("ad_embed_batch_codes")
 public func adEmbedBatchCodes(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
   let decoded: (embedder: Embedder, texts: [String])
@@ -223,7 +221,10 @@ public func adEmbedBatchCodes(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Unsaf
   let (embedder, texts) = decoded
   let dims = embedder.dims
   let stride = dims / 8 + dims + 4
-  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: texts.count * stride) else {
+  guard let payloadBytes = texts.count.checkedMultiplied(by: stride) else {
+    return ResultBuffer.error(.invalidInput, "embed result size overflow")
+  }
+  guard let (base, payload) = ResultBuffer.allocate(status: .ok, format: .bytes, payloadCount: payloadBytes) else {
     return nil
   }
   for (index, text) in texts.enumerated() {

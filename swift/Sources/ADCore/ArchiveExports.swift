@@ -1,4 +1,4 @@
-// Archive request codec (shared verbatim with src/lib/archive-native.js).
+// Archive request codec (shared verbatim — change both sides together).
 // Binary, not JSON: keeps Foundation out of the dylib (the Linux bundle
 // would grow ~6× for one cold-path parse). All little-endian:
 //
@@ -23,12 +23,6 @@ public func adArchiveTarZst(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeM
   }
   var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
 
-  func string() -> String? {
-    guard let rawLength = reader.u32() else { return nil }
-    guard let view = reader.bytes(Int(rawLength)) else { return nil }
-    return String(decoding: view, as: UTF8.self)
-  }
-
   guard let version = reader.u32(), version == archiveCodecVersion else {
     return ResultBuffer.error(.invalidInput, "unknown archive codec version")
   }
@@ -39,13 +33,15 @@ public func adArchiveTarZst(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeM
   guard fileCount <= ArchiveWriter.maxFiles else {
     return ResultBuffer.error(.invalidInput, "file count \(fileCount) exceeds cap")
   }
-  guard let sourceDir = string(), let outputPath = string() else {
+  guard let sourceDir = reader.lengthString(max: maxInputBytes),
+    let outputPath = reader.lengthString(max: maxInputBytes)
+  else {
     return ResultBuffer.error(.invalidInput, "truncated archive paths")
   }
   var files = [String]()
   files.reserveCapacity(fileCount)
   for _ in 0..<fileCount {
-    guard let path = string() else {
+    guard let path = reader.lengthString(max: maxInputBytes) else {
       return ResultBuffer.error(.invalidInput, "truncated file list")
     }
     files.append(path)
