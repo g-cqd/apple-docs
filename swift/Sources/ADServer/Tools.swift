@@ -1,14 +1,11 @@
-// The ad-server MCP tool surface (RFC 0005 Phase C). Each tool's input is an ADJSON
-// `@Schemable & Decodable` struct — the macro derives the JSON Schema (the zod
-// replacement, D-0005-10) AND gives typed decoding; handlers call the existing
-// ADStorage queries / Cascade / WebRoutes builders and project to the exact
-// `project*()` shapes (src/output/projection.js). Result payload bytes flow back
-// through the MCP dispatcher as `{content:[{type:text,text}], structuredContent}`.
+// The ad-server MCP tool surface. Each tool's input is an ADJSON
+// `@Schemable & Decodable` struct — the macro derives the JSON Schema AND gives typed
+// decoding; handlers call ADStorage queries / Cascade / WebRoutes builders. Result
+// payload bytes flow back through the MCP dispatcher as
+// `{content:[{type:text,text}], structuredContent}`.
 //
 // Schemas use `@Schemable(dialect: .draft7)` + `@SchemaInfo`/`@SchemaNumber` + Swift
-// enums so `tools/list` is byte-for-byte (intrinsic) equal to the SDK's zod schemas.
-// Shipped: search_docs (base), list_taxonomy, list_frameworks, search_sf_symbols,
-// list_apple_fonts. browse + read_doc/render (Phase D) follow.
+// enums so `tools/list` is byte-for-byte equal to the SDK's zod schemas.
 
 import ADJSON
 import ADSearchCascade
@@ -16,7 +13,7 @@ import ADServeCore
 import ADServeDSL
 import ADStorage
 
-/// MCP `instructions` (src/mcp/server.js) — injected once per session by clients.
+/// MCP `instructions` — injected once per session by clients.
 let mcpInstructions =
   "Local offline index of Apple developer documentation: DocC frameworks, HIG, App Store Review Guidelines, Swift Evolution/book/org, WWDC sessions, sample code, Swift packages, SF Symbols, Apple fonts. Typical flow: search_docs, then read_doc with a hit's path (paginate long pages with maxChars). browse/list_frameworks explore structure; list_taxonomy enumerates filter values. All tools are read-only and fast."
 
@@ -37,7 +34,7 @@ enum DeprecatedFilter: String, Codable, CaseIterable { case include, exclude, on
 
 @Schemable(dialect: .draft7)
 struct SearchDocsInput: Decodable {
-  // read/maxChars/page/match (inline + pagination + excerpts) ride Phase D — omitted.
+  // read/maxChars/page/match (inline + pagination + excerpts) — omitted.
   @SchemaInfo(description: #"Search terms, e.g. "NavigationStack"."#) var query: String
   /// Framework slug, e.g. swiftui, app-store-review.
   var framework: String?
@@ -99,7 +96,7 @@ struct ListAppleFontsInput: Decodable {}
 
 @Schemable(dialect: .draft7)
 struct BrowseInput: Decodable {
-  // maxChars/page (pagination) ride Phase D — omitted.
+  // maxChars/page (pagination) — omitted.
   /// Root slug, e.g. swiftui, design, wwdc.
   var framework: String
   /// Drill into a page, e.g. swiftui/view.
@@ -152,14 +149,17 @@ func mcpToolRegistry() -> ToolRegistry {
   }
 }
 
-// MARK: - Handlers (project to the exact projection.js shapes)
+// MARK: - Handlers
 
 private func searchDocs(_ input: SearchDocsInput, _ ctx: MCPToolContext) -> MCPToolResult {
-  // The cascade already emits projectSearchResult(webPaths:false) — the MCP variant —
-  // and search()'s defaults (fuzzy on, noDeep off) match the cascade's always-on
-  // behavior, so the bytes ARE the search_docs payload. limit default 25 (MCP).
+  // The cascade already emits the MCP search_docs payload (webPaths:false) —
+  // search()'s defaults (fuzzy on, noDeep off) match the cascade's always-on
+  // behavior. limit default 25.
+  guard input.query.utf8.count <= maxSearchQueryBytes else {
+    return .failure("query too long (max \(maxSearchQueryBytes) bytes)")
+  }
   let params = SearchParams(
-    query: input.query, limit: input.limit ?? 25, offset: 0,
+    query: input.query, limit: clampSearchLimit(input.limit ?? 25, upperBound: 100), offset: 0,
     framework: input.framework, source: input.source, kind: input.kind,
     language: input.language?.rawValue, platform: input.platform?.rawValue,
     minIos: input.minVersion?.ios, minMacos: input.minVersion?.macos,
@@ -183,11 +183,11 @@ private func listTaxonomy(_ input: ListTaxonomyInput, _ ctx: MCPToolContext) -> 
       })
   }
   if let field = input.field?.rawValue, let match = fields.first(where: { $0.name == field }) {
-    return encodePayload(.object([field: entries(match.column)]))
+    return .okValue(.object([field: entries(match.column)]))
   }
   var out: OrderedDictionary<String, JSONValue> = [:]
   for field in fields { out[field.name] = entries(field.column) }
-  return encodePayload(.object(out))
+  return .okValue(.object(out))
 }
 
 private func listFrameworks(_ input: ListFrameworksInput, _ ctx: MCPToolContext) -> MCPToolResult {
@@ -202,17 +202,20 @@ private func listFrameworks(_ input: ListFrameworksInput, _ ctx: MCPToolContext)
         ])
       }),
   ])
-  return encodePayload(payload)
+  return .okValue(payload)
 }
 
 private func searchSfSymbols(_ input: SearchSfSymbolsInput, _ ctx: MCPToolContext) -> MCPToolResult {
+  guard (input.query ?? "").utf8.count <= maxSearchQueryBytes else {
+    return .failure("query too long (max \(maxSearchQueryBytes) bytes)")
+  }
   let rows = ctx.connection.searchSfSymbols(
     query: input.query ?? "", scope: input.scope?.rawValue, limit: clampSymbolLimitInt(input.limit))
-  // projectSearchSfSymbols: lean {results:[{name,scope}]} (NOT the full row).
+  // Lean MCP shape: {results:[{name,scope}]} (NOT the full row).
   let payload = JSONValue.object([
     "results": .array(rows.map { .object(["name": .string($0.name), "scope": .string($0.scope)]) })
   ])
-  return encodePayload(payload)
+  return .okValue(payload)
 }
 
 private func browse(_ input: BrowseInput, _ ctx: MCPToolContext) -> MCPToolResult {
@@ -235,7 +238,7 @@ private func browse(_ input: BrowseInput, _ ctx: MCPToolContext) -> MCPToolResul
         "section": child.section.map(JSONValue.string) ?? .null,
       ])
     }
-    return encodePayload(
+    return .okValue(
       .object([
         "framework": .string(root.displayName), "path": .string(path),
         "title": page.title.map(JSONValue.string) ?? .null, "children": .array(children),
@@ -254,7 +257,7 @@ private func browse(_ input: BrowseInput, _ ctx: MCPToolContext) -> MCPToolResul
     let groups = counts.keys.sorted(by: >).map { year in
       JSONValue.object(["year": .number(Double(year)), "count": .number(Double(counts[year]!))])
     }
-    return encodePayload(
+    return .okValue(
       .object([
         "framework": .string(root.displayName), "groups": .array(groups),
         "total": .number(Double(allPages.count)),
@@ -276,10 +279,10 @@ private func browse(_ input: BrowseInput, _ ctx: MCPToolContext) -> MCPToolResul
       ])
     })
   out["total"] = .number(Double(allPages.count))
-  return encodePayload(.object(out))
+  return .okValue(.object(out))
 }
 
-/// `/^wwdc\/wwdc(\d{4})-/` → the 4-digit year (browse.js WWDC_PATH_YEAR).
+/// `/^wwdc\/wwdc(\d{4})-/` → the 4-digit year.
 private func wwdcYear(_ path: String) -> Int? {
   let prefix = "wwdc/wwdc"
   guard path.hasPrefix(prefix) else { return nil }
@@ -293,16 +296,12 @@ private func wwdcYear(_ path: String) -> Int? {
 
 // MARK: - helpers
 
-private func encodePayload(_ value: JSONValue) -> MCPToolResult {
-  (try? value.encoded()).map { MCPToolResult.ok(Array($0)) } ?? .failure("Failed to encode result.")
-}
-
 private func nonEmptyArg(_ value: String?) -> String? {
   guard let value, !value.isEmpty else { return nil }
   return value
 }
 
-/// `Math.min(Math.max(limit ?? 100 || 100, 1), 500)` (assets-symbols default 100).
+/// `Math.min(Math.max(limit ?? 100 || 100, 1), 500)` (default 100).
 private func clampSymbolLimitInt(_ value: Int?) -> Int {
   let base = (value ?? 100) == 0 ? 100 : (value ?? 100)
   return min(max(base, 1), 500)
