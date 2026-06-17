@@ -1,4 +1,4 @@
-// ADMX v1 weights-artifact reader (RFC 0002 D-0002-1) — read-only mmap,
+// ADMX v1 weights-artifact reader — read-only mmap,
 // Foundation-free (raw Darwin/Glibc syscalls, ADArchive house style).
 //
 // Layout (u32 LE integers; produced by scripts/gen-embed-matrix.mjs):
@@ -7,10 +7,10 @@
 //   [sparse] rows × u32 ascending token ids
 //   zero-pad to 64-byte boundary | rows × dims × f32 LE row-major
 //
-// The matrix is mapped, never heap-copied (§3 memory contract). Row pointers
-// stay valid for the lifetime of this object. f32 payload is read as
-// host-endian — both supported targets (arm64, x86_64) are little-endian;
-// header integers go through UInt32(littleEndian:) regardless.
+// The matrix is mapped, never heap-copied. Row pointers stay valid for the
+// lifetime of this object. f32 payload is read as host-endian — both
+// supported targets (arm64, x86_64) are little-endian; header integers go
+// through UInt32(littleEndian:) regardless.
 
 #if canImport(Darwin)
 import Darwin
@@ -69,7 +69,7 @@ public final class MatrixArtifact: @unchecked Sendable {
       UInt32(littleEndian: mapped.loadUnaligned(fromByteOffset: offset, as: UInt32.self))
     }
 
-    guard u32(0) == 0x584D_4441 else { throw fail(.badMagic) } // 'ADMX' LE
+    guard u32(0) == 0x584D_4441 else { throw fail(.badMagic) }  // 'ADMX' LE
     let version = u32(4)
     guard version == 1 else { throw fail(.unsupportedVersion(version)) }
     let flags = u32(8)
@@ -110,6 +110,12 @@ public final class MatrixArtifact: @unchecked Sendable {
 
   /// Pointer to the 4-byte-aligned f32 row for `tokenId`, or nil when the
   /// id is absent (sparse miss / dense out-of-range). Never traps.
+  ///
+  /// Lifetime contract: the pointer aliases the read-only mmap and is valid
+  /// ONLY while this `MatrixArtifact` is alive — `deinit` `munmap`s the region,
+  /// after which it dangles. It addresses exactly `dims` contiguous `Float`s
+  /// (one row); anything past that is out of bounds. Consume it within the
+  /// artifact's lifetime; never store it beyond.
   public func row(forTokenId id: UInt32) -> UnsafePointer<Float>? {
     let index: Int
     if isSparse {
