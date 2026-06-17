@@ -1,4 +1,4 @@
-// The Model Context Protocol core (RFC 0005 Phase C). In-house JSON-RPC 2.0 over a
+// The Model Context Protocol core. In-house JSON-RPC 2.0 over a
 // newline-delimited stdio transport — no `@modelcontextprotocol/sdk`. The dispatcher
 // handles initialize / ping / tools/list / tools/call (+ notifications/initialized);
 // the tool surface is provided by the DSL (`MCPToolProviding`). Everything is built on
@@ -32,7 +32,14 @@ public func jsonBool(_ value: JSONValue?) -> Bool? {
   return nil
 }
 /// A JSON number read as an Int (the MCP args send integers as JSON numbers).
-public func jsonInt(_ value: JSONValue?) -> Int? { jsonNumber(value).map { Int($0) } }
+/// NaN/infinite → nil; out-of-range magnitudes clamp to `Int.min`/`Int.max`
+/// instead of trapping on the `Int(Double)` conversion.
+public func jsonInt(_ value: JSONValue?) -> Int? {
+  guard let number = jsonNumber(value), number.isFinite else { return nil }
+  if number >= Double(Int.max) { return Int.max }
+  if number <= Double(Int.min) { return Int.min }
+  return Int(number)
+}
 /// `object[key]` for a `.object` value.
 public func jsonMember(_ value: JSONValue?, _ key: String) -> JSONValue? { jsonObject(value)?[key] }
 
@@ -76,10 +83,15 @@ public struct MCPToolContext: Sendable {
   }
 }
 
-/// A tool's outcome: the serialized payload bytes (→ `{content,structuredContent}`) or
-/// an error message (→ `{content,isError:true}`).
+/// A tool's outcome: pre-serialized payload bytes, a `JSONValue` payload, or an error
+/// message. `.ok`/`.okValue` both project to `{content,structuredContent}`; `.failure`
+/// to `{content,isError:true}`. `.okValue` lets JSON-producing tools hand the value
+/// straight through — the dispatcher encodes it once for `text` and reuses it as
+/// `structuredContent` (no encode→parse→re-encode round trip). `.ok` stays for tools
+/// that already emit raw bytes (the search cascade), where one parse is unavoidable.
 public enum MCPToolResult: Sendable {
   case ok([UInt8])
+  case okValue(JSONValue)
   case failure(String)
 }
 
@@ -180,6 +192,12 @@ public struct MCPDispatcher: Sendable {
       let structured = (try? JSONValue(parsing: text)) ?? .null
       return .object([
         "content": .array([textContent(text)]), "structuredContent": structured,
+      ])
+    case .okValue(let value):
+      let bytes = (try? value.encoded()).map(Array.init) ?? Array("null".utf8)
+      return .object([
+        "content": .array([textContent(String(decoding: bytes, as: UTF8.self))]),
+        "structuredContent": value,
       ])
     case .failure(let message):
       return errorContent(message)
