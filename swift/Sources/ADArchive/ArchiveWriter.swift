@@ -94,7 +94,7 @@ public enum ArchiveWriter {
       return .failure(.runtime("\(error)"))
     }
 
-    unlink(request.outputPath) // start clean, like the JS path
+    unlink(request.outputPath)  // start clean, like the JS path
     let outFd = open(request.outputPath, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
     guard outFd >= 0 else {
       return .failure(.runtime("cannot open output \(request.outputPath): errno \(errno)"))
@@ -170,7 +170,7 @@ public enum ArchiveWriter {
       metas.append(meta)
       tarBytes += ((meta.size + 511) / 512) * 512
     }
-    tarBytes += 1024 // two zero EOF blocks
+    tarBytes += 1024  // two zero EOF blocks
     let recordRemainder = tarBytes % Int64(Tar.recordSize)
     if recordRemainder != 0 { tarBytes += Int64(Tar.recordSize) - recordRemainder }
     return (metas, tarBytes)
@@ -256,7 +256,7 @@ struct ZstdSink: ByteSink {
     guard let ctx = zstd.createCCtx() else { throw ArchiveFailure.runtime("ZSTD_createCCtx failed") }
     cctx = ctx
     try set(ZstdParam.compressionLevel, level)
-    try set(ZstdParam.checksumFlag, 1) // match the zstd CLI default
+    try set(ZstdParam.checksumFlag, 1)  // match the zstd CLI default
     try set(ZstdParam.enableLongDistanceMatching, 0)
     try set(ZstdParam.contentSizeFlag, 1)
     // A non-MT libzstd build rejects nbWorkers — fail to JS rather than
@@ -293,7 +293,8 @@ struct ZstdSink: ByteSink {
     while input.pos < input.size {
       let code = withUnsafeMutablePointer(to: &out) { outPtr in
         withUnsafeMutablePointer(to: &input) { inPtr in
-          zstd.compressStream2(cctx, UnsafeMutableRawPointer(outPtr), UnsafeMutableRawPointer(inPtr), ZstdParam.endContinue)
+          zstd.compressStream2(
+            cctx, UnsafeMutableRawPointer(outPtr), UnsafeMutableRawPointer(inPtr), ZstdParam.endContinue)
         }
       }
       guard zstd.isError(code) == 0 else {

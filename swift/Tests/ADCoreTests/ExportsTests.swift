@@ -90,7 +90,10 @@ private func doubles(_ payload: [UInt8]) -> [Double] {
   )
   let result = request.call(adFusionRrf)
   #expect(result?.status == 0)
-  #expect(doubles(result?.payload ?? []) == [0.01639344262295082, 0.025965097831835007, 0.015873015873015872, 0.00967741935483871])
+  #expect(
+    doubles(result?.payload ?? []) == [
+      0.01639344262295082, 0.025965097831835007, 0.015873015873015872, 0.00967741935483871,
+    ])
 }
 
 @Test func hybridHappyPathMatchesJSFixture() {
@@ -100,7 +103,10 @@ private func doubles(_ payload: [UInt8]) -> [Double] {
   )
   let result = request.call(adFusionHybrid)
   #expect(result?.status == 0)
-  #expect(doubles(result?.payload ?? []) == [0.5163934426229508, 0.45096509783183497, 0.015873015873015872, 0.00967741935483871])
+  #expect(
+    doubles(result?.payload ?? []) == [
+      0.5163934426229508, 0.45096509783183497, 0.015873015873015872, 0.00967741935483871,
+    ])
 }
 
 @Test func fusionRejectsGarbageNotTrap() {
@@ -132,6 +138,11 @@ private func doubles(_ payload: [UInt8]) -> [Double] {
   absurd.f64(60)
   absurd.f64(0)
   #expect(absurd.call(adFusionRrf)?.status == 1)
+
+  // Ranked list longer than the id table (overflow/bounds guard): every index
+  // is individually in range, so only the rankedLen<=idCount bound rejects it.
+  let overlong = fusionRequest(k: 60, beta: 0, idCount: 2, lists: [([0, 1, 0], 1.0, nil)])
+  #expect(overlong.call(adFusionRrf)?.status == 1)
 }
 
 private func mmrRequest(

@@ -1,8 +1,8 @@
-// Framework tree for /data/frameworks/<slug>/tree.<hash>.json (RFC 0001 P6, P3).
-// Ports the queries behind src/web/templates/framework.js buildFrameworkTreeData:
-// getRootBySlug (existence → 404), getDocumentsByRoot (the key→{title,role} lookup),
-// getFrameworkTree (the child edges). Storage returns typed rows; ADServer frames
-// {edges, docs} as ADJSON JSONValue (docs is a dynamic-key object → order-free).
+// Framework tree for /data/frameworks/<slug>/tree.<hash>.json. Queries:
+// getRootBySlug (existence → 404), getDocumentsByRoot (the key→{title,role}
+// lookup), getFrameworkTree (the child edges). Storage returns typed rows;
+// ADServer frames {edges, docs} as ADJSON JSONValue (docs is a dynamic-key
+// object → order-free).
 
 public struct FrameworkTreeDoc: Sendable {
   public let path: String
@@ -23,8 +23,8 @@ extension StorageConnection {
     return stmt.step() == SQLite.row
   }
 
-  /// getDocumentsByRoot (documents.js getByRootSlugStmt) — the active pages of a
-  /// root. Order-free downstream (the `docs` lookup is an object).
+  /// getDocumentsByRoot — the active pages of a root. Order-free downstream
+  /// (the `docs` lookup is an object).
   public func frameworkTreeDocs(_ slug: String) -> [FrameworkTreeDoc] {
     let sql = """
       SELECT d.key, d.title, d.role, d.role_heading
@@ -45,8 +45,8 @@ extension StorageConnection {
     return out
   }
 
-  /// getFrameworkTree (documents.js): child edges. [] when document_relationships
-  /// is absent (lite tier).
+  /// getFrameworkTree: child edges. [] when document_relationships is absent
+  /// (lite tier).
   public func frameworkTreeEdges(_ slug: String) -> [FrameworkTreeEdge] {
     guard conn.hasRelationships else { return [] }
     let sql = """

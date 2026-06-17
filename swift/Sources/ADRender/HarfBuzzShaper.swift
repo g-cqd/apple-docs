@@ -1,9 +1,8 @@
 // Runtime dlopen binding to system HarfBuzz: shape text + walk glyph
-// outlines into an SVG (RFC 0003 phase 4 — the Linux font path that
-// replaces the hb-view host binary). Same zero-build-dep dlopen contract
-// as ADArchive/Zstd.swift — library absent → nil → the JS side falls back
-// to the hb-view spawn / placeholder. Cross-platform (dlopen works on
-// Linux + darwin); darwin keeps CoreText, this serves Linux.
+// outlines into an SVG. Zero-build-dep dlopen contract — library absent →
+// nil → the JS side falls back to the hb-view spawn / placeholder.
+// Cross-platform (dlopen works on Linux + darwin); darwin keeps CoreText,
+// this serves Linux.
 //
 // HarfBuzz-only: hb_font_draw_glyph (HB 7+) yields glyph outlines via draw
 // callbacks, so no FreeType struct-mirroring is needed. The shaping is the
@@ -34,14 +33,25 @@ struct HBGlyphPosition {
   var v: UInt32
 }
 
-typealias HBMoveTo = @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?, OpaquePointer?, Float, Float, UnsafeMutableRawPointer?) -> Void
+typealias HBMoveTo =
+  @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?, OpaquePointer?, Float, Float, UnsafeMutableRawPointer?) ->
+  Void
 typealias HBLineTo = HBMoveTo
-typealias HBQuadTo = @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?, OpaquePointer?, Float, Float, Float, Float, UnsafeMutableRawPointer?) -> Void
-typealias HBCubicTo = @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?, OpaquePointer?, Float, Float, Float, Float, Float, Float, UnsafeMutableRawPointer?) -> Void
-typealias HBClose = @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?, OpaquePointer?, UnsafeMutableRawPointer?) -> Void
+typealias HBQuadTo =
+  @convention(c) (
+    OpaquePointer?, UnsafeMutableRawPointer?, OpaquePointer?, Float, Float, Float, Float, UnsafeMutableRawPointer?
+  ) -> Void
+typealias HBCubicTo =
+  @convention(c) (
+    OpaquePointer?, UnsafeMutableRawPointer?, OpaquePointer?, Float, Float, Float, Float, Float, Float,
+    UnsafeMutableRawPointer?
+  ) -> Void
+typealias HBClose =
+  @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?, OpaquePointer?, UnsafeMutableRawPointer?) -> Void
 
 struct HarfBuzzLib: @unchecked Sendable {
-  let version: @convention(c) (UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?) -> Void
+  let version:
+    @convention(c) (UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?) -> Void
   let blobCreateFromFile: @convention(c) (UnsafePointer<CChar>?) -> OpaquePointer?
   let blobDestroy: @convention(c) (OpaquePointer?) -> Void
   let faceCreate: @convention(c) (OpaquePointer?, UInt32) -> OpaquePointer?
@@ -57,13 +67,19 @@ struct HarfBuzzLib: @unchecked Sendable {
   let shape: @convention(c) (OpaquePointer?, OpaquePointer?, UnsafeRawPointer?, UInt32) -> Void
   let bufferGetLength: @convention(c) (OpaquePointer?) -> UInt32
   let bufferGetGlyphInfos: @convention(c) (OpaquePointer?, UnsafeMutablePointer<UInt32>?) -> UnsafeMutableRawPointer?
-  let bufferGetGlyphPositions: @convention(c) (OpaquePointer?, UnsafeMutablePointer<UInt32>?) -> UnsafeMutableRawPointer?
+  let bufferGetGlyphPositions:
+    @convention(c) (OpaquePointer?, UnsafeMutablePointer<UInt32>?) -> UnsafeMutableRawPointer?
   let drawFuncsCreate: @convention(c) () -> OpaquePointer?
-  let drawFuncsSetMoveTo: @convention(c) (OpaquePointer?, HBMoveTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
-  let drawFuncsSetLineTo: @convention(c) (OpaquePointer?, HBLineTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
-  let drawFuncsSetQuadTo: @convention(c) (OpaquePointer?, HBQuadTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
-  let drawFuncsSetCubicTo: @convention(c) (OpaquePointer?, HBCubicTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
-  let drawFuncsSetClose: @convention(c) (OpaquePointer?, HBClose, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
+  let drawFuncsSetMoveTo:
+    @convention(c) (OpaquePointer?, HBMoveTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
+  let drawFuncsSetLineTo:
+    @convention(c) (OpaquePointer?, HBLineTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
+  let drawFuncsSetQuadTo:
+    @convention(c) (OpaquePointer?, HBQuadTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
+  let drawFuncsSetCubicTo:
+    @convention(c) (OpaquePointer?, HBCubicTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
+  let drawFuncsSetClose:
+    @convention(c) (OpaquePointer?, HBClose, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void
   let fontDrawGlyph: @convention(c) (OpaquePointer?, UInt32, OpaquePointer?, UnsafeMutableRawPointer?) -> Void
 }
 
@@ -128,7 +144,7 @@ private func fmt(_ value: Double) -> String {
   var frac = ""
   if fp != 0 {
     var digits = "\(fp)"
-    while digits.count < 6 { digits = "0" + digits } // zero-pad to 6 places
+    while digits.count < 6 { digits = "0" + digits }  // zero-pad to 6 places
     while digits.hasSuffix("0") { digits.removeLast() }
     frac = "." + digits
   }
@@ -156,8 +172,13 @@ public enum HarfBuzzShaper {
         return unsafeBitCast(raw, to: T.self)
       }
       guard
-        let version = sym("hb_version", as: (@convention(c) (UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?) -> Void).self),
-        let blobFile = sym("hb_blob_create_from_file_or_fail", as: (@convention(c) (UnsafePointer<CChar>?) -> OpaquePointer?).self),
+        let version = sym(
+          "hb_version",
+          as: (@convention(c) (
+            UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?
+          ) -> Void).self),
+        let blobFile = sym(
+          "hb_blob_create_from_file_or_fail", as: (@convention(c) (UnsafePointer<CChar>?) -> OpaquePointer?).self),
         let blobDestroy = sym("hb_blob_destroy", as: (@convention(c) (OpaquePointer?) -> Void).self),
         let faceCreate = sym("hb_face_create", as: (@convention(c) (OpaquePointer?, UInt32) -> OpaquePointer?).self),
         let faceUpem = sym("hb_face_get_upem", as: (@convention(c) (OpaquePointer?) -> UInt32).self),
@@ -166,20 +187,44 @@ public enum HarfBuzzShaper {
         let fontSetScale = sym("hb_font_set_scale", as: (@convention(c) (OpaquePointer?, Int32, Int32) -> Void).self),
         let fontDestroy = sym("hb_font_destroy", as: (@convention(c) (OpaquePointer?) -> Void).self),
         let bufCreate = sym("hb_buffer_create", as: (@convention(c) () -> OpaquePointer?).self),
-        let bufAddUtf8 = sym("hb_buffer_add_utf8", as: (@convention(c) (OpaquePointer?, UnsafePointer<CChar>?, Int32, UInt32, Int32) -> Void).self),
+        let bufAddUtf8 = sym(
+          "hb_buffer_add_utf8",
+          as: (@convention(c) (OpaquePointer?, UnsafePointer<CChar>?, Int32, UInt32, Int32) -> Void).self),
         let bufGuess = sym("hb_buffer_guess_segment_properties", as: (@convention(c) (OpaquePointer?) -> Void).self),
         let bufDestroy = sym("hb_buffer_destroy", as: (@convention(c) (OpaquePointer?) -> Void).self),
-        let shape = sym("hb_shape", as: (@convention(c) (OpaquePointer?, OpaquePointer?, UnsafeRawPointer?, UInt32) -> Void).self),
+        let shape = sym(
+          "hb_shape", as: (@convention(c) (OpaquePointer?, OpaquePointer?, UnsafeRawPointer?, UInt32) -> Void).self),
         let bufLen = sym("hb_buffer_get_length", as: (@convention(c) (OpaquePointer?) -> UInt32).self),
-        let bufInfos = sym("hb_buffer_get_glyph_infos", as: (@convention(c) (OpaquePointer?, UnsafeMutablePointer<UInt32>?) -> UnsafeMutableRawPointer?).self),
-        let bufPos = sym("hb_buffer_get_glyph_positions", as: (@convention(c) (OpaquePointer?, UnsafeMutablePointer<UInt32>?) -> UnsafeMutableRawPointer?).self),
+        let bufInfos = sym(
+          "hb_buffer_get_glyph_infos",
+          as: (@convention(c) (OpaquePointer?, UnsafeMutablePointer<UInt32>?) -> UnsafeMutableRawPointer?).self),
+        let bufPos = sym(
+          "hb_buffer_get_glyph_positions",
+          as: (@convention(c) (OpaquePointer?, UnsafeMutablePointer<UInt32>?) -> UnsafeMutableRawPointer?).self),
         let dfCreate = sym("hb_draw_funcs_create", as: (@convention(c) () -> OpaquePointer?).self),
-        let dfMove = sym("hb_draw_funcs_set_move_to_func", as: (@convention(c) (OpaquePointer?, HBMoveTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void).self),
-        let dfLine = sym("hb_draw_funcs_set_line_to_func", as: (@convention(c) (OpaquePointer?, HBLineTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void).self),
-        let dfQuad = sym("hb_draw_funcs_set_quadratic_to_func", as: (@convention(c) (OpaquePointer?, HBQuadTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void).self),
-        let dfCubic = sym("hb_draw_funcs_set_cubic_to_func", as: (@convention(c) (OpaquePointer?, HBCubicTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void).self),
-        let dfClose = sym("hb_draw_funcs_set_close_path_func", as: (@convention(c) (OpaquePointer?, HBClose, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void).self),
-        let drawGlyph = sym("hb_font_draw_glyph", as: (@convention(c) (OpaquePointer?, UInt32, OpaquePointer?, UnsafeMutableRawPointer?) -> Void).self)
+        let dfMove = sym(
+          "hb_draw_funcs_set_move_to_func",
+          as: (@convention(c) (OpaquePointer?, HBMoveTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void)
+            .self),
+        let dfLine = sym(
+          "hb_draw_funcs_set_line_to_func",
+          as: (@convention(c) (OpaquePointer?, HBLineTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void)
+            .self),
+        let dfQuad = sym(
+          "hb_draw_funcs_set_quadratic_to_func",
+          as: (@convention(c) (OpaquePointer?, HBQuadTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void)
+            .self),
+        let dfCubic = sym(
+          "hb_draw_funcs_set_cubic_to_func",
+          as: (@convention(c) (OpaquePointer?, HBCubicTo, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void)
+            .self),
+        let dfClose = sym(
+          "hb_draw_funcs_set_close_path_func",
+          as: (@convention(c) (OpaquePointer?, HBClose, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void)
+            .self),
+        let drawGlyph = sym(
+          "hb_font_draw_glyph",
+          as: (@convention(c) (OpaquePointer?, UInt32, OpaquePointer?, UnsafeMutableRawPointer?) -> Void).self)
       else { continue }
       // hb_version writes all three out-params unconditionally (no null
       // guard), so pass real storage for each.
@@ -187,7 +232,7 @@ public enum HarfBuzzShaper {
       var minor: UInt32 = 0
       var micro: UInt32 = 0
       version(&major, &minor, &micro)
-      guard major >= 7 else { continue } // hb_font_draw_glyph landed in 7.0
+      guard major >= 7 else { continue }  // hb_font_draw_glyph landed in 7.0
       return HarfBuzzLib(
         version: version, blobCreateFromFile: blobFile, blobDestroy: blobDestroy,
         faceCreate: faceCreate, faceGetUpem: faceUpem, faceDestroy: faceDestroy,
@@ -209,8 +254,12 @@ public enum HarfBuzzShaper {
     guard let hb = shared, let df = hb.drawFuncsCreate() else { return nil }
     let move: HBMoveTo = { _, dd, _, x, y, _ in Unmanaged<GlyphPen>.fromOpaque(dd!).takeUnretainedValue().move(x, y) }
     let line: HBLineTo = { _, dd, _, x, y, _ in Unmanaged<GlyphPen>.fromOpaque(dd!).takeUnretainedValue().line(x, y) }
-    let quad: HBQuadTo = { _, dd, _, cx, cy, x, y, _ in Unmanaged<GlyphPen>.fromOpaque(dd!).takeUnretainedValue().quad(cx, cy, x, y) }
-    let cubic: HBCubicTo = { _, dd, _, c1x, c1y, c2x, c2y, x, y, _ in Unmanaged<GlyphPen>.fromOpaque(dd!).takeUnretainedValue().cubic(c1x, c1y, c2x, c2y, x, y) }
+    let quad: HBQuadTo = { _, dd, _, cx, cy, x, y, _ in
+      Unmanaged<GlyphPen>.fromOpaque(dd!).takeUnretainedValue().quad(cx, cy, x, y)
+    }
+    let cubic: HBCubicTo = { _, dd, _, c1x, c1y, c2x, c2y, x, y, _ in
+      Unmanaged<GlyphPen>.fromOpaque(dd!).takeUnretainedValue().cubic(c1x, c1y, c2x, c2y, x, y)
+    }
     let close: HBClose = { _, dd, _, _ in Unmanaged<GlyphPen>.fromOpaque(dd!).takeUnretainedValue().close() }
     hb.drawFuncsSetMoveTo(df, move, nil, nil)
     hb.drawFuncsSetLineTo(df, line, nil, nil)
@@ -245,7 +294,8 @@ public enum HarfBuzzShaper {
     hb.bufferGuessSegmentProperties(buf)
     hb.shape(font, buf, nil, 0)
     let n = Int(hb.bufferGetLength(buf))
-    guard n > 0, let infosRaw = hb.bufferGetGlyphInfos(buf, nil), let posRaw = hb.bufferGetGlyphPositions(buf, nil) else {
+    guard n > 0, let infosRaw = hb.bufferGetGlyphInfos(buf, nil), let posRaw = hb.bufferGetGlyphPositions(buf, nil)
+    else {
       return nil
     }
     let infos = infosRaw.assumingMemoryBound(to: HBGlyphInfo.self)
@@ -271,9 +321,9 @@ public enum HarfBuzzShaper {
     let w = (pen.maxX - pen.minX) + pad * 2
     let h = (pen.maxY - pen.minY) + pad * 2
     let svg = """
-    <?xml version="1.0" encoding="UTF-8"?>
-    <svg xmlns="http://www.w3.org/2000/svg" width="\(fmt(w))" height="\(fmt(h))" viewBox="\(fmt(x)) \(fmt(y)) \(fmt(w)) \(fmt(h))" role="img"><path d="\(pen.d)" fill="#000"/></svg>
-    """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <svg xmlns="http://www.w3.org/2000/svg" width="\(fmt(w))" height="\(fmt(h))" viewBox="\(fmt(x)) \(fmt(y)) \(fmt(w)) \(fmt(h))" role="img"><path d="\(pen.d)" fill="#000"/></svg>
+      """
     return Array(svg.utf8)
   }
 }

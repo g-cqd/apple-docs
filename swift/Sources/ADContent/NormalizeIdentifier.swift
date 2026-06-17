@@ -1,7 +1,3 @@
-// Port of src/apple/normalizer.js normalizeIdentifier (normative JS until
-// the phase-5 kill): canonical lowercase doc paths from doc:// URIs and
-// /documentation/ variants; nil for non-page identifiers.
-
 public enum Identifier {
   public static func normalize(_ raw: String?) -> String? {
     guard var id = raw, !id.isEmpty else { return nil }
@@ -47,8 +43,8 @@ public enum Identifier {
     return id
   }
 
-  /// `doc://<authority-without-slash>/<prefix>(rest)` — the two regexes at
-  /// normalizer.js:17-19. For the design variant the prefix is kept.
+  /// `doc://<authority-without-slash>/<prefix>(rest)` — for the design
+  /// variant the prefix is kept.
   private static func matchDocUri(_ id: String, segmentPrefix: String) -> String? {
     guard id.hasPrefix("doc://") else { return nil }
     let afterScheme = id.dropFirst("doc://".count)

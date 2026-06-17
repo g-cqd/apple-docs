@@ -1,6 +1,6 @@
-// Contract-v0 result allocation: one malloc'ed block per result,
+// Result allocation: one malloc'ed block per result,
 // [u64 payloadLen LE][u32 status LE][u8 formatId][3 reserved] + payload at 16.
-// malloc/free symmetry is normative (D-P0-5): the JS side calls ad_free once.
+// malloc/free symmetry is normative: callers must call ad_free exactly once.
 
 #if canImport(Darwin)
 import Darwin
@@ -16,7 +16,10 @@ public enum ResultBuffer {
   public static func allocate(
     status: ADStatus, format: ADFormat, payloadCount: Int
   ) -> (base: UnsafeMutableRawPointer, payload: UnsafeMutableRawBufferPointer)? {
-    guard payloadCount >= 0, let base = malloc(headerSize + payloadCount) else { return nil }
+    guard payloadCount >= 0,
+      let total = headerSize.checkedAdded(payloadCount),
+      let base = malloc(total)
+    else { return nil }
     memset(base, 0, headerSize)
     base.storeBytes(of: UInt64(payloadCount).littleEndian, toByteOffset: 0, as: UInt64.self)
     base.storeBytes(of: status.rawValue.littleEndian, toByteOffset: 8, as: UInt32.self)

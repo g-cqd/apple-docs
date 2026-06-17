@@ -1,10 +1,9 @@
-// Search-data artifacts for /data/search/* (RFC 0001 P6 web slice, Phase 3).
-// Ports src/web/search-artifacts.js buildTitleIndex + buildAliasMap. The manifest
-// + the hashed filenames are framed in ADServer (it owns the SHA-256). Under the
-// intrinsic gate the alias map is order-free → a plain dictionary.
+// Search-data artifacts for /data/search/*. Builds the title index and
+// alias map. The manifest + the hashed filenames are framed in ADServer (it
+// owns the SHA-256). The alias map is order-free → a plain dictionary.
 
-/// The columnar v2 title index (search-artifacts.js buildTitleIndex). The parallel
-/// arrays are in `ORDER BY key`; `frameworks` is the sorted distinct set.
+/// The columnar v2 title index. The parallel arrays are in `ORDER BY key`;
+/// `frameworks` is the sorted distinct set.
 public struct TitleIndex: Sendable {
   public let frameworks: [String]
   public let keys: [String]
@@ -58,7 +57,7 @@ extension StorageConnection {
       fwIndices: fwIndices, kinds: kinds, roleHeadings: roleHeadings)
   }
 
-  /// {alias: canonical} (search-artifacts.js buildAliasMap). Order-free (intrinsic).
+  /// {alias: canonical} — order-free.
   public func buildAliasMap() -> [String: String] {
     guard let stmt = conn.prepareUncached("SELECT canonical, alias FROM framework_synonyms")
     else { return [:] }

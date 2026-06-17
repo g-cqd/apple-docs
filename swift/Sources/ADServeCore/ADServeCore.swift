@@ -1,9 +1,9 @@
-// ADServeCore — the ad-server ENGINE (RFC 0005). The optimizable server layer:
+// ADServeCore — the ad-server ENGINE. The optimizable server layer:
 // the value types a request/response flows through, the connection pool, the
 // hashing/request-id helpers, and the routing contract the DSL satisfies. The NIO
 // bootstrap + the response-writing envelope live in HTTPServer.swift. Headers and
-// status are swift-http-types value types throughout (RFC 0006 H1) — no stringly
-// tuples. The engine knows nothing route-specific.
+// status are swift-http-types value types throughout — no stringly tuples.
+// The engine knows nothing route-specific.
 
 import Crypto
 import Foundation
@@ -334,8 +334,8 @@ public func sha256HexLower(_ bytes: [UInt8]) -> String {
   return String(decoding: out, as: UTF8.self)
 }
 
-/// Loose RFC 7232 `If-None-Match` (src/web/responses.js matchesIfNoneMatch): `*`, a
-/// single tag, or a comma list; the strong/weak prefix is compared verbatim.
+/// Loose RFC 7232 `If-None-Match`: `*`, a single tag, or a comma list;
+/// the strong/weak prefix is compared verbatim.
 public func matchesIfNoneMatch(_ headerValue: String, _ etag: String) -> Bool {
   let value = trimOWS(headerValue[...])
   if value == "*" { return true }
@@ -350,14 +350,14 @@ private func trimOWS(_ s: Substring) -> Substring {
   return sub
 }
 
-/// Echo a valid inbound `X-Request-Id` (`/^[A-Za-z0-9._:+/=-]{1,128}$/`, src/web/
-/// serve.js), else mint a lowercase v4 UUID (the parity regex requires lowercase).
+/// Echo a valid inbound `X-Request-Id` (`/^[A-Za-z0-9._:+/=-]{1,128}$/`), else
+/// mint a lowercase v4 UUID.
 public func resolveRequestID(_ headers: HTTPFields) -> String {
   if let incoming = headers[requestIDName], isValidRequestID(incoming) { return incoming }
   return UUID().uuidString.lowercased()
 }
 
-/// `x-request-id` — defined once (a valid lowercase token name).
+/// `x-request-id` — lowercase token name, defined once.
 public let requestIDName = HTTPField.Name("x-request-id")!
 
 private func isValidRequestID(_ s: String) -> Bool {

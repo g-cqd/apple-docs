@@ -1,6 +1,6 @@
-// Fixtures printed from the normative JS implementation (src/search/fusion.js)
-// via bun; the decimal literals are JS shortest-round-trip strings, so the
-// Swift doubles are bit-identical to the JS values.
+// Fixtures printed from the normative JS implementation via bun; the decimal
+// literals are JS shortest-round-trip strings, so the Swift doubles are
+// bit-identical to the JS values.
 
 import Testing
 @testable import ADSearch

@@ -11,6 +11,7 @@ public enum UnicodeSets {
     // every CJK/mark range — one compare instead of a full search. (The v2
     // astral ranges deepened the chineseChar search; this more than pays
     // that back.)
+    guard !ranges.isEmpty else { return false }
     if value < ranges[0] || value > ranges[ranges.count - 1] { return false }
     var lo = 0
     var hi = ranges.count / 2 - 1

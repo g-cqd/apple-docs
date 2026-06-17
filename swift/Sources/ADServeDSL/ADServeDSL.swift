@@ -1,4 +1,4 @@
-// ADServeDSL — the engine-facing route types + handler contexts (RFC 0005). The DSL
+// ADServeDSL — the engine-facing route types + handler contexts. The DSL
 // SURFACE (`Server`/`App`/`Group`/`GET`…) lives in ServerDSL.swift; this file holds what the
 // surface lowers TO: the `@dynamicMemberLookup` handler contexts (the connection is only
 // reachable on a `.shared` (storage) context — compile-time enforced), the `CompiledRoute`

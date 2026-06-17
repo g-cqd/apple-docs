@@ -208,6 +208,15 @@ bun scripts/verify-profiles.mjs     # full integration matrix: installs every
                                     # and exercises CLI + web + MCP against each
 ```
 
+### Native (Swift) stack
+
+Hot paths are also implemented in Swift as a C-ABI library (`libAppleDocsCore`)
+the CLI loads at runtime, plus `ad-server` — an Apple-native HTTP + MCP host that
+serves the corpus in-process. Build it with `cd swift && swift build`; run the
+server with `ad-server serve --db <corpus.sqlite>` or the stdio MCP transport with
+`ad-server mcp --db <corpus.sqlite>`. See [`swift/README.md`](swift/README.md) for
+the module map, build flags, and the `ad-server` reference.
+
 More docs: [architecture](docs/architecture.md) ·
 [configuration](docs/configuration.md) · [installing](docs/installing.md) ·
 [self-hosting](docs/self-hosting.md) · [performance](docs/perf/index.md) ·

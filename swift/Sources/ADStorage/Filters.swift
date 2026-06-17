@@ -1,7 +1,6 @@
-// Filter facets for GET /api/filters (RFC 0001 P6 web slice). Ports the three
-// queries in src/web/routes/filters.route.js verbatim. wwdcYears mirrors the JS
-// try/catch: `json_extract` over malformed `source_metadata` errors mid-step, so
-// the whole facet degrades to [] rather than failing the response.
+// Filter facets for GET /api/filters. wwdcYears: `json_extract` over
+// malformed `source_metadata` errors mid-step, so the whole facet degrades
+// to [] rather than failing the response.
 
 public struct FrameworkFacet: Sendable {
   public let label: String

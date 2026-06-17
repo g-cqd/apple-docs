@@ -1,9 +1,7 @@
-// A single read connection to the corpus DB. Opened READWRITE (matching
-// bun:sqlite's reader workers, which open `new Database(path)` without the
-// readonly flag) so it participates cleanly in the WAL -shm wal-index that
-// the bun:sqlite writer maintains; `PRAGMA query_only = ON` then guarantees
-// it never writes. One Connection is used by exactly one OS thread (its
-// owning reader worker), so the statement cache needs no lock.
+// A single read connection to the corpus DB. Opened READWRITE so it
+// participates cleanly in the WAL -shm wal-index; `PRAGMA query_only = ON`
+// then guarantees it never writes. One Connection is used by exactly one OS
+// thread, so the statement cache needs no lock.
 
 #if canImport(Darwin)
 import Darwin
@@ -32,11 +30,11 @@ final class Connection: @unchecked Sendable {
     }
     self.db = handle
 
-    // Reader pragma subset, busy_timeout FIRST (see pragmas.js): the WAL
-    // journal_mode / synchronous / wal_autocheckpoint are file/writer
-    // properties the bun:sqlite writer already set, so a reader only needs
-    // the timeout (to wait out a checkpoint instead of erroring SQLITE_BUSY),
-    // query_only (write guard), and the page-cache / mmap knobs.
+    // Reader pragma subset, busy_timeout FIRST: the WAL journal_mode /
+    // synchronous / wal_autocheckpoint are file/writer properties already set,
+    // so a reader only needs the timeout (to wait out a checkpoint instead of
+    // erroring SQLITE_BUSY), query_only (write guard), and the page-cache /
+    // mmap knobs.
     Connection.exec(lib, handle, "PRAGMA busy_timeout = 5000")
     Connection.exec(lib, handle, "PRAGMA query_only = ON")
     Connection.exec(lib, handle, "PRAGMA cache_size = -64000")
@@ -44,9 +42,11 @@ final class Connection: @unchecked Sendable {
     Connection.exec(lib, handle, "PRAGMA mmap_size = 10737418240")
 
     // FTS5 is required (searchPages MATCHes documents_fts + uses bm25). If
-    // the dlopen'd libsqlite3 was built without it, fail the open so the JS
-    // bun:sqlite reader serves every query instead.
-    guard Connection.probeCount(lib, handle, "SELECT count(*) FROM pragma_compile_options WHERE compile_options = 'ENABLE_FTS5'") >= 1
+    // the dlopen'd libsqlite3 was built without it, fail the open so the
+    // fallback path serves every query instead.
+    guard
+      Connection.probeCount(
+        lib, handle, "SELECT count(*) FROM pragma_compile_options WHERE compile_options = 'ENABLE_FTS5'") >= 1
     else {
       _ = lib.closeV2(handle)
       return nil
@@ -93,9 +93,10 @@ final class Connection: @unchecked Sendable {
   }
 
   private static func tableExists(_ lib: SQLiteLib, _ db: OpaquePointer, _ name: String) -> Bool {
-    guard let stmt = PreparedStatement(
-      lib: lib, db: db,
-      sql: "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1")
+    guard
+      let stmt = PreparedStatement(
+        lib: lib, db: db,
+        sql: "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1")
     else { return false }
     let bytes = Array(name.utf8)
     bytes.withUnsafeBufferPointer { buf in

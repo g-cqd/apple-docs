@@ -44,10 +44,10 @@ enum TestSupport {
   }
 
   static let fixturesURL: URL = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent() // ADEmbedTests
-    .deletingLastPathComponent() // Tests
-    .deletingLastPathComponent() // swift
-    .deletingLastPathComponent() // repo root
+    .deletingLastPathComponent()  // ADEmbedTests
+    .deletingLastPathComponent()  // Tests
+    .deletingLastPathComponent()  // swift
+    .deletingLastPathComponent()  // repo root
     .appendingPathComponent("test/fixtures/tokenizer-parity")
 
   static func loadFixture() throws -> Fixture {

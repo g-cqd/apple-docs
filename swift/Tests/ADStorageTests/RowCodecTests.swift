@@ -30,7 +30,8 @@ private struct Decoded {
 private func decode(_ bytes: [UInt8]) -> Decoded {
   var off = 0
   func u32() -> UInt32 {
-    let v = UInt32(bytes[off]) | UInt32(bytes[off + 1]) << 8 | UInt32(bytes[off + 2]) << 16
+    let v =
+      UInt32(bytes[off]) | UInt32(bytes[off + 1]) << 8 | UInt32(bytes[off + 2]) << 16
       | UInt32(bytes[off + 3]) << 24
     off += 4
     return v

@@ -1,11 +1,6 @@
-// SF Symbol → PNG, lifted verbatim from src/resources/swift/symbol-png.js
-// (RFC 0003 phase 2). AppKit NSBitmapImageRep rasterization — DARWIN-ONLY
+// SF Symbol → PNG. AppKit NSBitmapImageRep rasterization — DARWIN-ONLY
 // (#if canImport(AppKit)); the Linux slice has no symbol here.
-//
-// D-0003-3 carved this NSBitmap path out of the phase-1 symbol-pdf probe as
-// a separate, untested case. The phase-2 Probe B gates whether it's wired:
-// it must be crash/hang-free and byte-identical to the spawn before any
-// caller uses it.
+// Must be crash/hang-free before any caller uses it.
 
 #if canImport(AppKit)
 import AppKit
@@ -61,14 +56,17 @@ public enum SymbolPng {
       guard let base = image else { return nil }
       // withSymbolConfiguration only honours weight/scale for system symbols;
       // private bundle images are plain NSImages and ignore the config.
-      let configured = scope == "public"
-        ? (base.withSymbolConfiguration(.init(pointSize: size, weight: parseWeight(weight), scale: parseScale(scale))) ?? base)
+      let configured =
+        scope == "public"
+        ? (base.withSymbolConfiguration(.init(pointSize: size, weight: parseWeight(weight), scale: parseScale(scale)))
+          ?? base)
         : base
       let px = Int((size * 2).rounded())
-      guard let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
-        samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
-        bytesPerRow: 0, bitsPerPixel: 0)
+      guard
+        let rep = NSBitmapImageRep(
+          bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
+          samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+          bytesPerRow: 0, bitsPerPixel: 0)
       else { return nil }
       rep.size = NSSize(width: size, height: size)
       NSGraphicsContext.saveGraphicsState()

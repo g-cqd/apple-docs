@@ -1,7 +1,7 @@
-// Reference dump tool for the flipped fixture generator (RFC 0002 §6h):
-// since embedding v2 the Swift tokenizer is its own reference, and
-// scripts/gen-tokenizer-fixtures.mjs records ids from THIS tool instead of
-// transformers.js. Not part of the shipped dylib; Foundation is fine here.
+// Reference dump tool: since embedding v2 the Swift tokenizer is its own
+// reference, and scripts/gen-tokenizer-fixtures.mjs records ids from THIS
+// tool instead of transformers.js. Not part of the shipped dylib; Foundation
+// is fine here.
 //
 // usage: ad-embed-dump <tokenizer-parity-fixtures-dir>
 //   stdin:  JSON array of texts
@@ -51,7 +51,8 @@ do {
   let config = try decoder.decode(
     TokenizerJson.self,
     from: Data(
-      contentsOf: fixturesDir
+      contentsOf:
+        fixturesDir
         .appendingPathComponent("models/minishlab/potion-retrieval-32M/tokenizer.json")
     )
   )

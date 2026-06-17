@@ -1,6 +1,5 @@
-// Asset queries for the /api/fonts + /api/symbols routes (RFC 0001 P6 web slice).
-// Ports src/storage/repos/{assets-fonts,assets-symbols}.js. Storage returns typed
-// rows (the D5 model seam); ADServer frames the JSON/CSS.
+// Asset queries for the /api/fonts + /api/symbols routes. Storage returns
+// typed rows; ADServer frames the JSON/CSS.
 
 public struct AppleFontFile: Sendable {
   public let id: String
@@ -14,8 +13,8 @@ public struct AppleFontFamily: Sendable {
 }
 
 extension StorageConnection {
-  /// families ⋈ files (assets-fonts.js `listFonts`): families ORDER BY display_name,
-  /// each family's files in (family_id, file_name) order. [] when the tables are absent.
+  /// families ⋈ files: families ORDER BY display_name, each family's files
+  /// in (family_id, file_name) order. [] when the tables are absent.
   public func listAppleFonts() -> [AppleFontFamily] {
     guard
       let famStmt = conn.prepareUncached("SELECT id FROM apple_font_families ORDER BY display_name")
@@ -43,7 +42,7 @@ extension StorageConnection {
 
 // MARK: - SF Symbols (/api/symbols/*)
 
-/// The light projection for /api/symbols/index.json (assets-symbols.js listCatalog).
+/// The light projection for /api/symbols/index.json.
 public struct SfCatalogRow: Sendable {
   public let name: String
   public let scope: String
@@ -56,9 +55,9 @@ public struct SfCatalogRow: Sendable {
 }
 
 /// The full `sf_symbols` row for /api/symbols/search + /<scope>/<name>.json
-/// (assets-symbols.js `...row` — every column verbatim; `bitmap_only`/
-/// `render_unsupported` stay 0/1 INTs). The 4 `*_json` columns are parsed by the
-/// caller (ADServer) into `categories`/`keywords`/`aliases`/`availability`.
+/// (every column verbatim; `bitmap_only`/`render_unsupported` stay 0/1 INTs).
+/// The 4 `*_json` columns are parsed by the caller (ADServer) into
+/// `categories`/`keywords`/`aliases`/`availability`.
 public struct SfSymbolRow: Sendable {
   public let name: String
   public let scope: String
@@ -90,9 +89,8 @@ private func readSfSymbolRow(_ stmt: PreparedStatement) -> SfSymbolRow {
     bitmapOnly: stmt.int(12), renderUnsupported: stmt.int(13))
 }
 
-/// FTS5 MATCH builder (assets `_helpers.js` buildResourceFtsQuery): lowercase,
-/// split on non-`[a-z0-9_.-]`, cap 8 terms, `"term"*` joined by OR (terms hold
-/// no quotes, so no escaping needed).
+/// FTS5 MATCH builder: lowercase, split on non-`[a-z0-9_.-]`, cap 8 terms,
+/// `"term"*` joined by OR (terms hold no quotes, so no escaping needed).
 func buildResourceFtsQuery(_ query: String) -> String {
   let lowered = query.lowercased()
   var terms: [String] = []
@@ -121,8 +119,7 @@ private func jsTrim(_ s: String) -> String {
 }
 
 extension StorageConnection {
-  /// /api/symbols/index.json (assets-symbols.js listCatalog), ORDER scope,
-  /// COALESCE(order_index,999999), name.
+  /// /api/symbols/index.json — ORDER BY scope, COALESCE(order_index,999999), name.
   public func listSfSymbolsCatalog() -> [SfCatalogRow] {
     let sql = """
       SELECT name, scope, categories_json, keywords_json, bitmap_only, render_unsupported, codepoint, codepoint_version
@@ -141,7 +138,7 @@ extension StorageConnection {
     return out
   }
 
-  /// /api/symbols/<scope>/<name>.json (assets-symbols.js getSymbol). nil = 404.
+  /// /api/symbols/<scope>/<name>.json — nil = 404.
   public func getSfSymbol(scope: String, name: String) -> SfSymbolRow? {
     guard let stmt = conn.prepareUncached("SELECT \(sfCols) FROM sf_symbols WHERE scope = ? AND name = ?")
     else { return nil }
@@ -151,9 +148,9 @@ extension StorageConnection {
     return readSfSymbolRow(stmt)
   }
 
-  /// /api/symbols/search (assets-symbols.js searchSymbols): empty → list; else FTS5
-  /// `MATCH`, falling back to `LIKE` when FTS5 trips on the query. `limit` is the
-  /// already-clamped `[1,500]` value; `scope` nil = all scopes.
+  /// /api/symbols/search: empty → list; else FTS5 `MATCH`, falling back to
+  /// `LIKE` when FTS5 trips on the query. `limit` is the already-clamped
+  /// `[1,500]` value; `scope` nil = all scopes.
   public func searchSfSymbols(query: String, scope: String?, limit: Int) -> [SfSymbolRow] {
     let q = jsTrim(query)
     let scopeBind: BindValue = scope.map { .text($0) } ?? .null

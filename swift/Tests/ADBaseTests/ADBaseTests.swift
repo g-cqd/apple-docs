@@ -55,7 +55,7 @@ private func readHeader(_ ptr: UnsafeMutableRawPointer) -> Header {
   // Mutating calls are hoisted into lets: the #expect macro rewrites
   // receiver method calls onto an immutable closure parameter.
   var bytes = [UInt8]()
-  bytes.append(contentsOf: [0x2A, 0, 0, 0]) // u32 42
+  bytes.append(contentsOf: [0x2A, 0, 0, 0])  // u32 42
   bytes.append(contentsOf: withUnsafeBytes(of: Double(0.5).bitPattern.littleEndian) { [UInt8]($0) })
   bytes.withUnsafeBufferPointer { raw in
     var reader = RequestReader(UnsafeRawBufferPointer(raw))
@@ -64,7 +64,7 @@ private func readHeader(_ ptr: UnsafeMutableRawPointer) -> Header {
     let second = reader.f64()
     #expect(second == 0.5)
     #expect(reader.remaining == 0)
-    let pastEndU32 = reader.u32() // past end → nil, never trap
+    let pastEndU32 = reader.u32()  // past end → nil, never trap
     let pastEndF64 = reader.f64()
     let pastEndBytes = reader.bytes(1)
     #expect(pastEndU32 == nil)
@@ -82,7 +82,7 @@ private func readHeader(_ ptr: UnsafeMutableRawPointer) -> Header {
     let aligned = reader.align8()
     #expect(aligned)
     #expect(reader.offset == 8)
-    let alignedAgain = reader.align8() // already aligned → no-op
+    let alignedAgain = reader.align8()  // already aligned → no-op
     #expect(alignedAgain)
     #expect(reader.offset == 8)
   }

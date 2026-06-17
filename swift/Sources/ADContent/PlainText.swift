@@ -1,6 +1,3 @@
-// Port of src/content/render-text.js renderPlainText — the FTS body text
-// (normative JS until the phase-5 kill). Span + writer implementation.
-
 public struct PlainTextSpans {
   public var title: ByteSpan?
   public var abstractText: ByteSpan?
@@ -43,7 +40,7 @@ public enum PlainText {
       let mark = w.count
       body(&w)
       if w.count == mark {
-        w.truncate(to: w.count - sep) // body contributed nothing — drop part
+        w.truncate(to: w.count - sep)  // body contributed nothing — drop part
       } else {
         first = false
       }

@@ -1,12 +1,11 @@
-// A hierarchical, type-safe server-DEFINITION DSL (RFC 0005, proof-of-concept).
+// A hierarchical, type-safe server-DEFINITION DSL.
 //
 // Decouples the SERVER (the ADServeCore engine) from its DEFINITION (this DSL) from the
 // BUSINESS LOGIC (the handler bodies). The definition leverages Swift type-safety
 // end-to-end — typed HTTP verbs (GET/POST/OPTIONS), a typed pool that picks the handler's
 // context type (so a pure-config route cannot touch the DB), typed cache + output
 // (`MediaType`), result builders for the tree, and `@dynamicMemberLookup` on the context
-// — and lowers to the existing `CompiledRoute`/`RouteTable` seam, so THE ENGINE IS
-// UNCHANGED (one listener, the shared pool) and the parity suites stay the contract.
+// — and lowers to the existing `CompiledRoute`/`RouteTable` seam.
 //
 //   Server {
 //     App(pool: .shared) {                        // an application on a port; the central shared pool

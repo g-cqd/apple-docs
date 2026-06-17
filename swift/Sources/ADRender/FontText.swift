@@ -1,9 +1,7 @@
-// Font-text → SVG, lifted verbatim from src/resources/swift/font-text.js
-// (RFC 0003 phase 1). Pure CoreText/CoreGraphics/Foundation — thread-safe,
-// so it runs in-process on the FFI-calling thread without an AppKit
-// runloop. The byte output must stay identical to the spawn path: the
-// fmt/PathNormalizer/SVG-assembly here are character-for-character the
-// FONT_TEXT_SCRIPT body.
+// Pure CoreText/CoreGraphics/Foundation — thread-safe, runs in-process on
+// the FFI-calling thread without an AppKit runloop. The byte output must
+// stay identical to the spawn path: the fmt/PathNormalizer/SVG-assembly
+// here are character-for-character the FONT_TEXT_SCRIPT body.
 //
 // CoreText is darwin-only; on Linux this whole file compiles to a stub
 // returning nil (the dispatch then falls back to hb-view / placeholder).
@@ -34,13 +32,18 @@ public enum FontText {
     let attr = NSAttributedString(
       string: text, attributes: [kCTFontAttributeName as NSAttributedString.Key: font])
     let line = CTLineCreateWithAttributedString(attr)
-    let runs = CTLineGetGlyphRuns(line) as! [CTRun]
+    guard let runs = CTLineGetGlyphRuns(line) as? [CTRun] else { return nil }
 
     var shapes: [Shape] = []
     var overall = CGRect.null
 
     for run in runs {
-      let runFont = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName] as! CTFont
+      // A missing font attribute is the only real failure here; the value, when
+      // present, is always a CTFont (a conditional cast would warn "always
+      // succeeds"), so nil-guard the lookup and bridge.
+      guard let runFontValue = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName]
+      else { return nil }
+      let runFont = runFontValue as! CTFont
       let count = CTRunGetGlyphCount(run)
       var glyphs = Array(repeating: CGGlyph(), count: count)
       var positions = Array(repeating: CGPoint.zero, count: count)

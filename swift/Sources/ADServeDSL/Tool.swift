@@ -1,13 +1,12 @@
-// The MCP Tool DSL (RFC 0005 Phase C). Mirrors the route DSL: `Tool("name", "desc")`
+// The MCP Tool DSL. Mirrors the route DSL: `Tool("name", "desc")`
 // → `.input(SomeInput.self)` / `.respond { input, ctx in … }`, collected by
 // `@ToolBuilder` into a `ToolRegistry` (an `MCPToolProviding` the engine dispatches).
 //
 // The input schema + decoding both come from ADJSON's `@Schemable` macro applied to a
-// `Decodable` input struct (D-0005-10): the macro derives the JSON Schema from the
-// stored properties (no zod, no hand-rolled builder), and `.respond` receives the
-// decoded typed value. The macro's schema is STRUCTURAL (types + required + nesting; no
-// descriptions/enums/bounds), so `tools/list` schemas are leaner than the JS MCP's zod
-// schemas — the parity gate is the `tools/call` behavior, not the schema text.
+// `Decodable` input struct: the macro derives the JSON Schema from the stored properties
+// (no zod, no hand-rolled builder), and `.respond` receives the decoded typed value.
+// The macro's schema is STRUCTURAL (types + required + nesting; no descriptions/enums/
+// bounds), so `tools/list` schemas are leaner than the JS MCP's zod schemas.
 
 public import ADJSON
 public import ADServeCore

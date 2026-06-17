@@ -6,8 +6,8 @@
 //
 // The word's UTF-8 is built once with per-scalar byte offsets; every greedy
 // candidate is then a (prefix, slice) probe into the vocab's flat table —
-// no per-candidate allocation (the naive rebuild-the-key version cost the
-// phase-3 throughput gate).
+// no per-candidate allocation (the naive rebuild-the-key version allocated
+// a key array per candidate and dominated the embed profile).
 
 enum WordPiece {
   static func encode(
@@ -49,7 +49,7 @@ enum WordPiece {
             }
             end -= 1
           }
-          guard let id = match else { return nil } // whole word → [UNK]
+          guard let id = match else { return nil }  // whole word → [UNK]
           sub.append(id)
           start = end
         }

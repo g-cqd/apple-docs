@@ -1,8 +1,7 @@
-// Maximal Marginal Relevance, mirrored bit-for-bit from `mmrSelect`
-// (src/search/fusion.js:97-129) with the production similarity baked in:
-// 1 - hamming(a, b) / (dim * 8) over equal-length byte vectors — the only
-// sim the JS call site uses (fuse-semantic.js:87-90). Scalar arithmetic
-// only; see Fusion.swift for the parity rationale.
+// Maximal Marginal Relevance, mirrored bit-for-bit from `mmrSelect` with
+// the production similarity baked in: 1 - hamming(a, b) / (dim * 8) over
+// equal-length byte vectors. Scalar arithmetic only; see Fusion.swift for
+// the parity rationale.
 
 public enum MMR {
   /// Returns the full output permutation (selected window, then the
@@ -30,11 +29,10 @@ public enum MMR {
       (presence[i >> 3] >> (i & 7)) & 1 == 1
     }
     func similarity(_ a: Int, _ b: Int) -> Double {
-      let base = vectors.baseAddress!
       var d = 0
       for i in 0..<dim {
-        let x = base.load(fromByteOffset: a * dim + i, as: UInt8.self)
-        let y = base.load(fromByteOffset: b * dim + i, as: UInt8.self)
+        let x = vectors.load(fromByteOffset: a * dim + i, as: UInt8.self)
+        let y = vectors.load(fromByteOffset: b * dim + i, as: UInt8.self)
         d += (x ^ y).nonzeroBitCount
       }
       return 1 - Double(d) / Double(dim * 8)

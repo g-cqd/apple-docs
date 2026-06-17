@@ -7,11 +7,11 @@
 // WordPiece greedy loop can probe candidates as (prefix, slice) pairs with
 // ZERO per-candidate allocation — the original Dictionary<[UInt8],Int32>
 // version allocated a key array per candidate and dominated the embed
-// profile (1.42× vs the ≥2× phase-3 gate).
+// profile.
 
 struct Vocab {
   private let arena: [UInt8]
-  private let tokenOffsets: [UInt32] // count+1 prefix offsets into arena
+  private let tokenOffsets: [UInt32]  // count+1 prefix offsets into arena
   // Open-addressing table of (vocab index + 1); 0 = empty. Power-of-two.
   private let table: [UInt32]
   private let mask: UInt64

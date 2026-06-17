@@ -1,12 +1,12 @@
-// Runtime dlopen/dlsym binding to the system libsqlite3 (RFC 0001 P5).
+// Runtime dlopen/dlsym binding to the system libsqlite3.
 //
 // Deliberately NOT a SwiftPM systemLibrary, for the same reason as
 // ADArchive/Zstd.swift: a systemLibrary would make libsqlite3 a hard build
 // dependency of the whole package for every contributor and CI leg. dlopen
-// keeps `swift build` zero-dep and degrades exactly like the rest of the
-// bridge — library absent (or built without FTS5) → open fails → the JS
-// `bun:sqlite` implementation serves. The C ABI used here is the stable
-// sqlite3 core + FTS5 is required at runtime (bm25 auxiliary function).
+// keeps `swift build` zero-dep and degrades gracefully — library absent (or
+// built without FTS5) → open fails → the fallback implementation serves. The
+// C ABI used here is the stable sqlite3 core + FTS5 is required at runtime
+// (bm25 auxiliary function).
 
 import CSQLiteShim
 
@@ -56,8 +56,7 @@ struct SQLiteLib: @unchecked Sendable {
   let reset: @convention(c) (OpaquePointer?) -> Int32
   let clearBindings: @convention(c) (OpaquePointer?) -> Int32
   let bindParameterIndex: @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
-  let bindText:
-    @convention(c) (OpaquePointer?, Int32, UnsafeRawPointer?, Int32, UnsafeRawPointer?) -> Int32
+  let bindText: @convention(c) (OpaquePointer?, Int32, UnsafeRawPointer?, Int32, UnsafeRawPointer?) -> Int32
   let bindInt64: @convention(c) (OpaquePointer?, Int32, Int64) -> Int32
   let bindDouble: @convention(c) (OpaquePointer?, Int32, Double) -> Int32
   let bindNull: @convention(c) (OpaquePointer?, Int32) -> Int32
@@ -159,11 +158,11 @@ enum SQLiteLoader {
       else { continue }
       // Disable SQLite memory statistics BEFORE the first open — removes a
       // global allocator mutex that otherwise serializes every malloc/free
-      // across all reader connections (RFC 0001 P6: profiling showed concurrent
-      // FTS readers ~90% blocked in that one mutex via sqlite3Malloc, not
-      // executing SQL → ~6× throughput at c=16 on an alloc-bound corpus). Via a
-      // C shim because sqlite3_config is variadic; benign SQLITE_MISUSE if
-      // SQLite is already initialized (e.g. the dylib loaded into a Bun process).
+      // across all reader connections (profiling showed concurrent FTS readers
+      // ~90% blocked in that one mutex via sqlite3Malloc, not executing SQL →
+      // ~6× throughput at c=16 on an alloc-bound corpus). Via a C shim because
+      // sqlite3_config is variadic; benign SQLITE_MISUSE if SQLite is already
+      // initialized.
       _ = ad_sqlite_config_memstatus_off(dlsym(handle, "sqlite3_config"))
       return SQLiteLib(
         openV2: openV2, closeV2: closeV2, prepareV2: prepareV2, finalize: finalize, step: step,

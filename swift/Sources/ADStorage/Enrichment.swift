@@ -1,10 +1,9 @@
-// Snippet / relatedCount enrichment queries (RFC 0001 P6, phase 2). Ports the
-// batched getDocumentSnippetData + getRelatedDocCounts from
-// src/storage/repos/documents.js, plus the type-directed section codec
-// (src/storage/section-codec.js): a section's content_text is used as-is when
-// stored TEXT, or zstd-inflated when stored as a magic-prefixed BLOB (the
-// `storage compact` profile). Best-effort: a missing table → empty result, so a
-// lite-tier corpus never sinks a search response.
+// Snippet / relatedCount enrichment queries. Batched getDocumentSnippetData +
+// getRelatedDocCounts, plus the type-directed section codec: a section's
+// content_text is used as-is when stored TEXT, or zstd-inflated when stored
+// as a magic-prefixed BLOB (the `storage compact` profile). Best-effort: a
+// missing table → empty result, so a lite-tier corpus never sinks a search
+// response.
 
 import ADArchive
 
@@ -90,9 +89,9 @@ extension StorageConnection {
   }
 }
 
-/// Type-directed section content decode (section-codec.js decodeSectionContent):
-/// TEXT passes through; a BLOB with the 4-byte zstd magic is inflated; any other
-/// BLOB is a best-effort UTF-8 decode.
+/// Type-directed section content decode: TEXT passes through; a BLOB with
+/// the 4-byte zstd magic is inflated; any other BLOB is a best-effort
+/// UTF-8 decode.
 private func decodeSectionContent(_ stmt: PreparedStatement, _ col: Int32) -> String? {
   switch stmt.columnType(col) {
   case SQLite.typeNull: return nil

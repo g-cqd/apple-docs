@@ -9,10 +9,10 @@ import Testing
 @testable import ADCore
 
 private let fixturesRoot = URL(fileURLWithPath: #filePath)
-  .deletingLastPathComponent() // ADCoreTests
-  .deletingLastPathComponent() // Tests
-  .deletingLastPathComponent() // swift
-  .deletingLastPathComponent() // repo
+  .deletingLastPathComponent()  // ADCoreTests
+  .deletingLastPathComponent()  // Tests
+  .deletingLastPathComponent()  // swift
+  .deletingLastPathComponent()  // repo
   .appendingPathComponent("test/fixtures")
 
 private struct Decoded {
@@ -190,7 +190,7 @@ struct EmbedExportsTests {
     #expect(first?.status == 0)
     // Second init — even with a bogus path — reports the existing state.
     let second = Fixture.initRequest(matrixPath: "/nonexistent.admx", vocab: vocab).call(adEmbedInit)
-    #expect(second?.status == 1) // bogus artifact rejected before adoption
+    #expect(second?.status == 1)  // bogus artifact rejected before adoption
     let third = Fixture.initRequest(vocab: vocab).call(adEmbedInit)
     #expect(third?.status == 0)
     #expect(third?.payload == first?.payload)

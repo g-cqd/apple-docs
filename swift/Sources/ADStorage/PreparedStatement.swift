@@ -1,8 +1,7 @@
 // A cached sqlite3_stmt wrapper. One statement per SQL string, owned by a
 // Connection, reused across calls. reset + clear_bindings run on teardown
-// of every execution (bun:sqlite does this implicitly) so stale bindings
-// from a prior call can never leak into the next and silently return wrong
-// rows.
+// of every execution so stale bindings from a prior call can never leak
+// into the next and silently return wrong rows.
 
 #if canImport(Darwin)
 import Darwin
@@ -71,10 +70,8 @@ final class PreparedStatement {
   /// each `[u8 tag][value]`:
   ///   tag 0 NULL (no value), 1 INTEGER [i64 LE], 2 REAL [f64 LE],
   ///   3 TEXT [u32 len][utf8], 4 BLOB [u32 len][bytes].
-  /// This mirrors sqlite3_column_type's dynamic mapping exactly, so the JS
-  /// decoder reproduces bun:sqlite's null/number/string/Uint8Array values
-  /// byte-for-byte. Returns false on a step error (→ JS fallback). Always
-  /// resets + clears bindings before returning.
+  /// This mirrors sqlite3_column_type's dynamic mapping exactly. Returns
+  /// false on a step error. Always resets + clears bindings before returning.
   func run(into out: inout [UInt8]) -> Bool {
     defer {
       _ = lib.reset(stmt)
@@ -100,9 +97,9 @@ final class PreparedStatement {
 
   /// Steps to completion, framing rows as a JSON array of objects keyed by
   /// column name — hand-rolled to `out` (NO Foundation; JSONEncoder is ~57×
-  /// slower on Linux, P0 records E6). Per-cell typing mirrors bun:sqlite:
-  /// NULL/BLOB → null, INTEGER/REAL → number, TEXT → escaped string. Returns
-  /// false on a step error. Always resets + clears bindings.
+  /// slower on Linux). Per-cell typing: NULL/BLOB → null, INTEGER/REAL →
+  /// number, TEXT → escaped string. Returns false on a step error. Always
+  /// resets + clears bindings.
   func runJSON(into out: inout [UInt8]) -> Bool {
     defer {
       _ = lib.reset(stmt)
@@ -144,7 +141,7 @@ final class PreparedStatement {
     return true
   }
 
-  // MARK: - row iteration (for the in-process cascade, RFC 0001 P6)
+  // MARK: - row iteration (for the in-process cascade)
 
   /// Steps once; returns the raw sqlite rc (SQLite.row / .done / error).
   func step() -> Int32 { lib.step(stmt) }
@@ -302,7 +299,7 @@ func appendInt(_ out: inout [UInt8], _ value: Int64) {
   }
 }
 
-// MARK: - JSON string escaping (RFC 8259 §7), UTF-8 bytes passed through.
+// MARK: - JSON string escaping, UTF-8 bytes passed through.
 
 private func hexDigit(_ v: UInt8) -> UInt8 {
   v < 10 ? UInt8(ascii: "0") + v : UInt8(ascii: "a") + (v - 10)

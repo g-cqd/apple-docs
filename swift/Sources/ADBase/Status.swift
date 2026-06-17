@@ -1,4 +1,4 @@
-/// ABI contract v0 status codes (rfcs/0001-swift-native-transition/p0/ffi-bridge.md §2).
+/// ABI contract v0 status codes.
 public enum ADStatus: UInt32, Sendable {
   case ok = 0
   case invalidInput = 1

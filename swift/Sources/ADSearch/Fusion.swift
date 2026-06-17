@@ -1,4 +1,4 @@
-// Fusion math mirrored bit-for-bit from src/search/fusion.js (normative).
+// Fusion math mirrored bit-for-bit from the JS reference implementation.
 //
 // Parity contract: accumulation order is outer-lists-then-inner-ranks; every
 // expression keeps the JS source's left-associative scalar shape. No FMA, no
@@ -22,8 +22,8 @@ public enum Fusion {
     }
   }
 
-  /// Mirror of `weightedRRF` (fusion.js:22-31). Caller guarantees every
-  /// index < idCount (validated at the FFI boundary).
+  /// Mirror of `weightedRRF`. Caller guarantees every index < idCount
+  /// (validated at the FFI boundary).
   public static func weightedRRF(_ lists: [List], idCount: Int, k: Double = 60) -> [Double] {
     var fused = [Double](repeating: 0, count: idCount)
     for list in lists {
@@ -34,7 +34,7 @@ public enum Fusion {
     return fused
   }
 
-  /// Mirror of `hybridFusion` (fusion.js:66-78).
+  /// Mirror of `hybridFusion`.
   public static func hybrid(_ lists: [List], idCount: Int, k: Double = 60, beta: Double = 0.5) -> [Double] {
     var fused = [Double](repeating: 0, count: idCount)
     for list in lists {
@@ -48,8 +48,8 @@ public enum Fusion {
     return fused
   }
 
-  /// Mirror of `normalizeScores` (fusion.js:41-53): strict comparisons, so a
-  /// degenerate or NaN range maps everything to 0 exactly like the JS guard.
+  /// Mirror of `normalizeScores`: strict comparisons, so a degenerate or NaN
+  /// range maps everything to 0 exactly like the JS guard.
   static func normalize(_ scores: [Double]) -> [Double] {
     var minV = Double.infinity
     var maxV = -Double.infinity

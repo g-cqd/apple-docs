@@ -1,7 +1,6 @@
-// The formatted search hit (port of src/search/format.js formatResult). The
-// cascade merges SearchRows into ResultHits (assigning matchQuality), rerank
-// scores them, projection emits them. Only the fields rerank + the projection
-// allowlist need are kept.
+// The formatted search hit. The cascade merges SearchRows into ResultHits
+// (assigning matchQuality), rerank scores them, projection emits them.
+// Only the fields rerank + the projection allowlist need are kept.
 
 import ADStorage
 
@@ -25,8 +24,8 @@ struct ResultHit {
   var score: Double = 0
   var origIndex: Int = 0  // insertion order, for a stable total-order sort
 
-  // Enrichment (phase 2) — nil = not enriched (omitted from the projection,
-  // matching JS where a thrown getRelatedDocCounts skips the whole block).
+  // Enrichment — nil = not enriched (omitted from the projection when
+  // getRelatedDocCounts is unavailable).
   var snippet: String?
   var relatedCount: Int?
 

@@ -1,4 +1,4 @@
-// libAppleDocsCore mandatory exports (ABI contract v0, ffi-bridge.md §2).
+// libAppleDocsCore mandatory exports (ABI contract v0).
 // No-trap rule: nothing here may abort on input — validate, return status.
 
 import ADBase
