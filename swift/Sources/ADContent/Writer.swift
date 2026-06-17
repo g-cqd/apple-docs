@@ -4,6 +4,7 @@
 // hot path.
 
 public import ADEmbed
+public import ADFUnicode
 public import ADJSONCore
 
 public typealias ByteSpan = UnsafeRawBufferPointer

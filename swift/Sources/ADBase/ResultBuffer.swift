@@ -2,6 +2,8 @@
 // [u64 payloadLen LE][u32 status LE][u8 formatId][3 reserved] + payload at 16.
 // malloc/free symmetry is normative: callers must call ad_free exactly once.
 
+import ADFCore
+
 #if canImport(Darwin)
 import Darwin
 #else
@@ -17,7 +19,7 @@ public enum ResultBuffer {
     status: ADStatus, format: ADFormat, payloadCount: Int
   ) -> (base: UnsafeMutableRawPointer, payload: UnsafeMutableRawBufferPointer)? {
     guard payloadCount >= 0,
-      let total = headerSize.checkedAdded(payloadCount),
+      let total = headerSize.checkedAdding(payloadCount),
       let base = malloc(total)
     else { return nil }
     memset(base, 0, headerSize)

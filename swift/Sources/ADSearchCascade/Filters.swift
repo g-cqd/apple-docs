@@ -3,8 +3,9 @@
 // re-check (kind taxonomy + platform-version sentinel) applied at every merge
 // point.
 
-import ADBase  // CheckedMath — overflow-checked version-component parse
+import ADBase
 import ADContent  // JsString — JS trim/toLowerCase
+import ADFCore  // CheckedMath — overflow-checked version-component parse
 import ADJSONCore  // JSONValue — parse platforms_json for the '0' platform sentinel
 import ADStorage  // SearchRow
 import OrderedCollections
@@ -192,7 +193,7 @@ enum Filters {
     for s in version.unicodeScalars {
       if s.value >= 48 && s.value <= 57 {
         let digit = Int(s.value - 48)
-        if let scaled = current.checkedMultiplied(by: 10), let next = scaled.checkedAdded(digit) {
+        if let scaled = current.checkedMultiplied(by: 10), let next = scaled.checkedAdding(digit) {
           current = next
         } else {
           current = Int.max

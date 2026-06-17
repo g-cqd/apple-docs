@@ -54,12 +54,25 @@ let http3TargetDependencies: [Target.Dependency] =
   http3 ? [.product(name: "NIOHTTP3", package: "swift-nio-http3")] : []
 let http3Settings: [SwiftSetting] = http3 ? [.define("AD_HTTP3")] : []
 
-// ADJSON: `AD_ADJSON_LOCAL=1` points at the local sibling checkout for in-development work
-// against unreleased ADJSON changes; otherwise the pinned main branch (Package.resolved).
-let adjsonDependency: Package.Dependency =
-  Context.environment["AD_ADJSON_LOCAL"] != nil
-  ? .package(path: "../../ADJSON")
-  : .package(url: "https://github.com/g-cqd/ADJSON.git", branch: "main")
+// First-party dependencies resolve from the published `main` branch by default, or from a local
+// checkout when the matching PATH env var is set — an absolute or relative path of the caller's
+// choice, so checkouts need not be co-located. No hardcoded relative default.
+//   ADJSON_PATH       -> a local ADJSON checkout (its content pipeline + server JSON).
+//   ADFOUNDATION_PATH -> consumed transitively (ADJSON now depends on ADFoundation), so set it too
+//                        when building against a local ADJSON checkout.
+let adjsonDependency: Package.Dependency = {
+  if let path = Context.environment["ADJSON_PATH"], !path.isEmpty {
+    return .package(path: path)
+  }
+  return .package(url: "https://github.com/g-cqd/ADJSON.git", branch: "main")
+}()
+
+let adfoundationDependency: Package.Dependency = {
+  if let path = Context.environment["ADFOUNDATION_PATH"], !path.isEmpty {
+    return .package(path: path)
+  }
+  return .package(url: "https://github.com/g-cqd/ADFoundation.git", branch: "main")
+}()
 
 let package = Package(
   name: "AppleDocsCore",
@@ -86,8 +99,9 @@ let package = Package(
     // (ADContent → ADCore → the dylib): the one dependency ADCore carries, static-linked,
     // so no third-party runtime .so ships. The umbrella `ADJSON` (adds @Schemable + the
     // `JSON.stringify`-identical `JSONEncoder`) is ad-server-only. Local checkout or pinned
-    // main via `AD_ADJSON_LOCAL` (see above).
+    // main via `ADJSON_PATH` (see above). ADFoundation's zero-dep `ADFCore` is the other static dep.
     adjsonDependency,
+    adfoundationDependency,
     // ad-server-only. swift-http-types: type-safe HTTP headers/status; swift-log:
     // structured logging; swift-nio-extras: the NIO↔HTTPTypes HTTP/1 bridge
     // (`HTTP1ToHTTPServerCodec`) — requires swift-nio ≥ 2.94.0, so the `from:
@@ -120,17 +134,26 @@ let package = Package(
     .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0"),
   ] + http3PackageDependencies,
   targets: [
-    .target(name: "ADBase", swiftSettings: releaseCMO + strictSettings),
+    .target(
+      name: "ADBase",
+      dependencies: [.product(name: "ADFCore", package: "ADFoundation")],
+      swiftSettings: releaseCMO + strictSettings),
     .target(name: "ADSearch", swiftSettings: releaseCMO + strictSettings),
     .target(name: "ADArchive", swiftSettings: releaseCMO + strictSettings),
-    .target(name: "ADEmbed", swiftSettings: releaseCMO + strictSettings),
-    // Content pipeline: reuses ADEmbed's engine-derived JS string semantics
+    .target(
+      name: "ADEmbed", dependencies: [.product(name: "ADFUnicode", package: "ADFoundation")],
+      swiftSettings: releaseCMO + strictSettings),
+    // Content pipeline: reuses ADFoundation's engine-derived JS string semantics (via ADFUnicode)
     // (CaseFolding = JS toLowerCase, jsWhitespace = JS trim/\s). The DocC JSON is
     // parsed + walked via g-cqd/ADJSON's `ADJSONCore` tape (Foundation-free, static —
     // it links into libAppleDocsCore with no third-party runtime dependency).
     .target(
       name: "ADContent",
-      dependencies: ["ADBase", "ADEmbed", .product(name: "ADJSONCore", package: "ADJSON")],
+      dependencies: [
+        "ADBase", "ADEmbed",
+        .product(name: "ADJSONCore", package: "ADJSON"),
+        .product(name: "ADFUnicode", package: "ADFoundation"),
+      ],
       swiftSettings: releaseCMO + strictSettings),
     // Render service: symbol/font renderers. darwin links CoreText/AppKit;
     // the Linux slice compiles to stubs (#if canImport) so the dylib still
@@ -145,7 +168,8 @@ let package = Package(
     // decompress used by the section codec (enrichment) — both dlopen'd, so
     // the dylib stays zero external dep.
     .target(
-      name: "ADStorage", dependencies: ["ADBase", "ADArchive", "CSQLiteShim"],
+      name: "ADStorage",
+      dependencies: ["ADBase", "ADArchive", "CSQLiteShim", .product(name: "ADJSONCore", package: "ADJSON")],
       swiftSettings: releaseCMO + strictSettings),
     // Search cascade: the byte-exact in-process port of the JS lexical search
     // (fts-query-builder, intent, the tier merge, ranking, projection).
@@ -155,6 +179,8 @@ let package = Package(
       name: "ADSearchCascade",
       dependencies: [
         "ADStorage", "ADContent", "ADBase",
+        .product(name: "ADFCore", package: "ADFoundation"),
+        .product(name: "ADFText", package: "ADFoundation"),
         .product(name: "OrderedCollections", package: "swift-collections"),
         .product(name: "Algorithms", package: "swift-algorithms"),
         .product(name: "ADJSONCore", package: "ADJSON"),
@@ -222,13 +248,19 @@ let package = Package(
       path: "Sources/ADServer", swiftSettings: releaseCMO + strictSettings),
     .target(
       name: "ADCore",
-      dependencies: ["ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent", "ADRender", "ADStorage"],
+      dependencies: [
+        "ADBase", "ADSearch", "ADArchive", "ADEmbed", "ADContent", "ADRender", "ADStorage",
+        .product(name: "ADFCore", package: "ADFoundation"),
+      ],
       swiftSettings: releaseCMO + strictSettings),
     .testTarget(name: "ADBaseTests", dependencies: ["ADBase"], swiftSettings: testSettings),
     .testTarget(name: "ADSearchTests", dependencies: ["ADSearch"], swiftSettings: testSettings),
     .testTarget(name: "ADArchiveTests", dependencies: ["ADArchive"], swiftSettings: testSettings),
     .testTarget(name: "ADCoreTests", dependencies: ["ADCore", "ADEmbed"], swiftSettings: testSettings),
-    .testTarget(name: "ADEmbedTests", dependencies: ["ADEmbed"], swiftSettings: testSettings),
+    .testTarget(
+      name: "ADEmbedTests",
+      dependencies: ["ADEmbed", .product(name: "ADFUnicode", package: "ADFoundation")],
+      swiftSettings: testSettings),
     .testTarget(
       name: "ADContentTests",
       dependencies: ["ADContent", .product(name: "ADJSONCore", package: "ADJSON")],

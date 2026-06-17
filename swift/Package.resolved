@@ -1,15 +1,6 @@
 {
-  "originHash" : "078163be5e46b4ae39efa8d248d45cca46eebe70642cdeeac815a6f85b73b2b5",
+  "originHash" : "05e299ee798905f952bc41079f7afefab2b610393b1b5a77cc6aea4039f2fb87",
   "pins" : [
-    {
-      "identity" : "adjson",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/g-cqd/ADJSON.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "9898d669b9d1b4756e98bab743ee5dec55da6e61"
-      }
-    },
     {
       "identity" : "swift-algorithms",
       "kind" : "remoteSourceControl",

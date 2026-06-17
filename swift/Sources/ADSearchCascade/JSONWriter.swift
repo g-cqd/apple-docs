@@ -1,7 +1,9 @@
-// Minimal hand-framed JSON writer (no Foundation). Escaping matches
-// JSON.stringify: ", \, the short escapes \b\f\n\r\t, and \u00XX for other
-// control bytes; everything else (incl. UTF-8 non-ASCII) passes through.
-// Commas between object members / array elements are inserted automatically.
+import ADJSONCore
+
+// Minimal hand-framed streaming JSON writer (no Foundation): tracks open-container state and inserts
+// commas between object members / array elements automatically. String escaping is delegated to
+// ADJSON's `JSONOutput.appendString` — the single JSON.stringify-identical escaper — so the escape
+// table is not re-maintained here.
 
 struct JSONWriter {
   var bytes: [UInt8] = []
@@ -69,33 +71,9 @@ struct JSONWriter {
     if let s { bytes.append(contentsOf: s.utf8) } else { bytes.append(contentsOf: "[]".utf8) }
   }
 
+  // Delegates to ADJSON's single JSON.stringify-identical escaper (quotes, backslash, the standard
+  // short escapes, and u-escapes for other C0 control bytes; UTF-8 passes through unchanged).
   private mutating func writeString(_ s: String) {
-    bytes.append(UInt8(ascii: "\""))
-    let backslash = UInt8(ascii: "\\")
-    for b in s.utf8 {
-      switch b {
-      case 0x22: bytes.append(backslash); bytes.append(0x22)
-      case 0x5C: bytes.append(backslash); bytes.append(0x5C)
-      case 0x08: bytes.append(backslash); bytes.append(UInt8(ascii: "b"))
-      case 0x0C: bytes.append(backslash); bytes.append(UInt8(ascii: "f"))
-      case 0x0A: bytes.append(backslash); bytes.append(UInt8(ascii: "n"))
-      case 0x0D: bytes.append(backslash); bytes.append(UInt8(ascii: "r"))
-      case 0x09: bytes.append(backslash); bytes.append(UInt8(ascii: "t"))
-      case 0..<0x20:
-        bytes.append(backslash)
-        bytes.append(UInt8(ascii: "u"))
-        bytes.append(UInt8(ascii: "0"))
-        bytes.append(UInt8(ascii: "0"))
-        bytes.append(hexDigit(b >> 4))
-        bytes.append(hexDigit(b & 0xF))
-      default:
-        bytes.append(b)
-      }
-    }
-    bytes.append(UInt8(ascii: "\""))
-  }
-
-  private func hexDigit(_ v: UInt8) -> UInt8 {
-    v < 10 ? UInt8(ascii: "0") + v : UInt8(ascii: "a") + (v - 10)
+    JSONOutput.appendString(s, to: &bytes)
   }
 }
