@@ -1,10 +1,6 @@
-// The in-process lexical search cascade (RFC 0001 P6). Orchestrates the three
-// lexical tiers on ONE connection in ONE offload, merges (title-exact → FTS →
-// trigram, dedup-by-path keep-first), reranks, slices, and projects to the
-// public JSON envelope — byte-identical to JS
-// projectSearchResult(search(opts,ctx)) for the lexical subset. Phase 1: no
-// snippet/relatedCount enrichment, no kind/platform JS filters, no framework
-// fan-out (single, no-filter query) — those land in follow-ons.
+// Orchestrates the three lexical tiers on ONE connection in ONE offload,
+// merges (title-exact → FTS → trigram, dedup-by-path keep-first), reranks,
+// slices, and projects to the public JSON envelope.
 
 import ADContent
 public import ADStorage
@@ -78,7 +74,6 @@ public enum Cascade {
     let offset = max(params.offset, 0)
     let requestedWindow = limit + offset
 
-    // Normalize the filter bag (search.js + filters.js + buildFilterParams).
     let framework = nonEmptyValue(params.framework)
     let kind = nonEmptyValue(params.kind)
     let language = nonEmptyValue(params.language)
@@ -89,13 +84,13 @@ public enum Cascade {
       platform: params.platform, minIos: nonEmptyValue(params.minIos),
       minMacos: nonEmptyValue(params.minMacos), minWatchos: nonEmptyValue(params.minWatchos),
       minTvos: nonEmptyValue(params.minTvos), minVisionos: nonEmptyValue(params.minVisionos))
-    // Only `kind` + platform-version stay JS-side → 3× over-fetch when active.
+    // Only `kind` + platform-version are filtered post-cascade → 3× over-fetch when active.
     let hasJsPostFilters = kind != nil || platformFilters.any
     let searchLimit = hasJsPostFilters ? min(max(requestedWindow * 3, 60), 300) : requestedWindow
 
     // SQL params: framework / source / kind / language / year / track /
-    // deprecated push down; the `$min_*` stay nil — platform filtering is
-    // entirely JS-side (matchesSearchFilters), matching search.js's filterOpts.
+    // deprecated push down; `$min_*` stay nil — platform filtering is
+    // post-cascade (matchesSearchFilters).
     let base = SearchPagesParams(
       query: FtsQuery.build(q), raw: q, limit: Int64(searchLimit), framework: framework,
       sourceType: sqlSourceType, sourcesJson: Filters.sourcesJson(sources), kind: kind,
@@ -119,9 +114,8 @@ public enum Cascade {
   /// `assemble`).
   public static func search(_ conn: StorageConnection, _ params: SearchParams) -> [UInt8] {
     guard let prepared = prepare(params) else { return emptyEnvelope }
-    // Framework-synonym expansion (search.js:137): run each strict tier once per
-    // framework (canonical + synonyms) and concatenate, and widen the
-    // matchesFrameworkFilter set to the same list.
+    // Framework-synonym expansion: run each strict tier once per framework
+    // (canonical + synonyms) and concatenate, widening the framework filter set.
     let frameworks = resolveFrameworks(conn, nonEmptyValue(params.framework))
     var filters = prepared.activeFilters
     filters.frameworks = frameworks
@@ -175,7 +169,7 @@ public enum Cascade {
     let filters = p.activeFilters
     var results: [ResultHit] = []
     var seen: Set<String> = []
-    // addResults (search.js:183): JS-side filter THEN dedup-by-path keep-first.
+    // Filter THEN dedup-by-path keep-first at each merge point.
     func addRows(_ rows: [SearchRow], quality: (SearchRow) -> String) {
       for row in rows {
         if !Filters.matches(row, filters) { continue }
@@ -195,9 +189,9 @@ public enum Cascade {
 
     // Deep tiers need the connection (skipped in the pure conn == nil path).
     if let conn {
-      // Tier 3: fuzzy Levenshtein (search.js:249) — only when T1+T2 produced < 5
-      // hits and the query is >= 4 UTF-16 units. Candidates in distance order,
-      // deduped, merged with matchQuality 'fuzzy'.
+      // Tier 3: fuzzy Levenshtein — only when T1+T2 produced < 5 hits and the
+      // query is >= 4 UTF-16 units. Candidates in distance order, deduped,
+      // merged with matchQuality 'fuzzy'.
       if results.count < 5, q.utf16.count >= 4 {
         let ids = Fuzzy.matchTitles(conn, query: q, limit: Int(p.ftsParams.limit))
         if !ids.isEmpty {
@@ -212,16 +206,16 @@ public enum Cascade {
           }
         }
       }
-      // Tier 4: body FTS (search.js:276) — merge only when the strict + fuzzy
-      // tiers haven't filled the requested window. `bodyRows` self-guards on the
-      // table's presence (→ [] when absent), matching the JS hasBody gate.
+      // Tier 4: body FTS — merge only when the strict + fuzzy tiers haven't
+      // filled the requested window. `bodyRows` self-guards on the table's
+      // presence (→ [] when absent).
       if results.count < limit + offset {
         addRows(fanout(filters.frameworks, p.ftsParams) { conn.bodyRows($0) }) { _ in "body" }
       }
 
-      // Relaxation cascade R1-R3 (cascade.js runRelaxationCascade) — only when
-      // the strict + deep tiers produced NOTHING, the trimmed query is >= 4
-      // UTF-16 units with no `"`, and it tokenizes to >= 3 tokens.
+      // Relaxation cascade R1-R3 — only when the strict + deep tiers produced
+      // NOTHING, the trimmed query is >= 4 UTF-16 units with no `"`, and it
+      // tokenizes to >= 3 tokens.
       if results.isEmpty, q.utf16.count >= 4, !q.contains("\"") {
         let tokens = Relaxation.tokenize(q)
         if tokens.count >= 3 {
@@ -253,22 +247,23 @@ public enum Cascade {
     }
 
     let intent = IntentDetector.detect(q)
-    Rerank.apply(&results, query: q, intent: intent)
-
     let total = results.count
-    let start = min(offset, total)
-    let end = min(offset + limit, total)
-    var sliced = Array(results[start..<end])
+    // Only the [offset, offset+limit) window survives, so rank just the top
+    // `offset+limit` hits; the envelope `total` is the full merged count.
+    let ranked = Rerank.apply(&results, query: q, intent: intent, window: offset + limit)
+
+    let start = min(offset, ranked.count)
+    let end = min(offset + limit, ranked.count)
+    var sliced = Array(ranked[start..<end])
     let hasMore = total >= offset + limit && sliced.count == limit
 
     if let conn { enrich(conn, &sliced, query: q) }
     return projectEnvelope(query: q, total: total, hasMore: hasMore, hits: sliced)
   }
 
-  /// Snippet + relatedCount enrichment of the final page (mirrors
-  /// src/commands/search.js:309-326). Best-effort: a missing
-  /// document_relationships table → getRelatedDocCounts returns nil → the whole
-  /// block is skipped, exactly like the JS try/catch (neither field emitted).
+  /// Snippet + relatedCount enrichment of the final page. Best-effort: a
+  /// missing document_relationships table → getRelatedDocCounts returns nil →
+  /// the whole block is skipped (neither field emitted).
   private static func enrich(_ conn: StorageConnection, _ hits: inout [ResultHit], query: String) {
     guard !hits.isEmpty else { return }
     let keys = hits.map(\.path)
@@ -327,7 +322,6 @@ public enum Cascade {
     w.closeObject()
   }
 
-  /// publicConfidence(matchQuality) (src/output/confidence.js).
   private static func publicConfidence(_ matchQuality: String) -> String {
     if matchQuality == "exact" { return "exact" }
     if matchQuality == "fuzzy" { return "approximate" }

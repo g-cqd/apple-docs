@@ -1,11 +1,12 @@
-// Fuzzy title matching (RFC 0001 P6, T3) — byte-exact port of src/lib/fuzzy.js.
-// Levenshtein (early-exit, over UTF-16 code units to match JS string indexing)
-// over a trigram-OR bm25 candidate pre-filter; sorted by distance (stable,
-// preserving candidate order for ties). framework/kind are deliberately ignored
-// here (the JS `_framework`/`_kind`) — filtering happens later on the records.
+// Fuzzy title matching — byte-exact port of the JS fuzzy module. Levenshtein
+// (early-exit, over UTF-16 code units to match JS string indexing) over a
+// trigram-OR bm25 candidate pre-filter; sorted by distance (stable, preserving
+// candidate order for ties). framework/kind are deliberately ignored here —
+// filtering happens later on the records.
 
 import ADContent
 import ADStorage
+import Algorithms
 
 enum Fuzzy {
   /// Levenshtein edit distance with early exit (returns maxDist+1 when exceeded).
@@ -67,13 +68,20 @@ enum Fuzzy {
 
     var matches: [(id: Int64, distance: Int, orig: Int)] = []
     for (orig, candidate) in candidates.enumerated() {
-      let titleLower = Array(JsString.lowercase(candidate.title).utf16)
+      let loweredTitle = JsString.lowercase(candidate.title)
+      // Length prefilter (same lowercased UTF-16 length levenshtein's early exit
+      // uses) before the [UInt16] alloc — a length gap > maxDist can't be closed
+      // by ≤ maxDist edits, so the candidate would be dropped anyway.
+      if abs(loweredTitle.utf16.count - queryLower.count) > maxDist { continue }
+      let titleLower = Array(loweredTitle.utf16)
       let distance = levenshtein(queryLower, titleLower, maxDist: maxDist)
       if distance <= maxDist { matches.append((candidate.id, distance, orig)) }
     }
-    // Stable sort by distance (JS Array.sort) — preserve candidate (bm25) order
-    // for ties via the original index.
-    matches.sort { $0.distance != $1.distance ? $0.distance < $1.distance : $0.orig < $1.orig }
-    return matches.prefix(limit).map(\.id)
+    // Bounded top-K by distance (JS Array.sort, stable) — preserve candidate
+    // (bm25) order for ties via the original index. The comparator is a strict
+    // total order (`orig` is unique), so this is identical to `sort().prefix(limit)`.
+    return matches.min(count: limit) {
+      $0.distance != $1.distance ? $0.distance < $1.distance : $0.orig < $1.orig
+    }.map(\.id)
   }
 }

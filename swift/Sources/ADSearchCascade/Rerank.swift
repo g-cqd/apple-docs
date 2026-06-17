@@ -1,8 +1,10 @@
-// Byte-exact port of src/search/ranking.js. The score multipliers are IEEE
+// Byte-exact port of the JS ranking module. The score multipliers are IEEE
 // doubles applied in the SAME order, so Swift `Double` yields bit-identical
 // scores → identical ordering. JS `Array.sort` is stable; Swift's isn't, so
 // the comparator carries the original insertion index as a final tie-break,
 // making it a deterministic TOTAL order that reproduces JS's stable result.
+
+import Algorithms
 
 enum Rerank {
   private static let baseScores: [String: Double] = [
@@ -27,7 +29,13 @@ enum Rerank {
     "fuzzy": 5, "body": 6, "relaxed": 7, "relaxed-or": 8, "relaxed-token": 9,
   ]
 
-  static func apply(_ results: inout [ResultHit], query: String, intent: Intent) {
+  /// Scores `results` in place, then returns the top `window` hits in final
+  /// ranked order. Only `window` (= offset+limit) survive the slice, so the
+  /// bounded selection avoids the full sort. The comparator is a strict total
+  /// order (ends in `origIndex`), so this is identical to `sort().prefix(window)`.
+  static func apply(_ results: inout [ResultHit], query: String, intent: Intent, window: Int)
+    -> [ResultHit]
+  {
     let lowerQuery = query.lowercased()
 
     for i in results.indices {
@@ -92,7 +100,7 @@ enum Rerank {
       results[i].score = score
     }
 
-    results.sort { a, b in
+    return results.min(count: window) { a, b in
       let scoreDiff = b.score - a.score
       if abs(scoreDiff) > 0.001 { return scoreDiff < 0 }  // higher score first
       let qa = qualityOrder[a.matchQuality] ?? 9
