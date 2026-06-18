@@ -108,20 +108,33 @@ public final class MatrixArtifact: @unchecked Sendable {
     munmap(base, length)
   }
 
-  /// Pointer to the 4-byte-aligned f32 row for `tokenId`, or nil when the
-  /// id is absent (sparse miss / dense out-of-range). Never traps.
+  /// Whether `tokenId` has a row (sparse hit / dense in-range). Never traps.
+  public func contains(tokenId id: UInt32) -> Bool {
+    rowIndex(forTokenId: id) != nil
+  }
+
+  /// Calls `body` with a read-only, bounds-exact `Span<Float>` (`dims` elements) over the f32 row for
+  /// `tokenId` and returns its result, or returns `nil` without calling `body` when the id is absent
+  /// (sparse miss / dense out-of-range). Never traps.
   ///
-  /// Lifetime contract: the pointer aliases the read-only mmap and is valid
-  /// ONLY while this `MatrixArtifact` is alive — `deinit` `munmap`s the region,
-  /// after which it dangles. It addresses exactly `dims` contiguous `Float`s
-  /// (one row); anything past that is out of bounds. Consume it within the
-  /// artifact's lifetime; never store it beyond.
-  public func row(forTokenId id: UInt32) -> UnsafePointer<Float>? {
-    let index: Int
+  /// The span aliases the read-only mmap and is valid ONLY for the duration of `body` — and because
+  /// a `Span` is non-escapable, the compiler now *enforces* that, where the previous
+  /// `UnsafePointer<Float>` return relied on a doc-only "never store it beyond" contract. Still zero
+  /// copy: the span points straight into the mapping.
+  public func withRow<R>(forTokenId id: UInt32, _ body: (Span<Float>) throws -> R) rethrows -> R? {
+    guard let index = rowIndex(forTokenId: id) else { return nil }
+    let pointer = (base + dataOffset + index * dims * 4).assumingMemoryBound(to: Float.self)
+    let buffer = UnsafeBufferPointer(start: pointer, count: dims)
+    return try body(buffer.span)
+  }
+
+  /// Row index for `tokenId` — binary search over the ascending sparse id-table, or the direct dense
+  /// index — or nil when absent. The single lookup shared by ``contains(tokenId:)`` and
+  /// ``withRow(forTokenId:_:)``.
+  private func rowIndex(forTokenId id: UInt32) -> Int? {
     if isSparse {
       var lo = 0
       var hi = rows - 1
-      var found = -1
       while lo <= hi {
         let mid = (lo + hi) / 2
         let value = UInt32(littleEndian: base.loadUnaligned(fromByteOffset: idTableOffset + mid * 4, as: UInt32.self))
@@ -130,17 +143,14 @@ public final class MatrixArtifact: @unchecked Sendable {
         } else if value > id {
           hi = mid - 1
         } else {
-          found = mid
-          break
+          return mid
         }
       }
-      guard found >= 0 else { return nil }
-      index = found
+      return nil
     } else {
       guard id < UInt32(rows) else { return nil }
-      index = Int(id)
+      return Int(id)
     }
-    return UnsafePointer((base + dataOffset + index * dims * 4).assumingMemoryBound(to: Float.self))
   }
 }
 
