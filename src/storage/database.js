@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { Database } from 'bun:sqlite'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -16,6 +15,7 @@ import { createPagesRepo } from './repos/pages.js'
 import { createRootsRepo } from './repos/roots.js'
 import { createSearchRepo } from './repos/search.js'
 
+/** @param {string} path */
 function deriveFrameworkFromPath(path) {
   if (!path) return null
   const parts = path.split('/').filter(Boolean)
@@ -24,6 +24,7 @@ function deriveFrameworkFromPath(path) {
 }
 
 export class DocsDatabase {
+  /** @param {string} dbPath */
   constructor(dbPath) {
     if (dbPath !== ':memory:') {
       const dir = dirname(dbPath)
@@ -57,12 +58,18 @@ export class DocsDatabase {
     runMigrations(this.db)
   }
 
+  /**
+   * @param {string} name
+   */
   hasTable(name) {
     return !!this.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name)
   }
 
   // tx(fn): synchronous unit of work in a transaction; rolls back on
   // throw, returns the callback result on success.
+  /**
+   * @param {(db?: any) => any} fn
+   */
   tx(fn) {
     this.db.run('BEGIN IMMEDIATE')
     try {
@@ -128,10 +135,21 @@ export class DocsDatabase {
     // remains as a hook for tier-conditional setup (currently none).
   }
 
+  /**
+   * @param {string} slug
+   * @param {string} displayName
+   * @param {string} kind
+   * @param {string} source
+   * @param {any | null} [seedPath]
+   * @param {string | null} [sourceType]
+   */
   upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
     return this.roots.upsertRoot(slug, displayName, kind, source, seedPath, sourceType)
   }
 
+  /**
+   * @param {Record<string, any>} params
+   */
   upsertPage(params) {
     const root = params.rootId ? this.roots.getRootById(params.rootId) : null
     const sourceType = params.sourceType ?? root?.source_type ?? 'apple-docc'
@@ -172,16 +190,31 @@ export class DocsDatabase {
     return page
   }
 
+  /**
+   * @param {Record<string, any>} params
+   */
   upsertDocument(params) {
     return this.documents.upsertDocument(params)
   }
+  /**
+   * @param {number} documentId
+   * @param {any[]} sections
+   */
   replaceDocumentSections(documentId, sections) {
     this.documents.replaceSections(documentId, sections)
   }
+  /**
+   * @param {string} fromKey
+   * @param {any[]} relationships
+   */
   replaceDocumentRelationships(fromKey, relationships) {
     this.documents.replaceRelationships(fromKey, relationships)
   }
 
+  /**
+   * @param {Record<string, any>} normalized
+   * @param {Record<string, any>} [hashes]
+   */
   upsertNormalizedDocument(normalized, hashes = {}) {
     const documentId = this.documents.upsertDocument({
       ...normalized.document,
@@ -195,7 +228,8 @@ export class DocsDatabase {
 
   /** Backwards-compat shape: documents-row first (with the legacy field
    *  aliases callers still expect), falling back to the pages row when no
-   *  document has been normalized yet. */
+   *  document has been normalized yet.
+   *  @param {string} path */
   getPage(path) {
     const document = this.documents.getDocumentByKey(path)
     if (document) {
@@ -213,44 +247,88 @@ export class DocsDatabase {
     return this.pages.getActivePage(path)
   }
 
+  /**
+   * @param {string} path
+   */
   getPageByPath(path) {
     return this.pages.getActivePage(path)
   }
+  /**
+   * @param {string[]} keys
+   */
   getActivePathsIn(keys) {
     return this.pages.getActivePathsIn(keys)
   }
+  /**
+   * @param {string} key
+   */
   getDocumentSections(key) {
     return this.documents.getSections(key)
   }
+  /**
+   * @param {string} key
+   */
   getDocumentRelationships(key) {
     return this.documents.getRelationships(key)
   }
+  /**
+   * @param {string} rootSlug
+   */
   getPagesByRoot(rootSlug) {
     return this.documents.getDocumentsByRoot(rootSlug)
   }
 
+  /**
+   * @param {string} ftsQuery
+   * @param {string} rawQuery
+   * @param {Record<string, any>} [opts]
+   */
   searchPages(ftsQuery, rawQuery, opts = {}) {
     return this.search.searchPages(ftsQuery, rawQuery, opts)
   }
+  /**
+   * @param {string} rawQuery
+   * @param {Record<string, any>} [opts]
+   */
   searchTitleExact(rawQuery, opts = {}) {
     return this.search.searchTitleExact(rawQuery, opts)
   }
+  /**
+   * @param {string} query
+   * @param {Record<string, any>} [opts]
+   */
   searchTrigram(query, opts = {}) {
     return this.search.searchTrigram(query, opts)
   }
+  /**
+   * @param {string} ftsQuery
+   * @param {Record<string, any>} [opts]
+   */
   searchBody(ftsQuery, opts = {}) {
     return this.search.searchBody(ftsQuery, opts)
   }
+  /**
+   * @param {string} slug
+   */
   getFrameworkSynonyms(slug) {
     return this.search.getFrameworkSynonyms(slug)
   }
 
+  /**
+   * @param {string[]} keys
+   */
   getDocumentSnippetData(keys) {
     return this.documents.getDocumentSnippetData(keys)
   }
+  /**
+   * @param {string[]} keys
+   */
   getRelatedDocCounts(keys) {
     return this.documents.getRelatedDocCounts(keys)
   }
+  /**
+   * @param {string} key
+   */
   getRelationshipCountsByType(key) {
     return this.documents.getRelationshipCountsByType(key)
   }
@@ -272,27 +350,49 @@ export class DocsDatabase {
   getAllChunkVectors() {
     return this.chunks.getAllChunkVectors()
   }
+  /**
+   * @param {number[]} chunkIds
+   */
   getChunkI8Batch(chunkIds) {
     return this.chunks.getChunkI8Batch(chunkIds)
   }
+  /**
+   * @param {Record<string, any>} params
+   */
   upsertChunk(params) {
-    this.chunks.upsertChunk(params)
+    this.chunks.upsertChunk(/** @type {any} */ (params))
   }
+  /**
+   * @param {number} documentId
+   */
   deleteChunksByDocId(documentId) {
     this.chunks.deleteChunksByDocId(documentId)
   }
+  /**
+   * @param {any[]} ids
+   */
   getSectionsByDocumentIds(ids) {
     return this.documents.getSectionsByDocumentIds(ids)
   }
+  /**
+   * @param {any[]} ids
+   */
   getSearchRecordsByIds(ids) {
     return this.search.getSearchRecordsByIds(ids)
   }
   getRawCount() {
     return this.search.getRawCount()
   }
+  /**
+   * @param {number} documentId
+   * @param {unknown} json
+   */
   upsertRawPayload(documentId, json) {
     this.search.upsertRawPayload(documentId, json)
   }
+  /**
+   * @param {string} key
+   */
   getRawPayloadByKey(key) {
     return this.search.getRawPayloadByKey(key)
   }
@@ -303,15 +403,26 @@ export class DocsDatabase {
   hasBodyIndex() {
     return this.search.hasBodyIndex()
   }
+  /**
+   * @param {number} documentId
+   * @param {string} body
+   */
   insertBody(documentId, body) {
     this.search.insertBody(documentId, body)
   }
   clearBodyIndex() {
     this.search.clearBodyIndex()
   }
+  /**
+   * @param {string} trigram
+   */
   getTrigramCandidates(trigram) {
     return this.search.getTrigramCandidates(trigram)
   }
+  /**
+   * @param {string} orQuery
+   * @param {number} limit
+   */
   fuzzyTrigramCandidates(orQuery, limit) {
     return this.search.fuzzyTrigramCandidates(orQuery, limit)
   }
@@ -330,50 +441,98 @@ export class DocsDatabase {
    * `documents_trigram` FTS5 index per call rather than building a
    * process-local Map. No warm-up cost, no staleness hazard, no
    * multi-hundred-MB per-worker memory footprint.
+   * @param {string} query @param {Record<string, any>} [opts]
    */
   fuzzyMatchTitles(query, opts = {}) {
     return fuzzyMatchTitles(query, this, opts)
   }
 
+  /**
+   * @param {string} title
+   * @param {any | null} [framework]
+   */
   searchByTitle(title, framework = null) {
     return this.search.searchByTitle(title, framework)
   }
+  /**
+   * @param {number} id
+   */
   getSearchRecordById(id) {
     return this.search.getSearchRecordById(id)
   }
 
+  /**
+   * @param {string | null} [kind]
+   */
   getRoots(kind = null) {
     return this.roots.getRoots(kind)
   }
+  /**
+   * @param {string} slug
+   */
   getRootBySlug(slug) {
     return this.roots.getRootBySlug(slug)
   }
+  /**
+   * @param {string} input
+   */
   resolveRoot(input) {
     return this.roots.resolveRoot(input)
   }
 
+  /**
+   * @param {string} path
+   * @param {string} status
+   * @param {string} rootSlug
+   * @param {any} [depth]
+   * @param {any | null} [error]
+   */
   setCrawlState(path, status, rootSlug, depth = 0, error = null) {
     this.crawl.setCrawlState(path, status, rootSlug, depth, error)
   }
+  /**
+   * @param {string} path
+   * @param {string} rootSlug
+   * @param {any} [depth]
+   */
   seedCrawlIfNew(path, rootSlug, depth = 0) {
     return this.crawl.seedCrawlIfNew(path, rootSlug, depth)
   }
+  /**
+   * @param {string} rootSlug
+   * @param {number} [limit]
+   */
   getPendingCrawl(rootSlug, limit = 10) {
     return this.crawl.getPendingCrawl(rootSlug, limit)
   }
+  /**
+   * @param {string} rootSlug
+   */
   resetFailedCrawl(rootSlug) {
     return this.crawl.resetFailedCrawl(rootSlug)
   }
+  /**
+   * @param {string} rootSlug
+   */
   countFailed(rootSlug) {
     return this.crawl.countFailed(rootSlug)
   }
+  /**
+   * @param {string} rootSlug
+   */
   getCrawlStats(rootSlug) {
     return this.crawl.getCrawlStats(rootSlug)
   }
+  /**
+   * @param {string} rootSlug
+   */
   clearCrawlState(rootSlug) {
     this.crawl.clearCrawlState(rootSlug)
   }
 
+  /**
+   * @param {Record<string, any>} params
+   */
   addUpdateLog(params) {
     this.operations.addUpdateLog(params)
   }
@@ -381,37 +540,61 @@ export class DocsDatabase {
     return this.operations.getLastUpdateLog()
   }
 
+  /**
+   * @param {string} path
+   */
   markConverted(path) {
     this.pages.markConverted(path)
   }
   getUnconvertedPages() {
     return this.pages.getUnconvertedPages()
   }
+  /**
+   * @param {string} slug
+   */
   updateRootPageCount(slug) {
     this.roots.updateRootPageCount(slug)
   }
   getAllPagesWithEtag() {
     return this.pages.getAllPagesWithEtag()
   }
+  /**
+   * @param {string} sourceType
+   */
   getPagesBySourceType(sourceType) {
     return this.pages.getPagesBySourceType(sourceType)
   }
+  /**
+   * @param {string} role
+   */
   getPagesByRole(role) {
     return this.documents.getDocumentsByRole(role)
   }
 
+  /**
+   * @param {string} path
+   */
   markPageDeleted(path) {
     this.pages.markPageDeleted(path)
     this.deleteNormalizedDocument(path)
   }
 
+  /**
+   * @param {string} path
+   */
   bumpConsecutive404(path) {
     return this.pages.bumpConsecutive404(path)
   }
+  /**
+   * @param {string} path
+   */
   resetConsecutive404(path) {
     this.pages.resetConsecutive404(path)
   }
 
+  /**
+   * @param {string} key
+   */
   deleteNormalizedDocument(key) {
     const document = this.documents.getDocumentIdByKey(key)
     if (!document) return false
@@ -421,10 +604,20 @@ export class DocsDatabase {
     return true
   }
 
+  /**
+   * @param {string} path
+   * @param {string} etag
+   * @param {string} lastModified
+   * @param {string} contentHash
+   */
   updatePageAfterDownload(path, etag, lastModified, contentHash) {
     this.pages.updatePageAfterDownload(path, etag, lastModified, contentHash)
   }
 
+  /**
+   * @param {string} action
+   * @param {any | null} [roots]
+   */
   setActivity(action, roots = null) {
     this.operations.setActivity(action, roots)
   }
@@ -442,9 +635,16 @@ export class DocsDatabase {
     return this.crawl.getCrawlProgressAll()
   }
 
+  /**
+   * @param {string} key
+   */
   getSnapshotMeta(key) {
     return this.operations.getSnapshotMeta(key)
   }
+  /**
+   * @param {string} key
+   * @param {unknown} value
+   */
   setSnapshotMeta(key, value) {
     this.operations.setSnapshotMeta(key, value)
     // Tier cache lives on the facade; invalidate when the underlying tier
@@ -452,12 +652,22 @@ export class DocsDatabase {
     if (key === 'snapshot_tier') this._tier = undefined
   }
 
+  /**
+   * @param {string} key
+   */
   getSyncCheckpoint(key) {
     return this.operations.getSyncCheckpoint(key)
   }
+  /**
+   * @param {string} key
+   * @param {unknown} value
+   */
   setSyncCheckpoint(key, value) {
     this.operations.setSyncCheckpoint(key, value)
   }
+  /**
+   * @param {string} key
+   */
   clearSyncCheckpoint(key) {
     this.operations.clearSyncCheckpoint(key)
   }
@@ -473,6 +683,9 @@ export class DocsDatabase {
     return this.getSyncCheckpoint('web_build')
   }
 
+  /**
+   * @param {Record<string, any>} state
+   */
   setWebBuildCheckpoint(state) {
     this.setSyncCheckpoint('web_build', state)
   }
@@ -491,8 +704,11 @@ export class DocsDatabase {
   getRenderIndexEntry(docId) {
     return this.operations.getRenderIndexEntry(docId)
   }
+  /**
+   * @param {Record<string, any>} entry
+   */
   upsertRenderIndexEntry(entry) {
-    this.operations.upsertRenderIndexEntry(entry)
+    this.operations.upsertRenderIndexEntry(/** @type {any} */ (entry))
   }
   clearRenderIndex() {
     this.operations.clearRenderIndex()
@@ -510,49 +726,91 @@ export class DocsDatabase {
     })
   }
 
+  /**
+   * @param {Record<string, any>} params
+   */
   upsertAppleFontFamily(params) {
     this.assetsFonts.upsertFontFamily(params)
   }
+  /**
+   * @param {Record<string, any>} params
+   */
   upsertAppleFontFile(params) {
     this.assetsFonts.upsertFontFile(params)
   }
   listAppleFonts() {
     return this.assetsFonts.listFonts()
   }
+  /**
+   * @param {string} id
+   */
   getAppleFontFile(id) {
     return this.assetsFonts.getFontFile(id)
   }
 
+  /**
+   * @param {Record<string, any>} params
+   */
   upsertSfSymbol(params) {
     this.assetsSymbols.upsertSymbol(params)
   }
+  /**
+   * @param {string} scope
+   * @param {string} name
+   */
   getSfSymbol(scope, name) {
     return this.assetsSymbols.getSymbol(scope, name)
   }
   listSfSymbolsCatalog() {
     return this.assetsSymbols.listCatalog()
   }
+  /**
+   * @param {string} scope
+   * @param {string} name
+   */
   markSfSymbolBitmapOnly(scope, name) {
     this.assetsSymbols.markBitmapOnly(scope, name)
   }
+  /**
+   * @param {string} scope
+   * @param {string} name
+   * @param {number} codepoint
+   * @param {any | null} [version]
+   */
   updateSfSymbolCodepoint(scope, name, codepoint, version = null) {
     this.assetsSymbols.updateCodepoint(scope, name, codepoint, version)
   }
+  /**
+   * @param {string} [query]
+   * @param {Record<string, any>} [opts]
+   */
   searchSfSymbols(query = '', opts = {}) {
     return this.assetsSymbols.searchSymbols(query, opts)
   }
+  /**
+   * @param {Record<string, any>} params
+   */
   upsertSfSymbolRender(params) {
     this.assetsSymbols.upsertRender(params)
   }
+  /**
+   * @param {string} cacheKey
+   */
   getSfSymbolRender(cacheKey) {
     return this.assetsSymbols.getRender(cacheKey)
   }
   sfSymbolRenderCacheStats() {
     return this.assetsSymbols.renderCacheStats()
   }
+  /**
+   * @param {string} cutoffIso
+   */
   pruneSfSymbolRendersOlderThan(cutoffIso) {
     return this.assetsSymbols.pruneRendersOlderThan(cutoffIso)
   }
+  /**
+   * @param {number} maxBytes
+   */
   pruneSfSymbolRendersToBytesQuota(maxBytes) {
     return this.assetsSymbols.pruneRendersToBytesQuota(maxBytes)
   }

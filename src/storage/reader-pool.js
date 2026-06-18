@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import { AssertionError, ValidationError } from '../lib/errors.js'
@@ -9,6 +8,7 @@ import { READ_OPS } from './reader-worker.js'
 // Typed error from `pool.run()` deadline expirations — lets the cascade
 // distinguish "partial results: deep tier timed out" from a real failure.
 export class DeadlineError extends Error {
+  /** @param {string} op @param {number} deadlineMs */
   constructor(op, deadlineMs) {
     super(`reader-pool: op '${op}' exceeded deadline ${deadlineMs}ms`)
     this.name = 'DeadlineError'
@@ -18,6 +18,17 @@ export class DeadlineError extends Error {
 }
 
 const WORKER_URL = new URL('./reader-worker.js', import.meta.url)
+
+/**
+ * @typedef {{
+ *   worker: Worker | null,
+ *   pending: Map<number, { resolve: (value?: any) => void, reject: (err?: any) => void }>,
+ *   ready: Promise<void> | null,
+ *   readyResolve: (() => void) | null,
+ *   readyReject: ((err?: any) => void) | null,
+ *   alive: boolean,
+ * }} Slot
+ */
 
 /**
  * Spawns a pool of worker threads each holding its own `bun:sqlite` read-only
@@ -43,14 +54,12 @@ const WORKER_URL = new URL('./reader-worker.js', import.meta.url)
  *   - Readers are optional: if the pool is never instantiated, commands
  *     call `ctx.db.*` directly on the main thread as before.
  *
- * @param {object} opts
- * @param {string} opts.dbPath - Filesystem path to the SQLite database.
- *   `:memory:` is not supported (it wouldn't survive the process boundary).
- * @param {number} [opts.size] - Number of workers. Defaults to a hardware-
- *   aware sizing (`availableParallelism() - 2`, capped at 12).
- * @param {(level: 'info'|'warn'|'error', msg: string) => void} [opts.log]
- * @param {new (...args: any[]) => Worker} [opts.WorkerCtor] - Injectable
- *   for tests.
+ * @param {{
+ *   dbPath?: string, size?: number,
+ *   log?: (level: 'info'|'warn'|'error', msg: string) => void,
+ *   WorkerCtor?: new (...args: any[]) => Worker,
+ *   maxPendingPerWorker?: number, deadlineMs?: number, bootRetries?: number,
+ * }} [opts]
  */
 export function createReaderPool(opts = {}) {
   const { dbPath, log } = opts
@@ -76,7 +85,9 @@ export function createReaderPool(opts = {}) {
   let idCounter = 1
   let closed = false
 
+  /** @param {number} index */
   function spawn(index) {
+    /** @type {Slot} */
     const slot = {
       worker: null,
       pending: new Map(),
@@ -125,7 +136,7 @@ export function createReaderPool(opts = {}) {
 
     worker.on('error', (err) => {
       stats.errors++
-      log?.('error', `reader-worker[${index}] error: ${err?.message ?? err}`)
+      log?.('error', `reader-worker[${index}] error: ${err instanceof Error ? err.message : err}`)
       slot.readyReject?.(err)
       failSlot(index, err)
     })
@@ -143,6 +154,7 @@ export function createReaderPool(opts = {}) {
     slots[index] = slot
   }
 
+  /** @param {number} index @param {any} err */
   function failSlot(index, err) {
     const slot = slots[index]
     if (!slot) return
@@ -159,6 +171,7 @@ export function createReaderPool(opts = {}) {
   // fresh worker. The try also covers a throwing WorkerCtor. Exhausting the
   // retries rethrows the last error; the caller (web/MCP context) then falls
   // back to main-thread reads.
+  /** @param {number} index */
   async function startSlot(index) {
     let lastErr
     for (let attempt = 0; attempt <= bootRetries; attempt++) {
@@ -169,7 +182,7 @@ export function createReaderPool(opts = {}) {
         return
       } catch (err) {
         lastErr = err
-        log?.('warn', `worker ${index} boot attempt ${attempt + 1}/${bootRetries + 1} failed: ${err?.message ?? err}`)
+        log?.('warn', `worker ${index} boot attempt ${attempt + 1}/${bootRetries + 1} failed: ${err instanceof Error ? err.message : err}`)
         if (attempt < bootRetries) await Bun.sleep(25 * (attempt + 1))
       }
     }
@@ -206,6 +219,7 @@ export function createReaderPool(opts = {}) {
     return best
   }
 
+  /** @param {string} op @param {any[]} [args] @param {{ deadlineMs?: number }} [runOpts] */
   async function run(op, args = [], runOpts = {}) {
     if (closed) throw new AssertionError('reader-pool: run() after close()')
     // Reject ops that aren't on the worker's whitelist immediately, on
@@ -220,7 +234,7 @@ export function createReaderPool(opts = {}) {
     }
     const idx = pickSlot()
     if (idx < 0) throw new AssertionError('reader-pool: no workers available')
-    const slot = slots[idx]
+    const slot = /** @type {Slot} */ (slots[idx])
 
     // Wait for this particular worker to emit ready. Already-ready slots
     // resolve immediately; newly-spawned ones (after failSlot) block until
@@ -241,9 +255,10 @@ export function createReaderPool(opts = {}) {
 
     const id = idCounter++
     // Deadline resolution: opts override > per-op map > pool default > DEFAULT_DEADLINE_MS.
-    const deadlineMs = runOpts.deadlineMs ?? PER_OP_DEADLINE_MS[op] ?? defaultDeadlineMs
+    const deadlineMs = runOpts.deadlineMs ?? /** @type {Record<string, number>} */ (PER_OP_DEADLINE_MS)[op] ?? defaultDeadlineMs
 
     return new Promise((resolve, reject) => {
+      /** @type {ReturnType<typeof setTimeout> | null} */
       let timer = null
       const cleanup = () => {
         if (timer) clearTimeout(timer)
@@ -260,7 +275,7 @@ export function createReaderPool(opts = {}) {
         },
       })
       try {
-        slot.worker.postMessage({ type: 'call', id, op, args })
+        slot.worker?.postMessage({ type: 'call', id, op, args })
       } catch (err) {
         cleanup()
         reject(err)
@@ -380,6 +395,7 @@ export function createReaderPool(opts = {}) {
   }
 }
 
+/** @param {any} raw */
 function rebuildError(raw) {
   const err = new Error(raw?.message ?? 'reader-worker: unknown error')
   if (raw?.stack) err.stack = raw.stack
