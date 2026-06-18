@@ -216,8 +216,11 @@ public enum ArchiveWriter {
       var streamed: Int64 = 0
       while true {
         let n = read(fd, buffer.baseAddress, chunkSize)
+        if n < 0 {
+          if errno == EINTR { continue }  // interrupted by a signal — retry, don't truncate the entry
+          throw ArchiveFailure.runtime("read failed for \(meta.relativePath): errno \(errno)")
+        }
         if n == 0 { break }
-        guard n > 0 else { throw ArchiveFailure.runtime("read failed for \(meta.relativePath): errno \(errno)") }
         try sink.write(UnsafeRawBufferPointer(start: buffer.baseAddress, count: n))
         streamed += Int64(n)
         if streamed > meta.size { break }
@@ -281,7 +284,11 @@ struct ZstdSink: ByteSink {
     var written = 0
     while written < out.pos {
       let n = systemWrite(fd, out.dst!.advanced(by: written), out.pos - written)
-      guard n > 0 else { throw ArchiveFailure.runtime("output write failed: errno \(errno)") }
+      if n < 0 {
+        if errno == EINTR { continue }  // interrupted by a signal — retry the partial write
+        throw ArchiveFailure.runtime("output write failed: errno \(errno)")
+      }
+      guard n > 0 else { throw ArchiveFailure.runtime("output write made no progress") }
       written += n
     }
     out.pos = 0
