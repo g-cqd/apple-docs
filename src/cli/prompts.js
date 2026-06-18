@@ -36,7 +36,9 @@ export async function promptYesNoAlways(question, { input = process.stdin, outpu
  * @returns {'yes' | 'no' | 'always'}
  */
 export function interpretAnswer(raw) {
-  const value = String(raw ?? '').trim().toLowerCase()
+  const value = String(raw ?? '')
+    .trim()
+    .toLowerCase()
   if (value === 'a' || value === 'always') return 'always'
   if (value === 'y' || value === 'yes') return 'yes'
   return 'no'
@@ -89,7 +91,9 @@ export async function promptChoice(question, choices, { defaultIndex = 0, input 
  * @returns {T}
  */
 export function interpretChoice(raw, choices, defaultIndex = 0) {
-  const value = String(raw ?? '').trim().toLowerCase()
+  const value = String(raw ?? '')
+    .trim()
+    .toLowerCase()
   if (value === '') return choices[defaultIndex].value
   const asNum = Number.parseInt(value, 10)
   if (Number.isInteger(asNum) && asNum >= 1 && asNum <= choices.length) {

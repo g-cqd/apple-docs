@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { mkdir, mkdtemp, readFile, rm, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /**
  * Long-lived pool of Python `pyftsubset` workers.
@@ -76,9 +76,8 @@ export function createPyftsubsetPool(opts = {}) {
   }
 
   function autoSize() {
-    const hw = typeof globalThis.navigator !== 'undefined' && typeof globalThis.navigator.hardwareConcurrency === 'number'
-      ? globalThis.navigator.hardwareConcurrency
-      : 4
+    const hw =
+      typeof globalThis.navigator !== 'undefined' && typeof globalThis.navigator.hardwareConcurrency === 'number' ? globalThis.navigator.hardwareConcurrency : 4
     return Math.min(hw, 4)
   }
 
@@ -148,10 +147,11 @@ export function createPyftsubsetPool(opts = {}) {
         // Fail every pending queued job; otherwise they'd hang forever.
         while (queue.length > 0) {
           const j = queue.shift()
-          j.reject(new PoolUnavailableError(
-            `font subsetting unavailable: ${degradeReason}`,
-            { setupHint: 'install Python 3 + fontTools: python3 -m pip install fonttools brotli' },
-          ))
+          j.reject(
+            new PoolUnavailableError(`font subsetting unavailable: ${degradeReason}`, {
+              setupHint: 'install Python 3 + fontTools: python3 -m pip install fonttools brotli',
+            }),
+          )
         }
       } else {
         // Healthy worker died after long uptime — replace it.
@@ -169,7 +169,9 @@ export function createPyftsubsetPool(opts = {}) {
       w.buffer = w.buffer.slice(idx + 1)
       if (!line) continue
       let reply
-      try { reply = JSON.parse(line) } catch {
+      try {
+        reply = JSON.parse(line)
+      } catch {
         // Unexpected non-JSON output — surface to logger but don't crash.
         logger?.warn?.(`font-subset pool: non-JSON stdout: ${line.slice(0, 256)}`)
         continue
@@ -193,7 +195,7 @@ export function createPyftsubsetPool(opts = {}) {
   function pump() {
     if (closed) return
     while (queue.length > 0) {
-      const idle = workers.find(w => !w.busy && !w.crashed && w.child.stdin.writable)
+      const idle = workers.find((w) => !w.busy && !w.crashed && w.child.stdin.writable)
       if (!idle) return
       const job = queue.shift()
       dispatch(idle, job)
@@ -258,10 +260,11 @@ export function createPyftsubsetPool(opts = {}) {
   function run(job) {
     if (closed) return Promise.reject(new Error('font-subset pool: closed'))
     if (degraded) {
-      return Promise.reject(new PoolUnavailableError(
-        `font subsetting unavailable: ${degradeReason}`,
-        { setupHint: 'install Python 3 + fontTools: python3 -m pip install fonttools brotli' },
-      ))
+      return Promise.reject(
+        new PoolUnavailableError(`font subsetting unavailable: ${degradeReason}`, {
+          setupHint: 'install Python 3 + fontTools: python3 -m pip install fonttools brotli',
+        }),
+      )
     }
     return new Promise((resolve, reject) => {
       queue.push({ canonical: job.canonical, fontPath: job.fontPath, resolve, reject })
@@ -276,14 +279,22 @@ export function createPyftsubsetPool(opts = {}) {
       j.reject(new Error('font-subset pool: closed'))
     }
     for (const w of workers) {
-      try { w.child.stdin.end() } catch {}
-      try { w.child.kill() } catch {}
+      try {
+        w.child.stdin.end()
+      } catch {}
+      try {
+        w.child.kill()
+      } catch {}
     }
     workers.length = 0
     // Tear down the mkdtemp staging dir if one was lazily created.
     // Callers that injected an `opts.tempDir` keep ownership.
     if (tempDir != null && opts.tempDir == null) {
-      try { await rm(tempDir, { recursive: true, force: true }) } catch { /* tolerate */ }
+      try {
+        await rm(tempDir, { recursive: true, force: true })
+      } catch {
+        /* tolerate */
+      }
       tempDir = null
     }
   }
@@ -291,14 +302,16 @@ export function createPyftsubsetPool(opts = {}) {
   function stats() {
     return {
       size: workers.length,
-      busy: workers.filter(w => w.busy).length,
+      busy: workers.filter((w) => w.busy).length,
       queueDepth: queue.length,
       degraded,
       degradeReason,
     }
   }
 
-  function isDegraded() { return degraded }
+  function isDegraded() {
+    return degraded
+  }
 
   return { init, run, close, stats, isDegraded }
 }

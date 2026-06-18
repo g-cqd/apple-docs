@@ -1,18 +1,17 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  projectFrameworks,
-  projectReadDoc,
-  projectRenderSfSymbol,
-  projectSearchResult,
-  projectStatus,
-} from '../../../src/output/projection.js'
+import { projectFrameworks, projectReadDoc, projectRenderSfSymbol, projectSearchResult, projectStatus } from '../../../src/output/projection.js'
 
 describe('per-call debug option short-circuits projection', () => {
   test('projectSearchResult returns raw envelope when debug:true', () => {
     const raw = {
-      query: 'x', total: 0, results: [],
-      tier: 'full', relaxed: true, relaxationTier: 'pruned',
-      trigramAvailable: true, partial: true,
+      query: 'x',
+      total: 0,
+      results: [],
+      tier: 'full',
+      relaxed: true,
+      relaxationTier: 'pruned',
+      trigramAvailable: true,
+      partial: true,
     }
     expect(projectSearchResult(raw, { debug: true })).toBe(raw)
   })

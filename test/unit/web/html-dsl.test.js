@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { html, raw, attr, isHtmlString } from '../../../src/web/lib/html.js'
+import { attr, html, isHtmlString, raw } from '../../../src/web/lib/html.js'
 
 /**
  * Contract tests for the tagged-template DSL at src/web/lib/html.js.
@@ -170,7 +170,9 @@ describe('immutability', () => {
   test('attempting to mutate _chunks does not affect output', () => {
     const out = html`<x>${1}</x>`
     const before = out.toString()
-    try { out._chunks.push('<hacked>') } catch {}
+    try {
+      out._chunks.push('<hacked>')
+    } catch {}
     // The array itself isn't frozen (would cost an extra pass per
     // template), but the brand + frozen wrapper means callers
     // shouldn't be poking at internals anyway. Verify toString still

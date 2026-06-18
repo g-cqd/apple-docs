@@ -14,8 +14,8 @@
 
 import { describe, expect, test } from 'bun:test'
 import { EventEmitter } from 'node:events'
-import { createReaderPools } from '../../../src/storage/reader-pools.js'
 import { classifyOp, DEEP_OPS } from '../../../src/storage/reader-pool-classifier.js'
+import { createReaderPools } from '../../../src/storage/reader-pools.js'
 
 class StubWorkerBase extends EventEmitter {
   constructor() {
@@ -107,8 +107,8 @@ describe('createReaderPools', () => {
     const deepPromise = pool.run('searchBody', ['bar'])
     await Promise.resolve()
 
-    const strictMsgs = State.outbox.filter(o => o.msg.op === 'searchTitleExact')
-    const deepMsgs = State.outbox.filter(o => o.msg.op === 'searchBody')
+    const strictMsgs = State.outbox.filter((o) => o.msg.op === 'searchTitleExact')
+    const deepMsgs = State.outbox.filter((o) => o.msg.op === 'searchBody')
     expect(strictMsgs).toHaveLength(1)
     expect(deepMsgs).toHaveLength(1)
     expect(strictMsgs[0].kind).toBe('strict')
@@ -131,13 +131,9 @@ describe('createReaderPools', () => {
 
     // Fire several strict ops. They must all dispatch and resolve
     // independently of the held deep op.
-    const strictPromises = [
-      pool.run('searchTitleExact', ['a']),
-      pool.run('searchTitleExact', ['b']),
-      pool.run('searchTitleExact', ['c']),
-    ]
+    const strictPromises = [pool.run('searchTitleExact', ['a']), pool.run('searchTitleExact', ['b']), pool.run('searchTitleExact', ['c'])]
     await Promise.resolve()
-    const strictMsgs = State.outbox.filter(o => o.msg.op === 'searchTitleExact')
+    const strictMsgs = State.outbox.filter((o) => o.msg.op === 'searchTitleExact')
     expect(strictMsgs).toHaveLength(3)
     for (const m of strictMsgs) expect(m.kind).toBe('strict')
 
@@ -145,7 +141,9 @@ describe('createReaderPools', () => {
     const settled = await Promise.all(strictPromises)
     expect(settled).toHaveLength(3)
 
-    void heldDeep.catch(() => { /* expected: pool closed */ })
+    void heldDeep.catch(() => {
+      /* expected: pool closed */
+    })
     await pool.close()
   })
 

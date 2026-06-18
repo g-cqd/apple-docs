@@ -1,11 +1,5 @@
-import { describe, test, expect, mock, afterEach, beforeEach } from 'bun:test'
-import {
-  SwiftDoccAdapter,
-  ARCHIVES,
-  collectIndexPaths,
-  pathToKey,
-  keyToPath,
-} from '../../../src/sources/swift-docc.js'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { ARCHIVES, collectIndexPaths, keyToPath, pathToKey, SwiftDoccAdapter } from '../../../src/sources/swift-docc.js'
 
 const originalFetch = globalThis.fetch
 
@@ -114,7 +108,7 @@ describe('SwiftDoccAdapter — discover', () => {
   test('registers a root per archive', async () => {
     const adapter = new SwiftDoccAdapter()
     const result = await adapter.discover(makeCtx())
-    const slugs = result.roots.map(r => r.slug).sort()
+    const slugs = result.roots.map((r) => r.slug).sort()
     expect(slugs).toEqual(['swift-compiler', 'swift-migration-guide', 'swift-package-manager'])
   })
 
@@ -166,10 +160,11 @@ describe('SwiftDoccAdapter — fetch / check URL routing', () => {
   })
 
   test('check returns modified when etag changes', async () => {
-    globalThis.fetch = async () => new Response('', {
-      status: 200,
-      headers: { etag: '"new"' },
-    })
+    globalThis.fetch = async () =>
+      new Response('', {
+        status: 200,
+        headers: { etag: '"new"' },
+      })
     const adapter = new SwiftDoccAdapter()
     const result = await adapter.check('swift-compiler/documentation/diagnostics', { etag: '"old"' }, makeCtx())
     expect(result.status).toBe('modified')
@@ -197,7 +192,7 @@ describe('SwiftDoccAdapter — normalize', () => {
     const adapter = new SwiftDoccAdapter()
     const result = adapter.normalize('swift-compiler/documentation/diagnostics/existential-any', FAKE_LEAF)
 
-    const seeAlso = result.sections.find(s => s.sectionKind === 'see_also')
+    const seeAlso = result.sections.find((s) => s.sectionKind === 'see_also')
     expect(seeAlso).toBeDefined()
     const items = JSON.parse(seeAlso.contentJson)[0].items
     expect(items[0].key).toBe('swift-compiler/documentation/diagnostics/diagnostic-groups')
@@ -206,10 +201,12 @@ describe('SwiftDoccAdapter — normalize', () => {
   test('emits scoped child relationships for the migration archive', () => {
     const json = {
       ...FAKE_LEAF,
-      topicSections: [{
-        title: 'Migration',
-        identifiers: ['doc://migrationguide/documentation/swift-6-concurrency-migration-guide/commonproblems'],
-      }],
+      topicSections: [
+        {
+          title: 'Migration',
+          identifiers: ['doc://migrationguide/documentation/swift-6-concurrency-migration-guide/commonproblems'],
+        },
+      ],
       references: {
         'doc://migrationguide/documentation/swift-6-concurrency-migration-guide/commonproblems': {
           url: '/documentation/swift-6-concurrency-migration-guide/commonproblems',
@@ -222,7 +219,7 @@ describe('SwiftDoccAdapter — normalize', () => {
     const adapter = new SwiftDoccAdapter()
     const result = adapter.normalize('swift-migration-guide/documentation/migrationguide', json)
 
-    const child = result.relationships.find(r => r.relationType === 'child')
+    const child = result.relationships.find((r) => r.relationType === 'child')
     expect(child.toKey).toBe('swift-migration-guide/documentation/swift-6-concurrency-migration-guide/commonproblems')
   })
 })
@@ -230,10 +227,7 @@ describe('SwiftDoccAdapter — normalize', () => {
 describe('SwiftDoccAdapter — extractReferences', () => {
   test('rewrites refs to scoped keys for downstream crawl seeds', () => {
     const adapter = new SwiftDoccAdapter()
-    const refs = adapter.extractReferences(
-      'swift-compiler/documentation/diagnostics/existential-any',
-      FAKE_LEAF,
-    )
+    const refs = adapter.extractReferences('swift-compiler/documentation/diagnostics/existential-any', FAKE_LEAF)
     expect(refs).toContain('swift-compiler/documentation/diagnostics/diagnostic-groups')
   })
 })
@@ -241,25 +235,18 @@ describe('SwiftDoccAdapter — extractReferences', () => {
 describe('helpers', () => {
   test('collectIndexPaths walks both top-level and nested children', () => {
     const paths = collectIndexPaths(FAKE_INDEX)
-    expect(paths).toEqual([
-      '/documentation/diagnostics',
-      '/documentation/diagnostics/diagnostic-groups',
-      '/documentation/diagnostics/existential-any',
-    ])
+    expect(paths).toEqual(['/documentation/diagnostics', '/documentation/diagnostics/diagnostic-groups', '/documentation/diagnostics/existential-any'])
   })
 
   test('pathToKey lowercases and prefixes with the slug', () => {
-    expect(pathToKey('swift-compiler', '/documentation/Diagnostics/Foo'))
-      .toBe('swift-compiler/documentation/diagnostics/foo')
+    expect(pathToKey('swift-compiler', '/documentation/Diagnostics/Foo')).toBe('swift-compiler/documentation/diagnostics/foo')
   })
 
   test('keyToPath inverts pathToKey', () => {
-    expect(keyToPath('swift-compiler', 'swift-compiler/documentation/diagnostics/foo'))
-      .toBe('/documentation/diagnostics/foo')
+    expect(keyToPath('swift-compiler', 'swift-compiler/documentation/diagnostics/foo')).toBe('/documentation/diagnostics/foo')
   })
 
   test('keyToPath rejects keys outside the archive', () => {
-    expect(() => keyToPath('swift-compiler', 'swiftpm/foo'))
-      .toThrow(/does not belong to archive/)
+    expect(() => keyToPath('swift-compiler', 'swiftpm/foo')).toThrow(/does not belong to archive/)
   })
 })

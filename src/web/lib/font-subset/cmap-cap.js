@@ -1,5 +1,5 @@
-import { ParseError } from '../../../lib/errors.js'
 import { readFile } from 'node:fs/promises'
+import { ParseError } from '../../../lib/errors.js'
 import { parseCmap } from '../../../resources/apple-symbols/codepoint-from-font.js'
 
 /**
@@ -50,9 +50,7 @@ function parseSfntDirectoryLocal(buf) {
   const tables = new Map()
   for (let i = 0; i < numTables; i++) {
     const recOffset = 12 + i * 16
-    const tag = String.fromCharCode(
-      buf[recOffset], buf[recOffset + 1], buf[recOffset + 2], buf[recOffset + 3],
-    )
+    const tag = String.fromCharCode(buf[recOffset], buf[recOffset + 1], buf[recOffset + 2], buf[recOffset + 3])
     const offset = view.getUint32(recOffset + 8, false)
     const length = view.getUint32(recOffset + 12, false)
     tables.set(tag, { offset, length })

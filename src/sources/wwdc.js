@@ -6,9 +6,10 @@
 // wwdc/apple-html.js, transcript / description / title extraction in
 // wwdc/transcript.js. This module is the adapter shell.
 
-import { checkRawGitHub, fetchGitHubTree, fetchRawGitHub } from '../lib/github.js'
 import { checkHtmlPage } from '../apple/api.js'
+import { checkRawGitHub, fetchGitHubTree, fetchRawGitHub } from '../lib/github.js'
 import { SourceAdapter } from './base.js'
+import { fetchAppleSession, fetchAppleYearIndex } from './wwdc/apple-html.js'
 import {
   APPLE_BASE,
   APPLE_YEARS,
@@ -18,19 +19,12 @@ import {
   ASCIIWWDC_REPO,
   ASCIIWWDC_YEAR_MAX,
   ASCIIWWDC_YEAR_MIN,
-  ROOT_SLUG,
   buildAsciiwwdcPath,
   buildKey,
   parseWwdcKey,
+  ROOT_SLUG,
 } from './wwdc/constants.js'
-import { fetchAppleSession, fetchAppleYearIndex } from './wwdc/apple-html.js'
-import {
-  extractAppleDescription,
-  extractAppleTitle,
-  extractAppleTranscript,
-  extractAsciiwwdcTitle,
-  normalizeAsciiwwdcTranscript,
-} from './wwdc/transcript.js'
+import { extractAppleDescription, extractAppleTitle, extractAppleTranscript, extractAsciiwwdcTitle, normalizeAsciiwwdcTranscript } from './wwdc/transcript.js'
 
 export { parseWwdcKey }
 
@@ -50,10 +44,7 @@ export class WwdcAdapter extends SourceAdapter {
     }
     const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
 
-    const [appleKeys, asciiwwdcKeys] = await Promise.all([
-      this.#discoverAppleKeys(ctx),
-      this.#discoverAsciiwwdcKeys(ctx),
-    ])
+    const [appleKeys, asciiwwdcKeys] = await Promise.all([this.#discoverAppleKeys(ctx), this.#discoverAsciiwwdcKeys(ctx)])
 
     // Merge, deduplicate by key
     const seen = new Set()
@@ -77,7 +68,10 @@ export class WwdcAdapter extends SourceAdapter {
     await Promise.all(
       APPLE_YEARS.map(async (year) => {
         const index = fetchAppleYearIndex(year, ctx.rateLimiter)
-        this.#tracksByYear.set(year, index.then(r => r.tracksBySession).catch(() => new Map()))
+        this.#tracksByYear.set(
+          year,
+          index.then((r) => r.tracksBySession).catch(() => new Map()),
+        )
         const { sessionIds } = await index
         for (const id of sessionIds) keys.push(buildKey(year, id))
       }),
@@ -94,7 +88,7 @@ export class WwdcAdapter extends SourceAdapter {
     let tracks = this.#tracksByYear.get(year)
     if (!tracks) {
       tracks = fetchAppleYearIndex(year, rateLimiter)
-        .then(r => r.tracksBySession)
+        .then((r) => r.tracksBySession)
         .catch(() => new Map())
       this.#tracksByYear.set(year, tracks)
     }
@@ -103,12 +97,7 @@ export class WwdcAdapter extends SourceAdapter {
 
   /** Discover ASCIIwwdc session keys for years 1997-2019. */
   async #discoverAsciiwwdcKeys(ctx) {
-    const tree = await fetchGitHubTree(
-      ASCIIWWDC_OWNER,
-      ASCIIWWDC_REPO,
-      ASCIIWWDC_BRANCH,
-      ctx.rateLimiter,
-    )
+    const tree = await fetchGitHubTree(ASCIIWWDC_OWNER, ASCIIWWDC_REPO, ASCIIWWDC_BRANCH, ctx.rateLimiter)
 
     const keys = []
     for (const entry of tree) {
@@ -214,7 +203,8 @@ export class WwdcAdapter extends SourceAdapter {
 
     const document = {
       sourceType: WwdcAdapter.type,
-      key, title,
+      key,
+      title,
       kind: 'wwdc-session',
       role: 'article',
       roleHeading: null,
@@ -224,8 +214,14 @@ export class WwdcAdapter extends SourceAdapter {
       abstractText: description ?? null,
       declarationText: null,
       platformsJson: null,
-      minIos: null, minMacos: null, minWatchos: null, minTvos: null, minVisionos: null,
-      isDeprecated: false, isBeta: false, isReleaseNotes: false,
+      minIos: null,
+      minMacos: null,
+      minWatchos: null,
+      minTvos: null,
+      minVisionos: null,
+      isDeprecated: false,
+      isBeta: false,
+      isReleaseNotes: false,
       urlDepth: key.split('/').length - 1,
       headings: null,
       sourceMetadata: JSON.stringify(sourceMetadata),
@@ -251,9 +247,7 @@ export class WwdcAdapter extends SourceAdapter {
   }
 
   #normalizeAsciiwwdc(key, payload, year, sessionId) {
-    const rawText = typeof payload?.transcript === 'string'
-      ? payload.transcript
-      : typeof payload === 'string' ? payload : ''
+    const rawText = typeof payload?.transcript === 'string' ? payload.transcript : typeof payload === 'string' ? payload : ''
     const text = normalizeAsciiwwdcTranscript(rawText)
 
     const title = extractAsciiwwdcTitle(rawText, year, sessionId)
@@ -261,7 +255,8 @@ export class WwdcAdapter extends SourceAdapter {
 
     const document = {
       sourceType: WwdcAdapter.type,
-      key, title,
+      key,
+      title,
       kind: 'wwdc-session',
       role: 'article',
       roleHeading: null,
@@ -271,16 +266,20 @@ export class WwdcAdapter extends SourceAdapter {
       abstractText: null,
       declarationText: null,
       platformsJson: null,
-      minIos: null, minMacos: null, minWatchos: null, minTvos: null, minVisionos: null,
-      isDeprecated: false, isBeta: false, isReleaseNotes: false,
+      minIos: null,
+      minMacos: null,
+      minWatchos: null,
+      minTvos: null,
+      minVisionos: null,
+      isDeprecated: false,
+      isBeta: false,
+      isReleaseNotes: false,
       urlDepth: key.split('/').length - 1,
       headings: null,
       sourceMetadata: JSON.stringify({ year, sessionId, source: 'asciiwwdc' }),
     }
 
-    const sections = [
-      { sectionKind: 'content', heading: 'Transcript', contentText: text },
-    ]
+    const sections = [{ sectionKind: 'content', heading: 'Transcript', contentText: text }]
 
     return { document, sections, relationships: [] }
   }

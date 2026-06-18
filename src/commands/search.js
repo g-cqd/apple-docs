@@ -1,18 +1,13 @@
 import { renderSnippet } from '../content/render-snippet.js'
-import { detectIntent } from '../search/intent.js'
-import { rerank } from '../search/ranking.js'
 import { buildCascadeRunners, runRelaxationCascade } from '../search/cascade.js'
-import {
-  buildPlatformFilters,
-  matchesSearchFilters,
-  normalizeDeprecatedFilter,
-  normalizeSourceFilter,
-} from '../search/filters.js'
+import { buildPlatformFilters, matchesSearchFilters, normalizeDeprecatedFilter, normalizeSourceFilter } from '../search/filters.js'
 import { formatResult } from '../search/format.js'
 import { buildFtsQuery } from '../search/fts-query-builder.js'
-import { isSemanticAvailable, semanticCandidates } from '../search/semantic.js'
 import { fuseSemanticResults } from '../search/fuse-semantic.js'
-import { runRead, DeadlineError } from '../storage/reader-pool.js'
+import { detectIntent } from '../search/intent.js'
+import { rerank } from '../search/ranking.js'
+import { isSemanticAvailable, semanticCandidates } from '../search/semantic.js'
+import { DeadlineError, runRead } from '../storage/reader-pool.js'
 
 const SEMANTIC_TOP_K = 50
 
@@ -115,8 +110,7 @@ export async function search(opts, ctx) {
   // FILTER_PREDICATES, so the over-fetch multiplier sits at 3× for the
   // common multi-source / deprecated-exclude queries and 1× when no JS
   // filters apply at all.
-  const hasJsPostFilters = !!kind
-    || Object.values(platformFilters).some(Boolean)
+  const hasJsPostFilters = !!kind || Object.values(platformFilters).some(Boolean)
   const searchLimit = hasJsPostFilters ? Math.min(Math.max(requestedWindow * 3, 60), 300) : requestedWindow
 
   if (!query?.trim()) return { results: [], total: 0, query: '' }
@@ -127,12 +121,13 @@ export async function search(opts, ctx) {
   // Optional semantic tier — kicked off here so the query embed overlaps the
   // lexical cascade. Dormant (null) unless vectors + an embedder are present;
   // skipped on the latency-critical `fast` path.
-  const semanticPromise = (!fast && isSemanticAvailable(ctx.db))
-    ? semanticCandidates(ctx, q, SEMANTIC_TOP_K).catch((err) => {
-        ctx.logger?.debug?.(`semantic tier skipped: ${err.message}`)
-        return []
-      })
-    : null
+  const semanticPromise =
+    !fast && isSemanticAvailable(ctx.db)
+      ? semanticCandidates(ctx, q, SEMANTIC_TOP_K).catch((err) => {
+          ctx.logger?.debug?.(`semantic tier skipped: ${err.message}`)
+          return []
+        })
+      : null
 
   // Framework synonym expansion
   const frameworks = [framework]
@@ -171,7 +166,11 @@ export async function search(opts, ctx) {
     for (const r of rows) {
       if (r.platformsParsed !== undefined) continue
       if (typeof r.platforms === 'string') {
-        try { r.platformsParsed = JSON.parse(r.platforms) } catch { r.platformsParsed = null }
+        try {
+          r.platformsParsed = JSON.parse(r.platforms)
+        } catch {
+          r.platformsParsed = null
+        }
       } else if (Array.isArray(r.platforms)) {
         r.platformsParsed = r.platforms
       } else {
@@ -193,7 +192,12 @@ export async function search(opts, ctx) {
   // Tier 4 metadata check stays on main thread — one cheap call.
   const hasBody = !noDeep && ctx.db.hasBodyIndex()
   const { runFts, runTitleExact, runTrigram, runBody } = buildCascadeRunners({
-    ctx, q, ftsQuery, frameworks, filterOpts, hasBody,
+    ctx,
+    q,
+    ftsQuery,
+    frameworks,
+    filterOpts,
+    hasBody,
   })
 
   // --- Fast phase: T1 (FTS5) and T2 (trigram) ---
@@ -212,8 +216,8 @@ export async function search(opts, ctx) {
   } else if (fast) {
     ftsResults = await runFts()
     const filledWindow = ftsResults.length >= requestedWindow
-    const trustNarrowedHits = userNarrowedScope && (results.length + ftsResults.length) > 0
-    triResults = (filledWindow || trustNarrowedHits) ? [] : await runTrigram()
+    const trustNarrowedHits = userNarrowedScope && results.length + ftsResults.length > 0
+    triResults = filledWindow || trustNarrowedHits ? [] : await runTrigram()
   } else {
     const fastParts = await Promise.all([runFts(), runTrigram()])
     ftsResults = fastParts[0]
@@ -250,8 +254,8 @@ export async function search(opts, ctx) {
     try {
       const fuzzyMatches = await runRead(ctx, 'fuzzyMatchTitles', [q, { framework, kind, limit: searchLimit }])
       // One batched fetch instead of N per-candidate round-trips (§10(B)).
-      const records = await runRead(ctx, 'getSearchRecordsByIds', [fuzzyMatches.map(fm => fm.id)])
-      const recordById = new Map(records.map(r => [r.id, r]))
+      const records = await runRead(ctx, 'getSearchRecordsByIds', [fuzzyMatches.map((fm) => fm.id)])
+      const recordById = new Map(records.map((r) => [r.id, r]))
       parseRowPlatforms(records)
       // Iterate fuzzyMatches (distance order preserved) so output is identical.
       for (const fm of fuzzyMatches) {
@@ -289,7 +293,12 @@ export async function search(opts, ctx) {
   // Progressive relaxation: only runs when the strict cascade produced
   // nothing and the query is a multi-word natural-language phrase.
   const relaxationTier = await runRelaxationCascade({
-    ctx, q, frameworks, filterOpts, results, addResults,
+    ctx,
+    q,
+    frameworks,
+    filterOpts,
+    results,
+    addResults,
   })
 
   // Intent detection + source-aware reranking (lexical order)
@@ -313,7 +322,7 @@ export async function search(opts, ctx) {
   // failures so a missing sections table on the lite tier doesn't sink
   // the whole response.
   try {
-    const resultKeys = sliced.map(r => r.path)
+    const resultKeys = sliced.map((r) => r.path)
     const snippetData = ctx.db.getDocumentSnippetData(resultKeys)
     const relatedCounts = ctx.db.getRelatedDocCounts(resultKeys)
     for (const r of sliced) {

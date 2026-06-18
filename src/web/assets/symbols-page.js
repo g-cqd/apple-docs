@@ -7,10 +7,10 @@
 // in symbols-page/detail-panel.js. This module owns the boot flow, the
 // filter compose, the customizer wire-up, and history routing.
 
-import { bindColorPair, normaliseHex } from './symbols-page/format.js'
-import { parseDetailRoute, readUrlState, writeUrlState } from './symbols-page/url-state.js'
-import { createGridRenderer } from './symbols-page/grid.js'
 import { createDetailPanel } from './symbols-page/detail-panel.js'
+import { bindColorPair, normaliseHex } from './symbols-page/format.js'
+import { createGridRenderer } from './symbols-page/grid.js'
+import { parseDetailRoute, readUrlState, writeUrlState } from './symbols-page/url-state.js'
 
 function init() {
   const GRID = document.getElementById('symbols-grid')
@@ -37,7 +37,9 @@ function init() {
   let categories = new Map()
   let currentCat = ''
 
-  function setStatus(text) { if (STATUS) STATUS.textContent = text }
+  function setStatus(text) {
+    if (STATUS) STATUS.textContent = text
+  }
 
   // ---- Detail panel ----
   const detail = {
@@ -58,7 +60,11 @@ function init() {
     copy: document.getElementById('symbols-mobile-copy'),
   }
   const panel = createDetailPanel({
-    detail, mobileBar, layout: LAYOUT, root, setStatus,
+    detail,
+    mobileBar,
+    layout: LAYOUT,
+    root,
+    setStatus,
     isDesktop: () => DESKTOP_MQ.matches,
   })
 
@@ -82,8 +88,11 @@ function init() {
 
   setStatus('Loading symbols…')
   fetch('/api/symbols/index.json', { credentials: 'same-origin' })
-    .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() })
-    .then(data => {
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res.json()
+    })
+    .then((data) => {
       allSymbols = Array.isArray(data.symbols) ? data.symbols : []
       if (COUNT) COUNT.textContent = allSymbols.length.toLocaleString('en-US')
       buildCategoryFacet()
@@ -92,11 +101,11 @@ function init() {
       // load that symbol into the inspector / mobile route.
       const routeName = parseDetailRoute(window.location.pathname)
       if (routeName) {
-        const sym = allSymbols.find(s => s.name === routeName)
+        const sym = allSymbols.find((s) => s.name === routeName)
         if (sym) panel.open(sym, null)
       }
     })
-    .catch(error => setStatus(`Unable to load symbols: ${error.message}`))
+    .catch((error) => setStatus(`Unable to load symbols: ${error.message}`))
 
   // ---- Filter compose ----
   function applyFilters() {
@@ -106,16 +115,19 @@ function init() {
     const showAll = !q && !scope && !cat
     const next = showAll
       ? allSymbols
-      : allSymbols.filter(s => {
-        if (scope && s.scope !== scope) return false
-        if (cat && !(s.categories || []).some(c => c.toLowerCase() === cat.toLowerCase())) return false
-        if (!q) return true
-        if (s.name.toLowerCase().includes(q)) return true
-        if ((s.categories || []).some(v => v.toLowerCase().includes(q))) return true
-        if ((s.keywords || []).some(v => v.toLowerCase().includes(q))) return true
-        return false
-      })
-    if (TYPING_HINT) { TYPING_HINT.hidden = true; TYPING_HINT.textContent = '' }
+      : allSymbols.filter((s) => {
+          if (scope && s.scope !== scope) return false
+          if (cat && !(s.categories || []).some((c) => c.toLowerCase() === cat.toLowerCase())) return false
+          if (!q) return true
+          if (s.name.toLowerCase().includes(q)) return true
+          if ((s.categories || []).some((v) => v.toLowerCase().includes(q))) return true
+          if ((s.keywords || []).some((v) => v.toLowerCase().includes(q))) return true
+          return false
+        })
+    if (TYPING_HINT) {
+      TYPING_HINT.hidden = true
+      TYPING_HINT.textContent = ''
+    }
     setStatus(`${next.length.toLocaleString('en-US')} matching symbol${next.length === 1 ? '' : 's'}`)
     grid.render(next)
   }
@@ -124,10 +136,17 @@ function init() {
   if (QUERY) {
     QUERY.addEventListener('input', () => {
       clearTimeout(filterTimer)
-      filterTimer = setTimeout(() => { applyFilters(); writeUrlStateNow() }, 80)
+      filterTimer = setTimeout(() => {
+        applyFilters()
+        writeUrlStateNow()
+      }, 80)
     })
   }
-  if (SCOPE) SCOPE.addEventListener('change', () => { applyFilters(); writeUrlStateNow() })
+  if (SCOPE)
+    SCOPE.addEventListener('change', () => {
+      applyFilters()
+      writeUrlStateNow()
+    })
   if (CATEGORY_MOBILE) {
     CATEGORY_MOBILE.addEventListener('change', () => {
       currentCat = CATEGORY_MOBILE.value
@@ -142,7 +161,7 @@ function init() {
   }
 
   // Cmd-K / Ctrl-K focuses the search.
-  window.addEventListener('keydown', e => {
+  window.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault()
       QUERY?.focus()
@@ -220,13 +239,13 @@ function init() {
   // Default behaviour: leave `--symbol-color` unset so the CSS fallback
   // resolves to the page's text colour. Only override once the user
   // touches the picker.
-  document.querySelectorAll('.symbols-control--weight .symbols-pill').forEach(pill => {
+  document.querySelectorAll('.symbols-control--weight .symbols-pill').forEach((pill) => {
     pill.addEventListener('click', () => {
       pickPill(pill, '.symbols-control--weight .symbols-pill')
       panel.setWeight(pill.dataset.weight)
     })
   })
-  document.querySelectorAll('.symbols-control--scale .symbols-pill').forEach(pill => {
+  document.querySelectorAll('.symbols-control--scale .symbols-pill').forEach((pill) => {
     pill.addEventListener('click', () => {
       pickPill(pill, '.symbols-control--scale .symbols-pill')
       panel.setScale(pill.dataset.scale)
@@ -234,7 +253,7 @@ function init() {
   })
 
   function pickPill(activePill, selector) {
-    document.querySelectorAll(selector).forEach(p => {
+    document.querySelectorAll(selector).forEach((p) => {
       p.setAttribute('aria-checked', p === activePill ? 'true' : 'false')
     })
   }
@@ -246,7 +265,11 @@ function init() {
       const v = normaliseHex(COLOR_HEX.value || COLOR.value)
       if (v) root.style.setProperty('--symbol-color', v)
     }
-    const markTouched = () => { if (touched) return; touched = true; apply() }
+    const markTouched = () => {
+      if (touched) return
+      touched = true
+      apply()
+    }
     COLOR.addEventListener('input', markTouched)
     COLOR_HEX.addEventListener('input', markTouched)
     bindColorPair(COLOR, COLOR_HEX, apply)
@@ -266,7 +289,7 @@ function init() {
     if (panel.close()) history.pushState({}, '', `/symbols${window.location.search}`)
   })
   mobileBar.back?.addEventListener('click', () => history.back())
-  SCROLLER.addEventListener('keydown', event => {
+  SCROLLER.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') panel.close()
   })
   detail.copyBtn?.addEventListener('click', () => panel.copySvg())
@@ -282,7 +305,7 @@ function init() {
     applyFilters()
     const routeName = parseDetailRoute(window.location.pathname)
     if (routeName) {
-      const sym = allSymbols.find(s => s.name === routeName)
+      const sym = allSymbols.find((s) => s.name === routeName)
       if (sym) panel.open(sym, null)
     } else {
       panel.closeNoNav()

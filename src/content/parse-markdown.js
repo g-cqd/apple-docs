@@ -141,10 +141,7 @@ function parseYaml(yaml) {
  * @returns {string}
  */
 function unquoteYaml(value) {
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
     return value.slice(1, -1)
   }
   return value
@@ -239,8 +236,7 @@ export function parseMarkdownToSections(markdown, key, opts = {}) {
   if (h1Match) {
     title = h1Match[1].trim()
     // Remove the h1 line and any leading blank lines from the body we process
-    bodyWithoutH1 = body.slice(0, h1Match.index) +
-      body.slice(h1Match.index + h1Match[0].length)
+    bodyWithoutH1 = body.slice(0, h1Match.index) + body.slice(h1Match.index + h1Match[0].length)
     bodyWithoutH1 = bodyWithoutH1.replace(/^\n+/, '')
   }
 
@@ -254,7 +250,7 @@ export function parseMarkdownToSections(markdown, key, opts = {}) {
 
   // ── Headings for FTS ──────────────────────────────────────────────────────
   const headingTexts = []
-  const allH2Re = /^## +(.+)$/mg
+  const allH2Re = /^## +(.+)$/gm
   for (const hm of bodyWithoutH1.matchAll(allH2Re)) {
     headingTexts.push(hm[1].trim())
   }

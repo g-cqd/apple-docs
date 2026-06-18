@@ -1,5 +1,5 @@
-import { fetchGitHubTree, fetchRawGitHub, checkRawGitHub } from '../lib/github.js'
 import { parseMarkdownToSections, splitByHeadings } from '../content/parse-markdown.js'
+import { checkRawGitHub, fetchGitHubTree, fetchRawGitHub } from '../lib/github.js'
 import { SourceAdapter } from './base.js'
 import { addEntryPoints } from './entry-points.js'
 
@@ -54,7 +54,7 @@ function buildChapterIndex(keys) {
 export function parseBookTopics(markdown) {
   if (typeof markdown !== 'string' || !markdown) return []
 
-  const topics = splitByHeadings(markdown, 2).find(s => s.heading === 'Topics')
+  const topics = splitByHeadings(markdown, 2).find((s) => s.heading === 'Topics')
   if (!topics) return []
 
   const groups = []
@@ -75,13 +75,15 @@ export class SwiftBookAdapter extends SourceAdapter {
   static syncMode = 'flat'
 
   /** @type {import('./entry-points.js').EntryPoint[]} */
-  static entryPoints = [{
-    slug: ROOT_SLUG,
-    key: `${ROOT_SLUG}/${ROOT_FILE}`,
-    title: 'The Swift Programming Language',
-    summary: 'The canonical Swift language guide and reference manual.',
-    parents: ['swift-org/documentation', 'swift-org/documentation/tspl'],
-  }]
+  static entryPoints = [
+    {
+      slug: ROOT_SLUG,
+      key: `${ROOT_SLUG}/${ROOT_FILE}`,
+      title: 'The Swift Programming Language',
+      summary: 'The canonical Swift language guide and reference manual.',
+      parents: ['swift-org/documentation', 'swift-org/documentation/tspl'],
+    },
+  ]
 
   constructor() {
     super()
@@ -100,16 +102,9 @@ export class SwiftBookAdapter extends SourceAdapter {
     const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
     const tree = await fetchGitHubTree(OWNER, REPO, BRANCH, ctx.rateLimiter)
     const keys = tree
-      .filter(entry =>
-        entry.type === 'blob' &&
-        entry.path.startsWith(CONTENT_PREFIX) &&
-        entry.path.endsWith('.md') &&
-        !entry.path.includes('/Snippets/'),
-      )
-      .map(entry => {
-        const relativePath = entry.path
-          .replace(CONTENT_PREFIX, '')
-          .replace('.md', '')
+      .filter((entry) => entry.type === 'blob' && entry.path.startsWith(CONTENT_PREFIX) && entry.path.endsWith('.md') && !entry.path.includes('/Snippets/'))
+      .map((entry) => {
+        const relativePath = entry.path.replace(CONTENT_PREFIX, '').replace('.md', '')
         return `${ROOT_SLUG}/${relativePath}`
       })
 
@@ -123,11 +118,7 @@ export class SwiftBookAdapter extends SourceAdapter {
 
   async fetch(key, ctx) {
     const relativePath = key.replace(`${ROOT_SLUG}/`, '')
-    const { text, etag, lastModified } = await fetchRawGitHub(
-      OWNER, REPO, BRANCH,
-      `${CONTENT_PREFIX}${relativePath}.md`,
-      ctx.rateLimiter,
-    )
+    const { text, etag, lastModified } = await fetchRawGitHub(OWNER, REPO, BRANCH, `${CONTENT_PREFIX}${relativePath}.md`, ctx.rateLimiter)
 
     return this.validateFetchResult({
       key,
@@ -139,12 +130,7 @@ export class SwiftBookAdapter extends SourceAdapter {
 
   async check(key, previousState, ctx) {
     const relativePath = key.replace(`${ROOT_SLUG}/`, '')
-    const result = await checkRawGitHub(
-      OWNER, REPO, BRANCH,
-      `${CONTENT_PREFIX}${relativePath}.md`,
-      previousState?.etag ?? null,
-      ctx.rateLimiter,
-    )
+    const result = await checkRawGitHub(OWNER, REPO, BRANCH, `${CONTENT_PREFIX}${relativePath}.md`, previousState?.etag ?? null, ctx.rateLimiter)
 
     return this.validateCheckResult({
       status: result.status,
@@ -195,27 +181,21 @@ export class SwiftBookAdapter extends SourceAdapter {
 
     // Drop the auto-generated discussion section whose heading is "Topics" —
     // the structured topics section below replaces it.
-    result.sections = result.sections.filter(s =>
-      !(s.sectionKind === 'discussion' && s.heading === 'Topics')
-    )
+    result.sections = result.sections.filter((s) => !(s.sectionKind === 'discussion' && s.heading === 'Topics'))
 
-    const order = result.sections.length === 0
-      ? 0
-      : Math.max(...result.sections.map(s => s.sortOrder ?? 0)) + 1
+    const order = result.sections.length === 0 ? 0 : Math.max(...result.sections.map((s) => s.sortOrder ?? 0)) + 1
 
-    const linkSections = groups.map(group => ({
+    const linkSections = groups.map((group) => ({
       title: group.title,
       type: null,
-      items: group.items.map(chapterName => ({
+      items: group.items.map((chapterName) => ({
         identifier: `swift-book://${chapterName}`,
         key: this.chapterIndex.get(chapterName.toLowerCase()) ?? null,
         title: humanizeFilename(chapterName),
       })),
     }))
 
-    const contentText = linkSections
-      .map(g => [g.title, ...g.items.map(it => it.title)].join('\n'))
-      .join('\n')
+    const contentText = linkSections.map((g) => [g.title, ...g.items.map((it) => it.title)].join('\n')).join('\n')
 
     result.sections.push({
       sectionKind: 'topics',
@@ -252,9 +232,7 @@ export class SwiftBookAdapter extends SourceAdapter {
     const dir = path.includes('/') ? path.split('/')[0] : null
     const sectionTitle = dir ? BOOK_SECTION_TITLES[dir] : null
     if (!sectionTitle) return
-    const metadata = result.document.sourceMetadata
-      ? JSON.parse(result.document.sourceMetadata)
-      : {}
+    const metadata = result.document.sourceMetadata ? JSON.parse(result.document.sourceMetadata) : {}
     metadata.bookSection = sectionTitle
     metadata.bookSectionDir = dir
     result.document.sourceMetadata = JSON.stringify(metadata)

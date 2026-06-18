@@ -6,17 +6,12 @@
  * the over-fetched result set.
  */
 
-const ROLE_KIND_FILTERS = new Set([
-  'symbol', 'article', 'collection', 'overview', 'tutorial',
-  'samplecode', 'sample_code', 'sample-project', 'sampleproject',
-])
+const ROLE_KIND_FILTERS = new Set(['symbol', 'article', 'collection', 'overview', 'tutorial', 'samplecode', 'sample_code', 'sample-project', 'sampleproject'])
 
 export function normalizeSourceFilter(source) {
   if (!source) return null
   const values = Array.isArray(source) ? source : String(source).split(',')
-  const normalized = values
-    .map(value => value.trim().toLowerCase())
-    .filter(Boolean)
+  const normalized = values.map((value) => value.trim().toLowerCase()).filter(Boolean)
   return normalized.length > 0 ? new Set(normalized) : null
 }
 
@@ -37,8 +32,11 @@ export function buildPlatformFilters(platform, explicit) {
   }
   if (platform) {
     const key = {
-      ios: 'minIos', macos: 'minMacos', watchos: 'minWatchos',
-      tvos: 'minTvos', visionos: 'minVisionos',
+      ios: 'minIos',
+      macos: 'minMacos',
+      watchos: 'minWatchos',
+      tvos: 'minTvos',
+      visionos: 'minVisionos',
     }[platform.toLowerCase()]
     if (key && !filters[key]) filters[key] = '0'
   }
@@ -50,13 +48,15 @@ export function matchesSearchFilters(row, filters) {
   // FILTER_PREDICATES. The JS implementations below cover callers that
   // bypass the SQL filter (e.g. relaxation cascade probes that re-query
   // with a reduced WHERE) and act as a defense-in-depth check.
-  return matchesSourceFilter(row, filters.sourceTypes)
-    && matchesFrameworkFilter(row, filters.frameworks)
-    && matchesKindFilter(row, filters.kind)
-    && matchesLanguageFilter(row, filters.language)
-    && matchesPlatformFilters(row, filters.platformFilters)
-    && matchesMetadataFilters(row, filters.year, filters.track)
-    && matchesDeprecatedFilter(row, filters.deprecated)
+  return (
+    matchesSourceFilter(row, filters.sourceTypes) &&
+    matchesFrameworkFilter(row, filters.frameworks) &&
+    matchesKindFilter(row, filters.kind) &&
+    matchesLanguageFilter(row, filters.language) &&
+    matchesPlatformFilters(row, filters.platformFilters) &&
+    matchesMetadataFilters(row, filters.year, filters.track) &&
+    matchesDeprecatedFilter(row, filters.deprecated)
+  )
 }
 
 function matchesSourceFilter(row, sourceTypes) {
@@ -76,11 +76,8 @@ function matchesDeprecatedFilter(row, mode) {
 function matchesFrameworkFilter(row, frameworks) {
   const candidates = (frameworks ?? []).filter(Boolean).map(normalizeFilterValue)
   if (candidates.length === 0) return true
-  const rowValues = [
-    normalizeFilterValue(row?.root_slug ?? row?.rootSlug),
-    normalizeFilterValue(row?.framework),
-  ].filter(Boolean)
-  return rowValues.some(value => candidates.includes(value))
+  const rowValues = [normalizeFilterValue(row?.root_slug ?? row?.rootSlug), normalizeFilterValue(row?.framework)].filter(Boolean)
+  return rowValues.some((value) => candidates.includes(value))
 }
 
 function matchesKindFilter(row, kind) {
@@ -95,12 +92,7 @@ function matchesKindFilter(row, kind) {
   const looksLikeDisplayedKind = String(kind) !== String(kind).toLowerCase()
   if (looksLikeDisplayedKind) return displayedKind === target
 
-  const roleCandidates = [
-    row?.role,
-    row?.doc_kind,
-    row?.docKind,
-    row?.kind,
-  ].map(normalizeFilterValue).filter(Boolean)
+  const roleCandidates = [row?.role, row?.doc_kind, row?.docKind, row?.kind].map(normalizeFilterValue).filter(Boolean)
 
   if (ROLE_KIND_FILTERS.has(target)) return roleCandidates.includes(target)
   return displayedKind === target
@@ -163,7 +155,9 @@ function matchesMetadataFilters(row, year, track) {
 }
 
 function normalizeFilterValue(value) {
-  return String(value ?? '').trim().toLowerCase()
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
 }
 
 function compareVersions(left, right) {
@@ -179,16 +173,22 @@ function compareVersions(left, right) {
 }
 
 function parseVersionParts(version) {
-  return String(version ?? '')
-    .match(/\d+/g)
-    ?.map(part => Number.parseInt(part, 10))
-    .filter(Number.isFinite) ?? []
+  return (
+    String(version ?? '')
+      .match(/\d+/g)
+      ?.map((part) => Number.parseInt(part, 10))
+      .filter(Number.isFinite) ?? []
+  )
 }
 
 function parsePlatforms(platforms) {
   if (!platforms) return null
   if (typeof platforms === 'string') {
-    try { return JSON.parse(platforms) } catch { return null }
+    try {
+      return JSON.parse(platforms)
+    } catch {
+      return null
+    }
   }
   return typeof platforms === 'object' ? platforms : null
 }

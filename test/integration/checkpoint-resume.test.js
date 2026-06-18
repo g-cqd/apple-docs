@@ -44,23 +44,26 @@ describe('checkpoint resume flows (P10)', () => {
           framework: 'swiftui',
           abstractText: `Body ${index}`,
         },
-        sections: [
-          { sectionKind: 'abstract', contentText: `Body ${index}`, sortOrder: 0 },
-        ],
+        sections: [{ sectionKind: 'abstract', contentText: `Body ${index}`, sortOrder: 0 }],
         relationships: [],
       })
     }
 
-    await expect(rebuildBody({}, {
-      db,
-      dataDir,
-      logger,
-      onProgress(progress) {
-        if (progress.indexed >= 500) {
-          throw new Error('interrupt body rebuild')
-        }
-      },
-    })).rejects.toThrow('interrupt body rebuild')
+    await expect(
+      rebuildBody(
+        {},
+        {
+          db,
+          dataDir,
+          logger,
+          onProgress(progress) {
+            if (progress.indexed >= 500) {
+              throw new Error('interrupt body rebuild')
+            }
+          },
+        },
+      ),
+    ).rejects.toThrow('interrupt body rebuild')
 
     expect(db.getBodyIndexCount()).toBe(500)
     expect(db.getSyncCheckpoint('body-index:full')).toMatchObject({
@@ -81,12 +84,15 @@ describe('checkpoint resume flows (P10)', () => {
     db.seedCrawlIfNew('swiftui/old-b', 'swiftui', 1)
     db.setCrawlState('swiftui/old-a', 'failed', 'swiftui', 1, 'Not found')
     db.setCrawlState('swiftui/old-b', 'failed', 'swiftui', 1, 'Not found')
-    writeFileSync(join(dataDir, 'raw-json', 'swiftui.json'), JSON.stringify({
-      references: {
-        'swiftui/old-a': { url: 'swiftui/new-a', title: 'New A' },
-        'swiftui/old-b': { url: 'swiftui/new-b', title: 'New B' },
-      },
-    }))
+    writeFileSync(
+      join(dataDir, 'raw-json', 'swiftui.json'),
+      JSON.stringify({
+        references: {
+          'swiftui/old-a': { url: 'swiftui/new-a', title: 'New A' },
+          'swiftui/old-b': { url: 'swiftui/new-b', title: 'New B' },
+        },
+      }),
+    )
 
     let fetchCalls = 0
     globalThis.fetch = async () => {
@@ -101,18 +107,23 @@ describe('checkpoint resume flows (P10)', () => {
       })
     }
 
-    await expect(consolidate({}, {
-      db,
-      dataDir,
-      rateLimiter,
-      logger,
-      semaphore: { max: 1 },
-      onProgress(progress) {
-        if (progress.phase === 'consolidate-retry' && progress.completed === 1) {
-          throw new Error('interrupt consolidate retry')
-        }
-      },
-    })).rejects.toThrow('interrupt consolidate retry')
+    await expect(
+      consolidate(
+        {},
+        {
+          db,
+          dataDir,
+          rateLimiter,
+          logger,
+          semaphore: { max: 1 },
+          onProgress(progress) {
+            if (progress.phase === 'consolidate-retry' && progress.completed === 1) {
+              throw new Error('interrupt consolidate retry')
+            }
+          },
+        },
+      ),
+    ).rejects.toThrow('interrupt consolidate retry')
 
     expect(db.getSyncCheckpoint('consolidate:retry-resolved')).toMatchObject({
       nextIndex: 1,
@@ -121,13 +132,16 @@ describe('checkpoint resume flows (P10)', () => {
     })
     expect(db.db.query("SELECT COUNT(*) as c FROM crawl_state WHERE status = 'failed'").get().c).toBe(1)
 
-    const resumed = await consolidate({}, {
-      db,
-      dataDir,
-      rateLimiter,
-      logger,
-      semaphore: { max: 1 },
-    })
+    const resumed = await consolidate(
+      {},
+      {
+        db,
+        dataDir,
+        rateLimiter,
+        logger,
+        semaphore: { max: 1 },
+      },
+    )
 
     expect(resumed.retried).toBe(2)
     expect(resumed.retriedOk).toBe(2)

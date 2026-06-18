@@ -5,8 +5,12 @@ function stubStamper(initial = 's1') {
   let value = initial
   return {
     get: () => value,
-    refresh: () => { value = `${value}!` },
-    rotate(next) { value = next },
+    refresh: () => {
+      value = `${value}!`
+    },
+    rotate(next) {
+      value = next
+    },
   }
 }
 

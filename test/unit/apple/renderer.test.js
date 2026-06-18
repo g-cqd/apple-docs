@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { renderPage, relativePath } from '../../../src/apple/renderer.js'
+import { describe, expect, test } from 'bun:test'
+import { relativePath, renderPage } from '../../../src/apple/renderer.js'
 
 const fixture = await Bun.file(new URL('../../fixtures/swiftui-view.json', import.meta.url)).json()
 

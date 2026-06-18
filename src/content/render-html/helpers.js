@@ -1,9 +1,6 @@
 // Pure HTML helpers used across the render-html cluster.
 
-import {
-  coerceDocument as _coerceDocument,
-  coerceSection as _coerceSection,
-} from '../coercion.js'
+import { coerceDocument as _coerceDocument, coerceSection as _coerceSection } from '../coercion.js'
 
 /** Generate a URL-safe slug from heading text. */
 export function slugify(text) {
@@ -50,7 +47,7 @@ export function readableNameFromKey(key) {
   const last = segments[segments.length - 1]
   return last
     .split('-')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
 
@@ -88,7 +85,7 @@ export function resolveReferenceUrl(identifier) {
       .replace(/[-_]/g, ' ')
       .replace(/\.\w+$/, '')
       .split(' ')
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
       .join(' ')
     return { href: identifier, title: title || identifier }
   }

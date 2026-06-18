@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { Database as SqliteDatabase } from 'bun:sqlite'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { SCHEMA_VERSION } from '../../../src/storage/migrations/index.js'
 
@@ -78,29 +78,32 @@ describe('DocsDatabase', () => {
 
     db.upsertNormalizedDocument({
       document: { key: 'swiftui/legacy', title: 'Legacy View', sourceType: 'apple-docc', framework: 'swiftui', minIos: '9.0' },
-      sections: [], relationships: [],
+      sections: [],
+      relationships: [],
     })
     db.upsertNormalizedDocument({
       document: { key: 'swiftui/mid', title: 'Mid View', sourceType: 'apple-docc', framework: 'swiftui', minIos: '10.0' },
-      sections: [], relationships: [],
+      sections: [],
+      relationships: [],
     })
     db.upsertNormalizedDocument({
       document: { key: 'swiftui/new', title: 'New View', sourceType: 'apple-docc', framework: 'swiftui', minIos: '17.0' },
-      sections: [], relationships: [],
+      sections: [],
+      relationships: [],
     })
 
     // Filter "minIos: 9.0" — symbols requiring iOS ≤ 9.0. Lexicographic
     // compare would have wrongly admitted the iOS-10 row too.
     const ios9 = db.searchPages('view', 'view', { minIos: '9.0' })
-    expect(ios9.map(row => row.path).sort()).toEqual(['swiftui/legacy'])
+    expect(ios9.map((row) => row.path).sort()).toEqual(['swiftui/legacy'])
 
     // "minIos: 10.0" includes 9.0 + 10.0, excludes 17.0
     const ios10 = db.searchPages('view', 'view', { minIos: '10.0' })
-    expect(ios10.map(row => row.path).sort()).toEqual(['swiftui/legacy', 'swiftui/mid'])
+    expect(ios10.map((row) => row.path).sort()).toEqual(['swiftui/legacy', 'swiftui/mid'])
 
     // "minIos: 17.0" includes everything ≤ 17.0
     const ios17 = db.searchPages('view', 'view', { minIos: '17.0' })
-    expect(ios17.map(row => row.path).sort()).toEqual(['swiftui/legacy', 'swiftui/mid', 'swiftui/new'])
+    expect(ios17.map((row) => row.path).sort()).toEqual(['swiftui/legacy', 'swiftui/mid', 'swiftui/new'])
   })
 
   test('FTS5 updates on page update', () => {
@@ -163,7 +166,7 @@ describe('DocsDatabase', () => {
     })
 
     const pages = db.getPagesByRole('sampleCode')
-    expect(pages.some(page => page.key === 'accelerate/adding-a-bokeh-effect-to-images')).toBe(true)
+    expect(pages.some((page) => page.key === 'accelerate/adding-a-bokeh-effect-to-images')).toBe(true)
   })
 
   test('crawl state operations', () => {
@@ -193,9 +196,7 @@ describe('DocsDatabase', () => {
   })
 
   test('v15 dropped the legacy refs table', () => {
-    const row = db.db
-      .query("SELECT name FROM sqlite_master WHERE type='table' AND name='refs'")
-      .get()
+    const row = db.db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='refs'").get()
     expect(row).toBeNull()
   })
 
@@ -248,10 +249,12 @@ describe('DocsDatabase', () => {
   })
 
   test('tx rolls back writes when the callback throws', () => {
-    expect(() => db.tx(() => {
-      db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
-      throw new Error('boom')
-    })).toThrow('boom')
+    expect(() =>
+      db.tx(() => {
+        db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
+        throw new Error('boom')
+      }),
+    ).toThrow('boom')
 
     expect(db.getRootBySlug('swiftui')).toBeNull()
   })
@@ -316,8 +319,14 @@ describe('DocsDatabase', () => {
     const migrated = new DocsDatabase(dbPath)
     try {
       expect(migrated.getRootBySlug('sample-code').source_type).toBe('sample-code')
-      expect(migrated.db.query('SELECT source_type FROM pages WHERE path = ?').get('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app').source_type).toBe('sample-code')
-      expect(migrated.db.query('SELECT source_type FROM documents WHERE key = ?').get('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app').source_type).toBe('sample-code')
+      expect(
+        migrated.db.query('SELECT source_type FROM pages WHERE path = ?').get('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app')
+          .source_type,
+      ).toBe('sample-code')
+      expect(
+        migrated.db.query('SELECT source_type FROM documents WHERE key = ?').get('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app')
+          .source_type,
+      ).toBe('sample-code')
     } finally {
       migrated.close()
       rmSync(tempDir, { recursive: true, force: true })
@@ -338,41 +347,44 @@ describe('DocsDatabase', () => {
   })
 
   test('upsertNormalizedDocument stores sections and relationships', () => {
-    db.upsertNormalizedDocument({
-      document: {
-        sourceType: 'apple-docc',
-        key: 'swiftui/view',
-        title: 'View',
-        kind: 'symbol',
-        role: 'symbol',
-        roleHeading: 'Protocol',
-        framework: 'swiftui',
-        url: 'https://developer.apple.com/documentation/swiftui/view',
-        abstractText: 'A view.',
-        declarationText: 'protocol View',
+    db.upsertNormalizedDocument(
+      {
+        document: {
+          sourceType: 'apple-docc',
+          key: 'swiftui/view',
+          title: 'View',
+          kind: 'symbol',
+          role: 'symbol',
+          roleHeading: 'Protocol',
+          framework: 'swiftui',
+          url: 'https://developer.apple.com/documentation/swiftui/view',
+          abstractText: 'A view.',
+          declarationText: 'protocol View',
+        },
+        sections: [
+          {
+            sectionKind: 'discussion',
+            heading: 'Overview',
+            contentText: 'Overview text',
+            contentJson: null,
+            sortOrder: 0,
+          },
+        ],
+        relationships: [
+          {
+            fromKey: 'swiftui/view',
+            toKey: 'swiftui/text',
+            relationType: 'see_also',
+            section: 'See Also',
+            sortOrder: 0,
+          },
+        ],
       },
-      sections: [
-        {
-          sectionKind: 'discussion',
-          heading: 'Overview',
-          contentText: 'Overview text',
-          contentJson: null,
-          sortOrder: 0,
-        },
-      ],
-      relationships: [
-        {
-          fromKey: 'swiftui/view',
-          toKey: 'swiftui/text',
-          relationType: 'see_also',
-          section: 'See Also',
-          sortOrder: 0,
-        },
-      ],
-    }, {
-      contentHash: 'normalized-hash',
-      rawPayloadHash: 'raw-hash',
-    })
+      {
+        contentHash: 'normalized-hash',
+        rawPayloadHash: 'raw-hash',
+      },
+    )
 
     const sections = db.getDocumentSections('swiftui/view')
     expect(sections.length).toBe(1)

@@ -1,4 +1,4 @@
-import { bold, dim, } from './_shared.js'
+import { bold, dim } from './_shared.js'
 
 export function formatLookup(result) {
   if (!result.found) {
@@ -10,15 +10,12 @@ export function formatLookup(result) {
     if (m) {
       lines.push(bold(m.title))
       if (m.roleHeading) lines.push(dim(m.roleHeading))
-      const lookupFlags = [
-        m.isDeprecated ? dim('[deprecated]') : '',
-        m.isBeta ? dim('[beta]') : '',
-      ].filter(Boolean).join(' ')
+      const lookupFlags = [m.isDeprecated ? dim('[deprecated]') : '', m.isBeta ? dim('[beta]') : ''].filter(Boolean).join(' ')
       if (lookupFlags) lines.push(lookupFlags)
       if (m.framework) lines.push(`Framework: ${m.framework}`)
       if (m.abstract) lines.push(`\n${m.abstract}`)
       if (m.declaration) lines.push(`\n${dim('Declaration:')} ${m.declaration}`)
-      if (m.platforms?.length) lines.push(`Platforms: ${m.platforms.map(p => `${p.name} ${p.introducedAt ?? ''}`).join(', ')}`)
+      if (m.platforms?.length) lines.push(`Platforms: ${m.platforms.map((p) => `${p.name} ${p.introducedAt ?? ''}`).join(', ')}`)
       lines.push('')
     }
     if (result.tierLimitation) {
@@ -39,4 +36,3 @@ export function formatLookup(result) {
   }
   return lines.join('\n')
 }
-

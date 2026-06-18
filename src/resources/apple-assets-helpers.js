@@ -22,7 +22,11 @@ export function tempSuffix() {
 }
 
 export function sanitizeFileName(value) {
-  return String(value).replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-+|-+$/g, '') || 'asset'
+  return (
+    String(value)
+      .replace(/[^a-z0-9_.-]+/gi, '-')
+      .replace(/^-+|-+$/g, '') || 'asset'
+  )
 }
 
 export function clampInteger(value, min, max) {

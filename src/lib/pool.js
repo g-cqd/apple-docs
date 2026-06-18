@@ -52,7 +52,9 @@ export function pool(items, limit, fn, opts = {}) {
         const item = items[cursor++]
         const promise = Promise.resolve()
           .then(() => fn(item, { signal }))
-          .catch(err => { errors.push(err) })
+          .catch((err) => {
+            errors.push(err)
+          })
           .finally(() => {
             active.delete(promise)
             drain()

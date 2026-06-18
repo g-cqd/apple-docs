@@ -1,4 +1,4 @@
-import { bold, dim, } from './_shared.js'
+import { bold, dim } from './_shared.js'
 
 export function formatSetup(result) {
   if (result.status === 'exists') {

@@ -4,7 +4,11 @@
 
 export function parseJsonValue(value) {
   if (value == null) return null
-  try { return JSON.parse(value) } catch { return null }
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
 }
 
 export function parseJsonArray(value) {
@@ -22,8 +26,8 @@ export function buildResourceFtsQuery(query) {
   const terms = String(query)
     .toLowerCase()
     .split(/[^a-z0-9_.-]+/i)
-    .map(term => term.trim())
+    .map((term) => term.trim())
     .filter(Boolean)
     .slice(0, 8)
-  return terms.map(term => `"${term.replaceAll('"', '""')}"*`).join(' OR ') || '""'
+  return terms.map((term) => `"${term.replaceAll('"', '""')}"*`).join(' OR ') || '""'
 }

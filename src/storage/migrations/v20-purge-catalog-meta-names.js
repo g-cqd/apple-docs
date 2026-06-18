@@ -12,7 +12,5 @@
  */
 
 export function up(db) {
-  db.run(
-    "DELETE FROM sf_symbols WHERE name IN ('symbols', 'year_to_release')",
-  )
+  db.run("DELETE FROM sf_symbols WHERE name IN ('symbols', 'year_to_release')")
 }

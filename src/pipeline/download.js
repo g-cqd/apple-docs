@@ -7,19 +7,21 @@ import { persistFetchedDocPage } from './persist.js'
  * This handles the resume edge case where discovery succeeded but download didn't persist.
  */
 export async function downloadMissing(db, dataDir, rateLimiter, logger, onProgress, filters = {}, opts = {}) {
-  let pages = db.db.query(`
+  let pages = db.db
+    .query(`
     SELECT p.path, p.root_id, r.slug as root_slug, r.source_type
     FROM pages p JOIN roots r ON p.root_id = r.id
     WHERE p.downloaded_at IS NULL AND p.status = 'active'
-  `).all()
-  const rootSet = filters.roots ? new Set(filters.roots.map(root => root.toLowerCase())) : null
-  const sourceSet = filters.sources ? new Set(filters.sources.map(source => source.toLowerCase())) : null
+  `)
+    .all()
+  const rootSet = filters.roots ? new Set(filters.roots.map((root) => root.toLowerCase())) : null
+  const sourceSet = filters.sources ? new Set(filters.sources.map((source) => source.toLowerCase())) : null
 
   if (rootSet) {
-    pages = pages.filter(page => rootSet.has(page.root_slug))
+    pages = pages.filter((page) => rootSet.has(page.root_slug))
   }
   if (sourceSet) {
-    pages = pages.filter(page => sourceSet.has(page.source_type))
+    pages = pages.filter((page) => sourceSet.has(page.source_type))
   }
 
   if (pages.length === 0) return { downloaded: 0 }

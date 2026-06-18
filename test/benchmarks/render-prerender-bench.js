@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Prerender bench (RFC 0003 §3 phase-2 gates): the in-dylib batch render
  * path vs the spawned worker pool, over a real catalog slice. Reports:
@@ -14,13 +15,13 @@
  *   bun test/benchmarks/render-prerender-bench.js [--n 1500] [--variants 3]
  */
 
+import { suffix } from 'bun:ffi'
 import { Database } from 'bun:sqlite'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
-import { renderScopeBucket, renderScopeBucketNative } from '../../src/resources/apple-symbols/prerender-engine.js'
 import { symbolVariantMatrix } from '../../src/resources/apple-symbols/cache-key.js'
+import { renderScopeBucket, renderScopeBucketNative } from '../../src/resources/apple-symbols/prerender-engine.js'
 import { _forceImpl, nativeRenderAvailable } from '../../src/resources/render-native.js'
 
 if (process.platform !== 'darwin') {
@@ -128,6 +129,8 @@ const thruOk = nThru >= pThru
 const rssOk = native.peakRss <= pooled.peakRss || native.peakRss < 800 * 1024 * 1024
 const parityOk = mismatch === 0 && compared > 0
 console.log(`\nparity: ${compared} identical, ${mismatch} mismatch`)
-console.log(`gates → throughput native≥pooled: ${thruOk ? 'MET' : 'FAILED'} | RSS bounded: ${rssOk ? 'MET' : 'FAILED'} | byte parity: ${parityOk ? 'MET' : 'FAILED'}`)
+console.log(
+  `gates → throughput native≥pooled: ${thruOk ? 'MET' : 'FAILED'} | RSS bounded: ${rssOk ? 'MET' : 'FAILED'} | byte parity: ${parityOk ? 'MET' : 'FAILED'}`,
+)
 console.log(thruOk && rssOk && parityOk ? 'PRERENDER GATES: PASS' : 'PRERENDER GATES: FAIL')
 process.exit(thruOk && rssOk && parityOk ? 0 : 1)

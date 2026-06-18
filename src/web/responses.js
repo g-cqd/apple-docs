@@ -36,13 +36,7 @@ export const MIME_TYPES = {
  * fonts, archives) are already compressed and gain nothing from another
  * pass, so they stay out of this set.
  */
-export const COMPRESSIBLE = new Set([
-  'text/html',
-  'text/css',
-  'text/javascript',
-  'text/markdown',
-  'application/json',
-])
+export const COMPRESSIBLE = new Set(['text/html', 'text/css', 'text/javascript', 'text/markdown', 'application/json'])
 
 /**
  * @typedef {object} JsonResponseOptions
@@ -119,7 +113,7 @@ export function notFoundResponse(siteConfig) {
  */
 export function errorResponse(error, opts = {}) {
   const status = opts.status ?? 500
-  const exposeStack = opts.exposeStack ?? (process.env.NODE_ENV !== 'production')
+  const exposeStack = opts.exposeStack ?? process.env.NODE_ENV !== 'production'
   const message = typeof error === 'string' ? error : (error?.message ?? 'Internal error')
   const body = { error: message }
   if (exposeStack && error?.stack) body.stack = String(error.stack)
@@ -141,7 +135,10 @@ export function matchesIfNoneMatch(headerValue, etag) {
   if (!headerValue) return false
   const value = headerValue.trim()
   if (value === '*') return true
-  return value.split(',').map(part => part.trim()).includes(etag)
+  return value
+    .split(',')
+    .map((part) => part.trim())
+    .includes(etag)
 }
 
 /**
@@ -163,11 +160,7 @@ export function matchesIfNoneMatch(headerValue, etag) {
  * @param {FileResponseOptions} options
  * @returns {Promise<Response>}
  */
-export async function fileResponseRevalidated(request, file, {
-  contentType,
-  contentDisposition,
-  maxAge = 86400,
-}) {
+export async function fileResponseRevalidated(request, file, { contentType, contentDisposition, maxAge = 86400 }) {
   let stat
   try {
     stat = await file.stat()
@@ -177,7 +170,7 @@ export async function fileResponseRevalidated(request, file, {
   const etag = `"${Math.round(stat.mtimeMs).toString(36)}-${stat.size.toString(36)}"`
   const headers = new Headers({
     'Content-Type': contentType,
-    'ETag': etag,
+    ETag: etag,
     // Allow shared caches (Caddy / Cloudflare / browser) to keep the bytes
     // for `maxAge` seconds, but require a conditional GET after that so we
     // never pin a stale render once the prerender cache or the on-disk

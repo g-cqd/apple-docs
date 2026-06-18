@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
 import { consolidate, verifyCorpusIntegrity } from '../../../src/commands/consolidate.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { createMockLogger, createMockRateLimiter } from '../../helpers/mocks.js'
 
 const fixture = await Bun.file(new URL('../../fixtures/swiftui-view.json', import.meta.url)).json()
@@ -98,12 +98,15 @@ describe('consolidate', () => {
     db.seedCrawlIfNew('swiftui/old-b', 'swiftui', 1)
     db.setCrawlState('swiftui/old-a', 'failed', 'swiftui', 1, 'Not found')
     db.setCrawlState('swiftui/old-b', 'failed', 'swiftui', 1, 'Not found')
-    writeFileSync(join(dataDir, 'raw-json', 'swiftui.json'), JSON.stringify({
-      references: {
-        'swiftui/old-a': { url: 'swiftui/new-a', title: 'New A' },
-        'swiftui/old-b': { url: 'swiftui/new-b', title: 'New B' },
-      },
-    }))
+    writeFileSync(
+      join(dataDir, 'raw-json', 'swiftui.json'),
+      JSON.stringify({
+        references: {
+          'swiftui/old-a': { url: 'swiftui/new-a', title: 'New A' },
+          'swiftui/old-b': { url: 'swiftui/new-b', title: 'New B' },
+        },
+      }),
+    )
 
     let active = 0
     let maxActive = 0
@@ -127,13 +130,16 @@ describe('consolidate', () => {
       })
     }
 
-    const runPromise = consolidate({}, {
-      db,
-      dataDir,
-      rateLimiter,
-      logger,
-      semaphore: { max: 2 },
-    })
+    const runPromise = consolidate(
+      {},
+      {
+        db,
+        dataDir,
+        rateLimiter,
+        logger,
+        semaphore: { max: 2 },
+      },
+    )
 
     for (let attempt = 0; attempt < 100 && maxActive < 2; attempt++) {
       await Bun.sleep(1)
@@ -159,28 +165,32 @@ describe('verifyCorpusIntegrity', () => {
     // Plant a section referencing a non-existent document. Foreign keys are
     // enforced from P1.8 onward, so bypass them just for this fixture.
     db.db.run('PRAGMA foreign_keys = OFF')
-    db.db.run(
-      "INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
-      [99999, 'overview', 'Test', 'text', null, 0]
-    )
+    db.db.run('INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order) VALUES (?, ?, ?, ?, ?, ?)', [
+      99999,
+      'overview',
+      'Test',
+      'text',
+      null,
+      0,
+    ])
     db.db.run('PRAGMA foreign_keys = ON')
 
     const result = verifyCorpusIntegrity(db, dataDir, logger)
-    const orphanCheck = result.checks.find(c => c.name === 'orphan_sections')
+    const orphanCheck = result.checks.find((c) => c.name === 'orphan_sections')
     expect(orphanCheck).toBeDefined()
     expect(orphanCheck.ok).toBe(false)
   })
 
   test('FTS integrity check passes for clean DB', () => {
     const result = verifyCorpusIntegrity(db, dataDir, logger)
-    const ftsCheck = result.checks.find(c => c.name === 'documents_fts')
+    const ftsCheck = result.checks.find((c) => c.name === 'documents_fts')
     expect(ftsCheck).toBeDefined()
     expect(ftsCheck.ok).toBe(true)
   })
 
   test('document_page_consistency check for empty DB', () => {
     const result = verifyCorpusIntegrity(db, dataDir, logger)
-    const consistencyCheck = result.checks.find(c => c.name === 'document_page_consistency')
+    const consistencyCheck = result.checks.find((c) => c.name === 'document_page_consistency')
     expect(consistencyCheck).toBeDefined()
     expect(consistencyCheck.ok).toBe(true)
   })

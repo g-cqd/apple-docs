@@ -2,12 +2,7 @@
 // matching `tag`, `.class`, `#id`, or `tag.class` and returns its inner
 // HTML with balanced same-tag depth tracking.
 
-import {
-  escapeRegex,
-  getOpenTagRegex,
-  getSelectorClassRegex,
-  getSelectorIdRegex,
-} from './constants.js'
+import { escapeRegex, getOpenTagRegex, getSelectorClassRegex, getSelectorIdRegex } from './constants.js'
 
 /**
  * Extract the inner HTML of the first element matching a simple selector.

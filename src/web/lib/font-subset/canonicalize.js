@@ -88,9 +88,7 @@ export function canonicalizePostBody(body) {
  * @param {URLSearchParams | Record<string, string>} params
  */
 export function canonicalizeQuery(params) {
-  const get = params instanceof URLSearchParams
-    ? (k) => params.get(k)
-    : (k) => (params && Object.prototype.hasOwnProperty.call(params, k) ? params[k] : null)
+  const get = params instanceof URLSearchParams ? (k) => params.get(k) : (k) => (params && Object.hasOwn(params, k) ? params[k] : null)
   const font = requireFontId(get('font'))
   const format = normalizeFormat(get('format') ?? undefined)
   const set = new Set()
@@ -122,10 +120,7 @@ function finalize(font, set, format) {
     throw new CanonicalizeError('at least one of codepoints, characters, or ranges must be provided')
   }
   if (set.size > MAX_CODEPOINTS_PER_REQUEST) {
-    throw new CanonicalizeError(
-      `too many codepoints: ${set.size} > ${MAX_CODEPOINTS_PER_REQUEST}`,
-      { status: 413 },
-    )
+    throw new CanonicalizeError(`too many codepoints: ${set.size} > ${MAX_CODEPOINTS_PER_REQUEST}`, { status: 413 })
   }
   const codepoints = [...set].sort((a, b) => a - b)
   return { font, codepoints, format }
@@ -155,7 +150,10 @@ function normalizeFormat(value) {
 }
 
 function splitList(s) {
-  return String(s).split(',').map(t => t.trim()).filter(Boolean)
+  return String(s)
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
 }
 
 function parseCodepointToken(token) {
@@ -206,10 +204,7 @@ function addCodepointInt(set, n) {
   }
   set.add(n)
   if (set.size > MAX_CODEPOINTS_PER_REQUEST) {
-    throw new CanonicalizeError(
-      `too many codepoints: > ${MAX_CODEPOINTS_PER_REQUEST}`,
-      { status: 413 },
-    )
+    throw new CanonicalizeError(`too many codepoints: > ${MAX_CODEPOINTS_PER_REQUEST}`, { status: 413 })
   }
 }
 
@@ -223,17 +218,11 @@ function addRange(set, loRaw, hiRaw) {
   // Pre-check size — a single bad range like `[0, 0x10FFFF]` would
   // otherwise spin for ~17M iterations before the per-add cap fires.
   if (hi - lo + 1 > MAX_CODEPOINTS_PER_REQUEST) {
-    throw new CanonicalizeError(
-      `range too large: ${hi - lo + 1} > ${MAX_CODEPOINTS_PER_REQUEST}`,
-      { status: 413 },
-    )
+    throw new CanonicalizeError(`range too large: ${hi - lo + 1} > ${MAX_CODEPOINTS_PER_REQUEST}`, { status: 413 })
   }
   for (let cp = lo; cp <= hi; cp++) set.add(cp)
   if (set.size > MAX_CODEPOINTS_PER_REQUEST) {
-    throw new CanonicalizeError(
-      `too many codepoints: > ${MAX_CODEPOINTS_PER_REQUEST}`,
-      { status: 413 },
-    )
+    throw new CanonicalizeError(`too many codepoints: > ${MAX_CODEPOINTS_PER_REQUEST}`, { status: 413 })
   }
 }
 

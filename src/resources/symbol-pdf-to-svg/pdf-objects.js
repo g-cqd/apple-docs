@@ -141,14 +141,21 @@ function parseDictionary(text) {
   let i = start + 2
   const out = {}
   while (i < text.length) {
-    skipWs(text, i, value => { i = value })
+    skipWs(text, i, (value) => {
+      i = value
+    })
     if (text.startsWith('>>', i)) break
-    if (text[i] !== '/') { i++; continue }
+    if (text[i] !== '/') {
+      i++
+      continue
+    }
     i++
     const keyStart = i
     while (i < text.length && !/[\s/<>[\]]/.test(text[i])) i++
     const key = text.slice(keyStart, i)
-    skipWs(text, i, value => { i = value })
+    skipWs(text, i, (value) => {
+      i = value
+    })
     if (text.startsWith('<<', i)) {
       const endNested = findMatching(text, i, '<<', '>>')
       out[key] = parseDictionary(text.slice(i, endNested + 2))
@@ -197,9 +204,14 @@ function findMatching(text, start, open, close) {
   let depth = 1
   let i = start + open.length
   while (i < text.length && depth > 0) {
-    if (text.startsWith(open, i)) { depth++; i += open.length }
-    else if (text.startsWith(close, i)) { depth--; if (depth === 0) return i; i += close.length }
-    else i++
+    if (text.startsWith(open, i)) {
+      depth++
+      i += open.length
+    } else if (text.startsWith(close, i)) {
+      depth--
+      if (depth === 0) return i
+      i += close.length
+    } else i++
   }
   return text.length - close.length
 }

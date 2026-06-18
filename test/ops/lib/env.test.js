@@ -4,16 +4,20 @@
  * any host regardless of who's logged in.
  */
 
-import { describe, test, expect } from 'bun:test'
-import { loadEnv, parseEnvFile, EnvLoadError, REQUIRED_VARS } from '../../../ops/lib/env.js'
+import { describe, expect, test } from 'bun:test'
+import { EnvLoadError, loadEnv, parseEnvFile, REQUIRED_VARS } from '../../../ops/lib/env.js'
 
 function minimalEnv(extra = {}) {
-  const base = Object.fromEntries(REQUIRED_VARS.map(k => [k, `${k.toLowerCase()}-value`]))
+  const base = Object.fromEntries(REQUIRED_VARS.map((k) => [k, `${k.toLowerCase()}-value`]))
   return { ...base, ...extra }
 }
 
 function envText(map) {
-  return Object.entries(map).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
+  return (
+    Object.entries(map)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n') + '\n'
+  )
 }
 
 function fakeDeps({ uid = 1000, mode = 0o600, fileText, readError } = {}) {
@@ -86,7 +90,9 @@ describe('loadEnv', () => {
 
   test('throws missing when stat fails', () => {
     const deps = fakeDeps()
-    deps.stat = () => { throw new Error('ENOENT') }
+    deps.stat = () => {
+      throw new Error('ENOENT')
+    }
     expect(() => loadEnv({ path: '/nope', deps })).toThrow(EnvLoadError)
   })
 
@@ -157,11 +163,13 @@ describe('loadEnv', () => {
   })
 
   test('honours an explicit STATIC_DIR override', () => {
-    const file = envText(minimalEnv({
-      REPO_DIR: '/srv/apple-docs',
-      STATIC_DIR: '/var/www/apple-docs',
-      LABEL_PREFIX: 'p',
-    }))
+    const file = envText(
+      minimalEnv({
+        REPO_DIR: '/srv/apple-docs',
+        STATIC_DIR: '/var/www/apple-docs',
+        LABEL_PREFIX: 'p',
+      }),
+    )
     const out = loadEnv({ path: '/fake', deps: fakeDeps({ fileText: file }) })
     expect(out.staticDir).toBe('/var/www/apple-docs')
   })
@@ -179,9 +187,11 @@ describe('SNAPSHOT_CHANNEL', () => {
   })
 
   test('rejects anything else', () => {
-    expect(() => loadEnv({
-      path: '/fake/.env',
-      deps: fakeDeps({ fileText: envText(minimalEnv({ SNAPSHOT_CHANNEL: 'nightly' })) }),
-    })).toThrow(EnvLoadError)
+    expect(() =>
+      loadEnv({
+        path: '/fake/.env',
+        deps: fakeDeps({ fileText: envText(minimalEnv({ SNAPSHOT_CHANNEL: 'nightly' })) }),
+      }),
+    ).toThrow(EnvLoadError)
   })
 })

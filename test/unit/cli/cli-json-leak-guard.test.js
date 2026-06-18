@@ -10,11 +10,24 @@ let dataDir
 const CLI = new URL('../../../cli.js', import.meta.url).pathname
 
 const INFRA_BLACKLIST = new Set([
-  'matchQuality', 'distance', 'score',
-  'tier', 'tierLimitation', 'trigramAvailable', 'bodyIndexAvailable',
-  'relaxed', 'relaxationTier', 'partial', 'partialReasons',
-  'urlDepth', 'sourceMetadata', 'intent',
-  'sectionKind', 'sortOrder', 'file_path', 'lastSeen',
+  'matchQuality',
+  'distance',
+  'score',
+  'tier',
+  'tierLimitation',
+  'trigramAvailable',
+  'bodyIndexAvailable',
+  'relaxed',
+  'relaxationTier',
+  'partial',
+  'partialReasons',
+  'urlDepth',
+  'sourceMetadata',
+  'intent',
+  'sectionKind',
+  'sortOrder',
+  'file_path',
+  'lastSeen',
 ])
 
 function assertNoBlacklistedDeep(value, path = '$') {
@@ -54,13 +67,18 @@ beforeAll(() => {
     path: 'swiftui/view',
     title: 'View',
     role: 'symbol',
-    abstract: 'A type that represents part of your app\'s user interface.',
+    abstract: "A type that represents part of your app's user interface.",
   })
   db.upsertNormalizedDocument({
     document: {
-      sourceType: 'apple-docc', key: 'swiftui/view', title: 'View',
-      kind: 'symbol', role: 'symbol', roleHeading: 'Protocol', framework: 'swiftui',
-      abstractText: 'A type that represents part of your app\'s user interface.',
+      sourceType: 'apple-docc',
+      key: 'swiftui/view',
+      title: 'View',
+      kind: 'symbol',
+      role: 'symbol',
+      roleHeading: 'Protocol',
+      framework: 'swiftui',
+      abstractText: "A type that represents part of your app's user interface.",
     },
     sections: [{ sectionKind: 'abstract', contentText: 'abstract text', sortOrder: 0 }],
     relationships: [],
@@ -145,7 +163,7 @@ describe('apple-docs --json output respects public allowlist', () => {
       out.trigramAvailable !== undefined ||
       out.bodyIndexAvailable !== undefined ||
       out.intent !== undefined ||
-      (out.results ?? []).some(r => r.matchQuality !== undefined || r.urlDepth !== undefined)
+      (out.results ?? []).some((r) => r.matchQuality !== undefined || r.urlDepth !== undefined)
     expect(hasAnyInfra).toBe(true)
   })
 })

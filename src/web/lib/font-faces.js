@@ -32,10 +32,14 @@ export function fontFaceName(familyId, fileId) {
  */
 export function formatHint(format) {
   switch ((format || '').toLowerCase()) {
-    case 'ttf': return 'truetype'
-    case 'otf': return 'opentype'
-    case 'ttc': return 'collection'
-    default: return ''
+    case 'ttf':
+      return 'truetype'
+    case 'otf':
+      return 'opentype'
+    case 'ttc':
+      return 'collection'
+    default:
+      return ''
   }
 }
 

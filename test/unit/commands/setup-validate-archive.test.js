@@ -1,11 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  parseTarVerboseLine,
-  validateArchive,
-} from '../../../src/commands/setup/validate-archive.js'
+import { parseTarVerboseLine, validateArchive } from '../../../src/commands/setup/validate-archive.js'
 
 let workDir
 let dataDir
@@ -28,7 +25,8 @@ async function buildArchive(name, build) {
   // include relative-traversal entries without having tar normalize them.
   // For most tests we just tar the staged contents.
   const proc = Bun.spawn(['tar', '-czf', archivePath, '-C', stage, '.'], {
-    stdout: 'pipe', stderr: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
   })
   const exit = await proc.exited
   if (exit !== 0) {
@@ -112,9 +110,7 @@ describe('validateArchive', () => {
       stdout: new Response('-rw-r--r-- 0 user staff 0 Jan 1 12:00 /etc/escape.txt\n').body,
       stderr: new Response('').body,
     })
-    await expect(
-      validateArchive(archivePath, dataDir, { spawn: fakeSpawn })
-    ).rejects.toThrow(/absolute path/)
+    await expect(validateArchive(archivePath, dataDir, { spawn: fakeSpawn })).rejects.toThrow(/absolute path/)
   })
 
   test('rejects a relative-traversal entry that escapes destDir', async () => {
@@ -126,9 +122,7 @@ describe('validateArchive', () => {
       stdout: new Response('-rw-r--r-- 0 user staff 0 Jan 1 12:00 ../../etc/escape.txt\n').body,
       stderr: new Response('').body,
     })
-    await expect(
-      validateArchive(archivePath, dataDir, { spawn: fakeSpawn })
-    ).rejects.toThrow(/escapes destDir/)
+    await expect(validateArchive(archivePath, dataDir, { spawn: fakeSpawn })).rejects.toThrow(/escapes destDir/)
   })
 
   test('rejects a hardlink entry', async () => {
@@ -140,9 +134,7 @@ describe('validateArchive', () => {
       stdout: new Response('hrwxr-xr-x 0 user staff 0 Jan 1 12:00 evil link to /etc/passwd\n').body,
       stderr: new Response('').body,
     })
-    await expect(
-      validateArchive(archivePath, dataDir, { spawn: fakeSpawn })
-    ).rejects.toThrow(/disallowed entry type/)
+    await expect(validateArchive(archivePath, dataDir, { spawn: fakeSpawn })).rejects.toThrow(/disallowed entry type/)
   })
 
   test('throws when tar listing itself fails', async () => {
@@ -151,8 +143,6 @@ describe('validateArchive', () => {
       stdout: new Response('').body,
       stderr: new Response('not a gzip file\n').body,
     })
-    await expect(
-      validateArchive('/nonexistent/path.tar.gz', dataDir, { spawn: fakeSpawn })
-    ).rejects.toThrow(/archive listing failed/)
+    await expect(validateArchive('/nonexistent/path.tar.gz', dataDir, { spawn: fakeSpawn })).rejects.toThrow(/archive listing failed/)
   })
 })

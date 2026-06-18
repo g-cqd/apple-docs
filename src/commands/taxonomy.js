@@ -38,7 +38,11 @@ export async function taxonomy(opts, ctx) {
   }
 
   const run = (sql) => {
-    try { return db.db.query(sql).all() } catch { return [] }
+    try {
+      return db.db.query(sql).all()
+    } catch {
+      return []
+    }
   }
 
   if (field && queries[field]) {

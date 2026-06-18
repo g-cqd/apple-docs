@@ -13,14 +13,11 @@
  * outside the allowlist.
  */
 
-import { resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
+import { resolve, sep } from 'node:path'
 import { ValidationError } from '../../lib/errors.js'
 
-const SYSTEM_FONT_ROOTS = [
-  '/Library/Fonts',
-  '/System/Library/Fonts',
-]
+const SYSTEM_FONT_ROOTS = ['/Library/Fonts', '/System/Library/Fonts']
 
 /**
  * Build the set of canonical roots a font's file_path may reside under.
@@ -31,7 +28,7 @@ const SYSTEM_FONT_ROOTS = [
  * @returns {string[]}
  */
 function approvedFontRoots(dataDir) {
-  const roots = SYSTEM_FONT_ROOTS.map(p => resolve(p) + sep)
+  const roots = SYSTEM_FONT_ROOTS.map((p) => resolve(p) + sep)
   roots.push(resolve(homedir(), 'Library', 'Fonts') + sep)
   roots.push(resolve(dataDir, 'resources', 'fonts', 'extracted') + sep)
   return roots
@@ -48,7 +45,8 @@ function approvedFontRoots(dataDir) {
 export function assertFontPathContained(filePath, dataDir) {
   if (typeof filePath !== 'string' || filePath.length === 0) {
     throw new ValidationError('Font file_path is missing or empty', {
-      field: 'file_path', value: filePath,
+      field: 'file_path',
+      value: filePath,
     })
   }
   const resolved = resolve(filePath)
@@ -58,8 +56,5 @@ export function assertFontPathContained(filePath, dataDir) {
       return resolved
     }
   }
-  throw new ValidationError(
-    `Font file_path escapes approved roots: ${filePath}`,
-    { field: 'file_path', value: filePath },
-  )
+  throw new ValidationError(`Font file_path escapes approved roots: ${filePath}`, { field: 'file_path', value: filePath })
 }

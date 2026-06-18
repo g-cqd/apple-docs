@@ -11,18 +11,20 @@
  * a new method to the Set is the way to opt it into the deep pool.
  */
 
-export const DEEP_OPS = Object.freeze(new Set([
-  // Bottom-of-cascade body FTS — multi-second outliers in the
-  // the benchmark.
-  'searchBody',
-  'searchBodyAndEnrich',
-  // Trigram-cache backed fuzzy match. Per-process Map of every title's
-  // trigrams; expensive to walk under load.
-  'fuzzyMatchTitles',
-  // Body-index population check used by the deep cascade — cheap on
-  // its own but always fires alongside body FTS, so route together.
-  'getBodyIndexCount',
-]))
+export const DEEP_OPS = Object.freeze(
+  new Set([
+    // Bottom-of-cascade body FTS — multi-second outliers in the
+    // the benchmark.
+    'searchBody',
+    'searchBodyAndEnrich',
+    // Trigram-cache backed fuzzy match. Per-process Map of every title's
+    // trigrams; expensive to walk under load.
+    'fuzzyMatchTitles',
+    // Body-index population check used by the deep cascade — cheap on
+    // its own but always fires alongside body FTS, so route together.
+    'getBodyIndexCount',
+  ]),
+)
 
 /**
  * @param {string} op

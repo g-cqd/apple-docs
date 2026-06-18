@@ -1,12 +1,12 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
+import { safeWebDocKey } from '../../../src/lib/safe-path.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { buildStaticSite, minifyCSS } from '../../../src/web/build.js'
-import { safeWebDocKey } from '../../../src/lib/safe-path.js'
 
 let db
 let tmpDir
@@ -23,10 +23,16 @@ beforeEach(() => {
 
   // Seed documents
   const now = new Date().toISOString()
-  db.db.run(`INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
-    VALUES ('apple-docc', 'documentation/swiftui/view', 'View', 'symbol', 'symbol', 'Protocol', 'swiftui', 'A type that represents part of your app UI', ?, ?)`, [now, now])
-  db.db.run(`INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
-    VALUES ('apple-docc', 'documentation/swiftui/text', 'Text', 'symbol', 'symbol', 'Structure', 'swiftui', 'A view that displays text', ?, ?)`, [now, now])
+  db.db.run(
+    `INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
+    VALUES ('apple-docc', 'documentation/swiftui/view', 'View', 'symbol', 'symbol', 'Protocol', 'swiftui', 'A type that represents part of your app UI', ?, ?)`,
+    [now, now],
+  )
+  db.db.run(
+    `INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
+    VALUES ('apple-docc', 'documentation/swiftui/text', 'Text', 'symbol', 'symbol', 'Structure', 'swiftui', 'A view that displays text', ?, ?)`,
+    [now, now],
+  )
 
   // Seed pages so the homepage view-model's "non-empty root" filter recognises
   // the framework. The filter (pages > 1 OR not self-ref) used to live only in
@@ -37,13 +43,20 @@ beforeEach(() => {
   // Page paths must equal document keys — the framework listing build
   // resolves a root's docs through the pages join (root membership),
   // exactly like the live route.
-  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'documentation/swiftui/view', '/documentation/swiftui/view', 'View', 'active')`, [swiftuiRoot.id])
-  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'documentation/swiftui/text', '/documentation/swiftui/text', 'Text', 'active')`, [swiftuiRoot.id])
+  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'documentation/swiftui/view', '/documentation/swiftui/view', 'View', 'active')`, [
+    swiftuiRoot.id,
+  ])
+  db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, 'documentation/swiftui/text', '/documentation/swiftui/text', 'Text', 'active')`, [
+    swiftuiRoot.id,
+  ])
   db.updateRootPageCount('swiftui')
 
   // Seed sections
   const viewId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
-  db.db.run(`INSERT INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`, [viewId])
+  db.db.run(
+    `INSERT INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`,
+    [viewId],
+  )
 
   ctx = { db, dataDir: tmpDir, logger: { info() {}, warn() {}, error() {} } }
 })
@@ -104,8 +117,8 @@ describe('buildStaticSite (P7-D)', () => {
     // title-index and aliases now use content-hashed filenames
     const searchDir = join(outDir, 'data', 'search')
     const files = readdirSync(searchDir)
-    expect(files.some(f => /^title-index\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
-    expect(files.some(f => /^aliases\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
+    expect(files.some((f) => /^title-index\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
+    expect(files.some((f) => /^aliases\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
     // Manifest contains file mappings
     const manifest = JSON.parse(readFileSync(join(searchDir, 'search-manifest.json'), 'utf8'))
     expect(manifest.version).toBe(2)
@@ -162,12 +175,12 @@ describe('buildStaticSite (P7-D)', () => {
     // Core bundle should contain theme, search, and page-toc code
     const core = readFileSync(join(outDir, 'assets', 'core.js'), 'utf8')
     expect(core).toContain('apple-docs-theme') // from theme.js
-    expect(core).toContain('search-input')     // from search.js
-    expect(core).toContain('page-toc')         // from page-toc.js
+    expect(core).toContain('search-input') // from search.js
+    expect(core).toContain('page-toc') // from page-toc.js
     // Listing bundle should contain collection-filters and tree-view code
     const listing = readFileSync(join(outDir, 'assets', 'listing.js'), 'utf8')
-    expect(listing).toContain('filter-chip')   // from collection-filters.js
-    expect(listing).toContain('tree-data')     // from tree-view.js
+    expect(listing).toContain('filter-chip') // from collection-filters.js
+    expect(listing).toContain('tree-data') // from tree-view.js
   })
 
   test('bundled build references core.js in HTML', async () => {
@@ -209,8 +222,8 @@ describe('buildStaticSite (P7-D)', () => {
 
     const siblings = readdirSync(tmpDir)
     expect(siblings).toContain('web')
-    expect(siblings.some(name => name.startsWith('web.tmp-'))).toBe(false)
-    expect(siblings.some(name => name.startsWith('web.prev-'))).toBe(false)
+    expect(siblings.some((name) => name.startsWith('web.tmp-'))).toBe(false)
+    expect(siblings.some((name) => name.startsWith('web.prev-'))).toBe(false)
   })
 
   test('preserves the existing output directory when a staged build fails', async () => {
@@ -232,8 +245,8 @@ describe('buildStaticSite (P7-D)', () => {
     expect(readFileSync(join(outDir, 'marker.txt'), 'utf8')).toBe('keep me')
     const siblings = readdirSync(tmpDir)
     expect(siblings).toContain('web')
-    expect(siblings.some(name => name.startsWith('web.tmp-'))).toBe(false)
-    expect(siblings.some(name => name.startsWith('web.prev-'))).toBe(false)
+    expect(siblings.some((name) => name.startsWith('web.tmp-'))).toBe(false)
+    expect(siblings.some((name) => name.startsWith('web.prev-'))).toBe(false)
   })
 
   test('restores the previous output if publish fails after moving it aside', async () => {
@@ -257,7 +270,7 @@ describe('buildStaticSite (P7-D)', () => {
     expect(readFileSync(join(outDir, 'marker.txt'), 'utf8')).toBe('keep me')
     const siblings = readdirSync(tmpDir)
     expect(siblings).toContain('web')
-    expect(siblings.some(name => name.startsWith('web.tmp-'))).toBe(false)
+    expect(siblings.some((name) => name.startsWith('web.tmp-'))).toBe(false)
   })
 })
 
@@ -294,10 +307,10 @@ describe('buildStaticSite — incremental (Phase 1)', () => {
     // Mutate one document's section: changing content_text length flips
     // the cheap sections_digest, so the incremental skip must miss.
     const viewId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
-    db.db.run(
-      `UPDATE document_sections SET content_text = ? WHERE document_id = ? AND section_kind = 'abstract'`,
-      ['A type that represents part of your app UI — extensively rewritten body', viewId],
-    )
+    db.db.run(`UPDATE document_sections SET content_text = ? WHERE document_id = ? AND section_kind = 'abstract'`, [
+      'A type that represents part of your app UI — extensively rewritten body',
+      viewId,
+    ])
 
     const result = await buildStaticSite({ out: outDir, incremental: true }, ctx)
     expect(result.pagesBuilt).toBe(1)
@@ -380,8 +393,17 @@ describe('buildStaticSite — SEO surface (Phase 4)', () => {
     writeFileSync(join(fontDir, 'x.ttf'), 'fake')
     db.upsertAppleFontFamily({ id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif' })
     db.upsertAppleFontFile({
-      id: 'font-x', familyId: 'sf-pro', fileName: 'X.ttf', filePath: join(fontDir, 'x.ttf'),
-      format: 'ttf', size: 4, source: 'remote', variant: 'Display', weight: 'Bold', italic: false, isVariable: false,
+      id: 'font-x',
+      familyId: 'sf-pro',
+      fileName: 'X.ttf',
+      filePath: join(fontDir, 'x.ttf'),
+      format: 'ttf',
+      size: 4,
+      source: 'remote',
+      variant: 'Display',
+      weight: 'Bold',
+      italic: false,
+      isVariable: false,
     })
 
     await buildStaticSite({ out: outDir, baseUrl: 'https://example.test' }, ctx)
@@ -409,9 +431,7 @@ describe('buildStaticSite — SEO surface (Phase 4)', () => {
 
   test('emits canonical, alternate, OpenGraph, and JSON-LD on document pages', async () => {
     // Add an explicit `url` on the doc so the template can emit `alternate`
-    db.db.run(
-      "UPDATE documents SET url = 'https://developer.apple.com/documentation/swiftui/view' WHERE key = 'documentation/swiftui/view'",
-    )
+    db.db.run("UPDATE documents SET url = 'https://developer.apple.com/documentation/swiftui/view' WHERE key = 'documentation/swiftui/view'")
     await buildStaticSite({ out: outDir, baseUrl: 'https://example.test' }, ctx)
     const html = readFileSync(join(outDir, 'docs', 'documentation', 'swiftui', 'view', 'index.html'), 'utf8')
     expect(html).toContain('<link rel="canonical" href="https://example.test/docs/documentation/swiftui/view/">')
@@ -447,10 +467,17 @@ describe('buildStaticSite — ENAMETOOLONG-proof web paths', () => {
   beforeEach(() => {
     expect(Buffer.byteLength(longLeaf)).toBeGreaterThan(255)
     const now = new Date().toISOString()
-    db.db.run(`INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
-      VALUES ('apple-docc', ?, 'init(parameterlabel:…)', 'symbol', 'symbol', 'Initializer', 'swiftui', 'A very long initializer', ?, ?)`, [longKey, now, now])
+    db.db.run(
+      `INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
+      VALUES ('apple-docc', ?, 'init(parameterlabel:…)', 'symbol', 'symbol', 'Initializer', 'swiftui', 'A very long initializer', ?, ?)`,
+      [longKey, now, now],
+    )
     const swiftuiRoot = db.getRootBySlug('swiftui')
-    db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, ?, ?, 'init(parameterlabel:…)', 'active')`, [swiftuiRoot.id, longKey, `/${longKey}`])
+    db.db.run(`INSERT INTO pages (root_id, path, url, title, status) VALUES (?, ?, ?, 'init(parameterlabel:…)', 'active')`, [
+      swiftuiRoot.id,
+      longKey,
+      `/${longKey}`,
+    ])
     db.updateRootPageCount('swiftui')
   })
 
@@ -511,7 +538,7 @@ describe('buildStaticSite — page weight reduction (Phase 5)', () => {
     expect(fwHtml).toMatch(/data-tree-src="https:\/\/example\.test\/data\/frameworks\/swiftui\/tree\.[0-9a-f]{10}\.json"/)
     // And the hashed file itself must exist on disk.
     const treeFiles = readdirSync(join(outDir, 'data', 'frameworks', 'swiftui'))
-    expect(treeFiles.some(f => /^tree\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
+    expect(treeFiles.some((f) => /^tree\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
   })
 })
 

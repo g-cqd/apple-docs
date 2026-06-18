@@ -8,13 +8,11 @@ describe('assertFontPathContained (A6)', () => {
   const dataDir = '/tmp/apple-docs-test'
 
   test('accepts /Library/Fonts paths', () => {
-    expect(assertFontPathContained('/Library/Fonts/Helvetica.ttf', dataDir))
-      .toBe('/Library/Fonts/Helvetica.ttf')
+    expect(assertFontPathContained('/Library/Fonts/Helvetica.ttf', dataDir)).toBe('/Library/Fonts/Helvetica.ttf')
   })
 
   test('accepts /System/Library/Fonts paths', () => {
-    expect(assertFontPathContained('/System/Library/Fonts/SF-Pro.ttf', dataDir))
-      .toBe('/System/Library/Fonts/SF-Pro.ttf')
+    expect(assertFontPathContained('/System/Library/Fonts/SF-Pro.ttf', dataDir)).toBe('/System/Library/Fonts/SF-Pro.ttf')
   })
 
   test('accepts user-home Library/Fonts paths', () => {
@@ -28,26 +26,22 @@ describe('assertFontPathContained (A6)', () => {
   })
 
   test('rejects /etc/passwd', () => {
-    expect(() => assertFontPathContained('/etc/passwd', dataDir))
-      .toThrow(ValidationError)
+    expect(() => assertFontPathContained('/etc/passwd', dataDir)).toThrow(ValidationError)
   })
 
   test('rejects an arbitrary path outside approved roots', () => {
-    expect(() => assertFontPathContained('/usr/local/sneaky.ttf', dataDir))
-      .toThrow(ValidationError)
+    expect(() => assertFontPathContained('/usr/local/sneaky.ttf', dataDir)).toThrow(ValidationError)
   })
 
   test('rejects traversal that resolves outside approved roots', () => {
     // /Library/Fonts/../../etc/passwd resolves to /etc/passwd
-    expect(() => assertFontPathContained('/Library/Fonts/../../etc/passwd', dataDir))
-      .toThrow(ValidationError)
+    expect(() => assertFontPathContained('/Library/Fonts/../../etc/passwd', dataDir)).toThrow(ValidationError)
   })
 
   test('rejects traversal that resolves outside dataDir resources/fonts', () => {
     // dataDir/resources/fonts/extracted/../../escape.txt resolves to dataDir/resources/escape.txt
     const path = `${dataDir}/resources/fonts/extracted/../../escape.txt`
-    expect(() => assertFontPathContained(path, dataDir))
-      .toThrow(ValidationError)
+    expect(() => assertFontPathContained(path, dataDir)).toThrow(ValidationError)
   })
 
   test('rejects empty / null / non-string', () => {

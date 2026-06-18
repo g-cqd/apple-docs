@@ -1,21 +1,14 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { extname, join } from 'node:path'
-import { listAppleFonts, renderFontText } from '../../resources/apple-assets.js'
-import { assertFontPathContained } from '../../resources/apple-fonts/safe-font-path.js'
 import { BackpressureError, ValidationError } from '../../lib/errors.js'
 import { sha256 } from '../../lib/hash.js'
 import { contentDispositionAttachment } from '../../lib/http-content-disposition.js'
 import { buildStoreZip } from '../../lib/zip.js'
-import {
-  MIME_TYPES,
-  API_CORPUS_CACHE_CONTROL,
-  jsonResponse,
-  textResponse,
-  fileResponseRevalidated,
-  matchesIfNoneMatch,
-} from '../responses.js'
 import { projectListAppleFonts } from '../../output/projection.js'
+import { listAppleFonts, renderFontText } from '../../resources/apple-assets.js'
+import { assertFontPathContained } from '../../resources/apple-fonts/safe-font-path.js'
 import { buildFontFaceCss } from '../lib/font-faces.js'
+import { API_CORPUS_CACHE_CONTROL, fileResponseRevalidated, jsonResponse, MIME_TYPES, matchesIfNoneMatch, textResponse } from '../responses.js'
 import { validateFontText } from './render-validation.js'
 
 /**
@@ -102,15 +95,20 @@ export async function fontFamilyZipHandler(request, ctx, url, match) {
   const familyId = decodeURIComponent(match[1])
   const subset = String(url.searchParams.get('subset') ?? 'all').toLowerCase()
   const families = ctx.db.listAppleFonts()
-  const family = families.find(f => f.id === familyId)
+  const family = families.find((f) => f.id === familyId)
   if (!family || family.files.length === 0) return new Response('Not Found', { status: 404 })
-  const filtered = family.files.filter(file => {
+  const filtered = family.files.filter((file) => {
     switch (subset) {
-      case 'variable': return !!file.is_variable
-      case 'static': return !file.is_variable
-      case 'remote': return file.source === 'remote'
-      case 'system': return file.source === 'system'
-      default: return true
+      case 'variable':
+        return !!file.is_variable
+      case 'static':
+        return !file.is_variable
+      case 'remote':
+        return file.source === 'remote'
+      case 'system':
+        return file.source === 'system'
+      default:
+        return true
     }
   })
   if (filtered.length === 0) return new Response('Not Found', { status: 404 })
@@ -155,7 +153,7 @@ export async function fontFamilyZipHandler(request, ctx, url, match) {
   const baseHeaders = {
     'Content-Type': 'application/zip',
     'Content-Disposition': contentDispositionAttachment(`${familyId}${fileNameSuffix}.zip`),
-    'ETag': etag,
+    ETag: etag,
     'Cache-Control': 'public, max-age=86400, must-revalidate',
   }
   if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) {
@@ -220,11 +218,14 @@ export async function fontTextSvgHandler(_request, ctx, url) {
     throw err
   }
   try {
-    const render = await renderFontText({
-      fontId: url.searchParams.get('fontId'),
-      text: textCheck.value,
-      size: url.searchParams.get('size') ?? undefined,
-    }, ctx)
+    const render = await renderFontText(
+      {
+        fontId: url.searchParams.get('fontId'),
+        text: textCheck.value,
+        size: url.searchParams.get('size') ?? undefined,
+      },
+      ctx,
+    )
     return textResponse(render.content, {
       contentType: render.mimeType,
       headers: { 'Cache-Control': 'public, max-age=86400' },

@@ -4,15 +4,8 @@
  * non-interactively anyway).
  */
 
-import { describe, test, expect } from 'bun:test'
-import {
-  isLoaded,
-  bootstrapOrKick,
-  bootout,
-  kickstart,
-  stopOne,
-  startOne,
-} from '../../../ops/lib/launchctl.js'
+import { describe, expect, test } from 'bun:test'
+import { bootout, bootstrapOrKick, isLoaded, kickstart, startOne, stopOne } from '../../../ops/lib/launchctl.js'
 
 function recorder(scriptedExits = []) {
   const calls = []
@@ -35,9 +28,7 @@ describe('isLoaded', () => {
     const { fake, calls } = recorder([0])
     const out = await isLoaded('mt.test.web', { runCmd: fake })
     expect(out).toBe(true)
-    expect(calls[0].args).toEqual([
-      '/usr/bin/sudo', '-n', '/bin/launchctl', 'print', 'system/mt.test.web',
-    ])
+    expect(calls[0].args).toEqual(['/usr/bin/sudo', '-n', '/bin/launchctl', 'print', 'system/mt.test.web'])
   })
   test('returns false on non-zero exit', async () => {
     const { fake } = recorder([113])
@@ -52,9 +43,7 @@ describe('bootstrapOrKick', () => {
       runCmdAllowFailure: fake,
     })
     expect(r.kind).toBe('bootstrapped')
-    expect(calls[0].args.slice(-3)).toEqual([
-      'bootstrap', 'system', '/Library/LaunchDaemons/mt.test.web.plist',
-    ])
+    expect(calls[0].args.slice(-3)).toEqual(['bootstrap', 'system', '/Library/LaunchDaemons/mt.test.web.plist'])
   })
 
   test('bootstrap fails → kickstart called', async () => {
@@ -74,9 +63,7 @@ describe('bootout', () => {
   test('issues bootout with correct args', async () => {
     const { fake, calls } = recorder([0])
     await bootout('mt.test.mcp', { runCmdAllowFailure: fake })
-    expect(calls[0].args).toEqual([
-      '/usr/bin/sudo', '-n', '/bin/launchctl', 'bootout', 'system/mt.test.mcp',
-    ])
+    expect(calls[0].args).toEqual(['/usr/bin/sudo', '-n', '/bin/launchctl', 'bootout', 'system/mt.test.mcp'])
   })
   test('does not throw when label was not loaded (non-zero exit)', async () => {
     const { fake } = recorder([5])
@@ -89,9 +76,7 @@ describe('kickstart', () => {
   test('issues kickstart -k with correct args', async () => {
     const { fake, calls } = recorder([0])
     await kickstart('mt.test.web', { runCmd: fake })
-    expect(calls[0].args).toEqual([
-      '/usr/bin/sudo', '-n', '/bin/launchctl', 'kickstart', '-k', 'system/mt.test.web',
-    ])
+    expect(calls[0].args).toEqual(['/usr/bin/sudo', '-n', '/bin/launchctl', 'kickstart', '-k', 'system/mt.test.web'])
   })
 })
 
@@ -123,11 +108,13 @@ describe('stopOne', () => {
 describe('startOne', () => {
   test('refuses to start when plist file is missing', async () => {
     const fake = async () => ({ exitCode: 0 })
-    await expect(startOne('mt.test.web', '/missing.plist', {
-      fs: { exists: () => false },
-      runCmd: fake,
-      runCmdAllowFailure: fake,
-    })).rejects.toThrow(/missing/)
+    await expect(
+      startOne('mt.test.web', '/missing.plist', {
+        fs: { exists: () => false },
+        runCmd: fake,
+        runCmdAllowFailure: fake,
+      }),
+    ).rejects.toThrow(/missing/)
   })
 
   test('bootstrap-or-kicks when plist exists', async () => {

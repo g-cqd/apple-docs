@@ -59,101 +59,113 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  try { await chromium?.close?.() } catch {}
-  try { await server?.close?.() } catch {}
-  try { db?.close?.() } catch {}
+  try {
+    await chromium?.close?.()
+  } catch {}
+  try {
+    await server?.close?.()
+  } catch {}
+  try {
+    db?.close?.()
+  } catch {}
 })
 
 describe('search worker (headless Chromium)', () => {
-  test.skipIf(!HAS_LOCAL_DB)('init + search returns ranked results via Web Worker', async () => {
-    if (!playwright) {
-      console.warn('skipping browser smoke: playwright not available')
-      return
-    }
-    try {
-      chromium = await playwright.chromium.launch({ headless: true })
-    } catch (err) {
-      // The playwright package is installed but its Chromium browser build
-      // isn't (`bunx playwright install chromium`). The file docstring
-      // promises an automatic skip in that case — honour it rather than
-      // failing the run.
-      console.warn(`skipping browser smoke: Chromium build not installed (${String(err?.message).split('\n')[0]})`)
-      return
-    }
-    const ctx = await chromium.newContext()
-    const page = await ctx.newPage()
+  test.skipIf(!HAS_LOCAL_DB)(
+    'init + search returns ranked results via Web Worker',
+    async () => {
+      if (!playwright) {
+        console.warn('skipping browser smoke: playwright not available')
+        return
+      }
+      try {
+        chromium = await playwright.chromium.launch({ headless: true })
+      } catch (err) {
+        // The playwright package is installed but its Chromium browser build
+        // isn't (`bunx playwright install chromium`). The file docstring
+        // promises an automatic skip in that case — honour it rather than
+        // failing the run.
+        console.warn(`skipping browser smoke: Chromium build not installed (${String(err?.message).split('\n')[0]})`)
+        return
+      }
+      const ctx = await chromium.newContext()
+      const page = await ctx.newPage()
 
-    const pageErrors = []
-    page.on('pageerror', (err) => pageErrors.push(err.message))
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') pageErrors.push(`console.error: ${msg.text()}`)
-    })
+      const pageErrors = []
+      page.on('pageerror', (err) => pageErrors.push(err.message))
+      page.on('console', (msg) => {
+        if (msg.type() === 'error') pageErrors.push(`console.error: ${msg.text()}`)
+      })
 
-    // Land on any same-origin page so the Worker constructor accepts a
-    // relative URL.
-    await page.goto(`${server.url}/`, { waitUntil: 'domcontentloaded' })
+      // Land on any same-origin page so the Worker constructor accepts a
+      // relative URL.
+      await page.goto(`${server.url}/`, { waitUntil: 'domcontentloaded' })
 
-    // Drive init + search inside the page. Returns the worker's result
-    // payload plus a couple of internal sanity checks (worker boots,
-    // returns a non-empty array, every result has a path + title).
-    const probe = await page.evaluate(async (workerUrl) => {
-      const worker = new Worker(workerUrl)
-      function waitForType(type) {
-        return new Promise((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error(`timeout waiting for ${type}`)), 45_000)
-          worker.addEventListener('message', function onMsg(e) {
-            if (e.data?.type === 'error') {
-              clearTimeout(timer); worker.removeEventListener('message', onMsg)
-              reject(new Error(`worker error: ${e.data.message}`))
-            } else if (e.data?.type === type) {
-              clearTimeout(timer); worker.removeEventListener('message', onMsg)
-              resolve(e.data)
-            }
+      // Drive init + search inside the page. Returns the worker's result
+      // payload plus a couple of internal sanity checks (worker boots,
+      // returns a non-empty array, every result has a path + title).
+      const probe = await page.evaluate(async (workerUrl) => {
+        const worker = new Worker(workerUrl)
+        function waitForType(type) {
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error(`timeout waiting for ${type}`)), 45_000)
+            worker.addEventListener('message', function onMsg(e) {
+              if (e.data?.type === 'error') {
+                clearTimeout(timer)
+                worker.removeEventListener('message', onMsg)
+                reject(new Error(`worker error: ${e.data.message}`))
+              } else if (e.data?.type === type) {
+                clearTimeout(timer)
+                worker.removeEventListener('message', onMsg)
+                resolve(e.data)
+              }
+            })
           })
-        })
-      }
-      const initStart = performance.now()
-      worker.postMessage({ type: 'init', base: '' })
-      await waitForType('ready')
-      const initMs = performance.now() - initStart
+        }
+        const initStart = performance.now()
+        worker.postMessage({ type: 'init', base: '' })
+        await waitForType('ready')
+        const initMs = performance.now() - initStart
 
-      const searchStart = performance.now()
-      worker.postMessage({ type: 'search', query: 'View', limit: 10, seqId: 1 })
-      const r1 = await waitForType('results')
-      const searchMs = performance.now() - searchStart
+        const searchStart = performance.now()
+        worker.postMessage({ type: 'search', query: 'View', limit: 10, seqId: 1 })
+        const r1 = await waitForType('results')
+        const searchMs = performance.now() - searchStart
 
-      // Second search reuses the warm index — should be much faster.
-      const reuseStart = performance.now()
-      worker.postMessage({ type: 'search', query: 'NavigationStack', limit: 10, seqId: 2 })
-      const r2 = await waitForType('results')
-      const reuseMs = performance.now() - reuseStart
+        // Second search reuses the warm index — should be much faster.
+        const reuseStart = performance.now()
+        worker.postMessage({ type: 'search', query: 'NavigationStack', limit: 10, seqId: 2 })
+        const r2 = await waitForType('results')
+        const reuseMs = performance.now() - reuseStart
 
-      worker.terminate()
-      return {
-        initMs, searchMs, reuseMs,
-        firstQuery: r1.results.map(r => ({ path: r.key, title: r.title })),
-        secondQuery: r2.results.map(r => ({ path: r.key, title: r.title })),
-      }
-    }, '/worker/search-worker.js')
+        worker.terminate()
+        return {
+          initMs,
+          searchMs,
+          reuseMs,
+          firstQuery: r1.results.map((r) => ({ path: r.key, title: r.title })),
+          secondQuery: r2.results.map((r) => ({ path: r.key, title: r.title })),
+        }
+      }, '/worker/search-worker.js')
 
-    expect(probe.firstQuery.length).toBeGreaterThan(0)
-    expect(probe.firstQuery[0]).toHaveProperty('path')
-    expect(probe.firstQuery[0]).toHaveProperty('title')
-    expect(probe.firstQuery.every(r => typeof r.path === 'string' && r.path.length > 0)).toBe(true)
-    // A query for "View" on a SwiftUI corpus should obviously hit
-    // documentation/swiftui/view among the top results.
-    expect(probe.firstQuery.some(r => r.path.toLowerCase().includes('swiftui/view'))).toBe(true)
+      expect(probe.firstQuery.length).toBeGreaterThan(0)
+      expect(probe.firstQuery[0]).toHaveProperty('path')
+      expect(probe.firstQuery[0]).toHaveProperty('title')
+      expect(probe.firstQuery.every((r) => typeof r.path === 'string' && r.path.length > 0)).toBe(true)
+      // A query for "View" on a SwiftUI corpus should obviously hit
+      // documentation/swiftui/view among the top results.
+      expect(probe.firstQuery.some((r) => r.path.toLowerCase().includes('swiftui/view'))).toBe(true)
 
-    // Warm-search latency should be well under cold-init latency
-    // (this is what the Uint32Array conversion buys us).
-    expect(probe.reuseMs).toBeLessThan(probe.initMs)
+      // Warm-search latency should be well under cold-init latency
+      // (this is what the Uint32Array conversion buys us).
+      expect(probe.reuseMs).toBeLessThan(probe.initMs)
 
-    expect(pageErrors).toEqual([])
+      expect(pageErrors).toEqual([])
 
-    console.log(
-      `  worker: init=${probe.initMs.toFixed(0)}ms cold-search=${probe.searchMs.toFixed(0)}ms warm-search=${probe.reuseMs.toFixed(0)}ms`,
-    )
+      console.log(`  worker: init=${probe.initMs.toFixed(0)}ms cold-search=${probe.searchMs.toFixed(0)}ms warm-search=${probe.reuseMs.toFixed(0)}ms`)
 
-    await ctx.close()
-  }, 90_000)
+      await ctx.close()
+    },
+    90_000,
+  )
 })

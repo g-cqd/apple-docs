@@ -1,13 +1,13 @@
 import { AssertionError, NotFoundError } from '../lib/errors.js'
-import { AppleDoccAdapter } from './apple-docc.js'
 import { AppleArchiveAdapter } from './apple-archive.js'
+import { AppleDoccAdapter } from './apple-docc.js'
 import { SourceAdapter } from './base.js'
+import { ExternalDoccAdapter } from './external-docc.js'
 import { GuidelinesAdapter } from './guidelines.js'
-import { PackagesAdapter } from './packages.js'
 import { HigAdapter } from './hig.js'
+import { PackagesAdapter } from './packages.js'
 import { SampleCodeAdapter } from './sample-code.js'
 import { SwiftBookAdapter } from './swift-book.js'
-import { ExternalDoccAdapter } from './external-docc.js'
 import { SwiftDoccAdapter } from './swift-docc.js'
 import { SwiftEvolutionAdapter } from './swift-evolution.js'
 import { SwiftOrgAdapter } from './swift-org.js'
@@ -31,7 +31,7 @@ export function getAdapter(sourceType) {
 }
 
 export function getAllAdapters() {
-  return [...registry.values()].map(AdapterClass => new AdapterClass())
+  return [...registry.values()].map((AdapterClass) => new AdapterClass())
 }
 
 export function getAdapterTypes() {

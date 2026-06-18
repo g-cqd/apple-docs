@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { recordBenchmark, readHistory, compareToPrevious } from '../../benchmarks/history.js'
+import { join } from 'node:path'
+import { compareToPrevious, readHistory, recordBenchmark } from '../../benchmarks/history.js'
 
 let tmpDir
 

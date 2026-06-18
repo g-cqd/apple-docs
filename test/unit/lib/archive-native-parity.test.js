@@ -10,10 +10,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { _resetNativeLoader, getNativeLib } from '../../../src/native/loader.js'
 import { _forceImpl, createTarZstArchive } from '../../../src/lib/archive-native.js'
 import { createTarZstArchive as jsCreateTarZstArchive } from '../../../src/lib/archive-zstd.js'
 import { sha256File } from '../../../src/lib/hash.js'
+import { _resetNativeLoader, getNativeLib } from '../../../src/native/loader.js'
 
 _resetNativeLoader()
 const lib = getNativeLib()

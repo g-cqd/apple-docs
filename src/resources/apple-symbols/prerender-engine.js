@@ -20,9 +20,9 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { ValidationError } from '../../lib/errors.js'
 import { ensureDir } from '../../storage/files.js'
-import { symbolPdfToSvg } from '../symbol-pdf-to-svg.js'
-import { SYMBOL_WORKER_SCRIPT } from '../swift-templates.js'
 import { nativeSymbolPdfBatch } from '../render-native.js'
+import { SYMBOL_WORKER_SCRIPT } from '../swift-templates.js'
+import { symbolPdfToSvg } from '../symbol-pdf-to-svg.js'
 import { getPrerenderedSymbolPath } from './cache-key.js'
 
 export const SYMBOL_DEFAULT_RENDER_SIZE = 128
@@ -61,9 +61,7 @@ export async function renderScopeBucketNative({ scope, symbols, variants, ctx, c
   const fallback = []
   for (let i = 0; i < queue.length; i += NATIVE_CHUNK) {
     const chunk = queue.slice(i, i + NATIVE_CHUNK)
-    const pdfs = nativeSymbolPdfBatch(
-      chunk.map(item => ({ name: item.symbol.name, scope, weight: item.weight, scale: item.scale })),
-    )
+    const pdfs = nativeSymbolPdfBatch(chunk.map((item) => ({ name: item.symbol.name, scope, weight: item.weight, scale: item.scale })))
     if (pdfs === null) {
       for (const item of chunk) fallback.push(item)
       continue
@@ -149,13 +147,17 @@ async function processSymbolQueue({ worker, queue, ctx, scope, result, onProgres
       if (bitmapOnly) {
         logger?.debug?.(`Skip ${scope}/${symbol.name} (${weight}/${scale}): no vector form`)
         result.skipped++
-        try { ctx.db.markSfSymbolBitmapOnly(scope, symbol.name) } catch {}
+        try {
+          ctx.db.markSfSymbolBitmapOnly(scope, symbol.name)
+        } catch {}
       } else {
         logger?.warn?.(`Pre-render failed for ${scope}/${symbol.name} (${weight}/${scale}): ${msg}`)
         result.failed++
         result.failures.push({ scope, name: symbol.name, weight, scale, error: msg })
         // Worker actually died (broken pipe, crash, etc.) — restart.
-        try { activeWorker.close() } catch {}
+        try {
+          activeWorker.close()
+        } catch {}
         activeWorker = await restart()
       }
       onProgress?.(result)
@@ -171,7 +173,9 @@ async function processSymbolQueue({ worker, queue, ctx, scope, result, onProgres
     // records the failure).
     await writeSymbolSvg({ ctx, scope, item: { symbol, weight, scale }, pdfBytes, logger, result, onProgress })
   }
-  try { activeWorker.close() } catch {}
+  try {
+    activeWorker.close()
+  } catch {}
 }
 
 async function spawnSymbolWorker({ scope, logger }) {
@@ -232,17 +236,16 @@ async function spawnSymbolWorker({ scope, logger }) {
           }
           return payload
         })(),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`symbol worker frame timeout after 30s for ${scope}/${name}`)),
-            30_000,
-          ),
-        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`symbol worker frame timeout after 30s for ${scope}/${name}`)), 30_000)),
       ])
     },
     close() {
-      try { proc.stdin.end?.() } catch {}
-      try { proc.kill() } catch {}
+      try {
+        proc.stdin.end?.()
+      } catch {}
+      try {
+        proc.kill()
+      } catch {}
       void rm(stagingDir, { recursive: true, force: true }).catch(() => {})
     },
   }

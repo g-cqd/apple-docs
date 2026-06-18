@@ -17,8 +17,8 @@
  */
 
 import { join } from 'node:path'
-import { quantize, quantizeTo, hamming, hammingU32, dotI8, VECTOR_DIMS, VECTOR_BYTES } from './embedding.js'
 import { getEmbedder } from './embedder.js'
+import { dotI8, hamming, hammingU32, quantize, quantizeTo, VECTOR_BYTES, VECTOR_DIMS } from './embedding.js'
 
 // Per-DB packed vector store (WeakMap → no cross-instance collision, auto-GC).
 // Invalidated cheaply by row count + mode; fully dropped by _resetVectorCache.
@@ -35,7 +35,7 @@ export function isSemanticAvailable(db) {
 /** Resolve the embedding width the snapshot was built at (meta, else infer). */
 function readDims(db, fallback) {
   const meta = typeof db.getSnapshotMeta === 'function' ? db.getSnapshotMeta('embed_dims') : null
-  const n = meta ? Number.parseInt(meta, 10) : NaN
+  const n = meta ? Number.parseInt(meta, 10) : Number.NaN
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
@@ -43,7 +43,10 @@ function loadVectors(db) {
   const chunkCount = typeof db.getChunkCount === 'function' ? db.getChunkCount() : 0
   if (chunkCount > 0) return resolveStore(db, 'chunk', chunkCount, () => buildChunkStore(db, chunkCount))
   const vectorCount = db.getVectorCount()
-  if (vectorCount === 0) { caches.delete(db); return null }
+  if (vectorCount === 0) {
+    caches.delete(db)
+    return null
+  }
   return resolveStore(db, 'legacy', vectorCount, () => buildLegacyStore(db, vectorCount))
 }
 
@@ -63,7 +66,7 @@ function buildLegacyStore(db, count) {
   // Keep only codes whose width matches the live size — an older snapshot
   // (48-byte MiniLM) read by the 64-byte reader is a mismatch; skipping those
   // degrades to lexical-only instead of Hamming-scanning misaligned bytes.
-  const usable = rows.filter(r => r.vec && r.vec.length === VECTOR_BYTES)
+  const usable = rows.filter((r) => r.vec && r.vec.length === VECTOR_BYTES)
   if (usable.length === 0) return { mode: 'legacy', count, usable: false }
   const ids = new Int32Array(usable.length)
   const packed = new Uint8Array(usable.length * VECTOR_BYTES)
@@ -77,11 +80,11 @@ function buildLegacyStore(db, count) {
 /** Chunk store: resident binary codes + chunk→doc map (int8 fetched on demand). */
 function buildChunkStore(db, count) {
   const rows = db.getAllChunkVectors()
-  const sample = rows.find(r => r.vec_bin)
+  const sample = rows.find((r) => r.vec_bin)
   if (!sample) return { mode: 'chunk', count, usable: false }
   const dims = readDims(db, sample.vec_bin.length * 8)
   const binWidth = Math.ceil(dims / 8)
-  const usable = rows.filter(r => r.vec_bin && r.vec_bin.length === binWidth)
+  const usable = rows.filter((r) => r.vec_bin && r.vec_bin.length === binWidth)
   if (usable.length === 0) return { mode: 'chunk', count, usable: false }
   const n = usable.length
   const binPacked = new Uint8Array(n * binWidth)
@@ -119,9 +122,7 @@ export async function semanticCandidates(ctx, query, topK = 50) {
     store.versionChecked = true
     const stored = (typeof db.getSnapshotMeta === 'function' && db.getSnapshotMeta('embed_version')) || '1'
     if (stored !== String(embedder.embedVersion)) {
-      logger?.info?.(
-        `semantic index was embedded at behavior v${stored}, live embedder is v${embedder.embedVersion} — serving; re-index to upgrade`,
-      )
+      logger?.info?.(`semantic index was embedded at behavior v${stored}, live embedder is v${embedder.embedVersion} — serving; re-index to upgrade`)
     }
   }
 
@@ -135,9 +136,7 @@ export async function semanticCandidates(ctx, query, topK = 50) {
     logger?.debug?.(`semantic tier dims mismatch (query ${qFp32.length} vs index ${store.dims}) — lexical-only`)
     return []
   }
-  return store.mode === 'chunk'
-    ? chunkSearch(db, store, qFp32, topK, logger)
-    : legacySearch(store, qFp32, topK)
+  return store.mode === 'chunk' ? chunkSearch(db, store, qFp32, topK, logger) : legacySearch(store, qFp32, topK)
 }
 
 /** Legacy path: Hamming top-K over whole-doc codes. */
@@ -160,9 +159,7 @@ function chunkSearch(db, store, qFp32, topK, logger) {
   const shortlistN = clampInt(process.env.APPLE_DOCS_SEMANTIC_SHORTLIST, 200, 16, 5000)
   const shortlist = shortlistByHamming(qBin, store.binPacked, store.binWidth, store.n, shortlistN)
   const rescore = process.env.APPLE_DOCS_RESCORE !== 'off'
-  const i8Map = rescore
-    ? db.getChunkI8Batch(shortlist.map(({ idx }) => store.chunkId[idx]))
-    : null
+  const i8Map = rescore ? db.getChunkI8Batch(shortlist.map(({ idx }) => store.chunkId[idx])) : null
 
   // Max-pool chunk scores up to their documents; keep each doc's best chunk
   // (its code becomes the doc's vector for the MMR diversity pass downstream).

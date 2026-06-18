@@ -19,9 +19,7 @@ export function createChunksRepo(db) {
   const countStmt = db.query('SELECT COUNT(*) AS c FROM document_chunks')
   let countMemo // undefined = unread; busted by the write paths below + resetCountCache
   const allBinStmt = db.query('SELECT chunk_id, document_id, vec_bin FROM document_chunks ORDER BY document_id, ord')
-  const upsertStmt = db.query(
-    'INSERT OR REPLACE INTO document_chunks(document_id, ord, text, vec_bin, vec_i8) VALUES ($doc, $ord, $text, $bin, $i8)',
-  )
+  const upsertStmt = db.query('INSERT OR REPLACE INTO document_chunks(document_id, ord, text, vec_bin, vec_i8) VALUES ($doc, $ord, $text, $bin, $i8)')
   const deleteByDocStmt = db.query('DELETE FROM document_chunks WHERE document_id = ?')
 
   return {
@@ -47,10 +45,11 @@ export function createChunksRepo(db) {
       const out = new Map()
       for (let i = 0; i < chunkIds.length; i += 500) {
         const ids = chunkIds.slice(i, i + 500)
-        const rows = safeCall(
-          () => db.query(`SELECT chunk_id, vec_i8 FROM document_chunks WHERE chunk_id IN (${ids.map(() => '?').join(',')})`).all(...ids),
-          { default: [], log: 'warn-once', label: 'chunks.i8Batch' },
-        )
+        const rows = safeCall(() => db.query(`SELECT chunk_id, vec_i8 FROM document_chunks WHERE chunk_id IN (${ids.map(() => '?').join(',')})`).all(...ids), {
+          default: [],
+          log: 'warn-once',
+          label: 'chunks.i8Batch',
+        })
         for (const r of rows) if (r.vec_i8) out.set(r.chunk_id, r.vec_i8)
       }
       return out

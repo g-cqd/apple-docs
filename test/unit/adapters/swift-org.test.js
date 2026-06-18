@@ -75,7 +75,9 @@ describe('SwiftOrgAdapter', () => {
       const adapter = new SwiftOrgAdapter()
       const ctx = {
         db: {
-          getRootBySlug() { return root },
+          getRootBySlug() {
+            return root
+          },
           upsertRoot(slug, displayName, kind, source) {
             root = { slug, display_name: displayName, kind, source }
             return root
@@ -106,7 +108,9 @@ describe('SwiftOrgAdapter', () => {
       const adapter = new SwiftOrgAdapter()
       const ctx = {
         db: {
-          getRootBySlug() { return root },
+          getRootBySlug() {
+            return root
+          },
           upsertRoot(slug, displayName, kind, source) {
             root = { slug, display_name: displayName, kind, source }
             return root
@@ -127,7 +131,9 @@ describe('SwiftOrgAdapter', () => {
       const adapter = new SwiftOrgAdapter()
       const ctx = {
         db: {
-          getRootBySlug() { return root },
+          getRootBySlug() {
+            return root
+          },
           upsertRoot(slug, displayName, kind, source) {
             upsertCalled = true
             root = { slug, display_name: displayName, kind, source }
@@ -148,7 +154,9 @@ describe('SwiftOrgAdapter', () => {
       const adapter = new SwiftOrgAdapter()
       const ctx = {
         db: {
-          getRootBySlug() { return existingRoot },
+          getRootBySlug() {
+            return existingRoot
+          },
           upsertRoot() {
             upsertCallCount++
             return existingRoot
@@ -166,7 +174,9 @@ describe('SwiftOrgAdapter', () => {
       const adapter = new SwiftOrgAdapter()
       const ctx = {
         db: {
-          getRootBySlug() { return root },
+          getRootBySlug() {
+            return root
+          },
           upsertRoot(slug, displayName, kind, source) {
             root = { slug, display_name: displayName, kind, source }
             return root
@@ -238,21 +248,21 @@ describe('SwiftOrgAdapter', () => {
       </main></body></html>`
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/getting-started/cli-swiftpm', html)
-      const sec = result.sections.find(s => s.heading === 'Section')
+      const sec = result.sections.find((s) => s.heading === 'Section')
       expect(sec.contentText).toContain('`swift --version`')
       expect(sec.contentText).toContain('```')
       expect(sec.contentText).toContain('let x = 1')
     })
 
     test('injects a "Related Documentation" topics section on /documentation', () => {
-      const html = `<html><body><main><h1>Documentation</h1><p>Welcome.</p></main></body></html>`
+      const html = '<html><body><main><h1>Documentation</h1><p>Welcome.</p></main></body></html>'
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/documentation', html)
 
-      const topics = result.sections.find(s => s.sectionKind === 'topics' && s.heading === 'Related Documentation')
+      const topics = result.sections.find((s) => s.sectionKind === 'topics' && s.heading === 'Related Documentation')
       expect(topics).toBeDefined()
       const items = JSON.parse(topics.contentJson)[0].items
-      const keys = items.map(i => i.key)
+      const keys = items.map((i) => i.key)
       expect(keys).toContain('swift-compiler/documentation/diagnostics')
       expect(keys).toContain('swift-package-manager/documentation/packagemanagerdocs')
       expect(keys).toContain('swift-migration-guide/documentation/migrationguide')
@@ -260,19 +270,19 @@ describe('SwiftOrgAdapter', () => {
     })
 
     test('emits see_also relationships for archive cross-links', () => {
-      const html = `<html><body><main><h1>Documentation</h1></main></body></html>`
+      const html = '<html><body><main><h1>Documentation</h1></main></body></html>'
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/documentation', html)
-      const seeAlso = result.relationships.filter(r => r.relationType === 'see_also')
+      const seeAlso = result.relationships.filter((r) => r.relationType === 'see_also')
       expect(seeAlso.length).toBeGreaterThanOrEqual(4)
-      expect(seeAlso.map(r => r.toKey)).toContain('swift-compiler/documentation/diagnostics')
+      expect(seeAlso.map((r) => r.toKey)).toContain('swift-compiler/documentation/diagnostics')
     })
 
     test('does not inject cross-links on unrelated pages', () => {
-      const html = `<html><body><main><h1>Concurrency</h1></main></body></html>`
+      const html = '<html><body><main><h1>Concurrency</h1></main></body></html>'
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/about', html)
-      const topics = result.sections.find(s => s.heading === 'Related Documentation')
+      const topics = result.sections.find((s) => s.heading === 'Related Documentation')
       expect(topics).toBeUndefined()
     })
   })
@@ -286,7 +296,7 @@ describe('SwiftOrgAdapter', () => {
       </main></body></html>`
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/getting-started', html)
-      const sec = result.sections.find(s => s.heading === 'Section')
+      const sec = result.sections.find((s) => s.heading === 'Section')
       expect(sec.contentText).toContain('](/docs/swift-org/install/)')
       expect(sec.contentText).toContain('](/docs/swift-org/getting-started/cli-swiftpm/)')
       expect(sec.contentText).not.toMatch(/]\(\/install\)/)
@@ -300,7 +310,7 @@ describe('SwiftOrgAdapter', () => {
       </main></body></html>`
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/documentation', html)
-      const sec = result.sections.find(s => s.heading === 'Section')
+      const sec = result.sections.find((s) => s.heading === 'Section')
       expect(sec.contentText).toContain('/docs/swift-package-manager/documentation/packagemanagerdocs/')
       expect(sec.contentText).toContain('/docs/swift-migration-guide/documentation/migrationguide/')
     })
@@ -313,7 +323,7 @@ describe('SwiftOrgAdapter', () => {
       </main></body></html>`
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/getting-started', html)
-      const sec = result.sections.find(s => s.heading === 'S')
+      const sec = result.sections.find((s) => s.heading === 'S')
       expect(sec.contentText).toContain('/docs/swift-book/documentation/the-swift-programming-language/guidedtour/')
     })
 
@@ -325,7 +335,7 @@ describe('SwiftOrgAdapter', () => {
       </main></body></html>`
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/about', html)
-      const sec = result.sections.find(s => s.heading === 'S')
+      const sec = result.sections.find((s) => s.heading === 'S')
       expect(sec.contentText).toContain('](https://swift.org/LICENSE.txt)')
       expect(sec.contentText).toContain('](https://swift.org/blog/something)')
     })
@@ -338,7 +348,7 @@ describe('SwiftOrgAdapter', () => {
       </main></body></html>`
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/about', html)
-      const sec = result.sections.find(s => s.heading === 'S')
+      const sec = result.sections.find((s) => s.heading === 'S')
       expect(sec.contentText).toContain('](https://github.com/apple/swift)')
     })
 
@@ -350,7 +360,7 @@ describe('SwiftOrgAdapter', () => {
       </main></body></html>`
       const adapter = new SwiftOrgAdapter()
       const result = adapter.normalize('swift-org/about', html)
-      const sec = result.sections.find(s => s.heading === 'S')
+      const sec = result.sections.find((s) => s.heading === 'S')
       expect(sec.contentText).toContain('/docs/swift-org/contributing/#reporting-bugs')
     })
 
@@ -399,11 +409,7 @@ describe('SwiftOrgAdapter', () => {
       globalThis.fetch = async () => ({ status: 304, ok: false, headers: { get: () => null } })
 
       const adapter = new SwiftOrgAdapter()
-      const result = await adapter.check(
-        'swift-org/documentation/concurrency',
-        { etag: '"abc123"' },
-        { rateLimiter: { acquire: async () => {} } },
-      )
+      const result = await adapter.check('swift-org/documentation/concurrency', { etag: '"abc123"' }, { rateLimiter: { acquire: async () => {} } })
 
       expect(result.status).toBe('unchanged')
       expect(result.changed).toBe(false)
@@ -413,15 +419,11 @@ describe('SwiftOrgAdapter', () => {
       globalThis.fetch = async () => ({
         status: 200,
         ok: true,
-        headers: { get: (h) => h === 'etag' ? '"new-etag"' : null },
+        headers: { get: (h) => (h === 'etag' ? '"new-etag"' : null) },
       })
 
       const adapter = new SwiftOrgAdapter()
-      const result = await adapter.check(
-        'swift-org/documentation/concurrency',
-        { etag: '"old-etag"' },
-        { rateLimiter: { acquire: async () => {} } },
-      )
+      const result = await adapter.check('swift-org/documentation/concurrency', { etag: '"old-etag"' }, { rateLimiter: { acquire: async () => {} } })
 
       expect(result.status).toBe('modified')
       expect(result.changed).toBe(true)
@@ -431,11 +433,7 @@ describe('SwiftOrgAdapter', () => {
       globalThis.fetch = async () => ({ status: 404, ok: false, headers: { get: () => null } })
 
       const adapter = new SwiftOrgAdapter()
-      const result = await adapter.check(
-        'swift-org/documentation/concurrency',
-        { etag: '"abc123"' },
-        { rateLimiter: { acquire: async () => {} } },
-      )
+      const result = await adapter.check('swift-org/documentation/concurrency', { etag: '"abc123"' }, { rateLimiter: { acquire: async () => {} } })
 
       expect(result.status).toBe('deleted')
       expect(result.deleted).toBe(true)
@@ -448,11 +446,7 @@ describe('SwiftOrgAdapter', () => {
       }
 
       const adapter = new SwiftOrgAdapter()
-      const result = await adapter.check(
-        'swift-org/documentation/concurrency',
-        { etag: '"abc123"' },
-        { rateLimiter: { acquire: async () => {} } },
-      )
+      const result = await adapter.check('swift-org/documentation/concurrency', { etag: '"abc123"' }, { rateLimiter: { acquire: async () => {} } })
 
       expect(result.status).toBe('error')
       expect(result.changed).toBe(false)
@@ -466,11 +460,7 @@ describe('SwiftOrgAdapter', () => {
       })
 
       const adapter = new SwiftOrgAdapter()
-      const result = await adapter.check(
-        'swift-org/documentation/concurrency',
-        { etag: '"old-etag"' },
-        { rateLimiter: { acquire: async () => {} } },
-      )
+      const result = await adapter.check('swift-org/documentation/concurrency', { etag: '"old-etag"' }, { rateLimiter: { acquire: async () => {} } })
 
       expect(result.newState?.etag).toBe('"old-etag"')
     })
@@ -483,11 +473,7 @@ describe('SwiftOrgAdapter', () => {
       }
 
       const adapter = new SwiftOrgAdapter()
-      await adapter.check(
-        'swift-org/getting-started/cli-swiftpm',
-        null,
-        { rateLimiter: { acquire: async () => {} } },
-      )
+      await adapter.check('swift-org/getting-started/cli-swiftpm', null, { rateLimiter: { acquire: async () => {} } })
 
       expect(capturedUrl).toBe('https://swift.org/getting-started/cli-swiftpm')
     })

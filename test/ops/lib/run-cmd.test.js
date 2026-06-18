@@ -4,8 +4,8 @@
  * makes timing-sensitive tests (deadlines) reproducible.
  */
 
-import { describe, test, expect } from 'bun:test'
-import { runCmd, runCmdAllowFailure, RunCmdError } from '../../../ops/lib/run-cmd.js'
+import { describe, expect, test } from 'bun:test'
+import { RunCmdError, runCmd, runCmdAllowFailure } from '../../../ops/lib/run-cmd.js'
 
 function fakeSpawn({ exitCode = 0, stdout = '', stderr = '', delayMs = 0, killOnSignal = true } = {}) {
   return (args, opts) => {
@@ -13,17 +13,18 @@ function fakeSpawn({ exitCode = 0, stdout = '', stderr = '', delayMs = 0, killOn
     let kill = () => {}
     const stdoutStream = stream(stdout)
     const stderrStream = stream(stderr)
-    const exited = delayMs > 0
-      ? new Promise((resolve) => {
-          const timer = setTimeout(() => resolve(exitCode), delayMs)
-          kill = (_sig) => {
-            if (killOnSignal) {
-              clearTimeout(timer)
-              resolve(137) // SIGKILL maps to 128 + 9 = 137
+    const exited =
+      delayMs > 0
+        ? new Promise((resolve) => {
+            const timer = setTimeout(() => resolve(exitCode), delayMs)
+            kill = (_sig) => {
+              if (killOnSignal) {
+                clearTimeout(timer)
+                resolve(137) // SIGKILL maps to 128 + 9 = 137
+              }
             }
-          }
-        })
-      : Promise.resolve(exitCode)
+          })
+        : Promise.resolve(exitCode)
     return {
       stdout: stdoutStream,
       stderr: stderrStream,
@@ -40,7 +41,10 @@ function stream(text) {
   let cursor = 0
   return new ReadableStream({
     pull(controller) {
-      if (cursor >= bytes.length) { controller.close(); return }
+      if (cursor >= bytes.length) {
+        controller.close()
+        return
+      }
       controller.enqueue(bytes.subarray(cursor))
       cursor = bytes.length
     },
@@ -113,7 +117,10 @@ describe('runCmd', () => {
       const wrapped = fakeSpawn({ stdout: 'ok' })(args, opts)
       // advance the clock between start and finish so elapsedMs > 0
       const original = wrapped.exited
-      wrapped.exited = original.then((c) => { t += 42; return c })
+      wrapped.exited = original.then((c) => {
+        t += 42
+        return c
+      })
       return wrapped
     }
     const r = await runCmd(['x'], { deps: { spawn, clock } })
@@ -131,8 +138,6 @@ describe('runCmdAllowFailure', () => {
 
   test('still throws on timeout', async () => {
     const spawn = fakeSpawn({ delayMs: 1000 })
-    await expect(
-      runCmdAllowFailure(['hang'], { deadlineMs: 10, deps: { spawn } }),
-    ).rejects.toBeInstanceOf(RunCmdError)
+    await expect(runCmdAllowFailure(['hang'], { deadlineMs: 10, deps: { spawn } })).rejects.toBeInstanceOf(RunCmdError)
   })
 })

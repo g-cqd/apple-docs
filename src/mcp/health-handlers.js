@@ -9,16 +9,7 @@
  * an operator can probe how the process is loaded without scraping a
  * separate metrics endpoint.
  */
-export function buildHealthBody({
-  exposeCacheStats,
-  cacheRegistry,
-  markdownCache,
-  heavyMax,
-  heavyQueue,
-  heavySemaphore,
-  concurrencyStats,
-  readerPool,
-}) {
+export function buildHealthBody({ exposeCacheStats, cacheRegistry, markdownCache, heavyMax, heavyQueue, heavySemaphore, concurrencyStats, readerPool }) {
   const body = { ok: true, service: 'apple-docs-mcp' }
   if (!exposeCacheStats) return body
   body.cache = cacheRegistry.stats()
@@ -51,7 +42,9 @@ export function buildReadinessResponse({ ctx, readerPool }) {
     try {
       readerStats = readerPool.stats?.()
       readerOk = (readerStats?.active ?? 0) > 0
-    } catch { readerOk = false }
+    } catch {
+      readerOk = false
+    }
   }
   const ready = dbOk && readerOk
   return Response.json(

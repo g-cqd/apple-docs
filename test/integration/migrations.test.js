@@ -1,10 +1,10 @@
-import { describe, test, expect } from 'bun:test'
-import { DocsDatabase } from '../../src/storage/database.js'
 import { Database } from 'bun:sqlite'
-import { SCHEMA_VERSION } from '../../src/storage/migrations/index.js'
+import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DocsDatabase } from '../../src/storage/database.js'
+import { SCHEMA_VERSION } from '../../src/storage/migrations/index.js'
 
 describe('Migration E2E (P8-G)', () => {
   test('fresh DB creates all tables at current schema version', () => {
@@ -12,10 +12,8 @@ describe('Migration E2E (P8-G)', () => {
     const version = db.getSchemaVersion()
     expect(version).toBe(SCHEMA_VERSION)
 
-    const tables = db.db
-      .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .all()
-    const tableNames = tables.map(t => t.name)
+    const tables = db.db.query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()
+    const tableNames = tables.map((t) => t.name)
 
     // Core tables from initial schema (v1)
     expect(tableNames).toContain('schema_meta')
@@ -53,10 +51,8 @@ describe('Migration E2E (P8-G)', () => {
   test('fresh DB creates all FTS virtual tables', () => {
     const db = new DocsDatabase(':memory:')
 
-    const virtualTables = db.db
-      .query("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%fts%' OR name LIKE '%trigram%' ORDER BY name")
-      .all()
-    const virtualTableNames = virtualTables.map(t => t.name)
+    const virtualTables = db.db.query("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%fts%' OR name LIKE '%trigram%' ORDER BY name").all()
+    const virtualTableNames = virtualTables.map((t) => t.name)
 
     // v21 dropped the dead legacy pages FTS (pages_fts / titles_trigram / pages_body_fts)
     expect(virtualTableNames).not.toContain('pages_fts')
@@ -87,7 +83,7 @@ describe('Migration E2E (P8-G)', () => {
   test('documents title has a NOCASE lookup index', () => {
     const db = new DocsDatabase(':memory:')
     const indexes = db.db.query('PRAGMA index_list(documents)').all()
-    expect(indexes.map(index => index.name)).toContain('idx_documents_title_nocase')
+    expect(indexes.map((index) => index.name)).toContain('idx_documents_title_nocase')
     db.close()
   })
 
@@ -170,9 +166,7 @@ describe('Migration E2E (P8-G)', () => {
     expect(page.abstract).toBe('A type that represents part of your app UI')
 
     // The document record must also exist in the documents table directly
-    const doc = db.db
-      .query("SELECT * FROM documents WHERE key = 'documentation/swiftui/view'")
-      .get()
+    const doc = db.db.query("SELECT * FROM documents WHERE key = 'documentation/swiftui/view'").get()
     expect(doc).not.toBeNull()
     expect(doc.title).toBe('View')
     expect(doc.role).toBe('symbol')
@@ -195,9 +189,7 @@ describe('Migration E2E (P8-G)', () => {
     })
 
     // documents_fts is the primary FTS table for normalized documents
-    const results = db.db
-      .query("SELECT key FROM documents_fts WHERE documents_fts MATCH 'example'")
-      .all()
+    const results = db.db.query("SELECT key FROM documents_fts WHERE documents_fts MATCH 'example'").all()
     expect(results.length).toBeGreaterThanOrEqual(1)
     expect(results[0].key).toBe('documentation/test/exampleview')
 
@@ -208,13 +200,9 @@ describe('Migration E2E (P8-G)', () => {
     const db = new DocsDatabase(':memory:')
 
     // The documents_ai trigger must mirror the row into documents_fts on insert.
-    db.db.run(
-      "INSERT INTO documents (key, title, abstract_text) VALUES ('documentation/test/searchable', 'SearchableList', 'A searchable list component')",
-    )
+    db.db.run("INSERT INTO documents (key, title, abstract_text) VALUES ('documentation/test/searchable', 'SearchableList', 'A searchable list component')")
 
-    const results = db.db
-      .query("SELECT key FROM documents_fts WHERE documents_fts MATCH 'searchable'")
-      .all()
+    const results = db.db.query("SELECT key FROM documents_fts WHERE documents_fts MATCH 'searchable'").all()
     expect(results.length).toBeGreaterThanOrEqual(1)
 
     db.close()
@@ -224,9 +212,7 @@ describe('Migration E2E (P8-G)', () => {
     const db = new DocsDatabase(':memory:')
 
     expect(() => {
-      db.db
-        .query("INSERT INTO documents_fts(documents_fts) VALUES('integrity-check')")
-        .run()
+      db.db.query("INSERT INTO documents_fts(documents_fts) VALUES('integrity-check')").run()
     }).not.toThrow()
 
     db.close()
@@ -235,9 +221,7 @@ describe('Migration E2E (P8-G)', () => {
   test('schema_meta table holds exactly the schema_version key after init', () => {
     const db = new DocsDatabase(':memory:')
 
-    const row = db.db
-      .query("SELECT value FROM schema_meta WHERE key = 'schema_version'")
-      .get()
+    const row = db.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
     expect(row).not.toBeNull()
     expect(row.value).toBe(String(SCHEMA_VERSION))
 
@@ -247,15 +231,11 @@ describe('Migration E2E (P8-G)', () => {
   test('framework_synonyms are seeded on fresh DB', () => {
     const db = new DocsDatabase(':memory:')
 
-    const synonyms = db.db
-      .query('SELECT canonical, alias FROM framework_synonyms ORDER BY canonical, alias')
-      .all()
+    const synonyms = db.db.query('SELECT canonical, alias FROM framework_synonyms ORDER BY canonical, alias').all()
     expect(synonyms.length).toBeGreaterThan(0)
 
     // quartzcore <-> coreanimation is a known seeded pair
-    const quartzEntry = synonyms.find(
-      s => s.canonical === 'quartzcore' && s.alias === 'coreanimation',
-    )
+    const quartzEntry = synonyms.find((s) => s.canonical === 'quartzcore' && s.alias === 'coreanimation')
     expect(quartzEntry).not.toBeUndefined()
 
     db.close()

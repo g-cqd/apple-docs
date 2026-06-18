@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
 import { homedir } from 'node:os'
-import { DocsDatabase } from '../../src/storage/database.js'
+import { join, resolve } from 'node:path'
 import { search } from '../../src/commands/search.js'
+import { DocsDatabase } from '../../src/storage/database.js'
 import { createReaderPool } from '../../src/storage/reader-pool.js'
 import { startDevServer } from '../../src/web/serve.js'
 import { recordBenchmark } from './history.js'
@@ -23,13 +23,9 @@ const DEFAULT_CASES = [
   { name: 'framework-filter', query: 'NavigationStack', opts: { limit: 10, framework: 'swiftui', noDeep: true, fuzzy: false, fast: true } },
 ]
 
-const FUZZY_CASES = [
-  { name: 'typo-fuzzy', query: 'Publsher', slo: false, opts: { limit: 10, noDeep: true, fuzzy: true, fast: true } },
-]
+const FUZZY_CASES = [{ name: 'typo-fuzzy', query: 'Publsher', slo: false, opts: { limit: 10, noDeep: true, fuzzy: true, fast: true } }]
 
-const BODY_CASES = [
-  { name: 'body-full-text', query: 'privacy nutrition labels', slo: false, opts: { limit: 10, noDeep: false, noEager: true, fast: true } },
-]
+const BODY_CASES = [{ name: 'body-full-text', query: 'privacy nutrition labels', slo: false, opts: { limit: 10, noDeep: false, noEager: true, fast: true } }]
 
 async function main() {
   const flags = parseFlags(process.argv.slice(2))
@@ -46,20 +42,14 @@ async function main() {
   const includeBody = flags['include-body'] === true
   const includeFuzzy = flags['include-fuzzy'] === true
   const cacheMode = flags.cache ?? 'on'
-  const cases = [
-    ...DEFAULT_CASES,
-    ...(includeFuzzy ? FUZZY_CASES : []),
-    ...(includeBody ? BODY_CASES : []),
-  ]
+  const cases = [...DEFAULT_CASES, ...(includeFuzzy ? FUZZY_CASES : []), ...(includeBody ? BODY_CASES : [])]
 
   let db = null
   let readerPool = null
   let serverInfo = null
   let runner
 
-  const logger = flags.verbose
-    ? console
-    : { info() {}, warn() {}, error: (...args) => console.error(...args) }
+  const logger = flags.verbose ? console : { info() {}, warn() {}, error: (...args) => console.error(...args) }
 
   try {
     if (mode === 'remote') {
@@ -86,7 +76,7 @@ async function main() {
       }
     }
 
-    console.log(`Real corpus search benchmark`)
+    console.log('Real corpus search benchmark')
     console.log(`  mode: ${mode}`)
     if (mode === 'remote') {
       console.log(`  url: ${remoteUrl}`)
@@ -111,9 +101,15 @@ async function main() {
       if (shouldRecord) recordResult(result, { mode, readers: readers ?? 'auto', includeBody })
     }
   } finally {
-    try { await serverInfo?.close?.() } catch {}
-    try { await readerPool?.close?.() } catch {}
-    try { db?.close?.() } catch {}
+    try {
+      await serverInfo?.close?.()
+    } catch {}
+    try {
+      await readerPool?.close?.()
+    } catch {}
+    try {
+      db?.close?.()
+    } catch {}
   }
 }
 
@@ -123,7 +119,7 @@ function createDirectRunner(ctx) {
     return {
       origin: 'n/a',
       edge: 'n/a',
-      paths: result.results?.slice(0, 5).map(r => r.path) ?? [],
+      paths: result.results?.slice(0, 5).map((r) => r.path) ?? [],
     }
   }
 }
@@ -147,7 +143,7 @@ function createApiRunner(baseUrl) {
     return {
       origin: (response.headers.get('x-apple-docs-cache') ?? 'n/a').toLowerCase(),
       edge: (response.headers.get('cf-cache-status') ?? 'n/a').toLowerCase(),
-      paths: payload.results?.slice(0, 5).map(r => r.path) ?? [],
+      paths: payload.results?.slice(0, 5).map((r) => r.path) ?? [],
     }
   }
 }
@@ -257,7 +253,7 @@ function summarize(values) {
   const sorted = values.slice().sort((a, b) => a - b)
   return {
     count: sorted.length,
-    p50: percentile(sorted, 0.50),
+    p50: percentile(sorted, 0.5),
     p95: percentile(sorted, 0.95),
     p99: percentile(sorted, 0.99),
     max: sorted[sorted.length - 1],
@@ -336,7 +332,7 @@ function dirnameOfDb(dbPath) {
 function parseConcurrency(value) {
   return String(value)
     .split(',')
-    .map(part => parsePositiveInt(part.trim()))
+    .map((part) => parsePositiveInt(part.trim()))
     .filter(Boolean)
 }
 
@@ -358,11 +354,15 @@ function resolveTilde(path) {
 }
 
 function safeCount(db, table) {
-  try { return db.db.query(`SELECT COUNT(*) as count FROM ${table}`).get().count } catch { return 0 }
+  try {
+    return db.db.query(`SELECT COUNT(*) as count FROM ${table}`).get().count
+  } catch {
+    return 0
+  }
 }
 
 function toSnake(value) {
-  return value.replace(/[A-Z]/g, match => `_${match.toLowerCase()}`)
+  return value.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`)
 }
 
 function fmt(value) {

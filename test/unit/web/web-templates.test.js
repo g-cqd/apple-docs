@@ -1,12 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import {
-  renderDocumentPage,
-  renderIndexPage,
-  renderFrameworkPage,
-  renderSearchPage,
-  renderNotFoundPage,
-  buildBreadcrumbs,
-} from '../../../src/web/templates.js'
+import { describe, expect, test } from 'bun:test'
+import { buildBreadcrumbs, renderDocumentPage, renderFrameworkPage, renderIndexPage, renderNotFoundPage, renderSearchPage } from '../../../src/web/templates.js'
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -97,9 +90,7 @@ describe('buildBreadcrumbs', () => {
     // not itself a page — its breadcrumb should be plain text, not a link.
     // The framework root (swift-book) always resolves via the framework
     // landing page so it stays a link even if not in knownKeys.
-    const knownKeys = new Set([
-      'swift-book/LanguageGuide/TheBasics',
-    ])
+    const knownKeys = new Set(['swift-book/LanguageGuide/TheBasics'])
     const html = buildBreadcrumbs('swift-book/LanguageGuide/TheBasics', {
       title: 'The Basics',
       framework: 'The Swift Programming Language',
@@ -129,7 +120,7 @@ describe('renderNotFoundPage', () => {
     expect(html).toContain('name="q"')
   })
 
-  test('marks the page as noindex so 404s don\'t show in sitemaps', () => {
+  test("marks the page as noindex so 404s don't show in sitemaps", () => {
     const html = renderNotFoundPage(siteConfig).toString()
     expect(html).toMatch(/<meta\s+name=["']robots["'][^>]*noindex/i)
   })
@@ -139,7 +130,7 @@ describe('renderNotFoundPage', () => {
     expect(html).toContain('window.location')
     expect(html).toContain('not-found-q')
     // The CamelCase / kebab / .html cleanup logic must be there.
-    expect(html).toContain("[a-z0-9])([A-Z]")
+    expect(html).toContain('[a-z0-9])([A-Z]')
   })
 
   test('includes navigation links to the main hubs', () => {
@@ -266,7 +257,9 @@ describe('renderDocumentPage', () => {
     expect(page).toMatch(/href="https:\/\/github\.com\/g-cqd"[^>]*rel="noopener noreferrer"/)
     expect(page).toMatch(/href="https:\/\/developer\.apple\.com"[^>]*rel="noopener noreferrer"/)
     // Snapshot tag is an <a><code>tag</code></a> linking to the release.
-    expect(page).toMatch(/href="https:\/\/github\.com\/g-cqd\/apple-docs\/releases\/tag\/snapshot-20260511"[^>]*rel="noopener noreferrer"><code>snapshot-20260511<\/code><\/a>/)
+    expect(page).toMatch(
+      /href="https:\/\/github\.com\/g-cqd\/apple-docs\/releases\/tag\/snapshot-20260511"[^>]*rel="noopener noreferrer"><code>snapshot-20260511<\/code><\/a>/,
+    )
   })
 
   test('footer shows the snapshot build macOS next to the tag', () => {
@@ -394,8 +387,19 @@ describe('renderDocumentPage', () => {
   test('page with 2+ sections has TOC sidebar and section IDs', () => {
     const sections = [
       { sectionKind: 'abstract', contentText: 'Abstract text', sortOrder: 0 },
-      { sectionKind: 'declaration', contentText: 'func foo()', contentJson: JSON.stringify([{ tokens: [{ text: 'func foo()' }], languages: ['swift'] }]), sortOrder: 1 },
-      { sectionKind: 'discussion', heading: 'Overview', contentText: 'Discussion here', contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Discussion here' }] }]), sortOrder: 3 },
+      {
+        sectionKind: 'declaration',
+        contentText: 'func foo()',
+        contentJson: JSON.stringify([{ tokens: [{ text: 'func foo()' }], languages: ['swift'] }]),
+        sortOrder: 1,
+      },
+      {
+        sectionKind: 'discussion',
+        heading: 'Overview',
+        contentText: 'Discussion here',
+        contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Discussion here' }] }]),
+        sortOrder: 3,
+      },
     ]
     const page = renderDocumentPage(mockDoc, sections, siteConfig).toString()
     expect(page).toContain('class="page-toc"')
@@ -417,7 +421,13 @@ describe('renderDocumentPage', () => {
     const sections = [
       { sectionKind: 'abstract', contentText: 'text', sortOrder: 0 },
       { sectionKind: 'declaration', contentText: 'code', contentJson: '[]', sortOrder: 1 },
-      { sectionKind: 'discussion', heading: 'Overview', contentText: 'text', contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'x' }] }]), sortOrder: 3 },
+      {
+        sectionKind: 'discussion',
+        heading: 'Overview',
+        contentText: 'text',
+        contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'x' }] }]),
+        sortOrder: 3,
+      },
     ]
     const page = renderDocumentPage(mockDoc, sections, siteConfig).toString()
     expect(page).toContain('class="page-toc-mobile"')
@@ -434,8 +444,19 @@ describe('renderDocumentPage', () => {
     const sections = [
       { sectionKind: 'abstract', contentText: 'text', sortOrder: 0 },
       { sectionKind: 'declaration', contentText: 'code', contentJson: JSON.stringify([{ tokens: [{ text: 'var x' }], languages: ['swift'] }]), sortOrder: 1 },
-      { sectionKind: 'discussion', heading: 'Overview', contentText: 'discussion text', contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'text' }] }]), sortOrder: 5 },
-      { sectionKind: 'relationships', contentText: '', contentJson: JSON.stringify([{ title: 'Conforms To', items: [{ key: 'swiftui/view', title: 'View' }] }]), sortOrder: 10 },
+      {
+        sectionKind: 'discussion',
+        heading: 'Overview',
+        contentText: 'discussion text',
+        contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'text' }] }]),
+        sortOrder: 5,
+      },
+      {
+        sectionKind: 'relationships',
+        contentText: '',
+        contentJson: JSON.stringify([{ title: 'Conforms To', items: [{ key: 'swiftui/view', title: 'View' }] }]),
+        sortOrder: 10,
+      },
     ]
     const page = renderDocumentPage(mockDoc, sections, siteConfig).toString()
     expect(page).toContain('<h2>Relationships</h2>')
@@ -449,7 +470,12 @@ describe('renderDocumentPage', () => {
     const sections = [
       { sectionKind: 'abstract', contentText: 'text', sortOrder: 0 },
       { sectionKind: 'declaration', contentText: 'code', contentJson: JSON.stringify([{ tokens: [{ text: 'var x' }], languages: ['swift'] }]), sortOrder: 1 },
-      { sectionKind: 'see_also', contentText: '', contentJson: JSON.stringify([{ title: 'Related', items: [{ key: 'swiftui/text', title: 'Text' }] }]), sortOrder: 10 },
+      {
+        sectionKind: 'see_also',
+        contentText: '',
+        contentJson: JSON.stringify([{ title: 'Related', items: [{ key: 'swiftui/text', title: 'Text' }] }]),
+        sortOrder: 10,
+      },
     ]
     const page = renderDocumentPage(mockDoc, sections, siteConfig).toString()
     expect(page).toContain('id="see-also"')
@@ -481,7 +507,13 @@ describe('renderDocumentPage', () => {
     const sections = [
       { sectionKind: 'abstract', contentText: 'text', sortOrder: 0 },
       { sectionKind: 'declaration', contentText: 'code', contentJson: JSON.stringify([{ tokens: [{ text: 'x' }], languages: ['swift'] }]), sortOrder: 1 },
-      { sectionKind: 'discussion', heading: 'Overview', contentText: 'x', contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'x' }] }]), sortOrder: 2 },
+      {
+        sectionKind: 'discussion',
+        heading: 'Overview',
+        contentText: 'x',
+        contentJson: JSON.stringify([{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'x' }] }]),
+        sortOrder: 2,
+      },
     ]
     const page = renderDocumentPage(mockDoc, sections, siteConfig).toString()
     // At least two blocks: meta + TOC
@@ -694,9 +726,7 @@ describe('renderFrameworkPage', () => {
 
   test('tree-edged frameworks render tree-only (no toggle, no list)', () => {
     const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig, {
-      treeEdges: [
-        { from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' },
-      ],
+      treeEdges: [{ from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' }],
     }).toString()
     // The role-bucket "List" alternative was removed — the tree IS the page.
     expect(page).not.toContain('class="view-toggle"')
@@ -707,9 +737,7 @@ describe('renderFrameworkPage', () => {
 
   test('tree data JSON is valid and parseable (not HTML-escaped)', () => {
     const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig, {
-      treeEdges: [
-        { from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' },
-      ],
+      treeEdges: [{ from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' }],
     }).toString()
     const match = page.match(/<script type="application\/json" id="tree-data">([\s\S]*?)<\/script>/)
     expect(match).toBeTruthy()
@@ -721,9 +749,7 @@ describe('renderFrameworkPage', () => {
 
   test('tree data carries only edges + doc lookup (no roleGroups)', () => {
     const page = renderFrameworkPage(mockFramework, mockDocuments, siteConfig, {
-      treeEdges: [
-        { from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' },
-      ],
+      treeEdges: [{ from_key: 'documentation/swiftui/view', to_key: 'documentation/swiftui/text' }],
     }).toString()
     const match = page.match(/<script type="application\/json" id="tree-data">([\s\S]*?)<\/script>/)
     const json = JSON.parse(match[1])

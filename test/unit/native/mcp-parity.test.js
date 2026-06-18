@@ -14,12 +14,11 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { taxonomy } from '../../../src/commands/taxonomy.js'
-import { frameworks } from '../../../src/commands/frameworks.js'
-import { listAppleFonts, searchSfSymbols } from '../../../src/resources/apple-assets.js'
 import { browse } from '../../../src/commands/browse.js'
+import { frameworks } from '../../../src/commands/frameworks.js'
 import { search } from '../../../src/commands/search.js'
+import { taxonomy } from '../../../src/commands/taxonomy.js'
+import { VERSION } from '../../../src/lib/version.js'
 import {
   projectBrowse,
   projectFrameworks,
@@ -28,7 +27,8 @@ import {
   projectSearchSfSymbols,
   projectTaxonomy,
 } from '../../../src/output/projection.js'
-import { VERSION } from '../../../src/lib/version.js'
+import { listAppleFonts, searchSfSymbols } from '../../../src/resources/apple-assets.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 const AD_SERVER = new URL('../../../swift/.build/release/ad-server', import.meta.url).pathname
 const INSTRUCTIONS =
@@ -68,7 +68,7 @@ function makeClient(child) {
     request(message) {
       this.notify(message)
       if (ready.length) return Promise.resolve(ready.shift())
-      return new Promise(resolve => waiters.push(resolve))
+      return new Promise((resolve) => waiters.push(resolve))
     },
   }
 }
@@ -80,10 +80,54 @@ if (existsSync(AD_SERVER)) {
   seed.upsertRoot('swiftui', 'SwiftUI', 'framework', 'seed')
   seed.upsertRoot('uikit', 'UIKit', 'framework', 'seed')
   const DOCS = [
-    { key: 'swiftui/view', title: 'View', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Protocol', kind: 'protocol', language: 'swift', abstractText: 'A view.', urlDepth: 2 },
-    { key: 'swiftui/stack', title: 'Stack', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Structure', kind: 'struct', language: 'swift', abstractText: 'A stack.', urlDepth: 2 },
-    { key: 'uikit/uiview', title: 'UIView', framework: 'uikit', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Class', kind: 'class', language: 'occ', abstractText: 'A uiview.', urlDepth: 2 },
-    { key: 'wwdc/talk1', title: 'Talk 1', framework: 'wwdc', sourceType: 'wwdc', role: 'article', roleHeading: 'Session', kind: 'article', language: 'swift', abstractText: 'A talk.', urlDepth: 2 },
+    {
+      key: 'swiftui/view',
+      title: 'View',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      roleHeading: 'Protocol',
+      kind: 'protocol',
+      language: 'swift',
+      abstractText: 'A view.',
+      urlDepth: 2,
+    },
+    {
+      key: 'swiftui/stack',
+      title: 'Stack',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      roleHeading: 'Structure',
+      kind: 'struct',
+      language: 'swift',
+      abstractText: 'A stack.',
+      urlDepth: 2,
+    },
+    {
+      key: 'uikit/uiview',
+      title: 'UIView',
+      framework: 'uikit',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      roleHeading: 'Class',
+      kind: 'class',
+      language: 'occ',
+      abstractText: 'A uiview.',
+      urlDepth: 2,
+    },
+    {
+      key: 'wwdc/talk1',
+      title: 'Talk 1',
+      framework: 'wwdc',
+      sourceType: 'wwdc',
+      role: 'article',
+      roleHeading: 'Session',
+      kind: 'article',
+      language: 'swift',
+      abstractText: 'A talk.',
+      urlDepth: 2,
+    },
   ]
   for (const d of DOCS) seed.upsertDocument(d)
   // Fonts.
@@ -92,13 +136,37 @@ if (existsSync(AD_SERVER)) {
   seed.assetsFonts.upsertFontFile({ id: 'sf-pro-bold', familyId: 'sf-pro', fileName: 'SF-Pro-Bold.otf', filePath: '/x/SF-Pro-Bold.otf', format: 'otf' })
   seed.assetsFonts.upsertFontFile({ id: 'ny-regular', familyId: 'ny', fileName: 'NewYork.ttf', filePath: '/x/NewYork.ttf', format: 'ttf' })
   // SF Symbols.
-  seed.assetsSymbols.upsertSymbol({ name: 'square.grid.2x2', scope: 'public', categories: ['ui', 'grid'], keywords: ['square', 'grid'], aliases: [], availability: { ios: '14.0' }, orderIndex: 0, bundlePath: 'sym/sq', bundleVersion: '14.6' })
-  seed.assetsSymbols.upsertSymbol({ name: 'circle.fill', scope: 'public', categories: ['shapes'], keywords: ['circle'], aliases: ['filled.circle'], availability: { ios: '13.0' }, orderIndex: 1, bundlePath: 'sym/ci', bundleVersion: '13.0' })
+  seed.assetsSymbols.upsertSymbol({
+    name: 'square.grid.2x2',
+    scope: 'public',
+    categories: ['ui', 'grid'],
+    keywords: ['square', 'grid'],
+    aliases: [],
+    availability: { ios: '14.0' },
+    orderIndex: 0,
+    bundlePath: 'sym/sq',
+    bundleVersion: '14.6',
+  })
+  seed.assetsSymbols.upsertSymbol({
+    name: 'circle.fill',
+    scope: 'public',
+    categories: ['shapes'],
+    keywords: ['circle'],
+    aliases: ['filled.circle'],
+    availability: { ios: '13.0' },
+    orderIndex: 1,
+    bundlePath: 'sym/ci',
+    bundleVersion: '13.0',
+  })
   seed.assetsSymbols.upsertSymbol({ name: 'lock.shield', scope: 'private', categories: [], keywords: ['lock'], aliases: [], availability: null, orderIndex: 0 })
   // A root with active pages so list_frameworks returns it (zero-page roots excluded).
   seed.upsertRoot('treefw', 'TreeFW', 'framework', 'seed')
   const treeRootId = seed.getRootBySlug('treefw').id
-  for (const [path, title] of [['treefw', 'TreeFW'], ['treefw/childa', 'ChildA'], ['treefw/childb', 'ChildB']]) {
+  for (const [path, title] of [
+    ['treefw', 'TreeFW'],
+    ['treefw/childa', 'ChildA'],
+    ['treefw/childb', 'ChildB'],
+  ]) {
     seed.upsertPage({ rootId: treeRootId, path, url: `https://x/${path}`, title, role: 'symbol', roleHeading: 'Class' })
   }
   seed.db.run("UPDATE documents SET framework = 'treefw' WHERE key LIKE 'treefw%'")
@@ -110,7 +178,9 @@ if (existsSync(AD_SERVER)) {
   seed.close()
   db = new DocsDatabase(dbPath)
   proc = Bun.spawn([AD_SERVER, 'mcp', '--db', dbPath, '--app-version', VERSION], {
-    stdin: 'pipe', stdout: 'pipe', stderr: 'ignore',
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'ignore',
   })
   client = makeClient(proc)
   // The default (HTTP) server also serves POST /mcp (the second transport).
@@ -121,7 +191,9 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
   beforeAll(async () => {
     // initialize handshake.
     await client.request({
-      jsonrpc: '2.0', id: 1, method: 'initialize',
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } },
     })
     client.notify({ jsonrpc: '2.0', method: 'notifications/initialized' })
@@ -132,7 +204,9 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
 
   test('initialize — serverInfo + protocolVersion + capabilities + instructions', async () => {
     const res = await client.request({
-      jsonrpc: '2.0', id: 2, method: 'initialize',
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'initialize',
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } },
     })
     expect(res.jsonrpc).toBe('2.0')
@@ -150,7 +224,7 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
 
   test('tools/list — metadata + draft-07 inputSchema (deep-equal vs zod)', async () => {
     const res = await client.request({ jsonrpc: '2.0', id: 4, method: 'tools/list' })
-    const byName = Object.fromEntries(res.result.tools.map(t => [t.name, t]))
+    const byName = Object.fromEntries(res.result.tools.map((t) => [t.name, t]))
     const READ_ONLY = { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false }
     const D7 = 'http://json-schema.org/draft-07/schema#'
     const obj = (properties, required) => ({ $schema: D7, type: 'object', properties, ...(required ? { required } : {}) })
@@ -158,19 +232,32 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
     const EXPECTED = {
       search_docs: {
         desc: "Search Apple developer docs (keyword + semantic). Prefer compact symbol/API terms; put constraints in filter args, not the query. Set read=true to inline the top hit's content.",
-        schema: obj({
-          query: { type: 'string', description: 'Search terms, e.g. "NavigationStack".' },
-          framework: { type: 'string', description: 'Framework slug, e.g. swiftui, app-store-review.' },
-          source: { type: 'string', description: 'Source slug(s), comma-separated: apple-docc, hig, wwdc, sample-code, swift-evolution, ...' },
-          kind: { type: 'string', description: 'Page kind (values via list_taxonomy).' },
-          language: { type: 'string', enum: ['swift', 'objc'] },
-          platform: { type: 'string', enum: ['ios', 'macos', 'watchos', 'tvos', 'visionos'] },
-          minVersion: { type: 'object', properties: { ios: { type: 'string' }, macos: { type: 'string' }, watchos: { type: 'string' }, tvos: { type: 'string' }, visionos: { type: 'string' } }, description: 'Min version per platform, e.g. {"ios":"17.0"}.' },
-          limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Max results (default 25).' },
-          year: { type: 'number', description: 'WWDC session year.' },
-          track: { type: 'string', description: 'WWDC track.' },
-          deprecated: { type: 'string', enum: ['include', 'exclude', 'only'], description: 'Default include; use exclude when writing code.' },
-        }, ['query']),
+        schema: obj(
+          {
+            query: { type: 'string', description: 'Search terms, e.g. "NavigationStack".' },
+            framework: { type: 'string', description: 'Framework slug, e.g. swiftui, app-store-review.' },
+            source: { type: 'string', description: 'Source slug(s), comma-separated: apple-docc, hig, wwdc, sample-code, swift-evolution, ...' },
+            kind: { type: 'string', description: 'Page kind (values via list_taxonomy).' },
+            language: { type: 'string', enum: ['swift', 'objc'] },
+            platform: { type: 'string', enum: ['ios', 'macos', 'watchos', 'tvos', 'visionos'] },
+            minVersion: {
+              type: 'object',
+              properties: {
+                ios: { type: 'string' },
+                macos: { type: 'string' },
+                watchos: { type: 'string' },
+                tvos: { type: 'string' },
+                visionos: { type: 'string' },
+              },
+              description: 'Min version per platform, e.g. {"ios":"17.0"}.',
+            },
+            limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Max results (default 25).' },
+            year: { type: 'number', description: 'WWDC session year.' },
+            track: { type: 'string', description: 'WWDC track.' },
+            deprecated: { type: 'string', enum: ['include', 'exclude', 'only'], description: 'Default include; use exclude when writing code.' },
+          },
+          ['query'],
+        ),
       },
       list_taxonomy: {
         desc: 'List distinct taxonomy values with counts (top 20 per field). Use to pick valid search_docs kind filters.',
@@ -201,12 +288,15 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp parity (ad-server mcp == JS MCP too
       },
       browse: {
         desc: "Walk the documentation topic tree: a root's pages, or one page's children via path. wwdc root returns per-year groups; pass year for that year's sessions.",
-        schema: obj({
-          framework: { type: 'string', description: 'Root slug, e.g. swiftui, design, wwdc.' },
-          path: { type: 'string', description: 'Drill into a page, e.g. swiftui/view.' },
-          year: { type: 'integer', description: 'WWDC sessions of one year.' },
-          limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Max pages (default 100, cap 200).' },
-        }, ['framework']),
+        schema: obj(
+          {
+            framework: { type: 'string', description: 'Root slug, e.g. swiftui, design, wwdc.' },
+            path: { type: 'string', description: 'Drill into a page, e.g. swiftui/view.' },
+            year: { type: 'integer', description: 'WWDC sessions of one year.' },
+            limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Max pages (default 100, cap 200).' },
+          },
+          ['framework'],
+        ),
       },
     }
     for (const [name, { desc, schema }] of Object.entries(EXPECTED)) {
@@ -284,7 +374,12 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp over HTTP (POST /mcp == same dispat
   let httpReady = false
   beforeAll(async () => {
     for (let i = 0; i < 100; i++) {
-      try { if ((await fetch(`http://127.0.0.1:${HTTP_PORT}/healthz`)).ok) { httpReady = true; break } } catch {}
+      try {
+        if ((await fetch(`http://127.0.0.1:${HTTP_PORT}/healthz`)).ok) {
+          httpReady = true
+          break
+        }
+      } catch {}
       await Bun.sleep(80)
     }
   })
@@ -296,14 +391,23 @@ describe.skipIf(!existsSync(AD_SERVER))('mcp over HTTP (POST /mcp == same dispat
 
   function mcpPost(message, headers = {}) {
     return fetch(`http://127.0.0.1:${HTTP_PORT}/mcp`, {
-      method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(message),
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(message),
     })
   }
 
-  test('http server reachable', () => { expect(httpReady).toBe(true) })
+  test('http server reachable', () => {
+    expect(httpReady).toBe(true)
+  })
 
   test('POST /mcp initialize', async () => {
-    const res = await mcpPost({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } } })
+    const res = await mcpPost({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } },
+    })
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('application/json')
     const json = await res.json()

@@ -14,11 +14,11 @@
  *     RFC-recorded behavior change.
  */
 
+import { suffix } from 'bun:ffi'
 import { describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
 import { quantizeI8, quantizeTo } from '../../../src/search/embedding.js'
 import { LEGACY_ONNX_SHA256 } from '../../../src/search/model-integrity.js'
 
@@ -33,11 +33,8 @@ const CODE_STRIDE = SIGN_BYTES + DIMS + 4
 // and the replay proves the production path still reproduces them.
 const DEV_LIB = new URL(`../../../swift/.build/release/libAppleDocsCore.${suffix}`, import.meta.url).pathname
 const nativeAvailable = !!process.env.APPLE_DOCS_NATIVE_LIB || existsSync(DEV_LIB)
-const modelsDir =
-  process.env.APPLE_DOCS_MODELS_DIR ??
-  join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
-const modelPresent =
-  existsSync(join(modelsDir, HF_ID, 'matrix-v1.admx')) || existsSync(join(modelsDir, HF_ID, 'onnx', 'model.onnx'))
+const modelsDir = process.env.APPLE_DOCS_MODELS_DIR ?? join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
+const modelPresent = existsSync(join(modelsDir, HF_ID, 'matrix-v1.admx')) || existsSync(join(modelsDir, HF_ID, 'onnx', 'model.onnx'))
 
 const index = JSON.parse(readFileSync(join(FIXTURES, 'index.json'), 'utf8'))
 const caseVectors = readFileSync(join(FIXTURES, 'case-vectors.bin'))
@@ -115,9 +112,7 @@ describe('embed-parity fixtures', () => {
       const { getEmbedder } = await import('../../../src/search/embedder.js')
       const embedder = await getEmbedder({ modelsDir })
       expect(embedder).not.toBeNull()
-      const { cases } = JSON.parse(
-        readFileSync(join(FIXTURES, '..', 'tokenizer-parity', 'cases.json'), 'utf8'),
-      )
+      const { cases } = JSON.parse(readFileSync(join(FIXTURES, '..', 'tokenizer-parity', 'cases.json'), 'utf8'))
       expect(cases.map((c) => c.name)).toEqual(index.caseNames)
       const vecs = await embedder.embedBatch(cases.map((c) => c.text))
       const mismatches = []

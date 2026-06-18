@@ -17,11 +17,33 @@ const BASE_SCORES = {
 // econst, tdef, ...), not display names — keep both spellings so the boost
 // fires on real rows regardless of which pipeline wrote them.
 const SYMBOL_KINDS = new Set([
-  'symbol', 'class', 'cl', 'structure', 'struct', 'structp', 'protocol',
-  'enum', 'enumeration', 'econst', 'case', 'union',
-  'property wrapper', 'property', 'instp', 'var',
-  'type alias', 'typealias', 'tdef',
-  'function', 'func', 'method', 'instm', 'clm', 'init', 'op', 'macro',
+  'symbol',
+  'class',
+  'cl',
+  'structure',
+  'struct',
+  'structp',
+  'protocol',
+  'enum',
+  'enumeration',
+  'econst',
+  'case',
+  'union',
+  'property wrapper',
+  'property',
+  'instp',
+  'var',
+  'type alias',
+  'typealias',
+  'tdef',
+  'function',
+  'func',
+  'method',
+  'instm',
+  'clm',
+  'init',
+  'op',
+  'macro',
 ])
 
 const SOURCE_PREFERENCE_MULTIPLIERS = {
@@ -99,11 +121,7 @@ export function rerank(results, query, intent) {
     // crowding out official docs unless the query is strongly package-specific.
     if (sourceType === 'packages') {
       score *= 0.45
-      if (
-        lowerQuery.includes('package')
-        || lowerQuery.includes('library')
-        || (r.title ?? '').toLowerCase() === lowerQuery
-      ) {
+      if (lowerQuery.includes('package') || lowerQuery.includes('library') || (r.title ?? '').toLowerCase() === lowerQuery) {
         score *= 1.5
       }
     }

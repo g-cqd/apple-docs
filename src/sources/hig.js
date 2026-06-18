@@ -12,9 +12,9 @@ export class HigAdapter extends SourceAdapter {
     if (!ctx.rootCatalogReady) {
       await discoverRoots(ctx.db, ctx.rateLimiter, ctx.logger)
     }
-    const roots = ctx.db.getRoots().filter(root => root.source_type === HigAdapter.type)
+    const roots = ctx.db.getRoots().filter((root) => root.source_type === HigAdapter.type)
     return this.validateDiscoveryResult({
-      keys: roots.map(root => root.seed_path ?? root.slug),
+      keys: roots.map((root) => root.seed_path ?? root.slug),
       roots,
     })
   }

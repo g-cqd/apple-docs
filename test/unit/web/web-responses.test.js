@@ -1,13 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import {
-  MIME_TYPES,
-  COMPRESSIBLE,
-  jsonResponse,
-  textResponse,
-  notFoundResponse,
-  matchesIfNoneMatch,
-  finalizeResponse,
-} from '../../../src/web/responses.js'
+import { describe, expect, test } from 'bun:test'
+import { COMPRESSIBLE, finalizeResponse, jsonResponse, MIME_TYPES, matchesIfNoneMatch, notFoundResponse, textResponse } from '../../../src/web/responses.js'
 
 const SITE_CONFIG = {
   baseUrl: 'http://localhost',
@@ -21,7 +13,9 @@ function makeGzipCache() {
   const map = new Map()
   return {
     get: (k) => map.get(k),
-    set: (k, v) => { map.set(k, v) },
+    set: (k, v) => {
+      map.set(k, v)
+    },
     _size: () => map.size,
   }
 }

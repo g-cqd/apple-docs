@@ -23,20 +23,13 @@
  * "current" pointer automatically.
  */
 
+import { spawn as nodeSpawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, rename, rm, writeFile, mkdtemp } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawn as nodeSpawn } from 'node:child_process'
 import { HttpError, NotFoundError, ValidationError } from '../../lib/errors.js'
-import {
-  findAppInTree,
-  findAppInVolumes,
-  findPkgInVolumes,
-  parseHdiutilMountPoints,
-  safeReaddir,
-  SF_SYMBOLS_APP,
-} from './dmg-helpers.js'
+import { findAppInTree, findAppInVolumes, findPkgInVolumes, parseHdiutilMountPoints, SF_SYMBOLS_APP, safeReaddir } from './dmg-helpers.js'
 
 const LANDING_URL = 'https://developer.apple.com/sf-symbols/'
 const SYSTEM_APP_PATH = '/Applications/SF Symbols.app'
@@ -74,9 +67,7 @@ export async function discoverLatest(opts = {}) {
     throw new NotFoundError(LANDING_URL, 'SF Symbols landing page had no recognised .dmg link')
   }
   // Latest = highest major, tie-break on cache-buster.
-  const entries = [...seen.values()].sort((a, b) =>
-    b.major - a.major || b.cacheBuster - a.cacheBuster,
-  )
+  const entries = [...seen.values()].sort((a, b) => b.major - a.major || b.cacheBuster - a.cacheBuster)
   const top = entries[0]
   logger?.debug?.(`SF Symbols current: major=${top.major} cb=${top.cacheBuster} url=${top.url}`)
 
@@ -106,10 +97,8 @@ async function readInstalledVersion(appPath) {
   if (!existsSync(appPath)) return null
   const plistPath = join(appPath, 'Contents', 'Info.plist')
   if (!existsSync(plistPath)) return null
-  const short = await runCmd('defaults', ['read', plistPath, 'CFBundleShortVersionString'])
-    .catch(() => null)
-  const build = await runCmd('defaults', ['read', plistPath, 'CFBundleVersion'])
-    .catch(() => null)
+  const short = await runCmd('defaults', ['read', plistPath, 'CFBundleShortVersionString']).catch(() => null)
+  const build = await runCmd('defaults', ['read', plistPath, 'CFBundleVersion']).catch(() => null)
   if (!short) return null
   return { short: short.trim(), build: (build ?? '').trim() }
 }
@@ -120,8 +109,12 @@ async function readInstalledVersion(appPath) {
  * treated as 0. `compareVersions("7.2", "7")` → 1.
  */
 export function compareVersions(a, b) {
-  const pa = String(a).split('.').map(s => Number.parseInt(s, 10) || 0)
-  const pb = String(b).split('.').map(s => Number.parseInt(s, 10) || 0)
+  const pa = String(a)
+    .split('.')
+    .map((s) => Number.parseInt(s, 10) || 0)
+  const pb = String(b)
+    .split('.')
+    .map((s) => Number.parseInt(s, 10) || 0)
   const len = Math.max(pa.length, pb.length)
   for (let i = 0; i < len; i++) {
     const da = pa[i] ?? 0
@@ -188,10 +181,7 @@ export async function ensureSfSymbolsApp(opts) {
       logger?.info?.(`SF Symbols.app ${systemShort} already at /Applications`)
       return { appPath: SYSTEM_APP_PATH, version: systemShort, source: 'system' }
     }
-    logger?.info?.(
-      `SF Symbols.app ${systemShort} at /Applications is older than published ${versionFromUrl(latest)}; ` +
-      `downloading current to cache`,
-    )
+    logger?.info?.(`SF Symbols.app ${systemShort} at /Applications is older than published ${versionFromUrl(latest)}; ` + 'downloading current to cache')
   }
 
   // Cache short-circuit: same URL as last download AND the app is
@@ -214,7 +204,7 @@ export async function ensureSfSymbolsApp(opts) {
     throw new NotFoundError(
       LANDING_URL,
       'SF Symbols.app missing and Apple developer site unreachable. ' +
-      'Install SF Symbols.app from https://developer.apple.com/sf-symbols/ or retry with network.',
+        'Install SF Symbols.app from https://developer.apple.com/sf-symbols/ or retry with network.',
     )
   }
 
@@ -294,9 +284,7 @@ export async function ensureSfSymbolsApp(opts) {
  * @param {{ appPath: string }} dest
  */
 async function provisionFromDmg(dmgPath, { appPath }) {
-  const plist = await runCmd('hdiutil', [
-    'attach', dmgPath, '-nobrowse', '-readonly', '-noautoopen', '-plist',
-  ])
+  const plist = await runCmd('hdiutil', ['attach', dmgPath, '-nobrowse', '-readonly', '-noautoopen', '-plist'])
   const mountPoints = parseHdiutilMountPoints(plist)
   if (mountPoints.length === 0) {
     throw new NotFoundError(dmgPath, `hdiutil attached ${dmgPath} but exposed no mounted volume`)
@@ -314,7 +302,7 @@ async function provisionFromDmg(dmgPath, { appPath }) {
       }
     }
     if (!sourceApp) {
-      const listing = mountPoints.map(mp => `${mp} → [${safeReaddir(mp).join(', ')}]`).join('; ')
+      const listing = mountPoints.map((mp) => `${mp} → [${safeReaddir(mp).join(', ')}]`).join('; ')
       throw new NotFoundError(dmgPath, `SF Symbols.app not found in any mounted volume or installer package (${listing})`)
     }
     if (existsSync(appPath)) await rm(appPath, { recursive: true, force: true })
@@ -374,10 +362,14 @@ function runCmd(cmd, args) {
     const proc = nodeSpawn(cmd, args)
     let out = ''
     let err = ''
-    proc.stdout.on('data', chunk => { out += chunk.toString('utf8') })
-    proc.stderr.on('data', chunk => { err += chunk.toString('utf8') })
+    proc.stdout.on('data', (chunk) => {
+      out += chunk.toString('utf8')
+    })
+    proc.stderr.on('data', (chunk) => {
+      err += chunk.toString('utf8')
+    })
     proc.on('error', reject)
-    proc.on('close', code => {
+    proc.on('close', (code) => {
       if (code === 0) resolve(out)
       else reject(new Error(`${cmd} ${args.join(' ')} exited ${code}: ${err.trim() || out.trim()}`))
     })

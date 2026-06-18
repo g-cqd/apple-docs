@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { WwdcAdapter, parseWwdcKey } from '../../../src/sources/wwdc.js'
+import { parseWwdcKey, WwdcAdapter } from '../../../src/sources/wwdc.js'
 
 const originalFetch = globalThis.fetch
 
@@ -136,10 +136,7 @@ describe('WwdcAdapter.discover', () => {
     globalThis.fetch = async (url) => {
       // Apple year-index HTML for 2024 returns one session link
       if (new URL(url).pathname.startsWith('/videos/wwdc2024/')) {
-        return new Response(
-          '<html><body><a href="/videos/play/wwdc2024/10001/">Session</a></body></html>',
-          { status: 200 },
-        )
+        return new Response('<html><body><a href="/videos/play/wwdc2024/10001/">Session</a></body></html>', { status: 200 })
       }
       // All other Apple year indexes return empty HTML
       if (urlMatchesPrefix(url, 'developer.apple.com', '/videos/wwdc')) {
@@ -173,7 +170,7 @@ describe('WwdcAdapter.discover', () => {
     expect(result.keys).toContain('wwdc/wwdc2019-234')
     expect(result.keys).toContain('wwdc/wwdc2018-101')
     // README and out-of-range year must not appear
-    expect(result.keys.some(k => k.includes('README'))).toBe(false)
+    expect(result.keys.some((k) => k.includes('README'))).toBe(false)
     expect(result.keys).not.toContain('wwdc/wwdc2021-999')
   })
 
@@ -280,9 +277,7 @@ describe('WwdcAdapter.fetch', () => {
 
   test('throws on an invalid key', async () => {
     const adapter = new WwdcAdapter()
-    await expect(adapter.fetch('bad/key', { rateLimiter: makeRateLimiter() })).rejects.toThrow(
-      'Invalid WWDC key',
-    )
+    await expect(adapter.fetch('bad/key', { rateLimiter: makeRateLimiter() })).rejects.toThrow('Invalid WWDC key')
   })
 })
 
@@ -456,7 +451,7 @@ describe('WwdcAdapter.normalize — Apple JSON', () => {
       description: 'A description.',
     })
 
-    const abstractSection = result.sections.find(s => s.sectionKind === 'abstract')
+    const abstractSection = result.sections.find((s) => s.sectionKind === 'abstract')
     expect(abstractSection).toBeDefined()
     expect(abstractSection.contentText).toBe('A description.')
   })
@@ -468,7 +463,7 @@ describe('WwdcAdapter.normalize — Apple JSON', () => {
       transcript: 'Hello world.',
     })
 
-    const contentSection = result.sections.find(s => s.sectionKind === 'content')
+    const contentSection = result.sections.find((s) => s.sectionKind === 'content')
     expect(contentSection).toBeDefined()
     expect(contentSection.contentText).toBe('Hello world.')
   })
@@ -615,11 +610,7 @@ describe('WwdcAdapter.check', () => {
       return new Response('', { status: 200, headers: { etag: '"new"' } })
     }
 
-    const result = await adapter.check(
-      'wwdc/wwdc2024-10001',
-      { etag: '"old"' },
-      { rateLimiter: makeRateLimiter() },
-    )
+    const result = await adapter.check('wwdc/wwdc2024-10001', { etag: '"old"' }, { rateLimiter: makeRateLimiter() })
 
     expect(requestedUrl).toContain('wwdc2024')
     expect(requestedUrl).toContain('10001')
@@ -637,11 +628,7 @@ describe('WwdcAdapter.check', () => {
       return new Response('', { status: 304 })
     }
 
-    const result = await adapter.check(
-      'wwdc/wwdc2019-234',
-      { etag: '"old"' },
-      { rateLimiter: makeRateLimiter() },
-    )
+    const result = await adapter.check('wwdc/wwdc2019-234', { etag: '"old"' }, { rateLimiter: makeRateLimiter() })
 
     expect(requestedUrl).toContain('raw.githubusercontent.com')
     expect(requestedUrl).toContain('en/2019/234.vtt')
@@ -654,11 +641,7 @@ describe('WwdcAdapter.check', () => {
 
     globalThis.fetch = async () => new Response('', { status: 404 })
 
-    const result = await adapter.check(
-      'wwdc/wwdc2023-50000',
-      { etag: '"old"' },
-      { rateLimiter: makeRateLimiter() },
-    )
+    const result = await adapter.check('wwdc/wwdc2023-50000', { etag: '"old"' }, { rateLimiter: makeRateLimiter() })
 
     expect(result.status).toBe('deleted')
     expect(result.deleted).toBe(true)
@@ -671,11 +654,7 @@ describe('WwdcAdapter.check', () => {
       throw new Error('network error')
     }
 
-    const result = await adapter.check(
-      'wwdc/wwdc2024-10001',
-      { etag: '"old"' },
-      { rateLimiter: makeRateLimiter() },
-    )
+    const result = await adapter.check('wwdc/wwdc2024-10001', { etag: '"old"' }, { rateLimiter: makeRateLimiter() })
 
     expect(result.status).toBe('error')
   })
@@ -683,11 +662,7 @@ describe('WwdcAdapter.check', () => {
   test('returns error status for an invalid key', async () => {
     const adapter = new WwdcAdapter()
 
-    const result = await adapter.check(
-      'not-a-wwdc-key',
-      {},
-      { rateLimiter: makeRateLimiter() },
-    )
+    const result = await adapter.check('not-a-wwdc-key', {}, { rateLimiter: makeRateLimiter() })
 
     expect(result.status).toBe('error')
     expect(result.changed).toBe(false)
@@ -698,11 +673,7 @@ describe('WwdcAdapter.check', () => {
 
     globalThis.fetch = async () => new Response('', { status: 304 })
 
-    const result = await adapter.check(
-      'wwdc/wwdc2024-10001',
-      { etag: '"cached"' },
-      { rateLimiter: makeRateLimiter() },
-    )
+    const result = await adapter.check('wwdc/wwdc2024-10001', { etag: '"cached"' }, { rateLimiter: makeRateLimiter() })
 
     expect(result.newState.etag).toBe('"cached"')
   })

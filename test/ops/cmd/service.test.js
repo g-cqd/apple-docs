@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import runService, { resolveTarget, expandTargets } from '../../../ops/cmd/service.js'
+import { describe, expect, test } from 'bun:test'
+import runService, { expandTargets, resolveTarget } from '../../../ops/cmd/service.js'
 
 const ENV = {
   vars: {
@@ -14,7 +14,7 @@ const ENV = {
 
 function captureLogger() {
   const lines = []
-  return { lines, say: m => lines.push(m), warn: m => lines.push('W:' + m), error: m => lines.push('E:' + m) }
+  return { lines, say: (m) => lines.push(m), warn: (m) => lines.push('W:' + m), error: (m) => lines.push('E:' + m) }
 }
 
 describe('resolveTarget', () => {
@@ -48,8 +48,13 @@ describe('runService', () => {
     const calls = []
     const deps = {
       isLoaded: async () => false,
-      bootstrapOrKick: async (label, plistPath) => { calls.push({ verb: 'bootstrap', label, plistPath }); return { kind: 'bootstrapped' } },
-      bootout: async () => {}, kickstart: async () => {}, runCmdAllowFailure: async () => ({ exitCode: 0 }),
+      bootstrapOrKick: async (label, plistPath) => {
+        calls.push({ verb: 'bootstrap', label, plistPath })
+        return { kind: 'bootstrapped' }
+      },
+      bootout: async () => {},
+      kickstart: async () => {},
+      runCmdAllowFailure: async () => ({ exitCode: 0 }),
     }
     const code = await runService({ args: ['start', 'web'], envLoader: () => ENV, logger: captureLogger(), deps })
     expect(code).toBe(0)
@@ -60,9 +65,13 @@ describe('runService', () => {
     const calls = []
     const deps = {
       isLoaded: async () => true,
-      bootstrapOrKick: async () => { throw new Error('should not bootstrap') },
+      bootstrapOrKick: async () => {
+        throw new Error('should not bootstrap')
+      },
       bootout: async () => {},
-      kickstart: async (label) => { calls.push({ verb: 'kickstart', label }) },
+      kickstart: async (label) => {
+        calls.push({ verb: 'kickstart', label })
+      },
       runCmdAllowFailure: async () => ({ exitCode: 0 }),
     }
     const code = await runService({ args: ['start', 'mcp'], envLoader: () => ENV, logger: captureLogger(), deps })
@@ -75,7 +84,9 @@ describe('runService', () => {
     const deps = {
       isLoaded: async () => true,
       bootstrapOrKick: async () => {},
-      bootout: async (label) => { calls.push(label) },
+      bootout: async (label) => {
+        calls.push(label)
+      },
       kickstart: async () => {},
       runCmdAllowFailure: async () => ({ exitCode: 0 }),
     }
@@ -88,14 +99,15 @@ describe('runService', () => {
     const fanout = []
     const deps = {
       isLoaded: async () => false,
-      bootstrapOrKick: async (label) => { fanout.push(label) },
-      bootout: async () => {}, kickstart: async () => {}, runCmdAllowFailure: async () => ({ exitCode: 0 }),
+      bootstrapOrKick: async (label) => {
+        fanout.push(label)
+      },
+      bootout: async () => {},
+      kickstart: async () => {},
+      runCmdAllowFailure: async () => ({ exitCode: 0 }),
     }
     await runService({ args: ['start', 'all'], envLoader: () => ENV, logger: captureLogger(), deps })
-    expect(fanout).toEqual([
-      'mt.test.web', 'mt.test.mcp', 'mt.test.cloudflared.web', 'mt.test.cloudflared.mcp',
-      'mt.test.proxy', 'mt.test.watchdog',
-    ])
+    expect(fanout).toEqual(['mt.test.web', 'mt.test.mcp', 'mt.test.cloudflared.web', 'mt.test.cloudflared.mcp', 'mt.test.proxy', 'mt.test.watchdog'])
   })
 
   test('status still exits 0 when service is missing, but logs the launchctl stderr', async () => {
@@ -104,12 +116,14 @@ describe('runService', () => {
     const log = captureLogger()
     const deps = {
       isLoaded: async () => false,
-      bootstrapOrKick: async () => {}, bootout: async () => {}, kickstart: async () => {},
+      bootstrapOrKick: async () => {},
+      bootout: async () => {},
+      kickstart: async () => {},
       runCmdAllowFailure: async () => ({ exitCode: 113, stdout: '', stderr: 'Could not find service "mt.test.web" in domain for system' }),
     }
     const code = await runService({ args: ['status', 'web'], envLoader: () => ENV, logger: log, deps })
     expect(code).toBe(0)
-    expect(log.lines.some(m => m.includes('Could not find service'))).toBe(true)
+    expect(log.lines.some((m) => m.includes('Could not find service'))).toBe(true)
   })
 
   test('unknown verb returns 64', async () => {

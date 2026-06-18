@@ -28,7 +28,10 @@ export function markdownToHtml(md, _depth = 0) {
   while (i < lines.length) {
     const line = lines[i]
 
-    if (line.trim() === '') { i++; continue }
+    if (line.trim() === '') {
+      i++
+      continue
+    }
 
     // HTML comment — skip entirely
     if (line.trim().startsWith('<!--')) {
@@ -124,7 +127,7 @@ export function markdownToHtml(md, _depth = 0) {
         items.push(lines[i].replace(/^[-*+]\s+/, ''))
         i++
       }
-      out.push(`<ul>${items.map(item => `<li>${inlineMarkdown(item)}</li>`).join('')}</ul>`)
+      out.push(`<ul>${items.map((item) => `<li>${inlineMarkdown(item)}</li>`).join('')}</ul>`)
       continue
     }
 
@@ -135,7 +138,7 @@ export function markdownToHtml(md, _depth = 0) {
         items.push(lines[i].replace(/^\d+[.)]\s+/, ''))
         i++
       }
-      out.push(`<ol>${items.map(item => `<li>${inlineMarkdown(item)}</li>`).join('')}</ol>`)
+      out.push(`<ol>${items.map((item) => `<li>${inlineMarkdown(item)}</li>`).join('')}</ol>`)
       continue
     }
 
@@ -148,14 +151,17 @@ export function markdownToHtml(md, _depth = 0) {
 
     // Paragraph — collect consecutive non-special lines
     const paraLines = []
-    while (i < lines.length && lines[i].trim() !== '' &&
+    while (
+      i < lines.length &&
+      lines[i].trim() !== '' &&
       !lines[i].match(/^(`{3,}|~{3,})/) &&
       !lines[i].match(/^#{1,6}\s/) &&
       !lines[i].match(/^>\s/) &&
       !lines[i].match(/^[-*+]\s+/) &&
       !lines[i].match(/^\d+[.)]\s+/) &&
       !lines[i].match(/^[-*_]{3,}\s*$/) &&
-      !lines[i].trim().startsWith('<!--')) {
+      !lines[i].trim().startsWith('<!--')
+    ) {
       paraLines.push(lines[i])
       i++
     }
@@ -179,9 +185,7 @@ export function markdownToHtml(md, _depth = 0) {
 function inlineMarkdown(text) {
   // Pre-process: convert <doc:PageName> and <doc:PageName#Section> references before escaping
   const pre = text.replace(/<doc:([^>#]+)(?:#([^>]+))?>/g, (_match, page, section) => {
-    const displayName = section
-      ? `${page.replace(/-/g, ' ')} — ${section.replace(/-/g, ' ')}`
-      : page.replace(/-/g, ' ')
+    const displayName = section ? `${page.replace(/-/g, ' ')} — ${section.replace(/-/g, ' ')}` : page.replace(/-/g, ' ')
     // Link to a search-friendly path — use the page name as the last segment
     return `[${displayName}](/docs/swift-book/?q=${encodeURIComponent(page)})`
   })
@@ -191,11 +195,9 @@ function inlineMarkdown(text) {
   // DocC fill-in placeholder syntax: <#name#>. After escapeHtml the source
   // form is `&lt;#name#&gt;`. Render as a styled span so it visually
   // distinguishes from surrounding code, matching docc-render's behavior.
-  s = s.replace(/&lt;#([^#]+?)#&gt;/g, (_m, name) =>
-    `<span class="placeholder">${name}</span>`,
-  )
+  s = s.replace(/&lt;#([^#]+?)#&gt;/g, (_m, name) => `<span class="placeholder">${name}</span>`)
   // Images: ![alt](url) — render alt text only (no images in docs)
-  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt) => alt ? `<em>[${alt}]</em>` : '')
+  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt) => (alt ? `<em>[${alt}]</em>` : ''))
   // Remove empty image/link brackets: ![] or []
   s = s.replace(/!\[\]/g, '')
   s = s.replace(/\[\]\([^)]*\)/g, '')

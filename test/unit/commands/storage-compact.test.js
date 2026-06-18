@@ -1,12 +1,12 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { storageCompact } from '../../../src/commands/storage-compact.js'
-import { search } from '../../../src/commands/search.js'
+import { join } from 'node:path'
 import { lookup } from '../../../src/commands/lookup.js'
-import { setProfile, getProfile } from '../../../src/storage/profiles.js'
+import { search } from '../../../src/commands/search.js'
+import { storageCompact } from '../../../src/commands/storage-compact.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
+import { getProfile, setProfile } from '../../../src/storage/profiles.js'
 
 let db
 let dataDir
@@ -52,13 +52,13 @@ describe('storageCompact', () => {
 
     // …but every reader decodes it transparently.
     const sections = db.getDocumentSections(KEY)
-    expect(sections.find(s => s.sectionKind === 'discussion').contentText).toContain('part of your app user interface')
+    expect(sections.find((s) => s.sectionKind === 'discussion').contentText).toContain('part of your app user interface')
 
     const page = await lookup({ path: KEY }, ctx)
     expect(page.content).toContain('part of your app user interface')
 
     const r = await search({ query: 'View', noDeep: true }, ctx)
-    expect(r.results.map(x => x.path)).toContain(KEY)
+    expect(r.results.map((x) => x.path)).toContain(KEY)
   })
 
   test('drops embedded raw payloads by default (DELETE, table kept)', async () => {
@@ -69,7 +69,7 @@ describe('storageCompact', () => {
     setProfile(db, 'balanced')
     const res = await storageCompact({}, ctx)
     expect(res.rawDropped).toBe(1)
-    expect(db.getRawCount()).toBe(0)             // payloads gone
+    expect(db.getRawCount()).toBe(0) // payloads gone
     expect(db.hasTable('document_raw')).toBe(true) // but the table stays (DELETE, not DROP)
   })
 
@@ -108,6 +108,6 @@ describe('storageCompact', () => {
     const res2 = await storageCompact({}, ctx)
     expect(res2.status).toBe('ok')
     const sections = db.getDocumentSections(KEY)
-    expect(sections.find(s => s.sectionKind === 'discussion').contentText).toContain('part of your app user interface')
+    expect(sections.find((s) => s.sectionKind === 'discussion').contentText).toContain('part of your app user interface')
   })
 })

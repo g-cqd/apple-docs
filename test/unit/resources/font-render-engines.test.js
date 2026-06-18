@@ -1,14 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { _resetFontTextEngines, _resolveFontTextEngines, renderFontText } from '../../../src/resources/apple-fonts/render.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import {
-  renderFontText,
-  _resolveFontTextEngines,
-  _resetFontTextEngines,
-} from '../../../src/resources/apple-fonts/render.js'
 
 const realWhich = Bun.which
 const realPlatform = process.platform
@@ -74,8 +69,15 @@ describe('renderFontText engine fallback', () => {
     // Valid SFNT magic so the probe passes; not a real font.
     writeFileSync(path, Buffer.concat([Buffer.from('OTTO'), Buffer.alloc(64)]))
     db.upsertAppleFontFile({
-      id: 'f'.repeat(24), familyId: 'sf-pro', fileName: 'SF-Pro.otf', filePath: path,
-      source: 'remote', italic: false, isVariable: false, axes: [], size: 68,
+      id: 'f'.repeat(24),
+      familyId: 'sf-pro',
+      fileName: 'SF-Pro.otf',
+      filePath: path,
+      source: 'remote',
+      italic: false,
+      isVariable: false,
+      axes: [],
+      size: 68,
     })
     return 'f'.repeat(24)
   }
@@ -94,10 +96,7 @@ describe('renderFontText engine fallback', () => {
     process.env.APPLE_DOCS_FONT_RENDERER = 'hb-view'
     const id = seedFont()
     const warnings = []
-    const r = await renderFontText(
-      { fontId: id, text: 'Hello' },
-      { db, dataDir, logger: { warn: (m) => warnings.push(m) } },
-    )
+    const r = await renderFontText({ fontId: id, text: 'Hello' }, { db, dataDir, logger: { warn: (m) => warnings.push(m) } })
     expect(r.content).toContain('<text')
     expect(warnings.length).toBeGreaterThan(0)
   })
@@ -112,13 +111,17 @@ describe.skipIf(!hbView || !existsSync(realFont))('hb-view integration', () => {
     process.env.APPLE_DOCS_FONT_RENDERER = 'hb-view'
     db.upsertAppleFontFamily({ id: 'sf-mono', displayName: 'SF Mono', status: 'available' })
     db.upsertAppleFontFile({
-      id: 'a'.repeat(24), familyId: 'sf-mono', fileName: 'SF-Mono-Regular.otf', filePath: realFont,
-      source: 'remote', italic: false, isVariable: false, axes: [], size: 1,
+      id: 'a'.repeat(24),
+      familyId: 'sf-mono',
+      fileName: 'SF-Mono-Regular.otf',
+      filePath: realFont,
+      source: 'remote',
+      italic: false,
+      isVariable: false,
+      axes: [],
+      size: 1,
     })
-    const r = await renderFontText(
-      { fontId: 'a'.repeat(24), text: 'Hello' },
-      { db, dataDir: join(homedir(), '.apple-docs'), logger: { warn() {} } },
-    )
+    const r = await renderFontText({ fontId: 'a'.repeat(24), text: 'Hello' }, { db, dataDir: join(homedir(), '.apple-docs'), logger: { warn() {} } })
     expect(r.content).toContain('<svg')
     expect(r.content).toContain('<path') // real outlines, not the <text> placeholder
     expect(r.content).not.toContain('<text')

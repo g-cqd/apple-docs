@@ -1,40 +1,33 @@
-import { describe, test, expect } from 'bun:test'
-import { normalizeIdentifier, extractRootSlug } from '../../../src/apple/normalizer.js'
+import { describe, expect, test } from 'bun:test'
+import { extractRootSlug, normalizeIdentifier } from '../../../src/apple/normalizer.js'
 
 describe('normalizeIdentifier', () => {
   test('handles doc:// URI scheme', () => {
-    expect(normalizeIdentifier('doc://com.apple.SwiftUI/documentation/SwiftUI/View'))
-      .toBe('swiftui/view')
+    expect(normalizeIdentifier('doc://com.apple.SwiftUI/documentation/SwiftUI/View')).toBe('swiftui/view')
   })
 
   test('handles /documentation/ prefix', () => {
-    expect(normalizeIdentifier('/documentation/SwiftUI/View'))
-      .toBe('swiftui/view')
+    expect(normalizeIdentifier('/documentation/SwiftUI/View')).toBe('swiftui/view')
   })
 
   test('handles mixed-case path without prefix', () => {
-    expect(normalizeIdentifier('SwiftUI/View'))
-      .toBe('swiftui/view')
+    expect(normalizeIdentifier('SwiftUI/View')).toBe('swiftui/view')
   })
 
   test('handles documentation/ prefix without leading slash', () => {
-    expect(normalizeIdentifier('documentation/SwiftUI/View'))
-      .toBe('swiftui/view')
+    expect(normalizeIdentifier('documentation/SwiftUI/View')).toBe('swiftui/view')
   })
 
   test('passes through already canonical path', () => {
-    expect(normalizeIdentifier('swiftui/view'))
-      .toBe('swiftui/view')
+    expect(normalizeIdentifier('swiftui/view')).toBe('swiftui/view')
   })
 
   test('strips trailing slashes', () => {
-    expect(normalizeIdentifier('swiftui/view/'))
-      .toBe('swiftui/view')
+    expect(normalizeIdentifier('swiftui/view/')).toBe('swiftui/view')
   })
 
   test('handles deeply nested paths', () => {
-    expect(normalizeIdentifier('doc://com.apple.documentation/documentation/Foundation/NSString/Encoding'))
-      .toBe('foundation/nsstring/encoding')
+    expect(normalizeIdentifier('doc://com.apple.documentation/documentation/Foundation/NSString/Encoding')).toBe('foundation/nsstring/encoding')
   })
 
   test('returns null for empty/null input', () => {
@@ -58,8 +51,7 @@ describe('normalizeIdentifier', () => {
   })
 
   test('strips fragment identifiers', () => {
-    expect(normalizeIdentifier('activitykit/displaying-live-data#configure'))
-      .toBe('activitykit/displaying-live-data')
+    expect(normalizeIdentifier('activitykit/displaying-live-data#configure')).toBe('activitykit/displaying-live-data')
   })
 
   test('keeps valid operator paths without leading dot', () => {

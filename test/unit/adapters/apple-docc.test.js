@@ -41,42 +41,58 @@ describe('AppleDoccAdapter', () => {
   })
 
   test('maps HEAD results into adapter check statuses', async () => {
-    globalThis.fetch = async () => new Response('', {
-      status: 304,
-      headers: { etag: '"same"' },
-    })
+    globalThis.fetch = async () =>
+      new Response('', {
+        status: 304,
+        headers: { etag: '"same"' },
+      })
 
     const adapter = new AppleDoccAdapter()
-    const result = await adapter.check('swiftui/view', { etag: '"same"' }, {
-      rateLimiter: { acquire: async () => {} },
-    })
+    const result = await adapter.check(
+      'swiftui/view',
+      { etag: '"same"' },
+      {
+        rateLimiter: { acquire: async () => {} },
+      },
+    )
 
     expect(result.status).toBe('unchanged')
     expect(result.changed).toBe(false)
   })
 
   test('check returns modified status on 200', async () => {
-    globalThis.fetch = async () => new Response('', {
-      status: 200,
-      headers: { etag: '"new-etag"' },
-    })
+    globalThis.fetch = async () =>
+      new Response('', {
+        status: 200,
+        headers: { etag: '"new-etag"' },
+      })
 
     const adapter = new AppleDoccAdapter()
-    const result = await adapter.check('swiftui/view', { etag: '"old"' }, {
-      rateLimiter: { acquire: async () => {} },
-    })
+    const result = await adapter.check(
+      'swiftui/view',
+      { etag: '"old"' },
+      {
+        rateLimiter: { acquire: async () => {} },
+      },
+    )
 
     expect(result.status).toBe('modified')
     expect(result.changed).toBe(true)
   })
 
   test('check returns error status on network failure', async () => {
-    globalThis.fetch = async () => { throw new Error('network down') }
+    globalThis.fetch = async () => {
+      throw new Error('network down')
+    }
 
     const adapter = new AppleDoccAdapter()
-    const result = await adapter.check('swiftui/view', { etag: '"x"' }, {
-      rateLimiter: { acquire: async () => {} },
-    })
+    const result = await adapter.check(
+      'swiftui/view',
+      { etag: '"x"' },
+      {
+        rateLimiter: { acquire: async () => {} },
+      },
+    )
 
     expect(result.status).toBe('error')
     expect(result.changed).toBe(false)

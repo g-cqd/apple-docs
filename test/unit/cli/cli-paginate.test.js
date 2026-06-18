@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
-import { paginateCliContent } from '../../../src/cli/paginate.js'
+import { describe, expect, test } from 'bun:test'
 import { formatLookup, formatSearchRead } from '../../../src/cli/formatter.js'
+import { paginateCliContent } from '../../../src/cli/paginate.js'
 
 describe('paginateCliContent', () => {
   const makeResult = (content) => ({ found: true, content, metadata: { title: 'Test' } })
@@ -219,7 +219,7 @@ describe('content splitting quality', () => {
       allPages.push(paginateCliContent(makeResult(content), 200, i).content)
     }
     // No page should start in the middle of the header text
-    const headerSplit = allPages.some(p => p.startsWith('mportant Title') || p.startsWith('portant Title'))
+    const headerSplit = allPages.some((p) => p.startsWith('mportant Title') || p.startsWith('portant Title'))
     expect(headerSplit).toBe(false)
   })
 

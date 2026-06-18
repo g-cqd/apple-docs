@@ -2,31 +2,53 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createLru } from '../../../src/lib/lru.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { searchHandler } from '../../../src/web/routes/search.route.js'
-import { createLru } from '../../../src/lib/lru.js'
 
 let db
 let ctx
 let dataDir
 
 const INFRA_BLACKLIST = new Set([
-  'matchQuality', 'distance', 'score',
-  'tier', 'tierLimitation', 'trigramAvailable', 'bodyIndexAvailable',
-  'relaxed', 'relaxationTier', 'partial', 'partialReasons',
-  'urlDepth', 'sourceMetadata', 'intent',
-  'sectionKind', 'sortOrder', 'file_path',
+  'matchQuality',
+  'distance',
+  'score',
+  'tier',
+  'tierLimitation',
+  'trigramAvailable',
+  'bodyIndexAvailable',
+  'relaxed',
+  'relaxationTier',
+  'partial',
+  'partialReasons',
+  'urlDepth',
+  'sourceMetadata',
+  'intent',
+  'sectionKind',
+  'sortOrder',
+  'file_path',
 ])
 
-const SEARCH_ALLOWED = new Set([
-  'query', 'total', 'hasMore', 'results', 'approximate', 'truncated', 'pageInfo',
-])
+const SEARCH_ALLOWED = new Set(['query', 'total', 'hasMore', 'results', 'approximate', 'truncated', 'pageInfo'])
 
 const HIT_ALLOWED = new Set([
-  'path', 'title', 'framework', 'rootSlug', 'kind', 'sourceType',
-  'abstract', 'declaration', 'platforms', 'language',
-  'snippet', 'relatedCount', 'confidence',
-  'isDeprecated', 'isBeta', 'isReleaseNotes',
+  'path',
+  'title',
+  'framework',
+  'rootSlug',
+  'kind',
+  'sourceType',
+  'abstract',
+  'declaration',
+  'platforms',
+  'language',
+  'snippet',
+  'relatedCount',
+  'confidence',
+  'isDeprecated',
+  'isBeta',
+  'isReleaseNotes',
   // web-only: hashed site path when it differs from the corpus key
   'webPath',
 ])
@@ -53,14 +75,16 @@ beforeEach(() => {
   db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
   db.upsertNormalizedDocument({
     document: {
-      sourceType: 'apple-docc', key: 'swiftui/view', title: 'View',
-      kind: 'symbol', role: 'symbol', roleHeading: 'Protocol',
+      sourceType: 'apple-docc',
+      key: 'swiftui/view',
+      title: 'View',
+      kind: 'symbol',
+      role: 'symbol',
+      roleHeading: 'Protocol',
       framework: 'swiftui',
-      abstractText: 'A type that represents part of your app\'s user interface.',
+      abstractText: "A type that represents part of your app's user interface.",
     },
-    sections: [
-      { sectionKind: 'abstract', contentText: 'A type that represents part of your app\'s user interface.', sortOrder: 0 },
-    ],
+    sections: [{ sectionKind: 'abstract', contentText: "A type that represents part of your app's user interface.", sortOrder: 0 }],
     relationships: [],
   })
 
@@ -69,13 +93,13 @@ beforeEach(() => {
       sourceType: 'apple-docc',
       key: `swiftui/zephyrview/init(${'parameterlabel:'.repeat(20)})`,
       title: 'ZephyrView initializer',
-      kind: 'symbol', role: 'symbol', roleHeading: 'Initializer',
+      kind: 'symbol',
+      role: 'symbol',
+      roleHeading: 'Initializer',
       framework: 'swiftui',
       abstractText: 'Synthetic overlong-key doc.',
     },
-    sections: [
-      { sectionKind: 'abstract', contentText: 'Synthetic overlong-key doc.', sortOrder: 0 },
-    ],
+    sections: [{ sectionKind: 'abstract', contentText: 'Synthetic overlong-key doc.', sortOrder: 0 }],
     relationships: [],
   })
 
@@ -97,7 +121,11 @@ beforeEach(() => {
 afterEach(() => {
   db?.close()
   if (dataDir) {
-    try { rmSync(dataDir, { recursive: true, force: true }) } catch { /* tolerate */ }
+    try {
+      rmSync(dataDir, { recursive: true, force: true })
+    } catch {
+      /* tolerate */
+    }
     dataDir = undefined
   }
 })
@@ -132,7 +160,7 @@ describe('/api/search response respects public allowlist', () => {
 
   test('overlong-key hits carry webPath (hashed site path) and stay allowlisted', async () => {
     const out = await callSearch('ZephyrView')
-    const hit = (out.results ?? []).find(r => r.path.startsWith('swiftui/zephyrview/'))
+    const hit = (out.results ?? []).find((r) => r.path.startsWith('swiftui/zephyrview/'))
     expect(hit).toBeDefined()
     expect(hit.webPath).toMatch(/~[0-9a-f]{12}$/)
     expect(hit.webPath).not.toBe(hit.path)

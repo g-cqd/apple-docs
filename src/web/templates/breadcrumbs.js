@@ -5,8 +5,8 @@
 // logic on purpose: the visual nav and the structured-data declaration
 // must always agree on the chain.
 
-import { html } from '../lib/html.js'
 import { safeWebDocKey } from '../../lib/safe-path.js'
+import { html } from '../lib/html.js'
 
 /**
  * Render the breadcrumb nav for a doc / framework key.

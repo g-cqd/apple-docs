@@ -27,7 +27,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { isNativeEnabled } from '../native/loader.js'
 import { buildNativeModel2Vec } from './embedder-native.js'
-import { meanPool, lastTokenPool, l2normalize, truncate } from './pooling.js'
+import { l2normalize, lastTokenPool, meanPool, truncate } from './pooling.js'
 
 // Model registry. `APPLE_DOCS_EMBED_MODEL` selects a key; `APPLE_DOCS_EMBED_DIMS`
 // optionally Matryoshka-truncates a feature-extraction model. Adding a model is
@@ -149,7 +149,9 @@ export async function getEmbedder({ logger, modelsDir } = {}) {
     if (onnxFallbackInstalled) {
       // Single-threaded WASM: Bun's worker support and ort-web's
       // threaded dispatch don't agree on every platform.
-      try { tx.env.backends.onnx.wasm.numThreads = 1 } catch {}
+      try {
+        tx.env.backends.onnx.wasm.numThreads = 1
+      } catch {}
     }
     cached = await buildFeatureExtraction(tx, spec)
   } catch (err) {
@@ -202,33 +204,40 @@ async function buildFeatureExtraction(tx, spec) {
   const { AutoModel, AutoTokenizer } = tx
   const model = await AutoModel.from_pretrained(spec.hfId, { dtype: spec.dtype ?? 'fp32' })
   const tokenizer = await AutoTokenizer.from_pretrained(spec.hfId)
-  const applyPrefix = (text, isQuery) =>
-    (isQuery ? (spec.queryPrefix ?? '') : (spec.docPrefix ?? '')) + (text ?? '')
+  const applyPrefix = (text, isQuery) => (isQuery ? (spec.queryPrefix ?? '') : (spec.docPrefix ?? '')) + (text ?? '')
   const run = async (texts, isQuery) => {
-    const enc = await tokenizer(texts.map(t => applyPrefix(t, isQuery)), { padding: true, truncation: true })
+    const enc = await tokenizer(
+      texts.map((t) => applyPrefix(t, isQuery)),
+      { padding: true, truncation: true },
+    )
     const out = await model({ input_ids: enc.input_ids, attention_mask: enc.attention_mask })
-    const hidden = out.last_hidden_state ?? out.token_embeddings
-      ?? Object.values(out).find(v => v?.dims?.length === 3)
+    const hidden = out.last_hidden_state ?? out.token_embeddings ?? Object.values(out).find((v) => v?.dims?.length === 3)
     const [n, seq, dim] = hidden.dims
     const maskData = enc.attention_mask?.data
     const results = new Array(n)
     for (let i = 0; i < n; i++) {
       const seqData = hidden.data.subarray(i * seq * dim, (i + 1) * seq * dim)
       const mask = maskData ? maskRow(maskData, i, seq) : null
-      const pooled = spec.pooling === 'last'
-        ? lastTokenPool(seqData, dim, mask)
-        : spec.pooling === 'cls'
-          ? Float32Array.from(seqData.subarray(0, dim)) // first token ([CLS])
-          : meanPool(seqData, dim, mask)
+      const pooled =
+        spec.pooling === 'last'
+          ? lastTokenPool(seqData, dim, mask)
+          : spec.pooling === 'cls'
+            ? Float32Array.from(seqData.subarray(0, dim)) // first token ([CLS])
+            : meanPool(seqData, dim, mask)
       results[i] = l2normalize(truncate(pooled, spec.targetDims))
     }
     return results
   }
   return {
-    async embed(text, opts) { return (await run([text ?? ''], !!opts?.isQuery))[0] },
+    async embed(text, opts) {
+      return (await run([text ?? ''], !!opts?.isQuery))[0]
+    },
     async embedBatch(texts, opts) {
       if (!texts || texts.length === 0) return []
-      return run(texts.map(t => t ?? ''), !!opts?.isQuery)
+      return run(
+        texts.map((t) => t ?? ''),
+        !!opts?.isQuery,
+      )
     },
   }
 }

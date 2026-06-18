@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DocsDatabase } from '../../../src/storage/database.js'
 import { _resetTrigramCache, fuzzyMatchTitles } from '../../../src/lib/fuzzy.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let dataDir
 let db
@@ -26,7 +26,7 @@ describe('fuzzyMatchTitles trigram cache (P2.9 staleness)', () => {
   test('finds a known title with a 1-char typo', () => {
     // 'Viev' shares trigram 'vie' with 'View' (one substitution away).
     const matches = fuzzyMatchTitles('Viev', db)
-    expect(matches.find(m => m.title === 'View')).toBeDefined()
+    expect(matches.find((m) => m.title === 'View')).toBeDefined()
   })
 
   test('newly-added title surfaces after the corpus stamp drifts', async () => {
@@ -40,12 +40,12 @@ describe('fuzzyMatchTitles trigram cache (P2.9 staleness)', () => {
     // Bump the DB file's mtime so the stamp shifts, then nudge the
     // STAMP_TTL_MS internal clock by waiting past the throttle window.
     const dbPath = join(dataDir, 'apple-docs.db')
-    const future = (Date.now() / 1000) + 60
+    const future = Date.now() / 1000 + 60
     utimesSync(dbPath, future, future)
-    await new Promise(r => setTimeout(r, 5_010))
+    await new Promise((r) => setTimeout(r, 5_010))
 
     const matches = fuzzyMatchTitles('List', db)
-    expect(matches.find(m => m.title === 'Listt')).toBeDefined()
+    expect(matches.find((m) => m.title === 'Listt')).toBeDefined()
   }, 10_000)
 
   test('cache survives within STAMP_TTL_MS without rebuild churn', () => {
@@ -60,6 +60,6 @@ describe('fuzzyMatchTitles trigram cache (P2.9 staleness)', () => {
     // missing because the stamp_read is rate-limited and the file mtime
     // genuinely did just bump (Bun.file flush). The point is the call
     // doesn't crash and previously-cached titles still match.
-    expect(matches.find(m => m.title === 'View')).toBeDefined()
+    expect(matches.find((m) => m.title === 'View')).toBeDefined()
   })
 })

@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildSymbolsArchive } from '../../../scripts/build-symbols-archive.js'
 import { buildFontsArchives, FONT_FAMILIES } from '../../../scripts/build-fonts-archives.js'
+import { buildSymbolsArchive } from '../../../scripts/build-symbols-archive.js'
 import { resolveSevenZipBinary } from '../../../src/lib/archive-7z.js'
 
 let dataDir
@@ -20,7 +20,11 @@ afterEach(() => {
 })
 
 let hasSevenZip = true
-try { resolveSevenZipBinary() } catch { hasSevenZip = false }
+try {
+  resolveSevenZipBinary()
+} catch {
+  hasSevenZip = false
+}
 const describeIf = hasSevenZip ? describe : describe.skip
 
 describeIf('buildSymbolsArchive', () => {
@@ -77,15 +81,6 @@ describeIf('buildFontsArchives', () => {
   })
 
   test('FONT_FAMILIES exports the 8 canonical slugs', () => {
-    expect(FONT_FAMILIES).toEqual([
-      'sf-pro',
-      'sf-compact',
-      'sf-mono',
-      'new-york',
-      'sf-arabic',
-      'sf-armenian',
-      'sf-georgian',
-      'sf-hebrew',
-    ])
+    expect(FONT_FAMILIES).toEqual(['sf-pro', 'sf-compact', 'sf-mono', 'new-york', 'sf-arabic', 'sf-armenian', 'sf-georgian', 'sf-hebrew'])
   })
 })

@@ -1,17 +1,17 @@
-import { dirname } from 'node:path'
 import { existsSync, statSync } from 'node:fs'
-import { createReaderPools } from '../storage/reader-pools.js'
+import { dirname } from 'node:path'
+import { initHighlighter } from '../content/highlight.js'
+import { getCommitHash } from '../lib/git-version.js'
+import { sha256 } from '../lib/hash.js'
+import { createLru } from '../lib/lru.js'
 import { createHostBucketedLimiter } from '../lib/per-host-rate-limiter.js'
 import { Semaphore } from '../lib/semaphore.js'
-import { createOnDemandGate } from './middleware/on-demand-gate.js'
-import { sha256 } from '../lib/hash.js'
-import { initHighlighter } from '../content/highlight.js'
-import { createLru } from '../lib/lru.js'
-import { createWebRenderCache } from './render-cache.js'
-import { buildTitleIndex, buildAliasMap } from './search-artifacts.js'
+import { createReaderPools } from '../storage/reader-pools.js'
 import { buildCsp } from './csp.js'
 import { createPyftsubsetPool } from './lib/font-subset/pyftsubset-pool.js'
-import { getCommitHash } from '../lib/git-version.js'
+import { createOnDemandGate } from './middleware/on-demand-gate.js'
+import { createWebRenderCache } from './render-cache.js'
+import { buildAliasMap, buildTitleIndex } from './search-artifacts.js'
 
 /**
  * @typedef {object} WebContext
@@ -63,11 +63,11 @@ export async function createWebContext(opts, ctx) {
   let snapshotTag = null
   let buildMacos = null
   try {
-    snapshotTag = db.getSnapshotMeta?.('snapshot_tag')
-      ?? db.getSnapshotMeta?.('snapshot_version')
-      ?? null
+    snapshotTag = db.getSnapshotMeta?.('snapshot_tag') ?? db.getSnapshotMeta?.('snapshot_version') ?? null
     buildMacos = db.getSnapshotMeta?.('build_macos') ?? null
-  } catch { /* provenance unavailable */ }
+  } catch {
+    /* provenance unavailable */
+  }
   const siteConfig = {
     baseUrl: opts.baseUrl || '',
     siteName: opts.siteName || 'Apple Developer Docs',
@@ -98,18 +98,12 @@ export async function createWebContext(opts, ctx) {
   // cap concurrent native-render work (Swift symbols / fonts) so a
   // burst of renders can't pin every CPU. maxWaiters bounds the queue
   // depth — past that we shed load with 503 + Retry-After: 1.
-  const renderSemaphore = new Semaphore(
-    parsePositiveInt(process.env.APPLE_DOCS_WEB_RENDER_CONCURRENCY) ?? 4,
-    { maxWaiters: 8 },
-  )
+  const renderSemaphore = new Semaphore(parsePositiveInt(process.env.APPLE_DOCS_WEB_RENDER_CONCURRENCY) ?? 4, { maxWaiters: 8 })
   // font-subset has its own semaphore so a burst of subset calls
   // can't squeeze out the symbol/text renderers and vice versa. The
   // pool itself sizes its Python workers (max 4); the semaphore is the
   // queue admission gate. Overflow → 503 + Retry-After: 1.
-  const fontSubsetSemaphore = new Semaphore(
-    parsePositiveInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_CONCURRENCY) ?? 8,
-    { maxWaiters: 16 },
-  )
+  const fontSubsetSemaphore = new Semaphore(parsePositiveInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_CONCURRENCY) ?? 8, { maxWaiters: 16 })
   // Lazy-init: the pool spawns Python processes, so building it during
   // tests that never touch the route would waste CPU and crash hosts
   // without fontTools installed. The route checks `fontSubsetPool`
@@ -134,7 +128,7 @@ export async function createWebContext(opts, ctx) {
   // 64 MB byte cap so a flood of large subsets can't blow memory.
   const fontSubsetCache = createLru({
     max: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_LRU) ?? 256,
-    maxBytes: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_LRU_BYTES) ?? (64 * 1024 * 1024),
+    maxBytes: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_LRU_BYTES) ?? 64 * 1024 * 1024,
     sizeFn: (v) => v?.byteLength ?? 0,
   })
   const readerPool = await resolveWebReaderPool(ctx, opts, logger)
@@ -144,7 +138,7 @@ export async function createWebContext(opts, ctx) {
   // with rich snippets. Add a 64 MB byte cap on top of the count cap.
   const searchCache = createLru({
     max: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_SEARCH_CACHE) ?? 512,
-    maxBytes: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_SEARCH_CACHE_BYTES) ?? (64 * 1024 * 1024),
+    maxBytes: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_SEARCH_CACHE_BYTES) ?? 64 * 1024 * 1024,
   })
   const corpusStamp = createCorpusStamp(ctx)
 
@@ -211,7 +205,7 @@ export async function createWebContext(opts, ctx) {
       shardCount: 0,
       files: {
         'title-index': `title-index.${titleHash}.json`,
-        'aliases': `aliases.${aliasHash}.json`,
+        aliases: `aliases.${aliasHash}.json`,
       },
       generatedAt: new Date().toISOString(),
     }
@@ -269,7 +263,9 @@ export async function createWebContext(opts, ctx) {
     fontSubsetSemaphore,
     fontSubsetCache,
     getFontSubsetPool,
-    get fontSubsetPool() { return fontSubsetPool },
+    get fontSubsetPool() {
+      return fontSubsetPool
+    },
     renderCache,
     readerPool,
     searchCtx,
@@ -304,9 +300,13 @@ function createCorpusStamp(ctx) {
 
   function compute() {
     let mtime = 0
-    try { mtime = dbPath && dbPath !== ':memory:' ? Math.floor(statSync(dbPath).mtimeMs) : 0 } catch {}
+    try {
+      mtime = dbPath && dbPath !== ':memory:' ? Math.floor(statSync(dbPath).mtimeMs) : 0
+    } catch {}
     let schema = 0
-    try { schema = ctx?.db?.getSchemaVersion?.() ?? 0 } catch {}
+    try {
+      schema = ctx?.db?.getSchemaVersion?.() ?? 0
+    } catch {}
     return `${schema}:${mtime}`
   }
 
@@ -362,9 +362,7 @@ async function resolveWebReaderPool(ctx, opts, logger) {
     })
     await pool.start()
     const snap = pool.stats()
-    logger?.info?.(
-      `web reader-pool: ready strict=${snap.pools.strict.size} deep=${snap.pools.deep.size} spawns=${snap.spawns}`,
-    )
+    logger?.info?.(`web reader-pool: ready strict=${snap.pools.strict.size} deep=${snap.pools.deep.size} spawns=${snap.spawns}`)
     return pool
   } catch (err) {
     logger?.error?.(`web reader-pool: failed to start (${err?.message ?? err}); falling back to main-thread reads`)

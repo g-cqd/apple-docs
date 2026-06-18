@@ -1,18 +1,10 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import {
-  mkdtempSync,
-  mkdirSync,
-  rmSync,
-  writeFileSync,
-  existsSync,
-  readFileSync,
-  utimesSync,
-} from 'node:fs'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createHash } from 'node:crypto'
-import { createTarZstArchive, countTarMembers } from '../../../src/lib/archive-zstd.js'
 import { extractTarZst } from '../../../src/commands/setup/helpers.js'
+import { countTarMembers, createTarZstArchive } from '../../../src/lib/archive-zstd.js'
 
 let workDir
 
@@ -105,16 +97,18 @@ describe('createTarZstArchive', () => {
     writeFileSync(tarPath, bytes.subarray(0, 200)) // partial first header
     let threw = false
     let count = -1
-    try { count = await countTarMembers(tarPath) } catch { threw = true }
+    try {
+      count = await countTarMembers(tarPath)
+    } catch {
+      threw = true
+    }
     expect(threw || count !== 3).toBe(true)
   })
 
   test('refuses to archive an empty source dir', async () => {
     const src = join(workDir, 'empty')
     mkdirSync(src)
-    await expect(
-      createTarZstArchive({ sourceDir: src, outputPath: join(workDir, 'empty.tar.zst') }),
-    ).rejects.toThrow(/no files under/)
+    await expect(createTarZstArchive({ sourceDir: src, outputPath: join(workDir, 'empty.tar.zst') })).rejects.toThrow(/no files under/)
   })
 
   test('excludes macOS Finder junk (.DS_Store / ._*) so they cannot break determinism', async () => {

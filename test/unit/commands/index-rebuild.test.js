@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { rebuildBody, rebuildTrigram } from '../../../src/commands/index-rebuild.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { createMockLogger } from '../../helpers/mocks.js'
@@ -37,7 +37,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  try { db.close() } catch {}
+  try {
+    db.close()
+  } catch {}
   rmSync(dataDir, { recursive: true, force: true })
 })
 

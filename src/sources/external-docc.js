@@ -18,15 +18,15 @@
  * slug-scoped keys with no remapping, and BFS stays inside the archive.
  */
 
-import { fetchWithRetry, checkResourceEtag } from '../lib/fetch-with-retry.js'
-import { normalize } from '../content/normalize.js'
+import { fetchTechnologies } from '../apple/api.js'
 import { extractReferences } from '../apple/extractor.js'
 import { extractRootSlug } from '../apple/normalizer.js'
-import { fetchTechnologies } from '../apple/api.js'
+import { normalize } from '../content/normalize.js'
 import { NotFoundError } from '../lib/errors.js'
+import { checkResourceEtag, fetchWithRetry } from '../lib/fetch-with-retry.js'
 import { SourceAdapter } from './base.js'
-import { collectIndexPaths } from './swift-docc.js'
 import { parseDoccArchiveUrl } from './docc-url.js'
+import { collectIndexPaths } from './swift-docc.js'
 
 const USER_AGENT = 'apple-docs-mcp/1.0'
 const DEFAULT_TIMEOUT = Number.parseInt(process.env.APPLE_DOCS_TIMEOUT ?? '30000', 10)
@@ -81,8 +81,7 @@ export class ExternalDoccAdapter extends SourceAdapter {
   }
 
   async discover(ctx) {
-    await this.detectFromTechnologies(ctx).catch(e =>
-      ctx.logger?.warn?.(`external-docc: detection skipped: ${e.message}`))
+    await this.detectFromTechnologies(ctx).catch((e) => ctx.logger?.warn?.(`external-docc: detection skipped: ${e.message}`))
 
     const roots = []
     const allKeys = []
@@ -97,7 +96,7 @@ export class ExternalDoccAdapter extends SourceAdapter {
         const root = ctx.db.getRootBySlug(slug)
         if (root) roots.push(root)
       }
-      const keys = await this.enumerate(slug, archive, ctx).catch(e => {
+      const keys = await this.enumerate(slug, archive, ctx).catch((e) => {
         ctx.logger?.warn?.(`external-docc: enumerate ${slug} failed: ${e.message}`)
         return []
       })
@@ -211,7 +210,7 @@ export class ExternalDoccAdapter extends SourceAdapter {
   extractReferences(key, rawPayload) {
     const { slug } = this.resolveArchive(key)
     const json = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload
-    return extractReferences(json).filter(ref => extractRootSlug(ref) === slug)
+    return extractReferences(json).filter((ref) => extractRootSlug(ref) === slug)
   }
 
   renderHints() {

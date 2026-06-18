@@ -92,10 +92,10 @@ function applyMigrations(db) {
   const current = row ? Number.parseInt(row.value, 10) : 0
 
   if (current > SCHEMA_VERSION) {
-    throw new ValidationError(
-      `Database schema version ${current} is newer than supported version ${SCHEMA_VERSION}. Update apple-docs to a newer version.`,
-      { field: 'schemaVersion', value: current },
-    )
+    throw new ValidationError(`Database schema version ${current} is newer than supported version ${SCHEMA_VERSION}. Update apple-docs to a newer version.`, {
+      field: 'schemaVersion',
+      value: current,
+    })
   }
   if (current === SCHEMA_VERSION) return
 
@@ -109,7 +109,11 @@ function applyMigrations(db) {
   } catch (e) {
     // BEGIN itself may have been the failing statement — a rollback then
     // has no transaction to act on; never mask the original error.
-    try { db.run('ROLLBACK') } catch { /* no active transaction */ }
+    try {
+      db.run('ROLLBACK')
+    } catch {
+      /* no active transaction */
+    }
     throw new ValidationError(`Migration from v${current} to v${SCHEMA_VERSION} failed: ${e.message}`)
   }
 }

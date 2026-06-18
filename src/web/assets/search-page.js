@@ -37,10 +37,13 @@ function init() {
       const data = await resp.json()
       populateSelect('filter-framework', data.frameworks)
       populateSelect('filter-kind', data.kinds)
-      populateSelect('filter-year', (data.wwdcYears || []).map(y => ({
-        value: String(y.year),
-        label: `${y.year} (${y.count})`,
-      })))
+      populateSelect(
+        'filter-year',
+        (data.wwdcYears || []).map((y) => ({
+          value: String(y.year),
+          label: `${y.year} (${y.count})`,
+        })),
+      )
     } catch {
       // Filters unavailable (static mode) — dropdowns stay with "All" only
     }
@@ -52,7 +55,7 @@ function init() {
     for (const val of values) {
       const value = typeof val === 'object' && val.value !== undefined ? val.value : val
       const label = typeof val === 'object' && val.value !== undefined ? (val.label ?? val.value) : val
-      const existing = [...select.options].find(option => option.value === value)
+      const existing = [...select.options].find((option) => option.value === value)
       if (existing) {
         if (existing.textContent === existing.value) existing.textContent = label
         continue
@@ -65,7 +68,7 @@ function init() {
   }
 
   function ensureSelectOption(select, value) {
-    if ([...select.options].some(option => option.value === value)) return
+    if ([...select.options].some((option) => option.value === value)) return
     const opt = document.createElement('option')
     opt.value = value
     opt.textContent = value
@@ -92,7 +95,7 @@ function init() {
     if (lang) params.set('language', lang)
 
     // Platform checkboxes — send comma-joined list
-    const platforms = [...form.querySelectorAll('input[name="platform"]:checked')].map(el => el.value)
+    const platforms = [...form.querySelectorAll('input[name="platform"]:checked')].map((el) => el.value)
     if (platforms.length > 0) params.set('platform', platforms.join(','))
 
     // Text inputs
@@ -121,7 +124,7 @@ function init() {
     }
     const lang = form.querySelector('input[name="language"]:checked')?.value
     if (lang) params.set('language', lang)
-    const platforms = [...form.querySelectorAll('input[name="platform"]:checked')].map(el => el.value)
+    const platforms = [...form.querySelectorAll('input[name="platform"]:checked')].map((el) => el.value)
     if (platforms.length > 0) params.set('platform', platforms.join(','))
     for (const name of ['min_ios', 'min_macos', 'min_watchos', 'min_tvos', 'min_visionos', 'year', 'track']) {
       const el = form.querySelector(`[name="${name}"]`)
@@ -187,12 +190,11 @@ function init() {
 
   // Render results
   function renderResults(results, append) {
-    const html = results.map(r => {
-      const label = displayConfidence(r.confidence)
-      const qualityHtml = label
-        ? `<span class="result-card-quality" data-confidence="${esc(r.confidence)}">${esc(label)}</span>`
-        : ''
-      return `
+    const html = results
+      .map((r) => {
+        const label = displayConfidence(r.confidence)
+        const qualityHtml = label ? `<span class="result-card-quality" data-confidence="${esc(r.confidence)}">${esc(label)}</span>` : ''
+        return `
       <a href="/docs/${esc(r.webPath ?? r.path)}/" class="search-result-card">
         <div class="result-card-header">
           <span class="result-card-title">${esc(r.title)}</span>
@@ -210,7 +212,8 @@ function init() {
         </div>
       </a>
     `
-    }).join('')
+      })
+      .join('')
     if (append) {
       resultsEl.insertAdjacentHTML('beforeend', html)
     } else {
@@ -303,9 +306,7 @@ function init() {
       // offset+limit), not a corpus-wide count — `hasMore` is the real
       // pagination signal. Fall back to the count comparison for static
       // deployments serving an older API shape.
-      const hasMore = typeof data.hasMore === 'boolean'
-        ? data.hasMore
-        : currentResultCount < currentTotal
+      const hasMore = typeof data.hasMore === 'boolean' ? data.hasMore : currentResultCount < currentTotal
 
       if (results.length === 0 && offset === 0) {
         statusEl.textContent = 'No results found.'

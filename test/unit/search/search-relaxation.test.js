@@ -1,16 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  SEARCH_STOPWORDS,
-  pickHighSignalToken,
-  pruneStopwords,
-  tokenize,
-} from '../../../src/search/relaxation.js'
+import { pickHighSignalToken, pruneStopwords, SEARCH_STOPWORDS, tokenize } from '../../../src/search/relaxation.js'
 
 describe('tokenize', () => {
   test('splits a natural-language query on punctuation', () => {
-    expect(tokenize('how do I use NavigationStack?')).toEqual([
-      'how', 'do', 'I', 'use', 'NavigationStack',
-    ])
+    expect(tokenize('how do I use NavigationStack?')).toEqual(['how', 'do', 'I', 'use', 'NavigationStack'])
   })
 
   test('drops empty tokens and single-digit noise', () => {
@@ -29,9 +22,7 @@ describe('tokenize', () => {
 
 describe('pruneStopwords', () => {
   test('drops filler words from a natural-language query', () => {
-    expect(pruneStopwords(['how', 'do', 'I', 'use', 'NavigationStack'])).toEqual([
-      'NavigationStack',
-    ])
+    expect(pruneStopwords(['how', 'do', 'I', 'use', 'NavigationStack'])).toEqual(['NavigationStack'])
   })
 
   test('keeps CamelCase tokens even when their lowercased form matches a stopword', () => {

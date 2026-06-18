@@ -1,4 +1,4 @@
-import { bold, dim, formatBytes, } from './_shared.js'
+import { bold, dim, formatBytes } from './_shared.js'
 
 export function formatStatus(result) {
   const fmt = formatBytes
@@ -15,7 +15,9 @@ export function formatStatus(result) {
   const pages = result.pages ?? { active: 0, deleted: 0 }
   const rawJson = result.rawJson ?? { size: 0, files: 0 }
   const markdown = result.markdown ?? { size: 0, files: 0 }
-  const kindStr = Object.entries(roots.byKind ?? {}).map(([k, v]) => `${v} ${k}`).join(', ')
+  const kindStr = Object.entries(roots.byKind ?? {})
+    .map(([k, v]) => `${v} ${k}`)
+    .join(', ')
 
   // `tier` only appears when `apple-docs status --advanced` is passed.
   const tierLabel = result.tier ? ` [${result.tier} tier]` : ''
@@ -40,7 +42,7 @@ export function formatStatus(result) {
   if (result.capabilities) {
     const c = result.capabilities
     const caps = []
-    caps.push("search: yes")
+    caps.push('search: yes')
     caps.push(`fuzzy: ${c.searchTrigram ? 'yes' : 'no'}`)
     caps.push(`body: ${c.searchBody ? 'yes' : 'no'}`)
     caps.push(`read: ${c.readContent ? 'yes' : 'metadata only'}`)
@@ -71,8 +73,8 @@ export function formatStatus(result) {
 
     // Per-root breakdown (only show roots with pending or failed)
     const crawlByRoot = result.crawlByRoot ?? []
-    const active = crawlByRoot.filter(r => r.pending > 0 || r.failed > 0)
-    const done = crawlByRoot.filter(r => r.pending === 0 && r.failed === 0)
+    const active = crawlByRoot.filter((r) => r.pending > 0 || r.failed > 0)
+    const done = crawlByRoot.filter((r) => r.pending === 0 && r.failed === 0)
 
     if (active.length > 0) {
       lines.push('')
@@ -84,7 +86,7 @@ export function formatStatus(result) {
 
     if (done.length > 0 && done.length <= 10) {
       lines.push('')
-      lines.push(`  ${bold('Complete:')} ${done.map(r => `${r.root} (${r.total})`).join(', ')}`)
+      lines.push(`  ${bold('Complete:')} ${done.map((r) => `${r.root} (${r.total})`).join(', ')}`)
     } else if (done.length > 10) {
       lines.push('')
       lines.push(`  ${bold('Complete:')} ${done.length} roots`)
@@ -95,7 +97,7 @@ export function formatStatus(result) {
     lines.push('')
     lines.push(bold(`  Update available: ${result.updateAvailable.latest}`))
     lines.push(`  Current:  ${result.updateAvailable.current}`)
-    lines.push("  Run: apple-docs setup --force")
+    lines.push('  Run: apple-docs setup --force')
   }
 
   if (result.freshness) {
@@ -107,10 +109,10 @@ export function formatStatus(result) {
       // The user projection drops `staleRoots` (projectStatus) — only
       // `--advanced` envelopes carry it.
       if (f.staleRoots?.length > 0) {
-        lines.push(`  Stale roots:     ${f.staleRoots.map(r => `${r.slug} (${r.daysSince}d)`).join(', ')}`)
+        lines.push(`  Stale roots:     ${f.staleRoots.map((r) => `${r.slug} (${r.daysSince}d)`).join(', ')}`)
       }
     } else {
-      lines.push("  Freshness:       No sync history")
+      lines.push('  Freshness:       No sync history')
     }
   }
 

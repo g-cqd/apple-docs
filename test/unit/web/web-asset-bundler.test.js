@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { minifyJs } from '../../../src/web/asset-bundler.js'
@@ -53,6 +53,10 @@ describe('minifyJs', () => {
 // /tmp on dev hosts that don't auto-vacuum.
 process.on('exit', () => {
   if (tmp) {
-    try { rmSync(tmp, { recursive: true, force: true }) } catch { /* best effort */ }
+    try {
+      rmSync(tmp, { recursive: true, force: true })
+    } catch {
+      /* best effort */
+    }
   }
 })

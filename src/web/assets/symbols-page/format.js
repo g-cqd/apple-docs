@@ -55,12 +55,9 @@ export function formatAvailability(availability) {
   if (!availability || typeof availability !== 'object') return ''
   const platformOrder = ['iOS', 'iPadOS', 'macOS', 'watchOS', 'tvOS', 'visionOS']
   const seen = new Set(platformOrder)
-  const ordered = [
-    ...platformOrder.filter(p => availability[p]),
-    ...Object.keys(availability).filter(p => !seen.has(p)),
-  ]
+  const ordered = [...platformOrder.filter((p) => availability[p]), ...Object.keys(availability).filter((p) => !seen.has(p))]
   return ordered
-    .map(p => availability[p] ? `${p} ${availability[p]}` : null)
+    .map((p) => (availability[p] ? `${p} ${availability[p]}` : null))
     .filter(Boolean)
     .join(', ')
 }

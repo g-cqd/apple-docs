@@ -1,7 +1,7 @@
-import { fetchWithRetry, checkResourceEtag } from '../lib/fetch-with-retry.js'
-import { normalize } from '../content/normalize.js'
 import { extractReferences } from '../apple/extractor.js'
 import { extractRootSlug } from '../apple/normalizer.js'
+import { normalize } from '../content/normalize.js'
+import { checkResourceEtag, fetchWithRetry } from '../lib/fetch-with-retry.js'
 import { SourceAdapter } from './base.js'
 import { addEntryPoints } from './entry-points.js'
 
@@ -114,15 +114,17 @@ export class SwiftDoccAdapter extends SourceAdapter {
       if (root) allRoots.push(root)
     }
 
-    const indexResults = await Promise.all(entries.map(async ([slug, archive]) => {
-      try {
-        const { data } = await fetchWithRetry(indexUrl(archive), ctx.rateLimiter, HTTP_OPTS)
-        return { slug, paths: collectIndexPaths(data) }
-      } catch (e) {
-        ctx.logger?.warn?.(`swift-docc: failed to discover ${slug}`, { error: e.message })
-        return { slug, paths: [] }
-      }
-    }))
+    const indexResults = await Promise.all(
+      entries.map(async ([slug, archive]) => {
+        try {
+          const { data } = await fetchWithRetry(indexUrl(archive), ctx.rateLimiter, HTTP_OPTS)
+          return { slug, paths: collectIndexPaths(data) }
+        } catch (e) {
+          ctx.logger?.warn?.(`swift-docc: failed to discover ${slug}`, { error: e.message })
+          return { slug, paths: [] }
+        }
+      }),
+    )
 
     const allKeys = []
     for (const { slug, paths } of indexResults) {
@@ -170,7 +172,7 @@ export class SwiftDoccAdapter extends SourceAdapter {
   extractReferences(key, rawPayload) {
     const { slug } = archiveForKey(key)
     const json = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload
-    return extractReferences(json).map(ref => addArchivePrefix(slug, ref))
+    return extractReferences(json).map((ref) => addArchivePrefix(slug, ref))
   }
 
   renderHints() {

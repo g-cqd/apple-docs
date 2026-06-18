@@ -1,14 +1,9 @@
-import { discoverRoots } from '../pipeline/discover.js'
-import { Semaphore } from '../lib/semaphore.js'
-import { getAdapter, getAllAdapters } from '../sources/registry.js'
-import {
-  ROOT_CATALOG_SOURCE_TYPES,
-  discoverAdaptersInParallel,
-  normalizeList,
-  validateRequestedSources,
-} from './command-helpers.js'
-import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
 import { scopeRootsFor } from '../lib/scope.js'
+import { Semaphore } from '../lib/semaphore.js'
+import { discoverRoots } from '../pipeline/discover.js'
+import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
+import { getAdapter, getAllAdapters } from '../sources/registry.js'
+import { discoverAdaptersInParallel, normalizeList, ROOT_CATALOG_SOURCE_TYPES, validateRequestedSources } from './command-helpers.js'
 import { updateDoccSource } from './update/docc.js'
 import { updateFlatSource } from './update/flat.js'
 import { updateGuidelinesSource } from './update/guidelines.js'
@@ -29,11 +24,7 @@ export async function update(opts, ctx) {
 
   validateRequestedSources(requestedSources)
 
-  const adapters = ctx.adapters ?? (
-    requestedSources
-      ? requestedSources.map(getAdapter)
-      : getAllAdapters()
-  )
+  const adapters = ctx.adapters ?? (requestedSources ? requestedSources.map(getAdapter) : getAllAdapters())
   const adapterCtx = { ...ctx, rootCatalogReady: false, semaphore }
 
   db.setActivity('update', opts.roots ?? null)
@@ -45,7 +36,7 @@ export async function update(opts, ctx) {
   let errCount = 0
 
   try {
-    if (adapters.some(adapter => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
+    if (adapters.some((adapter) => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
       try {
         await discoverRoots(db, rateLimiter, logger)
         adapterCtx.rootCatalogReady = true
@@ -54,8 +45,7 @@ export async function update(opts, ctx) {
       }
     }
 
-    const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } =
-      await discoverAdaptersInParallel(adapters, adapterCtx)
+    const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } = await discoverAdaptersInParallel(adapters, adapterCtx)
 
     for (const adapter of adapters) {
       try {
@@ -140,6 +130,10 @@ export async function update(opts, ctx) {
     // an active reader pool (e.g. embedded tests): respawn workers so any
     // prepared statements reload against the post-write schema. WAL would
     // usually cover us without this; recycle is cheap when the pool is idle.
-    try { await ctx.readerPool?.recycle?.() } catch { /* best-effort */ }
+    try {
+      await ctx.readerPool?.recycle?.()
+    } catch {
+      /* best-effort */
+    }
   }
 }

@@ -7,20 +7,17 @@
  * the script body can be diffed independently.
  */
 
-import { rm } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
-import {
-  clampInteger,
-  escapeXml,
-} from '../apple-assets-helpers.js'
-import { isLikelySfnt } from './sfnt.js'
-import { assertFontPathContained } from './safe-font-path.js'
-import { FONT_TEXT_SCRIPT } from '../swift-templates.js'
-import { nativeFontTextShaped, nativeFontTextSvg, nativeRenderAvailable } from '../render-native.js'
 import { NotFoundError, ValidationError } from '../../lib/errors.js'
+import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
+import { clampInteger, escapeXml } from '../apple-assets-helpers.js'
+import { nativeFontTextShaped, nativeFontTextSvg, nativeRenderAvailable } from '../render-native.js'
+import { FONT_TEXT_SCRIPT } from '../swift-templates.js'
+import { assertFontPathContained } from './safe-font-path.js'
+import { isLikelySfnt } from './sfnt.js'
 
 const ENGINE_ENV = 'APPLE_DOCS_FONT_RENDERER'
 let enginesCache // string[] | undefined
@@ -67,7 +64,9 @@ export async function renderFontText(opts, ctx) {
   } catch (error) {
     ctx.logger?.warn?.(`renderFontText: refused unsafe path for ${font.id}: ${error.message}`)
     return {
-      font, text, format: 'svg',
+      font,
+      text,
+      format: 'svg',
       mimeType: 'image/svg+xml; charset=utf-8',
       content: renderFontTextSvgFallback({ fontFamily: font.family_display_name, text, pointSize }),
     }
@@ -83,11 +82,12 @@ export async function renderFontText(opts, ctx) {
   if (valid) {
     for (const engine of _resolveFontTextEngines()) {
       try {
-        content = engine === 'hb-native'
-          ? nativeFontTextShaped({ fontPath: safeFontPath, text, pointSize })
-          : engine === 'hb-view'
-            ? await renderFontTextSvgHarfBuzz({ fontPath: safeFontPath, text, pointSize })
-            : await renderFontTextSvgCurves({ fontPath: safeFontPath, text, pointSize })
+        content =
+          engine === 'hb-native'
+            ? nativeFontTextShaped({ fontPath: safeFontPath, text, pointSize })
+            : engine === 'hb-view'
+              ? await renderFontTextSvgHarfBuzz({ fontPath: safeFontPath, text, pointSize })
+              : await renderFontTextSvgCurves({ fontPath: safeFontPath, text, pointSize })
         if (content) break
       } catch (error) {
         ctx.logger?.warn?.(`${engine} outline render failed for ${font.file_name}: ${error.message}`)
@@ -163,10 +163,7 @@ async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
   const scriptPath = join(stagingDir, 'render-font.swift')
   await Bun.write(scriptPath, FONT_TEXT_SCRIPT)
   try {
-    const { stdout, stderr, exitCode } = await spawnWithDeadline(
-      ['swift', scriptPath, fontPath, text, String(pointSize)],
-      { deadlineMs: 10_000 },
-    )
+    const { stdout, stderr, exitCode } = await spawnWithDeadline(['swift', scriptPath, fontPath, text, String(pointSize)], { deadlineMs: 10_000 })
     if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
     return new TextDecoder().decode(stdout)
   } finally {

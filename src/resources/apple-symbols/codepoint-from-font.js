@@ -82,8 +82,7 @@ function parseCmapFormat4(cmapTable, offset) {
       if (idRangeOffset === 0) {
         glyphIndex = (cp + idDelta) & 0xffff
       } else {
-        const glyphIndexAddr =
-          idRangeOffsetOff + i * 2 + idRangeOffset + (cp - startCode) * 2
+        const glyphIndexAddr = idRangeOffsetOff + i * 2 + idRangeOffset + (cp - startCode) * 2
         // Bounds guard — corrupt fonts can point outside the table.
         if (glyphIndexAddr + 2 > cmapTable.length) continue
         const raw = view.getUint16(glyphIndexAddr, false)

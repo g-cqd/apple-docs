@@ -10,6 +10,8 @@
 export function up(db) {
   try {
     db.run('ALTER TABLE documents ADD COLUMN usr TEXT')
-  } catch { /* column already exists */ }
+  } catch {
+    /* column already exists */
+  }
   db.run('CREATE INDEX IF NOT EXISTS idx_documents_usr ON documents(usr)')
 }

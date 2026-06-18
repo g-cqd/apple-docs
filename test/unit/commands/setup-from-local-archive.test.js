@@ -1,11 +1,11 @@
-import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { tmpdir, homedir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { snapshotBuild } from '../../../src/commands/snapshot.js'
 import { setup } from '../../../src/commands/setup.js'
+import { snapshotBuild } from '../../../src/commands/snapshot.js'
 import { createLogger } from '../../../src/lib/logger.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { fileCount } from '../../../src/storage/files.js'
 
 let dataDir
@@ -20,7 +20,10 @@ let snapshotResult
 // left in the module-level embedder cache) — that load made the suite flaky
 // under parallel load. The WITH-semantic path is covered by setup-smoke.
 let priorSemanticEnv
-beforeAll(() => { priorSemanticEnv = process.env.APPLE_DOCS_SEMANTIC; process.env.APPLE_DOCS_SEMANTIC = 'off' })
+beforeAll(() => {
+  priorSemanticEnv = process.env.APPLE_DOCS_SEMANTIC
+  process.env.APPLE_DOCS_SEMANTIC = 'off'
+})
 afterAll(() => {
   if (priorSemanticEnv === undefined) delete process.env.APPLE_DOCS_SEMANTIC
   else process.env.APPLE_DOCS_SEMANTIC = priorSemanticEnv
@@ -57,10 +60,7 @@ beforeEach(async () => {
   // hosts, so target $HOME explicitly here.
   snapshotOutDir = mkdtempSync(join(homedir(), '.apple-docs-archive-test-'))
   logger = createLogger('error')
-  snapshotResult = await snapshotBuild(
-    { out: snapshotOutDir, tag: 'archive-test-1' },
-    { db: sourceDb, dataDir: sourceDir, logger },
-  )
+  snapshotResult = await snapshotBuild({ out: snapshotOutDir, tag: 'archive-test-1' }, { db: sourceDb, dataDir: sourceDir, logger })
   sourceDb.close()
   rmSync(sourceDir, { recursive: true, force: true })
 
@@ -70,17 +70,20 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
-  try { db.close() } catch {}
-  try { rmSync(dataDir, { recursive: true, force: true }) } catch {}
-  try { rmSync(snapshotOutDir, { recursive: true, force: true }) } catch {}
+  try {
+    db.close()
+  } catch {}
+  try {
+    rmSync(dataDir, { recursive: true, force: true })
+  } catch {}
+  try {
+    rmSync(snapshotOutDir, { recursive: true, force: true })
+  } catch {}
 })
 
 describe('setup --archive (local snapshot install)', () => {
   test('installs from a local archive with valid checksum sidecar', async () => {
-    const result = await setup(
-      { archive: snapshotResult.archivePath },
-      { db, dataDir, logger },
-    )
+    const result = await setup({ archive: snapshotResult.archivePath }, { db, dataDir, logger })
     expect(result.status).toBe('ok')
     expect(result.source).toBe('local-archive')
     expect(result.documentCount).toBeGreaterThanOrEqual(1)
@@ -96,10 +99,7 @@ describe('setup --archive (local snapshot install)', () => {
   })
 
   test('skipResources skips the post-install font/symbol re-index', async () => {
-    const result = await setup(
-      { archive: snapshotResult.archivePath, skipResources: true },
-      { db, dataDir, logger },
-    )
+    const result = await setup({ archive: snapshotResult.archivePath, skipResources: true }, { db, dataDir, logger })
     expect(result.status).toBe('ok')
     // Document count comes from the extracted DB regardless of resource skip.
     expect(result.documentCount).toBeGreaterThanOrEqual(1)
@@ -108,10 +108,7 @@ describe('setup --archive (local snapshot install)', () => {
   test('proceeds with warn when sidecar checksum is missing', async () => {
     // Remove the checksum sidecar — local-archive mode is permissive.
     rmSync(snapshotResult.checksumPath, { force: true })
-    const result = await setup(
-      { archive: snapshotResult.archivePath },
-      { db, dataDir, logger },
-    )
+    const result = await setup({ archive: snapshotResult.archivePath }, { db, dataDir, logger })
     expect(result.status).toBe('ok')
     expect(result.documentCount).toBeGreaterThanOrEqual(1)
   })
@@ -119,10 +116,7 @@ describe('setup --archive (local snapshot install)', () => {
   test('rejects a stale / wrong checksum sidecar', async () => {
     // Corrupt the sidecar with a definitely-not-matching hash.
     writeFileSync(snapshotResult.checksumPath, 'deadbeef'.repeat(8) + '  archive\n')
-    await expect(setup(
-      { archive: snapshotResult.archivePath },
-      { db, dataDir, logger },
-    )).rejects.toThrow(/Checksum mismatch/i)
+    await expect(setup({ archive: snapshotResult.archivePath }, { db, dataDir, logger })).rejects.toThrow(/Checksum mismatch/i)
   })
 
   test('rejects an archive outside $HOME / cwd', async () => {
@@ -132,7 +126,7 @@ describe('setup --archive (local snapshot install)', () => {
     const outsidePath = join(outsideDir, 'archive.7z')
     Bun.write(outsidePath, Bun.file(snapshotResult.archivePath))
     // Wait a beat for the async write.
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     try {
       if (!existsSync(outsidePath)) {
         // Bun.write returned but the file isn't visible yet — skip
@@ -143,20 +137,14 @@ describe('setup --archive (local snapshot install)', () => {
       if (outsideDir.startsWith(`${homedir()}/`) || outsideDir.startsWith(`${process.cwd()}/`)) {
         return
       }
-      await expect(setup(
-        { archive: outsidePath },
-        { db, dataDir, logger },
-      )).rejects.toThrow(/must live under \$HOME or the current working directory/)
+      await expect(setup({ archive: outsidePath }, { db, dataDir, logger })).rejects.toThrow(/must live under \$HOME or the current working directory/)
     } finally {
       rmSync(outsideDir, { recursive: true, force: true })
     }
   })
 
   test('reports archive path in the result envelope', async () => {
-    const result = await setup(
-      { archive: snapshotResult.archivePath },
-      { db, dataDir, logger },
-    )
+    const result = await setup({ archive: snapshotResult.archivePath }, { db, dataDir, logger })
     expect(result.archive).toBe(snapshotResult.archivePath)
   })
 
@@ -164,18 +152,12 @@ describe('setup --archive (local snapshot install)', () => {
     // Seed a page on the target DB so totalPages > 0.
     const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
     db.upsertPage({ rootId: root.id, path: 'swiftui/view', url: 'u', title: 'View', role: 'symbol' })
-    const result = await setup(
-      { archive: snapshotResult.archivePath, force: false },
-      { db, dataDir, logger },
-    )
+    const result = await setup({ archive: snapshotResult.archivePath, force: false }, { db, dataDir, logger })
     expect(result.status).toBe('exists')
   })
 
   test('default install (non-interactive) applies the balanced profile', async () => {
-    const result = await setup(
-      { archive: snapshotResult.archivePath, yes: true },
-      { db, dataDir, logger },
-    )
+    const result = await setup({ archive: snapshotResult.archivePath, yes: true }, { db, dataDir, logger })
     expect(result.storageProfile).toBe('balanced')
     const verifyDb = new DocsDatabase(join(dataDir, 'apple-docs.db'))
     try {
@@ -186,20 +168,14 @@ describe('setup --archive (local snapshot install)', () => {
   })
 
   test('--profile prebuilt materializes markdown locally from sections', async () => {
-    const result = await setup(
-      { archive: snapshotResult.archivePath, profile: 'prebuilt' },
-      { db, dataDir, logger },
-    )
+    const result = await setup({ archive: snapshotResult.archivePath, profile: 'prebuilt' }, { db, dataDir, logger })
     expect(result.storageProfile).toBe('prebuilt')
     // storageMaterialize rendered the corpus to disk from document_sections.
     expect(fileCount(join(dataDir, 'markdown'))).toBeGreaterThanOrEqual(1)
   })
 
   test('--profile compact compacts the install in one step (no separate storage compact)', async () => {
-    const result = await setup(
-      { archive: snapshotResult.archivePath, profile: 'compact' },
-      { db, dataDir, logger },
-    )
+    const result = await setup({ archive: snapshotResult.archivePath, profile: 'compact' }, { db, dataDir, logger })
     expect(result.storageProfile).toBe('compact')
     const verifyDb = new DocsDatabase(join(dataDir, 'apple-docs.db'))
     try {
@@ -215,9 +191,6 @@ describe('setup --archive (local snapshot install)', () => {
   })
 
   test('--profile rejects an unknown name', async () => {
-    await expect(setup(
-      { archive: snapshotResult.archivePath, profile: 'bogus' },
-      { db, dataDir, logger },
-    )).rejects.toThrow(/Unknown --profile/)
+    await expect(setup({ archive: snapshotResult.archivePath, profile: 'bogus' }, { db, dataDir, logger })).rejects.toThrow(/Unknown --profile/)
   })
 })

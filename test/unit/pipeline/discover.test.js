@@ -1,7 +1,7 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { crawlRoot } from '../../../src/pipeline/discover.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { Semaphore } from '../../../src/lib/semaphore.js'
+import { crawlRoot } from '../../../src/pipeline/discover.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { createMockLogger } from '../../helpers/mocks.js'
 
 let db
@@ -18,9 +18,7 @@ afterEach(() => {
 
 describe('crawlRoot', () => {
   test('throws for unknown root slug', async () => {
-    await expect(
-      crawlRoot(db, '/tmp', null, 'nonexistent', logger, null, { semaphore: new Semaphore(1) })
-    ).rejects.toThrow('Unknown root: nonexistent')
+    await expect(crawlRoot(db, '/tmp', null, 'nonexistent', logger, null, { semaphore: new Semaphore(1) })).rejects.toThrow('Unknown root: nonexistent')
   })
 
   test('returns processed count when no pending pages', async () => {
@@ -52,8 +50,12 @@ describe('crawlRoot', () => {
     // Use an adapter that immediately fails so we don't hit the network
     const failAdapter = {
       constructor: { type: 'apple-docc' },
-      async fetch() { throw new Error('mock fail') },
-      extractReferences() { return [] },
+      async fetch() {
+        throw new Error('mock fail')
+      },
+      extractReferences() {
+        return []
+      },
     }
 
     try {
@@ -67,7 +69,7 @@ describe('crawlRoot', () => {
     }
 
     // Logger should mention the reset
-    const resetMsg = logger._calls.info.find(args => args[0]?.includes?.('Reset'))
+    const resetMsg = logger._calls.info.find((args) => args[0]?.includes?.('Reset'))
     expect(resetMsg).toBeDefined()
   })
 
@@ -78,9 +80,17 @@ describe('crawlRoot', () => {
     db.setCrawlState('testroot', 'processed', 'testroot', 0)
 
     const progressCalls = []
-    await crawlRoot(db, '/tmp', { acquire: async () => {} }, 'testroot', logger, (info) => {
-      progressCalls.push(info)
-    }, { semaphore: new Semaphore(1) })
+    await crawlRoot(
+      db,
+      '/tmp',
+      { acquire: async () => {} },
+      'testroot',
+      logger,
+      (info) => {
+        progressCalls.push(info)
+      },
+      { semaphore: new Semaphore(1) },
+    )
 
     // No pending pages means no batches means no progress calls
     expect(progressCalls).toEqual([])
@@ -98,7 +108,9 @@ describe('crawlRoot', () => {
         adapterCalled = true
         throw new Error('mock adapter fetch')
       },
-      extractReferences() { return [] },
+      extractReferences() {
+        return []
+      },
     }
 
     try {

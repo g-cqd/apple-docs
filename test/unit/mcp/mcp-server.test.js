@@ -78,10 +78,6 @@ describe('startServer', () => {
     stdin.emit('end')
     await handle.closed
 
-    expect(events).toEqual([
-      ['connect', fakeTransport],
-      ['server-close'],
-      ['transport-close'],
-    ])
+    expect(events).toEqual([['connect', fakeTransport], ['server-close'], ['transport-close']])
   })
 })

@@ -33,11 +33,7 @@ export function contentDispositionAttachment(filename) {
   // ASCII-safe fallback: drop control chars + characters disallowed by RFC
   // 6266 from a quoted-string filename param. Non-printable code points
   // become underscore so the legacy field doesn't carry mojibake.
-  const ascii = safe
-    .replace(CONTROL_CHARS, '')
-    .replace(HEADER_UNSAFE, '')
-    .replace(NON_PRINTABLE_ASCII, '_')
-    .trim() || FALLBACK_FILENAME
+  const ascii = safe.replace(CONTROL_CHARS, '').replace(HEADER_UNSAFE, '').replace(NON_PRINTABLE_ASCII, '_').trim() || FALLBACK_FILENAME
 
   // UTF-8 percent-encoded value for modern UAs.
   const utf8 = encodeURIComponent(safe)

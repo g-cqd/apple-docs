@@ -130,9 +130,9 @@ const RULES = [
 ]
 
 const SWIFT_ORG_REDIRECTS = {
-  'documentation/concurrency':       'swift-migration-guide/documentation/migrationguide',
-  'documentation/package-manager':   'swift-package-manager/documentation/packagemanagerdocs',
-  'documentation/tspl':              'swift-book/The-Swift-Programming-Language',
+  'documentation/concurrency': 'swift-migration-guide/documentation/migrationguide',
+  'documentation/package-manager': 'swift-package-manager/documentation/packagemanagerdocs',
+  'documentation/tspl': 'swift-book/The-Swift-Programming-Language',
 }
 
 function isSwiftOrg(u) {
@@ -149,7 +149,11 @@ function isSwiftOrg(u) {
 export function mapUrlToKey(url) {
   if (typeof url !== 'string' || !url) return null
   let parsed
-  try { parsed = new URL(url) } catch { return null }
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
 
   // Apply known swift.org redirect aliases before hostname rules so they
   // win over the generic swift-org fallback.
@@ -192,7 +196,11 @@ export function createLinkResolver(opts = {}) {
   const docsBase = opts.docsBase ?? '/docs'
   const baseUrl = opts.sourceUrl
   let base
-  try { base = baseUrl ? new URL(baseUrl) : null } catch { base = null }
+  try {
+    base = baseUrl ? new URL(baseUrl) : null
+  } catch {
+    base = null
+  }
 
   return (rawHref) => {
     if (typeof rawHref !== 'string' || !rawHref) return rawHref
@@ -286,7 +294,11 @@ export function classifyLink(url, opts) {
 
   // Absolute URL: try to internalize, otherwise mark external.
   let abs
-  try { abs = new URL(url) } catch { return { category: 'relative_broken', normalized: url } }
+  try {
+    abs = new URL(url)
+  } catch {
+    return { category: 'relative_broken', normalized: url }
+  }
   const candidate = mapUrlToKey(abs.toString())
   if (candidate && knownKeys.has(candidate)) {
     return { category: 'external_resolvable', internalKey: candidate, normalized: url }

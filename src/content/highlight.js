@@ -1,17 +1,38 @@
 import { createHighlighter } from 'shiki'
-import { createLru } from '../lib/lru.js'
 import { sha256 } from '../lib/hash.js'
+import { createLru } from '../lib/lru.js'
 
 const LANG_MAP = {
-  swift: 'swift', occ: 'objective-c', objc: 'objective-c',
-  'objective-c': 'objective-c', 'obj-c': 'objective-c',
-  data: 'xml', plist: 'xml', json: 'json', json5: 'json', jsonc: 'json',
-  javascript: 'javascript', js: 'javascript', c: 'c',
-  shell: 'shellscript', sh: 'shellscript', bash: 'shellscript',
-  zsh: 'shellscript', console: 'shellscript',
-  xml: 'xml', cpp: 'cpp', 'c++': 'cpp', metal: 'cpp',
-  html: 'html', python: 'python', http: 'http', https: 'http',
-  diff: 'diff', md: 'markdown', markdown: 'markdown', css: 'css',
+  swift: 'swift',
+  occ: 'objective-c',
+  objc: 'objective-c',
+  'objective-c': 'objective-c',
+  'obj-c': 'objective-c',
+  data: 'xml',
+  plist: 'xml',
+  json: 'json',
+  json5: 'json',
+  jsonc: 'json',
+  javascript: 'javascript',
+  js: 'javascript',
+  c: 'c',
+  shell: 'shellscript',
+  sh: 'shellscript',
+  bash: 'shellscript',
+  zsh: 'shellscript',
+  console: 'shellscript',
+  xml: 'xml',
+  cpp: 'cpp',
+  'c++': 'cpp',
+  metal: 'cpp',
+  html: 'html',
+  python: 'python',
+  http: 'http',
+  https: 'http',
+  diff: 'diff',
+  md: 'markdown',
+  markdown: 'markdown',
+  css: 'css',
 }
 
 const THEMES = ['github-light', 'github-dark']
@@ -32,10 +53,7 @@ const LANGS = [...new Set(Object.values(LANG_MAP))]
  * the slowdowns. Override via `APPLE_DOCS_HIGHLIGHT_MAX` if you need to
  * chase a specific case.
  */
-const HIGHLIGHT_MAX_BYTES = Math.max(
-  256,
-  Number.parseInt(process.env.APPLE_DOCS_HIGHLIGHT_MAX ?? '', 10) || 8 * 1024,
-)
+const HIGHLIGHT_MAX_BYTES = Math.max(256, Number.parseInt(process.env.APPLE_DOCS_HIGHLIGHT_MAX ?? '', 10) || 8 * 1024)
 
 /**
  * Hard kill-switch: when set (e.g. `APPLE_DOCS_NO_HIGHLIGHT=1` for the
@@ -63,13 +81,15 @@ export function initHighlighter() {
   _highlighterPromise ??= createHighlighter({
     themes: THEMES,
     langs: LANGS,
-  }).then((highlighter) => {
-    _highlighter = highlighter
-    return highlighter
-  }).catch((error) => {
-    _highlighterPromise = null
-    throw error
   })
+    .then((highlighter) => {
+      _highlighter = highlighter
+      return highlighter
+    })
+    .catch((error) => {
+      _highlighterPromise = null
+      throw error
+    })
   return _highlighterPromise
 }
 

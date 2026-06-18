@@ -15,7 +15,9 @@ import { ConfigError } from '../../../src/lib/errors.js'
  */
 
 /** Empty env — keeps loadConfig from picking up the host's process.env. */
-function blank() { return {} }
+function blank() {
+  return {}
+}
 
 describe('loadConfig — defaults', () => {
   test('returns the documented defaults when nothing is set', () => {
@@ -232,6 +234,8 @@ describe('loadConfig — passthrough and error formatting', () => {
   test('returned config is frozen', () => {
     const cfg = loadConfig(blank())
     expect(Object.isFrozen(cfg)).toBe(true)
-    expect(() => { cfg.APPLE_DOCS_LOG_LEVEL = 'debug' }).toThrow()
+    expect(() => {
+      cfg.APPLE_DOCS_LOG_LEVEL = 'debug'
+    }).toThrow()
   })
 })

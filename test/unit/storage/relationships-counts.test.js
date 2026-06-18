@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { DocsDatabase } from '../../../src/storage/database.js'
 import { lookup } from '../../../src/commands/lookup.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let ctx
@@ -16,10 +16,14 @@ beforeEach(() => {
     db.upsertNormalizedDocument({
       document: {
         sourceType: 'apple-docc',
-        key, title: key.split('/').pop(),
-        kind: 'symbol', role: 'symbol', framework: 'swiftui',
+        key,
+        title: key.split('/').pop(),
+        kind: 'symbol',
+        role: 'symbol',
+        framework: 'swiftui',
       },
-      sections: [], relationships: [],
+      sections: [],
+      relationships: [],
     })
   }
 
@@ -27,10 +31,13 @@ beforeEach(() => {
   db.upsertNormalizedDocument({
     document: {
       sourceType: 'apple-docc',
-      key: 'swiftui/view', title: 'View',
-      kind: 'symbol', role: 'symbol', roleHeading: 'Protocol',
+      key: 'swiftui/view',
+      title: 'View',
+      kind: 'symbol',
+      role: 'symbol',
+      roleHeading: 'Protocol',
       framework: 'swiftui',
-      abstractText: 'A type that represents part of your app\'s user interface.',
+      abstractText: "A type that represents part of your app's user interface.",
     },
     sections: [],
     relationships: [
@@ -73,7 +80,10 @@ describe('lookup() surfaces relationships in metadata', () => {
     const out = await lookup({ path: 'swiftui/view' }, ctx)
     expect(out.found).toBe(true)
     expect(out.metadata.relationships).toEqual({
-      inheritsFrom: 1, conformsTo: 1, seeAlso: 1, children: 1,
+      inheritsFrom: 1,
+      conformsTo: 1,
+      seeAlso: 1,
+      children: 1,
     })
   })
 

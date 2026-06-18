@@ -6,11 +6,19 @@
 const STORAGE_KEY = 'apple-docs-lang'
 
 function readStored() {
-  try { return localStorage.getItem(STORAGE_KEY) } catch { return null }
+  try {
+    return localStorage.getItem(STORAGE_KEY)
+  } catch {
+    return null
+  }
 }
 
 function persist(lang) {
-  try { localStorage.setItem(STORAGE_KEY, lang) } catch { /* storage full or disabled */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, lang)
+  } catch {
+    /* storage full or disabled */
+  }
 }
 
 function activate(lang, buttons, variants) {

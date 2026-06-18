@@ -15,8 +15,7 @@ import { extractTarZst } from './helpers.js'
 
 // Both Mac architectures resolve to the one universal-dylib asset; the
 // Swift runtime ships in macOS, so it travels alone.
-export const NATIVE_TARGET =
-  process.platform === 'darwin' ? 'darwin-universal' : `linux-${process.arch === 'x64' ? 'x64' : process.arch}`
+export const NATIVE_TARGET = process.platform === 'darwin' ? 'darwin-universal' : `linux-${process.arch === 'x64' ? 'x64' : process.arch}`
 
 const HEX64 = /\b[a-f0-9]{64}\b/i
 

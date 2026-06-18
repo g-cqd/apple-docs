@@ -19,7 +19,7 @@ import { buildHomepageExtras } from '../homepage-extras.js'
  */
 export function buildHomepageProps(ctx) {
   const { db, siteConfig } = ctx
-  const roots = db.getRoots().filter(r => {
+  const roots = db.getRoots().filter((r) => {
     if (r.page_count <= 1) {
       const pages = db.getPagesByRoot(r.slug)
       if (pages.length <= 1 && (!pages[0] || pages[0].path === r.slug)) return false

@@ -8,12 +8,7 @@
 
 import { runStep } from '../../lib/run-step.js'
 import { indexBodyFull, indexBodyIncremental } from '../../pipeline/index-body.js'
-import {
-  syncAppleFonts,
-  syncSfSymbols,
-  prerenderSfSymbols,
-  stampSfSymbolCodepoints,
-} from '../../resources/apple-assets.js'
+import { prerenderSfSymbols, stampSfSymbolCodepoints, syncAppleFonts, syncSfSymbols } from '../../resources/apple-assets.js'
 
 /**
  * Body-index phase. Incremental by default; `--full` triggers a clean
@@ -21,9 +16,7 @@ import {
  */
 export async function runBodyIndex({ db, dataDir, logger, fullRebuild }) {
   logger.info(fullRebuild ? 'Rebuilding body index...' : 'Indexing body content...')
-  const idxResult = fullRebuild
-    ? await indexBodyFull(db, dataDir, logger)
-    : await indexBodyIncremental(db, dataDir, logger)
+  const idxResult = fullRebuild ? await indexBodyFull(db, dataDir, logger) : await indexBodyIncremental(db, dataDir, logger)
   return { indexed: idxResult.indexed ?? 0 }
 }
 
@@ -62,33 +55,26 @@ export async function runResourcesPhase({ ctx, logger, scope }) {
   else logger.info('Scope: keepFonts=false — skipping Apple fonts sync')
 
   const fontsTask = keepFonts
-    ? runStep(
-      'sync.apple-fonts',
-      () => syncAppleFonts({ downloadFonts }, ctx),
-      { logger },
-    )
+    ? runStep('sync.apple-fonts', () => syncAppleFonts({ downloadFonts }, ctx), { logger })
     : Promise.resolve(skippedOutcome('sync.apple-fonts'))
 
   if (!keepSymbols) logger.info('Scope: keepSymbols=false — skipping SF Symbols sync')
   const symbolsTask = keepSymbols
     ? runStep(
-      'sync.sf-symbols-catalog',
-      async () => {
-        logger.info('Syncing SF Symbols catalog (public + private)...')
-        const [publicCount, privateCount] = await Promise.all([
-          syncSfSymbols({ scope: 'public' }, ctx),
-          syncSfSymbols({ scope: 'private' }, ctx),
-        ])
-        logger.info(`Synced ${publicCount} public + ${privateCount} private SF Symbols`)
-        return { public: publicCount, private: privateCount }
-      },
-      { logger },
-    )
+        'sync.sf-symbols-catalog',
+        async () => {
+          logger.info('Syncing SF Symbols catalog (public + private)...')
+          const [publicCount, privateCount] = await Promise.all([syncSfSymbols({ scope: 'public' }, ctx), syncSfSymbols({ scope: 'private' }, ctx)])
+          logger.info(`Synced ${publicCount} public + ${privateCount} private SF Symbols`)
+          return { public: publicCount, private: privateCount }
+        },
+        { logger },
+      )
     : Promise.resolve(skippedOutcome('sync.sf-symbols-catalog'))
 
   // Prerender only depends on the symbol catalog. Start it as soon as
   // symbols completes — does not wait for fonts.
-  const prerenderTask = symbolsTask.then(async outcome => {
+  const prerenderTask = symbolsTask.then(async (outcome) => {
     if (!outcome.ok || !keepSymbols) return { ok: true, label: 'sync.sf-symbols-prerender', result: null, ms: 0 }
     return runStep(
       'sync.sf-symbols-prerender',
@@ -106,15 +92,10 @@ export async function runResourcesPhase({ ctx, logger, scope }) {
   // (symbols). Gracefully skips when either prerequisite failed.
   const stampTask = Promise.all([fontsTask, symbolsTask]).then(async ([_fOutcome, sOutcome]) => {
     if (!sOutcome.ok || !keepSymbols || !keepFonts) return { ok: true, label: 'sync.sf-symbols-stamp', result: null, ms: 0 }
-    return runStep(
-      'sync.sf-symbols-stamp',
-      async () => stampSfSymbolCodepoints({}, ctx),
-      { logger },
-    )
+    return runStep('sync.sf-symbols-stamp', async () => stampSfSymbolCodepoints({}, ctx), { logger })
   })
 
-  const [fontsOutcome, symbolsOutcome, prerenderOutcome, stampOutcome] =
-    await Promise.all([fontsTask, symbolsTask, prerenderTask, stampTask])
+  const [fontsOutcome, symbolsOutcome, prerenderOutcome, stampOutcome] = await Promise.all([fontsTask, symbolsTask, prerenderTask, stampTask])
 
   if (fontsOutcome.ok) {
     fontsResult = fontsOutcome.result

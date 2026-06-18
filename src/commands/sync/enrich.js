@@ -36,11 +36,15 @@ export async function runEnrichPhase({ db, logger, assetDbPath = null, findAsset
     return fetched.dbPath
   }
 
-  const step = await runStep('sync.enrich-xcode', async () => {
-    const dbPath = await resolveAssetDb()
-    if (!dbPath) return { skipped: true }
-    return enrichFromAsset(db, dbPath, { apply: true, logger })
-  }, { logger })
+  const step = await runStep(
+    'sync.enrich-xcode',
+    async () => {
+      const dbPath = await resolveAssetDb()
+      if (!dbPath) return { skipped: true }
+      return enrichFromAsset(db, dbPath, { apply: true, logger })
+    },
+    { logger },
+  )
 
   return step.ok ? step.result : { skipped: true, error: step.error.message }
 }

@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress } from '../../../src/lib/flat-source-progress.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import {
-  markFlatSourceFailed,
-  markFlatSourceProcessed,
-  seedFlatSourceProgress,
-} from '../../../src/lib/flat-source-progress.js'
 
 let db
 
@@ -20,12 +16,7 @@ describe('flat-source progress helpers', () => {
   test('seedFlatSourceProgress clears stale rows and seeds pending or processed states', () => {
     db.setCrawlState('swift-evolution/old-entry', 'failed', 'swift-evolution', 0, 'timeout')
 
-    seedFlatSourceProgress(
-      db,
-      'swift-evolution',
-      ['swift-evolution/0001', 'swift-evolution/0002'],
-      new Set(['swift-evolution/0001']),
-    )
+    seedFlatSourceProgress(db, 'swift-evolution', ['swift-evolution/0001', 'swift-evolution/0002'], new Set(['swift-evolution/0001']))
 
     const stats = db.getCrawlStats('swift-evolution')
     expect(stats.processed).toBe(1)
@@ -56,12 +47,9 @@ describe('flat-source progress helpers', () => {
       return originalSetCrawlState(...args)
     }
 
-    expect(() => seedFlatSourceProgress(
-      db,
-      'swift-evolution',
-      ['swift-evolution/0001', 'swift-evolution/0002'],
-      new Set(['swift-evolution/0001']),
-    )).toThrow('boom')
+    expect(() => seedFlatSourceProgress(db, 'swift-evolution', ['swift-evolution/0001', 'swift-evolution/0002'], new Set(['swift-evolution/0001']))).toThrow(
+      'boom',
+    )
 
     const stats = db.getCrawlStats('swift-evolution')
     expect(stats.failed).toBe(1)

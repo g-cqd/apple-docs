@@ -10,12 +10,7 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  compareVersions,
-  discoverLatest,
-  ensureSfSymbolsApp,
-  versionFromUrl,
-} from '../../../src/resources/sf-symbols-app/install.js'
+import { compareVersions, discoverLatest, ensureSfSymbolsApp, versionFromUrl } from '../../../src/resources/sf-symbols-app/install.js'
 
 describe('compareVersions', () => {
   test('numeric segment comparison', () => {
@@ -106,7 +101,9 @@ describe('ensureSfSymbolsApp (without network)', () => {
       // should short-circuit on the system path with no network calls.
       // On hosts where it isn't installed, the helper should throw —
       // both outcomes prove the no-discovery branch is reachable.
-      const fetcher = () => { throw new Error('network should not be reached') }
+      const fetcher = () => {
+        throw new Error('network should not be reached')
+      }
       try {
         const out = await ensureSfSymbolsApp({
           dataDir,
@@ -140,9 +137,13 @@ function makeFetcher(table) {
       status: entry.status ?? 200,
       statusText: entry.statusText ?? 'OK',
       headers: {
-        get(name) { return entry.headers?.[name.toLowerCase()] ?? null },
+        get(name) {
+          return entry.headers?.[name.toLowerCase()] ?? null
+        },
       },
-      async text() { return entry.text ?? '' },
+      async text() {
+        return entry.text ?? ''
+      },
     }
   }
 }

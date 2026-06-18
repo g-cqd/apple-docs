@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
 import { verifyCorpusIntegrity } from '../../../src/commands/consolidate.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let tmpDir
@@ -35,16 +35,18 @@ describe('Corpus Integrity (P8-F)', () => {
     db.db.run('PRAGMA foreign_keys = ON')
 
     const result = verifyCorpusIntegrity(db, tmpDir, logger)
-    const orphanCheck = result.checks.find(c => c.name === 'orphan_sections')
+    const orphanCheck = result.checks.find((c) => c.name === 'orphan_sections')
     expect(orphanCheck.ok).toBe(false)
     expect(result.allOk).toBe(false)
   })
 
   test('detects orphan relationships', () => {
-    db.db.run("INSERT INTO document_relationships (from_key, to_key, relation_type) VALUES ('documentation/test/missing-source', 'documentation/test/missing-target', 'conformsTo')")
+    db.db.run(
+      "INSERT INTO document_relationships (from_key, to_key, relation_type) VALUES ('documentation/test/missing-source', 'documentation/test/missing-target', 'conformsTo')",
+    )
 
     const result = verifyCorpusIntegrity(db, tmpDir, logger)
-    const relCheck = result.checks.find(c => c.name === 'orphan_relationships')
+    const relCheck = result.checks.find((c) => c.name === 'orphan_relationships')
     expect(relCheck.ok).toBe(false)
   })
 
@@ -52,23 +54,29 @@ describe('Corpus Integrity (P8-F)', () => {
     // Create raw-json dir (simulating a full-tier install) but don't create the file
     mkdirSync(join(tmpDir, 'raw-json'), { recursive: true })
     const now = new Date().toISOString()
-    db.db.run("INSERT INTO documents (source_type, key, title, kind, role, framework, created_at, updated_at) VALUES ('apple-docc', 'documentation/test/missing', 'Missing', 'symbol', 'symbol', 'test', ?, ?)", [now, now])
+    db.db.run(
+      "INSERT INTO documents (source_type, key, title, kind, role, framework, created_at, updated_at) VALUES ('apple-docc', 'documentation/test/missing', 'Missing', 'symbol', 'symbol', 'test', ?, ?)",
+      [now, now],
+    )
 
     const result = verifyCorpusIntegrity(db, tmpDir, logger)
-    const fileCheck = result.checks.find(c => c.name === 'raw_json_files')
+    const fileCheck = result.checks.find((c) => c.name === 'raw_json_files')
     expect(fileCheck.ok).toBe(false)
   })
 
   test('passes file check when files exist', () => {
     const now = new Date().toISOString()
-    db.db.run("INSERT INTO documents (source_type, key, title, kind, role, framework, created_at, updated_at) VALUES ('apple-docc', 'documentation/test/exists', 'Exists', 'symbol', 'symbol', 'test', ?, ?)", [now, now])
+    db.db.run(
+      "INSERT INTO documents (source_type, key, title, kind, role, framework, created_at, updated_at) VALUES ('apple-docc', 'documentation/test/exists', 'Exists', 'symbol', 'symbol', 'test', ?, ?)",
+      [now, now],
+    )
 
     // Create the expected file
     mkdirSync(join(tmpDir, 'raw-json', 'documentation', 'test'), { recursive: true })
     writeFileSync(join(tmpDir, 'raw-json', 'documentation', 'test', 'exists.json'), '{}')
 
     const result = verifyCorpusIntegrity(db, tmpDir, logger)
-    const fileCheck = result.checks.find(c => c.name === 'raw_json_files')
+    const fileCheck = result.checks.find((c) => c.name === 'raw_json_files')
     expect(fileCheck.ok).toBe(true)
   })
 })

@@ -15,7 +15,7 @@ const MAX_RENDER_DEPTH = 512
 
 export function renderContentNodesToHtml(nodes, depth = 0) {
   if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
-  return nodes.map(node => renderBlockNodeToHtml(node, depth)).join('')
+  return nodes.map((node) => renderBlockNodeToHtml(node, depth)).join('')
 }
 
 function renderBlockNodeToHtml(node, depth) {
@@ -40,14 +40,10 @@ function renderBlockNodeToHtml(node, depth) {
     }
 
     case 'unorderedList':
-      return `<ul>${(node.items ?? []).map(item =>
-        `<li>${renderContentNodesToHtml(item.content ?? [], depth + 1)}</li>`,
-      ).join('')}</ul>`
+      return `<ul>${(node.items ?? []).map((item) => `<li>${renderContentNodesToHtml(item.content ?? [], depth + 1)}</li>`).join('')}</ul>`
 
     case 'orderedList':
-      return `<ol>${(node.items ?? []).map(item =>
-        `<li>${renderContentNodesToHtml(item.content ?? [], depth + 1)}</li>`,
-      ).join('')}</ol>`
+      return `<ol>${(node.items ?? []).map((item) => `<li>${renderContentNodesToHtml(item.content ?? [], depth + 1)}</li>`).join('')}</ol>`
 
     case 'aside': {
       const style = node.style ?? 'Note'
@@ -63,10 +59,9 @@ function renderBlockNodeToHtml(node, depth) {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i]
         const cells = Array.isArray(row) ? row : (row.cells ?? [])
-        const isHeader = (headerStyle === 'row' && i === 0)
-          || (headerStyle === 'both' && i === 0)
+        const isHeader = (headerStyle === 'row' && i === 0) || (headerStyle === 'both' && i === 0)
         const tag = isHeader ? 'th' : 'td'
-        const wrapper = isHeader ? 'thead' : (i === 1 && headerStyle !== 'none' ? 'tbody' : '')
+        const wrapper = isHeader ? 'thead' : i === 1 && headerStyle !== 'none' ? 'tbody' : ''
         if (wrapper === 'thead') parts.push('<thead>')
         if (wrapper === 'tbody') parts.push('<tbody>')
         parts.push('<tr>')
@@ -83,37 +78,47 @@ function renderBlockNodeToHtml(node, depth) {
     }
 
     case 'links':
-      return `<ul>${(node.items ?? []).map(item => {
-        if (typeof item === 'object' && item?._resolvedKey) {
-          const title = item._resolvedTitle ?? readableNameFromKey(item._resolvedKey)
-          return `<li><a href="/docs/${escapeHtml(safeWebDocKey(item._resolvedKey))}/">${escapeHtml(title)}</a></li>`
-        }
-        const id = typeof item === 'string' ? item : (item?.identifier ?? item?.title ?? '')
-        const key = normalizeIdentifier(id)
-        if (key) {
-          const title = (typeof item === 'object' ? item?._resolvedTitle : null) ?? readableNameFromKey(key)
-          return `<li><a href="/docs/${escapeHtml(safeWebDocKey(key))}/">${escapeHtml(title)}</a></li>`
-        }
-        // Try external URL / video reference
-        const refUrl = resolveReferenceUrl(id)
-        if (refUrl) {
-          const title = (typeof item === 'object' ? item?._resolvedTitle : null) ?? refUrl.title
-          return `<li><a href="${escapeHtml(refUrl.href)}">${escapeHtml(title)}</a></li>`
-        }
-        return `<li>${escapeHtml(typeof item === 'string' ? item : (item?.title ?? ''))}</li>`
-      }).join('')}</ul>`
+      return `<ul>${(node.items ?? [])
+        .map((item) => {
+          if (typeof item === 'object' && item?._resolvedKey) {
+            const title = item._resolvedTitle ?? readableNameFromKey(item._resolvedKey)
+            return `<li><a href="/docs/${escapeHtml(safeWebDocKey(item._resolvedKey))}/">${escapeHtml(title)}</a></li>`
+          }
+          const id = typeof item === 'string' ? item : (item?.identifier ?? item?.title ?? '')
+          const key = normalizeIdentifier(id)
+          if (key) {
+            const title = (typeof item === 'object' ? item?._resolvedTitle : null) ?? readableNameFromKey(key)
+            return `<li><a href="/docs/${escapeHtml(safeWebDocKey(key))}/">${escapeHtml(title)}</a></li>`
+          }
+          // Try external URL / video reference
+          const refUrl = resolveReferenceUrl(id)
+          if (refUrl) {
+            const title = (typeof item === 'object' ? item?._resolvedTitle : null) ?? refUrl.title
+            return `<li><a href="${escapeHtml(refUrl.href)}">${escapeHtml(title)}</a></li>`
+          }
+          return `<li>${escapeHtml(typeof item === 'string' ? item : (item?.title ?? ''))}</li>`
+        })
+        .join('')}</ul>`
 
     case 'termList':
-      return `<dl>${(node.items ?? []).map(item => {
-        const term = item.term ? renderInlineNodesToHtml(item.term.inlineContent ?? [], depth + 1) : ''
-        const def = renderContentNodesToHtml(item.definition?.content ?? [], depth + 1)
-        return `<dt>${term}</dt><dd>${def}</dd>`
-      }).join('')}</dl>`
+      return `<dl>${(node.items ?? [])
+        .map((item) => {
+          const term = item.term ? renderInlineNodesToHtml(item.term.inlineContent ?? [], depth + 1) : ''
+          const def = renderContentNodesToHtml(item.definition?.content ?? [], depth + 1)
+          return `<dt>${term}</dt><dd>${def}</dd>`
+        })
+        .join('')}</dl>`
 
     default:
       // Inline node appearing at block level — wrap in <p>
-      if (node.type === 'text' || node.type === 'codeVoice' || node.type === 'emphasis'
-        || node.type === 'strong' || node.type === 'reference' || node.type === 'link') {
+      if (
+        node.type === 'text' ||
+        node.type === 'codeVoice' ||
+        node.type === 'emphasis' ||
+        node.type === 'strong' ||
+        node.type === 'reference' ||
+        node.type === 'link'
+      ) {
         return `<p>${renderInlineNodeToHtml(node, depth + 1)}</p>`
       }
       // Best-effort for unknown block types
@@ -130,7 +135,7 @@ function renderBlockNodeToHtml(node, depth) {
 
 export function renderInlineNodesToHtml(nodes, depth = 0) {
   if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
-  return nodes.map(node => renderInlineNodeToHtml(node, depth)).join('')
+  return nodes.map((node) => renderInlineNodeToHtml(node, depth)).join('')
 }
 
 function renderInlineNodeToHtml(node, depth) {

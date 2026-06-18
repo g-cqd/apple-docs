@@ -1,4 +1,4 @@
-import { ValidationError } from "../lib/errors.js"
+import { ValidationError } from '../lib/errors.js'
 /**
  * Deterministic `tar.zst` archive builder. Replaces the `tar.gz` path:
  * `zstd -9 -T3` is ~15% smaller AND ~5× faster than `gzip -9` on the
@@ -44,15 +44,24 @@ const ZSTD_ARGS = ['-9', '-T3', '-q', '-f']
 
 function findZstd() {
   const candidates = [process.env.ZSTD_BIN, '/opt/homebrew/bin/zstd', '/usr/local/bin/zstd', '/usr/bin/zstd']
-  for (const c of candidates) { if (c && existsSync(c)) return c }
+  for (const c of candidates) {
+    if (c && existsSync(c)) return c
+  }
   // Last resort: anything named `zstd` on PATH (covers the CI runner, where
   // it may live outside the well-known prefixes above).
-  try { return Bun.which('zstd') } catch { return null }
+  try {
+    return Bun.which('zstd')
+  } catch {
+    return null
+  }
 }
 
 async function readStderr(proc) {
-  try { return (await new Response(proc.stderr).text()).trim().slice(0, 4096) || '<no stderr>' }
-  catch { return '<no stderr>' }
+  try {
+    return (await new Response(proc.stderr).text()).trim().slice(0, 4096) || '<no stderr>'
+  } catch {
+    return '<no stderr>'
+  }
 }
 
 /**
@@ -111,7 +120,10 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
     // 3. zstd the tar file -> output (zstd reads a real file; exit 0 ⇒ complete).
     if (zstdBin) {
       const zstdProc = Bun.spawn([zstdBin, ...ZSTD_ARGS, '-o', absOutput, tarTmp], {
-        stdout: 'ignore', stderr: 'pipe', timeout: effectiveDeadline, killSignal: 'SIGKILL',
+        stdout: 'ignore',
+        stderr: 'pipe',
+        timeout: effectiveDeadline,
+        killSignal: 'SIGKILL',
       })
       const zstdCode = await zstdProc.exited
       if (zstdCode !== 0) throw new ValidationError(`tar.zst: zstd exit ${zstdCode}: ${await readStderr(zstdProc)}`)
@@ -122,12 +134,24 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
       await sink.end()
     }
   } catch (err) {
-    if (existsSync(absOutput)) { try { unlinkSync(absOutput) } catch { /* tolerate */ } }
+    if (existsSync(absOutput)) {
+      try {
+        unlinkSync(absOutput)
+      } catch {
+        /* tolerate */
+      }
+    }
     if (err instanceof ValidationError) throw err
     throw new ValidationError(`tar.zst archive build failed: ${err?.message ?? err}`)
   } finally {
     rmSync(listDir, { recursive: true, force: true })
-    if (existsSync(tarTmp)) { try { unlinkSync(tarTmp) } catch { /* tolerate */ } }
+    if (existsSync(tarTmp)) {
+      try {
+        unlinkSync(tarTmp)
+      } catch {
+        /* tolerate */
+      }
+    }
   }
 
   const stat = statSync(absOutput)
@@ -145,9 +169,7 @@ export async function countTarMembers(tarPath) {
   const listing = await new Response(proc.stdout).text()
   const code = await proc.exited
   if (code !== 0) {
-    throw new ValidationError(
-      `tar.zst integrity check: member listing failed (tar exit ${code}): ${await readStderr(proc)}`,
-    )
+    throw new ValidationError(`tar.zst integrity check: member listing failed (tar exit ${code}): ${await readStderr(proc)}`)
   }
   let n = 0
   for (let i = 0; i < listing.length; i++) if (listing[i] === '\n') n++

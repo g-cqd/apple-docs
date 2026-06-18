@@ -116,11 +116,21 @@ export function buildWebMetrics(deps) {
   if (mem) {
     metrics.push(
       { name: 'apple_docs_process_rss_bytes', help: 'Resident set size of the process.', type: 'gauge', samples: [{ value: mem.rss }] },
-      { name: 'apple_docs_process_heap_bytes', help: 'JavaScript heap usage.', type: 'gauge', samples: [
-        { labels: { kind: 'used' }, value: mem.heapUsed },
-        { labels: { kind: 'total' }, value: mem.heapTotal },
-      ] },
-      { name: 'apple_docs_process_external_bytes', help: 'External (off-heap) memory pinned by V8/JSC.', type: 'gauge', samples: [{ value: mem.external ?? 0 }] },
+      {
+        name: 'apple_docs_process_heap_bytes',
+        help: 'JavaScript heap usage.',
+        type: 'gauge',
+        samples: [
+          { labels: { kind: 'used' }, value: mem.heapUsed },
+          { labels: { kind: 'total' }, value: mem.heapTotal },
+        ],
+      },
+      {
+        name: 'apple_docs_process_external_bytes',
+        help: 'External (off-heap) memory pinned by V8/JSC.',
+        type: 'gauge',
+        samples: [{ value: mem.external ?? 0 }],
+      },
     )
   }
 
@@ -128,7 +138,11 @@ export function buildWebMetrics(deps) {
 }
 
 function safeCall(fn) {
-  try { return fn() } catch { return null }
+  try {
+    return fn()
+  } catch {
+    return null
+  }
 }
 
 /**

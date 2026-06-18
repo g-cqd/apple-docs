@@ -1,21 +1,18 @@
-import { describe, test, expect } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs'
+import { describe, expect, test } from 'bun:test'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  fetchLatest,
-  pickSnapshotAssets,
-  downloadAndVerify,
-  fetchSha256Sidecar,
-  GhReleaseError,
-} from '../../../ops/lib/gh-release.js'
+import { downloadAndVerify, fetchLatest, fetchSha256Sidecar, GhReleaseError, pickSnapshotAssets } from '../../../ops/lib/gh-release.js'
 
 function makeStream(text) {
   const bytes = new TextEncoder().encode(text)
   let cursor = 0
   return new ReadableStream({
     pull(controller) {
-      if (cursor >= bytes.length) { controller.close(); return }
+      if (cursor >= bytes.length) {
+        controller.close()
+        return
+      }
       controller.enqueue(bytes.subarray(cursor))
       cursor = bytes.length
     },
@@ -80,7 +77,9 @@ describe('fetchLatest', () => {
 describe('pickSnapshotAssets', () => {
   test('prefers .tar.gz over .7z', () => {
     const release = {
-      tagName: 't', publishedAt: '', assets: [
+      tagName: 't',
+      publishedAt: '',
+      assets: [
         { name: 'apple-docs-full-t.7z', size: 1, url: 'a' },
         { name: 'apple-docs-full-t.7z.sha256', size: 1, url: 'b' },
         { name: 'apple-docs-full-t.tar.gz', size: 2, url: 'c' },
@@ -94,7 +93,9 @@ describe('pickSnapshotAssets', () => {
 
   test('falls back to .7z when no .tar.gz present', () => {
     const release = {
-      tagName: 't', publishedAt: '', assets: [
+      tagName: 't',
+      publishedAt: '',
+      assets: [
         { name: 'apple-docs-full-t.7z', size: 1, url: 'a' },
         { name: 'apple-docs-full-t.7z.sha256', size: 1, url: 'b' },
       ],
@@ -110,9 +111,9 @@ describe('pickSnapshotAssets', () => {
 
   test('throws when sidecar is missing', () => {
     const release = {
-      tagName: 't', publishedAt: '', assets: [
-        { name: 'apple-docs-full-t.tar.gz', size: 2, url: 'c' },
-      ],
+      tagName: 't',
+      publishedAt: '',
+      assets: [{ name: 'apple-docs-full-t.tar.gz', size: 2, url: 'c' }],
     }
     expect(() => pickSnapshotAssets(release)).toThrow(/without a matching .sha256 sidecar/)
   })
@@ -146,8 +147,7 @@ describe('downloadAndVerify', () => {
     const dir = mkdtempSync(join(tmpdir(), 'dl-'))
     try {
       const dest = join(dir, 'out.bin')
-      await expect(downloadAndVerify('http://x', dest, wrongSha, { fetcher }))
-        .rejects.toMatchObject({ code: 'checksum-mismatch' })
+      await expect(downloadAndVerify('http://x', dest, wrongSha, { fetcher })).rejects.toMatchObject({ code: 'checksum-mismatch' })
       expect(existsSync(dest)).toBe(false)
       expect(existsSync(`${dest}.part`)).toBe(false)
     } finally {
@@ -159,8 +159,7 @@ describe('downloadAndVerify', () => {
     const fetcher = () => Promise.resolve(fakeResp({ ok: false, status: 503, body: '' }))
     const dir = mkdtempSync(join(tmpdir(), 'dl-'))
     try {
-      await expect(downloadAndVerify('http://x', join(dir, 'a'), 'x'.repeat(64), { fetcher }))
-        .rejects.toMatchObject({ code: 'download-failed', status: 503 })
+      await expect(downloadAndVerify('http://x', join(dir, 'a'), 'x'.repeat(64), { fetcher })).rejects.toMatchObject({ code: 'download-failed', status: 503 })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

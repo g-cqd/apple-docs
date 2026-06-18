@@ -1,9 +1,9 @@
-import { describe, test, expect, afterEach } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { ensureEmbeddingModel, verifyPinnedModelFiles } from '../../../src/search/model-integrity.js'
+import { join } from 'node:path'
 import { ValidationError } from '../../../src/lib/errors.js'
+import { ensureEmbeddingModel, verifyPinnedModelFiles } from '../../../src/search/model-integrity.js'
 
 const dirs = []
 function tmp() {

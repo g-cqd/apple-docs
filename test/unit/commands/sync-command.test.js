@@ -2,8 +2,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { filterPages, filterPagesByRoots, normalizeList, validateRequestedSources } from '../../../src/commands/command-helpers.js'
 import { sync } from '../../../src/commands/sync.js'
-import { normalizeList, validateRequestedSources, filterPages, filterPagesByRoots } from '../../../src/commands/command-helpers.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
 
 const tempDirs = []
@@ -38,32 +38,33 @@ describe('sync command', () => {
     const goodRoot = db.getRootBySlug('good-root')
 
     try {
-      const result = await sync({}, {
-        db,
-        dataDir,
-        rateLimiter: { rate: 5, acquire: async () => {} },
-        logger: { info() {}, warn() {}, error() {} },
-        adapters: [
-          {
-            constructor: { type: 'bad-source', displayName: 'Bad Source', syncMode: 'flat' },
-            async discover() {
-              throw new Error('discover boom')
+      const result = await sync(
+        {},
+        {
+          db,
+          dataDir,
+          rateLimiter: { rate: 5, acquire: async () => {} },
+          logger: { info() {}, warn() {}, error() {} },
+          adapters: [
+            {
+              constructor: { type: 'bad-source', displayName: 'Bad Source', syncMode: 'flat' },
+              async discover() {
+                throw new Error('discover boom')
+              },
+              validateNormalizeResult() {},
             },
-            validateNormalizeResult() {},
-          },
-          {
-            constructor: { type: 'good-source', displayName: 'Good Source', syncMode: 'flat' },
-            async discover() {
-              return { roots: [{ ...goodRoot, source_type: 'good-source' }], keys: [] }
+            {
+              constructor: { type: 'good-source', displayName: 'Good Source', syncMode: 'flat' },
+              async discover() {
+                return { roots: [{ ...goodRoot, source_type: 'good-source' }], keys: [] }
+              },
+              validateNormalizeResult() {},
             },
-            validateNormalizeResult() {},
-          },
-        ],
-      })
-
-      expect(result.failedSources).toContainEqual(
-        { source: 'bad-source', error: 'discover boom' },
+          ],
+        },
       )
+
+      expect(result.failedSources).toContainEqual({ source: 'bad-source', error: 'discover boom' })
       expect(result.crawlResults['good-root']).toEqual({ processed: 0, total: 0, skipped: 0 })
     } finally {
       db.close()
@@ -78,13 +79,16 @@ describe('sync command', () => {
 
     const db = new DocsDatabase(':memory:')
     try {
-      const result = await sync({}, {
-        db,
-        dataDir,
-        rateLimiter: { rate: 5, acquire: async () => {} },
-        logger: { info() {}, warn() {}, error() {} },
-        adapters: [],
-      })
+      const result = await sync(
+        {},
+        {
+          db,
+          dataDir,
+          rateLimiter: { rate: 5, acquire: async () => {} },
+          logger: { info() {}, warn() {}, error() {} },
+          adapters: [],
+        },
+      )
 
       // Every whole-corpus sync covers fonts + SF Symbols + the doctor pass
       // (schema migrations, JSON minify, failure cleanup). The result keys
@@ -111,22 +115,25 @@ describe('sync command', () => {
     let fullSyncSeen = false
 
     try {
-      await sync({ full: true }, {
-        db,
-        dataDir,
-        rateLimiter: { rate: 5, acquire: async () => {} },
-        logger: { info() {}, warn() {}, error() {} },
-        adapters: [
-          {
-            constructor: { type: 'packages', displayName: 'Swift Package Catalog', syncMode: 'flat' },
-            async discover(ctx) {
-              fullSyncSeen = ctx.fullSync
-              return { roots: [], keys: [] }
+      await sync(
+        { full: true },
+        {
+          db,
+          dataDir,
+          rateLimiter: { rate: 5, acquire: async () => {} },
+          logger: { info() {}, warn() {}, error() {} },
+          adapters: [
+            {
+              constructor: { type: 'packages', displayName: 'Swift Package Catalog', syncMode: 'flat' },
+              async discover(ctx) {
+                fullSyncSeen = ctx.fullSync
+                return { roots: [], keys: [] }
+              },
+              validateNormalizeResult() {},
             },
-            validateNormalizeResult() {},
-          },
-        ],
-      })
+          ],
+        },
+      )
 
       expect(fullSyncSeen).toBe(true)
     } finally {

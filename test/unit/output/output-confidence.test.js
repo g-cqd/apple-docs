@@ -16,13 +16,7 @@ describe('publicConfidence', () => {
     expect(publicConfidence('relaxed-token')).toBe('approximate')
   })
 
-  test.each([
-    'prefix',
-    'contains',
-    'match',
-    'substring',
-    'body',
-  ])('non-exact strict tier %s maps to partial', (quality) => {
+  test.each(['prefix', 'contains', 'match', 'substring', 'body'])('non-exact strict tier %s maps to partial', (quality) => {
     expect(publicConfidence(quality)).toBe('partial')
   })
 

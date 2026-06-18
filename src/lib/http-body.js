@@ -57,13 +57,21 @@ export async function readBodyCapped(request, maxBytes) {
       if (done) break
       total += value.byteLength
       if (total > maxBytes) {
-        try { await reader.cancel() } catch { /* nothing meaningful to do */ }
+        try {
+          await reader.cancel()
+        } catch {
+          /* nothing meaningful to do */
+        }
         throw new BodyTooLargeError(maxBytes, total)
       }
       chunks.push(value)
     }
   } finally {
-    try { reader.releaseLock?.() } catch { /* nothing meaningful to do */ }
+    try {
+      reader.releaseLock?.()
+    } catch {
+      /* nothing meaningful to do */
+    }
   }
 
   if (chunks.length === 0) return ''

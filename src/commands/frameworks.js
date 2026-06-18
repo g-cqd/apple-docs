@@ -27,16 +27,18 @@ export async function frameworks(opts, ctx) {
   // all crawled under a different umbrella root; listing them as browsable
   // roots is noise because browse returns nothing for them.
   const kind = opts.kind ?? null
-  const roots = ctx.db.db.query(`
+  const roots = ctx.db.db
+    .query(`
     SELECT r.*, COALESCE(c.n, 0) AS live_page_count
     FROM roots r
     LEFT JOIN (SELECT root_id, COUNT(*) AS n FROM pages WHERE status = 'active' GROUP BY root_id) c
       ON c.root_id = r.id
     WHERE COALESCE(c.n, 0) > 0 ${kind ? 'AND r.kind = $kind' : ''}
     ORDER BY r.slug
-  `).all(kind ? { $kind: kind } : {})
+  `)
+    .all(kind ? { $kind: kind } : {})
   return {
-    roots: roots.map(r => ({
+    roots: roots.map((r) => ({
       slug: r.slug,
       name: r.display_name,
       kind: r.kind,

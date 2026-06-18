@@ -8,12 +8,8 @@
 // owns the event bindings and the lifecycle.
 
 import { createTreeDataLoader, hasTreeData } from './tree-view/data.js'
+import { applyTreeFilters, expandLazy, renderNode } from './tree-view/render.js'
 import { buildTreeState } from './tree-view/state.js'
-import {
-  applyTreeFilters,
-  expandLazy,
-  renderNode,
-} from './tree-view/render.js'
 
 export function init() {
   const treeContainer = document.getElementById('tree-container')
@@ -69,20 +65,24 @@ export function init() {
   let treeBuilt = false
   let inflight = false
 
-  treeContainer.addEventListener('toggle', (e) => {
-    const details = e.target.closest('details.tree-node')
-    if (!details?.open || !treeState) return
-    const lazyUl = details.querySelector(':scope > ul[data-lazy-parent]')
-    if (lazyUl) {
-      expandLazy(treeState, treeContainer, lazyUl.getAttribute('data-lazy-parent'))
-    }
-  }, true)
+  treeContainer.addEventListener(
+    'toggle',
+    (e) => {
+      const details = e.target.closest('details.tree-node')
+      if (!details?.open || !treeState) return
+      const lazyUl = details.querySelector(':scope > ul[data-lazy-parent]')
+      if (lazyUl) {
+        expandLazy(treeState, treeContainer, lazyUl.getAttribute('data-lazy-parent'))
+      }
+    },
+    true,
+  )
 
   function ensureTreeBuilt() {
     if (treeBuilt || inflight) return
     inflight = true
     treeContainer.innerHTML = '<p class="loading">Loading tree…</p>'
-    loader.load().then(data => {
+    loader.load().then((data) => {
       inflight = false
       if (!data) {
         treeContainer.innerHTML = '<p>Failed to load tree data.</p>'
@@ -127,14 +127,14 @@ export function init() {
           if (lazyEls.length === 0) break
           const batch = [...lazyEls].slice(0, 20)
           for (const el of batch) expandLazy(treeState, treeContainer, el.getAttribute('data-lazy-parent'))
-          await new Promise(r => requestAnimationFrame(r))
+          await new Promise((r) => requestAnimationFrame(r))
         }
         const allDetails = [...treeContainer.querySelectorAll('details.tree-node')]
         for (let i = 0; i < allDetails.length; i += 100) {
           for (let j = i; j < Math.min(i + 100, allDetails.length); j++) {
             allDetails[j].open = true
           }
-          await new Promise(r => requestAnimationFrame(r))
+          await new Promise((r) => requestAnimationFrame(r))
         }
         expandAllBtn.disabled = false
         expandAllBtn.textContent = 'Expand all'

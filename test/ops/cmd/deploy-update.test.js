@@ -1,13 +1,13 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import runDeployUpdate from '../../../ops/cmd/deploy-update.js'
 
 function captureLogger() {
   const lines = []
   return {
     lines,
-    say: m => lines.push(m),
-    warn: m => lines.push('W:' + m),
-    error: m => lines.push('E:' + m),
+    say: (m) => lines.push(m),
+    warn: (m) => lines.push('W:' + m),
+    error: (m) => lines.push('E:' + m),
     runOutput: () => {},
   }
 }
@@ -20,13 +20,20 @@ const ENV = {
   dataDir: '/fake/data',
   vars: {
     PUBLIC_WEB_HOST: 'apple-docs.example',
-    LABEL_PROXY: 'mt.test.proxy', LABEL_WEB: 'mt.test.web', LABEL_MCP: 'mt.test.mcp',
+    LABEL_PROXY: 'mt.test.proxy',
+    LABEL_WEB: 'mt.test.web',
+    LABEL_MCP: 'mt.test.mcp',
     LABEL_WATCHDOG: 'mt.test.watchdog',
-    LABEL_TUNNEL_WEB: 'mt.test.cf.web', LABEL_TUNNEL_MCP: 'mt.test.cf.mcp',
+    LABEL_TUNNEL_WEB: 'mt.test.cf.web',
+    LABEL_TUNNEL_MCP: 'mt.test.cf.mcp',
   },
   labels: {
-    web: 'mt.test.web', mcp: 'mt.test.mcp', watchdog: 'mt.test.watchdog',
-    proxy: 'mt.test.proxy', tunnelWeb: 'mt.test.cf.web', tunnelMcp: 'mt.test.cf.mcp',
+    web: 'mt.test.web',
+    mcp: 'mt.test.mcp',
+    watchdog: 'mt.test.watchdog',
+    proxy: 'mt.test.proxy',
+    tunnelWeb: 'mt.test.cf.web',
+    tunnelMcp: 'mt.test.cf.mcp',
   },
 }
 
@@ -50,9 +57,7 @@ function fakeRunner(routes = []) {
     const idx = calls.length
     calls.push({ args, opts, idx })
     for (const route of routes) {
-      const matched = typeof route.match === 'function'
-        ? route.match(args)
-        : args.join(' ').includes(route.match)
+      const matched = typeof route.match === 'function' ? route.match(args) : args.join(' ').includes(route.match)
       if (matched) {
         if (route.throws) throw route.throws
         const stdout = typeof route.stdout === 'function' ? route.stdout(idx) : (route.stdout ?? '')
@@ -75,11 +80,14 @@ const releasePayload = (tag) => ({
 })
 
 function makeFetcher(payload) {
-  return () => Promise.resolve({
-    ok: true, status: 200, headers: { get: () => null },
-    json: () => Promise.resolve(payload),
-    text: () => Promise.resolve(JSON.stringify(payload)),
-  })
+  return () =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: () => Promise.resolve(payload),
+      text: () => Promise.resolve(JSON.stringify(payload)),
+    })
 }
 
 // Build a ctx with sensible defaults plus per-test overrides. By
@@ -114,43 +122,47 @@ describe('runDeployUpdate', () => {
     ctx.deps.fs = inMemoryFs({}) // no /fake/repo
     const code = await runDeployUpdate(ctx)
     expect(code).toBe(1)
-    expect(log.lines.some(m => m.startsWith('E:'))).toBe(true)
+    expect(log.lines.some((m) => m.startsWith('E:'))).toBe(true)
   })
 
   test('exits 2 when dirty tree diverges from origin', async () => {
     const routes = [
       // isDirty: diff --quiet → non-zero
-      { match: a => a[3] === 'diff' && a[4] === '--quiet' && !a.includes('--cached'), exitCode: 1 },
+      { match: (a) => a[3] === 'diff' && a[4] === '--quiet' && !a.includes('--cached'), exitCode: 1 },
       // diff origin/main → non-empty stdout means divergence
-      { match: a => a[3] === 'diff' && a[4] === 'origin/main', stdout: 'index 1234..5678' },
+      { match: (a) => a[3] === 'diff' && a[4] === 'origin/main', stdout: 'index 1234..5678' },
     ]
     const runner = fakeRunner(routes)
     const runAllow = fakeRunner(routes)
     const log = captureLogger()
-    const code = await runDeployUpdate(defaults({
-      logger: log,
-      deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
-    }))
+    const code = await runDeployUpdate(
+      defaults({
+        logger: log,
+        deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
+      }),
+    )
     expect(code).toBe(2)
-    expect(log.lines.some(m => m.startsWith('E:'))).toBe(true)
+    expect(log.lines.some((m) => m.startsWith('E:'))).toBe(true)
     // No pull was attempted past the divergence guard.
-    expect(runner.calls.find(c => c.args.includes('pull'))).toBeUndefined()
+    expect(runner.calls.find((c) => c.args.includes('pull'))).toBeUndefined()
   })
 
   test('dirty tree matching origin gets reset and continues', async () => {
     const routes = [
-      { match: a => a[3] === 'diff' && a[4] === '--quiet' && !a.includes('--cached'), exitCode: 1 },
-      { match: a => a[3] === 'diff' && a[4] === 'origin/main', stdout: '' }, // matches origin
+      { match: (a) => a[3] === 'diff' && a[4] === '--quiet' && !a.includes('--cached'), exitCode: 1 },
+      { match: (a) => a[3] === 'diff' && a[4] === 'origin/main', stdout: '' }, // matches origin
     ]
     const runner = fakeRunner(routes)
     const runAllow = fakeRunner(routes)
-    const code = await runDeployUpdate(defaults({
-      deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
-    }))
+    const code = await runDeployUpdate(
+      defaults({
+        deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
+      }),
+    )
     expect(code).toBe(0)
     // git reset --hard HEAD was run, and clean -fd was scoped.
-    expect(runner.calls.some(c => c.args.includes('reset') && c.args.includes('--hard'))).toBe(true)
-    const clean = runner.calls.find(c => c.args.includes('clean'))
+    expect(runner.calls.some((c) => c.args.includes('reset') && c.args.includes('--hard'))).toBe(true)
+    const clean = runner.calls.find((c) => c.args.includes('clean'))
     expect(clean).toBeDefined()
     expect(clean.args.slice(-3)).toEqual(['src', 'test', 'cli.js'])
   })
@@ -160,60 +172,64 @@ describe('runDeployUpdate', () => {
     // All defaults: print returns 0 (loaded → kickstart path), no drift.
     const runner = fakeRunner()
     const runAllow = fakeRunner()
-    const code = await runDeployUpdate(defaults({
-      deps: {
-        runCmd: runner.fn,
-        runCmdAllowFailure: runAllow.fn,
-        sleep: async (ms) => { sleeps.push(ms) },
-      },
-    }))
+    const code = await runDeployUpdate(
+      defaults({
+        deps: {
+          runCmd: runner.fn,
+          runCmdAllowFailure: runAllow.fn,
+          sleep: async (ms) => {
+            sleeps.push(ms)
+          },
+        },
+      }),
+    )
     expect(code).toBe(0)
-    const kickLabels = runner.calls
-      .filter(c => c.args.includes('kickstart'))
-      .map(c => c.args.find(a => a.startsWith('system/')))
-    expect(kickLabels).toEqual([
-      'system/mt.test.web', 'system/mt.test.mcp', 'system/mt.test.watchdog',
-    ])
+    const kickLabels = runner.calls.filter((c) => c.args.includes('kickstart')).map((c) => c.args.find((a) => a.startsWith('system/')))
+    expect(kickLabels).toEqual(['system/mt.test.web', 'system/mt.test.mcp', 'system/mt.test.watchdog'])
     // Pre-watchdog and pre-smoke each sleep 3s.
-    expect(sleeps.filter(ms => ms === 3000).length).toBeGreaterThanOrEqual(2)
+    expect(sleeps.filter((ms) => ms === 3000).length).toBeGreaterThanOrEqual(2)
   })
 
   test('happy path bootstraps cleanly when label is not yet loaded', async () => {
     const routes = [
       // isLoaded: print returns non-zero → cutoverOne takes the bootstrap path
-      { match: a => a.includes('print'), exitCode: 113 },
+      { match: (a) => a.includes('print'), exitCode: 113 },
     ]
     const runner = fakeRunner(routes)
     const runAllow = fakeRunner(routes)
-    const code = await runDeployUpdate(defaults({
-      deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
-    }))
+    const code = await runDeployUpdate(
+      defaults({
+        deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
+      }),
+    )
     expect(code).toBe(0)
-    const bootstraps = runAllow.calls.filter(c => c.args.includes('bootstrap'))
+    const bootstraps = runAllow.calls.filter((c) => c.args.includes('bootstrap'))
     expect(bootstraps.length).toBeGreaterThanOrEqual(3)
   })
 
   test('skips bun install when package.json and bun.lock are unchanged', async () => {
     const runner = fakeRunner()
     const runAllow = fakeRunner()
-    await runDeployUpdate(defaults({
-      deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
-    }))
-    const installCalls = runner.calls.filter(c => c.args[0] === ENV.bunBin && c.args[1] === 'install')
+    await runDeployUpdate(
+      defaults({
+        deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
+      }),
+    )
+    const installCalls = runner.calls.filter((c) => c.args[0] === ENV.bunBin && c.args[1] === 'install')
     expect(installCalls.length).toBe(0)
   })
 
   test('runs bun install when bun.lock hash differs after pull', async () => {
     let lockCalls = 0
-    const routes = [
-      { match: a => a.join(' ').includes('rev-parse HEAD:bun.lock'), stdout: () => `lock-${lockCalls++}` },
-    ]
+    const routes = [{ match: (a) => a.join(' ').includes('rev-parse HEAD:bun.lock'), stdout: () => `lock-${lockCalls++}` }]
     const runner = fakeRunner(routes)
     const runAllow = fakeRunner(routes)
-    await runDeployUpdate(defaults({
-      deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
-    }))
-    const installCall = runner.calls.find(c => c.args[0] === ENV.bunBin && c.args[1] === 'install')
+    await runDeployUpdate(
+      defaults({
+        deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
+      }),
+    )
+    const installCall = runner.calls.find((c) => c.args[0] === ENV.bunBin && c.args[1] === 'install')
     expect(installCall).toBeDefined()
     expect(installCall.args).toContain('--frozen-lockfile')
   })
@@ -224,28 +240,38 @@ describe('runDeployUpdate', () => {
       '/fake/ops/caddy/Caddyfile': 'pre-render',
     })
     const proxyCalls = []
-    const code = await runDeployUpdate(defaults({
-      deps: {
-        fs,
-        renderAll: async () => {
-          fs.files.set('/fake/ops/caddy/Caddyfile', 'post-render')
-          return 0
+    const code = await runDeployUpdate(
+      defaults({
+        deps: {
+          fs,
+          renderAll: async () => {
+            fs.files.set('/fake/ops/caddy/Caddyfile', 'post-render')
+            return 0
+          },
+          proxy: async (ctx) => {
+            proxyCalls.push(ctx.args)
+            return 0
+          },
         },
-        proxy: async (ctx) => { proxyCalls.push(ctx.args); return 0 },
-      },
-    }))
+      }),
+    )
     expect(code).toBe(0)
     expect(proxyCalls).toContainEqual(['reload'])
   })
 
   test('skips caddy reload when Caddyfile is unchanged after render', async () => {
     const proxyCalls = []
-    await runDeployUpdate(defaults({
-      deps: {
-        renderAll: async () => 0, // does not touch the Caddyfile
-        proxy: async (ctx) => { proxyCalls.push(ctx.args); return 0 },
-      },
-    }))
+    await runDeployUpdate(
+      defaults({
+        deps: {
+          renderAll: async () => 0, // does not touch the Caddyfile
+          proxy: async (ctx) => {
+            proxyCalls.push(ctx.args)
+            return 0
+          },
+        },
+      }),
+    )
     expect(proxyCalls).toEqual([])
   })
 
@@ -257,27 +283,34 @@ describe('runDeployUpdate', () => {
       '/Library/LaunchDaemons/mt.test.web.plist': 'installed-B',
     })
     const log = captureLogger()
-    const code = await runDeployUpdate(defaults({
-      logger: log,
-      deps: { fs },
-    }))
+    const code = await runDeployUpdate(
+      defaults({
+        logger: log,
+        deps: { fs },
+      }),
+    )
     expect(code).toBe(0)
-    expect(log.lines.some(m => m.includes('plist drift'))).toBe(true)
+    expect(log.lines.some((m) => m.includes('plist drift'))).toBe(true)
   })
 
   test('USE_SNAPSHOT=1 forces snapshot mode (pullSnapshot called, sync not called)', async () => {
     let pullSnapshotCalled = false
     let syncCalled = false
-    await runDeployUpdate(defaults({
-      env: { USE_SNAPSHOT: '1' },
-      deps: {
-        runCmd: async (args) => {
-          if (args.includes('sync') && args[1] === 'run') syncCalled = true
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    await runDeployUpdate(
+      defaults({
+        env: { USE_SNAPSHOT: '1' },
+        deps: {
+          runCmd: async (args) => {
+            if (args.includes('sync') && args[1] === 'run') syncCalled = true
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
+          pullSnapshot: async () => {
+            pullSnapshotCalled = true
+            return 0
+          },
         },
-        pullSnapshot: async () => { pullSnapshotCalled = true; return 0 },
-      },
-    }))
+      }),
+    )
     expect(pullSnapshotCalled).toBe(true)
     expect(syncCalled).toBe(false)
   })
@@ -285,17 +318,22 @@ describe('runDeployUpdate', () => {
   test('snapshot success returns early — no duplicate web build / smoke', async () => {
     let webBuilt = false
     const smokeCalls = []
-    const code = await runDeployUpdate(defaults({
-      env: { USE_SNAPSHOT: '1' },
-      deps: {
-        pullSnapshot: async () => 0, // complete refresh: build/smoke/stamp done
-        smokeTest: async (ctx) => { smokeCalls.push(ctx); return 0 },
-        runCmd: async (args) => {
-          if (args.includes('build') && args[3] === 'web') webBuilt = true
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    const code = await runDeployUpdate(
+      defaults({
+        env: { USE_SNAPSHOT: '1' },
+        deps: {
+          pullSnapshot: async () => 0, // complete refresh: build/smoke/stamp done
+          smokeTest: async (ctx) => {
+            smokeCalls.push(ctx)
+            return 0
+          },
+          runCmd: async (args) => {
+            if (args.includes('build') && args[3] === 'web') webBuilt = true
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
         },
-      },
-    }))
+      }),
+    )
     expect(code).toBe(0)
     // pull-snapshot already built + smoked; deploy-update must not repeat them.
     expect(webBuilt).toBe(false)
@@ -305,30 +343,40 @@ describe('runDeployUpdate', () => {
   test('USE_SNAPSHOT=0 forces crawl-on-host (cli.js sync runs, pullSnapshot skipped)', async () => {
     let pullSnapshotCalled = false
     let syncCalled = false
-    await runDeployUpdate(defaults({
-      env: { USE_SNAPSHOT: '0' },
-      deps: {
-        runCmd: async (args) => {
-          if (args.includes('sync') && args[1] === 'run') syncCalled = true
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    await runDeployUpdate(
+      defaults({
+        env: { USE_SNAPSHOT: '0' },
+        deps: {
+          runCmd: async (args) => {
+            if (args.includes('sync') && args[1] === 'run') syncCalled = true
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
+          pullSnapshot: async () => {
+            pullSnapshotCalled = true
+            return 0
+          },
         },
-        pullSnapshot: async () => { pullSnapshotCalled = true; return 0 },
-      },
-    }))
+      }),
+    )
     expect(pullSnapshotCalled).toBe(false)
     expect(syncCalled).toBe(true)
   })
 
   test('USE_SNAPSHOT=auto picks snapshot when GH tag is newer than applied', async () => {
     let pullSnapshotCalled = false
-    await runDeployUpdate(defaults({
-      env: {}, // not '1' or '0' → auto-detect
-      deps: {
-        fs: inMemoryFs({ '/fake/repo': '', '/fake/ops/caddy/Caddyfile': 'c' }), // no applied-snapshot
-        fetcher: makeFetcher(releasePayload('snapshot-20260513')),
-        pullSnapshot: async () => { pullSnapshotCalled = true; return 0 },
-      },
-    }))
+    await runDeployUpdate(
+      defaults({
+        env: {}, // not '1' or '0' → auto-detect
+        deps: {
+          fs: inMemoryFs({ '/fake/repo': '', '/fake/ops/caddy/Caddyfile': 'c' }), // no applied-snapshot
+          fetcher: makeFetcher(releasePayload('snapshot-20260513')),
+          pullSnapshot: async () => {
+            pullSnapshotCalled = true
+            return 0
+          },
+        },
+      }),
+    )
     expect(pullSnapshotCalled).toBe(true)
   })
 
@@ -336,105 +384,121 @@ describe('runDeployUpdate', () => {
     let pullSnapshotCalled = false
     let syncCalled = false
     const log = captureLogger()
-    await runDeployUpdate(defaults({
-      logger: log,
-      env: {},
-      deps: {
-        fs: inMemoryFs({
-          '/fake/repo': '',
-          '/fake/ops/caddy/Caddyfile': 'c',
-          '/fake/ops/state/applied-snapshot': 'snapshot-20260513\n',
-        }),
-        fetcher: makeFetcher(releasePayload('snapshot-20260513')),
-        pullSnapshot: async () => { pullSnapshotCalled = true; return 0 },
-        runCmd: async (args) => {
-          if (args.includes('sync') && args[1] === 'run') syncCalled = true
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    await runDeployUpdate(
+      defaults({
+        logger: log,
+        env: {},
+        deps: {
+          fs: inMemoryFs({
+            '/fake/repo': '',
+            '/fake/ops/caddy/Caddyfile': 'c',
+            '/fake/ops/state/applied-snapshot': 'snapshot-20260513\n',
+          }),
+          fetcher: makeFetcher(releasePayload('snapshot-20260513')),
+          pullSnapshot: async () => {
+            pullSnapshotCalled = true
+            return 0
+          },
+          runCmd: async (args) => {
+            if (args.includes('sync') && args[1] === 'run') syncCalled = true
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
         },
-      },
-    }))
+      }),
+    )
     expect(pullSnapshotCalled).toBe(false)
     expect(syncCalled).toBe(false)
-    expect(log.lines.some(m => m.includes('code-only deploy'))).toBe(true)
+    expect(log.lines.some((m) => m.includes('code-only deploy'))).toBe(true)
   })
 
   test('USE_CRAWL=1 forces the crawl even with an unchanged tag', async () => {
     let syncCalled = false
-    await runDeployUpdate(defaults({
-      env: { USE_CRAWL: '1' },
-      deps: {
-        fs: inMemoryFs({
-          '/fake/repo': '',
-          '/fake/ops/caddy/Caddyfile': 'c',
-          '/fake/ops/state/applied-snapshot': 'snapshot-20260513\n',
-        }),
-        fetcher: makeFetcher(releasePayload('snapshot-20260513')),
-        runCmd: async (args) => {
-          if (args.includes('sync') && args[1] === 'run') syncCalled = true
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    await runDeployUpdate(
+      defaults({
+        env: { USE_CRAWL: '1' },
+        deps: {
+          fs: inMemoryFs({
+            '/fake/repo': '',
+            '/fake/ops/caddy/Caddyfile': 'c',
+            '/fake/ops/state/applied-snapshot': 'snapshot-20260513\n',
+          }),
+          fetcher: makeFetcher(releasePayload('snapshot-20260513')),
+          runCmd: async (args) => {
+            if (args.includes('sync') && args[1] === 'run') syncCalled = true
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
         },
-      },
-    }))
+      }),
+    )
     expect(syncCalled).toBe(true)
   })
 
   test('USE_SNAPSHOT=auto skips the corpus refresh when the GH releases endpoint errors out', async () => {
     let syncCalled = false
     const log = captureLogger()
-    await runDeployUpdate(defaults({
-      logger: log,
-      env: {},
-      deps: {
-        fetcher: () => Promise.resolve({
-          ok: false, status: 503, statusText: 'oops',
-          headers: { get: () => null },
-          json: () => Promise.resolve({}),
-          text: () => Promise.resolve(''),
-        }),
-        runCmd: async (args) => {
-          if (args.includes('sync') && args[1] === 'run') syncCalled = true
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    await runDeployUpdate(
+      defaults({
+        logger: log,
+        env: {},
+        deps: {
+          fetcher: () =>
+            Promise.resolve({
+              ok: false,
+              status: 503,
+              statusText: 'oops',
+              headers: { get: () => null },
+              json: () => Promise.resolve({}),
+              text: () => Promise.resolve(''),
+            }),
+          runCmd: async (args) => {
+            if (args.includes('sync') && args[1] === 'run') syncCalled = true
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
         },
-      },
-    }))
+      }),
+    )
     expect(syncCalled).toBe(false)
-    expect(log.lines.some(m => m.startsWith('W:') && m.includes('GH'))).toBe(true)
+    expect(log.lines.some((m) => m.startsWith('W:') && m.includes('GH'))).toBe(true)
   })
 
   test('pullSnapshot failure keeps serving the existing corpus — no implicit crawl', async () => {
     let syncCalled = false
     let webBuilt = false
     const log = captureLogger()
-    await runDeployUpdate(defaults({
-      logger: log,
-      env: { USE_SNAPSHOT: '1' },
-      deps: {
-        pullSnapshot: async () => 2,
-        runCmd: async (args) => {
-          if (args.includes('sync') && args[1] === 'run') syncCalled = true
-          if (args.includes('build') && args[3] === 'web') webBuilt = true
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    await runDeployUpdate(
+      defaults({
+        logger: log,
+        env: { USE_SNAPSHOT: '1' },
+        deps: {
+          pullSnapshot: async () => 2,
+          runCmd: async (args) => {
+            if (args.includes('sync') && args[1] === 'run') syncCalled = true
+            if (args.includes('build') && args[3] === 'web') webBuilt = true
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
         },
-      },
-    }))
+      }),
+    )
     expect(syncCalled).toBe(false)
     // The deploy still completes its code-side steps (static rebuild).
     expect(webBuilt).toBe(true)
-    expect(log.lines.some(m => m.startsWith('W:') && m.includes('existing corpus'))).toBe(true)
+    expect(log.lines.some((m) => m.startsWith('W:') && m.includes('existing corpus'))).toBe(true)
   })
 
   test('--full uses --full build flag instead of --incremental', async () => {
     const calls = []
-    await runDeployUpdate(defaults({
-      args: ['--full'],
-      deps: {
-        runCmd: async (args) => {
-          calls.push(args)
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    await runDeployUpdate(
+      defaults({
+        args: ['--full'],
+        deps: {
+          runCmd: async (args) => {
+            calls.push(args)
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
         },
-      },
-    }))
-    const buildCall = calls.find(a => a.includes('build') && a[3] === 'web')
+      }),
+    )
+    const buildCall = calls.find((a) => a.includes('build') && a[3] === 'web')
     expect(buildCall).toBeDefined()
     expect(buildCall).toContain('--full')
     expect(buildCall).not.toContain('--incremental')
@@ -442,88 +506,102 @@ describe('runDeployUpdate', () => {
 
   test('default rebuild uses --incremental', async () => {
     const calls = []
-    await runDeployUpdate(defaults({
-      deps: {
-        runCmd: async (args) => {
-          calls.push(args)
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    await runDeployUpdate(
+      defaults({
+        deps: {
+          runCmd: async (args) => {
+            calls.push(args)
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
         },
-      },
-    }))
-    const buildCall = calls.find(a => a.includes('build') && a[3] === 'web')
+      }),
+    )
+    const buildCall = calls.find((a) => a.includes('build') && a[3] === 'web')
     expect(buildCall).toBeDefined()
     expect(buildCall).toContain('--incremental')
     expect(buildCall).not.toContain('--full')
   })
 
   test('--full build failure returns exit 4', async () => {
-    const code = await runDeployUpdate(defaults({
-      args: ['--full'],
-      deps: {
-        runCmd: async (args) => {
-          if (args.includes('build') && args[3] === 'web') {
-            throw Object.assign(new Error('static build failed'), { exitCode: 1 })
-          }
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    const code = await runDeployUpdate(
+      defaults({
+        args: ['--full'],
+        deps: {
+          runCmd: async (args) => {
+            if (args.includes('build') && args[3] === 'web') {
+              throw Object.assign(new Error('static build failed'), { exitCode: 1 })
+            }
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
         },
-      },
-    }))
+      }),
+    )
     expect(code).toBe(4)
   })
 
   test('incremental build failure is non-fatal and logs a warning', async () => {
     const log = captureLogger()
-    const code = await runDeployUpdate(defaults({
-      logger: log,
-      deps: {
-        runCmd: async (args) => {
-          if (args.includes('build') && args[3] === 'web') {
-            throw Object.assign(new Error('incremental blew up'), { exitCode: 1 })
-          }
-          return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+    const code = await runDeployUpdate(
+      defaults({
+        logger: log,
+        deps: {
+          runCmd: async (args) => {
+            if (args.includes('build') && args[3] === 'web') {
+              throw Object.assign(new Error('incremental blew up'), { exitCode: 1 })
+            }
+            return { args, exitCode: 0, stdout: '', stderr: '', elapsedMs: 0 }
+          },
         },
-      },
-    }))
+      }),
+    )
     expect(code).toBe(0)
-    expect(log.lines.some(m => m.startsWith('W:') && m.includes('incremental'))).toBe(true)
+    expect(log.lines.some((m) => m.startsWith('W:') && m.includes('incremental'))).toBe(true)
   })
 
   test('KEEP_SERVING_DURING_REFRESH=0 stops web + mcp before the refresh', async () => {
     const runner = fakeRunner()
     const runAllow = fakeRunner()
-    await runDeployUpdate(defaults({
-      env: { KEEP_SERVING_DURING_REFRESH: '0' },
-      deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
-    }))
-    const bootouts = runAllow.calls
-      .filter(c => c.args.includes('bootout'))
-      .map(c => c.args.find(a => a.startsWith('system/')))
+    await runDeployUpdate(
+      defaults({
+        env: { KEEP_SERVING_DURING_REFRESH: '0' },
+        deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
+      }),
+    )
+    const bootouts = runAllow.calls.filter((c) => c.args.includes('bootout')).map((c) => c.args.find((a) => a.startsWith('system/')))
     // Early stops happen before any cutover work — these are the
     // pre-refresh bootouts when KEEP_SERVING is disabled.
     expect(bootouts).toEqual(expect.arrayContaining(['system/mt.test.web', 'system/mt.test.mcp']))
   })
 
   test('git pull failure returns exit 3', async () => {
-    const routes = [
-      { match: a => a[3] === 'pull', throws: Object.assign(new Error('ff blocked'), { exitCode: 128 }) },
-    ]
+    const routes = [{ match: (a) => a[3] === 'pull', throws: Object.assign(new Error('ff blocked'), { exitCode: 128 }) }]
     const runner = fakeRunner(routes)
     const runAllow = fakeRunner(routes)
-    const code = await runDeployUpdate(defaults({
-      deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
-    }))
+    const code = await runDeployUpdate(
+      defaults({
+        deps: { runCmd: runner.fn, runCmdAllowFailure: runAllow.fn },
+      }),
+    )
     expect(code).toBe(3)
   })
 
   test('cf-purge and smoke-test are invoked at the tail of the flow', async () => {
     const cfCalls = []
     const smokeCalls = []
-    await runDeployUpdate(defaults({
-      deps: {
-        cfPurge: async (ctx) => { cfCalls.push(ctx); return 0 },
-        smokeTest: async (ctx) => { smokeCalls.push(ctx); return 0 },
-      },
-    }))
+    await runDeployUpdate(
+      defaults({
+        deps: {
+          cfPurge: async (ctx) => {
+            cfCalls.push(ctx)
+            return 0
+          },
+          smokeTest: async (ctx) => {
+            smokeCalls.push(ctx)
+            return 0
+          },
+        },
+      }),
+    )
     expect(cfCalls.length).toBe(1)
     expect(smokeCalls.length).toBe(1)
   })

@@ -1,16 +1,7 @@
-import {
-  fetchRawGitHub,
-  fetchGitHubRepo,
-  fetchGitHubReadme,
-  checkRawGitHub,
-  checkGitHubRepo,
-  checkGitHubReadme,
-  hasGitHubToken,
-} from '../lib/github.js'
 import { parseMarkdownToSections } from '../content/parse-markdown.js'
 import { ParseError } from '../lib/errors.js'
+import { checkGitHubReadme, checkGitHubRepo, checkRawGitHub, fetchGitHubReadme, fetchGitHubRepo, fetchRawGitHub, hasGitHubToken } from '../lib/github.js'
 import { SourceAdapter } from './base.js'
-import { OFFICIAL_PACKAGES } from './packages-official.js'
 import { packageKey, parseCompositeEtag, parsePackageKey, parsePackageUrl } from './packages/keys.js'
 import {
   appendMetadataSection,
@@ -20,10 +11,8 @@ import {
   synthesizeMarkdown,
   synthesizeRepoShape,
 } from './packages/markdown.js'
-import {
-  discoverRawReadme,
-  extractAbstractFromMarkdown,
-} from './packages/readme.js'
+import { discoverRawReadme, extractAbstractFromMarkdown } from './packages/readme.js'
+import { OFFICIAL_PACKAGES } from './packages-official.js'
 
 const PACKAGE_LIST_OWNER = 'SwiftPackageIndex'
 const PACKAGE_LIST_REPO = 'PackageList'
@@ -33,7 +22,6 @@ const ROOT_SLUG = 'packages'
 
 const README_FILENAMES = ['README.md', 'readme.md', 'README.markdown']
 const _DEFAULT_BRANCHES = ['main', 'master']
-
 
 function packageSyncLimit() {
   const raw = process.env.APPLE_DOCS_PACKAGES_LIMIT
@@ -84,7 +72,6 @@ function packageFetchMode(_ctx) {
   return 'raw'
 }
 
-
 export class PackagesAdapter extends SourceAdapter {
   static type = 'packages'
   static displayName = 'Swift Package Catalog'
@@ -113,13 +100,7 @@ export class PackagesAdapter extends SourceAdapter {
 
     // full scope: union the curated apple/swiftlang allowlist with the
     // SwiftPackageIndex catalog so the official repos are always included.
-    const { text } = await fetchRawGitHub(
-      PACKAGE_LIST_OWNER,
-      PACKAGE_LIST_REPO,
-      PACKAGE_LIST_BRANCH,
-      PACKAGE_LIST_PATH,
-      ctx.rateLimiter,
-    )
+    const { text } = await fetchRawGitHub(PACKAGE_LIST_OWNER, PACKAGE_LIST_REPO, PACKAGE_LIST_BRANCH, PACKAGE_LIST_PATH, ctx.rateLimiter)
 
     let packageUrls
     try {
@@ -268,16 +249,8 @@ export class PackagesAdapter extends SourceAdapter {
     }
 
     const readme = rawPayload?.readme ?? null
-    const scope = rawPayload?.syncScope === 'full'
-      ? 'full'
-      : rawPayload?.syncScope === 'official'
-        ? 'official'
-        : packageCatalogScope({})
-    const fetchMode = rawPayload?.fetchMode === 'api'
-      ? 'api'
-      : rawPayload?.fetchMode === 'raw'
-        ? 'raw'
-        : packageFetchMode({})
+    const scope = rawPayload?.syncScope === 'full' ? 'full' : rawPayload?.syncScope === 'official' ? 'official' : packageCatalogScope({})
+    const fetchMode = rawPayload?.fetchMode === 'api' ? 'api' : rawPayload?.fetchMode === 'raw' ? 'raw' : packageFetchMode({})
     const source = fetchMode === 'raw' ? 'raw' : 'github-api'
 
     const sourceMetadata = {

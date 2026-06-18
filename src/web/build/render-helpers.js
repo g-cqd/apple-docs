@@ -22,11 +22,12 @@ export function renderWithTimeout(fn, ms) {
  * full body is unavailable.
  */
 export function renderSkiplistPlaceholder(doc, siteConfig) {
-  const esc = (s) => String(s ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
+  const esc = (s) =>
+    String(s ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
   const title = esc(doc.title ?? doc.key)
   const description = esc(doc.abstract_text ?? `${doc.title ?? doc.key} — Apple developer documentation`)
   const canonical = `${siteConfig.baseUrl || ''}/docs/${esc(safeWebDocKey(doc.key))}/`

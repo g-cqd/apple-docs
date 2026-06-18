@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import {
-  addEntryPoints,
-  clearEntryPoints,
-  getAllEntryPoints,
-  getEntryPointsForParent,
-} from '../../../src/sources/entry-points.js'
+import { addEntryPoints, clearEntryPoints, getAllEntryPoints, getEntryPointsForParent } from '../../../src/sources/entry-points.js'
 // Side-effect imports: adapters self-register their entry points at module load.
 import '../../../src/sources/swift-docc.js'
 import '../../../src/sources/swift-book.js'
@@ -24,12 +19,12 @@ describe('entry-points registry', () => {
     addEntryPoints([
       { key: 'a/b', title: 'A', parents: ['parent/x'] },
       { key: '', title: 'no-key', parents: ['parent/x'] }, // missing key — drop
-      { key: 'a/c', title: 'no-parents' },                  // missing parents — drop
+      { key: 'a/c', title: 'no-parents' }, // missing parents — drop
       { key: 'a/d', title: 'empty-parents', parents: [] }, // empty parents — drop
       null,
       undefined,
     ])
-    expect(getAllEntryPoints().map(e => e.key)).toEqual(['a/b'])
+    expect(getAllEntryPoints().map((e) => e.key)).toEqual(['a/b'])
   })
 
   test('addEntryPoints deduplicates entries with the same key + parents', () => {
@@ -53,7 +48,7 @@ describe('entry-points registry', () => {
       { key: 'b', title: 'B', parents: ['hub', 'other'] },
       { key: 'c', title: 'C', parents: ['other'] },
     ])
-    const titles = getEntryPointsForParent('hub').map(e => e.title)
+    const titles = getEntryPointsForParent('hub').map((e) => e.title)
     expect(titles).toEqual(['A', 'B'])
   })
 
@@ -61,7 +56,7 @@ describe('entry-points registry', () => {
     // Import order in baseline: SwiftDocc + SwiftBook adapters declare entry
     // points. The full set should include each archive root linking back to
     // swift-org/documentation.
-    const docKeys = getEntryPointsForParent('swift-org/documentation').map(e => e.key)
+    const docKeys = getEntryPointsForParent('swift-org/documentation').map((e) => e.key)
     expect(docKeys).toContain('swift-compiler/documentation/diagnostics')
     expect(docKeys).toContain('swift-package-manager/documentation/packagemanagerdocs')
     expect(docKeys).toContain('swift-migration-guide/documentation/migrationguide')

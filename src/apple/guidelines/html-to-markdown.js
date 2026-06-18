@@ -13,17 +13,37 @@ export async function htmlToMarkdown(html) {
   let linkHref = null
   let inStrong = false
   let strongBuf = ''
-  const listStack = []  // track list nesting: 'disc' | 'no-bullet'
+  const listStack = [] // track list nesting: 'disc' | 'no-bullet'
   let _inListItem = false
-  let skipDepth = 0   // for elements we want to skip entirely
+  let skipDepth = 0 // for elements we want to skip entirely
 
   const rw = new HTMLRewriter()
 
   // Skip navigation/sidebar elements that may be inside the content
-  rw.on('.sidenav-container', { element(el) { skipDepth++; el.onEndTag(() => skipDepth--) } })
-  rw.on('.sticky-container', { element(el) { skipDepth++; el.onEndTag(() => skipDepth--) } })
-  rw.on('.form-checkbox', { element(el) { skipDepth++; el.onEndTag(() => skipDepth--) } })
-  rw.on('#documentation', { element(el) { skipDepth++; el.onEndTag(() => skipDepth--) } })
+  rw.on('.sidenav-container', {
+    element(el) {
+      skipDepth++
+      el.onEndTag(() => skipDepth--)
+    },
+  })
+  rw.on('.sticky-container', {
+    element(el) {
+      skipDepth++
+      el.onEndTag(() => skipDepth--)
+    },
+  })
+  rw.on('.form-checkbox', {
+    element(el) {
+      skipDepth++
+      el.onEndTag(() => skipDepth--)
+    },
+  })
+  rw.on('#documentation', {
+    element(el) {
+      skipDepth++
+      el.onEndTag(() => skipDepth--)
+    },
+  })
 
   // Headings
   rw.on('h1, h2, h3', {
@@ -186,18 +206,19 @@ export async function htmlToMarkdown(html) {
   // `&amp;lt;` round-trip to the intended literal (`&lt;`) instead of
   // being mistakenly collapsed to `<`. Resolves CodeQL
   // `js/double-escaping`.
-  const md = parts.join('')
+  const md = parts
+    .join('')
     .replace(/&nbsp;/g, ' ')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, '&')
-    .replace(/\u00a0/g, ' ')       // non-breaking space
-    .replace(/\t/g, ' ')           // tabs
-    .replace(/^[ \t]+/gm, '')      // leading whitespace on each line (HTML indentation)
-    .replace(/ {2,}/g, ' ')        // collapse multiple spaces
-    .replace(/\n{3,}/g, '\n\n')    // collapse blank lines
+    .replace(/\u00a0/g, ' ') // non-breaking space
+    .replace(/\t/g, ' ') // tabs
+    .replace(/^[ \t]+/gm, '') // leading whitespace on each line (HTML indentation)
+    .replace(/ {2,}/g, ' ') // collapse multiple spaces
+    .replace(/\n{3,}/g, '\n\n') // collapse blank lines
     .trim()
 
   return md

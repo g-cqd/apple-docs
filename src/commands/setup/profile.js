@@ -1,6 +1,6 @@
-import { ValidationError } from '../../lib/errors.js'
-import { PROFILE_NAMES, DEFAULT_PROFILE } from '../../storage/profiles.js'
 import { promptChoice } from '../../cli/prompts.js'
+import { ValidationError } from '../../lib/errors.js'
+import { DEFAULT_PROFILE, PROFILE_NAMES } from '../../storage/profiles.js'
 
 /**
  * Resolve the storage profile to apply to a freshly-installed corpus:
@@ -18,10 +18,7 @@ import { promptChoice } from '../../cli/prompts.js'
 export async function resolveStorageProfile({ profile, yes }) {
   if (profile != null) {
     if (!PROFILE_NAMES.includes(profile)) {
-      throw new ValidationError(
-        `Unknown --profile "${profile}". Valid profiles: ${PROFILE_NAMES.join(', ')}`,
-        { field: 'profile', value: profile },
-      )
+      throw new ValidationError(`Unknown --profile "${profile}". Valid profiles: ${PROFILE_NAMES.join(', ')}`, { field: 'profile', value: profile })
     }
     return profile
   }

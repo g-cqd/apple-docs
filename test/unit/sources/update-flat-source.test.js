@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
 import { update } from '../../../src/commands/update.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 const originalFetch = globalThis.fetch
 const originalToken = process.env.GITHUB_TOKEN
@@ -44,7 +44,9 @@ afterEach(() => {
   globalThis.fetch = originalFetch
   if (originalToken == null) Reflect.deleteProperty(process.env, 'GITHUB_TOKEN')
   else process.env.GITHUB_TOKEN = originalToken
-  try { db.close() } catch {}
+  try {
+    db.close()
+  } catch {}
   rmSync(dataDir, { recursive: true, force: true })
 })
 
@@ -85,9 +87,7 @@ describe('update flat sources', () => {
     // outcomes; mocking those requires fetch-level shaping that's brittle.
     // Verify the repo primitive directly: bump → bump → reset → 0.
     db.bumpConsecutive404('packages/apple/swift-argument-parser')
-    expect(
-      db.bumpConsecutive404('packages/apple/swift-argument-parser'),
-    ).toBe(2)
+    expect(db.bumpConsecutive404('packages/apple/swift-argument-parser')).toBe(2)
     db.resetConsecutive404('packages/apple/swift-argument-parser')
     const row = db.db.query('SELECT consecutive_404_count FROM pages WHERE path = ?').get('packages/apple/swift-argument-parser')
     expect(row.consecutive_404_count).toBe(0)

@@ -40,14 +40,10 @@ export function createHostBucketedLimiter(opts = {}) {
   const rate = defaults.rate ?? 5
   const burst = defaults.burst ?? 2
   const primaryConfig = opts.primary ?? null
-  const maxBuckets = opts.maxBuckets
-    ?? parsePositiveInt(process.env.APPLE_DOCS_HOST_BUCKET_MAX)
-    ?? DEFAULT_MAX_BUCKETS
+  const maxBuckets = opts.maxBuckets ?? parsePositiveInt(process.env.APPLE_DOCS_HOST_BUCKET_MAX) ?? DEFAULT_MAX_BUCKETS
   /** @type {Map<string, RateLimiter>} */
   const buckets = new Map()
-  const primaryLimiter = primaryConfig
-    ? new RateLimiter(primaryConfig.rate ?? rate, primaryConfig.burst ?? burst)
-    : null
+  const primaryLimiter = primaryConfig ? new RateLimiter(primaryConfig.rate ?? rate, primaryConfig.burst ?? burst) : null
 
   function getBucket(url) {
     const key = bucketKeyFor(url)
@@ -78,7 +74,11 @@ export function createHostBucketedLimiter(opts = {}) {
       return getBucket(url).acquire()
     },
     /** Test-only / observability hooks. */
-    _size() { return buckets.size },
-    _has(host) { return buckets.has(host) },
+    _size() {
+      return buckets.size
+    },
+    _has(host) {
+      return buckets.has(host)
+    },
   }
 }

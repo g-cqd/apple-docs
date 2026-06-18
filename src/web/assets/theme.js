@@ -20,7 +20,9 @@ function readPreference() {
 }
 
 function savePreference(theme) {
-  try { localStorage.setItem(STORAGE_KEY, theme) } catch {}
+  try {
+    localStorage.setItem(STORAGE_KEY, theme)
+  } catch {}
 }
 
 function applyTheme(theme) {

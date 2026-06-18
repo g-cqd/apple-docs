@@ -1,14 +1,14 @@
 import { join } from 'node:path'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { createServer } from './server.js'
-import { createCacheRegistry } from './cache.js'
-import { createMarkdownCache } from './markdown-cache.js'
-import { buildHealthBody, buildReadinessResponse } from './health-handlers.js'
-import { createReaderPools } from '../storage/reader-pools.js'
-import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 import { isLoopbackOrigin, readJsonRpcBodyCapped } from '../lib/http-body.js'
+import { BackpressureError, Semaphore } from '../lib/semaphore.js'
+import { createReaderPools } from '../storage/reader-pools.js'
+import { createCacheRegistry } from './cache.js'
+import { buildHealthBody, buildReadinessResponse } from './health-handlers.js'
+import { createMarkdownCache } from './markdown-cache.js'
 import { maybeStartMcpMetricsServer } from './metrics-provider.js'
 import { classifyRpcPayload } from './rpc-classify.js'
+import { createServer } from './server.js'
 
 // Re-export the classifier so the public import shape
 // `import { classifyRpcPayload } from 'src/mcp/http-server.js'` keeps
@@ -68,11 +68,13 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   // framing confuses some Streamable HTTP clients (notably rmcp/Codex),
   // and we never push server-initiated messages for a POST request, so
   // the stream offers no benefit here.
-  const createTransport = deps.createTransport ?? (() =>
-    new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-    }))
+  const createTransport =
+    deps.createTransport ??
+    (() =>
+      new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      }))
   const serveImpl = deps.serve ?? ((cfg) => Bun.serve(cfg))
 
   // `APPLE_DOCS_MCP_CACHE_SCALE` uniformly multiplies every default cache
@@ -101,14 +103,9 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   // the event loop and block cheap protocol messages (initialize, ping,
   // tools/list) from any other client. Overflow returns JSON-RPC -32003 +
   // HTTP 503 so the caller can retry rather than hanging on a silent queue.
-  const heavyMax = deps.heavyConcurrency
-    ?? parsePositiveInt(process.env.APPLE_DOCS_MCP_CONCURRENCY)
-    ?? DEFAULT_HEAVY_CONCURRENCY
-  const heavyQueue = deps.heavyQueue
-    ?? parseNonNegativeInt(process.env.APPLE_DOCS_MCP_QUEUE)
-    ?? DEFAULT_HEAVY_QUEUE
-  const heavySemaphore = deps.heavySemaphore
-    ?? new Semaphore(heavyMax, { maxWaiters: heavyQueue })
+  const heavyMax = deps.heavyConcurrency ?? parsePositiveInt(process.env.APPLE_DOCS_MCP_CONCURRENCY) ?? DEFAULT_HEAVY_CONCURRENCY
+  const heavyQueue = deps.heavyQueue ?? parseNonNegativeInt(process.env.APPLE_DOCS_MCP_QUEUE) ?? DEFAULT_HEAVY_QUEUE
+  const heavySemaphore = deps.heavySemaphore ?? new Semaphore(heavyMax, { maxWaiters: heavyQueue })
   const concurrencyStats = { rejected: 0 }
 
   // When no --allow-origin is set, deny browser origins except loopback.
@@ -152,11 +149,18 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     const url = new URL(request.url)
 
     if (url.pathname === '/healthz') {
-      return Response.json(buildHealthBody({
-        exposeCacheStats, cacheRegistry, markdownCache,
-        heavyMax, heavyQueue, heavySemaphore,
-        concurrencyStats, readerPool,
-      }))
+      return Response.json(
+        buildHealthBody({
+          exposeCacheStats,
+          cacheRegistry,
+          markdownCache,
+          heavyMax,
+          heavyQueue,
+          heavySemaphore,
+          concurrencyStats,
+          readerPool,
+        }),
+      )
     }
     if (url.pathname === '/readyz') return buildReadinessResponse({ ctx, readerPool })
 
@@ -167,10 +171,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     if (request.method === 'OPTIONS') return corsPreflight(request)
 
     if (!originOk(request)) {
-      return Response.json(
-        { jsonrpc: '2.0', error: { code: -32000, message: 'Origin not allowed' } },
-        { status: 403 },
-      )
+      return Response.json({ jsonrpc: '2.0', error: { code: -32000, message: 'Origin not allowed' } }, { status: 403 })
     }
 
     // Peek JSON-RPC method so heavy tool calls can be gated without making
@@ -207,8 +208,12 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       // reads a single event. We accept the pre-existing leak on GET for
       // now — GET SSE is rarely used with stateless transports.
       if (forwardRequest.method === 'POST' || forwardRequest.method === 'DELETE') {
-        try { await mcpServer.close?.() } catch {}
-        try { await transport.close?.() } catch {}
+        try {
+          await mcpServer.close?.()
+        } catch {}
+        try {
+          await transport.close?.()
+        } catch {}
       }
       return response
     }
@@ -262,8 +267,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       // echo sane inbound X-Request-Id; mint UUID otherwise. Per-
       // request child logger stamps `requestId` on every JSON log line.
       const incomingId = request.headers.get('x-request-id')
-      const requestId = incomingId && /^[A-Za-z0-9._:+/=-]{1,128}$/.test(incomingId)
-        ? incomingId : crypto.randomUUID()
+      const requestId = incomingId && /^[A-Za-z0-9._:+/=-]{1,128}$/.test(incomingId) ? incomingId : crypto.randomUUID()
       const reqLogger = logger?.withRequestId?.(requestId) ?? logger
       const meta = { requestId, logger: reqLogger }
       try {
@@ -272,14 +276,15 @@ export async function startHttpServer(opts, ctx, deps = {}) {
         applySecurityHeaders(response)
         response.headers.set('X-Request-Id', requestId)
         const tag = buildPriorityTag(meta)
-        reqLogger?.info?.(`${request.method} ${url.pathname} -> ${response.status} ${Date.now() - started}ms${tag} ua="${ua}" cf-ray=${cfRay} accept="${accept}"`)
+        reqLogger?.info?.(
+          `${request.method} ${url.pathname} -> ${response.status} ${Date.now() - started}ms${tag} ua="${ua}" cf-ray=${cfRay} accept="${accept}"`,
+        )
         return response
       } catch (err) {
-        reqLogger?.error?.(`${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms err="${err?.message}" ua="${ua}" cf-ray=${cfRay}`, { stack: err?.stack })
-        const response = Response.json(
-          { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' } },
-          { status: 500 },
-        )
+        reqLogger?.error?.(`${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms err="${err?.message}" ua="${ua}" cf-ray=${cfRay}`, {
+          stack: err?.stack,
+        })
+        const response = Response.json({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' } }, { status: 500 })
         applySecurityHeaders(response)
         response.headers.set('X-Request-Id', requestId)
         return response
@@ -290,10 +295,22 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   const resolvedPort = server?.port ?? port
   const url = `http://${host}:${resolvedPort}/mcp`
   logger?.info?.(`MCP HTTP server listening at ${url}`)
-  const metricsHandle = maybeStartMcpMetricsServer(opts, { logger, serve: deps.serveMetrics, cacheRegistry, markdownCache, heavySemaphore, concurrencyStats, readerPool })
+  const metricsHandle = maybeStartMcpMetricsServer(opts, {
+    logger,
+    serve: deps.serveMetrics,
+    cacheRegistry,
+    markdownCache,
+    heavySemaphore,
+    concurrencyStats,
+    readerPool,
+  })
   const close = async (deadlineMs) => {
-    try { server?.stop?.(true) } catch {}
-    try { await Promise.all([metricsHandle?.close?.(), readerPool?.close?.({ softDrainMs: deadlineMs ?? 0 })]) } catch {}
+    try {
+      server?.stop?.(true)
+    } catch {}
+    try {
+      await Promise.all([metricsHandle?.close?.(), readerPool?.close?.({ softDrainMs: deadlineMs ?? 0 })])
+    } catch {}
   }
   return { server, url, close, metricsUrl: metricsHandle?.url ?? null }
 }
@@ -348,9 +365,7 @@ async function resolveReaderPool(ctx, _opts, deps, logger) {
     })
     await pool.start()
     const snap = pool.stats()
-    logger?.info?.(
-      `reader-pool: ready strict=${snap.pools.strict.size} deep=${snap.pools.deep.size} spawns=${snap.spawns}`,
-    )
+    logger?.info?.(`reader-pool: ready strict=${snap.pools.strict.size} deep=${snap.pools.deep.size} spawns=${snap.spawns}`)
     return pool
   } catch (err) {
     logger?.error?.(`reader-pool: failed to start (${err?.message ?? err}); falling back to main-thread reads`)
@@ -363,6 +378,6 @@ function parseNumber(value, parser, predicate) {
   const n = value == null ? Number.NaN : parser(value, 10)
   return Number.isFinite(n) && predicate(n) ? n : null
 }
-const parsePositiveInt = (v) => parseNumber(v, Number.parseInt, n => n > 0)
-const parseNonNegativeInt = (v) => parseNumber(v, Number.parseInt, n => n >= 0)
-const parsePositiveNumber = (v) => parseNumber(v, Number.parseFloat, n => n > 0)
+const parsePositiveInt = (v) => parseNumber(v, Number.parseInt, (n) => n > 0)
+const parseNonNegativeInt = (v) => parseNumber(v, Number.parseInt, (n) => n >= 0)
+const parsePositiveNumber = (v) => parseNumber(v, Number.parseFloat, (n) => n > 0)

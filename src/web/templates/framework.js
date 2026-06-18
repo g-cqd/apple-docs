@@ -1,4 +1,6 @@
-import { html, raw, attr } from '../lib/html.js'
+import { slugify } from '../../content/render-html.js'
+import { safeWebDocKey } from '../../lib/safe-path.js'
+import { attr, html, raw } from '../lib/html.js'
 import {
   buildBreadcrumbListJsonLd,
   buildFooter,
@@ -9,8 +11,6 @@ import {
   frameworkOriginalUrl,
   renderTocHtml,
 } from '../templates.js'
-import { slugify } from '../../content/render-html.js'
-import { safeWebDocKey } from '../../lib/safe-path.js'
 import { buildScopeGroups } from './framework-groups.js'
 
 export function buildFrameworkTreeData(_framework, documents, treeEdges, siteConfig) {
@@ -93,17 +93,15 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   const showList = !hasTree || listIsDefault
 
   const listSections = showList
-    ? (scope
-        ? scope.sections
-        : [...byRole.entries()].map(([role, docs]) => ({ id: slugify(role), label: role, count: null, docs })))
+    ? scope
+      ? scope.sections
+      : [...byRole.entries()].map(([role, docs]) => ({ id: slugify(role), label: role, count: null, docs }))
     : []
 
   const roleSections = []
   for (const { id, label, count, docs } of listSections) {
-    const docItems = docs.map(doc => renderDocItem(doc, siteConfig))
-    const heading = count != null
-      ? html`${label} <span class="group-count">(${count})</span>`
-      : html`${label}`
+    const docItems = docs.map((doc) => renderDocItem(doc, siteConfig))
+    const heading = count != null ? html`${label} <span class="group-count">(${count})</span>` : html`${label}`
     roleSections.push(html`<section id="${id}" class="role-group" data-filter-kind="${label}">
     <h2 class="role-heading">${heading}</h2>
     <ul class="doc-list">
@@ -114,27 +112,26 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
 
   const jumpNav = scope?.nav?.length
     ? html`<nav class="scope-jump-nav" aria-label="Jump to section">
-    ${interleave(scope.nav.map(n => html`<a href="${n.href}">${n.label} <span class="group-count">(${n.count})</span></a>`), html`\n    `)}
+    ${interleave(
+      scope.nav.map((n) => html`<a href="${n.href}">${n.label} <span class="group-count">(${n.count})</span></a>`),
+      html`\n    `,
+    )}
   </nav>
   `
     : null
 
-  const mainContent = roleSections.length > 0
-    ? html`${jumpNav}${interleave(roleSections, html`\n  `)}`
-    : html`<p>No documents found for this framework.</p>`
+  const mainContent = roleSections.length > 0 ? html`${jumpNav}${interleave(roleSections, html`\n  `)}` : html`<p>No documents found for this framework.</p>`
 
   const breadcrumbs = html`<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${fwName}</span></nav>`
 
   // Build sidebar: original-resource block + TOC of list sections.
-  const tocItems = listSections.map(section => ({ id: section.id, label: section.label }))
+  const tocItems = listSections.map((section) => ({ id: section.id, label: section.label }))
   const hasSidebar = tocItems.length >= 2
   const sidebarBlocks = []
   const originalBlock = buildOriginalResourceBlock(frameworkOriginalUrl(framework))
   if (originalBlock.toString()) sidebarBlocks.push(originalBlock)
   if (hasSidebar) sidebarBlocks.push(html`<div class="sidebar-block">${renderTocHtml(tocItems, false)}</div>`)
-  const sidebar = sidebarBlocks.length > 0
-    ? html`<aside class="doc-sidebar">${interleave(sidebarBlocks, html`\n`)}</aside>`
-    : null
+  const sidebar = sidebarBlocks.length > 0 ? html`<aside class="doc-sidebar">${interleave(sidebarBlocks, html`\n`)}</aside>` : null
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : null
 
   // Build the doc lookup JSON for tree view (key -> {title, role_heading, href})
@@ -163,19 +160,18 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
 
   // The toggle exists only where both views exist: scope-grouped roots
   // that also have tree edges.
-  const viewToggle = hasTree && listIsDefault
-    ? html`<div class="view-toggle" role="group" aria-label="View mode" data-default-view="list">
+  const viewToggle =
+    hasTree && listIsDefault
+      ? html`<div class="view-toggle" role="group" aria-label="View mode" data-default-view="list">
     <button class="active" data-view="list" aria-pressed="true">List</button>
     <button data-view="tree" aria-pressed="false">Tree</button>
   </div>`
-    : null
+      : null
 
   const description = `${fwName} documentation index.`
   const canonical = framework?.slug ? `${siteConfig.baseUrl || ''}/docs/${framework.slug}/` : null
   const originalUrl = frameworkOriginalUrl(framework)
-  const breadcrumbJsonLd = framework?.slug
-    ? buildBreadcrumbListJsonLd(framework.slug, siteConfig.baseUrl, { title: fwName, framework: fwName })
-    : null
+  const breadcrumbJsonLd = framework?.slug ? buildBreadcrumbListJsonLd(framework.slug, siteConfig.baseUrl, { title: fwName, framework: fwName }) : null
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'APIReference',
@@ -211,10 +207,14 @@ ${buildHeader(siteConfig)}
   <h1>${fwName}${viewToggle}</h1>
   ${mobileToc}
   <article class="doc-article">
-  ${showList ? html`<div id="collection-controls"></div>
+  ${
+    showList
+      ? html`<div id="collection-controls"></div>
   <div id="list-container">
   ${mainContent}
-  </div>` : null}
+  </div>`
+      : null
+  }
   <div id="tree-container"${externalTreeDataUrl ? attr('data-tree-src', externalTreeDataUrl) : null}></div>
   ${hasTree && !externalTreeDataUrl ? html`<script type="application/json" id="tree-data">${raw(treeDataJsonInline)}</script>` : null}
   </article>
@@ -233,18 +233,14 @@ function renderDocItem(doc, siteConfig) {
   // Show role_heading (or the scope-specific meta line, e.g. SE number)
   // as metadata to distinguish duplicates (e.g. .!=(_:_:) across types).
   const metaText = doc.meta ?? doc.role_heading
-  const meta = metaText
-    ? html`<span class="doc-item-meta">${metaText}</span>`
-    : null
+  const meta = metaText ? html`<span class="doc-item-meta">${metaText}</span>` : null
   const abstractText = doc.abstract_text ?? doc.abstract ?? ''
   const isDeprecated = /\bDeprecated\b/i.test(abstractText)
   const abstract = abstractText
     ? html`<span class="doc-item-meta">— ${abstractText.length > 80 ? `${abstractText.slice(0, 80)}...` : abstractText}</span>`
     : null
   const isSymbol = doc.role === 'symbol' || doc.role === 'dictionarySymbol' || doc.role === 'pseudoSymbol' || doc.role === 'restRequestSymbol'
-  const titleContent = isSymbol
-    ? html`<code>${doc.title ?? docKey}</code>`
-    : (doc.title ?? docKey)
+  const titleContent = isSymbol ? html`<code>${doc.title ?? docKey}</code>` : (doc.title ?? docKey)
   return html`<li data-filter-kind="${filterKind}"${attr('data-deprecated', isDeprecated || null)}><a href="${href}">${titleContent}</a>${meta}${abstract}</li>`
 }
 

@@ -3,26 +3,19 @@ import { redact } from '../../../src/lib/logger.js'
 
 describe('logger redaction (A30)', () => {
   test('redacts top-level sensitive keys', () => {
-    expect(redact({ token: 'abc', user: 'alice' }))
-      .toEqual({ token: '<redacted>', user: 'alice' })
-    expect(redact({ Authorization: 'Bearer xyz' }))
-      .toEqual({ Authorization: '<redacted>' })
-    expect(redact({ cookie: 'sid=…' }))
-      .toEqual({ cookie: '<redacted>' })
-    expect(redact({ apiKey: 'pk_…' }))
-      .toEqual({ apiKey: '<redacted>' })
-    expect(redact({ api_key: 'pk_…' }))
-      .toEqual({ api_key: '<redacted>' })
+    expect(redact({ token: 'abc', user: 'alice' })).toEqual({ token: '<redacted>', user: 'alice' })
+    expect(redact({ Authorization: 'Bearer xyz' })).toEqual({ Authorization: '<redacted>' })
+    expect(redact({ cookie: 'sid=…' })).toEqual({ cookie: '<redacted>' })
+    expect(redact({ apiKey: 'pk_…' })).toEqual({ apiKey: '<redacted>' })
+    expect(redact({ api_key: 'pk_…' })).toEqual({ api_key: '<redacted>' })
   })
 
   test('redacts nested sensitive keys', () => {
-    expect(redact({ outer: { secret: 'shh' } }))
-      .toEqual({ outer: { secret: '<redacted>' } })
+    expect(redact({ outer: { secret: 'shh' } })).toEqual({ outer: { secret: '<redacted>' } })
   })
 
   test('redacts inside arrays', () => {
-    expect(redact([{ password: 'pw' }, { user: 'a' }]))
-      .toEqual([{ password: '<redacted>' }, { user: 'a' }])
+    expect(redact([{ password: 'pw' }, { user: 'a' }])).toEqual([{ password: '<redacted>' }, { user: 'a' }])
   })
 
   test('passes through primitives', () => {

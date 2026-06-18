@@ -1,7 +1,4 @@
-import {
-  fetchWithRetry,
-  checkResourceEtag,
-} from './fetch-with-retry.js'
+import { checkResourceEtag, fetchWithRetry } from './fetch-with-retry.js'
 
 const USER_AGENT = 'apple-docs/2.0'
 const DEFAULT_TIMEOUT = Number.parseInt(process.env.APPLE_DOCS_GITHUB_TIMEOUT ?? process.env.APPLE_DOCS_TIMEOUT ?? '45000', 10)
@@ -174,9 +171,7 @@ export async function fetchGitHubReadme(owner, repo, branch, rateLimiter) {
   })
 
   const encoded = typeof data?.content === 'string' ? data.content.replace(/\n/g, '') : ''
-  const text = encoded
-    ? Buffer.from(encoded, data?.encoding === 'base64' ? 'base64' : 'utf8').toString('utf8')
-    : ''
+  const text = encoded ? Buffer.from(encoded, data?.encoding === 'base64' ? 'base64' : 'utf8').toString('utf8') : ''
 
   return {
     text,

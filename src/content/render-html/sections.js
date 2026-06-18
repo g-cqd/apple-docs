@@ -17,10 +17,7 @@ import { joinTokenTexts, renderDeclarationTokens, renderTypeTokens } from './tok
  * per line in normal cases but historically had a wedge on certain pages
  * (since fixed at the ATX-heading regex). The cap stays as belt-and-braces.
  */
-const MARKDOWN_MAX_BYTES = Math.max(
-  512,
-  Number.parseInt(process.env.APPLE_DOCS_MD_MAX_BYTES ?? '', 10) || 256 * 1024,
-)
+const MARKDOWN_MAX_BYTES = Math.max(512, Number.parseInt(process.env.APPLE_DOCS_MD_MAX_BYTES ?? '', 10) || 256 * 1024)
 
 export function renderAbstractHtml(section) {
   const nodes = safeJson(section.contentJson)
@@ -33,9 +30,7 @@ export function renderAbstractHtml(section) {
   // entire intro before the first <h2>, which may contain multiple paragraphs,
   // markdown emphasis, inline code, and links. Route through markdownToHtml
   // so those render as structured HTML instead of one escaped blob.
-  return text.length > MARKDOWN_MAX_BYTES
-    ? `<p>${escapeHtml(text)}</p>`
-    : markdownToHtml(text)
+  return text.length > MARKDOWN_MAX_BYTES ? `<p>${escapeHtml(text)}</p>` : markdownToHtml(text)
 }
 
 export function renderDeclarationHtml(section, opts = {}) {
@@ -51,11 +46,10 @@ export function renderDeclarationHtml(section, opts = {}) {
   const hasMultipleLangs = langSet.size > 1
 
   const snippets = blocks
-    .map(declaration => {
+    .map((declaration) => {
       const tokens = declaration?.tokens ?? []
       if (tokens.length === 0) return null
-      const hasTypeLinks = knownKeys && tokens.some(t =>
-        t._resolvedKey && (t.kind === 'typeIdentifier' || t.kind === 'attribute'))
+      const hasTypeLinks = knownKeys && tokens.some((t) => t._resolvedKey && (t.kind === 'typeIdentifier' || t.kind === 'attribute'))
       let html
       if (hasTypeLinks) {
         html = renderDeclarationTokens(tokens, knownKeys)
@@ -90,12 +84,16 @@ export function renderDeclarationHtml(section, opts = {}) {
 export function renderParametersHtml(section) {
   const parameters = safeJson(section.contentJson)
   const items = Array.isArray(parameters)
-    ? parameters.map(parameter => {
-      const html = renderContentNodesToHtml(parameter?.content ?? [])
-      return `<li><strong>${escapeHtml(parameter?.name ?? 'Value')}</strong>: ${html}</li>`
-    })
+    ? parameters.map((parameter) => {
+        const html = renderContentNodesToHtml(parameter?.content ?? [])
+        return `<li><strong>${escapeHtml(parameter?.name ?? 'Value')}</strong>: ${html}</li>`
+      })
     : section.contentText?.trim()
-      ? section.contentText.trim().split('\n').filter(Boolean).map(line => `<li>${escapeHtml(line)}</li>`)
+      ? section.contentText
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
       : []
 
   if (items.length === 0) return ''
@@ -108,7 +106,7 @@ export function renderPropertiesHtml(section, opts = {}) {
   const knownKeys = opts.knownKeys
   const heading = section.heading ?? 'Properties'
   const sectionId = slugify(heading)
-  const rows = items.map(item => {
+  const rows = items.map((item) => {
     const name = escapeHtml(item.name ?? '')
     const typeHtml = renderTypeTokens(item.type ?? [], knownKeys)
     const desc = renderContentNodesToHtml(item.content ?? [])
@@ -123,14 +121,19 @@ export function renderRestEndpointHtml(section) {
   if (!Array.isArray(tokens) || tokens.length === 0) return ''
   const heading = section.heading ?? 'URL'
   const sectionId = slugify(heading)
-  const spans = tokens.map(token => {
+  const spans = tokens.map((token) => {
     const text = escapeHtml(token.text ?? '')
     switch (token.kind) {
-      case 'method': return `<span class="rest-method">${text}</span>`
-      case 'baseURL': return `<span class="rest-base-url">${text}</span>`
-      case 'path': return `<span class="rest-path">${text}</span>`
-      case 'parameter': return `<span class="rest-param">${text}</span>`
-      default: return text
+      case 'method':
+        return `<span class="rest-method">${text}</span>`
+      case 'baseURL':
+        return `<span class="rest-base-url">${text}</span>`
+      case 'path':
+        return `<span class="rest-path">${text}</span>`
+      case 'parameter':
+        return `<span class="rest-param">${text}</span>`
+      default:
+        return text
     }
   })
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><pre class="rest-endpoint"><code>${spans.join('')}</code></pre></section>`
@@ -142,13 +145,11 @@ export function renderRestParametersHtml(section, opts = {}) {
   const knownKeys = opts.knownKeys
   const heading = section.heading ?? 'Parameters'
   const sectionId = slugify(heading)
-  const rows = items.map(item => {
+  const rows = items.map((item) => {
     const name = escapeHtml(item.name ?? '')
     const typeHtml = renderTypeTokens(item.type ?? [], knownKeys)
     const desc = renderContentNodesToHtml(item.content ?? [])
-    const requiredBadge = item.required
-      ? '<span class="badge badge-required">Required</span>'
-      : '<span class="badge badge-optional">Optional</span>'
+    const requiredBadge = item.required ? '<span class="badge badge-required">Required</span>' : '<span class="badge badge-optional">Optional</span>'
     return `<tr><td><code>${name}</code> ${requiredBadge}</td><td>${typeHtml}</td><td>${desc}</td></tr>`
   })
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><table class="params-table"><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>${rows.join('')}</tbody></table></section>`
@@ -160,7 +161,7 @@ export function renderRestResponsesHtml(section, opts = {}) {
   const knownKeys = opts.knownKeys
   const heading = section.heading ?? 'Response Codes'
   const sectionId = slugify(heading)
-  const rows = items.map(item => {
+  const rows = items.map((item) => {
     const status = escapeHtml(String(item.status ?? ''))
     const reason = escapeHtml(item.reason ?? '')
     const mimeType = item.mimeType ? `<div class="rest-mime">Content-Type: ${escapeHtml(item.mimeType)}</div>` : ''
@@ -176,7 +177,7 @@ export function renderPossibleValuesHtml(section) {
   if (!Array.isArray(values) || values.length === 0) return ''
   const heading = section.heading ?? 'Possible Values'
   const sectionId = slugify(heading)
-  const items = values.map(v => {
+  const items = values.map((v) => {
     const name = escapeHtml(v.name ?? '')
     const desc = renderContentNodesToHtml(v.content ?? [])
     return `<dt><code>${name}</code></dt><dd>${desc}</dd>`
@@ -189,7 +190,7 @@ export function renderMentionedInHtml(section) {
   if (!Array.isArray(items) || items.length === 0) return ''
   const heading = section.heading ?? 'Mentioned in'
   const sectionId = slugify(heading)
-  const listItems = items.map(item => {
+  const listItems = items.map((item) => {
     if (item.key) {
       return `<li><a href="/docs/${escapeHtml(safeWebDocKey(item.key))}/">${escapeHtml(item.title ?? item.key)}</a></li>`
     }
@@ -217,9 +218,7 @@ export function renderDiscussionHtml(section) {
   // the parser wedging on the page.
   const text = section.contentText?.trim() ?? ''
   if (!text) return ''
-  const body = text.length > MARKDOWN_MAX_BYTES
-    ? `<pre class="markdown-fallback"><code>${escapeHtml(text)}</code></pre>`
-    : markdownToHtml(text)
+  const body = text.length > MARKDOWN_MAX_BYTES ? `<pre class="markdown-fallback"><code>${escapeHtml(text)}</code></pre>` : markdownToHtml(text)
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2>${body}</section>`
 }
 
@@ -234,10 +233,8 @@ export function renderLinkSectionHtml(title, section) {
         body.push(`<h3>${escapeHtml(group.title)}</h3>`)
       }
       const items = (group?.items ?? [])
-        .map(item => {
-          const filterAttr = item?._resolvedRoleHeading
-            ? ` data-filter-kind="${escapeHtml(item._resolvedRoleHeading)}"`
-            : ''
+        .map((item) => {
+          const filterAttr = item?._resolvedRoleHeading ? ` data-filter-kind="${escapeHtml(item._resolvedRoleHeading)}"` : ''
           return item?.key
             ? `<li${filterAttr}><a href="/docs/${escapeHtml(safeWebDocKey(item.key))}/"><code>${escapeHtml(item.title ?? item.key)}</code></a></li>`
             : `<li>${escapeHtml(item?.title ?? item?.identifier ?? '')}</li>`
@@ -248,7 +245,12 @@ export function renderLinkSectionHtml(title, section) {
       }
     }
   } else if (section.contentText?.trim()) {
-    const items = section.contentText.trim().split('\n').filter(Boolean).map(line => `<li>${escapeHtml(line)}</li>`).join('')
+    const items = section.contentText
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => `<li>${escapeHtml(line)}</li>`)
+      .join('')
     body.push(`<ul>${items}</ul>`)
   }
 

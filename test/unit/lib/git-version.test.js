@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { getCommitHash, _resetCommitHash } from '../../../src/lib/git-version.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { _resetCommitHash, getCommitHash } from '../../../src/lib/git-version.js'
 
 // Reset the process-wide memoization cache BEFORE each test as well as after:
 // getCommitHash() caches its first resolution, so another test file that

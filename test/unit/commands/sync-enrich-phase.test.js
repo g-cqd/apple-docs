@@ -1,11 +1,11 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { createLogger } from '../../../src/lib/logger.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { runEnrichPhase } from '../../../src/commands/sync/enrich.js'
+import { createLogger } from '../../../src/lib/logger.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let dir
 let assetPath
@@ -16,16 +16,35 @@ function makeAssetDb(path) {
   const a = new Database(path)
   a.run('CREATE TABLE documents (asset_id TEXT PRIMARY KEY, document BLOB)')
   a.run('CREATE TABLE attributes (asset_id TEXT, vector_id INTEGER, chunk_index INTEGER, type TEXT, framework TEXT, title TEXT, content TEXT)')
-  a.query('INSERT INTO documents VALUES (?, ?)').run('/documentation/SwiftUI/View', JSON.stringify({
-    uri: '/documentation/SwiftUI/View', kind: 'symbol', role: 'symbol',
-    external_id: 's:7SwiftUI4ViewP', modules: ['SwiftUI'],
-    platforms: [{ platform: 'iOS', introduced: 13, deprecated: false }],
-  }))
-  a.query('INSERT INTO documents VALUES (?, ?)').run('/documentation/SwiftUI/View/novelmember', JSON.stringify({
-    uri: '/documentation/SwiftUI/View/novelmember', kind: 'symbol', role: 'symbol', modules: ['SwiftUI'],
-  }))
-  a.query('INSERT INTO attributes VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run('/documentation/SwiftUI/View/novelmember', 1, 0, 'symbol', 'SwiftUI', 'novelMember', 'novelMember\nA member the crawl missed.')
+  a.query('INSERT INTO documents VALUES (?, ?)').run(
+    '/documentation/SwiftUI/View',
+    JSON.stringify({
+      uri: '/documentation/SwiftUI/View',
+      kind: 'symbol',
+      role: 'symbol',
+      external_id: 's:7SwiftUI4ViewP',
+      modules: ['SwiftUI'],
+      platforms: [{ platform: 'iOS', introduced: 13, deprecated: false }],
+    }),
+  )
+  a.query('INSERT INTO documents VALUES (?, ?)').run(
+    '/documentation/SwiftUI/View/novelmember',
+    JSON.stringify({
+      uri: '/documentation/SwiftUI/View/novelmember',
+      kind: 'symbol',
+      role: 'symbol',
+      modules: ['SwiftUI'],
+    }),
+  )
+  a.query('INSERT INTO attributes VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    '/documentation/SwiftUI/View/novelmember',
+    1,
+    0,
+    'symbol',
+    'SwiftUI',
+    'novelMember',
+    'novelMember\nA member the crawl missed.',
+  )
   a.close()
   return path
 }
@@ -37,7 +56,8 @@ beforeEach(() => {
   db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
   db.upsertNormalizedDocument({
     document: { sourceType: 'apple-docc', key: 'swiftui/view', title: 'View', framework: 'swiftui', role: 'symbol' },
-    sections: [], relationships: [],
+    sections: [],
+    relationships: [],
   })
 })
 

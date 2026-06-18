@@ -1,22 +1,17 @@
-import { join } from 'node:path'
 import { existsSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { resolveSevenZipBinary } from '../lib/archive-7z.js'
 import { HttpError, NotFoundError, ValidationError } from '../lib/errors.js'
 import { sha256File } from '../lib/hash.js'
 import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
-import { resolveSevenZipBinary } from '../lib/archive-7z.js'
-import { ensureDir } from '../storage/files.js'
-import { DocsDatabase } from '../storage/database.js'
 import { syncAppleFonts, syncSfSymbols } from '../resources/apple-assets.js'
-import { validateArchive, validate7zArchive, validateZstArchive } from './setup/validate-archive.js'
-import { installFromLocalArchive } from './setup/local-archive.js'
-import {
-  extractTarZst,
-  fetchLatestRelease,
-  formatSize,
-  USER_AGENT,
-} from './setup/helpers.js'
+import { DocsDatabase } from '../storage/database.js'
+import { ensureDir } from '../storage/files.js'
 import { getProfile, setProfile } from '../storage/profiles.js'
+import { extractTarZst, fetchLatestRelease, formatSize, USER_AGENT } from './setup/helpers.js'
+import { installFromLocalArchive } from './setup/local-archive.js'
 import { resolveStorageProfile } from './setup/profile.js'
+import { validate7zArchive, validateArchive, validateZstArchive } from './setup/validate-archive.js'
 
 // Snapshot asset filename component — every snapshot ships the full
 // payload, so this is fixed.
@@ -39,7 +34,9 @@ export async function setup(opts, ctx) {
       const channel = opts.beta ? 'beta' : 'stable'
       let localBuildMacos = null
       if (channel === 'beta') {
-        try { localBuildMacos = db.getSnapshotMeta('build_macos') ?? null } catch {}
+        try {
+          localBuildMacos = db.getSnapshotMeta('build_macos') ?? null
+        } catch {}
       }
       const release = await fetchLatestRelease({ channel, localBuildMacos })
       const { installNativeBundle } = await import('./setup/native.js')
@@ -78,7 +75,9 @@ async function installFromGithubRelease(ctx, opts) {
   const channel = opts.beta ? 'beta' : 'stable'
   let localBuildMacos = null
   if (channel === 'beta') {
-    try { localBuildMacos = db.getSnapshotMeta('build_macos') ?? null } catch {}
+    try {
+      localBuildMacos = db.getSnapshotMeta('build_macos') ?? null
+    } catch {}
   }
   logger.info(channel === 'beta' ? 'Fetching latest release (beta channel)...' : 'Fetching latest release...')
   const release = await fetchLatestRelease({ channel, localBuildMacos })
@@ -88,10 +87,10 @@ async function installFromGithubRelease(ctx, opts) {
   // smaller than gzip -9, decompressed in-process via Bun's native zstd so
   // no system zstd is needed). Accept `.tar.gz` then legacy `.7z` so a host
   // pulling an older release still installs.
-  const findAsset = ext => release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith(ext))
+  const findAsset = (ext) => release.assets.find((a) => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith(ext))
   const archiveAsset = findAsset('.tar.zst') ?? findAsset('.tar.gz') ?? findAsset('.7z')
   if (!archiveAsset) {
-    throw new NotFoundError(`release/${release.tag}`, `No snapshot found in release ${release.tag}. Available: ${release.assets.map(a => a.name).join(', ')}`)
+    throw new NotFoundError(`release/${release.tag}`, `No snapshot found in release ${release.tag}. Available: ${release.assets.map((a) => a.name).join(', ')}`)
   }
   const isSevenZip = archiveAsset.name.endsWith('.7z')
 
@@ -99,23 +98,21 @@ async function installFromGithubRelease(ctx, opts) {
   // .sha256 sidecar is missing is a supply-chain hole: a compromised release
   // flow could omit the sidecar and still ship arbitrary bytes.
   const expectedSidecar = `${archiveAsset.name}.sha256`
-  const checksumAsset = release.assets.find(a => a.name === expectedSidecar)
+  const checksumAsset =
+    release.assets.find((a) => a.name === expectedSidecar) ??
     // Legacy shape: `<base>.sha256` (no double extension). Accept on the
     // tar.gz path only.
-    ?? (isSevenZip
-      ? null
-      : release.assets.find(a => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256')))
+    (isSevenZip ? null : release.assets.find((a) => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256')))
   if (!checksumAsset) {
     throw new ValidationError(
-      `Refusing to install: release ${release.tag} ships ${archiveAsset.name} without a matching .sha256 sidecar. ` +
-      'Snapshot integrity cannot be verified.',
+      `Refusing to install: release ${release.tag} ships ${archiveAsset.name} without a matching .sha256 sidecar. ` + 'Snapshot integrity cannot be verified.',
       { field: 'checksum' },
     )
   }
 
   // Keep the real extension on the temp file so extractAndIndex detects the
   // format the same way the local-archive path does.
-  const tmpExt = isSevenZip ? '.7z' : (archiveAsset.name.endsWith('.tar.zst') ? '.tar.zst' : '.tar.gz')
+  const tmpExt = isSevenZip ? '.7z' : archiveAsset.name.endsWith('.tar.zst') ? '.tar.zst' : '.tar.gz'
   const tmpPath = join(dataDir, `.setup-download${tmpExt}`)
   ensureDir(dataDir)
 
@@ -165,7 +162,14 @@ async function installFromGithubRelease(ctx, opts) {
       const { installNativeBundle } = await import('./setup/native.js')
       native = await installNativeBundle(release, { logger })
     }
-    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, tag: release.tag, profile: opts.profile, yes: opts.yes })
+    const result = await extractAndIndex(ctx, tmpPath, {
+      skipResources: opts.skipResources,
+      skipSemantic: opts.skipSemantic,
+      embedder: opts.embedder,
+      tag: release.tag,
+      profile: opts.profile,
+      yes: opts.yes,
+    })
     if (opts.native) {
       // Models exist only after extraction — derive the weights artifact now
       // (warn-only) so the first server boot doesn't pay the generation.
@@ -210,9 +214,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
     try {
       resolveSevenZipBinary()
     } catch (err) {
-      throw new ValidationError(
-        `${err.message}\nThe snapshot is shipped as a .7z archive; p7zip is required to install it.`,
-      )
+      throw new ValidationError(`${err.message}\nThe snapshot is shipped as a .7z archive; p7zip is required to install it.`)
     }
   }
 
@@ -232,7 +234,9 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
   let priorProfile = null
   try {
     if (db.getStats().totalPages > 0) priorProfile = getProfile(db)
-  } catch { /* fresh or unreadable db — no profile to inherit */ }
+  } catch {
+    /* fresh or unreadable db — no profile to inherit */
+  }
 
   db.close()
 
@@ -262,10 +266,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
     // anything that would escape `dataDir`, so the on-disk safety is in
     // line with the tar path.
     const binary = resolveSevenZipBinary()
-    const { stderr, exitCode } = await spawnWithDeadline(
-      [binary, 'x', '-y', `-o${dataDir}`, archivePath],
-      { deadlineMs: 10 * 60_000 },
-    )
+    const { stderr, exitCode } = await spawnWithDeadline([binary, 'x', '-y', `-o${dataDir}`, archivePath], { deadlineMs: 10 * 60_000 })
     if (exitCode !== 0) throw new ValidationError(`Extraction failed (${binary} exit ${exitCode}): ${stderr}`)
   } else if (isZst) {
     // macOS ships no zstd and Apple's bsdtar lacks libzstd, so we can't
@@ -281,10 +282,9 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
     // privileged state. Snapshot tarballs are typically 1-3 GB; 10 min
     // deadline bounds an OS-level hang without rejecting legit big-corpus
     // extracts on slower hosts.
-    const { stderr, exitCode } = await spawnWithDeadline(
-      ['tar', '--no-same-owner', '--no-same-permissions', '-xzf', archivePath, '-C', dataDir],
-      { deadlineMs: 10 * 60_000 },
-    )
+    const { stderr, exitCode } = await spawnWithDeadline(['tar', '--no-same-owner', '--no-same-permissions', '-xzf', archivePath, '-C', dataDir], {
+      deadlineMs: 10 * 60_000,
+    })
     if (exitCode !== 0) throw new ValidationError(`Extraction failed (exit ${exitCode}): ${stderr}`)
   }
   logger.info('Extracted snapshot.')

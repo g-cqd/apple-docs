@@ -26,15 +26,15 @@ import { existsSync } from 'node:fs'
 export function enforceFontPortability(db, dataDir, { logger } = {}) {
   const prefix = `${dataDir}/`
   const rows = db.db.query('SELECT id, family_id, file_path FROM apple_font_files').all()
-  const foreign = rows.filter(r => !r.file_path.startsWith(prefix))
+  const foreign = rows.filter((r) => !r.file_path.startsWith(prefix))
   if (foreign.length > 0) {
     logger?.warn?.(`Fonts: purging ${foreign.length} non-portable row(s) (outside ${dataDir})`)
     const del = db.db.query('DELETE FROM apple_font_files WHERE id = ?')
     for (const r of foreign) del.run(r.id)
   }
   const families = db.db.query('SELECT id FROM apple_font_families').all()
-  const portable = rows.filter(r => r.file_path.startsWith(prefix) && existsSync(r.file_path))
-  const missing = families.map(f => f.id).filter(id => !portable.some(r => r.family_id === id))
+  const portable = rows.filter((r) => r.file_path.startsWith(prefix) && existsSync(r.file_path))
+  const missing = families.map((f) => f.id).filter((id) => !portable.some((r) => r.family_id === id))
   return {
     total: rows.length,
     purged: foreign.length,

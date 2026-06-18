@@ -31,7 +31,7 @@ function randomCodes(rand, n, width, bias = 0.5) {
 function refShortlist(qBin, packed, width, n, K) {
   const idx = []
   const dist = []
-  let worst = Infinity
+  let worst = Number.POSITIVE_INFINITY
   const insert = (j, d) => {
     let lo = 0
     let hi = dist.length

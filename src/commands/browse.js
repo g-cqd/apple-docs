@@ -69,7 +69,7 @@ export async function browse(opts, ctx) {
       framework: root.display_name,
       path: opts.path,
       title: page.title,
-      children: refs.map(r => ({
+      children: refs.map((r) => ({
         path: r.target_path,
         title: r.anchor_text,
         section: r.section,
@@ -81,7 +81,7 @@ export async function browse(opts, ctx) {
   const year = opts.year != null ? Number.parseInt(String(opts.year), 10) : null
 
   if (isWwdc && year != null) {
-    allPages = allPages.filter(p => p.path.startsWith(`wwdc/wwdc${year}-`))
+    allPages = allPages.filter((p) => p.path.startsWith(`wwdc/wwdc${year}-`))
     if (allPages.length === 0) {
       throw new NotFoundError(String(year), `No WWDC sessions indexed for ${year}`)
     }
@@ -95,25 +95,21 @@ export async function browse(opts, ctx) {
       framework: root.display_name,
       slug: root.slug,
       kind: root.kind,
-      groups: [...counts.entries()]
-        .sort((a, b) => b[0] - a[0])
-        .map(([groupYear, count]) => ({ year: groupYear, count })),
+      groups: [...counts.entries()].sort((a, b) => b[0] - a[0]).map(([groupYear, count]) => ({ year: groupYear, count })),
       total: allPages.length,
     }
   }
 
   // `defaultLimit` bounds flat listings for callers that must keep
   // responses small (MCP) without forcing the grouped WWDC shape away.
-  const limit = opts.limit
-    ? Math.max(Number.parseInt(opts.limit, 10), 1)
-    : (opts.defaultLimit ?? undefined)
+  const limit = opts.limit ? Math.max(Number.parseInt(opts.limit, 10), 1) : (opts.defaultLimit ?? undefined)
   const pages = limit ? allPages.slice(0, limit) : allPages
   return {
     framework: root.display_name,
     slug: root.slug,
     kind: root.kind,
     ...(year != null ? { year } : {}),
-    pages: pages.map(p => ({
+    pages: pages.map((p) => ({
       path: p.path,
       title: p.title,
       kind: p.role_heading ?? p.role,

@@ -6,12 +6,7 @@
 // cleaner, but Apple inlines neither on the public video pages.
 
 import { HttpError } from '../../lib/errors.js'
-import {
-  APPLE_BASE,
-  APPLE_VIDEOS_INDEX,
-  DEFAULT_TIMEOUT,
-  USER_AGENT,
-} from './constants.js'
+import { APPLE_BASE, APPLE_VIDEOS_INDEX, DEFAULT_TIMEOUT, USER_AGENT } from './constants.js'
 
 /**
  * Fetch the year-level session index from Apple. Returns session IDs
@@ -118,41 +113,37 @@ function parseSessionHtml(html, year, sessionId) {
   // Work with content after the <h1> to avoid picking up nav text
   const afterH1 = h1Match ? cleaned.slice(h1Match.index + h1Match[0].length) : cleaned
 
-  const allParagraphs = [...afterH1.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
-    .map(m => stripHtmlTags(m[1]))
-    .filter(t => t.length > 0)
+  const allParagraphs = [...afterH1.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map((m) => stripHtmlTags(m[1])).filter((t) => t.length > 0)
 
   // Description: first substantial paragraph (the abstract)
-  const description = allParagraphs.find(p => p.length > 30) ?? allParagraphs[0] ?? null
+  const description = allParagraphs.find((p) => p.length > 30) ?? allParagraphs[0] ?? null
   const descIndex = description ? allParagraphs.indexOf(description) : -1
 
   const chapters = extractChaptersFromHtml(cleaned)
 
   // Transcript: paragraphs after the description (skip short UI labels)
-  const transcriptParagraphs = descIndex >= 0
-    ? allParagraphs.slice(descIndex + 1).filter(p => p.length > 15)
-    : []
+  const transcriptParagraphs = descIndex >= 0 ? allParagraphs.slice(descIndex + 1).filter((p) => p.length > 15) : []
   const transcript = transcriptParagraphs.join('\n\n') || null
 
   return {
-    title, description, chapters, transcript,
-    year, sessionId,
+    title,
+    description,
+    chapters,
+    transcript,
+    year,
+    sessionId,
     format: 'html',
   }
 }
 
 function stripHtmlTags(html) {
-  return decodeHtmlEntities(
-    html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '),
-  ).trim()
+  return decodeHtmlEntities(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')).trim()
 }
 
 function extractChaptersFromHtml(html) {
   const match = html.match(/<h2[^>]*>\s*Chapters\s*<\/h2>\s*<ul[^>]*>([\s\S]*?)<\/ul>/i)
   if (!match) return []
-  return [...match[1].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
-    .map(m => stripHtmlTags(m[1]))
-    .filter(Boolean)
+  return [...match[1].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map((m) => stripHtmlTags(m[1])).filter(Boolean)
 }
 
 export function decodeHtmlEntities(value) {

@@ -18,9 +18,7 @@ export function renderSymbolSvgFallback({ name, scope, pointSize, color, backgro
   const escapedName = escapeXml(name)
   const escapedColor = escapeXml(color)
   const escapedScope = escapeXml(scope)
-  const bgRect = background
-    ? `<rect width="100%" height="100%" fill="${escapeXml(background)}"/>`
-    : `<rect width="100%" height="100%" fill="none"/>`
+  const bgRect = background ? `<rect width="100%" height="100%" fill="${escapeXml(background)}"/>` : `<rect width="100%" height="100%" fill="none"/>`
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${pointSize}" height="${pointSize}" viewBox="0 0 ${pointSize} ${pointSize}" role="img" aria-label="${escapedName}">
   <title>${escapedName}</title>
@@ -85,11 +83,16 @@ function svgBackgroundRect(svg, background) {
 function parseSvgViewBox(svg) {
   const match = svg.match(/\bviewBox=(["'])([^"']+)\1/i)
   if (!match) return null
-  const parts = match[2].trim().split(/[\s,]+/).map(Number)
-  if (parts.length !== 4 || parts.some(value => !Number.isFinite(value))) return null
+  const parts = match[2]
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number)
+  if (parts.length !== 4 || parts.some((value) => !Number.isFinite(value))) return null
   return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] }
 }
 
 function formatSvgNumber(value) {
-  return Number(value).toFixed(3).replace(/\.?0+$/u, '')
+  return Number(value)
+    .toFixed(3)
+    .replace(/\.?0+$/u, '')
 }

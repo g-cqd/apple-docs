@@ -42,11 +42,11 @@ function escapeXml(s) {
  * homepage entry share the same shape and indentation.
  */
 function urlEntry({ loc, lastmod, changefreq, priority }) {
-  const parts = ["  <url>", `    <loc>${escapeXml(loc)}</loc>`]
+  const parts = ['  <url>', `    <loc>${escapeXml(loc)}</loc>`]
   if (lastmod) parts.push(`    <lastmod>${escapeXml(lastmod)}</lastmod>`)
   if (changefreq) parts.push(`    <changefreq>${escapeXml(changefreq)}</changefreq>`)
   if (priority != null) parts.push(`    <priority>${priority.toFixed(1)}</priority>`)
-  parts.push("  </url>")
+  parts.push('  </url>')
   return parts.join('\n')
 }
 
@@ -60,12 +60,14 @@ function buildFrameworkSitemapXml({ root, docs, baseUrl, lastmod }) {
 
   const entries = []
   // Framework landing page itself (one urlentry, slightly higher priority).
-  entries.push(urlEntry({
-    loc: `${baseUrl}/docs/${root.slug}/`,
-    lastmod,
-    changefreq: kindDefaults.changefreq,
-    priority: kindDefaults.priority,
-  }))
+  entries.push(
+    urlEntry({
+      loc: `${baseUrl}/docs/${root.slug}/`,
+      lastmod,
+      changefreq: kindDefaults.changefreq,
+      priority: kindDefaults.priority,
+    }),
+  )
 
   // Per-document entries. Cap at URLS_PER_SITEMAP — Apple's biggest framework
   // is ~39 K docs, well under the 50 K limit, so this should never trip in
@@ -78,21 +80,19 @@ function buildFrameworkSitemapXml({ root, docs, baseUrl, lastmod }) {
 
   for (const doc of docs) {
     const isReleaseNotes = root.kind === 'release-notes' || ROLE_NOTES_HINT.test(doc.role_heading ?? '')
-    entries.push(urlEntry({
-      loc: `${baseUrl}/docs/${safeWebDocKey(doc.key)}/`,
-      lastmod,
-      changefreq: isReleaseNotes ? 'weekly' : DOC_DEFAULT.changefreq,
-      priority: DOC_DEFAULT.priority,
-    }))
+    entries.push(
+      urlEntry({
+        loc: `${baseUrl}/docs/${safeWebDocKey(doc.key)}/`,
+        lastmod,
+        changefreq: isReleaseNotes ? 'weekly' : DOC_DEFAULT.changefreq,
+        priority: DOC_DEFAULT.priority,
+      }),
+    )
   }
 
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    entries.join('\n'),
-    '</urlset>',
-    '',
-  ].join('\n')
+  return ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">', entries.join('\n'), '</urlset>', ''].join(
+    '\n',
+  )
 }
 
 /**
@@ -100,14 +100,9 @@ function buildFrameworkSitemapXml({ root, docs, baseUrl, lastmod }) {
  * file. The homepage and search are inlined as a single tiny "_root" sitemap.
  */
 function buildSitemapIndexXml({ baseUrl, frameworkSlugs, lastmod }) {
-  const sitemaps = ['_root', ...frameworkSlugs].map(slug => {
+  const sitemaps = ['_root', ...frameworkSlugs].map((slug) => {
     const path = slug === '_root' ? '/sitemaps/_root.xml.gz' : `/sitemaps/${slug}.xml.gz`
-    return [
-      '  <sitemap>',
-      `    <loc>${escapeXml(baseUrl + path)}</loc>`,
-      `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
-      '  </sitemap>',
-    ].join('\n')
+    return ['  <sitemap>', `    <loc>${escapeXml(baseUrl + path)}</loc>`, `    <lastmod>${escapeXml(lastmod)}</lastmod>`, '  </sitemap>'].join('\n')
   })
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -168,9 +163,7 @@ export async function generateSitemaps({ db, outputDir, baseUrl, buildDate }) {
   let totalUrls = rootEntries.length
 
   for (const root of roots) {
-    const docs = db.db.query(
-      'SELECT key, role_heading FROM documents WHERE framework = ? ORDER BY key'
-    ).all(root.slug)
+    const docs = db.db.query('SELECT key, role_heading FROM documents WHERE framework = ? ORDER BY key').all(root.slug)
     if (docs.length === 0) continue
 
     const xml = buildFrameworkSitemapXml({ root, docs, baseUrl: cleanBase, lastmod })

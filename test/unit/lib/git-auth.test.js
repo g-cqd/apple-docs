@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { detectLocalGitHubToken, _test } from '../../../src/lib/git-auth.js'
+import { describe, expect, test } from 'bun:test'
+import { _test, detectLocalGitHubToken } from '../../../src/lib/git-auth.js'
 
 /**
  * Build a fake spawn factory driven by a list of canned responses keyed by the
@@ -18,10 +18,16 @@ function makeFakeSpawn(scripts) {
     }
     const encode = (str) => new TextEncoder().encode(str ?? '')
     const stdoutStream = new ReadableStream({
-      start(controller) { controller.enqueue(encode(script.stdout)); controller.close() },
+      start(controller) {
+        controller.enqueue(encode(script.stdout))
+        controller.close()
+      },
     })
     const stderrStream = new ReadableStream({
-      start(controller) { controller.enqueue(encode(script.stderr)); controller.close() },
+      start(controller) {
+        controller.enqueue(encode(script.stderr))
+        controller.close()
+      },
     })
     const exited = new Promise((resolve) => {
       if (script.hang) return // never resolves
@@ -37,7 +43,9 @@ function makeFakeSpawn(scripts) {
           close: async () => {},
         }
       },
-      _read() { return stdinPayload },
+      _read() {
+        return stdinPayload
+      },
     }
     return {
       stdin,
@@ -113,7 +121,9 @@ describe('detectLocalGitHubToken', () => {
   })
 
   test('returns null when spawn throws', async () => {
-    const spawn = () => { throw new Error('boom') }
+    const spawn = () => {
+      throw new Error('boom')
+    }
     const which = () => '/usr/bin/gh'
     const result = await detectLocalGitHubToken({ spawn, which })
     expect(result).toBeNull()
@@ -159,9 +169,7 @@ describe('safeEnv', () => {
 
 describe('parseGitCredentialOutput', () => {
   test('returns the password field value', () => {
-    const out = _test.parseGitCredentialOutput(
-      'protocol=https\nhost=github.com\nusername=x\npassword=secret\n',
-    )
+    const out = _test.parseGitCredentialOutput('protocol=https\nhost=github.com\nusername=x\npassword=secret\n')
     expect(out).toBe('secret')
   })
 

@@ -25,16 +25,16 @@ describe.skipIf(!existsSync(AD_SERVER))('Network.framework transport (--transpor
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'f3-'))
     new DocsDatabase(join(dir, 'corpus.db')).close()
-    server = Bun.spawn(
-      [
-        AD_SERVER, '--db', join(dir, 'corpus.db'), '--port', String(PORT),
-        '--transport', 'network', '--threads', '2',
-      ],
-      { stdout: 'ignore', stderr: 'ignore' },
-    )
+    server = Bun.spawn([AD_SERVER, '--db', join(dir, 'corpus.db'), '--port', String(PORT), '--transport', 'network', '--threads', '2'], {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    })
     for (let i = 0; i < 100; i++) {
       try {
-        if ((await fetch(`http://127.0.0.1:${PORT}/healthz`)).ok) { ready = true; break }
+        if ((await fetch(`http://127.0.0.1:${PORT}/healthz`)).ok) {
+          ready = true
+          break
+        }
       } catch {}
       await Bun.sleep(80)
     }

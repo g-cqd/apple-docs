@@ -6,7 +6,7 @@
  * explicit rejection (no silent clamp-and-render fallback).
  */
 
-import { SYMBOL_WEIGHTS, SYMBOL_SCALES } from '../../resources/apple-assets.js'
+import { SYMBOL_SCALES, SYMBOL_WEIGHTS } from '../../resources/apple-assets.js'
 
 export const FONT_TEXT_MAX_CHARS = 256
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { EventEmitter } from 'node:events'
-import { createReaderPool, runRead, __defaultReaderPoolSize } from '../../../src/storage/reader-pool.js'
+import { __defaultReaderPoolSize, createReaderPool, runRead } from '../../../src/storage/reader-pool.js'
 
 // Synchronous event emission — tests can drive responses deterministically.
 // Real worker_threads emit asynchronously; for unit tests the behavior is the
@@ -104,7 +104,10 @@ describe('createReaderPool', () => {
   test('run() surfaces worker error results as rejections', async () => {
     const handler = (worker, msg) => {
       emit(worker, {
-        type: 'result', id: msg.id, ok: false, error: { message: 'boom', stack: 'stack' },
+        type: 'result',
+        id: msg.id,
+        ok: false,
+        error: { message: 'boom', stack: 'stack' },
       })
     }
     const WorkerCtor = makeFakeCtor({ handler })
@@ -118,7 +121,9 @@ describe('createReaderPool', () => {
     // Hold slot 0's first call open so the second call observes load=1 on
     // slot 0 and load=0 on slot 1.
     let deferred
-    const pending = new Promise((resolve) => { deferred = resolve })
+    const pending = new Promise((resolve) => {
+      deferred = resolve
+    })
     // `WorkerCtor` is only assigned once but is referenced inside `handler`
     // before the assignment statement. `let` avoids biome's no-var warning
     // while letting the closure resolve it lazily at call time.
@@ -134,7 +139,9 @@ describe('createReaderPool', () => {
     }
     WorkerCtor = makeFakeCtor({
       handler,
-      onSpawn: (w) => { w.idx = WorkerCtor.instances.length - 1 },
+      onSpawn: (w) => {
+        w.idx = WorkerCtor.instances.length - 1
+      },
     })
     const pool = createReaderPool({ dbPath: DB_PATH, size: 2, WorkerCtor })
     await pool.start()
@@ -195,7 +202,7 @@ describe('createReaderPool', () => {
 
     await pool.close()
     await expect(inflight).rejects.toThrow(/closed/)
-    expect(WorkerCtor.instances.every(w => w.terminated)).toBe(true)
+    expect(WorkerCtor.instances.every((w) => w.terminated)).toBe(true)
     await expect(pool.run('searchPages', [])).rejects.toThrow(/after close/)
   })
 
@@ -216,7 +223,7 @@ describe('createReaderPool', () => {
     // The drain loop should have noticed the pending entry clear before the
     // worker is terminated, so the call resolves normally.
     await expect(inflight).resolves.toBe('late-ok')
-    expect(WorkerCtor.instances.every(w => w.terminated)).toBe(true)
+    expect(WorkerCtor.instances.every((w) => w.terminated)).toBe(true)
   })
 
   test('recycle tears down all workers and respawns a fresh set', async () => {
@@ -232,7 +239,7 @@ describe('createReaderPool', () => {
     await pool.recycle()
     const afterStats = pool.stats()
     expect(afterStats.spawns).toBe(4) // two fresh workers
-    expect(WorkerCtor.instances.slice(0, 2).every(w => w.terminated)).toBe(true)
+    expect(WorkerCtor.instances.slice(0, 2).every((w) => w.terminated)).toBe(true)
 
     expect(await pool.run('searchPages', [])).toBe('ok')
     await pool.close()
@@ -241,9 +248,12 @@ describe('createReaderPool', () => {
   test('spawn failure (fatal message) rejects start()', async () => {
     function FailingCtor() {
       const w = makeFakeWorker(null, { autoReady: false })
-      queueMicrotask(() => w.emit('message', {
-        type: 'fatal', error: { message: 'db open failed' },
-      }))
+      queueMicrotask(() =>
+        w.emit('message', {
+          type: 'fatal',
+          error: { message: 'db open failed' },
+        }),
+      )
       return w
     }
     const pool = createReaderPool({ dbPath: DB_PATH, size: 1, WorkerCtor: FailingCtor })
@@ -259,9 +269,7 @@ describe('createReaderPool', () => {
       spawns++
       const failThis = spawns === 1
       const w = makeFakeWorker(null, { autoReady: false })
-      queueMicrotask(() => w.emit('message', failThis
-        ? { type: 'fatal', error: { message: 'file is not a database' } }
-        : { type: 'ready' }))
+      queueMicrotask(() => w.emit('message', failThis ? { type: 'fatal', error: { message: 'file is not a database' } } : { type: 'ready' }))
       return w
     }
     const pool = createReaderPool({ dbPath: DB_PATH, size: 1, WorkerCtor: FlakyCtor })
@@ -290,7 +298,11 @@ describe('createReaderPool', () => {
     // entries land in slot.pending, the (cap+1)th run() throws.
     const FakeCtor = makeFakeCtor({ handler: () => {} })
     const pool = createReaderPool({
-      dbPath: DB_PATH, size: 1, WorkerCtor: FakeCtor, maxPendingPerWorker: 2, deadlineMs: 0,
+      dbPath: DB_PATH,
+      size: 1,
+      WorkerCtor: FakeCtor,
+      maxPendingPerWorker: 2,
+      deadlineMs: 0,
     })
     const a = pool.run('searchPages', ['a'])
     const b = pool.run('searchPages', ['b'])
@@ -308,7 +320,10 @@ describe('createReaderPool', () => {
   test('A15: per-call deadline rejects with timeout error', async () => {
     const FakeCtor = makeFakeCtor({ handler: () => {} })
     const pool = createReaderPool({
-      dbPath: DB_PATH, size: 1, WorkerCtor: FakeCtor, deadlineMs: 50,
+      dbPath: DB_PATH,
+      size: 1,
+      WorkerCtor: FakeCtor,
+      deadlineMs: 50,
     })
     // Use `getPage` here so the pool's deadlineMs=50 default takes
     // effect; `searchPages` has a 1.5s per-op deadline that overrides
@@ -335,7 +350,10 @@ describe('runRead', () => {
   test('routes through pool.run when ctx.readerPool is present', async () => {
     const calls = []
     const fakePool = {
-      run: (op, args) => { calls.push({ op, args }); return Promise.resolve('via-pool') },
+      run: (op, args) => {
+        calls.push({ op, args })
+        return Promise.resolve('via-pool')
+      },
     }
     const result = await runRead({ readerPool: fakePool }, 'getPage', ['foo'])
     expect(result).toBe('via-pool')

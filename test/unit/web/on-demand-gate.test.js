@@ -39,7 +39,7 @@ describe('createOnDemandGate (A7)', () => {
     const gate = createOnDemandGate({ negativeTtlMs: 50 })
     gate.recordMiss('foo')
     expect(gate.isNegativelyCached('foo')).toBe(true)
-    await new Promise(r => setTimeout(r, 80))
+    await new Promise((r) => setTimeout(r, 80))
     expect(gate.isNegativelyCached('foo')).toBe(false)
   })
 
@@ -61,8 +61,18 @@ describe('createOnDemandGate (A7)', () => {
       fetchMaxWaiters: 0,
     })
     let resolveA, resolveB
-    const a = gate.withFetchPermit(() => new Promise(r => { resolveA = r }))
-    const b = gate.withFetchPermit(() => new Promise(r => { resolveB = r }))
+    const a = gate.withFetchPermit(
+      () =>
+        new Promise((r) => {
+          resolveA = r
+        }),
+    )
+    const b = gate.withFetchPermit(
+      () =>
+        new Promise((r) => {
+          resolveB = r
+        }),
+    )
     // Both acquired. A third should overflow because maxWaiters=0.
     await expect(gate.withFetchPermit(async () => 'never')).rejects.toBeInstanceOf(BackpressureError)
     resolveA('done-a')
@@ -77,7 +87,12 @@ describe('createOnDemandGate (A7)', () => {
       fetchMaxWaiters: 2,
     })
     let resolveFirst
-    const first = gate.withFetchPermit(() => new Promise(r => { resolveFirst = r }))
+    const first = gate.withFetchPermit(
+      () =>
+        new Promise((r) => {
+          resolveFirst = r
+        }),
+    )
     const second = gate.withFetchPermit(async () => 'b')
     const third = gate.withFetchPermit(async () => 'c')
     // Fourth overflows the queue.

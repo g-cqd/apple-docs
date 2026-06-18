@@ -1,12 +1,12 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
-import { DocsDatabase } from '../../src/storage/database.js'
-import { search } from '../../src/commands/search.js'
-import { lookup } from '../../src/commands/lookup.js'
-import { indexEmbeddings } from '../../src/commands/index-embeddings.js'
-import { topicEmbedder } from '../helpers/topic-embedder.js'
-import { writeJSON } from '../../src/storage/files.js'
-import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { indexEmbeddings } from '../../src/commands/index-embeddings.js'
+import { lookup } from '../../src/commands/lookup.js'
+import { search } from '../../src/commands/search.js'
+import { DocsDatabase } from '../../src/storage/database.js'
+import { writeJSON } from '../../src/storage/files.js'
+import { topicEmbedder } from '../helpers/topic-embedder.js'
 
 let db
 let ctx
@@ -75,7 +75,9 @@ beforeAll(async () => {
 
 afterAll(() => {
   db.close()
-  try { rmSync(tmpDir, { recursive: true }) } catch {}
+  try {
+    rmSync(tmpDir, { recursive: true })
+  } catch {}
 })
 
 describe('Integration: Search', () => {
@@ -143,7 +145,8 @@ describe('Integration: Search with semantic fusion + MMR active', () => {
       sdb.upsertPage({ rootId: r.id, path: d.key, url: 'u', title: d.title, role: 'symbol', abstract: d.abstract })
       sdb.upsertNormalizedDocument({
         document: { key: d.key, title: d.title, sourceType: 'apple-docc', framework: 'audiokit', role: 'symbol', abstractText: d.abstract },
-        sections: [], relationships: [],
+        sections: [],
+        relationships: [],
       })
     }
     await indexEmbeddings({ embedder: topicEmbedder() }, sctx)
@@ -161,12 +164,12 @@ describe('Integration: Search with semantic fusion + MMR active', () => {
     // semantic tier maps sound → audio and surfaces the audio docs.
     const res = await search({ query: 'sound', limit: 10, noDeep: true }, sctx)
     expect(res.results.length).toBeGreaterThan(0)
-    expect(res.results.map(x => x.path)).toContain('documentation/audiokit/audioengine')
+    expect(res.results.map((x) => x.path)).toContain('documentation/audiokit/audioengine')
   })
 
   test('results carry no duplicate paths after fusion + MMR', async () => {
     const res = await search({ query: 'sound', limit: 10, noDeep: true }, sctx)
-    const paths = res.results.map(x => x.path)
+    const paths = res.results.map((x) => x.path)
     expect(new Set(paths).size).toBe(paths.length)
   })
 

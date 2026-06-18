@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
 import { ensureNormalizedDocument } from '../../../src/content/hydrate.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let dataDir
@@ -59,13 +59,15 @@ describe('ensureNormalizedDocument', () => {
         urlDepth: 3,
         sourceMetadata: null,
       },
-      sections: [{
-        sectionKind: 'overview',
-        heading: 'Overview',
-        contentText: 'Some text',
-        contentJson: '[]',
-        sortOrder: 0,
-      }],
+      sections: [
+        {
+          sectionKind: 'overview',
+          heading: 'Overview',
+          contentText: 'Some text',
+          contentJson: '[]',
+          sortOrder: 0,
+        },
+      ],
       relationships: [],
     }
     db.upsertNormalizedDocument(minimalNormalized, {
@@ -105,10 +107,7 @@ describe('ensureNormalizedDocument', () => {
 
     const keyPath = 'documentation/swiftui/view'
     mkdirSync(join(dataDir, 'raw-json', 'documentation', 'swiftui'), { recursive: true })
-    writeFileSync(
-      join(dataDir, 'raw-json', `${keyPath}.json`),
-      JSON.stringify(rawJson),
-    )
+    writeFileSync(join(dataDir, 'raw-json', `${keyPath}.json`), JSON.stringify(rawJson))
 
     const result = await ensureNormalizedDocument(db, dataDir, keyPath)
     // Should hydrate successfully since normalize can handle the raw JSON

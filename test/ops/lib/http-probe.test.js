@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { probe, probeBatch, formatProbeLine } from '../../../ops/lib/http-probe.js'
+import { describe, expect, test } from 'bun:test'
+import { formatProbeLine, probe, probeBatch } from '../../../ops/lib/http-probe.js'
 
 function makeFetcher(handler) {
   return (url, init) => {
@@ -20,7 +20,10 @@ function makeStream(text) {
   let cursor = 0
   return new ReadableStream({
     pull(controller) {
-      if (cursor >= bytes.length) { controller.close(); return }
+      if (cursor >= bytes.length) {
+        controller.close()
+        return
+      }
       controller.enqueue(bytes.subarray(cursor))
       cursor = bytes.length
     },
@@ -55,13 +58,14 @@ describe('probe', () => {
 
   test('returns outcome=timeout when AbortController fires', async () => {
     // Fetcher rejects with an AbortError-shaped error if the signal fires.
-    const fetcher = (_url, init) => new Promise((_resolve, reject) => {
-      init.signal?.addEventListener('abort', () => {
-        const e = new Error('aborted')
-        e.name = 'AbortError'
-        reject(e)
+    const fetcher = (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => {
+          const e = new Error('aborted')
+          e.name = 'AbortError'
+          reject(e)
+        })
       })
-    })
     const r = await probe('http://x', { deadlineMs: 10, deps: { fetcher } })
     expect(r.outcome).toBe('timeout')
   })
@@ -95,11 +99,7 @@ describe('probeBatch', () => {
   test('aggregates pass/fail counts and preserves order', async () => {
     let i = 0
     const fetcher = () => jsonResp(i++ === 1 ? 503 : 200, 'ok')
-    const out = await probeBatch([
-      { url: 'http://a' },
-      { url: 'http://b' },
-      { url: 'http://c' },
-    ], { fetcher })
+    const out = await probeBatch([{ url: 'http://a' }, { url: 'http://b' }, { url: 'http://c' }], { fetcher })
     expect(out.total).toBe(3)
     expect(out.passed).toBe(2)
     expect(out.failed).toBe(1)
@@ -122,7 +122,8 @@ describe('formatProbeLine', () => {
     expect(formatProbeLine({ ok: true, status: 200, url: 'http://x', elapsedMs: 12 })).toContain('✓ http://x → 200')
   })
   test('uses ✗ + reason for failures', () => {
-    expect(formatProbeLine({ ok: false, status: null, outcome: 'network', url: 'http://x', elapsedMs: 5, error: 'ECONNREFUSED' }))
-      .toContain('✗ http://x → network')
+    expect(formatProbeLine({ ok: false, status: null, outcome: 'network', url: 'http://x', elapsedMs: 5, error: 'ECONNREFUSED' })).toContain(
+      '✗ http://x → network',
+    )
   })
 })

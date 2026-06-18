@@ -12,8 +12,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DocsDatabase } from '../../../src/storage/database.js'
 import { VERSION } from '../../../src/lib/version.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 const AD_SERVER = new URL('../../../swift/.build/release/ad-server', import.meta.url).pathname
 const PLAIN_PORT = 3047
@@ -34,21 +34,52 @@ if (enabled) {
   const certPath = join(dir, 'cert.pem')
   const keyPath = join(dir, 'key.pem')
   Bun.spawnSync([
-    'openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-sha256', '-days', '1', '-nodes',
-    '-keyout', keyPath, '-out', certPath, '-subj', '/CN=localhost',
+    'openssl',
+    'req',
+    '-x509',
+    '-newkey',
+    'rsa:2048',
+    '-sha256',
+    '-days',
+    '1',
+    '-nodes',
+    '-keyout',
+    keyPath,
+    '-out',
+    certPath,
+    '-subj',
+    '/CN=localhost',
   ])
-  server = Bun.spawn([
-    AD_SERVER, '--db', dbPath, '--port', String(PLAIN_PORT),
-    '--tls-cert', certPath, '--tls-key', keyPath, '--tls-port', String(TLS_PORT),
-    '--threads', '2', '--app-version', VERSION,
-  ], { stdout: 'ignore', stderr: 'ignore' })
+  server = Bun.spawn(
+    [
+      AD_SERVER,
+      '--db',
+      dbPath,
+      '--port',
+      String(PLAIN_PORT),
+      '--tls-cert',
+      certPath,
+      '--tls-key',
+      keyPath,
+      '--tls-port',
+      String(TLS_PORT),
+      '--threads',
+      '2',
+      '--app-version',
+      VERSION,
+    ],
+    { stdout: 'ignore', stderr: 'ignore' },
+  )
 }
 
 describe.skipIf(!enabled)('TLS 1.3 + multi-App (ad-server terminates HTTPS + loopback)', () => {
   beforeAll(async () => {
     for (let i = 0; i < 100; i++) {
       try {
-        if ((await fetch(`https://127.0.0.1:${TLS_PORT}/healthz`, insecure)).ok) { ready = true; break }
+        if ((await fetch(`https://127.0.0.1:${TLS_PORT}/healthz`, insecure)).ok) {
+          ready = true
+          break
+        }
       } catch {}
       await Bun.sleep(80)
     }
@@ -81,40 +112,33 @@ describe.skipIf(!enabled)('TLS 1.3 + multi-App (ad-server terminates HTTPS + loo
   })
 
   test('TLS handshake negotiates TLSv1.3 + ALPN h2', () => {
-    const out = Bun.spawnSync([
-      'sh', '-c',
-      `echo Q | openssl s_client -connect 127.0.0.1:${TLS_PORT} -alpn h2,http/1.1 2>&1`,
-    ]).stdout.toString()
+    const out = Bun.spawnSync(['sh', '-c', `echo Q | openssl s_client -connect 127.0.0.1:${TLS_PORT} -alpn h2,http/1.1 2>&1`]).stdout.toString()
     expect(out).toContain('TLSv1.3')
     expect(out).toContain('ALPN protocol: h2')
   })
 
   test('HTTP/2 over TLS — curl --http2 serves /healthz as h2', () => {
-    const ver = Bun.spawnSync([
-      'curl', '-sk', '--http2', '-o', '/dev/null', '-w', '%{http_version}',
-      `https://127.0.0.1:${TLS_PORT}/healthz`,
-    ]).stdout.toString().trim()
+    const ver = Bun.spawnSync(['curl', '-sk', '--http2', '-o', '/dev/null', '-w', '%{http_version}', `https://127.0.0.1:${TLS_PORT}/healthz`])
+      .stdout.toString()
+      .trim()
     expect(ver).toBe('2')
-    const body = Bun.spawnSync([
-      'curl', '-sk', '--http2', `https://127.0.0.1:${TLS_PORT}/healthz`,
-    ]).stdout.toString()
+    const body = Bun.spawnSync(['curl', '-sk', '--http2', `https://127.0.0.1:${TLS_PORT}/healthz`]).stdout.toString()
     expect(body).toBe(HEALTH)
   })
 
   test('HTTP/2 multiplexing serves a DB-backed route (/readyz) as h2', () => {
-    const out = Bun.spawnSync([
-      'curl', '-sk', '--http2', '-w', '\\n%{http_version}',
-      `https://127.0.0.1:${TLS_PORT}/readyz`,
-    ]).stdout.toString().trim().split('\n')
+    const out = Bun.spawnSync(['curl', '-sk', '--http2', '-w', '\\n%{http_version}', `https://127.0.0.1:${TLS_PORT}/readyz`])
+      .stdout.toString()
+      .trim()
+      .split('\n')
     expect(out[1]).toBe('2')
     expect(JSON.parse(out[0]).db).toBe(true)
   })
 
   test('ALPN fallback — curl --http1.1 still serves over TLS', () => {
-    const ver = Bun.spawnSync([
-      'curl', '-sk', '--http1.1', '-o', '/dev/null', '-w', '%{http_version}',
-      `https://127.0.0.1:${TLS_PORT}/healthz`,
-    ]).stdout.toString().trim()
+    const ver = Bun.spawnSync(['curl', '-sk', '--http1.1', '-o', '/dev/null', '-w', '%{http_version}', `https://127.0.0.1:${TLS_PORT}/healthz`])
+      .stdout.toString()
+      .trim()
     expect(ver).toBe('1.1')
   })
 })

@@ -14,21 +14,21 @@
 import { NotFoundError } from '../lib/errors.js'
 
 const PROFILES = {
-  'compact': {
+  compact: {
     persistMarkdown: false,
     persistHtml: false,
     cacheOnRead: false,
     cacheMaxAge: 0,
     description: 'Smallest disk. Fully compacted at install (compressed sections, contentless body index, raw payloads dropped). Renders on demand.',
   },
-  'balanced': {
+  balanced: {
     persistMarkdown: false,
     persistHtml: false,
     cacheOnRead: true,
     cacheMaxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     description: 'Default. Ships the snapshot as-is and caches rendered Markdown on first read, evicting after 7 days.',
   },
-  'prebuilt': {
+  prebuilt: {
     persistMarkdown: true,
     persistHtml: true,
     cacheOnRead: false,
@@ -61,10 +61,7 @@ export function getProfile(db) {
  */
 export function setProfile(db, name) {
   if (!PROFILES[name]) {
-    throw new NotFoundError(
-      `storage-profile/${name}`,
-      `Unknown storage profile: "${name}". Valid profiles: ${PROFILE_NAMES.join(', ')}`,
-    )
+    throw new NotFoundError(`storage-profile/${name}`, `Unknown storage profile: "${name}". Valid profiles: ${PROFILE_NAMES.join(', ')}`)
   }
   db.setSnapshotMeta('storage_profile', name)
 }
@@ -78,10 +75,7 @@ export function setProfile(db, name) {
  */
 export function getProfileConfig(name) {
   if (!PROFILES[name]) {
-    throw new NotFoundError(
-      `storage-profile/${name}`,
-      `Unknown storage profile: "${name}". Valid profiles: ${PROFILE_NAMES.join(', ')}`,
-    )
+    throw new NotFoundError(`storage-profile/${name}`, `Unknown storage profile: "${name}". Valid profiles: ${PROFILE_NAMES.join(', ')}`)
   }
   return { ...PROFILES[name] }
 }
@@ -91,5 +85,5 @@ export function getProfileConfig(name) {
  * @returns {Array<{ name: string, persistMarkdown: boolean, persistHtml: boolean, cacheOnRead: boolean, cacheMaxAge: number, description: string }>}
  */
 export function listProfiles() {
-  return PROFILE_NAMES.map(name => ({ name, ...PROFILES[name] }))
+  return PROFILE_NAMES.map((name) => ({ name, ...PROFILES[name] }))
 }

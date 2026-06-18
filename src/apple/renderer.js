@@ -1,6 +1,6 @@
-import { normalizeIdentifier } from './normalizer.js'
-import { toFrontMatter } from '../lib/yaml.js'
 import { nativePageMarkdown } from '../content/content-native.js'
+import { toFrontMatter } from '../lib/yaml.js'
+import { normalizeIdentifier } from './normalizer.js'
 
 /**
  * Render a full Apple DocC JSON page to Markdown.
@@ -21,7 +21,7 @@ export function renderPage(json, canonicalPath) {
     framework: meta.modules?.[0]?.name,
     role: meta.role,
     role_heading: meta.roleHeading,
-    platforms: (meta.platforms ?? []).map(p => p.introducedAt ? `${p.name} ${p.introducedAt}+` : p.name).filter(Boolean),
+    platforms: (meta.platforms ?? []).map((p) => (p.introducedAt ? `${p.name} ${p.introducedAt}+` : p.name)).filter(Boolean),
     path: canonicalPath,
   }
   parts.push(toFrontMatter(fm))
@@ -90,7 +90,10 @@ export function renderPage(json, canonicalPath) {
     }
   }
 
-  return `${parts.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`
+  return `${parts
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()}\n`
 }
 
 // --- Section renderers ---
@@ -98,7 +101,7 @@ export function renderPage(json, canonicalPath) {
 function renderDeclarations(section) {
   const lines = ['## Declaration', '']
   for (const decl of section.declarations ?? []) {
-    const code = (decl.tokens ?? []).map(t => t.text).join('')
+    const code = (decl.tokens ?? []).map((t) => t.text).join('')
     const lang = decl.languages?.[0] ?? 'swift'
     lines.push(`\`\`\`${lang}`)
     lines.push(code)
@@ -113,7 +116,10 @@ function renderParameters(section) {
   for (const param of section.parameters ?? []) {
     const name = param.name ?? ''
     const desc = param.content
-      ? param.content.map(n => renderContentNode(n, {}, '')).join(' ').trim()
+      ? param.content
+          .map((n) => renderContentNode(n, {}, ''))
+          .join(' ')
+          .trim()
       : ''
     lines.push(`- \`${name}\`: ${desc}`)
   }
@@ -145,7 +151,7 @@ function renderLinkSection(section, refs, fromPath) {
 // --- Content node renderers ---
 
 function renderContentNodes(nodes, refs, fromPath) {
-  return nodes.map(n => renderContentNode(n, refs, fromPath)).join('\n')
+  return nodes.map((n) => renderContentNode(n, refs, fromPath)).join('\n')
 }
 
 function renderContentNode(node, refs, fromPath) {
@@ -163,14 +169,10 @@ function renderContentNode(node, refs, fromPath) {
     }
 
     case 'unorderedList':
-      return `${(node.items ?? []).map(item =>
-        renderListItem(item, '- ', refs, fromPath)
-      ).join('\n')}\n`
+      return `${(node.items ?? []).map((item) => renderListItem(item, '- ', refs, fromPath)).join('\n')}\n`
 
     case 'orderedList':
-      return `${(node.items ?? []).map((item, i) =>
-        renderListItem(item, `${i + 1}. `, refs, fromPath)
-      ).join('\n')}\n`
+      return `${(node.items ?? []).map((item, i) => renderListItem(item, `${i + 1}. `, refs, fromPath)).join('\n')}\n`
 
     case 'aside': {
       const style = node.style ?? 'Note'
@@ -183,15 +185,17 @@ function renderContentNode(node, refs, fromPath) {
 
     case 'links':
       // Links section: render as list
-      return `${(node.items ?? []).map(id => {
-        const ref = refs[id]
-        const normPath = normalizeIdentifier(id)
-        const title = ref?.title ?? normPath ?? id
-        if (normPath) {
-          return `- [${title}](${relativePath(fromPath, normPath)}.md)`
-        }
-        return `- ${title}`
-      }).join('\n')}\n`
+      return `${(node.items ?? [])
+        .map((id) => {
+          const ref = refs[id]
+          const normPath = normalizeIdentifier(id)
+          const title = ref?.title ?? normPath ?? id
+          if (normPath) {
+            return `- [${title}](${relativePath(fromPath, normPath)}.md)`
+          }
+          return `- ${title}`
+        })
+        .join('\n')}\n`
 
     default:
       // Try to render inline content if present
@@ -206,7 +210,10 @@ function renderContentNode(node, refs, fromPath) {
 }
 
 function renderListItem(item, prefix, refs, fromPath) {
-  const content = (item.content ?? []).map(n => renderContentNode(n, refs, fromPath)).join('').trim()
+  const content = (item.content ?? [])
+    .map((n) => renderContentNode(n, refs, fromPath))
+    .join('')
+    .trim()
   return prefix + content
 }
 
@@ -215,11 +222,15 @@ function renderTable(node, refs, fromPath) {
   if (rows.length === 0) return ''
 
   const renderCell = (cell) => {
-    return (cell.content ?? []).map(n => renderContentNode(n, refs, fromPath)).join('').trim().replace(/\n/g, ' ')
+    return (cell.content ?? [])
+      .map((n) => renderContentNode(n, refs, fromPath))
+      .join('')
+      .trim()
+      .replace(/\n/g, ' ')
   }
 
   const header = rows[0]
-  const _headerCells = (header.cells ?? header).map?.(c => Array.isArray(c) ? c : c) ?? []
+  const _headerCells = (header.cells ?? header).map?.((c) => (Array.isArray(c) ? c : c)) ?? []
   // Handle both { cells: [...] } format and direct array format
   const getRowCells = (row) => {
     if (Array.isArray(row)) return row
@@ -227,10 +238,7 @@ function renderTable(node, refs, fromPath) {
   }
 
   const hCells = getRowCells(rows[0]).map(renderCell)
-  const lines = [
-    `| ${hCells.join(' | ')} |`,
-    `| ${hCells.map(() => '---').join(' | ')} |`,
-  ]
+  const lines = [`| ${hCells.join(' | ')} |`, `| ${hCells.map(() => '---').join(' | ')} |`]
 
   for (let i = 1; i < rows.length; i++) {
     const cells = getRowCells(rows[i]).map(renderCell)
@@ -244,7 +252,7 @@ function renderTable(node, refs, fromPath) {
 
 function renderInline(nodes, refs, fromPath) {
   if (!Array.isArray(nodes)) return ''
-  return nodes.map(node => renderInlineNode(node, refs, fromPath)).join('')
+  return nodes.map((node) => renderInlineNode(node, refs, fromPath)).join('')
 }
 
 function renderInlineNode(node, refs, fromPath) {

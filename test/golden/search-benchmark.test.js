@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
-import { DocsDatabase } from '../../src/storage/database.js'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { search } from '../../src/commands/search.js'
-import { seedDatabase } from './seed.js'
+import { DocsDatabase } from '../../src/storage/database.js'
 import goldenQueries from './search-queries.json'
+import { seedDatabase } from './seed.js'
 
 let db
 let ctx
@@ -29,22 +29,25 @@ describe('Golden Search Queries', () => {
   for (const golden of goldenQueries) {
     test(golden.name, async () => {
       const startMs = performance.now()
-      const result = await search({
-        query: golden.query,
-        framework: golden.framework,
-        source: golden.source,
-        language: golden.language,
-        platform: golden.platform,
-        minIos: golden.min_ios,
-        minMacos: golden.min_macos,
-        limit: 20,
-        fuzzy: true,
-        noDeep: true,
-        noEager: false,
-      }, ctx)
+      const result = await search(
+        {
+          query: golden.query,
+          framework: golden.framework,
+          source: golden.source,
+          language: golden.language,
+          platform: golden.platform,
+          minIos: golden.min_ios,
+          minMacos: golden.min_macos,
+          limit: 20,
+          fuzzy: true,
+          noDeep: true,
+          noEager: false,
+        },
+        ctx,
+      )
       const latencyMs = performance.now() - startMs
 
-      const paths = result.results.map(r => r.path)
+      const paths = result.results.map((r) => r.path)
 
       if (golden.expect.minResults !== undefined) {
         expect(result.results.length).toBeGreaterThanOrEqual(golden.expect.minResults)
@@ -76,7 +79,7 @@ describe('Search result enrichment', () => {
   test('results include snippet field when document has sections', async () => {
     const result = await search({ query: 'Swift Testing', framework: 'wwdc', noDeep: true }, ctx)
     expect(result.results.length).toBeGreaterThan(0)
-    const withSnippet = result.results.find(r => r.snippet)
+    const withSnippet = result.results.find((r) => r.snippet)
     expect(withSnippet).toBeDefined()
   })
 
@@ -123,19 +126,22 @@ describe('Search latency benchmark', () => {
     for (const golden of goldenQueries) {
       for (let i = 0; i < ITERATIONS; i++) {
         const start = performance.now()
-        await search({
-          query: golden.query,
-          framework: golden.framework,
-          source: golden.source,
-          language: golden.language,
-          platform: golden.platform,
-          minIos: golden.min_ios,
-          minMacos: golden.min_macos,
-          limit: 20,
-          fuzzy: true,
-          noDeep: true,
-          noEager: false,
-        }, ctx)
+        await search(
+          {
+            query: golden.query,
+            framework: golden.framework,
+            source: golden.source,
+            language: golden.language,
+            platform: golden.platform,
+            minIos: golden.min_ios,
+            minMacos: golden.min_macos,
+            limit: 20,
+            fuzzy: true,
+            noDeep: true,
+            noEager: false,
+          },
+          ctx,
+        )
         allLatencies.push(performance.now() - start)
       }
     }

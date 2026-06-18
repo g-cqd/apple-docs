@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { PassThrough } from 'node:stream'
-import { promptYesNoAlways, interpretAnswer, promptChoice, interpretChoice } from '../../../src/cli/prompts.js'
+import { interpretAnswer, interpretChoice, promptChoice, promptYesNoAlways } from '../../../src/cli/prompts.js'
 
 function drive(answer) {
   const input = new PassThrough()

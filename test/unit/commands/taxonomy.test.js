@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { DocsDatabase } from '../../../src/storage/database.js'
 import { taxonomy } from '../../../src/commands/taxonomy.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let ctx
@@ -38,7 +38,9 @@ beforeAll(() => {
 })
 
 afterAll(() => {
-  try { db.close() } catch {}
+  try {
+    db.close()
+  } catch {}
 })
 
 describe('taxonomy', () => {
@@ -52,8 +54,8 @@ describe('taxonomy', () => {
 
   test('counts are positive and greater for the most common value', async () => {
     const result = await taxonomy({}, ctx)
-    const symbolRow = result.role.find(r => r.value === 'symbol')
-    const articleRow = result.role.find(r => r.value === 'article')
+    const symbolRow = result.role.find((r) => r.value === 'symbol')
+    const articleRow = result.role.find((r) => r.value === 'article')
     expect(symbolRow.count).toBeGreaterThan(0)
     expect(articleRow.count).toBeGreaterThan(0)
     expect(symbolRow.count).toBeGreaterThanOrEqual(articleRow.count)
@@ -63,7 +65,7 @@ describe('taxonomy', () => {
     const result = await taxonomy({ field: 'sourceType' }, ctx)
     expect(result.field).toBe('sourceType')
     expect(result.values).toBeArray()
-    const slugs = result.values.map(v => v.value)
+    const slugs = result.values.map((v) => v.value)
     expect(slugs).toContain('apple-docc')
     expect(slugs).toContain('hig')
   })

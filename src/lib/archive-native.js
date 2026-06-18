@@ -15,9 +15,9 @@ import { dirname, isAbsolute, resolve } from 'node:path'
 import { createLogger } from '../lib/logger.js'
 import { getNativeLib, isNativeEnabled } from '../native/loader.js'
 import { nativeErrorMessage, readNativeResult } from '../native/result.js'
-import { ValidationError } from './errors.js'
 import { listFilesSorted } from './archive-7z.js'
 import { createTarZstArchive as jsCreateTarZstArchive } from './archive-zstd.js'
+import { ValidationError } from './errors.js'
 
 export { countTarMembers } from './archive-zstd.js'
 
@@ -91,9 +91,7 @@ export async function createTarZstArchive(args) {
   const request = packRequest(sourceDir, absOutput, files)
   const result = readNativeResult(lib, lib.symbols.ad_archive_tar_zst(request, request.length))
   if (result.status !== 0) {
-    log.warn?.(
-      `[archive-tar.zst] native build failed (status ${result.status}: ${nativeErrorMessage(result)}) — js fallback`,
-    )
+    log.warn?.(`[archive-tar.zst] native build failed (status ${result.status}: ${nativeErrorMessage(result)}) — js fallback`)
     if (existsSync(absOutput)) {
       try {
         unlinkSync(absOutput)
@@ -111,8 +109,6 @@ export async function createTarZstArchive(args) {
       `tar.zst integrity check failed for ${name ?? absOutput}: native packed ${done.fileCount} members but ${files.length} were staged`,
     )
   }
-  log.info?.(
-    `[archive-tar.zst] wrote ${absOutput} (${(done.size / 1e6).toFixed(1)} MB, ${done.fileCount} members, native zstd ${done.zstdVersion})`,
-  )
+  log.info?.(`[archive-tar.zst] wrote ${absOutput} (${(done.size / 1e6).toFixed(1)} MB, ${done.fileCount} members, native zstd ${done.zstdVersion})`)
   return { outputPath: absOutput, fileCount: done.fileCount, size: done.size }
 }

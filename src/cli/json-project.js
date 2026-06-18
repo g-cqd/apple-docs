@@ -5,14 +5,7 @@
 // formatters already operate on operator-facing payloads (storage,
 // web-build).
 
-import {
-  projectBrowse,
-  projectFrameworks,
-  projectReadDoc,
-  projectSearchResult,
-  projectStatus,
-  projectTaxonomy,
-} from '../output/projection.js'
+import { projectBrowse, projectFrameworks, projectReadDoc, projectSearchResult, projectStatus, projectTaxonomy } from '../output/projection.js'
 
 export function jsonProject(command, result, flags) {
   switch (command) {
@@ -20,15 +13,19 @@ export function jsonProject(command, result, flags) {
       // `search --read` returns a doc-shaped { hit, page } envelope;
       // project the page through projectReadDoc and the hit through the
       // standard search-hit projection.
-      return flags.read && result?.page
-        ? { hit: projectHit(result.hit), page: projectReadDoc(result.page, { full: true }) }
-        : projectSearchResult(result)
-    case 'read': return projectReadDoc(result, { full: true })
-    case 'frameworks': return projectFrameworks(result)
-    case 'browse': return projectBrowse(result)
-    case 'kinds': return projectTaxonomy(result)
-    case 'status': return projectStatus(result, { advanced: !!flags.advanced })
-    default: return result
+      return flags.read && result?.page ? { hit: projectHit(result.hit), page: projectReadDoc(result.page, { full: true }) } : projectSearchResult(result)
+    case 'read':
+      return projectReadDoc(result, { full: true })
+    case 'frameworks':
+      return projectFrameworks(result)
+    case 'browse':
+      return projectBrowse(result)
+    case 'kinds':
+      return projectTaxonomy(result)
+    case 'status':
+      return projectStatus(result, { advanced: !!flags.advanced })
+    default:
+      return result
   }
 }
 

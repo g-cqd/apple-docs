@@ -14,8 +14,8 @@
  * in HTML and a GitHub URL.
  */
 
-import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const SHA_RE = /^[0-9a-f]{7,40}$/
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -26,14 +26,22 @@ let cached // undefined = not computed; string|null = result
 export function getCommitHash() {
   if (cached !== undefined) return cached
   const env = process.env.APPLE_DOCS_COMMIT?.trim().toLowerCase()
-  if (env && SHA_RE.test(env)) { cached = env; return cached }
+  if (env && SHA_RE.test(env)) {
+    cached = env
+    return cached
+  }
   try {
     const r = Bun.spawnSync(['git', '-C', REPO_ROOT, 'rev-parse', '--short', 'HEAD'])
     if (r.exitCode === 0) {
       const sha = new TextDecoder().decode(r.stdout).trim().toLowerCase()
-      if (SHA_RE.test(sha)) { cached = sha; return cached }
+      if (SHA_RE.test(sha)) {
+        cached = sha
+        return cached
+      }
     }
-  } catch { /* git missing or not a repo — fall through to null */ }
+  } catch {
+    /* git missing or not a repo — fall through to null */
+  }
   cached = null
   return cached
 }

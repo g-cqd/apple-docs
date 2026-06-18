@@ -98,12 +98,16 @@ describe('PackagesAdapter', () => {
   test('discover builds package keys from the Swift Package Index list', async () => {
     fetchImpl.mockImplementation(async (url) => {
       if (String(url).includes('raw.githubusercontent.com/SwiftPackageIndex/PackageList/main/packages.json')) {
-        return textResponse(JSON.stringify([
-          'https://github.com/Apple/Swift-Argument-Parser.git',
-          'https://github.com/apple/swift-argument-parser',
-          'https://github.com/pointfreeco/swift-composable-architecture',
-          'https://example.com/not-github',
-        ]), 200, { etag: '"packages"' })
+        return textResponse(
+          JSON.stringify([
+            'https://github.com/Apple/Swift-Argument-Parser.git',
+            'https://github.com/apple/swift-argument-parser',
+            'https://github.com/pointfreeco/swift-composable-architecture',
+            'https://example.com/not-github',
+          ]),
+          200,
+          { etag: '"packages"' },
+        )
       }
       return new Response('Not found', { status: 404 })
     })
@@ -142,9 +146,7 @@ describe('PackagesAdapter', () => {
 
     fetchImpl.mockImplementation(async (url) => {
       if (String(url).includes('raw.githubusercontent.com/SwiftPackageIndex/PackageList/main/packages.json')) {
-        return textResponse(JSON.stringify([
-          'https://github.com/pointfreeco/swift-composable-architecture',
-        ]))
+        return textResponse(JSON.stringify(['https://github.com/pointfreeco/swift-composable-architecture']))
       }
       return new Response('Not found', { status: 404 })
     })
@@ -177,9 +179,7 @@ describe('PackagesAdapter', () => {
 
     fetchImpl.mockImplementation(async (url) => {
       if (String(url).includes('raw.githubusercontent.com/SwiftPackageIndex/PackageList/main/packages.json')) {
-        return textResponse(JSON.stringify([
-          'https://github.com/pointfreeco/swift-composable-architecture',
-        ]))
+        return textResponse(JSON.stringify(['https://github.com/pointfreeco/swift-composable-architecture']))
       }
       return new Response('Not found', { status: 404 })
     })
@@ -206,20 +206,28 @@ describe('PackagesAdapter', () => {
     fetchImpl.mockImplementation(async (url) => {
       const urlStr = String(url)
       if (urlStr === 'https://api.github.com/repos/apple/swift-argument-parser') {
-        return jsonResponse({
-          full_name: 'apple/swift-argument-parser',
-          default_branch: 'main',
-        }, 200, { etag: '"repo"', 'last-modified': '2026-04-13T00:00:00Z' })
+        return jsonResponse(
+          {
+            full_name: 'apple/swift-argument-parser',
+            default_branch: 'main',
+          },
+          200,
+          { etag: '"repo"', 'last-modified': '2026-04-13T00:00:00Z' },
+        )
       }
       if (urlStr === 'https://api.github.com/repos/apple/swift-argument-parser/readme?ref=main') {
-        return jsonResponse({
-          path: 'README.md',
-          sha: 'abc123',
-          html_url: 'https://github.com/apple/swift-argument-parser/blob/main/README.md',
-          download_url: 'https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md',
-          content: Buffer.from('# swift-argument-parser\n\nArgument parsing for Swift.\n').toString('base64'),
-          encoding: 'base64',
-        }, 200, { etag: '"readme"', 'last-modified': '2026-04-13T01:00:00Z' })
+        return jsonResponse(
+          {
+            path: 'README.md',
+            sha: 'abc123',
+            html_url: 'https://github.com/apple/swift-argument-parser/blob/main/README.md',
+            download_url: 'https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md',
+            content: Buffer.from('# swift-argument-parser\n\nArgument parsing for Swift.\n').toString('base64'),
+            encoding: 'base64',
+          },
+          200,
+          { etag: '"readme"', 'last-modified': '2026-04-13T01:00:00Z' },
+        )
       }
       return new Response('Not found', { status: 404 })
     })
@@ -340,11 +348,9 @@ describe('PackagesAdapter', () => {
     expect(meta.topics).toContain('swift')
     expect(meta.readmePath).toBe('README.md')
 
-    expect(result.sections.find(section => section.sectionKind === 'abstract')?.contentText).toBe(
-      'Straightforward, type-safe argument parsing for Swift',
-    )
-    expect(result.sections.find(section => section.heading === 'Usage')).toBeTruthy()
-    expect(result.sections.find(section => section.heading === 'Package Metadata')).toBeTruthy()
+    expect(result.sections.find((section) => section.sectionKind === 'abstract')?.contentText).toBe('Straightforward, type-safe argument parsing for Swift')
+    expect(result.sections.find((section) => section.heading === 'Usage')).toBeTruthy()
+    expect(result.sections.find((section) => section.heading === 'Package Metadata')).toBeTruthy()
   })
 
   test('official-scope fetch pulls README directly from raw GitHub with no API call', async () => {
@@ -373,8 +379,8 @@ describe('PackagesAdapter', () => {
     expect(etag.readmeFilename).toBe('README.md')
     expect(etag.branch).toBe('main')
     // No api.github.com / swiftpackageindex.com traffic in official scope.
-    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
-    expect(urlsSeen.some(u => urlHasHost(u, 'swiftpackageindex.com'))).toBe(false)
+    expect(urlsSeen.some((u) => urlHasHost(u, 'api.github.com'))).toBe(false)
+    expect(urlsSeen.some((u) => urlHasHost(u, 'swiftpackageindex.com'))).toBe(false)
   })
 
   test('full-catalog fetch without a token falls back to raw README mode', async () => {
@@ -398,7 +404,7 @@ describe('PackagesAdapter', () => {
 
     expect(result.payload.syncScope).toBe('full')
     expect(result.payload.fetchMode).toBe('raw')
-    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
+    expect(urlsSeen.some((u) => urlHasHost(u, 'api.github.com'))).toBe(false)
   })
 
   test('default fetch path uses raw.githubusercontent.com even when a token is set', async () => {
@@ -421,7 +427,7 @@ describe('PackagesAdapter', () => {
     expect(result.payload.fetchMode).toBe('raw')
     // Stars/forks are null because no /repos call is made.
     expect(result.payload.repo.stargazers_count).toBeNull()
-    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
+    expect(urlsSeen.some((u) => urlHasHost(u, 'api.github.com'))).toBe(false)
     const etag = JSON.parse(result.etag)
     expect(etag.source).toBe('raw')
   })
@@ -437,11 +443,15 @@ describe('PackagesAdapter', () => {
         return jsonResponse({ full_name: 'apple/swift-argument-parser', default_branch: 'main' }, 200, { etag: '"repo"' })
       }
       if (urlStr === 'https://api.github.com/repos/apple/swift-argument-parser/readme?ref=main') {
-        return jsonResponse({
-          path: 'README.md',
-          content: Buffer.from('# swift-argument-parser\n').toString('base64'),
-          encoding: 'base64',
-        }, 200, { etag: '"readme"' })
+        return jsonResponse(
+          {
+            path: 'README.md',
+            content: Buffer.from('# swift-argument-parser\n').toString('base64'),
+            encoding: 'base64',
+          },
+          200,
+          { etag: '"readme"' },
+        )
       }
       return new Response('Not found', { status: 404 })
     })
@@ -449,14 +459,16 @@ describe('PackagesAdapter', () => {
     const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
 
     expect(result.payload.fetchMode).toBe('api')
-    expect(urlsSeen.some(u => {
-      try {
-        const parsed = new URL(u)
-        return parsed.host === 'api.github.com' && parsed.pathname === '/repos/apple/swift-argument-parser'
-      } catch {
-        return false
-      }
-    })).toBe(true)
+    expect(
+      urlsSeen.some((u) => {
+        try {
+          const parsed = new URL(u)
+          return parsed.host === 'api.github.com' && parsed.pathname === '/repos/apple/swift-argument-parser'
+        } catch {
+          return false
+        }
+      }),
+    ).toBe(true)
   })
 
   test('APPLE_DOCS_PACKAGES_FETCH=api without a token degrades to raw mode', async () => {
@@ -476,7 +488,7 @@ describe('PackagesAdapter', () => {
     const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
 
     expect(result.payload.fetchMode).toBe('raw')
-    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
+    expect(urlsSeen.some((u) => urlHasHost(u, 'api.github.com'))).toBe(false)
   })
 
   test('APPLE_DOCS_PACKAGES_FETCH=raw overrides any opt-in, even with a token', async () => {
@@ -495,7 +507,7 @@ describe('PackagesAdapter', () => {
     const result = await adapter.fetch('packages/apple/swift-argument-parser', makeCtx())
 
     expect(result.payload.fetchMode).toBe('raw')
-    expect(urlsSeen.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
+    expect(urlsSeen.some((u) => urlHasHost(u, 'api.github.com'))).toBe(false)
   })
 
   test('official-scope fetch falls back through README filename variants', async () => {
@@ -577,7 +589,7 @@ describe('PackagesAdapter', () => {
     expect(result.status).toBe('unchanged')
     expect(calledUrls).toContain('https://raw.githubusercontent.com/apple/swift-argument-parser/main/README.md')
     // The raw-scope check never hits api.github.com.
-    expect(calledUrls.some(u => urlHasHost(u, 'api.github.com'))).toBe(false)
+    expect(calledUrls.some((u) => urlHasHost(u, 'api.github.com'))).toBe(false)
   })
 
   test('check treats legacy etag without source as the GitHub API path', async () => {
@@ -619,8 +631,8 @@ describe('PackagesAdapter', () => {
     })
 
     expect(result.document.title).toBe('pointfreeco/swift-dependencies')
-    expect(result.sections.find(section => section.sectionKind === 'abstract')).toBeTruthy()
-    expect(result.sections.find(section => section.heading === 'Package Metadata')).toBeTruthy()
+    expect(result.sections.find((section) => section.sectionKind === 'abstract')).toBeTruthy()
+    expect(result.sections.find((section) => section.heading === 'Package Metadata')).toBeTruthy()
   })
 
   test('normalize preserves full catalog scope with raw fallback metadata', () => {

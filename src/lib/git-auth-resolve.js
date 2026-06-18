@@ -1,9 +1,9 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync, chmodSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { promptYesNoAlways } from '../cli/prompts.js'
 import { detectLocalGitHubToken } from './git-auth.js'
 import { setResolvedGitHubToken } from './github.js'
-import { promptYesNoAlways } from '../cli/prompts.js'
 
 /**
  * Resolve a GitHub token for `sync`/`update` from, in order:
@@ -82,9 +82,7 @@ export async function resolveGitHubAuth({
     }
     let answer
     try {
-      answer = await promptFn(
-        `Use local GitHub credentials from ${detected.source} to authenticate requests? [y/N/always]`,
-      )
+      answer = await promptFn(`Use local GitHub credentials from ${detected.source} to authenticate requests? [y/N/always]`)
     } catch {
       answer = 'no'
     }
@@ -142,7 +140,9 @@ export function writeSidecar(path, data) {
     mkdirSync(dirname(path), { recursive: true })
     const tmp = `${path}.${process.pid}.tmp`
     writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 })
-    try { chmodSync(tmp, 0o600) } catch {}
+    try {
+      chmodSync(tmp, 0o600)
+    } catch {}
     renameSync(tmp, path)
   } catch {
     // Ignored — not being able to persist the preference is non-fatal.

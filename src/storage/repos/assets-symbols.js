@@ -37,13 +37,9 @@ export function createAssetsSymbolsRepo(db) {
       bundle_version = excluded.bundle_version,
       updated_at = excluded.updated_at
   `)
-  const deleteFtsStmt = db.query(
-    'DELETE FROM sf_symbols_fts WHERE rowid = (SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?)',
-  )
+  const deleteFtsStmt = db.query('DELETE FROM sf_symbols_fts WHERE rowid = (SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?)')
   const getRowidStmt = db.query('SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?')
-  const insertFtsStmt = db.query(
-    'INSERT INTO sf_symbols_fts(rowid, name, keywords, categories, aliases) VALUES (?, ?, ?, ?, ?)',
-  )
+  const insertFtsStmt = db.query('INSERT INTO sf_symbols_fts(rowid, name, keywords, categories, aliases) VALUES (?, ?, ?, ?, ?)')
   const getSymbolStmt = db.query('SELECT * FROM sf_symbols WHERE scope = ? AND name = ?')
   const listCatalogStmt = db.query(`
     SELECT name, scope, categories_json, keywords_json, bitmap_only, render_unsupported, codepoint, codepoint_version
@@ -54,21 +50,15 @@ export function createAssetsSymbolsRepo(db) {
   // bundle representation) so the validator and snapshot completeness
   // gate skip it. Called from the prerender loop when the Swift worker
   // reports the symbol has no vector form.
-  const markBitmapOnlyStmt = db.query(
-    'UPDATE sf_symbols SET bitmap_only = 1 WHERE scope = $scope AND name = $name',
-  )
+  const markBitmapOnlyStmt = db.query('UPDATE sf_symbols SET bitmap_only = 1 WHERE scope = $scope AND name = $name')
   // v27: the catalog (current SF Symbols.app) can list names the build
   // host's macOS cannot draw at all; the prerender loop flags them when
   // every variant fails so the completeness gate skips them.
-  const markRenderUnsupportedStmt = db.query(
-    'UPDATE sf_symbols SET render_unsupported = 1 WHERE scope = $scope AND name = $name',
-  )
+  const markRenderUnsupportedStmt = db.query('UPDATE sf_symbols SET render_unsupported = 1 WHERE scope = $scope AND name = $name')
   // v19: stamp the resolved Private Use Area codepoint at sync time.
   // Pass NULL to clear (e.g., when the dump can't reach the symbol
   // through SF-Pro.ttf's PUA cmap).
-  const updateCodepointStmt = db.query(
-    'UPDATE sf_symbols SET codepoint = $codepoint, codepoint_version = $version WHERE scope = $scope AND name = $name',
-  )
+  const updateCodepointStmt = db.query('UPDATE sf_symbols SET codepoint = $codepoint, codepoint_version = $version WHERE scope = $scope AND name = $name')
   // Search variants — empty query, FTS hit, fallback LIKE.
   const searchEmptyStmt = db.query(`
     SELECT * FROM sf_symbols
@@ -113,15 +103,9 @@ export function createAssetsSymbolsRepo(db) {
   // millions of distinct (size, color, weight, scale) combinations, that's
   // an unbounded disk-fill hazard. Two prune strategies, callable from a
   // serve-side cron in src/web/serve.js.
-  const renderCacheStatsStmt = db.query(
-    'SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as bytes FROM sf_symbol_renders',
-  )
-  const olderThanStmt = db.query(
-    'SELECT cache_key, file_path FROM sf_symbol_renders WHERE updated_at < ?',
-  )
-  const oldestForQuotaStmt = db.query(
-    'SELECT cache_key, file_path, size FROM sf_symbol_renders ORDER BY updated_at ASC, cache_key ASC',
-  )
+  const renderCacheStatsStmt = db.query('SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as bytes FROM sf_symbol_renders')
+  const olderThanStmt = db.query('SELECT cache_key, file_path FROM sf_symbol_renders WHERE updated_at < ?')
+  const oldestForQuotaStmt = db.query('SELECT cache_key, file_path, size FROM sf_symbol_renders ORDER BY updated_at ASC, cache_key ASC')
   const deleteRenderStmt = db.query('DELETE FROM sf_symbol_renders WHERE cache_key = ?')
 
   return {
@@ -143,13 +127,7 @@ export function createAssetsSymbolsRepo(db) {
       deleteFtsStmt.run(params.scope, params.name)
       const rowid = getRowidStmt.get(params.scope, params.name)?.rowid
       if (rowid != null) {
-        insertFtsStmt.run(
-          rowid,
-          params.name,
-          (params.keywords ?? []).join(' '),
-          (params.categories ?? []).join(' '),
-          (params.aliases ?? []).join(' '),
-        )
+        insertFtsStmt.run(rowid, params.name, (params.keywords ?? []).join(' '), (params.categories ?? []).join(' '), (params.aliases ?? []).join(' '))
       }
     },
     getSymbol(scope, name) {
@@ -159,7 +137,7 @@ export function createAssetsSymbolsRepo(db) {
     /** Lightweight catalog used by the /api/symbols/index.json endpoint —
      *  excludes large JSON sidecars so the gzipped payload stays small. */
     listCatalog() {
-      return listCatalogStmt.all().map(row => ({
+      return listCatalogStmt.all().map((row) => ({
         name: row.name,
         scope: row.scope,
         categories: parseJsonArray(row.categories_json),
@@ -193,20 +171,24 @@ export function createAssetsSymbolsRepo(db) {
       const limit = Math.min(Math.max(Number.parseInt(opts.limit ?? 100, 10) || 100, 1), 500)
       const scope = opts.scope ?? null
       const q = String(query ?? '').trim()
-      const parseRows = rows => rows.map(normalizeSfSymbolRow)
+      const parseRows = (rows) => rows.map(normalizeSfSymbolRow)
       if (!q) return parseRows(searchEmptyStmt.all({ $scope: scope, $limit: limit }))
       try {
-        return parseRows(searchFtsStmt.all({
-          $query: buildResourceFtsQuery(q),
-          $scope: scope,
-          $limit: limit,
-        }))
+        return parseRows(
+          searchFtsStmt.all({
+            $query: buildResourceFtsQuery(q),
+            $scope: scope,
+            $limit: limit,
+          }),
+        )
       } catch {
-        return parseRows(searchLikeStmt.all({
-          $scope: scope,
-          $like: `%${q.toLowerCase()}%`,
-          $limit: limit,
-        }))
+        return parseRows(
+          searchLikeStmt.all({
+            $scope: scope,
+            $like: `%${q.toLowerCase()}%`,
+            $limit: limit,
+          }),
+        )
       }
     },
     upsertRender(params) {
@@ -246,7 +228,7 @@ export function createAssetsSymbolsRepo(db) {
     pruneRendersOlderThan(cutoffIso) {
       const rows = olderThanStmt.all(cutoffIso)
       for (const row of rows) deleteRenderStmt.run(row.cache_key)
-      return { removed: rows.length, paths: rows.map(r => r.file_path).filter(Boolean) }
+      return { removed: rows.length, paths: rows.map((r) => r.file_path).filter(Boolean) }
     },
     /**
      * Trim the render cache to a byte quota by removing oldest rows first.

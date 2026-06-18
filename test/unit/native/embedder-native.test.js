@@ -5,18 +5,13 @@
  * every vector must reproduce the production reference BIT-EXACTLY.
  */
 
+import { suffix } from 'bun:ffi'
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
 import { _resetNativeLoader } from '../../../src/native/loader.js'
-import {
-  _resetNativeEmbedder,
-  buildNativeModel2Vec,
-  EXPECTED_EMBED_VERSION,
-  pregenerateMatrixArtifact,
-} from '../../../src/search/embedder-native.js'
+import { _resetNativeEmbedder, buildNativeModel2Vec, EXPECTED_EMBED_VERSION, pregenerateMatrixArtifact } from '../../../src/search/embedder-native.js'
 
 test('pregenerateMatrixArtifact is warn-only without a model', async () => {
   const empty = mkdtempSync(join(tmpdir(), 'pregen-'))
@@ -125,9 +120,7 @@ describe.skipIf(!existsSync(DEV_LIB))('embedder-native round trip', () => {
     }
   })
 
-  const realModelsDir =
-    process.env.APPLE_DOCS_MODELS_DIR ??
-    join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
+  const realModelsDir = process.env.APPLE_DOCS_MODELS_DIR ?? join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
   const modelPresent = existsSync(join(realModelsDir, HF_ID, 'onnx', 'model.onnx'))
 
   test.skipIf(!modelPresent)(

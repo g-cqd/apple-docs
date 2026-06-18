@@ -6,15 +6,14 @@ import {
   safeWebDocKey,
   safeWebSegment,
   validateStorageKey,
-  webKeyNeedsMapping,
   WEB_SEGMENT_MAX_BYTES,
+  webKeyNeedsMapping,
 } from '../../../src/lib/safe-path.js'
 
 describe('safeFilename', () => {
   test('returns the input verbatim when the result fits the temp-suffix budget', () => {
     expect(safeFilename('view', '.json')).toBe('view.json')
-    expect(safeFilename('init(animationtool:colorprimaries:configuration)', '.json'))
-      .toBe('init(animationtool:colorprimaries:configuration).json')
+    expect(safeFilename('init(animationtool:colorprimaries:configuration)', '.json')).toBe('init(animationtool:colorprimaries:configuration).json')
   })
 
   test('shortens basenames that overflow the per-component byte limit', () => {
@@ -51,7 +50,8 @@ describe('safeFilename', () => {
 
   test('repeats the same shortening for the matching real-world Apple identifier', () => {
     // Pulled verbatim from the snapshot CI failure log on 2026-05-08.
-    const realWorld = 'init(animationtool:colorprimaries:colortransferfunction:colorycbcrmatrix:customvideocompositorclass:frameduration:instructions:outputbufferdescription:perframehdrdisplaymetadatapolicy:renderscale:rendersize:sourcesampledatatrackids:sourcetr-2lwnx'
+    const realWorld =
+      'init(animationtool:colorprimaries:colortransferfunction:colorycbcrmatrix:customvideocompositorclass:frameduration:instructions:outputbufferdescription:perframehdrdisplaymetadatapolicy:renderscale:rendersize:sourcesampledatatrackids:sourcetr-2lwnx'
     const result = safeFilename(realWorld, '.json')
 
     expect(result.length).toBeLessThanOrEqual(255 - 32)
@@ -118,7 +118,7 @@ describe('safeWebSegment / safeWebDocKey / webKeyNeedsMapping', () => {
     const out = safeWebSegment(seg)
     expect(Buffer.byteLength(out)).toBeLessThanOrEqual(WEB_SEGMENT_MAX_BYTES)
     const prefix = out.slice(0, out.indexOf('~'))
-    expect([...prefix].every(ch => ch === 'é')).toBe(true)
+    expect([...prefix].every((ch) => ch === 'é')).toBe(true)
     expect(Buffer.from(out).toString('utf8')).toBe(out)
   })
 

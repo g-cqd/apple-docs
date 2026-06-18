@@ -28,7 +28,8 @@ export function extractDocCRelationships(json, key, refs, mapKey) {
       const toKey = mapKey(resolveRefKey(id, refs))
       if (toKey) {
         relationships.push({
-          fromKey: key, toKey,
+          fromKey: key,
+          toKey,
           relationType: 'child',
           section: section.title ?? null,
           sortOrder: order++,
@@ -44,7 +45,8 @@ export function extractDocCRelationships(json, key, refs, mapKey) {
       const toKey = mapKey(resolveRefKey(id, refs))
       if (toKey) {
         relationships.push({
-          fromKey: key, toKey,
+          fromKey: key,
+          toKey,
           relationType,
           section: section.title ?? null,
           sortOrder: order++,
@@ -59,7 +61,8 @@ export function extractDocCRelationships(json, key, refs, mapKey) {
       const toKey = mapKey(resolveRefKey(id, refs))
       if (toKey) {
         relationships.push({
-          fromKey: key, toKey,
+          fromKey: key,
+          toKey,
           relationType: 'see_also',
           section: section.title ?? null,
           sortOrder: order++,

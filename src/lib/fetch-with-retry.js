@@ -44,7 +44,7 @@ export function isRecoverableForbidden(res) {
  * @returns {number} delay in milliseconds
  */
 function retryDelayMs(res, attempt, jitterMs) {
-  const baseDelay = Math.min(1000 * (2 ** attempt), 8000)
+  const baseDelay = Math.min(1000 * 2 ** attempt, 8000)
   let upstreamDelay = 0
 
   const retryAfter = res?.headers?.get?.('retry-after')

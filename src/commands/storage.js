@@ -1,13 +1,13 @@
+import { existsSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { statSync, existsSync, rmSync } from 'node:fs'
-import { dirSize, fileCount, ensureDir, writeText } from '../storage/files.js'
 import { nativeDocMarkdownBatch } from '../content/content-native.js'
-import { renderMarkdown } from '../content/render-markdown.js'
 import { renderHtml } from '../content/render-html.js'
+import { renderMarkdown } from '../content/render-markdown.js'
 import { pool } from '../lib/pool.js'
 import { keyPath } from '../lib/safe-path.js'
-import { decodeSectionContent } from '../storage/section-codec.js'
+import { dirSize, ensureDir, fileCount, writeText } from '../storage/files.js'
 import { withFileTempStore } from '../storage/pragmas.js'
+import { decodeSectionContent } from '../storage/section-codec.js'
 
 /**
  * Returns a storage breakdown: DB file size, rendered output dirs, raw JSON,
@@ -154,9 +154,7 @@ export function storageCheckOrphans(_opts, ctx) {
   const fkViolations = db.db.query('PRAGMA foreign_key_check').all()
 
   const semanticOrphans = {
-    crawlStateMissingRoot: db.db
-      .query('SELECT COUNT(*) AS count FROM crawl_state WHERE root_slug NOT IN (SELECT slug FROM roots)')
-      .get().count,
+    crawlStateMissingRoot: db.db.query('SELECT COUNT(*) AS count FROM crawl_state WHERE root_slug NOT IN (SELECT slug FROM roots)').get().count,
     documentsMissingPage: db.hasTable('documents')
       ? db.db.query('SELECT COUNT(*) AS count FROM documents WHERE key NOT IN (SELECT path FROM pages)').get().count
       : 0,
@@ -206,28 +204,34 @@ export async function storageMaterialize(opts, ctx) {
 
   if (roots && roots.length > 0) {
     const placeholders = roots.map(() => '?').join(', ')
-    docsRows = db.db.query(
-      `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.abstract_text, d.declaration_text, d.source_type
+    docsRows = db.db
+      .query(
+        `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.abstract_text, d.declaration_text, d.source_type
        FROM documents d
        JOIN pages p ON p.path = d.key
        JOIN roots r ON p.root_id = r.id
        WHERE r.slug IN (${placeholders}) AND p.status = 'active'
-       ORDER BY d.key`
-    ).all(...roots)
+       ORDER BY d.key`,
+      )
+      .all(...roots)
   } else {
-    docsRows = db.db.query(
-      `SELECT id, key, title, kind, role, role_heading, framework, abstract_text, declaration_text, source_type
+    docsRows = db.db
+      .query(
+        `SELECT id, key, title, kind, role, role_heading, framework, abstract_text, declaration_text, source_type
        FROM documents
-       ORDER BY key`
-    ).all()
+       ORDER BY key`,
+      )
+      .all()
   }
 
-  const getSections = db.hasTable('document_sections') ? db.db.query(
-    `SELECT section_kind, heading, content_text, content_json, sort_order
+  const getSections = db.hasTable('document_sections')
+    ? db.db.query(
+        `SELECT section_kind, heading, content_text, content_json, sort_order
      FROM document_sections
      WHERE document_id = ?
-     ORDER BY sort_order, id`
-  ) : null
+     ORDER BY sort_order, id`,
+      )
+    : null
 
   let materialized = 0
 

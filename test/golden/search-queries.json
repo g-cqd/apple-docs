@@ -36,10 +36,7 @@
     "query": "Navig",
     "expect": {
       "minResults": 2,
-      "topContains": [
-        "documentation/swiftui/navigationstack",
-        "documentation/swiftui/navigationlink"
-      ]
+      "topContains": ["documentation/swiftui/navigationstack", "documentation/swiftui/navigationlink"]
     }
   },
   {

@@ -12,8 +12,6 @@
  */
 export function buildSymbolsPageProps(ctx) {
   return {
-    totals: ctx.db.db.query(
-      'SELECT scope, COUNT(*) as count FROM sf_symbols GROUP BY scope',
-    ).all(),
+    totals: ctx.db.db.query('SELECT scope, COUNT(*) as count FROM sf_symbols GROUP BY scope').all(),
   }
 }

@@ -17,11 +17,11 @@
  * is used dev-locally; CI installs DejaVu (apt fonts-dejavu) + the tools.
  */
 
+import { suffix } from 'bun:ffi'
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
 import { _resetNativeLoader } from '../../../src/native/loader.js'
 import { _forceImpl, nativeFontTextShaped } from '../../../src/resources/render-native.js'
 

@@ -1,4 +1,5 @@
 import { ParseError } from '../lib/errors.js'
+
 /**
  * Parse the Apple App Store Review Guidelines HTML page into structured sections.
  * Uses Bun's built-in HTMLRewriter (Cloudflare lol-html) — zero dependencies.
@@ -12,6 +13,7 @@ const ROOT_SLUG = 'app-store-review'
  */
 const _SECTION_NUM_RE = /^(\d+(?:\.\d+)*(?:\([a-z]\))?)$/
 
+import { buildHierarchy } from './guidelines/hierarchy.js'
 /**
  * Parse the guidelines HTML into an array of section objects.
  * Each section has: { id, path, title, abstract, markdown, role, roleHeading, notarization, children }
@@ -25,17 +27,11 @@ const _SECTION_NUM_RE = /^(\d+(?:\.\d+)*(?:\([a-z]\))?)$/
  * @returns {Promise<{ sections: Array, lastUpdated: string|null }>}
  */
 import { htmlToMarkdown } from './guidelines/html-to-markdown.js'
-import {
-  extractAbstract,
-  extractLastUpdated,
-  extractSectionNumber,
-  resolveTitle,
-} from './guidelines/section-meta.js'
-import { buildHierarchy } from './guidelines/hierarchy.js'
+import { extractAbstract, extractLastUpdated, extractSectionNumber, resolveTitle } from './guidelines/section-meta.js'
 
 export async function parseGuidelinesHtml(html) {
   // ── Pass 1: Extract metadata + inject markers ──────────────────────
-  const sectionMeta = []  // { id, sidenavTitle, notarization }
+  const sectionMeta = [] // { id, sidenavTitle, notarization }
   const MARKER = '<!--§SPLIT:'
 
   const rewriter = new HTMLRewriter()
@@ -55,11 +51,27 @@ export async function parseGuidelinesHtml(html) {
   rewriter.on('#content-container li[data-sidenav]', captureSidenav('li'))
 
   // Strip ASR/NR badge images and their wrapper spans
-  rewriter.on('span.custom-tooltip-icon', { element(el) { el.remove() } })
+  rewriter.on('span.custom-tooltip-icon', {
+    element(el) {
+      el.remove()
+    },
+  })
   // Strip localization marker spans
-  rewriter.on('span.loc-en-only', { element(el) { el.remove() } })
-  rewriter.on('span.loc-j', { element(el) { el.remove() } })
-  rewriter.on('span.loc-cj', { element(el) { el.remove() } })
+  rewriter.on('span.loc-en-only', {
+    element(el) {
+      el.remove()
+    },
+  })
+  rewriter.on('span.loc-j', {
+    element(el) {
+      el.remove()
+    },
+  })
+  rewriter.on('span.loc-cj', {
+    element(el) {
+      el.remove()
+    },
+  })
 
   const transformed = await rewriter.transform(new Response(html)).text()
 
@@ -93,9 +105,7 @@ export async function parseGuidelinesHtml(html) {
     const markdown = await htmlToMarkdown(chunkHtml)
     const title = resolveTitle(meta, markdown)
     const sectionNumber = extractSectionNumber(title)
-    const path = sectionNumber
-      ? `${ROOT_SLUG}/${sectionNumber}`
-      : `${ROOT_SLUG}/${meta.id}`
+    const path = sectionNumber ? `${ROOT_SLUG}/${sectionNumber}` : `${ROOT_SLUG}/${meta.id}`
     const abstract = extractAbstract(markdown, title)
 
     const role = meta.tag === 'h3' ? 'collection' : 'article'
@@ -127,4 +137,4 @@ export async function parseGuidelinesHtml(html) {
 /**
  * Convert an HTML chunk to Markdown using HTMLRewriter.
  */
-export { ROOT_SLUG, GUIDELINES_URL }
+export { GUIDELINES_URL, ROOT_SLUG }

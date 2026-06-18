@@ -1,35 +1,29 @@
-import { join, dirname } from 'node:path'
+import { randomBytes } from 'node:crypto'
 import { rename, rm } from 'node:fs/promises'
 import { availableParallelism } from 'node:os'
-import { randomBytes } from 'node:crypto'
-import { renderIndexPage, renderSearchPage, renderFontsPage, renderSymbolsPage, renderNotFoundPage } from './templates.js'
-import { buildHomepageProps } from './view-models/homepage.viewmodel.js'
-import { buildFontsPageProps } from './view-models/fonts-page.viewmodel.js'
-import { buildSymbolsPageProps } from './view-models/symbols-page.viewmodel.js'
-import { buildFontFaceCss } from './lib/font-faces.js'
-import {
-  buildRobotsTxt,
-  buildOpenSearchXml,
-  buildApiCatalog,
-  buildMcpServerCard,
-  buildHeadersFile,
-} from './discovery.js'
-import { VERSION } from '../lib/version.js'
-import { generateSearchArtifacts } from './search-artifacts.js'
-import { generateSitemaps } from './sitemap.js'
-import { createWebRenderCache } from './render-cache.js'
-import { ensureDir } from '../storage/files.js'
-import { initHighlighter, disposeHighlighter } from '../content/highlight.js'
+import { dirname, join } from 'node:path'
 import { linksAudit } from '../commands/links.js'
-import { computeTemplateVersion } from './build/checkpoint.js'
-import { runWorkerBuilds } from './build/worker-fanout.js'
-import { runStep } from '../lib/run-step.js'
+import { disposeHighlighter, initHighlighter } from '../content/highlight.js'
 import { getCommitHash } from '../lib/git-version.js'
+import { runStep } from '../lib/run-step.js'
+import { VERSION } from '../lib/version.js'
+import { ensureDir } from '../storage/files.js'
 import { runAssetPipeline } from './build/assets-pipeline.js'
+import { atomicPublish } from './build/atomic-swap.js'
+import { computeTemplateVersion } from './build/checkpoint.js'
 import { buildDocumentPages } from './build/document-pages.js'
 import { buildFrameworkPages } from './build/framework-pages.js'
-import { atomicPublish } from './build/atomic-swap.js'
 import { minifyCSS } from './build/minify-css.js'
+import { runWorkerBuilds } from './build/worker-fanout.js'
+import { buildApiCatalog, buildHeadersFile, buildMcpServerCard, buildOpenSearchXml, buildRobotsTxt } from './discovery.js'
+import { buildFontFaceCss } from './lib/font-faces.js'
+import { createWebRenderCache } from './render-cache.js'
+import { generateSearchArtifacts } from './search-artifacts.js'
+import { generateSitemaps } from './sitemap.js'
+import { renderFontsPage, renderIndexPage, renderNotFoundPage, renderSearchPage, renderSymbolsPage } from './templates.js'
+import { buildFontsPageProps } from './view-models/fonts-page.viewmodel.js'
+import { buildHomepageProps } from './view-models/homepage.viewmodel.js'
+import { buildSymbolsPageProps } from './view-models/symbols-page.viewmodel.js'
 
 export { minifyCSS }
 
@@ -84,9 +78,7 @@ export async function buildStaticSite(opts, ctx) {
   const outDir = opts.out || 'dist/web'
   const incremental = opts.incremental === true && opts.full !== true
   const fullRebuild = opts.full === true || !incremental
-  const frameworkFilter = Array.isArray(opts.frameworks) && opts.frameworks.length > 0
-    ? new Set(opts.frameworks)
-    : null
+  const frameworkFilter = Array.isArray(opts.frameworks) && opts.frameworks.length > 0 ? new Set(opts.frameworks) : null
   const ncpu = availableParallelism?.() ?? 4
   const concurrency = Math.max(1, opts.concurrency ?? Math.max(2, ncpu - 2))
   const workers = Math.max(1, opts.workers ?? 1)
@@ -96,18 +88,14 @@ export async function buildStaticSite(opts, ctx) {
   // Crypto-random suffixes on the staging + rollback dirs so a
   // co-resident process can't pre-create them as symlinks and race the
   // rename. Mirrors the atomic-write pattern in src/lib/atomic-write.js.
-  const buildDir = incremental
-    ? outDir
-    : `${outDir}.tmp-${Date.now()}-${randomBytes(8).toString('hex')}`
+  const buildDir = incremental ? outDir : `${outDir}.tmp-${Date.now()}-${randomBytes(8).toString('hex')}`
   const previousDir = `${outDir}.prev-${Date.now()}-${randomBytes(8).toString('hex')}`
 
   const { db, logger } = ctx
   // `snapshot_tag` is the install-time stamp (set in src/commands/setup.js);
   // `snapshot_version` is the build-time stamp (set in src/commands/snapshot.js).
   // Either is valid as the "what corpus am I rendering" label.
-  const snapshotTag = db.getSnapshotMeta?.('snapshot_tag')
-    ?? db.getSnapshotMeta?.('snapshot_version')
-    ?? null
+  const snapshotTag = db.getSnapshotMeta?.('snapshot_tag') ?? db.getSnapshotMeta?.('snapshot_version') ?? null
   const siteConfig = {
     baseUrl: opts.baseUrl || '',
     siteName: opts.siteName || 'Apple Developer Docs',
@@ -206,9 +194,7 @@ export async function buildStaticSite(opts, ctx) {
     // 3. Pull frameworks. Filter must happen even if the call throws — we
     // want the failingCtx test in the suite to surface the underlying error.
     const allRoots = db.getRoots()
-    const roots = frameworkFilter
-      ? allRoots.filter(r => frameworkFilter.has(r.slug))
-      : allRoots
+    const roots = frameworkFilter ? allRoots.filter((r) => frameworkFilter.has(r.slug)) : allRoots
 
     initRenderIndexIfNeeded()
 
@@ -219,23 +205,22 @@ export async function buildStaticSite(opts, ctx) {
       // Bun.write a Uint8Array so it skips the implicit string → UTF-8
       // encode pass on the write path.
       const homepageProps = buildHomepageProps({ db, siteConfig })
-      await Bun.write(join(buildDir, 'index.html'),
-        renderIndexPage(homepageProps.roots, siteConfig, { extras: homepageProps.extras }).bytes())
+      await Bun.write(join(buildDir, 'index.html'), renderIndexPage(homepageProps.roots, siteConfig, { extras: homepageProps.extras }).bytes())
       await Bun.write(join(buildDir, 'search', 'index.html'), renderSearchPage(siteConfig).bytes())
       const fontsProps = buildFontsPageProps({ db })
-      await Bun.write(join(buildDir, 'fonts', 'index.html'),
-        renderFontsPage(siteConfig, fontsProps).bytes())
+      await Bun.write(join(buildDir, 'fonts', 'index.html'), renderFontsPage(siteConfig, fontsProps).bytes())
       // External @font-face sheet the /fonts page links. Font binaries are
       // served by the /api/fonts/file/<id> route (proxied to Bun behind
       // Caddy); a pure static CDN gets the sheet but the src URLs still
       // resolve through whatever serves /api — matching the prior behavior
       // where fonts-page.js built the same URLs client-side.
-      await Bun.write(join(buildDir, 'api', 'fonts', 'faces.css'),
+      await Bun.write(
+        join(buildDir, 'api', 'fonts', 'faces.css'),
         buildFontFaceCss(fontsProps.families, {
           fileUrl: (id) => `${siteConfig.baseUrl || ''}/api/fonts/file/${encodeURIComponent(id)}`,
-        }))
-      await Bun.write(join(buildDir, 'symbols', 'index.html'),
-        renderSymbolsPage(siteConfig, buildSymbolsPageProps({ db })).bytes())
+        }),
+      )
+      await Bun.write(join(buildDir, 'symbols', 'index.html'), renderSymbolsPage(siteConfig, buildSymbolsPageProps({ db })).bytes())
       await Bun.write(join(buildDir, '404.html'), renderNotFoundPage(siteConfig).bytes())
 
       // Agent-discovery files. Generated (not committed under public/)
@@ -244,10 +229,8 @@ export async function buildStaticSite(opts, ctx) {
       // committed copy. Same src/web/discovery.js builders the Bun routes use.
       await Bun.write(join(buildDir, 'robots.txt'), buildRobotsTxt(siteConfig))
       await Bun.write(join(buildDir, 'opensearch.xml'), buildOpenSearchXml(siteConfig))
-      await Bun.write(join(buildDir, '.well-known', 'api-catalog'),
-        JSON.stringify(buildApiCatalog(siteConfig), null, 2))
-      await Bun.write(join(buildDir, '.well-known', 'mcp', 'server-card.json'),
-        JSON.stringify(buildMcpServerCard(siteConfig, VERSION), null, 2))
+      await Bun.write(join(buildDir, '.well-known', 'api-catalog'), JSON.stringify(buildApiCatalog(siteConfig), null, 2))
+      await Bun.write(join(buildDir, '.well-known', 'mcp', 'server-card.json'), JSON.stringify(buildMcpServerCard(siteConfig, VERSION), null, 2))
       // _headers carries the Link/Vary/Content-Signal set onto static CDN
       // deploys (Cloudflare Pages / Netlify) that have no origin server.
       await Bun.write(join(buildDir, '_headers'), buildHeadersFile(siteConfig))
@@ -267,18 +250,34 @@ export async function buildStaticSite(opts, ctx) {
       // Workers must write into the orchestrator's `buildDir`, NOT `outDir`,
       // otherwise the orchestrator's atomic swap clobbers everything.
       const stats = await runWorkerBuilds({
-        roots, siteConfig, workers, concurrency, outDir: buildDir, db, logger,
+        roots,
+        siteConfig,
+        workers,
+        concurrency,
+        outDir: buildDir,
+        db,
+        logger,
       })
       counters.pagesBuilt += stats.pagesBuilt
       counters.pagesSkipped += stats.pagesSkipped
       counters.pagesFailed += stats.pagesFailed
     } else {
       await buildDocumentPages({
-        roots, db, buildDir, siteConfig, renderCache, knownKeys,
+        roots,
+        db,
+        buildDir,
+        siteConfig,
+        renderCache,
+        knownKeys,
         skipList: RENDER_SKIPLIST,
         renderTimeoutMs: RENDER_TIMEOUT_MS,
-        concurrency, incremental, templateVersion,
-        counters, tickProgress, logger, failuresPath,
+        concurrency,
+        incremental,
+        templateVersion,
+        counters,
+        tickProgress,
+        logger,
+        failuresPath,
       })
     }
 
@@ -310,15 +309,22 @@ export async function buildStaticSite(opts, ctx) {
 
     // 9. Manifest — only refresh on a full/unfiltered build.
     if (buildingAll) {
-      await Bun.write(join(buildDir, 'manifest.json'), JSON.stringify({
-        version: 1,
-        siteName: siteConfig.siteName,
-        buildDate: siteConfig.buildDate,
-        baseUrl: siteConfig.baseUrl,
-        totalDocuments: counters.pagesBuilt + counters.pagesSkipped,
-        totalFrameworks: frameworksBuilt,
-        searchArtifacts,
-      }, null, 2))
+      await Bun.write(
+        join(buildDir, 'manifest.json'),
+        JSON.stringify(
+          {
+            version: 1,
+            siteName: siteConfig.siteName,
+            buildDate: siteConfig.buildDate,
+            baseUrl: siteConfig.baseUrl,
+            totalDocuments: counters.pagesBuilt + counters.pagesSkipped,
+            totalFrameworks: frameworksBuilt,
+            searchArtifacts,
+          },
+          null,
+          2,
+        ),
+      )
     }
 
     // 10. Atomic swap (full builds only).
@@ -347,19 +353,15 @@ export async function buildStaticSite(opts, ctx) {
     // builds because the link audit needs the full /docs tree to be meaningful.
     let linksAuditResult = null
     if (buildingAll && !skipDocs) {
-      const auditStep = await runStep(
-        'web-build.links-audit',
-        () => linksAudit({ outDir }, { db, logger }),
-        { logger },
-      )
+      const auditStep = await runStep('web-build.links-audit', () => linksAudit({ outDir }, { db, logger }), { logger })
       if (auditStep.ok) linksAuditResult = auditStep.result
     }
 
     const durationMs = Math.round(performance.now() - start)
     logger?.info?.(
       `Static site built: ${outDir} ` +
-      `(${counters.pagesBuilt} built, ${counters.pagesSkipped} skipped, ${counters.pagesFailed} failed, ` +
-      `${frameworksBuilt} frameworks in ${durationMs}ms)`,
+        `(${counters.pagesBuilt} built, ${counters.pagesSkipped} skipped, ${counters.pagesFailed} failed, ` +
+        `${frameworksBuilt} frameworks in ${durationMs}ms)`,
     )
 
     return {

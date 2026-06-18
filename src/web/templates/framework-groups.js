@@ -99,7 +99,9 @@ export function groupWwdcByYear(docs) {
  * label, or 'Other' when unrecognized/missing.
  */
 export function swiftEvolutionStatusLabel(status) {
-  const normalized = String(status ?? '').trim().toLowerCase()
+  const normalized = String(status ?? '')
+    .trim()
+    .toLowerCase()
   if (!normalized) return 'Other'
   for (const [prefix, label] of SE_STATUS_FAMILIES) {
     if (normalized.startsWith(prefix)) return label
@@ -193,7 +195,7 @@ export function buildScopeGroups(root, docs, extras = {}) {
     return {
       scope: 'wwdc',
       sections,
-      nav: sections.map(s => ({ href: `#${s.id}`, label: s.label, count: s.count })),
+      nav: sections.map((s) => ({ href: `#${s.id}`, label: s.label, count: s.count })),
     }
   }
   if (scope === 'swift-evolution' || slug === 'swift-evolution') {
@@ -218,7 +220,7 @@ export function buildScopeGroups(root, docs, extras = {}) {
       sections,
       // Owner jump-nav for the biggest catalogs only — hundreds of
       // single-package owners would drown the nav.
-      nav: sections.filter(s => s.count >= 20).map(s => ({ href: `#${s.id}`, label: s.label, count: s.count })),
+      nav: sections.filter((s) => s.count >= 20).map((s) => ({ href: `#${s.id}`, label: s.label, count: s.count })),
     }
   }
   if (slug === 'technotes') {
@@ -229,7 +231,7 @@ export function buildScopeGroups(root, docs, extras = {}) {
     return {
       scope: 'apple-archive',
       sections,
-      nav: sections.map(s => ({ href: `#${s.id}`, label: s.label, count: s.count })),
+      nav: sections.map((s) => ({ href: `#${s.id}`, label: s.label, count: s.count })),
     }
   }
   if (scope === 'hig' || slug === 'design') {

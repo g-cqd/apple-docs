@@ -1,15 +1,9 @@
-import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
+import { Worker } from 'node:worker_threads'
 import { AssertionError, ValidationError } from '../lib/errors.js'
 import { BackpressureError } from '../lib/semaphore.js'
+import { DEFAULT_BOOT_RETRIES, DEFAULT_DEADLINE_MS, DEFAULT_MAX_PENDING_PER_WORKER, PER_OP_DEADLINE_MS, resolveDefaultSize } from './reader-pool-config.js'
 import { READ_OPS } from './reader-worker.js'
-import {
-  DEFAULT_BOOT_RETRIES,
-  DEFAULT_DEADLINE_MS,
-  DEFAULT_MAX_PENDING_PER_WORKER,
-  PER_OP_DEADLINE_MS,
-  resolveDefaultSize,
-} from './reader-pool-config.js'
 
 // Typed error from `pool.run()` deadline expirations — lets the cascade
 // distinguish "partial results: deep tier timed out" from a real failure.
@@ -241,16 +235,12 @@ export function createReaderPool(opts = {}) {
     // pending map and all three blew past the cap.
     if (slot.pending.size >= maxPendingPerWorker) {
       stats.backpressureRejects++
-      throw new BackpressureError(
-        `reader-pool: worker ${idx} pending=${slot.pending.size} exceeds maxPendingPerWorker=${maxPendingPerWorker}`,
-      )
+      throw new BackpressureError(`reader-pool: worker ${idx} pending=${slot.pending.size} exceeds maxPendingPerWorker=${maxPendingPerWorker}`)
     }
 
     const id = idCounter++
     // Deadline resolution: opts override > per-op map > pool default > DEFAULT_DEADLINE_MS.
-    const deadlineMs = runOpts.deadlineMs
-      ?? PER_OP_DEADLINE_MS[op]
-      ?? defaultDeadlineMs
+    const deadlineMs = runOpts.deadlineMs ?? PER_OP_DEADLINE_MS[op] ?? defaultDeadlineMs
 
     return new Promise((resolve, reject) => {
       let timer = null
@@ -259,8 +249,14 @@ export function createReaderPool(opts = {}) {
         slot.pending.delete(id)
       }
       slot.pending.set(id, {
-        resolve: (value) => { cleanup(); resolve(value) },
-        reject: (err) => { cleanup(); reject(err) },
+        resolve: (value) => {
+          cleanup()
+          resolve(value)
+        },
+        reject: (err) => {
+          cleanup()
+          reject(err)
+        },
       })
       try {
         slot.worker.postMessage({ type: 'call', id, op, args })
@@ -340,7 +336,9 @@ export function createReaderPool(opts = {}) {
       }
       slot.pending.clear()
       slot.alive = false
-      try { await slot.worker.terminate?.() } catch {}
+      try {
+        await slot.worker.terminate?.()
+      } catch {}
     }
     // Serial respawn with per-slot retry — same Darwin WAL/SHM bring-up
     // race start() guards against ("malformed sqlite_master" when N
@@ -360,7 +358,9 @@ export function createReaderPool(opts = {}) {
       pending += slot.pending.size
     }
     return {
-      size, active, pending,
+      size,
+      active,
+      pending,
       spawns: stats.spawns,
       errors: stats.errors,
       timeouts: stats.timeouts,

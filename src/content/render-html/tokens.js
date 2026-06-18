@@ -5,10 +5,7 @@
 import { safeWebDocKey } from '../../lib/safe-path.js'
 import { escapeHtml } from './helpers.js'
 
-const SEMANTIC_TOKEN_KINDS = new Set([
-  'keyword', 'attribute', 'typeIdentifier', 'identifier',
-  'genericParameter', 'externalParam', 'internalParam', 'number',
-])
+const SEMANTIC_TOKEN_KINDS = new Set(['keyword', 'attribute', 'typeIdentifier', 'identifier', 'genericParameter', 'externalParam', 'internalParam', 'number'])
 
 /** Join token texts, inserting spaces between adjacent semantic tokens that lack whitespace separators. */
 export function joinTokenTexts(tokens) {
@@ -61,18 +58,24 @@ export function renderDeclarationTokens(tokens, knownKeys) {
     switch (kind) {
       case 'keyword':
       case 'attribute':
-        spans.push(`<span class="decl-keyword">${text}</span>`); break
+        spans.push(`<span class="decl-keyword">${text}</span>`)
+        break
       case 'typeIdentifier':
-        spans.push(`<span class="decl-type">${text}</span>`); break
+        spans.push(`<span class="decl-type">${text}</span>`)
+        break
       case 'identifier':
-        spans.push(`<span class="decl-identifier">${text}</span>`); break
+        spans.push(`<span class="decl-identifier">${text}</span>`)
+        break
       case 'genericParameter':
-        spans.push(`<span class="decl-generic">${text}</span>`); break
+        spans.push(`<span class="decl-generic">${text}</span>`)
+        break
       case 'externalParam':
       case 'internalParam':
-        spans.push(`<span class="decl-param">${text}</span>`); break
+        spans.push(`<span class="decl-param">${text}</span>`)
+        break
       case 'number':
-        spans.push(`<span class="decl-number">${text}</span>`); break
+        spans.push(`<span class="decl-number">${text}</span>`)
+        break
       default:
         spans.push(text)
     }
@@ -83,17 +86,19 @@ export function renderDeclarationTokens(tokens, knownKeys) {
 /** Render type tokens (from properties, restParams, restResponses) with links. */
 export function renderTypeTokens(tokens, knownKeys) {
   if (!Array.isArray(tokens) || tokens.length === 0) return ''
-  return tokens.map(token => {
-    const text = escapeHtml(token.text ?? '')
-    if (!text) return ''
-    if (token.kind === 'typeIdentifier' && token._resolvedKey) {
-      if (!knownKeys || knownKeys.has(token._resolvedKey)) {
-        return `<a href="/docs/${escapeHtml(safeWebDocKey(token._resolvedKey))}/" class="code-type-link"><code>${text}</code></a>`
+  return tokens
+    .map((token) => {
+      const text = escapeHtml(token.text ?? '')
+      if (!text) return ''
+      if (token.kind === 'typeIdentifier' && token._resolvedKey) {
+        if (!knownKeys || knownKeys.has(token._resolvedKey)) {
+          return `<a href="/docs/${escapeHtml(safeWebDocKey(token._resolvedKey))}/" class="code-type-link"><code>${text}</code></a>`
+        }
       }
-    }
-    if (token.kind === 'typeIdentifier') {
-      return `<code>${text}</code>`
-    }
-    return text
-  }).join('')
+      if (token.kind === 'typeIdentifier') {
+        return `<code>${text}</code>`
+      }
+      return text
+    })
+    .join('')
 }

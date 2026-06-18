@@ -14,9 +14,7 @@ function levenshtein(a, b, maxDist = 2) {
     const curr = [i]
     let rowMin = i
     for (let j = 1; j <= n; j++) {
-      curr[j] = a[i - 1] === b[j - 1]
-        ? prev[j - 1]
-        : 1 + Math.min(prev[j], curr[j - 1], prev[j - 1])
+      curr[j] = a[i - 1] === b[j - 1] ? prev[j - 1] : 1 + Math.min(prev[j], curr[j - 1], prev[j - 1])
       if (curr[j] < rowMin) rowMin = curr[j]
     }
     if (rowMin > maxDist) return maxDist + 1
@@ -55,7 +53,9 @@ function buildTrigramOrQuery(triSet) {
  * no module-level state; the export remains so the test harness import
  * doesn't break.
  */
-export function _resetTrigramCache() { /* no-op */ }
+export function _resetTrigramCache() {
+  /* no-op */
+}
 
 /**
  * Find fuzzy title matches using a SQL-backed trigram pre-filter plus

@@ -12,25 +12,24 @@ const LINK_SECTION_TITLES = {
 export function renderMarkdown(document, sections = [], opts = {}) {
   const native = nativeDocMarkdown(document, sections, opts)
   if (native !== null) return native
-  const {
-    includeFrontMatter = true,
-    includeTitle = true,
-  } = opts
+  const { includeFrontMatter = true, includeTitle = true } = opts
   const doc = coerceDocument(document)
-  const orderedSections = sections
-    .map(coerceSection)
-    .sort((a, b) => a.sortOrder - b.sortOrder)
+  const orderedSections = sections.map(coerceSection).sort((a, b) => a.sortOrder - b.sortOrder)
 
   const parts = []
   if (includeFrontMatter) {
-    parts.push(toFrontMatter(compactObject({
-      title: doc.title,
-      framework: doc.frameworkDisplay ?? doc.framework,
-      role: doc.role,
-      role_heading: doc.roleHeading,
-      platforms: formatPlatforms(doc.platformsJson),
-      path: doc.key,
-    })))
+    parts.push(
+      toFrontMatter(
+        compactObject({
+          title: doc.title,
+          framework: doc.frameworkDisplay ?? doc.framework,
+          role: doc.role,
+          role_heading: doc.roleHeading,
+          platforms: formatPlatforms(doc.platformsJson),
+          path: doc.key,
+        }),
+      ),
+    )
     parts.push('')
   }
 
@@ -47,7 +46,10 @@ export function renderMarkdown(document, sections = [], opts = {}) {
     }
   }
 
-  return `${parts.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`
+  return `${parts
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()}\n`
 }
 
 function renderSectionMarkdown(section) {
@@ -74,8 +76,8 @@ function renderDeclarationMarkdown(section) {
   const declarations = safeJson(section.contentJson)
   const blocks = Array.isArray(declarations) ? declarations : []
   const renderedBlocks = blocks
-    .map(declaration => {
-      const code = (declaration?.tokens ?? []).map(token => token.text ?? '').join('')
+    .map((declaration) => {
+      const code = (declaration?.tokens ?? []).map((token) => token.text ?? '').join('')
       const language = declaration?.languages?.[0] ?? 'swift'
       if (!code.trim()) return null
       return [`\`\`\`${language}`, code, '```'].join('\n')
@@ -102,7 +104,13 @@ function renderParametersMarkdown(section) {
       lines.push(`- \`${parameter?.name ?? 'Value'}\`: ${description}`.trim())
     }
   } else if (section.contentText?.trim()) {
-    lines.push(...section.contentText.trim().split('\n').filter(Boolean).map(line => `- ${line}`))
+    lines.push(
+      ...section.contentText
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => `- ${line}`),
+    )
   }
 
   return lines.join('\n').trim()
@@ -131,7 +139,13 @@ function renderLinkSectionMarkdown(title, section) {
   }
 
   if (section.contentText?.trim()) {
-    lines.push(...section.contentText.trim().split('\n').filter(Boolean).map(line => `- ${line}`))
+    lines.push(
+      ...section.contentText
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => `- ${line}`),
+    )
   }
 
   return lines.join('\n').trim()
@@ -147,7 +161,7 @@ function normalizeParagraphs(text) {
   return text
     .trim()
     .split(/\n{2,}/)
-    .map(paragraph => paragraph.replace(/\n+/g, ' ').trim())
+    .map((paragraph) => paragraph.replace(/\n+/g, ' ').trim())
     .join('\n\n')
 }
 
@@ -156,8 +170,7 @@ function formatPlatforms(platformsJson) {
   if (Array.isArray(parsed)) return parsed
   if (!parsed || typeof parsed !== 'object') return undefined
 
-  return Object.entries(parsed)
-    .map(([platform, version]) => version ? `${prettyPlatform(platform)} ${version}+` : prettyPlatform(platform))
+  return Object.entries(parsed).map(([platform, version]) => (version ? `${prettyPlatform(platform)} ${version}+` : prettyPlatform(platform)))
 }
 
 function prettyPlatform(platform) {
@@ -202,5 +215,5 @@ function compactObject(input) {
 function humanize(value) {
   return String(value ?? 'Section')
     .replace(/_/g, ' ')
-    .replace(/\b\w/g, char => char.toUpperCase())
+    .replace(/\b\w/g, (char) => char.toUpperCase())
 }

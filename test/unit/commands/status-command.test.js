@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
 import { status } from '../../../src/commands/status.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let dataDir
@@ -68,10 +68,7 @@ describe('status command', () => {
 
   test('freshness reports not stale after recent sync', async () => {
     // Insert a recent update_log entry
-    db.db.run(
-      'INSERT INTO update_log (action, timestamp, root_slug) VALUES (?, ?, ?)',
-      ['sync', new Date().toISOString(), 'swiftui']
-    )
+    db.db.run('INSERT INTO update_log (action, timestamp, root_slug) VALUES (?, ?, ?)', ['sync', new Date().toISOString(), 'swiftui'])
 
     const result = await status({ skipUpdateCheck: true }, { db, dataDir })
     expect(result.freshness.isStale).toBe(false)
@@ -82,15 +79,9 @@ describe('status command', () => {
   test('freshness detects stale roots', async () => {
     // Insert an old update_log entry (30 days ago)
     const oldDate = new Date(Date.now() - 30 * 86400000).toISOString()
-    db.db.run(
-      'INSERT INTO update_log (action, timestamp, root_slug) VALUES (?, ?, ?)',
-      ['sync', oldDate, 'uikit']
-    )
+    db.db.run('INSERT INTO update_log (action, timestamp, root_slug) VALUES (?, ?, ?)', ['sync', oldDate, 'uikit'])
     // Insert a recent one for another root
-    db.db.run(
-      'INSERT INTO update_log (action, timestamp, root_slug) VALUES (?, ?, ?)',
-      ['sync', new Date().toISOString(), 'swiftui']
-    )
+    db.db.run('INSERT INTO update_log (action, timestamp, root_slug) VALUES (?, ?, ?)', ['sync', new Date().toISOString(), 'swiftui'])
 
     const result = await status({ skipUpdateCheck: true }, { db, dataDir })
     expect(result.freshness.staleRoots.length).toBe(1)
@@ -126,10 +117,7 @@ describe('status command', () => {
 
   test('lastSync and lastAction from update_log', async () => {
     const ts = new Date().toISOString()
-    db.db.run(
-      'INSERT INTO update_log (action, timestamp) VALUES (?, ?)',
-      ['sync', ts]
-    )
+    db.db.run('INSERT INTO update_log (action, timestamp) VALUES (?, ?)', ['sync', ts])
 
     const result = await status({ skipUpdateCheck: true }, { db, dataDir })
     expect(result.lastSync).toBe(ts)

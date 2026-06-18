@@ -18,17 +18,21 @@
 export function loadScopeExtras(db, root) {
   if (root?.slug !== 'design' && root?.source_type !== 'hig') return {}
   try {
-    const rows = db.db.query(`
+    const rows = db.db
+      .query(`
       SELECT dr.from_key AS parent, d.title AS parent_title, dr.to_key AS child
       FROM document_relationships dr
       JOIN documents d ON d.key = dr.from_key
       WHERE dr.relation_type = 'child' AND dr.from_key LIKE 'design/%'
-    `).all()
-    const orderRows = db.db.query(`
+    `)
+      .all()
+    const orderRows = db.db
+      .query(`
       SELECT to_key FROM document_relationships
       WHERE from_key = 'design/human-interface-guidelines' AND relation_type = 'child'
       ORDER BY sort_order, to_key
-    `).all()
+    `)
+      .all()
     const order = new Map(orderRows.map((r, i) => [r.to_key, i]))
 
     const higGroups = new Map()

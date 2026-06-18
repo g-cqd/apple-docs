@@ -41,8 +41,8 @@ export function weightedRRF(lists, { k = 60 } = {}) {
 export function normalizeScores(map) {
   const out = new Map()
   if (!map || map.size === 0) return out
-  let min = Infinity
-  let max = -Infinity
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
   for (const v of map.values()) {
     if (v < min) min = v
     if (v > max) max = v
@@ -106,7 +106,7 @@ export function mmrSelect(ranked, vecOf, sim, { lambda = 0.7, limit } = {}) {
   selected.push(remaining.shift())
   while (selected.length < cap && remaining.length > 0) {
     let bestPos = 0
-    let bestScore = -Infinity
+    let bestScore = Number.NEGATIVE_INFINITY
     for (let p = 0; p < remaining.length; p++) {
       const i = remaining[p]
       const vi = vecs[i]
@@ -120,10 +120,13 @@ export function mmrSelect(ranked, vecOf, sim, { lambda = 0.7, limit } = {}) {
         }
       }
       const mmr = lambda * rel[i] - (1 - lambda) * maxSim
-      if (mmr > bestScore) { bestScore = mmr; bestPos = p }
+      if (mmr > bestScore) {
+        bestScore = mmr
+        bestPos = p
+      }
     }
     selected.push(remaining.splice(bestPos, 1)[0])
   }
   // Anything beyond the cap keeps its incoming order, appended after the window.
-  return [...selected.map(i => ranked[i]), ...remaining.map(i => ranked[i])]
+  return [...selected.map((i) => ranked[i]), ...remaining.map((i) => ranked[i])]
 }

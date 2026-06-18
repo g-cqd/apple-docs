@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { status } from '../../../src/commands/status.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { status } from '../../../src/commands/status.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let tmpDir

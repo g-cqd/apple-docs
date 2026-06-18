@@ -29,9 +29,7 @@ import { createStamper } from './cache.js'
  * @param {string}   [opts.dbPath] - override (tests only)
  */
 export function createMarkdownCache(ctx, opts = {}) {
-  const scale = opts.scale != null && Number.isFinite(opts.scale) && opts.scale > 0
-    ? opts.scale
-    : 1
+  const scale = opts.scale != null && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : 1
   const capacity = Math.max(1, opts.capacity ?? Math.ceil(512 * scale))
   const stamper = opts.stamper ?? createStamper(ctx, opts)
   // Map<path, { content, sections, fallback, stamp }>; Map iteration is
@@ -43,7 +41,10 @@ export function createMarkdownCache(ctx, opts = {}) {
 
   function get(path) {
     const entry = entries.get(path)
-    if (entry === undefined) { misses++; return undefined }
+    if (entry === undefined) {
+      misses++
+      return undefined
+    }
     if (entry.stamp !== stamper.get()) {
       // Corpus rotated since we cached this page — evict and treat as miss.
       entries.delete(path)

@@ -21,9 +21,7 @@
  *   `apple_docs_..._count <total>`
  */
 
-export const DEFAULT_LATENCY_BUCKETS_MS = Object.freeze([
-  1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500,
-])
+export const DEFAULT_LATENCY_BUCKETS_MS = Object.freeze([1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500])
 
 /**
  * @param {{ buckets?: number[] }} [opts]

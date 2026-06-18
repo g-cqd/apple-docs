@@ -28,11 +28,11 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
   const checkpointKey = since ? 'body-index:incremental' : 'body-index:full'
   const checkpoint = db.getSyncCheckpoint(checkpointKey)
   const resumeSince = checkpoint?.since ?? since
-  const total = checkpoint?.total ?? db.db.query(
-    resumeSince
-      ? 'SELECT COUNT(*) as c FROM documents WHERE updated_at > ?'
-      : 'SELECT COUNT(*) as c FROM documents'
-  ).get(...(resumeSince ? [resumeSince] : [])).c
+  const total =
+    checkpoint?.total ??
+    db.db
+      .query(resumeSince ? 'SELECT COUNT(*) as c FROM documents WHERE updated_at > ?' : 'SELECT COUNT(*) as c FROM documents')
+      .get(...(resumeSince ? [resumeSince] : [])).c
 
   if (total === 0) {
     logger.info(resumeSince ? 'Body index is up to date' : 'No normalized documents to index')
@@ -48,7 +48,7 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
   logger.info(
     checkpoint
       ? `Resuming normalized body index at ${indexed}/${total} documents...`
-      : `${resumeSince ? 'Updating' : 'Building'} normalized body index for ${total} documents...`
+      : `${resumeSince ? 'Updating' : 'Building'} normalized body index for ${total} documents...`,
   )
 
   if (!resumeSince && !checkpoint) {
@@ -57,20 +57,24 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
 
   while (true) {
     const documents = resumeSince
-      ? db.db.query(`
+      ? db.db
+          .query(`
         SELECT id, key, title, abstract_text, declaration_text, headings, source_type
         FROM documents
         WHERE updated_at > ? AND id > ?
         ORDER BY id
         LIMIT ?
-      `).all(resumeSince, lastDocumentId, batchSize)
-      : db.db.query(`
+      `)
+          .all(resumeSince, lastDocumentId, batchSize)
+      : db.db
+          .query(`
         SELECT id, key, title, abstract_text, declaration_text, headings, source_type
         FROM documents
         WHERE id > ?
         ORDER BY id
         LIMIT ?
-      `).all(lastDocumentId, batchSize)
+      `)
+          .all(lastDocumentId, batchSize)
 
     if (documents.length === 0) break
 
@@ -80,18 +84,21 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
     const prepared = []
     for (const document of documents) {
       try {
-        let sections = db.db.query(`
+        let sections = db.db
+          .query(`
           SELECT section_kind, heading, content_text, content_json, sort_order
           FROM document_sections
           WHERE document_id = ?
           ORDER BY sort_order, id
-        `).all(document.id).map(section => ({
-          sectionKind: section.section_kind,
-          heading: section.heading,
-          contentText: decodeSectionContent(section.content_text),
-          contentJson: decodeSectionContent(section.content_json),
-          sortOrder: section.sort_order,
-        }))
+        `)
+          .all(document.id)
+          .map((section) => ({
+            sectionKind: section.section_kind,
+            heading: section.heading,
+            contentText: decodeSectionContent(section.content_text),
+            contentJson: decodeSectionContent(section.content_json),
+            sortOrder: section.sort_order,
+          }))
 
         if (sections.length === 0) {
           await ensureNormalizedDocument(db, dataDir, document.key, document.source_type ?? 'apple-docc')

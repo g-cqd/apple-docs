@@ -9,19 +9,15 @@
  * native handles standing in for reader-pool workers — the genuine risk is
  * one sqlite build reading a WAL another build is actively committing.
  */
+
+import { suffix } from 'bun:ffi'
 import { afterAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
 import { _resetNativeLoader } from '../../src/native/loader.js'
 import { DocsDatabase } from '../../src/storage/database.js'
-import {
-  _forceImpl,
-  nativeSearchPages,
-  nativeStorageClose,
-  nativeStorageOpen,
-} from '../../src/storage/storage-native.js'
+import { _forceImpl, nativeSearchPages, nativeStorageClose, nativeStorageOpen } from '../../src/storage/storage-native.js'
 
 const DEV_LIB = new URL(`../../swift/.build/release/libAppleDocsCore.${suffix}`, import.meta.url).pathname
 const dylibPresent = !!process.env.APPLE_DOCS_NATIVE_LIB || existsSync(DEV_LIB)

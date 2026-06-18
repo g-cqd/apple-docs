@@ -8,10 +8,10 @@
 // ~500 KB on UIKit) would dominate the HTML payload and defeat caching.
 
 import { dirname, join } from 'node:path'
-import { renderFrameworkPage, buildFrameworkTreeData } from '../templates.js'
-import { loadScopeExtras } from '../scope-group-data.js'
-import { ensureDir } from '../../storage/files.js'
 import { sha256 } from '../../lib/hash.js'
+import { ensureDir } from '../../storage/files.js'
+import { loadScopeExtras } from '../scope-group-data.js'
+import { buildFrameworkTreeData, renderFrameworkPage } from '../templates.js'
 import { maybePrecompress, PRECOMPRESS_THRESHOLD } from './io.js'
 
 /**

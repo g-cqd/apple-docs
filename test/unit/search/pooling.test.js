@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { meanPool, lastTokenPool, l2normalize, truncate } from '../../../src/search/pooling.js'
+import { describe, expect, test } from 'bun:test'
+import { l2normalize, lastTokenPool, meanPool, truncate } from '../../../src/search/pooling.js'
 
 describe('meanPool', () => {
   test('averages all tokens when unmasked', () => {

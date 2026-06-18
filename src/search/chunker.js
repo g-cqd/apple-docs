@@ -25,10 +25,7 @@ const ANCHOR_MAX = 1200
 // Section kinds that carry declaration / parameter / REST-schema noise rather
 // than prose. Everything else (discussion, overview, topics, content, …) is
 // kept, which naturally captures DocC's open-ended "named topic" headings.
-const SKIP_SECTION_KINDS = new Set([
-  'declaration', 'parameters', 'parameter', 'returnvalue', 'return value',
-  'attributes', 'availability',
-])
+const SKIP_SECTION_KINDS = new Set(['declaration', 'parameters', 'parameter', 'returnvalue', 'return value', 'attributes', 'availability'])
 
 /** Build the anchor string — identical to the legacy embedText() input. */
 export function anchorText(doc) {

@@ -35,37 +35,40 @@ function refresh() {
   if (sectionMap.size === 0) return
 
   const sections = [...sectionMap.values()]
-  const sectionByElement = new Map(sections.map(section => [section.el, section]))
+  const sectionByElement = new Map(sections.map((section) => [section.el, section]))
 
-  observer = new IntersectionObserver((entries) => {
-    let topEntry = null
-    for (const entry of entries) {
-      if (entry.isIntersecting) {
-        if (!topEntry || entry.boundingClientRect.top < topEntry.boundingClientRect.top) {
-          topEntry = entry
+  observer = new IntersectionObserver(
+    (entries) => {
+      let topEntry = null
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          if (!topEntry || entry.boundingClientRect.top < topEntry.boundingClientRect.top) {
+            topEntry = entry
+          }
         }
       }
-    }
 
-    if (!topEntry) return
+      if (!topEntry) return
 
-    const match = sectionByElement.get(topEntry.target)
-    if (!match || match.id === currentActiveId) return
+      const match = sectionByElement.get(topEntry.target)
+      if (!match || match.id === currentActiveId) return
 
-    if (currentActiveId && sectionMap.has(currentActiveId)) {
-      for (const link of sectionMap.get(currentActiveId).links) {
-        link.classList.remove('toc-active')
+      if (currentActiveId && sectionMap.has(currentActiveId)) {
+        for (const link of sectionMap.get(currentActiveId).links) {
+          link.classList.remove('toc-active')
+        }
       }
-    }
 
-    for (const link of match.links) {
-      link.classList.add('toc-active')
-    }
-    currentActiveId = match.id
-  }, {
-    rootMargin: '-80px 0px -60% 0px',
-    threshold: 0,
-  })
+      for (const link of match.links) {
+        link.classList.add('toc-active')
+      }
+      currentActiveId = match.id
+    },
+    {
+      rootMargin: '-80px 0px -60% 0px',
+      threshold: 0,
+    },
+  )
 
   for (const section of sections) {
     observer.observe(section.el)

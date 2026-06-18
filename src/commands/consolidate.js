@@ -1,19 +1,19 @@
-import { normalizeIdentifier, extractRootSlug } from '../apple/normalizer.js'
+import { join } from 'node:path'
 import { fetchDocPage } from '../apple/api.js'
 import { extractMetadata, extractReferences } from '../apple/extractor.js'
+import { extractRootSlug, normalizeIdentifier } from '../apple/normalizer.js'
 import { renderPage } from '../apple/renderer.js'
 import { sha256 } from '../lib/hash.js'
 import { pool } from '../lib/pool.js'
 import { keyPath } from '../lib/safe-path.js'
-import { readJSON, writeJSON, writeText, } from '../storage/files.js'
-import { join } from 'node:path'
+import { readJSON, writeJSON, writeText } from '../storage/files.js'
 
 const CONSOLIDATE_RETRY_CHECKPOINT = 'consolidate:retry-resolved'
 
-import { isInvalidFailedPath, minifyDir } from './consolidate/storage-helpers.js'
+import { ROOT_CATALOG_SOURCE_TYPES } from './command-helpers.js'
 import { verifyCorpusIntegrity, verifySnapshot } from './consolidate/integrity.js'
 import { retryTransientFailures } from './consolidate/retry-transient.js'
-import { ROOT_CATALOG_SOURCE_TYPES } from './command-helpers.js'
+import { isInvalidFailedPath, minifyDir } from './consolidate/storage-helpers.js'
 
 /**
  * A failed catalog-crawl path whose root slug is owned by a different
@@ -64,7 +64,7 @@ export async function consolidate(opts, ctx) {
         const invalid = isInvalidFailedPath(failed.path)
         const crossDup = !invalid && isCrossAdapterFalsePositive(db, failed.path)
         if (!invalid && !crossDup) continue
-        if (!dryRun) db.db.run("DELETE FROM crawl_state WHERE path = ?", [failed.path])
+        if (!dryRun) db.db.run('DELETE FROM crawl_state WHERE path = ?', [failed.path])
         if (crossDup) crossAdapter++
         else cleaned++
       }
@@ -72,7 +72,7 @@ export async function consolidate(opts, ctx) {
 
       // Step 2: for remaining failures, check parent pages for correct URL
       const remaining = dryRun
-        ? all.filter(failed => !isInvalidFailedPath(failed.path))
+        ? all.filter((failed) => !isInvalidFailedPath(failed.path))
         : db.db.query("SELECT path, root_slug, error FROM crawl_state WHERE status = 'failed'").all()
 
       for (const failed of remaining) {
@@ -114,10 +114,7 @@ export async function consolidate(opts, ctx) {
     // Step 3: retry resolved paths (unless dry-run)
     if (!dryRun && resolvedPaths.length > 0) {
       logger.info(`Retrying ${resolvedPaths.length} resolved paths...`)
-      const concurrency = Math.max(
-        1,
-        ctx.semaphore?.max ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10),
-      )
+      const concurrency = Math.max(1, ctx.semaphore?.max ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10))
       let nextIndex = retryCheckpoint?.nextIndex ?? 0
 
       while (nextIndex < resolvedPaths.length) {
@@ -125,7 +122,7 @@ export async function consolidate(opts, ctx) {
         await pool(batch, concurrency, async ({ oldPath, newPath, root }) => {
           const existing = db.getPage(newPath)
           if (existing) {
-            db.db.run("DELETE FROM crawl_state WHERE path = ?", [oldPath])
+            db.db.run('DELETE FROM crawl_state WHERE path = ?', [oldPath])
             retried++
             retriedOk++
             return
@@ -172,7 +169,7 @@ export async function consolidate(opts, ctx) {
             }
 
             db.setCrawlState(newPath, 'processed', root, 0)
-            db.db.run("DELETE FROM crawl_state WHERE path = ?", [oldPath])
+            db.db.run('DELETE FROM crawl_state WHERE path = ?', [oldPath])
             retried++
             retriedOk++
           } catch (error) {
@@ -266,7 +263,6 @@ export async function consolidate(opts, ctx) {
     db.clearActivity()
   }
 }
-
 
 // Re-export for callers that imported from this module.
 export { verifyCorpusIntegrity }

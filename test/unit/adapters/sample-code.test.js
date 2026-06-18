@@ -22,9 +22,7 @@ const SAMPLE_DOCC_JSON = {
       { name: 'macOS', introducedAt: '13.0' },
     ],
   },
-  abstract: [
-    { type: 'text', text: 'Create a single codebase and app target for Mac, iPhone, and iPad.' },
-  ],
+  abstract: [{ type: 'text', text: 'Create a single codebase and app target for Mac, iPhone, and iPad.' }],
   primaryContentSections: [
     {
       kind: 'content',
@@ -123,7 +121,9 @@ describe('SampleCodeAdapter', () => {
       const ctx = {
         db: {
           getRootBySlug: () => ({ slug: 'sample-code', name: 'Apple Sample Code' }),
-          upsertRoot() { upsertCallCount++ },
+          upsertRoot() {
+            upsertCallCount++
+          },
         },
       }
 
@@ -154,9 +154,7 @@ describe('SampleCodeAdapter', () => {
         db: {
           getRootBySlug: () => null,
           upsertRoot() {},
-          getPagesByRole: (role) => role === 'sampleCode'
-            ? [{ key: 'mapkit/find-nearby-points-of-interest' }]
-            : [],
+          getPagesByRole: (role) => (role === 'sampleCode' ? [{ key: 'mapkit/find-nearby-points-of-interest' }] : []),
         },
       }
 
@@ -193,9 +191,7 @@ describe('SampleCodeAdapter', () => {
 
       const result = await adapter.discover(ctx)
 
-      const occurrences = result.keys.filter(
-        k => k === 'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
-      )
+      const occurrences = result.keys.filter((k) => k === 'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app')
       expect(occurrences).toHaveLength(1)
     })
   })
@@ -221,30 +217,21 @@ describe('SampleCodeAdapter', () => {
 
     test('document.title comes from DocC metadata', () => {
       const adapter = new SampleCodeAdapter()
-      const result = adapter.normalize(
-        'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
-        SAMPLE_DOCC_JSON,
-      )
+      const result = adapter.normalize('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app', SAMPLE_DOCC_JSON)
 
       expect(result.document.title).toBe('Food Truck: Building a SwiftUI Multiplatform App')
     })
 
     test('document.kind is overridden to sample-project', () => {
       const adapter = new SampleCodeAdapter()
-      const result = adapter.normalize(
-        'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
-        SAMPLE_DOCC_JSON,
-      )
+      const result = adapter.normalize('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app', SAMPLE_DOCC_JSON)
 
       expect(result.document.kind).toBe('sample-project')
     })
 
     test('document.sourceType is sample-code', () => {
       const adapter = new SampleCodeAdapter()
-      const result = adapter.normalize(
-        'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
-        SAMPLE_DOCC_JSON,
-      )
+      const result = adapter.normalize('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app', SAMPLE_DOCC_JSON)
 
       expect(result.document.sourceType).toBe('sample-code')
     })
@@ -254,17 +241,12 @@ describe('SampleCodeAdapter', () => {
       const key = 'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app'
       const result = adapter.normalize(key, SAMPLE_DOCC_JSON)
 
-      expect(result.document.url).toBe(
-        'https://developer.apple.com/documentation/swiftui/food-truck-building-a-swiftui-multiplatform-app',
-      )
+      expect(result.document.url).toBe('https://developer.apple.com/documentation/swiftui/food-truck-building-a-swiftui-multiplatform-app')
     })
 
     test('document.sourceMetadata contains sampleProject flag', () => {
       const adapter = new SampleCodeAdapter()
-      const result = adapter.normalize(
-        'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
-        SAMPLE_DOCC_JSON,
-      )
+      const result = adapter.normalize('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app', SAMPLE_DOCC_JSON)
 
       const meta = JSON.parse(result.document.sourceMetadata)
       expect(meta.sampleProject).toBe(true)
@@ -272,10 +254,7 @@ describe('SampleCodeAdapter', () => {
 
     test('document.sourceMetadata includes the framework', () => {
       const adapter = new SampleCodeAdapter()
-      const result = adapter.normalize(
-        'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
-        SAMPLE_DOCC_JSON,
-      )
+      const result = adapter.normalize('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app', SAMPLE_DOCC_JSON)
 
       const meta = JSON.parse(result.document.sourceMetadata)
       expect(meta.frameworks).toContain('swiftui')
@@ -283,22 +262,16 @@ describe('SampleCodeAdapter', () => {
 
     test('document.abstractText is populated from DocC abstract', () => {
       const adapter = new SampleCodeAdapter()
-      const result = adapter.normalize(
-        'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
-        SAMPLE_DOCC_JSON,
-      )
+      const result = adapter.normalize('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app', SAMPLE_DOCC_JSON)
 
       expect(result.document.abstractText).toContain('Create a single codebase')
     })
 
     test('sections include abstract and discussion', () => {
       const adapter = new SampleCodeAdapter()
-      const result = adapter.normalize(
-        'sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app',
-        SAMPLE_DOCC_JSON,
-      )
+      const result = adapter.normalize('sample-code/swiftui/food-truck-building-a-swiftui-multiplatform-app', SAMPLE_DOCC_JSON)
 
-      const kinds = result.sections.map(s => s.sectionKind)
+      const kinds = result.sections.map((s) => s.sectionKind)
       expect(kinds).toContain('abstract')
       expect(kinds).toContain('discussion')
     })
@@ -337,10 +310,11 @@ describe('SampleCodeAdapter', () => {
 
   describe('check()', () => {
     test('returns unchanged status on 304', async () => {
-      globalThis.fetch = async () => new Response('', {
-        status: 304,
-        headers: { etag: '"same-etag"' },
-      })
+      globalThis.fetch = async () =>
+        new Response('', {
+          status: 304,
+          headers: { etag: '"same-etag"' },
+        })
 
       const adapter = new SampleCodeAdapter()
       const result = await adapter.check(
@@ -354,10 +328,11 @@ describe('SampleCodeAdapter', () => {
     })
 
     test('returns modified status on 200', async () => {
-      globalThis.fetch = async () => new Response('', {
-        status: 200,
-        headers: { etag: '"new-etag"' },
-      })
+      globalThis.fetch = async () =>
+        new Response('', {
+          status: 200,
+          headers: { etag: '"new-etag"' },
+        })
 
       const adapter = new SampleCodeAdapter()
       const result = await adapter.check(
@@ -374,18 +349,16 @@ describe('SampleCodeAdapter', () => {
       globalThis.fetch = async () => new Response('', { status: 404 })
 
       const adapter = new SampleCodeAdapter()
-      const result = await adapter.check(
-        'sample-code/swiftui/removed-sample',
-        { etag: '"abc"' },
-        { rateLimiter: { acquire: async () => {} } },
-      )
+      const result = await adapter.check('sample-code/swiftui/removed-sample', { etag: '"abc"' }, { rateLimiter: { acquire: async () => {} } })
 
       expect(result.status).toBe('deleted')
       expect(result.deleted).toBe(true)
     })
 
     test('returns error status on network failure', async () => {
-      globalThis.fetch = async () => { throw new Error('network down') }
+      globalThis.fetch = async () => {
+        throw new Error('network down')
+      }
 
       const adapter = new SampleCodeAdapter()
       const result = await adapter.check(
@@ -405,11 +378,7 @@ describe('SampleCodeAdapter', () => {
       }
 
       const adapter = new SampleCodeAdapter()
-      await adapter.check(
-        'sample-code/uikit/implementing-modern-collection-views',
-        { etag: null },
-        { rateLimiter: { acquire: async () => {} } },
-      )
+      await adapter.check('sample-code/uikit/implementing-modern-collection-views', { etag: null }, { rateLimiter: { acquire: async () => {} } })
 
       expect(capturedUrl).toContain('/documentation/uikit/implementing-modern-collection-views')
       expect(capturedUrl).not.toContain('sample-code')

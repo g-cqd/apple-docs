@@ -1,16 +1,16 @@
-import { join } from 'node:path'
+import { Database } from 'bun:sqlite'
 import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { Database } from 'bun:sqlite'
-import { SnapshotIncompleteError, ValidationError } from '../lib/errors.js'
-import { sha256File } from '../lib/hash.js'
+import { join } from 'node:path'
 import { listFilesSorted, writeSha256Sidecar } from '../lib/archive-7z.js'
 import { createTarZstArchive } from '../lib/archive-native.js'
+import { SnapshotIncompleteError, ValidationError } from '../lib/errors.js'
+import { sha256File } from '../lib/hash.js'
+import { keyPath } from '../lib/safe-path.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { copyTreeFast, ensureDir, writeJSON } from '../storage/files.js'
 import { withFileTempStore } from '../storage/pragmas.js'
 import { encodeSectionContent } from '../storage/section-codec.js'
-import { keyPath } from '../lib/safe-path.js'
 
 // Operational tables are truncated rather than dropped — DocsDatabase
 // reopens them at first run and crashes if they're missing entirely.
@@ -100,9 +100,7 @@ export async function snapshotBuild(opts, ctx) {
   // byte-stable and out of the transformer's determinism risk. The default
   // (potion) keeps the unsuffixed name.
   const embedModel = typeof opts.embedModel === 'string' ? opts.embedModel : null
-  const modelSlug = embedModel && embedModel !== 'potion-retrieval-32M'
-    ? `${embedModel.replace(/[^a-z0-9._-]/gi, '-')}-`
-    : ''
+  const modelSlug = embedModel && embedModel !== 'potion-retrieval-32M' ? `${embedModel.replace(/[^a-z0-9._-]/gi, '-')}-` : ''
   // The tag is interpolated into archive / checksum / manifest
   // filenames. Without a strict allowlist, a tag like
   // `../../etc/passwd` or one containing shell-significant characters
@@ -221,8 +219,8 @@ export async function snapshotBuild(opts, ctx) {
         const head = validation.missing.slice(0, 10).join(', ')
         throw new SnapshotIncompleteError(
           `Snapshot: ${validation.missingCount} pre-rendered SF Symbol variants missing` +
-          `${includeSymbols ? '' : ' (resources/symbols is absent — the prerender step did not run)'}` +
-          ` (e.g., ${head}). Run \`apple-docs sync\` to bake the missing renders, or pass --allow-incomplete-symbols to override.`,
+            `${includeSymbols ? '' : ' (resources/symbols is absent — the prerender step did not run)'}` +
+            ` (e.g., ${head}). Run \`apple-docs sync\` to bake the missing renders, or pass --allow-incomplete-symbols to override.`,
           { missingCount: validation.missingCount, missing: validation.missing },
         )
       }

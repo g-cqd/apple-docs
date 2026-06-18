@@ -73,8 +73,11 @@ describe('projectSearchResult', () => {
 
   test('promotes partial:true to truncated:true', () => {
     const out = projectSearchResult({
-      query: 'foo', total: 0, results: [],
-      partial: true, partialReasons: ['body'],
+      query: 'foo',
+      total: 0,
+      results: [],
+      partial: true,
+      partialReasons: ['body'],
     })
     expect(out.truncated).toBe(true)
     expect(out.partial).toBeUndefined()
@@ -121,8 +124,11 @@ describe('projectSearchHit', () => {
 
   test('preserves isDeprecated, isBeta, isReleaseNotes true-only', () => {
     const out = projectSearchHit({
-      title: 'X', matchQuality: 'match',
-      isDeprecated: true, isBeta: true, isReleaseNotes: true,
+      title: 'X',
+      matchQuality: 'match',
+      isDeprecated: true,
+      isBeta: true,
+      isReleaseNotes: true,
     })
     expect(out.isDeprecated).toBe(true)
     expect(out.isBeta).toBe(true)
@@ -136,7 +142,8 @@ describe('projectSearchHit', () => {
 
   test('webPath is emitted only with webPaths:true and only for overlong keys', () => {
     const longHit = {
-      title: 'X', matchQuality: 'exact',
+      title: 'X',
+      matchQuality: 'exact',
       path: `swiftui/view/init(${'parameterlabel:'.repeat(20)})`,
     }
     // Default (MCP / CLI): no webPath, raw corpus key untouched.
@@ -157,7 +164,8 @@ describe('projectSearchHit', () => {
 describe('projectReadDoc', () => {
   test('collapses found:false to { found: false, note }', () => {
     expect(projectReadDoc({ found: false, note: 'missing', content: '...' })).toEqual({
-      found: false, note: 'missing',
+      found: false,
+      note: 'missing',
     })
   })
 
@@ -180,12 +188,13 @@ describe('projectReadDoc', () => {
   })
 
   test('full mode keeps contentText but strips sectionKind/sortOrder', () => {
-    const out = projectReadDoc({
-      found: true,
-      sections: [
-        { heading: 'Overview', contentText: 'abc', sectionKind: 'body', sortOrder: 1 },
-      ],
-    }, { full: true })
+    const out = projectReadDoc(
+      {
+        found: true,
+        sections: [{ heading: 'Overview', contentText: 'abc', sectionKind: 'body', sortOrder: 1 }],
+      },
+      { full: true },
+    )
     expect(out.sections[0]).toEqual({ heading: 'Overview', contentText: 'abc' })
   })
 
@@ -234,12 +243,18 @@ describe('projectReadDoc', () => {
 describe('projectFrameworks', () => {
   test('drops lastSeen, status, displayName, sourceType from each root', () => {
     const out = projectFrameworks({
-      roots: [{
-        slug: 'swiftui', name: 'SwiftUI', kind: 'framework',
-        status: 'active', lastSeen: '2026-01-01',
-        displayName: 'SwiftUI', sourceType: 'apple-docc',
-        pageCount: 100,
-      }],
+      roots: [
+        {
+          slug: 'swiftui',
+          name: 'SwiftUI',
+          kind: 'framework',
+          status: 'active',
+          lastSeen: '2026-01-01',
+          displayName: 'SwiftUI',
+          sourceType: 'apple-docc',
+          pageCount: 100,
+        },
+      ],
       total: 1,
     })
     expect(out.roots[0]).toEqual({ slug: 'swiftui', name: 'SwiftUI', kind: 'framework', pageCount: 100 })
@@ -262,7 +277,11 @@ describe('projectFrameworks', () => {
 describe('projectBrowse', () => {
   test('drops slug and kind at top level', () => {
     const out = projectBrowse({
-      framework: 'SwiftUI', slug: 'swiftui', kind: 'framework', pages: [], total: 0,
+      framework: 'SwiftUI',
+      slug: 'swiftui',
+      kind: 'framework',
+      pages: [],
+      total: 0,
     })
     expect(out.slug).toBeUndefined()
     expect(out.framework).toBe('SwiftUI')
@@ -278,7 +297,9 @@ describe('projectBrowse', () => {
 
   test('preserves children section labels', () => {
     const out = projectBrowse({
-      framework: 'SwiftUI', path: 'swiftui/view', title: 'View',
+      framework: 'SwiftUI',
+      path: 'swiftui/view',
+      title: 'View',
       children: [{ path: 'swiftui/view/body', title: 'body', kind: 'symbol', section: 'Topics' }],
     })
     expect(out.children[0].section).toBe('Topics')
@@ -323,10 +344,13 @@ describe('projectSearchSfSymbols', () => {
 describe('projectListAppleFonts', () => {
   test('drops file_path from every file entry', () => {
     const out = projectListAppleFonts({
-      families: [{
-        id: 'sf-pro', name: 'SF Pro',
-        files: [{ id: 'f1', file_name: 'SFPro.ttf', file_path: '/var/cache/SFPro.ttf' }],
-      }],
+      families: [
+        {
+          id: 'sf-pro',
+          name: 'SF Pro',
+          files: [{ id: 'f1', file_name: 'SFPro.ttf', file_path: '/var/cache/SFPro.ttf' }],
+        },
+      ],
     })
     expect(out.families[0].files[0]).toEqual({ id: 'f1', file_name: 'SFPro.ttf' })
   })
@@ -335,8 +359,12 @@ describe('projectListAppleFonts', () => {
 describe('projectRenderSfSymbol', () => {
   test('drops file_path', () => {
     const out = projectRenderSfSymbol({
-      name: 'pencil', scope: 'public', format: 'svg',
-      file_path: '/var/cache/pencil.svg', resourceUri: 'apple-docs://...', svg: '<svg/>',
+      name: 'pencil',
+      scope: 'public',
+      format: 'svg',
+      file_path: '/var/cache/pencil.svg',
+      resourceUri: 'apple-docs://...',
+      svg: '<svg/>',
     })
     expect(out.file_path).toBeUndefined()
     expect(out.resourceUri).toBe('apple-docs://...')
@@ -347,8 +375,11 @@ describe('projectRenderSfSymbol', () => {
 describe('projectRenderFontText', () => {
   test('drops format and font internals', () => {
     const out = projectRenderFontText({
-      text: 'hello', mimeType: 'image/svg+xml', content: '<svg/>',
-      format: 'svg-1', font: { internal: 'state' },
+      text: 'hello',
+      mimeType: 'image/svg+xml',
+      content: '<svg/>',
+      format: 'svg-1',
+      font: { internal: 'state' },
     })
     expect(out.format).toBeUndefined()
     expect(out.font).toBeUndefined()

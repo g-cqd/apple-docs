@@ -31,4 +31,3 @@ function findParentNumber(num) {
   if (lastDot === -1) return null
   return num.slice(0, lastDot)
 }
-

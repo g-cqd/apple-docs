@@ -44,7 +44,10 @@ export function lastTokenPool(data, dims, mask = null) {
   if (mask) {
     last = -1
     for (let t = tokens - 1; t >= 0; t--) {
-      if (mask[t]) { last = t; break }
+      if (mask[t]) {
+        last = t
+        break
+      }
     }
     if (last < 0) last = tokens - 1
   }
@@ -64,7 +67,10 @@ export function l2normalize(vec) {
   for (let i = 0; i < vec.length; i++) n += vec[i] * vec[i]
   n = Math.sqrt(n)
   const out = new Float32Array(vec.length)
-  if (n === 0) { out.set(vec); return out }
+  if (n === 0) {
+    out.set(vec)
+    return out
+  }
   for (let i = 0; i < vec.length; i++) out[i] = vec[i] / n
   return out
 }

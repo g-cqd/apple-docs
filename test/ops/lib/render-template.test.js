@@ -1,12 +1,8 @@
-import { describe, test, expect } from 'bun:test'
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { describe, expect, test } from 'bun:test'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import {
-  renderTemplateString,
-  renderTemplate,
-  ALLOWED_VARS,
-} from '../../../ops/lib/render-template.js'
+import { join } from 'node:path'
+import { ALLOWED_VARS, renderTemplate, renderTemplateString } from '../../../ops/lib/render-template.js'
 
 describe('renderTemplateString', () => {
   test('replaces allowed placeholders with env values', () => {
@@ -57,7 +53,7 @@ describe('renderTemplate (file IO)', () => {
     try {
       const tpl = join(dir, 'in.tpl')
       writeFileSync(tpl, 'service=${LABEL_WEB}\n')
-      const out = join(dir, 'out/rendered.txt')  // exercise mkdir -p
+      const out = join(dir, 'out/rendered.txt') // exercise mkdir -p
       const result = renderTemplate(tpl, out, { LABEL_WEB: 'mt.test.web' })
       expect(result.content).toBe('service=mt.test.web\n')
       expect(existsSync(out)).toBe(true)
@@ -74,11 +70,18 @@ describe('renderTemplate (file IO)', () => {
   test('honours injected fs deps without touching the disk', () => {
     let written
     const fakeRead = () => 'hello ${USER_NAME}'
-    const fakeWrite = (_p, content) => { written = content }
+    const fakeWrite = (_p, content) => {
+      written = content
+    }
     const fakeEnsure = () => {}
-    const result = renderTemplate('/virtual.tpl', '/virtual.out', { USER_NAME: 'gc' }, {
-      deps: { readFile: fakeRead, writeFile: fakeWrite, ensureDir: fakeEnsure },
-    })
+    const result = renderTemplate(
+      '/virtual.tpl',
+      '/virtual.out',
+      { USER_NAME: 'gc' },
+      {
+        deps: { readFile: fakeRead, writeFile: fakeWrite, ensureDir: fakeEnsure },
+      },
+    )
     expect(written).toBe('hello gc')
     expect(result.unresolved).toEqual([])
   })
@@ -98,7 +101,7 @@ describe('renderTemplate (file IO)', () => {
       expect(readFileSync(out, 'utf8')).toBe('value=second\n')
       // Staging files have the pattern `.<basename>.<pid>.<ts>.tmp` and
       // must NOT survive a successful write.
-      const leftovers = readdirSync(dir).filter(f => f.startsWith('.rendered.txt.') && f.endsWith('.tmp'))
+      const leftovers = readdirSync(dir).filter((f) => f.startsWith('.rendered.txt.') && f.endsWith('.tmp'))
       expect(leftovers).toEqual([])
     } finally {
       rmSync(dir, { recursive: true, force: true })
@@ -116,9 +119,16 @@ describe('renderTemplate (file IO)', () => {
       throw new Error('disk full')
     }
     const fakeEnsure = () => {}
-    expect(() => renderTemplate('/virtual.tpl', '/virtual.out', {}, {
-      deps: { readFile: fakeRead, writeFile: fakeWrite, ensureDir: fakeEnsure },
-    })).toThrow(/disk full/)
+    expect(() =>
+      renderTemplate(
+        '/virtual.tpl',
+        '/virtual.out',
+        {},
+        {
+          deps: { readFile: fakeRead, writeFile: fakeWrite, ensureDir: fakeEnsure },
+        },
+      ),
+    ).toThrow(/disk full/)
     expect(attemptedDelete).toBe(true)
   })
 })

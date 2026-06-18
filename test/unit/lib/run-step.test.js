@@ -24,7 +24,13 @@ describe('runStep', () => {
 
   test('rethrows in throw mode', async () => {
     await expect(
-      runStep('boom', async () => { throw new Error('halt') }, { onError: 'throw' }),
+      runStep(
+        'boom',
+        async () => {
+          throw new Error('halt')
+        },
+        { onError: 'throw' },
+      ),
     ).rejects.toThrow('halt')
   })
 
@@ -35,7 +41,13 @@ describe('runStep', () => {
       warn: (msg, data) => records.push({ level: 'warn', msg, data }),
     }
     await runStep('a', async () => 1, { logger })
-    await runStep('b', async () => { throw new Error('x') }, { logger })
+    await runStep(
+      'b',
+      async () => {
+        throw new Error('x')
+      },
+      { logger },
+    )
     expect(records.length).toBe(2)
     expect(records[0].level).toBe('info')
     expect(records[0].msg).toBe('a ok')
@@ -45,7 +57,9 @@ describe('runStep', () => {
   })
 
   test('coerces non-Error throws', async () => {
-    const r = await runStep('s', async () => { throw 'string-error' })
+    const r = await runStep('s', async () => {
+      throw 'string-error'
+    })
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error.message).toBe('string-error')
   })

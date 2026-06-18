@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import runProxy from '../../../ops/cmd/proxy.js'
 
 const ENV = {
@@ -8,7 +8,7 @@ const ENV = {
 
 function captureLogger() {
   const lines = []
-  return { lines, say: m => lines.push(m), warn: m => lines.push('W:' + m), error: m => lines.push('E:' + m) }
+  return { lines, say: (m) => lines.push(m), warn: (m) => lines.push('W:' + m), error: (m) => lines.push('E:' + m) }
 }
 
 function captureRunner(exitCode = 0, stdout = '', stderr = '') {
@@ -25,9 +25,15 @@ function captureRunner(exitCode = 0, stdout = '', stderr = '') {
 function jsonResp({ status = 200, body = '[]' } = {}) {
   const bytes = new TextEncoder().encode(body)
   return {
-    ok: status >= 200 && status < 300, status,
+    ok: status >= 200 && status < 300,
+    status,
     headers: { get: () => null },
-    body: new ReadableStream({ pull(c) { c.enqueue(bytes); c.close() } }),
+    body: new ReadableStream({
+      pull(c) {
+        c.enqueue(bytes)
+        c.close()
+      },
+    }),
     text: () => Promise.resolve(body),
   }
 }
@@ -49,7 +55,7 @@ describe('runProxy', () => {
     const log = captureLogger()
     const code = await runProxy({ args: ['validate'], envLoader: () => ENV, logger: log, deps })
     expect(code).toBe(66)
-    expect(log.lines.some(m => m.includes('not found'))).toBe(true)
+    expect(log.lines.some((m) => m.includes('not found'))).toBe(true)
   })
 
   test('returns 127 when caddy binary is not on PATH', async () => {
@@ -62,9 +68,7 @@ describe('runProxy', () => {
     const r = captureRunner(0)
     const code = await runProxy({ args: ['validate'], envLoader: () => ENV, logger: captureLogger(), deps: presentDeps(r) })
     expect(code).toBe(0)
-    expect(r.calls[0].args).toEqual([
-      '/opt/homebrew/bin/caddy', 'validate', '--config', '/fake/ops/caddy/Caddyfile', '--adapter', 'caddyfile',
-    ])
+    expect(r.calls[0].args).toEqual(['/opt/homebrew/bin/caddy', 'validate', '--config', '/fake/ops/caddy/Caddyfile', '--adapter', 'caddyfile'])
   })
 
   test('reload runs validate first, then reload, both via the caddy bin', async () => {
@@ -94,23 +98,27 @@ describe('runProxy', () => {
     }
     const log = captureLogger()
     const code = await runProxy({
-      args: ['status'], envLoader: () => ENV, logger: log,
+      args: ['status'],
+      envLoader: () => ENV,
+      logger: log,
       deps: { exists: () => true, which: () => '/x', runCmd: async () => ({ exitCode: 0 }), fetcher },
     })
     expect(code).toBe(0)
     expect(captured).toBe('http://127.0.0.1:2019/reverse_proxy/upstreams')
-    expect(log.lines.some(m => m.includes('127.0.0.1:3130'))).toBe(true)
+    expect(log.lines.some((m) => m.includes('127.0.0.1:3130'))).toBe(true)
   })
 
   test('status returns 1 when the admin API is unreachable', async () => {
     const fetcher = () => Promise.reject(new Error('ECONNREFUSED'))
     const log = captureLogger()
     const code = await runProxy({
-      args: ['status'], envLoader: () => ENV, logger: log,
+      args: ['status'],
+      envLoader: () => ENV,
+      logger: log,
       deps: { exists: () => true, which: () => '/x', runCmd: async () => ({ exitCode: 0 }), fetcher },
     })
     expect(code).toBe(1)
-    expect(log.lines.some(m => m.startsWith('E:proxy: could not query'))).toBe(true)
+    expect(log.lines.some((m) => m.startsWith('E:proxy: could not query'))).toBe(true)
   })
 
   test('run supervises caddy via spawn (NOT runCmd) and propagates exit code', async () => {
@@ -127,7 +135,9 @@ describe('runProxy', () => {
     }
     const r = captureRunner()
     const code = await runProxy({
-      args: ['run'], envLoader: () => ENV, logger: captureLogger(),
+      args: ['run'],
+      envLoader: () => ENV,
+      logger: captureLogger(),
       deps: { ...presentDeps(r), spawn },
     })
     expect(code).toBe(0)
@@ -142,7 +152,9 @@ describe('runProxy', () => {
   test('run returns a non-zero exit if caddy exits non-zero', async () => {
     const spawn = () => ({ exited: Promise.resolve(2), kill: () => {} })
     const code = await runProxy({
-      args: ['run'], envLoader: () => ENV, logger: captureLogger(),
+      args: ['run'],
+      envLoader: () => ENV,
+      logger: captureLogger(),
       deps: { ...presentDeps(), spawn },
     })
     expect(code).toBe(2)

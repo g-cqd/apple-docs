@@ -9,17 +9,15 @@
  */
 
 import { safeCall } from '../lib/safe-call.js'
-import { runRead, DeadlineError } from '../storage/reader-pool.js'
-import { pickHighSignalToken, pruneStopwords, tokenize } from './relaxation.js'
+import { DeadlineError, runRead } from '../storage/reader-pool.js'
 import { buildFtsQuery, sanitizeTrigramQuery } from './fts-query-builder.js'
+import { pickHighSignalToken, pruneStopwords, tokenize } from './relaxation.js'
 
 /** Build the four cascade runners bound to the current query state. */
 export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, hasBody }) {
   const runFts = async () => {
     const flat = await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchPages', [ftsQuery, q, { ...filterOpts, framework: fw }])),
-      )).flat(),
+      async () => (await Promise.all(frameworks.map((fw) => runRead(ctx, 'searchPages', [ftsQuery, q, { ...filterOpts, framework: fw }])))).flat(),
       { default: null, log: 'warn-once', label: 'search.cascade.fts' },
     )
     if (flat !== null) return flat
@@ -27,9 +25,7 @@ export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, 
     // simple-prefix variant before giving up.
     const simple = `"${q.replace(/"/g, '')}"*`
     return await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchPages', [simple, q, { ...filterOpts, framework: fw }])),
-      )).flat(),
+      async () => (await Promise.all(frameworks.map((fw) => runRead(ctx, 'searchPages', [simple, q, { ...filterOpts, framework: fw }])))).flat(),
       { default: [], log: 'warn-once', label: 'search.cascade.fts.fallback' },
     )
   }
@@ -37,9 +33,7 @@ export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, 
   const runTitleExact = async () => {
     if (!ctx.readerPool && typeof ctx.db?.searchTitleExact !== 'function') return []
     return await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchTitleExact', [q, { ...filterOpts, framework: fw }])),
-      )).flat(),
+      async () => (await Promise.all(frameworks.map((fw) => runRead(ctx, 'searchTitleExact', [q, { ...filterOpts, framework: fw }])))).flat(),
       { default: [], log: 'warn-once', label: 'search.cascade.titleExact' },
     )
   }
@@ -50,9 +44,7 @@ export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, 
     // FTS5 parse `.` as query syntax and error out the whole tier.
     const trigramQuery = sanitizeTrigramQuery(q)
     return await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchTrigram', [trigramQuery, { ...filterOpts, framework: fw }])),
-      )).flat(),
+      async () => (await Promise.all(frameworks.map((fw) => runRead(ctx, 'searchTrigram', [trigramQuery, { ...filterOpts, framework: fw }])))).flat(),
       { default: [], log: 'warn-once', label: 'search.cascade.trigram' },
     )
   }
@@ -67,9 +59,7 @@ export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, 
   const runBody = async () => {
     if (!hasBody) return []
     return await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchBody', [ftsQuery, { ...filterOpts, framework: fw }])),
-      )).flat(),
+      async () => (await Promise.all(frameworks.map((fw) => runRead(ctx, 'searchBody', [ftsQuery, { ...filterOpts, framework: fw }])))).flat(),
       { default: [], log: 'warn-once', label: 'search.cascade.body', passThrough: DeadlineError },
     )
   }
@@ -99,9 +89,7 @@ export async function runRelaxationCascade(state) {
   if (pruned.length >= 1) {
     const prunedQuery = buildFtsQuery(pruned.join(' '))
     const r1 = await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchPages', [prunedQuery, q, { ...filterOpts, framework: fw }])),
-      )).flat(),
+      async () => (await Promise.all(frameworks.map((fw) => runRead(ctx, 'searchPages', [prunedQuery, q, { ...filterOpts, framework: fw }])))).flat(),
       { default: [], log: 'warn-once', label: 'search.relax.pruned' },
     )
     const before = results.length
@@ -111,11 +99,9 @@ export async function runRelaxationCascade(state) {
 
   // R2 — pruned OR: join the pruned tokens with OR so any single hit wins.
   if (results.length === 0 && pruned.length >= 2) {
-    const orQuery = pruned.map(t => `"${t.toLowerCase().replace(/"/g, '')}"`).join(' OR ')
+    const orQuery = pruned.map((t) => `"${t.toLowerCase().replace(/"/g, '')}"`).join(' OR ')
     const r2 = await safeCall(
-      async () => (await Promise.all(
-        frameworks.map(fw => runRead(ctx, 'searchPages', [orQuery, q, { ...filterOpts, framework: fw }])),
-      )).flat(),
+      async () => (await Promise.all(frameworks.map((fw) => runRead(ctx, 'searchPages', [orQuery, q, { ...filterOpts, framework: fw }])))).flat(),
       { default: [], log: 'warn-once', label: 'search.relax.prunedOr' },
     )
     const before = results.length
@@ -130,9 +116,8 @@ export async function runRelaxationCascade(state) {
     const signal = pickHighSignalToken(tokenPool)
     if (signal && signal.length >= 3) {
       const r3 = await safeCall(
-        async () => (await Promise.all(
-          frameworks.map(fw => runRead(ctx, 'searchTrigram', [sanitizeTrigramQuery(signal), { ...filterOpts, framework: fw }])),
-        )).flat(),
+        async () =>
+          (await Promise.all(frameworks.map((fw) => runRead(ctx, 'searchTrigram', [sanitizeTrigramQuery(signal), { ...filterOpts, framework: fw }])))).flat(),
         { default: [], log: 'warn-once', label: 'search.relax.trigramToken' },
       )
       const before = results.length

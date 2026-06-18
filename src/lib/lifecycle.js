@@ -100,7 +100,10 @@ async function gracefulShutdown(reason, deadlineMs = DEFAULT_DEADLINE_MS, opts =
     const stopP = Promise.resolve().then(() => entry.stop(remaining))
     stopP.catch(() => {})
     const settled = await Promise.race([
-      stopP.then(() => null, (err) => ({ err })),
+      stopP.then(
+        () => null,
+        (err) => ({ err }),
+      ),
       new Promise((resolve) => setTimeout(() => resolve(TIMEOUT), remaining)),
     ])
     if (settled === TIMEOUT) {
@@ -156,4 +159,4 @@ function _reset({ exit } = {}) {
 }
 
 export const lifecycle = { register, gracefulShutdown, _reset }
-export { installCrashHandlers, gracefulShutdown }
+export { gracefulShutdown, installCrashHandlers }

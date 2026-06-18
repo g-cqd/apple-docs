@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import {
   buildScopeGroups,
   groupSampleCodeByFramework,
@@ -28,17 +28,14 @@ describe('groupWwdcByYear', () => {
 
   test('groups by year descending with counts', () => {
     const groups = groupWwdcByYear(sessions)
-    expect(groups.map(g => g.label)).toEqual(['2024', '2023', '1997'])
-    expect(groups.map(g => g.count)).toEqual([2, 1, 1])
+    expect(groups.map((g) => g.label)).toEqual(['2024', '2023', '1997'])
+    expect(groups.map((g) => g.count)).toEqual([2, 1, 1])
     expect(groups[0].id).toBe('year-2024')
   })
 
   test('sorts sessions by title within a year', () => {
     const groups = groupWwdcByYear(sessions)
-    expect(groups[0].docs.map(d => d.title)).toEqual([
-      'Add personality with genmoji',
-      'Bring expression to your app',
-    ])
+    expect(groups[0].docs.map((d) => d.title)).toEqual(['Add personality with genmoji', 'Bring expression to your app'])
   })
 
   test('collects pages without a year in the path into a trailing Other group', () => {
@@ -86,35 +83,36 @@ describe('swiftEvolutionStatusLabel', () => {
 describe('groupSwiftEvolutionByStatus', () => {
   const proposals = [
     {
-      path: 'swift-evolution/0099-conditionclauses', title: 'Restructuring Condition Clauses',
+      path: 'swift-evolution/0099-conditionclauses',
+      title: 'Restructuring Condition Clauses',
       source_metadata: '{"seNumber":"SE-0099","status":"Implemented (Swift 3.0)","swiftVersion":"3.0"}',
     },
     {
-      path: 'swift-evolution/0413-typed-throws', title: 'Typed throws',
+      path: 'swift-evolution/0413-typed-throws',
+      title: 'Typed throws',
       source_metadata: '{"seNumber":"SE-0413","status":"Implemented (Swift 6.0)","swiftVersion":"6.0"}',
     },
     {
-      path: 'swift-evolution/0243-codepoint', title: 'Integer-convertible character literals',
+      path: 'swift-evolution/0243-codepoint',
+      title: 'Integer-convertible character literals',
       source_metadata: '{"seNumber":"SE-0243","status":"Rejected"}',
     },
     {
-      path: 'swift-evolution/9999-mystery', title: 'Mystery proposal',
+      path: 'swift-evolution/9999-mystery',
+      title: 'Mystery proposal',
       source_metadata: null,
     },
   ]
 
   test('groups by status family in canonical order with Other last', () => {
     const groups = groupSwiftEvolutionByStatus(proposals)
-    expect(groups.map(g => g.label)).toEqual(['Implemented', 'Rejected', 'Other'])
+    expect(groups.map((g) => g.label)).toEqual(['Implemented', 'Rejected', 'Other'])
     expect(groups[0].count).toBe(2)
   })
 
   test('sorts proposals by SE number descending within a group', () => {
     const groups = groupSwiftEvolutionByStatus(proposals)
-    expect(groups[0].docs.map(d => d.title)).toEqual([
-      'Typed throws',
-      'Restructuring Condition Clauses',
-    ])
+    expect(groups[0].docs.map((d) => d.title)).toEqual(['Typed throws', 'Restructuring Condition Clauses'])
   })
 
   test('attaches an SE number + Swift version meta line', () => {
@@ -124,9 +122,7 @@ describe('groupSwiftEvolutionByStatus', () => {
   })
 
   test('tolerates malformed metadata JSON', () => {
-    const groups = groupSwiftEvolutionByStatus([
-      { path: 'swift-evolution/0001-broken', title: 'Broken', source_metadata: '{nope' },
-    ])
+    const groups = groupSwiftEvolutionByStatus([{ path: 'swift-evolution/0001-broken', title: 'Broken', source_metadata: '{nope' }])
     expect(groups).toHaveLength(1)
     expect(groups[0].label).toBe('Other')
     expect(groups[0].docs[0].meta).toBeNull()
@@ -147,21 +143,19 @@ describe('groupSampleCodeByFramework', () => {
 
   test('groups by first framework entry, alphabetical with Other last', () => {
     const groups = groupSampleCodeByFramework(samples)
-    expect(groups.map(g => g.label)).toEqual(['metal', 'visionos', 'Other'])
+    expect(groups.map((g) => g.label)).toEqual(['metal', 'visionos', 'Other'])
     expect(groups[0].count).toBe(2)
     expect(groups[0].id).toBe('fw-metal')
   })
 
   test('sorts samples by title within a group', () => {
     const groups = groupSampleCodeByFramework(samples)
-    expect(groups[0].docs.map(d => d.title)).toEqual(['Argument buffers', 'Fishtank'])
+    expect(groups[0].docs.map((d) => d.title)).toEqual(['Argument buffers', 'Fishtank'])
   })
 
   test('missing metadata falls back to Other', () => {
     const groups = groupSampleCodeByFramework([{ path: 'sample-code/x', title: 'X' }])
-    expect(groups).toEqual([
-      { id: 'fw-other', label: 'Other', count: 1, docs: [{ path: 'sample-code/x', title: 'X' }] },
-    ])
+    expect(groups).toEqual([{ id: 'fw-other', label: 'Other', count: 1, docs: [{ path: 'sample-code/x', title: 'X' }] }])
   })
 })
 
@@ -214,10 +208,14 @@ describe('renderFrameworkPage scope-aware sections', () => {
 
   test('swift-evolution root renders status sections with SE meta', () => {
     const root = { slug: 'swift-evolution', display_name: 'Swift Evolution Proposals', source_type: 'swift-evolution' }
-    const docs = [{
-      path: 'swift-evolution/0413-typed-throws', title: 'Typed throws', role: 'article',
-      source_metadata: '{"seNumber":"SE-0413","status":"Implemented (Swift 6.0)","swiftVersion":"6.0"}',
-    }]
+    const docs = [
+      {
+        path: 'swift-evolution/0413-typed-throws',
+        title: 'Typed throws',
+        role: 'article',
+        source_metadata: '{"seNumber":"SE-0413","status":"Implemented (Swift 6.0)","swiftVersion":"6.0"}',
+      },
+    ]
     const page = renderFrameworkPage(root, docs, siteConfig).toString()
     expect(page).toMatch(/<section id="status-implemented"[^>]*data-filter-kind="Implemented">/)
     expect(page).toContain('SE-0413 · Swift 6.0')
@@ -225,10 +223,14 @@ describe('renderFrameworkPage scope-aware sections', () => {
 
   test('sample-code root renders framework sections', () => {
     const root = { slug: 'sample-code', display_name: 'Apple Sample Code', source_type: 'sample-code' }
-    const docs = [{
-      path: 'sample-code/metal/fishtank', title: 'Fishtank', role: 'sampleCode',
-      source_metadata: '{"sampleProject":true,"frameworks":["metal"]}',
-    }]
+    const docs = [
+      {
+        path: 'sample-code/metal/fishtank',
+        title: 'Fishtank',
+        role: 'sampleCode',
+        source_metadata: '{"sampleProject":true,"frameworks":["metal"]}',
+      },
+    ]
     const page = renderFrameworkPage(root, docs, siteConfig).toString()
     expect(page).toMatch(/<section id="fw-metal"[^>]*data-filter-kind="metal">/)
   })

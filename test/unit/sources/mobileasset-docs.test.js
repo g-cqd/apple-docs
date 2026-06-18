@@ -1,14 +1,10 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { enrichFromAsset, normalizeAssetUri, platformsToProject } from '../../../src/sources/mobileasset-docs.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import {
-  enrichFromAsset,
-  normalizeAssetUri,
-  platformsToProject,
-} from '../../../src/sources/mobileasset-docs.js'
 
 let dir
 let assetPath
@@ -22,36 +18,60 @@ function makeAssetDb(path) {
   const insAttr = a.query('INSERT INTO attributes VALUES (?, ?, ?, ?, ?, ?, ?)')
 
   // 1. Overlap page: project has it, missing usr + platforms → both backfill.
-  insDoc.run('/documentation/SwiftUI/View', JSON.stringify({
-    uri: '/documentation/SwiftUI/View', kind: 'symbol', role: 'symbol',
-    external_id: 's:7SwiftUI4ViewP', modules: ['SwiftUI'],
-    platforms: [
-      { platform: 'iOS', introduced: 13, deprecated: false },
-      { platform: 'macOS', introduced: 10.15, deprecated: false },
-    ],
-  }))
+  insDoc.run(
+    '/documentation/SwiftUI/View',
+    JSON.stringify({
+      uri: '/documentation/SwiftUI/View',
+      kind: 'symbol',
+      role: 'symbol',
+      external_id: 's:7SwiftUI4ViewP',
+      modules: ['SwiftUI'],
+      platforms: [
+        { platform: 'iOS', introduced: 13, deprecated: false },
+        { platform: 'macOS', introduced: 10.15, deprecated: false },
+      ],
+    }),
+  )
   // 2. Overlap page where the project already HAS platforms → usr only.
-  insDoc.run('/documentation/SwiftUI/Text', JSON.stringify({
-    uri: '/documentation/SwiftUI/Text', kind: 'symbol', role: 'symbol',
-    external_id: 's:7SwiftUI4TextV', modules: ['SwiftUI'],
-    platforms: [{ platform: 'iOS', introduced: 99, deprecated: false }],
-  }))
+  insDoc.run(
+    '/documentation/SwiftUI/Text',
+    JSON.stringify({
+      uri: '/documentation/SwiftUI/Text',
+      kind: 'symbol',
+      role: 'symbol',
+      external_id: 's:7SwiftUI4TextV',
+      modules: ['SwiftUI'],
+      platforms: [{ platform: 'iOS', introduced: 99, deprecated: false }],
+    }),
+  )
   // 3. Anchor row → skipped outright.
   insDoc.run('/documentation/SwiftUI#Essentials', JSON.stringify({ uri: '/documentation/SwiftUI#Essentials', kind: 'article', role: 'article' }))
   // 4. Member page whose parent (swiftui/view) exists but which the corpus
   // lacks → a real missing page; inserted (no parent/child suppression).
-  insDoc.run('/documentation/SwiftUI/View/somenewthing', JSON.stringify({
-    uri: '/documentation/SwiftUI/View/somenewthing', kind: 'symbol', role: 'symbol', modules: ['SwiftUI'],
-  }))
+  insDoc.run(
+    '/documentation/SwiftUI/View/somenewthing',
+    JSON.stringify({
+      uri: '/documentation/SwiftUI/View/somenewthing',
+      kind: 'symbol',
+      role: 'symbol',
+      modules: ['SwiftUI'],
+    }),
+  )
   insAttr.run('/documentation/SwiftUI/View/somenewthing', 3, 0, 'symbol', 'SwiftUI', 'someNewThing', 'someNewThing\nA brand new member.')
   // 5. Truly novel page (framework absent from project) → inserted w/ chunks.
   // modules[0] deliberately contains spaces: it is a DISPLAY name; the
   // framework slug must come from the URI segment instead.
-  insDoc.run('/documentation/AppleNewsFormat', JSON.stringify({
-    uri: '/documentation/AppleNewsFormat', kind: 'article', role: 'collection',
-    external_id: 'ANF-root', modules: ['Apple News Format'],
-    platforms: [{ platform: 'iOS', introduced: 9, deprecated: false }],
-  }))
+  insDoc.run(
+    '/documentation/AppleNewsFormat',
+    JSON.stringify({
+      uri: '/documentation/AppleNewsFormat',
+      kind: 'article',
+      role: 'collection',
+      external_id: 'ANF-root',
+      modules: ['Apple News Format'],
+      platforms: [{ platform: 'iOS', introduced: 9, deprecated: false }],
+    }),
+  )
   insAttr.run('/documentation/AppleNewsFormat', 1, 0, 'article', 'AppleNewsFormat', 'Apple News Format', 'Apple News Format\nDesign and publish articles.')
   insAttr.run('/documentation/AppleNewsFormat', 2, 1, 'article', 'AppleNewsFormat', 'Components', 'Components live here.')
   a.close()
@@ -65,14 +85,21 @@ beforeEach(() => {
   db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
   db.upsertNormalizedDocument({
     document: { sourceType: 'apple-docc', key: 'swiftui/view', title: 'View', framework: 'swiftui', role: 'symbol' },
-    sections: [], relationships: [],
+    sections: [],
+    relationships: [],
   })
   db.upsertNormalizedDocument({
     document: {
-      sourceType: 'apple-docc', key: 'swiftui/text', title: 'Text', framework: 'swiftui', role: 'symbol',
-      platformsJson: { ios: '13.0' }, minIos: '13.0',
+      sourceType: 'apple-docc',
+      key: 'swiftui/text',
+      title: 'Text',
+      framework: 'swiftui',
+      role: 'symbol',
+      platformsJson: { ios: '13.0' },
+      minIos: '13.0',
     },
-    sections: [], relationships: [],
+    sections: [],
+    relationships: [],
   })
 })
 

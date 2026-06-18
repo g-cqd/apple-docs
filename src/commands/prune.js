@@ -21,8 +21,8 @@
 import { rmSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { ValidationError } from '../lib/errors.js'
-import { loadScope, SCOPE_FILE } from '../lib/scope.js'
 import { keyPath } from '../lib/safe-path.js'
+import { loadScope, SCOPE_FILE } from '../lib/scope.js'
 import { withFileTempStore } from '../storage/pragmas.js'
 
 const BATCH = 900 // SQLite bound-parameter headroom (default cap 999)
@@ -33,20 +33,18 @@ export async function prune(opts, ctx) {
 
   const scope = loadScope(dataDir, { logger })
   if (!scope) {
-    throw new ValidationError(
-      `prune requires ${join(dataDir, SCOPE_FILE)} — it defines what to KEEP. See the README's "Scoping the corpus" section.`,
-    )
+    throw new ValidationError(`prune requires ${join(dataDir, SCOPE_FILE)} — it defines what to KEEP. See the README's "Scoping the corpus" section.`)
   }
 
   const roots = db.getRoots()
   validateScopeFrameworks(scope, roots)
 
-  const doomedRoots = roots.filter(root => isRootOutOfScope(root, scope))
-  const keptRoots = roots.filter(root => !isRootOutOfScope(root, scope))
+  const doomedRoots = roots.filter((root) => isRootOutOfScope(root, scope))
+  const keptRoots = roots.filter((root) => !isRootOutOfScope(root, scope))
 
   // Per-root page counts up front: the dry-run report and the real run
   // share the same accounting.
-  const plan = doomedRoots.map(root => ({
+  const plan = doomedRoots.map((root) => ({
     slug: root.slug,
     sourceType: root.source_type,
     pages: db.db.query('SELECT COUNT(*) AS c FROM pages WHERE root_id = ?').get(root.id).c,
@@ -73,7 +71,10 @@ export async function prune(opts, ctx) {
     return summary
   }
 
-  db.setActivity('prune', doomedRoots.map(r => r.slug))
+  db.setActivity(
+    'prune',
+    doomedRoots.map((r) => r.slug),
+  )
   try {
     for (const root of doomedRoots) {
       const removed = pruneRoot(db, dataDir, root, logger)
@@ -112,19 +113,15 @@ export async function prune(opts, ctx) {
   }
 
   logger.info(
-    `Pruned ${summary.rootsRemoved} roots, ${summary.pagesRemoved} pages, ${summary.documentsRemoved} documents, ${summary.filesRemoved} files`
-    + `${summary.fontsDropped ? '; fonts dropped' : ''}${summary.symbolsDropped ? '; symbols dropped' : ''}`,
+    `Pruned ${summary.rootsRemoved} roots, ${summary.pagesRemoved} pages, ${summary.documentsRemoved} documents, ${summary.filesRemoved} files` +
+      `${summary.fontsDropped ? '; fonts dropped' : ''}${summary.symbolsDropped ? '; symbols dropped' : ''}`,
   )
   return summary
 }
 
 function isRootOutOfScope(root, scope) {
   if (scope.sources && !scope.sources.includes(root.source_type)) return true
-  if (
-    root.source_type === 'apple-docc'
-    && scope.appleDoccFrameworks
-    && !scope.appleDoccFrameworks.includes(root.slug)
-  ) return true
+  if (root.source_type === 'apple-docc' && scope.appleDoccFrameworks && !scope.appleDoccFrameworks.includes(root.slug)) return true
   return false
 }
 
@@ -135,13 +132,13 @@ function isRootOutOfScope(root, scope) {
  */
 function validateScopeFrameworks(scope, roots) {
   if (!scope.appleDoccFrameworks) return
-  const known = new Set(roots.filter(r => r.source_type === 'apple-docc').map(r => r.slug))
-  const unknown = scope.appleDoccFrameworks.filter(slug => !known.has(slug))
+  const known = new Set(roots.filter((r) => r.source_type === 'apple-docc').map((r) => r.slug))
+  const unknown = scope.appleDoccFrameworks.filter((slug) => !known.has(slug))
   if (unknown.length > 0) {
     const sample = [...known].sort().slice(0, 15).join(', ')
     throw new ValidationError(
-      `scope.json: unknown apple-docc framework(s): ${unknown.join(', ')}. `
-      + `Known slugs include: ${sample}${known.size > 15 ? ', …' : ''} (apple-docs frameworks lists them all)`,
+      `scope.json: unknown apple-docc framework(s): ${unknown.join(', ')}. ` +
+        `Known slugs include: ${sample}${known.size > 15 ? ', …' : ''} (apple-docs frameworks lists them all)`,
     )
   }
 }
@@ -154,12 +151,14 @@ function pruneRoot(db, dataDir, root, logger) {
 
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH)
-    const paths = batch.map(r => r.path)
+    const paths = batch.map((r) => r.path)
     const marks = paths.map(() => '?').join(',')
 
     db.tx(() => {
-      const docIds = db.db.query(`SELECT id FROM documents WHERE key IN (${marks})`)
-        .all(...paths).map(r => r.id)
+      const docIds = db.db
+        .query(`SELECT id FROM documents WHERE key IN (${marks})`)
+        .all(...paths)
+        .map((r) => r.id)
       if (docIds.length > 0) {
         const docMarks = docIds.map(() => '?').join(',')
         if (db.hasTable('documents_body_fts')) {
@@ -172,17 +171,26 @@ function pruneRoot(db, dataDir, root, logger) {
         documents += docIds.length
       }
       db.db.run(`DELETE FROM document_relationships WHERE from_key IN (${marks})`, paths)
-      db.db.run(`DELETE FROM pages WHERE id IN (${batch.map(() => '?').join(',')})`, batch.map(r => r.id))
+      db.db.run(
+        `DELETE FROM pages WHERE id IN (${batch.map(() => '?').join(',')})`,
+        batch.map((r) => r.id),
+      )
     })
 
     // File deletion stays OUTSIDE the transaction: a crash here leaves
     // orphan files (harmless; rerun is idempotent), never a half-deleted DB.
     for (const path of paths) {
-      for (const [dir, ext] of [['markdown', '.md'], ['raw-json', '.json'], ['html', '.html']]) {
+      for (const [dir, ext] of [
+        ['markdown', '.md'],
+        ['raw-json', '.json'],
+        ['html', '.html'],
+      ]) {
         try {
           unlinkSync(keyPath(dataDir, dir, path, ext))
           files++
-        } catch { /* not materialized — fine */ }
+        } catch {
+          /* not materialized — fine */
+        }
       }
     }
   }

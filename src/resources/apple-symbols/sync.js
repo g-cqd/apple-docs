@@ -19,13 +19,13 @@ import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
 import { ensureDir } from '../../storage/files.js'
 import { normalizeStringArray } from '../apple-fonts/sfnt.js'
 import { readBundleVersion, readStringsMap } from '../apple-fonts/sync.js'
-import { symbolVariantMatrix } from './cache-key.js'
-import { symbolSnapshotNeedsReset } from './snapshot-meta.js'
-import { markUnrenderableSymbols } from './mark-unrenderable.js'
-import { stampSfSymbolCodepoints } from './codepoint-stamp.js'
-import { SYMBOL_RENDERER_VERSION } from './render.js'
 import { nativeRenderAvailable } from '../render-native.js'
+import { symbolVariantMatrix } from './cache-key.js'
+import { stampSfSymbolCodepoints } from './codepoint-stamp.js'
+import { markUnrenderableSymbols } from './mark-unrenderable.js'
 import { renderScopeBucket, renderScopeBucketNative, SYMBOL_DEFAULT_RENDER_SIZE } from './prerender-engine.js'
+import { SYMBOL_RENDERER_VERSION } from './render.js'
+import { symbolSnapshotNeedsReset } from './snapshot-meta.js'
 
 export { stampSfSymbolCodepoints }
 
@@ -57,11 +57,11 @@ export async function syncSfSymbols(opts, ctx) {
     return 0
   }
 
-  const order = await readPlist(join(bundleDir, 'symbol_order.plist')) ?? []
-  const categories = await readPlist(join(bundleDir, 'symbol_categories.plist')) ?? {}
-  const search = await readPlist(join(bundleDir, 'symbol_search.plist')) ?? {}
+  const order = (await readPlist(join(bundleDir, 'symbol_order.plist'))) ?? []
+  const categories = (await readPlist(join(bundleDir, 'symbol_categories.plist'))) ?? {}
+  const search = (await readPlist(join(bundleDir, 'symbol_search.plist'))) ?? {}
   const aliases = await readStringsMap(join(bundleDir, 'name_aliases.strings'))
-  const availability = await readPlist(join(bundleDir, 'name_availability.plist')) ?? {}
+  const availability = (await readPlist(join(bundleDir, 'name_availability.plist'))) ?? {}
   const version = await readBundleVersion(dirname(bundleDir))
 
   const names = new Set(Array.isArray(order) ? order : [])
@@ -106,7 +106,7 @@ export async function prerenderSfSymbols(opts, ctx) {
   const concurrency = Math.max(1, Math.min(opts.concurrency ?? 4, 16))
   const scopeFilter = opts.scope === 'public' || opts.scope === 'private' ? opts.scope : null
   const baseDir = join(dataDir, 'resources', 'symbols')
-  if (opts.resetCache || await symbolSnapshotNeedsReset(baseDir)) {
+  if (opts.resetCache || (await symbolSnapshotNeedsReset(baseDir))) {
     await rm(baseDir, { recursive: true, force: true }).catch(() => {})
   }
   ensureDir(baseDir)
@@ -115,9 +115,10 @@ export async function prerenderSfSymbols(opts, ctx) {
   // built before that filter landed can still carry `symbols` /
   // `year_to_release` rows. Letting them through here would burn
   // 27 variants × ~scopes worth of doomed worker calls for no payoff.
-  const symbols = ctx.db.listSfSymbolsCatalog()
-    .filter(symbol => !scopeFilter || symbol.scope === scopeFilter)
-    .filter(symbol => !CATALOG_META_NAMES.has(symbol.name))
+  const symbols = ctx.db
+    .listSfSymbolsCatalog()
+    .filter((symbol) => !scopeFilter || symbol.scope === scopeFilter)
+    .filter((symbol) => !CATALOG_META_NAMES.has(symbol.name))
   const result = { rendered: 0, skipped: 0, failed: 0, total: 0, symbols: symbols.length, failures: [] }
 
   // Cluster work by scope so each worker only handles one bundle path.
@@ -150,17 +151,24 @@ export async function prerenderSfSymbols(opts, ctx) {
     markUnrenderableSymbols({ ctx, scope, variants, result, logger })
   }
 
-  await Bun.write(join(baseDir, 'meta.json'), JSON.stringify({
-    rendererVersion: SYMBOL_RENDERER_VERSION,
-    pointSize: SYMBOL_DEFAULT_RENDER_SIZE,
-    variants: {
-      public: symbolVariantMatrix('public'),
-      private: symbolVariantMatrix('private'),
-    },
-    provenance: await getSymbolRenderProvenance(),
-    builtAt: new Date().toISOString(),
-    counts: result,
-  }, null, 2))
+  await Bun.write(
+    join(baseDir, 'meta.json'),
+    JSON.stringify(
+      {
+        rendererVersion: SYMBOL_RENDERER_VERSION,
+        pointSize: SYMBOL_DEFAULT_RENDER_SIZE,
+        variants: {
+          public: symbolVariantMatrix('public'),
+          private: symbolVariantMatrix('private'),
+        },
+        provenance: await getSymbolRenderProvenance(),
+        builtAt: new Date().toISOString(),
+        counts: result,
+      },
+      null,
+      2,
+    ),
+  )
   return result
 }
 
@@ -183,9 +191,8 @@ async function getSymbolSourceProvenance(scope) {
   const resourcesPath = SYMBOL_BUNDLES[scope]
   const contentsPath = dirname(resourcesPath)
   return {
-    renderer: scope === 'private'
-      ? 'Bundle.image(forResource:) from CoreGlyphsPrivate.bundle'
-      : 'NSImage(systemSymbolName:) from the system SF Symbols catalog',
+    renderer:
+      scope === 'private' ? 'Bundle.image(forResource:) from CoreGlyphsPrivate.bundle' : 'NSImage(systemSymbolName:) from the system SF Symbols catalog',
     font: null,
     bundle: scope === 'private' ? 'CoreGlyphsPrivate.bundle' : 'CoreGlyphs.bundle',
     resourcesPath,
@@ -199,10 +206,16 @@ async function readMacOSVersion() {
     const { stdout, exitCode } = await spawnWithDeadline(['/usr/bin/sw_vers'], { deadlineMs: 5_000 })
     if (exitCode !== 0) return null
     const text = new TextDecoder().decode(stdout)
-    const pairs = Object.fromEntries(text.trim().split('\n').map(line => {
-      const [key, ...rest] = line.split(':')
-      return [key.trim(), rest.join(':').trim()]
-    }).filter(([key]) => key))
+    const pairs = Object.fromEntries(
+      text
+        .trim()
+        .split('\n')
+        .map((line) => {
+          const [key, ...rest] = line.split(':')
+          return [key.trim(), rest.join(':').trim()]
+        })
+        .filter(([key]) => key),
+    )
     return {
       productName: pairs.ProductName ?? null,
       productVersion: pairs.ProductVersion ?? null,

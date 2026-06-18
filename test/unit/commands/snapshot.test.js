@@ -1,16 +1,16 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync, utimesSync } from 'node:fs'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { snapshotBuild } from '../../../src/commands/snapshot.js'
-import { createLogger } from '../../../src/lib/logger.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { indexEmbeddings } from '../../../src/commands/index-embeddings.js'
 // Snapshot archives are `.tar.zst`. Extract them exactly the way the real
 // consumer (`apple-docs setup`) does — Bun's native zstd → `tar -xf -` — so
 // the test passes on stock macOS too (Apple's bsdtar lacks zstd).
 import { extractTarZst } from '../../../src/commands/setup/helpers.js'
-import { indexEmbeddings } from '../../../src/commands/index-embeddings.js'
+import { snapshotBuild } from '../../../src/commands/snapshot.js'
+import { createLogger } from '../../../src/lib/logger.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { topicEmbedder } from '../../helpers/topic-embedder.js'
 
 let db
@@ -110,9 +110,7 @@ describe('snapshotBuild', () => {
     const emptyDb = new DocsDatabase(join(emptyDir, 'apple-docs.db'))
 
     try {
-      await expect(
-        snapshotBuild({ out: outDir }, { db: emptyDb, dataDir: emptyDir, logger })
-      ).rejects.toThrow('Corpus is empty')
+      await expect(snapshotBuild({ out: outDir }, { db: emptyDb, dataDir: emptyDir, logger })).rejects.toThrow('Corpus is empty')
     } finally {
       emptyDb.close()
       rmSync(emptyDir, { recursive: true, force: true })
@@ -128,7 +126,10 @@ describe('snapshotBuild', () => {
 
       const extractedDb = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
       try {
-        const tables = extractedDb.query("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
+        const tables = extractedDb
+          .query("SELECT name FROM sqlite_master WHERE type='table'")
+          .all()
+          .map((r) => r.name)
         // Body / trigram / sections all preserved (G.1: lite-tier drops gone).
         expect(tables).toContain('document_sections')
         expect(tables).toContain('documents')
@@ -180,9 +181,7 @@ describe('snapshotBuild', () => {
     // empty so validation finds 27 missing variants.
     mkdirSync(join(dataDir, 'resources', 'symbols', 'public'), { recursive: true })
 
-    await expect(
-      snapshotBuild({ out: outDir, tag: 'test-incomplete' }, { db, dataDir, logger }),
-    ).rejects.toThrow(/SnapshotIncompleteError|missing/i)
+    await expect(snapshotBuild({ out: outDir, tag: 'test-incomplete' }, { db, dataDir, logger })).rejects.toThrow(/SnapshotIncompleteError|missing/i)
   })
 
   test('--allow-incomplete-symbols overrides the matrix gate (F.3b)', async () => {
@@ -215,7 +214,7 @@ describe('snapshotBuild', () => {
       const a = await snapshotBuild({ out: outA, tag: 'snapshot-20260517' }, { db, dataDir, logger })
       // Force a wall-clock gap so any lingering Date.now() use would
       // diverge the second run.
-      await new Promise(resolve => setTimeout(resolve, 1100))
+      await new Promise((resolve) => setTimeout(resolve, 1100))
       const b = await snapshotBuild({ out: outB, tag: 'snapshot-20260517' }, { db, dataDir, logger })
 
       expect(a.archiveChecksum).toBe(b.archiveChecksum)
@@ -306,9 +305,7 @@ describe('snapshotBuild', () => {
     mkdirSync(join(modelBase, 'onnx'), { recursive: true })
     writeFileSync(join(modelBase, 'tokenizer.json'), '{}')
     writeFileSync(join(modelBase, 'onnx', 'model.onnx'), 'ONNX-BYTES')
-    await expect(snapshotBuild({ out: outDir, tag: 'test-noadmx' }, { db, dataDir, logger })).rejects.toThrow(
-      /matrix-v1\.admx missing/,
-    )
+    await expect(snapshotBuild({ out: outDir, tag: 'test-noadmx' }, { db, dataDir, logger })).rejects.toThrow(/matrix-v1\.admx missing/)
   })
 
   test('gated feature-extraction models keep their onnx (scope guard)', async () => {
@@ -382,5 +379,4 @@ describe('snapshotBuild', () => {
       rmSync(extractDir, { recursive: true, force: true })
     }
   })
-
 })

@@ -1,12 +1,6 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import {
-  getProfile,
-  setProfile,
-  getProfileConfig,
-  listProfiles,
-  PROFILE_NAMES,
-} from '../../../src/storage/profiles.js'
+import { getProfile, getProfileConfig, listProfiles, PROFILE_NAMES, setProfile } from '../../../src/storage/profiles.js'
 
 const REQUIRED_CONFIG_FIELDS = ['persistMarkdown', 'persistHtml', 'cacheOnRead', 'cacheMaxAge', 'description']
 
@@ -105,7 +99,7 @@ describe('getProfileConfig', () => {
     expect(second.cacheOnRead).toBe(true)
   })
 
-  test.each(PROFILE_NAMES)('profile "%s" config contains all required fields', name => {
+  test.each(PROFILE_NAMES)('profile "%s" config contains all required fields', (name) => {
     const config = getProfileConfig(name)
     for (const field of REQUIRED_CONFIG_FIELDS) {
       expect(config).toHaveProperty(field)
@@ -128,7 +122,7 @@ describe('listProfiles', () => {
   })
 
   test('profile names in the list match PROFILE_NAMES', () => {
-    const names = listProfiles().map(p => p.name)
+    const names = listProfiles().map((p) => p.name)
     expect(names).toEqual(PROFILE_NAMES)
   })
 })

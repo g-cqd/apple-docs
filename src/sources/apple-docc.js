@@ -12,9 +12,9 @@ export class AppleDoccAdapter extends SourceAdapter {
     if (!ctx.rootCatalogReady) {
       await discoverRoots(ctx.db, ctx.rateLimiter, ctx.logger)
     }
-    const roots = ctx.db.getRoots().filter(root => root.source_type === AppleDoccAdapter.type)
+    const roots = ctx.db.getRoots().filter((root) => root.source_type === AppleDoccAdapter.type)
     return this.validateDiscoveryResult({
-      keys: roots.map(root => root.slug),
+      keys: roots.map((root) => root.slug),
       roots,
     })
   }

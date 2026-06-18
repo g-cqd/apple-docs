@@ -1,10 +1,10 @@
-import { describe, test, expect } from 'bun:test'
+import { Database } from 'bun:sqlite'
+import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Database } from 'bun:sqlite'
-import { withFileTempStore } from '../../../src/storage/pragmas.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
+import { withFileTempStore } from '../../../src/storage/pragmas.js'
 
 function tempStoreOf(db) {
   const row = db.query('PRAGMA temp_store').get()
@@ -16,7 +16,9 @@ describe('withFileTempStore', () => {
     const db = new Database(':memory:')
     db.run('PRAGMA temp_store = MEMORY')
     let inside = null
-    withFileTempStore(db, () => { inside = tempStoreOf(db) })
+    withFileTempStore(db, () => {
+      inside = tempStoreOf(db)
+    })
     expect(inside).toBe(1) // FILE
     expect(tempStoreOf(db)).toBe(2) // MEMORY restored
     db.close()
@@ -25,7 +27,11 @@ describe('withFileTempStore', () => {
   test('restores MEMORY even when the callback throws', () => {
     const db = new Database(':memory:')
     db.run('PRAGMA temp_store = MEMORY')
-    expect(() => withFileTempStore(db, () => { throw new Error('boom') })).toThrow('boom')
+    expect(() =>
+      withFileTempStore(db, () => {
+        throw new Error('boom')
+      }),
+    ).toThrow('boom')
     expect(tempStoreOf(db)).toBe(2)
     db.close()
   })
@@ -38,7 +44,11 @@ describe('migration boot under contention', () => {
     try {
       // Sibling process: opens the raw DB, takes the write lock for ~1.5s,
       // then releases — simulating a concurrent first boot mid-migration.
-      const holder = Bun.spawn(['bun', '-e', `
+      const holder = Bun.spawn(
+        [
+          'bun',
+          '-e',
+          `
         const { Database } = require('bun:sqlite')
         const db = new Database(${JSON.stringify(dbPath)})
         db.run('CREATE TABLE IF NOT EXISTS warmup (x)')
@@ -48,7 +58,10 @@ describe('migration boot under contention', () => {
         db.run('COMMIT')
         db.close()
         console.log('RELEASED')
-      `], { stdout: 'pipe', stderr: 'pipe' })
+      `,
+        ],
+        { stdout: 'pipe', stderr: 'pipe' },
+      )
 
       // Wait until the lock is actually held.
       const reader = holder.stdout.getReader()

@@ -1,22 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import {
-  mkdtempSync,
-  mkdirSync,
-  rmSync,
-  writeFileSync,
-  existsSync,
-  statSync,
-  readFileSync,
-} from 'node:fs'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  createSevenZipArchive,
-  listFilesSorted,
-  resolveSevenZipBinary,
-  writeSha256Sidecar,
-  LZMA2_FLAGS,
-} from '../../../src/lib/archive-7z.js'
+import { createSevenZipArchive, LZMA2_FLAGS, listFilesSorted, resolveSevenZipBinary, writeSha256Sidecar } from '../../../src/lib/archive-7z.js'
 
 let workDir
 
@@ -74,13 +60,7 @@ describe('listFilesSorted', () => {
   test('returns POSIX-byte-ordered relative paths', () => {
     const root = stageFixture('fx-order')
     const files = listFilesSorted(root)
-    expect(files).toEqual([
-      'alpha.txt',
-      'beta.txt',
-      'gamma.bin',
-      'sub/delta.txt',
-      'sub/epsilon.txt',
-    ])
+    expect(files).toEqual(['alpha.txt', 'beta.txt', 'gamma.bin', 'sub/delta.txt', 'sub/epsilon.txt'])
   })
 })
 
@@ -111,7 +91,11 @@ describe('LZMA2_FLAGS', () => {
 // PATH (impossible on the dev macOS host; possible on a minimal CI image)
 // the describe block self-skips with a clear message.
 let hasSevenZip = true
-try { resolveSevenZipBinary() } catch { hasSevenZip = false }
+try {
+  resolveSevenZipBinary()
+} catch {
+  hasSevenZip = false
+}
 
 const describeIf = hasSevenZip ? describe : describe.skip
 
@@ -126,7 +110,7 @@ describeIf('createSevenZipArchive (integration)', () => {
     // simply running the build a second time after a delay is sufficient
     // because 7z records the mtime by default. -mtm=off is what we're
     // asserting against.)
-    await new Promise(r => setTimeout(r, 1100))
+    await new Promise((r) => setTimeout(r, 1100))
     await createSevenZipArchive({ sourceDir: src, outputPath: b })
     expect(sha256OfFile(a)).toBe(sha256OfFile(b))
   })
@@ -140,7 +124,8 @@ describeIf('createSevenZipArchive (integration)', () => {
     mkdirSync(restored)
     const binary = resolveSevenZipBinary()
     const proc = Bun.spawn([binary, 'x', '-y', `-o${restored}`, archive], {
-      stdout: 'pipe', stderr: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
     })
     await proc.exited
     expect(await proc.exited).toBe(0)
@@ -179,9 +164,7 @@ describeIf('createSevenZipArchive (integration)', () => {
   test('throws when source directory is empty', async () => {
     const src = join(workDir, 'empty')
     mkdirSync(src)
-    await expect(
-      createSevenZipArchive({ sourceDir: src, outputPath: join(workDir, 'e.7z') }),
-    ).rejects.toThrow(/no files/i)
+    await expect(createSevenZipArchive({ sourceDir: src, outputPath: join(workDir, 'e.7z') })).rejects.toThrow(/no files/i)
   })
 
   test('overwrites any existing output (no silent append)', async () => {

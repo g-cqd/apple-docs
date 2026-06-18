@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { Database } from 'bun:sqlite'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Database } from 'bun:sqlite'
-import { MIGRATIONS, SCHEMA_VERSION, runMigrations } from '../../../src/storage/migrations/index.js'
+import { MIGRATIONS, runMigrations, SCHEMA_VERSION } from '../../../src/storage/migrations/index.js'
 
 let dataDir
 let dbPath
@@ -61,7 +61,10 @@ describe('migrations', () => {
     const db = new Database(dbPath)
     runMigrations(db)
     const tables = new Set(
-      db.query("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name),
+      db
+        .query("SELECT name FROM sqlite_master WHERE type='table'")
+        .all()
+        .map((r) => r.name),
     )
     for (const expected of [
       'schema_meta',
@@ -109,7 +112,12 @@ describe('v21 — drop legacy pages FTS + redundant relationship indexes', () =>
   const v21 = MIGRATIONS.find((m) => m.version === 21).up
 
   function names(db, type) {
-    return new Set(db.query(`SELECT name FROM sqlite_master WHERE type='${type}'`).all().map((r) => r.name))
+    return new Set(
+      db
+        .query(`SELECT name FROM sqlite_master WHERE type='${type}'`)
+        .all()
+        .map((r) => r.name),
+    )
   }
 
   test('drops the dead pages FTS tables and their maintenance triggers', () => {

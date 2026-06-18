@@ -1,15 +1,15 @@
-import { afterAll, beforeAll, describe, expect, test, mock, spyOn } from 'bun:test'
-import { createMockLogger } from '../../helpers/mocks.js'
-import * as updateMod from '../../../src/commands/update.js'
+import { afterAll, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test'
 import * as consolidateMod from '../../../src/commands/consolidate.js'
+import { sync } from '../../../src/commands/sync.js'
+import * as updateMod from '../../../src/commands/update.js'
+import * as convertMod from '../../../src/pipeline/convert.js'
 import * as discoverMod from '../../../src/pipeline/discover.js'
 import * as downloadMod from '../../../src/pipeline/download.js'
-import * as convertMod from '../../../src/pipeline/convert.js'
-import * as guidelinesMod from '../../../src/pipeline/sync-guidelines.js'
 import * as indexBodyMod from '../../../src/pipeline/index-body.js'
+import * as guidelinesMod from '../../../src/pipeline/sync-guidelines.js'
 import * as appleAssetsMod from '../../../src/resources/apple-assets.js'
 import * as registryMod from '../../../src/sources/registry.js'
-import { sync } from '../../../src/commands/sync.js'
+import { createMockLogger } from '../../helpers/mocks.js'
 
 /**
  * Parallelism contract for src/commands/sync.js. We don't exercise the
@@ -28,7 +28,9 @@ import { sync } from '../../../src/commands/sync.js'
 /** Resolve when external code calls the returned trigger. */
 function deferred() {
   let resolve
-  const promise = new Promise(r => { resolve = r })
+  const promise = new Promise((r) => {
+    resolve = r
+  })
   return { promise, resolve }
 }
 
@@ -53,7 +55,9 @@ function makeDbStub() {
   return {
     setActivity() {},
     clearActivity() {},
-    addUpdateLog(entry) { updates.push(entry) },
+    addUpdateLog(entry) {
+      updates.push(entry)
+    },
     getRoots: () => [],
     getUnconvertedPages: () => [],
     getActivePathsIn: () => new Set(),
@@ -66,11 +70,21 @@ function makeFakeAdapter(type, syncMode = 'flat') {
   // Constructor surface: sync.js reads `adapter.constructor.type`,
   // `displayName`, `syncMode` — so we need a real constructor link.
   class FakeAdapter {
-    async discover() { return { keys: [], roots: [] } }
-    async fetch() { return { payload: {}, etag: null, lastModified: null } }
-    normalize() { return {} }
-    extractReferences() { return [] }
-    renderHints() { return {} }
+    async discover() {
+      return { keys: [], roots: [] }
+    }
+    async fetch() {
+      return { payload: {}, etag: null, lastModified: null }
+    }
+    normalize() {
+      return {}
+    }
+    extractReferences() {
+      return []
+    }
+    renderHints() {
+      return {}
+    }
     validateNormalizeResult() {}
   }
   Object.assign(FakeAdapter, {
@@ -171,10 +185,19 @@ describe('sync orchestrator parallelism', () => {
     // 'Starting ...' / 'Finished ...' log lines captured by the mock
     // logger.
     const adapterTypes = [
-      'apple-docc', 'hig', 'guidelines', 'swift-evolution', 'swift-book',
-      'swift-docc', 'swift-org', 'apple-archive', 'wwdc', 'sample-code', 'packages',
+      'apple-docc',
+      'hig',
+      'guidelines',
+      'swift-evolution',
+      'swift-book',
+      'swift-docc',
+      'swift-org',
+      'apple-archive',
+      'wwdc',
+      'sample-code',
+      'packages',
     ]
-    const adapters = adapterTypes.map(t => makeFakeAdapter(t, 'flat'))
+    const adapters = adapterTypes.map((t) => makeFakeAdapter(t, 'flat'))
 
     const ctx = {
       db: makeDbStub(),
@@ -218,15 +241,15 @@ describe('sync orchestrator parallelism', () => {
     // ---- Adapter parallelism: every adapter logged "Starting X (mode=flat, roots=0)"
     // and "Finished X in <n>ms (no roots)". Since flat with zero roots
     // returns immediately, both lines exist for every adapter type.
-    const adapterStarts = ctx.logger._calls.info.filter(args => /^Starting /.test(args[0]))
+    const adapterStarts = ctx.logger._calls.info.filter((args) => /^Starting /.test(args[0]))
     expect(adapterStarts.length).toBe(adapterTypes.length)
     for (const t of adapterTypes) {
-      expect(adapterStarts.some(args => args[0].startsWith(`Starting ${t} `))).toBe(true)
+      expect(adapterStarts.some((args) => args[0].startsWith(`Starting ${t} `))).toBe(true)
     }
 
     // ---- Dependency DAG between resource tasks.
-    const startsTs = (name) => log.find(e => e.event === `${name}:start`)?.ts ?? Number.NaN
-    const endsTs = (name) => log.find(e => e.event === `${name}:end`)?.ts ?? Number.NaN
+    const startsTs = (name) => log.find((e) => e.event === `${name}:start`)?.ts ?? Number.NaN
+    const endsTs = (name) => log.find((e) => e.event === `${name}:end`)?.ts ?? Number.NaN
 
     // Body-index started before resources' last task finished (overlap).
     const bodyIndexStart = startsTs('bodyIndex')

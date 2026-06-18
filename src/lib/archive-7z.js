@@ -1,4 +1,4 @@
-import { NotFoundError, ValidationError } from "./errors.js"
+import { NotFoundError, ValidationError } from './errors.js'
 /**
  * Deterministic native .7z archive builder.
  *
@@ -24,8 +24,8 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
-import { spawnWithDeadline } from './spawn-with-deadline.js'
 import { sha256File } from './hash.js'
+import { spawnWithDeadline } from './spawn-with-deadline.js'
 
 /** LZMA2 flag set.
  *
@@ -92,9 +92,9 @@ export function resolveSevenZipBinary(deps = {}) {
   throw new NotFoundError(
     '7zz',
     'Neither `7zz` nor `7z` is on PATH. Install p7zip to build / extract ' +
-    'snapshot archives:\n' +
-    '  macOS:  brew install sevenzip   # ships 7zz\n' +
-    '  Debian: apt install p7zip-full  # ships 7z',
+      'snapshot archives:\n' +
+      '  macOS:  brew install sevenzip   # ships 7zz\n' +
+      '  Debian: apt install p7zip-full  # ships 7z',
   )
 }
 
@@ -160,14 +160,7 @@ function walk(absRoot, relDir, out) {
  * @param {{spawn?: typeof Bun.spawn, which?: Function}} [args.deps]
  * @returns {Promise<{outputPath: string, fileCount: number, size: number, binary: string}>}
  */
-export async function createSevenZipArchive({
-  sourceDir,
-  outputPath,
-  name,
-  logger,
-  deadlineMs,
-  deps = {},
-}) {
+export async function createSevenZipArchive({ sourceDir, outputPath, name, logger, deadlineMs, deps = {} }) {
   const log = logger ?? { info() {}, warn() {}, error() {} }
   const binary = resolveSevenZipBinary(deps)
   const files = listFilesSorted(sourceDir)
@@ -204,14 +197,7 @@ export async function createSevenZipArchive({
   const listPath = join(listDir, 'files.lst')
   writeFileSync(listPath, `${files.join('\n')}\n`)
 
-  const args = [
-    binary,
-    'a',
-    '-t7z',
-    ...LZMA2_FLAGS,
-    absOutput,
-    `@${listPath}`,
-  ]
+  const args = [binary, 'a', '-t7z', ...LZMA2_FLAGS, absOutput, `@${listPath}`]
 
   try {
     const { stderr, exitCode } = await spawnWithDeadline(args, {

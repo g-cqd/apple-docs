@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import {
-  checkRawGitHub,
-  fetchGitHubTree,
-  fetchRawGitHub,
-  setResolvedGitHubToken,
-  getGitHubToken,
-} from '../../../src/lib/github.js'
+import { checkRawGitHub, fetchGitHubTree, fetchRawGitHub, getGitHubToken, setResolvedGitHubToken } from '../../../src/lib/github.js'
 
 const originalFetch = globalThis.fetch
 const originalEnv = { ...process.env }
@@ -37,8 +31,7 @@ describe('fetchGitHubTree', () => {
       { path: 'proposals', type: 'tree', sha: 'def', size: 0 },
     ]
 
-    globalThis.fetch = async () =>
-      Response.json({ tree: treeFixture, truncated: false })
+    globalThis.fetch = async () => Response.json({ tree: treeFixture, truncated: false })
 
     const tree = await fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)
 
@@ -48,9 +41,7 @@ describe('fetchGitHubTree', () => {
   test('throws on non-OK HTTP status', async () => {
     globalThis.fetch = async () => new Response('Not Found', { status: 404 })
 
-    await expect(
-      fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter),
-    ).rejects.toThrow('HTTP 404')
+    await expect(fetchGitHubTree('apple', 'swift-evolution', 'main', noopLimiter)).rejects.toThrow('HTTP 404')
   })
 })
 
@@ -71,11 +62,7 @@ describe('fetchRawGitHub', () => {
         },
       })
 
-    const result = await fetchRawGitHub(
-      'apple', 'swift-evolution', 'main',
-      'proposals/0001-example.md',
-      noopLimiter,
-    )
+    const result = await fetchRawGitHub('apple', 'swift-evolution', 'main', 'proposals/0001-example.md', noopLimiter)
 
     expect(result.text).toBe(bodyText)
     expect(result.etag).toBe('"etag-123"')
@@ -85,17 +72,13 @@ describe('fetchRawGitHub', () => {
   test('throws a 404 error for a missing file', async () => {
     globalThis.fetch = async () => new Response('Not Found', { status: 404 })
 
-    await expect(
-      fetchRawGitHub('apple', 'swift-evolution', 'main', 'missing.md', noopLimiter),
-    ).rejects.toThrow('Not found:')
+    await expect(fetchRawGitHub('apple', 'swift-evolution', 'main', 'missing.md', noopLimiter)).rejects.toThrow('Not found:')
   })
 
   test('returns null etag and lastModified when headers are absent', async () => {
     globalThis.fetch = async () => new Response('content', { status: 200 })
 
-    const result = await fetchRawGitHub(
-      'apple', 'swift-evolution', 'main', 'file.md', noopLimiter,
-    )
+    const result = await fetchRawGitHub('apple', 'swift-evolution', 'main', 'file.md', noopLimiter)
 
     expect(result.etag).toBeNull()
     expect(result.lastModified).toBeNull()
@@ -110,20 +93,15 @@ describe('checkRawGitHub', () => {
   test('returns unchanged for 304', async () => {
     globalThis.fetch = async () => new Response('', { status: 304 })
 
-    const result = await checkRawGitHub(
-      'apple', 'swift-evolution', 'main', 'file.md', '"old-etag"', noopLimiter,
-    )
+    const result = await checkRawGitHub('apple', 'swift-evolution', 'main', 'file.md', '"old-etag"', noopLimiter)
 
     expect(result.status).toBe('unchanged')
   })
 
   test('returns modified with new etag for 200', async () => {
-    globalThis.fetch = async () =>
-      new Response('', { status: 200, headers: { etag: '"new-etag"' } })
+    globalThis.fetch = async () => new Response('', { status: 200, headers: { etag: '"new-etag"' } })
 
-    const result = await checkRawGitHub(
-      'apple', 'swift-evolution', 'main', 'file.md', '"old-etag"', noopLimiter,
-    )
+    const result = await checkRawGitHub('apple', 'swift-evolution', 'main', 'file.md', '"old-etag"', noopLimiter)
 
     expect(result.status).toBe('modified')
     expect(result.etag).toBe('"new-etag"')
@@ -132,9 +110,7 @@ describe('checkRawGitHub', () => {
   test('returns deleted for 404', async () => {
     globalThis.fetch = async () => new Response('', { status: 404 })
 
-    const result = await checkRawGitHub(
-      'apple', 'swift-evolution', 'main', 'removed.md', null, noopLimiter,
-    )
+    const result = await checkRawGitHub('apple', 'swift-evolution', 'main', 'removed.md', null, noopLimiter)
 
     expect(result.status).toBe('deleted')
   })
@@ -142,19 +118,17 @@ describe('checkRawGitHub', () => {
   test('returns error for unexpected status codes', async () => {
     globalThis.fetch = async () => new Response('', { status: 500 })
 
-    const result = await checkRawGitHub(
-      'apple', 'swift-evolution', 'main', 'file.md', null, noopLimiter,
-    )
+    const result = await checkRawGitHub('apple', 'swift-evolution', 'main', 'file.md', null, noopLimiter)
 
     expect(result.status).toBe('error')
   })
 
   test('returns error when fetch throws', async () => {
-    globalThis.fetch = async () => { throw new Error('network failure') }
+    globalThis.fetch = async () => {
+      throw new Error('network failure')
+    }
 
-    const result = await checkRawGitHub(
-      'apple', 'swift-evolution', 'main', 'file.md', null, noopLimiter,
-    )
+    const result = await checkRawGitHub('apple', 'swift-evolution', 'main', 'file.md', null, noopLimiter)
 
     expect(result.status).toBe('error')
   })
@@ -331,9 +305,7 @@ describe('retry on 429', () => {
       })
     }
 
-    const result = await fetchRawGitHub(
-      'apple', 'swift-evolution', 'main', 'file.md', noopLimiter,
-    )
+    const result = await fetchRawGitHub('apple', 'swift-evolution', 'main', 'file.md', noopLimiter)
 
     expect(callCount).toBe(2)
     expect(result.text).toBe('file content')
@@ -345,7 +317,9 @@ describe('retry on 429', () => {
     let fetchCount = 0
 
     const countingLimiter = {
-      acquire: async () => { acquireCount += 1 },
+      acquire: async () => {
+        acquireCount += 1
+      },
     }
 
     globalThis.fetch = async () => {
@@ -394,9 +368,7 @@ describe('retry on 429', () => {
       })
     }
 
-    const result = await fetchRawGitHub(
-      'apple', 'swift-evolution', 'main', 'file.md', noopLimiter,
-    )
+    const result = await fetchRawGitHub('apple', 'swift-evolution', 'main', 'file.md', noopLimiter)
 
     expect(callCount).toBe(2)
     expect(result.text).toBe('file content')

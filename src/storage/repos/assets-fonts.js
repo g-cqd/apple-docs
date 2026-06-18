@@ -117,7 +117,7 @@ export function createAssetsFontsRepo(db) {
         list.push(normalizeAppleFontFile(file))
         byFamily.set(file.family_id, list)
       }
-      return families.map(family => ({
+      return families.map((family) => ({
         ...family,
         files: byFamily.get(family.id) ?? [],
       }))

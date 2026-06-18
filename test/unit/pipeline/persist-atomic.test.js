@@ -26,17 +26,19 @@ describe('persist atomic behavior', () => {
   test('does not write files or commit DB rows when rendering fails before persistence', async () => {
     const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
 
-    await expect(persistFetchedDocPage({
-      db,
-      dataDir: tmpDir,
-      rootId: root.id,
-      path: 'swiftui/view',
-      sourceType: 'apple-docc',
-      json: fixture,
-      renderPageFn() {
-        throw new Error('render failed')
-      },
-    })).rejects.toThrow('render failed')
+    await expect(
+      persistFetchedDocPage({
+        db,
+        dataDir: tmpDir,
+        rootId: root.id,
+        path: 'swiftui/view',
+        sourceType: 'apple-docc',
+        json: fixture,
+        renderPageFn() {
+          throw new Error('render failed')
+        },
+      }),
+    ).rejects.toThrow('render failed')
 
     expect(existsSync(join(tmpDir, 'raw-json', 'swiftui', 'view.json'))).toBe(false)
     expect(existsSync(join(tmpDir, 'markdown', 'swiftui', 'view.md'))).toBe(false)
@@ -51,14 +53,16 @@ describe('persist atomic behavior', () => {
       throw new Error('db failed')
     }
 
-    await expect(persistFetchedDocPage({
-      db,
-      dataDir: tmpDir,
-      rootId: root.id,
-      path: 'swiftui/view',
-      sourceType: 'apple-docc',
-      json: fixture,
-    })).rejects.toThrow('db failed')
+    await expect(
+      persistFetchedDocPage({
+        db,
+        dataDir: tmpDir,
+        rootId: root.id,
+        path: 'swiftui/view',
+        sourceType: 'apple-docc',
+        json: fixture,
+      }),
+    ).rejects.toThrow('db failed')
 
     db.upsertNormalizedDocument = originalUpsertNormalizedDocument
 
@@ -82,14 +86,16 @@ describe('persist atomic behavior', () => {
       throw new Error('db failed')
     }
 
-    await expect(persistFetchedDocPage({
-      db,
-      dataDir: tmpDir,
-      rootId: root.id,
-      path: 'swiftui/view',
-      sourceType: 'apple-docc',
-      json: fixture,
-    })).rejects.toThrow('db failed')
+    await expect(
+      persistFetchedDocPage({
+        db,
+        dataDir: tmpDir,
+        rootId: root.id,
+        path: 'swiftui/view',
+        sourceType: 'apple-docc',
+        json: fixture,
+      }),
+    ).rejects.toThrow('db failed')
 
     db.upsertNormalizedDocument = originalUpsertNormalizedDocument
 

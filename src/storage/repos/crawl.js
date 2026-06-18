@@ -15,18 +15,10 @@ export function createCrawlRepo(db) {
     ON CONFLICT(path) DO UPDATE SET status = $status, error = $error
   `)
   const existsStmt = db.query('SELECT 1 FROM crawl_state WHERE path = ?')
-  const getPendingStmt = db.query(
-    "SELECT path, depth FROM crawl_state WHERE status = 'pending' AND root_slug = ? LIMIT ?",
-  )
-  const resetFailedStmt = db.query(
-    "UPDATE crawl_state SET status = 'pending', error = NULL WHERE status = 'failed' AND root_slug = ?",
-  )
-  const countFailedStmt = db.query(
-    "SELECT COUNT(*) as count FROM crawl_state WHERE status = 'failed' AND root_slug = ?",
-  )
-  const countByStatusStmt = db.query(
-    'SELECT status, COUNT(*) as count FROM crawl_state WHERE root_slug = ? GROUP BY status',
-  )
+  const getPendingStmt = db.query("SELECT path, depth FROM crawl_state WHERE status = 'pending' AND root_slug = ? LIMIT ?")
+  const resetFailedStmt = db.query("UPDATE crawl_state SET status = 'pending', error = NULL WHERE status = 'failed' AND root_slug = ?")
+  const countFailedStmt = db.query("SELECT COUNT(*) as count FROM crawl_state WHERE status = 'failed' AND root_slug = ?")
+  const countByStatusStmt = db.query('SELECT status, COUNT(*) as count FROM crawl_state WHERE root_slug = ? GROUP BY status')
   const clearStmt = db.query('DELETE FROM crawl_state WHERE root_slug = ?')
 
   const progressByRootStmt = db.query(`

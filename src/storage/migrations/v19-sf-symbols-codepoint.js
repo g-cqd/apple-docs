@@ -17,7 +17,5 @@ export function up(db) {
     // Idempotent re-run.
     if (!/duplicate column name/i.test(e.message ?? '')) throw e
   }
-  db.run(
-    'CREATE INDEX IF NOT EXISTS idx_sf_symbols_codepoint ON sf_symbols(codepoint) WHERE codepoint IS NOT NULL',
-  )
+  db.run('CREATE INDEX IF NOT EXISTS idx_sf_symbols_codepoint ON sf_symbols(codepoint) WHERE codepoint IS NOT NULL')
 }

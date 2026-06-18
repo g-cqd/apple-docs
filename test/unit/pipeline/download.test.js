@@ -1,6 +1,6 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { createMockLogger, createMockRateLimiter } from '../../helpers/mocks.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { DocsDatabase } from '../../../src/storage/database.js'
+import { createMockLogger, createMockRateLimiter } from '../../helpers/mocks.js'
 
 describe('downloadMissing', () => {
   let db

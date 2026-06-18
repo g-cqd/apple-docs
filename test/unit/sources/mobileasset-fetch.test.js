@@ -1,13 +1,8 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import {
-  FALLBACK_ASSET,
-  fetchDocumentationAsset,
-  parseAssetManifest,
-  resolveDownload,
-} from '../../../src/sources/mobileasset-fetch.js'
+import { join } from 'node:path'
+import { FALLBACK_ASSET, fetchDocumentationAsset, parseAssetManifest, resolveDownload } from '../../../src/sources/mobileasset-fetch.js'
 
 // Mirrors the real manifest structure (plist <dict> per asset). sha1 of the
 // 26.2 entry is base64 "a/kcjiSuFnLI7ASIvyFIoDwroYc=" → hex below.
@@ -78,7 +73,9 @@ beforeAll(async () => {
   zipSha1 = new Bun.CryptoHasher('sha1').update(zipBytes).digest('hex')
 })
 
-afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }) })
+afterAll(() => {
+  if (dir) rmSync(dir, { recursive: true, force: true })
+})
 
 describe('parseAssetManifest', () => {
   test('extracts every variant, newest OS first, with hex sha1', () => {
@@ -116,7 +113,10 @@ describe.skipIf(!HAS_ZIP)('fetchDocumentationAsset', () => {
     const cacheDir = join(dir, 'cache-a')
     const r1 = await fetchDocumentationAsset({
       url: 'https://updates.cdn-apple.com/MA/x/docs/bb.zip',
-      sha1: zipSha1, size: zipBytes.byteLength, cacheDir, fetchImpl,
+      sha1: zipSha1,
+      size: zipBytes.byteLength,
+      cacheDir,
+      fetchImpl,
     })
     expect(r1.cached).toBe(false)
     expect(existsSync(r1.dbPath)).toBe(true)
@@ -125,24 +125,37 @@ describe.skipIf(!HAS_ZIP)('fetchDocumentationAsset', () => {
     let fetched = 0
     const r2 = await fetchDocumentationAsset({
       url: 'https://updates.cdn-apple.com/MA/x/docs/bb.zip',
-      sha1: zipSha1, size: zipBytes.byteLength, cacheDir,
-      fetchImpl: async () => { fetched++; return new Response(zipBytes) },
+      sha1: zipSha1,
+      size: zipBytes.byteLength,
+      cacheDir,
+      fetchImpl: async () => {
+        fetched++
+        return new Response(zipBytes)
+      },
     })
     expect(r2.cached).toBe(true)
     expect(fetched).toBe(0)
   })
 
   test('sha1 mismatch refuses the asset', async () => {
-    await expect(fetchDocumentationAsset({
-      url: 'https://updates.cdn-apple.com/MA/x/docs/cc.zip',
-      sha1: 'deadbeef'.repeat(5), cacheDir: join(dir, 'cache-b'), fetchImpl,
-    })).rejects.toThrow(/SHA-1 mismatch/)
+    await expect(
+      fetchDocumentationAsset({
+        url: 'https://updates.cdn-apple.com/MA/x/docs/cc.zip',
+        sha1: 'deadbeef'.repeat(5),
+        cacheDir: join(dir, 'cache-b'),
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/SHA-1 mismatch/)
   })
 
   test('size mismatch refuses the asset', async () => {
-    await expect(fetchDocumentationAsset({
-      url: 'https://updates.cdn-apple.com/MA/x/docs/dd.zip',
-      size: zipBytes.byteLength + 1, cacheDir: join(dir, 'cache-c'), fetchImpl,
-    })).rejects.toThrow(/size mismatch/)
+    await expect(
+      fetchDocumentationAsset({
+        url: 'https://updates.cdn-apple.com/MA/x/docs/dd.zip',
+        size: zipBytes.byteLength + 1,
+        cacheDir: join(dir, 'cache-c'),
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/size mismatch/)
   })
 })

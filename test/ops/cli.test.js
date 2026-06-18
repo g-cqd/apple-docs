@@ -1,9 +1,14 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { dispatch, printUsage } from '../../ops/cli.js'
 
 function captureStream() {
   const chunks = []
-  return { chunks, write(s) { chunks.push(s) } }
+  return {
+    chunks,
+    write(s) {
+      chunks.push(s)
+    },
+  }
 }
 
 function fakeLoader(impl, { exportShape = 'default' } = {}) {
@@ -77,7 +82,9 @@ describe('dispatch', () => {
   })
 
   test('exits 1 on thrown error without exitCode', async () => {
-    const loader = fakeLoader(async () => { throw new Error('boom') })
+    const loader = fakeLoader(async () => {
+      throw new Error('boom')
+    })
     const stderr = captureStream()
     const code = await dispatch(['deploy'], { loadCommand: loader, stderr, stdout: captureStream() })
     expect(code).toBe(1)

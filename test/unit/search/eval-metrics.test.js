@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { recallAtK, ndcgAtK, mrr, mean } from '../../../src/search/eval-metrics.js'
+import { describe, expect, test } from 'bun:test'
+import { mean, mrr, ndcgAtK, recallAtK } from '../../../src/search/eval-metrics.js'
 
 describe('recallAtK', () => {
   test('all relevant found within k → 1', () => {

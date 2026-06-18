@@ -5,17 +5,13 @@
  * has settled — no shared accumulator mutation under concurrent awaits.
  */
 
-import { crawlRoot } from '../../pipeline/discover.js'
-import { applyGuidelinesSnapshot } from '../../pipeline/sync-guidelines.js'
-import { persistNormalizedPage } from '../../pipeline/persist.js'
-import {
-  markFlatSourceFailed,
-  markFlatSourceProcessed,
-  seedFlatSourceProgress,
-} from '../../lib/flat-source-progress.js'
+import { markFlatSourceFailed, markFlatSourceProcessed, seedFlatSourceProgress } from '../../lib/flat-source-progress.js'
 import { pool } from '../../lib/pool.js'
-import { selectRootsForAdapter } from '../command-helpers.js'
 import { scopeRootsFor } from '../../lib/scope.js'
+import { crawlRoot } from '../../pipeline/discover.js'
+import { persistNormalizedPage } from '../../pipeline/persist.js'
+import { applyGuidelinesSnapshot } from '../../pipeline/sync-guidelines.js'
+import { selectRootsForAdapter } from '../command-helpers.js'
 
 /**
  * Run one adapter's crawl pipeline. Returns a result tuple the outer
@@ -63,7 +59,7 @@ export async function runAdapterStep(adapter, env) {
         return { type, mode, results, rootsCrawled: roots.length }
       }
       default: {
-        const rootSlugs = roots.map(root => root.slug)
+        const rootSlugs = roots.map((root) => root.slug)
         if (rootSlugs.length === 0) {
           logger.info(`Finished ${displayName} in ${Date.now() - stepStart}ms (no roots)`)
           return { type, mode }

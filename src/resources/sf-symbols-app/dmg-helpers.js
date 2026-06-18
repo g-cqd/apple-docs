@@ -53,7 +53,11 @@ function decodeXmlEntities(s) {
 }
 
 export function safeReaddir(dir) {
-  try { return readdirSync(dir) } catch { return [] }
+  try {
+    return readdirSync(dir)
+  } catch {
+    return []
+  }
 }
 
 /**
@@ -105,12 +109,19 @@ export function findAppInTree(root, maxDepth = 8) {
   while (queue.length > 0) {
     const [dir, depth] = queue.shift()
     let entries
-    try { entries = readdirSync(dir, { withFileTypes: true }) } catch { continue }
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
     for (const e of entries) {
       if (!e.isDirectory()) continue
       const full = join(dir, e.name)
       if (isSfSymbolsAppName(e.name)) return full
-      if (isAppBundleName(e.name)) { fallback ??= full; continue }
+      if (isAppBundleName(e.name)) {
+        fallback ??= full
+        continue
+      }
       if (depth < maxDepth) queue.push([full, depth + 1])
     }
   }

@@ -47,7 +47,7 @@ export function verifySnapshot(db, _logger) {
     checks.push({ name: 'fts_integrity', ok: false, error: e.message })
   }
 
-  const allOk = checks.every(c => c.ok)
+  const allOk = checks.every((c) => c.ok)
   return {
     installed: true,
     tier,
@@ -100,9 +100,7 @@ export function verifyCorpusIntegrity(db, dataDir, _logger) {
 
   // Check 4: Orphan sections (sections referencing non-existent documents)
   if (db.hasTable('document_sections')) {
-    const orphanSections = db.db.query(
-      'SELECT COUNT(*) as c FROM document_sections WHERE document_id NOT IN (SELECT id FROM documents)'
-    ).get().c
+    const orphanSections = db.db.query('SELECT COUNT(*) as c FROM document_sections WHERE document_id NOT IN (SELECT id FROM documents)').get().c
     checks.push({
       name: 'orphan_sections',
       ok: orphanSections === 0,
@@ -113,9 +111,9 @@ export function verifyCorpusIntegrity(db, dataDir, _logger) {
   }
 
   // Check 5: Orphan relationships (referencing non-existent documents)
-  const orphanRels = db.db.query(
-    'SELECT COUNT(*) as c FROM document_relationships WHERE from_key NOT IN (SELECT key FROM documents) OR to_key NOT IN (SELECT key FROM documents)'
-  ).get().c
+  const orphanRels = db.db
+    .query('SELECT COUNT(*) as c FROM document_relationships WHERE from_key NOT IN (SELECT key FROM documents) OR to_key NOT IN (SELECT key FROM documents)')
+    .get().c
   checks.push({
     name: 'orphan_relationships',
     ok: orphanRels === 0,
@@ -145,7 +143,7 @@ export function verifyCorpusIntegrity(db, dataDir, _logger) {
     })
   }
 
-  const allOk = checks.every(c => c.ok)
+  const allOk = checks.every((c) => c.ok)
   return { checks, allOk }
 }
 

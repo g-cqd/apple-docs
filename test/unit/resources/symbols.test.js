@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
 import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import {
   _test as appleAssetsTest,
   getPrerenderedSymbolPath,
@@ -12,6 +11,7 @@ import {
   searchSfSymbols,
   syncSfSymbols,
 } from '../../../src/resources/apple-assets.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let tmp
@@ -42,23 +42,32 @@ describe('SF Symbols', () => {
     const contentsDir = join(tmp, 'CoreGlyphs.bundle', 'Contents')
     const resourcesDir = join(contentsDir, 'Resources')
     await mkdir(resourcesDir, { recursive: true })
-    await Bun.write(join(contentsDir, 'Info.plist'), plistDict({
-      CFBundleVersion: '1',
-    }))
-    await Bun.write(join(resourcesDir, 'symbol_order.plist'), plistArray([
-      'pencil.and.sparkles',
-      'text.below.rectangle',
-    ]))
-    await Bun.write(join(resourcesDir, 'symbol_search.plist'), plistDict({
-      'pencil.and.sparkles': ['write', 'sparkles'],
-      'text.below.rectangle': ['text', 'layout'],
-    }))
-    await Bun.write(join(resourcesDir, 'symbol_categories.plist'), plistDict({
-      'pencil.and.sparkles': ['editing'],
-    }))
-    await Bun.write(join(resourcesDir, 'name_availability.plist'), plistDict({
-      'pencil.and.sparkles': { macOS: '15.0' },
-    }))
+    await Bun.write(
+      join(contentsDir, 'Info.plist'),
+      plistDict({
+        CFBundleVersion: '1',
+      }),
+    )
+    await Bun.write(join(resourcesDir, 'symbol_order.plist'), plistArray(['pencil.and.sparkles', 'text.below.rectangle']))
+    await Bun.write(
+      join(resourcesDir, 'symbol_search.plist'),
+      plistDict({
+        'pencil.and.sparkles': ['write', 'sparkles'],
+        'text.below.rectangle': ['text', 'layout'],
+      }),
+    )
+    await Bun.write(
+      join(resourcesDir, 'symbol_categories.plist'),
+      plistDict({
+        'pencil.and.sparkles': ['editing'],
+      }),
+    )
+    await Bun.write(
+      join(resourcesDir, 'name_availability.plist'),
+      plistDict({
+        'pencil.and.sparkles': { macOS: '15.0' },
+      }),
+    )
 
     const count = await syncSfSymbols({ scope: 'private', bundleDir: resourcesDir }, ctx)
     expect(count).toBe(2)
@@ -69,17 +78,20 @@ describe('SF Symbols', () => {
     expect(result.results[0].categories).toEqual(['editing'])
     expect(result.results[0].availability.macOS).toBe('15.0')
 
-    await Bun.write(join(resourcesDir, 'symbol_search.plist'), plistDict({
-      'pencil.and.sparkles': ['updated'],
-      'text.below.rectangle': ['text', 'layout'],
-    }))
+    await Bun.write(
+      join(resourcesDir, 'symbol_search.plist'),
+      plistDict({
+        'pencil.and.sparkles': ['updated'],
+        'text.below.rectangle': ['text', 'layout'],
+      }),
+    )
     await syncSfSymbols({ scope: 'private', bundleDir: resourcesDir }, ctx)
     const refreshed = searchSfSymbols('updated', { scope: 'private' }, ctx)
-    expect(refreshed.results.map(symbol => symbol.name)).toEqual(['pencil.and.sparkles'])
+    expect(refreshed.results.map((symbol) => symbol.name)).toEqual(['pencil.and.sparkles'])
 
     const catalog = db.listSfSymbolsCatalog()
     expect(catalog).toHaveLength(2)
-    expect(catalog.find(symbol => symbol.name === 'pencil.and.sparkles')?.categories).toEqual(['editing'])
+    expect(catalog.find((symbol) => symbol.name === 'pencil.and.sparkles')?.categories).toEqual(['editing'])
   })
 
   test('filters catalog meta-names that are not real symbols', async () => {
@@ -92,44 +104,54 @@ describe('SF Symbols', () => {
     const resourcesDir = join(contentsDir, 'Resources')
     await mkdir(resourcesDir, { recursive: true })
     await Bun.write(join(contentsDir, 'Info.plist'), plistDict({ CFBundleVersion: '1' }))
-    await Bun.write(join(resourcesDir, 'symbol_order.plist'), plistArray([
-      'symbols',
-      'year_to_release',
-      'pencil',
-    ]))
-    await Bun.write(join(resourcesDir, 'symbol_search.plist'), plistDict({
-      symbols: ['root'],
-      year_to_release: ['version'],
-      pencil: ['write'],
-    }))
+    await Bun.write(join(resourcesDir, 'symbol_order.plist'), plistArray(['symbols', 'year_to_release', 'pencil']))
+    await Bun.write(
+      join(resourcesDir, 'symbol_search.plist'),
+      plistDict({
+        symbols: ['root'],
+        year_to_release: ['version'],
+        pencil: ['write'],
+      }),
+    )
 
     const count = await syncSfSymbols({ scope: 'public', bundleDir: resourcesDir }, ctx)
     expect(count).toBe(1)
-    const names = db.listSfSymbolsCatalog().filter(s => s.scope === 'public').map(s => s.name)
+    const names = db
+      .listSfSymbolsCatalog()
+      .filter((s) => s.scope === 'public')
+      .map((s) => s.name)
     expect(names).toEqual(['pencil'])
     expect(names).not.toContain('symbols')
     expect(names).not.toContain('year_to_release')
   })
 
   test('maps snapshot variant paths for both scopes including weight/scale subdirs', () => {
-    expect(getPrerenderedSymbolPath(ctx, 'public', 'pencil.and.sparkles', {
-      weight: 'regular',
-      scale: 'medium',
-    })).toBe(join(tmp, 'resources', 'symbols', 'public', 'pencil.and.sparkles.svg'))
-    expect(getPrerenderedSymbolPath(ctx, 'public', 'pencil.and.sparkles', {
-      weight: 'bold',
-      scale: 'large',
-    })).toBe(join(tmp, 'resources', 'symbols', 'public', 'bold-large', 'pencil.and.sparkles.svg'))
+    expect(
+      getPrerenderedSymbolPath(ctx, 'public', 'pencil.and.sparkles', {
+        weight: 'regular',
+        scale: 'medium',
+      }),
+    ).toBe(join(tmp, 'resources', 'symbols', 'public', 'pencil.and.sparkles.svg'))
+    expect(
+      getPrerenderedSymbolPath(ctx, 'public', 'pencil.and.sparkles', {
+        weight: 'bold',
+        scale: 'large',
+      }),
+    ).toBe(join(tmp, 'resources', 'symbols', 'public', 'bold-large', 'pencil.and.sparkles.svg'))
     // Private now mirrors public: default variant at the scope root, non-default
     // variants under `<weight>-<scale>/`.
-    expect(getPrerenderedSymbolPath(ctx, 'private', 'pencil.and.sparkles', {
-      weight: 'regular',
-      scale: 'medium',
-    })).toBe(join(tmp, 'resources', 'symbols', 'private', 'pencil.and.sparkles.svg'))
-    expect(getPrerenderedSymbolPath(ctx, 'private', 'pencil.and.sparkles', {
-      weight: 'bold',
-      scale: 'large',
-    })).toBe(join(tmp, 'resources', 'symbols', 'private', 'bold-large', 'pencil.and.sparkles.svg'))
+    expect(
+      getPrerenderedSymbolPath(ctx, 'private', 'pencil.and.sparkles', {
+        weight: 'regular',
+        scale: 'medium',
+      }),
+    ).toBe(join(tmp, 'resources', 'symbols', 'private', 'pencil.and.sparkles.svg'))
+    expect(
+      getPrerenderedSymbolPath(ctx, 'private', 'pencil.and.sparkles', {
+        weight: 'bold',
+        scale: 'large',
+      }),
+    ).toBe(join(tmp, 'resources', 'symbols', 'private', 'bold-large', 'pencil.and.sparkles.svg'))
 
     expect(appleAssetsTest.symbolVariantMatrix('public')).toHaveLength(27)
     expect(appleAssetsTest.symbolVariantMatrix('private')).toHaveLength(27)
@@ -142,22 +164,28 @@ describe('SF Symbols', () => {
 
     expect(await appleAssetsTest.symbolSnapshotNeedsReset(baseDir)).toBe(true)
 
-    await Bun.write(join(baseDir, 'meta.json'), JSON.stringify({
-      rendererVersion: appleAssetsTest.symbolRendererVersion,
-      variants: {
-        public: appleAssetsTest.symbolVariantMatrix('public'),
-        private: appleAssetsTest.symbolVariantMatrix('private'),
-      },
-    }))
+    await Bun.write(
+      join(baseDir, 'meta.json'),
+      JSON.stringify({
+        rendererVersion: appleAssetsTest.symbolRendererVersion,
+        variants: {
+          public: appleAssetsTest.symbolVariantMatrix('public'),
+          private: appleAssetsTest.symbolVariantMatrix('private'),
+        },
+      }),
+    )
     expect(await appleAssetsTest.symbolSnapshotNeedsReset(baseDir)).toBe(false)
 
-    await Bun.write(join(baseDir, 'meta.json'), JSON.stringify({
-      rendererVersion: appleAssetsTest.symbolRendererVersion,
-      variants: {
-        public: appleAssetsTest.symbolVariantMatrix('public').slice(0, -1),
-        private: appleAssetsTest.symbolVariantMatrix('private'),
-      },
-    }))
+    await Bun.write(
+      join(baseDir, 'meta.json'),
+      JSON.stringify({
+        rendererVersion: appleAssetsTest.symbolRendererVersion,
+        variants: {
+          public: appleAssetsTest.symbolVariantMatrix('public').slice(0, -1),
+          private: appleAssetsTest.symbolVariantMatrix('private'),
+        },
+      }),
+    )
     expect(await appleAssetsTest.symbolSnapshotNeedsReset(baseDir)).toBe(true)
   })
 
@@ -198,22 +226,28 @@ describe('SF Symbols', () => {
       scale: 'large',
     })
     await mkdir(dirname(snapshotPath), { recursive: true })
-    await Bun.write(snapshotPath, `<?xml version="1.0" encoding="UTF-8"?>
+    await Bun.write(
+      snapshotPath,
+      `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 10 20">
   <defs><mask id="cut"><path d="M0 0h1v1z" fill="#000000"/></mask></defs>
   <path d="M1 1h8v18z" fill="#000000" mask="url(#cut)"/>
-</svg>`)
+</svg>`,
+    )
 
-    const render = await renderSfSymbol({
-      scope: 'public',
-      name: 'pencil.and.sparkles',
-      format: 'svg',
-      size: 64,
-      color: '#ff0000',
-      background: '#00ff00',
-      weight: 'bold',
-      scale: 'large',
-    }, ctx)
+    const render = await renderSfSymbol(
+      {
+        scope: 'public',
+        name: 'pencil.and.sparkles',
+        format: 'svg',
+        size: 64,
+        color: '#ff0000',
+        background: '#00ff00',
+        weight: 'bold',
+        scale: 'large',
+      },
+      ctx,
+    )
     const output = await Bun.file(render.file_path).text()
 
     expect(render.mode).toBe('snapshot')
@@ -238,9 +272,7 @@ describe('SF Symbols', () => {
     const prev = process.env.APPLE_DOCS_SYMBOLS_OFFLINE
     process.env.APPLE_DOCS_SYMBOLS_OFFLINE = '1'
     try {
-      await expect(
-        renderSfSymbol({ scope: 'public', name: 'orphan.symbol', format: 'svg' }, ctx),
-      ).rejects.toThrow(/offline mode|pre-render missing/i)
+      await expect(renderSfSymbol({ scope: 'public', name: 'orphan.symbol', format: 'svg' }, ctx)).rejects.toThrow(/offline mode|pre-render missing/i)
     } finally {
       if (prev === undefined) delete process.env.APPLE_DOCS_SYMBOLS_OFFLINE
       else process.env.APPLE_DOCS_SYMBOLS_OFFLINE = prev
@@ -253,7 +285,7 @@ function plistArray(values) {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <array>
-${values.map(value => `  <string>${escapeXml(value)}</string>`).join('\n')}
+${values.map((value) => `  <string>${escapeXml(value)}</string>`).join('\n')}
 </array>
 </plist>
 `
@@ -274,21 +306,18 @@ ${entries.join('\n')}
 function plistValue(value, depth) {
   const pad = '  '.repeat(depth)
   if (Array.isArray(value)) {
-    return `${pad}<array>\n${value.map(item => plistValue(item, depth + 1)).join('\n')}\n${pad}</array>`
+    return `${pad}<array>\n${value.map((item) => plistValue(item, depth + 1)).join('\n')}\n${pad}</array>`
   }
   if (value && typeof value === 'object') {
-    return `${pad}<dict>\n${Object.entries(value).map(([k, v]) => `${pad}  <key>${escapeXml(k)}</key>\n${plistValue(v, depth + 1)}`).join('\n')}\n${pad}</dict>`
+    return `${pad}<dict>\n${Object.entries(value)
+      .map(([k, v]) => `${pad}  <key>${escapeXml(k)}</key>\n${plistValue(v, depth + 1)}`)
+      .join('\n')}\n${pad}</dict>`
   }
   return `${pad}<string>${escapeXml(value)}</string>`
 }
 
 function escapeXml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;')
+  return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;')
 }
 
 describe('render_unsupported gate (v27)', () => {
@@ -317,12 +346,10 @@ describe('render_unsupported gate (v27)', () => {
     db.upsertSfSymbol({ name: 'f1', scope: 'private', categories: [], keywords: [], orderIndex: 0 })
     db.assetsSymbols.markRenderUnsupported('private', 'f1')
 
-    const flagged = db.listSfSymbolsCatalog().find(s => s.name === 'f1')
+    const flagged = db.listSfSymbolsCatalog().find((s) => s.name === 'f1')
     expect(flagged.renderUnsupported).toBe(true)
 
-    await expect(
-      renderSfSymbol({ name: 'f1', scope: 'private', format: 'svg' }, ctx),
-    ).rejects.toThrow(/newer macOS|setup --beta/)
+    await expect(renderSfSymbol({ name: 'f1', scope: 'private', format: 'svg' }, ctx)).rejects.toThrow(/newer macOS|setup --beta/)
   })
 })
 
@@ -331,16 +358,21 @@ describe('markUnrenderableSymbols', () => {
     const { markUnrenderableSymbols } = await import('../../../src/resources/apple-symbols/mark-unrenderable.js')
     db.upsertSfSymbol({ name: 'f1', scope: 'private', categories: [], keywords: [], orderIndex: 0 })
     db.upsertSfSymbol({ name: 'partial', scope: 'private', categories: [], keywords: [], orderIndex: 1 })
-    const variants = [{ weight: 'regular', scale: 'small' }, { weight: 'regular', scale: 'medium' }]
-    const result = { failures: [
-      { scope: 'private', name: 'f1', weight: 'regular', scale: 'small', error: 'x' },
-      { scope: 'private', name: 'f1', weight: 'regular', scale: 'medium', error: 'x' },
-      { scope: 'private', name: 'partial', weight: 'regular', scale: 'small', error: 'x' },
-      { scope: 'public', name: 'f1', weight: 'regular', scale: 'small', error: 'wrong scope' },
-    ] }
+    const variants = [
+      { weight: 'regular', scale: 'small' },
+      { weight: 'regular', scale: 'medium' },
+    ]
+    const result = {
+      failures: [
+        { scope: 'private', name: 'f1', weight: 'regular', scale: 'small', error: 'x' },
+        { scope: 'private', name: 'f1', weight: 'regular', scale: 'medium', error: 'x' },
+        { scope: 'private', name: 'partial', weight: 'regular', scale: 'small', error: 'x' },
+        { scope: 'public', name: 'f1', weight: 'regular', scale: 'small', error: 'wrong scope' },
+      ],
+    }
     markUnrenderableSymbols({ ctx, scope: 'private', variants, result, logger: ctx.logger })
     const catalog = db.listSfSymbolsCatalog()
-    expect(catalog.find(s => s.name === 'f1').renderUnsupported).toBe(true)
-    expect(catalog.find(s => s.name === 'partial').renderUnsupported).toBe(false)
+    expect(catalog.find((s) => s.name === 'f1').renderUnsupported).toBe(true)
+    expect(catalog.find((s) => s.name === 'partial').renderUnsupported).toBe(false)
   })
 })

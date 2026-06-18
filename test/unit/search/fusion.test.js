@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { weightedRRF, normalizeScores, hybridFusion, mmrSelect } from '../../../src/search/fusion.js'
+import { describe, expect, test } from 'bun:test'
+import { hybridFusion, mmrSelect, normalizeScores, weightedRRF } from '../../../src/search/fusion.js'
 
 describe('weightedRRF', () => {
   test('lexical rank-0 outranks semantic rank-0 (weights favor lexical)', () => {
@@ -30,14 +30,25 @@ describe('weightedRRF', () => {
 
 describe('normalizeScores', () => {
   test('min-max maps to [0,1]', () => {
-    const n = normalizeScores(new Map([['a', 10], ['b', 20], ['c', 30]]))
+    const n = normalizeScores(
+      new Map([
+        ['a', 10],
+        ['b', 20],
+        ['c', 30],
+      ]),
+    )
     expect(n.get('a')).toBeCloseTo(0)
     expect(n.get('b')).toBeCloseTo(0.5)
     expect(n.get('c')).toBeCloseTo(1)
   })
 
   test('all-equal (degenerate range) → all 0, no false signal', () => {
-    const n = normalizeScores(new Map([['a', 5], ['b', 5]]))
+    const n = normalizeScores(
+      new Map([
+        ['a', 5],
+        ['b', 5],
+      ]),
+    )
     expect(n.get('a')).toBe(0)
     expect(n.get('b')).toBe(0)
   })
@@ -57,20 +68,57 @@ describe('hybridFusion', () => {
   })
 
   test('exact lexical match (normScore 1.0) outranks a top semantic-only hit', () => {
-    const f = hybridFusion([
-      { ranked: ['exact', 'weakLex'], weight: 1.0, scores: new Map([['exact', 300], ['weakLex', 10]]) },
-      { ranked: ['semTop', 'exact'], weight: 0.6, scores: new Map([['semTop', 0.99], ['exact', 0.2]]) },
-    ], { beta: 0.5 })
+    const f = hybridFusion(
+      [
+        {
+          ranked: ['exact', 'weakLex'],
+          weight: 1.0,
+          scores: new Map([
+            ['exact', 300],
+            ['weakLex', 10],
+          ]),
+        },
+        {
+          ranked: ['semTop', 'exact'],
+          weight: 0.6,
+          scores: new Map([
+            ['semTop', 0.99],
+            ['exact', 0.2],
+          ]),
+        },
+      ],
+      { beta: 0.5 },
+    )
     expect(f.get('exact')).toBeGreaterThan(f.get('semTop'))
   })
 
   test('score magnitude lifts a strong semantic hit above a weak one at the same rank', () => {
-    const strong = hybridFusion([
-      { ranked: ['s'], weight: 0.6, scores: new Map([['s', 1], ['other', 0]]) },
-    ], { beta: 1 }).get('s')
-    const weak = hybridFusion([
-      { ranked: ['s'], weight: 0.6, scores: new Map([['s', 0], ['other', 1]]) },
-    ], { beta: 1 }).get('s')
+    const strong = hybridFusion(
+      [
+        {
+          ranked: ['s'],
+          weight: 0.6,
+          scores: new Map([
+            ['s', 1],
+            ['other', 0],
+          ]),
+        },
+      ],
+      { beta: 1 },
+    ).get('s')
+    const weak = hybridFusion(
+      [
+        {
+          ranked: ['s'],
+          weight: 0.6,
+          scores: new Map([
+            ['s', 0],
+            ['other', 1],
+          ]),
+        },
+      ],
+      { beta: 1 },
+    ).get('s')
     expect(strong).toBeGreaterThan(weak)
   })
 })
@@ -98,11 +146,14 @@ describe('mmrSelect', () => {
       { key: 'dupOfTop', vec: 'A' },
     ]
     const out = mmrSelect(ranked, vecOf, sim, { lambda: 0.7 })
-    expect(out.map(x => x.key)).toEqual(['top', 'noVec', 'dupOfTop'])
+    expect(out.map((x) => x.key)).toEqual(['top', 'noVec', 'dupOfTop'])
   })
 
   test('≤2 items returned as-is', () => {
-    const ranked = [{ key: 'a', vec: 'A' }, { key: 'b', vec: 'A' }]
-    expect(mmrSelect(ranked, vecOf, sim).map(x => x.key)).toEqual(['a', 'b'])
+    const ranked = [
+      { key: 'a', vec: 'A' },
+      { key: 'b', vec: 'A' },
+    ]
+    expect(mmrSelect(ranked, vecOf, sim).map((x) => x.key)).toEqual(['a', 'b'])
   })
 })

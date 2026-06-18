@@ -85,7 +85,9 @@ export function createRateLimiter(opts = {}) {
       return refillAndTake(resolveIp(request, server))
     },
     /** Test-only / observability: current bucket count. */
-    _size() { return buckets.size },
+    _size() {
+      return buckets.size
+    },
   }
 }
 

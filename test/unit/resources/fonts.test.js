@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
+import { NotFoundError } from '../../../src/lib/errors.js'
 import { ensureFontsExtracted, inspectSfntFile, listAppleFonts, parseFontFilename } from '../../../src/resources/apple-assets.js'
 import { renderFontText } from '../../../src/resources/apple-fonts/render.js'
-import { NotFoundError } from '../../../src/lib/errors.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let tmp
@@ -28,7 +28,6 @@ describe('Apple fonts', () => {
     // crashed with "NotFoundError is not defined" instead.
     await expect(renderFontText({ fontId: 'nope', text: 'Hi' }, ctx)).rejects.toBeInstanceOf(NotFoundError)
   })
-
 
   test('upserts and lists Apple font families/files', () => {
     db.upsertAppleFontFamily({
@@ -63,22 +62,34 @@ describe('Apple fonts', () => {
 
   test('parseFontFilename extracts variant, weight, italic from Apple naming conventions', () => {
     expect(parseFontFilename('SF-Pro-Display-BoldItalic.otf')).toEqual({
-      variant: 'Display', weight: 'Bold', italic: true,
+      variant: 'Display',
+      weight: 'Bold',
+      italic: true,
     })
     expect(parseFontFilename('SF-Pro-Italic.ttf')).toEqual({
-      variant: null, weight: null, italic: true,
+      variant: null,
+      weight: null,
+      italic: true,
     })
     expect(parseFontFilename('NewYorkSmall-RegularItalic.otf')).toEqual({
-      variant: 'Small', weight: 'Regular', italic: true,
+      variant: 'Small',
+      weight: 'Regular',
+      italic: true,
     })
     expect(parseFontFilename('SF-Mono-Bold.otf')).toEqual({
-      variant: null, weight: 'Bold', italic: false,
+      variant: null,
+      weight: 'Bold',
+      italic: false,
     })
     expect(parseFontFilename('SF-Pro.ttf')).toEqual({
-      variant: null, weight: null, italic: false,
+      variant: null,
+      weight: null,
+      italic: false,
     })
     expect(parseFontFilename('SF-Pro-Rounded-Black.otf')).toEqual({
-      variant: 'Rounded', weight: 'Black', italic: false,
+      variant: 'Rounded',
+      weight: 'Black',
+      italic: false,
     })
   })
 
@@ -107,7 +118,13 @@ describe('Apple fonts', () => {
   // a family with neither extracted fonts nor a cached DMG to re-extract from.
   test('ensureFontsExtracted skips a family that already has extracted fonts', async () => {
     const warnings = []
-    const logger = { info() {}, warn(msg) { warnings.push(msg) }, error() {} }
+    const logger = {
+      info() {},
+      warn(msg) {
+        warnings.push(msg)
+      },
+      error() {},
+    }
     const familyDir = join(tmp, 'resources', 'fonts', 'extracted', 'sf-pro')
     await mkdir(familyDir, { recursive: true })
     await writeFile(join(familyDir, 'SF-Pro-Display-Bold.otf'), 'stub')
@@ -118,21 +135,27 @@ describe('Apple fonts', () => {
     expect(result.extracted).toBe(0)
     expect(result.families).toEqual([])
     // SF Pro was skipped silently (had a font file) — no spawn, no warning.
-    expect(warnings.some(w => w.includes('SF Pro'))).toBe(false)
+    expect(warnings.some((w) => w.includes('SF Pro'))).toBe(false)
     // Families with neither fonts nor a cached DMG warn and are skipped.
-    expect(warnings.some(w => w.includes('no cached DMG'))).toBe(true)
+    expect(warnings.some((w) => w.includes('no cached DMG'))).toBe(true)
   })
 
   test('ensureFontsExtracted skips (does not throw) when no fonts and no cached DMG exist', async () => {
     const warnings = []
-    const logger = { info() {}, warn(msg) { warnings.push(msg) }, error() {} }
+    const logger = {
+      info() {},
+      warn(msg) {
+        warnings.push(msg)
+      },
+      error() {},
+    }
 
     const result = await ensureFontsExtracted(tmp, logger)
 
     expect(result.extracted).toBe(0)
     expect(result.families).toEqual([])
     expect(warnings.length).toBeGreaterThan(0)
-    expect(warnings.every(w => w.includes('no cached DMG'))).toBe(true)
+    expect(warnings.every((w) => w.includes('no cached DMG'))).toBe(true)
   })
 })
 
@@ -168,14 +191,14 @@ function buildFvarTable(axes) {
   const totalSize = offsetToAxes + axes.length * axisSize
   const bytes = new Uint8Array(totalSize)
   const view = new DataView(bytes.buffer)
-  view.setUint16(0, 1)        // major version
-  view.setUint16(2, 0)        // minor
+  view.setUint16(0, 1) // major version
+  view.setUint16(2, 0) // minor
   view.setUint16(4, offsetToAxes)
-  view.setUint16(6, 2)        // pair count placeholder
+  view.setUint16(6, 2) // pair count placeholder
   view.setUint16(8, axes.length)
   view.setUint16(10, axisSize)
-  view.setUint16(12, 0)       // instance count
-  view.setUint16(14, 0)       // instance size
+  view.setUint16(12, 0) // instance count
+  view.setUint16(14, 0) // instance size
   axes.forEach((axis, i) => {
     const start = offsetToAxes + i * axisSize
     bytes.set(new TextEncoder().encode(axis.tag), start)
@@ -200,15 +223,15 @@ function assembleSfnt(tables) {
   const total = bodyOffset
   const bytes = new Uint8Array(total)
   const view = new DataView(bytes.buffer)
-  view.setUint32(0, 0x00010000)        // sfnt version (TrueType)
+  view.setUint32(0, 0x00010000) // sfnt version (TrueType)
   view.setUint16(4, numTables)
-  view.setUint16(6, 0)                 // searchRange (we don't need accuracy)
-  view.setUint16(8, 0)                 // entrySelector
-  view.setUint16(10, 0)                // rangeShift
+  view.setUint16(6, 0) // searchRange (we don't need accuracy)
+  view.setUint16(8, 0) // entrySelector
+  view.setUint16(10, 0) // rangeShift
   directoryEntries.forEach((entry, i) => {
     const offset = 12 + i * 16
     bytes.set(new TextEncoder().encode(entry.tag), offset)
-    view.setUint32(offset + 4, 0)      // checksum
+    view.setUint32(offset + 4, 0) // checksum
     view.setUint32(offset + 8, entry.offset)
     view.setUint32(offset + 12, entry.length)
     bytes.set(entry.body, entry.offset)

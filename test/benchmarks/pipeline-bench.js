@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { downloadMissing } from '../../src/pipeline/download.js'
 import { convertAll } from '../../src/pipeline/convert.js'
+import { downloadMissing } from '../../src/pipeline/download.js'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { createMockLogger, createMockRateLimiter } from '../helpers/mocks.js'
 import { compareToPrevious, recordBenchmark } from './history.js'
@@ -153,7 +153,9 @@ async function main() {
     recordBenchmark('pipeline-p99', { value: p99, unit: 'ms' })
 
     if (comparison.regressed) {
-      console.log(`WARNING REGRESSION: p50 is ${comparison.changePercent}% slower than previous (${comparison.previousValue.toFixed(2)}ms -> ${p50.toFixed(2)}ms)`)
+      console.log(
+        `WARNING REGRESSION: p50 is ${comparison.changePercent}% slower than previous (${comparison.previousValue.toFixed(2)}ms -> ${p50.toFixed(2)}ms)`,
+      )
     } else if (comparison.previousValue) {
       console.log(`  vs previous: ${comparison.changePercent > 0 ? '+' : ''}${comparison.changePercent}%`)
     }

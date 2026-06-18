@@ -30,11 +30,30 @@ const NULL_U64 = 0xffffffffffffffffn
 // search.js RESULT_COLUMNS (then rank, tier). The shim builds row objects
 // positionally, so this also fixes bun:sqlite's key insertion order.
 const SEARCH_PAGES_COLUMNS = [
-  'path', 'title', 'role', 'role_heading', 'abstract', 'declaration', 'platforms',
-  'min_ios', 'min_macos', 'min_watchos', 'min_tvos', 'min_visionos',
-  'framework', 'root_slug', 'source_type', 'source_metadata',
-  'url_depth', 'is_release_notes', 'is_deprecated', 'is_beta', 'doc_kind', 'language',
-  'rank', 'tier',
+  'path',
+  'title',
+  'role',
+  'role_heading',
+  'abstract',
+  'declaration',
+  'platforms',
+  'min_ios',
+  'min_macos',
+  'min_watchos',
+  'min_tvos',
+  'min_visionos',
+  'framework',
+  'root_slug',
+  'source_type',
+  'source_metadata',
+  'url_depth',
+  'is_release_notes',
+  'is_deprecated',
+  'is_beta',
+  'doc_kind',
+  'language',
+  'rank',
+  'tier',
 ]
 
 let forced = null // 'js' | 'native' | null

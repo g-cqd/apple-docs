@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach } from 'bun:test'
-import { safeCall, _resetWarnedLabels } from '../../../src/lib/safe-call.js'
+import { beforeEach, describe, expect, test } from 'bun:test'
+import { _resetWarnedLabels, safeCall } from '../../../src/lib/safe-call.js'
 
 function makeLogger() {
   const calls = []
@@ -23,18 +23,35 @@ describe('safeCall (sync)', () => {
 
   test('returns the default on throw', () => {
     const logger = makeLogger()
-    const out = safeCall(() => { throw new Error('boom') }, { default: 'fallback', logger })
+    const out = safeCall(
+      () => {
+        throw new Error('boom')
+      },
+      { default: 'fallback', logger },
+    )
     expect(out).toBe('fallback')
   })
 
   test('returns undefined when no default is provided', () => {
     const logger = makeLogger()
-    expect(safeCall(() => { throw new Error('x') }, { logger })).toBeUndefined()
+    expect(
+      safeCall(
+        () => {
+          throw new Error('x')
+        },
+        { logger },
+      ),
+    ).toBeUndefined()
   })
 
   test('default log mode is warn (failures surface)', () => {
     const logger = makeLogger()
-    safeCall(() => { throw new Error('boom') }, { logger })
+    safeCall(
+      () => {
+        throw new Error('boom')
+      },
+      { logger },
+    )
     const warns = logger.calls.filter(([level]) => level === 'warn')
     expect(warns).toHaveLength(1)
     expect(warns[0][1]).toContain('safeCall')
@@ -42,27 +59,57 @@ describe('safeCall (sync)', () => {
 
   test('silent mode never logs', () => {
     const logger = makeLogger()
-    safeCall(() => { throw new Error('boom') }, { log: 'silent', logger })
+    safeCall(
+      () => {
+        throw new Error('boom')
+      },
+      { log: 'silent', logger },
+    )
     expect(logger.calls).toEqual([])
   })
 
   test('warn-once dedups by label across calls', () => {
     const logger = makeLogger()
-    safeCall(() => { throw new Error('a') }, { log: 'warn-once', label: 'p1', logger })
-    safeCall(() => { throw new Error('b') }, { log: 'warn-once', label: 'p1', logger })
-    safeCall(() => { throw new Error('c') }, { log: 'warn-once', label: 'p2', logger })
+    safeCall(
+      () => {
+        throw new Error('a')
+      },
+      { log: 'warn-once', label: 'p1', logger },
+    )
+    safeCall(
+      () => {
+        throw new Error('b')
+      },
+      { log: 'warn-once', label: 'p1', logger },
+    )
+    safeCall(
+      () => {
+        throw new Error('c')
+      },
+      { log: 'warn-once', label: 'p2', logger },
+    )
     expect(logger.calls.filter(([level]) => level === 'warn')).toHaveLength(2)
   })
 
   test('label appears in the log message', () => {
     const logger = makeLogger()
-    safeCall(() => { throw new Error('boom') }, { label: 'parse-platforms', logger })
+    safeCall(
+      () => {
+        throw new Error('boom')
+      },
+      { label: 'parse-platforms', logger },
+    )
     expect(logger.calls[0][1]).toContain('parse-platforms')
   })
 
   test('error data includes message + stack', () => {
     const logger = makeLogger()
-    safeCall(() => { throw new Error('details here') }, { logger })
+    safeCall(
+      () => {
+        throw new Error('details here')
+      },
+      { logger },
+    )
     const data = logger.calls[0][2]
     expect(data.error).toBe('details here')
     expect(data.stack).toBeDefined()
@@ -94,10 +141,15 @@ describe('safeCall (async)', () => {
 
   test('async fn that throws synchronously is caught too', async () => {
     const logger = makeLogger()
-    const result = safeCall(() => { throw new Error('sync-throw-in-async-context') }, {
-      default: 'fallback',
-      logger,
-    })
+    const result = safeCall(
+      () => {
+        throw new Error('sync-throw-in-async-context')
+      },
+      {
+        default: 'fallback',
+        logger,
+      },
+    )
     // Sync throw → sync return path, no Promise wrapping.
     expect(result).toBe('fallback')
   })

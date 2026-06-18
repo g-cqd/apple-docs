@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
-import { DocsDatabase } from '../../src/storage/database.js'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { normalize } from '../../src/content/normalize.js'
 import { persistFetchedDocPage } from '../../src/pipeline/persist.js'
-import { join } from 'node:path'
-import { mkdirSync, rmSync, existsSync } from 'node:fs'
+import { DocsDatabase } from '../../src/storage/database.js'
 
 const fixture = await Bun.file(new URL('../fixtures/swiftui-view.json', import.meta.url)).json()
 
@@ -23,7 +23,9 @@ beforeAll(() => {
 
 afterAll(() => {
   db.close()
-  try { rmSync(tmpDir, { recursive: true }) } catch {}
+  try {
+    rmSync(tmpDir, { recursive: true })
+  } catch {}
 })
 
 describe('Integration: Sync Pipeline', () => {
@@ -56,7 +58,7 @@ describe('Integration: Sync Pipeline', () => {
     // Verify document_sections populated
     const sections = db.getDocumentSections('swiftui/view')
     expect(sections.length).toBeGreaterThan(0)
-    const sectionKinds = sections.map(s => s.sectionKind ?? s.section_kind)
+    const sectionKinds = sections.map((s) => s.sectionKind ?? s.section_kind)
     expect(sectionKinds).toContain('abstract')
 
     // Verify raw JSON written to disk
@@ -73,13 +75,11 @@ describe('Integration: Sync Pipeline', () => {
   })
 
   test('document_relationships populated for topic children', () => {
-    const rels = db.db.query(
-      'SELECT to_key, relation_type FROM document_relationships WHERE from_key = ?'
-    ).all('swiftui/view')
+    const rels = db.db.query('SELECT to_key, relation_type FROM document_relationships WHERE from_key = ?').all('swiftui/view')
 
     expect(rels.length).toBeGreaterThan(0)
     // Should have child relations from topics
-    const childRels = rels.filter(r => r.relation_type === 'child')
+    const childRels = rels.filter((r) => r.relation_type === 'child')
     expect(childRels.length).toBeGreaterThan(0)
   })
 
@@ -113,7 +113,7 @@ describe('Integration: Sync Pipeline', () => {
 
     // Sections should be replaced (not duplicated)
     const sections = db.getDocumentSections('swiftui/view')
-    const abstractSections = sections.filter(s => (s.sectionKind ?? s.section_kind) === 'abstract')
+    const abstractSections = sections.filter((s) => (s.sectionKind ?? s.section_kind) === 'abstract')
     expect(abstractSections.length).toBeLessThanOrEqual(1)
   })
 })

@@ -1,7 +1,7 @@
 import { ValidationError } from '../lib/errors.js'
-import { encodeSectionContent } from '../storage/section-codec.js'
-import { getProfile, setProfile } from '../storage/profiles.js'
 import { withFileTempStore } from '../storage/pragmas.js'
+import { getProfile, setProfile } from '../storage/profiles.js'
+import { encodeSectionContent } from '../storage/section-codec.js'
 
 // Contentless body FTS: stops storing a second full copy of every body.
 // `contentless_delete=1` (SQLite ≥3.43) keeps the incremental sync
@@ -37,7 +37,7 @@ export async function storageCompact(opts, ctx) {
   if (profileBefore === 'prebuilt' && !force) {
     throw new ValidationError(
       'Refusing to compact a `prebuilt` install — it would add per-read decompression on the fast path. ' +
-      'Set a render-on-demand profile first (`apple-docs storage profile compact`) or pass --force.',
+        'Set a render-on-demand profile first (`apple-docs storage profile compact`) or pass --force.',
       { field: 'profile', value: profileBefore },
     )
   }

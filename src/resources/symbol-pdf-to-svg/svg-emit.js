@@ -32,10 +32,10 @@ export function assembleSvg(fills, opts) {
   if (!Number.isFinite(minX)) throw new ParseError('symbol PDF: empty geometry')
   const span = Math.max(maxX - minX, maxY - minY) || 1
   const pad = span * 0.06
-  const flipY = (y) => (maxY - y) + pad
-  const flipX = (x) => (x - minX) + pad
-  const vbW = (maxX - minX) + pad * 2
-  const vbH = (maxY - minY) + pad * 2
+  const flipY = (y) => maxY - y + pad
+  const flipX = (x) => x - minX + pad
+  const vbW = maxX - minX + pad * 2
+  const vbH = maxY - minY + pad * 2
 
   // Walk fills in painting order, building an SVG tree that mirrors Apple's
   // destination-out compositing. Each visible (alpha>0) fill paints on top
@@ -62,7 +62,7 @@ export function assembleSvg(fills, opts) {
   // prerendered SVG is byte-reproducible run-to-run — distinct symbols
   // still get distinct prefixes (same collision resistance as the old
   // 6-char random base, now deterministic).
-  const ds = fills.map(fill => subpathsToD(fill.subpaths, flipX, flipY))
+  const ds = fills.map((fill) => subpathsToD(fill.subpaths, flipX, flipY))
   const idBase = `c${fnv1a(`${name}|${vbW}x${vbH}|${ds.join('|')}`)}`
   let defs = ''
   let nodes = []
@@ -74,18 +74,17 @@ export function assembleSvg(fills, opts) {
       if (nodes.length === 0) return
       const maskId = `${idBase}_${idx}`
       const cutD = ds[idx]
-      defs += `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" mask-type="luminance" style="mask-type:luminance">`
-        + `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="#fff"/>`
-        + `<path d="${cutD}" fill="#000"${fillRuleAttr(fill.fillRule)}/>`
-        + "</mask>"
+      defs +=
+        `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" mask-type="luminance" style="mask-type:luminance">` +
+        `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="#fff"/>` +
+        `<path d="${cutD}" fill="#000"${fillRuleAttr(fill.fillRule)}/>` +
+        '</mask>'
       nodes = [`<g mask="url(#${maskId})">${nodes.join('')}</g>`]
     }
   })
   const body = nodes.join('')
 
-  const bgRect = background
-    ? `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="${escapeXml(background)}"/>`
-    : ''
+  const bgRect = background ? `<rect x="0" y="0" width="${formatNumber(vbW)}" height="${formatNumber(vbH)}" fill="${escapeXml(background)}"/>` : ''
   const defsBlock = defs ? `<defs>${defs}</defs>` : ''
   const viewBox = `0 0 ${formatNumber(vbW)} ${formatNumber(vbH)}`
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -133,7 +132,5 @@ function fillRuleAttr(fillRule) {
 }
 
 function escapeXml(value) {
-  return String(value).replace(/[<>&"']/g, c => (
-    { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]
-  ))
+  return String(value).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c])
 }

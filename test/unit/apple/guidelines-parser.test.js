@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { parseGuidelinesHtml, ROOT_SLUG, GUIDELINES_URL } from '../../../src/apple/guidelines-parser.js'
+import { describe, expect, test } from 'bun:test'
+import { GUIDELINES_URL, parseGuidelinesHtml, ROOT_SLUG } from '../../../src/apple/guidelines-parser.js'
 
 describe('parseGuidelinesHtml', () => {
   function wrapInContainer(content) {
@@ -59,7 +59,7 @@ describe('parseGuidelinesHtml', () => {
     expect(sections.length).toBe(3)
 
     // The parent (section 1) should have children
-    const parent = sections.find(s => s.sectionNumber === '1')
+    const parent = sections.find((s) => s.sectionNumber === '1')
     expect(parent).toBeDefined()
     expect(parent.children.length).toBe(2)
     expect(parent.children).toContain(`${ROOT_SLUG}/1.1`)
@@ -80,7 +80,7 @@ describe('parseGuidelinesHtml', () => {
     `)
 
     const { sections } = await parseGuidelinesHtml(html)
-    const nums = sections.map(s => s.sectionNumber)
+    const nums = sections.map((s) => s.sectionNumber)
     expect(nums).toContain('5')
     expect(nums).toContain('5.1')
     expect(nums).toContain('5.1.1')

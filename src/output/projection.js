@@ -17,9 +17,9 @@
  * that single call (used by leak-guard tests).
  */
 
-import { publicConfidence } from './confidence.js'
-import { safeWebDocKey } from '../lib/safe-path.js'
 import { DEBUG_PASSTHROUGH as CONFIG_DEBUG } from '../config.js'
+import { safeWebDocKey } from '../lib/safe-path.js'
+import { publicConfidence } from './confidence.js'
 
 export const DEBUG_PASSTHROUGH = CONFIG_DEBUG
 
@@ -46,11 +46,7 @@ function flagIf(out, src, key) {
 // The rich envelope's pageInfo carries `strategy`, `totalSections`,
 // `pageSections`, `maxChars` and other paginator-internals. The public
 // shape keeps only the navigational fields the caller actually needs.
-const PAGE_INFO_KEEP = [
-  'page', 'totalPages',
-  'hasNextPage', 'hasPreviousPage',
-  'totalItems',
-]
+const PAGE_INFO_KEEP = ['page', 'totalPages', 'hasNextPage', 'hasPreviousPage', 'totalItems']
 
 function projectPageInfo(pageInfo) {
   if (!pageInfo || typeof pageInfo !== 'object') return undefined
@@ -61,13 +57,18 @@ function projectPageInfo(pageInfo) {
 // --- search_docs -------------------------------------------------------------
 
 const SEARCH_HIT_KEEP = [
-  'path', 'title',
-  'framework', 'rootSlug',
-  'kind', 'sourceType',
-  'abstract', 'declaration',
+  'path',
+  'title',
+  'framework',
+  'rootSlug',
+  'kind',
+  'sourceType',
+  'abstract',
+  'declaration',
   'platforms',
   'language',
-  'snippet', 'relatedCount',
+  'snippet',
+  'relatedCount',
 ]
 
 // `webPaths: true` (web /api/search only) adds a `webPath` field when the
@@ -104,10 +105,10 @@ export function projectSearchResult(result, opts) {
     query: typeof result.query === 'string' ? result.query : '',
     total: typeof result.total === 'number' ? result.total : 0,
     ...(typeof result.hasMore === 'boolean' ? { hasMore: result.hasMore } : {}),
-    results: Array.isArray(result.results) ? result.results.map(hit => projectSearchHit(hit, opts)) : [],
+    results: Array.isArray(result.results) ? result.results.map((hit) => projectSearchHit(hit, opts)) : [],
   }
 
-  if (out.results.some(r => r.confidence === 'approximate')) out.approximate = true
+  if (out.results.some((r) => r.confidence === 'approximate')) out.approximate = true
   if (result.partial) out.truncated = true
 
   const pi = projectPageInfo(result.pageInfo)
@@ -117,11 +118,7 @@ export function projectSearchResult(result, opts) {
 
 // --- read_doc ----------------------------------------------------------------
 
-const METADATA_KEEP = [
-  'title', 'framework', 'rootSlug', 'roleHeading', 'kind',
-  'abstract', 'declaration', 'path', 'platforms',
-  'relationships',
-]
+const METADATA_KEEP = ['title', 'framework', 'rootSlug', 'roleHeading', 'kind', 'abstract', 'declaration', 'path', 'platforms', 'relationships']
 
 function projectMetadata(metadata) {
   if (!metadata || typeof metadata !== 'object') return metadata
@@ -185,9 +182,7 @@ export function projectFrameworks(result, opts) {
 
   const out = {
     total: typeof result.total === 'number' ? result.total : 0,
-    roots: Array.isArray(result.roots)
-      ? result.roots.map(root => pick(root, ROOT_KEEP))
-      : [],
+    roots: Array.isArray(result.roots) ? result.roots.map((root) => pick(root, ROOT_KEEP)) : [],
   }
   const pi = projectPageInfo(result.pageInfo)
   if (pi) out.pageInfo = pi
@@ -210,15 +205,15 @@ export function projectBrowse(result, opts) {
   if (typeof result.year === 'number') out.year = result.year
 
   if (Array.isArray(result.groups)) {
-    out.groups = result.groups.map(g => ({ year: g.year, count: g.count }))
+    out.groups = result.groups.map((g) => ({ year: g.year, count: g.count }))
     if (typeof result.total === 'number') out.total = result.total
   }
   if (Array.isArray(result.pages)) {
-    out.pages = result.pages.map(p => pick(p, BROWSE_PAGE_KEEP))
+    out.pages = result.pages.map((p) => pick(p, BROWSE_PAGE_KEEP))
     if (typeof result.total === 'number') out.total = result.total
   }
   if (Array.isArray(result.children)) {
-    out.children = result.children.map(c => pick(c, BROWSE_CHILD_KEEP))
+    out.children = result.children.map((c) => pick(c, BROWSE_CHILD_KEEP))
   }
 
   const pi = projectPageInfo(result.pageInfo)
@@ -231,9 +226,7 @@ export function projectBrowse(result, opts) {
 const TAXONOMY_FIELDS = ['kind', 'role', 'docKind', 'roleHeading', 'sourceType']
 
 function projectTaxonomyEntries(arr) {
-  return Array.isArray(arr)
-    ? arr.map(v => ({ value: v.value ?? null, count: v.count ?? 0 }))
-    : []
+  return Array.isArray(arr) ? arr.map((v) => ({ value: v.value ?? null, count: v.count ?? 0 })) : []
 }
 
 export function projectTaxonomy(result, opts) {
@@ -262,7 +255,7 @@ export function projectSearchSfSymbols(result, opts) {
   if (bypass(opts)) return result
   if (!result || typeof result !== 'object') return result
   const results = Array.isArray(result.results) ? result.results : []
-  return { results: results.map(s => pick(s, SF_SYMBOL_HIT_KEEP)) }
+  return { results: results.map((s) => pick(s, SF_SYMBOL_HIT_KEEP)) }
 }
 
 export function projectListAppleFonts(result, opts) {
@@ -270,12 +263,10 @@ export function projectListAppleFonts(result, opts) {
   if (!result || typeof result !== 'object') return result
   const families = Array.isArray(result.families) ? result.families : []
   return {
-    families: families.map(f => ({
+    families: families.map((f) => ({
       id: f.id,
       ...(f.name !== undefined ? { name: f.name } : {}),
-      files: Array.isArray(f.files)
-        ? f.files.map(file => ({ id: file.id, file_name: file.file_name }))
-        : [],
+      files: Array.isArray(f.files) ? f.files.map((file) => ({ id: file.id, file_name: file.file_name })) : [],
     })),
   }
 }
@@ -307,13 +298,7 @@ export function projectRenderFontText(result, opts) {
 
 // --- status ------------------------------------------------------------------
 
-const STATUS_KEEP_USER = [
-  'dataDir',
-  'databaseSize',
-  'snapshot',
-  'rawJson', 'markdown',
-  'lastSync', 'lastAction',
-]
+const STATUS_KEEP_USER = ['dataDir', 'databaseSize', 'snapshot', 'rawJson', 'markdown', 'lastSync', 'lastAction']
 
 export function projectStatus(result, opts) {
   if (bypass(opts)) return result

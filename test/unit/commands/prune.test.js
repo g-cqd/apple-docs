@@ -1,10 +1,10 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DocsDatabase } from '../../../src/storage/database.js'
 import { prune } from '../../../src/commands/prune.js'
 import { keyPath } from '../../../src/lib/safe-path.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let dataDir
@@ -91,9 +91,19 @@ describe('prune', () => {
     expect(r.pagesRemoved).toBe(2)
     expect(r.documentsRemoved).toBe(2)
 
-    expect(db.getRoots().map(x => x.slug)).toEqual(['swiftui'])
-    expect(db.db.query('SELECT path FROM pages').all().map(x => x.path)).toEqual(['documentation/swiftui/view'])
-    expect(db.db.query('SELECT key FROM documents').all().map(x => x.key)).toEqual(['documentation/swiftui/view'])
+    expect(db.getRoots().map((x) => x.slug)).toEqual(['swiftui'])
+    expect(
+      db.db
+        .query('SELECT path FROM pages')
+        .all()
+        .map((x) => x.path),
+    ).toEqual(['documentation/swiftui/view'])
+    expect(
+      db.db
+        .query('SELECT key FROM documents')
+        .all()
+        .map((x) => x.key),
+    ).toEqual(['documentation/swiftui/view'])
     // Title FTS cleaned by the documents_ad trigger; body FTS manually.
     expect(db.db.query("SELECT COUNT(*) AS c FROM documents_fts WHERE documents_fts MATCH 'publisher'").get().c).toBe(0)
     expect(db.db.query("SELECT COUNT(*) AS c FROM documents_body_fts WHERE documents_body_fts MATCH 'publisher'").get().c).toBe(0)

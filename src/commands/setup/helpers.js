@@ -23,10 +23,10 @@ export function resolveArchivePath(archive) {
   const cwd = process.cwd()
   if (home && absolute.startsWith(`${home}/`)) return absolute
   if (absolute.startsWith(`${cwd}/`) || absolute === cwd) return absolute
-  throw new ValidationError(
-    `Refusing to install from ${absolute}: archive path must live under $HOME or the current working directory.`,
-    { field: 'archive', value: absolute },
-  )
+  throw new ValidationError(`Refusing to install from ${absolute}: archive path must live under $HOME or the current working directory.`, {
+    field: 'archive',
+    value: absolute,
+  })
 }
 
 /**
@@ -59,17 +59,22 @@ export async function extractTarZst(archivePath, dataDir) {
     const sink = Bun.file(tarPath).writer()
     for await (const chunk of Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))) sink.write(chunk)
     await sink.end()
-    const proc = Bun.spawn(
-      ['tar', '--no-same-owner', '--no-same-permissions', '-xf', tarPath, '-C', dataDir],
-      { stdout: 'ignore', stderr: 'pipe', timeout: 10 * 60_000 },
-    )
+    const proc = Bun.spawn(['tar', '--no-same-owner', '--no-same-permissions', '-xf', tarPath, '-C', dataDir], {
+      stdout: 'ignore',
+      stderr: 'pipe',
+      timeout: 10 * 60_000,
+    })
     const stderrText = new Response(proc.stderr).text()
     const exitCode = await proc.exited
     if (exitCode !== 0) {
       throw new ValidationError(`Extraction failed (tar exit ${exitCode}): ${(await stderrText).trim().slice(0, 4096)}`)
     }
   } finally {
-    try { rmSync(tarPath, { force: true }) } catch { /* tolerate */ }
+    try {
+      rmSync(tarPath, { force: true })
+    } catch {
+      /* tolerate */
+    }
   }
 }
 
@@ -87,7 +92,7 @@ function shapeRelease(data) {
     tag: data.tag_name,
     date: data.published_at?.slice(0, 10) ?? 'unknown',
     prerelease: !!data.prerelease,
-    assets: (data.assets ?? []).map(a => ({
+    assets: (data.assets ?? []).map((a) => ({
       name: a.name,
       size: a.size,
       downloadUrl: a.browser_download_url,
@@ -109,7 +114,7 @@ export function macosMajor(version) {
  * return null — callers treat that as unknown provenance.
  */
 async function fetchReleaseBuildMacos(release) {
-  const status = release.assets.find(a => a.name === 'status.json')
+  const status = release.assets.find((a) => a.name === 'status.json')
   if (!status) return null
   try {
     const res = await fetch(status.downloadUrl, {
@@ -150,9 +155,8 @@ async function fetchReleaseBuildMacos(release) {
  * @param {{ channel?: 'stable'|'beta', localBuildMacos?: string|null }} [opts]
  */
 export async function fetchLatestRelease({ channel = 'stable', localBuildMacos = null } = {}) {
-  const url = channel === 'beta'
-    ? `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=15`
-    : `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
+  const url =
+    channel === 'beta' ? `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=15` : `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
 
   const res = await fetch(url, { headers: ghHeaders(), signal: AbortSignal.timeout(15000) })
 
@@ -163,20 +167,14 @@ export async function fetchLatestRelease({ channel = 'stable', localBuildMacos =
         'No releases found. The repository may not have published any snapshots yet.',
       )
     }
-    throw new HttpError(
-      res.status,
-      `https://api.github.com/repos/${GITHUB_REPO}/releases`,
-      `GitHub API error: HTTP ${res.status}`,
-    )
+    throw new HttpError(res.status, `https://api.github.com/repos/${GITHUB_REPO}/releases`, `GitHub API error: HTTP ${res.status}`)
   }
 
   const data = await res.json()
   if (channel !== 'beta') return shapeRelease(data)
 
   const localMajor = macosMajor(localBuildMacos)
-  const candidates = (Array.isArray(data) ? data : [])
-    .filter(r => !r.draft && (r.assets ?? []).some(a => SNAPSHOT_ASSET.test(a.name)))
-    .map(shapeRelease)
+  const candidates = (Array.isArray(data) ? data : []).filter((r) => !r.draft && (r.assets ?? []).some((a) => SNAPSHOT_ASSET.test(a.name))).map(shapeRelease)
   if (localMajor == null && candidates.length > 0) {
     // Fresh install — nothing to protect yet, but "newest release" is the
     // wrong pick when a beta from a newer macOS base exists: the channel
@@ -185,9 +183,7 @@ export async function fetchLatestRelease({ channel = 'stable', localBuildMacos =
     // the newest build host; ties (same major) go to the newest release,
     // so a stable from the same-or-newer base still supersedes the beta.
     // No provenance anywhere → newest release, as before.
-    const majors = await Promise.all(
-      candidates.map(async release => macosMajor(await fetchReleaseBuildMacos(release))),
-    )
+    const majors = await Promise.all(candidates.map(async (release) => macosMajor(await fetchReleaseBuildMacos(release))))
     let best = 0
     for (let i = 1; i < candidates.length; i++) {
       if ((majors[i] ?? -1) > (majors[best] ?? -1)) best = i

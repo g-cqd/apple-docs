@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Content renderer benchmark (RFC 0004 phases 1-2): JS vs native pages/s
  * for the three surfaces, over the real local corpus.
@@ -9,21 +10,16 @@
  * APPLE_DOCS_NATIVE_LIB). Numbers are recorded in rfcs/0004 per phase.
  */
 
+import { suffix } from 'bun:ffi'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
-import { DocsDatabase } from '../../src/storage/database.js'
-import {
-  _forceImpl,
-  nativeConvertPages,
-  nativeDocMarkdownBatch,
-  nativePlainTextBatch,
-} from '../../src/content/content-native.js'
+import { renderPage } from '../../src/apple/renderer.js'
+import { _forceImpl, nativeConvertPages, nativeDocMarkdownBatch, nativePlainTextBatch } from '../../src/content/content-native.js'
 import { renderMarkdown } from '../../src/content/render-markdown.js'
 import { renderPlainText } from '../../src/content/render-text.js'
-import { renderPage } from '../../src/apple/renderer.js'
 import { keyPath } from '../../src/lib/safe-path.js'
+import { DocsDatabase } from '../../src/storage/database.js'
 import { readJSON } from '../../src/storage/files.js'
 
 const args = process.argv.slice(2)
@@ -57,12 +53,18 @@ const rows = db.db
   .all(DOCS)
 const workload = rows.map((row) => ({
   document: {
-    key: row.key, title: row.title, framework: row.framework, role: row.role,
-    role_heading: row.role_heading, platforms_json: row.platforms_json,
+    key: row.key,
+    title: row.title,
+    framework: row.framework,
+    role: row.role,
+    role_heading: row.role_heading,
+    platforms_json: row.platforms_json,
   },
   plainDocument: {
-    title: row.title, abstract_text: row.abstract_text,
-    declaration_text: row.declaration_text, headings: row.headings,
+    title: row.title,
+    abstract_text: row.abstract_text,
+    declaration_text: row.declaration_text,
+    headings: row.headings,
   },
   sections: db.getDocumentSections(row.key),
 }))

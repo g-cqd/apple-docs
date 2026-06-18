@@ -12,15 +12,14 @@
  */
 
 import { fetchDocPage } from '../../apple/api.js'
-import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { pool } from '../../lib/pool.js'
+import { persistFetchedDocPage } from '../../pipeline/persist.js'
 
 // Retry HTTP 5xx, 408 (request timeout), 429 (rate limited), and
 // transport-level failures; treat everything else (404/403/other 4xx) as
 // permanent. Anchored on the error strings the crawl actually stores
 // (e.g. "HTTP 503 fetching https://…", "fetch failed", "… timed out").
-const TRANSIENT_RE =
-  /\bHTTP (5\d{2}|408|429)\b|timed? ?out|timeout|fetch failed|unable to connect|network|socket|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN/i
+const TRANSIENT_RE = /\bHTTP (5\d{2}|408|429)\b|timed? ?out|timeout|fetch failed|unable to connect|network|socket|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN/i
 
 export function isTransientError(error) {
   return typeof error === 'string' && TRANSIENT_RE.test(error)
@@ -41,7 +40,7 @@ export async function retryTransientFailures(ctx, opts = {}) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const rounds = opts.rounds ?? 2
   const baseDelayMs = opts.baseDelayMs ?? 30_000
-  const sleep = opts.sleep ?? (ms => Bun.sleep(ms))
+  const sleep = opts.sleep ?? ((ms) => Bun.sleep(ms))
   const fetchPage = opts.fetchPage ?? fetchDocPage
   const persist = opts.persist ?? persistFetchedDocPage
   const concurrency = Math.max(1, ctx.semaphore?.max ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10))
@@ -50,7 +49,7 @@ export async function retryTransientFailures(ctx, opts = {}) {
     db.db
       .query("SELECT path, root_slug, error FROM crawl_state WHERE status = 'failed'")
       .all()
-      .filter(row => isTransientError(row.error))
+      .filter((row) => isTransientError(row.error))
 
   let recovered = 0
   let roundsRun = 0
@@ -59,9 +58,7 @@ export async function retryTransientFailures(ctx, opts = {}) {
     if (transient.length === 0) break
     roundsRun = round
     const delay = baseDelayMs * round
-    logger?.info?.(
-      `Transient-failure retry ${round}/${rounds}: ${transient.length} page(s) after ${Math.round(delay / 1000)}s backoff`,
-    )
+    logger?.info?.(`Transient-failure retry ${round}/${rounds}: ${transient.length} page(s) after ${Math.round(delay / 1000)}s backoff`)
     await sleep(delay)
 
     await pool(transient, concurrency, async ({ path, root_slug }) => {

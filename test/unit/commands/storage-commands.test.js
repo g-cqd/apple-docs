@@ -1,10 +1,10 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { storageStats, storageGc, storageMaterialize } from '../../../src/commands/storage.js'
+import { join } from 'node:path'
 import { dispatchMaintenance } from '../../../src/cli/maintenance.js'
+import { storageGc, storageMaterialize, storageStats } from '../../../src/commands/storage.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { fileCount } from '../../../src/storage/files.js'
 
 let db
@@ -40,7 +40,7 @@ beforeEach(() => {
   db.db.run(
     `INSERT OR REPLACE INTO document_sections (document_id, section_kind, heading, content_text, sort_order)
      VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`,
-    [docId]
+    [docId],
   )
 
   ctx = { db, dataDir, logger: { info() {}, warn() {}, error() {} } }
@@ -177,7 +177,7 @@ describe('storageGc', () => {
   test('GC removes orphan crawl_state entries', () => {
     db.db.run(
       `INSERT INTO crawl_state (path, status, root_slug, depth)
-       VALUES ('orphan/path', 'done', 'nonexistent-root', 0)`
+       VALUES ('orphan/path', 'done', 'nonexistent-root', 0)`,
     )
     const before = db.db.query('SELECT COUNT(*) as count FROM crawl_state').get().count
     expect(before).toBe(1)
@@ -217,9 +217,7 @@ describe('storageGc', () => {
     // code referenced a non-existent `timestamp` and threw on every
     // --older-than invocation. Activity is a single-row state table
     // (id CHECK(id=1)) so we seed one stale row and assert it's gone.
-    db.db.run(
-      "INSERT OR REPLACE INTO activity (id, action, started_at, pid) VALUES (1, 'test', datetime('now', '-3 days'), 0)",
-    )
+    db.db.run("INSERT OR REPLACE INTO activity (id, action, started_at, pid) VALUES (1, 'test', datetime('now', '-3 days'), 0)")
     expect(db.db.query('SELECT COUNT(*) as c FROM activity').get().c).toBe(1)
 
     expect(() => storageGc({ olderThan: 1, vacuum: false }, ctx)).not.toThrow()
