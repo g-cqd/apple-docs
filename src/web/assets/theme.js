@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Theme switcher: persists the user's auto/light/dark preference and
 // reflects it via `<html data-theme="...">` so the CSS variable layer
 // can pick up the right palette.

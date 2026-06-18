@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Tree-view data loader. The framework page emits the hierarchical
 // JSON in one of two places:
 //   1. Inline `<script type="application/json" id="tree-data">` — the

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * `apple-docs links audit`        — scan every rendered HTML doc for `<a href>`
  *                                    targets, classify each, and report counts

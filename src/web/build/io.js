@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Build-time IO helpers — brotli precompression for static assets and
  * recursive directory copy for the public/ tree.

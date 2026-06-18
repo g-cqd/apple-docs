@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pages repository: the legacy page table (still used as the crawler's
  * working set). The methods here cover pure page-row operations.

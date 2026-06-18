@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v17 — `pages.consecutive_404_count` for the N=3 tombstone gate.
  *

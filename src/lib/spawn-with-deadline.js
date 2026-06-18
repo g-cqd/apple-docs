@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * One-shot Bun.spawn wrapper with a hard deadline + bounded stderr capture.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Update path for "flat" sources (sample-code, swift-evolution, packages,
 // swift-book, swift-org, apple-archive). Discover yields a flat list of
 // keys; tracked pages get checked for changes, stale pages get tombstoned,

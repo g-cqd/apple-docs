@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Chunked progressive grid renderer for the SF Symbols page.
 //
 // Mounting all ~10k tiles up-front makes the DOM and the initial layout

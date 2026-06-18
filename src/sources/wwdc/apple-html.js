@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Apple WWDC year-index + per-session HTML scraping.
 //
 // Apple's video pages for 2020+ are server-rendered HTML; the parsing

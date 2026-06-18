@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Apple-font discovery + DMG extraction helpers. Used by syncAppleFonts
  * (in apple-assets.js) and the symbol-bundle plist reader sites that

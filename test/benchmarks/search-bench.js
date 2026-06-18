@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { search } from '../../src/commands/search.js'
 import { DocsDatabase } from '../../src/storage/database.js'
 import { compareToPrevious, recordBenchmark } from './history.js'

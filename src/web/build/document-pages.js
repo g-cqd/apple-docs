@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Per-document HTML render loop — the hottest path of the build. Sync
 // shiki render, chunked sections fetch, render-index incremental skip,
 // sidecar failure log. Each framework runs through here; the

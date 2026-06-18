@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v12 — typography classification columns + tightened apple_font_files
  * uniqueness. The unique constraint moves from (family_id, file_path) to

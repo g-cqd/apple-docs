@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from './errors.js'
 /**
  * Optional Prometheus scrape endpoint for the long-running servers

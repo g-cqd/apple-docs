@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Collection-filter DOM rendering. The controller composes these into
 // the page; each function takes only what it needs (no module-level
 // state).

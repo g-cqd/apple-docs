@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { startHttpServer } from '../../../src/mcp/http-server.js'
 import { DocsDatabase } from '../../../src/storage/database.js'

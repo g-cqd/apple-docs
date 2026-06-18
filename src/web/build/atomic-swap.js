@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Atomic publish step for full builds: the orchestrator writes into a
 // staging dir alongside `outDir`, then renames staging over the live
 // directory in a single filesystem op so no partial output is ever

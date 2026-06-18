@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Fusion dispatch: native (libAppleDocsCore via bun:ffi) when the
  * `APPLE_DOCS_NATIVE` kill switch enables the `fusion` module, JS

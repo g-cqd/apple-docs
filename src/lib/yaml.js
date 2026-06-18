@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Serialize a flat object as YAML front matter.
  * Handles strings, numbers, booleans, and arrays of primitives.

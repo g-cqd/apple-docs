@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Lightweight markdown → HTML converter. Used by:
 //   - swift-book / WWDC / Swift Evolution sources that ship raw .md
 //   - Discussion-section fallback when DocC `contentJson` isn't present

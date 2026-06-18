@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Tests for ops/cmd/render-all.js. Fully in-memory: the fake `fs`
  * captures every write so we can assert filenames + content without

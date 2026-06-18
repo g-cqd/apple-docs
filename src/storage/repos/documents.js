@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Documents repository: the canonical document graph (introduced in v6),
  * its sections, relationships, and the small lookup helpers

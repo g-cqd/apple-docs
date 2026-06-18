@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Native embedder dispatch (RFC 0002 phase 3): the bit-exact Swift pipeline
  * (libAppleDocsCore ad_embed_*) behind the `APPLE_DOCS_NATIVE=embed` kill

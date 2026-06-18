@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Contract gate for the native MCP server (RFC 0005 Phase C). Boots `ad-server mcp`
  * as a stdio subprocess, speaks newline-delimited JSON-RPC, and checks:

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Full JS→FFI→Swift→JS round trip for the native embedder, runnable
  * anywhere the dylib exists (CI native matrix included): the committed

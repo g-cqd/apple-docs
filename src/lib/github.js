@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { checkResourceEtag, fetchWithRetry } from './fetch-with-retry.js'
 
 const USER_AGENT = 'apple-docs/2.0'

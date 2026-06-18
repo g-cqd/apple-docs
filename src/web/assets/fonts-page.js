@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Fonts page — Google-Fonts-style global tester.
 //
 // Sample text · size · weight · italic are SINGLE controls at the top

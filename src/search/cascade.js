@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Search cascade: the four query variants (FTS5 / title-exact / trigram /
  * body) wrapped with safeCall + warn-once logging, plus the three-step

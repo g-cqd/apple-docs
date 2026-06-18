@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SFNT (TrueType / OpenType) header inspection + filename parsing.
  *

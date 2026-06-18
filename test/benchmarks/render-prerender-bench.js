@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 
 /**
  * Prerender bench (RFC 0003 §3 phase-2 gates): the in-dylib batch render

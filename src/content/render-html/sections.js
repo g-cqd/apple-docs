@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Per-section HTML renderers. Each function consumes a single
 // (sectionKind, contentJson, contentText) tuple and emits the matching
 // <section>…</section> markup. The dispatcher in render-html.js routes

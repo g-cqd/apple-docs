@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v11 — rebuild sf_symbols_fts. The v10 virtual table was created with a
  * column shape that didn't match the populator (keyword/category/alias

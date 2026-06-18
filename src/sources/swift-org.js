@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { checkHtmlPage, fetchHtmlPage } from '../apple/api.js'
 import { parseHtmlToNormalized } from '../content/parse-html.js'
 import { createLinkResolver } from '../lib/link-resolver.js'

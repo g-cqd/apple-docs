@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { describe, expect, test } from 'bun:test'
 import { hybridFusion, mmrSelect, normalizeScores, weightedRRF } from '../../../src/search/fusion.js'
 

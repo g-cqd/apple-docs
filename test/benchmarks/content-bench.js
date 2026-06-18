@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 
 /**
  * Content renderer benchmark (RFC 0004 phases 1-2): JS vs native pages/s

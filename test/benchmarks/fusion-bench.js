@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Fusion js-vs-native micro-benchmark (packing cost included on the native
  * side — that is the price callers actually pay). Run:

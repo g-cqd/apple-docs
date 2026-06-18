@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Per-page render helpers — promise-race timeout wrapper and the
  * skiplist placeholder fallback for documents that wedge the synchronous

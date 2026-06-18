@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Tests for ops/lib/launchctl.js. Every assertion uses an injected
  * fake `runCmd` so we don't shell out to sudo (which would fail

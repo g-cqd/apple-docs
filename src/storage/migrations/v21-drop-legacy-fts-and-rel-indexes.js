@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v21 — drop the dead legacy `pages` FTS subsystem and the redundant
  * `document_relationships` indexes.

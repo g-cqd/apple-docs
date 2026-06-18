@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { describe, expect, test } from 'bun:test'
 import { formatLookup, formatSearchRead } from '../../../src/cli/formatter.js'
 import { paginateCliContent } from '../../../src/cli/paginate.js'

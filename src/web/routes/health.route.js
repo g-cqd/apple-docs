@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { getCommitHash } from '../../lib/git-version.js'
 import { VERSION } from '../../lib/version.js'
 import { jsonResponse } from '../responses.js'

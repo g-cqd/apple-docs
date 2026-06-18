@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Build checkpoint helpers — section batching, render-fingerprint digest,
  * and the template-version stamp used to invalidate the per-doc render

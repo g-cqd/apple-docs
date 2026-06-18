@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // HTML entity decoding. Handles named entities + decimal/hex numeric
 // character references.
 //

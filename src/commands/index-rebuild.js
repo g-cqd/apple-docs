@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Rebuild optional search indexes from existing data.
  * Useful for lower-tier snapshots that ship without trigram/body indexes

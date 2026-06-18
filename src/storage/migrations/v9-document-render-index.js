@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /** v9 — render-index table backing the incremental web-build cache. */
 export function up(db) {
   db.run(`CREATE TABLE IF NOT EXISTS document_render_index (

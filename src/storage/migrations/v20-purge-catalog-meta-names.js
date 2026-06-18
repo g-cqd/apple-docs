@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v20 — purge catalog meta-entry rows (`symbols`, `year_to_release`)
  * from `sf_symbols`. These names appear at the top of Apple's

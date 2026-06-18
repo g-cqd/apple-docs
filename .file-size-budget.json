@@ -5,32 +5,32 @@
   "exempt": [
     {
       "path": "src/web/worker/search-worker.js",
-      "lines": 422,
+      "lines": 423,
       "_reason": "Search Web Worker — title index, inverted/prefix builders, scoring, and postMessage protocol in one file because Web Workers can't share scope across module boundaries without a bundler. Formatter-normalized baseline (biome)."
     },
     {
       "path": "src/storage/database.js",
-      "lines": 579,
+      "lines": 580,
       "_reason": "DocsDatabase delegation facade over the per-domain repos; biome expands its one-line pass-through methods to ~3 lines each. Splitting would only scatter the delegation map. Candidate for a future split. Formatter-normalized baseline (biome)."
     },
     {
       "path": "src/web/build.js",
-      "lines": 401,
+      "lines": 402,
       "_reason": "Static-site build orchestration. Formatter-normalized baseline (biome)."
     },
     {
       "path": "src/web/templates.js",
-      "lines": 418,
+      "lines": 419,
       "_reason": "Web HTML templating cluster (routes -> templates -> context). Formatter-normalized baseline (biome)."
     },
     {
       "path": "src/storage/repos/search.js",
-      "lines": 407,
+      "lines": 408,
       "_reason": "Query planner with FTS5/title-exact/trigram/body variants sharing uniform filter + projection logic. Formatter-normalized baseline (biome)."
     },
     {
       "path": "cli.js",
-      "lines": 458,
+      "lines": 459,
       "_reason": "CLI dispatcher (search/read/sync/setup/mcp/web/status). Formatter-normalized baseline (biome); P7 migrates this to a swift-argument-parser CLI."
     }
   ]

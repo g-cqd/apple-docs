@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { sha256 } from '../lib/hash.js'
 import { renderNotFoundPage } from './templates.js'
 

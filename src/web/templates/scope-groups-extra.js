@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Scope-specific grouping for the remaining collection-style roots —
  * App Store Review's numbered sections, release-notes versions, the

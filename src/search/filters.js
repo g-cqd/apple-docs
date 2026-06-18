@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Post-cascade JS filtering for search results. The SQL planner pushes
  * single-value filters (framework, source_type) down to the prepared

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Shared helpers for the MCP tool / resource handlers.
 
 import { coerceSection } from '../../content/coercion.js'

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchDocPage } from '../../apple/api.js'
 import { lookup } from '../../commands/lookup.js'
 import { BackpressureError } from '../../lib/errors.js'

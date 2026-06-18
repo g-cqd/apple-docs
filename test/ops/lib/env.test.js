@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Tests for ops/lib/env.js. Uses injected fs/stat fakes so we don't
  * have to chmod real files — the suite is deterministic and runs on

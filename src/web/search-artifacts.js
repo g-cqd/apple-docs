@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { sha256 } from '../lib/hash.js'
 import { ensureDir } from '../storage/files.js'

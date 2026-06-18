@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SQLite PRAGMA setup for DocsDatabase. Keeps the configuration knobs in
  * one inspectable place.

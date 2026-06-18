@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { GLOBAL } from './help-global.js'
 import { INDEX_HELP, PRUNE_HELP } from './help-maintenance.js'
 

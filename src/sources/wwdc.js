@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // WWDC source adapter. Two corpora behind one adapter:
 //   - Apple's developer.apple.com video pages (2020+, HTML scrape)
 //   - ASCIIwwdc community transcripts (1997-2019, GitHub raw .vtt files)

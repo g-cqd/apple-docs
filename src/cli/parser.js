@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Commands that accept a second-level subcommand (e.g. `mcp start`, `web serve`).
  * For these, the next non-flag argument after the command is consumed as `subcommand`.

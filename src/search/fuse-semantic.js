@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // fusion-native dispatches to libAppleDocsCore when APPLE_DOCS_NATIVE
 // enables the fusion module; ./fusion.js stays the normative JS reference.
 

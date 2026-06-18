@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Output-identity lock for RFC 0001 §10 slice 1 (Hamming-scan perf): the
  * SWAR `Uint32` popcount must equal the byte-LUT `hamming`, and the

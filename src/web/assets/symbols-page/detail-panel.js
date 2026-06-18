@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Symbols-page detail panel: inspector on desktop, full-page route on
 // mobile. Decouples the metadata fetch + render + copy/download wiring
 // from the controller so the boot path stays focused on filters + grid.

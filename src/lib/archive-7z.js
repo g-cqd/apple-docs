@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { NotFoundError, ValidationError } from './errors.js'
 /**
  * Deterministic native .7z archive builder.

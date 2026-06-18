@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { inflateSync } from 'node:zlib'
 import { ParseError } from '../../lib/errors.js'
 // PDF object-graph extraction. Walks the (latin-1-decoded) PDF source,

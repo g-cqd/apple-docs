@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * HTML → Markdown converter for Apple's App Store Review Guidelines page.
  * The HTML is hand-curated and Apple-stable; the regex pipeline here is

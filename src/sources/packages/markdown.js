@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Markdown synthesis + section helpers for repo metadata.
  * Produces a doc-shaped Markdown for repos whose README we can pull,

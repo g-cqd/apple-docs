@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // MCP tool surface for asset rendering: search_sf_symbols, list_apple_fonts,
 // render_sf_symbol, render_font_text. Render outputs are deterministic for
 // the same args; results are cached at the DB / disk layer (sf_symbol_renders)

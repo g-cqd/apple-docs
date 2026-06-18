@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Operations repository: activity tracking, snapshot metadata, sync
  * checkpoints, the update log, and the per-document render-index.

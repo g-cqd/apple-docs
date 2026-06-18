@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Map the internal search-cascade matchQuality enum to the public
  * three-level confidence field.

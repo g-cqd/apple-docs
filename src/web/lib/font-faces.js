@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Shared @font-face construction for the /fonts page.
 //
 // Both the server-side `/api/fonts/faces.css` route and the client-side

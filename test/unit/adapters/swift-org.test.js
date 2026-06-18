@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { afterEach, describe, expect, test } from 'bun:test'
 import { SwiftOrgAdapter } from '../../../src/sources/swift-org.js'
 // Side-effect: register cross-source entry points used by the cross-link tests.

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { html, raw } from '../lib/html.js'
 import { assetUrl, buildFooter, buildHead, buildHeader } from '../templates.js'
 

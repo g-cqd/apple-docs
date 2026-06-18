@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * A/B parity: the native fusion implementation must be indistinguishable
  * from the JS reference — Object.is on every score, identical Map insertion

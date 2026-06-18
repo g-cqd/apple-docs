@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Metrics builder + optional Prometheus-scrape starter for
  * `apple-docs web serve`. Mirrors the shape of

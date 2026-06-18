@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 export function seedFlatSourceProgress(db, rootSlug, keys, processedKeys = []) {
   const processed = processedKeys instanceof Set ? processedKeys : new Set(processedKeys)
   db.tx(() => {

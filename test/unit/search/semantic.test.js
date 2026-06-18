@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { indexEmbeddings } from '../../../src/commands/index-embeddings.js'
 import { VECTOR_BYTES } from '../../../src/search/embedding.js'

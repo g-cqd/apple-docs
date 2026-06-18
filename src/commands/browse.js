@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { NotFoundError, ValidationError } from '../lib/errors.js'
 
 const WWDC_PATH_YEAR = /^wwdc\/wwdc(\d{4})-/

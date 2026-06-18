@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Dispatch table for low-frequency maintenance subcommands —
  * storage, snapshot, consolidate, index. Each entry returns

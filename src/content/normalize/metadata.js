@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Metadata extraction helpers for the DocC normalizer:
 //   - resolveKind / resolveLanguage / resolveDeclarationText / resolvePlatforms
 //   - findSection / extractFirstHeading / collectHeadings

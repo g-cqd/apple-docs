@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Levenshtein edit distance with early exit.
  * Returns maxDist + 1 if distance exceeds maxDist (avoids full computation).

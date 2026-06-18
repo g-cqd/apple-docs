@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { parseGuidelinesHtml, ROOT_SLUG } from '../apple/guidelines-parser.js'
 import { sha256 } from '../lib/hash.js'

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { normalizeIdentifier } from './normalizer.js'
 
 // Identifiers with this prefix point to symbols defined outside the current

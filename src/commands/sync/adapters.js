@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Per-adapter sync helpers. The outer `sync()` orchestrator dispatches
  * one of these per adapter via `Promise.allSettled`, so each returns

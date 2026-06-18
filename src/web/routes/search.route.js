@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { search } from '../../commands/search.js'
 import { BackpressureError, Semaphore } from '../../lib/semaphore.js'
 import { projectSearchResult } from '../../output/projection.js'

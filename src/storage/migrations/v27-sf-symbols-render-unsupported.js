@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v27 — `sf_symbols.render_unsupported` flag for symbols the build
  * host's macOS cannot draw.

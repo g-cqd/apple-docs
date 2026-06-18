@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * `apple-docs prune` — trim an existing corpus to `<dataDir>/scope.json`
  * WITHOUT re-crawling (issue #7). Deletes every page whose root falls

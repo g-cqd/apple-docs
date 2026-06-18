@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * The catalog is sourced from the current SF Symbols.app release, which
  * can be newer than the building macOS (SF Symbols 8.2 lists

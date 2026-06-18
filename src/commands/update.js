@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { scopeRootsFor } from '../lib/scope.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { discoverRoots } from '../pipeline/discover.js'

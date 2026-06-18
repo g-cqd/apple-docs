@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // MCP tool surface for the documentation queries: search_docs, read_doc,
 // list_frameworks, browse, list_taxonomy. Every response routes through
 // src/output/projection.js before serialisation; nothing else in this

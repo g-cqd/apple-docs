@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Shared constants + regex caches for the parse-html cluster.
 
 /** Block-level HTML tags that should produce paragraph breaks. */

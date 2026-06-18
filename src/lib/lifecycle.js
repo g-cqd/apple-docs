@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Process lifecycle helper for the apple-docs CLI / MCP / web entry points.
  *

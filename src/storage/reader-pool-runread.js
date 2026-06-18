@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Thin routing helper for the SQLite reader pool.
 //
 // Lives in its own module so `src/storage/reader-pool.js` can stay

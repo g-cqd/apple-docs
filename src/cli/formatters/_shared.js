@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Shared CLI formatter helpers (TTY detection, bytes formatter, search
  * quality badge). Pulled out so per-output-kind formatters can share

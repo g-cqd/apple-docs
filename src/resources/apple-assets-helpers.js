@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pure formatting / normalization helpers shared across the apple-fonts
  * and apple-symbols modules.

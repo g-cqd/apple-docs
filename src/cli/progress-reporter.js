@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Throttled TTY progress reporter for `web build`. Emits at most once per
  * second and replaces the line with a carriage return; computes a smoothed

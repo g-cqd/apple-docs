@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Update path for snapshot-style sources (the App Store Review
 // Guidelines): a single fetched HTML blob that gets re-applied when the
 // upstream ETag drifts.

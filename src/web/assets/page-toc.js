@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Page TOC active-link highlighter. Watches `<h2>`/`<h3>` sections via
 // IntersectionObserver and toggles `.toc-active` on the matching
 // `.page-toc a[href^="#"]` link as the user scrolls. The `page-toc:refresh`

@@ -4,8 +4,8 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "allowJs": true,
-    "checkJs": false,
-    "strict": false,
+    "checkJs": true,
+    "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["bun-types"]

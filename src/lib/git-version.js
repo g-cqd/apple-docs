@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Short commit hash of the running checkout, for the page footer ("what code
  * is this instance serving"). Computed at web-build time.

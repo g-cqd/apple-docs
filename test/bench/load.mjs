@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * RFC 0007 F4 — load-test harness (manual tool; NOT a CI test).
  *

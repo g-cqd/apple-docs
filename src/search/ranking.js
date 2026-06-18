@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 const BASE_SCORES = {
   exact: 100,
   prefix: 80,

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Header quick-search controller. Debounces /api/search calls, renders
 // the dropdown of hits, handles keyboard navigation (arrow keys, Enter,
 // Escape, `/` shortcut), and announces result counts via an aria-live

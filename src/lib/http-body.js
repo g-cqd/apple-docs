@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * HTTP boundary helpers. The MCP HTTP server is publicly reachable, so
  * `await request.text()` without a size cap and a default-allow Origin

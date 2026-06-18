@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { nativePlainTextBatch } from '../content/content-native.js'
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { renderPlainText } from '../content/render-text.js'

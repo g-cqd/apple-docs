@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v18 — `sf_symbols.bitmap_only` flag for symbols whose private bundle
  * representation is bitmap-backed (emoji.*, year_to_release, etc.).

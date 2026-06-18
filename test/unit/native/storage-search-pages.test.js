@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * A/B byte-parity gate for the native searchPages read path (RFC 0001 P5
  * first slice). The native side (libAppleDocsCore → dlopen'd libsqlite3)

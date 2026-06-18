@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, statSync } from 'node:fs'
 import { NotFoundError, ValidationError } from '../../lib/errors.js'
 import { sha256File } from '../../lib/hash.js'

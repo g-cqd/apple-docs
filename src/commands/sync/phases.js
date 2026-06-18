@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Post-crawl sync phases — body-index + resources. Both run
  * concurrently because they touch disjoint tables (body index:

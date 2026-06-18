@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchRawGitHub } from '../../lib/github.js'
 
 const README_FILENAMES = ['README.md', 'readme.md', 'README.markdown']

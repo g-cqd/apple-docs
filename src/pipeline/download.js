@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchDocPage } from '../apple/api.js'
 import { pool } from '../lib/pool.js'
 import { persistFetchedDocPage } from './persist.js'

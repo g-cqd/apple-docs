@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Embed js-vs-native benchmark for the RFC 0002 §3 gates (local-only: needs
  * the pinned model AND the full matrix artifact; CI never runs this). Run:

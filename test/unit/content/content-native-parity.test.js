@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Byte-parity gates for the content renderers (RFC 0004 phases 1-2).
  *

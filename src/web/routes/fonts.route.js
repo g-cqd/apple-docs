@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { extname, join } from 'node:path'
 import { BackpressureError, ValidationError } from '../../lib/errors.js'

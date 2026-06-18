@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Section metadata extractors — title, number, abstract, last-updated.
  * Operate on already-converted Markdown (or the source HTML for last-

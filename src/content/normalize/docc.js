@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Apple DocC normalizer (apple-docc | hig | swift-docc).
 
 import { normalizeIdentifier } from '../../apple/normalizer.js'

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // DocC content-node → HTML rendering. Walks the structured `contentJson`
 // representation that normalize.js produces and emits the corresponding
 // HTML tree. Block and inline node handlers live in the same module

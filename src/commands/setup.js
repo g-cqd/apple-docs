@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveSevenZipBinary } from '../lib/archive-7z.js'

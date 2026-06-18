@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { renderSnippet } from '../content/render-snippet.js'
 import { buildCascadeRunners, runRelaxationCascade } from '../search/cascade.js'
 import { buildPlatformFilters, matchesSearchFilters, normalizeDeprecatedFilter, normalizeSourceFilter } from '../search/filters.js'

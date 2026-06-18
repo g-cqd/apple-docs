@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { afterEach, describe, expect, test } from 'bun:test'
 import { addEntryPoints, clearEntryPoints, getAllEntryPoints, getEntryPointsForParent } from '../../../src/sources/entry-points.js'
 // Side-effect imports: adapters self-register their entry points at module load.

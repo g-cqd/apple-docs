@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { AssertionError, NotFoundError } from '../lib/errors.js'
 import { AppleArchiveAdapter } from './apple-archive.js'
 import { AppleDoccAdapter } from './apple-docc.js'

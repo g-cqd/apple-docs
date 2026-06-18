@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { describe, expect, test } from 'bun:test'
 import { renderContentNodesToText, renderInlineNodes } from '../../../src/content/normalize/render-content.js'
 import { renderContentNodesToHtml, renderInlineNodesToHtml } from '../../../src/content/render-html/nodes.js'

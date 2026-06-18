@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Storage dispatch (RFC 0001 P5 first slice): a native SQLite read path for
  * `searchPages` over the EXISTING real-SQLite corpus, served by

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Pagination plan builders. Two strategies — array (split on item
 // boundaries) and text-window (split inside a single string body) — both
 // driven by a binary search against a serialized-length budget.

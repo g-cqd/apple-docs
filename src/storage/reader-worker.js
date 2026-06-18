@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { parentPort, workerData } from 'node:worker_threads'
 import { getNativeLib, isNativeEnabled } from '../native/loader.js'
 import { DocsDatabase } from './database.js'

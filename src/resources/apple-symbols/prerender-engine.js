@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SF Symbol prerender execution engine — the two render paths a scope
  * bucket can take, split out of sync.js to keep that file under the

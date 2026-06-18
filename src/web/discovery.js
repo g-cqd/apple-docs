@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Agent-discovery affordances, shared by the Bun server routes
 // (src/web/serve.js) and the static build (src/web/build.js) so the live
 // site and the prebuilt CDN artifact emit byte-identical metadata.

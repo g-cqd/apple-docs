@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Deterministic, dependency-free document chunker for the body-aware semantic
  * index. The embedder used to see only `title + abstract + headings` (the
