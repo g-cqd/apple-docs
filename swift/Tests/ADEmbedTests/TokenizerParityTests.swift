@@ -9,25 +9,25 @@ import Testing
 @testable import ADEmbed
 
 struct TokenizerParityTests {
-  @Test func fixturesAreLoadableAndNonTrivial() throws {
-    let fixture = try TestSupport.loadFixture()
-    #expect(fixture.meta.model == "minishlab/potion-retrieval-32M")
-    #expect(fixture.cases.count > 150)
-  }
-
-  @Test func everyFixtureCaseMatchesTransformersJS() throws {
-    let tokenizer = try Tokenizer.fromFixtures()
-    let fixture = try TestSupport.loadFixture()
-    var failures: [String] = []
-    for c in fixture.cases {
-      let got = tokenizer.encode(c.text)
-      if got != c.ids {
-        failures.append("\(c.name): got \(got) want \(c.ids)")
-      }
+    @Test func fixturesAreLoadableAndNonTrivial() throws {
+        let fixture = try TestSupport.loadFixture()
+        #expect(fixture.meta.model == "minishlab/potion-retrieval-32M")
+        #expect(fixture.cases.count > 150)
     }
-    #expect(
-      failures.isEmpty,
-      "\(failures.count)/\(fixture.cases.count) mismatches:\n\(failures.prefix(8).joined(separator: "\n"))"
-    )
-  }
+
+    @Test func everyFixtureCaseMatchesTransformersJS() throws {
+        let tokenizer = try Tokenizer.fromFixtures()
+        let fixture = try TestSupport.loadFixture()
+        var failures: [String] = []
+        for c in fixture.cases {
+            let got = tokenizer.encode(c.text)
+            if got != c.ids {
+                failures.append("\(c.name): got \(got) want \(c.ids)")
+            }
+        }
+        #expect(
+            failures.isEmpty,
+            "\(failures.count)/\(fixture.cases.count) mismatches:\n\(failures.prefix(8).joined(separator: "\n"))"
+        )
+    }
 }

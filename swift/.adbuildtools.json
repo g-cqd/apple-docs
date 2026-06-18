@@ -1,0 +1,6 @@
+{
+    "devEnv": "APPLEDOCS_DEV",
+    "shippedTargets": ["Sources"],
+    "strtodBan": false,
+    "forceUnwrapBan": false
+}

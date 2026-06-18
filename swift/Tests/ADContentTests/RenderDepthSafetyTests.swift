@@ -1,6 +1,6 @@
+import ADJSONCore
 import Testing
 
-import ADJSONCore
 @testable import ADContent
 
 // Depth-safety for the recursive DocC content/inline renderer. The render walk
@@ -10,24 +10,24 @@ import ADJSONCore
 // these tests pin that contract.
 @Suite("Render depth safety")
 struct RenderDepthSafetyTests {
-  @Test func deeplyNestedRawJSONRejectedNotOverflow() {
-    // ~10× the 512 parse cap: parse must reject it, so the recursive renderer never runs.
-    let depth = 5000
-    let bytes = Array(
-      (String(repeating: "[", count: depth) + String(repeating: "]", count: depth)).utf8)
-    var writer = ByteWriter()
-    let rendered = bytes.withUnsafeBytes { raw in
-      PageMarkdown.renderRawJSON(raw, canonicalPath: "/documentation/x", into: &writer)
+    @Test func deeplyNestedRawJSONRejectedNotOverflow() {
+        // ~10× the 512 parse cap: parse must reject it, so the recursive renderer never runs.
+        let depth = 5000
+        let bytes = Array(
+            (String(repeating: "[", count: depth) + String(repeating: "]", count: depth)).utf8)
+        var writer = ByteWriter()
+        let rendered = bytes.withUnsafeBytes { raw in
+            PageMarkdown.renderRawJSON(raw, canonicalPath: "/documentation/x", into: &writer)
+        }
+        #expect(rendered == false)  // parse depth-capped: recursion never ran, no overflow
     }
-    #expect(rendered == false)  // parse depth-capped: recursion never ran, no overflow
-  }
 
-  @Test func shallowDocumentRendersWithoutCrash() {
-    let bytes = Array(#"{"metadata":{"title":"Hi"}}"#.utf8)
-    var writer = ByteWriter()
-    let rendered = bytes.withUnsafeBytes { raw in
-      PageMarkdown.renderRawJSON(raw, canonicalPath: "/documentation/x", into: &writer)
+    @Test func shallowDocumentRendersWithoutCrash() {
+        let bytes = Array(#"{"metadata":{"title":"Hi"}}"#.utf8)
+        var writer = ByteWriter()
+        let rendered = bytes.withUnsafeBytes { raw in
+            PageMarkdown.renderRawJSON(raw, canonicalPath: "/documentation/x", into: &writer)
+        }
+        #expect(rendered)  // parsed under the cap, rendered without crashing
     }
-    #expect(rendered)  // parsed under the cap, rendered without crashing
-  }
 }

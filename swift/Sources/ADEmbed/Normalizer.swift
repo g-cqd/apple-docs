@@ -14,36 +14,36 @@
 import ADFUnicode
 
 enum Normalizer {
-  private static let space: Unicode.Scalar = " "
+    private static let space: Unicode.Scalar = " "
 
-  static func normalize(_ text: [Unicode.Scalar]) -> [Unicode.Scalar] {
-    var cleaned: [Unicode.Scalar] = []
-    cleaned.reserveCapacity(text.count)
-    for s in text {
-      if UnicodeSets.isCleanTextRemoved(s.value) { continue }
-      cleaned.append(UnicodeSets.isJsWhitespace(s.value) ? space : s)
+    static func normalize(_ text: [Unicode.Scalar]) -> [Unicode.Scalar] {
+        var cleaned: [Unicode.Scalar] = []
+        cleaned.reserveCapacity(text.count)
+        for s in text {
+            if UnicodeSets.isCleanTextRemoved(s.value) { continue }
+            cleaned.append(UnicodeSets.isJsWhitespace(s.value) ? space : s)
+        }
+
+        var spaced: [Unicode.Scalar] = []
+        spaced.reserveCapacity(cleaned.count)
+        for s in cleaned {
+            if UnicodeSets.isChinese(s.value) {
+                spaced.append(space)
+                spaced.append(s)
+                spaced.append(space)
+            } else {
+                spaced.append(s)
+            }
+        }
+
+        let lowered = CaseFolding.lowercase(spaced)
+
+        var stripped: [Unicode.Scalar] = []
+        stripped.reserveCapacity(lowered.count)
+        // Lowest Mn scalar is U+0300 — cheap bail before the range search.
+        for s in NFD.decompose(lowered) where s.value < 0x300 || !UnicodeSets.isNonspacingMark(s.value) {
+            stripped.append(s)
+        }
+        return stripped
     }
-
-    var spaced: [Unicode.Scalar] = []
-    spaced.reserveCapacity(cleaned.count)
-    for s in cleaned {
-      if UnicodeSets.isChinese(s.value) {
-        spaced.append(space)
-        spaced.append(s)
-        spaced.append(space)
-      } else {
-        spaced.append(s)
-      }
-    }
-
-    let lowered = CaseFolding.lowercase(spaced)
-
-    var stripped: [Unicode.Scalar] = []
-    stripped.reserveCapacity(lowered.count)
-    // Lowest Mn scalar is U+0300 — cheap bail before the range search.
-    for s in NFD.decompose(lowered) where s.value < 0x300 || !UnicodeSets.isNonspacingMark(s.value) {
-      stripped.append(s)
-    }
-    return stripped
-  }
 }

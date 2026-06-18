@@ -6,5 +6,5 @@
 /// v1 — bit-exact transformers.js 4.2.0 mirror (the port).
 /// v2 — astral CJK spacing + half-away-from-zero i8 rounding.
 public enum EmbedBehavior {
-  public static let version: UInt32 = 2
+    public static let version: UInt32 = 2
 }

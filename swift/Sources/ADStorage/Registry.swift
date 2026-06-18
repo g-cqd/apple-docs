@@ -12,37 +12,37 @@
 import Synchronization
 
 public final class ConnectionRegistry: @unchecked Sendable {
-  public static let shared = ConnectionRegistry()
+    public static let shared = ConnectionRegistry()
 
-  private struct State {
-    var next: UInt64 = 1
-    var connections: [UInt64: Connection] = [:]
-  }
-  private let state = Mutex(State())
-
-  private init() {}
-
-  /// Opens a read connection and returns its handle, or nil if the dylib /
-  /// FTS5 / file is unavailable.
-  func open(path: String) -> UInt64? {
-    guard let conn = Connection(path: path) else { return nil }
-    return state.withLock { state in
-      let id = state.next
-      state.next &+= 1
-      state.connections[id] = conn
-      return id
+    private struct State {
+        var next: UInt64 = 1
+        var connections: [UInt64: Connection] = [:]
     }
-  }
+    private let state = Mutex(State())
 
-  func close(_ id: UInt64) {
-    state.withLock { _ = $0.connections.removeValue(forKey: id) }
-  }
+    private init() {}
 
-  /// Looks up the connection (under the lock) and runs `body` with it
-  /// OUTSIDE the lock — the connection belongs to the calling thread, so a
-  /// long query never blocks other workers' open/close/lookup.
-  func withConnection<R>(_ id: UInt64, _ body: (Connection) -> R) -> R? {
-    guard let conn = state.withLock({ $0.connections[id] }) else { return nil }
-    return body(conn)
-  }
+    /// Opens a read connection and returns its handle, or nil if the dylib /
+    /// FTS5 / file is unavailable.
+    func open(path: String) -> UInt64? {
+        guard let conn = Connection(path: path) else { return nil }
+        return state.withLock { state in
+            let id = state.next
+            state.next &+= 1
+            state.connections[id] = conn
+            return id
+        }
+    }
+
+    func close(_ id: UInt64) {
+        state.withLock { _ = $0.connections.removeValue(forKey: id) }
+    }
+
+    /// Looks up the connection (under the lock) and runs `body` with it
+    /// OUTSIDE the lock — the connection belongs to the calling thread, so a
+    /// long query never blocks other workers' open/close/lookup.
+    func withConnection<R>(_ id: UInt64, _ body: (Connection) -> R) -> R? {
+        guard let conn = state.withLock({ $0.connections[id] }) else { return nil }
+        return body(conn)
+    }
 }

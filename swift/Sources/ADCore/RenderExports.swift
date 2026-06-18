@@ -13,38 +13,38 @@ import ADBase
 import ADRender
 
 #if canImport(CoreGraphics)
-import CoreGraphics
+    import CoreGraphics
 #endif
 
 @_cdecl("ad_render_font_text")
 public func adRenderFontText(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
-  guard len > 0, len <= maxInputBytes, let ptr else {
-    return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
-  }
-  var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
-  guard let version = reader.u32(), version == 1 else {
-    return ResultBuffer.error(.invalidInput, "unsupported render request version")
-  }
-  guard let fontPathField = reader.nullableString(max: maxInputBytes),
-    let textField = reader.nullableString(max: maxInputBytes),
-    let pointSize = reader.f64()
-  else { return ResultBuffer.error(.invalidInput, "truncated font-text request") }
-  guard reader.remaining == 0 else {
-    return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
-  }
-  guard let fontPath = fontPathField, let text = textField else {
-    return ResultBuffer.error(.invalidInput, "null fontPath or text")
-  }
+    guard len > 0, len <= maxInputBytes, let ptr else {
+        return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
+    }
+    var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
+    guard let version = reader.u32(), version == 1 else {
+        return ResultBuffer.error(.invalidInput, "unsupported render request version")
+    }
+    guard let fontPathField = reader.nullableString(max: maxInputBytes),
+        let textField = reader.nullableString(max: maxInputBytes),
+        let pointSize = reader.f64()
+    else { return ResultBuffer.error(.invalidInput, "truncated font-text request") }
+    guard reader.remaining == 0 else {
+        return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
+    }
+    guard let fontPath = fontPathField, let text = textField else {
+        return ResultBuffer.error(.invalidInput, "null fontPath or text")
+    }
 
-  #if canImport(CoreText)
-  guard let svg = FontText.renderSVG(fontPath: fontPath, text: text, pointSize: CGFloat(pointSize))
-  else {
-    return ResultBuffer.error(.invalidInput, "font-text render produced no output")
-  }
-  return ResultBuffer.text(status: .ok, format: .utf8, svg)
-  #else
-  return ResultBuffer.error(.invalidInput, "render unavailable: no CoreText on this platform")
-  #endif
+    #if canImport(CoreText)
+        guard let svg = FontText.renderSVG(fontPath: fontPath, text: text, pointSize: CGFloat(pointSize))
+        else {
+            return ResultBuffer.error(.invalidInput, "font-text render produced no output")
+        }
+        return ResultBuffer.text(status: .ok, format: .utf8, svg)
+    #else
+        return ResultBuffer.error(.invalidInput, "render unavailable: no CoreText on this platform")
+    #endif
 }
 
 // ad_render_font_text_shaped request:
@@ -55,27 +55,27 @@ public func adRenderFontText(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Unsafe
 // dylib serves this; darwin keeps CoreText for its own font-text path.
 @_cdecl("ad_render_font_text_shaped")
 public func adRenderFontTextShaped(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
-  guard len > 0, len <= maxInputBytes, let ptr else {
-    return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
-  }
-  var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
-  guard let version = reader.u32(), version == 1 else {
-    return ResultBuffer.error(.invalidInput, "unsupported render request version")
-  }
-  guard let fontPathField = reader.nullableString(max: maxInputBytes),
-    let textField = reader.nullableString(max: maxInputBytes),
-    let pointSize = reader.f64()
-  else { return ResultBuffer.error(.invalidInput, "truncated shaped font-text request") }
-  guard reader.remaining == 0 else {
-    return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
-  }
-  guard let fontPath = fontPathField, let text = textField else {
-    return ResultBuffer.error(.invalidInput, "null fontPath or text")
-  }
-  guard let svg = HarfBuzzShaper.renderSVG(fontPath: fontPath, text: text, pointSize: pointSize) else {
-    return ResultBuffer.error(.invalidInput, "shaped font-text render produced no output")
-  }
-  return svg.withUnsafeBytes { ResultBuffer.make(status: .ok, format: .utf8, payload: $0) }
+    guard len > 0, len <= maxInputBytes, let ptr else {
+        return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
+    }
+    var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
+    guard let version = reader.u32(), version == 1 else {
+        return ResultBuffer.error(.invalidInput, "unsupported render request version")
+    }
+    guard let fontPathField = reader.nullableString(max: maxInputBytes),
+        let textField = reader.nullableString(max: maxInputBytes),
+        let pointSize = reader.f64()
+    else { return ResultBuffer.error(.invalidInput, "truncated shaped font-text request") }
+    guard reader.remaining == 0 else {
+        return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
+    }
+    guard let fontPath = fontPathField, let text = textField else {
+        return ResultBuffer.error(.invalidInput, "null fontPath or text")
+    }
+    guard let svg = HarfBuzzShaper.renderSVG(fontPath: fontPath, text: text, pointSize: pointSize) else {
+        return ResultBuffer.error(.invalidInput, "shaped font-text render produced no output")
+    }
+    return svg.withUnsafeBytes { ResultBuffer.make(status: .ok, format: .utf8, payload: $0) }
 }
 
 // ad_render_symbol_pdf request:
@@ -84,35 +84,35 @@ public func adRenderFontTextShaped(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> 
 // non-darwin / failure → .invalidInput → JS spawn fallback.
 @_cdecl("ad_render_symbol_pdf")
 public func adRenderSymbolPdf(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
-  guard len > 0, len <= maxInputBytes, let ptr else {
-    return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
-  }
-  var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
-  guard let version = reader.u32(), version == 1 else {
-    return ResultBuffer.error(.invalidInput, "unsupported render request version")
-  }
-  guard let nameField = reader.nullableString(max: maxInputBytes),
-    let scopeField = reader.nullableString(max: maxInputBytes),
-    let weightField = reader.nullableString(max: maxInputBytes),
-    let scaleField = reader.nullableString(max: maxInputBytes)
-  else { return ResultBuffer.error(.invalidInput, "truncated symbol-pdf request") }
-  guard reader.remaining == 0 else {
-    return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
-  }
-  guard let name = nameField, let scope = scopeField else {
-    return ResultBuffer.error(.invalidInput, "null symbol name or scope")
-  }
-  let weight = weightField ?? "regular"
-  let scale = scaleField ?? "medium"
+    guard len > 0, len <= maxInputBytes, let ptr else {
+        return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
+    }
+    var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
+    guard let version = reader.u32(), version == 1 else {
+        return ResultBuffer.error(.invalidInput, "unsupported render request version")
+    }
+    guard let nameField = reader.nullableString(max: maxInputBytes),
+        let scopeField = reader.nullableString(max: maxInputBytes),
+        let weightField = reader.nullableString(max: maxInputBytes),
+        let scaleField = reader.nullableString(max: maxInputBytes)
+    else { return ResultBuffer.error(.invalidInput, "truncated symbol-pdf request") }
+    guard reader.remaining == 0 else {
+        return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
+    }
+    guard let name = nameField, let scope = scopeField else {
+        return ResultBuffer.error(.invalidInput, "null symbol name or scope")
+    }
+    let weight = weightField ?? "regular"
+    let scale = scaleField ?? "medium"
 
-  #if canImport(AppKit)
-  guard let pdf = SymbolPdf.render(name: name, scope: scope, weight: weight, scale: scale) else {
-    return ResultBuffer.error(.invalidInput, "symbol-pdf render produced no output")
-  }
-  return pdf.withUnsafeBytes { ResultBuffer.make(status: .ok, format: .bytes, payload: $0) }
-  #else
-  return ResultBuffer.error(.invalidInput, "render unavailable: no AppKit on this platform")
-  #endif
+    #if canImport(AppKit)
+        guard let pdf = SymbolPdf.render(name: name, scope: scope, weight: weight, scale: scale) else {
+            return ResultBuffer.error(.invalidInput, "symbol-pdf render produced no output")
+        }
+        return pdf.withUnsafeBytes { ResultBuffer.make(status: .ok, format: .bytes, payload: $0) }
+    #else
+        return ResultBuffer.error(.invalidInput, "render unavailable: no AppKit on this platform")
+    #endif
 }
 
 // ad_render_symbol_png request:
@@ -122,46 +122,46 @@ public func adRenderSymbolPdf(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Unsaf
 // non-darwin / failure → .invalidInput → JS spawn fallback.
 @_cdecl("ad_render_symbol_png")
 public func adRenderSymbolPng(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
-  guard len > 0, len <= maxInputBytes, let ptr else {
-    return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
-  }
-  var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
-  guard let version = reader.u32(), version == 1 else {
-    return ResultBuffer.error(.invalidInput, "unsupported render request version")
-  }
-  guard let nameField = reader.nullableString(max: maxInputBytes),
-    let scopeField = reader.nullableString(max: maxInputBytes),
-    let pointSize = reader.f64(), let colorField = reader.nullableString(max: maxInputBytes),
-    let backgroundField = reader.nullableString(max: maxInputBytes),
-    let weightField = reader.nullableString(max: maxInputBytes),
-    let scaleField = reader.nullableString(max: maxInputBytes)
-  else { return ResultBuffer.error(.invalidInput, "truncated symbol-png request") }
-  guard reader.remaining == 0 else {
-    return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
-  }
-  guard let name = nameField, let scope = scopeField else {
-    return ResultBuffer.error(.invalidInput, "null symbol name or scope")
-  }
+    guard len > 0, len <= maxInputBytes, let ptr else {
+        return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
+    }
+    var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
+    guard let version = reader.u32(), version == 1 else {
+        return ResultBuffer.error(.invalidInput, "unsupported render request version")
+    }
+    guard let nameField = reader.nullableString(max: maxInputBytes),
+        let scopeField = reader.nullableString(max: maxInputBytes),
+        let pointSize = reader.f64(), let colorField = reader.nullableString(max: maxInputBytes),
+        let backgroundField = reader.nullableString(max: maxInputBytes),
+        let weightField = reader.nullableString(max: maxInputBytes),
+        let scaleField = reader.nullableString(max: maxInputBytes)
+    else { return ResultBuffer.error(.invalidInput, "truncated symbol-png request") }
+    guard reader.remaining == 0 else {
+        return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
+    }
+    guard let name = nameField, let scope = scopeField else {
+        return ResultBuffer.error(.invalidInput, "null symbol name or scope")
+    }
 
-  #if canImport(AppKit)
-  guard
-    let png = SymbolPng.render(
-      name: name, scope: scope, pointSize: pointSize, color: colorField, background: backgroundField,
-      weight: weightField ?? "regular", scale: scaleField ?? "medium")
-  else {
-    return ResultBuffer.error(.invalidInput, "symbol-png render produced no output")
-  }
-  return png.withUnsafeBytes { ResultBuffer.make(status: .ok, format: .bytes, payload: $0) }
-  #else
-  return ResultBuffer.error(.invalidInput, "render unavailable: no AppKit on this platform")
-  #endif
+    #if canImport(AppKit)
+        guard
+            let png = SymbolPng.render(
+                name: name, scope: scope, pointSize: pointSize, color: colorField, background: backgroundField,
+                weight: weightField ?? "regular", scale: scaleField ?? "medium")
+        else {
+            return ResultBuffer.error(.invalidInput, "symbol-png render produced no output")
+        }
+        return png.withUnsafeBytes { ResultBuffer.make(status: .ok, format: .bytes, payload: $0) }
+    #else
+        return ResultBuffer.error(.invalidInput, "render unavailable: no AppKit on this platform")
+    #endif
 }
 
 private struct SymbolJob: Sendable {
-  let name: String?
-  let scope: String?
-  let weight: String
-  let scale: String
+    let name: String?
+    let scope: String?
+    let weight: String
+    let scale: String
 }
 
 // ad_render_symbol_pdf_batch request:
@@ -173,44 +173,44 @@ private struct SymbolJob: Sendable {
 // build returns every entry null → the JS prerender uses its worker pool.
 @_cdecl("ad_render_symbol_pdf_batch")
 public func adRenderSymbolPdfBatch(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> UnsafeMutableRawPointer? {
-  guard len > 0, len <= maxInputBytes, let ptr else {
-    return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
-  }
-  var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
-  guard let version = reader.u32(), version == 1 else {
-    return ResultBuffer.error(.invalidInput, "unsupported render request version")
-  }
-  guard let count = reader.u32(), count <= 1 << 16 else {
-    return ResultBuffer.error(.invalidInput, "symbol count out of bounds")
-  }
-  var jobs: [SymbolJob] = []
-  jobs.reserveCapacity(Int(count))
-  for _ in 0..<count {
-    guard let nameField = reader.nullableString(max: maxInputBytes),
-      let scopeField = reader.nullableString(max: maxInputBytes),
-      let weightField = reader.nullableString(max: maxInputBytes),
-      let scaleField = reader.nullableString(max: maxInputBytes)
-    else { return ResultBuffer.error(.invalidInput, "truncated symbol-pdf batch item") }
-    jobs.append(
-      SymbolJob(
-        name: nameField, scope: scopeField,
-        weight: weightField ?? "regular", scale: scaleField ?? "medium"))
-  }
-  guard reader.remaining == 0 else {
-    return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
-  }
+    guard len > 0, len <= maxInputBytes, let ptr else {
+        return ResultBuffer.error(.invalidInput, "empty or oversized request (\(len) bytes)")
+    }
+    var reader = RequestReader(UnsafeRawBufferPointer(start: ptr, count: len))
+    guard let version = reader.u32(), version == 1 else {
+        return ResultBuffer.error(.invalidInput, "unsupported render request version")
+    }
+    guard let count = reader.u32(), count <= 1 << 16 else {
+        return ResultBuffer.error(.invalidInput, "symbol count out of bounds")
+    }
+    var jobs: [SymbolJob] = []
+    jobs.reserveCapacity(Int(count))
+    for _ in 0 ..< count {
+        guard let nameField = reader.nullableString(max: maxInputBytes),
+            let scopeField = reader.nullableString(max: maxInputBytes),
+            let weightField = reader.nullableString(max: maxInputBytes),
+            let scaleField = reader.nullableString(max: maxInputBytes)
+        else { return ResultBuffer.error(.invalidInput, "truncated symbol-pdf batch item") }
+        jobs.append(
+            SymbolJob(
+                name: nameField, scope: scopeField,
+                weight: weightField ?? "regular", scale: scaleField ?? "medium"))
+    }
+    guard reader.remaining == 0 else {
+        return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes")
+    }
 
-  #if canImport(AppKit)
-  let frozen = jobs
-  let results = renderIndexed(frozen.count) { i, out in
-    guard let name = frozen[i].name, let scope = frozen[i].scope,
-      let pdf = SymbolPdf.render(name: name, scope: scope, weight: frozen[i].weight, scale: frozen[i].scale)
-    else { return false }
-    out = pdf
-    return true
-  }
-  #else
-  let results = [[UInt8]?](repeating: nil, count: jobs.count)
-  #endif
-  return lenPrefixedPayload(results)
+    #if canImport(AppKit)
+        let frozen = jobs
+        let results = renderIndexed(frozen.count) { i, out in
+            guard let name = frozen[i].name, let scope = frozen[i].scope,
+                let pdf = SymbolPdf.render(name: name, scope: scope, weight: frozen[i].weight, scale: frozen[i].scale)
+            else { return false }
+            out = pdf
+            return true
+        }
+    #else
+        let results = [[UInt8]?](repeating: nil, count: jobs.count)
+    #endif
+    return lenPrefixedPayload(results)
 }
