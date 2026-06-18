@@ -53,12 +53,16 @@ struct WordPieceTests {
 
     private func encode(_ word: String, max: Int = 100) -> [Int32] {
         var out: [Int32] = []
+        var wordBytes: [UInt8] = []
+        var offsets: [Int] = []
         WordPiece.encode(
             word: scalars(word)[...],
             vocab: vocab,
             unkId: 1,
             continuationPrefix: prefix,
             maxInputCharsPerWord: max,
+            wordBytes: &wordBytes,
+            offsets: &offsets,
             into: &out
         )
         return out

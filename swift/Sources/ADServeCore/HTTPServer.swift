@@ -351,6 +351,10 @@ public struct HTTPServer: Sendable {
         isHTTP2: Bool
     ) async {
         do {
+            // The channel's pooled allocator — used for the response body buffer so NIO can
+            // account/optimise it against this connection (NIO's documented guidance over a
+            // throwaway `ByteBufferAllocator()`). A cheap `Sendable` value, captured once.
+            let allocator = channel.channel.allocator
             try await channel.executeThenClose { inbound, outbound in
                 var requestHead: HTTPRequest?
                 var body: [UInt8] = []
@@ -384,12 +388,13 @@ public struct HTTPServer: Sendable {
                             defer { active.leave() }
                             let keepAlive: Bool
                             if overflow {
-                                try await writeBodyTooLarge(to: head, outbound: outbound, isHTTP2: isHTTP2)
+                                try await writeBodyTooLarge(
+                                    to: head, outbound: outbound, isHTTP2: isHTTP2, allocator: allocator)
                                 keepAlive = false
                             } else {
                                 keepAlive = try await respond(
                                     to: head, body: body, routes: routes, outbound: outbound, threadPool: threadPool,
-                                    isHTTP2: isHTTP2)
+                                    isHTTP2: isHTTP2, allocator: allocator)
                             }
                             body = []
                             if !keepAlive { return }
@@ -419,12 +424,13 @@ public struct HTTPServer: Sendable {
     }
 
     private func writeBodyTooLarge(
-        to head: HTTPRequest, outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>, isHTTP2: Bool
+        to head: HTTPRequest, outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>, isHTTP2: Bool,
+        allocator: ByteBufferAllocator
     ) async throws {
         try await write(
             .plain(HTTPResponse.Status(code: 413), "request too large\n"), cache: .unset,
             requestHeaders: head.headerFields, requestID: resolveRequestID(head.headerFields),
-            keepAlive: false, isHTTP2: isHTTP2, outbound: outbound)
+            keepAlive: false, isHTTP2: isHTTP2, outbound: outbound, allocator: allocator)
     }
 
     /// Resolves + runs the route for one request, then writes the response. Returns
@@ -432,7 +438,7 @@ public struct HTTPServer: Sendable {
     private func respond(
         to head: HTTPRequest, body: [UInt8], routes: any HTTPHandling,
         outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>, threadPool: NIOThreadPool,
-        isHTTP2: Bool
+        isHTTP2: Bool, allocator: ByteBufferAllocator
     ) async throws -> Bool {
         let keepAlive = isKeepAlive(head)
         let target = head.path ?? "/"
@@ -467,7 +473,7 @@ public struct HTTPServer: Sendable {
 
         try await write(
             content, cache: cache, requestHeaders: head.headerFields, requestID: requestID,
-            keepAlive: keepAlive, isHTTP2: isHTTP2, outbound: outbound)
+            keepAlive: keepAlive, isHTTP2: isHTTP2, outbound: outbound, allocator: allocator)
         return keepAlive
     }
 
@@ -475,7 +481,8 @@ public struct HTTPServer: Sendable {
     /// constant header set, the minted/echoed request-id, and (h1 only) the connection header.
     private func write(
         _ content: ResponseContent, cache: CachePolicy, requestHeaders: HTTPFields, requestID: String,
-        keepAlive: Bool, isHTTP2: Bool, outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>
+        keepAlive: Bool, isHTTP2: Bool, outbound: NIOAsyncChannelOutboundWriter<HTTPResponsePart>,
+        allocator: ByteBufferAllocator
     ) async throws {
         var (status, contentType, body, extraHeaders) = materialize(content)
         var headers = HTTPFields()
@@ -505,7 +512,17 @@ public struct HTTPServer: Sendable {
         for field in extraHeaders { headers[field.name] = field.value }
 
         try await outbound.write(.head(HTTPResponse(status: status, headerFields: headers)))
-        if !body.isEmpty { try await outbound.write(.body(ByteBuffer(bytes: body))) }
+        if !body.isEmpty {
+            // `HTTPResponsePart.body` is a `ByteBuffer`, so the route's `[UInt8]` must be copied into
+            // NIO-owned storage once (a single contiguous memcpy — unavoidable without threading a
+            // `ByteBuffer` through the whole `ResponseContent`/route surface). Take that one buffer from
+            // the connection's pooled allocator with the exact capacity, rather than a throwaway
+            // `ByteBufferAllocator()` per response: NIO can then pool/account it against the channel
+            // (its documented recommendation). The body is identical bytes either way.
+            var buffer = allocator.buffer(capacity: body.count)
+            buffer.writeBytes(body)
+            try await outbound.write(.body(buffer))
+        }
         try await outbound.write(.end(nil))
     }
 

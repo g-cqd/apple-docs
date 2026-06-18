@@ -58,6 +58,11 @@ public struct Tokenizer: Sendable {
     public func encode(_ text: String) -> [Int32] {
         let scalars = Array(text.unicodeScalars)
         var out: [Int32] = []
+        // Two scratch buffers reused for every pre-token word (WordPiece clears them with
+        // `removeAll(keepingCapacity: true)` per word), so the word-UTF-8 + per-scalar offset
+        // arrays are allocated once per `encode` rather than once per word × section.
+        var wordBytes: [UInt8] = []
+        var offsets: [Int] = []
         for section in splitOnAddedTokens(scalars) {
             switch section {
                 case .added(let id):
@@ -71,6 +76,8 @@ public struct Tokenizer: Sendable {
                             unkId: unkId,
                             continuationPrefix: continuationPrefix,
                             maxInputCharsPerWord: maxInputCharsPerWord,
+                            wordBytes: &wordBytes,
+                            offsets: &offsets,
                             into: &out
                         )
                     }
