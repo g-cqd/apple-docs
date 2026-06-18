@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { mkdirSync, existsSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { AssertionError } from '../lib/errors.js'
 import { fuzzyMatchTitles } from '../lib/fuzzy.js'
@@ -14,13 +14,13 @@ import { createOperationsRepo } from './repos/operations.js'
 import { createPagesRepo } from './repos/pages.js'
 import { createRootsRepo } from './repos/roots.js'
 import { createSearchRepo } from './repos/search.js'
+
 function deriveFrameworkFromPath(path) {
   if (!path) return null
   const parts = path.split('/').filter(Boolean)
   if (parts[0] === 'documentation') return parts[1] ?? null
   return parts[0] ?? null
 }
-
 
 export class DocsDatabase {
   constructor(dbPath) {
@@ -49,8 +49,12 @@ export class DocsDatabase {
     enableForeignKeys(this.db)
   }
 
-  getEffectiveMmapSize() { return this._effectiveMmapSize ?? 0 }
-  _migrate() { runMigrations(this.db) }
+  getEffectiveMmapSize() {
+    return this._effectiveMmapSize ?? 0
+  }
+  _migrate() {
+    runMigrations(this.db)
+  }
 
   hasTable(name) {
     return !!this.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name)
@@ -86,7 +90,10 @@ export class DocsDatabase {
     if (this._tier !== undefined) return this._tier
     try {
       const row = this.db.query("SELECT value FROM snapshot_meta WHERE key='snapshot_tier'").get()
-      if (row) { this._tier = row.value; return this._tier }
+      if (row) {
+        this._tier = row.value
+        return this._tier
+      }
     } catch {}
     this._tier = this.hasTable('documents') ? 'full' : null
     return this._tier
@@ -164,9 +171,15 @@ export class DocsDatabase {
     return page
   }
 
-  upsertDocument(params) { return this.documents.upsertDocument(params) }
-  replaceDocumentSections(documentId, sections) { this.documents.replaceSections(documentId, sections) }
-  replaceDocumentRelationships(fromKey, relationships) { this.documents.replaceRelationships(fromKey, relationships) }
+  upsertDocument(params) {
+    return this.documents.upsertDocument(params)
+  }
+  replaceDocumentSections(documentId, sections) {
+    this.documents.replaceSections(documentId, sections)
+  }
+  replaceDocumentRelationships(fromKey, relationships) {
+    this.documents.replaceRelationships(fromKey, relationships)
+  }
 
   upsertNormalizedDocument(normalized, hashes = {}) {
     const documentId = this.documents.upsertDocument({
@@ -199,44 +212,111 @@ export class DocsDatabase {
     return this.pages.getActivePage(path)
   }
 
-  getPageByPath(path) { return this.pages.getActivePage(path) }
-  getActivePathsIn(keys) { return this.pages.getActivePathsIn(keys) }
-  getDocumentSections(key) { return this.documents.getSections(key) }
-  getDocumentRelationships(key) { return this.documents.getRelationships(key) }
-  getPagesByRoot(rootSlug) { return this.documents.getDocumentsByRoot(rootSlug) }
+  getPageByPath(path) {
+    return this.pages.getActivePage(path)
+  }
+  getActivePathsIn(keys) {
+    return this.pages.getActivePathsIn(keys)
+  }
+  getDocumentSections(key) {
+    return this.documents.getSections(key)
+  }
+  getDocumentRelationships(key) {
+    return this.documents.getRelationships(key)
+  }
+  getPagesByRoot(rootSlug) {
+    return this.documents.getDocumentsByRoot(rootSlug)
+  }
 
-  searchPages(ftsQuery, rawQuery, opts = {}) { return this.search.searchPages(ftsQuery, rawQuery, opts) }
-  searchTitleExact(rawQuery, opts = {}) { return this.search.searchTitleExact(rawQuery, opts) }
-  searchTrigram(query, opts = {}) { return this.search.searchTrigram(query, opts) }
-  searchBody(ftsQuery, opts = {}) { return this.search.searchBody(ftsQuery, opts) }
-  getFrameworkSynonyms(slug) { return this.search.getFrameworkSynonyms(slug) }
+  searchPages(ftsQuery, rawQuery, opts = {}) {
+    return this.search.searchPages(ftsQuery, rawQuery, opts)
+  }
+  searchTitleExact(rawQuery, opts = {}) {
+    return this.search.searchTitleExact(rawQuery, opts)
+  }
+  searchTrigram(query, opts = {}) {
+    return this.search.searchTrigram(query, opts)
+  }
+  searchBody(ftsQuery, opts = {}) {
+    return this.search.searchBody(ftsQuery, opts)
+  }
+  getFrameworkSynonyms(slug) {
+    return this.search.getFrameworkSynonyms(slug)
+  }
 
-  getDocumentSnippetData(keys) { return this.documents.getDocumentSnippetData(keys) }
-  getRelatedDocCounts(keys) { return this.documents.getRelatedDocCounts(keys) }
-  getRelationshipCountsByType(key) { return this.documents.getRelationshipCountsByType(key) }
+  getDocumentSnippetData(keys) {
+    return this.documents.getDocumentSnippetData(keys)
+  }
+  getRelatedDocCounts(keys) {
+    return this.documents.getRelatedDocCounts(keys)
+  }
+  getRelationshipCountsByType(key) {
+    return this.documents.getRelationshipCountsByType(key)
+  }
 
   // Semantic vectors + raw-payload store (SQL + zstd live in the search repo).
-  getVectorCount() { return this.search.getVectorCount() }
-  getAllVectors() { return this.search.getAllVectors() }
-  getChunkCount() { return this.chunks.getChunkCount() }
-  resetSemanticCountCaches() { this.search.resetCountCache(); this.chunks.resetCountCache() } // §10(B)
-  getAllChunkVectors() { return this.chunks.getAllChunkVectors() }
-  getChunkI8Batch(chunkIds) { return this.chunks.getChunkI8Batch(chunkIds) }
-  upsertChunk(params) { this.chunks.upsertChunk(params) }
-  deleteChunksByDocId(documentId) { this.chunks.deleteChunksByDocId(documentId) }
-  getSectionsByDocumentIds(ids) { return this.documents.getSectionsByDocumentIds(ids) }
-  getSearchRecordsByIds(ids) { return this.search.getSearchRecordsByIds(ids) }
-  getRawCount() { return this.search.getRawCount() }
-  upsertRawPayload(documentId, json) { this.search.upsertRawPayload(documentId, json) }
-  getRawPayloadByKey(key) { return this.search.getRawPayloadByKey(key) }
+  getVectorCount() {
+    return this.search.getVectorCount()
+  }
+  getAllVectors() {
+    return this.search.getAllVectors()
+  }
+  getChunkCount() {
+    return this.chunks.getChunkCount()
+  }
+  resetSemanticCountCaches() {
+    this.search.resetCountCache()
+    this.chunks.resetCountCache()
+  } // §10(B)
+  getAllChunkVectors() {
+    return this.chunks.getAllChunkVectors()
+  }
+  getChunkI8Batch(chunkIds) {
+    return this.chunks.getChunkI8Batch(chunkIds)
+  }
+  upsertChunk(params) {
+    this.chunks.upsertChunk(params)
+  }
+  deleteChunksByDocId(documentId) {
+    this.chunks.deleteChunksByDocId(documentId)
+  }
+  getSectionsByDocumentIds(ids) {
+    return this.documents.getSectionsByDocumentIds(ids)
+  }
+  getSearchRecordsByIds(ids) {
+    return this.search.getSearchRecordsByIds(ids)
+  }
+  getRawCount() {
+    return this.search.getRawCount()
+  }
+  upsertRawPayload(documentId, json) {
+    this.search.upsertRawPayload(documentId, json)
+  }
+  getRawPayloadByKey(key) {
+    return this.search.getRawPayloadByKey(key)
+  }
 
-  getBodyIndexCount() { return this.search.getBodyIndexCount() }
-  hasBodyIndex() { return this.search.hasBodyIndex() }
-  insertBody(documentId, body) { this.search.insertBody(documentId, body) }
-  clearBodyIndex() { this.search.clearBodyIndex() }
-  getTrigramCandidates(trigram) { return this.search.getTrigramCandidates(trigram) }
-  fuzzyTrigramCandidates(orQuery, limit) { return this.search.fuzzyTrigramCandidates(orQuery, limit) }
-  getAllTitlesForFuzzy() { return this.search.getAllTitles() }
+  getBodyIndexCount() {
+    return this.search.getBodyIndexCount()
+  }
+  hasBodyIndex() {
+    return this.search.hasBodyIndex()
+  }
+  insertBody(documentId, body) {
+    this.search.insertBody(documentId, body)
+  }
+  clearBodyIndex() {
+    this.search.clearBodyIndex()
+  }
+  getTrigramCandidates(trigram) {
+    return this.search.getTrigramCandidates(trigram)
+  }
+  fuzzyTrigramCandidates(orQuery, limit) {
+    return this.search.fuzzyTrigramCandidates(orQuery, limit)
+  }
+  getAllTitlesForFuzzy() {
+    return this.search.getAllTitles()
+  }
 
   /**
    * Thin wrapper so the reader-pool can route fuzzy matching through a worker
@@ -254,40 +334,82 @@ export class DocsDatabase {
     return fuzzyMatchTitles(query, this, opts)
   }
 
-  searchByTitle(title, framework = null) { return this.search.searchByTitle(title, framework) }
-  getSearchRecordById(id) { return this.search.getSearchRecordById(id) }
+  searchByTitle(title, framework = null) {
+    return this.search.searchByTitle(title, framework)
+  }
+  getSearchRecordById(id) {
+    return this.search.getSearchRecordById(id)
+  }
 
-  getRoots(kind = null) { return this.roots.getRoots(kind) }
-  getRootBySlug(slug) { return this.roots.getRootBySlug(slug) }
-  resolveRoot(input) { return this.roots.resolveRoot(input) }
+  getRoots(kind = null) {
+    return this.roots.getRoots(kind)
+  }
+  getRootBySlug(slug) {
+    return this.roots.getRootBySlug(slug)
+  }
+  resolveRoot(input) {
+    return this.roots.resolveRoot(input)
+  }
 
   setCrawlState(path, status, rootSlug, depth = 0, error = null) {
     this.crawl.setCrawlState(path, status, rootSlug, depth, error)
   }
-  seedCrawlIfNew(path, rootSlug, depth = 0) { return this.crawl.seedCrawlIfNew(path, rootSlug, depth) }
-  getPendingCrawl(rootSlug, limit = 10) { return this.crawl.getPendingCrawl(rootSlug, limit) }
-  resetFailedCrawl(rootSlug) { return this.crawl.resetFailedCrawl(rootSlug) }
-  countFailed(rootSlug) { return this.crawl.countFailed(rootSlug) }
-  getCrawlStats(rootSlug) { return this.crawl.getCrawlStats(rootSlug) }
-  clearCrawlState(rootSlug) { this.crawl.clearCrawlState(rootSlug) }
+  seedCrawlIfNew(path, rootSlug, depth = 0) {
+    return this.crawl.seedCrawlIfNew(path, rootSlug, depth)
+  }
+  getPendingCrawl(rootSlug, limit = 10) {
+    return this.crawl.getPendingCrawl(rootSlug, limit)
+  }
+  resetFailedCrawl(rootSlug) {
+    return this.crawl.resetFailedCrawl(rootSlug)
+  }
+  countFailed(rootSlug) {
+    return this.crawl.countFailed(rootSlug)
+  }
+  getCrawlStats(rootSlug) {
+    return this.crawl.getCrawlStats(rootSlug)
+  }
+  clearCrawlState(rootSlug) {
+    this.crawl.clearCrawlState(rootSlug)
+  }
 
-  addUpdateLog(params) { this.operations.addUpdateLog(params) }
-  getLastUpdateLog() { return this.operations.getLastUpdateLog() }
+  addUpdateLog(params) {
+    this.operations.addUpdateLog(params)
+  }
+  getLastUpdateLog() {
+    return this.operations.getLastUpdateLog()
+  }
 
-  markConverted(path) { this.pages.markConverted(path) }
-  getUnconvertedPages() { return this.pages.getUnconvertedPages() }
-  updateRootPageCount(slug) { this.roots.updateRootPageCount(slug) }
-  getAllPagesWithEtag() { return this.pages.getAllPagesWithEtag() }
-  getPagesBySourceType(sourceType) { return this.pages.getPagesBySourceType(sourceType) }
-  getPagesByRole(role) { return this.documents.getDocumentsByRole(role) }
+  markConverted(path) {
+    this.pages.markConverted(path)
+  }
+  getUnconvertedPages() {
+    return this.pages.getUnconvertedPages()
+  }
+  updateRootPageCount(slug) {
+    this.roots.updateRootPageCount(slug)
+  }
+  getAllPagesWithEtag() {
+    return this.pages.getAllPagesWithEtag()
+  }
+  getPagesBySourceType(sourceType) {
+    return this.pages.getPagesBySourceType(sourceType)
+  }
+  getPagesByRole(role) {
+    return this.documents.getDocumentsByRole(role)
+  }
 
   markPageDeleted(path) {
     this.pages.markPageDeleted(path)
     this.deleteNormalizedDocument(path)
   }
 
-  bumpConsecutive404(path) { return this.pages.bumpConsecutive404(path) }
-  resetConsecutive404(path) { this.pages.resetConsecutive404(path) }
+  bumpConsecutive404(path) {
+    return this.pages.bumpConsecutive404(path)
+  }
+  resetConsecutive404(path) {
+    this.pages.resetConsecutive404(path)
+  }
 
   deleteNormalizedDocument(key) {
     const document = this.documents.getDocumentIdByKey(key)
@@ -302,14 +424,26 @@ export class DocsDatabase {
     this.pages.updatePageAfterDownload(path, etag, lastModified, contentHash)
   }
 
-  setActivity(action, roots = null) { this.operations.setActivity(action, roots) }
-  clearActivity() { this.operations.clearActivity() }
-  getActivity() { return this.operations.getActivity() }
+  setActivity(action, roots = null) {
+    this.operations.setActivity(action, roots)
+  }
+  clearActivity() {
+    this.operations.clearActivity()
+  }
+  getActivity() {
+    return this.operations.getActivity()
+  }
 
-  getCrawlProgressByRoot() { return this.crawl.getCrawlProgressByRoot() }
-  getCrawlProgressAll() { return this.crawl.getCrawlProgressAll() }
+  getCrawlProgressByRoot() {
+    return this.crawl.getCrawlProgressByRoot()
+  }
+  getCrawlProgressAll() {
+    return this.crawl.getCrawlProgressAll()
+  }
 
-  getSnapshotMeta(key) { return this.operations.getSnapshotMeta(key) }
+  getSnapshotMeta(key) {
+    return this.operations.getSnapshotMeta(key)
+  }
   setSnapshotMeta(key, value) {
     this.operations.setSnapshotMeta(key, value)
     // Tier cache lives on the facade; invalidate when the underlying tier
@@ -317,9 +451,15 @@ export class DocsDatabase {
     if (key === 'snapshot_tier') this._tier = undefined
   }
 
-  getSyncCheckpoint(key) { return this.operations.getSyncCheckpoint(key) }
-  setSyncCheckpoint(key, value) { this.operations.setSyncCheckpoint(key, value) }
-  clearSyncCheckpoint(key) { this.operations.clearSyncCheckpoint(key) }
+  getSyncCheckpoint(key) {
+    return this.operations.getSyncCheckpoint(key)
+  }
+  setSyncCheckpoint(key, value) {
+    this.operations.setSyncCheckpoint(key, value)
+  }
+  clearSyncCheckpoint(key) {
+    this.operations.clearSyncCheckpoint(key)
+  }
 
   /**
    * Singleton checkpoint for the static web build, stored in sync_checkpoint
@@ -347,9 +487,15 @@ export class DocsDatabase {
    * @param {number} docId
    * @returns {{ doc_id: number, sections_digest: string, template_version: string, html_hash: string, updated_at: number }|null}
    */
-  getRenderIndexEntry(docId) { return this.operations.getRenderIndexEntry(docId) }
-  upsertRenderIndexEntry(entry) { this.operations.upsertRenderIndexEntry(entry) }
-  clearRenderIndex() { this.operations.clearRenderIndex() }
+  getRenderIndexEntry(docId) {
+    return this.operations.getRenderIndexEntry(docId)
+  }
+  upsertRenderIndexEntry(entry) {
+    this.operations.upsertRenderIndexEntry(entry)
+  }
+  clearRenderIndex() {
+    this.operations.clearRenderIndex()
+  }
 
   /**
    * Return parent->child edges for a framework's document tree.
@@ -363,24 +509,52 @@ export class DocsDatabase {
     })
   }
 
-  upsertAppleFontFamily(params) { this.assetsFonts.upsertFontFamily(params) }
-  upsertAppleFontFile(params) { this.assetsFonts.upsertFontFile(params) }
-  listAppleFonts() { return this.assetsFonts.listFonts() }
-  getAppleFontFile(id) { return this.assetsFonts.getFontFile(id) }
+  upsertAppleFontFamily(params) {
+    this.assetsFonts.upsertFontFamily(params)
+  }
+  upsertAppleFontFile(params) {
+    this.assetsFonts.upsertFontFile(params)
+  }
+  listAppleFonts() {
+    return this.assetsFonts.listFonts()
+  }
+  getAppleFontFile(id) {
+    return this.assetsFonts.getFontFile(id)
+  }
 
-  upsertSfSymbol(params) { this.assetsSymbols.upsertSymbol(params) }
-  getSfSymbol(scope, name) { return this.assetsSymbols.getSymbol(scope, name) }
-  listSfSymbolsCatalog() { return this.assetsSymbols.listCatalog() }
-  markSfSymbolBitmapOnly(scope, name) { this.assetsSymbols.markBitmapOnly(scope, name) }
+  upsertSfSymbol(params) {
+    this.assetsSymbols.upsertSymbol(params)
+  }
+  getSfSymbol(scope, name) {
+    return this.assetsSymbols.getSymbol(scope, name)
+  }
+  listSfSymbolsCatalog() {
+    return this.assetsSymbols.listCatalog()
+  }
+  markSfSymbolBitmapOnly(scope, name) {
+    this.assetsSymbols.markBitmapOnly(scope, name)
+  }
   updateSfSymbolCodepoint(scope, name, codepoint, version = null) {
     this.assetsSymbols.updateCodepoint(scope, name, codepoint, version)
   }
-  searchSfSymbols(query = '', opts = {}) { return this.assetsSymbols.searchSymbols(query, opts) }
-  upsertSfSymbolRender(params) { this.assetsSymbols.upsertRender(params) }
-  getSfSymbolRender(cacheKey) { return this.assetsSymbols.getRender(cacheKey) }
-  sfSymbolRenderCacheStats() { return this.assetsSymbols.renderCacheStats() }
-  pruneSfSymbolRendersOlderThan(cutoffIso) { return this.assetsSymbols.pruneRendersOlderThan(cutoffIso) }
-  pruneSfSymbolRendersToBytesQuota(maxBytes) { return this.assetsSymbols.pruneRendersToBytesQuota(maxBytes) }
+  searchSfSymbols(query = '', opts = {}) {
+    return this.assetsSymbols.searchSymbols(query, opts)
+  }
+  upsertSfSymbolRender(params) {
+    this.assetsSymbols.upsertRender(params)
+  }
+  getSfSymbolRender(cacheKey) {
+    return this.assetsSymbols.getRender(cacheKey)
+  }
+  sfSymbolRenderCacheStats() {
+    return this.assetsSymbols.renderCacheStats()
+  }
+  pruneSfSymbolRendersOlderThan(cutoffIso) {
+    return this.assetsSymbols.pruneRendersOlderThan(cutoffIso)
+  }
+  pruneSfSymbolRendersToBytesQuota(maxBytes) {
+    return this.assetsSymbols.pruneRendersToBytesQuota(maxBytes)
+  }
 
   getSchemaVersion() {
     const row = this.db.query("SELECT value FROM schema_meta WHERE key = 'schema_version'").get()
@@ -403,4 +577,3 @@ export class DocsDatabase {
     this.db.close()
   }
 }
-

@@ -1,7 +1,7 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { indexEmbeddings } from '../../../src/commands/index-embeddings.js'
-import { VECTOR_DIMS, VECTOR_BYTES } from '../../../src/search/embedding.js'
+import { VECTOR_BYTES, VECTOR_DIMS } from '../../../src/search/embedding.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 // Deterministic fake embedder (xorshift seeded by text) — no ONNX dependency.
 export function fakeEmbedder() {
@@ -9,8 +9,16 @@ export function fakeEmbedder() {
     async embed(text) {
       const v = new Float32Array(VECTOR_DIMS)
       let h = 2166136261
-      for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619) }
-      for (let i = 0; i < VECTOR_DIMS; i++) { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; v[i] = ((h >>> 0) / 0xffffffff) - 0.5 }
+      for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i)
+        h = Math.imul(h, 16777619)
+      }
+      for (let i = 0; i < VECTOR_DIMS; i++) {
+        h ^= h << 13
+        h ^= h >>> 17
+        h ^= h << 5
+        v[i] = (h >>> 0) / 0xffffffff - 0.5
+      }
       return v
     },
   }
@@ -28,7 +36,8 @@ beforeEach(() => {
     db.upsertPage({ rootId: root.id, path: key, url: 'u', title: `Sym${i}`, role: 'symbol', abstract: `Abstract ${i}` })
     db.upsertNormalizedDocument({
       document: { key, title: `Sym${i}`, sourceType: 'apple-docc', framework: 'swiftui', role: 'symbol', abstractText: `Abstract ${i}` },
-      sections: [], relationships: [],
+      sections: [],
+      relationships: [],
     })
   }
 })

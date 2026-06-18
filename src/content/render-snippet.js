@@ -7,7 +7,7 @@ export function renderSnippet(document, sections = [], query = '', maxLength = 2
   const terms = query
     .toLowerCase()
     .split(/\s+/)
-    .map(term => term.replace(/[^\p{L}\p{N}_-]+/gu, ''))
+    .map((term) => term.replace(/[^\p{L}\p{N}_-]+/gu, ''))
     .filter(Boolean)
 
   if (terms.length === 0) {
@@ -16,8 +16,8 @@ export function renderSnippet(document, sections = [], query = '', maxLength = 2
 
   const lower = text.toLowerCase()
   const hitIndex = terms
-    .map(term => lower.indexOf(term))
-    .filter(index => index >= 0)
+    .map((term) => lower.indexOf(term))
+    .filter((index) => index >= 0)
     .sort((a, b) => a - b)[0]
 
   if (hitIndex == null) {

@@ -1,7 +1,7 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { indexEmbeddings } from '../../../src/commands/index-embeddings.js'
 import { search } from '../../../src/commands/search.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { topicEmbedder } from '../../helpers/topic-embedder.js'
 
 const DOCS = [
@@ -16,7 +16,8 @@ function seed(db) {
     db.upsertPage({ rootId: root.id, path: d.key, url: 'u', title: d.title, role: 'symbol', abstract: d.abstract })
     db.upsertNormalizedDocument({
       document: { key: d.key, title: d.title, sourceType: 'apple-docc', framework: 'fw', role: 'symbol', abstractText: d.abstract },
-      sections: [], relationships: [],
+      sections: [],
+      relationships: [],
     })
   }
 }
@@ -43,7 +44,7 @@ describe('hybrid semantic search', () => {
     // "sound" appears in no title/abstract → lexical-only would return nothing;
     // the semantic tier maps sound → audio → Alpha.
     const r = await search({ query: 'sound', noDeep: true }, ctx)
-    expect(r.results.map(x => x.path)).toContain('fw/alpha')
+    expect(r.results.map((x) => x.path)).toContain('fw/alpha')
   })
 
   test('dormant (no vectors) → identical to lexical-only', async () => {

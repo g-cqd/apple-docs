@@ -6,19 +6,8 @@
 // rendering in collection-filters/render.js. This module owns the
 // lifecycle and event wiring.
 
-import {
-  collectKindCounts,
-  createFilterState,
-  readStateFromHash,
-  writeStateToHash,
-} from './collection-filters/state.js'
-import {
-  applyFilters,
-  applySort,
-  buildControls,
-  insertControls,
-  syncToc,
-} from './collection-filters/render.js'
+import { applyFilters, applySort, buildControls, insertControls, syncToc } from './collection-filters/render.js'
+import { collectKindCounts, createFilterState, readStateFromHash, writeStateToHash } from './collection-filters/state.js'
 
 export function init() {
   const listContainer = document.getElementById('list-container')
@@ -38,7 +27,7 @@ export function init() {
   // The original server-rendered HTML — captured before the first kind-sort
   // so we can restore the canonical role-grouped layout when the user
   // selects 'alpha' again.
-  let originalListHtml = listContainer ? listContainer.innerHTML : null
+  const originalListHtml = listContainer ? listContainer.innerHTML : null
 
   function applyAll() {
     applyFilters(state)

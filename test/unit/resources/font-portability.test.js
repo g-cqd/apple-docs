@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DocsDatabase } from '../../../src/storage/database.js'
 import { enforceFontPortability } from '../../../src/resources/apple-fonts/portability.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let dataDir
@@ -51,7 +51,10 @@ describe('enforceFontPortability', () => {
     expect(r.kept).toBe(1)
     // sf-mono lost its only (system) row → flagged as missing.
     expect(r.missing).toEqual(['sf-mono'])
-    const left = db.db.query('SELECT id FROM apple_font_files').all().map(x => x.id)
+    const left = db.db
+      .query('SELECT id FROM apple_font_files')
+      .all()
+      .map((x) => x.id)
     expect(left).toEqual(['a'.repeat(24)])
   })
 

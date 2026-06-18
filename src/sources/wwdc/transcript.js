@@ -70,9 +70,7 @@ export function extractAppleDescription(json) {
     return json.description
   }
 
-  const abstractSection = (json?.primaryContentSections ?? []).find(
-    s => s?.kind === 'abstract',
-  )
+  const abstractSection = (json?.primaryContentSections ?? []).find((s) => s?.kind === 'abstract')
   if (abstractSection) {
     const parts = collectInlineText(abstractSection?.content ?? [])
     if (parts.length > 0) return parts.join(' ')
@@ -86,10 +84,7 @@ export function extractAppleDescription(json) {
 }
 
 export function extractAppleTitle(json, year, sessionId) {
-  const candidate =
-    json?.title ??
-    json?.metadata?.title ??
-    deepFind(json, 'title')
+  const candidate = json?.title ?? json?.metadata?.title ?? deepFind(json, 'title')
   if (typeof candidate === 'string' && candidate.length > 0) return candidate
   return `WWDC${year} Session ${sessionId}`
 }
@@ -104,7 +99,7 @@ export function extractAsciiwwdcTitle(text, year, sessionId) {
     return `WWDC${year} Session ${sessionId}`
   }
 
-  const firstLine = text.split('\n').find(line => line.trim().length > 0)
+  const firstLine = text.split('\n').find((line) => line.trim().length > 0)
   if (firstLine && !/^\[?\d{2}:\d{2}/.test(firstLine.trim())) {
     const candidate = firstLine.trim()
     if (candidate.length > 0 && candidate.length < 200) return candidate

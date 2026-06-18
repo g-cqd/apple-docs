@@ -227,7 +227,9 @@
    2. Reset & base
    ------------------------------------------------------------ */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -467,7 +469,9 @@ a:hover {
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .search-clear:hover {
@@ -810,10 +814,16 @@ a:hover {
    no inline color/background-color, so no !important needed.
    Spans only get color — background stays transparent to avoid inheriting
    the container's --shiki-light-bg onto every token. */
-.shiki span { color: var(--shiki-light); }
-[data-theme="dark"] .shiki span { color: var(--shiki-dark); }
+.shiki span {
+  color: var(--shiki-light);
+}
+[data-theme="dark"] .shiki span {
+  color: var(--shiki-dark);
+}
 @media (prefers-color-scheme: dark) {
-  [data-theme="auto"] .shiki span { color: var(--shiki-dark); }
+  [data-theme="auto"] .shiki span {
+    color: var(--shiki-dark);
+  }
 }
 /* Code block shell — shared between Shiki-highlighted blocks and the
    DocC declaration-token blocks (`pre.decl-tokens`). These previously
@@ -828,21 +838,52 @@ pre.decl-tokens {
 }
 
 /* Declaration token rendering — semantic coloring for Apple DocC tokens */
-pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; border-radius: 0; }
-.decl-keyword { color: var(--token-keyword); }
-.decl-type { color: var(--token-type); }
-.decl-identifier { color: var(--token-identifier); }
-.decl-generic { color: var(--token-type); font-style: italic; }
-.decl-param { color: var(--fg); }
-.decl-number { color: var(--token-number); }
+pre.decl-tokens code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+  border-radius: 0;
+}
+.decl-keyword {
+  color: var(--token-keyword);
+}
+.decl-type {
+  color: var(--token-type);
+}
+.decl-identifier {
+  color: var(--token-identifier);
+}
+.decl-generic {
+  color: var(--token-type);
+  font-style: italic;
+}
+.decl-param {
+  color: var(--fg);
+}
+.decl-number {
+  color: var(--token-number);
+}
 
 /* Type links in declaration blocks */
-.code-type-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
-.code-type-link:hover { text-decoration: underline solid; opacity: 0.85; }
-.code-type-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--radius-xs); }
+.code-type-link {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.code-type-link:hover {
+  text-decoration: underline solid;
+  opacity: 0.85;
+}
+.code-type-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-xs);
+}
 
 /* Language variant toggle — declaration show/hide */
-.decl-variant[hidden] { display: none; }
+.decl-variant[hidden] {
+  display: none;
+}
 
 /* Language toggle button group */
 .lang-toggle {
@@ -863,7 +904,9 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   background: transparent;
   color: var(--secondary-fg);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .lang-btn:not(:last-child) {
@@ -1099,9 +1142,15 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   border-radius: 10px;
 }
 
-.sidebar-block > :first-child { margin-top: 0; }
-.sidebar-block > :last-child { margin-bottom: 0; }
-.sidebar-block .page-toc { margin-bottom: 0; }
+.sidebar-block > :first-child {
+  margin-top: 0;
+}
+.sidebar-block > :last-child {
+  margin-bottom: 0;
+}
+.sidebar-block .page-toc {
+  margin-bottom: 0;
+}
 
 .doc-sidebar h2 {
   font-size: 0.9375rem;
@@ -1319,7 +1368,9 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 0.8125rem;
   font-family: inherit;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
   white-space: nowrap;
 }
 
@@ -1450,7 +1501,9 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   color: var(--secondary-fg);
   padding: 0.15rem 0.5rem;
   border-left: 2px solid transparent;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .page-toc a:hover {
@@ -1565,10 +1618,22 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   margin: 4rem auto;
   padding: 0 1rem;
 }
-.not-found-page h1 { margin-bottom: 0.75rem; }
-.not-found-lede { color: var(--text-secondary); font-size: 1.05rem; margin: 0 0 1.25rem; }
-.not-found-meta { font-size: 0.95rem; margin: 0 0 2rem; }
-.not-found-meta__label { color: var(--text-secondary); margin-right: 0.5rem; }
+.not-found-page h1 {
+  margin-bottom: 0.75rem;
+}
+.not-found-lede {
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  margin: 0 0 1.25rem;
+}
+.not-found-meta {
+  font-size: 0.95rem;
+  margin: 0 0 2rem;
+}
+.not-found-meta__label {
+  color: var(--text-secondary);
+  margin-right: 0.5rem;
+}
 .not-found-meta code {
   background: var(--code-bg);
   border: 1px solid var(--border);
@@ -1577,8 +1642,14 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-size: 0.85em;
   word-break: break-all;
 }
-.not-found-search { margin: 2rem 0 1.5rem; }
-.not-found-search__label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+.not-found-search {
+  margin: 2rem 0 1.5rem;
+}
+.not-found-search__label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
 .not-found-search__row {
   display: flex;
   gap: 0.5rem;
@@ -1601,13 +1672,17 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   font-weight: 500;
   cursor: pointer;
 }
-.not-found-search__row button:hover { filter: brightness(1.1); }
+.not-found-search__row button:hover {
+  filter: brightness(1.1);
+}
 .not-found-links {
   font-size: 0.9rem;
   color: var(--text-secondary);
   margin-top: 1.5rem;
 }
-.not-found-links a { margin: 0 0.15rem; }
+.not-found-links a {
+  margin: 0 0.15rem;
+}
 
 .search-filters {
   display: flex;
@@ -1767,7 +1842,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 }
 
 .search-results.is-loading::before {
-  content: 'Searching…';
+  content: "Searching…";
   position: sticky;
   top: 0;
   align-self: flex-start;
@@ -1788,7 +1863,9 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   border-radius: var(--radius-lg);
   text-decoration: none;
   color: var(--fg);
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .search-result-card:hover {
@@ -2125,7 +2202,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
 }
 
 .fonts-tester__switch-track::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 2px;
   left: 2px;
@@ -2268,7 +2345,9 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   align-items: center;
   gap: 0.4rem;
   min-height: 2rem;
-  transition: border-color 120ms ease, background-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
 }
 
 .font-pill:hover:not(:disabled),
@@ -2603,7 +2682,9 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   padding: 0 0.45rem;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .symbols-pill:hover {
@@ -2945,7 +3026,9 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   visibility: hidden;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 120ms ease, visibility 0s 120ms;
+  transition:
+    opacity 120ms ease,
+    visibility 0s 120ms;
   z-index: 5;
 }
 
@@ -3016,8 +3099,7 @@ pre.decl-tokens code { background: transparent; padding: 0; font-size: inherit; 
   border: 1px dashed var(--border);
   border-radius: var(--radius-xl);
   min-height: 160px;
-  background:
-    repeating-conic-gradient(var(--code-bg) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
+  background: repeating-conic-gradient(var(--code-bg) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
 }
 
 .symbols-detail__preview {

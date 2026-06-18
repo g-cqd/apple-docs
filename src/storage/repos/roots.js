@@ -57,10 +57,12 @@ export function createRootsRepo(db) {
       if (exact) return exact
       const lower = input.toLowerCase()
       const all = getAllStmt.all()
-      return all.find(r => r.slug.toLowerCase() === lower)
-        ?? all.find(r => r.display_name.toLowerCase().includes(lower))
-        ?? all.find(r => r.slug.includes(lower))
-        ?? null
+      return (
+        all.find((r) => r.slug.toLowerCase() === lower) ??
+        all.find((r) => r.display_name.toLowerCase().includes(lower)) ??
+        all.find((r) => r.slug.includes(lower)) ??
+        null
+      )
     },
     updateRootPageCount(slug) {
       updatePageCountStmt.run(slug)

@@ -23,7 +23,10 @@ export function buildControls(sortedKinds) {
   const sortSelect = document.createElement('select')
   sortSelect.id = 'sort-select'
   sortSelect.setAttribute('aria-label', 'Sort by')
-  for (const [value, label] of [['alpha', 'Name (A–Z)'], ['kind', 'Kind']]) {
+  for (const [value, label] of [
+    ['alpha', 'Name (A–Z)'],
+    ['kind', 'Kind'],
+  ]) {
     const opt = document.createElement('option')
     opt.value = value
     opt.textContent = label
@@ -144,9 +147,7 @@ export function applySort(state, originalListHtml) {
 /** Apply kind/search/deprecated filters to the currently-rendered list. */
 export function applyFilters(state) {
   const showAllKinds = state.activeFilters.size === 0
-  const items = document.querySelectorAll(
-    '.role-group li[data-filter-kind], .framework-group li[data-filter-kind]',
-  )
+  const items = document.querySelectorAll('.role-group li[data-filter-kind], .framework-group li[data-filter-kind]')
   for (const el of items) {
     const kind = el.getAttribute('data-filter-kind')
     const isDeprecated = el.getAttribute('data-deprecated') === 'true'
@@ -168,18 +169,13 @@ export function syncToc() {
   const container = document.getElementById('list-container')
   if (!container) return
   const sections = [...container.children]
-    .filter(el =>
-      (el.classList.contains('framework-group') || el.classList.contains('role-group'))
-      && !el.hidden && el.id,
-    )
-    .map(section => ({
+    .filter((el) => (el.classList.contains('framework-group') || el.classList.contains('role-group')) && !el.hidden && el.id)
+    .map((section) => ({
       id: section.id,
       label: (section.querySelector('h2, .role-heading')?.textContent ?? section.id).trim(),
     }))
 
-  const tocHtml = `<ul>${sections.map(section =>
-    `<li><a href="#${escapeHtml(section.id)}">${escapeHtml(section.label)}</a></li>`,
-  ).join('')}</ul>`
+  const tocHtml = `<ul>${sections.map((section) => `<li><a href="#${escapeHtml(section.id)}">${escapeHtml(section.label)}</a></li>`).join('')}</ul>`
 
   for (const toc of document.querySelectorAll('.page-toc')) {
     const mobileDetails = toc.closest('.page-toc-mobile')
@@ -195,7 +191,7 @@ export function syncToc() {
   if (sidebar) {
     const tocBlock = sidebar.querySelector('.sidebar-block:has(> .page-toc)')
     if (tocBlock) tocBlock.hidden = sections.length < 2
-    const visibleBlocks = Array.from(sidebar.querySelectorAll(':scope > .sidebar-block')).filter(el => !el.hidden)
+    const visibleBlocks = Array.from(sidebar.querySelectorAll(':scope > .sidebar-block')).filter((el) => !el.hidden)
     const hasSidebarVisible = visibleBlocks.length > 0
     sidebar.hidden = !hasSidebarVisible
     if (mainContent) mainContent.classList.toggle('has-sidebar', hasSidebarVisible)

@@ -5,8 +5,8 @@
 //     decoration via the references map).
 
 import { normalizeIdentifier } from '../../apple/normalizer.js'
-import { renderInlineNodes } from './render-content.js'
 import { resolveRefKey } from './refs.js'
+import { renderInlineNodes } from './render-content.js'
 
 const identity = (v) => v
 
@@ -59,11 +59,11 @@ export function enrichDeclarationTokens(declarations, refs, mapKey = identity) {
     }
   }
 
-  return declarations.map(decl => {
+  return declarations.map((decl) => {
     const tokens = decl?.tokens
     if (!Array.isArray(tokens)) return decl
 
-    const enrichedTokens = tokens.map(token => {
+    const enrichedTokens = tokens.map((token) => {
       if (token.kind !== 'typeIdentifier' && token.kind !== 'attribute') return token
 
       // 1. Direct identifier resolution (doc:// URL on the token)
@@ -90,7 +90,7 @@ export function enrichDeclarationTokens(declarations, refs, mapKey = identity) {
  */
 export function enrichTypeTokens(tokens, refs, mapKey = identity) {
   if (!Array.isArray(tokens) || tokens.length === 0) return tokens
-  return tokens.map(token => {
+  return tokens.map((token) => {
     if (token.kind !== 'typeIdentifier') return token
     if (token.identifier) {
       const key = mapKey(resolveRefKey(token.identifier, refs))
@@ -125,7 +125,7 @@ export function resolveDeclarationText(json) {
     if (section.kind !== 'declarations') continue
     const decl = section.declarations?.[0]
     if (decl?.tokens) {
-      return decl.tokens.map(t => t.text ?? '').join('') || null
+      return decl.tokens.map((t) => t.text ?? '').join('') || null
     }
   }
   return null
@@ -158,7 +158,7 @@ export function resolvePlatforms(meta) {
 /** Find the first section with a matching kind in an array of sections. */
 export function findSection(sections, kind) {
   if (!Array.isArray(sections)) return null
-  return sections.find(s => s.kind === kind) ?? null
+  return sections.find((s) => s.kind === kind) ?? null
 }
 
 /** Extract the text of the first heading node from a content nodes array. */

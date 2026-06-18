@@ -1,8 +1,9 @@
 // fusion-native dispatches to libAppleDocsCore when APPLE_DOCS_NATIVE
 // enables the fusion module; ./fusion.js stays the normative JS reference.
-import { hammingSim, hybridFusion, mmrSelect, weightedRRF } from './fusion-native.js'
+
 import { matchesSearchFilters } from './filters.js'
 import { formatResult } from './format.js'
+import { hammingSim, hybridFusion, mmrSelect, weightedRRF } from './fusion-native.js'
 
 /**
  * Blend the lexical result order with the semantic candidate order, in place.
@@ -23,10 +24,10 @@ export function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, re
   // Capture the lexical order + the rule-reranker's calibrated scores BEFORE
   // injecting semantic-only docs, so the lexical fusion signal reflects
   // ranking.js (BASE_SCORES + rules), not the post-injection set.
-  const lexicalRanked = results.map(r => r.path)
-  const lexicalScores = new Map(results.map(r => [r.path, r.score ?? 0]))
+  const lexicalRanked = results.map((r) => r.path)
+  const lexicalScores = new Map(results.map((r) => [r.path, r.score ?? 0]))
 
-  const byId = new Map(ctx.db.getSearchRecordsByIds(sem.map(c => c.documentId)).map(r => [r.id, r]))
+  const byId = new Map(ctx.db.getSearchRecordsByIds(sem.map((c) => c.documentId)).map((r) => [r.id, r]))
   const semanticRanked = []
   const semanticScores = new Map()
   const vecByPath = new Map()
@@ -44,15 +45,19 @@ export function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, re
     }
   }
 
-  const fused = (process.env.APPLE_DOCS_FUSION ?? 'hybrid') === 'rrf'
-    ? weightedRRF([
-        { ranked: lexicalRanked, weight: 1.0 },
-        { ranked: semanticRanked, weight: 0.6 },
-      ])
-    : hybridFusion([
-        { ranked: lexicalRanked, weight: 1.0, scores: lexicalScores },
-        { ranked: semanticRanked, weight: 0.6, scores: semanticScores },
-      ], { beta: 0.5 })
+  const fused =
+    (process.env.APPLE_DOCS_FUSION ?? 'hybrid') === 'rrf'
+      ? weightedRRF([
+          { ranked: lexicalRanked, weight: 1.0 },
+          { ranked: semanticRanked, weight: 0.6 },
+        ])
+      : hybridFusion(
+          [
+            { ranked: lexicalRanked, weight: 1.0, scores: lexicalScores },
+            { ranked: semanticRanked, weight: 0.6, scores: semanticScores },
+          ],
+          { beta: 0.5 },
+        )
   for (const r of results) r.score = fused.get(r.path) ?? 0
   results.sort((a, b) => b.score - a.score)
 
@@ -65,11 +70,11 @@ export function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, re
   // head. With many same-titled pages (e.g. "View") the query is ambiguous
   // and fusion's semantic judgment stays in charge — eval'd: an unbounded
   // hoist costs ndcg@10/mrr on the NL judgment set.
-  const exactBlock = results.filter(r => r.matchQuality === 'exact')
+  const exactBlock = results.filter((r) => r.matchQuality === 'exact')
   if (exactBlock.length > 0 && exactBlock.length <= 5) {
     const lexPos = new Map(lexicalRanked.map((p, i) => [p, i]))
-    exactBlock.sort((a, b) => (lexPos.get(a.path) ?? Infinity) - (lexPos.get(b.path) ?? Infinity))
-    const rest = results.filter(r => r.matchQuality !== 'exact')
+    exactBlock.sort((a, b) => (lexPos.get(a.path) ?? Number.POSITIVE_INFINITY) - (lexPos.get(b.path) ?? Number.POSITIVE_INFINITY))
+    const rest = results.filter((r) => r.matchQuality !== 'exact')
     results.length = 0
     results.push(...exactBlock, ...rest)
   }
@@ -82,12 +87,7 @@ export function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, re
     const parsed = Number.parseFloat(process.env.APPLE_DOCS_MMR_LAMBDA ?? '0.7')
     const lambda = Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 0.7
     const window = Math.min(results.length, Math.max(requestedWindow, 20))
-    const reordered = mmrSelect(
-      results.slice(0, window),
-      (r) => vecByPath.get(r.path) ?? null,
-      hammingSim,
-      { lambda },
-    )
+    const reordered = mmrSelect(results.slice(0, window), (r) => vecByPath.get(r.path) ?? null, hammingSim, { lambda })
     results.splice(0, window, ...reordered)
   }
 }

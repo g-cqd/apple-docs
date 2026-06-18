@@ -1,6 +1,6 @@
+import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { rename, unlink } from 'node:fs/promises'
-import { randomBytes } from 'node:crypto'
 import { extractReferences } from '../apple/extractor.js'
 import { renderPage } from '../apple/renderer.js'
 import { normalize } from '../content/normalize.js'
@@ -71,10 +71,7 @@ async function doPersistFetchedDocPage({
       db.markConverted(path)
     })
 
-    await Promise.all([
-      discardAtomicWrite(rawBackupPath),
-      discardAtomicWrite(markdownBackupPath),
-    ])
+    await Promise.all([discardAtomicWrite(rawBackupPath), discardAtomicWrite(markdownBackupPath)])
   } catch (error) {
     await Promise.all([
       discardAtomicWrite(rawTempPath),
@@ -154,10 +151,7 @@ async function doPersistNormalizedPage({
       db.markConverted(path)
     })
 
-    await Promise.all([
-      discardAtomicWrite(rawBackupPath),
-      discardAtomicWrite(markdownBackupPath),
-    ])
+    await Promise.all([discardAtomicWrite(rawBackupPath), discardAtomicWrite(markdownBackupPath)])
   } catch (error) {
     await Promise.all([
       discardAtomicWrite(rawTempPath),

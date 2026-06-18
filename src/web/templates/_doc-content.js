@@ -1,13 +1,17 @@
-import { html, raw } from '../lib/html.js'
 import { slugify } from '../../content/render-html.js'
 import { safeWebDocKey } from '../../lib/safe-path.js'
+import { html, raw } from '../lib/html.js'
 
 /** @returns {import('../lib/html.js').HtmlString} */
 export function buildRelationshipContent(section) {
   const contentJson = section?.content_json ?? section?.contentJson ?? null
   let groups = null
   if (contentJson && typeof contentJson === 'string') {
-    try { groups = JSON.parse(contentJson) } catch { /* ignore */ }
+    try {
+      groups = JSON.parse(contentJson)
+    } catch {
+      /* ignore */
+    }
   } else if (contentJson && typeof contentJson === 'object') {
     groups = contentJson
   }
@@ -20,7 +24,7 @@ export function buildRelationshipContent(section) {
       if (group?.title) {
         parts.push(html`<h3 class="sidebar-group-title">${group.title}</h3>`)
       }
-      const items = (group?.items ?? []).map(item => {
+      const items = (group?.items ?? []).map((item) => {
         if (item?.key) {
           return html`<li><a href="/docs/${safeWebDocKey(item.key)}/"><code>${item.title ?? item.key}</code></a></li>`
         }
@@ -71,9 +75,13 @@ export function buildPageToc(sections) {
     let label
     switch (kind) {
       case 'declaration':
-        id = 'declaration'; label = 'Declaration'; break
+        id = 'declaration'
+        label = 'Declaration'
+        break
       case 'parameters':
-        id = 'parameters'; label = 'Parameters'; break
+        id = 'parameters'
+        label = 'Parameters'
+        break
       case 'properties':
         label = section.heading ?? 'Properties'
         id = slugify(label)
@@ -95,17 +103,23 @@ export function buildPageToc(sections) {
         id = slugify(label)
         break
       case 'mentioned_in':
-        id = 'mentioned-in'; label = 'Mentioned in'; break
+        id = 'mentioned-in'
+        label = 'Mentioned in'
+        break
       case 'discussion':
         label = section.heading ?? 'Overview'
         id = slugify(label)
         break
       case 'topics':
-        id = 'topics'; label = 'Topics'; break
+        id = 'topics'
+        label = 'Topics'
+        break
       case 'relationships':
         continue // rendered in sidebar, not in article body
       case 'see_also':
-        id = 'see-also'; label = 'See Also'; break
+        id = 'see-also'
+        label = 'See Also'
+        break
       default:
         label = section.heading ?? 'Section'
         id = slugify(label)
@@ -120,7 +134,11 @@ export function hasRenderableItems(json) {
   if (!json) return false
   let groups = null
   if (typeof json === 'string') {
-    try { groups = JSON.parse(json) } catch { return false }
+    try {
+      groups = JSON.parse(json)
+    } catch {
+      return false
+    }
   } else if (Array.isArray(json)) {
     groups = json
   } else {
@@ -140,9 +158,7 @@ export function hasRenderableItems(json) {
  */
 export function renderTocHtml(tocItems, mobile = false) {
   if (tocItems.length < 2) return html``
-  const list = tocItems.map(item =>
-    html`<li><a href="#${item.id}">${item.label}</a></li>`,
-  )
+  const list = tocItems.map((item) => html`<li><a href="#${item.id}">${item.label}</a></li>`)
   const listHtml = html`<ul>${list}</ul>`
   if (mobile) {
     return html`<details class="page-toc-mobile"><summary>Contents</summary><nav class="page-toc">${listHtml}</nav></details>`

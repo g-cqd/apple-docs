@@ -50,7 +50,7 @@ export function formatResult(r, matchQuality = 'match', distance = undefined) {
     platforms,
     declaration: r.declaration,
     urlDepth: r.url_depth ?? 0,
-    isReleaseNotes: !!(r.is_release_notes),
+    isReleaseNotes: !!r.is_release_notes,
     language: r.language ?? null,
     isDeprecated: r.is_deprecated ? true : undefined,
     isBeta: r.is_beta ? true : undefined,

@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { createRateLimiter, tooManyRequestsResponse } from '../../../src/web/middleware/rate-limit.js'
 
 function makeReq({ ip = '1.2.3.4', forwarded = null } = {}) {
@@ -60,7 +60,7 @@ describe('createRateLimiter', () => {
     expect(limiter.take(makeReq(), server).ok).toBe(true)
     expect(limiter.take(makeReq(), server).ok).toBe(false)
     // Wait long enough for the bucket to refill (rate=100/s → 10ms / token)
-    await new Promise(r => setTimeout(r, 30))
+    await new Promise((r) => setTimeout(r, 30))
     expect(limiter.take(makeReq(), server).ok).toBe(true)
   })
 

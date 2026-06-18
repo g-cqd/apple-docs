@@ -20,7 +20,7 @@
  */
 
 const DEFAULT_INTERVAL_MS = 100
-const DEFAULT_RING_SIZE = 600   // 60 s history at 100 ms cadence
+const DEFAULT_RING_SIZE = 600 // 60 s history at 100 ms cadence
 
 /**
  * Hi-resolution monotonic clock — `performance.now()` is universal,
@@ -47,7 +47,7 @@ export function createEventLoopLagSampler(opts = {}) {
     // (actual - expected). Floor at 0 so a slightly-early fire (rare;
     // some JS runtimes coalesce timers) doesn't pollute the histogram
     // with a negative sample.
-    const lag = Math.max(0, (t - lastTick) - intervalMs)
+    const lag = Math.max(0, t - lastTick - intervalMs)
     lastTick = t
     samples[writeIdx] = lag
     writeIdx = (writeIdx + 1) % ringSize
@@ -68,7 +68,7 @@ export function createEventLoopLagSampler(opts = {}) {
     for (let i = 0; i < count; i++) sorted[i] = samples[i]
     sorted.sort()
     return {
-      p50: percentile(sorted, 0.50),
+      p50: percentile(sorted, 0.5),
       p95: percentile(sorted, 0.95),
       p99: percentile(sorted, 0.99),
       max,

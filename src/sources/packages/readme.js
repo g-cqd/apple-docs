@@ -61,7 +61,10 @@ export function extractAbstractFromMarkdown(markdown) {
     const line = rawLine.trim()
     if (!line) continue
     if (!seenH1) {
-      if (line.startsWith('# ')) { seenH1 = true; continue }
+      if (line.startsWith('# ')) {
+        seenH1 = true
+        continue
+      }
       // Some READMEs start directly with a paragraph — accept that too.
       if (!line.startsWith('<') && !line.startsWith('[![') && !line.startsWith('![')) {
         return line.replace(/\s+/g, ' ').slice(0, 280)
@@ -74,4 +77,3 @@ export function extractAbstractFromMarkdown(markdown) {
   }
   return null
 }
-

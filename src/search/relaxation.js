@@ -13,21 +13,60 @@
  * kept by `pruneStopwords` regardless of membership here.
  */
 export const SEARCH_STOPWORDS = new Set([
-  'a', 'an', 'and', 'are', 'as', 'at',
-  'be', 'but', 'by',
-  'do', 'does',
-  'for', 'from',
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'but',
+  'by',
+  'do',
+  'does',
+  'for',
+  'from',
   'get',
-  'have', 'how',
-  'i', 'if', 'in', 'into', 'is', 'it', 'its',
-  'me', 'my',
-  'of', 'on', 'or',
+  'have',
+  'how',
+  'i',
+  'if',
+  'in',
+  'into',
+  'is',
+  'it',
+  'its',
+  'me',
+  'my',
+  'of',
+  'on',
+  'or',
   'should',
-  'that', 'the', 'their', 'then', 'there', 'these', 'this', 'to',
-  'use', 'using',
-  'want', 'was', 'way', 'we', 'were',
-  'what', 'when', 'where', 'which', 'while', 'why', 'will', 'with',
-  'you', 'your',
+  'that',
+  'the',
+  'their',
+  'then',
+  'there',
+  'these',
+  'this',
+  'to',
+  'use',
+  'using',
+  'want',
+  'was',
+  'way',
+  'we',
+  'were',
+  'what',
+  'when',
+  'where',
+  'which',
+  'while',
+  'why',
+  'will',
+  'with',
+  'you',
+  'your',
 ])
 
 const CAMEL_CASE = /[a-z][A-Z]/
@@ -44,8 +83,8 @@ export function tokenize(query) {
   if (!query || typeof query !== 'string') return []
   return query
     .split(/[^\w.]+/)
-    .filter(token => token.length > 0)
-    .filter(token => !(/^\d$/.test(token)))
+    .filter((token) => token.length > 0)
+    .filter((token) => !/^\d$/.test(token))
 }
 
 /**
@@ -57,7 +96,7 @@ export function tokenize(query) {
  */
 export function pruneStopwords(tokens) {
   if (!Array.isArray(tokens)) return []
-  return tokens.filter(token => {
+  return tokens.filter((token) => {
     if (CAMEL_CASE.test(token)) return true
     return !SEARCH_STOPWORDS.has(token.toLowerCase())
   })
@@ -73,7 +112,7 @@ export function pruneStopwords(tokens) {
  */
 export function pickHighSignalToken(tokens) {
   if (!Array.isArray(tokens) || tokens.length === 0) return null
-  const camel = tokens.find(token => CAMEL_CASE.test(token))
+  const camel = tokens.find((token) => CAMEL_CASE.test(token))
   if (camel) return camel
   let best = null
   for (const token of tokens) {

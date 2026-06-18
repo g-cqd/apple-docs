@@ -1,4 +1,5 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
+import { buildScopeGroups } from '../../../src/web/templates/framework-groups.js'
 import {
   groupArchiveByCategory,
   groupGuidelinesBySection,
@@ -8,7 +9,6 @@ import {
   groupSwiftBookByPart,
   sortTechnotes,
 } from '../../../src/web/templates/scope-groups-extra.js'
-import { buildScopeGroups } from '../../../src/web/templates/framework-groups.js'
 
 describe('groupGuidelinesBySection', () => {
   const docs = [
@@ -22,16 +22,12 @@ describe('groupGuidelinesBySection', () => {
 
   test('sections per top-level number, labelled by the section page', () => {
     const sections = groupGuidelinesBySection(docs)
-    expect(sections.map(s => s.label)).toEqual(['1. Safety', '2. Performance', 'Other'])
+    expect(sections.map((s) => s.label)).toEqual(['1. Safety', '2. Performance', 'Other'])
   })
 
   test('numeric rule order with the section page first (1.2 before 1.10)', () => {
     const one = groupGuidelinesBySection(docs)[0]
-    expect(one.docs.map(d => d.path)).toEqual([
-      'app-store-review/1',
-      'app-store-review/1.2',
-      'app-store-review/1.10',
-    ])
+    expect(one.docs.map((d) => d.path)).toEqual(['app-store-review/1', 'app-store-review/1.2', 'app-store-review/1.10'])
   })
 })
 
@@ -45,8 +41,8 @@ describe('groupReleaseNotesByVersion', () => {
 
   test('majors newest first, versions newest first within, versionless last', () => {
     const sections = groupReleaseNotesByVersion(docs)
-    expect(sections.map(s => s.label)).toEqual(['iOS 18', 'iOS 17', 'Other'])
-    expect(sections[0].docs.map(d => d.title)).toEqual(['iOS 18.2 Release Notes', 'iOS 18 Release Notes'])
+    expect(sections.map((s) => s.label)).toEqual(['iOS 18', 'iOS 17', 'Other'])
+    expect(sections[0].docs.map((d) => d.title)).toEqual(['iOS 18.2 Release Notes', 'iOS 18 Release Notes'])
   })
 })
 
@@ -57,7 +53,7 @@ describe('groupSwiftBookByPart', () => {
       { path: 'swift-book/GuidedTour/AboutSwift', title: 'About Swift' },
       { path: 'swift-book/LanguageGuide/Closures', title: 'Closures' },
     ])
-    expect(sections.map(s => s.label)).toEqual(['A Swift Tour', 'Language Guide', 'Language Reference'])
+    expect(sections.map((s) => s.label)).toEqual(['A Swift Tour', 'Language Guide', 'Language Reference'])
   })
 })
 
@@ -68,8 +64,8 @@ describe('groupPackagesByOwner', () => {
       { path: 'packages/apple/swift-nio', title: 'swift-nio' },
       { path: 'packages/apple/swift-argument-parser', title: 'swift-argument-parser' },
     ])
-    expect(sections.map(s => s.label)).toEqual(['apple', 'vapor'])
-    expect(sections[0].docs.map(d => d.title)).toEqual(['swift-argument-parser', 'swift-nio'])
+    expect(sections.map((s) => s.label)).toEqual(['apple', 'vapor'])
+    expect(sections[0].docs.map((d) => d.title)).toEqual(['swift-argument-parser', 'swift-nio'])
   })
 })
 
@@ -80,11 +76,7 @@ describe('sortTechnotes', () => {
       { path: 'technotes/tn3102', title: 'TN3102: HTTP/3 in your app' },
       { path: 'technotes/tn3105', title: 'TN3105: Status bar style' },
     ])
-    expect(section.docs.map(d => d.title)).toEqual([
-      'TN3105: Status bar style',
-      'TN3102: HTTP/3 in your app',
-      'Technotes',
-    ])
+    expect(section.docs.map((d) => d.title)).toEqual(['TN3105: Status bar style', 'TN3102: HTTP/3 in your app', 'Technotes'])
   })
 })
 
@@ -96,7 +88,7 @@ describe('groupArchiveByCategory', () => {
       { path: 'apple-archive/c', title: 'C', framework: 'networkinginternet' },
       { path: 'apple-archive/d', title: 'D', framework: null },
     ])
-    expect(sections.map(s => s.label)).toEqual(['Cocoa', 'Networking & Internet', 'Other'])
+    expect(sections.map((s) => s.label)).toEqual(['Cocoa', 'Networking & Internet', 'Other'])
   })
 })
 
@@ -114,8 +106,8 @@ describe('groupHigByCategory', () => {
 
   test('categories in landing-page order, category page heads its section', () => {
     const sections = groupHigByCategory(docs, higGroups)
-    expect(sections.map(s => s.label)).toEqual(['Foundations', 'Patterns', 'Other'])
-    expect(sections[1].docs.map(d => d.title)).toEqual(['Patterns', 'Alerts'])
+    expect(sections.map((s) => s.label)).toEqual(['Foundations', 'Patterns', 'Other'])
+    expect(sections[1].docs.map((d) => d.title)).toEqual(['Patterns', 'Alerts'])
   })
 
   test('returns null without a membership map (caller falls back to roles)', () => {
@@ -126,27 +118,24 @@ describe('groupHigByCategory', () => {
 
 describe('buildScopeGroups dispatch (new scopes)', () => {
   test('release-notes kind routes to version grouping', () => {
-    const scope = buildScopeGroups(
-      { slug: 'xcode-release-notes', kind: 'release-notes', source_type: 'apple-docc' },
-      [{ path: 'xcode-release-notes/xcode-16', title: 'Xcode 16 Release Notes' }],
-    )
+    const scope = buildScopeGroups({ slug: 'xcode-release-notes', kind: 'release-notes', source_type: 'apple-docc' }, [
+      { path: 'xcode-release-notes/xcode-16', title: 'Xcode 16 Release Notes' },
+    ])
     expect(scope?.scope).toBe('release-notes')
     expect(scope.sections[0].label).toBe('Xcode 16')
   })
 
   test('hig without extras falls back to null', () => {
-    const scope = buildScopeGroups(
-      { slug: 'design', kind: 'design', source_type: 'hig' },
-      [{ path: 'design/human-interface-guidelines/alerts', title: 'Alerts' }],
-    )
+    const scope = buildScopeGroups({ slug: 'design', kind: 'design', source_type: 'hig' }, [
+      { path: 'design/human-interface-guidelines/alerts', title: 'Alerts' },
+    ])
     expect(scope).toBeNull()
   })
 
   test('archive root gets a category nav', () => {
-    const scope = buildScopeGroups(
-      { slug: 'apple-archive', kind: 'collection', source_type: 'apple-archive' },
-      [{ path: 'apple-archive/a', title: 'A', framework: 'carbon' }],
-    )
+    const scope = buildScopeGroups({ slug: 'apple-archive', kind: 'collection', source_type: 'apple-archive' }, [
+      { path: 'apple-archive/a', title: 'A', framework: 'carbon' },
+    ])
     expect(scope?.nav?.[0]?.label).toBe('Carbon')
   })
 })

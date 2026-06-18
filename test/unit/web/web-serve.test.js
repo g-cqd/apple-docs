@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { safeWebDocKey } from '../../../src/lib/safe-path.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { startDevServer } from '../../../src/web/serve.js'
-import { safeWebDocKey } from '../../../src/lib/safe-path.js'
 
 let db
 let ctx
@@ -30,7 +30,10 @@ beforeEach(async () => {
     sourceType: 'apple-docc',
   })
   const docId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
-  db.db.run(`INSERT OR REPLACE INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`, [docId])
+  db.db.run(
+    `INSERT OR REPLACE INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`,
+    [docId],
+  )
 
   db.upsertNormalizedDocument({
     document: {
@@ -43,12 +46,8 @@ beforeEach(async () => {
       framework: 'swiftui',
       abstractText: 'A type that represents part of your app UI',
     },
-    sections: [
-      { sectionKind: 'abstract', contentText: 'A type that represents part of your app UI', sortOrder: 0 },
-    ],
-    relationships: [
-      { fromKey: 'documentation/swiftui/view', toKey: 'documentation/swiftui/text', relationType: 'child', section: 'Topics', sortOrder: 0 },
-    ],
+    sections: [{ sectionKind: 'abstract', contentText: 'A type that represents part of your app UI', sortOrder: 0 }],
+    relationships: [{ fromKey: 'documentation/swiftui/view', toKey: 'documentation/swiftui/text', relationType: 'child', section: 'Topics', sortOrder: 0 }],
   })
 
   db.upsertNormalizedDocument({
@@ -62,9 +61,7 @@ beforeEach(async () => {
       framework: 'swiftui',
       abstractText: 'A view that displays read-only text.',
     },
-    sections: [
-      { sectionKind: 'abstract', contentText: 'A view that displays read-only text.', sortOrder: 0 },
-    ],
+    sections: [{ sectionKind: 'abstract', contentText: 'A view that displays read-only text.', sortOrder: 0 }],
     relationships: [],
   })
 
@@ -79,9 +76,7 @@ beforeEach(async () => {
       framework: 'swiftui',
       abstractText: 'Learn how to copy values safely.',
     },
-    sections: [
-      { sectionKind: 'abstract', contentText: 'Learn how to copy values safely.', sortOrder: 0 },
-    ],
+    sections: [{ sectionKind: 'abstract', contentText: 'Learn how to copy values safely.', sortOrder: 0 }],
     relationships: [],
   })
 
@@ -97,9 +92,7 @@ beforeEach(async () => {
         framework: 'swiftui',
         abstractText: `Synthetic result ${i}.`,
       },
-      sections: [
-        { sectionKind: 'abstract', contentText: `Synthetic result ${i}.`, sortOrder: 0 },
-      ],
+      sections: [{ sectionKind: 'abstract', contentText: `Synthetic result ${i}.`, sortOrder: 0 }],
       relationships: [],
     })
   }
@@ -107,7 +100,7 @@ beforeEach(async () => {
   // A6: fonts must live under one of the approved roots (system dirs or
   // dataDir/resources/fonts/extracted). The test ctx uses dataDir='/tmp',
   // so the fixtures land under /tmp/resources/fonts/extracted/.
-  const fontDir = `/tmp/resources/fonts/extracted/sf-pro`
+  const fontDir = '/tmp/resources/fonts/extracted/sf-pro'
   const fontPath = `${fontDir}/apple-docs-web-test-font-${process.pid}.ttf`
   const variableFontPath = `${fontDir}/apple-docs-web-test-font-${process.pid}-vf.ttf`
   await Bun.write(fontPath, 'fake-font')
@@ -166,10 +159,7 @@ describe('Dev Server (P7-E)', () => {
   test('/healthz returns 200 without touching the database', async () => {
     const closedDb = new DocsDatabase(':memory:')
     closedDb.db.close()
-    const local = await startDevServer(
-      { port: 0 },
-      { db: closedDb, dataDir: '/tmp/apple-docs-test', logger: { info() {}, warn() {} } },
-    )
+    const local = await startDevServer({ port: 0 }, { db: closedDb, dataDir: '/tmp/apple-docs-test', logger: { info() {}, warn() {} } })
     try {
       const res = await fetch(`${local.url}/healthz`)
       expect(res.status).toBe(200)
@@ -604,7 +594,7 @@ describe('Dev Server (P7-E)', () => {
     const indexJson = await index.json()
     expect(Array.isArray(indexJson.symbols)).toBe(true)
     expect(indexJson.count).toBe(indexJson.symbols.length)
-    expect(indexJson.symbols.find(s => s.name === 'pencil.and.sparkles')).toBeTruthy()
+    expect(indexJson.symbols.find((s) => s.name === 'pencil.and.sparkles')).toBeTruthy()
 
     const search = await fetch(`${serverInfo.url}/api/symbols/search?q=sparkles&scope=private`)
     expect(search.status).toBe(200)
@@ -712,9 +702,9 @@ describe('Dev Server (P7-E)', () => {
     expect(second.status).toBe(200)
     const firstData = await first.json()
     const secondData = await second.json()
-    const firstPaths = new Set(firstData.results.map(r => r.path))
+    const firstPaths = new Set(firstData.results.map((r) => r.path))
     expect(secondData.results).toHaveLength(10)
-    expect(secondData.results.every(r => !firstPaths.has(r.path))).toBe(true)
+    expect(secondData.results.every((r) => !firstPaths.has(r.path))).toBe(true)
   })
 
   test('/api/search accepts min version filters', async () => {
@@ -731,14 +721,18 @@ describe('Dev Server (P7-E)', () => {
     expect(data.frameworks).toBeArray()
     expect(data.kinds).toBeArray()
     // Frameworks now return {label, value} objects with display names
-    const fwValues = data.frameworks.map(f => f.value)
+    const fwValues = data.frameworks.map((f) => f.value)
     expect(fwValues).toContain('swiftui')
     // No WWDC sessions in this corpus — facet degrades to an empty array
     expect(data.wwdcYears).toEqual([])
   })
 
   test('/api/filters surfaces WWDC year facets with counts, newest first', async () => {
-    for (const [key, year] of [['wwdc/wwdc2024-10195', 2024], ['wwdc/wwdc2024-10134', 2024], ['wwdc/wwdc2023-10042', 2023]]) {
+    for (const [key, year] of [
+      ['wwdc/wwdc2024-10195', 2024],
+      ['wwdc/wwdc2024-10134', 2024],
+      ['wwdc/wwdc2023-10042', 2023],
+    ]) {
       db.upsertNormalizedDocument({
         document: {
           sourceType: 'wwdc',
@@ -784,7 +778,7 @@ describe('Dev Server — agent discovery + Markdown negotiation', () => {
     expect(Array.isArray(json.linkset)).toBe(true)
     const ctx = json.linkset[0]
     expect(ctx['service-doc'][0].href).toContain('/docs/')
-    expect(ctx.item.map(i => i.href).some(h => h.includes('/api/search'))).toBe(true)
+    expect(ctx.item.map((i) => i.href).some((h) => h.includes('/api/search'))).toBe(true)
   })
 
   test('/.well-known/mcp/server-card.json advertises the 9 tools + 4 resources', async () => {
@@ -830,7 +824,7 @@ describe('Dev Server — agent discovery + Markdown negotiation', () => {
     const csp = (await fetch(`${serverInfo.url}/fonts`)).headers.get('content-security-policy')
     expect(csp).toContain("style-src 'self'")
     expect(csp).toContain("style-src-attr 'unsafe-inline'")
-    expect(csp).not.toContain("style-src-elem")
+    expect(csp).not.toContain('style-src-elem')
   })
 
   test('GET /docs/<key>.md serves cacheable Markdown', async () => {
@@ -883,9 +877,7 @@ describe('Dev Server — hashed web paths for overlong doc keys', () => {
         framework: 'swiftui',
         abstractText: 'A very long initializer signature.',
       },
-      sections: [
-        { sectionKind: 'abstract', contentText: 'A very long initializer signature.', sortOrder: 0 },
-      ],
+      sections: [{ sectionKind: 'abstract', contentText: 'A very long initializer signature.', sortOrder: 0 }],
       relationships: [],
     })
     webKey = safeWebDocKey(longKey)
@@ -945,7 +937,9 @@ describe('Dev Server (D.2 metrics endpoint)', () => {
   })
 
   afterEach(async () => {
-    try { await mServerInfo?.close?.() } catch {}
+    try {
+      await mServerInfo?.close?.()
+    } catch {}
     mDb.close()
   })
 

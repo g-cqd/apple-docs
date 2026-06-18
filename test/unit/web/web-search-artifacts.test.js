@@ -1,15 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import {
-  generateSearchArtifacts,
-  buildTitleIndex,
-  buildAliasMap,
-  buildBodyShards,
-  writeSearchManifest,
-} from '../../../src/web/search-artifacts.js'
+import { buildAliasMap, buildBodyShards, buildTitleIndex, generateSearchArtifacts, writeSearchManifest } from '../../../src/web/search-artifacts.js'
 
 let db
 let tmpDir
@@ -33,9 +27,7 @@ beforeEach(() => {
     [now, now],
   )
 
-  const viewId = db.db.query(
-    "SELECT id FROM documents WHERE key = 'documentation/swiftui/view'",
-  ).get().id
+  const viewId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
 
   db.db.run(
     `INSERT INTO document_sections (document_id, section_kind, heading, content_text, sort_order)
@@ -192,9 +184,7 @@ describe('buildBodyShards', () => {
        VALUES ('apple-docc', 'documentation/spritekit/sknode', 'SKNode', 'symbol', 'spritekit', 'SpriteKit node', ?, ?)`,
       [now, now],
     )
-    const skId = db.db.query(
-      "SELECT id FROM documents WHERE key = 'documentation/spritekit/sknode'",
-    ).get().id
+    const skId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/spritekit/sknode'").get().id
     db.db.run(
       `INSERT INTO document_sections (document_id, section_kind, heading, content_text, sort_order)
        VALUES (?, 'discussion', 'Overview', ?, 0)`,
@@ -260,8 +250,8 @@ describe('generateSearchArtifacts', () => {
     expect(existsSync(join(tmpDir, 'shards'))).toBe(true)
     // title-index and aliases have content-hashed filenames
     const files = readdirSync(tmpDir)
-    expect(files.some(f => /^title-index\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
-    expect(files.some(f => /^aliases\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
+    expect(files.some((f) => /^title-index\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
+    expect(files.some((f) => /^aliases\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
   })
 
   test('returns correct counts', async () => {
@@ -318,7 +308,7 @@ describe('generateSearchArtifacts', () => {
   test('manifest files contain shard entries', async () => {
     await generateSearchArtifacts(db, tmpDir)
     const manifest = await Bun.file(join(tmpDir, 'search-manifest.json')).json()
-    const shardKeys = Object.keys(manifest.files).filter(k => k.startsWith('shard-'))
+    const shardKeys = Object.keys(manifest.files).filter((k) => k.startsWith('shard-'))
     expect(shardKeys.length).toBeGreaterThanOrEqual(1)
     for (const key of shardKeys) {
       expect(manifest.files[key]).toMatch(/^shards\/[a-z_]\.[0-9a-f]{10}\.json$/)
@@ -370,8 +360,8 @@ describe('empty database', () => {
     expect(existsSync(join(emptyDir, 'search-manifest.json'))).toBe(true)
     // Content-hashed files should still be present
     const files = readdirSync(emptyDir)
-    expect(files.some(f => /^title-index\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
-    expect(files.some(f => /^aliases\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
+    expect(files.some((f) => /^title-index\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
+    expect(files.some((f) => /^aliases\.[0-9a-f]{10}\.json$/.test(f))).toBe(true)
   })
 })
 
@@ -381,7 +371,7 @@ describe('empty database', () => {
 
 describe('writeSearchManifest', () => {
   test('writes search-manifest.json with expected v2 fields', async () => {
-    const files = { 'title-index': 'title-index.abc1234567.json', 'aliases': 'aliases.def7654321.json' }
+    const files = { 'title-index': 'title-index.abc1234567.json', aliases: 'aliases.def7654321.json' }
     await writeSearchManifest(tmpDir, { titleCount: 10, aliasCount: 5, shardCount: 3, files })
     const manifest = await Bun.file(join(tmpDir, 'search-manifest.json')).json()
     expect(manifest.version).toBe(2)

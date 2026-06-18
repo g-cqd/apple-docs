@@ -11,25 +11,25 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir, homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { sha256 } from '../../../src/lib/hash.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import { startDevServer } from '../../../src/web/serve.js'
 import {
+  CanonicalizeError,
   canonicalizePostBody,
   canonicalizeQuery,
   canonicalKeyString,
-  CanonicalizeError,
   DEFAULT_FORMAT,
   MAX_CODEPOINTS_PER_REQUEST,
 } from '../../../src/web/lib/font-subset/canonicalize.js'
+import { _clearCmapCache, capAgainst, getLegalCodepointSet } from '../../../src/web/lib/font-subset/cmap-cap.js'
 import { resolveFontPath } from '../../../src/web/lib/font-subset/font-resolver.js'
-import { getLegalCodepointSet, capAgainst, _clearCmapCache } from '../../../src/web/lib/font-subset/cmap-cap.js'
 import { createPyftsubsetPool } from '../../../src/web/lib/font-subset/pyftsubset-pool.js'
-import { sha256 } from '../../../src/lib/hash.js'
+import { startDevServer } from '../../../src/web/serve.js'
 
 const SF_PRO_PATH = join(homedir(), '.apple-docs', 'resources', 'fonts', 'extracted', 'sf-pro', 'SF-Pro.ttf')
 const HAS_SF_PRO = existsSync(SF_PRO_PATH)
@@ -37,7 +37,9 @@ const HAS_PYFTSUBSET = (() => {
   try {
     const r = spawnSync('python3', ['-c', 'import fontTools.subset'], { stdio: 'ignore' })
     return r.status === 0
-  } catch { return false }
+  } catch {
+    return false
+  }
 })()
 
 describe('canonicalize', () => {
@@ -64,7 +66,7 @@ describe('canonicalize', () => {
 
   test('characters with surrogate-pair emoji yield supplementary codepoints', () => {
     const c = canonicalizePostBody({ font: 'sf-pro', characters: 'A\u{1F600}B' })
-    expect(c.codepoints).toEqual([0x41, 0x42, 0x1F600])
+    expect(c.codepoints).toEqual([0x41, 0x42, 0x1f600])
   })
 
   test('empty input rejected', () => {
@@ -78,8 +80,7 @@ describe('canonicalize', () => {
   })
 
   test('format validation rejects unknown values', () => {
-    expect(() => canonicalizePostBody({ font: 'sf-pro', codepoints: [65], format: 'eot' }))
-      .toThrow(CanonicalizeError)
+    expect(() => canonicalizePostBody({ font: 'sf-pro', codepoints: [65], format: 'eot' })).toThrow(CanonicalizeError)
   })
 
   test('format ttf and otf accepted', () => {
@@ -108,7 +109,11 @@ describe('canonicalize', () => {
 
   test('oversize range rejected with 413', () => {
     let err
-    try { canonicalizePostBody({ font: 'sf-pro', ranges: [[0, 0x10FFFF]] }) } catch (e) { err = e }
+    try {
+      canonicalizePostBody({ font: 'sf-pro', ranges: [[0, 0x10ffff]] })
+    } catch (e) {
+      err = e
+    }
     expect(err).toBeInstanceOf(CanonicalizeError)
     expect(err.status).toBe(413)
   })
@@ -130,7 +135,9 @@ describe('canonical key parity (GET vs POST)', () => {
     let rng = 1
     const next = () => {
       // xorshift32 — deterministic + dependency-free
-      rng ^= rng << 13; rng ^= rng >>> 17; rng ^= rng << 5
+      rng ^= rng << 13
+      rng ^= rng >>> 17
+      rng ^= rng << 5
       return (rng >>> 0) / 0xffffffff
     }
     for (let i = 0; i < 100; i++) {
@@ -177,7 +184,7 @@ describe('cmap-cap', () => {
     expect(ok.illegal).toEqual([])
 
     // A codepoint we are confident isn't in SF-Pro (a deep PUA-B value).
-    const illegal = [0x10FFFD, 0x10FFFC]
+    const illegal = [0x10fffd, 0x10fffc]
     const bad = capAgainst(legal, illegal)
     expect(bad.ok).toBe(false)
     expect(bad.illegalCount).toBe(2)
@@ -187,7 +194,7 @@ describe('cmap-cap', () => {
     _clearCmapCache()
     const legal = await getLegalCodepointSet('sf-pro', SF_PRO_PATH)
     const bad = []
-    let cp = 0x10FFFF
+    let cp = 0x10ffff
     while (bad.length < 50) {
       if (!legal.has(cp)) bad.push(cp)
       cp--
@@ -214,46 +221,58 @@ describe('pyftsubset pool', () => {
     if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {})
   })
 
-  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('Latin A–Z round-trip yields valid woff2', async () => {
-    const cps = []
-    for (let cp = 0x41; cp <= 0x5A; cp++) cps.push(cp)
-    const bytes = await pool.run({
-      canonical: { font: 'sf-pro', codepoints: cps, format: 'woff2' },
-      fontPath: SF_PRO_PATH,
-    })
-    expect(bytes.byteLength).toBeGreaterThan(0)
-    // wOF2 magic
-    expect(bytes[0]).toBe(0x77) // 'w'
-    expect(bytes[1]).toBe(0x4f) // 'O'
-    expect(bytes[2]).toBe(0x46) // 'F'
-    expect(bytes[3]).toBe(0x32) // '2'
-  }, 30_000)
+  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)(
+    'Latin A–Z round-trip yields valid woff2',
+    async () => {
+      const cps = []
+      for (let cp = 0x41; cp <= 0x5a; cp++) cps.push(cp)
+      const bytes = await pool.run({
+        canonical: { font: 'sf-pro', codepoints: cps, format: 'woff2' },
+        fontPath: SF_PRO_PATH,
+      })
+      expect(bytes.byteLength).toBeGreaterThan(0)
+      // wOF2 magic
+      expect(bytes[0]).toBe(0x77) // 'w'
+      expect(bytes[1]).toBe(0x4f) // 'O'
+      expect(bytes[2]).toBe(0x46) // 'F'
+      expect(bytes[3]).toBe(0x32) // '2'
+    },
+    30_000,
+  )
 
-  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('determinism: same input → identical bytes across two runs', async () => {
-    const cps = [0x41, 0x42, 0x43]
-    const a = await pool.run({
-      canonical: { font: 'sf-pro', codepoints: cps, format: 'woff2' },
-      fontPath: SF_PRO_PATH,
-    })
-    const b = await pool.run({
-      canonical: { font: 'sf-pro', codepoints: cps, format: 'woff2' },
-      fontPath: SF_PRO_PATH,
-    })
-    expect(sha256(a)).toBe(sha256(b))
-  }, 30_000)
+  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)(
+    'determinism: same input → identical bytes across two runs',
+    async () => {
+      const cps = [0x41, 0x42, 0x43]
+      const a = await pool.run({
+        canonical: { font: 'sf-pro', codepoints: cps, format: 'woff2' },
+        fontPath: SF_PRO_PATH,
+      })
+      const b = await pool.run({
+        canonical: { font: 'sf-pro', codepoints: cps, format: 'woff2' },
+        fontPath: SF_PRO_PATH,
+      })
+      expect(sha256(a)).toBe(sha256(b))
+    },
+    30_000,
+  )
 
-  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('ttf output preserves sfnt magic', async () => {
-    const bytes = await pool.run({
-      canonical: { font: 'sf-pro', codepoints: [0x41], format: 'ttf' },
-      fontPath: SF_PRO_PATH,
-    })
-    // SFNT magic for TTF: 0x00010000 (or 'true', 'OTTO' for CFF). SF-Pro
-    // is a TrueType variable font → 0x00010000.
-    expect(bytes[0]).toBe(0x00)
-    expect(bytes[1]).toBe(0x01)
-    expect(bytes[2]).toBe(0x00)
-    expect(bytes[3]).toBe(0x00)
-  }, 30_000)
+  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)(
+    'ttf output preserves sfnt magic',
+    async () => {
+      const bytes = await pool.run({
+        canonical: { font: 'sf-pro', codepoints: [0x41], format: 'ttf' },
+        fontPath: SF_PRO_PATH,
+      })
+      // SFNT magic for TTF: 0x00010000 (or 'true', 'OTTO' for CFF). SF-Pro
+      // is a TrueType variable font → 0x00010000.
+      expect(bytes[0]).toBe(0x00)
+      expect(bytes[1]).toBe(0x01)
+      expect(bytes[2]).toBe(0x00)
+      expect(bytes[3]).toBe(0x00)
+    },
+    30_000,
+  )
 })
 
 describe('route contract (/api/fonts/subset)', () => {
@@ -274,11 +293,14 @@ describe('route contract (/api/fonts/subset)', () => {
     // ~25 MB file and avoids cross-fs link failures.
     const file = Bun.file(SF_PRO_PATH)
     await Bun.write(target, file)
-    server = await startDevServer({ port: 0 }, {
-      db,
-      dataDir,
-      logger: { info() {}, warn() {}, error() {} },
-    })
+    server = await startDevServer(
+      { port: 0 },
+      {
+        db,
+        dataDir,
+        logger: { info() {}, warn() {}, error() {} },
+      },
+    )
   }, 30_000)
 
   afterAll(async () => {
@@ -287,50 +309,62 @@ describe('route contract (/api/fonts/subset)', () => {
     if (dataDir) await rm(dataDir, { recursive: true, force: true }).catch(() => {})
   })
 
-  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('POST happy path returns 200 + woff2', async () => {
-    const res = await fetch(`${server.url}/api/fonts/subset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ font: 'sf-pro', codepoints: [65, 66, 67] }),
-    })
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toBe('font/woff2')
-    expect(res.headers.get('cache-control')).toContain('immutable')
-    expect(res.headers.get('etag')).toMatch(/^"[0-9a-f]{64}"$/)
-    const body = new Uint8Array(await res.arrayBuffer())
-    expect(body.byteLength).toBeGreaterThan(0)
-    expect(body[0]).toBe(0x77)
-  }, 30_000)
+  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)(
+    'POST happy path returns 200 + woff2',
+    async () => {
+      const res = await fetch(`${server.url}/api/fonts/subset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ font: 'sf-pro', codepoints: [65, 66, 67] }),
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('font/woff2')
+      expect(res.headers.get('cache-control')).toContain('immutable')
+      expect(res.headers.get('etag')).toMatch(/^"[0-9a-f]{64}"$/)
+      const body = new Uint8Array(await res.arrayBuffer())
+      expect(body.byteLength).toBeGreaterThan(0)
+      expect(body[0]).toBe(0x77)
+    },
+    30_000,
+  )
 
-  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('GET happy path returns same bytes as POST', async () => {
-    const postRes = await fetch(`${server.url}/api/fonts/subset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ font: 'sf-pro', codepoints: [0x41, 0x42, 0x43] }),
-    })
-    expect(postRes.status).toBe(200)
-    const postBody = new Uint8Array(await postRes.arrayBuffer())
+  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)(
+    'GET happy path returns same bytes as POST',
+    async () => {
+      const postRes = await fetch(`${server.url}/api/fonts/subset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ font: 'sf-pro', codepoints: [0x41, 0x42, 0x43] }),
+      })
+      expect(postRes.status).toBe(200)
+      const postBody = new Uint8Array(await postRes.arrayBuffer())
 
-    const getRes = await fetch(`${server.url}/api/fonts/subset?font=sf-pro&codepoints=${encodeURIComponent('U+0041,U+0042,U+0043')}`)
-    expect(getRes.status).toBe(200)
-    const getBody = new Uint8Array(await getRes.arrayBuffer())
-    expect(sha256(getBody)).toBe(sha256(postBody))
-    // ETag parity too — both layers cache against the same key.
-    expect(getRes.headers.get('etag')).toBe(postRes.headers.get('etag'))
-  }, 30_000)
+      const getRes = await fetch(`${server.url}/api/fonts/subset?font=sf-pro&codepoints=${encodeURIComponent('U+0041,U+0042,U+0043')}`)
+      expect(getRes.status).toBe(200)
+      const getBody = new Uint8Array(await getRes.arrayBuffer())
+      expect(sha256(getBody)).toBe(sha256(postBody))
+      // ETag parity too — both layers cache against the same key.
+      expect(getRes.headers.get('etag')).toBe(postRes.headers.get('etag'))
+    },
+    30_000,
+  )
 
-  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('illegal codepoint returns 422 with illegal list', async () => {
-    const res = await fetch(`${server.url}/api/fonts/subset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ font: 'sf-pro', codepoints: [0x10FFFD] }),
-    })
-    expect(res.status).toBe(422)
-    const body = await res.json()
-    expect(body.error).toMatch(/not in the source font/)
-    expect(Array.isArray(body.illegal)).toBe(true)
-    expect(body.illegal[0]).toBe(0x10FFFD)
-  }, 15_000)
+  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)(
+    'illegal codepoint returns 422 with illegal list',
+    async () => {
+      const res = await fetch(`${server.url}/api/fonts/subset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ font: 'sf-pro', codepoints: [0x10fffd] }),
+      })
+      expect(res.status).toBe(422)
+      const body = await res.json()
+      expect(body.error).toMatch(/not in the source font/)
+      expect(Array.isArray(body.illegal)).toBe(true)
+      expect(body.illegal[0]).toBe(0x10fffd)
+    },
+    15_000,
+  )
 
   test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('empty input returns 400', async () => {
     const res = await fetch(`${server.url}/api/fonts/subset`, {
@@ -341,11 +375,15 @@ describe('route contract (/api/fonts/subset)', () => {
     expect(res.status).toBe(400)
   })
 
-  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('format=ttf returns font/ttf', async () => {
-    const res = await fetch(`${server.url}/api/fonts/subset?font=sf-pro&codepoints=65&format=ttf`)
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toBe('font/ttf')
-  }, 30_000)
+  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)(
+    'format=ttf returns font/ttf',
+    async () => {
+      const res = await fetch(`${server.url}/api/fonts/subset?font=sf-pro&codepoints=65&format=ttf`)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('font/ttf')
+    },
+    30_000,
+  )
 
   test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('body > 256 KB returns 413', async () => {
     // Generate a 300 KB JSON body. The simplest way is a large characters
@@ -360,16 +398,20 @@ describe('route contract (/api/fonts/subset)', () => {
     expect(res.status).toBe(413)
   })
 
-  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)('If-None-Match returns 304', async () => {
-    // Warm the cache first.
-    const first = await fetch(`${server.url}/api/fonts/subset?font=sf-pro&codepoints=88`)
-    expect(first.status).toBe(200)
-    const etag = first.headers.get('etag')
-    const second = await fetch(`${server.url}/api/fonts/subset?font=sf-pro&codepoints=88`, {
-      headers: { 'If-None-Match': etag },
-    })
-    expect(second.status).toBe(304)
-  }, 30_000)
+  test.skipIf(!HAS_PYFTSUBSET || !HAS_SF_PRO)(
+    'If-None-Match returns 304',
+    async () => {
+      // Warm the cache first.
+      const first = await fetch(`${server.url}/api/fonts/subset?font=sf-pro&codepoints=88`)
+      expect(first.status).toBe(200)
+      const etag = first.headers.get('etag')
+      const second = await fetch(`${server.url}/api/fonts/subset?font=sf-pro&codepoints=88`, {
+        headers: { 'If-None-Match': etag },
+      })
+      expect(second.status).toBe(304)
+    },
+    30_000,
+  )
 })
 
 // Suppress unused-import lint if MAX_CODEPOINTS_PER_REQUEST isn't exercised

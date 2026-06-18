@@ -1,4 +1,5 @@
 import { ValidationError } from '../../lib/errors.js'
+
 const ROOT_SLUG = 'packages'
 
 /**
@@ -12,7 +13,9 @@ export function packageKey(owner, repo) {
 }
 
 export function parsePackageUrl(url) {
-  const match = String(url ?? '').trim().match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i)
+  const match = String(url ?? '')
+    .trim()
+    .match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i)
   if (!match) return null
   return {
     owner: decodeURIComponent(match[1]),

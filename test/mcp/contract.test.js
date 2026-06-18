@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import { createLogger } from '../../src/lib/logger.js'
 import { createServer } from '../../src/mcp/server.js'
 import { DocsDatabase } from '../../src/storage/database.js'
-import { createLogger } from '../../src/lib/logger.js'
 
 let db
 let server
@@ -16,11 +16,12 @@ function repeatSentence(sentence, count) {
 beforeEach(async () => {
   db = new DocsDatabase(':memory:')
   db.setSnapshotMeta('snapshot_tier', 'standard')
-  const seedPage = (rootId, params) => db.upsertPage({
-    rootId,
-    url: `https://example.com/${params.path}`,
-    ...params,
-  })
+  const seedPage = (rootId, params) =>
+    db.upsertPage({
+      rootId,
+      url: `https://example.com/${params.path}`,
+      ...params,
+    })
 
   // Seed minimal test data
   db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
@@ -34,22 +35,20 @@ beforeEach(async () => {
       role: 'symbol',
       roleHeading: 'Protocol',
       framework: 'swiftui',
-      abstractText: 'A type that represents part of your app\'s user interface.',
+      abstractText: "A type that represents part of your app's user interface.",
     },
     sections: [
-      { sectionKind: 'abstract', contentText: 'A type that represents part of your app\'s user interface.', sortOrder: 0 },
+      { sectionKind: 'abstract', contentText: "A type that represents part of your app's user interface.", sortOrder: 0 },
       { sectionKind: 'declaration', contentText: 'protocol View', sortOrder: 1 },
     ],
-    relationships: [
-      { fromKey: 'swiftui/view', toKey: 'swiftui/text', relationType: 'child', section: 'Topics', sortOrder: 0 },
-    ],
+    relationships: [{ fromKey: 'swiftui/view', toKey: 'swiftui/text', relationType: 'child', section: 'Topics', sortOrder: 0 }],
   })
   seedPage(swiftuiRootId, {
     path: 'swiftui/view',
     title: 'View',
     role: 'symbol',
     roleHeading: 'Protocol',
-    abstract: 'A type that represents part of your app\'s user interface.',
+    abstract: "A type that represents part of your app's user interface.",
   })
   db.upsertNormalizedDocument({
     document: {
@@ -62,9 +61,7 @@ beforeEach(async () => {
       framework: 'swiftui',
       abstractText: 'A view that displays one or more lines of read-only text.',
     },
-    sections: [
-      { sectionKind: 'abstract', contentText: 'A view that displays one or more lines of read-only text.', sortOrder: 0 },
-    ],
+    sections: [{ sectionKind: 'abstract', contentText: 'A view that displays one or more lines of read-only text.', sortOrder: 0 }],
     relationships: [],
   })
   seedPage(swiftuiRootId, {
@@ -129,9 +126,7 @@ beforeEach(async () => {
         framework: 'swiftui',
         abstractText: `Synthetic page ${i} for browse pagination tests.`,
       },
-      sections: [
-        { sectionKind: 'abstract', contentText: `Synthetic page ${i} for browse pagination tests.`, sortOrder: 0 },
-      ],
+      sections: [{ sectionKind: 'abstract', contentText: `Synthetic page ${i} for browse pagination tests.`, sortOrder: 0 }],
       relationships: [],
     })
     seedPage(swiftuiRootId, {
@@ -161,9 +156,7 @@ beforeEach(async () => {
       abstractText: 'Learn about the Swift Testing framework.',
       sourceMetadata: JSON.stringify({ year: 2024, sessionId: '10001', track: 'Testing' }),
     },
-    sections: [
-      { sectionKind: 'abstract', contentText: 'Learn about the Swift Testing framework.', sortOrder: 0 },
-    ],
+    sections: [{ sectionKind: 'abstract', contentText: 'Learn about the Swift Testing framework.', sortOrder: 0 }],
     relationships: [],
   })
   const sampleRoot = db.upsertRoot('sample-code', 'Apple Sample Code', 'collection', 'test')
@@ -184,9 +177,7 @@ beforeEach(async () => {
       abstractText: 'Create a multiplatform SwiftUI sample app.',
       sourceMetadata: JSON.stringify({ sampleProject: true, frameworks: ['swiftui'] }),
     },
-    sections: [
-      { sectionKind: 'abstract', contentText: 'Create a multiplatform SwiftUI sample app.', sortOrder: 0 },
-    ],
+    sections: [{ sectionKind: 'abstract', contentText: 'Create a multiplatform SwiftUI sample app.', sortOrder: 0 }],
     relationships: [],
   })
 
@@ -218,10 +209,7 @@ beforeEach(async () => {
   client = new Client({ name: 'test-client', version: '1.0.0' })
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-  await Promise.all([
-    server.connect(serverTransport),
-    client.connect(clientTransport),
-  ])
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
 })
 
 afterEach(async () => {
@@ -403,7 +391,7 @@ describe('MCP contract — tools', () => {
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.roots).toBeArray()
     expect(parsed.roots.length).toBeGreaterThan(0)
-    expect(parsed.roots.map(root => root.slug)).toContain('swiftui')
+    expect(parsed.roots.map((root) => root.slug)).toContain('swiftui')
   })
 
   test('browse returns framework pages', async () => {

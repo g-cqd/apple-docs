@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { normalize, renderContentNodesToText } from '../../../src/content/normalize.js'
 
 const fixture = await Bun.file(new URL('../../fixtures/swiftui-view.json', import.meta.url)).json()
@@ -41,13 +41,13 @@ describe('normalize — Apple DocC', () => {
     }
 
     // First section should be abstract or have sortOrder 0
-    const sectionKinds = sections.map(s => s.sectionKind)
+    const sectionKinds = sections.map((s) => s.sectionKind)
     expect(sectionKinds).toContain('abstract')
   })
 
   test('extracts abstract section with contentText and contentJson', () => {
     const { sections } = normalize(fixture, 'swiftui/view', 'apple-docc')
-    const abstract = sections.find(s => s.sectionKind === 'abstract')
+    const abstract = sections.find((s) => s.sectionKind === 'abstract')
 
     expect(abstract).toBeTruthy()
     expect(abstract.contentText).toBeTruthy()
@@ -57,7 +57,7 @@ describe('normalize — Apple DocC', () => {
 
   test('extracts declaration section', () => {
     const { sections } = normalize(fixture, 'swiftui/view', 'apple-docc')
-    const decl = sections.find(s => s.sectionKind === 'declaration')
+    const decl = sections.find((s) => s.sectionKind === 'declaration')
 
     expect(decl).toBeTruthy()
     expect(decl.contentText).toContain('View')
@@ -67,7 +67,7 @@ describe('normalize — Apple DocC', () => {
 
   test('extracts topics section', () => {
     const { sections } = normalize(fixture, 'swiftui/view', 'apple-docc')
-    const topics = sections.find(s => s.sectionKind === 'topics')
+    const topics = sections.find((s) => s.sectionKind === 'topics')
 
     expect(topics).toBeTruthy()
     expect(topics.heading).toBe('Topics')
@@ -79,7 +79,7 @@ describe('normalize — Apple DocC', () => {
 
     expect(relationships.length).toBeGreaterThan(0)
 
-    const types = new Set(relationships.map(r => r.relationType))
+    const types = new Set(relationships.map((r) => r.relationType))
     // View should have at least child relations (from topics)
     expect(types.has('child')).toBe(true)
 
@@ -175,24 +175,31 @@ describe('renderContentNodesToText', () => {
   })
 
   test('renders unorderedList to text', () => {
-    const nodes = [{
-      type: 'unorderedList',
-      items: [
-        { content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Item A' }] }] },
-        { content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Item B' }] }] },
-      ],
-    }]
+    const nodes = [
+      {
+        type: 'unorderedList',
+        items: [
+          { content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Item A' }] }] },
+          { content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Item B' }] }] },
+        ],
+      },
+    ]
     const text = renderContentNodesToText(nodes, {})
     expect(text).toContain('Item A')
     expect(text).toContain('Item B')
   })
 
   test('renders codeVoice inline', () => {
-    const nodes = [{ type: 'paragraph', inlineContent: [
-      { type: 'text', text: 'Use ' },
-      { type: 'codeVoice', code: 'View' },
-      { type: 'text', text: ' protocol' },
-    ]}]
+    const nodes = [
+      {
+        type: 'paragraph',
+        inlineContent: [
+          { type: 'text', text: 'Use ' },
+          { type: 'codeVoice', code: 'View' },
+          { type: 'text', text: ' protocol' },
+        ],
+      },
+    ]
     expect(renderContentNodesToText(nodes, {})).toContain('Use View protocol')
   })
 
@@ -233,7 +240,7 @@ describe('normalize — properties section', () => {
 
   test('extracts properties section', () => {
     const { sections } = normalize(payload, 'api/myresponse', 'apple-docc')
-    const props = sections.find(s => s.sectionKind === 'properties')
+    const props = sections.find((s) => s.sectionKind === 'properties')
     expect(props).toBeTruthy()
     expect(props.heading).toBe('Properties')
     expect(props.contentText).toContain('signedInfo')
@@ -241,7 +248,7 @@ describe('normalize — properties section', () => {
 
   test('stores structured contentJson with resolved type keys', () => {
     const { sections } = normalize(payload, 'api/myresponse', 'apple-docc')
-    const props = sections.find(s => s.sectionKind === 'properties')
+    const props = sections.find((s) => s.sectionKind === 'properties')
     const items = JSON.parse(props.contentJson)
     expect(items).toHaveLength(1)
     expect(items[0].name).toBe('signedInfo')
@@ -282,7 +289,13 @@ describe('normalize — REST endpoint sections', () => {
         kind: 'restResponses',
         title: 'Response Codes',
         items: [
-          { status: 200, reason: 'OK', mimeType: 'application/json', type: [], content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Success.' }] }] },
+          {
+            status: 200,
+            reason: 'OK',
+            mimeType: 'application/json',
+            type: [],
+            content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Success.' }] }],
+          },
           { status: 401, reason: 'Unauthorized', type: [], content: [{ type: 'paragraph', inlineContent: [{ type: 'text', text: 'Invalid token.' }] }] },
         ],
       },
@@ -292,7 +305,7 @@ describe('normalize — REST endpoint sections', () => {
 
   test('extracts rest_endpoint section', () => {
     const { sections } = normalize(payload, 'api/get-statuses', 'apple-docc')
-    const endpoints = sections.filter(s => s.sectionKind === 'rest_endpoint')
+    const endpoints = sections.filter((s) => s.sectionKind === 'rest_endpoint')
     expect(endpoints).toHaveLength(1)
     expect(endpoints[0].heading).toBe('URL')
     expect(endpoints[0].contentText).toContain('GET')
@@ -301,7 +314,7 @@ describe('normalize — REST endpoint sections', () => {
 
   test('extracts rest_parameters section', () => {
     const { sections } = normalize(payload, 'api/get-statuses', 'apple-docc')
-    const params = sections.find(s => s.sectionKind === 'rest_parameters')
+    const params = sections.find((s) => s.sectionKind === 'rest_parameters')
     expect(params).toBeTruthy()
     expect(params.heading).toBe('Path Parameters')
     const items = JSON.parse(params.contentJson)
@@ -311,7 +324,7 @@ describe('normalize — REST endpoint sections', () => {
 
   test('extracts rest_responses section', () => {
     const { sections } = normalize(payload, 'api/get-statuses', 'apple-docc')
-    const responses = sections.find(s => s.sectionKind === 'rest_responses')
+    const responses = sections.find((s) => s.sectionKind === 'rest_responses')
     expect(responses).toBeTruthy()
     expect(responses.heading).toBe('Response Codes')
     const items = JSON.parse(responses.contentJson)
@@ -340,7 +353,7 @@ describe('normalize — possibleValues section', () => {
 
   test('extracts possible_values section', () => {
     const { sections } = normalize(payload, 'api/status', 'apple-docc')
-    const pv = sections.find(s => s.sectionKind === 'possible_values')
+    const pv = sections.find((s) => s.sectionKind === 'possible_values')
     expect(pv).toBeTruthy()
     expect(pv.heading).toBe('Possible Values')
     const values = JSON.parse(pv.contentJson)
@@ -356,10 +369,7 @@ describe('normalize — mentions section', () => {
     primaryContentSections: [
       {
         kind: 'mentions',
-        mentions: [
-          'doc://com.apple/documentation/changelog',
-          'doc://com.apple/documentation/guide',
-        ],
+        mentions: ['doc://com.apple/documentation/changelog', 'doc://com.apple/documentation/guide'],
       },
     ],
     references: {
@@ -370,7 +380,7 @@ describe('normalize — mentions section', () => {
 
   test('extracts mentioned_in section', () => {
     const { sections } = normalize(payload, 'api/myapi', 'apple-docc')
-    const mi = sections.find(s => s.sectionKind === 'mentioned_in')
+    const mi = sections.find((s) => s.sectionKind === 'mentioned_in')
     expect(mi).toBeTruthy()
     expect(mi.heading).toBe('Mentioned in')
     const items = JSON.parse(mi.contentJson)
@@ -396,7 +406,7 @@ describe('normalize — unknown section fallback', () => {
 
   test('captures unknown sections as discussion fallback', () => {
     const { sections } = normalize(payload, 'test/page', 'apple-docc')
-    const discussion = sections.find(s => s.sectionKind === 'discussion' && s.heading === 'Future Section')
+    const discussion = sections.find((s) => s.sectionKind === 'discussion' && s.heading === 'Future Section')
     expect(discussion).toBeTruthy()
     expect(discussion.contentText).toContain('Future content')
   })
@@ -417,9 +427,7 @@ describe('normalize — cross-source link resolution', () => {
           content: [
             {
               type: 'paragraph',
-              inlineContent: [
-                { type: 'reference', identifier: 'apple-archive-ref' },
-              ],
+              inlineContent: [{ type: 'reference', identifier: 'apple-archive-ref' }],
             },
           ],
         },
@@ -436,7 +444,7 @@ describe('normalize — cross-source link resolution', () => {
       },
     }
     const { sections } = normalize(json, 'foo/bar', 'apple-docc')
-    const discussion = sections.find(s => s.sectionKind === 'discussion')
+    const discussion = sections.find((s) => s.sectionKind === 'discussion')
     const nodes = JSON.parse(discussion.contentJson)
     const refNode = nodes[0].inlineContent[0]
     expect(refNode._resolvedKey).toBe('apple-archive/documentation/General/Conceptual/GameplayKit_Guide')
@@ -472,7 +480,7 @@ describe('normalize — cross-source link resolution', () => {
       references: {},
     }
     const { sections } = normalize(json, 'x', 'apple-docc')
-    const discussion = sections.find(s => s.sectionKind === 'discussion')
+    const discussion = sections.find((s) => s.sectionKind === 'discussion')
     const nodes = JSON.parse(discussion.contentJson)
     const linkNode = nodes[0].inlineContent[0]
     expect(linkNode._resolvedKey).toBe('wwdc/wwdc2024-10001')
@@ -493,9 +501,7 @@ describe('normalize — cross-source link resolution', () => {
           content: [
             {
               type: 'paragraph',
-              inlineContent: [
-                { type: 'link', destination: 'https://forums.swift.org/t/123', title: 'Forum thread' },
-              ],
+              inlineContent: [{ type: 'link', destination: 'https://forums.swift.org/t/123', title: 'Forum thread' }],
             },
           ],
         },
@@ -505,7 +511,7 @@ describe('normalize — cross-source link resolution', () => {
       references: {},
     }
     const { sections } = normalize(json, 'x', 'apple-docc')
-    const discussion = sections.find(s => s.sectionKind === 'discussion')
+    const discussion = sections.find((s) => s.sectionKind === 'discussion')
     const nodes = JSON.parse(discussion.contentJson)
     const linkNode = nodes[0].inlineContent[0]
     expect(linkNode._resolvedKey).toBeUndefined()

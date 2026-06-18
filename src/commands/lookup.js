@@ -1,9 +1,9 @@
-import { readText, readJSON, writeText } from '../storage/files.js'
 import { normalizeIdentifier } from '../apple/normalizer.js'
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { normalize } from '../content/normalize.js'
 import { renderMarkdown } from '../content/render-markdown.js'
 import { keyPath } from '../lib/safe-path.js'
+import { readJSON, readText, writeText } from '../storage/files.js'
 import { getProfile, getProfileConfig } from '../storage/profiles.js'
 
 /**
@@ -109,7 +109,13 @@ export async function lookup(opts, ctx) {
       // Compressed raw payload shipped in the DB (single snapshot) — used when
       // loose raw-json files aren't materialized on disk.
       const raw = db.getRawPayloadByKey?.(pagePath)
-      if (raw) { try { json = JSON.parse(raw) } catch { /* not JSON — skip */ } }
+      if (raw) {
+        try {
+          json = JSON.parse(raw)
+        } catch {
+          /* not JSON — skip */
+        }
+      }
     }
     if (json) {
       try {
@@ -156,9 +162,7 @@ export async function lookup(opts, ctx) {
     roleHeading: page.role_heading,
     kind: page.kind ?? null,
     abstract: page.abstract,
-    platforms: page.platforms
-      ? (typeof page.platforms === 'string' ? JSON.parse(page.platforms) : page.platforms)
-      : [],
+    platforms: page.platforms ? (typeof page.platforms === 'string' ? JSON.parse(page.platforms) : page.platforms) : [],
     declaration: page.declaration,
     path: pagePath,
     ...(Object.keys(relationshipCounts).length > 0 ? { relationships: relationshipCounts } : {}),
@@ -169,16 +173,16 @@ export async function lookup(opts, ctx) {
   // Section extraction: return a specific section by heading, sectionKind, or content match
   if (opts.section && sections.length > 0) {
     const sectionQuery = opts.section
-    const match = sections.find(s =>
-      s.heading === sectionQuery || s.heading?.endsWith(sectionQuery)
-      || (s.sectionKind ?? s.section_kind) === sectionQuery,
-    ) ?? sections.find(s =>
-      (s.contentText ?? s.content_text)?.includes(sectionQuery),
-    )
+    const match =
+      sections.find((s) => s.heading === sectionQuery || s.heading?.endsWith(sectionQuery) || (s.sectionKind ?? s.section_kind) === sectionQuery) ??
+      sections.find((s) => (s.contentText ?? s.content_text)?.includes(sectionQuery))
     if (match) {
       return { found: true, metadata, content: match.contentText ?? match.content_text ?? 'Section content not available.', sections: [match] }
     }
-    const available = sections.map(s => s.heading ?? s.sectionKind ?? s.section_kind).filter(Boolean).join(', ')
+    const available = sections
+      .map((s) => s.heading ?? s.sectionKind ?? s.section_kind)
+      .filter(Boolean)
+      .join(', ')
     return { found: true, metadata, content: null, sections, note: `Section not found: ${sectionQuery}. Available sections: ${available}` }
   }
 
@@ -186,8 +190,8 @@ export async function lookup(opts, ctx) {
   // consumers still on one of those, surface a clear upgrade hint
   // instead of silently empty content. The current snapshot has only
   // one tier, so this branch only fires on stale installs.
-  let note 
-  let tierLimitation 
+  let note
+  let tierLimitation
   if (content) {
     note = fallback ? 'Rendered on-demand from normalized content.' : undefined
   } else {

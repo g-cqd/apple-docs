@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { isTransientError, retryTransientFailures } from '../../../src/commands/consolidate/retry-transient.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import {
-  isTransientError,
-  retryTransientFailures,
-} from '../../../src/commands/consolidate/retry-transient.js'
 
 let db
 let ctx
@@ -79,7 +76,10 @@ describe('retryTransientFailures', () => {
       rounds: 2,
       baseDelayMs: 0,
       sleep: async () => {},
-      fetchPage: async () => { attempts++; throw new Error('HTTP 503 fetching https://x.json') },
+      fetchPage: async () => {
+        attempts++
+        throw new Error('HTTP 503 fetching https://x.json')
+      },
       persist: async () => {},
     })
     expect(attempts).toBe(2) // retried both rounds
@@ -93,8 +93,12 @@ describe('retryTransientFailures', () => {
     const res = await retryTransientFailures(ctx, {
       rounds: 3,
       baseDelayMs: 10_000,
-      sleep: async () => { slept = true },
-      fetchPage: async () => { throw new Error('should not fetch') },
+      sleep: async () => {
+        slept = true
+      },
+      fetchPage: async () => {
+        throw new Error('should not fetch')
+      },
     })
     expect(res.rounds).toBe(0)
     expect(res.recovered).toBe(0)

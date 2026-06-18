@@ -2,13 +2,7 @@
 // mobile. Decouples the metadata fetch + render + copy/download wiring
 // from the controller so the boot path stays focused on filters + grid.
 
-import {
-  describeComposition,
-  formatAliases,
-  formatAvailability,
-  readVar,
-  resolvedThemeFg,
-} from './format.js'
+import { describeComposition, formatAliases, formatAvailability, readVar, resolvedThemeFg } from './format.js'
 
 /**
  * Cache of full per-symbol JSON (aliases, availability — fields not in
@@ -21,9 +15,7 @@ async function fetchMetadata(symbol) {
   const key = `${symbol.scope}/${symbol.name}`
   if (metadataCache.has(key)) return metadataCache.get(key)
   try {
-    const res = await fetch(
-      `/api/symbols/${encodeURIComponent(symbol.scope)}/${encodeURIComponent(symbol.name)}.json`,
-    )
+    const res = await fetch(`/api/symbols/${encodeURIComponent(symbol.scope)}/${encodeURIComponent(symbol.name)}.json`)
     if (!res.ok) return symbol
     const full = await res.json()
     const merged = { ...symbol, ...full }
@@ -62,7 +54,8 @@ function renderMetadata(detailMeta, symbol) {
     rows.push(['Bundle', symbol.bundle_version ?? symbol.bundleVersion])
   }
   for (const [k, v] of rows) {
-    const dt = document.createElement('dt'); dt.textContent = k
+    const dt = document.createElement('dt')
+    dt.textContent = k
     const dd = document.createElement('dd')
     if (v instanceof Node) dd.append(v)
     else dd.textContent = v
@@ -149,10 +142,9 @@ export function createDetailPanel(deps) {
     lastClickedTile = tile
     if (detail.root) detail.root.hidden = false
     if (detail.name) detail.name.textContent = symbol.name
-    if (detail.scope) detail.scope.textContent =
-      symbol.scope === 'private' ? 'Private CoreGlyphs' : 'Public SF Symbol'
+    if (detail.scope) detail.scope.textContent = symbol.scope === 'private' ? 'Private CoreGlyphs' : 'Public SF Symbol'
     refreshDetail()
-    fetchMetadata(symbol).then(meta => {
+    fetchMetadata(symbol).then((meta) => {
       if (activeSymbol === symbol) renderMetadata(detail.meta, meta)
     })
     if (mobileBar.root) {
@@ -200,9 +192,17 @@ export function createDetailPanel(deps) {
     }
   }
 
-  function setWeight(value) { detailWeight.value = value; refreshDetail() }
-  function setScale(value) { detailScale.value = value; refreshDetail() }
-  function getActiveSymbol() { return activeSymbol }
+  function setWeight(value) {
+    detailWeight.value = value
+    refreshDetail()
+  }
+  function setScale(value) {
+    detailScale.value = value
+    refreshDetail()
+  }
+  function getActiveSymbol() {
+    return activeSymbol
+  }
 
   return { open, close, closeNoNav, refresh: refreshDetail, copySvg, setWeight, setScale, getActiveSymbol }
 }

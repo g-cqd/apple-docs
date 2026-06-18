@@ -39,9 +39,7 @@ export async function installFromLocalArchive(ctx, opts, { extractAndIndex, snap
   // for legacy .7z); manifest strips the archive extension.
   const isSevenZip = archivePath.endsWith('.7z')
   const checksumPath = `${archivePath}.sha256`
-  const manifestPath = isSevenZip
-    ? `${archivePath.slice(0, -'.7z'.length)}.manifest.json`
-    : `${stripTarGz(archivePath)}.manifest.json`
+  const manifestPath = isSevenZip ? `${archivePath.slice(0, -'.7z'.length)}.manifest.json` : `${stripTarGz(archivePath)}.manifest.json`
   const hasChecksum = existsSync(checksumPath)
   const hasManifest = existsSync(manifestPath)
 
@@ -72,7 +70,13 @@ export async function installFromLocalArchive(ctx, opts, { extractAndIndex, snap
     }
   }
 
-  const result = await extractAndIndex(ctx, archivePath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, profile: opts.profile, yes: opts.yes })
+  const result = await extractAndIndex(ctx, archivePath, {
+    skipResources: opts.skipResources,
+    skipSemantic: opts.skipSemantic,
+    embedder: opts.embedder,
+    profile: opts.profile,
+    yes: opts.yes,
+  })
   return {
     status: 'ok',
     source: 'local-archive',

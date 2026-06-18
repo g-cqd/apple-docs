@@ -1,6 +1,6 @@
-import { DocsDatabase } from '../../src/storage/database.js'
 import { search } from '../../src/commands/search.js'
-import { recordBenchmark, compareToPrevious } from './history.js'
+import { DocsDatabase } from '../../src/storage/database.js'
+import { compareToPrevious, recordBenchmark } from './history.js'
 
 /**
  * Run search benchmarks and optionally record history.
@@ -56,7 +56,9 @@ async function main() {
     recordBenchmark('search-p99', { value: p99, unit: 'ms' })
 
     if (comparison.regressed) {
-      console.log(`WARNING REGRESSION: p50 is ${comparison.changePercent}% slower than previous (${comparison.previousValue.toFixed(2)}ms -> ${p50.toFixed(2)}ms)`)
+      console.log(
+        `WARNING REGRESSION: p50 is ${comparison.changePercent}% slower than previous (${comparison.previousValue.toFixed(2)}ms -> ${p50.toFixed(2)}ms)`,
+      )
     } else if (comparison.previousValue) {
       console.log(`  vs previous: ${comparison.changePercent > 0 ? '+' : ''}${comparison.changePercent}%`)
     }

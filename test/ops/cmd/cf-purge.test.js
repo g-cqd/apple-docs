@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import runCfPurge from '../../../ops/cmd/cf-purge.js'
 
 function captureLogger() {
@@ -20,7 +20,15 @@ function jsonResp({ status = 200, body = '{"success":true}' } = {}) {
     headers: { get: () => null },
     text: () => Promise.resolve(body),
     body: new ReadableStream({
-      pull(c) { if (consumed) { c.close(); return } consumed = true; c.enqueue(bytes); c.close() },
+      pull(c) {
+        if (consumed) {
+          c.close()
+          return
+        }
+        consumed = true
+        c.enqueue(bytes)
+        c.close()
+      },
     }),
   }
 }
@@ -29,12 +37,14 @@ describe('runCfPurge', () => {
   test('soft-fails (exit 0 + warn) when token is missing', async () => {
     const logger = captureLogger()
     const code = await runCfPurge({
-      env: {},                            // no creds anywhere
-      envLoader: () => { throw new Error('no env file') },
+      env: {}, // no creds anywhere
+      envLoader: () => {
+        throw new Error('no env file')
+      },
       logger,
     })
     expect(code).toBe(0)
-    expect(logger.chunks.some(c => c.kind === 'warn' && c.m.includes('skipping edge purge'))).toBe(true)
+    expect(logger.chunks.some((c) => c.kind === 'warn' && c.m.includes('skipping edge purge'))).toBe(true)
   })
 
   test('issues purge_everything POST with bearer auth on success', async () => {
@@ -64,7 +74,7 @@ describe('runCfPurge', () => {
       deps: { fetcher },
     })
     expect(code).toBe(1)
-    expect(logger.chunks.some(c => c.kind === 'error' && c.m.includes('Cloudflare purge failed'))).toBe(true)
+    expect(logger.chunks.some((c) => c.kind === 'error' && c.m.includes('Cloudflare purge failed'))).toBe(true)
   })
 
   test('returns 1 when HTTP 200 but body says success:false', async () => {
@@ -76,7 +86,7 @@ describe('runCfPurge', () => {
       deps: { fetcher },
     })
     expect(code).toBe(1)
-    expect(logger.chunks.some(c => c.m.includes('did not report success'))).toBe(true)
+    expect(logger.chunks.some((c) => c.m.includes('did not report success'))).toBe(true)
   })
 
   test('returns 1 when body is not JSON', async () => {

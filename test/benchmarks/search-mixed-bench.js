@@ -29,10 +29,10 @@
  */
 
 import { existsSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
 import { homedir } from 'node:os'
-import { DocsDatabase } from '../../src/storage/database.js'
+import { dirname, resolve } from 'node:path'
 import { search } from '../../src/commands/search.js'
+import { DocsDatabase } from '../../src/storage/database.js'
 import { createReaderPools } from '../../src/storage/reader-pools.js'
 import { recordBenchmark } from './history.js'
 
@@ -63,9 +63,7 @@ async function main() {
   if (!existsSync(dbPath)) throw new Error(`Database not found: ${dbPath}`)
 
   const dataDir = dirname(dbPath)
-  const logger = flags.verbose
-    ? console
-    : { info() {}, warn() {}, error: (...args) => console.error(...args) }
+  const logger = flags.verbose ? console : { info() {}, warn() {}, error: (...args) => console.error(...args) }
 
   const db = new DocsDatabase(dbPath)
   const readerPool = createReaderPools({ dbPath, strictSize, deepSize })
@@ -89,8 +87,12 @@ async function main() {
       if (shouldRecord) recordResult(result, { strictSize, deepSize, ratio: `${ratio.slo}:${ratio.heavy}` })
     }
   } finally {
-    try { await readerPool.close({ softDrainMs: 0 }) } catch {}
-    try { db.close() } catch {}
+    try {
+      await readerPool.close({ softDrainMs: 0 })
+    } catch {}
+    try {
+      db.close()
+    } catch {}
   }
 }
 
@@ -120,9 +122,7 @@ async function runConcurrency({ ctx, iterations, concurrency, ratio }) {
       // SLO_RATIO + HEAVY_RATIO slots; 0..SLO_RATIO-1 → SLO, rest → HEAVY.
       const slot = index % (ratio.slo + ratio.heavy)
       const isHeavy = slot >= ratio.slo
-      const c = isHeavy
-        ? HEAVY_CASES[heavyIdx++ % HEAVY_CASES.length]
-        : SLO_CASES[sloIdx++ % SLO_CASES.length]
+      const c = isHeavy ? HEAVY_CASES[heavyIdx++ % HEAVY_CASES.length] : SLO_CASES[sloIdx++ % SLO_CASES.length]
       const t0 = performance.now()
       try {
         await search({ query: c.query, ...c.opts }, ctx)
@@ -153,7 +153,7 @@ function summarize(values) {
   const sorted = values.slice().sort((a, b) => a - b)
   return {
     count: sorted.length,
-    p50: percentile(sorted, 0.50),
+    p50: percentile(sorted, 0.5),
     p95: percentile(sorted, 0.95),
     p99: percentile(sorted, 0.99),
     max: sorted[sorted.length - 1],
@@ -224,12 +224,17 @@ function parseNonNegativeInt(value) {
 }
 
 function parseConcurrency(value) {
-  return String(value).split(',').map(s => Number.parseInt(s.trim(), 10)).filter(n => Number.isFinite(n) && n > 0)
+  return String(value)
+    .split(',')
+    .map((s) => Number.parseInt(s.trim(), 10))
+    .filter((n) => Number.isFinite(n) && n > 0)
 }
 
 function parseRatio(value) {
-  const [slo, heavy] = String(value).split(':').map(s => Number.parseInt(s.trim(), 10))
-  if (!Number.isFinite(slo) || slo < 0 || !Number.isFinite(heavy) || heavy < 0 || (slo + heavy === 0)) {
+  const [slo, heavy] = String(value)
+    .split(':')
+    .map((s) => Number.parseInt(s.trim(), 10))
+  if (!Number.isFinite(slo) || slo < 0 || !Number.isFinite(heavy) || heavy < 0 || slo + heavy === 0) {
     throw new Error(`--ratio must be "<slo>:<heavy>" with non-negative integers, got ${value}`)
   }
   return { slo, heavy }

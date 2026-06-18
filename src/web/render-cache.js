@@ -22,7 +22,12 @@ export function createWebRenderCache(db) {
 
   function getKnownKeys() {
     if (!knownKeys) {
-      knownKeys = new Set(db.db.query('SELECT key FROM documents').all().map(row => row.key))
+      knownKeys = new Set(
+        db.db
+          .query('SELECT key FROM documents')
+          .all()
+          .map((row) => row.key),
+      )
     }
     return knownKeys
   }

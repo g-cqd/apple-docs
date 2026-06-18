@@ -54,9 +54,7 @@ export function createPagesRepo(db) {
   const updateEtagStmt = db.query(
     'UPDATE pages SET etag = $etag, last_modified = $last_modified, content_hash = $content_hash, downloaded_at = $downloaded_at WHERE path = $path',
   )
-  const updateConvertedStmt = db.query(
-    'UPDATE pages SET converted_at = ? WHERE path = ?',
-  )
+  const updateConvertedStmt = db.query('UPDATE pages SET converted_at = ? WHERE path = ?')
   const getUnconvertedStmt = db.query(`
     SELECT p.path, r.slug as root_slug, COALESCE(p.source_type, r.source_type) as source_type
     FROM pages p
@@ -65,9 +63,7 @@ export function createPagesRepo(db) {
       AND p.downloaded_at IS NOT NULL
       AND p.status = 'active'
   `)
-  const getAllWithEtagStmt = db.query(
-    "SELECT path, etag FROM pages WHERE etag IS NOT NULL AND status = 'active'",
-  )
+  const getAllWithEtagStmt = db.query("SELECT path, etag FROM pages WHERE etag IS NOT NULL AND status = 'active'")
   const getBySourceTypeStmt = db.query(`
     SELECT p.path, p.root_id, p.etag, p.last_modified, p.content_hash,
            p.consecutive_404_count,
@@ -81,12 +77,8 @@ export function createPagesRepo(db) {
   // v17: tombstone gate. bumpConsecutive404 increments + returns the new
   // count atomically (RETURNING avoids a follow-up SELECT race); reset
   // zeroes the counter on any successful crawl.
-  const bump404Stmt = db.query(
-    'UPDATE pages SET consecutive_404_count = consecutive_404_count + 1 WHERE path = ? RETURNING consecutive_404_count',
-  )
-  const reset404Stmt = db.query(
-    'UPDATE pages SET consecutive_404_count = 0 WHERE path = ? AND consecutive_404_count > 0',
-  )
+  const bump404Stmt = db.query('UPDATE pages SET consecutive_404_count = consecutive_404_count + 1 WHERE path = ? RETURNING consecutive_404_count')
+  const reset404Stmt = db.query('UPDATE pages SET consecutive_404_count = 0 WHERE path = ? AND consecutive_404_count > 0')
 
   return {
     upsertPageRow(params) {
@@ -106,14 +98,11 @@ export function createPagesRepo(db) {
         $downloaded_at: params.downloadedAt ?? null,
         $source_type: params.sourceType,
         $language: params.language ?? null,
-        $is_release_notes: params.isReleaseNotes == null ? 0 : (params.isReleaseNotes ? 1 : 0),
+        $is_release_notes: params.isReleaseNotes == null ? 0 : params.isReleaseNotes ? 1 : 0,
         $url_depth: params.urlDepth,
         $doc_kind: params.docKind ?? params.role ?? null,
-        $source_metadata: params.sourceMetadata == null
-          ? null
-          : (typeof params.sourceMetadata === 'string'
-            ? params.sourceMetadata
-            : JSON.stringify(params.sourceMetadata)),
+        $source_metadata:
+          params.sourceMetadata == null ? null : typeof params.sourceMetadata === 'string' ? params.sourceMetadata : JSON.stringify(params.sourceMetadata),
         $min_ios: params.minIos ?? null,
         $min_macos: params.minMacos ?? null,
         $min_watchos: params.minWatchos ?? null,
@@ -134,9 +123,7 @@ export function createPagesRepo(db) {
       for (let index = 0; index < keys.length; index += chunkSize) {
         const chunk = keys.slice(index, index + chunkSize)
         const placeholders = chunk.map(() => '?').join(',')
-        const rows = db.query(
-          `SELECT path FROM pages WHERE status = 'active' AND path IN (${placeholders})`,
-        ).all(...chunk)
+        const rows = db.query(`SELECT path FROM pages WHERE status = 'active' AND path IN (${placeholders})`).all(...chunk)
         for (const row of rows) activePaths.add(row.path)
       }
       return activePaths

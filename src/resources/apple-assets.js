@@ -5,22 +5,14 @@
  * the small list/search readers, and re-exports everything else.
  */
 
-import { extname, join } from 'node:path'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { extname, join } from 'node:path'
 import { sha256 } from '../lib/hash.js'
 import { ensureDir } from '../storage/files.js'
-import {
-  inspectSfntFile,
-  parseFontFilename,
-} from './apple-fonts/sfnt.js'
 import { renderFontText } from './apple-fonts/render.js'
-import {
-  discoverAppleFontFiles,
-  downloadFileIfNeeded,
-  extractDmgFonts,
-  hashFile,
-} from './apple-fonts/sync.js'
+import { inspectSfntFile, parseFontFilename } from './apple-fonts/sfnt.js'
+import { discoverAppleFontFiles, downloadFileIfNeeded, extractDmgFonts, hashFile } from './apple-fonts/sync.js'
 import {
   getPrerenderedSymbolPath,
   normalizeSymbolScale,
@@ -29,37 +21,83 @@ import {
   SYMBOL_WEIGHTS,
   symbolVariantMatrix,
 } from './apple-symbols/cache-key.js'
-import { customizePrerenderedSymbolSvg } from './apple-symbols/svg-helpers.js'
 import { renderSfSymbol, SYMBOL_RENDERER_VERSION } from './apple-symbols/render.js'
-import {
-  prerenderSfSymbols,
-  stampSfSymbolCodepoints,
-  symbolSnapshotNeedsReset,
-  syncSfSymbols,
-} from './apple-symbols/sync.js'
+import { customizePrerenderedSymbolSvg } from './apple-symbols/svg-helpers.js'
+import { prerenderSfSymbols, stampSfSymbolCodepoints, symbolSnapshotNeedsReset, syncSfSymbols } from './apple-symbols/sync.js'
 
-export { inspectSfntFile, parseFontFilename }
-export { SYMBOL_WEIGHTS, SYMBOL_SCALES, getPrerenderedSymbolPath }
-export { renderFontText }
-export { renderSfSymbol }
-export { syncSfSymbols, prerenderSfSymbols, stampSfSymbolCodepoints }
+export {
+  getPrerenderedSymbolPath,
+  inspectSfntFile,
+  parseFontFilename,
+  prerenderSfSymbols,
+  renderFontText,
+  renderSfSymbol,
+  SYMBOL_SCALES,
+  SYMBOL_WEIGHTS,
+  stampSfSymbolCodepoints,
+  syncSfSymbols,
+}
 
 const APPLE_FONT_FAMILIES = [
-  { id: 'sf-pro', displayName: 'SF Pro', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg', match: /^SF-Pro(?:-|\.|$)|^SFNS/i },
-  { id: 'sf-compact', displayName: 'SF Compact', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Compact.dmg', match: /^SF-Compact(?:-|\.|$)|^SFCompact/i },
-  { id: 'sf-mono', displayName: 'SF Mono', category: 'monospace', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Mono.dmg', match: /^SF-Mono(?:-|\.|$)|^SFNSMono/i },
-  { id: 'new-york', displayName: 'New York', category: 'serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/NY.dmg', match: /^NewYork/i },
-  { id: 'sf-arabic', displayName: 'SF Arabic', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Arabic.dmg', match: /^SF-Arabic(?:-|\.|$)|^SFArabic/i },
-  { id: 'sf-armenian', displayName: 'SF Armenian', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Armenian.dmg', match: /^SF-Armenian(?:-|\.|$)|^SFArmenian/i },
-  { id: 'sf-georgian', displayName: 'SF Georgian', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Georgian.dmg', match: /^SF-Georgian(?:-|\.|$)|^SFGeorgian/i },
-  { id: 'sf-hebrew', displayName: 'SF Hebrew', category: 'sans-serif', sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Hebrew.dmg', match: /^SF-Hebrew(?:-|\.|$)|^SFHebrew/i },
+  {
+    id: 'sf-pro',
+    displayName: 'SF Pro',
+    category: 'sans-serif',
+    sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg',
+    match: /^SF-Pro(?:-|\.|$)|^SFNS/i,
+  },
+  {
+    id: 'sf-compact',
+    displayName: 'SF Compact',
+    category: 'sans-serif',
+    sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Compact.dmg',
+    match: /^SF-Compact(?:-|\.|$)|^SFCompact/i,
+  },
+  {
+    id: 'sf-mono',
+    displayName: 'SF Mono',
+    category: 'monospace',
+    sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Mono.dmg',
+    match: /^SF-Mono(?:-|\.|$)|^SFNSMono/i,
+  },
+  {
+    id: 'new-york',
+    displayName: 'New York',
+    category: 'serif',
+    sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/NY.dmg',
+    match: /^NewYork/i,
+  },
+  {
+    id: 'sf-arabic',
+    displayName: 'SF Arabic',
+    category: 'sans-serif',
+    sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Arabic.dmg',
+    match: /^SF-Arabic(?:-|\.|$)|^SFArabic/i,
+  },
+  {
+    id: 'sf-armenian',
+    displayName: 'SF Armenian',
+    category: 'sans-serif',
+    sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Armenian.dmg',
+    match: /^SF-Armenian(?:-|\.|$)|^SFArmenian/i,
+  },
+  {
+    id: 'sf-georgian',
+    displayName: 'SF Georgian',
+    category: 'sans-serif',
+    sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Georgian.dmg',
+    match: /^SF-Georgian(?:-|\.|$)|^SFGeorgian/i,
+  },
+  {
+    id: 'sf-hebrew',
+    displayName: 'SF Hebrew',
+    category: 'sans-serif',
+    sourceUrl: 'https://devimages-cdn.apple.com/design/resources/download/SF-Hebrew.dmg',
+    match: /^SF-Hebrew(?:-|\.|$)|^SFHebrew/i,
+  },
 ]
 
-const DEFAULT_FONT_DIRS = [
-  '/Library/Fonts',
-  '/System/Library/Fonts',
-  join(homedir(), 'Library', 'Fonts'),
-]
+const DEFAULT_FONT_DIRS = ['/Library/Fonts', '/System/Library/Fonts', join(homedir(), 'Library', 'Fonts')]
 
 const FONT_FILE_RE = /\.(ttf|otf|ttc|dfont)$/i
 
@@ -118,7 +156,7 @@ export async function syncAppleFonts(opts, ctx) {
   // overwrites the row — so we run remote first and skip system entries
   // whose names already landed.
   const indexFile = (file, source) => {
-    const family = APPLE_FONT_FAMILIES.find(f => f.match.test(file.fileName))
+    const family = APPLE_FONT_FAMILIES.find((f) => f.match.test(file.fileName))
     if (!family) return false
     const { variant, weight, italic } = parseFontFilename(file.fileName)
     const { isVariable, axes } = inspectSfntFile(file.filePath)
@@ -161,7 +199,7 @@ export async function syncAppleFonts(opts, ctx) {
 }
 
 function matchFamilyId(fileName) {
-  const family = APPLE_FONT_FAMILIES.find(f => f.match.test(fileName))
+  const family = APPLE_FONT_FAMILIES.find((f) => f.match.test(fileName))
   return family?.id ?? ''
 }
 
@@ -182,7 +220,7 @@ export async function ensureFontsExtracted(dataDir, logger) {
   let extracted = 0
   for (const family of APPLE_FONT_FAMILIES) {
     const familyDir = join(extractedDir, family.id)
-    if (existsSync(familyDir) && readdirSync(familyDir).some(f => FONT_FILE_RE.test(f))) continue
+    if (existsSync(familyDir) && readdirSync(familyDir).some((f) => FONT_FILE_RE.test(f))) continue
     const dmgPath = join(originalsDir, `${family.id}.dmg`)
     if (!existsSync(dmgPath)) {
       logger?.warn?.(`Apple font family ${family.displayName} has no extracted fonts and no cached DMG; skipping`)

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { NATIVE_TARGET, installNativeBundle, nativeInstallRoot } from '../../../src/commands/setup/native.js'
+import { installNativeBundle, NATIVE_TARGET, nativeInstallRoot } from '../../../src/commands/setup/native.js'
 
 function mockLogger() {
   const calls = { info: [], warn: [] }

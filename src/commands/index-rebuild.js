@@ -24,7 +24,7 @@ export async function rebuildTrigram(_opts, ctx) {
     )`)
   } else {
     logger.info('Clearing existing trigram index...')
-    db.db.run("DELETE FROM documents_trigram")
+    db.db.run('DELETE FROM documents_trigram')
   }
 
   // Populate from existing titles

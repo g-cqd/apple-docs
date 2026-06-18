@@ -17,8 +17,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DocsDatabase } from '../../../src/storage/database.js'
 import { search } from '../../../src/commands/search.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { DeadlineError } from '../../../src/storage/reader-pool.js'
 
 let tmpDir
@@ -38,7 +38,7 @@ beforeAll(() => {
     title: 'View',
     role: 'symbol',
     roleHeading: 'Protocol',
-    abstract: 'A type that represents part of your app\'s user interface.',
+    abstract: "A type that represents part of your app's user interface.",
     platforms: null,
     declaration: 'protocol View',
     sourceType: 'apple-docc',
@@ -47,8 +47,12 @@ beforeAll(() => {
 })
 
 afterAll(() => {
-  try { db.close() } catch {}
-  try { rmSync(tmpDir, { recursive: true, force: true }) } catch {}
+  try {
+    db.close()
+  } catch {}
+  try {
+    rmSync(tmpDir, { recursive: true, force: true })
+  } catch {}
 })
 
 /**
@@ -92,12 +96,15 @@ describe('search partial-on-deep-timeout', () => {
     // `noEager: true` forces the body branch to run even if fast tiers
     // already filled the window. `fuzzy: false` keeps fuzzy out of the path
     // so we only assert the body branch's behavior.
-    const out = await search({
-      query: 'View',
-      noEager: true,
-      fuzzy: false,
-      limit: 10,
-    }, ctx)
+    const out = await search(
+      {
+        query: 'View',
+        noEager: true,
+        fuzzy: false,
+        limit: 10,
+      },
+      ctx,
+    )
     expect(out.partial).toBe(true)
     expect(out.partialReasons).toContain('body')
     // Strict cascade still produced the View result.
@@ -113,11 +120,14 @@ describe('search partial-on-deep-timeout', () => {
       readerPool: makeStubPoolThatTimesOut('fuzzyMatchTitles'),
     }
     // Force fuzzy to engage by giving an unmatchable typo'd query.
-    const out = await search({
-      query: 'Vieww',
-      fuzzy: true,
-      limit: 10,
-    }, ctx)
+    const out = await search(
+      {
+        query: 'Vieww',
+        fuzzy: true,
+        limit: 10,
+      },
+      ctx,
+    )
     expect(out.partial).toBe(true)
     expect(out.partialReasons).toContain('fuzzy')
   })

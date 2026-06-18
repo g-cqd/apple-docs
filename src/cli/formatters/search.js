@@ -14,10 +14,7 @@ export function formatSearchResults(result) {
     const quality = r.matchQuality ?? 'match'
     const tag = qualityBadge(quality, r.distance)
     const sourceLabel = r.sourceType ? `${r.sourceType} / ` : ''
-    const flags = [
-      r.isDeprecated ? dim('[deprecated]') : '',
-      r.isBeta ? dim('[beta]') : '',
-    ].filter(Boolean).join(' ')
+    const flags = [r.isDeprecated ? dim('[deprecated]') : '', r.isBeta ? dim('[beta]') : ''].filter(Boolean).join(' ')
     lines.push(`  ${dim(`${sourceLabel + r.framework} / ${r.kind ?? ''}`)}${tag}${flags ? ` ${flags}` : ''}`)
     lines.push(`  ${bold(r.title)}`)
     if (r.abstract) lines.push(`  ${r.abstract}`)
@@ -55,4 +52,3 @@ export function formatSearchRead(result) {
   }
   return lines.join('\n')
 }
-

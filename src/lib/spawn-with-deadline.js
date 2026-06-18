@@ -54,23 +54,19 @@ export async function spawnWithDeadline(args, opts = {}) {
   let timedOut = false
   const timer = setTimeout(() => {
     timedOut = true
-    try { proc.kill('SIGKILL') } catch { /* already exited */ }
+    try {
+      proc.kill('SIGKILL')
+    } catch {
+      /* already exited */
+    }
   }, deadlineMs)
 
   // Read stdout fully; read stderr through a capped sink so a pathological
   // child can't OOM us.
-  const stdoutPromise = proc.stdout
-    ? new Response(proc.stdout).arrayBuffer()
-    : Promise.resolve(new ArrayBuffer(0))
-  const stderrPromise = proc.stderr
-    ? readStreamCapped(proc.stderr, stderrMaxBytes)
-    : Promise.resolve('')
+  const stdoutPromise = proc.stdout ? new Response(proc.stdout).arrayBuffer() : Promise.resolve(new ArrayBuffer(0))
+  const stderrPromise = proc.stderr ? readStreamCapped(proc.stderr, stderrMaxBytes) : Promise.resolve('')
 
-  const [stdout, stderr, exitCode] = await Promise.all([
-    stdoutPromise,
-    stderrPromise,
-    proc.exited,
-  ])
+  const [stdout, stderr, exitCode] = await Promise.all([stdoutPromise, stderrPromise, proc.exited])
   clearTimeout(timer)
 
   if (timedOut) {
@@ -105,7 +101,11 @@ async function readStreamCapped(stream, maxBytes) {
     }
     out += decoder.decode()
   } finally {
-    try { reader.releaseLock?.() } catch { /* ignore */ }
+    try {
+      reader.releaseLock?.()
+    } catch {
+      /* ignore */
+    }
   }
   return out
 }

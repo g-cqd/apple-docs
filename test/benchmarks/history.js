@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const DEFAULT_HISTORY_DIR = join(import.meta.dir, '..', '..', '.benchmarks')
@@ -35,10 +35,10 @@ export function readHistory(name, opts = {}) {
   if (!existsSync(filePath)) return []
 
   const lines = readFileSync(filePath, 'utf8').trim().split('\n').filter(Boolean)
-  let entries = lines.map(l => JSON.parse(l))
+  let entries = lines.map((l) => JSON.parse(l))
 
   if (name) {
-    entries = entries.filter(e => e.name === name)
+    entries = entries.filter((e) => e.name === name)
   }
 
   if (opts.limit) {

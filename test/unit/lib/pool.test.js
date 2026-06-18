@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { pool } from '../../../src/lib/pool.js'
 
 describe('pool (P2.8 AbortSignal)', () => {
@@ -15,7 +15,14 @@ describe('pool (P2.8 AbortSignal)', () => {
     controller.abort(new Error('cancelled'))
     let started = 0
     await expect(
-      pool([1, 2, 3], 2, async () => { started += 1 }, { signal: controller.signal }),
+      pool(
+        [1, 2, 3],
+        2,
+        async () => {
+          started += 1
+        },
+        { signal: controller.signal },
+      ),
     ).rejects.toThrow('cancelled')
     expect(started).toBe(0)
   })
@@ -24,13 +31,18 @@ describe('pool (P2.8 AbortSignal)', () => {
     const controller = new AbortController()
     const items = Array.from({ length: 20 }, (_, i) => i)
     let started = 0
-    const promise = pool(items, 2, async (i) => {
-      started += 1
-      // Abort once a few have started
-      if (started === 2) controller.abort(new Error('stop'))
-      // Hold each task briefly
-      await new Promise(r => setTimeout(r, 10))
-    }, { signal: controller.signal })
+    const promise = pool(
+      items,
+      2,
+      async (i) => {
+        started += 1
+        // Abort once a few have started
+        if (started === 2) controller.abort(new Error('stop'))
+        // Hold each task briefly
+        await new Promise((r) => setTimeout(r, 10))
+      },
+      { signal: controller.signal },
+    )
     await expect(promise).rejects.toThrow('stop')
     // At most a small number of tasks ran (the two that were already
     // started + maybe one more); definitely not all 20.
@@ -64,9 +76,14 @@ describe('pool (P2.8 AbortSignal)', () => {
   test('signal is passed to the worker function', async () => {
     const controller = new AbortController()
     const seen = []
-    await pool([1, 2], 2, async (_n, opts) => {
-      seen.push(opts?.signal)
-    }, { signal: controller.signal })
+    await pool(
+      [1, 2],
+      2,
+      async (_n, opts) => {
+        seen.push(opts?.signal)
+      },
+      { signal: controller.signal },
+    )
     expect(seen).toHaveLength(2)
     for (const s of seen) expect(s).toBe(controller.signal)
   })

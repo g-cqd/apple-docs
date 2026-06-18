@@ -12,9 +12,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
 import { VERSION } from '../lib/version.js'
 import { createCacheRegistry } from './cache.js'
-import { registerDocTools } from './tools/docs.js'
-import { registerAssetTools } from './tools/assets.js'
 import { registerResources } from './server/resources.js'
+import { registerAssetTools } from './tools/assets.js'
+import { registerDocTools } from './tools/docs.js'
 
 /**
  * Create an MCP server instance with all tools and resources registered.
@@ -33,7 +33,8 @@ export function createServer(ctx, deps = {}) {
     { name: 'apple-docs', version: VERSION },
     {
       capabilities: { resources: {}, tools: {} },
-      instructions: 'Local offline index of Apple developer documentation: DocC frameworks, HIG, App Store Review Guidelines, Swift Evolution/book/org, WWDC sessions, sample code, Swift packages, SF Symbols, Apple fonts. Typical flow: search_docs, then read_doc with a hit\'s path (paginate long pages with maxChars). browse/list_frameworks explore structure; list_taxonomy enumerates filter values. All tools are read-only and fast.',
+      instructions:
+        "Local offline index of Apple developer documentation: DocC frameworks, HIG, App Store Review Guidelines, Swift Evolution/book/org, WWDC sessions, sample code, Swift packages, SF Symbols, Apple fonts. Typical flow: search_docs, then read_doc with a hit's path (paginate long pages with maxChars). browse/list_frameworks explore structure; list_taxonomy enumerates filter values. All tools are read-only and fast.",
     },
   )
 
@@ -61,7 +62,9 @@ export async function startServer(ctx, opts = {}) {
   const transport = createTransport()
 
   let closedResolve = null
-  const closed = new Promise(resolve => { closedResolve = resolve })
+  const closed = new Promise((resolve) => {
+    closedResolve = resolve
+  })
   let closePromise = null
 
   const detachListeners = () => {
@@ -91,7 +94,9 @@ export async function startServer(ctx, opts = {}) {
       }
       return reason
     })()
-    closePromise.finally(() => { closedResolve?.(reason) })
+    closePromise.finally(() => {
+      closedResolve?.(reason)
+    })
     return closePromise
   }
 

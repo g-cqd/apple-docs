@@ -23,11 +23,13 @@ export function addEntryPoints(entries) {
   if (!Array.isArray(entries)) return
   for (const entry of entries) {
     if (!entry?.key || !Array.isArray(entry.parents) || entry.parents.length === 0) continue
-    if (ENTRY_POINTS.some(existing =>
-      existing.key === entry.key &&
-      existing.parents.every(p => entry.parents.includes(p)) &&
-      entry.parents.every(p => existing.parents.includes(p)),
-    )) continue
+    if (
+      ENTRY_POINTS.some(
+        (existing) =>
+          existing.key === entry.key && existing.parents.every((p) => entry.parents.includes(p)) && entry.parents.every((p) => existing.parents.includes(p)),
+      )
+    )
+      continue
     ENTRY_POINTS.push(entry)
   }
 }
@@ -39,7 +41,7 @@ export function clearEntryPoints() {
 
 /** Return all entry points whose `parents` includes the given key. */
 export function getEntryPointsForParent(parentKey) {
-  return ENTRY_POINTS.filter(ep => ep.parents.includes(parentKey))
+  return ENTRY_POINTS.filter((ep) => ep.parents.includes(parentKey))
 }
 
 /** Return the full registered list (read-only view). */

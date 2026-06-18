@@ -18,7 +18,7 @@
  *   absolute glyph coordinates.
  */
 
-export { SYMBOL_WORKER_SCRIPT } from './swift/symbol-worker.js'
+export { FONT_TEXT_SCRIPT } from './swift/font-text.js'
 export { SYMBOL_PDF_SCRIPT } from './swift/symbol-pdf.js'
 export { SYMBOL_PNG_SCRIPT } from './swift/symbol-png.js'
-export { FONT_TEXT_SCRIPT } from './swift/font-text.js'
+export { SYMBOL_WORKER_SCRIPT } from './swift/symbol-worker.js'

@@ -30,10 +30,18 @@ function classifyRoute(pathname) {
   if (pathname.startsWith('/docs/')) return '/docs/*'
   if (pathname.startsWith('/data/')) return '/data/*'
   if (pathname.startsWith('/assets/') || pathname.startsWith('/worker/')) return '/assets/*'
-  if (pathname === '/healthz' || pathname === '/readyz' || pathname === '/search'
-    || pathname === '/search/' || pathname === '/fonts' || pathname === '/fonts/'
-    || pathname === '/symbols' || pathname === '/symbols/' || pathname === '/index.html'
-  ) return pathname
+  if (
+    pathname === '/healthz' ||
+    pathname === '/readyz' ||
+    pathname === '/search' ||
+    pathname === '/search/' ||
+    pathname === '/fonts' ||
+    pathname === '/fonts/' ||
+    pathname === '/symbols' ||
+    pathname === '/symbols/' ||
+    pathname === '/index.html'
+  )
+    return pathname
   return 'other'
 }
 

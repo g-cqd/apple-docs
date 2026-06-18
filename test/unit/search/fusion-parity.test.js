@@ -4,23 +4,13 @@
  * order, identical MMR permutations — across fixed vectors and seeded
  * property cases. Skips when no dylib is built (CI builds one first).
  */
+
+import { suffix } from 'bun:ffi'
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'
-import { suffix } from 'bun:ffi'
 import { _resetNativeLoader } from '../../../src/native/loader.js'
-import {
-  _forceImpl,
-  _nativeCallCount,
-  hammingSim,
-  hybridFusion,
-  mmrSelect,
-  weightedRRF,
-} from '../../../src/search/fusion-native.js'
-import {
-  hybridFusion as jsHybrid,
-  mmrSelect as jsMmr,
-  weightedRRF as jsRRF,
-} from '../../../src/search/fusion.js'
+import { hybridFusion as jsHybrid, mmrSelect as jsMmr, weightedRRF as jsRRF } from '../../../src/search/fusion.js'
+import { _forceImpl, _nativeCallCount, hammingSim, hybridFusion, mmrSelect, weightedRRF } from '../../../src/search/fusion-native.js'
 
 const DEV_LIB = new URL(`../../../swift/.build/release/libAppleDocsCore.${suffix}`, import.meta.url).pathname
 
@@ -80,8 +70,23 @@ describe.skipIf(!existsSync(DEV_LIB))('fusion native/js parity', () => {
 
   test('hybridFusion fixed vectors', () => {
     const lists = [
-      { ranked: ['a', 'b', 'c'], weight: 1.0, scores: new Map([['a', 5], ['b', 2], ['c', 1]]) },
-      { ranked: ['b', 'd'], weight: 0.6, scores: new Map([['b', 0.9], ['d', 0.1]]) },
+      {
+        ranked: ['a', 'b', 'c'],
+        weight: 1.0,
+        scores: new Map([
+          ['a', 5],
+          ['b', 2],
+          ['c', 1],
+        ]),
+      },
+      {
+        ranked: ['b', 'd'],
+        weight: 0.6,
+        scores: new Map([
+          ['b', 0.9],
+          ['d', 0.1],
+        ]),
+      },
     ]
     const before = _nativeCallCount()
     expectMapsIdentical(hybridFusion(lists, { k: 60, beta: 0.5 }), jsHybrid(lists, { k: 60, beta: 0.5 }))
@@ -89,7 +94,16 @@ describe.skipIf(!existsSync(DEV_LIB))('fusion native/js parity', () => {
   })
 
   test('rrf ignores scores exactly like JS', () => {
-    const lists = [{ ranked: ['a', 'b'], weight: 1.0, scores: new Map([['a', 9], ['b', 1]]) }]
+    const lists = [
+      {
+        ranked: ['a', 'b'],
+        weight: 1.0,
+        scores: new Map([
+          ['a', 9],
+          ['b', 1],
+        ]),
+      },
+    ]
     expectMapsIdentical(weightedRRF(lists), jsRRF(lists))
   })
 
@@ -128,13 +142,9 @@ describe.skipIf(!existsSync(DEV_LIB))('fusion native/js parity', () => {
     const items = ['p', 'q', 'r', 's']
     const vecOf = (it) => vecs[it]
     const before = _nativeCallCount()
-    expect(mmrSelect(items, vecOf, hammingSim, { lambda: 0.3 })).toEqual(
-      jsMmr(items, vecOf, hammingSim, { lambda: 0.3 }),
-    )
+    expect(mmrSelect(items, vecOf, hammingSim, { lambda: 0.3 })).toEqual(jsMmr(items, vecOf, hammingSim, { lambda: 0.3 }))
     expect(_nativeCallCount()).toBe(before + 1)
-    expect(mmrSelect(items, vecOf, hammingSim, { lambda: 0.3, limit: 3 })).toEqual(
-      jsMmr(items, vecOf, hammingSim, { lambda: 0.3, limit: 3 }),
-    )
+    expect(mmrSelect(items, vecOf, hammingSim, { lambda: 0.3, limit: 3 })).toEqual(jsMmr(items, vecOf, hammingSim, { lambda: 0.3, limit: 3 }))
   })
 
   test('custom sim stays on JS', () => {
@@ -152,9 +162,7 @@ describe.skipIf(!existsSync(DEV_LIB))('fusion native/js parity', () => {
       const n = 1 + Math.floor(rand() * 30)
       const dim = [1, 2, 8][Math.floor(rand() * 3)]
       const items = Array.from({ length: n }, (_, j) => `item/${j}`)
-      const vecs = items.map(() =>
-        rand() < 0.2 ? null : Uint8Array.from({ length: dim }, () => Math.floor(rand() * 256)),
-      )
+      const vecs = items.map(() => (rand() < 0.2 ? null : Uint8Array.from({ length: dim }, () => Math.floor(rand() * 256))))
       const vecOf = (it) => vecs[items.indexOf(it)]
       const lambda = rand()
       const limit = rand() < 0.5 ? undefined : 1 + Math.floor(rand() * n)

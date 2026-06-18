@@ -1,7 +1,7 @@
-import { renderSearchPage, renderFontsPage, renderSymbolsPage, renderIndexPage } from '../templates.js'
 import { textResponse } from '../responses.js'
-import { buildHomepageProps } from '../view-models/homepage.viewmodel.js'
+import { renderFontsPage, renderIndexPage, renderSearchPage, renderSymbolsPage } from '../templates.js'
 import { buildFontsPageProps } from '../view-models/fonts-page.viewmodel.js'
+import { buildHomepageProps } from '../view-models/homepage.viewmodel.js'
 import { buildSymbolsPageProps } from '../view-models/symbols-page.viewmodel.js'
 
 const HTML = { contentType: 'text/html; charset=utf-8' }

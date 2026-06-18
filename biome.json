@@ -1,42 +1,46 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
-	"assist": { "actions": { "source": { "organizeImports": "off" } } },
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"recommended": true,
-			"correctness": {
-				"noUnusedVariables": "error",
-				"noUnusedImports": "error"
-			},
-			"suspicious": {
-				"noExplicitAny": "off",
-				"noAssignInExpressions": "warn"
-			},
-			"complexity": {
-				"useOptionalChain": "warn"
-			},
-			"style": {
-				"noNonNullAssertion": "off",
-				"noDescendingSpecificity": "off",
-				"useConst": "warn",
-				"useNumberNamespace": "warn",
-				"useTemplate": "warn",
-				"useSingleVarDeclarator": "warn",
-				"noUnusedTemplateLiteral": "warn"
-			}
-		}
-	},
-	"formatter": {
-		"enabled": false
-	},
-	"files": {
-		"includes": [
-			"**",
-			"!**/node_modules",
-			"!**/dist",
-			"!**/docs",
-			"!**/test/fixtures"
-		]
-	}
+  "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noAssignInExpressions": "warn"
+      },
+      "complexity": {
+        "useOptionalChain": "warn"
+      },
+      "style": {
+        "noNonNullAssertion": "error",
+        "noDescendingSpecificity": "off",
+        "useConst": "warn",
+        "useNumberNamespace": "warn",
+        "useTemplate": "warn",
+        "useSingleVarDeclarator": "warn",
+        "noUnusedTemplateLiteral": "warn"
+      }
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 160
+  },
+  "javascript": {
+    "formatter": {
+      "semicolons": "asNeeded",
+      "quoteStyle": "single",
+      "trailingCommas": "all"
+    }
+  },
+  "files": {
+    "includes": ["**", "!**/node_modules", "!**/dist", "!**/docs", "!**/test/fixtures"]
+  }
 }

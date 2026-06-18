@@ -8,9 +8,10 @@
 // Bun.build inlines the named exports directly inside the bundle's
 // outer IIFE (`format: 'iife'` in asset-bundler.js). No __esModule
 // shim is emitted because nothing outside the bundle imports these.
-import { init as initTheme } from './theme.js'
-import { init as initSearch } from './search.js'
+
 import { init as initPageToc } from './page-toc.js'
+import { init as initSearch } from './search.js'
+import { init as initTheme } from './theme.js'
 
 initTheme()
 initSearch()

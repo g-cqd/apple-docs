@@ -9,8 +9,8 @@
  */
 
 import { encodeVersion } from '../../lib/version-encode.js'
-import { coerceSourceType } from '../source-types.js'
 import { decodeSectionContent } from '../section-codec.js'
+import { coerceSourceType } from '../source-types.js'
 
 function deriveFrameworkFromPath(path) {
   if (!path) return null
@@ -109,12 +109,8 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
     WHERE dr.from_key = ?
     ORDER BY dr.sort_order, dr.to_key
   `)
-  const deleteRelationshipsByFromStmt = db.query(
-    'DELETE FROM document_relationships WHERE from_key = ?',
-  )
-  const deleteRelationshipsByKeyStmt = db.query(
-    'DELETE FROM document_relationships WHERE from_key = ? OR to_key = ?',
-  )
+  const deleteRelationshipsByFromStmt = db.query('DELETE FROM document_relationships WHERE from_key = ?')
+  const deleteRelationshipsByKeyStmt = db.query('DELETE FROM document_relationships WHERE from_key = ? OR to_key = ?')
   const insertRelationshipStmt = db.query(`
     INSERT INTO document_relationships (from_key, to_key, relation_type, section, sort_order)
     VALUES ($from_key, $to_key, $relation_type, $section, $sort_order)
@@ -139,9 +135,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
         ORDER BY sort_order, id
       `)
     : null
-  const deleteSectionsStmt = hasSectionsTable
-    ? db.query('DELETE FROM document_sections WHERE document_id = ?')
-    : null
+  const deleteSectionsStmt = hasSectionsTable ? db.query('DELETE FROM document_sections WHERE document_id = ?') : null
   const insertSectionStmt = hasSectionsTable
     ? db.query(`
         INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order)
@@ -181,15 +175,12 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
         $min_watchos_num: encodeVersion(params.minWatchos),
         $min_tvos_num: encodeVersion(params.minTvos),
         $min_visionos_num: encodeVersion(params.minVisionos),
-        $is_deprecated: params.isDeprecated == null ? null : (params.isDeprecated ? 1 : 0),
-        $is_beta: params.isBeta == null ? null : (params.isBeta ? 1 : 0),
-        $is_release_notes: params.isReleaseNotes == null ? null : (params.isReleaseNotes ? 1 : 0),
+        $is_deprecated: params.isDeprecated == null ? null : params.isDeprecated ? 1 : 0,
+        $is_beta: params.isBeta == null ? null : params.isBeta ? 1 : 0,
+        $is_release_notes: params.isReleaseNotes == null ? null : params.isReleaseNotes ? 1 : 0,
         $url_depth: params.urlDepth ?? null,
-        $source_metadata: params.sourceMetadata == null
-          ? null
-          : (typeof params.sourceMetadata === 'string'
-            ? params.sourceMetadata
-            : JSON.stringify(params.sourceMetadata)),
+        $source_metadata:
+          params.sourceMetadata == null ? null : typeof params.sourceMetadata === 'string' ? params.sourceMetadata : JSON.stringify(params.sourceMetadata),
         $content_hash: params.contentHash ?? null,
         $raw_payload_hash: params.rawPayloadHash ?? null,
         $now: now,
@@ -247,7 +238,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       if (!getSectionsStmt) return []
       const document = getByKeyStmt.get(key)
       if (!document) return []
-      return getSectionsStmt.all(document.id).map(section => ({
+      return getSectionsStmt.all(document.id).map((section) => ({
         sectionKind: section.section_kind,
         heading: section.heading,
         contentText: decodeSectionContent(section.content_text),
@@ -270,10 +261,12 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
     getDocumentSnippetData(keys) {
       if (!keys || keys.length === 0) return new Map()
       const placeholders = keys.map(() => '?').join(',')
-      const docs = db.query(`
+      const docs = db
+        .query(`
         SELECT id, key, title, abstract_text, declaration_text, headings
         FROM documents WHERE key IN (${placeholders})
-      `).all(...keys)
+      `)
+        .all(...keys)
       const docMap = new Map()
       const idToKey = new Map()
       for (const d of docs) {
@@ -283,11 +276,13 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       if (idToKey.size > 0 && hasSectionsTable) {
         const ids = [...idToKey.keys()]
         const sPlaceholders = ids.map(() => '?').join(',')
-        const sections = db.query(`
+        const sections = db
+          .query(`
           SELECT document_id, section_kind, heading, content_text, sort_order
           FROM document_sections WHERE document_id IN (${sPlaceholders})
           ORDER BY sort_order
-        `).all(...ids)
+        `)
+          .all(...ids)
         for (const s of sections) {
           const key = idToKey.get(s.document_id)
           if (key && docMap.has(key)) {
@@ -309,15 +304,20 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       const safe = ids.map(Number).filter(Number.isInteger)
       if (safe.length === 0) return new Map()
       const placeholders = safe.map(() => '?').join(',')
-      const rows = db.query(`
+      const rows = db
+        .query(`
         SELECT document_id, section_kind, heading, content_text, sort_order
         FROM document_sections WHERE document_id IN (${placeholders})
         ORDER BY document_id, sort_order, id
-      `).all(...safe)
+      `)
+        .all(...safe)
       const map = new Map()
       for (const s of rows) {
         let arr = map.get(s.document_id)
-        if (!arr) { arr = []; map.set(s.document_id, arr) }
+        if (!arr) {
+          arr = []
+          map.set(s.document_id, arr)
+        }
         arr.push({
           sectionKind: s.section_kind,
           heading: s.heading,
@@ -331,11 +331,13 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
     getRelatedDocCounts(keys) {
       if (!keys || keys.length === 0) return new Map()
       const placeholders = keys.map(() => '?').join(',')
-      const rows = db.query(`
+      const rows = db
+        .query(`
         SELECT from_key, COUNT(*) as count
         FROM document_relationships WHERE from_key IN (${placeholders})
         GROUP BY from_key
-      `).all(...keys)
+      `)
+        .all(...keys)
       const map = new Map()
       for (const r of rows) map.set(r.from_key, r.count)
       return map
@@ -349,11 +351,13 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
      */
     getRelationshipCountsByType(fromKey) {
       if (!fromKey) return {}
-      const rows = db.query(`
+      const rows = db
+        .query(`
         SELECT relation_type, COUNT(*) as count
         FROM document_relationships WHERE from_key = ?
         GROUP BY relation_type
-      `).all(fromKey)
+      `)
+        .all(fromKey)
       const out = {}
       for (const r of rows) {
         const key = RELATION_TYPE_TO_CAMEL[r.relation_type]
@@ -376,4 +380,3 @@ const RELATION_TYPE_TO_CAMEL = {
   seeAlso: 'seeAlso',
   child: 'children',
 }
-

@@ -35,13 +35,7 @@ export function maybeStartMcpMetricsServer(opts, deps) {
   })
 }
 
-function buildMcpMetrics({
-  cacheRegistry,
-  markdownCache,
-  heavySemaphore,
-  concurrencyStats,
-  readerPool,
-}) {
+function buildMcpMetrics({ cacheRegistry, markdownCache, heavySemaphore, concurrencyStats, readerPool }) {
   const metrics = []
 
   // ---- Per-tool response cache. cacheRegistry.stats() returns
@@ -75,7 +69,12 @@ function buildMcpMetrics({
     metrics.push(
       { name: 'apple_docs_mcp_markdown_cache_hits_total', help: 'Markdown render-cache hits.', type: 'counter', samples: [{ value: md.hits ?? 0 }] },
       { name: 'apple_docs_mcp_markdown_cache_misses_total', help: 'Markdown render-cache misses.', type: 'counter', samples: [{ value: md.misses ?? 0 }] },
-      { name: 'apple_docs_mcp_markdown_cache_evictions_total', help: 'Markdown render-cache LRU evictions.', type: 'counter', samples: [{ value: md.evictions ?? 0 }] },
+      {
+        name: 'apple_docs_mcp_markdown_cache_evictions_total',
+        help: 'Markdown render-cache LRU evictions.',
+        type: 'counter',
+        samples: [{ value: md.evictions ?? 0 }],
+      },
       { name: 'apple_docs_mcp_markdown_cache_size', help: 'Markdown render-cache current item count.', type: 'gauge', samples: [{ value: md.size ?? 0 }] },
     )
   }
@@ -86,7 +85,12 @@ function buildMcpMetrics({
   if (heavySemaphore) {
     metrics.push(
       { name: 'apple_docs_heavy_semaphore_active', help: 'Active heavy-tool permits in use.', type: 'gauge', samples: [{ value: heavySemaphore.active ?? 0 }] },
-      { name: 'apple_docs_heavy_semaphore_waiting', help: 'Heavy-tool calls queued waiting for a permit.', type: 'gauge', samples: [{ value: heavySemaphore._queue?.length ?? 0 }] },
+      {
+        name: 'apple_docs_heavy_semaphore_waiting',
+        help: 'Heavy-tool calls queued waiting for a permit.',
+        type: 'gauge',
+        samples: [{ value: heavySemaphore._queue?.length ?? 0 }],
+      },
     )
   }
   if (concurrencyStats) {
@@ -110,7 +114,11 @@ function buildMcpMetrics({
 }
 
 function safeCall(fn) {
-  try { return fn() } catch { return null }
+  try {
+    return fn()
+  } catch {
+    return null
+  }
 }
 
 function pushReaderPoolMetrics(metrics, rp) {

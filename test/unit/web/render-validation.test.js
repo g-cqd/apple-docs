@@ -1,10 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import {
-  validateFontText,
-  validateSymbolParams,
-  FONT_TEXT_MAX_CHARS,
-  ALLOWED_SYMBOL_SIZES,
-} from '../../../src/web/routes/render-validation.js'
+import { describe, expect, test } from 'bun:test'
+import { ALLOWED_SYMBOL_SIZES, FONT_TEXT_MAX_CHARS, validateFontText, validateSymbolParams } from '../../../src/web/routes/render-validation.js'
 
 describe('validateFontText', () => {
   test('null defaults to "Typography"', () => {

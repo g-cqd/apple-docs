@@ -4,7 +4,9 @@ import { errorResponse } from '../../../src/web/responses.js'
 describe('errorResponse (A27 stack-trace stripping)', () => {
   let originalEnv
 
-  beforeEach(() => { originalEnv = process.env.NODE_ENV })
+  beforeEach(() => {
+    originalEnv = process.env.NODE_ENV
+  })
   afterEach(() => {
     if (originalEnv === undefined) delete process.env.NODE_ENV
     else process.env.NODE_ENV = originalEnv

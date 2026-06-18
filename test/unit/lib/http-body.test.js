@@ -1,11 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import {
-  BodyTooLargeError,
-  DEFAULT_MAX_BODY_BYTES,
-  isLoopbackOrigin,
-  readBodyCapped,
-  readJsonRpcBodyCapped,
-} from '../../../src/lib/http-body.js'
+import { describe, expect, test } from 'bun:test'
+import { BodyTooLargeError, DEFAULT_MAX_BODY_BYTES, isLoopbackOrigin, readBodyCapped, readJsonRpcBodyCapped } from '../../../src/lib/http-body.js'
 
 function makeRequest({ body, headers = {} } = {}) {
   return new Request('http://test.local/mcp', {

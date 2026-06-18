@@ -1,7 +1,7 @@
 import { search } from '../../commands/search.js'
-import { jsonResponse, API_CORPUS_CACHE_CONTROL } from '../responses.js'
 import { BackpressureError, Semaphore } from '../../lib/semaphore.js'
 import { projectSearchResult } from '../../output/projection.js'
+import { API_CORPUS_CACHE_CONTROL, jsonResponse } from '../responses.js'
 
 /**
  * Bounded concurrency for explicit `deep=1` search requests.
@@ -115,5 +115,8 @@ function searchResponseCacheKey(searchOpts, stamp) {
 function stableJson(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+    .join(',')}}`
 }

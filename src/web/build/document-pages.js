@@ -5,16 +5,16 @@
 // upstream.
 
 import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 import { appendFile } from 'node:fs/promises'
-import { renderDocumentPage } from '../templates.js'
-import { ensureDir } from '../../storage/files.js'
-import { pool } from '../../lib/pool.js'
+import { dirname, join } from 'node:path'
 import { sha256 } from '../../lib/hash.js'
+import { pool } from '../../lib/pool.js'
 import { safeWebDocKey } from '../../lib/safe-path.js'
+import { ensureDir } from '../../storage/files.js'
+import { renderDocumentPage } from '../templates.js'
 import { batchFetchSections, computeSectionsDigest } from './checkpoint.js'
-import { renderSkiplistPlaceholder, renderWithTimeout } from './render-helpers.js'
 import { maybePrecompress } from './io.js'
+import { renderSkiplistPlaceholder, renderWithTimeout } from './render-helpers.js'
 
 /**
  * Build every document page in `roots` into `buildDir/docs/<key>/index.html`.
@@ -39,20 +39,34 @@ import { maybePrecompress } from './io.js'
  * @param {string} args.failuresPath
  */
 export async function buildDocumentPages({
-  roots, db, buildDir, siteConfig, renderCache, knownKeys, skipList,
-  renderTimeoutMs, concurrency, incremental, templateVersion,
-  counters, tickProgress, logger, failuresPath,
+  roots,
+  db,
+  buildDir,
+  siteConfig,
+  renderCache,
+  knownKeys,
+  skipList,
+  renderTimeoutMs,
+  concurrency,
+  incremental,
+  templateVersion,
+  counters,
+  tickProgress,
+  logger,
+  failuresPath,
 }) {
   for (const root of roots) {
-    const docs = db.db.query(
-      `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework,
+    const docs = db.db
+      .query(
+        `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework,
               d.abstract_text, d.source_type, d.language, d.url,
               d.platforms_json, d.is_deprecated, d.is_beta,
               COALESCE(r.display_name, d.framework) as framework_display
        FROM documents d LEFT JOIN roots r ON r.slug = d.framework
        WHERE d.framework = ?
        ORDER BY d.id`,
-    ).all(root.slug)
+      )
+      .all(root.slug)
 
     if (docs.length === 0) continue
 
@@ -60,7 +74,11 @@ export async function buildDocumentPages({
     // index-body pipeline at src/pipeline/index-body.js:44). Drops 346 K
     // queries to ~700 in the production corpus.
     const sectionsByDoc = db.hasTable('document_sections')
-      ? batchFetchSections(db, docs.map(d => d.id), 500)
+      ? batchFetchSections(
+          db,
+          docs.map((d) => d.id),
+          500,
+        )
       : new Map()
 
     await pool(docs, concurrency, async (doc) => {
@@ -106,19 +124,21 @@ export async function buildDocumentPages({
         // can proceed without wedging on a single bad input.
         const rendered = skipList.has(doc.key)
           ? renderSkiplistPlaceholder(doc, siteConfig)
-          : await renderWithTimeout(() => renderDocumentPage(doc, sections, siteConfig, {
-              knownKeys,
-              ancestorTitles: renderCache.getAncestorTitles(doc.key),
-              resolveRoleHeadings: (keys) => renderCache.getRoleHeadings(keys),
-            }), renderTimeoutMs)
+          : await renderWithTimeout(
+              () =>
+                renderDocumentPage(doc, sections, siteConfig, {
+                  knownKeys,
+                  ancestorTitles: renderCache.getAncestorTitles(doc.key),
+                  resolveRoleHeadings: (keys) => renderCache.getRoleHeadings(keys),
+                }),
+              renderTimeoutMs,
+            )
 
         // renderDocumentPage returns HtmlString; renderSkiplistPlaceholder
         // returns a plain string. Coerce to Uint8Array bytes once and
         // hand the same buffer to write + precompress + hash so we only
         // pay one UTF-8 encode per page instead of three.
-        const html = typeof rendered === 'string'
-          ? Buffer.from(rendered)
-          : rendered.bytes()
+        const html = typeof rendered === 'string' ? Buffer.from(rendered) : rendered.bytes()
 
         ensureDir(dirname(filePath))
         await Bun.write(filePath, html)
@@ -137,12 +157,15 @@ export async function buildDocumentPages({
         // Persist failures to a sidecar log; the build run should not abort
         // because of a single bad doc.
         try {
-          await appendFile(failuresPath, `${JSON.stringify({
-            t: new Date().toISOString(),
-            doc_id: doc.id,
-            key: doc.key,
-            error: err.message,
-          })}\n`)
+          await appendFile(
+            failuresPath,
+            `${JSON.stringify({
+              t: new Date().toISOString(),
+              doc_id: doc.id,
+              key: doc.key,
+              error: err.message,
+            })}\n`,
+          )
         } catch {
           // best-effort; never let logging fail a build
         }

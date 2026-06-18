@@ -12,5 +12,7 @@
 export function up(db) {
   try {
     db.run('ALTER TABLE sf_symbols ADD COLUMN codepoint_version TEXT')
-  } catch { /* column already exists */ }
+  } catch {
+    /* column already exists */
+  }
 }

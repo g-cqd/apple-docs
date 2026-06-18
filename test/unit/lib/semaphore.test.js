@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { BackpressureError, Semaphore } from '../../../src/lib/semaphore.js'
 
 describe('Semaphore', () => {
@@ -15,7 +15,9 @@ describe('Semaphore', () => {
     await sem.acquire()
 
     let acquired = false
-    const pending = sem.acquire().then(() => { acquired = true })
+    const pending = sem.acquire().then(() => {
+      acquired = true
+    })
 
     // Give microtask queue a tick
     await Promise.resolve()
@@ -61,13 +63,21 @@ describe('Semaphore', () => {
 
   test('run() releases on error', async () => {
     const sem = new Semaphore(1)
-    await expect(sem.run(() => { throw new Error('boom') })).rejects.toThrow('boom')
+    await expect(
+      sem.run(() => {
+        throw new Error('boom')
+      }),
+    ).rejects.toThrow('boom')
     expect(sem.active).toBe(0)
   })
 
   test('run() releases on async error', async () => {
     const sem = new Semaphore(1)
-    await expect(sem.run(async () => { throw new Error('async boom') })).rejects.toThrow('async boom')
+    await expect(
+      sem.run(async () => {
+        throw new Error('async boom')
+      }),
+    ).rejects.toThrow('async boom')
     expect(sem.active).toBe(0)
   })
 
@@ -79,16 +89,11 @@ describe('Semaphore', () => {
     const task = async () => {
       current++
       if (current > maxConcurrent) maxConcurrent = current
-      await new Promise(r => setTimeout(r, 10))
+      await new Promise((r) => setTimeout(r, 10))
       current--
     }
 
-    await Promise.all([
-      sem.run(task),
-      sem.run(task),
-      sem.run(task),
-      sem.run(task),
-    ])
+    await Promise.all([sem.run(task), sem.run(task), sem.run(task), sem.run(task)])
 
     expect(maxConcurrent).toBe(2)
     expect(sem.active).toBe(0)
@@ -133,7 +138,7 @@ describe('Semaphore', () => {
 
     test('a queued waiter is rejected and removed when its signal aborts', async () => {
       const sem = new Semaphore(1)
-      await sem.acquire()                    // permit held by main
+      await sem.acquire() // permit held by main
       const controller = new AbortController()
       const queued = sem.acquire({ signal: controller.signal })
       // Microtask flush so the waiter is in _queue
@@ -152,7 +157,12 @@ describe('Semaphore', () => {
       await sem.acquire()
       const controller = new AbortController()
       let ranBody = false
-      const promise = sem.run(async () => { ranBody = true }, { signal: controller.signal })
+      const promise = sem.run(
+        async () => {
+          ranBody = true
+        },
+        { signal: controller.signal },
+      )
       await Promise.resolve()
       controller.abort()
       await expect(promise).rejects.toThrow()

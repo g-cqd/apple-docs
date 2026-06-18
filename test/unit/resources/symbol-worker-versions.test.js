@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  sfSymbolsSharedInterface,
-  symbolCodepointWorkerScript,
-} from '../../../src/resources/swift/symbol-codepoint-worker.js'
+import { sfSymbolsSharedInterface, symbolCodepointWorkerScript } from '../../../src/resources/swift/symbol-codepoint-worker.js'
 
 // The SF Symbols private SymbolFontReader ABI changed at major 8 (a 5th
 // MetadataReadingOptions param + an @escaping decryptor closure). The worker

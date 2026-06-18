@@ -131,8 +131,7 @@ export function buildOpenSearchXml(siteConfig = {}) {
   const origin = originOf(siteConfig)
   const longName = siteConfig.siteName || 'Apple Developer Docs'
   const shortName = (siteConfig.searchShortName || 'Apple Docs').slice(0, 16)
-  const esc = (s) => String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   return `<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
   <ShortName>${esc(shortName)}</ShortName>
@@ -160,12 +159,8 @@ export function buildApiCatalog(siteConfig = {}) {
     linkset: [
       {
         anchor: url(origin, '/'),
-        'service-doc': [
-          { href: url(origin, '/docs/'), title: 'Apple Developer Docs', type: 'text/html' },
-        ],
-        status: [
-          { href: url(origin, '/readyz'), type: 'application/json' },
-        ],
+        'service-doc': [{ href: url(origin, '/docs/'), title: 'Apple Developer Docs', type: 'text/html' }],
+        status: [{ href: url(origin, '/readyz'), type: 'application/json' }],
         item: [
           { href: url(origin, '/api/search'), title: 'Documentation search', type: 'application/json' },
           { href: url(origin, '/api/filters'), title: 'Search filter facets', type: 'application/json' },
@@ -218,7 +213,8 @@ export function buildMcpServerCard(siteConfig = {}, version) {
   const origin = originOf(siteConfig)
   return {
     serverInfo: { name: 'apple-docs', version },
-    description: 'Search and read Apple developer documentation offline: DocC API reference, HIG, App Store Review Guidelines, Swift Evolution, WWDC sessions, sample code, SF Symbols, and Apple fonts. Read-only tools, token-lean definitions.',
+    description:
+      'Search and read Apple developer documentation offline: DocC API reference, HIG, App Store Review Guidelines, Swift Evolution, WWDC sessions, sample code, SF Symbols, and Apple fonts. Read-only tools, token-lean definitions.',
     transport: { type: 'streamable-http', endpoint: url(origin, '/mcp') },
     capabilities: ['tools', 'resources'],
     endpoints: {

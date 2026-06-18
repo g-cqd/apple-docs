@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, statSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { resolveGitHubAuth, readSidecar, writeSidecar } from '../../../src/lib/git-auth-resolve.js'
-import { setResolvedGitHubToken, getGitHubToken } from '../../../src/lib/github.js'
+import { readSidecar, resolveGitHubAuth, writeSidecar } from '../../../src/lib/git-auth-resolve.js'
+import { getGitHubToken, setResolvedGitHubToken } from '../../../src/lib/github.js'
 
 // `getGitHubToken` is imported for the "detected token is installed" assertions.
 void getGitHubToken
@@ -18,7 +18,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  try { rmSync(tmpHome, { recursive: true, force: true }) } catch {}
+  try {
+    rmSync(tmpHome, { recursive: true, force: true })
+  } catch {}
   setResolvedGitHubToken(null)
 })
 
@@ -34,7 +36,9 @@ function loggerStub() {
 }
 
 function neverDetect() {
-  return async () => { throw new Error('detect should not run') }
+  return async () => {
+    throw new Error('detect should not run')
+  }
 }
 
 describe('resolveGitHubAuth', () => {
@@ -74,7 +78,9 @@ describe('resolveGitHubAuth', () => {
 
   test('--use-git-auth detects without prompting', async () => {
     const logger = loggerStub()
-    const promptFn = async () => { throw new Error('prompt should not run') }
+    const promptFn = async () => {
+      throw new Error('prompt should not run')
+    }
     const res = await resolveGitHubAuth({
       flags: { 'use-git-auth': true },
       env: {},
@@ -105,7 +111,9 @@ describe('resolveGitHubAuth', () => {
   test('persisted useGitAuth=true bypasses prompt', async () => {
     mkdirSync(tmpHome, { recursive: true })
     writeFileSync(sidecarPath, JSON.stringify({ useGitAuth: true }))
-    const promptFn = async () => { throw new Error('prompt should not run') }
+    const promptFn = async () => {
+      throw new Error('prompt should not run')
+    }
 
     const res = await resolveGitHubAuth({
       flags: {},
@@ -204,7 +212,9 @@ describe('resolveGitHubAuth', () => {
       flags: {},
       env: {},
       detect: async () => null,
-      promptFn: async () => { throw new Error('should not prompt') },
+      promptFn: async () => {
+        throw new Error('should not prompt')
+      },
       isTTY: () => true,
       sidecarPath,
     })

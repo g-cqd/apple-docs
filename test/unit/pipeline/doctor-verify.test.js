@@ -1,11 +1,11 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
 import { consolidate } from '../../../src/commands/consolidate.js'
 import { createLogger } from '../../../src/lib/logger.js'
 import { RateLimiter } from '../../../src/lib/rate-limiter.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
 let dataDir
@@ -60,7 +60,7 @@ describe('doctor --verify', () => {
     expect(sv.tier).toBe('standard')
     expect(sv.tag).toBe('test-v1')
     expect(sv.ok).toBe(true)
-    expect(sv.checks.every(c => c.ok)).toBe(true)
+    expect(sv.checks.every((c) => c.ok)).toBe(true)
   })
 
   test('detects document count mismatch', async () => {
@@ -74,7 +74,7 @@ describe('doctor --verify', () => {
     expect(sv.installed).toBe(true)
     expect(sv.ok).toBe(false)
 
-    const countCheck = sv.checks.find(c => c.name === 'document_count')
+    const countCheck = sv.checks.find((c) => c.name === 'document_count')
     expect(countCheck.ok).toBe(false)
     expect(countCheck.expected).toBe(100)
     expect(countCheck.actual).toBe(0)

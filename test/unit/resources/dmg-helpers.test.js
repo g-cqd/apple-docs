@@ -1,5 +1,5 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -55,8 +55,12 @@ describe('parseHdiutilMountPoints', () => {
 
 describe('volume / package discovery', () => {
   let root
-  beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'apple-docs-dmg-helpers-')) })
-  afterEach(() => { rmSync(root, { recursive: true, force: true }) })
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'apple-docs-dmg-helpers-'))
+  })
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
 
   test('findAppInVolumes finds a loose SF Symbols.app at a volume root', () => {
     const vol = join(root, 'vol-app')
@@ -86,9 +90,7 @@ describe('volume / package discovery', () => {
     // Mirrors `pkgutil --expand-full` output: <dest>/Payload/<dst>/SF Symbols.app
     const appDir = join(root, 'expanded', 'Payload', 'Applications', 'SF Symbols.app', 'Contents')
     mkdirSync(appDir, { recursive: true })
-    expect(findAppInTree(join(root, 'expanded'))).toBe(
-      join(root, 'expanded', 'Payload', 'Applications', 'SF Symbols.app'),
-    )
+    expect(findAppInTree(join(root, 'expanded'))).toBe(join(root, 'expanded', 'Payload', 'Applications', 'SF Symbols.app'))
   })
 
   test('findAppInTree returns null when absent and respects maxDepth', () => {

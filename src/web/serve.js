@@ -1,50 +1,25 @@
 import { rm } from 'node:fs/promises'
-import { notFoundResponse, finalizeResponse } from './responses.js'
-import { createWebContext } from './context.js'
-import { createRouteRegistry } from './route-registry.js'
-import { createRateLimiter, tooManyRequestsResponse } from './middleware/rate-limit.js'
-import { createObservability } from './middleware/observability.js'
-import { maybeStartWebMetricsServer } from './metrics-provider.js'
 import { createEventLoopLagSampler } from '../lib/event-loop-lag.js'
-import { healthHandler, readinessHandler } from './routes/health.route.js'
-import { filtersHandler } from './routes/filters.route.js'
-import { symbolsIndexHandler } from './routes/symbols-index.route.js'
-import {
-  searchManifestHandler,
-  searchHashedArtifactHandler,
-  titleIndexLegacyHandler,
-  aliasMapLegacyHandler,
-} from './routes/search-data.route.js'
-import { searchHandler } from './routes/search.route.js'
-import {
-  listFontsHandler,
-  fontFacesCssHandler,
-  fontFileHandler,
-  fontFamilyZipHandler,
-  fontTextSvgHandler,
-} from './routes/fonts.route.js'
-import {
-  symbolsSearchHandler,
-  symbolMetadataHandler,
-  symbolRenderHandler,
-} from './routes/symbols.route.js'
-import {
-  searchPageHandler,
-  fontsPageHandler,
-  symbolsPageHandler,
-  homepageHandler,
-} from './routes/pages.route.js'
-import { assetsHandler, workerHandler } from './routes/assets.route.js'
-import { frameworkTreeHandler } from './routes/framework-tree.route.js'
-import { docsHandler } from './routes/docs.route.js'
-import { fontSubsetHandler } from './routes/font-subset.route.js'
-import {
-  robotsTxtHandler,
-  openSearchHandler,
-  apiCatalogHandler,
-  mcpServerCardHandler,
-} from './routes/discovery.route.js'
+import { createWebContext } from './context.js'
 import { DISCOVERY_LINKS } from './discovery.js'
+import { maybeStartWebMetricsServer } from './metrics-provider.js'
+import { createObservability } from './middleware/observability.js'
+import { createRateLimiter, tooManyRequestsResponse } from './middleware/rate-limit.js'
+import { finalizeResponse, notFoundResponse } from './responses.js'
+import { createRouteRegistry } from './route-registry.js'
+import { assetsHandler, workerHandler } from './routes/assets.route.js'
+import { apiCatalogHandler, mcpServerCardHandler, openSearchHandler, robotsTxtHandler } from './routes/discovery.route.js'
+import { docsHandler } from './routes/docs.route.js'
+import { filtersHandler } from './routes/filters.route.js'
+import { fontSubsetHandler } from './routes/font-subset.route.js'
+import { fontFacesCssHandler, fontFamilyZipHandler, fontFileHandler, fontTextSvgHandler, listFontsHandler } from './routes/fonts.route.js'
+import { frameworkTreeHandler } from './routes/framework-tree.route.js'
+import { healthHandler, readinessHandler } from './routes/health.route.js'
+import { fontsPageHandler, homepageHandler, searchPageHandler, symbolsPageHandler } from './routes/pages.route.js'
+import { searchHandler } from './routes/search.route.js'
+import { aliasMapLegacyHandler, searchHashedArtifactHandler, searchManifestHandler, titleIndexLegacyHandler } from './routes/search-data.route.js'
+import { symbolMetadataHandler, symbolRenderHandler, symbolsSearchHandler } from './routes/symbols.route.js'
+import { symbolsIndexHandler } from './routes/symbols-index.route.js'
 
 /**
  * Start a local dev server for previewing documentation.
@@ -72,10 +47,11 @@ export async function startDevServer(opts, ctx) {
   // The strict 5/min limit on the /docs/<key> on-demand-fetch path lives
   // inside docs.route.js and is independent — that's a specific SSRF
   // amplifier control, not general rate limiting.
-  const rateLimitOptIn = opts.rateLimit === true
-    || process.env.APPLE_DOCS_WEB_RATE_LIMIT === '1'
-    || process.env.APPLE_DOCS_WEB_RATE != null
-    || process.env.APPLE_DOCS_WEB_BURST != null
+  const rateLimitOptIn =
+    opts.rateLimit === true ||
+    process.env.APPLE_DOCS_WEB_RATE_LIMIT === '1' ||
+    process.env.APPLE_DOCS_WEB_RATE != null ||
+    process.env.APPLE_DOCS_WEB_BURST != null
   const defaultLimiter = rateLimitOptIn
     ? createRateLimiter({
         rate: parsePositiveNumber(process.env.APPLE_DOCS_WEB_RATE) ?? 60,
@@ -101,7 +77,9 @@ export async function startDevServer(opts, ctx) {
   // font-subset (lazy pool init on first request).
   registry.register('/api/fonts/subset', async (request, c) => {
     if (!c.fontSubsetPool) {
-      try { await c.getFontSubsetPool() } catch (err) {
+      try {
+        await c.getFontSubsetPool()
+      } catch (err) {
         c.logger?.warn?.(`font-subset pool init failed: ${err?.message ?? err}`)
       }
     }
@@ -133,10 +111,7 @@ export async function startDevServer(opts, ctx) {
   registry.register('/data/search/search-manifest.json', searchManifestHandler)
   registry.register('/data/search/title-index.json', titleIndexLegacyHandler)
   registry.register('/data/search/aliases.json', aliasMapLegacyHandler)
-  registry.registerPattern(
-    /^\/data\/search\/(?:title-index|aliases)\.[0-9a-f]{10}\.json$/,
-    searchHashedArtifactHandler,
-  )
+  registry.registerPattern(/^\/data\/search\/(?:title-index|aliases)\.[0-9a-f]{10}\.json$/, searchHashedArtifactHandler)
 
   async function handleRequest(request) {
     const dispatched = await registry.dispatch(request, webCtx)
@@ -172,9 +147,7 @@ export async function startDevServer(opts, ctx) {
       // logger.withRequestId child stamps `requestId` into every JSON log
       // line emitted while handling this request.
       const incoming = request.headers.get('x-request-id')
-      const requestId = incoming && /^[A-Za-z0-9._:+/=-]{1,128}$/.test(incoming)
-        ? incoming
-        : crypto.randomUUID()
+      const requestId = incoming && /^[A-Za-z0-9._:+/=-]{1,128}$/.test(incoming) ? incoming : crypto.randomUUID()
       webCtx._requestId = requestId
       const baseLogger = webCtx._baseLogger ?? webCtx.logger ?? null
       if (!webCtx._baseLogger && baseLogger) webCtx._baseLogger = baseLogger
@@ -228,9 +201,11 @@ export async function startDevServer(opts, ctx) {
   // byte-quota trim are best-effort — failures are logged once and the
   // next interval retries.
   const ttlDays = parsePositiveNumber(process.env.APPLE_DOCS_RENDER_CACHE_TTL_DAYS) ?? 30
-  const quotaBytes = parsePositiveNumber(process.env.APPLE_DOCS_RENDER_CACHE_BYTES) ?? (5 * 1024 * 1024 * 1024)
+  const quotaBytes = parsePositiveNumber(process.env.APPLE_DOCS_RENDER_CACHE_BYTES) ?? 5 * 1024 * 1024 * 1024
   const pruneIntervalMs = 30 * 60 * 1000
-  const pruneTimer = setInterval(() => { void pruneRenderCache() }, pruneIntervalMs)
+  const pruneTimer = setInterval(() => {
+    void pruneRenderCache()
+  }, pruneIntervalMs)
   pruneTimer.unref?.()
 
   async function pruneRenderCache() {
@@ -240,7 +215,9 @@ export async function startDevServer(opts, ctx) {
       const quotaPrune = ctx.db.pruneSfSymbolRendersToBytesQuota(quotaBytes)
       const allPaths = [...ttlPrune.paths, ...quotaPrune.paths]
       for (const filePath of allPaths) {
-        await rm(filePath, { force: true }).catch(() => { /* best-effort */ })
+        await rm(filePath, { force: true }).catch(() => {
+          /* best-effort */
+        })
       }
       const removed = ttlPrune.removed + quotaPrune.removed
       if (removed > 0) {
@@ -263,16 +240,24 @@ export async function startDevServer(opts, ctx) {
 
   async function close(deadlineMs) {
     clearInterval(pruneTimer)
-    try { eventLoopLag.stop() } catch {}
-    try { originalStop?.(true) } catch {}
-    try { await metricsHandle?.close?.() } catch {}
+    try {
+      eventLoopLag.stop()
+    } catch {}
+    try {
+      originalStop?.(true)
+    } catch {}
+    try {
+      await metricsHandle?.close?.()
+    } catch {}
     try {
       // Forward the parent shutdown deadline as a soft-drain budget so the
       // reader pool waits for in-flight queries to settle before terminating
       // workers. Falsy / undefined → immediate close (legacy behavior).
       await readerPool?.close?.({ softDrainMs: deadlineMs ?? 0 })
     } catch {}
-    try { await webCtx.fontSubsetPool?.close?.() } catch {}
+    try {
+      await webCtx.fontSubsetPool?.close?.()
+    } catch {}
   }
 
   return { server, url: serverUrl, close, readerPool, metricsUrl: metricsHandle?.url ?? null }
@@ -291,10 +276,12 @@ function parsePositiveNumber(value) {
  */
 function mergeVary(headers, field) {
   const existing = headers.get('Vary')
-  if (!existing) { headers.set('Vary', field); return }
+  if (!existing) {
+    headers.set('Vary', field)
+    return
+  }
   if (existing.trim() === '*') return
-  const present = existing.split(',').map(s => s.trim().toLowerCase())
+  const present = existing.split(',').map((s) => s.trim().toLowerCase())
   if (present.includes(field.toLowerCase())) return
   headers.set('Vary', `${existing}, ${field}`)
 }
-

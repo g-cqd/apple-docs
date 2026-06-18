@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach } from 'bun:test'
-import { lifecycle, gracefulShutdown } from '../../../src/lib/lifecycle.js'
+import { beforeEach, describe, expect, test } from 'bun:test'
+import { gracefulShutdown, lifecycle } from '../../../src/lib/lifecycle.js'
 
 beforeEach(() => {
   lifecycle._reset({ exit: () => {} })
@@ -7,16 +7,34 @@ beforeEach(() => {
 
 function makeLogger() {
   const calls = []
-  const make = (level) => (...args) => calls.push([level, ...args])
+  const make =
+    (level) =>
+    (...args) =>
+      calls.push([level, ...args])
   return { calls, info: make('info'), warn: make('warn'), error: make('error') }
 }
 
 describe('lifecycle.register / gracefulShutdown', () => {
   test('drains components in reverse registration order', async () => {
     const order = []
-    lifecycle.register({ name: 'db', stop: () => { order.push('db') } })
-    lifecycle.register({ name: 'pool', stop: () => { order.push('pool') } })
-    lifecycle.register({ name: 'http', stop: () => { order.push('http') } })
+    lifecycle.register({
+      name: 'db',
+      stop: () => {
+        order.push('db')
+      },
+    })
+    lifecycle.register({
+      name: 'pool',
+      stop: () => {
+        order.push('pool')
+      },
+    })
+    lifecycle.register({
+      name: 'http',
+      stop: () => {
+        order.push('http')
+      },
+    })
 
     const code = await gracefulShutdown('test', 1000, { logger: makeLogger() })
     expect(code).toBe(0)
@@ -27,7 +45,13 @@ describe('lifecycle.register / gracefulShutdown', () => {
     let resolved = false
     lifecycle.register({
       name: 'slow',
-      stop: () => new Promise((r) => setTimeout(() => { resolved = true; r() }, 30)),
+      stop: () =>
+        new Promise((r) =>
+          setTimeout(() => {
+            resolved = true
+            r()
+          }, 30),
+        ),
     })
     const code = await gracefulShutdown('test', 1000, { logger: makeLogger() })
     expect(resolved).toBe(true)
@@ -36,9 +60,24 @@ describe('lifecycle.register / gracefulShutdown', () => {
 
   test('continues past a stop() that throws', async () => {
     const order = []
-    lifecycle.register({ name: 'a', stop: () => { order.push('a') } })
-    lifecycle.register({ name: 'b', stop: () => { throw new Error('boom') } })
-    lifecycle.register({ name: 'c', stop: () => { order.push('c') } })
+    lifecycle.register({
+      name: 'a',
+      stop: () => {
+        order.push('a')
+      },
+    })
+    lifecycle.register({
+      name: 'b',
+      stop: () => {
+        throw new Error('boom')
+      },
+    })
+    lifecycle.register({
+      name: 'c',
+      stop: () => {
+        order.push('c')
+      },
+    })
 
     const logger = makeLogger()
     const code = await gracefulShutdown('test', 1000, { logger })
@@ -51,11 +90,16 @@ describe('lifecycle.register / gracefulShutdown', () => {
     let aborted = false
     lifecycle.register({
       name: 'wedged',
-      stop: () => new Promise(() => { /* never resolves */ }),
+      stop: () =>
+        new Promise(() => {
+          /* never resolves */
+        }),
     })
     lifecycle.register({
       name: 'after-wedge',
-      stop: () => { aborted = true },
+      stop: () => {
+        aborted = true
+      },
     })
 
     const code = await gracefulShutdown('test', 100, { logger: makeLogger() })
@@ -86,7 +130,11 @@ describe('lifecycle.register / gracefulShutdown', () => {
 
   test('re-entry forces immediate exit', async () => {
     let exitCode = null
-    lifecycle._reset({ exit: (code) => { exitCode = code } })
+    lifecycle._reset({
+      exit: (code) => {
+        exitCode = code
+      },
+    })
 
     lifecycle.register({
       name: 'long',

@@ -1,4 +1,5 @@
-import { ParseError } from "../lib/errors.js"
+import { ParseError } from '../lib/errors.js'
+
 /**
  * Convert a single-page SF Symbol PDF (as emitted by
  * `vectorGlyph.drawInContext:`) into a true vector SVG with full layer-cutout
@@ -27,15 +28,8 @@ import { ParseError } from "../lib/errors.js"
  * them in sequence.
  */
 
-import {
-  bytesToLatin1,
-  collectObjects,
-  decodeStream,
-  findPage,
-  resolveDict,
-  resolveStreamObject,
-} from './symbol-pdf-to-svg/pdf-objects.js'
 import { parseContentStream } from './symbol-pdf-to-svg/content-stream.js'
+import { bytesToLatin1, collectObjects, decodeStream, findPage, resolveDict, resolveStreamObject } from './symbol-pdf-to-svg/pdf-objects.js'
 import { assembleSvg } from './symbol-pdf-to-svg/svg-emit.js'
 
 /**

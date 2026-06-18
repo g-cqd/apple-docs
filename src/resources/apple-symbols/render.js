@@ -11,31 +11,16 @@ import { existsSync, statSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { NotFoundError, ValidationError } from '../../lib/errors.js'
 import { sha256 } from '../../lib/hash.js'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
-import { nativeSymbolPdf, nativeSymbolPng } from '../render-native.js'
-import { NotFoundError, ValidationError } from '../../lib/errors.js'
 import { ensureDir } from '../../storage/files.js'
-import {
-  clampInteger,
-  normalizeBackground,
-  normalizeColor,
-  sanitizeFileName,
-} from '../apple-assets-helpers.js'
-import {
-  getPrerenderedSymbolPath,
-  normalizeSymbolScale,
-  normalizeSymbolWeight,
-} from './cache-key.js'
-import {
-  customizePrerenderedSymbolSvg,
-  renderSymbolSvgFallback,
-} from './svg-helpers.js'
+import { clampInteger, normalizeBackground, normalizeColor, sanitizeFileName } from '../apple-assets-helpers.js'
+import { nativeSymbolPdf, nativeSymbolPng } from '../render-native.js'
+import { SYMBOL_PDF_SCRIPT, SYMBOL_PNG_SCRIPT } from '../swift-templates.js'
 import { symbolPdfToSvg } from '../symbol-pdf-to-svg.js'
-import {
-  SYMBOL_PDF_SCRIPT,
-  SYMBOL_PNG_SCRIPT,
-} from '../swift-templates.js'
+import { getPrerenderedSymbolPath, normalizeSymbolScale, normalizeSymbolWeight } from './cache-key.js'
+import { customizePrerenderedSymbolSvg, renderSymbolSvgFallback } from './svg-helpers.js'
 
 // Bumping `renderer` invalidates every cached SVG/PNG so the next request
 // refreshes against the current snapshot/live renderer contract.
@@ -86,22 +71,22 @@ export async function renderSfSymbol(opts, ctx) {
   // CSS color. PNG cannot — Apple's renderer needs a concrete sRGB value, so
   // we fall back to black for PNG when "currentColor" is requested.
   const rawColor = opts.color ?? '#000000'
-  const color = format === 'svg' && String(rawColor).toLowerCase() === 'currentcolor'
-    ? 'currentColor'
-    : normalizeColor(rawColor)
+  const color = format === 'svg' && String(rawColor).toLowerCase() === 'currentcolor' ? 'currentColor' : normalizeColor(rawColor)
   const background = normalizeBackground(opts.background ?? opts.bg)
-  const cacheKey = sha256(JSON.stringify({
-    renderer: SYMBOL_RENDERER_VERSION,
-    type: 'sf-symbol',
-    scope,
-    name: opts.name,
-    format,
-    pointSize,
-    weight,
-    scale,
-    color,
-    background,
-  })).slice(0, 32)
+  const cacheKey = sha256(
+    JSON.stringify({
+      renderer: SYMBOL_RENDERER_VERSION,
+      type: 'sf-symbol',
+      scope,
+      name: opts.name,
+      format,
+      pointSize,
+      weight,
+      scale,
+      color,
+      background,
+    }),
+  ).slice(0, 32)
   const cached = ctx.db.getSfSymbolRender(cacheKey)
   if (cached && existsSync(cached.file_path)) return cached
 
@@ -120,9 +105,18 @@ export async function renderSfSymbol(opts, ctx) {
   let data
   let mode = 'live'
   const offline = symbolsOfflineMode()
-  const snapshotSvg = await renderSymbolSvgFromSnapshot({
-    name: opts.name, scope, pointSize, weight, scale, color, background,
-  }, ctx)
+  const snapshotSvg = await renderSymbolSvgFromSnapshot(
+    {
+      name: opts.name,
+      scope,
+      pointSize,
+      weight,
+      scale,
+      color,
+      background,
+    },
+    ctx,
+  )
   if (snapshotSvg) {
     if (format === 'svg') {
       data = snapshotSvg
@@ -138,7 +132,7 @@ export async function renderSfSymbol(opts, ctx) {
           // missing piece.
           throw new ValidationError(
             `SF Symbol PNG rasterization failed for ${scope}/${opts.name} (offline mode): ${error.message}. ` +
-            'Install rsvg-convert (librsvg2-bin) or run on macOS where sips is available.',
+              'Install rsvg-convert (librsvg2-bin) or run on macOS where sips is available.',
           )
         }
         ctx.logger?.warn?.(`SF Symbol snapshot PNG rasterization failed for ${scope}/${opts.name}: ${error.message}`)
@@ -231,10 +225,7 @@ async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale =
   const scriptPath = join(stagingDir, 'symbol-pdf.swift')
   await Bun.write(scriptPath, SYMBOL_PDF_SCRIPT)
   try {
-    const { stdout, stderr, exitCode } = await spawnWithDeadline(
-      ['swift', scriptPath, name, scope, weight, scale],
-      { deadlineMs: 10_000 },
-    )
+    const { stdout, stderr, exitCode } = await spawnWithDeadline(['swift', scriptPath, name, scope, weight, scale], { deadlineMs: 10_000 })
     if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
     return new Uint8Array(stdout)
   } finally {
@@ -245,7 +236,7 @@ async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale =
 async function renderSymbolSvgFromSnapshot({ name, scope, pointSize, weight, scale, color, background }, ctx) {
   const filePath = getPrerenderedSymbolPath(ctx, scope, name, { weight, scale })
   const file = Bun.file(filePath)
-  if (!await file.exists()) return null
+  if (!(await file.exists())) return null
   try {
     const svg = await file.text()
     return customizePrerenderedSymbolSvg(svg, { pointSize, color, background })

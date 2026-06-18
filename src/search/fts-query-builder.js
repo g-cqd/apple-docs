@@ -55,10 +55,7 @@ function buildWordGroup(word) {
   // A sub-word that's already a prefix term is redundant.
   for (const t of prefixTerms) exactTerms.delete(t)
 
-  const alternatives = [
-    ...[...prefixTerms].map(t => `"${t}"*`),
-    ...[...exactTerms].map(t => `"${t}"`),
-  ]
+  const alternatives = [...[...prefixTerms].map((t) => `"${t}"*`), ...[...exactTerms].map((t) => `"${t}"`)]
   if (alternatives.length === 0) return null
   if (alternatives.length === 1) return alternatives[0]
   return `(${alternatives.join(' OR ')})`
@@ -66,7 +63,10 @@ function buildWordGroup(word) {
 
 /** Split a CamelCase identifier into its sub-words (empty if it doesn't split). */
 function camelSubwords(s) {
-  const parts = s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(' ').filter(Boolean)
+  const parts = s
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(' ')
+    .filter(Boolean)
   return parts.length > 1 ? parts : []
 }
 

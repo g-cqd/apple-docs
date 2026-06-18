@@ -33,38 +33,64 @@ const BIN = new URL('../../swift/.build/release/ad-server', import.meta.url).pat
 const CONCURRENCIES = [16, 128]
 const SEARCH = '/search?q=view&framework=swiftui&limit=20'
 
-if (!existsSync(DB)) { console.error(`corpus not found: ${DB}`); process.exit(2) }
-if (!existsSync(BIN)) { console.error(`ad-server not built: ${BIN} — run: swift build -c release`); process.exit(2) }
+if (!existsSync(DB)) {
+  console.error(`corpus not found: ${DB}`)
+  process.exit(2)
+}
+if (!existsSync(BIN)) {
+  console.error(`ad-server not built: ${BIN} — run: swift build -c release`)
+  process.exit(2)
+}
 
 let server
 if (!args['no-spawn']) {
-  server = Bun.spawn([BIN, '--db', DB, '--port', String(PORT), '--threads', String(THREADS)],
-    { stdout: 'ignore', stderr: 'ignore' })
+  server = Bun.spawn([BIN, '--db', DB, '--port', String(PORT), '--threads', String(THREADS)], { stdout: 'ignore', stderr: 'ignore' })
 }
 
 let ready = false
 for (let i = 0; i < 200; i++) {
-  try { if ((await fetch(`${BASE}/healthz`)).ok) { ready = true; break } } catch {}
+  try {
+    if ((await fetch(`${BASE}/healthz`)).ok) {
+      ready = true
+      break
+    }
+  } catch {}
   await Bun.sleep(50)
 }
-if (!ready) { console.error('server did not become ready'); server?.kill('SIGKILL'); process.exit(1) }
+if (!ready) {
+  console.error('server did not become ready')
+  server?.kill('SIGKILL')
+  process.exit(1)
+}
 
-const pct = (sorted, p) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : 0
+const pct = (sorted, p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : 0)
 
 async function scenario(label, path, conc) {
-  for (let i = 0; i < 100; i++) { try { await (await fetch(BASE + path)).arrayBuffer() } catch {} } // warmup
+  for (let i = 0; i < 100; i++) {
+    try {
+      await (await fetch(BASE + path)).arrayBuffer()
+    } catch {}
+  } // warmup
   const url = BASE + path
   const deadline = performance.now() + SECS * 1000
   const lat = []
-  let ok = 0, err = 0
+  let ok = 0,
+    err = 0
   async function worker() {
     while (performance.now() < deadline) {
       const t0 = performance.now()
       try {
         const res = await fetch(url)
         await res.arrayBuffer()
-        if (res.ok) { ok++; lat.push(performance.now() - t0) } else { err++ }
-      } catch { err++ }
+        if (res.ok) {
+          ok++
+          lat.push(performance.now() - t0)
+        } else {
+          err++
+        }
+      } catch {
+        err++
+      }
     }
   }
   const t0 = performance.now()
@@ -73,8 +99,9 @@ async function scenario(label, path, conc) {
   lat.sort((a, b) => a - b)
   console.log(
     `${label.padEnd(22)} conc=${String(conc).padStart(3)}  ${(ok / elapsed).toFixed(0).padStart(7)} req/s  ` +
-    `p50=${pct(lat, 50).toFixed(2)} p90=${pct(lat, 90).toFixed(2)} p99=${pct(lat, 99).toFixed(2)} ` +
-    `max=${(lat.at(-1) ?? 0).toFixed(1)} ms  ok=${ok} err=${err}`)
+      `p50=${pct(lat, 50).toFixed(2)} p90=${pct(lat, 90).toFixed(2)} p99=${pct(lat, 99).toFixed(2)} ` +
+      `max=${(lat.at(-1) ?? 0).toFixed(1)} ms  ok=${ok} err=${err}`,
+  )
 }
 
 console.log(`# ad-server load — db=${DB.split('/').at(-1)} threads=${THREADS} secs=${SECS}/scenario`)

@@ -9,13 +9,13 @@
  *                                    without re-fetching from origin.
  */
 
-import { readFile, readdir } from 'node:fs/promises'
-import { decodeSectionContent } from '../storage/section-codec.js'
-import { join } from 'node:path'
 import { existsSync } from 'node:fs'
+import { readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { NotFoundError } from '../lib/errors.js'
-import { safeWebDocKey } from '../lib/safe-path.js'
 import { classifyLink, mapUrlToKey } from '../lib/link-resolver.js'
+import { safeWebDocKey } from '../lib/safe-path.js'
+import { decodeSectionContent } from '../storage/section-codec.js'
 
 const HREF_REGEX = /<a\s[^>]*href\s*=\s*"([^"]+)"/gi
 
@@ -180,10 +180,11 @@ export async function linksAudit(opts, ctx) {
     }
   }
 
-  const finalize = (m) => [...m.entries()]
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 50)
-    .map(([k, v]) => ({ value: k, count: v.count, sources: [...v.sources] }))
+  const finalize = (m) =>
+    [...m.entries()]
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 50)
+      .map(([k, v]) => ({ value: k, count: v.count, sources: [...v.sources] }))
 
   return {
     filesScanned: stats.filesScanned,
@@ -319,13 +320,14 @@ export async function linksConsolidate(opts, ctx) {
   const dryRun = opts.dryRun === true
 
   const knownKeys = new Set(
-    db.db.query("SELECT path FROM pages WHERE status != 'deleted'").all().map(r => r.path),
+    db.db
+      .query("SELECT path FROM pages WHERE status != 'deleted'")
+      .all()
+      .map((r) => r.path),
   )
   logger?.info?.(`Consolidating links against ${knownKeys.size.toLocaleString('en-US')} corpus keys${dryRun ? ' (dry run)' : ''}...`)
 
-  const sections = db.db.query(
-    'SELECT id, document_id, content_json FROM document_sections WHERE content_json IS NOT NULL AND content_json != \'\''
-  ).all()
+  const sections = db.db.query("SELECT id, document_id, content_json FROM document_sections WHERE content_json IS NOT NULL AND content_json != ''").all()
 
   const totals = { documentsScanned: 0, sectionsTouched: 0, added: 0, removed: 0, kept: 0 }
   const docsTouched = new Set()
@@ -334,7 +336,11 @@ export async function linksConsolidate(opts, ctx) {
   let processed = 0
   for (const row of sections) {
     let payload
-    try { payload = JSON.parse(decodeSectionContent(row.content_json)) } catch { continue }
+    try {
+      payload = JSON.parse(decodeSectionContent(row.content_json))
+    } catch {
+      continue
+    }
     if (!payload) continue
 
     let added = 0
@@ -364,7 +370,9 @@ export async function linksConsolidate(opts, ctx) {
 
     processed++
     if (processed % 50000 === 0) {
-      logger?.info?.(`  scanned ${processed.toLocaleString('en-US')} sections — added ${totals.added.toLocaleString('en-US')}, removed ${totals.removed.toLocaleString('en-US')}`)
+      logger?.info?.(
+        `  scanned ${processed.toLocaleString('en-US')} sections — added ${totals.added.toLocaleString('en-US')}, removed ${totals.removed.toLocaleString('en-US')}`,
+      )
     }
   }
 

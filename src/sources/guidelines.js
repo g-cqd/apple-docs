@@ -1,5 +1,5 @@
 import { checkHtmlPage, fetchHtmlPage } from '../apple/api.js'
-import { GUIDELINES_URL, ROOT_SLUG, parseGuidelinesHtml } from '../apple/guidelines-parser.js'
+import { GUIDELINES_URL, parseGuidelinesHtml, ROOT_SLUG } from '../apple/guidelines-parser.js'
 import { normalize } from '../content/normalize.js'
 import { SourceAdapter } from './base.js'
 
@@ -23,9 +23,7 @@ export class GuidelinesAdapter extends SourceAdapter {
   async fetch(key, ctx) {
     const { html, etag, lastModified } = await fetchHtmlPage(GUIDELINES_URL, ctx.rateLimiter)
     const parsed = await parseGuidelinesHtml(html)
-    const section = key === ROOT_SLUG
-      ? null
-      : parsed.sections.find(item => item.path === key) ?? null
+    const section = key === ROOT_SLUG ? null : (parsed.sections.find((item) => item.path === key) ?? null)
 
     return this.validateFetchResult({
       key,

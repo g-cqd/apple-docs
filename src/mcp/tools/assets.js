@@ -4,21 +4,9 @@
 // rather than the per-tool cache.
 
 import { z } from 'zod'
-import {
-  listAppleFonts,
-  renderFontText,
-  renderSfSymbol,
-  searchSfSymbols,
-  SYMBOL_SCALES,
-  SYMBOL_WEIGHTS,
-} from '../../resources/apple-assets.js'
+import { projectListAppleFonts, projectRenderFontText, projectRenderSfSymbol, projectSearchSfSymbols } from '../../output/projection.js'
+import { listAppleFonts, renderFontText, renderSfSymbol, SYMBOL_SCALES, SYMBOL_WEIGHTS, searchSfSymbols } from '../../resources/apple-assets.js'
 import { createMcpTextResult } from '../pagination.js'
-import {
-  projectListAppleFonts,
-  projectRenderFontText,
-  projectRenderSfSymbol,
-  projectSearchSfSymbols,
-} from '../../output/projection.js'
 
 const READ_ONLY_HINTS = {
   readOnlyHint: true,

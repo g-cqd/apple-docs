@@ -14,12 +14,14 @@ export function batchFetchSections(db, docIds, chunkSize) {
   for (let i = 0; i < docIds.length; i += chunkSize) {
     const chunk = docIds.slice(i, i + chunkSize)
     const placeholders = chunk.map(() => '?').join(',')
-    const rows = db.db.query(
-      `SELECT document_id, section_kind, heading, content_text, content_json, sort_order
+    const rows = db.db
+      .query(
+        `SELECT document_id, section_kind, heading, content_text, content_json, sort_order
        FROM document_sections
        WHERE document_id IN (${placeholders})
-       ORDER BY document_id, sort_order, id`
-    ).all(...chunk)
+       ORDER BY document_id, sort_order, id`,
+      )
+      .all(...chunk)
     for (const row of rows) {
       let arr = result.get(row.document_id)
       if (!arr) {

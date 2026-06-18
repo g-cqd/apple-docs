@@ -12,10 +12,7 @@ export const USER_AGENT = 'apple-docs/2.0'
 export const DEFAULT_TIMEOUT = 30_000
 
 /** Years served by Apple's WWDC videos pages (HTML scraping). */
-export const APPLE_YEARS = Array.from(
-  { length: new Date().getFullYear() - 2020 + 1 },
-  (_, i) => 2020 + i,
-)
+export const APPLE_YEARS = Array.from({ length: new Date().getFullYear() - 2020 + 1 }, (_, i) => 2020 + i)
 
 /** Years served by ASCIIwwdc community transcripts. */
 export const ASCIIWWDC_YEAR_MIN = 1997

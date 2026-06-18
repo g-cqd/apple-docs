@@ -8,11 +8,11 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { copyFile, mkdtemp, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
-import { ensureDir } from '../../storage/files.js'
+import { HttpError, ValidationError } from '../../lib/errors.js'
 import { readPlist } from '../../lib/plist.js'
 import { spawnWithDeadline } from '../../lib/spawn-with-deadline.js'
+import { ensureDir } from '../../storage/files.js'
 import { sanitizeFileName } from '../apple-assets-helpers.js'
-import { HttpError, ValidationError } from '../../lib/errors.js'
 import { parseHdiutilMountPoints } from '../sf-symbols-app/dmg-helpers.js'
 
 const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.dfont'])
@@ -91,15 +91,14 @@ export async function extractDmgFonts(dmgPath, destinationDir, logger) {
     for (const mp of mountPoints) {
       for (const pkg of findByExtension(mp, '.pkg')) {
         const out = join(expandedDir, sanitizeFileName(basename(pkg)))
-        await run(['pkgutil', '--expand-full', pkg, out]).catch(error => {
+        await run(['pkgutil', '--expand-full', pkg, out]).catch((error) => {
           logger?.warn?.(`pkgutil failed for ${pkg}: ${error.message}`)
         })
       }
     }
     // Sort by file name so the extracted set + copy order is deterministic;
     // discoverAppleFontFiles' walk order is filesystem-dependent.
-    const sources = discoverAppleFontFiles([...mountPoints, expandedDir])
-      .sort((a, b) => (a.fileName < b.fileName ? -1 : a.fileName > b.fileName ? 1 : 0))
+    const sources = discoverAppleFontFiles([...mountPoints, expandedDir]).sort((a, b) => (a.fileName < b.fileName ? -1 : a.fileName > b.fileName ? 1 : 0))
     const extracted = []
     for (const source of sources) {
       const target = join(destinationDir, source.fileName)

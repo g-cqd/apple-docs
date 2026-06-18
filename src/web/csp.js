@@ -25,9 +25,7 @@ function sha256Base64(text) {
 }
 
 /** Inline script bodies → CSP source-hash entries. */
-const INLINE_SCRIPT_HASHES = Object.freeze([
-  `'sha256-${sha256Base64(NOT_FOUND_INLINE_SCRIPT)}'`,
-])
+const INLINE_SCRIPT_HASHES = Object.freeze([`'sha256-${sha256Base64(NOT_FOUND_INLINE_SCRIPT)}'`])
 
 const POLICY_DIRECTIVES = [
   "default-src 'self'",

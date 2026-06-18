@@ -1,4 +1,4 @@
-import { bold, formatBytes, } from './_shared.js'
+import { bold, formatBytes } from './_shared.js'
 
 export function formatSync(result) {
   const lines = [bold('Sync complete')]
@@ -17,7 +17,9 @@ export function formatSync(result) {
   )
   if (result.fonts) {
     const f = result.fonts
-    lines.push(`  Fonts:            ${f.families} families, ${f.files} files (${f.system} system, ${f.remote} bundled${f.downloaded ? `, ${f.downloaded} downloaded` : ''})`)
+    lines.push(
+      `  Fonts:            ${f.families} families, ${f.files} files (${f.system} system, ${f.remote} bundled${f.downloaded ? `, ${f.downloaded} downloaded` : ''})`,
+    )
   }
   if (result.symbols) {
     const s = result.symbols
@@ -39,9 +41,8 @@ export function formatSync(result) {
     lines.push(`  Doctor:           ${parts.join(', ')}`)
   }
   if (Array.isArray(result.failedSources) && result.failedSources.length > 0) {
-    lines.push(`  Failed sources:   ${result.failedSources.map(f => f.source).join(', ')}`)
+    lines.push(`  Failed sources:   ${result.failedSources.map((f) => f.source).join(', ')}`)
   }
   lines.push(`  Duration:         ${(result.durationMs / 1000).toFixed(1)}s`)
   return lines.join('\n')
 }
-

@@ -8,7 +8,7 @@
  * to its own command switch.
  */
 
-import { formatStorageStats, formatStorageGc } from './formatter.js'
+import { formatStorageGc, formatStorageStats } from './formatter.js'
 import { showHelp } from './help.js'
 
 function exitHelp(family) {
@@ -35,7 +35,12 @@ async function dispatchStorage(subcommand, positional, flags, ctx) {
   if (subcommand === 'materialize') {
     const { storageMaterialize } = await import('../commands/storage.js')
     const format = ['html', 'raw-json'].includes(flags.format) ? flags.format : 'markdown'
-    const roots = flags.roots ? String(flags.roots).split(',').map(s => s.trim()).filter(Boolean) : undefined
+    const roots = flags.roots
+      ? String(flags.roots)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined
     return { result: await storageMaterialize({ format, roots }, ctx), formatter: summary('storage materialize') }
   }
   if (subcommand === 'compact') {
@@ -44,7 +49,7 @@ async function dispatchStorage(subcommand, positional, flags, ctx) {
   }
   if (subcommand === 'gc') {
     const { storageGc } = await import('../commands/storage.js')
-    const drop = flags.drop ? flags.drop.split(',').map(s => s.trim()) : []
+    const drop = flags.drop ? flags.drop.split(',').map((s) => s.trim()) : []
     const olderThan = flags['older-than'] ? Number.parseInt(flags['older-than'], 10) : undefined
     return {
       result: await storageGc({ drop, olderThan, vacuum: !flags['no-vacuum'] }, ctx),
@@ -65,13 +70,16 @@ async function dispatchSnapshot(subcommand, _positional, flags, ctx) {
       process.exit(2)
     }
     const { snapshotBuild } = await import('../commands/snapshot.js')
-    const result = await snapshotBuild({
-      out: flags.out,
-      tag: flags.tag,
-      // F.3b: deliberate-partial-build escape hatch. Pass when
-      // building on a host that can't run the SF Symbols renderer.
-      allowIncompleteSymbols: !!flags['allow-incomplete-symbols'],
-    }, ctx)
+    const result = await snapshotBuild(
+      {
+        out: flags.out,
+        tag: flags.tag,
+        // F.3b: deliberate-partial-build escape hatch. Pass when
+        // building on a host that can't run the SF Symbols renderer.
+        allowIncompleteSymbols: !!flags['allow-incomplete-symbols'],
+      },
+      ctx,
+    )
     return { result, formatter: summary('snapshot') }
   }
   return exitHelp('snapshot')
@@ -79,10 +87,13 @@ async function dispatchSnapshot(subcommand, _positional, flags, ctx) {
 
 async function dispatchConsolidate(_subcommand, _positional, flags, ctx) {
   const { consolidate } = await import('../commands/consolidate.js')
-  const result = await consolidate({
-    dryRun: !!flags['dry-run'],
-    minify: !!flags.minify,
-  }, ctx)
+  const result = await consolidate(
+    {
+      dryRun: !!flags['dry-run'],
+      minify: !!flags.minify,
+    },
+    ctx,
+  )
   return { result, formatter: summary('consolidate') }
 }
 
@@ -124,7 +135,9 @@ async function dispatchVersion(ctx) {
     const buildMacos = ctx.db.getSnapshotMeta('build_macos')
     if (tag) result.snapshot = tag
     if (buildMacos) result.snapshotBuildMacos = buildMacos
-  } catch { /* no corpus — version info stands alone */ }
+  } catch {
+    /* no corpus — version info stands alone */
+  }
   const formatter = (r) => {
     const lines = [`apple-docs ${r.version}${r.commit ? ` (${r.commit})` : ''}`]
     if (r.snapshot) {

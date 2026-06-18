@@ -1,26 +1,37 @@
 #!/usr/bin/env bun
 import { join } from 'node:path'
-import { config } from './src/config.js'
-import { parseArgs } from './src/cli/parser.js'
+import {
+  formatBrowse,
+  formatFrameworks,
+  formatLookup,
+  formatSearchRead,
+  formatSearchResults,
+  formatSetup,
+  formatStatus,
+  formatSync,
+  formatTaxonomy,
+  formatWebBuild,
+  formatWebDeploy,
+} from './src/cli/formatter.js'
 import { showHelp } from './src/cli/help.js'
-import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatSetup, formatWebBuild, formatWebDeploy, formatTaxonomy } from './src/cli/formatter.js'
-import { DocsDatabase } from './src/storage/database.js'
+import { jsonProject } from './src/cli/json-project.js'
+import { dispatchMaintenance, MAINTENANCE_COMMANDS } from './src/cli/maintenance.js'
+import { paginateCliContent } from './src/cli/paginate.js'
+import { parseArgs } from './src/cli/parser.js'
+import { makeProgressReporter } from './src/cli/progress-reporter.js'
+import { browse } from './src/commands/browse.js'
+import { frameworks } from './src/commands/frameworks.js'
+import { lookup } from './src/commands/lookup.js'
+import { search } from './src/commands/search.js'
+import { status } from './src/commands/status.js'
+import { sync } from './src/commands/sync.js'
+import { taxonomy } from './src/commands/taxonomy.js'
+import { config } from './src/config.js'
+import { installCrashHandlers, lifecycle } from './src/lib/lifecycle.js'
 import { createLogger } from './src/lib/logger.js'
 import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
-
-import { search } from './src/commands/search.js'
-import { lookup } from './src/commands/lookup.js'
-import { frameworks } from './src/commands/frameworks.js'
-import { browse } from './src/commands/browse.js'
-import { sync } from './src/commands/sync.js'
-import { status } from './src/commands/status.js'
-import { taxonomy } from './src/commands/taxonomy.js'
 import { projectStatus } from './src/output/projection.js'
-import { jsonProject } from './src/cli/json-project.js'
-import { paginateCliContent } from './src/cli/paginate.js'
-import { dispatchMaintenance, MAINTENANCE_COMMANDS } from './src/cli/maintenance.js'
-import { makeProgressReporter } from './src/cli/progress-reporter.js'
-import { installCrashHandlers, lifecycle } from './src/lib/lifecycle.js'
+import { DocsDatabase } from './src/storage/database.js'
 
 const { command, subcommand, positional, flags } = parseArgs(process.argv)
 
@@ -38,7 +49,7 @@ function metricsOpts(flags) {
 
 if (flags.help || !command) {
   showHelp(command)
-  process.exit(flags.help ? 0 : (command ? 0 : 1))
+  process.exit(flags.help ? 0 : command ? 0 : 1)
 }
 
 const dataDir = flags.home ?? config.APPLE_DOCS_HOME
@@ -62,7 +73,11 @@ const ctx = { db, dataDir, rateLimiter, logger }
 // drain step that touches it (WAL checkpoint, etc.) runs first.
 installCrashHandlers({ logger })
 lifecycle.register({ name: 'db', stop: () => db.close() })
-const cleanup = () => { try { db.close() } catch {} }
+const cleanup = () => {
+  try {
+    db.close()
+  } catch {}
+}
 
 // Commands that hit the GitHub API benefit from local credentials.
 if (command === 'sync' || command === 'setup') {
@@ -77,26 +92,29 @@ try {
   switch (command) {
     case 'search': {
       const query = positional.join(' ')
-      result = await search({
-        query,
-        framework: flags.framework,
-        source: flags.source,
-        kind: flags.kind,
-        limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined,
-        fuzzy: !flags['no-fuzzy'],
-        noDeep: !!flags['no-deep'],
-        noEager: !!flags['no-eager'],
-        language: flags.language,
-        platform: flags.platform,
-        minIos: flags['min-ios'],
-        minMacos: flags['min-macos'],
-        minWatchos: flags['min-watchos'],
-        minTvos: flags['min-tvos'],
-        minVisionos: flags['min-visionos'],
-        year: flags.year ? Number.parseInt(flags.year, 10) : undefined,
-        track: flags.track,
-        deprecated: flags.deprecated,
-      }, ctx)
+      result = await search(
+        {
+          query,
+          framework: flags.framework,
+          source: flags.source,
+          kind: flags.kind,
+          limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined,
+          fuzzy: !flags['no-fuzzy'],
+          noDeep: !!flags['no-deep'],
+          noEager: !!flags['no-eager'],
+          language: flags.language,
+          platform: flags.platform,
+          minIos: flags['min-ios'],
+          minMacos: flags['min-macos'],
+          minWatchos: flags['min-watchos'],
+          minTvos: flags['min-tvos'],
+          minVisionos: flags['min-visionos'],
+          year: flags.year ? Number.parseInt(flags.year, 10) : undefined,
+          track: flags.track,
+          deprecated: flags.deprecated,
+        },
+        ctx,
+      )
       if (flags.read) {
         if (result.results.length === 0) {
           formatter = formatSearchResults
@@ -120,7 +138,10 @@ try {
 
     case 'read': {
       const target = positional[0]
-      if (!target) { showHelp('read'); process.exit(1) }
+      if (!target) {
+        showHelp('read')
+        process.exit(1)
+      }
       // If it contains '/', treat as path; otherwise as symbol name
       const opts = target.includes('/') ? { path: target } : { symbol: target, framework: flags.framework }
       if (flags.section) opts.section = flags.section
@@ -142,13 +163,19 @@ try {
 
     case 'browse': {
       const fw = positional[0]
-      if (!fw) { showHelp('browse'); process.exit(1) }
-      result = await browse({
-        framework: fw,
-        path: flags.path,
-        limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined,
-        year: flags.year ? Number.parseInt(flags.year, 10) : undefined,
-      }, ctx)
+      if (!fw) {
+        showHelp('browse')
+        process.exit(1)
+      }
+      result = await browse(
+        {
+          framework: fw,
+          path: flags.path,
+          limit: flags.limit ? Number.parseInt(flags.limit, 10) : undefined,
+          year: flags.year ? Number.parseInt(flags.year, 10) : undefined,
+        },
+        ctx,
+      )
       formatter = formatBrowse
       break
     }
@@ -191,18 +218,17 @@ try {
           const port = flags.port ? Number.parseInt(flags.port, 10) : 3031
           const host = flags.host ?? '127.0.0.1'
           const allowedOrigins = flags['allow-origin']
-            ? String(flags['allow-origin']).split(',').map(s => s.trim()).filter(Boolean)
+            ? String(flags['allow-origin'])
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
             : []
           const heavyConcurrency = parseOptionalInt(flags.concurrency) || undefined
           const heavyQueue = parseOptionalInt(flags.queue)
-          const handle = await startHttpServer(
-            { port, host, allowedOrigins, ...metricsOpts(flags) },
-            ctx,
-            {
-              ...(heavyConcurrency != null ? { heavyConcurrency } : {}),
-              ...(heavyQueue != null ? { heavyQueue } : {}),
-            },
-          )
+          const handle = await startHttpServer({ port, host, allowedOrigins, ...metricsOpts(flags) }, ctx, {
+            ...(heavyConcurrency != null ? { heavyConcurrency } : {}),
+            ...(heavyQueue != null ? { heavyQueue } : {}),
+          })
           lifecycle.register({ name: 'mcp-http', stop: (deadlineMs) => handle.close(deadlineMs) })
           console.log(`MCP HTTP server running at ${handle.url}`)
           if (handle.metricsUrl) console.log(`Metrics endpoint at ${handle.metricsUrl}`)
@@ -214,48 +240,70 @@ try {
         }
         case 'install': {
           if (flags.http) {
-            const endpoint = typeof flags.http === 'string'
-              ? flags.http
-              : 'https://apple-docs-mcp.example.com/mcp'
+            const endpoint = typeof flags.http === 'string' ? flags.http : 'https://apple-docs-mcp.example.com/mcp'
             console.log('MCP (Streamable HTTP) client configuration for apple-docs:\n')
-            console.log(JSON.stringify({
-              mcpServers: {
-                'apple-docs': {
-                  transport: { type: 'streamable-http', url: endpoint },
+            console.log(
+              JSON.stringify(
+                {
+                  mcpServers: {
+                    'apple-docs': {
+                      transport: { type: 'streamable-http', url: endpoint },
+                    },
+                  },
                 },
-              },
-            }, null, 2))
+                null,
+                2,
+              ),
+            )
             console.log('\nFallback for clients without native Streamable HTTP support (via mcp-remote):')
-            console.log(JSON.stringify({
-              mcpServers: {
-                'apple-docs': {
-                  command: 'npx',
-                  args: ['mcp-remote', endpoint],
+            console.log(
+              JSON.stringify(
+                {
+                  mcpServers: {
+                    'apple-docs': {
+                      command: 'npx',
+                      args: ['mcp-remote', endpoint],
+                    },
+                  },
                 },
-              },
-            }, null, 2))
+                null,
+                2,
+              ),
+            )
             process.exit(0)
             break
           }
-          console.log("MCP server configuration for apple-docs:\n")
-          console.log(JSON.stringify({
-            mcpServers: {
-              'apple-docs': {
-                command: 'apple-docs',
-                args: ['mcp', 'start'],
-                env: { APPLE_DOCS_HOME: dataDir },
+          console.log('MCP server configuration for apple-docs:\n')
+          console.log(
+            JSON.stringify(
+              {
+                mcpServers: {
+                  'apple-docs': {
+                    command: 'apple-docs',
+                    args: ['mcp', 'start'],
+                    env: { APPLE_DOCS_HOME: dataDir },
+                  },
+                },
               },
-            },
-          }, null, 2))
-          console.log("\nAlternatively, use the backward-compatible binary:")
-          console.log(JSON.stringify({
-            mcpServers: {
-              'apple-docs': {
-                command: 'apple-docs-mcp',
-                env: { APPLE_DOCS_HOME: dataDir },
+              null,
+              2,
+            ),
+          )
+          console.log('\nAlternatively, use the backward-compatible binary:')
+          console.log(
+            JSON.stringify(
+              {
+                mcpServers: {
+                  'apple-docs': {
+                    command: 'apple-docs-mcp',
+                    env: { APPLE_DOCS_HOME: dataDir },
+                  },
+                },
               },
-            },
-          }, null, 2))
+              null,
+              2,
+            ),
+          )
           process.exit(0)
           break
         }
@@ -292,16 +340,19 @@ try {
         else if (flags.prebuilt) setupProfile = 'prebuilt'
       }
       const { setup: setupCmd } = await import('./src/commands/setup.js')
-      result = await setupCmd({
-        force: !!flags.force,
-        skipResources: !!flags['skip-resources'],
-        skipSemantic: !!flags['skip-semantic'],
-        archive: flags.archive ?? null,
-        profile: setupProfile,
-        beta: !!flags.beta,
-        native: !!flags.native,
-        yes: !!flags.yes,
-      }, ctx)
+      result = await setupCmd(
+        {
+          force: !!flags.force,
+          skipResources: !!flags['skip-resources'],
+          skipSemantic: !!flags['skip-semantic'],
+          archive: flags.archive ?? null,
+          profile: setupProfile,
+          beta: !!flags.beta,
+          native: !!flags.native,
+          yes: !!flags.yes,
+        },
+        ctx,
+      )
       formatter = formatSetup
       break
     }
@@ -310,29 +361,36 @@ try {
       switch (subcommand) {
         case 'build': {
           const { buildStaticSite } = await import('./src/web/build.js')
-          const frameworks = typeof flags.frameworks === 'string' && flags.frameworks.length > 0
-            ? flags.frameworks.split(',').map(s => s.trim()).filter(Boolean)
-            : undefined
+          const frameworks =
+            typeof flags.frameworks === 'string' && flags.frameworks.length > 0
+              ? flags.frameworks
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : undefined
           const concurrency = flags.concurrency ? Math.max(1, Number.parseInt(flags.concurrency, 10) || 0) : undefined
           const workers = flags.workers ? Math.max(1, Number.parseInt(flags.workers, 10) || 0) : undefined
           // Suppress the per-doc TTY rotor when this Bun is itself a build
           // worker — its stdout is inherited by the orchestrator and the
           // rotor lines from N workers would otherwise overwrite each other.
           const isWorker = process.env.APPLE_DOCS_BUILD_WORKER === '1'
-          const onProgress = (process.stdout.isTTY && !isWorker) ? makeProgressReporter() : null
-          result = await buildStaticSite({
-            out: flags.out,
-            baseUrl: flags['base-url'],
-            siteName: flags['site-name'],
-            incremental: !!flags.incremental,
-            full: !!flags.full,
-            skipDocs: !!flags['skip-docs'],
-            frameworks,
-            concurrency,
-            workers,
-            onProgress,
-            json: !!flags.json,
-          }, ctx)
+          const onProgress = process.stdout.isTTY && !isWorker ? makeProgressReporter() : null
+          result = await buildStaticSite(
+            {
+              out: flags.out,
+              baseUrl: flags['base-url'],
+              siteName: flags['site-name'],
+              incremental: !!flags.incremental,
+              full: !!flags.full,
+              skipDocs: !!flags['skip-docs'],
+              frameworks,
+              concurrency,
+              workers,
+              onProgress,
+              json: !!flags.json,
+            },
+            ctx,
+          )
           if (onProgress) onProgress.done()
           formatter = formatWebBuild
           break
@@ -341,13 +399,16 @@ try {
           const { startDevServer } = await import('./src/web/serve.js')
           const host = flags.host ?? process.env.APPLE_DOCS_WEB_HOST ?? '127.0.0.1'
           const rateLimit = !!flags['rate-limit']
-          const info = await startDevServer({
-            port: flags.port ? Number.parseInt(flags.port, 10) : 3000,
-            host,
-            baseUrl: flags['base-url'],
-            ...(rateLimit ? { rateLimit: true } : {}),
-            ...metricsOpts(flags),
-          }, ctx)
+          const info = await startDevServer(
+            {
+              port: flags.port ? Number.parseInt(flags.port, 10) : 3000,
+              host,
+              baseUrl: flags['base-url'],
+              ...(rateLimit ? { rateLimit: true } : {}),
+              ...metricsOpts(flags),
+            },
+            ctx,
+          )
           lifecycle.register({ name: 'web', stop: (deadlineMs) => info.close(deadlineMs) })
           console.log(`Dev server running at ${info.url}`)
           if (info.metricsUrl) console.log(`Metrics endpoint at ${info.metricsUrl}`)

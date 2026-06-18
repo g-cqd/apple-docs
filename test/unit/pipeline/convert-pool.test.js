@@ -27,14 +27,7 @@ describe('convertAll semaphore options', () => {
       return true
     })
 
-    const runPromise = convertAll(
-      db,
-      '/tmp',
-      { warn() {} },
-      (info) => progress.push(info),
-      {},
-      { semaphore: { max: 2 }, convertPage },
-    )
+    const runPromise = convertAll(db, '/tmp', { warn() {} }, (info) => progress.push(info), {}, { semaphore: { max: 2 }, convertPage })
 
     await Promise.resolve()
     await Promise.resolve()

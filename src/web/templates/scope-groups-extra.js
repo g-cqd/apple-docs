@@ -23,7 +23,10 @@ function lastSegment(doc) {
 }
 
 function numericParts(s) {
-  return String(s).split(/[._]/).map(n => Number.parseInt(n, 10)).filter(Number.isFinite)
+  return String(s)
+    .split(/[._]/)
+    .map((n) => Number.parseInt(n, 10))
+    .filter(Number.isFinite)
 }
 
 function compareNumericParts(a, b) {
@@ -60,7 +63,7 @@ export function groupGuidelinesBySection(docs) {
     .sort((a, b) => a[0] - b[0])
     .map(([section, sectionDocs]) => {
       sectionDocs.sort((a, b) => compareNumericParts(lastSegment(a), lastSegment(b)))
-      const header = sectionDocs.find(d => lastSegment(d) === String(section))
+      const header = sectionDocs.find((d) => lastSegment(d) === String(section))
       return {
         id: `section-${section}`,
         label: header ? docTitle(header) : `Section ${section}`,
@@ -105,9 +108,7 @@ export function groupReleaseNotesByVersion(docs) {
       id: `v-${major}`,
       label: group.product ? `${group.product} ${major}` : `Version ${major}`,
       count: group.docs.length,
-      docs: group.docs
-        .sort((a, b) => compareNumericParts(b.version, a.version))
-        .map(entry => entry.doc),
+      docs: group.docs.sort((a, b) => compareNumericParts(b.version, a.version)).map((entry) => entry.doc),
     }))
   if (rest.length > 0) {
     sections.push({ id: 'v-other', label: 'Other', count: rest.length, docs: rest.sort(byTitle) })
@@ -216,10 +217,10 @@ const ARCHIVE_LABELS = new Map([
 export function groupArchiveByCategory(docs) {
   const byCategory = new Map()
   for (const doc of docs ?? []) {
-    const raw = String(doc?.framework ?? '').trim().toLowerCase()
-    const label = raw
-      ? (ARCHIVE_LABELS.get(raw) ?? raw.charAt(0).toUpperCase() + raw.slice(1))
-      : 'Other'
+    const raw = String(doc?.framework ?? '')
+      .trim()
+      .toLowerCase()
+    const label = raw ? (ARCHIVE_LABELS.get(raw) ?? raw.charAt(0).toUpperCase() + raw.slice(1)) : 'Other'
     if (!byCategory.has(label)) byCategory.set(label, [])
     byCategory.get(label).push(doc)
   }
@@ -248,7 +249,7 @@ export function groupHigByCategory(docs, higGroups) {
   if (!(higGroups instanceof Map) || higGroups.size === 0) return null
   const sections = new Map()
   const rest = []
-  const parentPaths = new Map([...higGroups.values()].map(g => [g.parentPath, g]))
+  const parentPaths = new Map([...higGroups.values()].map((g) => [g.parentPath, g]))
   for (const doc of docs ?? []) {
     const path = String(doc?.path ?? '')
     const own = parentPaths.get(path)

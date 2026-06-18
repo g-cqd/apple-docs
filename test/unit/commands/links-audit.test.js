@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
 import { linksAudit, linksConsolidate } from '../../../src/commands/links.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 const tempDirs = []
 
@@ -18,7 +18,9 @@ function setup() {
   tempDirs.push(dir)
 
   // A simple page with a mix of link types.
-  writeFileSync(join(dir, 'docs', 'swiftui', 'index.html'), `<!DOCTYPE html>
+  writeFileSync(
+    join(dir, 'docs', 'swiftui', 'index.html'),
+    `<!DOCTYPE html>
 <html>
   <body>
     <nav class="breadcrumbs"><a href="/docs/swiftui/">SwiftUI</a> / <a href="/docs/swiftui/missing/">Missing</a></nav>
@@ -30,9 +32,13 @@ function setup() {
       <p><a href="#section">anchor</a></p>
     </article>
   </body>
-</html>`)
-  writeFileSync(join(dir, 'docs', 'swift-org', 'index.html'), `<!DOCTYPE html>
-<html><body><article><a href="/docs/swift-org/install/">install</a></article></body></html>`)
+</html>`,
+  )
+  writeFileSync(
+    join(dir, 'docs', 'swift-org', 'index.html'),
+    `<!DOCTYPE html>
+<html><body><article><a href="/docs/swift-org/install/">install</a></article></body></html>`,
+  )
 
   const db = new DocsDatabase(':memory:')
   db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'apple-docc')
@@ -41,19 +47,22 @@ function setup() {
     rootId: db.getRootBySlug('swiftui').id,
     path: 'swiftui',
     url: 'https://developer.apple.com/documentation/swiftui',
-    title: 'SwiftUI', sourceType: 'apple-docc',
+    title: 'SwiftUI',
+    sourceType: 'apple-docc',
   })
   db.upsertPage({
     rootId: db.getRootBySlug('swiftui').id,
     path: 'swiftui/view',
     url: 'https://developer.apple.com/documentation/swiftui/view',
-    title: 'View', sourceType: 'apple-docc',
+    title: 'View',
+    sourceType: 'apple-docc',
   })
   db.upsertPage({
     rootId: db.getRootBySlug('swift-org').id,
     path: 'swift-org/install',
     url: 'https://swift.org/install',
-    title: 'Install', sourceType: 'swift-org',
+    title: 'Install',
+    sourceType: 'swift-org',
   })
 
   return { dir, db }
@@ -67,11 +76,11 @@ describe('linksAudit', () => {
 
     expect(result.filesScanned).toBe(2)
     expect(result.linksTotal).toBe(8)
-    expect(result.byCategory.internal_ok).toBe(3)        // /docs/swiftui/, /docs/swiftui/view/, /docs/swift-org/install/
-    expect(result.byCategory.internal_broken).toBe(1)    // /docs/swiftui/missing/
+    expect(result.byCategory.internal_ok).toBe(3) // /docs/swiftui/, /docs/swiftui/view/, /docs/swift-org/install/
+    expect(result.byCategory.internal_broken).toBe(1) // /docs/swiftui/missing/
     expect(result.byCategory.external_resolvable).toBe(1) // apple.com/swiftui/view → swiftui/view
-    expect(result.byCategory.external).toBe(1)            // forums.swift.org
-    expect(result.byCategory.relative_broken).toBe(1)     // /install
+    expect(result.byCategory.external).toBe(1) // forums.swift.org
+    expect(result.byCategory.relative_broken).toBe(1) // /install
     expect(result.byCategory.fragment).toBe(1)
   })
 
@@ -101,16 +110,14 @@ describe('linksAudit', () => {
     const result = await linksAudit({ outDir: dir }, { db, logger: { info() {} } })
     db.close()
 
-    const apple = result.topExternalResolvable.find(e => e.value === 'swiftui/view')
+    const apple = result.topExternalResolvable.find((e) => e.value === 'swiftui/view')
     expect(apple).toBeDefined()
     expect(apple.count).toBe(1)
   })
 
   test('throws when outDir does not exist', async () => {
     const db = new DocsDatabase(':memory:')
-    await expect(
-      linksAudit({ outDir: '/nonexistent/path' }, { db, logger: { info() {} } }),
-    ).rejects.toThrow(/does not exist/)
+    await expect(linksAudit({ outDir: '/nonexistent/path' }, { db, logger: { info() {} } })).rejects.toThrow(/does not exist/)
     db.close()
   })
 })
@@ -153,13 +160,15 @@ describe('linksConsolidate', () => {
       key: 'wwdc/wwdc2024-10001',
       sourceType: 'wwdc',
       framework: 'wwdc',
-      contentJson: JSON.stringify([{
-        type: 'paragraph',
-        inlineContent: [
-          { type: 'link', destination: 'https://developer.apple.com/videos/play/wwdc2024/10001/', title: 'Session' },
-          { type: 'link', destination: 'https://forums.swift.org/t/123', title: 'External' },
-        ],
-      }]),
+      contentJson: JSON.stringify([
+        {
+          type: 'paragraph',
+          inlineContent: [
+            { type: 'link', destination: 'https://developer.apple.com/videos/play/wwdc2024/10001/', title: 'Session' },
+            { type: 'link', destination: 'https://forums.swift.org/t/123', title: 'External' },
+          ],
+        },
+      ]),
     })
 
     const result = await linksConsolidate({}, { db, logger: { info() {} } })
@@ -179,10 +188,12 @@ describe('linksConsolidate', () => {
     seedDoc(db, {
       key: 'orphan',
       framework: 'orphan',
-      contentJson: JSON.stringify([{
-        type: 'paragraph',
-        inlineContent: [{ type: 'reference', identifier: 'foo', _resolvedKey: 'missing/page' }],
-      }]),
+      contentJson: JSON.stringify([
+        {
+          type: 'paragraph',
+          inlineContent: [{ type: 'reference', identifier: 'foo', _resolvedKey: 'missing/page' }],
+        },
+      ]),
     })
 
     const result = await linksConsolidate({}, { db, logger: { info() {} } })
@@ -197,9 +208,12 @@ describe('linksConsolidate', () => {
     seedDoc(db, {
       key: 'swiftui/view',
       framework: 'swiftui',
-      contentJson: JSON.stringify([{
-        type: 'link', destination: 'https://developer.apple.com/documentation/swiftui/view',
-      }]),
+      contentJson: JSON.stringify([
+        {
+          type: 'link',
+          destination: 'https://developer.apple.com/documentation/swiftui/view',
+        },
+      ]),
     })
 
     const result = await linksConsolidate({ dryRun: true }, { db, logger: { info() {} } })
@@ -214,9 +228,12 @@ describe('linksConsolidate', () => {
     seedDoc(db, {
       key: 'swiftui/view',
       framework: 'swiftui',
-      contentJson: JSON.stringify([{
-        type: 'link', destination: 'https://developer.apple.com/documentation/swiftui/view',
-      }]),
+      contentJson: JSON.stringify([
+        {
+          type: 'link',
+          destination: 'https://developer.apple.com/documentation/swiftui/view',
+        },
+      ]),
     })
 
     await linksConsolidate({}, { db, logger: { info() {} } })

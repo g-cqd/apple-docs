@@ -26,23 +26,22 @@
  * written. Re-running is idempotent (NULL-guarded updates, keyed upserts).
  */
 
+import { constants, Database } from 'bun:sqlite'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { Database, constants } from 'bun:sqlite'
 import { encodeVersion } from '../lib/version-encode.js'
 
-export const DEFAULT_ASSET_ROOT =
-  '/System/Library/AssetsV2/com_apple_MobileAsset_AppleDeveloperDocumentation'
+export const DEFAULT_ASSET_ROOT = '/System/Library/AssetsV2/com_apple_MobileAsset_AppleDeveloperDocumentation'
 
 // Apple platform display names → the project's platforms_json keys.
 const PLATFORM_KEYS = {
-  'iOS': 'ios',
-  'iPadOS': 'ipados',
+  iOS: 'ios',
+  iPadOS: 'ipados',
   'Mac Catalyst': 'maccatalyst',
-  'macOS': 'macos',
-  'tvOS': 'tvos',
-  'visionOS': 'visionos',
-  'watchOS': 'watchos',
+  macOS: 'macos',
+  tvOS: 'tvos',
+  visionOS: 'visionos',
+  watchOS: 'watchos',
 }
 
 /** List installed documentation assets, best (most documents) first. */
@@ -58,7 +57,9 @@ export function findDocumentationAssets(rootDir = DEFAULT_ASSET_ROOT) {
       const docs = db.query('SELECT COUNT(*) AS c FROM documents').get().c
       db.close()
       out.push({ assetPath: join(rootDir, entry), dbPath, docs })
-    } catch { /* unreadable asset — skip */ }
+    } catch {
+      /* unreadable asset — skip */
+    }
   }
   return out.sort((a, b) => b.docs - a.docs)
 }
@@ -146,25 +147,40 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
       min_ios = $ios, min_macos = $macos, min_watchos = $watchos, min_tvos = $tvos, min_visionos = $visionos,
       min_ios_num = $iosn, min_macos_num = $macosn, min_watchos_num = $watchosn, min_tvos_num = $tvosn, min_visionos_num = $visionosn
     WHERE id = $id AND platforms_json IS NULL`)
-  const chunksFor = asset.query(
-    'SELECT title, content FROM attributes WHERE asset_id = ? ORDER BY chunk_index',
-  )
+  const chunksFor = asset.query('SELECT title, content FROM attributes WHERE asset_id = ? ORDER BY chunk_index')
 
   const stats = { pages: 0, anchorsSkipped: 0, usrBackfilled: 0, platformsBackfilled: 0, novelInserted: 0 }
   const novel = []
   const BATCH = 5000
   let inTxn = false
-  const begin = () => { if (apply && !inTxn) { raw.run('BEGIN'); inTxn = true } }
-  const commit = () => { if (apply && inTxn) { raw.run('COMMIT'); inTxn = false } }
+  const begin = () => {
+    if (apply && !inTxn) {
+      raw.run('BEGIN')
+      inTxn = true
+    }
+  }
+  const commit = () => {
+    if (apply && inTxn) {
+      raw.run('COMMIT')
+      inTxn = false
+    }
+  }
 
   try {
     let sinceCommit = 0
     for (const row of asset.query('SELECT asset_id, CAST(document AS TEXT) AS document FROM documents').all()) {
-      if (row.asset_id.includes('#')) { stats.anchorsSkipped++; continue }
+      if (row.asset_id.includes('#')) {
+        stats.anchorsSkipped++
+        continue
+      }
       stats.pages++
       const key = normalizeAssetUri(row.asset_id)
       let doc
-      try { doc = JSON.parse(row.document) } catch { continue }
+      try {
+        doc = JSON.parse(row.document)
+      } catch {
+        continue
+      }
       const usr = doc.external_id ?? doc.symbol?.preciseIdentifier ?? null
       const hit = existing.get(key)
 
@@ -180,10 +196,15 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
             if (apply) {
               setPlatforms.run({
                 $pj: plat.platformsJson,
-                $ios: plat.minIos, $macos: plat.minMacos, $watchos: plat.minWatchos,
-                $tvos: plat.minTvos, $visionos: plat.minVisionos,
-                $iosn: encodeVersion(plat.minIos), $macosn: encodeVersion(plat.minMacos),
-                $watchosn: encodeVersion(plat.minWatchos), $tvosn: encodeVersion(plat.minTvos),
+                $ios: plat.minIos,
+                $macos: plat.minMacos,
+                $watchos: plat.minWatchos,
+                $tvos: plat.minTvos,
+                $visionos: plat.minVisionos,
+                $iosn: encodeVersion(plat.minIos),
+                $macosn: encodeVersion(plat.minMacos),
+                $watchosn: encodeVersion(plat.minWatchos),
+                $tvosn: encodeVersion(plat.minTvos),
                 $visionosn: encodeVersion(plat.minVisionos),
                 $id: hit.id,
               })
@@ -191,7 +212,10 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
             stats.platformsBackfilled++
           }
         }
-        if (++sinceCommit >= BATCH) { commit(); sinceCommit = 0 }
+        if (++sinceCommit >= BATCH) {
+          commit()
+          sinceCommit = 0
+        }
         continue
       }
 
@@ -217,7 +241,11 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
       stats.novelInserted++
       if (!apply) continue
       if (framework) {
-        try { projectDb.upsertRoot(framework, n.doc.modules?.[0] ?? framework, 'framework', sourceTag) } catch { /* exists */ }
+        try {
+          projectDb.upsertRoot(framework, n.doc.modules?.[0] ?? framework, 'framework', sourceTag)
+        } catch {
+          /* exists */
+        }
       }
       const documentId = projectDb.upsertNormalizedDocument({
         document: {
@@ -244,18 +272,27 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
       if (n.usr) setUsrById.run({ $usr: n.usr, $id: documentId })
       // Commit in batches so a fresh run (tens of thousands of novel pages,
       // each an upsert + sections + FTS triggers) is not one giant transaction.
-      if (stats.novelInserted % BATCH === 0) { commit(); begin() }
+      if (stats.novelInserted % BATCH === 0) {
+        commit()
+        begin()
+      }
     }
     commit()
   } finally {
-    if (inTxn) { try { raw.run('ROLLBACK') } catch { /* already closed */ } }
+    if (inTxn) {
+      try {
+        raw.run('ROLLBACK')
+      } catch {
+        /* already closed */
+      }
+    }
     asset.close()
   }
 
   logger?.info?.(
     `xcode-docs merge${apply ? '' : ' (dry-run)'}: ${stats.usrBackfilled} USRs, ` +
-    `${stats.platformsBackfilled} platform backfills, ${stats.novelInserted} novel pages ` +
-    `(${stats.anchorsSkipped} section anchors skipped)`,
+      `${stats.platformsBackfilled} platform backfills, ${stats.novelInserted} novel pages ` +
+      `(${stats.anchorsSkipped} section anchors skipped)`,
   )
   return stats
 }

@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { buildFtsQuery, sanitizeTrigramQuery } from '../../../src/search/fts-query-builder.js'
 
 describe('buildFtsQuery', () => {

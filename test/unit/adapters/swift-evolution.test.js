@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
 import * as github from '../../../src/lib/github.js'
 import { SwiftEvolutionAdapter } from '../../../src/sources/swift-evolution.js'
 
@@ -53,7 +53,9 @@ describe('SwiftEvolutionAdapter', () => {
     adapter = new SwiftEvolutionAdapter()
   })
 
-  afterEach(() => { mock.restore() })
+  afterEach(() => {
+    mock.restore()
+  })
 
   test('has correct static properties', () => {
     expect(SwiftEvolutionAdapter.type).toBe('swift-evolution')
@@ -107,11 +109,7 @@ describe('SwiftEvolutionAdapter', () => {
     mockCheckRawGitHub.mockResolvedValue({ status: 'modified', etag: '"new"' })
 
     const ctx = makeCtx()
-    const result = await adapter.check(
-      'swift-evolution/0296-async-await',
-      { etag: '"old"' },
-      ctx,
-    )
+    const result = await adapter.check('swift-evolution/0296-async-await', { etag: '"old"' }, ctx)
 
     expect(result.status).toBe('modified')
     expect(result.changed).toBe(true)
@@ -121,11 +119,7 @@ describe('SwiftEvolutionAdapter', () => {
     mockCheckRawGitHub.mockResolvedValue({ status: 'unchanged', etag: '"same"' })
 
     const ctx = makeCtx()
-    const result = await adapter.check(
-      'swift-evolution/0296-async-await',
-      { etag: '"same"' },
-      ctx,
-    )
+    const result = await adapter.check('swift-evolution/0296-async-await', { etag: '"same"' }, ctx)
 
     expect(result.status).toBe('unchanged')
     expect(result.changed).toBe(false)
@@ -156,13 +150,13 @@ describe('SwiftEvolutionAdapter', () => {
     expect(result.sections.length).toBeGreaterThan(0)
     expect(result.relationships).toEqual([])
 
-    const abstract = result.sections.find(s => s.sectionKind === 'abstract')
+    const abstract = result.sections.find((s) => s.sectionKind === 'abstract')
     expect(abstract).toBeDefined()
 
-    const discussions = result.sections.filter(s => s.sectionKind === 'discussion')
+    const discussions = result.sections.filter((s) => s.sectionKind === 'discussion')
     expect(discussions.length).toBeGreaterThanOrEqual(2) // Introduction, Motivation, Proposed solution
 
-    const headings = discussions.map(s => s.heading)
+    const headings = discussions.map((s) => s.heading)
     expect(headings).toContain('Introduction')
     expect(headings).toContain('Motivation')
     expect(headings).toContain('Proposed solution')

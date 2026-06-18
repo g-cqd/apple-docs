@@ -12,7 +12,7 @@ export function resolveTitle(meta, markdown) {
 
   // For <h3> elements without a data-sidenav value, extract from markdown
   // The first line of markdown is typically "### N. Title"
-  const firstLine = markdown.split('\n').find(l => l.trim())
+  const firstLine = markdown.split('\n').find((l) => l.trim())
   if (firstLine) {
     // Strip markdown heading prefix and numbering-dot prefix
     const title = firstLine.replace(/^#+\s*/, '').trim()
@@ -20,7 +20,7 @@ export function resolveTitle(meta, markdown) {
   }
 
   // Fallback to id
-  return meta.id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  return meta.id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 /**
@@ -40,10 +40,12 @@ export function extractSectionNumber(title) {
  */
 export function extractAbstract(markdown, _title) {
   // Remove the title line, heading lines, and list prefixes
-  const lines = markdown.split('\n')
-    .filter(l => !l.startsWith('#') && l.trim())
-    .map(l => l.replace(/^[-*]\s+/, '').trim())
-  const text = lines.join(' ')
+  const lines = markdown
+    .split('\n')
+    .filter((l) => !l.startsWith('#') && l.trim())
+    .map((l) => l.replace(/^[-*]\s+/, '').trim())
+  const text = lines
+    .join(' ')
     .replace(/\*\*/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/\s+/g, ' ')

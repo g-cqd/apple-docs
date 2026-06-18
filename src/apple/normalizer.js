@@ -20,8 +20,10 @@ export function normalizeIdentifier(raw) {
   if (designDocMatch) id = designDocMatch[1]
 
   // Strip leading /documentation/ but preserve /design/ and /app-store-review/ as namespace prefixes
-  if (id.startsWith('/design/')) id = id.slice(1) // keep 'design/...'
-  else if (id.startsWith('/app-store-review/')) id = id.slice(1) // keep 'app-store-review/...'
+  if (id.startsWith('/design/'))
+    id = id.slice(1) // keep 'design/...'
+  else if (id.startsWith('/app-store-review/'))
+    id = id.slice(1) // keep 'app-store-review/...'
   else if (id.startsWith('/documentation/')) id = id.slice('/documentation/'.length)
 
   // Strip leading documentation/ (no slash)

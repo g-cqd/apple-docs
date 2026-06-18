@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { RateLimiter } from '../../../src/lib/rate-limiter.js'
 
 describe('RateLimiter', () => {
@@ -31,9 +31,7 @@ describe('RateLimiter', () => {
     const limiter = new RateLimiter(20, 2) // 2 burst, 20/sec = 50ms between
     const timestamps = []
 
-    const tasks = Array.from({ length: 5 }, () =>
-      limiter.acquire().then(() => timestamps.push(Date.now()))
-    )
+    const tasks = Array.from({ length: 5 }, () => limiter.acquire().then(() => timestamps.push(Date.now())))
 
     await Promise.all(tasks)
     expect(timestamps.length).toBe(5)

@@ -46,7 +46,7 @@ export function markUnrenderableSymbols({ ctx, scope, variants, result, logger }
   if (unsupported.length > 0) {
     logger?.warn?.(
       `${unsupported.length} ${scope} symbol(s) unrenderable on this macOS ` +
-      `(catalog newer than OS): ${unsupported.slice(0, 8).join(', ')}${unsupported.length > 8 ? ', …' : ''}`,
+        `(catalog newer than OS): ${unsupported.slice(0, 8).join(', ')}${unsupported.length > 8 ? ', …' : ''}`,
     )
   }
   if (partial.length > 0) {

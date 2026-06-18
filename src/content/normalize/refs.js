@@ -54,10 +54,10 @@ export function renderLinkSectionsToText(sections, refs) {
 }
 
 export function normalizeLinkSections(sections, refs, mapKey = identity) {
-  return (sections ?? []).map(section => ({
+  return (sections ?? []).map((section) => ({
     title: section.title ?? null,
     type: section.type ?? null,
-    items: (section.identifiers ?? []).map(id => {
+    items: (section.identifiers ?? []).map((id) => {
       const ref = refs?.[id]
       return {
         identifier: id,
@@ -74,7 +74,7 @@ export function normalizeLinkSections(sections, refs, mapKey = identity) {
  */
 export function resolveContentReferences(nodes, refs, mapKey = identity) {
   if (!Array.isArray(nodes)) return nodes
-  return nodes.map(node => resolveNodeRefs(node, refs, mapKey))
+  return nodes.map((node) => resolveNodeRefs(node, refs, mapKey))
 }
 
 function resolveNodeRefs(node, refs, mapKey = identity) {
@@ -90,7 +90,7 @@ function resolveNodeRefs(node, refs, mapKey = identity) {
 
   // Links block node — resolve each item identifier
   if (node.type === 'links' && Array.isArray(node.items)) {
-    const resolvedItems = node.items.map(id => {
+    const resolvedItems = node.items.map((id) => {
       const ref = refs?.[id]
       const key = mapKey(resolveRefKey(id, refs))
       const title = ref?.title ?? null
@@ -114,26 +114,26 @@ function resolveNodeRefs(node, refs, mapKey = identity) {
   // Recurse into child content
   const clone = { ...node }
   if (Array.isArray(clone.inlineContent)) {
-    clone.inlineContent = clone.inlineContent.map(child => resolveNodeRefs(child, refs, mapKey))
+    clone.inlineContent = clone.inlineContent.map((child) => resolveNodeRefs(child, refs, mapKey))
   }
   if (Array.isArray(clone.content)) {
-    clone.content = clone.content.map(child => resolveNodeRefs(child, refs, mapKey))
+    clone.content = clone.content.map((child) => resolveNodeRefs(child, refs, mapKey))
   }
   if (Array.isArray(clone.items)) {
-    clone.items = clone.items.map(item => {
-      if (item?.content) return { ...item, content: item.content.map(child => resolveNodeRefs(child, refs, mapKey)) }
+    clone.items = clone.items.map((item) => {
+      if (item?.content) return { ...item, content: item.content.map((child) => resolveNodeRefs(child, refs, mapKey)) }
       return item
     })
   }
   // Term list items
   if (node.type === 'termList' && Array.isArray(clone.items)) {
-    clone.items = clone.items.map(item => {
+    clone.items = clone.items.map((item) => {
       const resolved = { ...item }
       if (resolved.term?.inlineContent) {
-        resolved.term = { ...resolved.term, inlineContent: resolved.term.inlineContent.map(child => resolveNodeRefs(child, refs, mapKey)) }
+        resolved.term = { ...resolved.term, inlineContent: resolved.term.inlineContent.map((child) => resolveNodeRefs(child, refs, mapKey)) }
       }
       if (resolved.definition?.content) {
-        resolved.definition = { ...resolved.definition, content: resolved.definition.content.map(child => resolveNodeRefs(child, refs, mapKey)) }
+        resolved.definition = { ...resolved.definition, content: resolved.definition.content.map((child) => resolveNodeRefs(child, refs, mapKey)) }
       }
       return resolved
     })

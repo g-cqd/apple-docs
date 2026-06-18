@@ -1,6 +1,6 @@
+import { suffix } from 'bun:ffi'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'
-import { suffix } from 'bun:ffi'
 import { _resetNativeLoader, getNativeLib, isNativeEnabled } from '../../../src/native/loader.js'
 import { readNativeResult } from '../../../src/native/result.js'
 

@@ -15,11 +15,11 @@
  *     reference only.
  */
 
+import { suffix } from 'bun:ffi'
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
 import { _resetNativeLoader } from '../../../src/native/loader.js'
 import { _forceImpl, nativeFontTextSvg, nativeSymbolPdf, nativeSymbolPdfBatch, nativeSymbolPng } from '../../../src/resources/render-native.js'
 import { FONT_TEXT_SCRIPT, SYMBOL_PDF_SCRIPT, SYMBOL_PNG_SCRIPT } from '../../../src/resources/swift-templates.js'
@@ -81,7 +81,7 @@ describe.skipIf(!isDarwin || !nativeAvailable)('render-native', () => {
   // is byte-identical to the serial single + spawn output.
   const BATCH_SYMBOLS = ['heart.fill', 'star', 'house.fill', 'gear', 'pencil', 'trash', 'folder', 'bell', 'bookmark', 'tag', 'flag', 'bolt']
   test('symbol-pdf batch == singles (concurrent path) + spawn anchor', () => {
-    const items = BATCH_SYMBOLS.map(name => ({ name, scope: 'public' }))
+    const items = BATCH_SYMBOLS.map((name) => ({ name, scope: 'public' }))
     const batch = nativeSymbolPdfBatch(items)
     expect(batch).not.toBeNull()
     expect(batch.length).toBe(items.length)

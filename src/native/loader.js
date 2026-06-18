@@ -12,8 +12,9 @@
  * memoizes null and the caller's JS implementation serves, with one
  * structured warning.
  */
-import { existsSync } from 'node:fs'
+
 import { dlopen, suffix } from 'bun:ffi'
+import { existsSync } from 'node:fs'
 import { createLogger } from '../lib/logger.js'
 import { NATIVE_STATUS_OK, nativeErrorMessage, readNativeResult } from './result.js'
 
@@ -66,10 +67,7 @@ function candidatePaths() {
   if (process.env.APPLE_DOCS_NATIVE_LIB) return [process.env.APPLE_DOCS_NATIVE_LIB]
   const arch = process.arch === 'x64' ? 'x64' : process.arch
   const fileName = `libAppleDocsCore.${suffix}`
-  return [
-    `${ROOT}dist/native/${process.platform}-${arch}/${fileName}`,
-    `${ROOT}swift/.build/release/${fileName}`,
-  ]
+  return [`${ROOT}dist/native/${process.platform}-${arch}/${fileName}`, `${ROOT}swift/.build/release/${fileName}`]
 }
 
 /**
@@ -109,9 +107,7 @@ export function getNativeLib() {
         break
       }
       const info = readNativeResult(lib, lib.symbols.ad_build_info())
-      log().debug(
-        `native: loaded ${path}${info.status === NATIVE_STATUS_OK ? ` ${nativeErrorMessage(info)}` : ''}`,
-      )
+      log().debug(`native: loaded ${path}${info.status === NATIVE_STATUS_OK ? ` ${nativeErrorMessage(info)}` : ''}`)
       libCache = lib
       return libCache
     } catch (error) {

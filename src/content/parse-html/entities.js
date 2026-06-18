@@ -14,19 +14,21 @@
 // untouched: `&amp;lt;` → (no other rule matches) → `&amp;lt;` →
 // `&lt;`, which is the original literal string.
 export function decodeEntities(text) {
-  return text
-    // Named entities other than &amp; (process FIRST so &amp;-encoded
-    // copies of the literal entity text survive).
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, '/')
-    .replace(/&nbsp;/g, ' ')
-    // Numeric entities (decimal + hex).
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
-    // &amp; LAST so already-double-encoded entities round-trip correctly.
-    .replace(/&amp;/g, '&')
+  return (
+    text
+      // Named entities other than &amp; (process FIRST so &amp;-encoded
+      // copies of the literal entity text survive).
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&#x27;/g, "'")
+      .replace(/&#x2F;/g, '/')
+      .replace(/&nbsp;/g, ' ')
+      // Numeric entities (decimal + hex).
+      .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+      .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+      // &amp; LAST so already-double-encoded entities round-trip correctly.
+      .replace(/&amp;/g, '&')
+  )
 }

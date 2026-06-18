@@ -57,7 +57,10 @@ export function parseDoccArchiveUrl(rawUrl) {
   // root-hosted archives like security.apple.com, `/CareKit` for the GitHub
   // Pages project site). Case is preserved — the live host is case-sensitive.
   const prefix = url.pathname.slice(0, idx)
-  const rest = url.pathname.slice(idx + DOC_SEGMENT.length).replace(/\/+$/, '').toLowerCase()
+  const rest = url.pathname
+    .slice(idx + DOC_SEGMENT.length)
+    .replace(/\/+$/, '')
+    .toLowerCase()
   if (!rest) return null
 
   const segments = rest.split('/')

@@ -12,22 +12,23 @@ export function renderFontsPage(siteConfig, data = {}) {
   const familiesJson = JSON.stringify(families).replace(/</g, '\\u003c')
   const baseUrl = siteConfig.baseUrl || ''
 
-  const familyMarkup = families.map(family => {
-    const variableCount = family.files.filter(f => f.is_variable).length
-    const remoteCount = family.files.filter(f => f.source === 'remote').length
-    const systemCount = family.files.filter(f => f.source === 'system').length
+  const familyMarkup = families.map((family) => {
+    const variableCount = family.files.filter((f) => f.is_variable).length
+    const remoteCount = family.files.filter((f) => f.source === 'remote').length
+    const systemCount = family.files.filter((f) => f.source === 'system').length
     const meta = [
       `${family.files.length} file${family.files.length === 1 ? '' : 's'}`,
       variableCount > 0 ? `${variableCount} variable` : null,
       remoteCount > 0 ? `${remoteCount} remote` : null,
       systemCount > 0 ? `${systemCount} system` : null,
-    ].filter(Boolean).join(' · ')
-    const familyZip = (subset) => `${baseUrl}/api/fonts/family/${encodeURIComponent(family.id)}.zip${subset && subset !== 'all' ? `?subset=${encodeURIComponent(subset)}` : ''}`
+    ]
+      .filter(Boolean)
+      .join(' · ')
+    const familyZip = (subset) =>
+      `${baseUrl}/api/fonts/family/${encodeURIComponent(family.id)}.zip${subset && subset !== 'all' ? `?subset=${encodeURIComponent(subset)}` : ''}`
     const downloadButtons = [
       html`<a class="font-family__download" href="${familyZip('all')}" download>Download all</a>`,
-      variableCount > 0
-        ? html`<a class="font-family__download font-family__download--alt" href="${familyZip('variable')}" download>Variable only</a>`
-        : null,
+      variableCount > 0 ? html`<a class="font-family__download font-family__download--alt" href="${familyZip('variable')}" download>Variable only</a>` : null,
       family.files.length - variableCount > 0
         ? html`<a class="font-family__download font-family__download--alt" href="${familyZip('static')}" download>Static only</a>`
         : null,

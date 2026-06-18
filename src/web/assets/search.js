@@ -140,7 +140,9 @@ export function init() {
       </a>
     `,
       )
-      .join('')}<a href="/search?q=${encodeURIComponent(query || '')}" class="search-view-all" role="option" id="search-result-viewall">View all results &rarr;</a>`
+      .join(
+        '',
+      )}<a href="/search?q=${encodeURIComponent(query || '')}" class="search-view-all" role="option" id="search-result-viewall">View all results &rarr;</a>`
     showDropdown()
 
     const count = hits.length

@@ -13,7 +13,7 @@
 //                                parameters, properties, rest-*, possible-values,
 //                                mentioned-in, discussion, link sections.
 
-import { coerceDocument, escapeHtml, slugify } from './render-html/helpers.js'
+import { coerceDocument, coerceSection, escapeHtml, slugify } from './render-html/helpers.js'
 import {
   renderAbstractHtml,
   renderDeclarationHtml,
@@ -27,7 +27,6 @@ import {
   renderRestParametersHtml,
   renderRestResponsesHtml,
 } from './render-html/sections.js'
-import { coerceSection } from './render-html/helpers.js'
 
 export { slugify }
 
@@ -39,9 +38,7 @@ const LINK_SECTION_TITLES = {
 
 export function renderHtml(document, sections = [], opts = {}) {
   const doc = coerceDocument(document)
-  const orderedSections = sections
-    .map(coerceSection)
-    .sort((a, b) => a.sortOrder - b.sortOrder)
+  const orderedSections = sections.map(coerceSection).sort((a, b) => a.sortOrder - b.sortOrder)
 
   const parts = []
 

@@ -23,8 +23,11 @@ function validateBase(rawBase) {
   if (typeof rawBase !== 'string') throw new Error('base must be a string')
   if (rawBase.startsWith('/') && !rawBase.startsWith('//')) return rawBase
   let parsed
-  try { parsed = new URL(rawBase, self.location.href) }
-  catch { throw new Error(`base is not a valid URL: ${rawBase}`) }
+  try {
+    parsed = new URL(rawBase, self.location.href)
+  } catch {
+    throw new Error(`base is not a valid URL: ${rawBase}`)
+  }
   if (parsed.origin !== self.location.origin) {
     throw new Error(`base origin ${parsed.origin} does not match worker origin ${self.location.origin}`)
   }
@@ -63,10 +66,7 @@ self.addEventListener('message', async (event) => {
         // Manifest not available — fall back to unhashed filenames
       }
 
-      const [titleResp, aliasResp] = await Promise.all([
-        fetch(titleUrl),
-        fetch(aliasUrl),
-      ])
+      const [titleResp, aliasResp] = await Promise.all([fetch(titleUrl), fetch(aliasUrl)])
       titleIndex = await titleResp.json()
       aliases = await aliasResp.json()
       normalizeIndex()
@@ -262,8 +262,11 @@ function intersectTwoSorted(a, b) {
   while (ai < a.length && bi < b.length) {
     const av = a[ai]
     const bv = b[bi]
-    if (av === bv) { out[oi++] = av; ai++; bi++ }
-    else if (av < bv) ai++
+    if (av === bv) {
+      out[oi++] = av
+      ai++
+      bi++
+    } else if (av < bv) ai++
     else bi++
   }
   return out.subarray(0, oi)
@@ -290,9 +293,17 @@ function unionTwoSorted(a, b) {
   while (ai < a.length && bi < b.length) {
     const av = a[ai]
     const bv = b[bi]
-    if (av === bv) { out[oi++] = av; ai++; bi++ }
-    else if (av < bv) { out[oi++] = av; ai++ }
-    else { out[oi++] = bv; bi++ }
+    if (av === bv) {
+      out[oi++] = av
+      ai++
+      bi++
+    } else if (av < bv) {
+      out[oi++] = av
+      ai++
+    } else {
+      out[oi++] = bv
+      bi++
+    }
   }
   while (ai < a.length) out[oi++] = a[ai++]
   while (bi < b.length) out[oi++] = b[bi++]

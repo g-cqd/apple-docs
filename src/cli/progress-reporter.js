@@ -36,12 +36,11 @@ export function makeProgressReporter() {
     const elapsedSec = Math.max(1e-3, (now - oldest.t) / 1000)
     const rate = (p.total - oldest.n) / elapsedSec
     const elapsedTotal = now - startTs
-    const line = (
+    const line =
       `[${fmtDuration(elapsedTotal)}] ` +
       `${fmt(p.built)} built, ${fmt(p.skipped)} skipped, ${fmt(p.failed)} failed ` +
       `· ${rate.toFixed(0)}/s ` +
       `· RSS=${fmtBytes(p.rss)}`
-    )
     process.stdout.write(`\r${line.padEnd(process.stdout.columns ?? 80, ' ').slice(0, (process.stdout.columns ?? 80) - 1)}`)
   }
   reporter.done = () => {

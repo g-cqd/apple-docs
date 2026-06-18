@@ -19,7 +19,10 @@ function buildPdf(parts) {
   const total = chunks.reduce((sum, c) => sum + c.length, 0)
   const out = new Uint8Array(total)
   let offset = 0
-  for (const c of chunks) { out.set(c, offset); offset += c.length }
+  for (const c of chunks) {
+    out.set(c, offset)
+    offset += c.length
+  }
   return out
 }
 
@@ -42,7 +45,9 @@ describe('collectObjects /Length handling', () => {
     const compressed = deflate('hello pdf world')
     const bytes = buildPdf([
       '%PDF-1.4\n',
-      '1 0 obj\n<< /Length ', String(compressed.length), ' /Filter /FlateDecode >>\nstream\n',
+      '1 0 obj\n<< /Length ',
+      String(compressed.length),
+      ' /Filter /FlateDecode >>\nstream\n',
       compressed,
       '\nendstream\nendobj\n',
       '%%EOF\n',
@@ -64,7 +69,9 @@ describe('collectObjects /Length handling', () => {
       '1 0 obj\n<< /Length 2 0 R /Filter /FlateDecode >>\nstream\n',
       compressed,
       '\nendstream\nendobj\n',
-      '2 0 obj\n', String(compressed.length), '\nendobj\n',
+      '2 0 obj\n',
+      String(compressed.length),
+      '\nendobj\n',
       '%%EOF\n',
     ])
     const text = latin1(bytes)
@@ -79,13 +86,7 @@ describe('collectObjects /Length handling', () => {
 
   test('missing /Length falls back to the endstream marker', () => {
     const payload = 'raw uncompressed body'
-    const bytes = buildPdf([
-      '%PDF-1.4\n',
-      '1 0 obj\n<< /Type /Raw >>\nstream\n',
-      payload,
-      '\nendstream\nendobj\n',
-      '%%EOF\n',
-    ])
+    const bytes = buildPdf(['%PDF-1.4\n', '1 0 obj\n<< /Type /Raw >>\nstream\n', payload, '\nendstream\nendobj\n', '%%EOF\n'])
     const text = latin1(bytes)
     const objects = collectObjects(text, bytes)
     const obj = objects.get('1 0')
@@ -93,4 +94,3 @@ describe('collectObjects /Length handling', () => {
     expect(latin1(obj.stream)).toBe(payload)
   })
 })
-

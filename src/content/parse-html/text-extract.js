@@ -17,22 +17,17 @@ export function htmlToPlainText(html) {
   cleaned = cleaned.replace(/<svg[\s\S]*?<\/svg>/gi, '')
 
   // Replace opening block tags with a paragraph-break sentinel
-  const withBreaks = cleaned.replace(
-    /<(\/?)(\w+)([^>]*)>/g,
-    (_match, _slash, tag) => {
-      const lower = tag.toLowerCase()
-      if (BLOCK_TAGS.has(lower)) return '\n\n'
-      return ' '
-    },
-  )
+  const withBreaks = cleaned.replace(/<(\/?)(\w+)([^>]*)>/g, (_match, _slash, tag) => {
+    const lower = tag.toLowerCase()
+    if (BLOCK_TAGS.has(lower)) return '\n\n'
+    return ' '
+  })
 
   const decoded = decodeEntities(withBreaks)
 
   // Normalise: collapse runs of spaces/tabs within each paragraph; then
   // collapse 3+ newlines to exactly 2 (one blank line).
-  const lines = decoded
-    .split('\n')
-    .map(line => line.replace(/[ \t]+/g, ' ').trim())
+  const lines = decoded.split('\n').map((line) => line.replace(/[ \t]+/g, ' ').trim())
 
   const joined = lines.join('\n').replace(/\n{3,}/g, '\n\n')
 
@@ -190,8 +185,11 @@ export function htmlToMarkdown(html, opts = {}) {
 
   // Whitespace normalization: collapse runs of spaces/tabs *within* prose lines,
   // trim trailing whitespace, collapse 3+ blank lines to 2.
-  const lines = s.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim())
-  s = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  const lines = s.split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim())
+  s = lines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 
   // Restore fenced code blocks last, preserving their original indentation.
   s = s.replace(/@@FENCE_SLOT_(\d+)@@/g, (_m, idx) => {

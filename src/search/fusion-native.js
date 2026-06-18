@@ -11,11 +11,7 @@ import { createLogger } from '../lib/logger.js'
 import { getNativeLib, isNativeEnabled } from '../native/loader.js'
 import { nativeErrorMessage, readNativeResult } from '../native/result.js'
 import { hamming } from './embedding.js'
-import {
-  hybridFusion as jsHybridFusion,
-  mmrSelect as jsMmrSelect,
-  weightedRRF as jsWeightedRRF,
-} from './fusion.js'
+import { hybridFusion as jsHybridFusion, mmrSelect as jsMmrSelect, weightedRRF as jsWeightedRRF } from './fusion.js'
 
 const MODULE = 'fusion'
 let forced = null // 'js' | 'native' | null

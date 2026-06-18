@@ -23,10 +23,7 @@ import { ValidationError } from '../lib/errors.js'
 import { spawnWithDeadline } from '../lib/spawn-with-deadline.js'
 import { DEFAULT_ASSET_ROOT } from './mobileasset-docs.js'
 
-export const DEFAULT_MANIFEST_PATH = join(
-  DEFAULT_ASSET_ROOT,
-  'com_apple_MobileAsset_AppleDeveloperDocumentation.xml',
-)
+export const DEFAULT_MANIFEST_PATH = join(DEFAULT_ASSET_ROOT, 'com_apple_MobileAsset_AppleDeveloperDocumentation.xml')
 
 // Xcode 27.0 / OS 27.0 / build 10M13306 — verified live (HTTP 200, size and
 // x-amz-meta-digest-sh1 matching). Re-pin alongside Xcode releases.
@@ -135,10 +132,9 @@ export async function fetchDocumentationAsset({ url, sha1 = null, size = null, c
     // member name like `documentation-db/../../evil` can't escape the slot even
     // though the glob would match it. Only index.sql (+ its WAL/SHM) is needed.
     mkdirSync(dbDir, { recursive: true })
-    const { exitCode, stderr } = await spawnWithDeadline(
-      ['unzip', '-j', '-o', '-q', zipPath, 'AssetData/documentation-db/*', '-d', dbDir],
-      { deadlineMs: 10 * 60_000 },
-    )
+    const { exitCode, stderr } = await spawnWithDeadline(['unzip', '-j', '-o', '-q', zipPath, 'AssetData/documentation-db/*', '-d', dbDir], {
+      deadlineMs: 10 * 60_000,
+    })
     if (exitCode !== 0 || !existsSync(dbPath)) {
       throw new ValidationError(`Asset extraction failed (unzip exit ${exitCode}): ${stderr}`)
     }

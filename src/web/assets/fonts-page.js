@@ -21,8 +21,15 @@ import { fontFaceName } from '../lib/font-faces.js'
 function init() {
   const VARIANT_ORDER = ['Display', 'Text', 'Rounded', 'ExtraLarge', 'Large', 'Medium', 'Small', '__default__']
   const WEIGHT_NUMERIC = {
-    Ultralight: 100, Thin: 200, Light: 300, Regular: 400, Medium: 500,
-    Semibold: 600, Bold: 700, Heavy: 800, Black: 900,
+    Ultralight: 100,
+    Thin: 200,
+    Light: 300,
+    Regular: 400,
+    Medium: 500,
+    Semibold: 600,
+    Bold: 700,
+    Heavy: 800,
+    Black: 900,
   }
 
   const dataNode = document.getElementById('fonts-data')
@@ -68,9 +75,9 @@ function init() {
   //    empty — kept for layout slot symmetry, removed from a11y tree.
   // ---------------------------------------------------------------------
   const cardStates = []
-  document.querySelectorAll('.font-family').forEach(card => {
+  document.querySelectorAll('.font-family').forEach((card) => {
     const familyId = card.getAttribute('data-family-id')
-    const family = families.find(f => f.id === familyId)
+    const family = families.find((f) => f.id === familyId)
     if (!family) return
     const variantsEl = card.querySelector('[data-variants]')
     const previewEl = card.querySelector('[data-preview]')
@@ -129,7 +136,7 @@ function init() {
   function applySample() {
     const text = sampleEl?.value || 'Reading Apple docs in good type.'
     root.style.setProperty('--sample-text', JSON.stringify(text))
-    document.querySelectorAll('.font-preview-line').forEach(line => {
+    document.querySelectorAll('.font-preview-line').forEach((line) => {
       if (line.dataset.overridden === 'true') return
       line.textContent = text
     })
@@ -139,7 +146,7 @@ function init() {
     const size = Number.parseInt(sizeEl?.value, 10) || 48
     if (sizeValueEl) sizeValueEl.textContent = String(size)
     root.style.setProperty('--sample-size', `${size}px`)
-    document.querySelectorAll('.font-preview-line').forEach(line => {
+    document.querySelectorAll('.font-preview-line').forEach((line) => {
       line.style.fontSize = `${size}px`
     })
   }
@@ -171,7 +178,7 @@ function init() {
 
   // Mark per-row overrides so applySample skips them on subsequent
   // typing in the global input.
-  document.addEventListener('input', e => {
+  document.addEventListener('input', (e) => {
     if (e.target.classList?.contains('font-preview-line')) {
       e.target.dataset.overridden = 'true'
     }
@@ -184,7 +191,7 @@ function init() {
   //    New York and SF-Mono, so the filter was a single-bit selector.)
   // ---------------------------------------------------------------------
   if (bottomAll) {
-    bottomAll.addEventListener('click', e => {
+    bottomAll.addEventListener('click', (e) => {
       e.preventDefault()
       grid?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -192,7 +199,7 @@ function init() {
   // The per-family download CTA is updated to the most-recently-clicked
   // family card. Lightweight contextual primary action.
   if (bottomCta) {
-    document.addEventListener('click', e => {
+    document.addEventListener('click', (e) => {
       const card = e.target.closest('.font-family')
       if (!card) return
       const familyId = card.getAttribute('data-family-id')
@@ -233,17 +240,17 @@ function init() {
     if (state.style && state.style !== 'auto' && groups.has(state.style)) {
       variant = state.style
     } else {
-      variant = autoPriority.find(v => groups.has(v)) ?? VARIANT_ORDER.find(v => groups.has(v))
+      variant = autoPriority.find((v) => groups.has(v)) ?? VARIANT_ORDER.find((v) => groups.has(v))
     }
     const files = variant ? groups.get(variant) : []
     if (files.length === 0) return null
 
-    const variable = files.find(f => f.is_variable)
+    const variable = files.find((f) => f.is_variable)
     if (variable) return variable
 
     const target = state.weight
     const wantItalic = state.italic
-    const candidates = files.filter(f => (f.italic ?? false) === wantItalic)
+    const candidates = files.filter((f) => (f.italic ?? false) === wantItalic)
     const pool = candidates.length ? candidates : files
     let best = pool[0]
     let bestDelta = Number.POSITIVE_INFINITY

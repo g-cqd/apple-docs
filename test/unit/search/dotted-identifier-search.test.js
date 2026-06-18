@@ -1,6 +1,6 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { search } from '../../../src/commands/search.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 // Regression for the reported miss: Apple stores enum-case titles bare /
 // concatenated (`AVAudioSessionRouteSelectionExternal`), but users type the
@@ -43,11 +43,8 @@ describe('dotted / qualified identifier search', () => {
   const TARGET = 'documentation/avfaudio/avaudiosessionrouteselectionexternal'
 
   test('a dotted Parent.Case query finds the concatenated-title symbol', async () => {
-    const res = await search(
-      { query: 'AVAudioSessionRouteSelection.AVAudioSessionRouteSelectionExternal', noDeep: true },
-      ctx,
-    )
-    expect(res.results.map(r => r.path)).toContain(TARGET)
+    const res = await search({ query: 'AVAudioSessionRouteSelection.AVAudioSessionRouteSelectionExternal', noDeep: true }, ctx)
+    expect(res.results.map((r) => r.path)).toContain(TARGET)
   })
 
   test('the bare concatenated query ranks the symbol first (tier-0 exact title)', async () => {

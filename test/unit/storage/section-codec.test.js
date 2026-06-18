@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { encodeSectionContent, decodeSectionContent, decodeSectionRow } from '../../../src/storage/section-codec.js'
+import { describe, expect, test } from 'bun:test'
+import { decodeSectionContent, decodeSectionRow, encodeSectionContent } from '../../../src/storage/section-codec.js'
 
 describe('section-codec', () => {
   test('roundtrips large content via zstd (stored as a BLOB)', () => {

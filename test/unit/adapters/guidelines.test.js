@@ -56,9 +56,13 @@ describe('GuidelinesAdapter', () => {
     }
 
     const adapter = new GuidelinesAdapter()
-    const result = await adapter.check('app-store-review', { etag: '"old"' }, {
-      rateLimiter: { acquire: async () => {} },
-    })
+    const result = await adapter.check(
+      'app-store-review',
+      { etag: '"old"' },
+      {
+        rateLimiter: { acquire: async () => {} },
+      },
+    )
 
     expect(result.status).toBe('error')
     expect(result.changed).toBe(false)

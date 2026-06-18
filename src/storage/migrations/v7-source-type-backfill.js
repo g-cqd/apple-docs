@@ -9,15 +9,21 @@ import { ROOT_SOURCE_TYPE_BY_SLUG } from '../source-types.js'
 export function up(db) {
   for (const [slug, sourceType] of ROOT_SOURCE_TYPE_BY_SLUG) {
     db.run('UPDATE roots SET source_type = ? WHERE slug = ?', [sourceType, slug])
-    db.run(`
+    db.run(
+      `
       UPDATE pages
       SET source_type = ?
       WHERE root_id IN (SELECT id FROM roots WHERE slug = ?)
-    `, [sourceType, slug])
-    db.run(`
+    `,
+      [sourceType, slug],
+    )
+    db.run(
+      `
       UPDATE documents
       SET source_type = ?
       WHERE key = ? OR key LIKE ?
-    `, [sourceType, slug, `${slug}/%`])
+    `,
+      [sourceType, slug, `${slug}/%`],
+    )
   }
 }

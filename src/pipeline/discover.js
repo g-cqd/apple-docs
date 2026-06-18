@@ -1,6 +1,6 @@
-import { NotFoundError } from '../lib/errors.js'
-import { normalizeIdentifier, extractRootSlug } from '../apple/normalizer.js'
 import { fetchDocPage, fetchTechnologies } from '../apple/api.js'
+import { extractRootSlug, normalizeIdentifier } from '../apple/normalizer.js'
+import { NotFoundError } from '../lib/errors.js'
 import { persistFetchedDocPage } from './persist.js'
 
 const KIND_MAP = {
@@ -8,11 +8,11 @@ const KIND_MAP = {
   'App Services': 'framework',
   'Developer Tools': 'tooling',
   'Graphics and Games': 'framework',
-  'Media': 'framework',
+  Media: 'framework',
   'Release Notes': 'release-notes',
-  'System': 'framework',
-  'Web': 'framework',
-  'Design': 'technology',
+  System: 'framework',
+  Web: 'framework',
+  Design: 'technology',
   'Technology Overviews': 'technology',
   'Sample Code': 'tutorial',
 }
@@ -92,7 +92,7 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
       batch.map(({ path, depth }) => {
         const run = () => processPage(db, dataDir, rateLimiter, root.id, rootSlug, root.source_type, path, depth, logger, adapter)
         return semaphore ? semaphore.run(run) : run()
-      })
+      }),
     )
 
     for (let i = 0; i < results.length; i++) {
@@ -128,9 +128,7 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
 
 async function processPage(db, dataDir, rateLimiter, rootId, rootSlug, sourceType, path, depth, logger, adapter = null) {
   try {
-    const fetched = adapter
-      ? await adapter.fetch(path, { db, dataDir, rateLimiter, logger })
-      : await fetchDocPage(path, rateLimiter)
+    const fetched = adapter ? await adapter.fetch(path, { db, dataDir, rateLimiter, logger }) : await fetchDocPage(path, rateLimiter)
     const json = fetched.payload ?? fetched.json
     const etag = fetched.etag ?? null
     const lastModified = fetched.lastModified ?? null
@@ -146,9 +144,7 @@ async function processPage(db, dataDir, rateLimiter, rootId, rootSlug, sourceTyp
     })
 
     // Extract and seed references
-    const references = adapter
-      ? adapter.extractReferences(path, json)
-      : persisted.references
+    const references = adapter ? adapter.extractReferences(path, json) : persisted.references
     for (const refPath of references) {
       const refRoot = extractRootSlug(refPath)
       if (refRoot === rootSlug) {

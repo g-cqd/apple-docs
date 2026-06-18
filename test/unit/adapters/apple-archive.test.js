@@ -1,6 +1,5 @@
-import { afterEach, describe, test, expect } from 'bun:test'
-import { AppleArchiveAdapter } from '../../../src/sources/apple-archive.js'
-import { deriveFramework } from '../../../src/sources/apple-archive.js'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { AppleArchiveAdapter, deriveFramework } from '../../../src/sources/apple-archive.js'
 
 const originalFetch = globalThis.fetch
 
@@ -193,9 +192,7 @@ describe('AppleArchiveAdapter.discover', () => {
 
     const result = await adapter.discover(ctx)
 
-    expect(result.keys).toContain(
-      'apple-archive/documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/Introduction',
-    )
+    expect(result.keys).toContain('apple-archive/documentation/Cocoa/Conceptual/ProgrammingWithObjectiveC/Introduction')
   })
 
   test('includes the KeyValueCoding index key', async () => {
@@ -258,7 +255,7 @@ describe('AppleArchiveAdapter.discover', () => {
 
     const result = await adapter.discover(ctx)
 
-    expect(result.keys.some(key => key.includes('LegacySample'))).toBe(false)
+    expect(result.keys.some((key) => key.includes('LegacySample'))).toBe(false)
   })
 
   test('filters known missing archive URLs out of the catalog', async () => {
@@ -418,7 +415,7 @@ describe('AppleArchiveAdapter.normalize', () => {
 
     const result = adapter.normalize(key, ARCHIVE_HTML_FIXTURE)
 
-    const headings = result.sections.map(s => s.heading).filter(Boolean)
+    const headings = result.sections.map((s) => s.heading).filter(Boolean)
     expect(headings).toContain('Defining Classes')
     expect(headings).toContain('Working with Objects')
   })
@@ -441,20 +438,22 @@ describe('AppleArchiveAdapter.normalize', () => {
 
   test('creates a metadata-only document for PDF archive guides', () => {
     const adapter = new AppleArchiveAdapter()
-    adapter._guideCatalog = new Map([[
-      'apple-archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf',
-      {
-        title: 'Java for WebObjects Developers',
-        url: 'https://developer.apple.com/library/archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf',
-        format: 'pdf',
-        sourceMetadata: JSON.stringify({ resourceType: 'Guides', archivePath: 'documentation/WebObjects/JavaForWODev/JavaForWODev.pdf', format: 'pdf' }),
-      },
-    ]])
+    adapter._guideCatalog = new Map([
+      [
+        'apple-archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf',
+        {
+          title: 'Java for WebObjects Developers',
+          url: 'https://developer.apple.com/library/archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf',
+          format: 'pdf',
+          sourceMetadata: JSON.stringify({ resourceType: 'Guides', archivePath: 'documentation/WebObjects/JavaForWODev/JavaForWODev.pdf', format: 'pdf' }),
+        },
+      ],
+    ])
 
-    const result = adapter.normalize(
-      'apple-archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf',
-      { format: 'pdf', title: 'Java for WebObjects Developers' },
-    )
+    const result = adapter.normalize('apple-archive/documentation/WebObjects/JavaForWODev/JavaForWODev.pdf', {
+      format: 'pdf',
+      title: 'Java for WebObjects Developers',
+    })
 
     expect(result.document.sourceType).toBe('apple-archive')
     expect(result.document.title).toBe('Java for WebObjects Developers')

@@ -1,13 +1,12 @@
 import { html, raw } from './lib/html.js'
 
+export { renderFontsPage } from './templates/fonts.js'
+export { renderNotFoundPage } from './templates/not-found.js'
 // Page-level templates have been extracted to per-page files in
 // src/web/templates/. Each imports the shared helpers below from this
 // module, so the public API stays at './templates.js' for callers.
 export { renderSearchPage } from './templates/search.js'
-export { renderNotFoundPage } from './templates/not-found.js'
-export { renderFontsPage } from './templates/fonts.js'
 export { renderSymbolsPage } from './templates/symbols.js'
-
 
 export function assetUrl(siteConfig, file) {
   const base = `${siteConfig.baseUrl}/assets/${file}`
@@ -26,10 +25,7 @@ export function assetUrl(siteConfig, file) {
  * keys/values would still terminate the script element.
  */
 function escapeJsonLd(value) {
-  return JSON.stringify(value)
-    .replaceAll('<', '\\u003c')
-    .replaceAll('>', '\\u003e')
-    .replaceAll('&', '\\u0026')
+  return JSON.stringify(value).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e').replaceAll('&', '\\u0026')
 }
 
 /**
@@ -45,7 +41,11 @@ function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDe
   if (!canonical) return html``
   let altHost = ''
   if (alternate) {
-    try { altHost = new URL(alternate).host } catch { /* alternate may be relative */ }
+    try {
+      altHost = new URL(alternate).host
+    } catch {
+      /* alternate may be relative */
+    }
   }
   const altTitle = altHost ? ` title="Original on ${Bun.escapeHTML(altHost)}"` : ''
   const ogProperties = [
@@ -62,9 +62,7 @@ function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDe
     html`  <link rel="canonical" href="${canonical}">`,
     alternate ? html`  <link rel="alternate" href="${alternate}"${raw(altTitle)}>` : null,
     html`  <meta name="robots" content="${robots ?? 'index, follow, max-image-preview:large'}">`,
-    ...ogProperties.map(([property, content]) =>
-      html`  <meta property="${property}" content="${content}">`,
-    ),
+    ...ogProperties.map(([property, content]) => html`  <meta property="${property}" content="${content}">`),
     html`  <meta name="twitter:card" content="summary">`,
     html`  <meta name="twitter:title" content="${ogTitle ?? siteConfig.siteName}">`,
     ogDesc ? html`  <meta name="twitter:description" content="${ogDesc}">` : null,
@@ -101,11 +99,11 @@ export function buildHead({ title, description, siteConfig, canonical, alternate
     jsonLd,
     robots,
   })
-  const descMeta = description
-    ? html`<meta name="description" content="${description}">`
+  const descMeta = description ? html`<meta name="description" content="${description}">` : raw('')
+  const extra = headExtra
+    ? html`
+  ${headExtra}`
     : raw('')
-  const extra = headExtra ? html`
-  ${headExtra}` : raw('')
   return html`<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -258,8 +256,8 @@ function renderScripts(siteConfig, groups) {
 // stays under the 400-line file-size ceiling. Re-exported here so
 // existing callers keep importing from './templates.js'.
 export {
-  buildBreadcrumbs,
   buildBreadcrumbListJsonLd,
+  buildBreadcrumbs,
 } from './templates/breadcrumbs.js'
 
 // ---------------------------------------------------------------------------
@@ -276,22 +274,36 @@ export function frameworkOriginalUrl(root) {
   if (root.url) return root.url
   const slug = root.slug ?? ''
   switch (root.source_type) {
-    case 'hig': return 'https://developer.apple.com/design/human-interface-guidelines'
-    case 'guidelines': return 'https://developer.apple.com/app-store/review/guidelines/'
-    case 'wwdc': return 'https://developer.apple.com/videos/'
-    case 'sample-code': return 'https://developer.apple.com/sample-code/'
-    case 'swift-evolution': return 'https://www.swift.org/swift-evolution/'
-    case 'swift-book': return 'https://docs.swift.org/swift-book/'
-    case 'swift-org': return 'https://www.swift.org/'
-    case 'apple-archive': return 'https://developer.apple.com/library/archive/'
-    case 'packages': return 'https://swiftpackageindex.com/'
-    default: return slug ? `https://developer.apple.com/documentation/${slug}` : null
+    case 'hig':
+      return 'https://developer.apple.com/design/human-interface-guidelines'
+    case 'guidelines':
+      return 'https://developer.apple.com/app-store/review/guidelines/'
+    case 'wwdc':
+      return 'https://developer.apple.com/videos/'
+    case 'sample-code':
+      return 'https://developer.apple.com/sample-code/'
+    case 'swift-evolution':
+      return 'https://www.swift.org/swift-evolution/'
+    case 'swift-book':
+      return 'https://docs.swift.org/swift-book/'
+    case 'swift-org':
+      return 'https://www.swift.org/'
+    case 'apple-archive':
+      return 'https://developer.apple.com/library/archive/'
+    case 'packages':
+      return 'https://swiftpackageindex.com/'
+    default:
+      return slug ? `https://developer.apple.com/documentation/${slug}` : null
   }
 }
 
 /** Short hostname label ("developer.apple.com") used in the link text. */
 function hostLabel(url) {
-  try { return new URL(url).host } catch { return '' }
+  try {
+    return new URL(url).host
+  } catch {
+    return ''
+  }
 }
 
 /**
@@ -349,15 +361,24 @@ export function buildDocMeta(doc) {
 export function parsePlatformsJson(platformsJson) {
   if (!platformsJson) return null
   if (typeof platformsJson === 'object') return platformsJson
-  try { return JSON.parse(platformsJson) } catch { return null }
+  try {
+    return JSON.parse(platformsJson)
+  } catch {
+    return null
+  }
 }
 
 /** Build a platform availability line from a platforms map. */
 function buildPlatformBadges(platforms) {
   if (!platforms || typeof platforms !== 'object') return null
   const platformNames = {
-    ios: 'iOS', macos: 'macOS', watchos: 'watchOS', tvos: 'tvOS',
-    visionos: 'visionOS', maccatalyst: 'Mac Catalyst', ipados: 'iPadOS',
+    ios: 'iOS',
+    macos: 'macOS',
+    watchos: 'watchOS',
+    tvos: 'tvOS',
+    visionos: 'visionOS',
+    maccatalyst: 'Mac Catalyst',
+    ipados: 'iPadOS',
   }
   const items = []
   for (const [slug, version] of Object.entries(platforms)) {
@@ -393,7 +414,5 @@ export {
 export { attr } from './lib/html.js'
 
 export { renderDocumentPage } from './templates/document.js'
-
+export { buildFrameworkTreeData, renderFrameworkPage } from './templates/framework.js'
 export { renderIndexPage } from './templates/index-page.js'
-
-export { renderFrameworkPage, buildFrameworkTreeData } from './templates/framework.js'

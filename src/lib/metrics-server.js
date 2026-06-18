@@ -80,7 +80,9 @@ export function startMetricsServer(opts) {
   logger?.info?.(`metrics endpoint listening at ${url}`)
 
   async function close() {
-    try { server?.stop?.(true) } catch {}
+    try {
+      server?.stop?.(true)
+    } catch {}
   }
 
   return { server, url, port, close }

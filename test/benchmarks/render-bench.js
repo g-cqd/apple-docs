@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Render bench (RFC 0003 §3 ≥5× warm gate): in-process native render vs the
  * `swift script.swift` spawn, for font-text and symbol-pdf. darwin-only
@@ -7,10 +8,10 @@
  *   bun test/benchmarks/render-bench.js [--iter 30]
  */
 
+import { suffix } from 'bun:ffi'
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
 import { _forceImpl, nativeFontTextSvg, nativeSymbolPdf } from '../../src/resources/render-native.js'
 import { FONT_TEXT_SCRIPT, SYMBOL_PDF_SCRIPT } from '../../src/resources/swift-templates.js'
 
@@ -58,24 +59,12 @@ function bench(label, nativeFn, spawnArgs, script) {
   return spawnMs / native
 }
 
-let ratios = []
+const ratios = []
 ratios.push(
-  bench(
-    'symbol-pdf',
-    () => nativeSymbolPdf({ name: 'heart.fill', scope: 'public' }),
-    ['heart.fill', 'public', 'regular', 'medium'],
-    SYMBOL_PDF_SCRIPT,
-  ),
+  bench('symbol-pdf', () => nativeSymbolPdf({ name: 'heart.fill', scope: 'public' }), ['heart.fill', 'public', 'regular', 'medium'], SYMBOL_PDF_SCRIPT),
 )
 if (existsSync(fontPath)) {
-  ratios.push(
-    bench(
-      'font-text',
-      () => nativeFontTextSvg({ fontPath, text: 'Typography', pointSize: 96 }),
-      [fontPath, 'Typography', '96'],
-      FONT_TEXT_SCRIPT,
-    ),
-  )
+  ratios.push(bench('font-text', () => nativeFontTextSvg({ fontPath, text: 'Typography', pointSize: 96 }), [fontPath, 'Typography', '96'], FONT_TEXT_SCRIPT))
 } else {
   console.log('font-text: skipped (corpus font absent)')
 }

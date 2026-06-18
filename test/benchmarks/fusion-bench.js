@@ -5,11 +5,12 @@
  *   swift build -c release --package-path swift
  *   bun test/benchmarks/fusion-bench.js
  */
-import { existsSync } from 'node:fs'
+
 import { suffix } from 'bun:ffi'
+import { existsSync } from 'node:fs'
 import { _resetNativeLoader } from '../../src/native/loader.js'
-import { _forceImpl, hammingSim, hybridFusion, mmrSelect } from '../../src/search/fusion-native.js'
 import { hybridFusion as jsHybrid, mmrSelect as jsMmr } from '../../src/search/fusion.js'
+import { _forceImpl, hammingSim, hybridFusion, mmrSelect } from '../../src/search/fusion-native.js'
 
 const DEV_LIB = new URL(`../../swift/.build/release/libAppleDocsCore.${suffix}`, import.meta.url).pathname
 if (!existsSync(DEV_LIB)) {
@@ -30,9 +31,7 @@ function makeLists(n) {
 
 function makeMmrInput(n, dim = 16) {
   const items = Array.from({ length: n }, (_, i) => `item/${i}`)
-  const vecs = new Map(
-    items.map((it, i) => [it, i % 5 === 0 ? null : Uint8Array.from({ length: dim }, (_, j) => (i * 31 + j * 7) % 256)]),
-  )
+  const vecs = new Map(items.map((it, i) => [it, i % 5 === 0 ? null : Uint8Array.from({ length: dim }, (_, j) => (i * 31 + j * 7) % 256)]))
   return { items, vecOf: (it) => vecs.get(it) ?? null }
 }
 

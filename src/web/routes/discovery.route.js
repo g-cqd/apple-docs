@@ -1,6 +1,6 @@
-import { textResponse, jsonResponse } from '../responses.js'
 import { VERSION } from '../../lib/version.js'
-import { buildRobotsTxt, buildApiCatalog, buildMcpServerCard, buildOpenSearchXml } from '../discovery.js'
+import { buildApiCatalog, buildMcpServerCard, buildOpenSearchXml, buildRobotsTxt } from '../discovery.js'
+import { jsonResponse, textResponse } from '../responses.js'
 
 // Discovery endpoints are a pure function of siteConfig (no corpus
 // dependency), so a flat hour of shared-cache life is safe and they're

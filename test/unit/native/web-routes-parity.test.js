@@ -12,16 +12,16 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { filtersHandler } from '../../../src/web/routes/filters.route.js'
-import { listFontsHandler, fontFacesCssHandler } from '../../../src/web/routes/fonts.route.js'
-import { symbolsIndexHandler } from '../../../src/web/routes/symbols-index.route.js'
-import { symbolsSearchHandler, symbolMetadataHandler } from '../../../src/web/routes/symbols.route.js'
-import { buildTitleIndex, buildAliasMap } from '../../../src/web/search-artifacts.js'
-import { buildFrameworkTreeData } from '../../../src/web/templates/framework.js'
-import { buildRobotsTxt, buildOpenSearchXml, buildApiCatalog, buildMcpServerCard } from '../../../src/web/discovery.js'
-import { VERSION } from '../../../src/lib/version.js'
 import { sha256 } from '../../../src/lib/hash.js'
+import { VERSION } from '../../../src/lib/version.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
+import { buildApiCatalog, buildMcpServerCard, buildOpenSearchXml, buildRobotsTxt } from '../../../src/web/discovery.js'
+import { filtersHandler } from '../../../src/web/routes/filters.route.js'
+import { fontFacesCssHandler, listFontsHandler } from '../../../src/web/routes/fonts.route.js'
+import { symbolMetadataHandler, symbolsSearchHandler } from '../../../src/web/routes/symbols.route.js'
+import { symbolsIndexHandler } from '../../../src/web/routes/symbols-index.route.js'
+import { buildAliasMap, buildTitleIndex } from '../../../src/web/search-artifacts.js'
+import { buildFrameworkTreeData } from '../../../src/web/templates/framework.js'
 
 const AD_SERVER = new URL('../../../swift/.build/release/ad-server', import.meta.url).pathname
 const PORT = 3043
@@ -54,13 +54,90 @@ if (existsSync(AD_SERVER)) {
   // metal has no root (→ COALESCE falls back to the framework slug); wwdc docs
   // carry source_metadata.year (the wwdcYears facet source).
   const DOCS = [
-    { key: 'swiftui/view', title: 'View', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Protocol', kind: 'protocol', language: 'swift', abstractText: 'A view.', urlDepth: 2 },
-    { key: 'swiftui/stack', title: 'Stack', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Structure', kind: 'struct', language: 'swift', abstractText: 'A stack.', urlDepth: 2 },
-    { key: 'uikit/uiview', title: 'UIView', framework: 'uikit', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Class', kind: 'class', language: 'occ', abstractText: 'A uiview.', urlDepth: 2 },
-    { key: 'metal/device', title: 'MTLDevice', framework: 'metal', sourceType: 'apple-docc', role: 'symbol', roleHeading: 'Class', kind: 'protocol', language: 'occ', abstractText: 'A device.', urlDepth: 2 },
-    { key: 'wwdc/talk1', title: 'Talk 1', framework: 'wwdc', sourceType: 'wwdc', role: 'article', roleHeading: 'Session', kind: 'article', language: 'swift', abstractText: 'A talk.', urlDepth: 2 },
-    { key: 'wwdc/talk2', title: 'Talk 2', framework: 'wwdc', sourceType: 'wwdc', role: 'article', roleHeading: 'Session', kind: 'article', language: 'swift', abstractText: 'A talk.', urlDepth: 2 },
-    { key: 'wwdc/talk3', title: 'Talk 3', framework: 'wwdc', sourceType: 'wwdc', role: 'article', roleHeading: 'Session', kind: 'article', language: 'swift', abstractText: 'A talk.', urlDepth: 2 },
+    {
+      key: 'swiftui/view',
+      title: 'View',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      roleHeading: 'Protocol',
+      kind: 'protocol',
+      language: 'swift',
+      abstractText: 'A view.',
+      urlDepth: 2,
+    },
+    {
+      key: 'swiftui/stack',
+      title: 'Stack',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      roleHeading: 'Structure',
+      kind: 'struct',
+      language: 'swift',
+      abstractText: 'A stack.',
+      urlDepth: 2,
+    },
+    {
+      key: 'uikit/uiview',
+      title: 'UIView',
+      framework: 'uikit',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      roleHeading: 'Class',
+      kind: 'class',
+      language: 'occ',
+      abstractText: 'A uiview.',
+      urlDepth: 2,
+    },
+    {
+      key: 'metal/device',
+      title: 'MTLDevice',
+      framework: 'metal',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      roleHeading: 'Class',
+      kind: 'protocol',
+      language: 'occ',
+      abstractText: 'A device.',
+      urlDepth: 2,
+    },
+    {
+      key: 'wwdc/talk1',
+      title: 'Talk 1',
+      framework: 'wwdc',
+      sourceType: 'wwdc',
+      role: 'article',
+      roleHeading: 'Session',
+      kind: 'article',
+      language: 'swift',
+      abstractText: 'A talk.',
+      urlDepth: 2,
+    },
+    {
+      key: 'wwdc/talk2',
+      title: 'Talk 2',
+      framework: 'wwdc',
+      sourceType: 'wwdc',
+      role: 'article',
+      roleHeading: 'Session',
+      kind: 'article',
+      language: 'swift',
+      abstractText: 'A talk.',
+      urlDepth: 2,
+    },
+    {
+      key: 'wwdc/talk3',
+      title: 'Talk 3',
+      framework: 'wwdc',
+      sourceType: 'wwdc',
+      role: 'article',
+      roleHeading: 'Session',
+      kind: 'article',
+      language: 'swift',
+      abstractText: 'A talk.',
+      urlDepth: 2,
+    },
   ]
   for (const d of DOCS) seed.upsertDocument(d)
   const stampYear = seed.db.query('UPDATE documents SET source_metadata = ? WHERE key = ?')
@@ -72,17 +149,55 @@ if (existsSync(AD_SERVER)) {
   seed.assetsFonts.upsertFontFamily({ id: 'sf-pro', displayName: 'SF Pro' })
   seed.assetsFonts.upsertFontFamily({ id: 'ny', displayName: 'New York' })
   seed.assetsFonts.upsertFontFile({ id: 'sf-pro-bold', familyId: 'sf-pro', fileName: 'SF-Pro-Bold.otf', filePath: '/x/SF-Pro-Bold.otf', format: 'otf' })
-  seed.assetsFonts.upsertFontFile({ id: 'sf-pro-regular', familyId: 'sf-pro', fileName: 'SF-Pro-Regular.otf', filePath: '/x/SF-Pro-Regular.otf', format: 'otf' })
+  seed.assetsFonts.upsertFontFile({
+    id: 'sf-pro-regular',
+    familyId: 'sf-pro',
+    fileName: 'SF-Pro-Regular.otf',
+    filePath: '/x/SF-Pro-Regular.otf',
+    format: 'otf',
+  })
   seed.assetsFonts.upsertFontFile({ id: 'ny-regular', familyId: 'ny', fileName: 'NewYork.ttf', filePath: '/x/NewYork.ttf', format: 'ttf' })
   // SF Symbols (Phase 2): catalog + FTS index; circle.fill gets a PUA codepoint
   // (→ codepoint_display on metadata), square.grid.2x2 stays null (→ omitted).
-  seed.assetsSymbols.upsertSymbol({ name: 'square.grid.2x2', scope: 'public', categories: ['ui', 'grid'], keywords: ['square', 'grid'], aliases: [], availability: { ios: '14.0', macos: '11.0' }, orderIndex: 0, bundlePath: 'sym/sq', bundleVersion: '14.6' })
-  seed.assetsSymbols.upsertSymbol({ name: 'circle.fill', scope: 'public', categories: ['shapes'], keywords: ['circle', 'fill'], aliases: ['filled.circle'], availability: { ios: '13.0' }, orderIndex: 1, bundlePath: 'sym/ci', bundleVersion: '13.0' })
-  seed.assetsSymbols.upsertSymbol({ name: 'lock.shield', scope: 'private', categories: [], keywords: ['lock', 'shield'], aliases: [], availability: null, orderIndex: 0 })
+  seed.assetsSymbols.upsertSymbol({
+    name: 'square.grid.2x2',
+    scope: 'public',
+    categories: ['ui', 'grid'],
+    keywords: ['square', 'grid'],
+    aliases: [],
+    availability: { ios: '14.0', macos: '11.0' },
+    orderIndex: 0,
+    bundlePath: 'sym/sq',
+    bundleVersion: '14.6',
+  })
+  seed.assetsSymbols.upsertSymbol({
+    name: 'circle.fill',
+    scope: 'public',
+    categories: ['shapes'],
+    keywords: ['circle', 'fill'],
+    aliases: ['filled.circle'],
+    availability: { ios: '13.0' },
+    orderIndex: 1,
+    bundlePath: 'sym/ci',
+    bundleVersion: '13.0',
+  })
+  seed.assetsSymbols.upsertSymbol({
+    name: 'lock.shield',
+    scope: 'private',
+    categories: [],
+    keywords: ['lock', 'shield'],
+    aliases: [],
+    availability: null,
+    orderIndex: 0,
+  })
   seed.assetsSymbols.updateCodepoint('public', 'circle.fill', 59440, '13.0')
   // Framework synonyms (Phase 3 aliases map).
-  try { seed.db.run("INSERT INTO framework_synonyms (canonical, alias) VALUES ('swiftui', 'su')") } catch {}
-  try { seed.db.run("INSERT INTO framework_synonyms (canonical, alias) VALUES ('uikit', 'uk')") } catch {}
+  try {
+    seed.db.run("INSERT INTO framework_synonyms (canonical, alias) VALUES ('swiftui', 'su')")
+  } catch {}
+  try {
+    seed.db.run("INSERT INTO framework_synonyms (canonical, alias) VALUES ('uikit', 'uk')")
+  } catch {}
   // Framework tree (Phase 3b): a root + active pages + 'child' relationships.
   seed.upsertRoot('treefw', 'TreeFW', 'framework', 'seed')
   const treeRootId = seed.getRootBySlug('treefw').id
@@ -94,21 +209,45 @@ if (existsSync(AD_SERVER)) {
     seed.upsertPage({ rootId: treeRootId, path, url: `https://x/${path}`, title, role, roleHeading })
   }
   seed.db.run("UPDATE documents SET framework = 'treefw' WHERE key LIKE 'treefw%'")
-  seed.replaceDocumentRelationships('treefw', [{ toKey: 'treefw/childa', relationType: 'child' }, { toKey: 'treefw/childb', relationType: 'child' }])
+  seed.replaceDocumentRelationships('treefw', [
+    { toKey: 'treefw/childa', relationType: 'child' },
+    { toKey: 'treefw/childb', relationType: 'child' },
+  ])
   seed.close()
   db = new DocsDatabase(dbPath)
-  server = Bun.spawn([
-    AD_SERVER, '--db', dbPath, '--port', String(PORT), '--threads', '2',
-    '--base-url', SITE.baseUrl, '--site-name', SITE.siteName,
-    '--search-short-name', SITE.searchShortName, '--content-signal', SITE.contentSignal,
-    '--app-version', VERSION,
-  ], { stdout: 'ignore', stderr: 'ignore' })
+  server = Bun.spawn(
+    [
+      AD_SERVER,
+      '--db',
+      dbPath,
+      '--port',
+      String(PORT),
+      '--threads',
+      '2',
+      '--base-url',
+      SITE.baseUrl,
+      '--site-name',
+      SITE.siteName,
+      '--search-short-name',
+      SITE.searchShortName,
+      '--content-signal',
+      SITE.contentSignal,
+      '--app-version',
+      VERSION,
+    ],
+    { stdout: 'ignore', stderr: 'ignore' },
+  )
 }
 
 describe.skipIf(!existsSync(AD_SERVER))('web-routes parity (Swift ad-server == JS web handlers)', () => {
   beforeAll(async () => {
     for (let i = 0; i < 100; i++) {
-      try { if ((await fetch(`http://127.0.0.1:${PORT}/healthz`)).ok) { ready = true; break } } catch {}
+      try {
+        if ((await fetch(`http://127.0.0.1:${PORT}/healthz`)).ok) {
+          ready = true
+          break
+        }
+      } catch {}
       await Bun.sleep(80)
     }
   })
@@ -272,7 +411,7 @@ describe.skipIf(!existsSync(AD_SERVER))('web-routes parity (Swift ad-server == J
     const edges = db.getFrameworkTree('treefw')
     const { json: expected, hasTree } = buildFrameworkTreeData(root, docs, edges, { baseUrl: SITE.baseUrl })
     expect(hasTree).toBe(true)
-    const hash = sha256(expected).slice(0, 10)  // the <hash> is cache-busting; ad-server serves current
+    const hash = sha256(expected).slice(0, 10) // the <hash> is cache-busting; ad-server serves current
     const res = await fetch(`http://127.0.0.1:${PORT}/data/frameworks/treefw/tree.${hash}.json`)
     expect(res.status).toBe(200)
     expectIntrinsic(await res.text(), expected)

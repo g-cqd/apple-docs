@@ -63,7 +63,7 @@ describe('per-command Advanced subsections', () => {
 
   test('mcp help groups --concurrency/--queue/--metrics-port under Advanced', async () => {
     const help = await showHelp('mcp')
-    expect(help).toContain('advanced')   // section name case-insensitive
+    expect(help).toContain('advanced') // section name case-insensitive
     expect(help).toContain('--concurrency')
     expect(help).toContain('--queue')
     expect(help).toContain('--metrics-port')

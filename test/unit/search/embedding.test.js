@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { quantize, hamming, quantizeI8, dotI8, VECTOR_BYTES, VECTOR_DIMS } from '../../../src/search/embedding.js'
+import { describe, expect, test } from 'bun:test'
+import { dotI8, hamming, quantize, quantizeI8, VECTOR_BYTES, VECTOR_DIMS } from '../../../src/search/embedding.js'
 
 describe('quantize', () => {
   test('produces VECTOR_BYTES and sign bits in little-endian bit order', () => {

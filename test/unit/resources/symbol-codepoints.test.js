@@ -16,13 +16,9 @@
  */
 
 import { describe, expect, test } from 'bun:test'
+import { _internals, dumpSymbolCodepoints, resolveSymbolFontPath } from '../../../src/resources/apple-symbols/codepoint-dump.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { runMigrations, SCHEMA_VERSION } from '../../../src/storage/migrations/index.js'
-import {
-  dumpSymbolCodepoints,
-  resolveSymbolFontPath,
-  _internals,
-} from '../../../src/resources/apple-symbols/codepoint-dump.js'
 import { symbolMetadataHandler } from '../../../src/web/routes/symbols.route.js'
 
 describe('codepoint dump orchestrator', () => {
@@ -32,10 +28,10 @@ describe('codepoint dump orchestrator', () => {
       '{"name":"star.fill","codepoint":1049271}',
       '{"name":"bogus.symbol","codepoint":null}',
     ])
-    const { map, total, resolved, skipped } = await dumpSymbolCodepoints(
-      ['house.fill', 'star.fill', 'bogus.symbol'],
-      { fontPath: '/tmp/font.ttf', spawn: () => fakeProc },
-    )
+    const { map, total, resolved, skipped } = await dumpSymbolCodepoints(['house.fill', 'star.fill', 'bogus.symbol'], {
+      fontPath: '/tmp/font.ttf',
+      spawn: () => fakeProc,
+    })
     expect(total).toBe(3)
     expect(resolved).toBe(2)
     expect(skipped).toBe(1)
@@ -51,35 +47,26 @@ describe('codepoint dump orchestrator', () => {
       '{"name":"poisoned","codepoint":65}',
       '{"name":"clean","codepoint":1049270}',
     ])
-    const { map } = await dumpSymbolCodepoints(
-      ['poisoned', 'clean'],
-      {
-        fontPath: '/tmp/font.ttf',
-        spawn: () => fakeProc,
-        logger: { warn: (m) => warnings.push(m), debug() {}, info() {} },
-      },
-    )
+    const { map } = await dumpSymbolCodepoints(['poisoned', 'clean'], {
+      fontPath: '/tmp/font.ttf',
+      spawn: () => fakeProc,
+      logger: { warn: (m) => warnings.push(m), debug() {}, info() {} },
+    })
     expect(map.get('poisoned')).toBeNull()
     expect(map.get('clean')).toBe(1049270)
-    expect(warnings.some(w => /non-PUA/.test(w))).toBe(true)
+    expect(warnings.some((w) => /non-PUA/.test(w))).toBe(true)
   })
 
   test('returns partial results when the worker dies mid-stream', async () => {
     // Emit two lines, then close stdout. The orchestrator must keep
     // the two entries it received and not throw.
-    const fakeProc = createFakeProc([
-      '{"name":"a","codepoint":1049270}',
-      '{"name":"b","codepoint":1049271}',
-    ], { closeAfter: 2 })
+    const fakeProc = createFakeProc(['{"name":"a","codepoint":1049270}', '{"name":"b","codepoint":1049271}'], { closeAfter: 2 })
     const warnings = []
-    const { map } = await dumpSymbolCodepoints(
-      ['a', 'b', 'c', 'd'],
-      {
-        fontPath: '/tmp/font.ttf',
-        spawn: () => fakeProc,
-        logger: { warn: (m) => warnings.push(m), debug() {}, info() {} },
-      },
-    )
+    const { map } = await dumpSymbolCodepoints(['a', 'b', 'c', 'd'], {
+      fontPath: '/tmp/font.ttf',
+      spawn: () => fakeProc,
+      logger: { warn: (m) => warnings.push(m), debug() {}, info() {} },
+    })
     expect(map.size).toBe(2)
     expect(map.has('c')).toBe(false)
     expect(map.has('d')).toBe(false)
@@ -90,15 +77,33 @@ describe('codepoint dump orchestrator', () => {
     // Edge cases at every PUA boundary.
     const cases = [
       // BMP PUA: U+E000..U+F8FF
-      [0xdfff, false], [0xe000, true], [0xf000, true], [0xf8ff, true], [0xf900, false],
+      [0xdfff, false],
+      [0xe000, true],
+      [0xf000, true],
+      [0xf8ff, true],
+      [0xf900, false],
       // SPUA-A: U+F0000..U+FFFFD
-      [0xeffff, false], [0xf0000, true], [0xf8000, true], [0xffffd, true], [0xffffe, false],
+      [0xeffff, false],
+      [0xf0000, true],
+      [0xf8000, true],
+      [0xffffd, true],
+      [0xffffe, false],
       // SPUA-B: U+100000..U+10FFFD
-      [0xfffff, false], [0x100000, true], [0x108000, true], [0x10fffd, true], [0x10fffe, false],
+      [0xfffff, false],
+      [0x100000, true],
+      [0x108000, true],
+      [0x10fffd, true],
+      [0x10fffe, false],
       // Boring ASCII / Latin / Hangul fail.
-      [0, false], [0x41, false], [0x4e00, false], [0xac00, false],
+      [0, false],
+      [0x41, false],
+      [0x4e00, false],
+      [0xac00, false],
       // Out-of-range Unicode.
-      [-1, false], [0x110000, false], [Number.NaN, false], [1.5, false],
+      [-1, false],
+      [0x110000, false],
+      [Number.NaN, false],
+      [1.5, false],
     ]
     for (const [cp, expected] of cases) {
       expect(isPrivateUseCodepoint(cp)).toBe(expected)
@@ -137,11 +142,9 @@ describe('v19 migration', () => {
       const cols = db.db
         .query('SELECT name FROM pragma_table_info("sf_symbols")')
         .all()
-        .map(r => r.name)
+        .map((r) => r.name)
       expect(cols).toContain('codepoint')
-      const idx = db.db
-        .query('SELECT name FROM sqlite_master WHERE type=? AND name=?')
-        .get('index', 'idx_sf_symbols_codepoint')
+      const idx = db.db.query('SELECT name FROM sqlite_master WHERE type=? AND name=?').get('index', 'idx_sf_symbols_codepoint')
       expect(idx).not.toBe(null)
     } finally {
       db.close()
@@ -176,7 +179,7 @@ describe('v19 migration', () => {
       db.updateSfSymbolCodepoint('public', 'house.fill', 0x1004b6)
       row = db.getSfSymbol('public', 'house.fill')
       expect(row.codepoint).toBe(0x1004b6)
-      const entry = db.listSfSymbolsCatalog().find(s => s.name === 'house.fill')
+      const entry = db.listSfSymbolsCatalog().find((s) => s.name === 'house.fill')
       expect(entry.codepoint).toBe(0x1004b6)
       // Clear with null.
       db.updateSfSymbolCodepoint('public', 'house.fill', null)
@@ -191,18 +194,18 @@ describe('v19 migration', () => {
     try {
       db.upsertSfSymbol({ name: 'house.fill', scope: 'public', categories: [], keywords: [], orderIndex: 0 })
       db.updateSfSymbolCodepoint('public', 'house.fill', 0x1004b6, '8.0')
-      let entry = db.listSfSymbolsCatalog().find(s => s.name === 'house.fill')
+      let entry = db.listSfSymbolsCatalog().find((s) => s.name === 'house.fill')
       expect(entry.codepoint).toBe(0x1004b6)
       expect(entry.codepointVersion).toBe('8.0')
       // Re-stamp against a newer font: the version follows the codepoint so the
       // mapping always describes the font it was resolved from.
       db.updateSfSymbolCodepoint('public', 'house.fill', 0x1004c0, '9.0')
-      entry = db.listSfSymbolsCatalog().find(s => s.name === 'house.fill')
+      entry = db.listSfSymbolsCatalog().find((s) => s.name === 'house.fill')
       expect(entry.codepoint).toBe(0x1004c0)
       expect(entry.codepointVersion).toBe('9.0')
       // Legacy/unversioned stamp leaves the version null.
       db.updateSfSymbolCodepoint('public', 'house.fill', 0x1004b6)
-      expect(db.listSfSymbolsCatalog().find(s => s.name === 'house.fill').codepointVersion).toBe(null)
+      expect(db.listSfSymbolsCatalog().find((s) => s.name === 'house.fill').codepointVersion).toBe(null)
     } finally {
       db.close()
     }
@@ -250,12 +253,11 @@ describe('/api/symbols/<scope>/<name>.json route', () => {
       })
       // Leave codepoint NULL.
       const ctx = { db }
-      const response = symbolMetadataHandler(
-        new Request('http://x/api/symbols/public/orphan.json'),
-        ctx,
-        new URL('http://x/api/symbols/public/orphan.json'),
-        ['/api/symbols/public/orphan.json', 'public', 'orphan'],
-      )
+      const response = symbolMetadataHandler(new Request('http://x/api/symbols/public/orphan.json'), ctx, new URL('http://x/api/symbols/public/orphan.json'), [
+        '/api/symbols/public/orphan.json',
+        'public',
+        'orphan',
+      ])
       const body = await response.json()
       expect('codepoint' in body && body.codepoint != null).toBe(false)
       expect('codepoint_display' in body).toBe(false)
@@ -296,7 +298,7 @@ function createFakeProc(lines, { closeAfter } = {}) {
   // Build a ReadableStream that emits the requested lines sequentially
   // and (optionally) closes early to simulate worker death.
   const emit = closeAfter != null ? lines.slice(0, closeAfter) : lines
-  const text = emit.map(line => `${line}\n`).join('')
+  const text = emit.map((line) => `${line}\n`).join('')
   const buffer = new TextEncoder().encode(text)
   let cursor = 0
   let stdinClosed = false
@@ -313,16 +315,24 @@ function createFakeProc(lines, { closeAfter } = {}) {
       controller.enqueue(slice)
     },
   })
-  const stderr = new ReadableStream({ start(controller) { controller.close() } })
+  const stderr = new ReadableStream({
+    start(controller) {
+      controller.close()
+    },
+  })
   return {
     stdout,
     stderr,
     stdin: {
       write() {},
       flush() {},
-      end() { stdinClosed = true },
+      end() {
+        stdinClosed = true
+      },
     },
     kill() {},
-    get _stdinClosed() { return stdinClosed },
+    get _stdinClosed() {
+      return stdinClosed
+    },
   }
 }

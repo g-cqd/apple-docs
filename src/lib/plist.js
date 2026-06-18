@@ -27,10 +27,7 @@ export async function readPlist(path) {
   // the test suite plus the actual XML plists Apple ships under
   // CoreGlyphs.bundle (symbol_search, symbol_categories, …).
   try {
-    const { stdout, stderr, exitCode } = await spawnWithDeadline(
-      ['plutil', '-convert', 'json', '-o', '-', path],
-      { deadlineMs: 10_000 },
-    )
+    const { stdout, stderr, exitCode } = await spawnWithDeadline(['plutil', '-convert', 'json', '-o', '-', path], { deadlineMs: 10_000 })
     if (exitCode === 0) return JSON.parse(new TextDecoder().decode(stdout))
     // Distinguish "binary not on PATH" from "plutil ran but rejected the
     // input". For the former we try the JS fallback; for the latter we
@@ -49,14 +46,15 @@ function parseXmlPlist(text) {
   if (text.startsWith('bplist')) {
     throw new ParseError('parseXmlPlist: binary plists require plutil; install Apple developer tools')
   }
-  const decode = (s) => s
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(Number.parseInt(n, 16)))
-    .replace(/&amp;/g, '&')
+  const decode = (s) =>
+    s
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(Number.parseInt(n, 16)))
+      .replace(/&amp;/g, '&')
 
   let i = 0
   const len = text.length
@@ -158,4 +156,3 @@ function parseXmlPlist(text) {
   }
   throw new ParseError('parseXmlPlist: no <plist> root found')
 }
-

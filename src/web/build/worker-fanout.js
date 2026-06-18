@@ -4,11 +4,10 @@ import { ValidationError } from '../../lib/errors.js'
  * across N child Bun subprocesses, each rendering its own slice.
  */
 
-import { join } from 'node:path'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 
 function partitionFrameworksByDocCount(roots, db, n) {
-  const counts = roots.map(root => ({
+  const counts = roots.map((root) => ({
     root,
     count: db.db.query('SELECT COUNT(*) as c FROM documents WHERE framework = ?').get(root.slug).c,
   }))
@@ -20,7 +19,7 @@ function partitionFrameworksByDocCount(roots, db, n) {
     smallest.slugs.push(root.slug)
     smallest.total += count
   }
-  return bins.filter(b => b.slugs.length > 0)
+  return bins.filter((b) => b.slugs.length > 0)
 }
 
 /**
@@ -50,7 +49,7 @@ export async function runWorkerBuilds({ roots, siteConfig, workers, concurrency,
   }
   const totalDocs = bins.reduce((s, b) => s + b.total, 0)
   logger?.info?.(
-    `Fan-out: ${bins.length} workers × ${concurrency} concurrency · ${totalDocs.toLocaleString('en-US')} docs partitioned across ${bins.map(b => b.total.toLocaleString('en-US')).join(', ')}`
+    `Fan-out: ${bins.length} workers × ${concurrency} concurrency · ${totalDocs.toLocaleString('en-US')} docs partitioned across ${bins.map((b) => b.total.toLocaleString('en-US')).join(', ')}`,
   )
 
   // Resolve the CLI entrypoint relative to this module so worker processes
@@ -61,21 +60,34 @@ export async function runWorkerBuilds({ roots, siteConfig, workers, concurrency,
 
   const procs = bins.map((bin, i) => {
     const args = [
-      'run', cliJs, 'web', 'build',
-      '--out', outDir,
-      '--frameworks', bin.slugs.join(','),
-      '--concurrency', String(concurrency),
-      '--workers', '1',
+      'run',
+      cliJs,
+      'web',
+      'build',
+      '--out',
+      outDir,
+      '--frameworks',
+      bin.slugs.join(','),
+      '--concurrency',
+      String(concurrency),
+      '--workers',
+      '1',
       '--incremental',
     ]
-    if (siteConfig.baseUrl) { args.push('--base-url', siteConfig.baseUrl) }
-    if (siteConfig.siteName) { args.push('--site-name', siteConfig.siteName) }
+    if (siteConfig.baseUrl) {
+      args.push('--base-url', siteConfig.baseUrl)
+    }
+    if (siteConfig.siteName) {
+      args.push('--site-name', siteConfig.siteName)
+    }
     // Don't pass `--full` to workers. The orchestrator already cleared the
     // render index. Workers must run in incremental mode so they write
     // directly to the shared `outDir` (= the orchestrator's staging dir)
     // instead of each spinning up its own staging dir + atomic swap, which
     // would race-replace the orchestrator's output.
-    logger?.info?.(`worker[${i + 1}/${bins.length}] starting (${bin.slugs.length} frameworks, ${bin.total.toLocaleString('en-US')} docs): ${bin.slugs.slice(0, 4).join(', ')}${bin.slugs.length > 4 ? '…' : ''}`)
+    logger?.info?.(
+      `worker[${i + 1}/${bins.length}] starting (${bin.slugs.length} frameworks, ${bin.total.toLocaleString('en-US')} docs): ${bin.slugs.slice(0, 4).join(', ')}${bin.slugs.length > 4 ? '…' : ''}`,
+    )
     return Bun.spawn([bunBin, ...args], {
       stdout: 'inherit',
       stderr: 'inherit',
@@ -89,8 +101,8 @@ export async function runWorkerBuilds({ roots, siteConfig, workers, concurrency,
     })
   })
 
-  const exits = await Promise.all(procs.map(p => p.exited))
-  const failedCount = exits.filter(c => c !== 0).length
+  const exits = await Promise.all(procs.map((p) => p.exited))
+  const failedCount = exits.filter((c) => c !== 0).length
   if (failedCount > 0) {
     throw new ValidationError(`${failedCount}/${exits.length} build worker(s) exited non-zero`)
   }
@@ -98,11 +110,16 @@ export async function runWorkerBuilds({ roots, siteConfig, workers, concurrency,
   // Re-read counts from the render-index for an honest aggregate. We don't
   // attempt to recover a per-worker breakdown — the children already
   // streamed their summaries to stdout.
-  const counts = db.db.query(
-    `SELECT COUNT(*) AS built FROM document_render_index ri
+  const counts = db.db
+    .query(
+      `SELECT COUNT(*) AS built FROM document_render_index ri
      JOIN documents d ON d.id = ri.doc_id
-     WHERE d.framework IN (${bins.flatMap(b => b.slugs).map(() => '?').join(',')})`
-  ).get(...bins.flatMap(b => b.slugs))
+     WHERE d.framework IN (${bins
+       .flatMap((b) => b.slugs)
+       .map(() => '?')
+       .join(',')})`,
+    )
+    .get(...bins.flatMap((b) => b.slugs))
   return {
     pagesBuilt: counts?.built ?? 0,
     pagesSkipped: 0,

@@ -55,18 +55,14 @@ const DEFAULT_NEGATIVE_TTL_MS = 30_000
 export const CACHE_NEGATIVE = Symbol('apple-docs.cache.negative')
 
 export function createCacheRegistry(ctx, opts = {}) {
-  const enabled = opts.enabled ?? (process.env.APPLE_DOCS_MCP_CACHE !== 'off')
+  const enabled = opts.enabled ?? process.env.APPLE_DOCS_MCP_CACHE !== 'off'
   // `scale` is a uniform multiplier applied to DEFAULT_SIZES. Intended use is
   // "this box has lots of RAM, give me more headroom" — one knob instead of
   // five. Explicit per-tool overrides via `opts.sizes` win and are NOT scaled,
   // so operators can still pin individual sizes. Fractional values are fine
   // (Math.ceil keeps them integer and ≥1).
-  const scale = opts.scale != null && Number.isFinite(opts.scale) && opts.scale > 0
-    ? opts.scale
-    : 1
-  const scaled = Object.fromEntries(
-    Object.entries(DEFAULT_SIZES).map(([k, v]) => [k, Math.max(1, Math.ceil(v * scale))]),
-  )
+  const scale = opts.scale != null && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : 1
+  const scaled = Object.fromEntries(Object.entries(DEFAULT_SIZES).map(([k, v]) => [k, Math.max(1, Math.ceil(v * scale))]))
   const sizes = { ...scaled, ...(opts.sizes ?? {}) }
   const negativeTtlMs = opts.negativeTtlMs ?? DEFAULT_NEGATIVE_TTL_MS
   const now = opts.now ?? (() => Date.now())
@@ -93,9 +89,7 @@ export function createCacheRegistry(ctx, opts = {}) {
         }
         counter.misses++
         const value = await handler(args)
-        const expiresAt = value?.[CACHE_NEGATIVE] === true
-          ? now() + negativeTtlMs
-          : null
+        const expiresAt = value?.[CACHE_NEGATIVE] === true ? now() + negativeTtlMs : null
         cache.set(key, value, expiresAt)
         return value
       }
@@ -128,7 +122,10 @@ export function createCacheRegistry(ctx, opts = {}) {
     },
     invalidate() {
       for (const cache of caches.values()) cache.clear()
-      for (const counter of counters.values()) { counter.hits = 0; counter.misses = 0 }
+      for (const counter of counters.values()) {
+        counter.hits = 0
+        counter.misses = 0
+      }
       stamper.refresh()
     },
   }
@@ -143,7 +140,11 @@ export function createStamper(ctx, opts = {}) {
 
   function compute() {
     let mtime = 0
-    try { mtime = dbPath ? Math.floor(statSync(dbPath).mtimeMs) : 0 } catch { mtime = 0 }
+    try {
+      mtime = dbPath ? Math.floor(statSync(dbPath).mtimeMs) : 0
+    } catch {
+      mtime = 0
+    }
     return `${schemaVersion}:${mtime}`
   }
 
@@ -164,7 +165,11 @@ export function createStamper(ctx, opts = {}) {
 }
 
 function safeSchemaVersion(ctx) {
-  try { return ctx?.db?.getSchemaVersion?.() ?? 0 } catch { return 0 }
+  try {
+    return ctx?.db?.getSchemaVersion?.() ?? 0
+  } catch {
+    return 0
+  }
 }
 
 export function cacheKey(tool, args, stamp) {
@@ -190,7 +195,9 @@ class LruCache {
     // Map<key, { value, expiresAt: number | null }>
     this.map = new Map()
   }
-  get size() { return this.map.size }
+  get size() {
+    return this.map.size
+  }
   get(key, nowMs = Date.now()) {
     if (!this.map.has(key)) return undefined
     const entry = this.map.get(key)
@@ -211,5 +218,7 @@ class LruCache {
       this.map.delete(oldest)
     }
   }
-  clear() { this.map.clear() }
+  clear() {
+    this.map.clear()
+  }
 }

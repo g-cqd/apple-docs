@@ -66,7 +66,11 @@ export async function validateZstArchive(archivePath, destDir, deps = {}) {
     }
     return validateTarListing(await stdoutP, destDir)
   } finally {
-    try { rmSync(tarPath, { force: true }) } catch { /* tolerate */ }
+    try {
+      rmSync(tarPath, { force: true })
+    } catch {
+      /* tolerate */
+    }
   }
 }
 

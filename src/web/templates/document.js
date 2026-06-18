@@ -1,7 +1,9 @@
+import { renderHtml } from '../../content/render-html.js'
+import { safeWebDocKey } from '../../lib/safe-path.js'
 import { html, raw } from '../lib/html.js'
 import {
-  buildBreadcrumbs,
   buildBreadcrumbListJsonLd,
+  buildBreadcrumbs,
   buildDocMeta,
   buildFooter,
   buildHead,
@@ -14,8 +16,6 @@ import {
   parsePlatformsJson,
   renderTocHtml,
 } from '../templates.js'
-import { renderHtml } from '../../content/render-html.js'
-import { safeWebDocKey } from '../../lib/safe-path.js'
 
 export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   const sectionsList = sections ?? []
@@ -32,22 +32,20 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
 
   // Detect multi-language declarations for language toggle
   const hasLangToggle = content.includes('data-languages=')
-  const breadcrumbs = doc.key ? buildBreadcrumbs(doc.key, {
-    title: doc.title,
-    framework: doc.framework_display ?? doc.framework,
-    ancestorTitles: opts.ancestorTitles,
-    knownKeys: opts.knownKeys,
-  }) : null
+  const breadcrumbs = doc.key
+    ? buildBreadcrumbs(doc.key, {
+        title: doc.title,
+        framework: doc.framework_display ?? doc.framework,
+        ancestorTitles: opts.ancestorTitles,
+        knownKeys: opts.knownKeys,
+      })
+    : null
 
   // Sort sections for TOC (same order as renderHtml uses)
-  const orderedSections = sectionsList.slice().sort((a, b) =>
-    (a.sortOrder ?? a.sort_order ?? 0) - (b.sortOrder ?? b.sort_order ?? 0)
-  )
+  const orderedSections = sectionsList.slice().sort((a, b) => (a.sortOrder ?? a.sort_order ?? 0) - (b.sortOrder ?? b.sort_order ?? 0))
   const tocItems = buildPageToc(orderedSections)
 
-  const relationshipSection = orderedSections.find(s =>
-    (s.sectionKind ?? s.section_kind) === 'relationships'
-  )
+  const relationshipSection = orderedSections.find((s) => (s.sectionKind ?? s.section_kind) === 'relationships')
 
   const hasSidebar = tocItems.length >= 2
 
@@ -85,9 +83,7 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
     }
   }
 
-  const sidebar = sidebarParts.length > 0
-    ? html`<aside class="doc-sidebar">${interleave(sidebarParts, html`\n`)}</aside>`
-    : null
+  const sidebar = sidebarParts.length > 0 ? html`<aside class="doc-sidebar">${interleave(sidebarParts, html`\n`)}</aside>` : null
 
   const hasSidebarFinal = sidebarParts.length > 0
 
@@ -98,21 +94,32 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
   // Advertise the Markdown variant (served at /docs/<key>.md) so agents
   // discover it without sniffing. A distinct URL → distinct cache key, so it
   // caches cleanly alongside the HTML (no Vary: Accept hazard).
-  const mdAlternate = (siteConfig.markdownDocs && webKey)
-    ? html`<link rel="alternate" type="text/markdown" href="${siteConfig.baseUrl || ''}/docs/${webKey}.md">`
-    : null
+  const mdAlternate =
+    siteConfig.markdownDocs && webKey ? html`<link rel="alternate" type="text/markdown" href="${siteConfig.baseUrl || ''}/docs/${webKey}.md">` : null
   const docDescription = doc.abstract_text || `${doc.title ?? ''} — Apple developer documentation`.trim()
   const platforms = parsePlatformsJson(doc.platforms_json) || {}
-  const platformNames = Object.keys(platforms).filter(k => platforms[k]).map(k => ({
-    ios: 'iOS', macos: 'macOS', watchos: 'watchOS', tvos: 'tvOS', visionos: 'visionOS',
-    maccatalyst: 'Mac Catalyst', ipados: 'iPadOS',
-  }[k] ?? k))
-  const programmingLanguage = (doc.language === 'occ' || doc.language === 'objc') ? 'Objective-C' : 'Swift'
-  const breadcrumbJsonLd = doc.key ? buildBreadcrumbListJsonLd(doc.key, siteConfig.baseUrl, {
-    title: doc.title,
-    framework: doc.framework_display ?? doc.framework,
-    ancestorTitles: opts.ancestorTitles,
-  }) : null
+  const platformNames = Object.keys(platforms)
+    .filter((k) => platforms[k])
+    .map(
+      (k) =>
+        ({
+          ios: 'iOS',
+          macos: 'macOS',
+          watchos: 'watchOS',
+          tvos: 'tvOS',
+          visionos: 'visionOS',
+          maccatalyst: 'Mac Catalyst',
+          ipados: 'iPadOS',
+        })[k] ?? k,
+    )
+  const programmingLanguage = doc.language === 'occ' || doc.language === 'objc' ? 'Objective-C' : 'Swift'
+  const breadcrumbJsonLd = doc.key
+    ? buildBreadcrumbListJsonLd(doc.key, siteConfig.baseUrl, {
+        title: doc.title,
+        framework: doc.framework_display ?? doc.framework,
+        ancestorTitles: opts.ancestorTitles,
+      })
+    : null
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'TechArticle',
@@ -192,10 +199,18 @@ function enrichTopicItems(sections, resolveRoleHeadings) {
     const raw = section.contentJson ?? section.content_json
     let contentJson = null
     if (typeof raw === 'string') {
-      try { contentJson = JSON.parse(raw) } catch { continue }
+      try {
+        contentJson = JSON.parse(raw)
+      } catch {
+        continue
+      }
     } else if (typeof raw === 'object' && raw !== null) {
       // Defensive clone — never mutate a shared upstream object.
-      try { contentJson = structuredClone(raw) } catch { continue }
+      try {
+        contentJson = structuredClone(raw)
+      } catch {
+        continue
+      }
     }
     if (!Array.isArray(contentJson)) continue
 

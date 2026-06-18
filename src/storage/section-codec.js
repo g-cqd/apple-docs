@@ -37,11 +37,7 @@ export function encodeSectionContent(text) {
  */
 export function decodeSectionContent(value) {
   if (value == null || typeof value === 'string') return value
-  if (
-    value.length >= 4 &&
-    value[0] === ZSTD_MAGIC[0] && value[1] === ZSTD_MAGIC[1] &&
-    value[2] === ZSTD_MAGIC[2] && value[3] === ZSTD_MAGIC[3]
-  ) {
+  if (value.length >= 4 && value[0] === ZSTD_MAGIC[0] && value[1] === ZSTD_MAGIC[1] && value[2] === ZSTD_MAGIC[2] && value[3] === ZSTD_MAGIC[3]) {
     return Buffer.from(Bun.zstdDecompressSync(value)).toString('utf8')
   }
   // Non-zstd blob (shouldn't happen) — best-effort UTF-8 decode.

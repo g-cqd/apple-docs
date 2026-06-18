@@ -21,7 +21,7 @@
 
 import { safeCall } from '../../lib/safe-call.js'
 import { encodeVersion } from '../../lib/version-encode.js'
-import { encodeSectionContent, decodeSectionContent } from '../section-codec.js'
+import { decodeSectionContent, encodeSectionContent } from '../section-codec.js'
 
 // Column projection shared across the four search variants. Bundled here
 // so a future schema column addition only has to land in one place.
@@ -69,28 +69,31 @@ const FILTER_PREDICATES = `
 // but the param derivation (encodeVersion, sources JSON, track LIKE) stays the
 // single JS source of truth.
 export function buildFilterParams({
-  framework = null, kind = null, language = null, sourceType = null,
-  sources = null, year = null, track = null, deprecatedMode = 'include',
-  minIos = null, minMacos = null, minWatchos = null, minTvos = null, minVisionos = null,
+  framework = null,
+  kind = null,
+  language = null,
+  sourceType = null,
+  sources = null,
+  year = null,
+  track = null,
+  deprecatedMode = 'include',
+  minIos = null,
+  minMacos = null,
+  minWatchos = null,
+  minTvos = null,
+  minVisionos = null,
 } = {}) {
   // Pack multi-source as a JSON array string for json_each().
   // null → no filter; single-element list → equivalent to $source_type.
-  const sourcesJson = Array.isArray(sources) && sources.length > 0
-    ? JSON.stringify(sources)
-    : (sources instanceof Set && sources.size > 0
-      ? JSON.stringify([...sources])
-      : null)
+  const sourcesJson =
+    Array.isArray(sources) && sources.length > 0 ? JSON.stringify(sources) : sources instanceof Set && sources.size > 0 ? JSON.stringify([...sources]) : null
   // Track filter is substring-matched (lowercase) so "graphics" matches
   // "Graphics & Games". $track_like has the `%...%` wrappers baked in.
-  const trackLike = typeof track === 'string' && track.trim()
-    ? `%${track.trim().toLowerCase()}%`
-    : null
+  const trackLike = typeof track === 'string' && track.trim() ? `%${track.trim().toLowerCase()}%` : null
   // Deprecated mode is one of 'include' | 'exclude' | 'only'. The
   // FILTER_PREDICATES OR chain selects which branch applies — pass
   // through verbatim with a safe fallback.
-  const deprecated = ['include', 'exclude', 'only'].includes(deprecatedMode)
-    ? deprecatedMode
-    : 'include'
+  const deprecated = ['include', 'exclude', 'only'].includes(deprecatedMode) ? deprecatedMode : 'include'
   return {
     $framework: framework,
     $kind: kind,
@@ -170,13 +173,9 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
   // Availability probe (§10(B)): LIMIT 1 stops at the first row; COUNT(*)
   // on this FTS5 index scans all 358k rows (~130ms warm, 43% of search CPU).
   const bodyExistsStmt = hasBodyFtsTable ? db.query('SELECT 1 FROM documents_body_fts LIMIT 1') : null
-  const bodyInsertStmt = hasBodyFtsTable
-    ? db.query('INSERT OR REPLACE INTO documents_body_fts(rowid, body) VALUES ($id, $body)')
-    : null
+  const bodyInsertStmt = hasBodyFtsTable ? db.query('INSERT OR REPLACE INTO documents_body_fts(rowid, body) VALUES ($id, $body)') : null
   const bodyClearStmt = hasBodyFtsTable ? db.query('DELETE FROM documents_body_fts') : null
-  const bodyDeleteByIdStmt = hasBodyFtsTable
-    ? db.query('DELETE FROM documents_body_fts WHERE rowid = ?')
-    : null
+  const bodyDeleteByIdStmt = hasBodyFtsTable ? db.query('DELETE FROM documents_body_fts WHERE rowid = ?') : null
 
   // Fuzzy support
   const trigramCandidatesStmt = hasTrigramTable
@@ -283,7 +282,8 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
       const safe = (ids ?? []).map(Number).filter(Number.isInteger)
       if (safe.length === 0) return []
       const placeholders = safe.map(() => '?').join(',')
-      return db.query(`
+      return db
+        .query(`
         SELECT d.id, d.key as path, d.title, d.role, d.role_heading, d.abstract_text as abstract,
                d.declaration_text as declaration, d.platforms_json as platforms,
                COALESCE(r.display_name, d.framework) as framework, COALESCE(r.slug, d.framework) as root_slug,
@@ -292,7 +292,8 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
                d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos
         FROM documents d LEFT JOIN roots r ON r.slug = d.framework
         WHERE d.id IN (${placeholders})
-      `).all(...safe)
+      `)
+        .all(...safe)
     },
     /** FTS5 main planner. Fires bm25-ranked rows tagged with a tier 0-3. */
     searchPages(ftsQuery, rawQuery, opts = {}) {
@@ -316,22 +317,24 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
     searchTrigram(query, opts = {}) {
       if (!searchTrigramStmt) return []
       return safeCall(
-        () => searchTrigramStmt.all({
-          $query: query,
-          $limit: opts.limit ?? 100,
-          ...buildFilterParams(opts),
-        }),
+        () =>
+          searchTrigramStmt.all({
+            $query: query,
+            $limit: opts.limit ?? 100,
+            ...buildFilterParams(opts),
+          }),
         { default: [], log: 'warn-once', label: 'search.trigram' },
       )
     },
     searchBody(ftsQuery, opts = {}) {
       if (!searchBodyStmt) return []
       return safeCall(
-        () => searchBodyStmt.all({
-          $query: ftsQuery,
-          $limit: opts.limit ?? 100,
-          ...buildFilterParams(opts),
-        }),
+        () =>
+          searchBodyStmt.all({
+            $query: ftsQuery,
+            $limit: opts.limit ?? 100,
+            ...buildFilterParams(opts),
+          }),
         { default: [], log: 'warn-once', label: 'search.body' },
       )
     },
@@ -398,7 +401,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
     getFrameworkSynonyms(slug) {
       if (!slug) return []
       const normalized = slug.toLowerCase()
-      return frameworkSynonymsStmt.all(normalized, normalized).map(r => r.alias ?? r.canonical)
+      return frameworkSynonymsStmt.all(normalized, normalized).map((r) => r.alias ?? r.canonical)
     },
   }
 }

@@ -93,11 +93,13 @@ export function extractMetadata(json) {
   const abstract = renderInlineToText(json.abstract ?? [])
 
   // Platforms
-  const platforms = (meta.platforms ?? []).map(p => {
-    const name = p.name ?? ''
-    const intro = p.introducedAt ?? ''
-    return intro ? `${name} ${intro}+` : name
-  }).filter(Boolean)
+  const platforms = (meta.platforms ?? [])
+    .map((p) => {
+      const name = p.name ?? ''
+      const intro = p.introducedAt ?? ''
+      return intro ? `${name} ${intro}+` : name
+    })
+    .filter(Boolean)
 
   // Declaration: from primaryContentSections where kind === 'declarations'
   let declaration = null
@@ -105,7 +107,7 @@ export function extractMetadata(json) {
     if (section.kind === 'declarations') {
       const decl = section.declarations?.[0]
       if (decl?.tokens) {
-        declaration = decl.tokens.map(t => t.text).join('')
+        declaration = decl.tokens.map((t) => t.text).join('')
       }
       break
     }
@@ -120,16 +122,26 @@ export function extractMetadata(json) {
 export function renderInlineToText(nodes) {
   if (!Array.isArray(nodes) || nodes.length === 0) return null
 
-  return nodes.map(node => {
-    switch (node.type) {
-      case 'text': return node.text ?? ''
-      case 'codeVoice': return node.code ?? ''
-      case 'emphasis': return renderInlineToText(node.inlineContent ?? []) ?? ''
-      case 'strong': return renderInlineToText(node.inlineContent ?? []) ?? ''
-      case 'reference': return node.title ?? node.identifier ?? ''
-      case 'newTerm': return renderInlineToText(node.inlineContent ?? []) ?? ''
-      case 'inlineHead': return renderInlineToText(node.inlineContent ?? []) ?? ''
-      default: return node.text ?? node.code ?? ''
-    }
-  }).join('')
+  return nodes
+    .map((node) => {
+      switch (node.type) {
+        case 'text':
+          return node.text ?? ''
+        case 'codeVoice':
+          return node.code ?? ''
+        case 'emphasis':
+          return renderInlineToText(node.inlineContent ?? []) ?? ''
+        case 'strong':
+          return renderInlineToText(node.inlineContent ?? []) ?? ''
+        case 'reference':
+          return node.title ?? node.identifier ?? ''
+        case 'newTerm':
+          return renderInlineToText(node.inlineContent ?? []) ?? ''
+        case 'inlineHead':
+          return renderInlineToText(node.inlineContent ?? []) ?? ''
+        default:
+          return node.text ?? node.code ?? ''
+      }
+    })
+    .join('')
 }

@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,7 +6,12 @@ import { createLogger, isoOffset, redactSensitive } from '../../../ops/lib/logge
 
 function captureStream() {
   const chunks = []
-  return { chunks, write(s) { chunks.push(s) } }
+  return {
+    chunks,
+    write(s) {
+      chunks.push(s)
+    },
+  }
 }
 
 describe('isoOffset', () => {
@@ -58,7 +63,7 @@ describe('createLogger', () => {
 
   test('logPath() tees output to disk', () => {
     const dir = mkdtempSync(join(tmpdir(), 'logger-test-'))
-    const logPath = join(dir, 'a/b/out.log')  // ensure mkdir -p path
+    const logPath = join(dir, 'a/b/out.log') // ensure mkdir -p path
     try {
       const log = createLogger({ logPath, stream: { write() {} } })
       log.say('to disk')

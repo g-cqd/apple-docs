@@ -1,4 +1,4 @@
-import { fetchHtmlPage, checkHtmlPage } from '../apple/api.js'
+import { checkHtmlPage, fetchHtmlPage } from '../apple/api.js'
 import { parseHtmlToNormalized } from '../content/parse-html.js'
 import { createLinkResolver } from '../lib/link-resolver.js'
 import { SourceAdapter } from './base.js'
@@ -96,7 +96,7 @@ export class SwiftOrgAdapter extends SourceAdapter {
     }
 
     const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
-    const keys = CURATED_PATHS.map(path => `${ROOT_SLUG}/${path}`)
+    const keys = CURATED_PATHS.map((path) => `${ROOT_SLUG}/${path}`)
 
     return this.validateDiscoveryResult({
       keys,
@@ -166,32 +166,28 @@ export class SwiftOrgAdapter extends SourceAdapter {
     const links = getEntryPointsForParent(key)
     if (links.length === 0) return
 
-    const order = result.sections.length === 0
-      ? 0
-      : Math.max(...result.sections.map(s => s.sortOrder ?? 0)) + 1
+    const order = result.sections.length === 0 ? 0 : Math.max(...result.sections.map((s) => s.sortOrder ?? 0)) + 1
 
-    const items = links.map(link => ({
+    const items = links.map((link) => ({
       identifier: link.key,
       key: link.key,
       title: link.title,
-      abstract: link.summary
-        ? [{ type: 'text', text: link.summary }]
-        : null,
+      abstract: link.summary ? [{ type: 'text', text: link.summary }] : null,
     }))
 
-    const contentText = links
-      .map(l => `${l.title}: ${l.summary ?? ''}`.trim())
-      .join('\n')
+    const contentText = links.map((l) => `${l.title}: ${l.summary ?? ''}`.trim()).join('\n')
 
     result.sections.push({
       sectionKind: 'topics',
       heading: 'Related Documentation',
       contentText,
-      contentJson: JSON.stringify([{
-        title: 'Related Documentation',
-        type: null,
-        items,
-      }]),
+      contentJson: JSON.stringify([
+        {
+          title: 'Related Documentation',
+          type: null,
+          items,
+        },
+      ]),
       sortOrder: order,
     })
 

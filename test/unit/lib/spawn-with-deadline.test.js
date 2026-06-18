@@ -17,9 +17,7 @@ describe('spawnWithDeadline', () => {
 
   test('throws SpawnTimeoutError when deadline elapses', async () => {
     const start = Date.now()
-    await expect(
-      spawnWithDeadline(['/bin/sleep', '5'], { deadlineMs: 200 }),
-    ).rejects.toBeInstanceOf(SpawnTimeoutError)
+    await expect(spawnWithDeadline(['/bin/sleep', '5'], { deadlineMs: 200 })).rejects.toBeInstanceOf(SpawnTimeoutError)
     const elapsed = Date.now() - start
     // Should kill within a few hundred ms past the deadline; tolerate CI jitter.
     expect(elapsed).toBeLessThan(2000)
@@ -27,10 +25,7 @@ describe('spawnWithDeadline', () => {
 
   test('caps captured stderr at stderrMaxBytes', async () => {
     // Emit ~10 KB of stderr; cap at 1 KB.
-    const result = await spawnWithDeadline(
-      ['/bin/sh', '-c', 'yes "stderr noise" | head -c 10000 1>&2; exit 0'],
-      { deadlineMs: 5000, stderrMaxBytes: 1024 },
-    )
+    const result = await spawnWithDeadline(['/bin/sh', '-c', 'yes "stderr noise" | head -c 10000 1>&2; exit 0'], { deadlineMs: 5000, stderrMaxBytes: 1024 })
     expect(result.exitCode).toBe(0)
     expect(result.stderr.length).toBeLessThan(1200) // cap + truncation marker
     expect(result.stderr).toContain('truncated')

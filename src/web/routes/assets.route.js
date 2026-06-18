@@ -1,7 +1,7 @@
 import { join } from 'node:path'
+import { minifyJs } from '../asset-bundler.js'
 import { ENTRY_BUNDLES } from '../assets-manifest.js'
 import { MIME_TYPES } from '../responses.js'
-import { minifyJs } from '../asset-bundler.js'
 
 async function getBundledJs(ctx, bundleName, entryRel) {
   // `bundleCache` stores either the resolved bundle text (string) OR the

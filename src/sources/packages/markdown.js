@@ -29,8 +29,8 @@ function reindexSections(sections) {
 
 export function ensureAbstractSection(sections, abstractText) {
   if (!abstractText) return sections
-  const next = sections.map(section => ({ ...section }))
-  const index = next.findIndex(section => section.sectionKind === 'abstract')
+  const next = sections.map((section) => ({ ...section }))
+  const index = next.findIndex((section) => section.sectionKind === 'abstract')
   if (index >= 0) {
     next[index].contentText = abstractText
     next[index].contentJson = null
@@ -73,7 +73,7 @@ export function appendMetadataSection(sections, repo, readme) {
   if (fields.length === 0) return sections
 
   return reindexSections([
-    ...sections.map(section => ({ ...section })),
+    ...sections.map((section) => ({ ...section })),
     {
       sectionKind: 'discussion',
       heading: 'Package Metadata',
@@ -111,4 +111,3 @@ export function synthesizeRepoShape({ owner, repo }, { branch, description }) {
     updated_at: null,
   }
 }
-

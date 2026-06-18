@@ -20,7 +20,7 @@ describe('createEventLoopLagSampler', () => {
     const sampler = createEventLoopLagSampler({ intervalMs: 20 })
     try {
       // Wait for at least 4 ticks worth of cadence.
-      await new Promise(r => setTimeout(r, 120))
+      await new Promise((r) => setTimeout(r, 120))
       const snap = sampler.snapshot()
       expect(snap.samples).toBeGreaterThan(0)
       expect(snap.p50).toBeGreaterThanOrEqual(0)
@@ -37,9 +37,11 @@ describe('createEventLoopLagSampler', () => {
     try {
       // Block the loop synchronously for ~80 ms — should show up in p99/max.
       const blockStart = Date.now()
-      while (Date.now() - blockStart < 80) { /* spin */ }
+      while (Date.now() - blockStart < 80) {
+        /* spin */
+      }
       // Then let the timer fire a few times after the block.
-      await new Promise(r => setTimeout(r, 100))
+      await new Promise((r) => setTimeout(r, 100))
       const snap = sampler.snapshot()
       // Floor: at least one sample should reflect the block (>= 50 ms is
       // a comfortable margin; some runtimes coalesce timers slightly).
@@ -51,10 +53,10 @@ describe('createEventLoopLagSampler', () => {
 
   test('stop() clears the interval — no further samples accrue', async () => {
     const sampler = createEventLoopLagSampler({ intervalMs: 10 })
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const before = sampler.snapshot().samples
     sampler.stop()
-    await new Promise(r => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 50))
     const after = sampler.snapshot().samples
     // Sample count is monotonically non-decreasing; since we stopped, it
     // should not have advanced.

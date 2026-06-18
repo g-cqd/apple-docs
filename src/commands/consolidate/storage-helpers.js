@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { normalizeIdentifier } from '../../apple/normalizer.js'
 import { stableStringify } from '../../storage/files.js'
@@ -47,10 +47,17 @@ export function minifyDir(dirPath, logger) {
 
   const walk = (dir) => {
     let entries
-    try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return }
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
     for (const entry of entries) {
       const full = join(dir, entry.name)
-      if (entry.isDirectory()) { walk(full); continue }
+      if (entry.isDirectory()) {
+        walk(full)
+        continue
+      }
       if (!entry.name.endsWith('.json')) continue
 
       try {

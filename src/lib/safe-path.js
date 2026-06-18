@@ -102,7 +102,7 @@ export function webKeyNeedsMapping(key) {
   if (typeof key !== 'string' || Buffer.byteLength(key, 'utf8') <= WEB_SEGMENT_MAX_BYTES) {
     return false
   }
-  return key.split('/').some(seg => Buffer.byteLength(seg, 'utf8') > WEB_SEGMENT_MAX_BYTES)
+  return key.split('/').some((seg) => Buffer.byteLength(seg, 'utf8') > WEB_SEGMENT_MAX_BYTES)
 }
 
 /**
@@ -137,24 +137,28 @@ export function safeWebDocKey(key) {
 export function validateStorageKey(rawKey) {
   if (typeof rawKey !== 'string' || rawKey.length === 0) {
     throw new ValidationError('Storage key must be a non-empty string', {
-      field: 'key', value: rawKey,
+      field: 'key',
+      value: rawKey,
     })
   }
   if (rawKey.startsWith('/') || rawKey.startsWith('~')) {
     throw new ValidationError(`Storage key must be relative, got absolute: ${rawKey}`, {
-      field: 'key', value: rawKey,
+      field: 'key',
+      value: rawKey,
     })
   }
   if (/^[A-Za-z]:[\\/]/.test(rawKey)) {
     throw new ValidationError(`Storage key must be relative, got Windows root: ${rawKey}`, {
-      field: 'key', value: rawKey,
+      field: 'key',
+      value: rawKey,
     })
   }
   const segments = rawKey.split('/')
   for (const seg of segments) {
     if (seg === '' || seg === '.' || seg === '..') {
       throw new ValidationError(`Invalid path segment "${seg}" in storage key: ${rawKey}`, {
-        field: 'key', value: rawKey,
+        field: 'key',
+        value: rawKey,
       })
     }
     // Backslashes are not separators on POSIX but they're a common smuggling
@@ -163,7 +167,8 @@ export function validateStorageKey(rawKey) {
     // OS-agnostic. NUL bytes terminate C strings — universal nope.
     if (seg.includes('\\') || seg.includes('\0')) {
       throw new ValidationError(`Storage key contains forbidden character: ${rawKey}`, {
-        field: 'key', value: rawKey,
+        field: 'key',
+        value: rawKey,
       })
     }
   }
@@ -202,10 +207,7 @@ export function keyPath(dataDir, subdir, key, ext) {
   const resolvedRoot = resolve(dataDir) + sep
   const resolvedResult = resolve(result)
   if (!resolvedResult.startsWith(resolvedRoot) && resolvedResult !== resolve(dataDir)) {
-    throw new ValidationError(
-      `Storage path escapes dataDir: ${result}`,
-      { field: 'key', value: key },
-    )
+    throw new ValidationError(`Storage path escapes dataDir: ${result}`, { field: 'key', value: key })
   }
   return result
 }

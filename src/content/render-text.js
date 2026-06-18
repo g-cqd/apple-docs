@@ -8,20 +8,21 @@ export function renderPlainText(document, sections = []) {
   const native = nativePlainText(document, sections)
   if (native !== null) return native
   const doc = coerceDocument(document)
-  const orderedSections = sections
-    .map(coerceSection)
-    .sort((a, b) => a.sortOrder - b.sortOrder)
+  const orderedSections = sections.map(coerceSection).sort((a, b) => a.sortOrder - b.sortOrder)
 
   const parts = [
     doc.title,
     doc.abstractText,
     doc.declarationText,
     doc.headings,
-    ...orderedSections.map(section => {
+    ...orderedSections.map((section) => {
       const body = [section.heading, section.contentText].filter(Boolean).join('\n')
       return body.trim() || null
     }),
   ].filter(Boolean)
 
-  return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim()
+  return parts
+    .join('\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }

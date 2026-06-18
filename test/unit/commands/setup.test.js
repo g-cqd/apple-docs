@@ -1,13 +1,13 @@
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test'
-import { mkdtempSync, rmSync, } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
-import { snapshotBuild } from '../../../src/commands/snapshot.js'
-import { setup } from '../../../src/commands/setup.js'
-import { createLogger } from '../../../src/lib/logger.js'
-import { setResolvedGitHubToken } from '../../../src/lib/github.js'
+import { join } from 'node:path'
 import { fetchLatestRelease, macosMajor } from '../../../src/commands/setup/helpers.js'
+import { setup } from '../../../src/commands/setup.js'
+import { snapshotBuild } from '../../../src/commands/snapshot.js'
+import { setResolvedGitHubToken } from '../../../src/lib/github.js'
+import { createLogger } from '../../../src/lib/logger.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 
 let dataDir
 let db
@@ -20,7 +20,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  try { db.close() } catch {}
+  try {
+    db.close()
+  } catch {}
   rmSync(dataDir, { recursive: true, force: true })
 })
 
@@ -67,10 +69,7 @@ describe('setup', () => {
     })
 
     const snapshotOutDir = mkdtempSync(join(tmpdir(), 'apple-docs-snap-out-'))
-    const snapshotResult = await snapshotBuild(
-      { out: snapshotOutDir, tag: 'test-release-1' },
-      { db: sourceDb, dataDir: sourceDir, logger },
-    )
+    const snapshotResult = await snapshotBuild({ out: snapshotOutDir, tag: 'test-release-1' }, { db: sourceDb, dataDir: sourceDir, logger })
     sourceDb.close()
 
     // Read the built archive and checksum
@@ -83,22 +82,25 @@ describe('setup', () => {
       const urlStr = String(url)
 
       if (urlStr.includes('/releases/latest')) {
-        return new Response(JSON.stringify({
-          tag_name: 'test-release-1',
-          published_at: '2026-04-13T00:00:00Z',
-          assets: [
-            {
-              name: 'apple-docs-full-test-release-1.tar.zst',
-              size: archiveBytes.byteLength,
-              browser_download_url: 'https://fake.github.com/archive.tar.gz',
-            },
-            {
-              name: 'apple-docs-full-test-release-1.tar.zst.sha256',
-              size: checksumText.length,
-              browser_download_url: 'https://fake.github.com/checksum.sha256',
-            },
-          ],
-        }), { status: 200 })
+        return new Response(
+          JSON.stringify({
+            tag_name: 'test-release-1',
+            published_at: '2026-04-13T00:00:00Z',
+            assets: [
+              {
+                name: 'apple-docs-full-test-release-1.tar.zst',
+                size: archiveBytes.byteLength,
+                browser_download_url: 'https://fake.github.com/archive.tar.gz',
+              },
+              {
+                name: 'apple-docs-full-test-release-1.tar.zst.sha256',
+                size: checksumText.length,
+                browser_download_url: 'https://fake.github.com/checksum.sha256',
+              },
+            ],
+          }),
+          { status: 200 },
+        )
       }
 
       if (urlStr.includes('archive.tar.gz')) {
@@ -118,10 +120,7 @@ describe('setup', () => {
       const setupDb = new DocsDatabase(join(setupDir, 'apple-docs.db'))
 
       try {
-        const result = await setup(
-          { force: false },
-          { db: setupDb, dataDir: setupDir, logger },
-        )
+        const result = await setup({ force: false }, { db: setupDb, dataDir: setupDir, logger })
 
         expect(result.status).toBe('ok')
         expect(result.tag).toBe('test-release-1')
@@ -154,22 +153,25 @@ describe('setup', () => {
       const urlStr = String(url)
 
       if (urlStr.includes('/releases/latest')) {
-        return new Response(JSON.stringify({
-          tag_name: 'bad-v1',
-          published_at: '2026-04-13T00:00:00Z',
-          assets: [
-            {
-              name: 'apple-docs-full-bad-v1.tar.gz',
-              size: 100,
-              browser_download_url: 'https://fake.github.com/archive.tar.gz',
-            },
-            {
-              name: 'apple-docs-full-bad-v1.tar.gz.sha256',
-              size: 80,
-              browser_download_url: 'https://fake.github.com/checksum.sha256',
-            },
-          ],
-        }), { status: 200 })
+        return new Response(
+          JSON.stringify({
+            tag_name: 'bad-v1',
+            published_at: '2026-04-13T00:00:00Z',
+            assets: [
+              {
+                name: 'apple-docs-full-bad-v1.tar.gz',
+                size: 100,
+                browser_download_url: 'https://fake.github.com/archive.tar.gz',
+              },
+              {
+                name: 'apple-docs-full-bad-v1.tar.gz.sha256',
+                size: 80,
+                browser_download_url: 'https://fake.github.com/checksum.sha256',
+              },
+            ],
+          }),
+          { status: 200 },
+        )
       }
 
       if (urlStr.includes('archive.tar.gz')) {
@@ -184,9 +186,7 @@ describe('setup', () => {
     })
 
     try {
-      await expect(
-        setup({ force: true }, { db, dataDir, logger })
-      ).rejects.toThrow('Checksum mismatch')
+      await expect(setup({ force: true }, { db, dataDir, logger })).rejects.toThrow('Checksum mismatch')
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -212,9 +212,7 @@ describe('setup', () => {
     }
 
     try {
-      await expect(
-        setup({ force: true }, { db, dataDir, logger })
-      ).rejects.toThrow()
+      await expect(setup({ force: true }, { db, dataDir, logger })).rejects.toThrow()
     } finally {
       globalThis.fetch = originalFetch
       setResolvedGitHubToken(null)
@@ -233,25 +231,26 @@ describe('setup', () => {
     globalThis.fetch = mock(async (url) => {
       const urlStr = String(url)
       if (urlStr.includes('/releases/latest')) {
-        return new Response(JSON.stringify({
-          tag_name: 'test-release-no-checksum',
-          published_at: '2026-04-13T00:00:00Z',
-          assets: [
-            {
-              name: 'apple-docs-full-test-release-no-checksum.tar.gz',
-              size: 100,
-              browser_download_url: 'https://fake.github.com/archive.tar.gz',
-            },
-            // intentionally NO .sha256 asset
-          ],
-        }), { status: 200 })
+        return new Response(
+          JSON.stringify({
+            tag_name: 'test-release-no-checksum',
+            published_at: '2026-04-13T00:00:00Z',
+            assets: [
+              {
+                name: 'apple-docs-full-test-release-no-checksum.tar.gz',
+                size: 100,
+                browser_download_url: 'https://fake.github.com/archive.tar.gz',
+              },
+              // intentionally NO .sha256 asset
+            ],
+          }),
+          { status: 200 },
+        )
       }
       throw new Error(`unexpected url ${urlStr}`)
     })
     try {
-      await expect(
-        setup({ force: true }, { db, dataDir, logger })
-      ).rejects.toThrow(/without a matching \.sha256/)
+      await expect(setup({ force: true }, { db, dataDir, logger })).rejects.toThrow(/without a matching \.sha256/)
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -259,7 +258,6 @@ describe('setup', () => {
 })
 
 describe('fetchLatestRelease channels', () => {
-
   const snapAsset = (tag) => ({
     name: `apple-docs-full-${tag}.tar.zst`,
     size: 1,
@@ -272,8 +270,12 @@ describe('fetchLatestRelease channels', () => {
   })
 
   let originalFetch
-  beforeEach(() => { originalFetch = globalThis.fetch })
-  afterEach(() => { globalThis.fetch = originalFetch })
+  beforeEach(() => {
+    originalFetch = globalThis.fetch
+  })
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
 
   test('macosMajor parses versions', () => {
     expect(macosMajor('27.1')).toBe(27)
@@ -286,12 +288,15 @@ describe('fetchLatestRelease channels', () => {
     const urls = []
     globalThis.fetch = mock(async (url) => {
       urls.push(String(url))
-      return new Response(JSON.stringify({
-        tag_name: 'snapshot-20260609',
-        published_at: '2026-06-09T00:00:00Z',
-        prerelease: false,
-        assets: [snapAsset('snapshot-20260609')],
-      }), { status: 200 })
+      return new Response(
+        JSON.stringify({
+          tag_name: 'snapshot-20260609',
+          published_at: '2026-06-09T00:00:00Z',
+          prerelease: false,
+          assets: [snapAsset('snapshot-20260609')],
+        }),
+        { status: 200 },
+      )
     })
     const r = await fetchLatestRelease()
     expect(r.tag).toBe('snapshot-20260609')
@@ -306,10 +311,19 @@ describe('fetchLatestRelease channels', () => {
         return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
       }
       expect(u.includes('/releases?') || u.includes('-status.json')).toBe(true)
-      return new Response(JSON.stringify([
-        { tag_name: 'snapshot-20260610-beta.1', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.1'), statusAsset('snapshot-20260610-beta.1')] },
-        { tag_name: 'snapshot-20260609', published_at: '2026-06-09T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260609')] },
-      ]), { status: 200 })
+      return new Response(
+        JSON.stringify([
+          {
+            tag_name: 'snapshot-20260610-beta.1',
+            published_at: '2026-06-10T00:00:00Z',
+            prerelease: true,
+            draft: false,
+            assets: [snapAsset('snapshot-20260610-beta.1'), statusAsset('snapshot-20260610-beta.1')],
+          },
+          { tag_name: 'snapshot-20260609', published_at: '2026-06-09T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260609')] },
+        ]),
+        { status: 200 },
+      )
     })
     const r = await fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.1' })
     expect(r.tag).toBe('snapshot-20260610-beta.1')
@@ -325,21 +339,54 @@ describe('fetchLatestRelease channels', () => {
       if (u.includes('good-beta-status.json')) {
         return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
       }
-      return new Response(JSON.stringify([
-        { tag_name: 'old-beta', published_at: '2026-06-12T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('old-beta'), statusAsset('old-beta')] },
-        { tag_name: 'good-beta', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('good-beta'), statusAsset('good-beta')] },
-      ]), { status: 200 })
+      return new Response(
+        JSON.stringify([
+          {
+            tag_name: 'old-beta',
+            published_at: '2026-06-12T00:00:00Z',
+            prerelease: true,
+            draft: false,
+            assets: [snapAsset('old-beta'), statusAsset('old-beta')],
+          },
+          {
+            tag_name: 'good-beta',
+            published_at: '2026-06-10T00:00:00Z',
+            prerelease: true,
+            draft: false,
+            assets: [snapAsset('good-beta'), statusAsset('good-beta')],
+          },
+        ]),
+        { status: 200 },
+      )
     })
     const r = await fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.0' })
     expect(r.tag).toBe('good-beta')
   })
 
   test('beta channel skips drafts and asset-less releases', async () => {
-    globalThis.fetch = mock(async () => new Response(JSON.stringify([
-      { tag_name: 'bad-draft', published_at: '2026-06-12T00:00:00Z', prerelease: true, draft: true, assets: [snapAsset('bad-draft')] },
-      { tag_name: 'binaries-1.0', published_at: '2026-06-11T00:00:00Z', prerelease: false, draft: false, assets: [{ name: 'apple-docs-darwin-arm64', size: 1, browser_download_url: 'https://fake.github.com/bin' }] },
-      { tag_name: 'snapshot-20260610-beta.1', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.1')] },
-    ]), { status: 200 }))
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          JSON.stringify([
+            { tag_name: 'bad-draft', published_at: '2026-06-12T00:00:00Z', prerelease: true, draft: true, assets: [snapAsset('bad-draft')] },
+            {
+              tag_name: 'binaries-1.0',
+              published_at: '2026-06-11T00:00:00Z',
+              prerelease: false,
+              draft: false,
+              assets: [{ name: 'apple-docs-darwin-arm64', size: 1, browser_download_url: 'https://fake.github.com/bin' }],
+            },
+            {
+              tag_name: 'snapshot-20260610-beta.1',
+              published_at: '2026-06-10T00:00:00Z',
+              prerelease: true,
+              draft: false,
+              assets: [snapAsset('snapshot-20260610-beta.1')],
+            },
+          ]),
+          { status: 200 },
+        ),
+    )
     const r = await fetchLatestRelease({ channel: 'beta' })
     expect(r.tag).toBe('snapshot-20260610-beta.1')
   })
@@ -350,13 +397,20 @@ describe('fetchLatestRelease channels', () => {
       if (u.includes('-status.json')) {
         return new Response(JSON.stringify({ buildMacos: '26.2' }), { status: 200 })
       }
-      return new Response(JSON.stringify([
-        { tag_name: 'snapshot-20260614', published_at: '2026-06-14T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260614'), statusAsset('snapshot-20260614')] },
-      ]), { status: 200 })
+      return new Response(
+        JSON.stringify([
+          {
+            tag_name: 'snapshot-20260614',
+            published_at: '2026-06-14T00:00:00Z',
+            prerelease: false,
+            draft: false,
+            assets: [snapAsset('snapshot-20260614'), statusAsset('snapshot-20260614')],
+          },
+        ]),
+        { status: 200 },
+      )
     })
-    await expect(
-      fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.1' }),
-    ).rejects.toThrow(/beta channel/)
+    await expect(fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.1' })).rejects.toThrow(/beta channel/)
   })
 
   test('beta install accepts a stable built on at least the same macOS', async () => {
@@ -365,10 +419,25 @@ describe('fetchLatestRelease channels', () => {
       if (u.includes('-status.json')) {
         return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
       }
-      return new Response(JSON.stringify([
-        { tag_name: 'snapshot-20260614', published_at: '2026-06-14T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260614'), statusAsset('snapshot-20260614')] },
-        { tag_name: 'snapshot-20260610-beta.1', published_at: '2026-06-10T00:00:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.1')] },
-      ]), { status: 200 })
+      return new Response(
+        JSON.stringify([
+          {
+            tag_name: 'snapshot-20260614',
+            published_at: '2026-06-14T00:00:00Z',
+            prerelease: false,
+            draft: false,
+            assets: [snapAsset('snapshot-20260614'), statusAsset('snapshot-20260614')],
+          },
+          {
+            tag_name: 'snapshot-20260610-beta.1',
+            published_at: '2026-06-10T00:00:00Z',
+            prerelease: true,
+            draft: false,
+            assets: [snapAsset('snapshot-20260610-beta.1')],
+          },
+        ]),
+        { status: 200 },
+      )
     })
     const r = await fetchLatestRelease({ channel: 'beta', localBuildMacos: '27.1' })
     expect(r.tag).toBe('snapshot-20260614')
@@ -376,9 +445,15 @@ describe('fetchLatestRelease channels', () => {
   })
 
   test('beta channel without local provenance takes the newest installable release', async () => {
-    globalThis.fetch = mock(async () => new Response(JSON.stringify([
-      { tag_name: 'snapshot-20260614', published_at: '2026-06-14T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260614')] },
-    ]), { status: 200 }))
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          JSON.stringify([
+            { tag_name: 'snapshot-20260614', published_at: '2026-06-14T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260614')] },
+          ]),
+          { status: 200 },
+        ),
+    )
     const r = await fetchLatestRelease({ channel: 'beta' })
     expect(r.tag).toBe('snapshot-20260614')
   })
@@ -395,10 +470,25 @@ describe('fetchLatestRelease channels', () => {
       if (u.includes('beta.3-status.json')) {
         return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
       }
-      return new Response(JSON.stringify([
-        { tag_name: 'snapshot-20260611', published_at: '2026-06-11T02:48:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260611'), statusAsset('snapshot-20260611')] },
-        { tag_name: 'snapshot-20260610-beta.3', published_at: '2026-06-10T23:51:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.3'), statusAsset('snapshot-20260610-beta.3')] },
-      ]), { status: 200 })
+      return new Response(
+        JSON.stringify([
+          {
+            tag_name: 'snapshot-20260611',
+            published_at: '2026-06-11T02:48:00Z',
+            prerelease: false,
+            draft: false,
+            assets: [snapAsset('snapshot-20260611'), statusAsset('snapshot-20260611')],
+          },
+          {
+            tag_name: 'snapshot-20260610-beta.3',
+            published_at: '2026-06-10T23:51:00Z',
+            prerelease: true,
+            draft: false,
+            assets: [snapAsset('snapshot-20260610-beta.3'), statusAsset('snapshot-20260610-beta.3')],
+          },
+        ]),
+        { status: 200 },
+      )
     })
     const r = await fetchLatestRelease({ channel: 'beta' })
     expect(r.tag).toBe('snapshot-20260610-beta.3')
@@ -411,10 +501,25 @@ describe('fetchLatestRelease channels', () => {
       if (u.includes('-status.json')) {
         return new Response(JSON.stringify({ buildMacos: '27.0' }), { status: 200 })
       }
-      return new Response(JSON.stringify([
-        { tag_name: 'snapshot-20260614', published_at: '2026-06-14T00:00:00Z', prerelease: false, draft: false, assets: [snapAsset('snapshot-20260614'), statusAsset('snapshot-20260614')] },
-        { tag_name: 'snapshot-20260610-beta.3', published_at: '2026-06-10T23:51:00Z', prerelease: true, draft: false, assets: [snapAsset('snapshot-20260610-beta.3'), statusAsset('snapshot-20260610-beta.3')] },
-      ]), { status: 200 })
+      return new Response(
+        JSON.stringify([
+          {
+            tag_name: 'snapshot-20260614',
+            published_at: '2026-06-14T00:00:00Z',
+            prerelease: false,
+            draft: false,
+            assets: [snapAsset('snapshot-20260614'), statusAsset('snapshot-20260614')],
+          },
+          {
+            tag_name: 'snapshot-20260610-beta.3',
+            published_at: '2026-06-10T23:51:00Z',
+            prerelease: true,
+            draft: false,
+            assets: [snapAsset('snapshot-20260610-beta.3'), statusAsset('snapshot-20260610-beta.3')],
+          },
+        ]),
+        { status: 200 },
+      )
     })
     const r = await fetchLatestRelease({ channel: 'beta' })
     expect(r.tag).toBe('snapshot-20260614')

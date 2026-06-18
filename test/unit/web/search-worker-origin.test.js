@@ -15,17 +15,14 @@
  * origin doesn't match the worker's own.
  */
 
-import { describe, test, expect, beforeAll } from 'bun:test'
+import { beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 let validateBase
 
 beforeAll(() => {
-  const src = readFileSync(
-    join(import.meta.dir, '../../../src/web/worker/search-worker.js'),
-    'utf8',
-  )
+  const src = readFileSync(join(import.meta.dir, '../../../src/web/worker/search-worker.js'), 'utf8')
   // Extract just the validateBase function. Easier than mocking `self`
   // and re-running the whole module; the function is self-contained.
   const match = src.match(/function validateBase[\s\S]+?\n\}\n/m)

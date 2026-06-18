@@ -22,8 +22,7 @@ import { SYMBOL_RENDERER_VERSION } from './render.js'
  */
 export async function symbolSnapshotNeedsReset(baseDir) {
   if (!existsSync(baseDir)) return false
-  const entries = readdirSync(baseDir, { withFileTypes: true })
-    .filter(entry => entry.name !== 'meta.json')
+  const entries = readdirSync(baseDir, { withFileTypes: true }).filter((entry) => entry.name !== 'meta.json')
   if (entries.length === 0) return false
 
   const meta = await readJsonIfExists(join(baseDir, 'meta.json'))
@@ -41,8 +40,6 @@ async function readJsonIfExists(path) {
 
 function hasSnapshotVariantSet(meta, scope) {
   const expected = symbolVariantMatrix(scope).map(symbolVariantKey).sort()
-  const actual = Array.isArray(meta?.variants?.[scope])
-    ? meta.variants[scope].map(symbolVariantKey).sort()
-    : []
+  const actual = Array.isArray(meta?.variants?.[scope]) ? meta.variants[scope].map(symbolVariantKey).sort() : []
   return expected.length === actual.length && expected.every((key, index) => key === actual[index])
 }

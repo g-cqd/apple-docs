@@ -36,94 +36,96 @@ const bool = () =>
 const posInt = () => z.coerce.number().int().min(1)
 const nonNegInt = () => z.coerce.number().int().min(0)
 
-const configSchema = z.object({
-  // -- Core ----------------------------------------------------------------
-  APPLE_DOCS_HOME: z.string().default(join(homedir(), '.apple-docs')),
-  APPLE_DOCS_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  APPLE_DOCS_DEBUG: bool().default(false),
-  NODE_ENV: z.string().optional(),
+const configSchema = z
+  .object({
+    // -- Core ----------------------------------------------------------------
+    APPLE_DOCS_HOME: z.string().default(join(homedir(), '.apple-docs')),
+    APPLE_DOCS_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+    APPLE_DOCS_DEBUG: bool().default(false),
+    NODE_ENV: z.string().optional(),
 
-  // -- Outbound HTTP (Apple / GitHub crawl) --------------------------------
-  APPLE_DOCS_RATE: posInt().optional(), // entry-point-dependent default (sync=500, else=5)
-  APPLE_DOCS_BURST: posInt().optional(),
-  APPLE_DOCS_CONCURRENCY: posInt().optional(),
-  APPLE_DOCS_PARALLEL: posInt().default(10),
-  APPLE_DOCS_TIMEOUT: posInt().default(30_000),
-  APPLE_DOCS_GITHUB_TIMEOUT: posInt().optional(), // falls back to APPLE_DOCS_TIMEOUT
-  APPLE_DOCS_API_BASE: z.string().url().optional(),
-  APPLE_DOCS_HOST_BUCKET_MAX: posInt().default(256),
+    // -- Outbound HTTP (Apple / GitHub crawl) --------------------------------
+    APPLE_DOCS_RATE: posInt().optional(), // entry-point-dependent default (sync=500, else=5)
+    APPLE_DOCS_BURST: posInt().optional(),
+    APPLE_DOCS_CONCURRENCY: posInt().optional(),
+    APPLE_DOCS_PARALLEL: posInt().default(10),
+    APPLE_DOCS_TIMEOUT: posInt().default(30_000),
+    APPLE_DOCS_GITHUB_TIMEOUT: posInt().optional(), // falls back to APPLE_DOCS_TIMEOUT
+    APPLE_DOCS_API_BASE: z.string().url().optional(),
+    APPLE_DOCS_HOST_BUCKET_MAX: posInt().default(256),
 
-  // -- Sync ----------------------------------------------------------------
-  APPLE_DOCS_SKIP_RESOURCES: bool().default(false),
-  APPLE_DOCS_DOWNLOAD_FONTS: bool().optional(),
-  APPLE_DOCS_SYMBOLS_OFFLINE: bool().default(false),
-  APPLE_DOCS_PACKAGES_SCOPE: z.enum(['official', 'full']).default('official'),
-  APPLE_DOCS_PACKAGES_FETCH: z.enum(['raw', 'api']).default('raw'),
-  APPLE_DOCS_PACKAGES_LIMIT: posInt().optional(),
-  APPLE_DOCS_BUILD_WORKER: bool().default(false),
+    // -- Sync ----------------------------------------------------------------
+    APPLE_DOCS_SKIP_RESOURCES: bool().default(false),
+    APPLE_DOCS_DOWNLOAD_FONTS: bool().optional(),
+    APPLE_DOCS_SYMBOLS_OFFLINE: bool().default(false),
+    APPLE_DOCS_PACKAGES_SCOPE: z.enum(['official', 'full']).default('official'),
+    APPLE_DOCS_PACKAGES_FETCH: z.enum(['raw', 'api']).default('raw'),
+    APPLE_DOCS_PACKAGES_LIMIT: posInt().optional(),
+    APPLE_DOCS_BUILD_WORKER: bool().default(false),
 
-  // -- Auth ----------------------------------------------------------------
-  GITHUB_TOKEN: z.string().optional(),
-  GH_TOKEN: z.string().optional(),
+    // -- Auth ----------------------------------------------------------------
+    GITHUB_TOKEN: z.string().optional(),
+    GH_TOKEN: z.string().optional(),
 
-  // -- MCP server ----------------------------------------------------------
-  APPLE_DOCS_MCP_CACHE: z.enum(['on', 'off']).default('on'),
-  APPLE_DOCS_MCP_CACHE_SCALE: z.coerce.number().positive().optional(),
-  APPLE_DOCS_MCP_CACHE_STATS: bool().default(false),
-  APPLE_DOCS_MCP_CONCURRENCY: posInt().default(8),
-  APPLE_DOCS_MCP_QUEUE: nonNegInt().default(64),
-  // Reader-pool toggle ('on' enables the worker-thread pool); the pool's
-  // *size* lives in APPLE_DOCS_MCP_READER_WORKERS. The runtime check is
-  // a strict equality against 'on' (src/mcp/http-server.js), so the
-  // schema must accept the toggle string rather than coerce to a number.
-  APPLE_DOCS_MCP_READERS: z.enum(['on', 'off']).optional(),
-  APPLE_DOCS_MCP_READER_WORKERS: posInt().optional(),
-  APPLE_DOCS_MCP_DEEP_READERS: posInt().optional(),
+    // -- MCP server ----------------------------------------------------------
+    APPLE_DOCS_MCP_CACHE: z.enum(['on', 'off']).default('on'),
+    APPLE_DOCS_MCP_CACHE_SCALE: z.coerce.number().positive().optional(),
+    APPLE_DOCS_MCP_CACHE_STATS: bool().default(false),
+    APPLE_DOCS_MCP_CONCURRENCY: posInt().default(8),
+    APPLE_DOCS_MCP_QUEUE: nonNegInt().default(64),
+    // Reader-pool toggle ('on' enables the worker-thread pool); the pool's
+    // *size* lives in APPLE_DOCS_MCP_READER_WORKERS. The runtime check is
+    // a strict equality against 'on' (src/mcp/http-server.js), so the
+    // schema must accept the toggle string rather than coerce to a number.
+    APPLE_DOCS_MCP_READERS: z.enum(['on', 'off']).optional(),
+    APPLE_DOCS_MCP_READER_WORKERS: posInt().optional(),
+    APPLE_DOCS_MCP_DEEP_READERS: posInt().optional(),
 
-  // -- Web server ----------------------------------------------------------
-  APPLE_DOCS_WEB_HOST: z.string().default('127.0.0.1'),
-  APPLE_DOCS_WEB_RATE: posInt().optional(),
-  APPLE_DOCS_WEB_BURST: posInt().optional(),
-  APPLE_DOCS_WEB_RATE_LIMIT: bool().default(false),
-  APPLE_DOCS_WEB_DEEP_INFLIGHT: posInt().default(4),
-  APPLE_DOCS_WEB_DEEP_QUEUE: nonNegInt().default(8),
-  APPLE_DOCS_WEB_DEEP_READERS: posInt().optional(),
-  // Reader-pool mode (off|auto|on); the pool's size lives in
-  // APPLE_DOCS_WEB_READER_WORKERS. Runtime reads the string directly
-  // (src/web/context.js), so accept the enum rather than coerce.
-  APPLE_DOCS_WEB_READERS: z.enum(['off', 'auto', 'on']).optional(),
-  APPLE_DOCS_WEB_READER_WORKERS: posInt().optional(),
-  APPLE_DOCS_WEB_RENDER_CONCURRENCY: posInt().optional(),
-  APPLE_DOCS_WEB_SEARCH_CACHE: posInt().optional(),
-  APPLE_DOCS_WEB_SEARCH_CACHE_BYTES: posInt().optional(),
-  APPLE_DOCS_WEB_FONT_SUBSET_WORKERS: posInt().optional(),
-  APPLE_DOCS_WEB_FONT_SUBSET_CONCURRENCY: posInt().optional(),
-  APPLE_DOCS_WEB_FONT_SUBSET_LRU: posInt().optional(),
-  APPLE_DOCS_WEB_FONT_SUBSET_LRU_BYTES: posInt().optional(),
-  APPLE_DOCS_FONT_SUBSET_PYTHON: z.string().optional(),
+    // -- Web server ----------------------------------------------------------
+    APPLE_DOCS_WEB_HOST: z.string().default('127.0.0.1'),
+    APPLE_DOCS_WEB_RATE: posInt().optional(),
+    APPLE_DOCS_WEB_BURST: posInt().optional(),
+    APPLE_DOCS_WEB_RATE_LIMIT: bool().default(false),
+    APPLE_DOCS_WEB_DEEP_INFLIGHT: posInt().default(4),
+    APPLE_DOCS_WEB_DEEP_QUEUE: nonNegInt().default(8),
+    APPLE_DOCS_WEB_DEEP_READERS: posInt().optional(),
+    // Reader-pool mode (off|auto|on); the pool's size lives in
+    // APPLE_DOCS_WEB_READER_WORKERS. Runtime reads the string directly
+    // (src/web/context.js), so accept the enum rather than coerce.
+    APPLE_DOCS_WEB_READERS: z.enum(['off', 'auto', 'on']).optional(),
+    APPLE_DOCS_WEB_READER_WORKERS: posInt().optional(),
+    APPLE_DOCS_WEB_RENDER_CONCURRENCY: posInt().optional(),
+    APPLE_DOCS_WEB_SEARCH_CACHE: posInt().optional(),
+    APPLE_DOCS_WEB_SEARCH_CACHE_BYTES: posInt().optional(),
+    APPLE_DOCS_WEB_FONT_SUBSET_WORKERS: posInt().optional(),
+    APPLE_DOCS_WEB_FONT_SUBSET_CONCURRENCY: posInt().optional(),
+    APPLE_DOCS_WEB_FONT_SUBSET_LRU: posInt().optional(),
+    APPLE_DOCS_WEB_FONT_SUBSET_LRU_BYTES: posInt().optional(),
+    APPLE_DOCS_FONT_SUBSET_PYTHON: z.string().optional(),
 
-  // -- Content rendering ---------------------------------------------------
-  APPLE_DOCS_NO_HIGHLIGHT: bool().default(false),
-  APPLE_DOCS_HIGHLIGHT_MAX: posInt().optional(),
-  APPLE_DOCS_MD_MAX_BYTES: posInt().optional(),
-  APPLE_DOCS_RENDER_CACHE_BYTES: posInt().optional(),
-  APPLE_DOCS_RENDER_CACHE_TTL_DAYS: nonNegInt().optional(),
+    // -- Content rendering ---------------------------------------------------
+    APPLE_DOCS_NO_HIGHLIGHT: bool().default(false),
+    APPLE_DOCS_HIGHLIGHT_MAX: posInt().optional(),
+    APPLE_DOCS_MD_MAX_BYTES: posInt().optional(),
+    APPLE_DOCS_RENDER_CACHE_BYTES: posInt().optional(),
+    APPLE_DOCS_RENDER_CACHE_TTL_DAYS: nonNegInt().optional(),
 
-  // -- Native bridge (Swift libAppleDocsCore via bun:ffi) -------------------
-  // Native-by-default (RFC 0002 phase 5): '' (default)/'1'/'on' = native
-  // serves wherever the dylib + artifacts exist (outputs bit-identical, JS
-  // serves silently otherwise); 'off'/'0' = the escape hatch, JS everywhere;
-  // comma list ('fusion,archive,embed') = exactly those modules. The loader
-  // (src/native/loader.js) parses the value.
-  APPLE_DOCS_NATIVE: z.string().default(''),
-  // Operator override: absolute path to a libAppleDocsCore build.
-  APPLE_DOCS_NATIVE_LIB: z.string().optional(),
+    // -- Native bridge (Swift libAppleDocsCore via bun:ffi) -------------------
+    // Native-by-default (RFC 0002 phase 5): '' (default)/'1'/'on' = native
+    // serves wherever the dylib + artifacts exist (outputs bit-identical, JS
+    // serves silently otherwise); 'off'/'0' = the escape hatch, JS everywhere;
+    // comma list ('fusion,archive,embed') = exactly those modules. The loader
+    // (src/native/loader.js) parses the value.
+    APPLE_DOCS_NATIVE: z.string().default(''),
+    // Operator override: absolute path to a libAppleDocsCore build.
+    APPLE_DOCS_NATIVE_LIB: z.string().optional(),
 
-  // -- Internal -----------------------------------------------------------
-  BUN_BIN: z.string().optional(),
-  HOME: z.string().optional(),
-  DYLD_FRAMEWORK_PATH: z.string().optional(),
-}).passthrough()
+    // -- Internal -----------------------------------------------------------
+    BUN_BIN: z.string().optional(),
+    HOME: z.string().optional(),
+    DYLD_FRAMEWORK_PATH: z.string().optional(),
+  })
+  .passthrough()
 
 /**
  * Parse a given environment block (`process.env` by default) against the
@@ -140,9 +142,7 @@ const configSchema = z.object({
 export function loadConfig(env = process.env) {
   const result = configSchema.safeParse(env)
   if (!result.success) {
-    const issues = result.error.issues
-      .map((iss) => `  - ${iss.path.join('.')}: ${iss.message}`)
-      .join('\n')
+    const issues = result.error.issues.map((iss) => `  - ${iss.path.join('.')}: ${iss.message}`).join('\n')
     throw new ConfigError(`Invalid environment configuration:\n${issues}`)
   }
   return Object.freeze(result.data)

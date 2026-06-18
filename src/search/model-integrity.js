@@ -65,9 +65,7 @@ export async function verifyPinnedModelFiles(dir, hfId, pins = PINNED_MODEL_FILE
     if (got !== want) mismatches.push(`${rel}: ${got} != ${want}`)
   }
   if (mismatches.length > 0) {
-    throw new ValidationError(
-      `Embedding model failed its integrity pin — upstream drift or tampering. Do not ship.\n  ${mismatches.join('\n  ')}`,
-    )
+    throw new ValidationError(`Embedding model failed its integrity pin — upstream drift or tampering. Do not ship.\n  ${mismatches.join('\n  ')}`)
   }
   return { verified: Object.keys(pinned).length }
 }
@@ -159,9 +157,7 @@ export async function ensureEmbeddingModel({ modelsDir, logger, embedder } = {})
   // hard rather than silently ship a snapshot with no semantic tier.
   const isReleaseBuild = process.env.APPLE_DOCS_ALLOW_REMOTE_MODELS === '1'
   const spec = resolveActiveSpec()
-  const dir = process.env.APPLE_DOCS_MODELS_DIR
-    ?? modelsDir
-    ?? join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
+  const dir = process.env.APPLE_DOCS_MODELS_DIR ?? modelsDir ?? join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
 
   if (embedder === undefined) {
     // Acquire/derive BEFORE building the embedder: the native default path
@@ -185,8 +181,8 @@ export async function ensureEmbeddingModel({ modelsDir, logger, embedder } = {})
 
   const { verified } = await verifyPinnedModelFiles(dir, spec.hfId)
   return verified === 0
-    // Gated non-default variants build separate artifacts; pin them when (if)
-    // one is ever promoted to a published snapshot.
-    ? { status: 'ok', hfId: spec.hfId, verified, message: 'no pins for this model (non-default variant)' }
+    ? // Gated non-default variants build separate artifacts; pin them when (if)
+      // one is ever promoted to a published snapshot.
+      { status: 'ok', hfId: spec.hfId, verified, message: 'no pins for this model (non-default variant)' }
     : { status: 'ok', hfId: spec.hfId, verified }
 }

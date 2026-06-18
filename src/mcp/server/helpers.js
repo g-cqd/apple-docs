@@ -13,7 +13,7 @@ export function sanitizeDocumentPayload(payload) {
   if (!Array.isArray(payload?.sections) || payload.sections.length === 0) return payload
   return {
     ...payload,
-    sections: payload.sections.map(section => coerceSection(section)),
+    sections: payload.sections.map((section) => coerceSection(section)),
   }
 }
 

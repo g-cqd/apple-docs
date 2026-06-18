@@ -1,17 +1,17 @@
+import { ValidationError } from '../lib/errors.js'
+import { runStep } from '../lib/run-step.js'
+import { filterAdaptersByScope, loadScope } from '../lib/scope.js'
+import { Semaphore } from '../lib/semaphore.js'
 import { convertAll } from '../pipeline/convert.js'
 import { discoverRoots } from '../pipeline/discover.js'
 import { downloadMissing } from '../pipeline/download.js'
-import { ValidationError } from '../lib/errors.js'
-import { Semaphore } from '../lib/semaphore.js'
-import { runStep } from '../lib/run-step.js'
 import { getAllAdapters } from '../sources/registry.js'
-import { loadScope, filterAdaptersByScope } from '../lib/scope.js'
-import { ROOT_CATALOG_SOURCE_TYPES, filterPages, discoverAdaptersInParallel } from './command-helpers.js'
-import { update } from './update.js'
+import { discoverAdaptersInParallel, filterPages, ROOT_CATALOG_SOURCE_TYPES } from './command-helpers.js'
 import { consolidate } from './consolidate.js'
 import { runAdapterStep } from './sync/adapters.js'
 import { runEnrichPhase } from './sync/enrich.js'
 import { runBodyIndex, runResourcesPhase } from './sync/phases.js'
+import { update } from './update.js'
 
 /**
  * Full corpus pipeline. Single entry point for refreshing everything end-to-end:
@@ -50,12 +50,8 @@ export async function sync(opts, ctx) {
   // explicitly).
   const DEFAULT_CONCURRENCY = 100
   const AGGRESSIVE_CONCURRENCY = 500
-  const envConcurrency = process.env.APPLE_DOCS_CONCURRENCY != null
-    ? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY, 10)
-    : null
-  const concurrency = ctx.semaphore?.max
-    ?? envConcurrency
-    ?? (opts.aggressive ? AGGRESSIVE_CONCURRENCY : DEFAULT_CONCURRENCY)
+  const envConcurrency = process.env.APPLE_DOCS_CONCURRENCY != null ? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY, 10) : null
+  const concurrency = ctx.semaphore?.max ?? envConcurrency ?? (opts.aggressive ? AGGRESSIVE_CONCURRENCY : DEFAULT_CONCURRENCY)
   if (concurrency > 100 && !opts.aggressive && envConcurrency == null) {
     throw new ValidationError(`--concurrency ${concurrency} > 100 requires --aggressive (or set APPLE_DOCS_CONCURRENCY explicitly)`)
   }
@@ -79,16 +75,12 @@ export async function sync(opts, ctx) {
     //    detect added/removed keys at the same time. Resource sync (fonts +
     //    symbols) is suppressed here — sync owns it as its own dedicated step
     //    further down so the work doesn't run twice.
-    const updateStep = await runStep(
-      'sync.update',
-      () => update({ skipFonts: true, skipSymbols: true, scope }, { ...ctx, semaphore, adapters }),
-      { logger },
-    )
+    const updateStep = await runStep('sync.update', () => update({ skipFonts: true, skipSymbols: true, scope }, { ...ctx, semaphore, adapters }), { logger })
     if (updateStep.ok) updateResult = updateStep.result
     db.setActivity('sync', null)
 
     // 2. Root discovery for catalog-driven sources (apple-docc et al).
-    if (adapters.some(adapter => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
+    if (adapters.some((adapter) => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
       await discoverRoots(db, rateLimiter, logger)
       adapterCtx.rootCatalogReady = true
     }
@@ -103,19 +95,21 @@ export async function sync(opts, ctx) {
     //    hosts so concurrent crawls do not contend on the same upstream
     //    budget.
     const adapterOutcomes = await Promise.allSettled(
-      adapters.map(adapter => runAdapterStep(adapter, {
-        ctx,
-        adapterCtx,
-        db,
-        dataDir,
-        logger,
-        discoveriesBySource,
-        discoveryErrorsBySource,
-        parallel,
-        concurrency,
-        crawlOpts,
-        scope,
-      })),
+      adapters.map((adapter) =>
+        runAdapterStep(adapter, {
+          ctx,
+          adapterCtx,
+          db,
+          dataDir,
+          logger,
+          discoveriesBySource,
+          discoveryErrorsBySource,
+          parallel,
+          concurrency,
+          crawlOpts,
+          scope,
+        }),
+      ),
     )
 
     const crawlResults = {}
@@ -140,7 +134,7 @@ export async function sync(opts, ctx) {
       if (outcome.rootsCrawled) rootsCrawled += outcome.rootsCrawled
     }
 
-    const activeSourceTypes = adapters.map(adapter => adapter.constructor.type)
+    const activeSourceTypes = adapters.map((adapter) => adapter.constructor.type)
     const filters = { roots: null, sources: activeSourceTypes }
 
     // 4. Backfill any missing raw payloads + materialize Markdown.
@@ -162,19 +156,14 @@ export async function sync(opts, ctx) {
     //    smoke harnesses) and scope.json-narrowed corpora alike: merging a
     //    ~350k-page asset into a partial corpus would flood it with novel
     //    pages from sources/roots that were deliberately excluded.
-    const enrichResult = (ctx.adapters || scope)
-      ? { skipped: true }
-      : await runEnrichPhase({ db, logger })
+    const enrichResult = ctx.adapters || scope ? { skipped: true } : await runEnrichPhase({ db, logger })
 
     // 6. Body index + resources run concurrently. They touch disjoint tables
     //    (body index: documents_body_fts + schema_meta; resources:
     //    sf_symbols + apple_font_*). bun:sqlite serialises SQL on the
     //    single connection, but the wall-clock win comes from the disk + network
     //    + Swift-worker I/O overlap between the two phases.
-    const [idxOutcome, resOutcome] = await Promise.all([
-      runBodyIndex({ db, dataDir, logger, fullRebuild }),
-      runResourcesPhase({ ctx, logger, scope }),
-    ])
+    const [idxOutcome, resOutcome] = await Promise.all([runBodyIndex({ db, dataDir, logger, fullRebuild }), runResourcesPhase({ ctx, logger, scope })])
     const bodyIndexed = idxOutcome.indexed
     for (const failure of resOutcome.failedSources) failedSources.push(failure)
     const fontsResult = resOutcome.fontsResult
@@ -183,11 +172,7 @@ export async function sync(opts, ctx) {
 
     // 7. Schema migrations + invalid-entry cleanup + parent-ref re-resolution +
     // raw JSON minification. Idempotent and cheap when there's nothing to do.
-    const doctorStep = await runStep(
-      'sync.consolidate',
-      () => consolidate({ minify: true }, { ...ctx, semaphore }),
-      { logger },
-    )
+    const doctorStep = await runStep('sync.consolidate', () => consolidate({ minify: true }, { ...ctx, semaphore }), { logger })
     const doctorResult = doctorStep.ok ? doctorStep.result : null
 
     const durationMs = Date.now() - startMs
@@ -218,6 +203,8 @@ export async function sync(opts, ctx) {
     }
   } finally {
     db.clearActivity()
-    try { await ctx.readerPool?.recycle?.() } catch {}
+    try {
+      await ctx.readerPool?.recycle?.()
+    } catch {}
   }
 }

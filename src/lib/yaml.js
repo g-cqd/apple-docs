@@ -7,7 +7,7 @@ export function toFrontMatter(obj) {
   for (const [key, value] of Object.entries(obj)) {
     if (value == null) continue
     if (Array.isArray(value)) {
-      lines.push(`${key}: [${value.map(v => quoteIfNeeded(String(v))).join(', ')}]`)
+      lines.push(`${key}: [${value.map((v) => quoteIfNeeded(String(v))).join(', ')}]`)
     } else {
       lines.push(`${key}: ${quoteIfNeeded(String(value))}`)
     }
@@ -17,8 +17,7 @@ export function toFrontMatter(obj) {
 }
 
 function quoteIfNeeded(s) {
-  if (s === '' || s === 'true' || s === 'false' || s === 'null' ||
-      /^[\d.]+$/.test(s) || /[:{}[\],&*?|>!%#@`"']/.test(s) || s.includes('\n')) {
+  if (s === '' || s === 'true' || s === 'false' || s === 'null' || /^[\d.]+$/.test(s) || /[:{}[\],&*?|>!%#@`"']/.test(s) || s.includes('\n')) {
     return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
   }
   return s

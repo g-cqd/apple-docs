@@ -54,9 +54,7 @@ describe('tokenizer-parity fixtures', () => {
 
   test('vocab.json is the id-ordered mirror of tokenizer.json', () => {
     const vocab = JSON.parse(readFileSync(join(FIXTURES, 'vocab.json'), 'utf8'))
-    const declared = JSON.parse(
-      readFileSync(join(FIXTURES, 'models', HF_ID, 'tokenizer.json'), 'utf8'),
-    ).model.vocab
+    const declared = JSON.parse(readFileSync(join(FIXTURES, 'models', HF_ID, 'tokenizer.json'), 'utf8')).model.vocab
     const entries = Object.entries(declared)
     expect(vocab.length).toBe(entries.length)
     for (const [token, id] of entries) {

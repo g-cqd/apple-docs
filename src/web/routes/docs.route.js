@@ -1,15 +1,15 @@
-import { renderDocumentPage, renderFrameworkPage, buildFrameworkTreeData } from '../templates.js'
-import { loadScopeExtras } from '../scope-group-data.js'
-import { sha256 } from '../../lib/hash.js'
-import { BackpressureError } from '../../lib/errors.js'
 import { fetchDocPage } from '../../apple/api.js'
-import { persistFetchedDocPage } from '../../pipeline/persist.js'
-import { coalesceByKey } from '../../pipeline/coalesce.js'
 import { lookup } from '../../commands/lookup.js'
-import { tooManyRequestsResponse } from '../middleware/rate-limit.js'
-import { textResponse, notFoundResponse } from '../responses.js'
+import { BackpressureError } from '../../lib/errors.js'
+import { sha256 } from '../../lib/hash.js'
+import { safeWebDocKey, WEB_SEGMENT_MAX_BYTES, webKeyNeedsMapping } from '../../lib/safe-path.js'
+import { coalesceByKey } from '../../pipeline/coalesce.js'
+import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { decodeSectionRow } from '../../storage/section-codec.js'
-import { safeWebDocKey, webKeyNeedsMapping, WEB_SEGMENT_MAX_BYTES } from '../../lib/safe-path.js'
+import { tooManyRequestsResponse } from '../middleware/rate-limit.js'
+import { notFoundResponse, textResponse } from '../responses.js'
+import { loadScopeExtras } from '../scope-group-data.js'
+import { buildFrameworkTreeData, renderDocumentPage, renderFrameworkPage } from '../templates.js'
 
 const HTML_HASHABLE = { contentType: 'text/html; charset=utf-8', hashable: true }
 
@@ -33,9 +33,7 @@ function resolveHashedWebKey(db, key) {
   let map = webKeyMaps.get(db)
   if (!map) {
     map = new Map()
-    const rows = db.db.query(
-      'SELECT key FROM documents WHERE length(CAST(key AS BLOB)) > ?',
-    ).all(WEB_SEGMENT_MAX_BYTES)
+    const rows = db.db.query('SELECT key FROM documents WHERE length(CAST(key AS BLOB)) > ?').all(WEB_SEGMENT_MAX_BYTES)
     for (const { key: raw } of rows) {
       if (webKeyNeedsMapping(raw)) map.set(safeWebDocKey(raw), raw)
     }
@@ -49,7 +47,8 @@ const DOC_BASE_QUERY = `SELECT d.id, d.key, d.title, d.kind, d.role, d.role_head
        COALESCE(r.display_name, d.framework) as framework_display
 FROM documents d LEFT JOIN roots r ON r.slug = d.framework WHERE d.key = ?`
 
-const DOC_SECTIONS_QUERY = 'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'
+const DOC_SECTIONS_QUERY =
+  'SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id'
 
 /**
  * `/docs/<key>` — either a framework listing (when the key matches a
@@ -61,7 +60,10 @@ const DOC_SECTIONS_QUERY = 'SELECT section_kind, heading, content_text, content_
  */
 export async function docsHandler(request, ctx, url) {
   const { db, dataDir, siteConfig, renderCache, rateLimiter, readerPool, frameworkTreeCache, frameworkTreeBySlug, invalidateDocumentCaches, onDemandGate } = ctx
-  const key = url.pathname.replace('/docs/', '').replace(/\/$/, '').replace(/\/index\.html$/, '')
+  const key = url.pathname
+    .replace('/docs/', '')
+    .replace(/\/$/, '')
+    .replace(/\/index\.html$/, '')
   if (!key) return notFoundResponse(siteConfig)
 
   // Markdown via the `.md` URL suffix: `/docs/<key>.md` returns the same
@@ -140,11 +142,14 @@ export async function docsHandler(request, ctx, url) {
           const framework = key.split('/')[0]
           const rootRow = db.getRootBySlug(framework)
           await persistFetchedDocPage({
-            db, dataDir,
+            db,
+            dataDir,
             rootId: rootRow?.id ?? null,
             path: key,
             sourceType: 'apple-docc',
-            json, etag, lastModified,
+            json,
+            etag,
+            lastModified,
           })
         })
       }
@@ -161,7 +166,9 @@ export async function docsHandler(request, ctx, url) {
         onDemandGate?.recordMiss(key)
       }
       invalidateDocumentCaches({ key, title: doc?.title, roleHeading: doc?.role_heading })
-      try { await readerPool?.recycle?.() } catch {}
+      try {
+        await readerPool?.recycle?.()
+      } catch {}
     } catch (err) {
       if (err instanceof BackpressureError) {
         return new Response('Too many docs fetches in flight. Retry after 30s.\n', {
@@ -180,9 +187,7 @@ export async function docsHandler(request, ctx, url) {
   }
 
   if (doc) {
-    let sections = db.hasTable('document_sections')
-      ? db.db.query(DOC_SECTIONS_QUERY).all(doc.id).map(decodeSectionRow)
-      : []
+    let sections = db.hasTable('document_sections') ? db.db.query(DOC_SECTIONS_QUERY).all(doc.id).map(decodeSectionRow) : []
 
     // On-demand fetch sections for lite snapshots (doc exists but sections are missing).
     if (sections.length === 0 && doc.source_type === 'apple-docc') {
@@ -195,16 +200,21 @@ export async function docsHandler(request, ctx, url) {
           const framework = doc.key.split('/')[0]
           const rootRow = db.getRootBySlug(framework)
           await persistFetchedDocPage({
-            db, dataDir,
+            db,
+            dataDir,
             rootId: rootRow?.id ?? null,
             path: doc.key,
             sourceType: 'apple-docc',
-            json, etag, lastModified,
+            json,
+            etag,
+            lastModified,
           })
         })
         sections = db.db.query(DOC_SECTIONS_QUERY).all(doc.id).map(decodeSectionRow)
         invalidateDocumentCaches({ key: doc.key, title: doc.title, roleHeading: doc.role_heading })
-        try { await readerPool?.recycle?.() } catch {}
+        try {
+          await readerPool?.recycle?.()
+        } catch {}
       } catch {
         // fetch failed — render with empty sections
       }

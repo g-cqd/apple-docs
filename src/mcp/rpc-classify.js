@@ -13,14 +13,7 @@
 // they are cache-wrapped with static/near-static payloads (taxonomy is
 // invalidated only after a corpus refresh) and their uncached miss
 // path is a small bulk SQL read, not CPU-bound ranking work.
-export const HEAVY_TOOLS = new Set([
-  'search_docs',
-  'read_doc',
-  'browse',
-  'search_sf_symbols',
-  'render_sf_symbol',
-  'render_font_text',
-])
+export const HEAVY_TOOLS = new Set(['search_docs', 'read_doc', 'browse', 'search_sf_symbols', 'render_sf_symbol', 'render_font_text'])
 
 /**
  * Classify a JSON-RPC POST payload as 'heavy' (a tools/call that may saturate
@@ -32,10 +25,14 @@ export const HEAVY_TOOLS = new Set([
 export function classifyRpcPayload(bodyText) {
   if (!bodyText) return 'light'
   let parsed
-  try { parsed = JSON.parse(bodyText) } catch { return 'light' }
+  try {
+    parsed = JSON.parse(bodyText)
+  } catch {
+    return 'light'
+  }
   if (Array.isArray(parsed)) {
     // JSON-RPC batch: throttle if any sub-call is heavy.
-    return parsed.some(item => isHeavyRpc(item)) ? 'heavy' : 'light'
+    return parsed.some((item) => isHeavyRpc(item)) ? 'heavy' : 'light'
   }
   return isHeavyRpc(parsed) ? 'heavy' : 'light'
 }

@@ -29,10 +29,7 @@ function insert(cacheKey, opts = {}) {
   })
   // Override updated_at so we can simulate aged rows.
   if (opts.updatedAtIso) {
-    db.db.run(
-      'UPDATE sf_symbol_renders SET updated_at = ? WHERE cache_key = ?',
-      [opts.updatedAtIso, cacheKey],
-    )
+    db.db.run('UPDATE sf_symbol_renders SET updated_at = ? WHERE cache_key = ?', [opts.updatedAtIso, cacheKey])
   }
 }
 

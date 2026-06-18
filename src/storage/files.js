@@ -1,7 +1,7 @@
-import { cpSync, mkdirSync, existsSync, statSync, readdirSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { dirname, join } from 'node:path'
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { platform } from 'node:os'
+import { dirname, join } from 'node:path'
 
 export function ensureDir(dirPath) {
   if (!existsSync(dirPath)) {
@@ -16,7 +16,7 @@ export function ensureDir(dirPath) {
 export function stableStringify(obj) {
   return JSON.stringify(obj, (_, value) => {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
-      return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
+      return Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
     }
     return value
   })
@@ -35,7 +35,7 @@ export async function writeJSON(filePath, obj) {
 
 export async function readJSON(filePath) {
   const file = Bun.file(filePath)
-  if (!await file.exists()) return null
+  if (!(await file.exists())) return null
   return file.json()
 }
 
@@ -46,7 +46,7 @@ export async function writeText(filePath, text) {
 
 export async function readText(filePath) {
   const file = Bun.file(filePath)
-  if (!await file.exists()) return null
+  if (!(await file.exists())) return null
   return file.text()
 }
 

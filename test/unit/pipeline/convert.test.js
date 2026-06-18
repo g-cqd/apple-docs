@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
 import { convertAll } from '../../../src/pipeline/convert.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { createMockLogger } from '../../helpers/mocks.js'
 
 let db
@@ -69,10 +69,7 @@ describe('convertAll', () => {
     }
 
     mkdirSync(join(dataDir, 'raw-json', 'documentation', 'swiftui'), { recursive: true })
-    writeFileSync(
-      join(dataDir, 'raw-json', 'documentation', 'swiftui', 'text.json'),
-      JSON.stringify(rawJson),
-    )
+    writeFileSync(join(dataDir, 'raw-json', 'documentation', 'swiftui', 'text.json'), JSON.stringify(rawJson))
 
     mkdirSync(join(dataDir, 'markdown', 'documentation', 'swiftui'), { recursive: true })
 
@@ -130,7 +127,10 @@ describe('convertAll', () => {
     const root1 = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'apple-docc')
     const root2 = db.upsertRoot('uikit', 'UIKit', 'framework', 'apple-docc')
 
-    for (const [root, name] of [[root1, 'swiftui'], [root2, 'uikit']]) {
+    for (const [root, name] of [
+      [root1, 'swiftui'],
+      [root2, 'uikit'],
+    ]) {
       db.upsertPage({
         rootId: root.id,
         path: `documentation/${name}/view`,

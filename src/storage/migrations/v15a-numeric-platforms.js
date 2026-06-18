@@ -37,9 +37,7 @@ export function up(db) {
   // Backfill. Read row-by-row in JS — the encoding logic is non-trivial
   // and SQLite has no native semver parser. The cost is one full-table
   // scan once, on a corpus that's already indexed.
-  const rows = db.query(
-    'SELECT id, min_ios, min_macos, min_watchos, min_tvos, min_visionos FROM documents',
-  ).all()
+  const rows = db.query('SELECT id, min_ios, min_macos, min_watchos, min_tvos, min_visionos FROM documents').all()
   const updateStmt = db.query(`
     UPDATE documents SET
       min_ios_num = $ios,

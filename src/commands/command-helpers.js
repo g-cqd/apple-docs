@@ -10,7 +10,7 @@ export const ROOT_CATALOG_SOURCE_TYPES = new Set(['apple-docc', 'hig'])
  * @returns {string[] | null}
  */
 export function normalizeList(values) {
-  return values?.map(value => value.toLowerCase()) ?? null
+  return values?.map((value) => value.toLowerCase()) ?? null
 }
 
 /**
@@ -22,7 +22,7 @@ export function validateRequestedSources(requestedSources) {
   if (!requestedSources) return
 
   const knownSources = new Set(getAdapterTypes())
-  const unknownSources = requestedSources.filter(source => !knownSources.has(source))
+  const unknownSources = requestedSources.filter((source) => !knownSources.has(source))
   if (unknownSources.length > 0) {
     throw new ValidationError(`Unknown source type(s): ${unknownSources.join(', ')}`, { field: 'sources', value: unknownSources })
   }
@@ -39,9 +39,9 @@ export function validateRequestedSources(requestedSources) {
  */
 export function selectRootsForAdapter(adapter, discovery, db, requestedRoots) {
   const requestedRootSet = requestedRoots ? new Set(requestedRoots) : null
-  const discoveredRoots = discovery.roots ?? db.getRoots().filter(root => root.source_type === adapter.constructor.type)
+  const discoveredRoots = discovery.roots ?? db.getRoots().filter((root) => root.source_type === adapter.constructor.type)
 
-  return discoveredRoots.filter(root => {
+  return discoveredRoots.filter((root) => {
     if (!root?.slug) return false
     if (!requestedRootSet) return true
     return requestedRootSet.has(root.slug)
@@ -60,7 +60,7 @@ export function filterPages(pages, requestedRoots, requestedSources) {
   const rootSet = requestedRoots ? new Set(requestedRoots) : null
   const sourceSet = requestedSources ? new Set(requestedSources) : null
 
-  return pages.filter(page => {
+  return pages.filter((page) => {
     if (rootSet && !rootSet.has(page.root_slug)) return false
     if (sourceSet && !sourceSet.has(page.source_type)) return false
     return true
@@ -78,7 +78,7 @@ export function filterPages(pages, requestedRoots, requestedSources) {
 export function filterPagesByRoots(pages, requestedRoots) {
   if (!requestedRoots) return pages
   const requestedRootSet = new Set(requestedRoots)
-  return pages.filter(page => requestedRootSet.has(page.root_slug))
+  return pages.filter((page) => requestedRootSet.has(page.root_slug))
 }
 
 /**

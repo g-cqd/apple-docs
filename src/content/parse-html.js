@@ -17,12 +17,12 @@
 
 import { createDocumentTemplate } from './document-template.js'
 import { SECTION_SPLIT_REGEX_BY_TAG, STRIP_ELEMENTS } from './parse-html/constants.js'
-import { htmlToMarkdown, htmlToPlainText } from './parse-html/text-extract.js'
-import { stripElements } from './parse-html/strip-elements.js'
-import { extractBySelector } from './parse-html/selectors.js'
 import { detectRedirectStub, extractMetaInfo } from './parse-html/meta.js'
+import { extractBySelector } from './parse-html/selectors.js'
+import { stripElements } from './parse-html/strip-elements.js'
+import { htmlToMarkdown, htmlToPlainText } from './parse-html/text-extract.js'
 
-export { htmlToMarkdown, htmlToPlainText, extractMetaInfo, detectRedirectStub }
+export { detectRedirectStub, extractMetaInfo, htmlToMarkdown, htmlToPlainText }
 
 /**
  * Extract structured content from an HTML documentation page.
@@ -38,9 +38,7 @@ export function extractHtmlContent(html, opts = {}) {
   if (!html) return { title: null, description: null, sections: [] }
 
   const meta = extractMetaInfo(html)
-  const renderText = opts.preserveStructure
-    ? (frag) => htmlToMarkdown(frag, { linkResolver: opts.linkResolver })
-    : htmlToPlainText
+  const renderText = opts.preserveStructure ? (frag) => htmlToMarkdown(frag, { linkResolver: opts.linkResolver }) : htmlToPlainText
 
   // ── Locate content container ───────────────────────────────────────────────
   let container = null
@@ -166,7 +164,7 @@ export function parseHtmlToNormalized(html, key, opts = {}) {
   }
 
   // headings: space-joined texts of all section headings for FTS
-  const headingTexts = htmlSections.map(s => s.heading).filter(Boolean)
+  const headingTexts = htmlSections.map((s) => s.heading).filter(Boolean)
   const headings = headingTexts.length > 0 ? headingTexts.join(' ') : null
 
   const document = createDocumentTemplate(key, title, abstractText, headings, {

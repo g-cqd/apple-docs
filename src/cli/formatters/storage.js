@@ -1,4 +1,4 @@
-import { bold, formatBytes, } from './_shared.js'
+import { bold, formatBytes } from './_shared.js'
 
 export function formatStorageStats(result) {
   const lines = [
@@ -27,4 +27,3 @@ export function formatStorageGc(result) {
   lines.push(`  Vacuumed:  ${result.vacuumed ? 'yes' : 'no'}`)
   return lines.join('\n')
 }
-

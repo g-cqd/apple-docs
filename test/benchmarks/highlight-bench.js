@@ -1,5 +1,5 @@
-import { compareToPrevious, recordBenchmark } from './history.js'
 import { disposeHighlighter, highlightCode, initHighlighter } from '../../src/content/highlight.js'
+import { compareToPrevious, recordBenchmark } from './history.js'
 
 const REPEATS_PER_SNIPPET = 10
 
@@ -42,7 +42,7 @@ async function main() {
   await initHighlighter()
 
   const corpus = Array.from({ length: 50 }, (_, index) => createSnippet(index))
-  const calls = corpus.flatMap(snippet => Array.from({ length: REPEATS_PER_SNIPPET }, () => snippet))
+  const calls = corpus.flatMap((snippet) => Array.from({ length: REPEATS_PER_SNIPPET }, () => snippet))
   const times = []
 
   for (const { code, lang } of calls) {
@@ -69,7 +69,9 @@ async function main() {
     recordBenchmark('highlight-p99', { value: p99, unit: 'ms' })
 
     if (comparison.regressed) {
-      console.log(`WARNING REGRESSION: p50 is ${comparison.changePercent}% slower than previous (${comparison.previousValue.toFixed(2)}ms -> ${p50.toFixed(2)}ms)`)
+      console.log(
+        `WARNING REGRESSION: p50 is ${comparison.changePercent}% slower than previous (${comparison.previousValue.toFixed(2)}ms -> ${p50.toFixed(2)}ms)`,
+      )
     } else if (comparison.previousValue) {
       console.log(`  vs previous: ${comparison.changePercent > 0 ? '+' : ''}${comparison.changePercent}%`)
     }

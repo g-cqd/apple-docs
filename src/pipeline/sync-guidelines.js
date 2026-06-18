@@ -1,18 +1,12 @@
-import { ROOT_SLUG, GUIDELINES_URL } from '../apple/guidelines-parser.js'
-import { normalize } from '../content/normalize.js'
-import { toFrontMatter } from '../lib/yaml.js'
-import { sha256 } from '../lib/hash.js'
-import { stableStringify, writeText } from '../storage/files.js'
 import { join } from 'node:path'
+import { GUIDELINES_URL, ROOT_SLUG } from '../apple/guidelines-parser.js'
+import { normalize } from '../content/normalize.js'
+import { sha256 } from '../lib/hash.js'
+import { toFrontMatter } from '../lib/yaml.js'
+import { stableStringify, writeText } from '../storage/files.js'
 
 export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
-  const {
-    html,
-    etag = null,
-    lastModified = null,
-    sections = [],
-    lastUpdated = null,
-  } = snapshot
+  const { html, etag = null, lastModified = null, sections = [], lastUpdated = null } = snapshot
 
   // Ensure root exists
   const root = db.upsertRoot(ROOT_SLUG, 'App Store Review Guidelines', 'guidelines', 'html-scrape')
@@ -24,7 +18,7 @@ export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
   // Save raw HTML for reference
   await writeText(join(dataDir, 'raw-json', `${ROOT_SLUG}.html`), html)
 
-  const currentPaths = new Set(sections.map(section => section.path))
+  const currentPaths = new Set(sections.map((section) => section.path))
   for (const existing of db.getPagesByRoot(ROOT_SLUG)) {
     if (!currentPaths.has(existing.path)) {
       db.markPageDeleted(existing.path)

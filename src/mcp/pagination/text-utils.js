@@ -2,10 +2,16 @@
 // All exports are pure functions so each is independently testable.
 
 export function splitText(text) {
-  const paragraphs = text.split(/\n{2,}/).map(part => part.trim()).filter(Boolean)
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean)
   if (paragraphs.length > 1) return paragraphs
 
-  const lines = text.split('\n').map(part => part.trim()).filter(Boolean)
+  const lines = text
+    .split('\n')
+    .map((part) => part.trim())
+    .filter(Boolean)
   if (lines.length > 1) return lines
 
   return [text.trim()]
@@ -56,11 +62,7 @@ export function sliceTextAtBoundary(text, start, end) {
   }
 
   const slice = text.slice(start, end)
-  const boundary = Math.max(
-    slice.lastIndexOf('\n\n'),
-    slice.lastIndexOf('\n'),
-    slice.lastIndexOf(' '),
-  )
+  const boundary = Math.max(slice.lastIndexOf('\n\n'), slice.lastIndexOf('\n'), slice.lastIndexOf(' '))
 
   if (boundary <= Math.min(24, Math.floor(slice.length / 4))) {
     return { text: slice.trim(), end }

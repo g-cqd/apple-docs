@@ -14,8 +14,8 @@ import { basename, extname } from 'node:path'
 const FONT_VARIANTS = ['Display', 'Text', 'Rounded', 'ExtraLarge', 'Large', 'Medium', 'Small']
 const FONT_WEIGHTS = ['Ultralight', 'Thin', 'Light', 'Regular', 'Medium', 'Semibold', 'Bold', 'Heavy', 'Black']
 
-const VARIANT_LOOKUP = new Map(FONT_VARIANTS.map(v => [v.toLowerCase(), v]))
-const WEIGHT_LOOKUP = new Map(FONT_WEIGHTS.map(w => [w.toLowerCase(), w]))
+const VARIANT_LOOKUP = new Map(FONT_VARIANTS.map((v) => [v.toLowerCase(), v]))
+const WEIGHT_LOOKUP = new Map(FONT_WEIGHTS.map((w) => [w.toLowerCase(), w]))
 
 /**
  * Cheap magic-byte check for an SFNT-like font file. CoreText behaviour on a
@@ -124,12 +124,7 @@ export function inspectSfntFile(filePath) {
     for (let i = 0; i < numTables; i++) {
       const entry = 12 + i * 16
       if (entry + 16 > view.byteLength) break
-      const tag = String.fromCharCode(
-        view.getUint8(entry),
-        view.getUint8(entry + 1),
-        view.getUint8(entry + 2),
-        view.getUint8(entry + 3),
-      )
+      const tag = String.fromCharCode(view.getUint8(entry), view.getUint8(entry + 1), view.getUint8(entry + 2), view.getUint8(entry + 3))
       if (tag === 'fvar') {
         fvarOffset = view.getUint32(entry + 8)
         fvarLength = view.getUint32(entry + 12)
@@ -148,12 +143,7 @@ export function inspectSfntFile(filePath) {
     for (let i = 0; i < axisCount; i++) {
       const start = offsetToAxes + i * axisSize
       if (start + 20 > fvarView.byteLength) break
-      const tag = String.fromCharCode(
-        fvarView.getUint8(start),
-        fvarView.getUint8(start + 1),
-        fvarView.getUint8(start + 2),
-        fvarView.getUint8(start + 3),
-      )
+      const tag = String.fromCharCode(fvarView.getUint8(start), fvarView.getUint8(start + 1), fvarView.getUint8(start + 2), fvarView.getUint8(start + 3))
       const min = fvarView.getInt32(start + 4) / 65536
       const def = fvarView.getInt32(start + 8) / 65536
       const max = fvarView.getInt32(start + 12) / 65536

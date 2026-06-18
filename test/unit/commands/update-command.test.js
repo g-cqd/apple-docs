@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { update } from '../../../src/commands/update.js'
 import { normalizeList, validateRequestedSources } from '../../../src/commands/command-helpers.js'
+import { update } from '../../../src/commands/update.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
 
 const tempDirs = []
@@ -16,25 +16,35 @@ afterEach(() => {
 
 describe('update command', () => {
   test('rejects unknown source filters before running discovery', async () => {
-    await expect(update({
-      sources: ['not-a-source'],
-    }, {
-      db: null,
-      dataDir: '/tmp',
-      rateLimiter: null,
-      logger: { info() {}, warn() {}, error() {} },
-    })).rejects.toThrow('Unknown source type(s): not-a-source')
+    await expect(
+      update(
+        {
+          sources: ['not-a-source'],
+        },
+        {
+          db: null,
+          dataDir: '/tmp',
+          rateLimiter: null,
+          logger: { info() {}, warn() {}, error() {} },
+        },
+      ),
+    ).rejects.toThrow('Unknown source type(s): not-a-source')
   })
 
   test('rejects multiple unknown sources', async () => {
-    await expect(update({
-      sources: ['bogus-a', 'bogus-b'],
-    }, {
-      db: null,
-      dataDir: '/tmp',
-      rateLimiter: null,
-      logger: { info() {}, warn() {}, error() {} },
-    })).rejects.toThrow('bogus-a')
+    await expect(
+      update(
+        {
+          sources: ['bogus-a', 'bogus-b'],
+        },
+        {
+          db: null,
+          dataDir: '/tmp',
+          rateLimiter: null,
+          logger: { info() {}, warn() {}, error() {} },
+        },
+      ),
+    ).rejects.toThrow('bogus-a')
   })
 
   test('continues updating other adapters when one discovery fails', async () => {
@@ -48,28 +58,31 @@ describe('update command', () => {
     const goodRoot = db.getRootBySlug('good-root')
 
     try {
-      const result = await update({}, {
-        db,
-        dataDir,
-        rateLimiter: { rate: 5, acquire: async () => {} },
-        logger: { info() {}, warn() {}, error() {} },
-        adapters: [
-          {
-            constructor: { type: 'bad-source', displayName: 'Bad Source', syncMode: 'flat' },
-            async discover() {
-              throw new Error('discover boom')
+      const result = await update(
+        {},
+        {
+          db,
+          dataDir,
+          rateLimiter: { rate: 5, acquire: async () => {} },
+          logger: { info() {}, warn() {}, error() {} },
+          adapters: [
+            {
+              constructor: { type: 'bad-source', displayName: 'Bad Source', syncMode: 'flat' },
+              async discover() {
+                throw new Error('discover boom')
+              },
+              validateNormalizeResult() {},
             },
-            validateNormalizeResult() {},
-          },
-          {
-            constructor: { type: 'good-source', displayName: 'Good Source', syncMode: 'flat' },
-            async discover() {
-              return { roots: [{ ...goodRoot, source_type: 'good-source' }], keys: [] }
+            {
+              constructor: { type: 'good-source', displayName: 'Good Source', syncMode: 'flat' },
+              async discover() {
+                return { roots: [{ ...goodRoot, source_type: 'good-source' }], keys: [] }
+              },
+              validateNormalizeResult() {},
             },
-            validateNormalizeResult() {},
-          },
-        ],
-      })
+          ],
+        },
+      )
 
       expect(result.errCount).toBe(1)
       expect(result.newCount).toBe(0)

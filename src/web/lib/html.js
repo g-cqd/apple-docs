@@ -172,9 +172,7 @@ function makeHtml(chunks) {
       // Encode every string chunk to UTF-8 once, concat into a single
       // Uint8Array. Bun.write accepts Uint8Array directly without
       // re-encoding — that's the zero-copy build emission win.
-      const buffers = this._chunks.map(chunk =>
-        typeof chunk === 'string' ? encoder.encode(chunk) : chunk,
-      )
+      const buffers = this._chunks.map((chunk) => (typeof chunk === 'string' ? encoder.encode(chunk) : chunk))
       let total = 0
       for (const buf of buffers) total += buf.byteLength
       const out = new Uint8Array(total)

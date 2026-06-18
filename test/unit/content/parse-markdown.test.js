@@ -1,9 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import {
-  extractFrontmatter,
-  splitByHeadings,
-  parseMarkdownToSections,
-} from '../../../src/content/parse-markdown.js'
+import { describe, expect, test } from 'bun:test'
+import { extractFrontmatter, parseMarkdownToSections, splitByHeadings } from '../../../src/content/parse-markdown.js'
 
 // ---------------------------------------------------------------------------
 // extractFrontmatter
@@ -255,10 +251,10 @@ Some content without an H1.
       sourceType: 'swift-evolution',
     })
 
-    const discussions = sections.filter(s => s.sectionKind === 'discussion')
+    const discussions = sections.filter((s) => s.sectionKind === 'discussion')
     expect(discussions.length).toBe(3)
 
-    const headings = discussions.map(s => s.heading)
+    const headings = discussions.map((s) => s.heading)
     expect(headings).toContain('Motivation')
     expect(headings).toContain('Proposed Solution')
     expect(headings).toContain('Detailed Design')

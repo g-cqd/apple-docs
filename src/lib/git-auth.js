@@ -61,7 +61,9 @@ async function runChild(spawn, cmd, { timeoutMs, stdin, env }) {
   let timer
   const timeout = new Promise((resolve) => {
     timer = setTimeout(() => {
-      try { proc.kill() } catch {}
+      try {
+        proc.kill()
+      } catch {}
       resolve('timeout')
     }, timeoutMs)
   })
@@ -86,10 +88,7 @@ async function runChild(spawn, cmd, { timeoutMs, stdin, env }) {
     const result = await Promise.race([exitedPromise, timeout])
     if (result === 'timeout') return null
 
-    const [stdout, stderr] = await Promise.all([
-      streamToString(proc.stdout),
-      streamToString(proc.stderr),
-    ])
+    const [stdout, stderr] = await Promise.all([streamToString(proc.stdout), streamToString(proc.stderr)])
     return { code: typeof result.code === 'number' ? result.code : 0, stdout, stderr }
   } finally {
     clearTimeout(timer)
@@ -128,22 +127,13 @@ function parseGitCredentialOutput(text) {
  * @param {Record<string, string | undefined>} [options.env] Defaults to process.env.
  * @returns {Promise<{ token: string, source: 'gh' | 'git-credential' } | null>}
  */
-export async function detectLocalGitHubToken({
-  timeoutMs = 3000,
-  spawn = Bun.spawn,
-  which = Bun.which,
-  env = process.env,
-} = {}) {
+export async function detectLocalGitHubToken({ timeoutMs = 3000, spawn = Bun.spawn, which = Bun.which, env = process.env } = {}) {
   const childEnv = safeEnv(env)
 
   // 1. gh auth token --hostname github.com
   try {
     if (which('gh')) {
-      const res = await runChild(
-        spawn,
-        ['gh', 'auth', 'token', '--hostname', 'github.com'],
-        { timeoutMs, env: childEnv },
-      )
+      const res = await runChild(spawn, ['gh', 'auth', 'token', '--hostname', 'github.com'], { timeoutMs, env: childEnv })
       if (res && res.code === 0) {
         const token = res.stdout.trim()
         if (token.length > 0) {
@@ -159,11 +149,7 @@ export async function detectLocalGitHubToken({
   try {
     if (which('git')) {
       const payload = 'protocol=https\nhost=github.com\n\n'
-      const res = await runChild(
-        spawn,
-        ['git', 'credential', 'fill'],
-        { timeoutMs, stdin: payload, env: childEnv },
-      )
+      const res = await runChild(spawn, ['git', 'credential', 'fill'], { timeoutMs, stdin: payload, env: childEnv })
       if (res && res.code === 0) {
         const token = parseGitCredentialOutput(res.stdout)
         if (token) {

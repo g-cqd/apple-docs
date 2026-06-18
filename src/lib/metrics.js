@@ -59,9 +59,12 @@ function escapeLabelValue(value) {
   let out = ''
   for (let i = 0; i < value.length; i++) {
     const ch = value.charCodeAt(i)
-    if (ch === 0x5c) out += '\\\\'         // backslash
-    else if (ch === 0x22) out += '\\"'     // double-quote
-    else if (ch === 0x0a) out += '\\n'     // newline
+    if (ch === 0x5c)
+      out += '\\\\' // backslash
+    else if (ch === 0x22)
+      out += '\\"' // double-quote
+    else if (ch === 0x0a)
+      out += '\\n' // newline
     else out += value[i]
   }
   return out

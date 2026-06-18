@@ -28,8 +28,7 @@ const PUA_RANGES = Object.freeze([
 // SF Symbols.app the worker targets. The Resources are plain plists +
 // the (encrypted) metadata.store; SFSymbolsShared.SymbolFontReader
 // reads them regardless of the framework binary's origin.
-const METADATA_DIR =
-  '/System/Library/PrivateFrameworks/SFSymbols.framework/Resources/metadata'
+const METADATA_DIR = '/System/Library/PrivateFrameworks/SFSymbols.framework/Resources/metadata'
 
 const DEFAULT_APP_PATH = '/Applications/SF Symbols.app'
 
@@ -45,10 +44,7 @@ const DEFAULT_APP_PATH = '/Applications/SF Symbols.app'
 function pathsForApp(appPath) {
   const sharedFrameworkDir = join(appPath, 'Contents', 'Frameworks')
   const sharedFramework = join(sharedFrameworkDir, 'SFSymbolsShared.framework')
-  const glyphsLibFrameworkDir = join(
-    sharedFramework,
-    'Versions', 'A', 'Frameworks',
-  )
+  const glyphsLibFrameworkDir = join(sharedFramework, 'Versions', 'A', 'Frameworks')
   const fontPath = join(appPath, 'Contents', 'Resources', 'Fonts', 'SFSymbolsFallback.otf')
   return {
     appPath,
@@ -62,11 +58,7 @@ function pathsForApp(appPath) {
 
 function isPrivateUseCodepoint(cp) {
   if (!Number.isInteger(cp) || cp < 0 || cp > 0x10ffff) return false
-  return (
-    (cp >= 0xe000 && cp <= 0xf8ff) ||
-    (cp >= 0xf0000 && cp <= 0xffffd) ||
-    (cp >= 0x100000 && cp <= 0x10fffd)
-  )
+  return (cp >= 0xe000 && cp <= 0xf8ff) || (cp >= 0xf0000 && cp <= 0xffffd) || (cp >= 0x100000 && cp <= 0x10fffd)
 }
 
 /**
@@ -153,9 +145,7 @@ export async function dumpSymbolCodepoints(names, opts) {
       }
       // Race the read against a line-level idle timeout.
       const readPromise = reader.read()
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('codepoint worker line timeout')), timeoutMs),
-      )
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('codepoint worker line timeout')), timeoutMs))
       const { value, done } = await Promise.race([readPromise, timeoutPromise])
       if (done) {
         if (buffer.length > 0) {
@@ -176,9 +166,7 @@ export async function dumpSymbolCodepoints(names, opts) {
   try {
     for (const name of names) {
       if (Date.now() > wallClockDeadline) {
-        logger?.warn?.(
-          `codepoint dump exceeded ${wallClockMs}ms wall clock; processed ${map.size} of ${names.length}`,
-        )
+        logger?.warn?.(`codepoint dump exceeded ${wallClockMs}ms wall clock; processed ${map.size} of ${names.length}`)
         break
       }
       proc.stdin.write(`${name}\n`)
@@ -204,9 +192,7 @@ export async function dumpSymbolCodepoints(names, opts) {
         // in principle return Latin codepoints — we want to catch that
         // here rather than store nonsense in the DB.
         if (!isPrivateUseCodepoint(parsed.codepoint)) {
-          logger?.warn?.(
-            `codepoint dump: rejecting non-PUA codepoint ${parsed.codepoint} for ${parsed.name}`,
-          )
+          logger?.warn?.(`codepoint dump: rejecting non-PUA codepoint ${parsed.codepoint} for ${parsed.name}`)
           map.set(parsed.name, null)
           skipped++
           continue
@@ -219,8 +205,14 @@ export async function dumpSymbolCodepoints(names, opts) {
       }
     }
   } finally {
-    try { proc.stdin.end?.() } catch {}
-    try { proc.kill() } catch { killed = true }
+    try {
+      proc.stdin.end?.()
+    } catch {}
+    try {
+      proc.kill()
+    } catch {
+      killed = true
+    }
     void killed
   }
   return { map, total: names.length, resolved, skipped, fontPath }
@@ -247,25 +239,20 @@ function parseLine(line) {
  */
 async function appMajorVersion(appPath, logger) {
   try {
-    const proc = Bun.spawn(
-      ['defaults', 'read', join(appPath, 'Contents', 'Info.plist'), 'CFBundleShortVersionString'],
-      { stdout: 'pipe', stderr: 'ignore' },
-    )
+    const proc = Bun.spawn(['defaults', 'read', join(appPath, 'Contents', 'Info.plist'), 'CFBundleShortVersionString'], { stdout: 'pipe', stderr: 'ignore' })
     const out = (await new Response(proc.stdout).text()).trim()
     await proc.exited
     const major = Number.parseInt(out.split('.')[0], 10)
     if (Number.isInteger(major) && major > 0) return major
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   logger?.debug?.(`SF Symbols app version unreadable at ${appPath}; assuming latest major (8)`)
   return 8
 }
 
 async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH, logger }) {
-  const {
-    symbolCodepointWorkerScript,
-    sfSymbolsSharedInterface,
-    CORE_GLYPHS_LIB_INTERFACE,
-  } = await import('../swift/symbol-codepoint-worker.js')
+  const { symbolCodepointWorkerScript, sfSymbolsSharedInterface, CORE_GLYPHS_LIB_INTERFACE } = await import('../swift/symbol-codepoint-worker.js')
   const { tmpdir } = await import('node:os')
   const { mkdtemp, rm, mkdir, symlink } = await import('node:fs/promises')
 
@@ -302,30 +289,15 @@ async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH,
   const glyphsFwShellDir = join(stageDir, 'CoreGlyphsLib.framework')
   await mkdir(sharedFwShellDir, { recursive: true })
   await mkdir(glyphsFwShellDir, { recursive: true })
-  await symlink(
-    join(paths.sharedFramework, 'Versions', 'A', 'SFSymbolsShared'),
-    join(sharedFwShellDir, 'SFSymbolsShared'),
-  )
-  await symlink(
-    join(paths.glyphsLibFrameworkDir, 'CoreGlyphsLib.framework', 'Versions', 'A', 'CoreGlyphsLib'),
-    join(glyphsFwShellDir, 'CoreGlyphsLib'),
-  )
+  await symlink(join(paths.sharedFramework, 'Versions', 'A', 'SFSymbolsShared'), join(sharedFwShellDir, 'SFSymbolsShared'))
+  await symlink(join(paths.glyphsLibFrameworkDir, 'CoreGlyphsLib.framework', 'Versions', 'A', 'CoreGlyphsLib'), join(glyphsFwShellDir, 'CoreGlyphsLib'))
 
   const scriptPath = join(stageDir, 'worker.swift')
   await Bun.write(scriptPath, symbolCodepointWorkerScript(major))
 
   logger?.debug?.(`spawning codepoint worker against ${fontPath} (app=${appPath})`)
   const proc = Bun.spawn(
-    [
-      'swift',
-      '-I', stageDir,
-      '-F', stageDir,
-      '-framework', 'SFSymbolsShared',
-      '-framework', 'CoreGlyphsLib',
-      scriptPath,
-      fontPath,
-      metadataDir,
-    ],
+    ['swift', '-I', stageDir, '-F', stageDir, '-framework', 'SFSymbolsShared', '-framework', 'CoreGlyphsLib', scriptPath, fontPath, metadataDir],
     {
       stdout: 'pipe',
       stderr: 'pipe',
@@ -336,17 +308,15 @@ async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH,
         // symlinks resolve at exec time (dyld follows the link, then
         // re-resolves rpath-relative @rpath/CoreGlyphsLib inside the
         // SFSymbolsShared.framework bundle).
-        DYLD_FRAMEWORK_PATH: [
-          paths.glyphsLibFrameworkDir,
-          paths.sharedFrameworkDir,
-          process.env.DYLD_FRAMEWORK_PATH,
-        ].filter(Boolean).join(':'),
+        DYLD_FRAMEWORK_PATH: [paths.glyphsLibFrameworkDir, paths.sharedFrameworkDir, process.env.DYLD_FRAMEWORK_PATH].filter(Boolean).join(':'),
       },
     },
   )
   // Schedule stage cleanup once the process exits.
   void (async () => {
-    try { await proc.exited } catch {}
+    try {
+      await proc.exited
+    } catch {}
     void rm(stageDir, { recursive: true, force: true }).catch(() => {})
   })()
   return proc

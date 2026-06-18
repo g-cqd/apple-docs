@@ -1,6 +1,6 @@
+import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { dirSize, fileCount } from '../storage/files.js'
-import { statSync, existsSync } from 'node:fs'
 
 const STALE_THRESHOLD_DAYS = 14
 
@@ -22,16 +22,14 @@ function freshnessCheck(db) {
   const isStale = daysSinceSync > STALE_THRESHOLD_DAYS
 
   // Per-root staleness: last update_log entry per root_slug
-  const rootRows = db.db.query(
-    "SELECT root_slug, MAX(timestamp) as last_update FROM update_log WHERE root_slug IS NOT NULL GROUP BY root_slug"
-  ).all()
+  const rootRows = db.db.query('SELECT root_slug, MAX(timestamp) as last_update FROM update_log WHERE root_slug IS NOT NULL GROUP BY root_slug').all()
 
   const staleRoots = rootRows
-    .map(r => ({
+    .map((r) => ({
       slug: r.root_slug,
       daysSince: Math.floor((Date.now() - new Date(r.last_update).getTime()) / 86400000),
     }))
-    .filter(r => r.daysSince > STALE_THRESHOLD_DAYS)
+    .filter((r) => r.daysSince > STALE_THRESHOLD_DAYS)
 
   return { lastSyncAt, daysSinceSync, isStale, staleRoots }
 }
@@ -73,15 +71,13 @@ export async function status(opts, ctx) {
     failed: stats.crawlProgress.failed,
   }
 
-  const crawlByRoot = stats.crawlByRoot.map(r => ({
+  const crawlByRoot = stats.crawlByRoot.map((r) => ({
     root: r.root_slug,
     processed: r.processed,
     pending: r.pending,
     failed: r.failed,
     total: r.processed + r.pending + r.failed,
-    percent: r.processed + r.pending + r.failed > 0
-      ? Math.round((r.processed / (r.processed + r.pending + r.failed)) * 100)
-      : 0,
+    percent: r.processed + r.pending + r.failed > 0 ? Math.round((r.processed / (r.processed + r.pending + r.failed)) * 100) : 0,
   }))
 
   // Check for updates (only if installed from snapshot)
@@ -94,9 +90,7 @@ export async function status(opts, ctx) {
   // macOS built it (decides the SF Symbols catalog + font set).
   const snapshotTag = db.getSnapshotMeta('snapshot_tag') ?? db.getSnapshotMeta('snapshot_version') ?? null
   const snapshotBuildMacos = db.getSnapshotMeta('build_macos') ?? null
-  const snapshot = snapshotTag || snapshotBuildMacos
-    ? { tag: snapshotTag, buildMacos: snapshotBuildMacos }
-    : null
+  const snapshot = snapshotTag || snapshotBuildMacos ? { tag: snapshotTag, buildMacos: snapshotBuildMacos } : null
 
   const tier = db.getTier()
   const capabilities = {
@@ -116,7 +110,7 @@ export async function status(opts, ctx) {
     markdown: { size: markdownSize, files: markdownFiles },
     roots: {
       total: stats.totalRoots,
-      byKind: Object.fromEntries(stats.rootsByKind.map(r => [r.kind, r.count])),
+      byKind: Object.fromEntries(stats.rootsByKind.map((r) => [r.kind, r.count])),
     },
     pages: {
       active: stats.totalPages,

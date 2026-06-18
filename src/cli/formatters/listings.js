@@ -1,4 +1,4 @@
-import { bold, dim, } from './_shared.js'
+import { bold, dim } from './_shared.js'
 
 export function formatFrameworks(result) {
   if (result.roots.length === 0) return 'No frameworks found. Run `apple-docs sync` first.'
@@ -66,9 +66,7 @@ export function formatBrowse(result) {
 }
 
 export function formatTaxonomy(result) {
-  const sections = result.field && result.values
-    ? [[result.field, result.values]]
-    : Object.entries(result)
+  const sections = result.field && result.values ? [[result.field, result.values]] : Object.entries(result)
   const lines = []
   for (const [label, values] of sections) {
     if (!Array.isArray(values) || values.length === 0) continue
@@ -80,4 +78,3 @@ export function formatTaxonomy(result) {
   }
   return lines.join('\n').trimEnd()
 }
-

@@ -1,11 +1,11 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import {
-  htmlToPlainText,
-  htmlToMarkdown,
-  extractMetaInfo,
-  extractHtmlContent,
-  parseHtmlToNormalized,
   detectRedirectStub,
+  extractHtmlContent,
+  extractMetaInfo,
+  htmlToMarkdown,
+  htmlToPlainText,
+  parseHtmlToNormalized,
 } from '../../../src/content/parse-html.js'
 
 // ---------------------------------------------------------------------------
@@ -168,7 +168,7 @@ describe('extractHtmlContent — container detection', () => {
       <footer>Skip footer</footer>
     </body></html>`
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).toContain('Main content.')
     expect(allText).not.toContain('Skip nav')
     expect(allText).not.toContain('Skip footer')
@@ -179,7 +179,7 @@ describe('extractHtmlContent — container detection', () => {
       <article><p>Article content.</p></article>
     </body></html>`
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).toContain('Article content.')
   })
 
@@ -188,7 +188,7 @@ describe('extractHtmlContent — container detection', () => {
       <div class="content"><p>Content class text.</p></div>
     </body></html>`
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).toContain('Content class text.')
   })
 
@@ -197,14 +197,14 @@ describe('extractHtmlContent — container detection', () => {
       <div id="content"><p>Content id text.</p></div>
     </body></html>`
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).toContain('Content id text.')
   })
 
   test('falls back to <body> when no semantic container found', () => {
-    const html = "<html><body><p>Body text only.</p></body></html>"
+    const html = '<html><body><p>Body text only.</p></body></html>'
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).toContain('Body text only.')
   })
 
@@ -214,7 +214,7 @@ describe('extractHtmlContent — container detection', () => {
       <div id="custom-docs"><p>Custom container.</p></div>
     </body></html>`
     const { sections } = extractHtmlContent(html, { containerSelector: '#custom-docs' })
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).toContain('Custom container.')
     // main content should NOT be included since we targeted custom container
     expect(allText).not.toContain('Should be ignored.')
@@ -234,7 +234,7 @@ describe('extractHtmlContent — strips navigation and chrome elements', () => {
       </main>
     </body></html>`
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).not.toContain('Home')
     expect(allText).toContain('Real content here.')
   })
@@ -247,7 +247,7 @@ describe('extractHtmlContent — strips navigation and chrome elements', () => {
       </main>
     </body></html>`
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).not.toContain('Site Header')
     expect(allText).toContain('Article body.')
   })
@@ -260,7 +260,7 @@ describe('extractHtmlContent — strips navigation and chrome elements', () => {
       </main>
     </body></html>`
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).not.toContain('Copyright 2024')
     expect(allText).toContain('Article text.')
   })
@@ -273,7 +273,7 @@ describe('extractHtmlContent — strips navigation and chrome elements', () => {
       </main>
     </body></html>`
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).not.toContain('should not appear')
     expect(allText).toContain('Content after script.')
   })
@@ -287,7 +287,7 @@ describe('extractHtmlContent — strips navigation and chrome elements', () => {
       </main>
     </body></html>`
     const { sections } = extractHtmlContent(html)
-    const allText = sections.map(s => s.content).join(' ')
+    const allText = sections.map((s) => s.content).join(' ')
     expect(allText).not.toContain('display: none')
     expect(allText).not.toContain('Please enable JavaScript')
     expect(allText).toContain('Visible content.')
@@ -310,7 +310,7 @@ describe('extractHtmlContent — splits by h2 headings', () => {
     const { sections } = extractHtmlContent(html)
     expect(sections.length).toBeGreaterThanOrEqual(3)
 
-    const headings = sections.map(s => s.heading).filter(Boolean)
+    const headings = sections.map((s) => s.heading).filter(Boolean)
     expect(headings).toContain('First Section')
     expect(headings).toContain('Second Section')
   })
@@ -321,7 +321,7 @@ describe('extractHtmlContent — splits by h2 headings', () => {
       <p>Overview content.</p>
     </main></body></html>`
     const { sections } = extractHtmlContent(html)
-    const overviewSection = sections.find(s => s.heading === 'Overview')
+    const overviewSection = sections.find((s) => s.heading === 'Overview')
     expect(overviewSection).toBeDefined()
     expect(overviewSection.content).toContain('Overview content.')
   })
@@ -333,7 +333,7 @@ describe('extractHtmlContent — splits by h2 headings', () => {
       <p>After heading.</p>
     </main></body></html>`
     const { sections } = extractHtmlContent(html)
-    const leadSection = sections.find(s => s.heading === null)
+    const leadSection = sections.find((s) => s.heading === null)
     expect(leadSection).toBeDefined()
     expect(leadSection.content).toContain('Intro before any heading.')
   })
@@ -347,7 +347,7 @@ describe('extractHtmlContent — splits by h2 headings', () => {
       <p>Sub content B.</p>
     </main></body></html>`
     const { sections } = extractHtmlContent(html)
-    const headings = sections.map(s => s.heading).filter(Boolean)
+    const headings = sections.map((s) => s.heading).filter(Boolean)
     expect(headings).toContain('Sub Section A')
     expect(headings).toContain('Sub Section B')
   })
@@ -458,20 +458,20 @@ describe('parseHtmlToNormalized', () => {
   test('produces sections with abstract and discussion sectionKinds', () => {
     const { sections } = parseHtmlToNormalized(minimalHtml, 'swift/generics')
 
-    const abstractSection = sections.find(s => s.sectionKind === 'abstract')
+    const abstractSection = sections.find((s) => s.sectionKind === 'abstract')
     expect(abstractSection).toBeDefined()
     expect(abstractSection.contentText).toBe('An introduction to Swift generics.')
 
-    const discussionSections = sections.filter(s => s.sectionKind === 'discussion')
+    const discussionSections = sections.filter((s) => s.sectionKind === 'discussion')
     expect(discussionSections.length).toBeGreaterThanOrEqual(2)
-    const headingTexts = discussionSections.map(s => s.heading)
+    const headingTexts = discussionSections.map((s) => s.heading)
     expect(headingTexts).toContain('Overview')
     expect(headingTexts).toContain('Type Parameters')
   })
 
   test('sections have monotonically increasing sortOrder', () => {
     const { sections } = parseHtmlToNormalized(minimalHtml, 'swift/generics')
-    const orders = sections.map(s => s.sortOrder)
+    const orders = sections.map((s) => s.sortOrder)
     for (let i = 1; i < orders.length; i++) {
       expect(orders[i]).toBeGreaterThan(orders[i - 1])
     }
@@ -696,7 +696,7 @@ describe('extractHtmlContent — preserveStructure option', () => {
       <ul><li>one</li><li>two</li></ul>
     </main></body></html>`
     const { sections } = extractHtmlContent(html, { preserveStructure: true })
-    const sec = sections.find(s => s.heading === 'Section A')
+    const sec = sections.find((s) => s.heading === 'Section A')
     expect(sec.content).toContain('`foo()`')
     expect(sec.content).toContain('**place**')
     expect(sec.content).toContain('- one')
@@ -711,7 +711,7 @@ describe('extractHtmlContent — preserveStructure option', () => {
       <ul><li>one</li><li>two</li></ul>
     </main></body></html>`
     const { sections } = extractHtmlContent(html)
-    const sec = sections.find(s => s.heading === 'Section A')
+    const sec = sections.find((s) => s.heading === 'Section A')
     expect(sec.content).not.toContain('`foo()`')
     expect(sec.content).not.toContain('- one')
   })
@@ -725,7 +725,7 @@ describe('stripElements — adversarial inputs (P4.9)', () => {
   function strip(inner) {
     const html = `<html><body><h1>T</h1><h2>S</h2><div>${inner}</div></body></html>`
     const { sections } = extractHtmlContent(html)
-    return (sections.find(s => s.heading === 'S')?.content ?? '').replace(/\s+/g, ' ').trim()
+    return (sections.find((s) => s.heading === 'S')?.content ?? '').replace(/\s+/g, ' ').trim()
   }
 
   test('deeply nested same-tag elements strip in linear time', () => {
@@ -737,7 +737,7 @@ describe('stripElements — adversarial inputs (P4.9)', () => {
     const { sections } = extractHtmlContent(html)
     const elapsed = performance.now() - start
     expect(elapsed).toBeLessThan(2000)
-    const content = sections.find(s => s.heading === 'S')?.content ?? ''
+    const content = sections.find((s) => s.heading === 'S')?.content ?? ''
     expect(content).toContain('before')
     expect(content).toContain('after')
     expect(content).not.toContain('foo')

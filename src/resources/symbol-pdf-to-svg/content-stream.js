@@ -43,8 +43,12 @@ export function parseContentStream(buffer, alphaByName) {
     }
     const op = token.value
     switch (op) {
-      case 'q': stack.push({ ...top() }); break
-      case 'Q': if (stack.length > 1) stack.pop(); break
+      case 'q':
+        stack.push({ ...top() })
+        break
+      case 'Q':
+        if (stack.length > 1) stack.pop()
+        break
       case 'gs': {
         const name = operands[0]
         if (typeof name === 'string' && name.startsWith('/')) {
@@ -57,8 +61,18 @@ export function parseContentStream(buffer, alphaByName) {
         // Apple's PDFs emit identity here; we still consume operands so the
         // subsequent path data isn't misread.
         break
-      case 'cs': case 'sc': case 'scn': case 'CS': case 'SC': case 'SCN':
-      case 'rg': case 'RG': case 'g': case 'G': case 'k': case 'K':
+      case 'cs':
+      case 'sc':
+      case 'scn':
+      case 'CS':
+      case 'SC':
+      case 'SCN':
+      case 'rg':
+      case 'RG':
+      case 'g':
+      case 'G':
+      case 'k':
+      case 'K':
         // Color is meaningless for our currentColor-driven SVG output.
         break
       case 'm':
@@ -66,43 +80,51 @@ export function parseContentStream(buffer, alphaByName) {
         break
       case 'l':
         appendCommand({ op: 'L', args: [operands[0], operands[1]] })
-        currentX = operands[0]; currentY = operands[1]
+        currentX = operands[0]
+        currentY = operands[1]
         break
       case 'c':
         appendCommand({ op: 'C', args: operands.slice(0, 6) })
-        currentX = operands[4]; currentY = operands[5]
+        currentX = operands[4]
+        currentY = operands[5]
         break
       case 'v':
         appendCommand({ op: 'C', args: [currentX, currentY, operands[0], operands[1], operands[2], operands[3]] })
-        currentX = operands[2]; currentY = operands[3]
+        currentX = operands[2]
+        currentY = operands[3]
         break
       case 'y':
         appendCommand({ op: 'C', args: [operands[0], operands[1], operands[2], operands[3], operands[2], operands[3]] })
-        currentX = operands[2]; currentY = operands[3]
+        currentX = operands[2]
+        currentY = operands[3]
         break
       case 're': {
         const [x, y, w, h] = operands
-        path.push({ commands: [
-          { op: 'M', args: [x, y] },
-          { op: 'L', args: [x + w, y] },
-          { op: 'L', args: [x + w, y + h] },
-          { op: 'L', args: [x, y + h] },
-          { op: 'Z' },
-        ] })
-        currentX = x; currentY = y
+        path.push({
+          commands: [{ op: 'M', args: [x, y] }, { op: 'L', args: [x + w, y] }, { op: 'L', args: [x + w, y + h] }, { op: 'L', args: [x, y + h] }, { op: 'Z' }],
+        })
+        currentX = x
+        currentY = y
         break
       }
       case 'h':
         appendCommand({ op: 'Z' })
         break
-      case 'f': case 'F': case 'f*':
+      case 'f':
+      case 'F':
+      case 'f*':
         closeFill(op === 'f*' ? 'evenodd' : 'nonzero')
         break
-      case 'B': case 'B*': case 'b': case 'b*':
+      case 'B':
+      case 'B*':
+      case 'b':
+      case 'b*':
         if (op === 'b' || op === 'b*') appendCommand({ op: 'Z' })
         closeFill(op.includes('*') ? 'evenodd' : 'nonzero')
         break
-      case 'n': case 'S': case 's':
+      case 'n':
+      case 'S':
+      case 's':
         // Stroke-only or no-paint: drop the path.
         path = []
         break
@@ -124,7 +146,10 @@ function tokenize(text) {
       i = newline < 0 ? text.length : newline + 1
       continue
     }
-    if (/\s/.test(ch)) { i++; continue }
+    if (/\s/.test(ch)) {
+      i++
+      continue
+    }
     if (ch === '/') {
       const start = i
       i++

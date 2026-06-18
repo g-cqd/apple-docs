@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import { createLogger } from '../../src/lib/logger.js'
 import { createServer } from '../../src/mcp/server.js'
 import { DocsDatabase } from '../../src/storage/database.js'
-import { createLogger } from '../../src/lib/logger.js'
 
 let db, server, client, dataDir
 
@@ -14,15 +14,23 @@ let db, server, client, dataDir
 // in a public-mode response. Any extra key is treated as a leak.
 const ALLOWED = {
   search_docs: new Set([
-    'query', 'total', 'hasMore', 'results',
-    'approximate', 'truncated',
+    'query',
+    'total',
+    'hasMore',
+    'results',
+    'approximate',
+    'truncated',
     'pageInfo',
     // Doc-shaped variant (search --read)
-    'found', 'metadata', 'content', 'sections', 'matches', 'note', 'bestMatch',
+    'found',
+    'metadata',
+    'content',
+    'sections',
+    'matches',
+    'note',
+    'bestMatch',
   ]),
-  read_doc: new Set([
-    'found', 'metadata', 'content', 'sections', 'matches', 'note', 'bestMatch', 'pageInfo',
-  ]),
+  read_doc: new Set(['found', 'metadata', 'content', 'sections', 'matches', 'note', 'bestMatch', 'pageInfo']),
   list_frameworks: new Set(['roots', 'total', 'pageInfo']),
   browse: new Set(['framework', 'title', 'path', 'pages', 'children', 'total', 'pageInfo', 'groups', 'year']),
   list_taxonomy: new Set(['kind', 'role', 'docKind', 'roleHeading', 'sourceType']),
@@ -33,30 +41,66 @@ const ALLOWED = {
 }
 
 const SEARCH_HIT_ALLOWED = new Set([
-  'path', 'title', 'framework', 'rootSlug', 'kind', 'sourceType',
-  'abstract', 'declaration', 'platforms', 'language',
-  'snippet', 'relatedCount', 'confidence',
-  'isDeprecated', 'isBeta', 'isReleaseNotes',
+  'path',
+  'title',
+  'framework',
+  'rootSlug',
+  'kind',
+  'sourceType',
+  'abstract',
+  'declaration',
+  'platforms',
+  'language',
+  'snippet',
+  'relatedCount',
+  'confidence',
+  'isDeprecated',
+  'isBeta',
+  'isReleaseNotes',
 ])
 
 const METADATA_ALLOWED = new Set([
-  'title', 'framework', 'rootSlug', 'roleHeading', 'kind',
-  'abstract', 'declaration', 'path', 'platforms', 'relationships',
-  'isDeprecated', 'isBeta', 'isReleaseNotes',
+  'title',
+  'framework',
+  'rootSlug',
+  'roleHeading',
+  'kind',
+  'abstract',
+  'declaration',
+  'path',
+  'platforms',
+  'relationships',
+  'isDeprecated',
+  'isBeta',
+  'isReleaseNotes',
 ])
 
-const PAGE_INFO_ALLOWED = new Set([
-  'page', 'totalPages', 'hasNextPage', 'hasPreviousPage', 'totalItems',
-])
+const PAGE_INFO_ALLOWED = new Set(['page', 'totalPages', 'hasNextPage', 'hasPreviousPage', 'totalItems'])
 
 // Infrastructure fields explicitly proven NOT to appear anywhere.
 const INFRA_BLACKLIST = new Set([
-  'matchQuality', 'distance', 'score',
-  'tier', 'tierLimitation', 'trigramAvailable', 'bodyIndexAvailable',
-  'relaxed', 'relaxationTier', 'partial', 'partialReasons',
-  'urlDepth', 'sourceMetadata', 'intent',
-  'sectionKind', 'sortOrder', 'section_kind', 'sort_order',
-  'file_path', 'lastSeen', 'status', 'displayName',
+  'matchQuality',
+  'distance',
+  'score',
+  'tier',
+  'tierLimitation',
+  'trigramAvailable',
+  'bodyIndexAvailable',
+  'relaxed',
+  'relaxationTier',
+  'partial',
+  'partialReasons',
+  'urlDepth',
+  'sourceMetadata',
+  'intent',
+  'sectionKind',
+  'sortOrder',
+  'section_kind',
+  'sort_order',
+  'file_path',
+  'lastSeen',
+  'status',
+  'displayName',
 ])
 
 function assertNoBlacklistedDeep(value, path = '$') {
@@ -105,14 +149,19 @@ beforeEach(async () => {
     path: 'swiftui/view',
     title: 'View',
     role: 'symbol',
-    abstract: 'A type that represents part of your app\'s user interface.',
+    abstract: "A type that represents part of your app's user interface.",
   })
 
   // Seed: View doc with relationships.
   db.upsertNormalizedDocument({
     document: {
-      sourceType: 'apple-docc', key: 'swiftui/text', title: 'Text',
-      kind: 'symbol', role: 'symbol', roleHeading: 'Structure', framework: 'swiftui',
+      sourceType: 'apple-docc',
+      key: 'swiftui/text',
+      title: 'Text',
+      kind: 'symbol',
+      role: 'symbol',
+      roleHeading: 'Structure',
+      framework: 'swiftui',
       abstractText: 'A view that displays text.',
     },
     sections: [{ sectionKind: 'abstract', contentText: 'A view that displays text.', sortOrder: 0 }],
@@ -120,17 +169,20 @@ beforeEach(async () => {
   })
   db.upsertNormalizedDocument({
     document: {
-      sourceType: 'apple-docc', key: 'swiftui/view', title: 'View',
-      kind: 'symbol', role: 'symbol', roleHeading: 'Protocol', framework: 'swiftui',
-      abstractText: 'A type that represents part of your app\'s user interface.',
+      sourceType: 'apple-docc',
+      key: 'swiftui/view',
+      title: 'View',
+      kind: 'symbol',
+      role: 'symbol',
+      roleHeading: 'Protocol',
+      framework: 'swiftui',
+      abstractText: "A type that represents part of your app's user interface.",
     },
     sections: [
-      { sectionKind: 'abstract', contentText: 'A type that represents part of your app\'s user interface.', sortOrder: 0 },
+      { sectionKind: 'abstract', contentText: "A type that represents part of your app's user interface.", sortOrder: 0 },
       { sectionKind: 'discussion', heading: 'Overview', contentText: 'You create custom views.', sortOrder: 1 },
     ],
-    relationships: [
-      { fromKey: 'swiftui/view', toKey: 'swiftui/text', relationType: 'child', sortOrder: 0 },
-    ],
+    relationships: [{ fromKey: 'swiftui/view', toKey: 'swiftui/text', relationType: 'child', sortOrder: 0 }],
   })
 
   // Use a real tmpdir for dataDir so the markdown/raw-json persistence
@@ -152,7 +204,11 @@ afterEach(async () => {
   await server?.close()
   db?.close()
   if (dataDir) {
-    try { rmSync(dataDir, { recursive: true, force: true }) } catch { /* tolerate */ }
+    try {
+      rmSync(dataDir, { recursive: true, force: true })
+    } catch {
+      /* tolerate */
+    }
     dataDir = undefined
   }
 })
@@ -168,7 +224,7 @@ describe('MCP leak guard — every tool response respects the allowlist', () => 
     assertTopLevelAllowlist('search_docs', out)
     assertNoBlacklistedDeep(out)
     for (const hit of out.results ?? []) {
-      assertNestedAllowlist(hit, SEARCH_HIT_ALLOWED, `search_docs.results[*]`)
+      assertNestedAllowlist(hit, SEARCH_HIT_ALLOWED, 'search_docs.results[*]')
       expect(['exact', 'partial', 'approximate']).toContain(hit.confidence)
     }
     assertNestedAllowlist(out.pageInfo, PAGE_INFO_ALLOWED, 'search_docs.pageInfo')

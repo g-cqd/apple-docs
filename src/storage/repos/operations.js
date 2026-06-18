@@ -9,9 +9,7 @@
 export function createOperationsRepo(db) {
   // Activity tracking — singleton row keyed (id = 1) so `setActivity`
   // overwrites a stale entry left behind by a killed run.
-  const setActivityStmt = db.query(
-    'INSERT OR REPLACE INTO activity (id, action, started_at, pid, roots) VALUES (1, $action, $started_at, $pid, $roots)',
-  )
+  const setActivityStmt = db.query('INSERT OR REPLACE INTO activity (id, action, started_at, pid, roots) VALUES (1, $action, $started_at, $pid, $roots)')
   const clearActivityStmt = db.query('DELETE FROM activity WHERE id = 1')
   const getActivityStmt = db.query('SELECT * FROM activity WHERE id = 1')
 
@@ -19,9 +17,7 @@ export function createOperationsRepo(db) {
   const getSnapshotMetaStmt = db.query('SELECT value FROM snapshot_meta WHERE key = ?')
   const setSnapshotMetaStmt = db.query('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)')
   const getSyncCheckpointStmt = db.query('SELECT value FROM sync_checkpoint WHERE key = ?')
-  const setSyncCheckpointStmt = db.query(
-    'INSERT OR REPLACE INTO sync_checkpoint (key, value, updated_at) VALUES (?, ?, ?)',
-  )
+  const setSyncCheckpointStmt = db.query('INSERT OR REPLACE INTO sync_checkpoint (key, value, updated_at) VALUES (?, ?, ?)')
   const clearSyncCheckpointStmt = db.query('DELETE FROM sync_checkpoint WHERE key = ?')
 
   // Update log
@@ -32,9 +28,7 @@ export function createOperationsRepo(db) {
   const getLastUpdateLogStmt = db.query('SELECT * FROM update_log ORDER BY id DESC LIMIT 1')
 
   // Per-document render-index (web build incremental cache)
-  const getRenderIndexStmt = db.query(
-    'SELECT doc_id, sections_digest, template_version, html_hash, updated_at FROM document_render_index WHERE doc_id = ?',
-  )
+  const getRenderIndexStmt = db.query('SELECT doc_id, sections_digest, template_version, html_hash, updated_at FROM document_render_index WHERE doc_id = ?')
   const upsertRenderIndexStmt = db.query(
     'INSERT OR REPLACE INTO document_render_index (doc_id, sections_digest, template_version, html_hash, updated_at) VALUES (?, ?, ?, ?, ?)',
   )
@@ -112,13 +106,7 @@ export function createOperationsRepo(db) {
       return getRenderIndexStmt.get(docId) ?? null
     },
     upsertRenderIndexEntry({ docId, sectionsDigest, templateVersion, htmlHash }) {
-      upsertRenderIndexStmt.run(
-        docId,
-        sectionsDigest,
-        templateVersion,
-        htmlHash,
-        Math.floor(Date.now() / 1000),
-      )
+      upsertRenderIndexStmt.run(docId, sectionsDigest, templateVersion, htmlHash, Math.floor(Date.now() / 1000))
     },
     clearRenderIndex() {
       clearRenderIndexStmt.run()

@@ -1,6 +1,6 @@
-import { getPrerenderedSymbolPath, renderSfSymbol, searchSfSymbols } from '../../resources/apple-assets.js'
 import { BackpressureError } from '../../lib/errors.js'
-import { jsonResponse, fileResponseRevalidated, notFoundResponse } from '../responses.js'
+import { getPrerenderedSymbolPath, renderSfSymbol, searchSfSymbols } from '../../resources/apple-assets.js'
+import { fileResponseRevalidated, jsonResponse, notFoundResponse } from '../responses.js'
 import { validateSymbolParams } from './render-validation.js'
 
 /**
@@ -99,12 +99,15 @@ export async function symbolRenderHandler(request, ctx, url, match) {
     throw err
   }
   try {
-    const render = await renderSfSymbol({
-      scope,
-      name: decodedName,
-      format,
-      ...validated.value,
-    }, ctx)
+    const render = await renderSfSymbol(
+      {
+        scope,
+        name: decodedName,
+        format,
+        ...validated.value,
+      },
+      ctx,
+    )
     const file = Bun.file(render.file_path)
     // Live renders are keyed off (renderer, scope, name, format, size,
     // color, background) — same parameters always yield the same on-disk

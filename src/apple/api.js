@@ -1,7 +1,4 @@
-import {
-  fetchWithRetry as _fetchWithRetry,
-  checkResourceEtag,
-} from '../lib/fetch-with-retry.js'
+import { fetchWithRetry as _fetchWithRetry, checkResourceEtag } from '../lib/fetch-with-retry.js'
 
 const TUTORIALS_BASE = process.env.APPLE_DOCS_API_BASE ?? 'https://developer.apple.com/tutorials/data'
 const USER_AGENT = 'apple-docs-mcp/1.0'
@@ -33,11 +30,7 @@ const defaultOpts = {
  * @returns {Promise<{ json: object, etag: string|null, lastModified: string|null }>}
  */
 export async function fetchDocPage(path, rateLimiter) {
-  const { data, etag, lastModified } = await _fetchWithRetry(
-    resolveUrl(path),
-    rateLimiter,
-    defaultOpts,
-  )
+  const { data, etag, lastModified } = await _fetchWithRetry(resolveUrl(path), rateLimiter, defaultOpts)
   return { json: data, etag, lastModified }
 }
 

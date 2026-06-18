@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { DocsDatabase } from '../../../src/storage/database.js'
 
 let db
@@ -32,12 +32,12 @@ afterEach(() => {
 describe('search repo via DocsDatabase facade', () => {
   test('search.searchPages finds documents via FTS5', () => {
     const rows = db.searchPages('"View"', 'View', { limit: 10 })
-    expect(rows.find(r => r.path === 'swiftui/view')).toBeDefined()
+    expect(rows.find((r) => r.path === 'swiftui/view')).toBeDefined()
   })
 
   test('search.searchPages includes tier and rank', () => {
     const rows = db.searchPages('"View"', 'View', { limit: 10 })
-    const view = rows.find(r => r.path === 'swiftui/view')
+    const view = rows.find((r) => r.path === 'swiftui/view')
     expect(view).toBeDefined()
     expect(view.tier).toBe(0) // exact title match
     expect(typeof view.rank).toBe('number')
@@ -53,7 +53,7 @@ describe('search repo via DocsDatabase facade', () => {
   test('search.searchTrigram bypasses FTS for fuzzy matches', () => {
     // Trigram tolerates one-character substring matches.
     const rows = db.searchTrigram('"navi"', { limit: 10 })
-    expect(rows.find(r => r.path === 'swiftui/navigationstack')).toBeDefined()
+    expect(rows.find((r) => r.path === 'swiftui/navigationstack')).toBeDefined()
   })
 
   test('framework filter applies across all variants', () => {

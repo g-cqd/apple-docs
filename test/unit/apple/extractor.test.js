@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { extractReferences, extractMetadata, renderInlineToText } from '../../../src/apple/extractor.js'
+import { describe, expect, test } from 'bun:test'
+import { extractMetadata, extractReferences, renderInlineToText } from '../../../src/apple/extractor.js'
 
 // Load the real fixture
 const fixture = await Bun.file(new URL('../../fixtures/swiftui-view.json', import.meta.url)).json()
@@ -19,7 +19,7 @@ describe('extractReferences', () => {
   test('includes topic section identifiers', () => {
     const refs = extractReferences(fixture)
     // SwiftUI/View has topic sections with child symbols
-    expect(refs.some(r => r.startsWith('swiftui/view/'))).toBe(true)
+    expect(refs.some((r) => r.startsWith('swiftui/view/'))).toBe(true)
   })
 
   test('returns empty for empty json', () => {
@@ -34,9 +34,7 @@ describe('extractReferences', () => {
     const json = {
       topicSections: [
         {
-          identifiers: [
-            'doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/hasMore',
-          ],
+          identifiers: ['doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/hasMore'],
         },
       ],
       references: {
@@ -81,10 +79,7 @@ describe('extractReferences', () => {
     const json = {
       topicSections: [
         {
-          identifiers: [
-            'doc://com.apple.tabletopkit/documentation/TabletopKit/Player/id',
-            'doc://com.externally.resolved.symbol/s:11TabletopKit6PlayerV2IDa',
-          ],
+          identifiers: ['doc://com.apple.tabletopkit/documentation/TabletopKit/Player/id', 'doc://com.externally.resolved.symbol/s:11TabletopKit6PlayerV2IDa'],
         },
       ],
       references: {
@@ -121,7 +116,7 @@ describe('extractMetadata', () => {
   test('extracts platforms', () => {
     const meta = extractMetadata(fixture)
     expect(meta.platforms.length).toBeGreaterThan(0)
-    expect(meta.platforms.some(p => p.includes('iOS'))).toBe(true)
+    expect(meta.platforms.some((p) => p.includes('iOS'))).toBe(true)
   })
 
   test('extracts declaration', () => {

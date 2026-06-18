@@ -17,18 +17,14 @@ export function extractMetaInfo(html) {
   const rawTitle = titleMatch ? titleMatch[1] : null
   const title = rawTitle ? htmlToPlainText(rawTitle).trim() || null : null
 
-  const descMatch = html.match(
-    /<meta[^>]+name\s*=\s*["']description["'][^>]+content\s*=\s*["']([^"']*)["'][^>]*>/i,
-  ) ?? html.match(
-    /<meta[^>]+content\s*=\s*["']([^"']*)["'][^>]+name\s*=\s*["']description["'][^>]*>/i,
-  )
+  const descMatch =
+    html.match(/<meta[^>]+name\s*=\s*["']description["'][^>]+content\s*=\s*["']([^"']*)["'][^>]*>/i) ??
+    html.match(/<meta[^>]+content\s*=\s*["']([^"']*)["'][^>]+name\s*=\s*["']description["'][^>]*>/i)
   const description = descMatch ? decodeEntities(descMatch[1]).trim() || null : null
 
-  const ogMatch = html.match(
-    /<meta[^>]+property\s*=\s*["']og:title["'][^>]+content\s*=\s*["']([^"']*)["'][^>]*>/i,
-  ) ?? html.match(
-    /<meta[^>]+content\s*=\s*["']([^"']*)["'][^>]+property\s*=\s*["']og:title["'][^>]*>/i,
-  )
+  const ogMatch =
+    html.match(/<meta[^>]+property\s*=\s*["']og:title["'][^>]+content\s*=\s*["']([^"']*)["'][^>]*>/i) ??
+    html.match(/<meta[^>]+content\s*=\s*["']([^"']*)["'][^>]+property\s*=\s*["']og:title["'][^>]*>/i)
   const ogTitle = ogMatch ? decodeEntities(ogMatch[1]).trim() || null : null
 
   return { title, description, ogTitle }

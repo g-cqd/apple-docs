@@ -1,7 +1,7 @@
 import { join } from 'node:path'
-import { quantizeTo, quantizeI8 } from '../search/embedding.js'
-import { getEmbedder } from '../search/embedder.js'
 import { chunkDocument } from '../search/chunker.js'
+import { getEmbedder } from '../search/embedder.js'
+import { quantizeI8, quantizeTo } from '../search/embedding.js'
 import { _resetVectorCache } from '../search/semantic.js'
 
 /**
@@ -59,9 +59,10 @@ export async function indexEmbeddings(opts, ctx) {
       full = true
     }
   }
-  const rows = (full
-    ? db.db.query('SELECT id, title, abstract_text, headings FROM documents ORDER BY id')
-    : db.db.query('SELECT id, title, abstract_text, headings FROM documents WHERE id NOT IN (SELECT document_id FROM document_chunks) ORDER BY id')
+  const rows = (
+    full
+      ? db.db.query('SELECT id, title, abstract_text, headings FROM documents ORDER BY id')
+      : db.db.query('SELECT id, title, abstract_text, headings FROM documents WHERE id NOT IN (SELECT document_id FROM document_chunks) ORDER BY id')
   ).all()
   const total = rows.length
   if (total === 0) {
@@ -76,27 +77,25 @@ export async function indexEmbeddings(opts, ctx) {
   let dims = 0
   for (let i = 0; i < total; i += BATCH) {
     const batch = rows.slice(i, i + BATCH)
-    const sectionsMap = db.getSectionsByDocumentIds(batch.map(r => r.id))
+    const sectionsMap = db.getSectionsByDocumentIds(batch.map((r) => r.id))
     // Flatten every chunk of the batch into one embed call so the ONNX
     // pipeline batches efficiently; map results back by index afterwards.
     const flat = []
     for (const r of batch) {
       const chunks = chunkDocument({
-        title: r.title, abstract_text: r.abstract_text, headings: r.headings,
+        title: r.title,
+        abstract_text: r.abstract_text,
+        headings: r.headings,
         sections: sectionsMap.get(r.id) ?? [],
       })
       for (let ord = 0; ord < chunks.length; ord++) flat.push({ docId: r.id, ord, text: chunks[ord] })
     }
-    const texts = flat.map(f => f.text)
+    const texts = flat.map((f) => f.text)
     // Code-capable embedders (the native bridge) return the storage blobs
     // directly — byte-identical to the JS quantizers by the embed-parity
     // gates, at 580 B/chunk across the FFI instead of the 2 KB f32 vector.
     const codeRows = embedder.embedBatchCodes ? await embedder.embedBatchCodes(texts) : null
-    const vecs = codeRows
-      ? null
-      : embedder.embedBatch
-        ? await embedder.embedBatch(texts)
-        : await sequentialEmbed(embedder, texts)
+    const vecs = codeRows ? null : embedder.embedBatch ? await embedder.embedBatch(texts) : await sequentialEmbed(embedder, texts)
     if (!dims && flat.length) {
       dims = codeRows ? embedder.dims : vecs[0].length
       // Written with the first batch (idempotent) so an interrupted run never

@@ -23,8 +23,8 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ValidationError } from './errors.js'
 import { getAdapterTypes } from '../sources/registry.js'
+import { ValidationError } from './errors.js'
 
 export const SCOPE_FILE = 'scope.json'
 
@@ -47,9 +47,9 @@ export function loadScope(dataDir, { logger } = {}) {
   }
   const scope = normalizeScope(raw, path)
   logger?.info?.(
-    `Scope active (${SCOPE_FILE}): sources=${scope.sources ? scope.sources.join(',') : 'all'}`
-    + (scope.appleDoccFrameworks ? `; apple-docc=[${scope.appleDoccFrameworks.join(',')}]` : '')
-    + `; fonts=${scope.keepFonts ? 'keep' : 'drop'}; symbols=${scope.keepSymbols ? 'keep' : 'drop'}`,
+    `Scope active (${SCOPE_FILE}): sources=${scope.sources ? scope.sources.join(',') : 'all'}` +
+      (scope.appleDoccFrameworks ? `; apple-docc=[${scope.appleDoccFrameworks.join(',')}]` : '') +
+      `; fonts=${scope.keepFonts ? 'keep' : 'drop'}; symbols=${scope.keepSymbols ? 'keep' : 'drop'}`,
   )
   return scope
 }
@@ -64,11 +64,9 @@ function normalizeScope(raw, path) {
   const sources = normalizeStringList(raw.sources, 'sources', path)
   if (sources) {
     const known = new Set(getAdapterTypes())
-    const unknown = sources.filter(s => !known.has(s))
+    const unknown = sources.filter((s) => !known.has(s))
     if (unknown.length > 0) {
-      throw new ValidationError(
-        `${path}: unknown source(s): ${unknown.join(', ')} (valid: ${[...known].sort().join(', ')})`,
-      )
+      throw new ValidationError(`${path}: unknown source(s): ${unknown.join(', ')} (valid: ${[...known].sort().join(', ')})`)
     }
   }
   const frameworks = normalizeStringList(raw.appleDoccFrameworks, 'appleDoccFrameworks', path)
@@ -85,10 +83,10 @@ function normalizeScope(raw, path) {
 
 function normalizeStringList(value, field, path) {
   if (value == null) return null
-  if (!Array.isArray(value) || value.some(x => typeof x !== 'string')) {
+  if (!Array.isArray(value) || value.some((x) => typeof x !== 'string')) {
     throw new ValidationError(`${path}: ${field} must be an array of strings`)
   }
-  const list = [...new Set(value.map(x => x.trim().toLowerCase()).filter(Boolean))]
+  const list = [...new Set(value.map((x) => x.trim().toLowerCase()).filter(Boolean))]
   return list.length > 0 ? list : null
 }
 
@@ -99,7 +97,7 @@ function normalizeStringList(value, field, path) {
 export function filterAdaptersByScope(adapters, scope) {
   if (!scope?.sources) return adapters
   const wanted = new Set(scope.sources)
-  return adapters.filter(a => wanted.has(a.constructor.type))
+  return adapters.filter((a) => wanted.has(a.constructor.type))
 }
 
 /**

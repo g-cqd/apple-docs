@@ -1,15 +1,15 @@
-import { describe, test, expect, afterEach } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import {
-  buildRobotsTxt,
-  buildOpenSearchXml,
   buildApiCatalog,
-  buildMcpServerCard,
   buildHeadersFile,
+  buildMcpServerCard,
+  buildOpenSearchXml,
+  buildRobotsTxt,
   contentSignal,
-  DISCOVERY_LINKS,
   DEFAULT_CONTENT_SIGNAL,
-  MCP_TOOLS,
+  DISCOVERY_LINKS,
   MCP_RESOURCE_TEMPLATES,
+  MCP_TOOLS,
 } from '../../../src/web/discovery.js'
 import { buildFontFaceCss, fontFaceName, formatHint } from '../../../src/web/lib/font-faces.js'
 
@@ -72,7 +72,7 @@ describe('discovery: buildApiCatalog', () => {
     expect(ctx.anchor).toBe('https://docs.example.com/')
     expect(ctx['service-doc'][0].href).toBe('https://docs.example.com/docs/')
     expect(ctx.status[0].href).toBe('https://docs.example.com/readyz')
-    expect(ctx.item.map(i => i.href)).toContain('https://docs.example.com/api/search')
+    expect(ctx.item.map((i) => i.href)).toContain('https://docs.example.com/api/search')
     expect(ctx.related[0].href).toBe('https://docs.example.com/.well-known/mcp/server-card.json')
   })
 
@@ -131,7 +131,13 @@ describe('font-faces builder', () => {
 
   test('buildFontFaceCss emits one @font-face per file with the default route URL', () => {
     const css = buildFontFaceCss([
-      { id: 'sf-pro', files: [{ id: 'f1', format: 'ttf' }, { id: 'f2', format: 'otf' }] },
+      {
+        id: 'sf-pro',
+        files: [
+          { id: 'f1', format: 'ttf' },
+          { id: 'f2', format: 'otf' },
+        ],
+      },
     ])
     expect(css).toContain('@font-face { font-family: "apple-docs-sf-pro-f1"; src: url("/api/fonts/file/f1") format("truetype"); font-display: swap; }')
     expect(css).toContain('format("opentype")')
@@ -139,10 +145,7 @@ describe('font-faces builder', () => {
   })
 
   test('a custom fileUrl builder (static build) is honoured', () => {
-    const css = buildFontFaceCss(
-      [{ id: 'sf-pro', files: [{ id: 'f1', format: 'ttf' }] }],
-      { fileUrl: (id) => `https://cdn.example.com/api/fonts/file/${id}` },
-    )
+    const css = buildFontFaceCss([{ id: 'sf-pro', files: [{ id: 'f1', format: 'ttf' }] }], { fileUrl: (id) => `https://cdn.example.com/api/fonts/file/${id}` })
     expect(css).toContain('src: url("https://cdn.example.com/api/fonts/file/f1")')
   })
 

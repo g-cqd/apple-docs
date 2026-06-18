@@ -38,15 +38,20 @@ describe('HigAdapter', () => {
   })
 
   test('maps modified HEAD responses into adapter check statuses', async () => {
-    globalThis.fetch = async () => new Response('', {
-      status: 200,
-      headers: { etag: '"new"' },
-    })
+    globalThis.fetch = async () =>
+      new Response('', {
+        status: 200,
+        headers: { etag: '"new"' },
+      })
 
     const adapter = new HigAdapter()
-    const result = await adapter.check('design/human-interface-guidelines/layout', { etag: '"old"' }, {
-      rateLimiter: { acquire: async () => {} },
-    })
+    const result = await adapter.check(
+      'design/human-interface-guidelines/layout',
+      { etag: '"old"' },
+      {
+        rateLimiter: { acquire: async () => {} },
+      },
+    )
 
     expect(result.status).toBe('modified')
     expect(result.changed).toBe(true)

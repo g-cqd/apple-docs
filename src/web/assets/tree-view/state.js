@@ -20,7 +20,7 @@ export function buildTreeState(data) {
 
   // Root nodes appear as parent but never as child.
   const allParents = [...children.keys()]
-  const rootKeys = allParents.filter(k => !childSet.has(k))
+  const rootKeys = allParents.filter((k) => !childSet.has(k))
 
   // Sort children alphabetically within each parent by title.
   const titleOf = (k) => (docs[k]?.title ?? k).toLowerCase()
@@ -44,7 +44,10 @@ export function buildTreeState(data) {
     if (visited.has(key)) return 0
     visited.add(key)
     const kids = children.get(key)
-    if (!kids) { descendantCounts.set(key, 0); return 0 }
+    if (!kids) {
+      descendantCounts.set(key, 0)
+      return 0
+    }
     let total = kids.length
     for (const k of kids) total += count(k)
     descendantCounts.set(key, total)

@@ -8,10 +8,18 @@
 export function createMockLogger() {
   const calls = { info: [], warn: [], error: [], debug: [] }
   return {
-    info(...args) { calls.info.push(args) },
-    warn(...args) { calls.warn.push(args) },
-    error(...args) { calls.error.push(args) },
-    debug(...args) { calls.debug.push(args) },
+    info(...args) {
+      calls.info.push(args)
+    },
+    warn(...args) {
+      calls.warn.push(args)
+    },
+    error(...args) {
+      calls.error.push(args)
+    },
+    debug(...args) {
+      calls.debug.push(args)
+    },
     _calls: calls,
   }
 }
@@ -22,4 +30,3 @@ export function createMockLogger() {
 export function createMockRateLimiter() {
   return { acquire: async () => {} }
 }
-

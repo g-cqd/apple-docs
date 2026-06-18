@@ -5,15 +5,13 @@ const encoder = new TextEncoder()
 
 describe('symbol PDF to SVG conversion', () => {
   test('tracks alpha and fill rule per PDF fill operation', () => {
-    const fills = _test.parseContentStream(encoder.encode([
-      '/GsCut gs',
-      '0 0 m 10 0 l 10 10 l 0 10 l h f',
-      '/GsOn gs',
-      '1 1 m 2 1 l 2 2 l 1 2 l h f*',
-    ].join(' ')), {
-      GsCut: 0,
-      GsOn: 1,
-    })
+    const fills = _test.parseContentStream(
+      encoder.encode(['/GsCut gs', '0 0 m 10 0 l 10 10 l 0 10 l h f', '/GsOn gs', '1 1 m 2 1 l 2 2 l 1 2 l h f*'].join(' ')),
+      {
+        GsCut: 0,
+        GsOn: 1,
+      },
+    )
 
     expect(fills).toHaveLength(2)
     expect(fills[0].alpha).toBe(0)
@@ -23,11 +21,11 @@ describe('symbol PDF to SVG conversion', () => {
   })
 
   test('emits alpha-zero nonzero cuts as luminance masks instead of even-odd clip subtraction', () => {
-    const svg = _test.assembleSvg([
-      visible(rect(0, 0, 40, 40)),
-      cut([rect(5, 5, 20, 20), rect(15, 15, 20, 20)], 'nonzero'),
-      visible(rect(10, 10, 5, 5)),
-    ], { name: 'overlapping-cut', pointSize: 64, color: '#123456' })
+    const svg = _test.assembleSvg([visible(rect(0, 0, 40, 40)), cut([rect(5, 5, 20, 20), rect(15, 15, 20, 20)], 'nonzero'), visible(rect(10, 10, 5, 5))], {
+      name: 'overlapping-cut',
+      pointSize: 64,
+      color: '#123456',
+    })
 
     expect(svg).toContain('<mask ')
     expect(svg).toContain('mask-type="luminance"')
@@ -46,10 +44,11 @@ describe('symbol PDF to SVG conversion', () => {
   })
 
   test('preserves even-odd semantics only for alpha-zero fills that used f-star', () => {
-    const svg = _test.assembleSvg([
-      visible(rect(0, 0, 40, 40)),
-      cut([rect(5, 5, 30, 30), rect(15, 15, 10, 10)], 'evenodd'),
-    ], { name: 'evenodd-cut', pointSize: 64, color: '#123456' })
+    const svg = _test.assembleSvg([visible(rect(0, 0, 40, 40)), cut([rect(5, 5, 30, 30), rect(15, 15, 10, 10)], 'evenodd')], {
+      name: 'evenodd-cut',
+      pointSize: 64,
+      color: '#123456',
+    })
 
     expect(svg).toContain('<mask ')
     expect(svg).toContain('<path d="')
@@ -68,12 +67,6 @@ function cut(subpaths, fillRule) {
 
 function rect(x, y, w, h) {
   return {
-    commands: [
-      { op: 'M', args: [x, y] },
-      { op: 'L', args: [x + w, y] },
-      { op: 'L', args: [x + w, y + h] },
-      { op: 'L', args: [x, y + h] },
-      { op: 'Z' },
-    ],
+    commands: [{ op: 'M', args: [x, y] }, { op: 'L', args: [x + w, y] }, { op: 'L', args: [x + w, y + h] }, { op: 'L', args: [x, y + h] }, { op: 'Z' }],
   }
 }

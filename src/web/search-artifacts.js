@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import { ensureDir } from '../storage/files.js'
 import { sha256 } from '../lib/hash.js'
+import { ensureDir } from '../storage/files.js'
 import { decodeSectionContent } from '../storage/section-codec.js'
 
 /**
@@ -23,24 +23,26 @@ function contentHash(data) {
  * @returns {{ v: 2, frameworks: string[], keys: string[], titles: string[], abstracts: string[], fwIndices: number[], kinds: string[], roleHeadings: string[] }}
  */
 export function buildTitleIndex(db) {
-  const docs = db.db.query(`
+  const docs = db.db
+    .query(`
     SELECT key, title, abstract_text, framework, kind, role_heading
     FROM documents
     ORDER BY key
-  `).all()
+  `)
+    .all()
 
-  const frameworks = [...new Set(docs.map(d => d.framework).filter(Boolean))].sort()
+  const frameworks = [...new Set(docs.map((d) => d.framework).filter(Boolean))].sort()
   const fwLookup = Object.fromEntries(frameworks.map((f, i) => [f, i]))
 
   return {
     v: 2,
     frameworks,
-    keys: docs.map(d => d.key),
-    titles: docs.map(d => d.title),
-    abstracts: docs.map(d => (d.abstract_text || '').slice(0, 80)),
-    fwIndices: docs.map(d => fwLookup[d.framework] ?? -1),
-    kinds: docs.map(d => d.kind || ''),
-    roleHeadings: docs.map(d => d.role_heading || ''),
+    keys: docs.map((d) => d.key),
+    titles: docs.map((d) => d.title),
+    abstracts: docs.map((d) => (d.abstract_text || '').slice(0, 80)),
+    fwIndices: docs.map((d) => fwLookup[d.framework] ?? -1),
+    kinds: docs.map((d) => d.kind || ''),
+    roleHeadings: docs.map((d) => d.role_heading || ''),
   }
 }
 
@@ -98,26 +100,32 @@ export async function buildBodyShards(db, outputDir) {
     }
     return s
   }
-  const letterFor = (framework) => (
-    framework ? framework.charAt(0).toLowerCase().replace(/[^a-z]/, '_') : '_'
-  )
+  const letterFor = (framework) =>
+    framework
+      ? framework
+          .charAt(0)
+          .toLowerCase()
+          .replace(/[^a-z]/, '_')
+      : '_'
 
   if (hasSections) {
     const docs = db.db.query('SELECT id, key, framework FROM documents ORDER BY id').all()
 
     for (let offset = 0; offset < docs.length; offset += BODY_SHARD_BATCH) {
       const batch = docs.slice(offset, offset + BODY_SHARD_BATCH)
-      const ids = batch.map(d => d.id)
+      const ids = batch.map((d) => d.id)
       const placeholders = ids.map(() => '?').join(',')
 
       // Pull sections for this batch, ordered so we can short-circuit per doc
       // as soon as we've accumulated BODY_PREVIEW_CHARS.
-      const sectionRows = db.db.query(
-        `SELECT document_id, content_text
+      const sectionRows = db.db
+        .query(
+          `SELECT document_id, content_text
          FROM document_sections
          WHERE document_id IN (${placeholders})
-         ORDER BY document_id, sort_order, id`
-      ).all(...ids)
+         ORDER BY document_id, sort_order, id`,
+        )
+        .all(...ids)
 
       const bodyByDoc = new Map()
       for (const row of sectionRows) {
@@ -234,7 +242,7 @@ export async function generateSearchArtifacts(db, outputDir) {
   /** @type {Record<string, string>} */
   const files = {
     'title-index': `title-index.${titleResult.hash}.json`,
-    'aliases': `aliases.${aliasResult.hash}.json`,
+    aliases: `aliases.${aliasResult.hash}.json`,
   }
   for (const { letter, hash } of shardMeta) {
     files[`shard-${letter}`] = `shards/${letter}.${hash}.json`

@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../src/storage/database.js'
-import { snapshotBuild } from '../../src/commands/snapshot.js'
-import { setup } from '../../src/commands/setup.js'
-import { status } from '../../src/commands/status.js'
-import { search } from '../../src/commands/search.js'
-import { lookup } from '../../src/commands/lookup.js'
-import { rebuildBody, rebuildTrigram } from '../../src/commands/index-rebuild.js'
+import { join } from 'node:path'
 import { indexEmbeddings } from '../../src/commands/index-embeddings.js'
-import { semanticCandidates } from '../../src/search/semantic.js'
+import { rebuildBody, rebuildTrigram } from '../../src/commands/index-rebuild.js'
+import { lookup } from '../../src/commands/lookup.js'
+import { search } from '../../src/commands/search.js'
+import { setup } from '../../src/commands/setup.js'
+import { snapshotBuild } from '../../src/commands/snapshot.js'
+import { status } from '../../src/commands/status.js'
 import { createLogger } from '../../src/lib/logger.js'
+import { semanticCandidates } from '../../src/search/semantic.js'
+import { DocsDatabase } from '../../src/storage/database.js'
 import { writeJSON, writeText } from '../../src/storage/files.js'
 import { topicEmbedder } from '../helpers/topic-embedder.js'
 
@@ -102,22 +102,25 @@ function installReleaseMock(fixture) {
     const urlStr = String(url)
 
     if (urlStr.includes('/releases/latest')) {
-      return new Response(JSON.stringify({
-        tag_name: fixture.tag,
-        published_at: '2026-04-13T00:00:00Z',
-        assets: [
-          {
-            name: `apple-docs-full-${fixture.tag}.tar.zst`,
-            size: fixture.archiveBytes.byteLength,
-            browser_download_url: fixture.archiveUrl,
-          },
-          {
-            name: `apple-docs-full-${fixture.tag}.tar.zst.sha256`,
-            size: fixture.checksumText.length,
-            browser_download_url: fixture.checksumUrl,
-          },
-        ],
-      }), { status: 200 })
+      return new Response(
+        JSON.stringify({
+          tag_name: fixture.tag,
+          published_at: '2026-04-13T00:00:00Z',
+          assets: [
+            {
+              name: `apple-docs-full-${fixture.tag}.tar.zst`,
+              size: fixture.archiveBytes.byteLength,
+              browser_download_url: fixture.archiveUrl,
+            },
+            {
+              name: `apple-docs-full-${fixture.tag}.tar.zst.sha256`,
+              size: fixture.checksumText.length,
+              browser_download_url: fixture.checksumUrl,
+            },
+          ],
+        }),
+        { status: 200 },
+      )
     }
 
     if (urlStr === fixture.archiveUrl) return new Response(fixture.archiveBytes, { status: 200 })

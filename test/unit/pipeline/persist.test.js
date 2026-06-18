@@ -50,19 +50,19 @@ describe('persistFetchedDocPage', () => {
   test('coalesces concurrent calls for the same path onto one promise (Audit 5 §4.5)', async () => {
     const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
     const args = {
-      db, dataDir: tmpDir, rootId: root.id,
-      path: 'swiftui/view', sourceType: 'apple-docc', json: fixture,
+      db,
+      dataDir: tmpDir,
+      rootId: root.id,
+      path: 'swiftui/view',
+      sourceType: 'apple-docc',
+      json: fixture,
     }
 
     // Spawn three concurrent calls with identical args. Coalescing means
     // they share one in-flight promise — the same returned object is
     // shared across all three callers, and only one DB upsert + file
     // promote runs.
-    const [a, b, c] = await Promise.all([
-      persistFetchedDocPage(args),
-      persistFetchedDocPage(args),
-      persistFetchedDocPage(args),
-    ])
+    const [a, b, c] = await Promise.all([persistFetchedDocPage(args), persistFetchedDocPage(args), persistFetchedDocPage(args)])
     expect(a).toBe(b)
     expect(b).toBe(c)
 

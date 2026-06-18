@@ -18,19 +18,16 @@
 
 import { ValidationError } from '../lib/errors.js'
 import {
-  PaginationItemTooLargeError,
-  PAGINATION_LIMITS,
   buildArrayPages,
   buildArrayPaginationPlan,
   buildDocumentPagePayload,
   buildTextPaginationPlan,
+  PAGINATION_LIMITS,
+  PaginationItemTooLargeError,
   splitOversizedSection,
   withDocumentPageInfo,
 } from './pagination/page-builder.js'
-import {
-  excerptAroundMatch,
-  serializePayload,
-} from './pagination/text-utils.js'
+import { excerptAroundMatch, serializePayload } from './pagination/text-utils.js'
 
 export const MIN_PAGINATED_MAX_CHARS = 512
 
@@ -111,7 +108,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
   // single section overflows on its own, recursively split it along
   // paragraph / line / character-window boundaries until each fragment
   // fits. Bail to text-window mode if even the smallest unit overflows.
-  const units = sections.map(section => ({
+  const units = sections.map((section) => ({
     ...section,
     contentText: section?.contentText ?? section?.content_text ?? '',
   }))
@@ -126,15 +123,17 @@ export function paginateDocumentPayload(payload, opts = {}) {
         items: units,
         totalPages: assumedTotalPages,
         maxChars,
-        buildPayload: (slice, pageIndex, totalPages) => buildDocumentPagePayload({
-          payload, document,
-          pageSections: slice,
-          page: pageIndex,
-          totalPages,
-          maxChars,
-          strategy,
-          totalSectionUnits: units.length,
-        }),
+        buildPayload: (slice, pageIndex, totalPages) =>
+          buildDocumentPagePayload({
+            payload,
+            document,
+            pageSections: slice,
+            page: pageIndex,
+            totalPages,
+            maxChars,
+            strategy,
+            totalSectionUnits: units.length,
+          }),
       })
       pagePayloads = pages
       if (pages.length === assumedTotalPages) break
@@ -145,10 +144,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
       const currentLength = String(oversized?.contentText ?? oversized?.content_text ?? '').length
       const split = splitOversizedSection(
         oversized,
-        Math.max(
-          PAGINATION_LIMITS.MIN_SECTION_FRAGMENT_CHARS,
-          Math.min(Math.floor(currentLength / 2), Math.floor(maxChars * 0.75)),
-        ),
+        Math.max(PAGINATION_LIMITS.MIN_SECTION_FRAGMENT_CHARS, Math.min(Math.floor(currentLength / 2), Math.floor(maxChars * 0.75))),
       )
       if (split.length <= 1) {
         return paginateTextWindowPayload(payload, { maxChars, page })
@@ -172,12 +168,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
 }
 
 export function buildMatchedDocumentPayload(payload, opts = {}) {
-  const {
-    match,
-    caseSensitive = false,
-    contextChars = 140,
-    maxMatches = 5,
-  } = opts
+  const { match, caseSensitive = false, contextChars = 140, maxMatches = 5 } = opts
 
   const sections = Array.isArray(payload?.sections) ? payload.sections : []
   const matches = []
@@ -207,9 +198,7 @@ export function buildMatchedDocumentPayload(payload, opts = {}) {
     content: null,
     matches,
     sections: [],
-    note: matches.length === 0
-      ? `No matches found for "${match}".`
-      : `Showing ${matches.length} match${matches.length === 1 ? '' : 'es'} for "${match}".`,
+    note: matches.length === 0 ? `No matches found for "${match}".` : `Showing ${matches.length} match${matches.length === 1 ? '' : 'es'} for "${match}".`,
   }
 }
 
@@ -220,19 +209,23 @@ function paginateTextWindowPayload(payload, opts) {
   const plan = buildTextPaginationPlan({
     text: content,
     maxChars,
-    buildPayload: (slice, pageIndex, totalPages) => withDocumentPageInfo({
-      ...payload,
-      note: undefined,
-      content: slice,
-      sections: [],
-    }, {
-      page: pageIndex,
-      totalPages,
-      maxChars,
-      strategy: 'text-window',
-      totalSections: 0,
-      pageSections: 0,
-    }),
+    buildPayload: (slice, pageIndex, totalPages) =>
+      withDocumentPageInfo(
+        {
+          ...payload,
+          note: undefined,
+          content: slice,
+          sections: [],
+        },
+        {
+          page: pageIndex,
+          totalPages,
+          maxChars,
+          strategy: 'text-window',
+          totalSections: 0,
+          pageSections: 0,
+        },
+      ),
   })
 
   if (page < 1 || page > plan.pages.length) {

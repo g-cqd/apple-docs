@@ -9,8 +9,8 @@
  * import path for the error taxonomy.
  */
 
-export { BackpressureError } from './semaphore.js'
 export { BodyTooLargeError } from './http-body.js'
+export { BackpressureError } from './semaphore.js'
 
 /**
  * HTTP-layer failure: upstream returned a non-2xx status (or the request was

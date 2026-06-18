@@ -26,8 +26,7 @@ describe('parseDoccArchiveUrl', () => {
   test('derives the data-JSON base by inserting /data before /documentation', () => {
     const parsed = parseDoccArchiveUrl('https://carekit-apple.github.io/CareKit/documentation/carekit')
     // The adapter builds `${baseUrl}/data/documentation/${entryKey}.json`.
-    expect(`${parsed.baseUrl}/data/documentation/${parsed.entryKey}.json`)
-      .toBe('https://carekit-apple.github.io/CareKit/data/documentation/carekit.json')
+    expect(`${parsed.baseUrl}/data/documentation/${parsed.entryKey}.json`).toBe('https://carekit-apple.github.io/CareKit/data/documentation/carekit.json')
   })
 
   test('keeps a deep entry path but slugs the first segment', () => {

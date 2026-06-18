@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { rerank } from '../../../src/search/ranking.js'
 
 function makeResult(overrides = {}) {
@@ -18,10 +18,7 @@ function makeResult(overrides = {}) {
 
 describe('rerank', () => {
   test('assigns base scores from match quality tiers', () => {
-    const results = [
-      makeResult({ matchQuality: 'exact' }),
-      makeResult({ matchQuality: 'body', path: 'other/path' }),
-    ]
+    const results = [makeResult({ matchQuality: 'exact' }), makeResult({ matchQuality: 'body', path: 'other/path' })]
     rerank(results, 'View', { type: 'symbol', confidence: 0.7 })
     expect(results[0].score).toBeGreaterThan(results[1].score)
   })
@@ -117,13 +114,7 @@ describe('rerank', () => {
       makeResult({ matchQuality: 'match', sourceType: 'apple-docc', path: 'other/docc' }),
     ]
     rerank(results, 'layout', { type: 'general', confidence: 0.5 })
-    expect(results.map(r => r.sourceType)).toEqual([
-      'apple-docc',
-      'hig',
-      'sample-code',
-      'guidelines',
-      'wwdc',
-    ])
+    expect(results.map((r) => r.sourceType)).toEqual(['apple-docc', 'hig', 'sample-code', 'guidelines', 'wwdc'])
   })
 
   test('combined: release notes of archived content get both penalties', () => {

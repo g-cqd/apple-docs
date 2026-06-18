@@ -7,8 +7,8 @@ export function renderSymbolsPage(siteConfig, data = {}) {
   const description = 'Browse, search, and download SF Symbols. Customize size and colors before exporting SVG or PNG.'
   const totals = Array.isArray(data.totals) ? data.totals : []
   const totalCount = totals.reduce((sum, row) => sum + (row.count ?? 0), 0)
-  const publicCount = totals.find(row => row.scope === 'public')?.count ?? 0
-  const privateCount = totals.find(row => row.scope === 'private')?.count ?? 0
+  const publicCount = totals.find((row) => row.scope === 'public')?.count ?? 0
+  const privateCount = totals.find((row) => row.scope === 'private')?.count ?? 0
 
   // Layout:
   //   - global sticky toolbar at top: search · scope · category(mobile) ·
@@ -36,7 +36,7 @@ export function renderSymbolsPage(siteConfig, data = {}) {
     about: {
       '@type': 'Thing',
       name: 'SF Symbols',
-      description: 'Apple\'s icon library shipped with iOS, macOS, watchOS, tvOS, and visionOS.',
+      description: "Apple's icon library shipped with iOS, macOS, watchOS, tvOS, and visionOS.",
     },
     numberOfItems: totalCount,
   }

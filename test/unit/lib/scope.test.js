@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadScope, filterAdaptersByScope, scopeRootsFor } from '../../../src/lib/scope.js'
+import { filterAdaptersByScope, loadScope, scopeRootsFor } from '../../../src/lib/scope.js'
 import { getAllAdapters } from '../../../src/sources/registry.js'
 
 let dataDir
@@ -76,13 +76,13 @@ describe('filterAdaptersByScope / scopeRootsFor', () => {
   test('sources restriction filters adapters by type', () => {
     const adapters = getAllAdapters()
     const filtered = filterAdaptersByScope(adapters, { sources: ['wwdc', 'hig'] })
-    expect(filtered.map(a => a.constructor.type).sort()).toEqual(['hig', 'wwdc'])
+    expect(filtered.map((a) => a.constructor.type).sort()).toEqual(['hig', 'wwdc'])
   })
 
   test('framework narrowing applies ONLY to apple-docc', () => {
     const adapters = getAllAdapters()
-    const docc = adapters.find(a => a.constructor.type === 'apple-docc')
-    const wwdc = adapters.find(a => a.constructor.type === 'wwdc')
+    const docc = adapters.find((a) => a.constructor.type === 'apple-docc')
+    const wwdc = adapters.find((a) => a.constructor.type === 'wwdc')
     const scope = { sources: null, appleDoccFrameworks: ['swiftui'] }
     expect(scopeRootsFor(docc, scope)).toEqual(['swiftui'])
     expect(scopeRootsFor(wwdc, scope)).toBeNull()

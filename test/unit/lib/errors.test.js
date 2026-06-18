@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  BackpressureError,
-  BodyTooLargeError,
-  HttpError,
-  NotFoundError,
-  ParseError,
-  ValidationError,
-} from '../../../src/lib/errors.js'
+import { BackpressureError, BodyTooLargeError, HttpError, NotFoundError, ParseError, ValidationError } from '../../../src/lib/errors.js'
 
 describe('typed errors', () => {
   test('HttpError carries status, url, name', () => {

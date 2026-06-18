@@ -42,10 +42,7 @@ describe('createHostBucketedLimiter', () => {
 
     const timestamps = []
 
-    await Promise.all([
-      limiter.acquire().then(() => timestamps.push(Date.now())),
-      limiter.acquire('not-a-url').then(() => timestamps.push(Date.now())),
-    ])
+    await Promise.all([limiter.acquire().then(() => timestamps.push(Date.now())), limiter.acquire('not-a-url').then(() => timestamps.push(Date.now()))])
 
     expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(10)
   })

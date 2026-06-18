@@ -24,10 +24,7 @@ describe('discoverAdaptersInParallel', () => {
       resolveB = resolve
     })
     const events = []
-    const adapters = [
-      createAdapter('source-a', events, discoveryA),
-      createAdapter('source-b', events, discoveryB),
-    ]
+    const adapters = [createAdapter('source-a', events, discoveryA), createAdapter('source-b', events, discoveryB)]
 
     const runPromise = discoverAdaptersInParallel(adapters, {})
 
@@ -38,12 +35,7 @@ describe('discoverAdaptersInParallel', () => {
     resolveA({ roots: [{ slug: 'root-a' }] })
 
     const { discoveries, errors } = await runPromise
-    expect(events).toEqual([
-      'discover-source-a-start',
-      'discover-source-b-start',
-      'discover-source-b-done',
-      'discover-source-a-done',
-    ])
+    expect(events).toEqual(['discover-source-a-start', 'discover-source-b-start', 'discover-source-b-done', 'discover-source-a-done'])
     expect(errors.size).toBe(0)
     expect(discoveries.get('source-a')).toEqual({ roots: [{ slug: 'root-a' }] })
     expect(discoveries.get('source-b')).toEqual({ roots: [{ slug: 'root-b' }] })

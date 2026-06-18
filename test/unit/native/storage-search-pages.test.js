@@ -10,19 +10,15 @@
  * the real DocsDatabase migrations so documents_fts / bm25 / the _num
  * companions all exist exactly as in production.
  */
+
+import { suffix } from 'bun:ffi'
 import { afterAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
 import { _resetNativeLoader } from '../../../src/native/loader.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import {
-  _forceImpl,
-  nativeSearchPages,
-  nativeStorageClose,
-  nativeStorageOpen,
-} from '../../../src/storage/storage-native.js'
+import { _forceImpl, nativeSearchPages, nativeStorageClose, nativeStorageOpen } from '../../../src/storage/storage-native.js'
 
 const DEV_LIB = new URL(`../../../swift/.build/release/libAppleDocsCore.${suffix}`, import.meta.url).pathname
 const dylibPresent = !!process.env.APPLE_DOCS_NATIVE_LIB || existsSync(DEV_LIB)
@@ -37,16 +33,127 @@ function seed(database) {
   database.upsertRoot('uikit', 'UIKit', 'framework', 'test')
   database.upsertRoot('foundation', 'Foundation', 'framework', 'test')
   const docs = [
-    { key: 'swiftui/view', title: 'View', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', kind: 'protocol', language: 'swift', abstractText: 'A type that represents part of your app interface.', urlDepth: 2, minIos: '13.0', minMacos: '10.15' },
-    { key: 'swiftui/viewbuilder', title: 'ViewBuilder', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', kind: 'struct', language: 'swift', abstractText: 'Constructs views from closures.', urlDepth: 2, minIos: '14.0' },
-    { key: 'swiftui/contentview', title: 'ContentView', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', kind: 'struct', language: 'swift', abstractText: 'The root view of the app.', urlDepth: 2, minIos: '15.0', isBeta: true },
-    { key: 'swiftui/canvas', title: 'Canvas', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', kind: 'struct', language: 'swift', abstractText: 'Renders a 2D view with immediate mode drawing.', urlDepth: 2, minIos: '15.0' },
-    { key: 'swiftui/legacyview', title: 'LegacyView', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', kind: 'class', language: 'swift', abstractText: 'An old deprecated view API.', urlDepth: 2, isDeprecated: true, minIos: '13.0' },
-    { key: 'swiftui/japanese', title: '小さなビュー', framework: 'swiftui', sourceType: 'apple-docc', role: 'symbol', kind: 'struct', language: 'swift', abstractText: 'A tiny view rendered in Japanese.', urlDepth: 2 },
-    { key: 'uikit/uiview', title: 'UIView', framework: 'uikit', sourceType: 'apple-docc', role: 'symbol', kind: 'class', language: 'occ', abstractText: 'Manages the content for a rectangular view area.', urlDepth: 2, minIos: '2.0' },
-    { key: 'uikit/uiviewcontroller', title: 'UIViewController', framework: 'uikit', sourceType: 'apple-docc', role: 'symbol', kind: 'class', language: 'occ', abstractText: 'An object that manages a view hierarchy.', urlDepth: 2, minIos: '2.0', isReleaseNotes: false },
-    { key: 'foundation/url', title: 'URL', framework: 'foundation', sourceType: 'apple-docc', role: 'symbol', kind: 'struct', language: 'swift', abstractText: 'A value identifying the location of a resource.', urlDepth: 2 },
-    { key: 'wwdc/2023/great-views', title: 'Build great views', framework: 'wwdc', sourceType: 'wwdc', role: 'article', language: 'both', abstractText: 'A session about building views and view layout.', urlDepth: 3, sourceMetadata: { year: 2023, track: 'SwiftUI & UI Frameworks' } },
+    {
+      key: 'swiftui/view',
+      title: 'View',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      kind: 'protocol',
+      language: 'swift',
+      abstractText: 'A type that represents part of your app interface.',
+      urlDepth: 2,
+      minIos: '13.0',
+      minMacos: '10.15',
+    },
+    {
+      key: 'swiftui/viewbuilder',
+      title: 'ViewBuilder',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      kind: 'struct',
+      language: 'swift',
+      abstractText: 'Constructs views from closures.',
+      urlDepth: 2,
+      minIos: '14.0',
+    },
+    {
+      key: 'swiftui/contentview',
+      title: 'ContentView',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      kind: 'struct',
+      language: 'swift',
+      abstractText: 'The root view of the app.',
+      urlDepth: 2,
+      minIos: '15.0',
+      isBeta: true,
+    },
+    {
+      key: 'swiftui/canvas',
+      title: 'Canvas',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      kind: 'struct',
+      language: 'swift',
+      abstractText: 'Renders a 2D view with immediate mode drawing.',
+      urlDepth: 2,
+      minIos: '15.0',
+    },
+    {
+      key: 'swiftui/legacyview',
+      title: 'LegacyView',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      kind: 'class',
+      language: 'swift',
+      abstractText: 'An old deprecated view API.',
+      urlDepth: 2,
+      isDeprecated: true,
+      minIos: '13.0',
+    },
+    {
+      key: 'swiftui/japanese',
+      title: '小さなビュー',
+      framework: 'swiftui',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      kind: 'struct',
+      language: 'swift',
+      abstractText: 'A tiny view rendered in Japanese.',
+      urlDepth: 2,
+    },
+    {
+      key: 'uikit/uiview',
+      title: 'UIView',
+      framework: 'uikit',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      kind: 'class',
+      language: 'occ',
+      abstractText: 'Manages the content for a rectangular view area.',
+      urlDepth: 2,
+      minIos: '2.0',
+    },
+    {
+      key: 'uikit/uiviewcontroller',
+      title: 'UIViewController',
+      framework: 'uikit',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      kind: 'class',
+      language: 'occ',
+      abstractText: 'An object that manages a view hierarchy.',
+      urlDepth: 2,
+      minIos: '2.0',
+      isReleaseNotes: false,
+    },
+    {
+      key: 'foundation/url',
+      title: 'URL',
+      framework: 'foundation',
+      sourceType: 'apple-docc',
+      role: 'symbol',
+      kind: 'struct',
+      language: 'swift',
+      abstractText: 'A value identifying the location of a resource.',
+      urlDepth: 2,
+    },
+    {
+      key: 'wwdc/2023/great-views',
+      title: 'Build great views',
+      framework: 'wwdc',
+      sourceType: 'wwdc',
+      role: 'article',
+      language: 'both',
+      abstractText: 'A session about building views and view layout.',
+      urlDepth: 3,
+      sourceMetadata: { year: 2023, track: 'SwiftUI & UI Frameworks' },
+    },
   ]
   for (const d of docs) database.upsertDocument(d)
 }

@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { resolveDict, resolveStreamObject } from '../../../src/resources/symbol-pdf-to-svg/pdf-objects.js'
 
 /**
@@ -20,9 +20,7 @@ describe('resolveDict', () => {
   })
 
   test('follows ref to the referenced object dict', () => {
-    const objects = new Map([
-      [42, { dict: { Type: '/Page' } }],
-    ])
+    const objects = new Map([[42, { dict: { Type: '/Page' } }]])
     expect(resolveDict({ ref: 42 }, objects)).toEqual({ Type: '/Page' })
   })
 

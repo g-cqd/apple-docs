@@ -11,9 +11,7 @@ export function normalizeGuidelines(payload, key) {
   const roleHeading = payload?.roleHeading ?? null
   const path = payload?.path ?? key ?? null
 
-  const url = path
-    ? `https://developer.apple.com/app-store/review/guidelines/#${payload?.id ?? ''}`
-    : null
+  const url = path ? `https://developer.apple.com/app-store/review/guidelines/#${payload?.id ?? ''}` : null
 
   const document = {
     sourceType: 'guidelines',

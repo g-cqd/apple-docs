@@ -1,6 +1,6 @@
-import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
 import * as github from '../../../src/lib/github.js'
-import { SwiftBookAdapter, parseBookTopics } from '../../../src/sources/swift-book.js'
+import { parseBookTopics, SwiftBookAdapter } from '../../../src/sources/swift-book.js'
 
 // Spy on the real github.js exports and restore them per test via
 // mock.restore(). This avoids mock.module(), which is process-global and leaks
@@ -80,7 +80,9 @@ describe('SwiftBookAdapter', () => {
     adapter = new SwiftBookAdapter()
   })
 
-  afterEach(() => { mock.restore() })
+  afterEach(() => {
+    mock.restore()
+  })
 
   test('has correct static properties', () => {
     expect(SwiftBookAdapter.type).toBe('swift-book')
@@ -106,8 +108,8 @@ describe('SwiftBookAdapter', () => {
     expect(result.keys).toContain('swift-book/LanguageGuide/TheBasics')
     expect(result.keys).toContain('swift-book/LanguageGuide/StringsAndCharacters')
     expect(result.keys).toContain('swift-book/ReferenceManual/Types')
-    expect(result.keys.some(k => k.includes('Snippets'))).toBe(false)
-    expect(result.keys.some(k => k === 'swift-book/README')).toBe(false)
+    expect(result.keys.some((k) => k.includes('Snippets'))).toBe(false)
+    expect(result.keys.some((k) => k === 'swift-book/README')).toBe(false)
   })
 
   test('fetch returns raw markdown', async () => {
@@ -125,11 +127,7 @@ describe('SwiftBookAdapter', () => {
     expect(result.etag).toBe('"abc"')
 
     // Verify correct GitHub path was constructed
-    expect(mockFetchRawGitHub).toHaveBeenCalledWith(
-      'swiftlang', 'swift-book', 'main',
-      'TSPL.docc/TheBasics.md',
-      expect.anything(),
-    )
+    expect(mockFetchRawGitHub).toHaveBeenCalledWith('swiftlang', 'swift-book', 'main', 'TSPL.docc/TheBasics.md', expect.anything())
   })
 
   test('check delegates to checkRawGitHub', async () => {
@@ -159,8 +157,8 @@ describe('SwiftBookAdapter', () => {
     expect(result.sections.length).toBeGreaterThan(0)
     expect(result.relationships).toEqual([])
 
-    const discussions = result.sections.filter(s => s.sectionKind === 'discussion')
-    const headings = discussions.map(s => s.heading)
+    const discussions = result.sections.filter((s) => s.sectionKind === 'discussion')
+    const headings = discussions.map((s) => s.heading)
     expect(headings).toContain('Constants and Variables')
     expect(headings).toContain('Type Annotations')
     expect(headings).toContain('Comments')
@@ -195,17 +193,12 @@ describe('SwiftBookAdapter', () => {
     await adapter.discover(makeCtx())
 
     const result = adapter.normalize('swift-book/The-Swift-Programming-Language', SAMPLE_ROOT_TOC)
-    const topics = result.sections.find(s => s.sectionKind === 'topics')
+    const topics = result.sections.find((s) => s.sectionKind === 'topics')
     expect(topics).toBeDefined()
     const linkSections = JSON.parse(topics.contentJson)
-    expect(linkSections.map(s => s.title)).toEqual([
-      'Welcome to Swift',
-      'Language Guide',
-      'Language Reference',
-      'Revision History',
-    ])
-    const guideItems = linkSections.find(s => s.title === 'Language Guide').items
-    expect(guideItems.find(i => i.title === 'The Basics').key).toBe('swift-book/LanguageGuide/TheBasics')
+    expect(linkSections.map((s) => s.title)).toEqual(['Welcome to Swift', 'Language Guide', 'Language Reference', 'Revision History'])
+    const guideItems = linkSections.find((s) => s.title === 'Language Guide').items
+    expect(guideItems.find((i) => i.title === 'The Basics').key).toBe('swift-book/LanguageGuide/TheBasics')
   })
 
   test('normalize on root TOC emits child relationships in TOC order', async () => {
@@ -223,7 +216,7 @@ describe('SwiftBookAdapter', () => {
     await adapter.discover(makeCtx())
 
     const result = adapter.normalize('swift-book/The-Swift-Programming-Language', SAMPLE_ROOT_TOC)
-    const childKeys = result.relationships.filter(r => r.relationType === 'child').map(r => r.toKey)
+    const childKeys = result.relationships.filter((r) => r.relationType === 'child').map((r) => r.toKey)
     expect(childKeys[0]).toBe('swift-book/GuidedTour/AboutSwift')
     expect(childKeys).toContain('swift-book/LanguageGuide/TheBasics')
     expect(childKeys).toContain('swift-book/ReferenceManual/Types')
@@ -248,7 +241,7 @@ describe('parseBookTopics', () => {
   })
 
   test('parses grouped <doc:> references under ### subheadings', () => {
-    const md = `## Topics\n\n### A\n\n- <doc:Foo>\n- <doc:Bar>\n\n### B\n\n- <doc:Baz>\n`
+    const md = '## Topics\n\n### A\n\n- <doc:Foo>\n- <doc:Bar>\n\n### B\n\n- <doc:Baz>\n'
     expect(parseBookTopics(md)).toEqual([
       { title: 'A', items: ['Foo', 'Bar'] },
       { title: 'B', items: ['Baz'] },
@@ -256,7 +249,7 @@ describe('parseBookTopics', () => {
   })
 
   test('does not bleed into sibling ## sections', () => {
-    const md = `## Topics\n\n### A\n\n- <doc:Foo>\n\n## Other\n\n### Z\n\n- <doc:Nope>\n`
+    const md = '## Topics\n\n### A\n\n- <doc:Foo>\n\n## Other\n\n### Z\n\n- <doc:Nope>\n'
     const groups = parseBookTopics(md)
     expect(groups).toEqual([{ title: 'A', items: ['Foo'] }])
   })

@@ -32,7 +32,7 @@ export function createTreeDataLoader(treeContainer) {
     const src = treeContainer.getAttribute('data-tree-src')
     if (!src) return Promise.resolve(null)
     return fetch(src, { credentials: 'omit' })
-      .then(res => res.ok ? res.json() : null)
+      .then((res) => (res.ok ? res.json() : null))
       .catch(() => null)
   }
 
@@ -45,7 +45,7 @@ export function createTreeDataLoader(treeContainer) {
         cached = inline
         return Promise.resolve(cached)
       }
-      inFlight = fetchExternal().then(data => {
+      inFlight = fetchExternal().then((data) => {
         if (data) cached = data
         return cached
       })

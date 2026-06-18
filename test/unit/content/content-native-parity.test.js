@@ -10,15 +10,15 @@
  *     every golden byte-exactly through the production entry points.
  */
 
+import { suffix } from 'bun:ffi'
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
-import { _resetNativeLoader } from '../../../src/native/loader.js'
+import { renderPage } from '../../../src/apple/renderer.js'
 import { _forceImpl } from '../../../src/content/content-native.js'
 import { renderMarkdown } from '../../../src/content/render-markdown.js'
 import { renderPlainText } from '../../../src/content/render-text.js'
-import { renderPage } from '../../../src/apple/renderer.js'
+import { _resetNativeLoader } from '../../../src/native/loader.js'
 
 const FIXTURES = join(import.meta.dir, '..', '..', 'fixtures', 'content-parity', 'fixtures.json')
 const DEV_LIB = new URL(`../../../swift/.build/release/libAppleDocsCore.${suffix}`, import.meta.url).pathname
@@ -30,10 +30,7 @@ function checkAll(label) {
   const mismatches = []
   for (const c of docCases) {
     if (renderMarkdown(c.document, c.sections) !== c.markdown) mismatches.push(`${c.name} md`)
-    if (
-      renderMarkdown(c.document, c.sections, { includeFrontMatter: false, includeTitle: false }) !==
-      c.markdownBare
-    ) {
+    if (renderMarkdown(c.document, c.sections, { includeFrontMatter: false, includeTitle: false }) !== c.markdownBare) {
       mismatches.push(`${c.name} md-bare`)
     }
     if (renderPlainText(c.plainDocument, c.sections) !== c.plaintext) {

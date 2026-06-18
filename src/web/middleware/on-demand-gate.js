@@ -27,7 +27,7 @@
 import { Semaphore } from '../../lib/semaphore.js'
 import { createRateLimiter } from './rate-limit.js'
 
-const DEFAULT_PER_IP_RATE = 5 / 60     // 5 req per minute (rate is per-second)
+const DEFAULT_PER_IP_RATE = 5 / 60 // 5 req per minute (rate is per-second)
 const DEFAULT_PER_IP_BURST = 5
 const DEFAULT_NEGATIVE_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_NEGATIVE_LRU = 1024
@@ -46,10 +46,9 @@ export function createOnDemandGate(opts = {}) {
   /** @type {Map<string, number>} key → deniedUntil epoch ms */
   const negativeCache = new Map()
 
-  const fetchSemaphore = new Semaphore(
-    opts.fetchMaxConcurrent ?? DEFAULT_FETCH_MAX_CONCURRENT,
-    { maxWaiters: opts.fetchMaxWaiters ?? DEFAULT_FETCH_MAX_WAITERS },
-  )
+  const fetchSemaphore = new Semaphore(opts.fetchMaxConcurrent ?? DEFAULT_FETCH_MAX_CONCURRENT, {
+    maxWaiters: opts.fetchMaxWaiters ?? DEFAULT_FETCH_MAX_WAITERS,
+  })
 
   function checkPerIp(request, server) {
     return perIpLimiter.take(request, server)

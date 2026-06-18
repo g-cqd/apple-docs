@@ -1,5 +1,5 @@
-import { fetchGitHubTree, fetchRawGitHub, checkRawGitHub } from '../lib/github.js'
 import { parseMarkdownToSections } from '../content/parse-markdown.js'
+import { checkRawGitHub, fetchGitHubTree, fetchRawGitHub } from '../lib/github.js'
 import { SourceAdapter } from './base.js'
 
 const OWNER = 'swiftlang'
@@ -77,8 +77,8 @@ export class SwiftEvolutionAdapter extends SourceAdapter {
     const root = ctx.db?.getRootBySlug(ROOT_SLUG) ?? null
     const tree = await fetchGitHubTree(OWNER, REPO, BRANCH, ctx.rateLimiter)
     const keys = tree
-      .filter(entry => entry.type === 'blob' && entry.path.startsWith('proposals/') && entry.path.endsWith('.md'))
-      .map(entry => {
+      .filter((entry) => entry.type === 'blob' && entry.path.startsWith('proposals/') && entry.path.endsWith('.md'))
+      .map((entry) => {
         const filename = entry.path.replace('proposals/', '').replace('.md', '')
         return `${ROOT_SLUG}/${filename}`
       })
@@ -91,11 +91,7 @@ export class SwiftEvolutionAdapter extends SourceAdapter {
 
   async fetch(key, ctx) {
     const filename = key.replace(`${ROOT_SLUG}/`, '')
-    const { text, etag, lastModified } = await fetchRawGitHub(
-      OWNER, REPO, BRANCH,
-      `proposals/${filename}.md`,
-      ctx.rateLimiter,
-    )
+    const { text, etag, lastModified } = await fetchRawGitHub(OWNER, REPO, BRANCH, `proposals/${filename}.md`, ctx.rateLimiter)
 
     return this.validateFetchResult({
       key,
@@ -107,12 +103,7 @@ export class SwiftEvolutionAdapter extends SourceAdapter {
 
   async check(key, previousState, ctx) {
     const filename = key.replace(`${ROOT_SLUG}/`, '')
-    const result = await checkRawGitHub(
-      OWNER, REPO, BRANCH,
-      `proposals/${filename}.md`,
-      previousState?.etag ?? null,
-      ctx.rateLimiter,
-    )
+    const result = await checkRawGitHub(OWNER, REPO, BRANCH, `proposals/${filename}.md`, previousState?.etag ?? null, ctx.rateLimiter)
 
     return this.validateCheckResult({
       status: result.status,

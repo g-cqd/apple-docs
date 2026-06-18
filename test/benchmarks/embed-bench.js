@@ -11,18 +11,16 @@
  *   - native init time (gate: ≤ 500 ms) and process RSS
  */
 
+import { suffix } from 'bun:ffi'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { suffix } from 'bun:ffi'
 import { _resetNativeLoader } from '../../src/native/loader.js'
 import { buildNativeModel2Vec } from '../../src/search/embedder-native.js'
 
 const ROOT = new URL('../../', import.meta.url).pathname
 const DEV_LIB = `${ROOT}swift/.build/release/libAppleDocsCore.${suffix}`
-const modelsDir =
-  process.env.APPLE_DOCS_MODELS_DIR ??
-  join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
+const modelsDir = process.env.APPLE_DOCS_MODELS_DIR ?? join(process.env.APPLE_DOCS_HOME ?? join(homedir(), '.apple-docs'), 'resources', 'models')
 const HF_ID = 'minishlab/potion-retrieval-32M'
 
 const LIB = process.env.APPLE_DOCS_NATIVE_LIB ?? DEV_LIB
@@ -38,9 +36,7 @@ if (!existsSync(join(modelsDir, HF_ID, 'onnx', 'model.onnx'))) {
 process.env.APPLE_DOCS_NATIVE_LIB ??= LIB
 _resetNativeLoader()
 
-const corpus = JSON.parse(readFileSync(`${ROOT}test/fixtures/embed-parity/corpus-texts.json`, 'utf8')).map(
-  (c) => c.text,
-)
+const corpus = JSON.parse(readFileSync(`${ROOT}test/fixtures/embed-parity/corpus-texts.json`, 'utf8')).map((c) => c.text)
 
 async function throughput(label, embedBatch, passes = 5) {
   await embedBatch(corpus.slice(0, 64)) // warmup

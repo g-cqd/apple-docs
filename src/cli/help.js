@@ -366,7 +366,6 @@ Options (advanced — pipeline tuning):
 
 Resumable: re-run after interruption to continue from the last checkpoint.
 `.trim(),
-
 }
 
 export function showHelp(command) {

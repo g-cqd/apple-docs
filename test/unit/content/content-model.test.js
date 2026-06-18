@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { normalize } from '../../../src/content/normalize.js'
-import { renderMarkdown } from '../../../src/content/render-markdown.js'
 import { renderHtml } from '../../../src/content/render-html.js'
-import { renderPlainText } from '../../../src/content/render-text.js'
+import { renderMarkdown } from '../../../src/content/render-markdown.js'
 import { renderSnippet } from '../../../src/content/render-snippet.js'
+import { renderPlainText } from '../../../src/content/render-text.js'
 
 const fixture = await Bun.file(new URL('../../fixtures/swiftui-view.json', import.meta.url)).json()
 
@@ -48,7 +48,7 @@ describe('normalized content model', () => {
 
   test('enriches declaration tokens with _resolvedKey from references', () => {
     const normalized = normalize(fixture, 'swiftui/view', 'apple-docc')
-    const declSection = normalized.sections.find(s => s.sectionKind === 'declaration')
+    const declSection = normalized.sections.find((s) => s.sectionKind === 'declaration')
     expect(declSection).toBeDefined()
 
     const decls = JSON.parse(declSection.contentJson)
@@ -56,7 +56,7 @@ describe('normalized content model', () => {
 
     // The @MainActor attribute has identifier: "doc://com.externally.resolved.symbol/s:ScM"
     // which resolves via the references map
-    const mainActor = tokens.find(t => t.text === 'MainActor')
+    const mainActor = tokens.find((t) => t.text === 'MainActor')
     expect(mainActor).toBeDefined()
     expect(mainActor._resolvedKey).toBe('swift/mainactor')
   })

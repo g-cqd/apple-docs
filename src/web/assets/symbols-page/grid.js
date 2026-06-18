@@ -84,14 +84,17 @@ export function createGridRenderer({ grid, scroller, onTileClick, chunkSize = DE
     endSentinel.setAttribute('aria-hidden', 'true')
     grid.appendChild(endSentinel)
 
-    chunkObserver = new IntersectionObserver(entries => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          renderNextChunk()
-          break
+    chunkObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            renderNextChunk()
+            break
+          }
         }
-      }
-    }, { root: scroller, rootMargin: '600px 0px 600px 0px' })
+      },
+      { root: scroller, rootMargin: '600px 0px 600px 0px' },
+    )
     chunkObserver.observe(endSentinel)
 
     renderNextChunk()

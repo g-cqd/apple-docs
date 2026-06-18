@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { chunkDocument, anchorText } from '../../../src/search/chunker.js'
+import { describe, expect, test } from 'bun:test'
+import { anchorText, chunkDocument } from '../../../src/search/chunker.js'
 
 const doc = (over = {}) => ({
   title: 'NavigationStack',
@@ -28,12 +28,14 @@ describe('chunkDocument', () => {
   })
 
   test('keeps discussion/overview sections as body chunks (heading prefixed)', () => {
-    const chunks = chunkDocument(doc({
-      sections: [
-        { sectionKind: 'discussion', heading: 'Discussion', contentText: 'Use a navigation stack to present a stack of views.' },
-        { sectionKind: 'overview', heading: 'Overview', contentText: 'Push and pop destinations.' },
-      ],
-    }))
+    const chunks = chunkDocument(
+      doc({
+        sections: [
+          { sectionKind: 'discussion', heading: 'Discussion', contentText: 'Use a navigation stack to present a stack of views.' },
+          { sectionKind: 'overview', heading: 'Overview', contentText: 'Push and pop destinations.' },
+        ],
+      }),
+    )
     expect(chunks.length).toBe(3)
     expect(chunks[1]).toContain('Discussion.')
     expect(chunks[1]).toContain('present a stack of views')
@@ -41,27 +43,32 @@ describe('chunkDocument', () => {
   })
 
   test('skips declaration / parameters / REST schema sections', () => {
-    const chunks = chunkDocument(doc({
-      sections: [
-        { sectionKind: 'declaration', contentText: 'struct NavigationStack<Data, Root>' },
-        { sectionKind: 'parameters', contentText: 'data: the navigation data' },
-        { sectionKind: 'restEndpoint', contentText: 'GET /v1/things' },
-      ],
-    }))
+    const chunks = chunkDocument(
+      doc({
+        sections: [
+          { sectionKind: 'declaration', contentText: 'struct NavigationStack<Data, Root>' },
+          { sectionKind: 'parameters', contentText: 'data: the navigation data' },
+          { sectionKind: 'restEndpoint', contentText: 'GET /v1/things' },
+        ],
+      }),
+    )
     expect(chunks.length).toBe(1) // anchor only — all body sections skipped
   })
 
   test('skips the abstract section when abstract_text already feeds the anchor', () => {
-    const chunks = chunkDocument(doc({
-      sections: [{ sectionKind: 'abstract', contentText: 'A view that displays a root view and enables navigation.' }],
-    }))
+    const chunks = chunkDocument(
+      doc({
+        sections: [{ sectionKind: 'abstract', contentText: 'A view that displays a root view and enables navigation.' }],
+      }),
+    )
     expect(chunks.length).toBe(1)
   })
 
   test('long sections are split into overlapping windows', () => {
     const long = 'sentence. '.repeat(300) // ~3000 chars
     const chunks = chunkDocument(doc({ sections: [{ sectionKind: 'discussion', contentText: long }] }), {
-      windowChars: 880, overlapChars: 160,
+      windowChars: 880,
+      overlapChars: 160,
     })
     expect(chunks.length).toBeGreaterThan(2)
     // adjacent windows overlap → the tail of chunk[1] reappears at the head of chunk[2]

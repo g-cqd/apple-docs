@@ -1,11 +1,11 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { join } from 'node:path'
 import { lookup } from '../../../src/commands/lookup.js'
-import { setProfile } from '../../../src/storage/profiles.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { readText } from '../../../src/storage/files.js'
+import { setProfile } from '../../../src/storage/profiles.js'
 
 let db
 let dataDir
@@ -29,7 +29,10 @@ beforeEach(() => {
 
   // upsertPage triggers a row in documents via schema triggers, so use the existing one
   const docId = db.db.query("SELECT id FROM documents WHERE key = 'documentation/swiftui/view'").get().id
-  db.db.run(`INSERT INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`, [docId])
+  db.db.run(
+    `INSERT INTO document_sections (document_id, section_kind, heading, content_text, sort_order) VALUES (?, 'abstract', NULL, 'A type that represents part of your app UI', 0)`,
+    [docId],
+  )
 
   ctx = { db, dataDir, logger: { info() {}, warn() {}, error() {} } }
 })
@@ -88,8 +91,13 @@ describe('Lookup cache (P8-D)', () => {
     const gets = []
     const sets = []
     const markdownCache = {
-      get(path) { gets.push(path); return undefined },
-      set(path, payload) { sets.push({ path, payload }) },
+      get(path) {
+        gets.push(path)
+        return undefined
+      },
+      set(path, payload) {
+        sets.push({ path, payload })
+      },
     }
     const ctxWithCache = { ...ctx, markdownCache }
     await lookup({ path: 'documentation/swiftui/view' }, ctxWithCache)
@@ -104,13 +112,14 @@ describe('Lookup cache (P8-D)', () => {
     const storedContent = sets[0].payload.content
     const storedSections = sets[0].payload.sections
     const hitMarkdownCache = {
-      get() { return { content: storedContent, sections: storedSections, fallback: true } },
-      set() { throw new Error('set() must not be called on a hit') },
+      get() {
+        return { content: storedContent, sections: storedSections, fallback: true }
+      },
+      set() {
+        throw new Error('set() must not be called on a hit')
+      },
     }
-    const r2 = await lookup(
-      { path: 'documentation/swiftui/view', includeSections: true },
-      { ...ctx, markdownCache: hitMarkdownCache },
-    )
+    const r2 = await lookup({ path: 'documentation/swiftui/view', includeSections: true }, { ...ctx, markdownCache: hitMarkdownCache })
     expect(r2.content).toBe(storedContent)
   })
 })

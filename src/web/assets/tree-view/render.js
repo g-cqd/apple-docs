@@ -57,10 +57,12 @@ export function renderNode(state, key, depth, maxDepth, visited, displayTitle = 
   if (depth >= maxDepth) {
     childHtml = `<ul class="tree-children" data-lazy-parent="${escapeHtml(renderKey)}"></ul>`
   } else {
-    const items = (renderKids || []).map(k => {
-      const dt = overrides.get(k)
-      return renderNode(state, k, depth + 1, maxDepth, visited, dt)
-    }).join('\n')
+    const items = (renderKids || [])
+      .map((k) => {
+        const dt = overrides.get(k)
+        return renderNode(state, k, depth + 1, maxDepth, visited, dt)
+      })
+      .join('\n')
     childHtml = `<ul class="tree-children">${items}</ul>`
   }
 
@@ -78,10 +80,12 @@ export function expandLazy(state, treeContainer, parentKey) {
   const overrides = disambiguateChildren(state, parentKey, kids)
   const visited = new Set()
   visited.add(parentKey)
-  const items = kids.map(k => {
-    const displayTitle = overrides.get(k)
-    return renderNode(state, k, 0, 2, visited, displayTitle)
-  }).join('\n')
+  const items = kids
+    .map((k) => {
+      const displayTitle = overrides.get(k)
+      return renderNode(state, k, 0, 2, visited, displayTitle)
+    })
+    .join('\n')
 
   placeholder.innerHTML = items
   placeholder.removeAttribute('data-lazy-parent')
@@ -102,6 +106,6 @@ export function applyTreeFilters(treeContainer) {
 
   for (const el of treeContainer.querySelectorAll('[data-filter-kind]')) {
     const kind = el.getAttribute('data-filter-kind')
-    el.style.display = (showAll || active.has(kind)) ? '' : 'none'
+    el.style.display = showAll || active.has(kind) ? '' : 'none'
   }
 }

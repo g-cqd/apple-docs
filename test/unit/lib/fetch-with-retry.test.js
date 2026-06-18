@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import {
-  checkResourceEtag,
-  classifyFetchError,
-  fetchWithRetry,
-  isRecoverableForbidden,
-} from '../../../src/lib/fetch-with-retry.js'
 import { HttpError, NotFoundError } from '../../../src/lib/errors.js'
+import { checkResourceEtag, classifyFetchError, fetchWithRetry, isRecoverableForbidden } from '../../../src/lib/fetch-with-retry.js'
 
 const originalFetch = globalThis.fetch
 const originalSetTimeout = globalThis.setTimeout
@@ -160,9 +155,7 @@ describe('fetch-with-retry', () => {
         attempts += 1
         throw new TypeError('Invalid URL')
       }
-      await expect(
-        fetchWithRetry('not-a-url', limiter, { maxRetries: 5, jitterMs: 0 }),
-      ).rejects.toThrow('Invalid URL')
+      await expect(fetchWithRetry('not-a-url', limiter, { maxRetries: 5, jitterMs: 0 })).rejects.toThrow('Invalid URL')
       expect(attempts).toBe(1)
     })
 
@@ -182,7 +175,10 @@ describe('fetch-with-retry', () => {
         }
         return jsonResponse({ ok: true })
       }
-      globalThis.setTimeout = (fn, _ms, ...args) => { fn(...args); return 0 }
+      globalThis.setTimeout = (fn, _ms, ...args) => {
+        fn(...args)
+        return 0
+      }
       const out = await fetchWithRetry('https://api.github.com/repos/x/y', limiter, {
         maxRetries: 1,
         jitterMs: 0,
@@ -225,10 +221,11 @@ describe('fetch-with-retry', () => {
       const controller = new AbortController()
       controller.abort(new Error('user-cancelled'))
       let fetched = 0
-      globalThis.fetch = async () => { fetched += 1; return jsonResponse({}) }
-      await expect(
-        fetchWithRetry('https://example.test/x', limiter, { signal: controller.signal }),
-      ).rejects.toThrow('user-cancelled')
+      globalThis.fetch = async () => {
+        fetched += 1
+        return jsonResponse({})
+      }
+      await expect(fetchWithRetry('https://example.test/x', limiter, { signal: controller.signal })).rejects.toThrow('user-cancelled')
       expect(fetched).toBe(0)
     })
 
@@ -242,9 +239,7 @@ describe('fetch-with-retry', () => {
         controller.abort(new Error('mid-flight'))
         throw Object.assign(new Error('aborted'), { name: 'AbortError' })
       }
-      await expect(
-        fetchWithRetry('https://example.test/x', limiter, { signal: controller.signal, maxRetries: 5, jitterMs: 0 }),
-      ).rejects.toThrow('mid-flight')
+      await expect(fetchWithRetry('https://example.test/x', limiter, { signal: controller.signal, maxRetries: 5, jitterMs: 0 })).rejects.toThrow('mid-flight')
       expect(attempts).toBe(1)
     })
 

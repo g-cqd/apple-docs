@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { buildStoreZip, crc32 } from '../../../src/lib/zip.js'
 
 describe('zip', () => {
@@ -30,10 +30,7 @@ describe('zip', () => {
       await writeFile(archivePath, zip)
 
       const proc = Bun.spawn(['unzip', '-l', archivePath], { stdout: 'pipe', stderr: 'pipe' })
-      const [stdout, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        proc.exited,
-      ])
+      const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
       expect(code).toBe(0)
       expect(stdout).toContain('alpha.txt')
       expect(stdout).toContain('nested/beta.bin')

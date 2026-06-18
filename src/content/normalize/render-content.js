@@ -12,7 +12,7 @@ const MAX_RENDER_DEPTH = 512
 
 export function renderContentNodesToText(nodes, refs, depth = 0) {
   if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
-  return nodes.map(node => renderNode(node, refs, depth)).join('')
+  return nodes.map((node) => renderNode(node, refs, depth)).join('')
 }
 
 function renderNode(node, refs, depth) {
@@ -32,9 +32,7 @@ function renderNode(node, refs, depth) {
 
     case 'unorderedList':
     case 'orderedList':
-      return (node.items ?? [])
-        .map(item => renderContentNodesToText(item.content ?? [], refs, depth + 1))
-        .join('')
+      return (node.items ?? []).map((item) => renderContentNodesToText(item.content ?? [], refs, depth + 1)).join('')
 
     case 'aside': {
       const style = node.style ?? 'Note'
@@ -45,18 +43,16 @@ function renderNode(node, refs, depth) {
     case 'table': {
       const rows = node.rows ?? []
       return `${rows
-        .map(row => {
+        .map((row) => {
           const cells = Array.isArray(row) ? row : (row.cells ?? [])
-          return cells
-            .map(cell => renderContentNodesToText(cell.content ?? [], refs, depth + 1).trim())
-            .join(' | ')
+          return cells.map((cell) => renderContentNodesToText(cell.content ?? [], refs, depth + 1).trim()).join(' | ')
         })
         .join('\n')}\n`
     }
 
     case 'links':
       return `${(node.items ?? [])
-        .map(id => {
+        .map((id) => {
           const ref = refs?.[id]
           return ref?.title ?? normalizeIdentifier(id) ?? id
         })
@@ -106,7 +102,7 @@ function renderNode(node, refs, depth) {
 export function renderInlineNodes(nodes, refs, depth = 0) {
   if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
   return nodes
-    .map(node => {
+    .map((node) => {
       switch (node.type) {
         case 'text':
           return node.text ?? ''

@@ -1,10 +1,10 @@
 // Build-time asset pipeline: copy + minify the per-server static assets
 // into the build output.
 
-import { readFileSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ENTRY_BUNDLES, STANDALONE_ASSETS, WORKER_ASSETS } from '../assets-manifest.js'
 import { minifyJs } from '../asset-bundler.js'
+import { ENTRY_BUNDLES, STANDALONE_ASSETS, WORKER_ASSETS } from '../assets-manifest.js'
 import { copyDirRecursive } from './io.js'
 import { minifyCSS } from './minify-css.js'
 

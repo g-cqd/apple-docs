@@ -66,9 +66,7 @@ function emit(log, label, err, logger) {
  */
 export function safeCall(fn, opts = {}) {
   const { default: defaultValue, log = 'warn', label, logger, passThrough } = opts
-  const passThroughs = passThrough
-    ? (Array.isArray(passThrough) ? passThrough : [passThrough])
-    : null
+  const passThroughs = passThrough ? (Array.isArray(passThrough) ? passThrough : [passThrough]) : null
   function shouldRethrow(err) {
     if (!passThroughs) return false
     for (const ctor of passThroughs) {

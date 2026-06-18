@@ -3,11 +3,11 @@ import { buildWebMetrics } from '../../../src/web/metrics-provider.js'
 import { createObservability } from '../../../src/web/middleware/observability.js'
 
 function metricNames(metrics) {
-  return new Set(metrics.map(m => m.name))
+  return new Set(metrics.map((m) => m.name))
 }
 
 function findMetric(metrics, name) {
-  return metrics.find(m => m.name === name) ?? null
+  return metrics.find((m) => m.name === name) ?? null
 }
 
 describe('buildWebMetrics', () => {
@@ -25,7 +25,7 @@ describe('buildWebMetrics', () => {
     expect(names.has('apple_docs_web_requests_total')).toBe(true)
 
     const reqs = findMetric(metrics, 'apple_docs_web_requests_total')
-    const routes = new Set(reqs.samples.map(s => s.labels.route))
+    const routes = new Set(reqs.samples.map((s) => s.labels.route))
     expect(routes.has('/healthz')).toBe(true)
     expect(routes.has('/api/search')).toBe(true)
 
@@ -70,12 +70,14 @@ describe('buildWebMetrics', () => {
     const metrics = buildWebMetrics({
       observability: createObservability(),
       searchCache: { byteSize: () => 1024 },
-      renderCache: { /* no byteSize */ },
+      renderCache: {
+        /* no byteSize */
+      },
       gzipCache: { byteSize: () => 2048 },
     })
     const m = findMetric(metrics, 'apple_docs_web_cache_bytes')
     expect(m).not.toBeNull()
-    const labels = m.samples.map(s => s.labels.cache).sort()
+    const labels = m.samples.map((s) => s.labels.cache).sort()
     expect(labels).toEqual(['gzip', 'search'])
   })
 
@@ -89,7 +91,7 @@ describe('buildWebMetrics', () => {
     })
     const lag = findMetric(metrics, 'apple_docs_event_loop_lag_ms')
     expect(lag).not.toBeNull()
-    const byQuantile = Object.fromEntries(lag.samples.map(s => [s.labels.quantile, s.value]))
+    const byQuantile = Object.fromEntries(lag.samples.map((s) => [s.labels.quantile, s.value]))
     expect(byQuantile['0.5']).toBe(0.4)
     expect(byQuantile['0.95']).toBe(1.2)
     expect(byQuantile['0.99']).toBe(3.8)
@@ -105,7 +107,7 @@ describe('buildWebMetrics', () => {
     expect(names.has('apple_docs_process_rss_bytes')).toBe(true)
     expect(names.has('apple_docs_process_heap_bytes')).toBe(true)
     const heap = findMetric(metrics, 'apple_docs_process_heap_bytes')
-    const kinds = new Set(heap.samples.map(s => s.labels.kind))
+    const kinds = new Set(heap.samples.map((s) => s.labels.kind))
     expect(kinds.has('used')).toBe(true)
     expect(kinds.has('total')).toBe(true)
   })

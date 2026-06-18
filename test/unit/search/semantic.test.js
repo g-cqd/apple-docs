@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { DocsDatabase } from '../../../src/storage/database.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { indexEmbeddings } from '../../../src/commands/index-embeddings.js'
-import { semanticCandidates, isSemanticAvailable, _resetVectorCache } from '../../../src/search/semantic.js'
 import { VECTOR_BYTES } from '../../../src/search/embedding.js'
+import { _resetVectorCache, isSemanticAvailable, semanticCandidates } from '../../../src/search/semantic.js'
+import { DocsDatabase } from '../../../src/storage/database.js'
 import { topicEmbedder } from '../../helpers/topic-embedder.js'
 
 let db
@@ -22,7 +22,8 @@ beforeEach(async () => {
     db.upsertPage({ rootId: root.id, path: d.key, url: 'u', title: d.title, role: 'symbol', abstract: d.abstract })
     db.upsertNormalizedDocument({
       document: { key: d.key, title: d.title, sourceType: 'apple-docc', framework: 'fw', role: 'symbol', abstractText: d.abstract },
-      sections: [], relationships: [],
+      sections: [],
+      relationships: [],
     })
   }
   await indexEmbeddings({ embedder: topicEmbedder() }, ctx)
@@ -90,8 +91,7 @@ describe('semanticCandidates', () => {
     const ids = db.getAllVectors().map((v) => v.document_id)
     return db.getSearchRecordsByIds(ids).find((r) => r.path === path).id
   }
-  const writeRawVector = (id, bytes) =>
-    db.db.query('INSERT OR REPLACE INTO document_vectors(document_id, vec) VALUES (?, ?)').run(id, new Uint8Array(bytes))
+  const writeRawVector = (id, bytes) => db.db.query('INSERT OR REPLACE INTO document_vectors(document_id, vec) VALUES (?, ?)').run(id, new Uint8Array(bytes))
   const STALE_BYTES = 48 // older MiniLM-384 code width (vs the current 512-bit/64-byte)
 
   test('legacy path: document_vectors-only snapshot still ranks (no chunks)', async () => {
@@ -198,8 +198,7 @@ describe('_resetVectorCache', () => {
     // Overwrite every chunk's binary code with gamma's (layout) code: row
     // counts are unchanged, so the cheap (mode, count) check keeps serving
     // the cached store.
-    const gammaId = db.getSearchRecordsByIds(db.getAllVectors().map((v) => v.document_id))
-      .find((r) => r.path === 'fw/gamma').id
+    const gammaId = db.getSearchRecordsByIds(db.getAllVectors().map((v) => v.document_id)).find((r) => r.path === 'fw/gamma').id
     const gammaBin = db.db.query('SELECT vec_bin FROM document_chunks WHERE document_id = ?').get(gammaId).vec_bin
     db.db.query('UPDATE document_chunks SET vec_bin = ?').run(gammaBin)
     db.db.query('UPDATE document_chunks SET vec_i8 = NULL').run()
@@ -226,13 +225,17 @@ describe('getChunkI8Batch', () => {
       mem.upsertPage({ rootId: 1, path: 'fw/one', url: 'u', title: 'One', role: 'symbol', abstract: 'a' })
       mem.upsertNormalizedDocument({
         document: { key: 'fw/one', title: 'One', sourceType: 'apple-docc', framework: 'fw', role: 'symbol', abstractText: 'a' },
-        sections: [], relationships: [],
+        sections: [],
+        relationships: [],
       })
       const docId = mem.db.query('SELECT id FROM documents LIMIT 1').get().id
       for (let ord = 0; ord < 520; ord++) {
         mem.upsertChunk({ documentId: docId, ord, vecBin: new Uint8Array([ord % 256]), vecI8: new Uint8Array([1, 2, 3, ord % 256]) })
       }
-      const ids = mem.db.query('SELECT chunk_id FROM document_chunks ORDER BY ord').all().map((r) => r.chunk_id)
+      const ids = mem.db
+        .query('SELECT chunk_id FROM document_chunks ORDER BY ord')
+        .all()
+        .map((r) => r.chunk_id)
       expect(ids).toHaveLength(520)
 
       const map = mem.getChunkI8Batch(ids)

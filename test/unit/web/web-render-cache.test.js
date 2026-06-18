@@ -35,7 +35,7 @@ beforeEach(() => {
     db.db.run(
       `INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
        VALUES ('apple-docc', ?, ?, ?, ?, ?, 'swiftui', '', ?, ?)`,
-      [doc.key, doc.title, doc.kind, doc.role, doc.roleHeading, now, now]
+      [doc.key, doc.title, doc.kind, doc.role, doc.roleHeading, now, now],
     )
   }
 })
@@ -49,11 +49,7 @@ describe('createWebRenderCache', () => {
     const cache = createWebRenderCache(db)
 
     const ancestorTitles = cache.getAncestorTitles('documentation/swiftui/view')
-    const roleHeadings = cache.getRoleHeadings([
-      'documentation/swiftui/view',
-      'documentation/swiftui/text',
-      'documentation/swiftui/missing',
-    ])
+    const roleHeadings = cache.getRoleHeadings(['documentation/swiftui/view', 'documentation/swiftui/text', 'documentation/swiftui/missing'])
 
     expect(cache.getKnownKeys().has('documentation/swiftui/view')).toBe(true)
     expect(ancestorTitles.get('documentation/swiftui')).toBe('SwiftUI Overview')
@@ -73,7 +69,7 @@ describe('createWebRenderCache', () => {
     db.db.run(
       `INSERT INTO documents (source_type, key, title, kind, role, role_heading, framework, abstract_text, created_at, updated_at)
        VALUES ('apple-docc', 'documentation/swiftui/color', 'Color', 'symbol', 'symbol', 'Enumeration', 'swiftui', '', ?, ?)`,
-      [new Date().toISOString(), new Date().toISOString()]
+      [new Date().toISOString(), new Date().toISOString()],
     )
 
     expect(cache.getKnownKeys().has('documentation/swiftui/color')).toBe(false)

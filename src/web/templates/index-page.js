@@ -1,12 +1,6 @@
-import { html } from '../lib/html.js'
-import {
-  buildFooter,
-  buildHead,
-  buildHeader,
-  buildScripts,
-  renderTocHtml,
-} from '../templates.js'
 import { slugify } from '../../content/render-html.js'
+import { html } from '../lib/html.js'
+import { buildFooter, buildHead, buildHeader, buildScripts, renderTocHtml } from '../templates.js'
 
 export function renderIndexPage(frameworks, siteConfig, opts = {}) {
   const pageTitle = siteConfig.siteName
@@ -31,11 +25,9 @@ export function renderIndexPage(frameworks, siteConfig, opts = {}) {
 
   const sections = []
   for (const [kind, items] of byKind) {
-    const listItems = items.map(fw => {
+    const listItems = items.map((fw) => {
       const href = fw.href ?? `${siteConfig.baseUrl}/docs/${fw.slug}/`
-      const countBadge = fw.doc_count != null
-        ? html` <span class="badge badge-count">${String(fw.doc_count)}</span>`
-        : null
+      const countBadge = fw.doc_count != null ? html` <span class="badge badge-count">${String(fw.doc_count)}</span>` : null
       return html`<li data-filter-kind="${kind}"><a href="${href}">${fw.display_name ?? fw.name ?? fw.slug}</a>${countBadge}</li>`
     })
 
@@ -48,16 +40,12 @@ export function renderIndexPage(frameworks, siteConfig, opts = {}) {
   </section>`)
   }
 
-  const mainContent = sections.length > 0
-    ? interleave(sections, html`\n  `)
-    : html`<p>No frameworks indexed yet.</p>`
+  const mainContent = sections.length > 0 ? interleave(sections, html`\n  `) : html`<p>No frameworks indexed yet.</p>`
 
   // Build sidebar TOC from kind groups
-  const tocItems = [...byKind.keys()].map(kind => ({ id: slugify(kind), label: kind }))
+  const tocItems = [...byKind.keys()].map((kind) => ({ id: slugify(kind), label: kind }))
   const hasSidebar = tocItems.length >= 2
-  const sidebar = hasSidebar
-    ? html`<aside class="doc-sidebar"><div class="sidebar-block">${renderTocHtml(tocItems, false)}</div></aside>`
-    : null
+  const sidebar = hasSidebar ? html`<aside class="doc-sidebar"><div class="sidebar-block">${renderTocHtml(tocItems, false)}</div></aside>` : null
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : null
 
   const description = 'Apple developer documentation, indexed locally.'

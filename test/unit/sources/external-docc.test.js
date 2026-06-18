@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { CURATED_ARCHIVES, ExternalDoccAdapter, indexPathToKey, isDoccPayload } from '../../../src/sources/external-docc.js'
 import { DocsDatabase } from '../../../src/storage/database.js'
-import {
-  CURATED_ARCHIVES,
-  ExternalDoccAdapter,
-  indexPathToKey,
-  isDoccPayload,
-} from '../../../src/sources/external-docc.js'
 
 const TECH_URL = 'https://developer.apple.com/tutorials/data/documentation/technologies.json'
 const realFetch = globalThis.fetch
@@ -26,7 +21,7 @@ function jsonResponse(body, status = 200) {
 function installFetch(map) {
   globalThis.fetch = async (url) => {
     const u = String(url)
-    if (Object.prototype.hasOwnProperty.call(map, u)) return jsonResponse(map[u])
+    if (Object.hasOwn(map, u)) return jsonResponse(map[u])
     return jsonResponse({}, 404)
   }
 }
@@ -86,10 +81,14 @@ describe('ExternalDoccAdapter normalize / references', () => {
 
   test('extractReferences keeps only same-archive links', () => {
     const adapter = new ExternalDoccAdapter()
-    const json = doccPage('CareKit', {
-      a: { url: '/documentation/carekit/ocktask' },
-      b: { url: '/documentation/swiftui/view' },
-    }, ['a', 'b'])
+    const json = doccPage(
+      'CareKit',
+      {
+        a: { url: '/documentation/carekit/ocktask' },
+        b: { url: '/documentation/swiftui/view' },
+      },
+      ['a', 'b'],
+    )
     expect(adapter.extractReferences('carekit', json)).toEqual(['carekit/ocktask'])
   })
 
@@ -118,12 +117,9 @@ describe('ExternalDoccAdapter discover', () => {
     // one child; the others are single-page.
     installFetch({
       [TECH_URL]: { sections: [] },
-      'https://carekit-apple.github.io/CareKit/data/documentation/carekit.json':
-        doccPage('CareKit', { c: { url: '/documentation/carekit/ocktask' } }, ['c']),
-      'https://carekit-apple.github.io/CareKit/data/documentation/carekit/ocktask.json':
-        doccPage('OCKTask'),
-      'https://security.apple.com/data/documentation/private-cloud-compute.json':
-        doccPage('Private Cloud Compute'),
+      'https://carekit-apple.github.io/CareKit/data/documentation/carekit.json': doccPage('CareKit', { c: { url: '/documentation/carekit/ocktask' } }, ['c']),
+      'https://carekit-apple.github.io/CareKit/data/documentation/carekit/ocktask.json': doccPage('OCKTask'),
+      'https://security.apple.com/data/documentation/private-cloud-compute.json': doccPage('Private Cloud Compute'),
       'https://www.swift.org/data/documentation/docc.json': doccPage('DocC'),
     })
 
@@ -131,7 +127,7 @@ describe('ExternalDoccAdapter discover', () => {
     const result = await adapter.discover(ctx)
 
     expect(result.keys.sort()).toEqual(['carekit', 'carekit/ocktask', 'docc', 'private-cloud-compute'])
-    expect(result.roots.map(r => r.slug).sort()).toEqual(['carekit', 'docc', 'private-cloud-compute'])
+    expect(result.roots.map((r) => r.slug).sort()).toEqual(['carekit', 'docc', 'private-cloud-compute'])
     // Roots are persisted with the external-docc source type.
     expect(db.getRootBySlug('carekit').source_type).toBe('external-docc')
   })
@@ -141,10 +137,15 @@ describe('ExternalDoccAdapter discover', () => {
       [TECH_URL]: { sections: [] },
       'https://www.swift.org/index/index.json': {
         interfaceLanguages: {
-          swift: [{ path: '/documentation/docc', children: [
-            { path: '/documentation/docc/tutorial' },
-            { path: '/documentation/other/leak' }, // different archive — dropped
-          ] }],
+          swift: [
+            {
+              path: '/documentation/docc',
+              children: [
+                { path: '/documentation/docc/tutorial' },
+                { path: '/documentation/other/leak' }, // different archive — dropped
+              ],
+            },
+          ],
         },
       },
       // Curated siblings: single page, no index.
@@ -162,11 +163,20 @@ describe('ExternalDoccAdapter discover', () => {
   test('detects a new DocC archive from technologies.json and rejects non-DocC links', async () => {
     installFetch({
       [TECH_URL]: {
-        sections: [{ groups: [{ name: 'App Frameworks', technologies: [
-          { title: 'FooKit', destination: { identifier: 'https://foo.example/documentation/fookit' } },
-          { title: 'BarKit', destination: { identifier: 'https://github.com/BarKit' } }, // not DocC-shaped
-          { title: 'BazKit', destination: { identifier: 'https://baz.example/documentation/bazkit' } }, // shaped but probe fails
-        ] }] }],
+        sections: [
+          {
+            groups: [
+              {
+                name: 'App Frameworks',
+                technologies: [
+                  { title: 'FooKit', destination: { identifier: 'https://foo.example/documentation/fookit' } },
+                  { title: 'BarKit', destination: { identifier: 'https://github.com/BarKit' } }, // not DocC-shaped
+                  { title: 'BazKit', destination: { identifier: 'https://baz.example/documentation/bazkit' } }, // shaped but probe fails
+                ],
+              },
+            ],
+          },
+        ],
       },
       // FooKit: probe + root resolve as DocC.
       'https://foo.example/data/documentation/fookit.json': doccPage('FooKit'),
@@ -182,7 +192,9 @@ describe('ExternalDoccAdapter discover', () => {
     const result = await adapter.discover(ctx)
 
     expect(adapter.archives.fookit).toEqual({
-      displayName: 'FooKit', kind: 'framework', baseUrl: 'https://foo.example',
+      displayName: 'FooKit',
+      kind: 'framework',
+      baseUrl: 'https://foo.example',
     })
     expect(adapter.archives.bazkit).toBeUndefined()
     expect(adapter.archives.barkit).toBeUndefined()
@@ -204,6 +216,6 @@ describe('ExternalDoccAdapter discover', () => {
 
     // The pre-existing apple-docc 'docc' root is left untouched.
     expect(db.getRootBySlug('docc').source_type).toBe('apple-docc')
-    expect(result.roots.map(r => r.slug)).not.toContain('docc')
+    expect(result.roots.map((r) => r.slug)).not.toContain('docc')
   })
 })

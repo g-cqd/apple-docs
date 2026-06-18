@@ -4,14 +4,7 @@
 
 import { renderMarkdown } from '../../content/render-markdown.js'
 import { ValidationError } from '../../lib/errors.js'
-import {
-  serializePayload,
-  skipWhitespace,
-  sliceTextAtBoundary,
-  splitByCharacterWindow,
-  groupChunks,
-  splitText,
-} from './text-utils.js'
+import { groupChunks, serializePayload, skipWhitespace, sliceTextAtBoundary, splitByCharacterWindow, splitText } from './text-utils.js'
 
 const MAX_PLAN_ITERATIONS = 12
 const MIN_SECTION_FRAGMENT_CHARS = 160
@@ -72,10 +65,7 @@ export function buildArrayPages({ items, totalPages, maxChars, buildPayload }) {
     }
 
     if (best === start) {
-      throw new PaginationItemTooLargeError(
-        `A single item exceeds the maxChars budget (${maxChars}). Increase maxChars or narrow the query.`,
-        start,
-      )
+      throw new PaginationItemTooLargeError(`A single item exceeds the maxChars budget (${maxChars}). Increase maxChars or narrow the query.`, start)
     }
 
     pages.push(buildPayload(items.slice(start, best), pageIndex, totalPages))
@@ -145,10 +135,7 @@ function buildTextPages({ text, totalPages, maxChars, buildPayload }) {
 
 function ensureFits(payload, maxChars, itemIndex) {
   if (serializePayload(payload).length > maxChars) {
-    throw new PaginationItemTooLargeError(
-      `A single page exceeds the maxChars budget (${maxChars}). Increase maxChars.`,
-      itemIndex,
-    )
+    throw new PaginationItemTooLargeError(`A single page exceeds the maxChars budget (${maxChars}). Increase maxChars.`, itemIndex)
   }
 }
 
@@ -166,14 +153,14 @@ export function splitOversizedSection(section, targetChars) {
 
   const pieces = groupChunks(splitText(text), effectiveTarget)
   if (pieces.length <= 1) {
-    return splitByCharacterWindow(text, effectiveTarget).map(contentText => ({
+    return splitByCharacterWindow(text, effectiveTarget).map((contentText) => ({
       ...section,
       contentText,
       contentJson: null,
     }))
   }
 
-  return pieces.map(contentText => ({
+  return pieces.map((contentText) => ({
     ...section,
     contentText,
     contentJson: null,
@@ -196,34 +183,28 @@ export function withDocumentPageInfo(payload, pageInfo) {
   }
 }
 
-export function buildDocumentPagePayload({
-  payload,
-  document,
-  pageSections,
-  page,
-  totalPages,
-  maxChars,
-  strategy,
-  totalSectionUnits,
-}) {
+export function buildDocumentPagePayload({ payload, document, pageSections, page, totalPages, maxChars, strategy, totalSectionUnits }) {
   const content = renderMarkdown(document ?? payload?.metadata ?? {}, pageSections, {
     includeFrontMatter: page === 1,
     includeTitle: page === 1,
   })
 
-  return withDocumentPageInfo({
-    ...payload,
-    note: undefined,
-    content,
-    sections: [],
-  }, {
-    page,
-    totalPages,
-    maxChars,
-    strategy,
-    totalSections: totalSectionUnits,
-    pageSections: pageSections.length,
-  })
+  return withDocumentPageInfo(
+    {
+      ...payload,
+      note: undefined,
+      content,
+      sections: [],
+    },
+    {
+      page,
+      totalPages,
+      maxChars,
+      strategy,
+      totalSections: totalSectionUnits,
+      pageSections: pageSections.length,
+    },
+  )
 }
 
 export const PAGINATION_LIMITS = {

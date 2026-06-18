@@ -14,9 +14,7 @@ export async function updateGuidelinesSource(adapter, discovery, requestedRoots,
   if (roots.length === 0) return counts
 
   const pages = filterPagesByRoots(db.getPagesBySourceType(adapter.constructor.type), requestedRoots)
-  const previousState = pages[0]
-    ? { etag: pages[0].etag, lastModified: pages[0].last_modified, contentHash: pages[0].content_hash }
-    : null
+  const previousState = pages[0] ? { etag: pages[0].etag, lastModified: pages[0].last_modified, contentHash: pages[0].content_hash } : null
 
   logger.info(`Checking ${adapter.constructor.displayName} for updates...`)
 

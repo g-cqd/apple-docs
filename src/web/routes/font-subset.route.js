@@ -28,20 +28,15 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { BackpressureError } from '../../lib/semaphore.js'
-import { readBodyCapped, BodyTooLargeError } from '../../lib/http-body.js'
 import { sha256 } from '../../lib/hash.js'
+import { BodyTooLargeError, readBodyCapped } from '../../lib/http-body.js'
 import { contentDispositionAttachment } from '../../lib/http-content-disposition.js'
-import { matchesIfNoneMatch } from '../responses.js'
-import {
-  canonicalizePostBody,
-  canonicalizeQuery,
-  canonicalKeyString,
-  CanonicalizeError,
-} from '../lib/font-subset/canonicalize.js'
+import { BackpressureError } from '../../lib/semaphore.js'
+import { CanonicalizeError, canonicalizePostBody, canonicalizeQuery, canonicalKeyString } from '../lib/font-subset/canonicalize.js'
+import { capAgainst, getLegalCodepointSet } from '../lib/font-subset/cmap-cap.js'
 import { resolveFontPath } from '../lib/font-subset/font-resolver.js'
-import { getLegalCodepointSet, capAgainst } from '../lib/font-subset/cmap-cap.js'
 import { PoolUnavailableError } from '../lib/font-subset/pyftsubset-pool.js'
+import { matchesIfNoneMatch } from '../responses.js'
 
 const MAX_BODY_BYTES = 256 * 1024 // 256 KB
 const FORMAT_EXT = { woff2: 'woff2', ttf: 'ttf', otf: 'otf' }
@@ -67,7 +62,11 @@ export async function fontSubsetHandler(request, ctx) {
         throw err
       }
       let body
-      try { body = JSON.parse(bodyText) } catch { return jsonError(400, 'body is not valid JSON') }
+      try {
+        body = JSON.parse(bodyText)
+      } catch {
+        return jsonError(400, 'body is not valid JSON')
+      }
       canonical = canonicalizePostBody(body)
     } else if (request.method === 'GET') {
       canonical = canonicalizeQuery(new URL(request.url).searchParams)
@@ -113,10 +112,10 @@ export async function fontSubsetHandler(request, ctx) {
 
   const baseHeaders = {
     'Content-Type': mime,
-    'ETag': etag,
+    ETag: etag,
     'Cache-Control': 'public, max-age=31536000, immutable',
     'Content-Disposition': contentDispositionAttachment(`${canonical.font}-${sha.slice(0, 8)}.${ext}`),
-    'Vary': 'Accept-Encoding',
+    Vary: 'Accept-Encoding',
   }
 
   if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) {

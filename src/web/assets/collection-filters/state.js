@@ -74,7 +74,10 @@ export function readStateFromHash(state, kindCounts) {
   }
 
   let touched = false
-  if (map.get('sort') === 'kind') { state.currentSort = 'kind'; touched = true }
+  if (map.get('sort') === 'kind') {
+    state.currentSort = 'kind'
+    touched = true
+  }
   if (map.has('filter')) {
     for (const v of map.get('filter').split(',').filter(Boolean)) {
       if (kindCounts.has(v)) {
@@ -84,10 +87,17 @@ export function readStateFromHash(state, kindCounts) {
     }
   }
   if (map.has('q')) {
-    try { state.searchQuery = decodeURIComponent(map.get('q')) } catch { state.searchQuery = map.get('q') }
+    try {
+      state.searchQuery = decodeURIComponent(map.get('q'))
+    } catch {
+      state.searchQuery = map.get('q')
+    }
     if (state.searchQuery) touched = true
   }
-  if (map.get('hideDeprecated') === '1') { state.hideDeprecated = true; touched = true }
+  if (map.get('hideDeprecated') === '1') {
+    state.hideDeprecated = true
+    touched = true
+  }
 
   return touched
 }

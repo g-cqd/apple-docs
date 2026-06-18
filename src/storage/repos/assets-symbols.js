@@ -57,15 +57,6 @@ export function createAssetsSymbolsRepo(db) {
   // host's macOS cannot draw at all; the prerender loop flags them when
   // every variant fails so the completeness gate skips them.
   const markRenderUnsupportedStmt = db.query('UPDATE sf_symbols SET render_unsupported = 1 WHERE scope = $scope AND name = $name')
-  // v28: the same host can also draw a symbol at only SOME variants (macos-26
-  // has no ultralight square.and.arrow.up). Record the exact
-  // `"<weight>/<scale>"` set the renderer could not produce so the
-  // completeness gate skips those and keeps flagging everything else.
-  const setUnsupportedVariantsStmt = db.query('UPDATE sf_symbols SET unsupported_variants = $variants WHERE scope = $scope AND name = $name')
-  // Read back separately rather than through listCatalog(): that payload is
-  // /api/symbols/index.json, which is byte-parity-gated against ad-server, so a
-  // build-time-only field must not appear in it.
-  const listUnsupportedVariantsStmt = db.query("SELECT scope, name, unsupported_variants FROM sf_symbols WHERE unsupported_variants != '[]'")
   // v19: stamp the resolved Private Use Area codepoint at sync time.
   // Pass NULL to clear (e.g., when the dump can't reach the symbol
   // through SF-Pro.ttf's PUA cmap).
@@ -208,7 +199,6 @@ export function createAssetsSymbolsRepo(db) {
       const limit = Math.min(Math.max(Number.parseInt(opts.limit ?? 100, 10) || 100, 1), 500)
       const scope = opts.scope ?? null
       const q = String(query ?? '').trim()
-      /** @param {any[]} rows */
       const parseRows = (rows) => rows.map(normalizeSfSymbolRow)
       if (!q) return parseRows(searchEmptyStmt.all({ $scope: scope, $limit: limit }))
       try {
