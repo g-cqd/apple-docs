@@ -4,20 +4,26 @@
 
 import { normalizeIdentifier } from '../../apple/normalizer.js'
 
-export function renderContentNodesToText(nodes, refs) {
-  if (!Array.isArray(nodes)) return ''
-  return nodes.map(node => renderNode(node, refs)).join('')
+// Hard cap on DocC node-tree recursion depth. Mirrors the Swift renderer, whose walk is bounded by
+// ADJSON's `parse(maxDepth: 512)` (see ADContent/PageMarkdown.swift): beyond 512 nested levels a
+// subtree renders as empty instead of overflowing the call stack on hostile/malformed input. Real
+// Apple payloads are ≲ 10 levels, so the cap never triggers on real data and JS↔Swift stays byte-identical.
+const MAX_RENDER_DEPTH = 512
+
+export function renderContentNodesToText(nodes, refs, depth = 0) {
+  if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
+  return nodes.map(node => renderNode(node, refs, depth)).join('')
 }
 
-function renderNode(node, refs) {
+function renderNode(node, refs, depth) {
   if (!node || typeof node !== 'object') return ''
 
   switch (node.type) {
     case 'paragraph':
-      return `${renderInlineNodes(node.inlineContent ?? [], refs)}\n`
+      return `${renderInlineNodes(node.inlineContent ?? [], refs, depth + 1)}\n`
 
     case 'heading': {
-      const text = node.text ?? renderInlineNodes(node.inlineContent ?? [], refs)
+      const text = node.text ?? renderInlineNodes(node.inlineContent ?? [], refs, depth + 1)
       return `${text ?? ''}\n`
     }
 
@@ -27,12 +33,12 @@ function renderNode(node, refs) {
     case 'unorderedList':
     case 'orderedList':
       return (node.items ?? [])
-        .map(item => renderContentNodesToText(item.content ?? [], refs))
+        .map(item => renderContentNodesToText(item.content ?? [], refs, depth + 1))
         .join('')
 
     case 'aside': {
       const style = node.style ?? 'Note'
-      const inner = renderContentNodesToText(node.content ?? [], refs).trim()
+      const inner = renderContentNodesToText(node.content ?? [], refs, depth + 1).trim()
       return `${style}: ${inner}\n`
     }
 
@@ -42,7 +48,7 @@ function renderNode(node, refs) {
         .map(row => {
           const cells = Array.isArray(row) ? row : (row.cells ?? [])
           return cells
-            .map(cell => renderContentNodesToText(cell.content ?? [], refs).trim())
+            .map(cell => renderContentNodesToText(cell.content ?? [], refs, depth + 1).trim())
             .join(' | ')
         })
         .join('\n')}\n`
@@ -69,7 +75,7 @@ function renderNode(node, refs) {
     case 'superscript':
     case 'subscript':
     case 'strikethrough':
-      return renderInlineNodes(node.inlineContent ?? [], refs)
+      return renderInlineNodes(node.inlineContent ?? [], refs, depth + 1)
 
     case 'reference': {
       const ref = refs?.[node.identifier]
@@ -84,10 +90,10 @@ function renderNode(node, refs) {
       if (node.text) return node.text
       if (node.code) return String(node.code)
       if (Array.isArray(node.inlineContent)) {
-        return renderInlineNodes(node.inlineContent, refs)
+        return renderInlineNodes(node.inlineContent, refs, depth + 1)
       }
       if (Array.isArray(node.content)) {
-        return renderContentNodesToText(node.content, refs)
+        return renderContentNodesToText(node.content, refs, depth + 1)
       }
       return ''
   }
@@ -97,26 +103,32 @@ function renderNode(node, refs) {
  * Render an array of inline nodes to plain text.
  * Mirrors the logic in extractor.js but also handles reference lookups.
  */
-export function renderInlineNodes(nodes, refs) {
-  if (!Array.isArray(nodes)) return ''
-  return nodes.map(node => {
-    switch (node.type) {
-      case 'text': return node.text ?? ''
-      case 'codeVoice': return node.code ?? ''
-      case 'emphasis':
-      case 'strong':
-      case 'newTerm':
-      case 'inlineHead':
-      case 'superscript':
-      case 'subscript':
-      case 'strikethrough':
-        return renderInlineNodes(node.inlineContent ?? [], refs)
-      case 'reference': {
-        const ref = refs?.[node.identifier]
-        return ref?.title ?? node.title ?? node.identifier ?? ''
+export function renderInlineNodes(nodes, refs, depth = 0) {
+  if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
+  return nodes
+    .map(node => {
+      switch (node.type) {
+        case 'text':
+          return node.text ?? ''
+        case 'codeVoice':
+          return node.code ?? ''
+        case 'emphasis':
+        case 'strong':
+        case 'newTerm':
+        case 'inlineHead':
+        case 'superscript':
+        case 'subscript':
+        case 'strikethrough':
+          return renderInlineNodes(node.inlineContent ?? [], refs, depth + 1)
+        case 'reference': {
+          const ref = refs?.[node.identifier]
+          return ref?.title ?? node.title ?? node.identifier ?? ''
+        }
+        case 'link':
+          return node.title ?? node.destination ?? ''
+        default:
+          return node.text ?? node.code ?? ''
       }
-      case 'link': return node.title ?? node.destination ?? ''
-      default: return node.text ?? node.code ?? ''
-    }
-  }).join('')
+    })
+    .join('')
 }

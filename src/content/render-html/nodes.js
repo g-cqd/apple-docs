@@ -8,21 +8,26 @@ import { safeWebDocKey } from '../../lib/safe-path.js'
 import { highlightCode } from '../highlight.js'
 import { escapeHtml, isSafeHref, readableNameFromKey, resolveReferenceUrl } from './helpers.js'
 
-export function renderContentNodesToHtml(nodes) {
-  if (!Array.isArray(nodes)) return ''
-  return nodes.map(renderBlockNodeToHtml).join('')
+// Hard cap on DocC node-tree recursion depth — see render-content.js. Mirrors the Swift renderer's
+// `parse(maxDepth: 512)` bound: beyond 512 nested levels a subtree renders as empty instead of
+// overflowing the call stack. Real Apple payloads are ≲ 10 levels, so this never triggers on real data.
+const MAX_RENDER_DEPTH = 512
+
+export function renderContentNodesToHtml(nodes, depth = 0) {
+  if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
+  return nodes.map(node => renderBlockNodeToHtml(node, depth)).join('')
 }
 
-function renderBlockNodeToHtml(node) {
+function renderBlockNodeToHtml(node, depth) {
   if (!node || typeof node !== 'object') return ''
 
   switch (node.type) {
     case 'paragraph':
-      return `<p>${renderInlineNodesToHtml(node.inlineContent ?? [])}</p>`
+      return `<p>${renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1)}</p>`
 
     case 'heading': {
       const level = Math.min(Math.max(node.level ?? 3, 2), 6)
-      const text = node.text ?? renderInlineNodesToHtml(node.inlineContent ?? [])
+      const text = node.text ?? renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1)
       const anchor = node.anchor ? ` id="${escapeHtml(node.anchor)}"` : ''
       return `<h${level}${anchor}>${escapeHtml(text)}</h${level}>`
     }
@@ -36,17 +41,17 @@ function renderBlockNodeToHtml(node) {
 
     case 'unorderedList':
       return `<ul>${(node.items ?? []).map(item =>
-        `<li>${renderContentNodesToHtml(item.content ?? [])}</li>`,
+        `<li>${renderContentNodesToHtml(item.content ?? [], depth + 1)}</li>`,
       ).join('')}</ul>`
 
     case 'orderedList':
       return `<ol>${(node.items ?? []).map(item =>
-        `<li>${renderContentNodesToHtml(item.content ?? [])}</li>`,
+        `<li>${renderContentNodesToHtml(item.content ?? [], depth + 1)}</li>`,
       ).join('')}</ol>`
 
     case 'aside': {
       const style = node.style ?? 'Note'
-      const inner = renderContentNodesToHtml(node.content ?? [])
+      const inner = renderContentNodesToHtml(node.content ?? [], depth + 1)
       return `<aside><p><strong>${escapeHtml(style)}:</strong></p>${inner}</aside>`
     }
 
@@ -66,7 +71,7 @@ function renderBlockNodeToHtml(node) {
         if (wrapper === 'tbody') parts.push('<tbody>')
         parts.push('<tr>')
         for (const cell of cells) {
-          const cellContent = renderContentNodesToHtml(cell.content ?? cell ?? [])
+          const cellContent = renderContentNodesToHtml(cell.content ?? cell ?? [], depth + 1)
           parts.push(`<${tag}>${cellContent}</${tag}>`)
         }
         parts.push('</tr>')
@@ -100,8 +105,8 @@ function renderBlockNodeToHtml(node) {
 
     case 'termList':
       return `<dl>${(node.items ?? []).map(item => {
-        const term = item.term ? renderInlineNodesToHtml(item.term.inlineContent ?? []) : ''
-        const def = renderContentNodesToHtml(item.definition?.content ?? [])
+        const term = item.term ? renderInlineNodesToHtml(item.term.inlineContent ?? [], depth + 1) : ''
+        const def = renderContentNodesToHtml(item.definition?.content ?? [], depth + 1)
         return `<dt>${term}</dt><dd>${def}</dd>`
       }).join('')}</dl>`
 
@@ -109,26 +114,26 @@ function renderBlockNodeToHtml(node) {
       // Inline node appearing at block level — wrap in <p>
       if (node.type === 'text' || node.type === 'codeVoice' || node.type === 'emphasis'
         || node.type === 'strong' || node.type === 'reference' || node.type === 'link') {
-        return `<p>${renderInlineNodeToHtml(node)}</p>`
+        return `<p>${renderInlineNodeToHtml(node, depth + 1)}</p>`
       }
       // Best-effort for unknown block types
       if (Array.isArray(node.content)) {
-        return renderContentNodesToHtml(node.content)
+        return renderContentNodesToHtml(node.content, depth + 1)
       }
       if (Array.isArray(node.inlineContent)) {
-        return `<p>${renderInlineNodesToHtml(node.inlineContent)}</p>`
+        return `<p>${renderInlineNodesToHtml(node.inlineContent, depth + 1)}</p>`
       }
       if (node.text) return `<p>${escapeHtml(node.text)}</p>`
       return ''
   }
 }
 
-export function renderInlineNodesToHtml(nodes) {
-  if (!Array.isArray(nodes)) return ''
-  return nodes.map(renderInlineNodeToHtml).join('')
+export function renderInlineNodesToHtml(nodes, depth = 0) {
+  if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
+  return nodes.map(node => renderInlineNodeToHtml(node, depth)).join('')
 }
 
-function renderInlineNodeToHtml(node) {
+function renderInlineNodeToHtml(node, depth) {
   if (!node || typeof node !== 'object') return ''
 
   switch (node.type) {
@@ -139,25 +144,25 @@ function renderInlineNodeToHtml(node) {
       return `<code>${escapeHtml(node.code ?? '')}</code>`
 
     case 'emphasis':
-      return `<em>${renderInlineNodesToHtml(node.inlineContent ?? [])}</em>`
+      return `<em>${renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1)}</em>`
 
     case 'strong':
-      return `<strong>${renderInlineNodesToHtml(node.inlineContent ?? [])}</strong>`
+      return `<strong>${renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1)}</strong>`
 
     case 'newTerm':
-      return `<em>${renderInlineNodesToHtml(node.inlineContent ?? [])}</em>`
+      return `<em>${renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1)}</em>`
 
     case 'superscript':
-      return `<sup>${renderInlineNodesToHtml(node.inlineContent ?? [])}</sup>`
+      return `<sup>${renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1)}</sup>`
 
     case 'subscript':
-      return `<sub>${renderInlineNodesToHtml(node.inlineContent ?? [])}</sub>`
+      return `<sub>${renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1)}</sub>`
 
     case 'strikethrough':
-      return `<s>${renderInlineNodesToHtml(node.inlineContent ?? [])}</s>`
+      return `<s>${renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1)}</s>`
 
     case 'inlineHead':
-      return `<strong>${renderInlineNodesToHtml(node.inlineContent ?? [])}</strong>`
+      return `<strong>${renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1)}</strong>`
 
     case 'reference': {
       // Use resolved data from normalization, or fall back to extracting from identifier
@@ -181,7 +186,7 @@ function renderInlineNodeToHtml(node) {
       const internalKey = node._resolvedKey
       const rawHref = internalKey ? `/docs/${safeWebDocKey(internalKey)}/` : (node.destination ?? '#')
       const href = isSafeHref(rawHref) ? rawHref : '#'
-      const title = node.title ?? (renderInlineNodesToHtml(node.inlineContent ?? []) || href)
+      const title = node.title ?? (renderInlineNodesToHtml(node.inlineContent ?? [], depth + 1) || href)
       return `<a href="${escapeHtml(href)}">${typeof title === 'string' ? escapeHtml(title) : title}</a>`
     }
 
