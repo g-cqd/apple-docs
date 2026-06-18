@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v15 — drop the legacy `refs` table.
  *
@@ -11,6 +10,7 @@
  * The parallel writes from sync-guidelines were removed alongside this
  * migration so the table can go without leaving callers behind.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   // Drop dependent indexes first; SQLite will drop them with the table
   // anyway but explicit DROP avoids surprises when this runs against a

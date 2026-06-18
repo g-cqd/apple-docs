@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Migration runner. Walks the linear MIGRATIONS list in version order,
  * applying every migration whose version is greater than the current
@@ -83,10 +82,12 @@ export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version
  * Retrying is always safe: each attempt re-reads schema_version, and a
  * sibling that finished the work turns this into a no-op.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function runMigrations(db) {
   return withBusyRetry(() => applyMigrations(db))
 }
 
+/** @param {import('bun:sqlite').Database} db */
 function applyMigrations(db) {
   db.run('CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
   const row = db.query('SELECT value FROM schema_meta WHERE key = ?').get('schema_version')
@@ -115,6 +116,6 @@ function applyMigrations(db) {
     } catch {
       /* no active transaction */
     }
-    throw new ValidationError(`Migration from v${current} to v${SCHEMA_VERSION} failed: ${e.message}`)
+    throw new ValidationError(`Migration from v${current} to v${SCHEMA_VERSION} failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 }

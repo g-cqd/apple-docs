@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v24 — tag each stamped codepoint with the SF Symbols version it was resolved
  * from (`sf_symbols.codepoint_version`, nullable TEXT, e.g. "8.0").
@@ -10,6 +9,7 @@
  * match the shipped font to its codepoints (and detect drift on the next sync).
  * ALTER guarded against re-run on partial DBs.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   try {
     db.run('ALTER TABLE sf_symbols ADD COLUMN codepoint_version TEXT')

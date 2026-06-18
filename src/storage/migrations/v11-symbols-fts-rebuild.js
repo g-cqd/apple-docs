@@ -1,9 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v11 — rebuild sf_symbols_fts. The v10 virtual table was created with a
  * column shape that didn't match the populator (keyword/category/alias
  * columns were unused). Drop and rebuild from the JSON sidecar columns.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   db.exec(`
     DROP TABLE IF EXISTS sf_symbols_fts;

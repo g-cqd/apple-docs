@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v22 — `document_vectors`: binary-quantized embedding store for the optional
  * hybrid semantic-search tier.
@@ -14,6 +13,7 @@
  *
  * Additive and idempotent.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   db.run(`CREATE TABLE IF NOT EXISTS document_vectors (
     document_id INTEGER PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v27 — `sf_symbols.render_unsupported` flag for symbols the build
  * host's macOS cannot draw.
@@ -13,11 +12,12 @@
  * the render surfaces explain that the symbol needs a snapshot built
  * on a newer macOS (the beta channel).
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   try {
     db.run('ALTER TABLE sf_symbols ADD COLUMN render_unsupported INTEGER NOT NULL DEFAULT 0')
   } catch (e) {
     // Idempotent re-run.
-    if (!/duplicate column name/i.test(e.message ?? '')) throw e
+    if (!/duplicate column name/i.test(e instanceof Error ? e.message : '')) throw e
   }
 }

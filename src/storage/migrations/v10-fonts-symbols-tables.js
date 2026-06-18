@@ -1,8 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v10 — fonts + SF Symbols asset domain. Catalog, file inventory, full-text
  * search index, and a render cache table keyed by (renderer, params).
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS apple_font_families (
