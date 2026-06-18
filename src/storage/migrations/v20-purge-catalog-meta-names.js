@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v20 — purge catalog meta-entry rows (`symbols`, `year_to_release`)
  * from `sf_symbols`. These names appear at the top of Apple's
@@ -12,6 +11,7 @@
  * Idempotent — deleting non-existent rows is a no-op.
  */
 
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   db.run("DELETE FROM sf_symbols WHERE name IN ('symbols', 'year_to_release')")
 }

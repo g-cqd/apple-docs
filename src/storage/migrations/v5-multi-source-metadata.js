@@ -1,9 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v5 — multi-source metadata columns on roots + pages, framework
  * synonyms table, and a backfill pass that derives source_type from
  * existing root kinds.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   // Multi-source metadata columns on roots
   try {

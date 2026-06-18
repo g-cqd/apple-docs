@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v17 — `pages.consecutive_404_count` for the N=3 tombstone gate.
  *
@@ -12,11 +11,12 @@
  * to delete; storing it elsewhere would force a join on the hot crawl
  * path.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   try {
     db.run('ALTER TABLE pages ADD COLUMN consecutive_404_count INTEGER NOT NULL DEFAULT 0')
   } catch (e) {
     // Idempotent re-run.
-    if (!/duplicate column name/i.test(e.message ?? '')) throw e
+    if (!/duplicate column name/i.test(e instanceof Error ? e.message : '')) throw e
   }
 }

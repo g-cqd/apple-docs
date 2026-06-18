@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v6 — introduce the canonical documents table (multi-source-aware) plus
  * document_sections, document_relationships, snapshot_meta, and the FTS5
@@ -8,6 +7,7 @@
  * The legacy pages + refs tables stay alongside; killing them is the
  * P4 migration v14 in the remediation plan.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   db.run(`CREATE TABLE IF NOT EXISTS documents (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,

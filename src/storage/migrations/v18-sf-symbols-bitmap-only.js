@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v18 — `sf_symbols.bitmap_only` flag for symbols whose private bundle
  * representation is bitmap-backed (emoji.*, year_to_release, etc.).
@@ -11,11 +10,12 @@
  * validator skip them, while still keeping the symbol visible to
  * `/api/symbols/search` for clients that can render a fallback.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   try {
     db.run('ALTER TABLE sf_symbols ADD COLUMN bitmap_only INTEGER NOT NULL DEFAULT 0')
   } catch (e) {
     // Idempotent re-run.
-    if (!/duplicate column name/i.test(e.message ?? '')) throw e
+    if (!/duplicate column name/i.test(e instanceof Error ? e.message : '')) throw e
   }
 }

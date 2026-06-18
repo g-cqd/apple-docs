@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v14 — switch documents_trigram to FTS5 external-content backed by the
  * documents table.
@@ -22,6 +21,7 @@
  * deferred — would need a coordinated column rename across triggers and
  * the search planner. The v14 win on disk savings stands on its own.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   db.run('DROP TABLE IF EXISTS documents_trigram')
   db.run(`CREATE VIRTUAL TABLE documents_trigram USING fts5(

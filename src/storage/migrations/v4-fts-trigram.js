@@ -1,8 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v4 — fuzzy/title trigram + full-body FTS5 tables, plus replacement
  * triggers that mirror inserts/updates/deletes into the trigram table.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   // Trigram FTS5 table for fuzzy title matching
   db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS titles_trigram USING fts5(

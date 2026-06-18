@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v15a — numeric companion columns for platform minimums.
  *
@@ -22,6 +21,7 @@ import { encodeVersion } from '../../lib/version-encode.js'
 
 const PLATFORMS = ['ios', 'macos', 'watchos', 'tvos', 'visionos']
 
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   for (const p of PLATFORMS) {
     const col = `min_${p}_num`
@@ -30,7 +30,7 @@ export function up(db) {
     } catch (e) {
       // Idempotent re-run: the column exists already from a partial
       // previous attempt. Any other error rethrows.
-      if (!/duplicate column name/i.test(e.message ?? '')) throw e
+      if (!/duplicate column name/i.test(e instanceof Error ? e.message : '')) throw e
     }
     db.run(`CREATE INDEX IF NOT EXISTS idx_documents_${col} ON documents(${col})`)
   }

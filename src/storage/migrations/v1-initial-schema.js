@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v1 — initial schema. The DDL block is the union of every migration up
  * to v13 (so a fresh DB skips straight to v13 without playing forward).
@@ -204,6 +203,7 @@ CREATE TABLE IF NOT EXISTS sf_symbol_renders (
 );
 `
 
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   db.exec(SCHEMA_SQL)
 }

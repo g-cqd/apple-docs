@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v23 — `document_raw`: the raw upstream Apple DocC payloads, zstd-compressed,
  * one BLOB per document.
@@ -12,6 +11,7 @@
  * Empty/absent table → readers fall back to document_sections (no raw needed
  * for reading or search). Additive and idempotent.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   db.run(`CREATE TABLE IF NOT EXISTS document_raw (
     document_id INTEGER PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,

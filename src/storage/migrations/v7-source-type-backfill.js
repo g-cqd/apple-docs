@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v7 — backfill source_type on roots/pages/documents from the canonical
  * slug→source map. Runs after v5 (which only handled the design/hig and
@@ -7,6 +6,7 @@
 
 import { ROOT_SOURCE_TYPE_BY_SLUG } from '../source-types.js'
 
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   for (const [slug, sourceType] of ROOT_SOURCE_TYPE_BY_SLUG) {
     db.run('UPDATE roots SET source_type = ? WHERE slug = ?', [sourceType, slug])

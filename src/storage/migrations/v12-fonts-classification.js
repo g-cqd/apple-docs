@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v12 — typography classification columns + tightened apple_font_files
  * uniqueness. The unique constraint moves from (family_id, file_path) to
@@ -6,6 +5,7 @@
  * disk locations is now one row, with `source` recording which copy we
  * kept (preferring 'remote' = downloaded DMG over 'system' = /Library/Fonts).
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   try {
     db.run('ALTER TABLE apple_font_families ADD COLUMN category TEXT')

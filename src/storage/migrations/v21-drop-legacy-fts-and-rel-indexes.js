@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v21 — drop the dead legacy `pages` FTS subsystem and the redundant
  * `document_relationships` indexes.
@@ -33,6 +32,7 @@
  *
  * Idempotent — every statement guards with IF EXISTS.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   // 1. Legacy pages FTS subsystem.
   // Drop the maintenance triggers first so a subsequent `pages` write can't

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v25 — `document_chunks`: per-chunk embedding store for the body-aware
  * semantic tier.
@@ -19,6 +18,7 @@
  *
  * Additive and idempotent.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   db.run(`CREATE TABLE IF NOT EXISTS document_chunks (
     chunk_id    INTEGER PRIMARY KEY AUTOINCREMENT,
