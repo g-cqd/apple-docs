@@ -20,11 +20,22 @@ public enum Pooling {
     for row in rows {
       for i in 0..<dims { out[i] += row[i] }
     }
-    let count = Float(rows.count)
-    for i in 0..<dims { out[i] /= count }
+    finalizeMeanNormalized(&out, count: rows.count)
+  }
+
+  /// Finalizes a per-dim **sum** accumulator (`out`) into the L2-normalized mean, bit-identical to
+  /// the onnxruntime reference: f32 divide by `Float(count)`, then a single sequential f32
+  /// sum-of-squares chain, f32 sqrt (IEEE-correctly-rounded), f32 divide. `count` is the number of
+  /// rows summed (≥ 1). This is the back half of ``meanPoolNormalized(rows:dims:into:)``, exposed so a
+  /// caller can stream rows into `out` directly (no `[UnsafePointer<Float>]` array) while preserving
+  /// the exact reduction order the parity contract requires.
+  public static func finalizeMeanNormalized(_ out: inout [Float], count: Int) {
+    precondition(count > 0, "finalizeMeanNormalized requires at least one row")
+    let n = Float(count)
+    for i in 0..<out.count { out[i] /= n }
     var sumSquares: Float = 0
-    for i in 0..<dims { sumSquares += out[i] * out[i] }
+    for i in 0..<out.count { sumSquares += out[i] * out[i] }
     let norm = sumSquares.squareRoot()
-    for i in 0..<dims { out[i] /= norm }
+    for i in 0..<out.count { out[i] /= norm }
   }
 }

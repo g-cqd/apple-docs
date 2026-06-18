@@ -65,14 +65,14 @@ struct MatrixArtifactTests {
 
   @Test func sparseLookupHitsAndMisses() throws {
     let matrix = try MatrixArtifact(path: EmbedFixtures.subsetPath)
-    #expect(matrix.row(forTokenId: 0) != nil)  // the [PAD] row is always included
+    #expect(matrix.contains(tokenId: 0))  // the [PAD] row is always included
     var missing: UInt32?
-    for id in 0..<UInt32(63091) where matrix.row(forTokenId: id) == nil {
+    for id in 0..<UInt32(63091) where !matrix.contains(tokenId: id) {
       missing = id
       break
     }
     #expect(missing != nil, "a 608-row subset must miss most of the vocab")
-    #expect(matrix.row(forTokenId: 1 << 30) == nil)
+    #expect(!matrix.contains(tokenId: 1 << 30))
   }
 
   @Test func corruptArtifactsAreRejected() throws {

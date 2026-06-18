@@ -23,19 +23,20 @@ public struct Embedder: Sendable {
   public func embed(_ text: String) throws(EmbedError) -> [Float] {
     var ids = tokenizer.encode(text)
     if ids.isEmpty { ids = [0] }  // EmbeddingBag needs ≥1 token
-    // The row pointers alias `self.matrix`'s mmap; the stored `matrix` keeps it
-    // alive for this whole synchronous call, and the pointers are consumed by
-    // `Pooling` below and never escape `embed`, so the borrow stays sound.
-    var rows: [UnsafePointer<Float>] = []
-    rows.reserveCapacity(ids.count)
-    for id in ids {
-      guard id >= 0, let row = matrix.row(forTokenId: UInt32(id)) else {
-        throw .missingRow(tokenId: id)
-      }
-      rows.append(row)
-    }
+    // Mean-pool the token rows straight from the matrix's mmap: fold each row into `out` as it is
+    // visited (bag order), then finalize (mean + L2 normalize). Each row is read through a
+    // `Span<Float>` whose lifetime the compiler bounds to the closure, so no row pointer escapes and
+    // no intermediate `[UnsafePointer<Float>]` is allocated. The accumulation order is unchanged, so
+    // the result stays bit-identical to the onnxruntime reference (see `Pooling`).
     var out = [Float](repeating: 0, count: dims)
-    Pooling.meanPoolNormalized(rows: rows, dims: dims, into: &out)
+    for id in ids {
+      guard id >= 0 else { throw .missingRow(tokenId: id) }
+      let visited: Void? = matrix.withRow(forTokenId: UInt32(id)) { row in
+        for i in 0..<dims { out[i] += row[i] }
+      }
+      guard visited != nil else { throw .missingRow(tokenId: id) }
+    }
+    Pooling.finalizeMeanNormalized(&out, count: ids.count)
     return out
   }
 
