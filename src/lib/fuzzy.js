@@ -86,13 +86,13 @@ export function fuzzyMatchTitles(query, db, { framework: _framework, kind: _kind
   // ordering puts the highest-trigram-overlap titles first so the
   // tail beyond N is unlikely to contain real matches.
   const sqlLimit = Math.max(limit * 5, 100)
-  const candidates = db.fuzzyTrigramCandidates?.(orQuery, sqlLimit) ?? []
+  const candidates = /** @type {any[]} */ (db.fuzzyTrigramCandidates?.(orQuery, sqlLimit) ?? [])
 
   // Fallback path for hosts without the trigram FTS5 table (in-memory
   // tests, schema < v6). Scan every title — slow on a real corpus,
   // negligible on the small fixtures that hit this branch.
   const useFallback = candidates.length === 0 && typeof db.fuzzyTrigramCandidates !== 'function'
-  const rows = useFallback ? (db.getAllTitlesForFuzzy?.() ?? []) : candidates
+  const rows = /** @type {any[]} */ (useFallback ? (db.getAllTitlesForFuzzy?.() ?? []) : candidates)
 
   const queryLower = query.toLowerCase()
   const matches = []

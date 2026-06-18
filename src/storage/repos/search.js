@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Search repository: the four-variant query planner (FTS5 / title-exact /
  * trigram / body), the body-index maintenance ops, the fuzzy-trigram
@@ -69,6 +68,15 @@ const FILTER_PREDICATES = `
 // filter values — the FTS5 statement is duplicated in Swift (StorageExports),
 // but the param derivation (encodeVersion, sources JSON, track LIKE) stays the
 // single JS source of truth.
+/**
+ * @param {{
+ *   framework?: string | null, kind?: string | null, language?: string | null,
+ *   sourceType?: string | null, sources?: string[] | Set<string> | null,
+ *   year?: number | null, track?: string | null, deprecatedMode?: string,
+ *   minIos?: string | null, minMacos?: string | null, minWatchos?: string | null,
+ *   minTvos?: string | null, minVisionos?: string | null
+ * }} [filters]
+ */
 export function buildFilterParams({
   framework = null,
   kind = null,
@@ -116,6 +124,7 @@ export function buildFilterParams({
   }
 }
 
+/** @param {import('bun:sqlite').Database} db @param {{ hasTrigramTable?: boolean, hasBodyFtsTable?: boolean }} [opts] */
 export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable = false } = {}) {
   const searchFtsStmt = db.query(`
     SELECT ${RESULT_COLUMNS},
@@ -234,6 +243,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
   // so the statements prepare unconditionally. An empty document_vectors
   // table simply means the semantic tier is dormant.
   const vectorCountStmt = db.query('SELECT COUNT(*) AS c FROM document_vectors')
+  /** @type {number | undefined} */
   let vectorCountMemo // undefined = unread; busted by resetCountCache after a re-embed
   const allVectorsStmt = db.query('SELECT document_id, vec FROM document_vectors')
   const rawCountStmt = db.query('SELECT COUNT(*) AS c FROM document_raw')
@@ -251,7 +261,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
      *  (§10(B)): read per search, changes only at index time. */
     getVectorCount() {
       if (vectorCountMemo === undefined) {
-        vectorCountMemo = safeCall(() => vectorCountStmt.get().c, { default: 0, log: 'warn-once', label: 'search.vectorCount' })
+        vectorCountMemo = /** @type {number} */ (safeCall(() => vectorCountStmt.get().c, { default: 0, log: 'warn-once', label: 'search.vectorCount' }))
       }
       return vectorCountMemo
     },
@@ -268,17 +278,18 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
       return safeCall(() => rawCountStmt.get().c, { default: 0, log: 'warn-once', label: 'search.rawCount' })
     },
     /** Store a raw Apple payload, zstd-compressed when that saves bytes. */
+    /** @param {number} documentId @param {unknown} json */
     upsertRawPayload(documentId, json) {
       if (json == null) return
       const text = typeof json === 'string' ? json : JSON.stringify(json)
       rawUpsertStmt.run(documentId, encodeSectionContent(text))
     },
-    /** Fetch + inflate a raw payload by document key; null when absent. */
+    /** Fetch + inflate a raw payload by document key; null when absent. @param {string} key */
     getRawPayloadByKey(key) {
-      const row = safeCall(() => rawByKeyStmt.get(key), { default: null, log: 'warn-once', label: 'search.rawByKey' })
+      const row = /** @type {any} */ (safeCall(() => rawByKeyStmt.get(key), { default: null, log: 'warn-once', label: 'search.rawByKey' }))
       return row ? decodeSectionContent(row.raw) : null
     },
-    /** Batched id→record fetch (semantic tier maps doc ids back to rows). */
+    /** Batched id→record fetch (semantic tier maps doc ids back to rows). @param {any[]} ids */
     getSearchRecordsByIds(ids) {
       const safe = (ids ?? []).map(Number).filter(Number.isInteger)
       if (safe.length === 0) return []
@@ -297,6 +308,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         .all(...safe)
     },
     /** FTS5 main planner. Fires bm25-ranked rows tagged with a tier 0-3. */
+    /** @param {string} ftsQuery @param {string} rawQuery @param {Record<string, any>} [opts] */
     searchPages(ftsQuery, rawQuery, opts = {}) {
       return searchFtsStmt.all({
         $query: ftsQuery,
@@ -308,6 +320,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
     /** Title-exact lookup (case-insensitive) — covers the FTS-misses case
      *  where the document title doesn't tokenize the way the FTS index
      *  does (e.g. dotted symbol names). Returns rows tagged tier=0. */
+    /** @param {string} rawQuery @param {Record<string, any>} [opts] */
     searchTitleExact(rawQuery, opts = {}) {
       return searchTitleExactStmt.all({
         $raw: rawQuery,
@@ -315,6 +328,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         ...buildFilterParams(opts),
       })
     },
+    /** @param {string} query @param {Record<string, any>} [opts] */
     searchTrigram(query, opts = {}) {
       if (!searchTrigramStmt) return []
       return safeCall(
@@ -327,6 +341,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         { default: [], log: 'warn-once', label: 'search.trigram' },
       )
     },
+    /** @param {string} ftsQuery @param {Record<string, any>} [opts] */
     searchBody(ftsQuery, opts = {}) {
       if (!searchBodyStmt) return []
       return safeCall(
@@ -357,15 +372,18 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         label: 'search.hasBodyIndex',
       })
     },
+    /** @param {number} documentId @param {string} body */
     insertBody(documentId, body) {
       bodyInsertStmt?.run({ $id: documentId, $body: body })
     },
     clearBodyIndex() {
       bodyClearStmt?.run()
     },
+    /** @param {number} documentId */
     deleteBodyByDocId(documentId) {
       bodyDeleteByIdStmt?.run(documentId)
     },
+    /** @param {string} trigram */
     getTrigramCandidates(trigram) {
       if (!trigramCandidatesStmt) return []
       return safeCall(() => trigramCandidatesStmt.all({ $trigram: trigram }), {
@@ -380,6 +398,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
      * highest-trigram-overlap titles first; the caller runs Levenshtein
      * on the result to verify edit distance.
      */
+    /** @param {string} orQuery @param {number} [limit] */
     fuzzyTrigramCandidates(orQuery, limit = 500) {
       if (!fuzzyCandidatesStmt) return []
       return safeCall(() => fuzzyCandidatesStmt.all({ $query: orQuery, $limit: limit }), {
@@ -391,14 +410,17 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
     getAllTitles() {
       return allTitlesStmt.all()
     },
+    /** @param {string} title @param {string | null} [framework] */
     searchByTitle(title, framework = null) {
       return searchByTitleStmt.get({ $title: title, $framework: framework })
     },
+    /** @param {number} id */
     getSearchRecordById(id) {
       return searchRecordByIdStmt.get(id)
     },
     /** Returns the symmetric synonym list for a framework slug (both
      *  directions: aliases pointing at slug + canonicals slug aliases at). */
+    /** @param {string} slug */
     getFrameworkSynonyms(slug) {
       if (!slug) return []
       const normalized = slug.toLowerCase()

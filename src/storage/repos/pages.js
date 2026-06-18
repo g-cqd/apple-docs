@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pages repository: the legacy page table (still used as the crawler's
  * working set). The methods here cover pure page-row operations.
@@ -9,6 +8,7 @@
 
 import { serializePlatforms } from './documents.js'
 
+/** @param {import('bun:sqlite').Database} db */
 export function createPagesRepo(db) {
   const upsertStmt = db.query(`
     INSERT INTO pages (
@@ -82,6 +82,7 @@ export function createPagesRepo(db) {
   const reset404Stmt = db.query('UPDATE pages SET consecutive_404_count = 0 WHERE path = ? AND consecutive_404_count > 0')
 
   return {
+    /** @param {Record<string, any>} params */
     upsertPageRow(params) {
       return upsertStmt.get({
         $root_id: params.rootId,
@@ -111,12 +112,14 @@ export function createPagesRepo(db) {
         $min_visionos: params.minVisionos ?? null,
       })
     },
+    /** @param {string} path */
     getActivePage(path) {
       return getByPathStmt.get(path, 'active')
     },
     /** O(N) chunked existence test against the pages table. SQLite caps
      *  bound parameters at 999, so we batch in chunks of 900 to stay
      *  comfortably under that limit. */
+    /** @param {string[]} keys */
     getActivePathsIn(keys) {
       if (!keys || keys.length === 0) return new Set()
       const activePaths = new Set()
@@ -129,9 +132,11 @@ export function createPagesRepo(db) {
       }
       return activePaths
     },
+    /** @param {string} path */
     markPageDeleted(path) {
       markDeletedStmt.run(path)
     },
+    /** @param {string} path @param {string | null} etag @param {string | null} lastModified @param {string | null} contentHash */
     updatePageAfterDownload(path, etag, lastModified, contentHash) {
       updateEtagStmt.run({
         $path: path,
@@ -141,6 +146,7 @@ export function createPagesRepo(db) {
         $downloaded_at: new Date().toISOString(),
       })
     },
+    /** @param {string} path */
     markConverted(path) {
       updateConvertedStmt.run(new Date().toISOString(), path)
     },
@@ -150,13 +156,16 @@ export function createPagesRepo(db) {
     getAllPagesWithEtag() {
       return getAllWithEtagStmt.all()
     },
+    /** @param {string} sourceType */
     getPagesBySourceType(sourceType) {
       return getBySourceTypeStmt.all(sourceType)
     },
+    /** @param {string} path */
     bumpConsecutive404(path) {
       const row = bump404Stmt.get(path)
       return row?.consecutive_404_count ?? 0
     },
+    /** @param {string} path */
     resetConsecutive404(path) {
       reset404Stmt.run(path)
     },

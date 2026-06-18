@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Apple typography repository: families + files. Schema lives in
  * migrations v10 (initial) and v12 (classification + uniqueness).
@@ -9,6 +8,7 @@
 
 import { parseJsonArray } from '../_helpers.js'
 
+/** @param {Record<string, any>} row */
 function normalizeAppleFontFile(row) {
   return {
     ...row,
@@ -18,6 +18,7 @@ function normalizeAppleFontFile(row) {
   }
 }
 
+/** @param {import('bun:sqlite').Database} db */
 export function createAssetsFontsRepo(db) {
   const upsertFamilyStmt = db.query(`
     INSERT INTO apple_font_families (
@@ -75,6 +76,7 @@ export function createAssetsFontsRepo(db) {
   `)
 
   return {
+    /** @param {Record<string, any>} params */
     upsertFontFamily(params) {
       upsertFamilyStmt.run({
         $id: params.id,
@@ -89,6 +91,7 @@ export function createAssetsFontsRepo(db) {
         $updated_at: new Date().toISOString(),
       })
     },
+    /** @param {Record<string, any>} params */
     upsertFontFile(params) {
       upsertFileStmt.run({
         $id: params.id,
@@ -123,6 +126,7 @@ export function createAssetsFontsRepo(db) {
         files: byFamily.get(family.id) ?? [],
       }))
     },
+    /** @param {string} id */
     getFontFile(id) {
       const row = getFileStmt.get(id)
       return row ? normalizeAppleFontFile(row) : null

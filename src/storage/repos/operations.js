@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Operations repository: activity tracking, snapshot metadata, sync
  * checkpoints, the update log, and the per-document render-index.
@@ -7,6 +6,7 @@
  * and the snapshot_meta + activity definitions in v6.
  */
 
+/** @param {import('bun:sqlite').Database} db */
 export function createOperationsRepo(db) {
   // Activity tracking — singleton row keyed (id = 1) so `setActivity`
   // overwrites a stale entry left behind by a killed run.
@@ -36,6 +36,7 @@ export function createOperationsRepo(db) {
   const clearRenderIndexStmt = db.query('DELETE FROM document_render_index')
 
   return {
+    /** @param {string} action @param {string[] | null} [roots] */
     setActivity(action, roots = null) {
       setActivityStmt.run({
         $action: action,
@@ -62,14 +63,17 @@ export function createOperationsRepo(db) {
       }
     },
 
+    /** @param {string} key */
     getSnapshotMeta(key) {
       const row = getSnapshotMetaStmt.get(key)
       return row ? row.value : null
     },
+    /** @param {string} key @param {unknown} value */
     setSnapshotMeta(key, value) {
       setSnapshotMetaStmt.run(key, String(value))
     },
 
+    /** @param {string} key */
     getSyncCheckpoint(key) {
       const row = getSyncCheckpointStmt.get(key)
       if (!row) return null
@@ -79,14 +83,17 @@ export function createOperationsRepo(db) {
         return row.value
       }
     },
+    /** @param {string} key @param {unknown} value */
     setSyncCheckpoint(key, value) {
       const serialized = typeof value === 'string' ? value : JSON.stringify(value)
       setSyncCheckpointStmt.run(key, serialized, new Date().toISOString())
     },
+    /** @param {string} key */
     clearSyncCheckpoint(key) {
       clearSyncCheckpointStmt.run(key)
     },
 
+    /** @param {Record<string, any>} params */
     addUpdateLog(params) {
       addUpdateLogStmt.run({
         $timestamp: new Date().toISOString(),
@@ -103,9 +110,11 @@ export function createOperationsRepo(db) {
       return getLastUpdateLogStmt.get()
     },
 
+    /** @param {number} docId */
     getRenderIndexEntry(docId) {
       return getRenderIndexStmt.get(docId) ?? null
     },
+    /** @param {{ docId: number, sectionsDigest: string, templateVersion: any, htmlHash: string }} entry */
     upsertRenderIndexEntry({ docId, sectionsDigest, templateVersion, htmlHash }) {
       upsertRenderIndexStmt.run(docId, sectionsDigest, templateVersion, htmlHash, Math.floor(Date.now() / 1000))
     },

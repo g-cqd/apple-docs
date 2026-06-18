@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SF Symbols repository: catalog rows, the FTS5 search index, and the
  * persistent render cache. Schema lives in migrations v10 (initial) and
@@ -8,6 +7,7 @@
 
 import { buildResourceFtsQuery, parseJsonArray, parseJsonValue } from '../_helpers.js'
 
+/** @param {Record<string, any>} row */
 function normalizeSfSymbolRow(row) {
   return {
     ...row,
@@ -18,6 +18,7 @@ function normalizeSfSymbolRow(row) {
   }
 }
 
+/** @param {import('bun:sqlite').Database} db */
 export function createAssetsSymbolsRepo(db) {
   const upsertSymbolStmt = db.query(`
     INSERT INTO sf_symbols (
@@ -110,6 +111,7 @@ export function createAssetsSymbolsRepo(db) {
   const deleteRenderStmt = db.query('DELETE FROM sf_symbol_renders WHERE cache_key = ?')
 
   return {
+    /** @param {Record<string, any>} params */
     upsertSymbol(params) {
       upsertSymbolStmt.run({
         $name: params.name,
@@ -131,6 +133,7 @@ export function createAssetsSymbolsRepo(db) {
         insertFtsStmt.run(rowid, params.name, (params.keywords ?? []).join(' '), (params.categories ?? []).join(' '), (params.aliases ?? []).join(' '))
       }
     },
+    /** @param {string} scope @param {string} name */
     getSymbol(scope, name) {
       const row = getSymbolStmt.get(scope, name)
       return row ? normalizeSfSymbolRow(row) : null
@@ -149,14 +152,17 @@ export function createAssetsSymbolsRepo(db) {
         codepointVersion: row.codepoint_version ?? null,
       }))
     },
+    /** @param {string} scope @param {string} name */
     markBitmapOnly(scope, name) {
       markBitmapOnlyStmt.run({ $scope: scope, $name: name })
     },
+    /** @param {string} scope @param {string} name */
     markRenderUnsupported(scope, name) {
       markRenderUnsupportedStmt.run({ $scope: scope, $name: name })
     },
     /** Stamp the resolved PUA codepoint + the SF Symbols version it came from
      *  (so the codepoint can be matched to the shipped font). Pass null to clear. */
+    /** @param {string} scope @param {string} name @param {number | null} codepoint @param {string | null} [version] */
     updateCodepoint(scope, name, codepoint, version = null) {
       updateCodepointStmt.run({
         $scope: scope,
@@ -168,10 +174,12 @@ export function createAssetsSymbolsRepo(db) {
     /** Hybrid search: FTS5 first, falls back to LIKE on parser failure
      *  (FTS5 trips on `?`, `:`, etc — the catalog has thousands of dotted
      *  symbol names so the fallback path is hit in practice). */
+    /** @param {string} [query] @param {{ limit?: any, scope?: string | null }} [opts] */
     searchSymbols(query = '', opts = {}) {
       const limit = Math.min(Math.max(Number.parseInt(opts.limit ?? 100, 10) || 100, 1), 500)
       const scope = opts.scope ?? null
       const q = String(query ?? '').trim()
+      /** @param {any[]} rows */
       const parseRows = (rows) => rows.map(normalizeSfSymbolRow)
       if (!q) return parseRows(searchEmptyStmt.all({ $scope: scope, $limit: limit }))
       try {
@@ -192,6 +200,7 @@ export function createAssetsSymbolsRepo(db) {
         )
       }
     },
+    /** @param {Record<string, any>} params */
     upsertRender(params) {
       upsertRenderStmt.run({
         $cache_key: params.cacheKey,
@@ -210,6 +219,7 @@ export function createAssetsSymbolsRepo(db) {
         $updated_at: new Date().toISOString(),
       })
     },
+    /** @param {string} cacheKey */
     getRender(cacheKey) {
       return getRenderStmt.get(cacheKey) ?? null
     },
@@ -226,6 +236,7 @@ export function createAssetsSymbolsRepo(db) {
      * @param {string} cutoffIso ISO timestamp; rows with updated_at < cutoffIso are removed.
      * @returns {{ removed: number, paths: string[] }}
      */
+    /** @param {string} cutoffIso */
     pruneRendersOlderThan(cutoffIso) {
       const rows = olderThanStmt.all(cutoffIso)
       for (const row of rows) deleteRenderStmt.run(row.cache_key)
@@ -236,6 +247,7 @@ export function createAssetsSymbolsRepo(db) {
      * No-op when current bytes ≤ maxBytes. Returns the same shape as
      * pruneRendersOlderThan so callers can rm the files.
      */
+    /** @param {number} maxBytes */
     pruneRendersToBytesQuota(maxBytes) {
       const stats = renderCacheStatsStmt.get()
       if ((stats?.bytes ?? 0) <= maxBytes) return { removed: 0, paths: [] }

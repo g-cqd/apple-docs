@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Documents repository: the canonical document graph (introduced in v6),
  * its sections, relationships, and the small lookup helpers
@@ -13,6 +12,7 @@ import { encodeVersion } from '../../lib/version-encode.js'
 import { decodeSectionContent } from '../section-codec.js'
 import { coerceSourceType } from '../source-types.js'
 
+/** @param {string} path */
 function deriveFrameworkFromPath(path) {
   if (!path) return null
   const parts = path.split('/').filter(Boolean)
@@ -20,11 +20,13 @@ function deriveFrameworkFromPath(path) {
   return parts[0] ?? null
 }
 
+/** @param {unknown} value */
 export function serializePlatforms(value) {
   if (value == null) return null
   return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
+/** @param {import('bun:sqlite').Database} db @param {{ hasSectionsTable?: boolean }} [opts] */
 export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
   const upsertStmt = db.query(`
     INSERT INTO documents (
@@ -150,6 +152,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
 
   return {
     hasSectionsTable,
+    /** @param {Record<string, any>} params */
     upsertDocument(params) {
       const now = new Date().toISOString()
       return upsertStmt.get({
@@ -187,25 +190,31 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
         $now: now,
       })
     },
+    /** @param {string} key */
     getDocumentByKey(key) {
       return getByKeyStmt.get(key)
     },
+    /** @param {string} key */
     getDocumentIdByKey(key) {
       return getIdByKeyStmt.get(key)
     },
+    /** @param {string} rootSlug */
     getDocumentsByRoot(rootSlug) {
       return getByRootSlugStmt.all(rootSlug)
     },
+    /** @param {string} role */
     getDocumentsByRole(role) {
       return getByRoleStmt.all(role)
     },
     /** Used by deleteNormalizedDocument on the facade — drops the row plus
      *  any relationships that name it as either endpoint. The body row
      *  (if any) is dropped through a separate body-clearing path. */
+    /** @param {string} key */
     deleteDocumentByKey(key) {
       deleteRelationshipsByKeyStmt.run(key, key)
       deleteByKeyStmt.run(key)
     },
+    /** @param {number} documentId @param {any[]} [sections] */
     replaceSections(documentId, sections) {
       if (!deleteSectionsStmt || !insertSectionStmt) return
       deleteSectionsStmt.run(documentId)
@@ -220,9 +229,11 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
         })
       }
     },
+    /** @param {number} documentId */
     deleteSectionsByDocId(documentId) {
       deleteSectionsStmt?.run(documentId)
     },
+    /** @param {string} fromKey @param {any[]} [relationships] */
     replaceRelationships(fromKey, relationships) {
       deleteRelationshipsByFromStmt.run(fromKey)
       for (const relationship of relationships ?? []) {
@@ -235,6 +246,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
         })
       }
     },
+    /** @param {string} key */
     getSections(key) {
       if (!getSectionsStmt) return []
       const document = getByKeyStmt.get(key)
@@ -247,11 +259,13 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
         sortOrder: section.sort_order,
       }))
     },
+    /** @param {string} key */
     getRelationships(key) {
       return getRelationshipsBySourceStmt.all(key)
     },
     /** Parent→child edges for a framework's document tree. Powers the
      *  static-build framework tree and the breadcrumb resolver. */
+    /** @param {string} framework @param {{ hasRelationshipsTable?: boolean }} opts */
     getFrameworkTree(framework, { hasRelationshipsTable }) {
       if (!hasRelationshipsTable) return []
       return getFrameworkTreeStmt.all(framework)
@@ -259,6 +273,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
     /** Lookup helper used by the search formatter. Returns a Map keyed by
      *  doc key, each value holding the document row plus the section list
      *  pulled in batched IN(...) chunks. */
+    /** @param {string[]} keys */
     getDocumentSnippetData(keys) {
       if (!keys || keys.length === 0) return new Map()
       const placeholders = keys.map(() => '?').join(',')
@@ -300,6 +315,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
      * ordered array of `{ sectionKind, heading, contentText, sortOrder }`
      * with content_text inflated. Empty Map on the lite tier (no sections).
      */
+    /** @param {any[]} ids */
     getSectionsByDocumentIds(ids) {
       if (!ids || ids.length === 0 || !hasSectionsTable) return new Map()
       const safe = ids.map(Number).filter(Number.isInteger)
@@ -329,6 +345,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       return map
     },
     /** Counts of relationships originating from each given doc key. */
+    /** @param {string[]} keys */
     getRelatedDocCounts(keys) {
       if (!keys || keys.length === 0) return new Map()
       const placeholders = keys.map(() => '?').join(',')
@@ -350,6 +367,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
      * cheap relationship-presence hint without leaking the relationship
      * list itself.
      */
+    /** @param {string} fromKey */
     getRelationshipCountsByType(fromKey) {
       if (!fromKey) return {}
       const rows = db
@@ -359,6 +377,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
         GROUP BY relation_type
       `)
         .all(fromKey)
+      /** @type {Record<string, number>} */
       const out = {}
       for (const r of rows) {
         const key = RELATION_TYPE_TO_CAMEL[r.relation_type]
@@ -372,6 +391,7 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
 // Map DB relation_type slugs to camelCase public names. Anything not in
 // this map is dropped from the surfaced count object (so an unexpected
 // future relation_type never leaks via the count).
+/** @type {Record<string, string>} */
 const RELATION_TYPE_TO_CAMEL = {
   inherits_from: 'inheritsFrom',
   inherited_by: 'inheritedBy',

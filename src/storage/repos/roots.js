@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Roots repository: documentation root rows + the page_count maintenance
  * helper. Schema lives in migrations/v1-initial-schema.js.
@@ -9,6 +8,7 @@
 
 import { deriveRootSourceType } from '../source-types.js'
 
+/** @param {import('bun:sqlite').Database} db */
 export function createRootsRepo(db) {
   const upsertStmt = db.query(`
     INSERT INTO roots (slug, display_name, kind, status, source, seed_path, source_type, first_seen, last_seen)
@@ -31,6 +31,10 @@ export function createRootsRepo(db) {
   )
 
   return {
+    /**
+     * @param {string} slug @param {string} displayName @param {string} kind @param {string} source
+     * @param {string | null} [seedPath] @param {string | null} [sourceType]
+     */
     upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
       return upsertStmt.get({
         $slug: slug,
@@ -42,17 +46,21 @@ export function createRootsRepo(db) {
         $now: new Date().toISOString(),
       })
     },
+    /** @param {string | null} [kind] */
     getRoots(kind = null) {
       return kind ? getByKindStmt.all(kind) : getAllStmt.all()
     },
+    /** @param {string} slug */
     getRootBySlug(slug) {
       return getBySlugStmt.get(slug)
     },
+    /** @param {number} id */
     getRootById(id) {
       return getByIdStmt.get(id)
     },
     /** Resolve by exact slug, then case-insensitive slug match, then
      *  case-insensitive display_name contains, then slug substring. */
+    /** @param {string} input */
     resolveRoot(input) {
       const exact = getBySlugStmt.get(input)
       if (exact) return exact
@@ -65,6 +73,7 @@ export function createRootsRepo(db) {
         null
       )
     },
+    /** @param {string} slug */
     updateRootPageCount(slug) {
       updatePageCountStmt.run(slug)
     },
