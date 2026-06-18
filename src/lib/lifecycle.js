@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Process lifecycle helper for the apple-docs CLI / MCP / web entry points.
  *
@@ -23,10 +22,13 @@
  * module singleton.
  */
 
+/** @type {Array<{ name: string, stop: (deadlineMs: number) => Promise<void> | void }>} */
 const components = []
 let handlersInstalled = false
 let shuttingDown = false
+/** @type {{ info?: Function, warn?: Function, error?: Function } | null} */
 let installedLogger = null
+/** @type {(code: number) => void} */
 let exitImpl = (code) => process.exit(code)
 
 const DEFAULT_DEADLINE_MS = 30_000
@@ -86,6 +88,7 @@ async function gracefulShutdown(reason, deadlineMs = DEFAULT_DEADLINE_MS, opts =
   const TIMEOUT = Symbol('timeout')
   while (components.length > 0) {
     const entry = components.pop()
+    if (!entry) break
     const remaining = Math.max(0, deadlineMs - (Date.now() - start))
     if (remaining === 0) {
       logger?.warn?.(`shutdown: deadline reached before stopping ${entry.name}`)
@@ -125,6 +128,7 @@ async function gracefulShutdown(reason, deadlineMs = DEFAULT_DEADLINE_MS, opts =
 /**
  * Install the four process-level handlers exactly once. Subsequent calls
  * update the logger reference but don't re-attach handlers.
+ * @param {{ logger?: { info?: Function, warn?: Function, error?: Function } }} [options]
  */
 function installCrashHandlers({ logger } = {}) {
   installedLogger = logger ?? installedLogger
@@ -150,7 +154,10 @@ function installCrashHandlers({ logger } = {}) {
   })
 }
 
-/** Test-only: reset module state between cases. */
+/**
+ * Test-only: reset module state between cases.
+ * @param {{ exit?: (code: number) => void }} [options]
+ */
 function _reset({ exit } = {}) {
   components.length = 0
   handlersInstalled = false

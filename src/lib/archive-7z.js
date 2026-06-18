@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { NotFoundError, ValidationError } from './errors.js'
 /**
  * Deterministic native .7z archive builder.
@@ -99,6 +98,7 @@ export function resolveSevenZipBinary(deps = {}) {
   )
 }
 
+/** @param {string} bin */
 function defaultWhich(bin) {
   const res = spawnSync('/usr/bin/env', ['which', bin], { encoding: 'utf8' })
   if (res.status === 0 && res.stdout.trim()) return res.stdout.trim()
@@ -125,6 +125,7 @@ export function listFilesSorted(root) {
   return files
 }
 
+/** @param {string} absRoot @param {string} relDir @param {string[]} out */
 function walk(absRoot, relDir, out) {
   const absDir = relDir ? join(absRoot, relDir) : absRoot
   const entries = readdirSync(absDir, { withFileTypes: true })
@@ -158,7 +159,7 @@ function walk(absRoot, relDir, out) {
  * @param {string} [args.name]          Logical name for logging (defaults to basename of outputPath).
  * @param {{info?: Function, warn?: Function, error?: Function}} [args.logger]
  * @param {number} [args.deadlineMs]    Override the spawn deadline.
- * @param {{spawn?: typeof Bun.spawn, which?: Function}} [args.deps]
+ * @param {{spawn?: typeof Bun.spawn, which?: (bin: string) => string | null}} [args.deps]
  * @returns {Promise<{outputPath: string, fileCount: number, size: number, binary: string}>}
  */
 export async function createSevenZipArchive({ sourceDir, outputPath, name, logger, deadlineMs, deps = {} }) {
@@ -246,6 +247,7 @@ export async function writeSha256Sidecar(archivePath) {
   return { sidecarPath, sha256 }
 }
 
+/** @param {number} bytes */
 function formatSize(bytes) {
   if (bytes > 1e9) return `${(bytes / 1e9).toFixed(2)} GB`
   if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`

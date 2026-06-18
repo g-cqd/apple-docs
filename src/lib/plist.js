@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Apple plist (Property List) reader.
  *
@@ -19,6 +18,7 @@ import { existsSync } from 'node:fs'
 import { ParseError } from './errors.js'
 import { spawnWithDeadline } from './spawn-with-deadline.js'
 
+/** @param {string} path */
 export async function readPlist(path) {
   if (!existsSync(path)) return null
   // plutil is the fast/canonical converter on macOS and is the only thing
@@ -36,17 +36,19 @@ export async function readPlist(path) {
     if (exitCode !== 127) throw new ParseError(`plutil failed for ${path}: ${stderr.trim()}`)
   } catch (error) {
     // Bun.spawn throws ENOENT when the binary isn't on PATH.
-    const message = String(error?.message ?? '')
+    const message = error instanceof Error ? error.message : String(error)
     if (!/ENOENT|spawn|not found|No such file/i.test(message)) throw error
   }
   const xml = await Bun.file(path).text()
   return parseXmlPlist(xml)
 }
 
+/** @param {string} text */
 function parseXmlPlist(text) {
   if (text.startsWith('bplist')) {
     throw new ParseError('parseXmlPlist: binary plists require plutil; install Apple developer tools')
   }
+  /** @param {string} s */
   const decode = (s) =>
     s
       .replace(/&lt;/g, '<')
@@ -96,6 +98,7 @@ function parseXmlPlist(text) {
     return { name, isClose, isSelf, raw }
   }
 
+  /** @param {string} untilTag */
   function readText(untilTag) {
     const closeTag = `</${untilTag}>`
     const end = text.indexOf(closeTag, i)
@@ -105,8 +108,10 @@ function parseXmlPlist(text) {
     return decode(value)
   }
 
+  /** @param {any} tag @returns {Record<string, any>} */
   function readDict(tag) {
     if (tag.isSelf) return {}
+    /** @type {Record<string, any>} */
     const out = {}
     while (true) {
       const next = readTag()
@@ -119,8 +124,10 @@ function parseXmlPlist(text) {
       out[key] = readValue(valueTag)
     }
   }
+  /** @param {any} tag @returns {any[]} */
   function readArray(tag) {
     if (tag.isSelf) return []
+    /** @type {any[]} */
     const out = []
     while (true) {
       const next = readTag()
@@ -130,6 +137,7 @@ function parseXmlPlist(text) {
     }
   }
 
+  /** @param {any} tag @returns {any} */
   function readValue(tag) {
     if (tag.name === 'dict') return readDict(tag)
     if (tag.name === 'array') return readArray(tag)

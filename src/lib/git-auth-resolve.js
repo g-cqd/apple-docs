@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -29,15 +28,17 @@ import { setResolvedGitHubToken } from './github.js'
  * @param {string} [options.sidecarPath]
  * @returns {Promise<{ token: string | null, source: string | null }>}
  */
-export async function resolveGitHubAuth({
-  flags,
-  env = process.env,
-  logger,
-  detect = detectLocalGitHubToken,
-  promptFn = promptYesNoAlways,
-  isTTY = () => Boolean(process.stdin.isTTY),
-  sidecarPath = defaultSidecarPath(),
-} = {}) {
+export async function resolveGitHubAuth(
+  {
+    flags,
+    env = process.env,
+    logger,
+    detect = detectLocalGitHubToken,
+    promptFn = promptYesNoAlways,
+    isTTY = () => Boolean(process.stdin.isTTY),
+    sidecarPath = defaultSidecarPath(),
+  } = /** @type {any} */ ({}),
+) {
   // 1. Env vars win; nothing to do.
   if (env.GITHUB_TOKEN || env.GH_TOKEN) {
     return { token: null, source: 'env' }

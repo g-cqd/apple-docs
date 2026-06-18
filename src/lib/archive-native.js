@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Archive dispatch: Swift ADArchive (libAppleDocsCore, streaming tar.zst —
  * no intermediate .tar, no tar/zstd host binaries) when `APPLE_DOCS_NATIVE`
@@ -27,15 +26,17 @@ const CODEC_VERSION = 1
 const LEVEL = 9
 const WORKERS = 3
 
+/** @type {'js' | 'native' | null} */
 let forced = null // 'js' | 'native' | null
 let announced = false
 
-/** Test seam. */
+/** Test seam. @param {'js' | 'native' | null} impl */
 export function _forceImpl(impl) {
   forced = impl
   announced = false
 }
 
+/** @param {{ info?: Function, warn?: Function, error?: Function, debug?: Function }} [logger] */
 function nativeLib(logger) {
   if (forced === 'js') return null
   if (forced !== 'native' && !isNativeEnabled(MODULE)) return null
@@ -48,6 +49,7 @@ function nativeLib(logger) {
   return lib
 }
 
+/** @param {string} sourceDir @param {string} outputPath @param {string[]} files */
 function packRequest(sourceDir, outputPath, files) {
   const encoder = new TextEncoder()
   const sourceBytes = encoder.encode(sourceDir)

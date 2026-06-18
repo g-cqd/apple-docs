@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join, resolve, sep } from 'node:path'
 import { ValidationError } from './errors.js'
 
@@ -218,6 +217,7 @@ export function keyPath(dataDir, subdir, key, ext) {
  * across a multi-byte character boundary. ASCII-only inputs (the common
  * case for Apple identifiers) take the fast path.
  */
+/** @param {string} str @param {number} maxBytes */
 function truncateToBytes(str, maxBytes) {
   if (Buffer.byteLength(str, 'utf8') <= maxBytes) return str
   // Walk forward by code points; bail when adding the next would exceed.

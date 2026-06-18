@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * ADMX v1 weights artifact (RFC 0002 D-0002-1): the potion embedding matrix
  * re-exported from the pinned model.onnx into a dumb mmap-able layout the
@@ -30,6 +29,7 @@ import { promoteAtomicWrite } from './atomic-write.js'
 
 export const ADMX_HEADER_BYTES = 4 + 4 + 4 + 4 + 4 + 4 + 8 + 32
 
+/** @param {Buffer} buf @param {number} pos @returns {[bigint, number]} */
 function varint(buf, pos) {
   let value = 0n
   let shift = 0n
@@ -41,7 +41,11 @@ function varint(buf, pos) {
   }
 }
 
-/** Yield [fieldNumber, wireType, varintValue, start, end] for each field. */
+/**
+ * Yield [fieldNumber, wireType, varintValue, start, end] for each field.
+ * @param {Buffer} buf @param {number} start @param {number} end
+ * @returns {Generator<[number, number, bigint | null, number, number]>}
+ */
 function* fields(buf, start, end) {
   let pos = start
   while (pos < end) {
@@ -72,6 +76,7 @@ function* fields(buf, start, end) {
 
 /**
  * Locate the embedding initializer inside a model.onnx buffer.
+ * @param {Buffer} buf
  * @returns {{ rows: number, dims: number, rawStart: number, rawEnd: number }}
  */
 export function findEmbeddingInitializer(buf) {
@@ -142,6 +147,7 @@ export function buildAdmxArtifact(onnx, sourceShaHex, sparseIds = null) {
  * generators converge — the bytes are deterministic). Writes a `.sha256`
  * sidecar. The caller must have verified the source pin already.
  *
+ * @param {{ onnxPath: string, outPath: string, sourceShaHex: string, sparseIds?: Uint32Array | null }} options
  * @returns {Promise<{ rows: number, dims: number, bytes: number }>}
  */
 export async function generateMatrixArtifact({ onnxPath, outPath, sourceShaHex, sparseIds = null }) {

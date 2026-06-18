@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Detect a GitHub token from the local environment via `gh` or the git
  * credential helper. Never throws; returns `null` on any failure.
@@ -14,6 +13,7 @@
  * @returns {Record<string, string>}
  */
 function safeEnv(env) {
+  /** @type {Record<string, string>} */
   const out = {}
   for (const key of ['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL']) {
     if (env[key]) out[key] = env[key]
@@ -85,7 +85,7 @@ async function runChild(spawn, cmd, { timeoutMs, stdin, env }) {
       }
     }
 
-    const exitedPromise = proc.exited.then((code) => ({ code }))
+    const exitedPromise = /** @type {Promise<number>} */ (proc.exited).then((code) => ({ code }))
     const result = await Promise.race([exitedPromise, timeout])
     if (result === 'timeout') return null
 
