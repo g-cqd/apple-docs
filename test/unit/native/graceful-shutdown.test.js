@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Graceful lifecycle (RFC 0007 F2). ad-server traps SIGTERM/SIGINT (hand-rolled — no
  * swift-service-lifecycle), stops accepting (closes the listening channels so in-flight

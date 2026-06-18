@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { nativeDocMarkdownBatch } from '../content/content-native.js'

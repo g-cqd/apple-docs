@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchWithRetry as _fetchWithRetry, checkResourceEtag } from '../lib/fetch-with-retry.js'
 
 const TUTORIALS_BASE = process.env.APPLE_DOCS_API_BASE ?? 'https://developer.apple.com/tutorials/data'

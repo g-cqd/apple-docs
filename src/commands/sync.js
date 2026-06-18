@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../lib/errors.js'
 import { runStep } from '../lib/run-step.js'
 import { filterAdaptersByScope, loadScope } from '../lib/scope.js'

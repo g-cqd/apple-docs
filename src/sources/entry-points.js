@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Cross-source entry-point registry.
  *

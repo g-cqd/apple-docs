@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // CLI `--json` projection dispatcher: maps each command to its
 // public-output projection in src/output/projection.js. Anything not
 // listed here passes through unprojected — those commands either don't

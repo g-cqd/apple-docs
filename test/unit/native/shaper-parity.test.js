@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Tolerance parity gate for the Linux HarfBuzz shaper (RFC 0003 phase 4):
  * the in-dylib `ad_render_font_text_shaped` vs the hb-view host binary.

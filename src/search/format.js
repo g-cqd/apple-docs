@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Result-row formatter. Maps the wide search row produced by the storage
  * layer to the public CLI/MCP shape that the formatter / projection

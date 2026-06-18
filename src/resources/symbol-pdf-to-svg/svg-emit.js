@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ParseError } from '../../lib/errors.js'
 // Compose the parsed PDF fills into an SVG that mirrors Apple's
 // destination-out compositing. Visible (alpha>0) fills paint normally;

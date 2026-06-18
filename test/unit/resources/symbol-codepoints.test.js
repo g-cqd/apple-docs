@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Tests for SF Symbol codepoint dump orchestration, the new v19
  * migration, and the route serializer that surfaces the resolved

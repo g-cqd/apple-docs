@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Ensure a working SF Symbols.app is on disk before the codepoint
  * worker runs. The worker depends on two private frameworks

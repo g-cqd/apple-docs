@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { HttpError, NotFoundError } from '../../../src/lib/errors.js'
 import { checkResourceEtag, classifyFetchError, fetchWithRetry, isRecoverableForbidden } from '../../../src/lib/fetch-with-retry.js'

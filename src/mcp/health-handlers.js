@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // MCP HTTP server /healthz + /readyz response builders.
 //
 // Pure functions with explicit deps — closures over server-internal

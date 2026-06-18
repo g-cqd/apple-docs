@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Scope-aware grouping for framework listing pages. Non-framework roots
  * (WWDC, Swift Evolution, sample code) collapse into a useless "Other"

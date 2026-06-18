@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Browser-level smoke for the search Web Worker (P3.3 verification).
  *

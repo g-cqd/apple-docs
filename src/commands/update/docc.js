@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Update path for DocC-shaped sources (apple-docc, hig, swift-docc) —
 // per-page check + pull, plus crawl-from-scratch for any new roots.
 

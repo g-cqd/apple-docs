@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import { AssertionError, ValidationError } from '../lib/errors.js'

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * HTML content extraction utilities for converting HTML documentation pages
  * into the normalized document model.

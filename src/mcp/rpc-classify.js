@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Heavy/light JSON-RPC classifier for the MCP HTTP transport.
 //
 // Lives in a sibling module so `http-server.js` stays under the

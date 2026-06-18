@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Global link resolver — maps every external URL pattern we know about to its
  * corresponding corpus storage key, and packages the rules into a callback

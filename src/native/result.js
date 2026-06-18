@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Contract-v0 result reader (rfcs/0001-swift-native-transition/p0/ffi-bridge.md §2):
  * every native result is one allocation — 16-byte header

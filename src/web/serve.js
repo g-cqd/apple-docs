@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { rm } from 'node:fs/promises'
 import { createEventLoopLagSampler } from '../lib/event-loop-lag.js'
 import { createWebContext } from './context.js'

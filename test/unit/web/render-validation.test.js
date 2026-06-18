@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { describe, expect, test } from 'bun:test'
 import { ALLOWED_SYMBOL_SIZES, FONT_TEXT_MAX_CHARS, validateFontText, validateSymbolParams } from '../../../src/web/routes/render-validation.js'
 

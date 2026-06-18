@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { toFrontMatter } from '../lib/yaml.js'
 import { nativeDocMarkdown } from './content-native.js'
 import { renderContentNodesToText } from './normalize.js'

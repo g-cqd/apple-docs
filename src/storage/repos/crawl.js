@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Crawl-state repository: the working set the discoverer + downloader
  * pull from. Each row tracks one path's status (pending / processed /

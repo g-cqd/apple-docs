@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Canonicalize a font-subset request into a deterministic shape suitable
  * for SHA-256 cache keying. Both the POST JSON body and the GET query

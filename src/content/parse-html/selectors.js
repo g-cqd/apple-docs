@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Lightweight CSS-selector-shaped extraction: finds the first element
 // matching `tag`, `.class`, `#id`, or `tag.class` and returns its inner
 // HTML with balanced same-tag depth tracking.

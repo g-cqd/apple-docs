@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Language toggle controller for the doc page declaration block.
 //
 // Served as a standalone `<script src="/assets/lang-toggle.js">`, so it

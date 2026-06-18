@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Render dispatch (RFC 0003 P3-darwin phase 1): the in-process Swift
  * renderers (libAppleDocsCore ad_render_*) behind the `render`

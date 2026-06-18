@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { parseMarkdownToSections } from '../content/parse-markdown.js'
 import { checkRawGitHub, fetchGitHubTree, fetchRawGitHub } from '../lib/github.js'
 import { SourceAdapter } from './base.js'

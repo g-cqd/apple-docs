@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SF Symbols repository: catalog rows, the FTS5 search index, and the
  * persistent render cache. Schema lives in migrations v10 (initial) and

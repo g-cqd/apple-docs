@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { bold, dim } from './_shared.js'
 
 export function formatSetup(result) {

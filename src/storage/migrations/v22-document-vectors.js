@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v22 — `document_vectors`: binary-quantized embedding store for the optional
  * hybrid semantic-search tier.

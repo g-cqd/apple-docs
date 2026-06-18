@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Fixed-bucket cumulative histogram for Prometheus exposition.
  *

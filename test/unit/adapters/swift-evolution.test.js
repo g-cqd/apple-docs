@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
 import * as github from '../../../src/lib/github.js'
 import { SwiftEvolutionAdapter } from '../../../src/sources/swift-evolution.js'

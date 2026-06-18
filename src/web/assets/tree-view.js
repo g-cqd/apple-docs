@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Tree-view controller for framework listing pages. Loads the
 // hierarchical JSON and renders the tree; on scope-grouped roots
 // (which server-render their curated list) it also drives the

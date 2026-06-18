@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Symbols page — Phosphor-style global toolbar + Lucide-style
 // label-less tile grid.
 //

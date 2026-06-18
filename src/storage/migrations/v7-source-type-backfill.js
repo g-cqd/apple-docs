@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v7 — backfill source_type on roots/pages/documents from the canonical
  * slug→source map. Runs after v5 (which only handled the design/hig and

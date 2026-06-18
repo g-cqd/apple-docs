@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { readFile } from 'node:fs/promises'
 import { ParseError } from '../../../lib/errors.js'
 import { parseCmap } from '../../../resources/apple-symbols/codepoint-from-font.js'

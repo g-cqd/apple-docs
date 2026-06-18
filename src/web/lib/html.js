@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Tagged-template DSL for the web layer. Replaces the prior
  * `${escapeAttr(value)}` template-literal style with auto-escaping at

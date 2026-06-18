@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Declaration / type-token rendering. Walks the DocC `tokens` array
 // (semantic kind + text + optional `_resolvedKey` for type linking) and
 // emits HTML with semantic CSS classes and per-type anchor links.

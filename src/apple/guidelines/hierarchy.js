@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Hierarchy resolution: walks the dotted section numbering
  * (1, 1.1, 1.1.2, 1.1.2(a)) to derive parent links.

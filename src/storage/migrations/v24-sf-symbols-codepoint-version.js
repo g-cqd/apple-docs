@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v24 — tag each stamped codepoint with the SF Symbols version it was resolved
  * from (`sf_symbols.codepoint_version`, nullable TEXT, e.g. "8.0").

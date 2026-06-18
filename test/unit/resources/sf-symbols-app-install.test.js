@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Tests for the SF Symbols.app provisioner. The pure helpers (version
  * parsing/compare, URL discovery, version derivation) get deterministic

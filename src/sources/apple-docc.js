@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { checkDocPage, fetchDocPage } from '../apple/api.js'
 import { extractReferences } from '../apple/extractor.js'
 import { normalize } from '../content/normalize.js'

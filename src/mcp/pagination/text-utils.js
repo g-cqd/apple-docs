@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Text-shaping helpers used by both the array and text-window paginators.
 // All exports are pure functions so each is independently testable.
 

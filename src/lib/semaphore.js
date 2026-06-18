@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Counting semaphore for bounding global concurrency.
  * All parallel roots share one semaphore so total in-flight fetches are capped.

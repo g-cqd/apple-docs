@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ParseError } from '../../lib/errors.js'
 /**
  * SFNT `cmap` table parser — codepoint → glyph-index map.

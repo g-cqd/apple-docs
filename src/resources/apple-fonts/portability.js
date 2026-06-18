@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pre-publish invariant: a snapshot's font catalog must be self-contained.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Byte-parity gate for the Swift render port (RFC 0003 phase 1).
  *

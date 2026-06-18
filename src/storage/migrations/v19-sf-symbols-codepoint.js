@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v19 — `sf_symbols.codepoint` (nullable INTEGER) stamped at snapshot
  * sync time from the SF Symbols framework / SF-Pro.ttf via a Swift

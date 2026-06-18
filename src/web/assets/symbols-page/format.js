@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Pure formatting + DOM helpers for the symbols page. All exports are
 // stateless so the controller can use them without threading globals.
 

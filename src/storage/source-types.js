@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Canonical source-type enum. Every SourceAdapter declares its `static type`,
  * but storage queries and content normalization need a single source of

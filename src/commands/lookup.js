@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { normalizeIdentifier } from '../apple/normalizer.js'
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { normalize } from '../content/normalize.js'

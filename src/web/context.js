@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { initHighlighter } from '../content/highlight.js'

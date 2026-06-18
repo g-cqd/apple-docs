@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Offline enrichment source: Xcode's Developer Documentation MobileAsset
  * (`com.apple.MobileAsset.AppleDeveloperDocumentation`).

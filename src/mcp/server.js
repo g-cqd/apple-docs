@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // The official MCP SDK is the single sanctioned npm dependency.
 // It handles JSON-RPC 2.0, schema validation, transport negotiation,
 // and protocol compliance.

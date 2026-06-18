@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 
 /**
  * Render bench (RFC 0003 §3 ≥5× warm gate): in-process native render vs the

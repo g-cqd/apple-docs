@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Bun.build's `format: 'iife'` adds the outer scope shield in the
 // minified output, so the source-level IIFE was redundant — `init()`
 // is called explicitly by the bundle entry. Early-return bails

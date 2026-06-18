@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { renderPlainText } from './render-text.js'
 
 export function renderSnippet(document, sections = [], query = '', maxLength = 220) {

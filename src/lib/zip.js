@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Minimal STORE-method ZIP writer (no compression).
 //
 // Fonts are already compressed binaries — STORE is the right call: smaller

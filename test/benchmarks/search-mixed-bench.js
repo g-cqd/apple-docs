@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Mixed-load benchmark — SLO + heavy fuzzy/body interleaved.
  *

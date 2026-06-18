@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * `/api/fonts/subset` — accept a list of codepoints / characters / ranges
  * and return a subset of the requested family's variable master.

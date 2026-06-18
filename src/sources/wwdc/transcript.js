@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Transcript extraction across both supported corpora:
 //   - Apple JSON sessions (DocC-style render-tree, 2020+)
 //   - ASCIIwwdc community transcripts (VTT-flavoured plain text, 1997-2019)

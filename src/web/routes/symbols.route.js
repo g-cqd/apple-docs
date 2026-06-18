@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { BackpressureError } from '../../lib/errors.js'
 import { getPrerenderedSymbolPath, renderSfSymbol, searchSfSymbols } from '../../resources/apple-assets.js'
 import { fileResponseRevalidated, jsonResponse, notFoundResponse } from '../responses.js'

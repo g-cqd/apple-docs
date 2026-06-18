@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { Database } from 'bun:sqlite'
 import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'

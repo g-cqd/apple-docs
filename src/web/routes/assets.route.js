@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { minifyJs } from '../asset-bundler.js'
 import { ENTRY_BUNDLES } from '../assets-manifest.js'

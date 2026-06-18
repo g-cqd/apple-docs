@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { disposeHighlighter, highlightCode, initHighlighter } from '../../src/content/highlight.js'
 import { compareToPrevious, recordBenchmark } from './history.js'
 

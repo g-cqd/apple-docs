@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Search repository: the four-variant query planner (FTS5 / title-exact /
  * trigram / body), the body-index maintenance ops, the fuzzy-trigram

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * libAppleDocsCore loader — the only place that dlopens the Swift dylib.
  *

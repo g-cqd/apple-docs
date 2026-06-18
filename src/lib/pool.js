@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Run async tasks with bounded concurrency.
  * Starts up to `limit` tasks in parallel. When one finishes, starts the next.

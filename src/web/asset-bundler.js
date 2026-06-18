@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../lib/errors.js'
 /**
  * Build a single browser-targeted JS entrypoint via `Bun.build` and return

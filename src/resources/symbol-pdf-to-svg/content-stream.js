@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // PDF content-stream interpreter for the SF-Symbol-shaped subset emitted
 // by CGContext: q/Q, cs, sc, gs, m/l/c/h/re, f, B/b. No text, no images,
 // no shading. Extracts a flat list of `fill` records (subpaths + alpha

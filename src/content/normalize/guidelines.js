@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // App Store Review Guidelines normalizer.
 //
 // The guidelines adapter delivers a pre-parsed payload (title + markdown

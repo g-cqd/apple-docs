@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Render DocC block + inline content nodes to plain text. Mirrors the
 // shape consumed by extractor.js but additionally walks the references
 // map so reference titles surface in the rendered output.

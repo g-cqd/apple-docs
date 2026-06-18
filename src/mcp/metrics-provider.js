@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Per-request metrics builder + optional metrics server starter for
  * `apple-docs mcp serve`.

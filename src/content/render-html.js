@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Top-level HTML renderer dispatch. Walks the canonical document/sections
 // shape produced by content/normalize.js and delegates each section to
 // the matching per-kind renderer in render-html/sections.js.

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Codepoint stamping orchestrator. Pulled out of `sync.js` to keep that
  * file inside the 400-line ceiling enforced by `scripts/check-file-size.js`.

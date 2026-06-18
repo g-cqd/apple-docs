@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * safeCall — uniform replacement for `try { ... } catch {}` and
  * `try { ... } catch { return defaultValue }` patterns.

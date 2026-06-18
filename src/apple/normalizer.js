@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Normalize any Apple documentation identifier to a canonical lowercase path.
  * Handles: doc://..., /documentation/..., documentation/..., mixed-case paths.

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { afterEach, describe, expect, test } from 'bun:test'
 import { AppleDoccAdapter } from '../../../src/sources/apple-docc.js'
 

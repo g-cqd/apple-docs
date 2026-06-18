@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v13 — case-insensitive title index. Hot search/lookup path: exact
  * symbol-title lookups previously scanned the whole documents table on

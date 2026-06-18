@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // SF Symbols snapshot meta helpers.
 //
 // Extracted from src/resources/apple-symbols/sync.js so the parent

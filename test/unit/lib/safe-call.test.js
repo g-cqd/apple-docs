@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { _resetWarnedLabels, safeCall } from '../../../src/lib/safe-call.js'
 

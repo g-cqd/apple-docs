@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * WAL coexistence gate (RFC 0001 P5 first slice): the native read path
  * (dlopen'd libsqlite3) and the bun:sqlite WRITER touch the same real

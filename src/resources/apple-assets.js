@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Apple-asset facade. The font / symbol pipelines live in per-concern
  * modules under apple-fonts/ and apple-symbols/; this module is the

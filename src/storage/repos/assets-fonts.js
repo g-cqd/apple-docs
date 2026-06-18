@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Apple typography repository: families + files. Schema lives in
  * migrations v10 (initial) and v12 (classification + uniqueness).

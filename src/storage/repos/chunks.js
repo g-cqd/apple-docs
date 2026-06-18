@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Chunk-vector repository (v25): persistence for the body-aware semantic index.
  *

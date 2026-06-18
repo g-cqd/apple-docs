@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Framework-listing filter UI: kind chips, fuzzy text filter, deep-link
 // state via the URL hash. Operates on the server-rendered list only —
 // tree-only pages render neither the list nor these controls.

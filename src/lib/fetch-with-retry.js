@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Shared HTTP fetch + retry utilities.
  * Consolidated from src/apple/api.js and src/lib/github.js.

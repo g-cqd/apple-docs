@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pure (no-spawn) helpers for SF Symbols .dmg provisioning, split out of
  * install.js to keep that file under the 400-line ceiling and to make the

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * @typedef {{ keys: string[], roots?: Array<object> }} DiscoveryResult
  * @typedef {{ key: string, payload: object, etag?: string|null, lastModified?: string|null }} FetchResult

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // HTML → text/markdown converters used by extractHtmlContent and the
 // section splitter. htmlToPlainText drops every structural tag in favour
 // of paragraph breaks; htmlToMarkdown preserves code, links, lists,

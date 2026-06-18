@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { VECTOR_DIMS } from '../../src/search/embedding.js'
 
 // Deterministic "semantic" embedder for tests — no ONNX dependency.

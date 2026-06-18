@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Tree-view state derivation: builds the parent → children adjacency map,
 // the root list, and memoised descendant counts from the wire-format JSON.
 // All helpers below take this state object as their first argument so the

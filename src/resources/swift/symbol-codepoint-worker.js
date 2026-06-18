@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Long-lived SF Symbol -> Unicode codepoint dump worker.
  *

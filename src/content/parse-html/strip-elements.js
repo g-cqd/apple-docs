@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Strip whole elements (and their content) from an HTML string. Linear
 // single-pass: walk all open/close events, depth-counter the matched
 // ranges, splice them out. A non-greedy regex replace in a do-while

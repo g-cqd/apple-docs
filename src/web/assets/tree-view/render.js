@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Tree-view DOM rendering. Each helper takes the `state` object built
 // in tree-view/state.js as its first argument so the render layer stays
 // stateless — easier to reason about and easier to test if we ever

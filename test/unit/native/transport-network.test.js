@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Apple-native transport (RFC 0007 F3). `--transport network` binds the engine on
  * NIOTransportServices (Network.framework) instead of NIOPosix; the same routes + storage

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Small helpers shared by `apple-docs setup` — extracted from
 // src/commands/setup.js to keep that file under the 400-line ceiling.
 

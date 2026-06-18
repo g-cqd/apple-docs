@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 export function sha256(data) {
   return new Bun.CryptoHasher('sha256').update(data).digest('hex')
 }

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Public render endpoints (SF Symbols, font text samples) sit on a CPU
  * budget that's the project's only constrained resource — every render

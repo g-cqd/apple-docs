@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /** v2 — activity table for tracking long-running operations. */
 export function up(db) {
   db.run(`CREATE TABLE IF NOT EXISTS activity (

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Archive A/B parity. Byte equality with the bsdtar-built JS archive is
  * impossible (synthesized vs host headers), so the gates are: native

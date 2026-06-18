@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { slugify } from '../../content/render-html.js'
 import { html } from '../lib/html.js'
 import { buildFooter, buildHead, buildHeader, buildScripts, renderTocHtml } from '../templates.js'

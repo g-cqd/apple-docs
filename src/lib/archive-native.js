@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Archive dispatch: Swift ADArchive (libAppleDocsCore, streaming tar.zst —
  * no intermediate .tar, no tar/zstd host binaries) when `APPLE_DOCS_NATIVE`

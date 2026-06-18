@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { createHighlighter } from 'shiki'
 import { sha256 } from '../lib/hash.js'
 import { createLru } from '../lib/lru.js'

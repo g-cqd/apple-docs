@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Framework listing page renderer (the `/docs/<root>/index.html` shell
 // for each catalogued framework).
 //

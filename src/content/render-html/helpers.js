@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Pure HTML helpers used across the render-html cluster.
 
 import { coerceDocument as _coerceDocument, coerceSection as _coerceSection } from '../coercion.js'

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // References resolution. DocC ships a flat `references` map keyed by
 // identifier; downstream code needs three things:
 //   1. Resolve an identifier to a corpus key (`resolveRefKey`).

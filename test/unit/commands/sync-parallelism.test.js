@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { afterAll, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test'
 import * as consolidateMod from '../../../src/commands/consolidate.js'
 import { sync } from '../../../src/commands/sync.js'

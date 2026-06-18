@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // MCP resource registrations: stable URIs that map to corpus content
 // (apple-docs://doc/<key>, apple-docs://framework/<slug>,
 // apple-docs://sf-symbol/<scope>/<name>.<format>, apple-docs://font/<id>).

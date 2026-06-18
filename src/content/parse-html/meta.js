@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Document-level meta extraction: <title>, <meta name="description">,
 // <meta property="og:title">, plus the redirect-stub detector.
 

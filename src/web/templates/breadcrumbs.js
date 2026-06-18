@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Breadcrumbs and the matching `BreadcrumbList` JSON-LD shape.
 //
 // Extracted from src/web/templates.js so the parent stays under the

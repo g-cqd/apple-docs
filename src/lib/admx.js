@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * ADMX v1 weights artifact (RFC 0002 D-0002-1): the potion embedding matrix
  * re-exported from the pinned model.onnx into a dumb mmap-able layout the

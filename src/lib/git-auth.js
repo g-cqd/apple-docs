@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Detect a GitHub token from the local environment via `gh` or the git
  * credential helper. Never throws; returns `null` on any failure.

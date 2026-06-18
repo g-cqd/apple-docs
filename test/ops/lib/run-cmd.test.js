@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Tests for ops/lib/run-cmd.js. Uses a fake `spawn` so we don't shell
  * out per assertion — that keeps the suite ~ms instead of ~seconds and

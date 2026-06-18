@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Xcode-docs enrichment phase. Runs BETWEEN convert and the index phase so
  * pages inserted from Xcode's offline Developer Documentation MobileAsset

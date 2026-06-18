@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Per-request observability shim. Captures route latency into a shared
  * histogram and bumps a per-route counter so the /metrics provider can

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { randomBytes } from 'node:crypto'
 import { rename, rm } from 'node:fs/promises'
 import { availableParallelism } from 'node:os'

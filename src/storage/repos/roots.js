@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Roots repository: documentation root rows + the page_count maintenance
  * helper. Schema lives in migrations/v1-initial-schema.js.

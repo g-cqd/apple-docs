@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { renderPage } from '../apple/renderer.js'
 import { nativeConvertPages } from '../content/content-native.js'
 import { pool } from '../lib/pool.js'

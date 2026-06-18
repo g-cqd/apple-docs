@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { describe, expect, test } from 'bun:test'
 import { BodyTooLargeError, DEFAULT_MAX_BODY_BYTES, isLoopbackOrigin, readBodyCapped, readJsonRpcBodyCapped } from '../../../src/lib/http-body.js'
 

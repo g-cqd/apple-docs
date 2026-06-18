@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v6 — introduce the canonical documents table (multi-source-aware) plus
  * document_sections, document_relationships, snapshot_meta, and the FTS5

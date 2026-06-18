@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Byte-parity gate for the native web API routes (RFC 0001 P6 web slice). The
  * ad-server JSON/text routes must match the Bun web handlers byte-for-byte

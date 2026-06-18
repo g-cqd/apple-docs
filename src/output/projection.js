@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Single public-output boundary for every surface the project exposes —
  * MCP tools, MCP resources, CLI `--json` mode, web `/api/*` routes.

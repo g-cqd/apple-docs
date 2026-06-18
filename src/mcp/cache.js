@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
 

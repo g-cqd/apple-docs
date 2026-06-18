@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v14 — switch documents_trigram to FTS5 external-content backed by the
  * documents table.

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Shared constants for the WWDC source. Keys, year ranges, and the
 // upstream endpoints.
 

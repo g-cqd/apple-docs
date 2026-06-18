@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * @typedef {object} TaxonomyArgs
  * @property {'kind'|'role'|'docKind'|'roleHeading'|'sourceType'} [field]

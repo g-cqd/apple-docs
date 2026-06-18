@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v23 — `document_raw`: the raw upstream Apple DocC payloads, zstd-compressed,
  * one BLOB per document.

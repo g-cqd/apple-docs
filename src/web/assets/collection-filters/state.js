@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Collection-filter state: kind counts, current selection, URL-hash
 // serialization. All pure helpers — the controller wires them onto DOM
 // events.

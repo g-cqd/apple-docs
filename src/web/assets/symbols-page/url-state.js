@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // URL-state contract for the symbols page.
 //   ?q=…&scope=…&cat=…  filter state
 //   /symbols/<name>     detail-route (mobile + bookmark-friendly)

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * v26 — `documents.usr`: the symbol's precise identifier (Swift / Clang USR,
  * e.g. `s:7SwiftUI4ViewP`), sourced from Xcode's offline Developer

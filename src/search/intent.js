@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 const HOWTO_WORDS = /\b(how|guide|tutorial|example|implement|create|build|use|setup|configure|add|make)\b/i
 const ERROR_WORDS = /\b(error|crash|exception|fail|issue|bug|fix|troubleshoot|exc_bad|abort|segfault)\b/i
 const CONCEPT_PATTERNS = /\b(what\s+is|difference\s+between|vs\.?|overview|introduction|explain)\b/i

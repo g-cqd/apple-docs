@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // DocC relationships extraction. Walks topicSections (child links),
 // relationshipsSections (inheritance / conformance), and seeAlsoSections
 // to produce the canonical { fromKey, toKey, relationType, section,

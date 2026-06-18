@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * TLS 1.3 + the multi-App model (RFC 0007 F1b). Boots ad-server (release) with BOTH a
  * plaintext loopback listener AND an in-process TLS listener (`--tls-cert/--tls-key/--tls-port`,

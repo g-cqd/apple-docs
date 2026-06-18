@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { randomBytes } from 'node:crypto'
 import { copyFile, rename, unlink } from 'node:fs/promises'
 import { dirname } from 'node:path'

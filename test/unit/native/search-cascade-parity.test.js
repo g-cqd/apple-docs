@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Byte-parity gate for the native lexical search cascade (RFC 0001 P6). The
  * Swift /search endpoint (ad-server → ADSearchCascade, in-process) must

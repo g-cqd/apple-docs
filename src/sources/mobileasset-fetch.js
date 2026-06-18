@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Download path for the Xcode Developer Documentation MobileAsset, for
  * machines without Xcode (CI, servers). The asset is a plain zip on Apple's

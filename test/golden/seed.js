@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Seed an in-memory database with a representative set of pages
  * for golden search query testing. Covers multiple frameworks,
