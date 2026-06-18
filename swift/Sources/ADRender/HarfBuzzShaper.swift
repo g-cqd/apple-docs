@@ -333,12 +333,18 @@ public enum HarfBuzzShaper {
         let penRef = Unmanaged.passUnretained(pen).toOpaque()
         var penX = 0.0
         var penY = 0.0
-        for i in 0 ..< n {
-            pen.ox = penX + Double(pos[i].xOffset)
-            pen.oy = penY + Double(pos[i].yOffset)
-            hb.fontDrawGlyph(font, infos[i].codepoint, df, penRef)
-            penX += Double(pos[i].xAdvance)
-            penY += Double(pos[i].yAdvance)
+        // `penRef` is unretained, and the HarfBuzz draw callbacks reconstruct `pen`
+        // from it during `fontDrawGlyph`. Pin `pen`'s lifetime across the whole loop
+        // so ARC can't release it mid-draw — making the invariant explicit instead
+        // of relying on the incidental post-loop `pen` use below.
+        withExtendedLifetime(pen) {
+            for i in 0 ..< n {
+                pen.ox = penX + Double(pos[i].xOffset)
+                pen.oy = penY + Double(pos[i].yOffset)
+                hb.fontDrawGlyph(font, infos[i].codepoint, df, penRef)
+                penX += Double(pos[i].xAdvance)
+                penY += Double(pos[i].yAdvance)
+            }
         }
         guard pen.d.isEmpty == false, pen.minX.isFinite else { return nil }
 
