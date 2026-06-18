@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from './errors.js'
 /**
  * Optional Prometheus scrape endpoint for the long-running servers
@@ -25,8 +24,8 @@ import { formatPrometheus, PROMETHEUS_CONTENT_TYPE } from './metrics.js'
  * @param {object} opts
  * @param {number}        opts.port - listen port (0 picks any free port)
  * @param {string}       [opts.host='127.0.0.1']
- * @param {() => Array}   opts.provider - returns the metrics array per request
- * @param {(cfg: object) => any} [opts.serve] - injected for tests; defaults
+ * @param {() => any[]}   opts.provider - returns the metrics array per request
+ * @param {(cfg: any) => any} [opts.serve] - injected for tests; defaults
  *   to `Bun.serve`
  * @param {{ info?: Function, error?: Function }} [opts.logger]
  * @returns {{ server: any, url: string, port: number,
@@ -45,6 +44,7 @@ export function startMetricsServer(opts) {
   const server = serveImpl({
     port: requestedPort,
     hostname: host,
+    /** @param {Request} request */
     fetch(request) {
       const url = new URL(request.url)
       if (url.pathname !== '/metrics') {
@@ -60,7 +60,7 @@ export function startMetricsServer(opts) {
       try {
         body = formatPrometheus(provider())
       } catch (err) {
-        logger?.error?.(`metrics-server: provider threw: ${err?.message ?? err}`)
+        logger?.error?.(`metrics-server: provider threw: ${err instanceof Error ? err.message : String(err)}`)
         return new Response('metrics provider error\n', {
           status: 500,
           headers: { 'Content-Type': 'text/plain; charset=utf-8' },
