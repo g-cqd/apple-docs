@@ -1,9 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { platform } from 'node:os'
 import { dirname, join } from 'node:path'
 
+/** @param {string} dirPath */
 export function ensureDir(dirPath) {
   if (!existsSync(dirPath)) {
     mkdirSync(dirPath, { recursive: true })
@@ -13,6 +13,7 @@ export function ensureDir(dirPath) {
 /**
  * Serialize an object to minified JSON with sorted keys.
  * Deterministic output: same input always produces same string.
+ * @param {unknown} obj
  */
 export function stableStringify(obj) {
   return JSON.stringify(obj, (_, value) => {
@@ -26,6 +27,7 @@ export function stableStringify(obj) {
 /**
  * Write a JSON object to disk as minified, key-sorted JSON.
  * Returns the serialized string (reuse for hashing — no double-stringify).
+ * @param {string} filePath @param {unknown} obj
  */
 export async function writeJSON(filePath, obj) {
   ensureDir(dirname(filePath))
@@ -34,27 +36,31 @@ export async function writeJSON(filePath, obj) {
   return str
 }
 
+/** @param {string} filePath */
 export async function readJSON(filePath) {
   const file = Bun.file(filePath)
   if (!(await file.exists())) return null
   return file.json()
 }
 
+/** @param {string} filePath @param {string} text */
 export async function writeText(filePath, text) {
   ensureDir(dirname(filePath))
   await Bun.write(filePath, text)
 }
 
+/** @param {string} filePath */
 export async function readText(filePath) {
   const file = Bun.file(filePath)
   if (!(await file.exists())) return null
   return file.text()
 }
 
-/** Get total size of a directory in bytes (recursive). Returns 0 if missing. */
+/** Get total size of a directory in bytes (recursive). Returns 0 if missing. @param {string} dirPath */
 export function dirSize(dirPath) {
   if (!existsSync(dirPath)) return 0
   let total = 0
+  /** @param {string} p */
   const walk = (p) => {
     for (const entry of readdirSync(p, { withFileTypes: true })) {
       const full = join(p, entry.name)
@@ -87,6 +93,7 @@ export function dirSize(dirPath) {
  * keeps the function correct on Linux test runners that exercise
  * snapshot helpers in unit tests.
  */
+/** @param {string} src @param {string} dst */
 export function copyTreeFast(src, dst) {
   if (platform() === 'darwin') {
     ensureDir(dirname(dst))
@@ -97,10 +104,11 @@ export function copyTreeFast(src, dst) {
   cpSync(src, dst, { recursive: true })
 }
 
-/** Count files in a directory (recursive). Returns 0 if missing. */
+/** Count files in a directory (recursive). Returns 0 if missing. @param {string} dirPath */
 export function fileCount(dirPath) {
   if (!existsSync(dirPath)) return 0
   let count = 0
+  /** @param {string} p */
   const walk = (p) => {
     for (const entry of readdirSync(p, { withFileTypes: true })) {
       if (entry.isDirectory()) walk(join(p, entry.name))

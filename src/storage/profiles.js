@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Storage profile definitions and accessors.
  *
@@ -14,6 +13,7 @@
 
 import { NotFoundError } from '../lib/errors.js'
 
+/** @type {Record<string, { persistMarkdown: boolean, persistHtml: boolean, cacheOnRead: boolean, cacheMaxAge: number, description: string }>} */
 const PROFILES = {
   compact: {
     persistMarkdown: false,

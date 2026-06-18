@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Section content codec for the `on-demand` (compacted) storage profile.
  *
@@ -54,7 +53,7 @@ export function decodeSectionContent(value) {
  */
 export function decodeSectionRow(row) {
   if (!row) return row
-  if (row.content_text != null) row.content_text = decodeSectionContent(row.content_text)
-  if (row.content_json != null) row.content_json = decodeSectionContent(row.content_json)
+  if (row.content_text != null) row.content_text = decodeSectionContent(/** @type {any} */ (row.content_text))
+  if (row.content_json != null) row.content_json = decodeSectionContent(/** @type {any} */ (row.content_json))
   return row
 }
