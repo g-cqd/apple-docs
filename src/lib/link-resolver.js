@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Global link resolver — maps every external URL pattern we know about to its
  * corresponding corpus storage key, and packages the rules into a callback
@@ -9,7 +8,10 @@
  * pattern instead of editing per-adapter resolvers.
  */
 
-/** Pure mapping rules: URL → candidate corpus key, no DB access. */
+/**
+ * Pure mapping rules: URL → candidate corpus key, no DB access.
+ * @type {Array<{ test: (u: URL) => boolean, map: (u: URL) => string | null }>}
+ */
 const RULES = [
   // developer.apple.com/documentation/<framework>/<rest>  → <framework>/<rest>
   // The framework slug is Apple's lowercase-no-hyphen form (`swiftui`, `appkit`).
@@ -130,12 +132,14 @@ const RULES = [
   // claimed (see createLinkResolver implementation below).
 ]
 
+/** @type {Record<string, string>} */
 const SWIFT_ORG_REDIRECTS = {
   'documentation/concurrency': 'swift-migration-guide/documentation/migrationguide',
   'documentation/package-manager': 'swift-package-manager/documentation/packagemanagerdocs',
   'documentation/tspl': 'swift-book/The-Swift-Programming-Language',
 }
 
+/** @param {URL} u */
 function isSwiftOrg(u) {
   return u.hostname === 'swift.org' || u.hostname === 'www.swift.org'
 }

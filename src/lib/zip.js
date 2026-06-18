@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Minimal STORE-method ZIP writer (no compression).
 //
 // Fonts are already compressed binaries — STORE is the right call: smaller
@@ -16,6 +15,7 @@ const CRC32_TABLE = (() => {
   return table
 })()
 
+/** @param {Uint8Array} bytes */
 export function crc32(bytes) {
   let crc = 0xffffffff
   for (let i = 0; i < bytes.length; i++) {
@@ -116,6 +116,7 @@ export function buildStoreZip(entries) {
   return out
 }
 
+/** @param {Date} date */
 function toDosTime(date) {
   const year = Math.max(1980, date.getFullYear())
   const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../lib/errors.js'
 /**
  * Deterministic `tar.zst` archive builder. Replaces the `tar.gz` path:
@@ -57,6 +56,7 @@ function findZstd() {
   }
 }
 
+/** @param {any} proc */
 async function readStderr(proc) {
   try {
     return (await new Response(proc.stderr).text()).trim().slice(0, 4096) || '<no stderr>'
@@ -131,7 +131,10 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
     } else {
       log.warn?.('[archive-tar.zst] zstd CLI not found — using Bun CompressionStream (slower, single-thread)')
       const sink = Bun.file(absOutput).writer()
-      for await (const chunk of Bun.file(tarTmp).stream().pipeThrough(new CompressionStream('zstd'))) sink.write(chunk)
+      for await (const chunk of Bun.file(tarTmp)
+        .stream()
+        .pipeThrough(new CompressionStream(/** @type {any} */ ('zstd'))))
+        sink.write(chunk)
       await sink.end()
     }
   } catch (err) {
@@ -143,7 +146,7 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
       }
     }
     if (err instanceof ValidationError) throw err
-    throw new ValidationError(`tar.zst archive build failed: ${err?.message ?? err}`)
+    throw new ValidationError(`tar.zst archive build failed: ${err instanceof Error ? err.message : String(err)}`)
   } finally {
     rmSync(listDir, { recursive: true, force: true })
     if (existsSync(tarTmp)) {
@@ -165,6 +168,7 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
  * (no stdin streaming), so it's reliable cross-platform. Exported as a test
  * seam for the truncation-detection regression test.
  */
+/** @param {string} tarPath */
 export async function countTarMembers(tarPath) {
   const proc = Bun.spawn(['tar', '-tf', tarPath], { stdout: 'pipe', stderr: 'pipe' })
   const listing = await new Response(proc.stdout).text()
@@ -177,6 +181,7 @@ export async function countTarMembers(tarPath) {
   return n
 }
 
+/** @param {number} bytes */
 function formatSize(bytes) {
   if (bytes > 1e9) return `${(bytes / 1e9).toFixed(2)} GB`
   if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Shared HTTP fetch + retry utilities.
  * Consolidated from src/apple/api.js and src/lib/github.js.
@@ -15,6 +14,10 @@ function sleep(ms) {
   return Bun.sleep(ms)
 }
 
+/**
+ * @param {{ acquire(url?: string, opts?: { signal?: AbortSignal }): Promise<void> }} rateLimiter
+ * @param {string} url
+ */
 function acquireRateLimit(rateLimiter, url) {
   return rateLimiter.acquire(url)
 }
@@ -82,12 +85,14 @@ export function classifyFetchError(error) {
   // underlying socket / DNS / TLS failures — those are retryable.
   // A bare TypeError (no cause) usually means an invalid URL or unsupported
   // protocol — that's terminal.
-  if (error.name === 'TypeError' && error.cause == null) return 'terminal'
+  const e = /** @type {any} */ (error)
+  if (e.name === 'TypeError' && e.cause == null) return 'terminal'
   return 'retryable'
 }
 
 /** Combine an optional caller signal with the per-attempt timeout signal,
  *  so an abort from either source aborts the in-flight request. */
+/** @param {AbortSignal | null | undefined} callerSignal @param {number} timeoutMs */
 function combineSignals(callerSignal, timeoutMs) {
   const timeoutSignal = AbortSignal.timeout(timeoutMs)
   if (!callerSignal) return timeoutSignal
@@ -95,6 +100,7 @@ function combineSignals(callerSignal, timeoutMs) {
   // Polyfill fallback (bun ≥ 1.1 has AbortSignal.any natively): tie the
   // two together with a controller that aborts when either does.
   const controller = new AbortController()
+  /** @param {AbortSignal} sig */
   const onAbort = (sig) => () => controller.abort(sig.reason)
   if (callerSignal.aborted) controller.abort(callerSignal.reason)
   else callerSignal.addEventListener('abort', onAbort(callerSignal), { once: true })
@@ -123,10 +129,7 @@ function combineSignals(callerSignal, timeoutMs) {
  *   signal?: AbortSignal,
  *   _attempt?: number,
  * }} [opts]
- * @returns {Promise<
- *   { data: unknown, etag: string|null, lastModified: string|null } |
- *   { text: string, etag: string|null, lastModified: string|null }
- * >}
+ * @returns {Promise<{ data?: any, text?: string, etag: string|null, lastModified: string|null }>}
  */
 export async function fetchWithRetry(url, rateLimiter, opts = {}) {
   const {
@@ -199,7 +202,7 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
  *   headers?: Record<string, string>,
  *   timeout?: number,
  * }} [opts]
- * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
+ * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string | null }>}
  */
 export async function checkResourceEtag(url, previousEtag, rateLimiter, opts = {}) {
   const { headers = {}, timeout = 30000 } = opts

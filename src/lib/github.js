@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { checkResourceEtag, fetchWithRetry } from './fetch-with-retry.js'
 
 const USER_AGENT = 'apple-docs/2.0'
@@ -85,15 +84,17 @@ export async function fetchGitHubTree(owner, repo, branch, rateLimiter) {
  */
 export async function fetchRawGitHub(owner, repo, branch, filePath, rateLimiter) {
   const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`
-  return fetchWithRetry(url, rateLimiter, {
-    headers: {
-      'User-Agent': USER_AGENT,
-      ...authHeaders(),
-    },
-    parseAs: 'text',
-    maxRetries: MAX_RETRIES,
-    timeout: DEFAULT_TIMEOUT,
-  })
+  return /** @type {Promise<{ text: string, etag: string | null, lastModified: string | null }>} */ (
+    fetchWithRetry(url, rateLimiter, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        ...authHeaders(),
+      },
+      parseAs: 'text',
+      maxRetries: MAX_RETRIES,
+      timeout: DEFAULT_TIMEOUT,
+    })
+  )
 }
 
 /**
@@ -105,7 +106,7 @@ export async function fetchRawGitHub(owner, repo, branch, filePath, rateLimiter)
  * @param {string} filePath
  * @param {string|null} previousEtag
  * @param {{ acquire(): Promise<void> }} rateLimiter
- * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
+ * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string | null }>}
  */
 export async function checkRawGitHub(owner, repo, branch, filePath, previousEtag, rateLimiter) {
   const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`
@@ -128,12 +129,14 @@ export async function checkRawGitHub(owner, repo, branch, filePath, previousEtag
  */
 export async function fetchGitHubRepo(owner, repo, rateLimiter) {
   const url = `https://api.github.com/repos/${owner}/${repo}`
-  return fetchWithRetry(url, rateLimiter, {
-    headers: githubApiHeaders(),
-    maxRetries: MAX_RETRIES,
-    timeout: DEFAULT_TIMEOUT,
-    notFoundAs: 'http-error',
-  })
+  return /** @type {Promise<{ data: object, etag: string | null, lastModified: string | null }>} */ (
+    fetchWithRetry(url, rateLimiter, {
+      headers: githubApiHeaders(),
+      maxRetries: MAX_RETRIES,
+      timeout: DEFAULT_TIMEOUT,
+      notFoundAs: 'http-error',
+    })
+  )
 }
 
 /**
@@ -143,7 +146,7 @@ export async function fetchGitHubRepo(owner, repo, rateLimiter) {
  * @param {string} repo
  * @param {string|null} previousEtag
  * @param {{ acquire(): Promise<void> }} rateLimiter
- * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
+ * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string | null }>}
  */
 export async function checkGitHubRepo(owner, repo, previousEtag, rateLimiter) {
   const url = `https://api.github.com/repos/${owner}/${repo}`
@@ -193,7 +196,7 @@ export async function fetchGitHubReadme(owner, repo, branch, rateLimiter) {
  * @param {string} branch
  * @param {string|null} previousEtag
  * @param {{ acquire(): Promise<void> }} rateLimiter
- * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
+ * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string | null }>}
  */
 export async function checkGitHubReadme(owner, repo, branch, previousEtag, rateLimiter) {
   const url = `https://api.github.com/repos/${owner}/${repo}/readme?ref=${encodeURIComponent(branch)}`
