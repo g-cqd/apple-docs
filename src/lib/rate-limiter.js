@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 export class RateLimiter {
   /**
    * Token bucket rate limiter.
@@ -10,6 +9,7 @@ export class RateLimiter {
     this.burst = burst
     this.tokens = burst
     this.lastRefill = Date.now()
+    /** @type {Array<(value?: unknown) => void>} */
     this._queue = []
     this._processing = false
   }
@@ -43,7 +43,7 @@ export class RateLimiter {
       if (this.tokens >= 1) {
         this.tokens -= 1
         const resolve = this._queue.shift()
-        resolve()
+        resolve?.()
         // Process next immediately if tokens remain
         if (this._queue.length > 0) {
           queueMicrotask(tick)

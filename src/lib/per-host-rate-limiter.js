@@ -1,8 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { RateLimiter } from './rate-limiter.js'
 
 const DEFAULT_MAX_BUCKETS = 256
 
+/** @param {string | null | undefined} url */
 function bucketKeyFor(url) {
   if (!url) return '*'
   try {
@@ -12,6 +12,7 @@ function bucketKeyFor(url) {
   }
 }
 
+/** @param {string | null | undefined} value */
 function parsePositiveInt(value) {
   if (value == null) return null
   const n = Number.parseInt(value, 10)
@@ -46,6 +47,7 @@ export function createHostBucketedLimiter(opts = {}) {
   const buckets = new Map()
   const primaryLimiter = primaryConfig ? new RateLimiter(primaryConfig.rate ?? rate, primaryConfig.burst ?? burst) : null
 
+  /** @param {string | null | undefined} url */
   function getBucket(url) {
     const key = bucketKeyFor(url)
     const existing = buckets.get(key)
@@ -68,6 +70,7 @@ export function createHostBucketedLimiter(opts = {}) {
   return {
     rate: primaryConfig?.rate ?? rate,
     burst: primaryConfig?.burst ?? burst,
+    /** @param {string | null | undefined} url */
     async acquire(url) {
       if (primaryLimiter) {
         await primaryLimiter.acquire()
@@ -78,6 +81,7 @@ export function createHostBucketedLimiter(opts = {}) {
     _size() {
       return buckets.size
     },
+    /** @param {string} host */
     _has(host) {
       return buckets.has(host)
     },

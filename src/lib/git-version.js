@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Short commit hash of the running checkout, for the page footer ("what code
  * is this instance serving"). Computed at web-build time.
@@ -21,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 const SHA_RE = /^[0-9a-f]{7,40}$/
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
+/** @type {string | null | undefined} */
 let cached // undefined = not computed; string|null = result
 
 /** @returns {string|null} short commit hash, or null when unavailable */

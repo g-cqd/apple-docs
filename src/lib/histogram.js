@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Fixed-bucket cumulative histogram for Prometheus exposition.
  *
@@ -35,6 +34,7 @@ export function createHistogram(opts = {}) {
   let sum = 0
   let total = 0
 
+  /** @param {unknown} value */
   function record(value) {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return
     sum += value
