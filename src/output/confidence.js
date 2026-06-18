@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Map the internal search-cascade matchQuality enum to the public
  * three-level confidence field.
@@ -13,6 +12,9 @@
  *   approximate — fuzzy match or relaxation-cascade fallback.
  *   partial     — every other tier; the query matched somewhere but
  *                 not as a title-exact hit.
+ *
+ * @param {unknown} matchQuality
+ * @returns {'exact' | 'approximate' | 'partial'}
  */
 export function publicConfidence(matchQuality) {
   if (matchQuality === 'exact') return 'exact'
