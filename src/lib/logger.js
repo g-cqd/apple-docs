@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 }
 
 /**
@@ -15,21 +14,53 @@ const REDACT_KEY_RE = /token|secret|authorization|cookie|password|api[_-]?key|be
  */
 const REDACT_MAX_DEPTH = 8
 
-export function createLogger(level = process.env.APPLE_DOCS_LOG_LEVEL || 'info') {
-  const threshold = LEVELS[level] ?? LEVELS.info
+/**
+ * A structured logger instance. The base logger and its `withRequestId`
+ * children share the same emit path; only the stamped request id differs.
+ * @typedef {object} Logger
+ * @property {(msg: string, data?: unknown) => void} debug
+ * @property {(msg: string, data?: unknown) => void} info
+ * @property {(msg: string, data?: unknown) => void} warn
+ * @property {(msg: string, data?: unknown) => void} error
+ * @property {(id: string | null) => Logger} withRequestId
+ */
 
+/**
+ * @param {string} [level]
+ * @returns {Logger}
+ */
+export function createLogger(level = process.env.APPLE_DOCS_LOG_LEVEL || 'info') {
+  const threshold = LEVELS[/** @type {keyof typeof LEVELS} */ (level)] ?? LEVELS.info
+
+  /**
+   * @param {keyof typeof LEVELS} lvl
+   * @param {string} msg
+   * @param {unknown} [data]
+   * @param {string | null} [requestId]
+   */
   function buildEntry(lvl, msg, data, requestId) {
+    /** @type {Record<string, unknown>} */
     const entry = { ts: new Date().toISOString(), level: lvl, msg }
     if (requestId) entry.requestId = requestId
     if (data !== undefined) entry.data = redact(data, 0)
     return entry
   }
 
+  /**
+   * @param {keyof typeof LEVELS} lvl
+   * @param {string} msg
+   * @param {unknown} [data]
+   * @param {string | null} [requestId]
+   */
   function emit(lvl, msg, data, requestId) {
     if (LEVELS[lvl] < threshold) return
     process.stderr.write(`${JSON.stringify(buildEntry(lvl, msg, data, requestId))}\n`)
   }
 
+  /**
+   * @param {string | null} requestId
+   * @returns {Logger}
+   */
   function makeLogger(requestId) {
     return {
       debug: (msg, data) => emit('debug', msg, data, requestId),
@@ -64,6 +95,7 @@ export function redact(value, depth = 0) {
   if (Array.isArray(value)) {
     return value.map((v) => redact(v, depth + 1))
   }
+  /** @type {Record<string, unknown>} */
   const out = {}
   for (const [k, v] of Object.entries(value)) {
     if (REDACT_KEY_RE.test(k)) {
