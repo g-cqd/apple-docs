@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Subprocess wrapper for the ops layer. Every ops command that shells
  * out (launchctl, tar, sudo, curl-via-fetch helpers, the apple-docs

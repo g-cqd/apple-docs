@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Build the combined SF Symbols pre-render archive: `symbols-<tag>.tar.zst`.
  *

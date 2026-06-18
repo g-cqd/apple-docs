@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Caddy proxy verbs: run / validate / reload / status. Folds four
  * separate bash scripts (run-proxy, proxy-validate, proxy-reload,

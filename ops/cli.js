@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Single entry point for every ops command. Replaces the bash
  * dispatcher at ops/bin/apple-docs-ops; lazy-imports each subcommand

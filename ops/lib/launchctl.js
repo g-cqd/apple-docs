@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * launchctl wrapper for the ops layer. Every privileged
  * load/unload/kick call on macOS goes through here so:

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pull-and-redeploy workflow for apple-docs. Ports ops/bin/deploy-update.sh.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Operator-facing logger for ops/cli.js. Mirrors the `say()` / `run()`
  * idiom every bash script in ops/bin used:

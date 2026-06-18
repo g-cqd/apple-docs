@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * check-file-size.js
  *
