@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * GitHub Releases helper for the ops pipeline. Fetches the
  * /releases/latest endpoint, picks the snapshot tarball + its sha256

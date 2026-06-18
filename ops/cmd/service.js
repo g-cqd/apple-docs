@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * `ops/cli.js service <verb> <target>` — start/stop/restart/status
  * verbs against the launchd-managed apple-docs daemons.

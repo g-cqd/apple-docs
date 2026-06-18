@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * First-boot helper: wait for an in-progress `apple-docs sync` to
  * complete, then bootstrap the web + mcp daemons against the fresh

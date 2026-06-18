@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Install apple-docs LaunchDaemons + sudoers drop-in. Idempotent.
  * Must be invoked as root (the bash predecessor exits 1 on non-root;
