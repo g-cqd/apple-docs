@@ -109,13 +109,15 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
           ORDER BY sort_order, id
         `)
           .all(document.id)
-          .map(/** @param {Record<string, any>} section */ (section) => ({
-            sectionKind: section.section_kind,
-            heading: section.heading,
-            contentText: decodeSectionContent(section.content_text),
-            contentJson: decodeSectionContent(section.content_json),
-            sortOrder: section.sort_order,
-          }))
+          .map(
+            /** @param {Record<string, any>} section */ (section) => ({
+              sectionKind: section.section_kind,
+              heading: section.heading,
+              contentText: decodeSectionContent(section.content_text),
+              contentJson: decodeSectionContent(section.content_json),
+              sortOrder: section.sort_order,
+            }),
+          )
 
         if (sections.length === 0) {
           await ensureNormalizedDocument(db, dataDir, document.key, document.source_type ?? 'apple-docc')

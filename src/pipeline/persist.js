@@ -27,17 +27,7 @@ export function persistFetchedDocPage(args) {
 
 /** @param {Record<string, any>} args */
 async function doPersistFetchedDocPage(args) {
-  const {
-    db,
-    dataDir,
-    rootId,
-    path,
-    sourceType = 'apple-docc',
-    json,
-    etag = null,
-    lastModified = null,
-    renderPageFn = renderPage,
-  } = args
+  const { db, dataDir, rootId, path, sourceType = 'apple-docc', json, etag = null, lastModified = null, renderPageFn = renderPage } = args
   const jsonStr = stableStringify(json)
   const rawPayloadHash = sha256(jsonStr)
   const normalized = normalize(json, path, sourceType)
@@ -106,18 +96,7 @@ export function persistNormalizedPage(args) {
 
 /** @param {Record<string, any>} args */
 async function doPersistNormalizedPage(args) {
-  const {
-    db,
-    dataDir,
-    rootId,
-    path,
-    sourceType,
-    rawPayload,
-    normalized,
-    etag = null,
-    lastModified = null,
-    renderMarkdownFn = renderMarkdown,
-  } = args
+  const { db, dataDir, rootId, path, sourceType, rawPayload, normalized, etag = null, lastModified = null, renderMarkdownFn = renderMarkdown } = args
   // Always store as valid JSON so downstream tools (minify, readJSON) work uniformly.
   // String payloads (Markdown, HTML) from flat sources are wrapped in a JSON envelope.
   const isStringPayload = typeof rawPayload === 'string'
