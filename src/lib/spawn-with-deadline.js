@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * One-shot Bun.spawn wrapper with a hard deadline + bounded stderr capture.
  *
@@ -49,7 +48,7 @@ export async function spawnWithDeadline(args, opts = {}) {
     stderr: opts.stderr ?? 'pipe',
     cwd: opts.cwd,
     env: opts.env,
-    stdin: opts.stdin,
+    stdin: /** @type {any} */ (opts.stdin),
   })
 
   let timedOut = false
@@ -77,6 +76,7 @@ export async function spawnWithDeadline(args, opts = {}) {
   return { stdout, stderr, exitCode }
 }
 
+/** @param {ReadableStream<Uint8Array>} stream @param {number} maxBytes */
 async function readStreamCapped(stream, maxBytes) {
   const reader = stream.getReader()
   const decoder = new TextDecoder()

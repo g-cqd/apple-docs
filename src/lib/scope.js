@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Opt-in corpus scoping (issue #7).
  *
@@ -34,7 +33,7 @@ export const SCOPE_FILE = 'scope.json'
  * hard-required "no scope, no behavior change" contract).
  *
  * @param {string} dataDir
- * @param {{ logger?: object }} [opts]
+ * @param {{ logger?: import('../types.js').Logger }} [opts]
  * @returns {{ sources: string[]|null, appleDoccFrameworks: string[]|null, keepFonts: boolean, keepSymbols: boolean } | null}
  */
 export function loadScope(dataDir, { logger } = {}) {
@@ -44,7 +43,7 @@ export function loadScope(dataDir, { logger } = {}) {
   try {
     raw = JSON.parse(readFileSync(path, 'utf8'))
   } catch (err) {
-    throw new ValidationError(`${path} is not valid JSON: ${err.message}`)
+    throw new ValidationError(`${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`)
   }
   const scope = normalizeScope(raw, path)
   logger?.info?.(
@@ -55,6 +54,7 @@ export function loadScope(dataDir, { logger } = {}) {
   return scope
 }
 
+/** @param {any} raw @param {string} path */
 function normalizeScope(raw, path) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new ValidationError(`${path}: expected a JSON object`)
@@ -82,6 +82,7 @@ function normalizeScope(raw, path) {
   }
 }
 
+/** @param {unknown} value @param {string} field @param {string} path */
 function normalizeStringList(value, field, path) {
   if (value == null) return null
   if (!Array.isArray(value) || value.some((x) => typeof x !== 'string')) {
@@ -94,6 +95,8 @@ function normalizeStringList(value, field, path) {
 /**
  * Drop adapters whose source type is out of scope. No scope (or no
  * `sources` restriction) → the input list unchanged.
+ * @param {any[]} adapters
+ * @param {ReturnType<typeof loadScope>} scope
  */
 export function filterAdaptersByScope(adapters, scope) {
   if (!scope?.sources) return adapters
@@ -106,6 +109,8 @@ export function filterAdaptersByScope(adapters, scope) {
  * ONLY to the apple-docc adapter — other adapters' root slugs (wwdc,
  * swift-book, …) live in a different namespace and must never be filtered
  * by a framework list. Null = no restriction.
+ * @param {any} adapter
+ * @param {ReturnType<typeof loadScope>} scope
  */
 export function scopeRootsFor(adapter, scope) {
   if (!scope) return null

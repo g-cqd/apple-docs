@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Prometheus exposition-format encoder.
  *
@@ -25,6 +24,7 @@
 
 export const PROMETHEUS_CONTENT_TYPE = 'text/plain; version=0.0.4; charset=utf-8'
 
+/** @param {unknown} metrics */
 export function formatPrometheus(metrics) {
   if (!Array.isArray(metrics)) return ''
   const out = []
@@ -43,6 +43,7 @@ export function formatPrometheus(metrics) {
   return out.length === 0 ? '' : `${out.join('\n')}\n`
 }
 
+/** @param {Record<string, unknown> | null | undefined} labels */
 function formatLabels(labels) {
   if (!labels || typeof labels !== 'object') return ''
   const keys = Object.keys(labels)
@@ -56,6 +57,7 @@ function formatLabels(labels) {
   return parts.length === 0 ? '' : `{${parts.join(',')}}`
 }
 
+/** @param {string} value */
 function escapeLabelValue(value) {
   let out = ''
   for (let i = 0; i < value.length; i++) {
@@ -71,6 +73,7 @@ function escapeLabelValue(value) {
   return out
 }
 
+/** @param {string} value */
 function escapeHelp(value) {
   // HELP lines escape backslash and newline only (double-quotes are literal).
   let out = ''
@@ -83,6 +86,7 @@ function escapeHelp(value) {
   return out
 }
 
+/** @param {number} value */
 function formatValue(value) {
   // Integers stay integers (cleaner scrape output); fractional values keep
   // full JS precision via toString — Prometheus parses scientific notation.

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Cross-runtime event-loop lag sampler.
  *
@@ -88,6 +87,7 @@ export function createEventLoopLagSampler(opts = {}) {
  * Linear-interpolated percentile pick — cheap, accurate enough for a
  * Prometheus gauge. `arr` is assumed sorted ascending.
  */
+/** @param {ArrayLike<number>} arr @param {number} q */
 function percentile(arr, q) {
   if (arr.length === 0) return 0
   const idx = (arr.length - 1) * q

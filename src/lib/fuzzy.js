@@ -1,8 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Levenshtein edit distance with early exit.
  * Returns maxDist + 1 if distance exceeds maxDist (avoids full computation).
  */
+/** @param {string} a @param {string} b @param {number} [maxDist] */
 function levenshtein(a, b, maxDist = 2) {
   const m = a.length
   const n = b.length
@@ -27,8 +27,10 @@ function levenshtein(a, b, maxDist = 2) {
 /**
  * Extract character trigrams from a string.
  */
+/** @param {string} s */
 function trigrams(s) {
   const lower = s.toLowerCase()
+  /** @type {Set<string>} */
   const set = new Set()
   for (let i = 0; i <= lower.length - 3; i++) {
     set.add(lower.slice(i, i + 3))
@@ -42,6 +44,7 @@ function trigrams(s) {
  * and joined with explicit OR. Empty input → null (caller should skip
  * the SQL entirely).
  */
+/** @param {Set<string>} triSet */
 function buildTrigramOrQuery(triSet) {
   if (triSet.size === 0) return null
   const parts = []
@@ -69,7 +72,7 @@ export function _resetTrigramCache() {
  *
  * @param {string} query
  * @param {import('../storage/database.js').DocsDatabase} db
- * @param {{ framework?: string, kind?: string, limit?: number, maxDist?: number, excludeIds?: Set<string|number> }} opts
+ * @param {{ framework?: string, kind?: string, limit?: number, maxDist?: number, excludeIds?: Set<string|number> | null }} opts
  * @returns {Array<{ id: number, title: string, distance: number }>}
  */
 export function fuzzyMatchTitles(query, db, { framework: _framework, kind: _kind, limit = 100, maxDist = 2, excludeIds = null } = {}) {

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * HTTP boundary helpers. The MCP HTTP server is publicly reachable, so
  * `await request.text()` without a size cap and a default-allow Origin
@@ -17,6 +16,7 @@
 export const DEFAULT_MAX_BODY_BYTES = 1_000_000
 
 export class BodyTooLargeError extends Error {
+  /** @param {number} maxBytes @param {number} observed */
   constructor(maxBytes, observed) {
     super(`request body exceeds ${maxBytes} bytes (observed ${observed})`)
     this.name = 'BodyTooLargeError'
@@ -120,6 +120,7 @@ export async function readJsonRpcBodyCapped(request, maxBytes = DEFAULT_MAX_BODY
 /** Loopback origins always allowed when no explicit --allow-origin policy
  *  is set: http(s)://localhost, http(s)://127.0.0.1, http(s)://[::1] — any
  *  port. Anything else (including non-http schemes) is rejected. */
+/** @param {string} origin */
 export function isLoopbackOrigin(origin) {
   let url
   try {
