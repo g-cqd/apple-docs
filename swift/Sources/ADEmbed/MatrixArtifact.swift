@@ -79,9 +79,17 @@ public final class MatrixArtifact: @unchecked Sendable {
         let dims = Int(u32(20))
         let isSparse = flags & 1 == 1
 
-        let idTableBytes = isSparse ? rows * 4 : 0
+        // `rows`/`dims` come from an untrusted header. `rows * dims * 4` can
+        // exceed Int64 (each factor is up to 2^32), and Swift's `*` traps on
+        // overflow — a crafted header would crash (DoS) here. Compute the payload
+        // size with reporting-overflow math and reject instead of trapping.
+        let (idTableBytes, idOv) = isSparse ? rows.multipliedReportingOverflow(by: 4) : (0, false)
+        guard !idOv else { throw fail(.truncated) }
         let dataOffset = (Self.headerBytes + idTableBytes + 63) / 64 * 64
-        guard length == dataOffset + rows * dims * 4 else { throw fail(.truncated) }
+        let (rowDims, ov1) = rows.multipliedReportingOverflow(by: dims)
+        let (payloadBytes, ov2) = rowDims.multipliedReportingOverflow(by: 4)
+        let (expectedLength, ov3) = dataOffset.addingReportingOverflow(payloadBytes)
+        guard !ov1, !ov2, !ov3, length == expectedLength else { throw fail(.truncated) }
 
         if isSparse {
             var previous: UInt32 = 0
@@ -123,7 +131,14 @@ public final class MatrixArtifact: @unchecked Sendable {
     /// copy: the span points straight into the mapping.
     public func withRow<R>(forTokenId id: UInt32, _ body: (Span<Float>) throws -> R) rethrows -> R? {
         guard let index = rowIndex(forTokenId: id) else { return nil }
-        let pointer = (base + dataOffset + index * dims * 4).assumingMemoryBound(to: Float.self)
+        // `index < rows` and the initializer proved `rows*dims*4` fits Int and
+        // equals the mapped payload, so `index*dims*4` cannot overflow and stays
+        // in-map. `base` is page-aligned (mmap) and `dataOffset` is a multiple of
+        // 64, so the row base is 4-byte aligned for `Float` — required by
+        // `assumingMemoryBound`. The assert documents and guards that invariant.
+        let rowOffset = dataOffset + index * dims * 4
+        assert((Int(bitPattern: base) + rowOffset) % MemoryLayout<Float>.alignment == 0)
+        let pointer = (base + rowOffset).assumingMemoryBound(to: Float.self)
         let buffer = UnsafeBufferPointer(start: pointer, count: dims)
         return try body(buffer.span)
     }
