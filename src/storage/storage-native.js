@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Storage dispatch (RFC 0001 P5 first slice): a native SQLite read path for
  * `searchPages` over the EXISTING real-SQLite corpus, served by
@@ -57,14 +56,16 @@ const SEARCH_PAGES_COLUMNS = [
   'tier',
 ]
 
+/** @type {'js' | 'native' | null} */
 let forced = null // 'js' | 'native' | null
 let announced = false
+/** @type {import('../lib/logger.js').Logger | undefined} */
 let logger
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-/** Test seam. */
+/** Test seam. @param {'js' | 'native' | null} impl */
 export function _forceImpl(impl) {
   forced = impl
   announced = false
@@ -97,6 +98,7 @@ let scratch = new ArrayBuffer(8192)
 let scratchU8 = new Uint8Array(scratch)
 let scratchView = new DataView(scratch)
 
+/** @param {number} minimum */
 function growScratch(minimum) {
   let size = scratch.byteLength * 2
   while (size < minimum) size *= 2
@@ -113,23 +115,26 @@ class Packer {
     this.offset = 0
   }
 
+  /** @param {number} extra */
   ensure(extra) {
     if (this.offset + extra > scratch.byteLength) growScratch(this.offset + extra)
   }
 
+  /** @param {number} value */
   u32(value) {
     this.ensure(4)
     scratchView.setUint32(this.offset, value, true)
     this.offset += 4
   }
 
+  /** @param {number | bigint} value */
   u64(value) {
     this.ensure(8)
     scratchView.setBigUint64(this.offset, BigInt(value), true)
     this.offset += 8
   }
 
-  /** Nullable u64: null/undefined → sentinel. */
+  /** Nullable u64: null/undefined → sentinel. @param {number | null | undefined} value */
   nullableU64(value) {
     if (value === null || value === undefined) {
       this.u64(NULL_U64)
@@ -138,7 +143,7 @@ class Packer {
     this.u64(value)
   }
 
-  /** Nullable string: null/undefined → sentinel. */
+  /** Nullable string: null/undefined → sentinel. @param {unknown} value */
   string(value) {
     if (value === null || value === undefined) {
       this.u32(NULL_STRING)
@@ -156,12 +161,15 @@ class Packer {
   }
 }
 
+/** @param {string} symbol @param {Packer} packer */
 function call(symbol, packer) {
   const lib = nativeLib()
-  if (!lib?.symbols?.[symbol]) return null
+  if (!lib) return null
+  const fn = /** @type {any} */ (lib.symbols)[symbol]
+  if (typeof fn !== 'function') return null
   try {
     const { bytes, length } = packer.finish()
-    const result = readNativeResult(lib, lib.symbols[symbol](bytes, BigInt(length)))
+    const result = readNativeResult(lib, fn(bytes, BigInt(length)))
     if (result.status !== NATIVE_STATUS_OK) return null
     return result.bytes
   } catch {
@@ -173,6 +181,7 @@ function call(symbol, packer) {
  * Opens a native read handle for `dbPath`. Returns an opaque BigInt handle
  * or null (storage disabled, dylib/FTS5 absent, or open failed → the worker
  * keeps using bun:sqlite for searchPages).
+ * @param {unknown} dbPath
  */
 export function nativeStorageOpen(dbPath) {
   const packer = new Packer()
@@ -184,7 +193,7 @@ export function nativeStorageOpen(dbPath) {
   return view.getBigUint64(0, true)
 }
 
-/** Closes a native read handle. */
+/** Closes a native read handle. @param {bigint | null | undefined} handle */
 export function nativeStorageClose(handle) {
   if (handle === null || handle === undefined) return
   const packer = new Packer()
@@ -196,6 +205,8 @@ export function nativeStorageClose(handle) {
 /**
  * Native searchPages(ftsQuery, rawQuery, opts) on `handle`. Returns the same
  * row array bun:sqlite produces, or null to fall back to JS.
+ * @param {bigint | null | undefined} handle @param {string} ftsQuery @param {string} rawQuery
+ * @param {Record<string, any>} [opts]
  */
 export function nativeSearchPages(handle, ftsQuery, rawQuery, opts = {}) {
   if (handle === null || handle === undefined) return null
@@ -225,6 +236,7 @@ export function nativeSearchPages(handle, ftsQuery, rawQuery, opts = {}) {
 }
 
 /** Decodes [u32 columnCount][u32 rowCount] + type-tagged cells into rows. */
+/** @param {Uint8Array} bytes */
 function decodeRows(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   let off = 0
@@ -235,6 +247,7 @@ function decodeRows(bytes) {
   off += 4
   const rows = new Array(rowCount)
   for (let r = 0; r < rowCount; r++) {
+    /** @type {Record<string, any>} */
     const row = {}
     for (let c = 0; c < columnCount; c++) {
       const tag = bytes[off]

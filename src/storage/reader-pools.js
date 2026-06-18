@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Split reader-pool factory.
  *
@@ -32,6 +31,7 @@ const DEEP_MAX_WORKERS = 4
 const STRICT_MAX_WORKERS = 12
 const FALLBACK_HW = 6
 
+/** @param {{ strictSize?: number }} opts */
 function resolveStrictSize(opts) {
   if (opts.strictSize) return Math.max(1, opts.strictSize)
   const hw = availableParallelism?.() ?? FALLBACK_HW
@@ -40,6 +40,7 @@ function resolveStrictSize(opts) {
   return Math.min(STRICT_MAX_WORKERS, Math.max(2, hw - 4))
 }
 
+/** @param {{ deepSize?: number }} opts */
 function resolveDeepSize(opts) {
   if (opts.deepSize) return Math.max(1, opts.deepSize)
   const hw = availableParallelism?.() ?? FALLBACK_HW
@@ -50,15 +51,15 @@ function resolveDeepSize(opts) {
 
 /**
  * @param {{
- *   dbPath: string,
+ *   dbPath?: string,
  *   strictSize?: number,
  *   deepSize?: number,
  *   strictDeadlineMs?: number,
  *   deepDeadlineMs?: number,
  *   maxPendingPerWorker?: number,
  *   log?: (level: string, msg: string) => void,
- *   WorkerCtor?: any,
- * }} opts
+ *   WorkerCtor?: any, strictWorkerCtor?: any, deepWorkerCtor?: any,
+ * }} [opts]
  */
 export function createReaderPools(opts = {}) {
   const log = opts.log
@@ -93,6 +94,7 @@ export function createReaderPools(opts = {}) {
     await deep.start()
   }
 
+  /** @param {string} op @param {any[]} [args] @param {{ deadlineMs?: number }} [runOpts] */
   async function run(op, args = [], runOpts = {}) {
     const target = classifyOp(op) === 'deep' ? deep : strict
     return target.run(op, args, runOpts)

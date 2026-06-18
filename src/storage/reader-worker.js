@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { parentPort, workerData } from 'node:worker_threads'
 import { getNativeLib, isNativeEnabled } from '../native/loader.js'
 import { DocsDatabase } from './database.js'
@@ -50,7 +49,7 @@ if (parentPort) {
   // same file.
   const { dbPath } = workerData ?? {}
   if (!dbPath) {
-    parentPort.postMessage({ type: 'fatal', error: { message: 'worker spawned without dbPath' } })
+    parentPort?.postMessage({ type: 'fatal', error: { message: 'worker spawned without dbPath' } })
     process.exit(1)
   }
 
@@ -58,9 +57,9 @@ if (parentPort) {
   try {
     db = new DocsDatabase(dbPath)
   } catch (err) {
-    parentPort.postMessage({
+    parentPort?.postMessage({
       type: 'fatal',
-      error: { message: err?.message ?? String(err), stack: err?.stack },
+      error: { message: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
     })
     process.exit(1)
   }
@@ -84,6 +83,7 @@ if (parentPort) {
   // Native provenance rides along: announce lines logged INSIDE the worker go
   // to a stderr nobody routes, so the pool logs one parent-process line
   // instead (visible in launchd service logs).
+  /** @type {string[]} */
   let native = []
   try {
     const enabled = ['fusion', 'archive', 'embed'].filter((m) => isNativeEnabled(m))
@@ -92,14 +92,14 @@ if (parentPort) {
   } catch {
     // provenance is informational — never block readiness
   }
-  parentPort.postMessage({ type: 'ready', native })
+  parentPort?.postMessage({ type: 'ready', native })
 
   parentPort.on('message', (msg) => {
     if (!msg || typeof msg !== 'object') return
     if (msg.type !== 'call') return
     const { id, op, args } = msg
     if (!READ_OPS.has(op)) {
-      parentPort.postMessage({
+      parentPort?.postMessage({
         type: 'result',
         id,
         ok: false,
@@ -107,9 +107,9 @@ if (parentPort) {
       })
       return
     }
-    const fn = db[op]
+    const fn = /** @type {any} */ (db)[op]
     if (typeof fn !== 'function') {
-      parentPort.postMessage({
+      parentPort?.postMessage({
         type: 'result',
         id,
         ok: false,
@@ -122,18 +122,18 @@ if (parentPort) {
       let data
       if (op === 'searchPages' && storageHandle != null) {
         // Native attempt; null → fall through to bun:sqlite for this call.
-        data = nativeSearchPages(storageHandle, ...callArgs)
+        data = nativeSearchPages(storageHandle, .../** @type {[any, any, any]} */ (callArgs))
         if (data === null) data = fn.apply(db, callArgs)
       } else {
         data = fn.apply(db, callArgs)
       }
-      parentPort.postMessage({ type: 'result', id, ok: true, data })
+      parentPort?.postMessage({ type: 'result', id, ok: true, data })
     } catch (err) {
-      parentPort.postMessage({
+      parentPort?.postMessage({
         type: 'result',
         id,
         ok: false,
-        error: { message: err?.message ?? String(err), stack: err?.stack },
+        error: { message: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
       })
     }
   })
