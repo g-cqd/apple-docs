@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Crawl-state repository: the working set the discoverer + downloader
  * pull from. Each row tracks one path's status (pending / processed /
@@ -9,6 +8,7 @@
  * goes through this repo.
  */
 
+/** @param {import('bun:sqlite').Database} db */
 export function createCrawlRepo(db) {
   const setStmt = db.query(`
     INSERT INTO crawl_state (path, status, root_slug, depth, error)
@@ -41,6 +41,7 @@ export function createCrawlRepo(db) {
   `)
 
   return {
+    /** @param {string} path @param {string} status @param {string} rootSlug @param {number} [depth] @param {string | null} [error] */
     setCrawlState(path, status, rootSlug, depth = 0, error = null) {
       setStmt.run({
         $path: path,
@@ -51,25 +52,32 @@ export function createCrawlRepo(db) {
       })
     },
     /** Insert a path only if not already tracked. Returns true on insert. */
+    /** @param {string} path @param {string} rootSlug @param {number} [depth] */
     seedCrawlIfNew(path, rootSlug, depth = 0) {
       if (existsStmt.get(path)) return false
       this.setCrawlState(path, 'pending', rootSlug, depth)
       return true
     },
+    /** @param {string} rootSlug @param {number} [limit] */
     getPendingCrawl(rootSlug, limit = 10) {
       return getPendingStmt.all(rootSlug, limit)
     },
+    /** @param {string} rootSlug */
     resetFailedCrawl(rootSlug) {
       return resetFailedStmt.run(rootSlug)
     },
+    /** @param {string} rootSlug */
     countFailed(rootSlug) {
       return countFailedStmt.get(rootSlug).count
     },
+    /** @param {string} rootSlug */
     getCrawlStats(rootSlug) {
+      /** @type {Record<string, number>} */
       const stats = { pending: 0, processed: 0, failed: 0 }
       for (const row of countByStatusStmt.all(rootSlug)) stats[row.status] = row.count
       return stats
     },
+    /** @param {string} rootSlug */
     clearCrawlState(rootSlug) {
       clearStmt.run(rootSlug)
     },

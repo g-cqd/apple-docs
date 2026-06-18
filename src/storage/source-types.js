@@ -56,7 +56,8 @@ export const ROOT_SOURCE_TYPE_BY_SLUG = new Map([
 
 /** @param {string} slug @param {string} [kind] */
 export function deriveRootSourceType(slug, kind) {
-  if (ROOT_SOURCE_TYPE_BY_SLUG.has(slug)) return ROOT_SOURCE_TYPE_BY_SLUG.get(slug)
+  const mapped = ROOT_SOURCE_TYPE_BY_SLUG.get(slug)
+  if (mapped) return mapped
   if (kind === 'guidelines') return 'guidelines'
   if (kind === 'design') return 'hig'
   return DEFAULT_SOURCE_TYPE

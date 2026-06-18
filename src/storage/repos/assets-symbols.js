@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SF Symbols repository: catalog rows, the FTS5 search index, and the
  * persistent render cache. Schema lives in migrations v10 (initial) and
@@ -200,6 +199,7 @@ export function createAssetsSymbolsRepo(db) {
       const limit = Math.min(Math.max(Number.parseInt(opts.limit ?? 100, 10) || 100, 1), 500)
       const scope = opts.scope ?? null
       const q = String(query ?? '').trim()
+      /** @param {any[]} rows */
       const parseRows = (rows) => rows.map(normalizeSfSymbolRow)
       if (!q) return parseRows(searchEmptyStmt.all({ $scope: scope, $limit: limit }))
       try {
