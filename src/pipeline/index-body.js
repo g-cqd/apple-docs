@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { nativePlainTextBatch } from '../content/content-native.js'
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { renderPlainText } from '../content/render-text.js'
@@ -7,6 +6,11 @@ import { decodeSectionContent } from '../storage/section-codec.js'
 /**
  * Index all document bodies into documents_body_fts.
  * Clears existing index and rebuilds from scratch.
+ *
+ * @param {import('../types.js').Db} db
+ * @param {string} dataDir
+ * @param {import('../types.js').Logger} logger
+ * @param {import('../types.js').ProgressCallback} [onProgress]
  */
 export async function indexBodyFull(db, dataDir, logger, onProgress) {
   return indexNormalizedBody(db, dataDir, logger, null, onProgress)
@@ -14,12 +18,24 @@ export async function indexBodyFull(db, dataDir, logger, onProgress) {
 
 /**
  * Index only documents updated after the last body index build.
+ *
+ * @param {import('../types.js').Db} db
+ * @param {string} dataDir
+ * @param {import('../types.js').Logger} logger
+ * @param {import('../types.js').ProgressCallback} [onProgress]
  */
 export async function indexBodyIncremental(db, dataDir, logger, onProgress) {
   const lastIndexed = db.db.query("SELECT value FROM schema_meta WHERE key = 'body_indexed_at'").get()?.value ?? null
   return indexNormalizedBody(db, dataDir, logger, lastIndexed, onProgress)
 }
 
+/**
+ * @param {import('../types.js').Db} db
+ * @param {string} dataDir
+ * @param {import('../types.js').Logger} logger
+ * @param {string | null} since
+ * @param {import('../types.js').ProgressCallback} [onProgress]
+ */
 async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
   if (!db.hasTable('document_sections')) {
     logger.info('document_sections table not available (lite tier) — cannot build body index')
@@ -93,7 +109,7 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
           ORDER BY sort_order, id
         `)
           .all(document.id)
-          .map((section) => ({
+          .map(/** @param {Record<string, any>} section */ (section) => ({
             sectionKind: section.section_kind,
             heading: section.heading,
             contentText: decodeSectionContent(section.content_text),

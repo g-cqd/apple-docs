@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { rename, unlink } from 'node:fs/promises'
@@ -15,6 +14,7 @@ import { coalesceByKey } from './coalesce.js'
 /**
  * Persist a fetched DocC JSON payload into raw storage, legacy page rows,
  * and the normalized document model.
+ * @param {Record<string, any>} args
  */
 export function persistFetchedDocPage(args) {
   // Per-path coalesce so concurrent fetches for the same key collapse
@@ -25,17 +25,19 @@ export function persistFetchedDocPage(args) {
   return coalesceByKey(`persist:${args.path}`, () => doPersistFetchedDocPage(args))
 }
 
-async function doPersistFetchedDocPage({
-  db,
-  dataDir,
-  rootId,
-  path,
-  sourceType = 'apple-docc',
-  json,
-  etag = null,
-  lastModified = null,
-  renderPageFn = renderPage,
-}) {
+/** @param {Record<string, any>} args */
+async function doPersistFetchedDocPage(args) {
+  const {
+    db,
+    dataDir,
+    rootId,
+    path,
+    sourceType = 'apple-docc',
+    json,
+    etag = null,
+    lastModified = null,
+    renderPageFn = renderPage,
+  } = args
   const jsonStr = stableStringify(json)
   const rawPayloadHash = sha256(jsonStr)
   const normalized = normalize(json, path, sourceType)
@@ -96,23 +98,26 @@ async function doPersistFetchedDocPage({
  * Persist a pre-normalized document from any adapter (flat sync mode).
  * Unlike persistFetchedDocPage, this accepts already-normalized data
  * and uses the generic renderMarkdown instead of DocC-specific renderPage.
+ * @param {Record<string, any>} args
  */
 export function persistNormalizedPage(args) {
   return coalesceByKey(`persist:${args.path}`, () => doPersistNormalizedPage(args))
 }
 
-async function doPersistNormalizedPage({
-  db,
-  dataDir,
-  rootId,
-  path,
-  sourceType,
-  rawPayload,
-  normalized,
-  etag = null,
-  lastModified = null,
-  renderMarkdownFn = renderMarkdown,
-}) {
+/** @param {Record<string, any>} args */
+async function doPersistNormalizedPage(args) {
+  const {
+    db,
+    dataDir,
+    rootId,
+    path,
+    sourceType,
+    rawPayload,
+    normalized,
+    etag = null,
+    lastModified = null,
+    renderMarkdownFn = renderMarkdown,
+  } = args
   // Always store as valid JSON so downstream tools (minify, readJSON) work uniformly.
   // String payloads (Markdown, HTML) from flat sources are wrapped in a JSON envelope.
   const isStringPayload = typeof rawPayload === 'string'
@@ -166,6 +171,13 @@ async function doPersistNormalizedPage({
   return { page, normalized, rawPayloadHash, normalizedHash }
 }
 
+/**
+ * @param {import('../types.js').Db} db
+ * @param {number} rootId
+ * @param {string} path
+ * @param {Record<string, any>} doc
+ * @param {Record<string, any>} meta
+ */
 function upsertPageFromDocument(db, rootId, path, doc, meta) {
   return db.upsertPage({
     rootId,
@@ -196,6 +208,7 @@ function upsertPageFromDocument(db, rootId, path, doc, meta) {
   })
 }
 
+/** @param {string} path */
 function defaultDoccUrl(path) {
   if (path.startsWith('design/')) {
     return `https://developer.apple.com/${path}`
@@ -203,6 +216,7 @@ function defaultDoccUrl(path) {
   return `https://developer.apple.com/documentation/${path}`
 }
 
+/** @param {string} filePath */
 function createBackupPath(filePath) {
   // Crypto-random suffix so the rollback backup can't be pre-guessed
   // and symlinked by a co-resident process between the rename and the
@@ -210,6 +224,7 @@ function createBackupPath(filePath) {
   return `${filePath}.bak-${process.pid}-${randomBytes(8).toString('hex')}`
 }
 
+/** @param {string} tempPath @param {string} filePath */
 async function promoteWithBackup(tempPath, filePath) {
   let backupPath = null
   if (existsSync(filePath)) {
@@ -228,6 +243,7 @@ async function promoteWithBackup(tempPath, filePath) {
   }
 }
 
+/** @param {string} filePath @param {string | null} backupPath */
 async function rollbackPromotedWrite(filePath, backupPath) {
   try {
     await unlink(filePath)
