@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Counting semaphore for bounding global concurrency.
  * All parallel roots share one semaphore so total in-flight fetches are capped.
@@ -10,6 +9,7 @@
  * also rejects immediately.
  */
 export class BackpressureError extends Error {
+  /** @param {string} message */
   constructor(message) {
     super(message)
     this.name = 'BackpressureError'
@@ -17,13 +17,19 @@ export class BackpressureError extends Error {
 }
 
 export class Semaphore {
+  /**
+   * @param {number} max
+   * @param {{ maxWaiters?: number | null }} [opts]
+   */
   constructor(max, opts = {}) {
     this.max = max
     this.maxWaiters = opts.maxWaiters ?? null
     this.active = 0
+    /** @type {Array<{ resolve: () => void, reject: (reason?: unknown) => void }>} */
     this._queue = []
   }
 
+  /** @param {{ signal?: AbortSignal }} [opts] */
   async acquire(opts = {}) {
     const signal = opts.signal
     if (signal?.aborted) throw signal.reason ?? new DOMException('aborted', 'AbortError')
@@ -37,35 +43,37 @@ export class Semaphore {
       throw new BackpressureError(`Semaphore queue overflow: maxWaiters=${this.maxWaiters}`)
     }
 
-    return new Promise((resolve, reject) => {
-      const entry = { resolve, reject }
-      this._queue.push(entry)
+    return /** @type {Promise<void>} */ (
+      new Promise((resolve, reject) => {
+        const entry = { resolve, reject }
+        this._queue.push(entry)
 
-      if (signal) {
-        const onAbort = () => {
-          const idx = this._queue.indexOf(entry)
-          if (idx >= 0) this._queue.splice(idx, 1)
-          reject(signal.reason ?? new DOMException('aborted', 'AbortError'))
+        if (signal) {
+          const onAbort = () => {
+            const idx = this._queue.indexOf(entry)
+            if (idx >= 0) this._queue.splice(idx, 1)
+            reject(signal.reason ?? new DOMException('aborted', 'AbortError'))
+          }
+          signal.addEventListener('abort', onAbort, { once: true })
+          // Wrap resolve to detach the listener on success so we don't
+          // leak per-acquire listeners on long-lived signals.
+          entry.resolve = () => {
+            signal.removeEventListener('abort', onAbort)
+            resolve()
+          }
+          entry.reject = (err) => {
+            signal.removeEventListener('abort', onAbort)
+            reject(err)
+          }
         }
-        signal.addEventListener('abort', onAbort, { once: true })
-        // Wrap resolve to detach the listener on success so we don't
-        // leak per-acquire listeners on long-lived signals.
-        entry.resolve = () => {
-          signal.removeEventListener('abort', onAbort)
-          resolve()
-        }
-        entry.reject = (err) => {
-          signal.removeEventListener('abort', onAbort)
-          reject(err)
-        }
-      }
-    })
+      })
+    )
   }
 
   release() {
     if (this._queue.length > 0) {
       const next = this._queue.shift()
-      next.resolve()
+      next?.resolve()
     } else {
       this.active--
     }
@@ -75,6 +83,8 @@ export class Semaphore {
    * Run fn() while holding a permit. Releases on completion or error.
    * Forwards `signal` to acquire() so cancellation propagates from the
    * waiting state too.
+   * @param {() => any} fn
+   * @param {{ signal?: AbortSignal }} [opts]
    */
   async run(fn, opts = {}) {
     await this.acquire(opts)

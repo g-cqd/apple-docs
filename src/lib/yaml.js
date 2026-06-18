@@ -1,7 +1,7 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Serialize a flat object as YAML front matter.
  * Handles strings, numbers, booleans, and arrays of primitives.
+ * @param {Record<string, unknown>} obj
  */
 export function toFrontMatter(obj) {
   const lines = ['---']
@@ -17,6 +17,7 @@ export function toFrontMatter(obj) {
   return lines.join('\n')
 }
 
+/** @param {string} s */
 function quoteIfNeeded(s) {
   if (s === '' || s === 'true' || s === 'false' || s === 'null' || /^[\d.]+$/.test(s) || /[:{}[\],&*?|>!%#@`"']/.test(s) || s.includes('\n')) {
     return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
