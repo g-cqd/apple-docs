@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Single public-output boundary for every surface the project exposes —
  * MCP tools, MCP resources, CLI `--json` mode, web `/api/*` routes.
@@ -22,15 +21,38 @@ import { DEBUG_PASSTHROUGH as CONFIG_DEBUG } from '../config.js'
 import { safeWebDocKey } from '../lib/safe-path.js'
 import { publicConfidence } from './confidence.js'
 
+/**
+ * A rich command envelope crossing the public-output boundary. Its concrete shape varies by
+ * surface and is owned by the (still-untyped) command/search layers, so it is modelled here as a
+ * dynamic record and validated structurally at runtime. Tighten to the real envelope types once
+ * those source modules are type-checked.
+ * @typedef {Record<string, any> | null | undefined} Envelope
+ */
+
+/**
+ * Per-call projection options shared across surfaces.
+ * @typedef {{ debug?: boolean, webPaths?: boolean, full?: boolean, advanced?: boolean }} ProjectOpts
+ */
+
 export const DEBUG_PASSTHROUGH = CONFIG_DEBUG
 
+/**
+ * @param {ProjectOpts} [opts]
+ * @returns {boolean}
+ */
 function bypass(opts) {
   if (opts?.debug === true) return true
   return DEBUG_PASSTHROUGH
 }
 
 // Helper: copy a fixed set of keys from src → dst if defined.
+/**
+ * @param {Envelope} src
+ * @param {readonly string[]} keys
+ * @returns {Record<string, any>}
+ */
 function pick(src, keys) {
+  /** @type {Record<string, any>} */
   const out = {}
   for (const k of keys) if (src?.[k] !== undefined) out[k] = src[k]
   return out
@@ -38,6 +60,11 @@ function pick(src, keys) {
 
 // True-only flag — emit the property only when truthy. Keeps payloads
 // quiet by default and conveys the binary nature in a single `?: true`.
+/**
+ * @param {Record<string, any>} out
+ * @param {Envelope} src
+ * @param {string} key
+ */
 function flagIf(out, src, key) {
   if (src?.[key]) out[key] = true
 }
@@ -49,6 +76,10 @@ function flagIf(out, src, key) {
 // shape keeps only the navigational fields the caller actually needs.
 const PAGE_INFO_KEEP = ['page', 'totalPages', 'hasNextPage', 'hasPreviousPage', 'totalItems']
 
+/**
+ * @param {Envelope} pageInfo
+ * @returns {Record<string, any> | undefined}
+ */
 function projectPageInfo(pageInfo) {
   if (!pageInfo || typeof pageInfo !== 'object') return undefined
   const out = pick(pageInfo, PAGE_INFO_KEEP)
@@ -77,6 +108,10 @@ const SEARCH_HIT_KEEP = [
 // Swift init keys whose web path carries a hashed segment. MCP and CLI
 // surfaces never pass the option: their `path` stays the raw corpus key
 // that read_doc accepts, and no webPath is emitted there.
+/**
+ * @param {Envelope} hit
+ * @param {ProjectOpts} [opts]
+ */
 export function projectSearchHit(hit, opts) {
   if (!hit || typeof hit !== 'object') return hit
   const out = pick(hit, SEARCH_HIT_KEEP)
@@ -91,6 +126,10 @@ export function projectSearchHit(hit, opts) {
   return out
 }
 
+/**
+ * @param {Envelope} result
+ * @param {ProjectOpts} [opts]
+ */
 export function projectSearchResult(result, opts) {
   if (bypass(opts)) return result
   if (!result || typeof result !== 'object') return result
@@ -102,14 +141,16 @@ export function projectSearchResult(result, opts) {
     return projectReadDoc(result, opts)
   }
 
+  const results = Array.isArray(result.results) ? result.results.map((hit) => projectSearchHit(hit, opts)) : []
+  /** @type {Record<string, any>} */
   const out = {
     query: typeof result.query === 'string' ? result.query : '',
     total: typeof result.total === 'number' ? result.total : 0,
     ...(typeof result.hasMore === 'boolean' ? { hasMore: result.hasMore } : {}),
-    results: Array.isArray(result.results) ? result.results.map((hit) => projectSearchHit(hit, opts)) : [],
+    results,
   }
 
-  if (out.results.some((r) => r.confidence === 'approximate')) out.approximate = true
+  if (results.some((r) => r?.confidence === 'approximate')) out.approximate = true
   if (result.partial) out.truncated = true
 
   const pi = projectPageInfo(result.pageInfo)
@@ -121,6 +162,9 @@ export function projectSearchResult(result, opts) {
 
 const METADATA_KEEP = ['title', 'framework', 'rootSlug', 'roleHeading', 'kind', 'abstract', 'declaration', 'path', 'platforms', 'relationships']
 
+/**
+ * @param {Envelope} metadata
+ */
 function projectMetadata(metadata) {
   if (!metadata || typeof metadata !== 'object') return metadata
   const out = pick(metadata, METADATA_KEEP)
@@ -130,6 +174,9 @@ function projectMetadata(metadata) {
   return out
 }
 
+/**
+ * @param {Envelope} section
+ */
 function sectionSkeleton(section) {
   if (!section || typeof section !== 'object') return section
   if (section.heading !== undefined && typeof section.chars === 'number') {
@@ -140,8 +187,12 @@ function sectionSkeleton(section) {
   return { heading, chars: typeof text === 'string' ? text.length : 0 }
 }
 
+/**
+ * @param {Envelope} section
+ */
 function projectSectionFull(section) {
   if (!section || typeof section !== 'object') return section
+  /** @type {Record<string, any>} */
   const out = {}
   if (section.heading !== undefined) out.heading = section.heading
   const text = section.contentText ?? section.content_text
@@ -149,6 +200,10 @@ function projectSectionFull(section) {
   return out
 }
 
+/**
+ * @param {Envelope} payload
+ * @param {ProjectOpts} [opts]
+ */
 export function projectReadDoc(payload, opts) {
   if (bypass(opts)) return payload
   if (!payload || typeof payload !== 'object') return payload
@@ -158,6 +213,7 @@ export function projectReadDoc(payload, opts) {
   }
 
   const full = opts?.full === true
+  /** @type {Record<string, any>} */
   const out = { found: true }
   if (payload.metadata) out.metadata = projectMetadata(payload.metadata)
   if (payload.content !== undefined) out.content = payload.content
@@ -177,10 +233,15 @@ export function projectReadDoc(payload, opts) {
 
 const ROOT_KEEP = ['slug', 'name', 'kind', 'pageCount']
 
+/**
+ * @param {Envelope} result
+ * @param {ProjectOpts} [opts]
+ */
 export function projectFrameworks(result, opts) {
   if (bypass(opts)) return result
   if (!result || typeof result !== 'object') return result
 
+  /** @type {Record<string, any>} */
   const out = {
     total: typeof result.total === 'number' ? result.total : 0,
     roots: Array.isArray(result.roots) ? result.roots.map((root) => pick(root, ROOT_KEEP)) : [],
@@ -195,10 +256,15 @@ export function projectFrameworks(result, opts) {
 const BROWSE_PAGE_KEEP = ['path', 'title', 'kind', 'abstract']
 const BROWSE_CHILD_KEEP = ['path', 'title', 'kind', 'section']
 
+/**
+ * @param {Envelope} result
+ * @param {ProjectOpts} [opts]
+ */
 export function projectBrowse(result, opts) {
   if (bypass(opts)) return result
   if (!result || typeof result !== 'object') return result
 
+  /** @type {Record<string, any>} */
   const out = {}
   if (result.framework !== undefined) out.framework = result.framework
   if (result.title !== undefined) out.title = result.title
@@ -226,10 +292,18 @@ export function projectBrowse(result, opts) {
 
 const TAXONOMY_FIELDS = ['kind', 'role', 'docKind', 'roleHeading', 'sourceType']
 
+/**
+ * @param {unknown} arr
+ * @returns {Array<{ value: any, count: any }>}
+ */
 function projectTaxonomyEntries(arr) {
   return Array.isArray(arr) ? arr.map((v) => ({ value: v.value ?? null, count: v.count ?? 0 })) : []
 }
 
+/**
+ * @param {Envelope} result
+ * @param {ProjectOpts} [opts]
+ */
 export function projectTaxonomy(result, opts) {
   if (bypass(opts)) return result
   if (!result || typeof result !== 'object') return result
@@ -241,6 +315,7 @@ export function projectTaxonomy(result, opts) {
   if (result.field && Array.isArray(result.values)) {
     return { [result.field]: projectTaxonomyEntries(result.values) }
   }
+  /** @type {Record<string, any>} */
   const out = {}
   for (const f of TAXONOMY_FIELDS) {
     if (Array.isArray(result[f])) out[f] = projectTaxonomyEntries(result[f])
@@ -252,6 +327,10 @@ export function projectTaxonomy(result, opts) {
 
 const SF_SYMBOL_HIT_KEEP = ['name', 'scope']
 
+/**
+ * @param {Envelope} result
+ * @param {ProjectOpts} [opts]
+ */
 export function projectSearchSfSymbols(result, opts) {
   if (bypass(opts)) return result
   if (!result || typeof result !== 'object') return result
@@ -259,9 +338,14 @@ export function projectSearchSfSymbols(result, opts) {
   return { results: results.map((s) => pick(s, SF_SYMBOL_HIT_KEEP)) }
 }
 
+/**
+ * @param {Envelope} result
+ * @param {ProjectOpts} [opts]
+ */
 export function projectListAppleFonts(result, opts) {
   if (bypass(opts)) return result
   if (!result || typeof result !== 'object') return result
+  /** @type {Array<{ id?: any, name?: any, files?: any[] }>} */
   const families = Array.isArray(result.families) ? result.families : []
   return {
     families: families.map((f) => ({
@@ -272,9 +356,14 @@ export function projectListAppleFonts(result, opts) {
   }
 }
 
+/**
+ * @param {Envelope} result
+ * @param {ProjectOpts} [opts]
+ */
 export function projectRenderSfSymbol(result, opts) {
   if (bypass(opts)) return result
   if (!result || typeof result !== 'object') return result
+  /** @type {Record<string, any>} */
   const out = {
     name: result.name,
     scope: result.scope,
@@ -286,9 +375,14 @@ export function projectRenderSfSymbol(result, opts) {
   return out
 }
 
+/**
+ * @param {Envelope} result
+ * @param {ProjectOpts} [opts]
+ */
 export function projectRenderFontText(result, opts) {
   if (bypass(opts)) return result
   if (!result || typeof result !== 'object') return result
+  /** @type {Record<string, any>} */
   const out = {}
   if (result.text !== undefined) out.text = result.text
   if (result.mimeType !== undefined) out.mimeType = result.mimeType
@@ -301,6 +395,10 @@ export function projectRenderFontText(result, opts) {
 
 const STATUS_KEEP_USER = ['dataDir', 'databaseSize', 'snapshot', 'rawJson', 'markdown', 'lastSync', 'lastAction']
 
+/**
+ * @param {Envelope} result
+ * @param {ProjectOpts} [opts]
+ */
 export function projectStatus(result, opts) {
   if (bypass(opts)) return result
   // `--advanced` callers receive the full envelope so the user can
