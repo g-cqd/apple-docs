@@ -31,7 +31,7 @@ public enum PageMarkdown {
         }
         guard ok else { return false }
         return bytes.withUnsafeBytes { raw -> Bool in
-            guard let doc = try? ADJSON.parse(raw, options: .init(maxDepth: 512)) else { return false }
+            guard let doc = try? ADJSON.parse(raw, options: .init(maxDepth: 64)) else { return false }
             scratch.removeAll()
             render(doc.root, canonicalPath: canonicalPath, into: &scratch)
             ByteOps.finishDocument(scratch.bytes, into: &out, trailingNewline: true)
@@ -43,11 +43,12 @@ public enum PageMarkdown {
     /// stream). false when the JSON can't be parsed. The buffer is borrowed
     /// for the parse, so all reads complete before this returns.
     ///
-    /// The `maxDepth: 512` cap bounds container nesting, so the recursive
-    /// content/inline walk below can't be driven past 512 frames by request
-    /// input — the renderer never recurses deeper than the parse accepted.
+    /// The `maxDepth: 64` cap bounds container nesting (matching DocMarkdown's
+    /// section parses and real DocC depth, which is far shallower), so the
+    /// recursive content/inline walk below can't be driven past 64 frames by
+    /// request input — the renderer never recurses deeper than the parse accepted.
     public static func renderRawJSON(_ raw: ByteSpan, canonicalPath: String, into w: inout ByteWriter) -> Bool {
-        guard let doc = try? ADJSON.parse(raw, options: .init(maxDepth: 512)) else { return false }
+        guard let doc = try? ADJSON.parse(raw, options: .init(maxDepth: 64)) else { return false }
         render(doc.root, canonicalPath: canonicalPath, into: &w)
         return true
     }
