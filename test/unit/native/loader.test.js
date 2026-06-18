@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { suffix } from 'bun:ffi'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'

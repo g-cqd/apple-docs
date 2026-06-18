@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * libAppleDocsCore loader — the only place that dlopens the Swift dylib.
  *
@@ -23,7 +22,7 @@ const EXPECTED_ABI = 1
 
 // One symbol table for the whole bridge: new modules add exports here and
 // bump EXPECTED_ABI together with the Swift side on any layout change.
-const SYMBOLS = {
+const SYMBOLS = /** @type {const} */ ({
   ad_abi_version: { args: [], returns: 'u32' },
   ad_build_info: { args: [], returns: 'ptr' },
   ad_echo: { args: ['buffer', 'i64'], returns: 'ptr' },
@@ -50,10 +49,12 @@ const SYMBOLS = {
   ad_storage_open: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_storage_close: { args: ['buffer', 'i64'], returns: 'ptr' },
   ad_storage_search_pages: { args: ['buffer', 'i64'], returns: 'ptr' },
-}
+})
 
 const ROOT = new URL('../../', import.meta.url).pathname
+/** @type {import('bun:ffi').Library<typeof SYMBOLS> | null | undefined} */
 let libCache // undefined = unresolved; null = unavailable; object = loaded
+/** @type {ReturnType<typeof createLogger> | undefined} */
 let logger
 
 function log() {
@@ -112,7 +113,7 @@ export function getNativeLib() {
       libCache = lib
       return libCache
     } catch (error) {
-      reasons.push(`${path}: ${error.message}`)
+      reasons.push(`${path}: ${error instanceof Error ? error.message : String(error)}`)
       break
     }
   }
