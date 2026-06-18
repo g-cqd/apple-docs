@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SQLite PRAGMA setup for DocsDatabase. Keeps the configuration knobs in
  * one inspectable place.
@@ -15,6 +14,7 @@
 /** Apply the standard pragma set. Returns the effective mmap size in
  *  bytes (0 when the platform's bun:sqlite build caps mmap below the
  *  requested 10 GB — surfaces via DocsDatabase.getEffectiveMmapSize()). */
+/** @param {import('bun:sqlite').Database} db */
 export function applyPragmas(db) {
   // busy_timeout FIRST: `journal_mode = WAL` is a write that needs the
   // lock — with the timeout set after it, a concurrent first boot
@@ -46,6 +46,7 @@ export function applyPragmas(db) {
 }
 
 /** Turn FK enforcement on. Idempotent. Call AFTER runMigrations. */
+/** @param {import('bun:sqlite').Database} db */
 export function enableForeignKeys(db) {
   db.run('PRAGMA foreign_keys = ON')
 }
@@ -58,6 +59,7 @@ export function enableForeignKeys(db) {
  * keeps the temp b-tree on disk for the duration of the maintenance
  * operation only; query-time temp behavior is unaffected.
  */
+/** @param {import('bun:sqlite').Database} db @param {() => any} fn */
 export function withFileTempStore(db, fn) {
   db.run('PRAGMA temp_store = FILE')
   try {
@@ -75,13 +77,14 @@ const BUSY_RE = /database is locked|SQLITE_BUSY/i
  * migration can hold the write lock well past `busy_timeout`; callers
  * must be idempotent (pragmas and the migration runner both are).
  */
+/** @param {() => any} fn @param {{ budgetMs?: number }} [opts] */
 export function withBusyRetry(fn, { budgetMs = 30_000 } = {}) {
   const deadline = Date.now() + budgetMs
   for (let attempt = 0; ; attempt++) {
     try {
       return fn()
     } catch (e) {
-      if (!BUSY_RE.test(String(e?.message ?? e)) || Date.now() >= deadline) throw e
+      if (!BUSY_RE.test(String(e instanceof Error ? e.message : e)) || Date.now() >= deadline) throw e
       Bun.sleepSync(Math.min(250 * (attempt + 1), 2000))
     }
   }

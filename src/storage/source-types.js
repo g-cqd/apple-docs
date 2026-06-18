@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Canonical source-type enum. Every SourceAdapter declares its `static type`,
  * but storage queries and content normalization need a single source of
@@ -28,6 +27,7 @@ export const SOURCE_TYPES = Object.freeze([
 
 const SOURCE_TYPE_SET = new Set(SOURCE_TYPES)
 
+/** @param {unknown} value @returns {value is string} */
 export function isSourceType(value) {
   return typeof value === 'string' && SOURCE_TYPE_SET.has(value)
 }
@@ -37,6 +37,7 @@ export function isSourceType(value) {
  * default. Callers that want to surface bad input can pre-check with
  * `isSourceType` and throw their own error.
  */
+/** @param {unknown} value */
 export function coerceSourceType(value) {
   return isSourceType(value) ? value : DEFAULT_SOURCE_TYPE
 }
@@ -53,6 +54,7 @@ export const ROOT_SOURCE_TYPE_BY_SLUG = new Map([
   ['wwdc', 'wwdc'],
 ])
 
+/** @param {string} slug @param {string} [kind] */
 export function deriveRootSourceType(slug, kind) {
   if (ROOT_SOURCE_TYPE_BY_SLUG.has(slug)) return ROOT_SOURCE_TYPE_BY_SLUG.get(slug)
   if (kind === 'guidelines') return 'guidelines'

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Thin routing helper for the SQLite reader pool.
 //
 // Lives in its own module so `src/storage/reader-pool.js` can stay
@@ -15,6 +14,11 @@ import { AssertionError } from '../lib/errors.js'
  *
  * Intentionally minimal — it exists so command modules don't need to know
  * about the pool's existence beyond whether to `await`.
+ */
+/**
+ * @param {{ readerPool?: { run: (op: string, args: any[]) => any }, db?: any }} ctx
+ * @param {string} op
+ * @param {any[]} [args]
  */
 export async function runRead(ctx, op, args = []) {
   if (ctx?.readerPool) return ctx.readerPool.run(op, args)

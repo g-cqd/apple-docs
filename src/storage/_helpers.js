@@ -1,8 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Shared helpers for storage repos.
  */
 
+/** @param {string | null | undefined} value */
 export function parseJsonValue(value) {
   if (value == null) return null
   try {
@@ -12,6 +12,7 @@ export function parseJsonValue(value) {
   }
 }
 
+/** @param {string | null | undefined} value */
 export function parseJsonArray(value) {
   const parsed = parseJsonValue(value)
   return Array.isArray(parsed) ? parsed : []
@@ -23,6 +24,7 @@ export function parseJsonArray(value) {
  * caps at 8 terms, escapes embedded quotes, and joins as an OR of
  * prefix matches. Empty input becomes `""` so the parser doesn't trip.
  */
+/** @param {unknown} query */
 export function buildResourceFtsQuery(query) {
   const terms = String(query)
     .toLowerCase()
