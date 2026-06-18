@@ -1,9 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { randomBytes } from 'node:crypto'
 import { copyFile, rename, unlink } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { ensureDir, stableStringify } from '../storage/files.js'
 
+/** @param {string} filePath */
 function createTempPath(filePath) {
   // Crypto-random suffix (~64 bits) so the staging name can't be
   // pre-guessed by a co-resident attacker who watches the
@@ -12,11 +12,13 @@ function createTempPath(filePath) {
   return `${filePath}.tmp-${process.pid}-${randomBytes(8).toString('hex')}`
 }
 
+/** @param {string} tempPath @param {string} filePath */
 async function finalizeAtomicWrite(tempPath, filePath) {
   try {
     await rename(tempPath, filePath)
   } catch (error) {
-    if (error?.code === 'EXDEV') {
+    const err = /** @type {NodeJS.ErrnoException} */ (error)
+    if (err?.code === 'EXDEV') {
       await copyFile(tempPath, filePath)
       await unlink(tempPath)
       return
@@ -28,12 +30,15 @@ async function finalizeAtomicWrite(tempPath, filePath) {
   }
 }
 
+/** @param {string | null | undefined} tempPath */
 export async function discardAtomicWrite(tempPath) {
+  if (tempPath == null) return
   try {
     await unlink(tempPath)
   } catch {}
 }
 
+/** @param {string} filePath @param {string} text */
 export async function stageTextAtomic(filePath, text) {
   ensureDir(dirname(filePath))
   const tempPath = createTempPath(filePath)
@@ -41,6 +46,7 @@ export async function stageTextAtomic(filePath, text) {
   return tempPath
 }
 
+/** @param {string} tempPath @param {string} filePath */
 export async function promoteAtomicWrite(tempPath, filePath) {
   await finalizeAtomicWrite(tempPath, filePath)
 }

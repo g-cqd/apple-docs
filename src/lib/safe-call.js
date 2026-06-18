@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * safeCall — uniform replacement for `try { ... } catch {}` and
  * `try { ... } catch { return defaultValue }` patterns.
@@ -22,6 +21,7 @@
 import { createLogger } from './logger.js'
 
 const warnedLabels = new Set()
+/** @type {import('./logger.js').Logger | null} */
 let defaultLogger = null
 
 function getDefaultLogger() {
@@ -29,6 +29,12 @@ function getDefaultLogger() {
   return defaultLogger
 }
 
+/**
+ * @param {'silent' | 'warn' | 'warn-once'} log
+ * @param {string | undefined} label
+ * @param {unknown} err
+ * @param {{ warn: (msg: string, data?: object) => void } | undefined} logger
+ */
 function emit(log, label, err, logger) {
   if (log === 'silent') return
   const data = {
@@ -63,11 +69,12 @@ function emit(log, label, err, logger) {
  *   logger?: { warn: (msg: string, data?: object) => void },
  *   passThrough?: Function | Function[],
  * }} [opts]
- * @returns {T | Promise<T>}
+ * @returns {T | Promise<T | undefined> | undefined}
  */
 export function safeCall(fn, opts = {}) {
   const { default: defaultValue, log = 'warn', label, logger, passThrough } = opts
   const passThroughs = passThrough ? (Array.isArray(passThrough) ? passThrough : [passThrough]) : null
+  /** @param {unknown} err */
   function shouldRethrow(err) {
     if (!passThroughs) return false
     for (const ctor of passThroughs) {
@@ -77,8 +84,8 @@ export function safeCall(fn, opts = {}) {
   }
   try {
     const result = fn()
-    if (result && typeof result.then === 'function') {
-      return result.catch((err) => {
+    if (result && typeof (/** @type {any} */ (result).then) === 'function') {
+      return /** @type {Promise<T>} */ (result).catch((err) => {
         if (shouldRethrow(err)) throw err
         emit(log, label, err, logger)
         return defaultValue
