@@ -74,6 +74,16 @@ let adfoundationDependency: Package.Dependency = {
   return .package(url: "https://github.com/g-cqd/ADFoundation.git", branch: "main")
 }()
 
+// ADSQL_PATH -> the ADSQL language package (its SQL + full-text-search surface over the
+// ADDB engine). Pulled ONLY by the server-side `ADSQLSearch` target (the moved
+// `/search` body), never by the zero-dependency `ADCore` dylib.
+let adsqlDependency: Package.Dependency = {
+  if let path = Context.environment["ADSQL_PATH"], !path.isEmpty {
+    return .package(path: path)
+  }
+  return .package(url: "https://github.com/g-cqd/ADSQL.git", branch: "main")
+}()
+
 let package = Package(
   name: "AppleDocsCore",
   // macOS one generation below the device platforms. Synchronization (Mutex/Atomic) ships in
@@ -102,6 +112,7 @@ let package = Package(
     // main via `ADJSON_PATH` (see above). ADFoundation's zero-dep `ADFCore` is the other static dep.
     adjsonDependency,
     adfoundationDependency,
+    adsqlDependency,
     // ad-server-only. swift-http-types: type-safe HTTP headers/status; swift-log:
     // structured logging; swift-nio-extras: the NIO↔HTTPTypes HTTP/1 bridge
     // (`HTTP1ToHTTPServerCodec`) — requires swift-nio ≥ 2.94.0, so the `from:
@@ -153,6 +164,7 @@ let package = Package(
         "ADBase", "ADEmbed",
         .product(name: "ADJSONCore", package: "ADJSON"),
         .product(name: "ADFUnicode", package: "ADFoundation"),
+        .product(name: "ADFCore", package: "ADFoundation"),
       ],
       swiftSettings: releaseCMO + strictSettings),
     // Render service: symbol/font renderers. darwin links CoreText/AppKit;
@@ -244,8 +256,21 @@ let package = Package(
         "ADServeDSL",
         "ADStorage",
         "ADSearchCascade",
+        "ADSQLSearch",
       ],
       path: "Sources/ADServer", swiftSettings: releaseCMO + strictSettings),
+    // ADSQLSearch — apple-docs' `/search` serving over the in-process ADDB engine
+    // (the Swift body of the `ad_storage_search_pages` ABI): builds the main query,
+    // binds the filter bag, frames the projection into the response bytes. Moved here
+    // from the ADSQL package — it is apple-docs domain, not generic SQL. SERVER-ONLY:
+    // used by ad-server, NEVER by the `ADCore` dylib (which stays zero-external-dep).
+    .target(
+      name: "ADSQLSearch",
+      dependencies: [
+        .product(name: "ADSQL", package: "ADSQL"),
+        .product(name: "ADSQLFullTextSearch", package: "ADSQL"),
+      ],
+      swiftSettings: releaseCMO + strictSettings),
     .target(
       name: "ADCore",
       dependencies: [

@@ -10,6 +10,7 @@
 public import ADBase
 public import ADEmbed
 public import ADFUnicode
+import ADFCore
 
 public enum JsString {
   @inline(__always)
@@ -17,35 +18,11 @@ public enum JsString {
     byte == 0x20 || (byte >= 0x09 && byte <= 0x0D)
   }
 
-  /// Decodes the scalar starting at `i` (caller guarantees `bytes[i] >= 0x80`
-  /// begins a well-formed sequence — content crossed a JS UTF-8 boundary).
-  @inline(__always)
-  static func scalarAt(_ bytes: [UInt8], _ i: Int) -> (value: UInt32, width: Int) {
-    let b0 = bytes[i]
-    if b0 < 0x80 { return (UInt32(b0), 1) }
-    if b0 & 0xE0 == 0xC0, i + 1 < bytes.count {
-      return ((UInt32(b0 & 0x1F) << 6) | UInt32(bytes[i + 1] & 0x3F), 2)
-    }
-    if b0 & 0xF0 == 0xE0, i + 2 < bytes.count {
-      return (
-        (UInt32(b0 & 0x0F) << 12) | (UInt32(bytes[i + 1] & 0x3F) << 6)
-          | UInt32(bytes[i + 2] & 0x3F), 3
-      )
-    }
-    if b0 & 0xF8 == 0xF0, i + 3 < bytes.count {
-      return (
-        (UInt32(b0 & 0x07) << 18) | (UInt32(bytes[i + 1] & 0x3F) << 12)
-          | (UInt32(bytes[i + 2] & 0x3F) << 6) | UInt32(bytes[i + 3] & 0x3F), 4
-      )
-    }
-    return (0xFFFD, 1)
-  }
-
   @inline(__always)
   static func whitespaceWidth(_ bytes: [UInt8], _ i: Int) -> Int? {
     let byte = bytes[i]
     if byte < 0x80 { return isAsciiJsWhitespace(byte) ? 1 : nil }
-    let (value, width) = scalarAt(bytes, i)
+    let (value, width) = UTF8Decode.scalar(bytes, at: i, count: bytes.count)
     return UnicodeSets.isJsWhitespace(value) ? width : nil
   }
 

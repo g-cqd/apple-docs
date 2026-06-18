@@ -6,6 +6,8 @@
 public import ADEmbed
 public import ADFUnicode
 public import ADJSONCore
+// `public` because `ByteOps.whitespaceWidth` is `@inlinable` and references `UTF8Decode`.
+public import ADFCore
 
 public typealias ByteSpan = UnsafeRawBufferPointer
 
@@ -162,33 +164,13 @@ public struct ByteWriter {
 /// Range-based byte helpers shared by the writer and the finisher.
 public enum ByteOps {
   @inlinable
-  static func scalarAt<C: RandomAccessCollection>(_ bytes: C, _ i: Int, _ n: Int) -> (UInt32, Int)
-  where C.Element == UInt8, C.Index == Int {
-    let b0 = bytes[i]
-    if b0 < 0x80 { return (UInt32(b0), 1) }
-    if b0 & 0xE0 == 0xC0, i + 1 < n {
-      return ((UInt32(b0 & 0x1F) << 6) | UInt32(bytes[i + 1] & 0x3F), 2)
-    }
-    if b0 & 0xF0 == 0xE0, i + 2 < n {
-      return ((UInt32(b0 & 0x0F) << 12) | (UInt32(bytes[i + 1] & 0x3F) << 6) | UInt32(bytes[i + 2] & 0x3F), 3)
-    }
-    if b0 & 0xF8 == 0xF0, i + 3 < n {
-      return (
-        (UInt32(b0 & 0x07) << 18) | (UInt32(bytes[i + 1] & 0x3F) << 12)
-          | (UInt32(bytes[i + 2] & 0x3F) << 6) | UInt32(bytes[i + 3] & 0x3F), 4
-      )
-    }
-    return (0xFFFD, 1)
-  }
-
-  @inlinable
   public static func whitespaceWidth<C: RandomAccessCollection>(_ bytes: C, _ i: Int, _ n: Int) -> Int?
   where C.Element == UInt8, C.Index == Int {
     let byte = bytes[i]
     if byte < 0x80 {
       return byte == 0x20 || (byte >= 0x09 && byte <= 0x0D) ? 1 : nil
     }
-    let (value, width) = scalarAt(bytes, i, n)
+    let (value, width) = UTF8Decode.scalar(bytes, at: i, count: n)
     return UnicodeSets.isJsWhitespace(value) ? width : nil
   }
 
