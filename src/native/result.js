@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Contract-v0 result reader (rfcs/0001-swift-native-transition/p0/ffi-bridge.md §2):
  * every native result is one allocation — 16-byte header
@@ -15,8 +14,8 @@ export const NATIVE_STATUS_OK = 0
 /**
  * Copies header + payload out of a native result and frees it.
  *
- * @param {{ symbols: { ad_free: (ptr: unknown) => void } }} lib
- * @param {unknown} ptr non-null pointer returned by an ad_* export
+ * @param {{ symbols: { ad_free: (ptr: any) => void } }} lib
+ * @param {import('bun:ffi').Pointer | null} ptr non-null pointer returned by an ad_* export
  * @returns {{ status: number, formatId: number, bytes: Uint8Array }}
  */
 export function readNativeResult(lib, ptr) {
@@ -33,7 +32,10 @@ export function readNativeResult(lib, ptr) {
   }
 }
 
-/** Decodes an error payload (UTF-8 message) for logging. */
+/**
+ * Decodes an error payload (UTF-8 message) for logging.
+ * @param {{ bytes: Uint8Array }} result
+ */
 export function nativeErrorMessage(result) {
   return new TextDecoder().decode(result.bytes)
 }
