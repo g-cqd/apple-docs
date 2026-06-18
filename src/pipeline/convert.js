@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { renderPage } from '../apple/renderer.js'
 import { nativeConvertPages } from '../content/content-native.js'
 import { pool } from '../lib/pool.js'
@@ -9,12 +8,16 @@ const NATIVE_BATCH = 64
 
 /**
  * Convert all unconverted pages from raw JSON to Markdown.
- * @param {import('../storage/database.js').DocsDatabase} db
+ *
+ * @param {import('../types.js').Db} db
  * @param {string} dataDir
- * @param {import('../lib/logger.js').Logger} logger
- * @param {function} [onProgress]
+ * @param {import('../types.js').Logger} logger
+ * @param {import('../types.js').ProgressCallback} [onProgress]
+ * @param {{ roots?: string[], sources?: string[] }} [filters]
+ * @param {Record<string, any>} [opts]
  */
 export async function convertAll(db, dataDir, logger, onProgress, filters = {}, opts = {}) {
+  /** @type {any[]} */
   let pages = db.getUnconvertedPages()
   const rootSet = filters.roots ? new Set(filters.roots.map((root) => root.toLowerCase())) : null
   const sourceSet = filters.sources ? new Set(filters.sources.map((source) => source.toLowerCase())) : null
@@ -57,7 +60,7 @@ export async function convertAll(db, dataDir, logger, onProgress, filters = {}, 
           done++
           onProgress?.({ done, total: pages.length, path })
         } catch (e) {
-          logger.warn(`Convert failed: ${path}`, { error: e.message })
+          logger.warn(`Convert failed: ${path}`, { error: e instanceof Error ? e.message : String(e) })
         }
       }
     }
@@ -71,7 +74,7 @@ export async function convertAll(db, dataDir, logger, onProgress, filters = {}, 
       if (ok !== false) done++
       onProgress?.({ done, total, path })
     } catch (e) {
-      logger.warn(`Convert failed: ${path}`, { error: e.message })
+      logger.warn(`Convert failed: ${path}`, { error: e instanceof Error ? e.message : String(e) })
     }
   })
 
@@ -80,6 +83,9 @@ export async function convertAll(db, dataDir, logger, onProgress, filters = {}, 
 
 /**
  * Convert a single page from raw JSON to Markdown.
+ * @param {import('../types.js').Db} db
+ * @param {string} dataDir
+ * @param {string} pagePath
  */
 async function convertPage(db, dataDir, pagePath) {
   const jsonPath = keyPath(dataDir, 'raw-json', pagePath, '.json')

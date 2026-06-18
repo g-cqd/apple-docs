@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { GUIDELINES_URL, ROOT_SLUG } from '../apple/guidelines-parser.js'
 import { normalize } from '../content/normalize.js'
@@ -6,6 +5,11 @@ import { sha256 } from '../lib/hash.js'
 import { toFrontMatter } from '../lib/yaml.js'
 import { stableStringify, writeText } from '../storage/files.js'
 
+/**
+ * @param {import('../types.js').Db} db
+ * @param {string} dataDir
+ * @param {Record<string, any>} snapshot
+ */
 export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
   const { html, etag = null, lastModified = null, sections = [], lastUpdated = null } = snapshot
 
@@ -19,7 +23,7 @@ export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
   // Save raw HTML for reference
   await writeText(join(dataDir, 'raw-json', `${ROOT_SLUG}.html`), html)
 
-  const currentPaths = new Set(sections.map((section) => section.path))
+  const currentPaths = new Set(sections.map(/** @param {Record<string, any>} section */ (section) => section.path))
   for (const existing of db.getPagesByRoot(ROOT_SLUG)) {
     if (!currentPaths.has(existing.path)) {
       db.markPageDeleted(existing.path)
@@ -29,7 +33,7 @@ export async function applyGuidelinesSnapshot(db, dataDir, snapshot) {
   // Process each section
   for (const section of sections) {
     const normalized = normalize(section, section.path, 'guidelines')
-    const doc = normalized.document
+    const doc = /** @type {Record<string, any>} */ (normalized.document)
     const normalizedHash = sha256(stableStringify(normalized))
 
     // Build Markdown with YAML front matter (same format as DocC pages)

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchDocPage } from '../apple/api.js'
 import { pool } from '../lib/pool.js'
 import { persistFetchedDocPage } from './persist.js'
@@ -6,8 +5,17 @@ import { persistFetchedDocPage } from './persist.js'
 /**
  * Download any pages that were discovered but not yet downloaded.
  * This handles the resume edge case where discovery succeeded but download didn't persist.
+ *
+ * @param {import('../types.js').Db} db
+ * @param {string} dataDir
+ * @param {any} rateLimiter
+ * @param {import('../types.js').Logger} logger
+ * @param {import('../types.js').ProgressCallback} [onProgress]
+ * @param {{ roots?: string[], sources?: string[] }} [filters]
+ * @param {Record<string, any>} [opts]
  */
 export async function downloadMissing(db, dataDir, rateLimiter, logger, onProgress, filters = {}, opts = {}) {
+  /** @type {any[]} */
   let pages = db.db
     .query(`
     SELECT p.path, p.root_id, r.slug as root_slug, r.source_type
@@ -49,7 +57,7 @@ export async function downloadMissing(db, dataDir, rateLimiter, logger, onProgre
       downloaded++
       onProgress?.({ downloaded, total: pages.length, path })
     } catch (e) {
-      logger.warn(`Download failed: ${path}`, { error: e.message })
+      logger.warn(`Download failed: ${path}`, { error: e instanceof Error ? e.message : String(e) })
     }
   })
 

@@ -8,8 +8,11 @@
  *
  * @typedef {import('./lib/logger.js').Logger} Logger
  *   Structured logger (see `lib/logger.js`).
- * @typedef {import('./storage/database.js').DocsDatabase} Db
- *   The SQLite-backed storage handle (see `storage/database.js`).
+ * @typedef {any} Db
+ *   The SQLite-backed storage handle (see `storage/database.js`). Aliased to `any` until
+ *   storage is type-checked: referencing the quarantined `DocsDatabase` class surfaces its
+ *   default-inferred (too-narrow) method signatures as false call-site errors. Flip this one
+ *   line to `import('./storage/database.js').DocsDatabase` when storage joins the burndown.
  * @typedef {(event: Record<string, any>) => void} ProgressCallback
  *   Sync/build progress sink; the event object's fields vary by caller.
  */

@@ -1,9 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchDocPage, fetchTechnologies } from '../apple/api.js'
 import { extractRootSlug, normalizeIdentifier } from '../apple/normalizer.js'
 import { NotFoundError } from '../lib/errors.js'
 import { persistFetchedDocPage } from './persist.js'
 
+/** @type {Record<string, string>} */
 const KIND_MAP = {
   'App Frameworks': 'framework',
   'App Services': 'framework',
@@ -20,7 +20,11 @@ const KIND_MAP = {
 
 /**
  * Discover documentation roots from the technologies index.
- * @returns {number} Number of roots discovered
+ *
+ * @param {import('../types.js').Db} db
+ * @param {any} rateLimiter
+ * @param {import('../types.js').Logger} logger
+ * @returns {Promise<number>} Number of roots discovered
  */
 export async function discoverRoots(db, rateLimiter, logger) {
   logger.info('Fetching technologies index...')
@@ -59,8 +63,15 @@ export async function discoverRoots(db, rateLimiter, logger) {
 
 /**
  * Crawl a single root's documentation pages via BFS.
- * Uses a shared semaphore for global concurrency control across all roots.
- * @param {import('../lib/semaphore.js').Semaphore} semaphore - shared across all parallel roots
+ * Uses a shared semaphore (in `opts`) for global concurrency control across all roots.
+ *
+ * @param {import('../types.js').Db} db
+ * @param {string} dataDir
+ * @param {any} rateLimiter
+ * @param {string} rootSlug
+ * @param {import('../types.js').Logger} logger
+ * @param {import('../types.js').ProgressCallback} [onProgress]
+ * @param {{ retryFailed?: boolean, semaphore?: any, adapter?: any, concurrency?: number }} [opts]
  */
 export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onProgress, opts = {}) {
   const { retryFailed = false, semaphore, adapter = null } = opts
@@ -86,7 +97,7 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
   let processed = 0
 
   while (true) {
-    const batch = db.getPendingCrawl(rootSlug, batchSize)
+    const batch = /** @type {any[]} */ (db.getPendingCrawl(rootSlug, batchSize))
     if (batch.length === 0) break
 
     const results = await Promise.allSettled(
@@ -97,7 +108,8 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
     )
 
     for (let i = 0; i < results.length; i++) {
-      if (results[i].status === 'fulfilled') {
+      const settled = results[i]
+      if (settled.status === 'fulfilled') {
         processed++
       } else {
         // Upstream 404 / 403 churn dominates a cold-corpus crawl: Apple's
@@ -109,7 +121,7 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
         // demote them to debug — the failed-state row in the DB is the
         // canonical record. Anything else (network, parse, filesystem) is
         // still surfaced loudly so we notice it.
-        const message = results[i].reason?.message ?? ''
+        const message = settled.reason?.message ?? ''
         const isUpstreamMiss = message.startsWith('Not found:') || message.startsWith('HTTP 403')
         const log = isUpstreamMiss ? logger.debug : logger.warn
         log.call(logger, `Failed: ${batch[i].path}`, { error: message })
@@ -127,6 +139,18 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
   return { processed, total: finalStats.processed + finalStats.failed }
 }
 
+/**
+ * @param {import('../types.js').Db} db
+ * @param {string} dataDir
+ * @param {any} rateLimiter
+ * @param {number} rootId
+ * @param {string} rootSlug
+ * @param {string} sourceType
+ * @param {string} path
+ * @param {number} depth
+ * @param {import('../types.js').Logger} logger
+ * @param {any} [adapter]
+ */
 async function processPage(db, dataDir, rateLimiter, rootId, rootSlug, sourceType, path, depth, logger, adapter = null) {
   try {
     const fetched = adapter ? await adapter.fetch(path, { db, dataDir, rateLimiter, logger }) : await fetchDocPage(path, rateLimiter)
@@ -155,7 +179,8 @@ async function processPage(db, dataDir, rateLimiter, rootId, rootSlug, sourceTyp
 
     db.setCrawlState(path, 'processed', rootSlug, depth)
   } catch (e) {
-    const errMsg = e.status === 404 ? 'Not found' : e.message
+    const err = /** @type {any} */ (e)
+    const errMsg = err.status === 404 ? 'Not found' : err.message
     db.setCrawlState(path, 'failed', rootSlug, depth, errMsg)
     throw e
   }
