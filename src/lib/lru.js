@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Create a small bounded least-recently-used cache.
  *
@@ -27,6 +26,7 @@ export function createLru(opts) {
   }
 
   return {
+    /** @param {string} key */
     get(key) {
       if (!entries.has(key)) return undefined
       const value = entries.get(key)
@@ -36,6 +36,7 @@ export function createLru(opts) {
       return value
     },
 
+    /** @param {string} key @param {unknown} value */
     set(key, value) {
       if (max === 0) return value
 
@@ -77,6 +78,7 @@ export function createLru(opts) {
   }
 }
 
+/** @param {unknown} value */
 function defaultByteSize(value) {
   if (value == null) return 0
   if (typeof value === 'string') return value.length

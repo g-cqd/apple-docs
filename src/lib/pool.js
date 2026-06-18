@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Run async tasks with bounded concurrency.
  * Starts up to `limit` tasks in parallel. When one finishes, starts the next.
@@ -27,6 +26,7 @@ export function pool(items, limit, fn, opts = {}) {
   const length = items.length
   let cursor = 0
   const active = new Set()
+  /** @type {unknown[]} */
   const errors = []
 
   return new Promise((resolve, reject) => {

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Typed error classes for upstream/parse/validation classification.
  *
@@ -19,6 +18,11 @@ export { BackpressureError } from './semaphore.js'
  * is the request target so logs don't lose context.
  */
 export class HttpError extends Error {
+  /**
+   * @param {number} status
+   * @param {string} url
+   * @param {string} [message]
+   */
   constructor(status, url, message) {
     super(message ?? `HTTP ${status} fetching ${url}`)
     this.name = 'HttpError'
@@ -33,6 +37,10 @@ export class HttpError extends Error {
  * handlers still match.
  */
 export class NotFoundError extends HttpError {
+  /**
+   * @param {string} url
+   * @param {string} [message]
+   */
   constructor(url, message) {
     super(404, url, message ?? `Not found: ${url}`)
     this.name = 'NotFoundError'
@@ -45,6 +53,10 @@ export class NotFoundError extends HttpError {
  * "server is broken" differently from "network is broken".
  */
 export class ParseError extends Error {
+  /**
+   * @param {string} message
+   * @param {{ cause?: unknown, source?: string }} [opts]
+   */
   constructor(message, { cause, source } = {}) {
     super(message)
     this.name = 'ParseError'
@@ -59,6 +71,10 @@ export class ParseError extends Error {
  * ParseError is about upstream-supplied payload.
  */
 export class ValidationError extends Error {
+  /**
+   * @param {string} message
+   * @param {{ field?: string, value?: unknown }} [opts]
+   */
   constructor(message, { field, value } = {}) {
     super(message)
     this.name = 'ValidationError'
@@ -73,6 +89,11 @@ export class ValidationError extends Error {
  * which command timed out and at what bound.
  */
 export class SpawnTimeoutError extends Error {
+  /**
+   * @param {string[]} args
+   * @param {number} deadlineMs
+   * @param {{ stderr?: string }} [opts]
+   */
   constructor(args, deadlineMs, { stderr } = {}) {
     super(`spawn timeout: ${args[0]} exceeded ${deadlineMs}ms`)
     this.name = 'SpawnTimeoutError'
@@ -89,6 +110,10 @@ export class SpawnTimeoutError extends Error {
  * `missingCount` is the true total so the message can quote it.
  */
 export class SnapshotIncompleteError extends Error {
+  /**
+   * @param {string} message
+   * @param {{ missingCount?: number, missing?: any[] }} [opts]
+   */
   constructor(message, { missingCount, missing } = {}) {
     super(message)
     this.name = 'SnapshotIncompleteError'
@@ -103,6 +128,7 @@ export class SnapshotIncompleteError extends Error {
  * — operator must fix the env and restart.
  */
 export class ConfigError extends Error {
+  /** @param {string} message */
   constructor(message) {
     super(message)
     this.name = 'ConfigError'
@@ -117,6 +143,7 @@ export class ConfigError extends Error {
  * facing 4xx.
  */
 export class AssertionError extends Error {
+  /** @param {string} message */
   constructor(message) {
     super(message)
     this.name = 'AssertionError'

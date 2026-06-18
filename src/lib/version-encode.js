@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Encode an Apple platform-version string into a sortable INTEGER.
  *
@@ -19,6 +18,10 @@
  */
 const COMPONENT_BASE = 1_000
 
+/**
+ * @param {unknown} text
+ * @returns {number | null}
+ */
 export function encodeVersion(text) {
   if (text == null) return null
   const trimmed = String(text).trim()
