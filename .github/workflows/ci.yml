@@ -51,9 +51,11 @@ jobs:
           path: reports/
           retention-days: 30
 
-  # Swift formatting gate — the analogue of Biome for the Swift side. `swift
-  # format` ships with the toolchain (no new dependency); `.swift-format` pins
-  # the project's style and `--strict` fails the build on any drift.
+  # Swift lint gate — the analogue of Biome for the Swift side, now via the
+  # shared ADBuildTools Lint plugin (dev-gated behind APPLEDOCS_DEV so normal/CI
+  # dylib builds never resolve it). The plugin lints against the canonical
+  # `.swift-format` ADBuildTools owns; the drift step fails the build if this
+  # repo's `.swift-format` diverges from that canonical copy.
   swift-format:
     runs-on: ubuntu-latest
     steps:
@@ -62,9 +64,17 @@ jobs:
         uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
         with:
           toolchain: '6.3.2' # keep in sync with swift/.swift-version
-      - name: Swift format lint
+      - name: Swift lint (ADBuildTools plugin, canonical .swift-format)
         working-directory: swift
-        run: swift format lint --strict --recursive Sources Tests
+        run: APPLEDOCS_DEV=1 swift package --disable-sandbox lint
+      - name: Canonical .swift-format drift check
+        working-directory: swift
+        # The Lint plugin resolves ADBuildTools, which vendors the canonical
+        # config under .build/checkouts/ADBuildTools. Fail if our copy drifted.
+        run: |
+          CANON="$(find .build/checkouts/ADBuildTools -maxdepth 2 -name '.swift-format' -print -quit)"
+          if [ -z "$CANON" ]; then echo "canonical .swift-format not found in ADBuildTools checkout" >&2; exit 1; fi
+          diff -u "$CANON" .swift-format
 
   # Sanitizer lane for the heavy Unsafe/FFI + concurrency surface (ASan catches
   # the C-boundary OOB/overflow class; TSan any latent data race). Serial so a
