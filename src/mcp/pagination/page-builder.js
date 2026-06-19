@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Pagination plan builders. Two strategies — array (split on item
 // boundaries) and text-window (split inside a single string body) — both
 // driven by a binary search against a serialized-length budget.
@@ -11,6 +10,7 @@ const MAX_PLAN_ITERATIONS = 12
 const MIN_SECTION_FRAGMENT_CHARS = 160
 
 export class PaginationItemTooLargeError extends Error {
+  /** @param {string} message @param {number} itemIndex */
   constructor(message, itemIndex) {
     super(message)
     this.name = 'PaginationItemTooLargeError'
@@ -24,6 +24,7 @@ export class PaginationItemTooLargeError extends Error {
  * Each iteration re-runs buildArrayPages with the previous count until
  * the page-count stabilises (or MAX_PLAN_ITERATIONS bails).
  */
+/** @param {{ items: any[], maxChars: number, initialTotalPages: number, buildPayload: (slice: any[], pageIndex: number, totalPages: number) => any }} opts */
 export function buildArrayPaginationPlan({ items, maxChars, initialTotalPages, buildPayload }) {
   let assumedTotalPages = initialTotalPages
   let pages = []
@@ -37,6 +38,7 @@ export function buildArrayPaginationPlan({ items, maxChars, initialTotalPages, b
   return { pages, totalPages: pages.length }
 }
 
+/** @param {{ items: any[], totalPages: number, maxChars: number, buildPayload: (slice: any[], pageIndex: number, totalPages: number) => any }} opts */
 export function buildArrayPages({ items, totalPages, maxChars, buildPayload }) {
   if (items.length === 0) {
     const empty = buildPayload([], 1, 1)
@@ -77,6 +79,7 @@ export function buildArrayPages({ items, totalPages, maxChars, buildPayload }) {
   return pages
 }
 
+/** @param {{ text: string, maxChars: number, buildPayload: (slice: string, pageIndex: number, totalPages: number) => any }} opts */
 export function buildTextPaginationPlan({ text, maxChars, buildPayload }) {
   let assumedTotalPages = 1
   let pages = []
@@ -90,6 +93,7 @@ export function buildTextPaginationPlan({ text, maxChars, buildPayload }) {
   return { pages, totalPages: pages.length }
 }
 
+/** @param {{ text: string, totalPages: number, maxChars: number, buildPayload: (slice: string, pageIndex: number, totalPages: number) => any }} opts */
 function buildTextPages({ text, totalPages, maxChars, buildPayload }) {
   if (!text) {
     const empty = buildPayload('', 1, 1)
@@ -134,6 +138,7 @@ function buildTextPages({ text, totalPages, maxChars, buildPayload }) {
   return pages
 }
 
+/** @param {any} payload @param {number} maxChars @param {number} itemIndex */
 function ensureFits(payload, maxChars, itemIndex) {
   if (serializePayload(payload).length > maxChars) {
     throw new PaginationItemTooLargeError(`A single page exceeds the maxChars budget (${maxChars}). Increase maxChars.`, itemIndex)
@@ -147,6 +152,7 @@ function ensureFits(payload, maxChars, itemIndex) {
  * (single character window) won't fit, returns the original section so
  * the caller can fall back to text-window mode at the document level.
  */
+/** @param {any} section @param {number} targetChars */
 export function splitOversizedSection(section, targetChars) {
   const text = section?.contentText ?? section?.content_text ?? ''
   if (!text || text.length <= MIN_SECTION_FRAGMENT_CHARS) return [section]
@@ -168,6 +174,7 @@ export function splitOversizedSection(section, targetChars) {
   }))
 }
 
+/** @param {any} payload @param {Record<string, any>} pageInfo */
 export function withDocumentPageInfo(payload, pageInfo) {
   return {
     ...payload,
@@ -184,6 +191,7 @@ export function withDocumentPageInfo(payload, pageInfo) {
   }
 }
 
+/** @param {{ payload: any, document: any, pageSections: any[], page: number, totalPages: number, maxChars: number, strategy: string, totalSectionUnits: number }} opts */
 export function buildDocumentPagePayload({ payload, document, pageSections, page, totalPages, maxChars, strategy, totalSectionUnits }) {
   const content = renderMarkdown(document ?? payload?.metadata ?? {}, pageSections, {
     includeFrontMatter: page === 1,

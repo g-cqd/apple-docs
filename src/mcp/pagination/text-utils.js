@@ -1,7 +1,7 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Text-shaping helpers used by both the array and text-window paginators.
 // All exports are pure functions so each is independently testable.
 
+/** @param {string} text */
 export function splitText(text) {
   const paragraphs = text
     .split(/\n{2,}/)
@@ -18,8 +18,11 @@ export function splitText(text) {
   return [text.trim()]
 }
 
+/** @param {string[]} chunks @param {number} targetChars */
 export function groupChunks(chunks, targetChars) {
+  /** @type {string[]} */
   const groups = []
+  /** @type {string[]} */
   let buffer = []
   let bufferLength = 0
 
@@ -40,6 +43,7 @@ export function groupChunks(chunks, targetChars) {
   return groups
 }
 
+/** @param {string} text @param {number} targetChars */
 export function splitByCharacterWindow(text, targetChars) {
   const parts = []
   let start = 0
@@ -54,6 +58,7 @@ export function splitByCharacterWindow(text, targetChars) {
   return parts.filter(Boolean)
 }
 
+/** @param {string} text @param {number} start @param {number} end */
 export function sliceTextAtBoundary(text, start, end) {
   if (end >= text.length) {
     return {
@@ -75,6 +80,7 @@ export function sliceTextAtBoundary(text, start, end) {
   }
 }
 
+/** @param {string} text @param {number} index @param {number} matchLength @param {number} contextChars */
 export function excerptAroundMatch(text, index, matchLength, contextChars) {
   const start = Math.max(0, index - contextChars)
   const end = Math.min(text.length, index + matchLength + contextChars)
@@ -87,10 +93,12 @@ export function excerptAroundMatch(text, index, matchLength, contextChars) {
 // Compact on purpose: this serialized text is what MCP clients place in the
 // model's context window; 2-space indentation cost ~20% extra tokens on every
 // tool response for zero information gain.
+/** @param {unknown} payload */
 export function serializePayload(payload) {
   return JSON.stringify(payload)
 }
 
+/** @param {string} text @param {number} start */
 export function skipWhitespace(text, start) {
   let index = start
   while (index < text.length && /\s/.test(text[index])) index++

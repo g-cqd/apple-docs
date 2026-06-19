@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Heavy/light JSON-RPC classifier for the MCP HTTP transport.
 //
 // Lives in a sibling module so `http-server.js` stays under the
@@ -23,6 +22,7 @@ export const HEAVY_TOOLS = new Set(['search_docs', 'read_doc', 'browse', 'search
  * are treated as light — the transport will produce the right error, and we
  * would rather not throttle on data we can't interpret.
  */
+/** @param {string | null | undefined} bodyText */
 export function classifyRpcPayload(bodyText) {
   if (!bodyText) return 'light'
   let parsed
@@ -38,6 +38,7 @@ export function classifyRpcPayload(bodyText) {
   return isHeavyRpc(parsed) ? 'heavy' : 'light'
 }
 
+/** @param {any} message */
 function isHeavyRpc(message) {
   if (!message || typeof message !== 'object') return false
   if (message.method !== 'tools/call') return false

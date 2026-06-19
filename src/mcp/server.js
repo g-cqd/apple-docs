@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // The official MCP SDK is the single sanctioned npm dependency.
 // It handles JSON-RPC 2.0, schema validation, transport negotiation,
 // and protocol compliance.
@@ -21,9 +20,9 @@ import { registerDocTools } from './tools/docs.js'
  * Create an MCP server instance with all tools and resources registered.
  * Separated from startServer() so tests can create a server without stdio.
  *
- * @param {object} ctx - shared command context ({ db, dataDir, logger, ... })
+ * @param {any} ctx - shared command context ({ db, dataDir, logger, ... })
  * @param {object} [deps] - optional injection points
- * @param {object} [deps.cacheRegistry] - pre-built cache registry. HTTP mode
+ * @param {any} [deps.cacheRegistry] - pre-built cache registry. HTTP mode
  *   passes one shared registry so cache hits survive across requests; stdio
  *   mode omits it and we create one per process.
  */
@@ -50,6 +49,8 @@ export function createServer(ctx, deps = {}) {
 
 /**
  * Start the MCP server, connecting via stdio transport.
+ * @param {any} ctx
+ * @param {{ createServer?: any, createTransport?: any, stdin?: any, stdout?: any, stderr?: any }} [opts]
  */
 export async function startServer(ctx, opts = {}) {
   const { logger } = ctx
@@ -62,10 +63,12 @@ export async function startServer(ctx, opts = {}) {
   const server = createServerImpl(ctx)
   const transport = createTransport()
 
+  /** @type {((reason?: any) => void) | null} */
   let closedResolve = null
   const closed = new Promise((resolve) => {
     closedResolve = resolve
   })
+  /** @type {Promise<any> | null} */
   let closePromise = null
 
   const detachListeners = () => {
@@ -75,6 +78,7 @@ export async function startServer(ctx, opts = {}) {
     stderr.off?.('error', onStderrError)
   }
 
+  /** @param {string} [reason] */
   const close = (reason = 'shutdown') => {
     if (closePromise) return closePromise
     detachListeners()
@@ -86,11 +90,11 @@ export async function startServer(ctx, opts = {}) {
           await transport.close?.()
         }
       } catch (error) {
-        logger?.warn?.(`MCP server close failed: ${error?.message ?? error}`)
+        logger?.warn?.(`MCP server close failed: ${error instanceof Error ? error.message : error}`)
         try {
           await transport.close?.()
         } catch (transportError) {
-          logger?.warn?.(`MCP transport close failed: ${transportError?.message ?? transportError}`)
+          logger?.warn?.(`MCP transport close failed: ${transportError instanceof Error ? transportError.message : transportError}`)
         }
       }
       return reason
@@ -101,23 +105,25 @@ export async function startServer(ctx, opts = {}) {
     return closePromise
   }
 
+  /** @param {string} reason */
   const closeOnPipeEnd = (reason) => {
     logger?.info?.(`MCP stdio disconnected (${reason})`)
     void close(reason)
   }
 
+  /** @param {string} streamName @param {any} error */
   const closeOnPipeError = (streamName, error) => {
     if (error?.code === 'EPIPE' || error?.code === 'ERR_STREAM_DESTROYED') {
       closeOnPipeEnd(`${streamName}:${error.code}`)
       return
     }
-    logger?.error?.(`MCP ${streamName} stream error: ${error?.message ?? error}`, { stack: error?.stack })
+    logger?.error?.(`MCP ${streamName} stream error: ${error instanceof Error ? error.message : error}`, { stack: error?.stack })
   }
 
   const onStdinEnd = () => closeOnPipeEnd('stdin:end')
   const onStdinClose = () => closeOnPipeEnd('stdin:close')
-  const onStdoutError = (error) => closeOnPipeError('stdout', error)
-  const onStderrError = (error) => closeOnPipeError('stderr', error)
+  const onStdoutError = (/** @type {any} */ error) => closeOnPipeError('stdout', error)
+  const onStderrError = (/** @type {any} */ error) => closeOnPipeError('stderr', error)
 
   stdin.on?.('end', onStdinEnd)
   stdin.on?.('close', onStdinClose)

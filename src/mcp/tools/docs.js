@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // MCP tool surface for the documentation queries: search_docs, read_doc,
 // list_frameworks, browse, list_taxonomy. Every response routes through
 // src/output/projection.js before serialisation; nothing else in this
@@ -54,6 +53,11 @@ const matchExcerptSchema = z
   .optional()
   .describe('Return only excerpt windows around matches instead of full content.')
 
+/**
+ * @param {any} server
+ * @param {any} ctx
+ * @param {{ wrap: (name: string, fn: (args: any) => any) => any }} cache
+ */
 export function registerDocTools(server, ctx, cache) {
   server.registerTool(
     'search_docs',
@@ -138,7 +142,7 @@ export function registerDocTools(server, ctx, cache) {
           : result
       const out = createMcpTextResult(projectSearchResult(payload))
       // Cache empty results briefly so the cascade isn't burned in a tight loop.
-      if (result.results.length === 0) out[CACHE_NEGATIVE] = true
+      if (result.results.length === 0) /** @type {any} */ (out)[CACHE_NEGATIVE] = true
       return out
     }),
   )
@@ -187,7 +191,7 @@ export function registerDocTools(server, ctx, cache) {
       }
       const full = args.section != null || matchOpts != null || args.maxChars != null
       const out = createMcpTextResult(projectReadDoc(payload, { full }))
-      if (result?.found === false) out[CACHE_NEGATIVE] = true
+      if (result?.found === false) /** @type {any} */ (out)[CACHE_NEGATIVE] = true
       return out
     }),
   )

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { createStamper } from './cache.js'
 
 /**
@@ -20,8 +19,9 @@ import { createStamper } from './cache.js'
  * Capacity: 512 entries. Rendered Markdown bodies land in the tens of KB,
  * so the steady-state memory footprint is on the order of 10–50 MB.
  *
- * @param {object} ctx - shared command context ({ db, dataDir, ... })
+ * @param {Record<string, any>} ctx - shared command context ({ db, dataDir, ... })
  * @param {object} [opts]
+ * @param {any} [opts.stamper] - injectable corpus stamper (tests only)
  * @param {number} [opts.capacity=512]
  * @param {number} [opts.scale=1] - multiplier applied to the default capacity
  *   when `opts.capacity` is not set. Shared convention with the tool cache
@@ -40,6 +40,7 @@ export function createMarkdownCache(ctx, opts = {}) {
   let misses = 0
   let evictions = 0
 
+  /** @param {string} path */
   function get(path) {
     const entry = entries.get(path)
     if (entry === undefined) {
@@ -59,6 +60,7 @@ export function createMarkdownCache(ctx, opts = {}) {
     return entry
   }
 
+  /** @param {string} path @param {Record<string, any>} payload */
   function set(path, payload) {
     if (entries.has(path)) entries.delete(path)
     entries.set(path, { ...payload, stamp: stamper.get() })

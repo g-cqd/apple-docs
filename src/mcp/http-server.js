@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { isLoopbackOrigin, readJsonRpcBodyCapped } from '../lib/http-body.js'
@@ -53,10 +52,10 @@ const DEFAULT_HEAVY_QUEUE = 64
  * localhost or a tunnel whose public surface is gated upstream. Binds to
  * 127.0.0.1 by default; pass --host 0.0.0.0 to expose on the LAN.
  *
- * @param {object} opts - { port?, host?, allowedOrigins? }
- * @param {object} ctx - shared command context ({ db, dataDir, logger, ... })
- * @param {object} [deps] - dependency injection for tests
- * @returns {{ server: object, url: string, close: () => Promise<void> }}
+ * @param {{ port?: number, host?: string, allowedOrigins?: string[], metricsPort?: number, metricsHost?: string }} opts
+ * @param {any} ctx - shared command context ({ db, dataDir, logger, ... })
+ * @param {{ createServer?: any, createTransport?: any, serve?: any, serveMetrics?: any, cacheRegistry?: any, markdownCache?: any, heavyConcurrency?: number, heavyQueue?: number, heavySemaphore?: any, readerPool?: any }} [deps] - dependency injection for tests
+ * @returns {Promise<{ server: any, url: string, close: (deadlineMs?: number) => Promise<void>, metricsUrl: string | null }>}
  */
 export async function startHttpServer(opts, ctx, deps = {}) {
   const { logger } = ctx
@@ -76,7 +75,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
       }))
-  const serveImpl = deps.serve ?? ((cfg) => Bun.serve(cfg))
+  const serveImpl = deps.serve ?? ((/** @type {any} */ cfg) => Bun.serve(cfg))
 
   // `APPLE_DOCS_MCP_CACHE_SCALE` uniformly multiplies every default cache
   // capacity (response cache + markdown cache). Default 1 keeps the laptop
@@ -110,6 +109,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   const concurrencyStats = { rejected: 0 }
 
   // When no --allow-origin is set, deny browser origins except loopback.
+  /** @param {Request} request */
   function originOk(request) {
     const origin = request.headers.get('origin')
     if (!origin) return true
@@ -117,11 +117,13 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     return isLoopbackOrigin(origin)
   }
 
+  /** @param {Response} response @returns {Response} */
   function applySecurityHeaders(response) {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) response.headers.set(k, v)
     return response
   }
 
+  /** @param {Request} request @param {Response} response */
   function applyCorsHeaders(request, response) {
     const origin = request.headers.get('origin')
     if (!origin) return response
@@ -132,6 +134,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     return response
   }
 
+  /** @param {Request} request */
   function corsPreflight(request) {
     const origin = request.headers.get('origin') ?? ''
     const allowed = originOk(request)
@@ -146,6 +149,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     return new Response(null, { status: allowed ? 204 : 403, headers })
   }
 
+  /** @param {Request} request @param {Record<string, any>} meta */
   async function handle(request, meta) {
     const url = new URL(request.url)
 
@@ -259,7 +263,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   const server = serveImpl({
     port,
     hostname: host,
-    async fetch(request) {
+    async fetch(/** @type {Request} */ request) {
       const started = Date.now()
       const url = new URL(request.url)
       const ua = request.headers.get('user-agent') ?? '-'
@@ -282,9 +286,10 @@ export async function startHttpServer(opts, ctx, deps = {}) {
         )
         return response
       } catch (err) {
-        reqLogger?.error?.(`${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms err="${err?.message}" ua="${ua}" cf-ray=${cfRay}`, {
-          stack: err?.stack,
-        })
+        reqLogger?.error?.(
+          `${request.method} ${url.pathname} -> 500 ${Date.now() - started}ms err="${err instanceof Error ? err.message : err}" ua="${ua}" cf-ray=${cfRay}`,
+          { stack: err instanceof Error ? err.stack : undefined },
+        )
         const response = Response.json({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' } }, { status: 500 })
         applySecurityHeaders(response)
         response.headers.set('X-Request-Id', requestId)
@@ -305,6 +310,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     concurrencyStats,
     readerPool,
   })
+  /** @param {number} [deadlineMs] */
   const close = async (deadlineMs) => {
     try {
       server?.stop?.(true)
@@ -320,6 +326,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
 // file fits under the 400-line ceiling. The classifier is imported and
 // re-exported at the top of this module.
 
+/** @param {Record<string, any>} meta */
 function buildPriorityTag(meta) {
   const parts = []
   if (meta.priority === 'heavy') {
@@ -344,6 +351,7 @@ function buildPriorityTag(meta) {
  * Errors during `start()` are logged and downgraded to `null` — the HTTP
  * server stays usable on the main-thread handle rather than failing to boot.
  */
+/** @param {any} ctx @param {any} _opts @param {any} deps @param {any} logger */
 async function resolveReaderPool(ctx, _opts, deps, logger) {
   if (deps && 'readerPool' in deps) return deps.readerPool ?? null
   if (process.env.APPLE_DOCS_MCP_READERS !== 'on') return null
@@ -369,16 +377,17 @@ async function resolveReaderPool(ctx, _opts, deps, logger) {
     logger?.info?.(`reader-pool: ready strict=${snap.pools.strict.size} deep=${snap.pools.deep.size} spawns=${snap.spawns}`)
     return pool
   } catch (err) {
-    logger?.error?.(`reader-pool: failed to start (${err?.message ?? err}); falling back to main-thread reads`)
+    logger?.error?.(`reader-pool: failed to start (${err instanceof Error ? err.message : err}); falling back to main-thread reads`)
     return null
   }
 }
 
 // Three flavors of "parse env into a usable number" + a shared helper.
+/** @param {string | null | undefined} value @param {(s: string, radix?: number) => number} parser @param {(n: number) => boolean} predicate */
 function parseNumber(value, parser, predicate) {
   const n = value == null ? Number.NaN : parser(value, 10)
   return Number.isFinite(n) && predicate(n) ? n : null
 }
-const parsePositiveInt = (v) => parseNumber(v, Number.parseInt, (n) => n > 0)
-const parseNonNegativeInt = (v) => parseNumber(v, Number.parseInt, (n) => n >= 0)
-const parsePositiveNumber = (v) => parseNumber(v, Number.parseFloat, (n) => n > 0)
+const parsePositiveInt = (/** @type {string | null | undefined} */ v) => parseNumber(v, Number.parseInt, (n) => n > 0)
+const parseNonNegativeInt = (/** @type {string | null | undefined} */ v) => parseNumber(v, Number.parseInt, (n) => n >= 0)
+const parsePositiveNumber = (/** @type {string | null | undefined} */ v) => parseNumber(v, Number.parseFloat, (n) => n > 0)

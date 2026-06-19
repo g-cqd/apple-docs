@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Per-request metrics builder + optional metrics server starter for
  * `apple-docs mcp serve`.
@@ -20,6 +19,8 @@ import { startMetricsServer } from '../lib/metrics-server.js'
  * only when the operator passed `--metrics-port`. Returns null when the
  * port is absent (no perf cost, no listener).
  *
+ * @param {{ metricsPort?: number, metricsHost?: string }} opts
+ * @param {Record<string, any>} deps
  * @returns {{ server: any, url: string, port: number,
  *   close: () => Promise<void> } | null}
  */
@@ -36,6 +37,7 @@ export function maybeStartMcpMetricsServer(opts, deps) {
   })
 }
 
+/** @param {{ cacheRegistry?: any, markdownCache?: any, heavySemaphore?: any, concurrencyStats?: any, readerPool?: any }} deps */
 function buildMcpMetrics({ cacheRegistry, markdownCache, heavySemaphore, concurrencyStats, readerPool }) {
   const metrics = []
 
@@ -114,6 +116,7 @@ function buildMcpMetrics({ cacheRegistry, markdownCache, heavySemaphore, concurr
   return metrics
 }
 
+/** @param {() => any} fn */
 function safeCall(fn) {
   try {
     return fn()
@@ -122,6 +125,7 @@ function safeCall(fn) {
   }
 }
 
+/** @param {any[]} metrics @param {any} rp */
 function pushReaderPoolMetrics(metrics, rp) {
   const pools = rp.pools
   const FIELDS = [
