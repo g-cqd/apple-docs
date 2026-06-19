@@ -102,6 +102,21 @@ export function isNativeServeEnabled() {
 }
 
 /**
+ * CLI flip gate (RFC 0007 P7) — like the serve flip, a PROCESS-level swap to the
+ * `ad-cli` binary for the read verbs (`frameworks`, `kinds`, …) rather than a
+ * bit-identical pure-function module, so it is DEFAULT-OFF until its per-verb
+ * golden bake completes: blanket on/unset does NOT enable it; only an explicit
+ * `cli` token in the comma-list does. `off`/'0' force it off like everything.
+ *
+ * @returns {boolean}
+ */
+export function isNativeCliEnabled() {
+  const raw = (process.env.APPLE_DOCS_NATIVE ?? '').trim().toLowerCase()
+  if (raw === '0' || raw === 'off') return false
+  return raw.split(',').some((entry) => entry.trim() === 'cli')
+}
+
+/**
  * Memoized dlopen + ABI handshake. Returns the bound library or null
  * (never throws). Callers must already have passed `isNativeEnabled`.
  */
