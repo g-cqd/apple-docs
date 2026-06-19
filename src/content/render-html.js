@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Top-level HTML renderer dispatch. Walks the canonical document/sections
 // shape produced by content/normalize.js and delegates each section to
 // the matching per-kind renderer in render-html/sections.js.
@@ -31,13 +30,14 @@ import {
 
 export { slugify }
 
+/** @type {Record<string, string>} */
 const LINK_SECTION_TITLES = {
   topics: 'Topics',
   relationships: 'Relationships',
   see_also: 'See Also',
 }
 
-export function renderHtml(document, sections = [], opts = {}) {
+export function renderHtml(/** @type {any} */ document, /** @type {any[]} */ sections = [], opts = {}) {
   const doc = coerceDocument(document)
   const orderedSections = sections.map(coerceSection).sort((a, b) => a.sortOrder - b.sortOrder)
 
@@ -55,7 +55,7 @@ export function renderHtml(document, sections = [], opts = {}) {
   return parts.join('\n').trim()
 }
 
-function renderSectionHtml(section, opts = {}) {
+function renderSectionHtml(/** @type {any} */ section, opts = {}) {
   switch (section.sectionKind) {
     case 'abstract':
       return renderAbstractHtml(section)

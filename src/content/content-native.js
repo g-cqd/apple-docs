@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Content dispatch (RFC 0004 phases 1-2): native (libAppleDocsCore via
  * bun:ffi) when the `APPLE_DOCS_NATIVE` kill switch enables the `content`
@@ -17,6 +16,7 @@ import { NATIVE_STATUS_OK, readNativeResult } from '../native/result.js'
 
 const MODULE = 'content'
 const NULL_SENTINEL = 0xffffffff
+/** @type {'js'|'native'|null} */
 let forced = null // 'js' | 'native' | null
 let announced = false
 let logger
@@ -25,7 +25,7 @@ const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
 /** Test seam. */
-export function _forceImpl(impl) {
+export function _forceImpl(/** @type {any} */ impl) {
   forced = impl
   announced = false
 }
@@ -66,7 +66,7 @@ let scratch = new ArrayBuffer(65536)
 let scratchU8 = new Uint8Array(scratch)
 let scratchView = new DataView(scratch)
 
-function growScratch(minimum) {
+function growScratch(/** @type {any} */ minimum) {
   let size = scratch.byteLength * 2
   while (size < minimum) size *= 2
   const next = new ArrayBuffer(size)
@@ -82,24 +82,24 @@ class Packer {
     this.offset = 0
   }
 
-  ensure(extra) {
+  ensure(/** @type {any} */ extra) {
     if (this.offset + extra > scratch.byteLength) growScratch(this.offset + extra)
   }
 
-  u32(value) {
+  u32(/** @type {any} */ value) {
     this.ensure(4)
     scratchView.setUint32(this.offset, value, true)
     this.offset += 4
   }
 
-  f64(value) {
+  f64(/** @type {any} */ value) {
     this.ensure(8)
     scratchView.setFloat64(this.offset, value, true)
     this.offset += 8
   }
 
   /** Nullable string: null/undefined → sentinel; anything else coerced. */
-  string(value) {
+  string(/** @type {any} */ value) {
     if (value === null || value === undefined) {
       this.u32(NULL_SENTINEL)
       return
@@ -117,8 +117,8 @@ class Packer {
   }
 }
 
-function call(symbol, packer) {
-  const lib = nativeLib()
+function call(/** @type {any} */ symbol, /** @type {any} */ packer) {
+  const lib = /** @type {any} */ (nativeLib())
   if (!lib) return null
   const fn = lib.symbols[symbol]
   if (!fn) return null
@@ -136,7 +136,7 @@ function call(symbol, packer) {
  * Native renderMarkdown(document, sections, opts) — null means "use JS".
  * Coercions mirror render-markdown.js coerceDocument/coerceSection.
  */
-function packDocBody(packer, document, sections) {
+function packDocBody(/** @type {any} */ packer, /** @type {any} */ document, /** @type {any} */ sections) {
   const platformsJson = document?.platformsJson ?? document?.platforms_json ?? null
   if (!isStringOrNullish(platformsJson)) return false // pre-parsed object — JS path
   packer.string(document?.key ?? document?.path ?? null)
@@ -163,7 +163,7 @@ function packDocBody(packer, document, sections) {
   return true
 }
 
-function packPlainBody(packer, document, sections) {
+function packPlainBody(/** @type {any} */ packer, /** @type {any} */ document, /** @type {any} */ sections) {
   packer.string(document?.title ?? null)
   packer.string(document?.abstractText ?? document?.abstract_text ?? null)
   packer.string(document?.declarationText ?? document?.declaration_text ?? null)
@@ -182,13 +182,13 @@ function packPlainBody(packer, document, sections) {
   return true
 }
 
-function docFlags(opts) {
+function docFlags(/** @type {any} */ opts) {
   const includeFrontMatter = opts.includeFrontMatter !== false
   const includeTitle = opts.includeTitle !== false
   return (includeFrontMatter ? 1 : 0) | (includeTitle ? 2 : 0)
 }
 
-export function nativeDocMarkdown(document, sections, opts = {}) {
+export function nativeDocMarkdown(/** @type {any} */ document, /** @type {any} */ sections, opts = {}) {
   if (forced === 'js') return null
   const packer = new Packer()
   packer.u32(1)
@@ -202,7 +202,7 @@ export function nativeDocMarkdown(document, sections, opts = {}) {
  * per-call shape loses to in-process JS at 0.48×; index-body's batch is
  * the production path). null means "use JS".
  */
-export function nativePlainText(document, sections) {
+export function nativePlainText(/** @type {any} */ document, /** @type {any} */ sections) {
   if (forced !== 'native') return null
   const packer = new Packer()
   packer.u32(1)
@@ -211,7 +211,7 @@ export function nativePlainText(document, sections) {
 }
 
 /** Decode count × [u32 len][utf8] (sentinel = null entry). */
-function decodeLenPrefixed(result, count) {
+function decodeLenPrefixed(/** @type {any} */ result, /** @type {any} */ count) {
   const view = new DataView(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength)
   const out = new Array(count)
   let offset = 0
@@ -228,8 +228,8 @@ function decodeLenPrefixed(result, count) {
   return out
 }
 
-function callBatch(symbol, packer, count) {
-  const lib = nativeLib()
+function callBatch(/** @type {any} */ symbol, /** @type {any} */ packer, /** @type {any} */ count) {
+  const lib = /** @type {any} */ (nativeLib())
   if (!lib?.symbols?.[symbol]) return null
   try {
     const { bytes, length } = packer.finish()
@@ -247,7 +247,7 @@ function callBatch(symbol, packer, count) {
  * in JS), or null entirely when native is unavailable / inputs sit
  * outside the codec.
  */
-export function nativeDocMarkdownBatch(docs, opts = {}) {
+export function nativeDocMarkdownBatch(/** @type {any} */ docs, opts = {}) {
   if (forced === 'js') return null
   if (!Array.isArray(docs) || docs.length === 0) return null
   const packer = new Packer()
@@ -261,7 +261,7 @@ export function nativeDocMarkdownBatch(docs, opts = {}) {
 }
 
 /** Batched renderPlainText over `[{ document, sections }]`. */
-export function nativePlainTextBatch(docs) {
+export function nativePlainTextBatch(/** @type {any} */ docs) {
   if (forced === 'js') return null
   if (!Array.isArray(docs) || docs.length === 0) return null
   const packer = new Packer()
@@ -280,7 +280,7 @@ export function nativePlainTextBatch(docs) {
  * The value graph round-trips losslessly through JSON.stringify
  * (insertion order preserved, numbers re-parse identically).
  */
-export function nativePageMarkdown(json, canonicalPath) {
+export function nativePageMarkdown(/** @type {any} */ json, /** @type {any} */ canonicalPath) {
   if (forced !== 'native') return null
   if (!json || typeof json !== 'object') return null
   let raw
@@ -304,10 +304,10 @@ export function nativePageMarkdown(json, canonicalPath) {
  * failed natively — convert it in JS), or null entirely when native is
  * unavailable.
  */
-export function nativeConvertPages(entries) {
+export function nativeConvertPages(/** @type {any} */ entries) {
   if (forced === 'js') return null
   if (!Array.isArray(entries) || entries.length === 0) return null
-  const lib = nativeLib()
+  const lib = /** @type {any} */ (nativeLib())
   if (!lib?.symbols?.ad_content_convert_pages) return null
   const packer = new Packer()
   packer.u32(1)
@@ -326,7 +326,7 @@ export function nativeConvertPages(entries) {
   }
 }
 
-function isStringOrNullish(value) {
+function isStringOrNullish(/** @type {any} */ value) {
   // platformsJson / contentJson may arrive pre-parsed (objects) on some
   // call paths — those sit outside the codec; the caller falls back to JS.
   return value === null || value === undefined || typeof value === 'string'

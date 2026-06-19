@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // DocC relationships extraction. Walks topicSections (child links),
 // relationshipsSections (inheritance / conformance), and seeAlsoSections
 // to produce the canonical { fromKey, toKey, relationType, section,
@@ -6,6 +5,7 @@
 
 import { resolveRefKey } from './refs.js'
 
+/** @type {Record<string, string>} */
 const RELATION_TYPE_MAP = {
   inheritsFrom: 'inherits_from',
   conformsTo: 'conforms_to',
@@ -13,10 +13,10 @@ const RELATION_TYPE_MAP = {
 }
 
 /**
- * @param {object} json   - DocC JSON payload (or normalized intermediate).
+ * @param {any} json   - DocC JSON payload (or normalized intermediate).
  * @param {string} key    - This document's canonical key (the `fromKey`).
- * @param {object} refs   - References map.
- * @param {(k: string) => string} mapKey
+ * @param {any} refs   - References map.
+ * @param {(k: any) => any} mapKey
  * @returns {Array<{ fromKey: string, toKey: string, relationType: string, section: string|null, sortOrder: number }>}
  */
 export function extractDocCRelationships(json, key, refs, mapKey) {

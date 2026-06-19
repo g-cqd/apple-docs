@@ -1,10 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Strip whole elements (and their content) from an HTML string. Linear
 // single-pass: walk all open/close events, depth-counter the matched
 // ranges, splice them out. A non-greedy regex replace in a do-while
 // loop would hit O(N×depth) on adversarial input.
 
-export function stripElements(html, tags) {
+export function stripElements(/** @type {any} */ html, /** @type {any} */ tags) {
   let result = html
   for (const tag of tags) {
     result = stripElementOnce(result, tag)
@@ -12,7 +11,7 @@ export function stripElements(html, tags) {
   return result
 }
 
-function stripElementOnce(html, tag) {
+function stripElementOnce(/** @type {any} */ html, /** @type {any} */ tag) {
   const openRe = new RegExp(`<${tag}(?:\\s[^>]*)?\\s*/?>`, 'gi')
   const closeRe = new RegExp(`</${tag}\\s*>`, 'gi')
 

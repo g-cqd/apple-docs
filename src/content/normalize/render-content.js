@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Render DocC block + inline content nodes to plain text. Mirrors the
 // shape consumed by extractor.js but additionally walks the references
 // map so reference titles surface in the rendered output.
@@ -11,12 +10,14 @@ import { normalizeIdentifier } from '../../apple/normalizer.js'
 // Apple payloads are ≲ 10 levels, so the cap never triggers on real data and JS↔Swift stays byte-identical.
 const MAX_RENDER_DEPTH = 512
 
-export function renderContentNodesToText(nodes, refs, depth = 0) {
+/** @returns {string} */
+export function renderContentNodesToText(/** @type {any} */ nodes, /** @type {any} */ refs, depth = 0) {
   if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
   return nodes.map((node) => renderNode(node, refs, depth)).join('')
 }
 
-function renderNode(node, refs, depth) {
+/** @returns {string} */
+function renderNode(/** @type {any} */ node, /** @type {any} */ refs, /** @type {any} */ depth) {
   if (!node || typeof node !== 'object') return ''
 
   switch (node.type) {
@@ -33,7 +34,7 @@ function renderNode(node, refs, depth) {
 
     case 'unorderedList':
     case 'orderedList':
-      return (node.items ?? []).map((item) => renderContentNodesToText(item.content ?? [], refs, depth + 1)).join('')
+      return (node.items ?? []).map((/** @type {any} */ item) => renderContentNodesToText(item.content ?? [], refs, depth + 1)).join('')
 
     case 'aside': {
       const style = node.style ?? 'Note'
@@ -44,16 +45,16 @@ function renderNode(node, refs, depth) {
     case 'table': {
       const rows = node.rows ?? []
       return `${rows
-        .map((row) => {
+        .map((/** @type {any} */ row) => {
           const cells = Array.isArray(row) ? row : (row.cells ?? [])
-          return cells.map((cell) => renderContentNodesToText(cell.content ?? [], refs, depth + 1).trim()).join(' | ')
+          return cells.map((/** @type {any} */ cell) => renderContentNodesToText(cell.content ?? [], refs, depth + 1).trim()).join(' | ')
         })
         .join('\n')}\n`
     }
 
     case 'links':
       return `${(node.items ?? [])
-        .map((id) => {
+        .map((/** @type {any} */ id) => {
           const ref = refs?.[id]
           return ref?.title ?? normalizeIdentifier(id) ?? id
         })
@@ -100,7 +101,8 @@ function renderNode(node, refs, depth) {
  * Render an array of inline nodes to plain text.
  * Mirrors the logic in extractor.js but also handles reference lookups.
  */
-export function renderInlineNodes(nodes, refs, depth = 0) {
+/** @returns {string} */
+export function renderInlineNodes(/** @type {any} */ nodes, /** @type {any} */ refs, depth = 0) {
   if (!Array.isArray(nodes) || depth > MAX_RENDER_DEPTH) return ''
   return nodes
     .map((node) => {

@@ -1,4 +1,4 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
+/** @param {any} key @param {any} title @param {any} abstractText @param {any} headings @param {any} [opts] @returns {any} */
 export function createDocumentTemplate(key, title, abstractText, headings, opts = {}) {
   return {
     sourceType: opts.sourceType ?? null,

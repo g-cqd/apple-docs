@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Lightweight CSS-selector-shaped extraction: finds the first element
 // matching `tag`, `.class`, `#id`, or `tag.class` and returns its inner
 // HTML with balanced same-tag depth tracking.
@@ -51,7 +50,7 @@ export function extractBySelector(html, selector) {
  * Walks open/close tag boundaries with depth counting so nested same-tag
  * elements don't terminate the match early.
  */
-function extractBalancedInner(html, tag, startPos) {
+function extractBalancedInner(/** @type {any} */ html, /** @type {any} */ tag, /** @type {any} */ startPos) {
   const lowerHtml = html.toLowerCase()
   const lowerTag = tag.toLowerCase()
 

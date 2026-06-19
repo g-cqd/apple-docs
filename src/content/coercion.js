@@ -1,5 +1,5 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
-export function coerceDocument(document, { includeKey = false } = {}) {
+export function coerceDocument(/** @type {any} */ document, { includeKey = false } = {}) {
+  /** @type {Record<string, any>} */
   const result = {
     title: document?.title ?? null,
   }
@@ -12,7 +12,8 @@ export function coerceDocument(document, { includeKey = false } = {}) {
   return result
 }
 
-export function coerceSection(section, { includeContentJson = false } = {}) {
+export function coerceSection(/** @type {any} */ section, { includeContentJson = false } = {}) {
+  /** @type {Record<string, any>} */
   const result = {
     sectionKind: section?.sectionKind ?? section?.section_kind ?? null,
     heading: section?.heading ?? null,

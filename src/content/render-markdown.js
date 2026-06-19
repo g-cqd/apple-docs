@@ -1,16 +1,16 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { toFrontMatter } from '../lib/yaml.js'
 import { nativeDocMarkdown } from './content-native.js'
 import { renderContentNodesToText } from './normalize.js'
 import { safeJson } from './safe-json.js'
 
+/** @type {Record<string, string>} */
 const LINK_SECTION_TITLES = {
   topics: 'Topics',
   relationships: 'Relationships',
   see_also: 'See Also',
 }
 
-export function renderMarkdown(document, sections = [], opts = {}) {
+export function renderMarkdown(/** @type {any} */ document, /** @type {any[]} */ sections = [], /** @type {any} */ opts = {}) {
   const native = nativeDocMarkdown(document, sections, opts)
   if (native !== null) return native
   const { includeFrontMatter = true, includeTitle = true } = opts
@@ -53,7 +53,7 @@ export function renderMarkdown(document, sections = [], opts = {}) {
     .trim()}\n`
 }
 
-function renderSectionMarkdown(section) {
+function renderSectionMarkdown(/** @type {any} */ section) {
   switch (section.sectionKind) {
     case 'abstract':
       return section.contentText?.trim() ?? ''
@@ -73,12 +73,12 @@ function renderSectionMarkdown(section) {
   }
 }
 
-function renderDeclarationMarkdown(section) {
+function renderDeclarationMarkdown(/** @type {any} */ section) {
   const declarations = safeJson(section.contentJson)
   const blocks = Array.isArray(declarations) ? declarations : []
   const renderedBlocks = blocks
     .map((declaration) => {
-      const code = (declaration?.tokens ?? []).map((token) => token.text ?? '').join('')
+      const code = (declaration?.tokens ?? []).map((/** @type {any} */ token) => token.text ?? '').join('')
       const language = declaration?.languages?.[0] ?? 'swift'
       if (!code.trim()) return null
       return [`\`\`\`${language}`, code, '```'].join('\n')
@@ -93,7 +93,7 @@ function renderDeclarationMarkdown(section) {
   return ['## Declaration', '', '```swift', section.contentText.trim(), '```'].join('\n')
 }
 
-function renderParametersMarkdown(section) {
+function renderParametersMarkdown(/** @type {any} */ section) {
   const parameters = safeJson(section.contentJson)
   const lines = ['## Parameters', '']
 
@@ -110,14 +110,14 @@ function renderParametersMarkdown(section) {
         .trim()
         .split('\n')
         .filter(Boolean)
-        .map((line) => `- ${line}`),
+        .map((/** @type {any} */ line) => `- ${line}`),
     )
   }
 
   return lines.join('\n').trim()
 }
 
-function renderLinkSectionMarkdown(title, section) {
+function renderLinkSectionMarkdown(/** @type {any} */ title, /** @type {any} */ section) {
   const lines = [`## ${title}`, '']
   const groups = safeJson(section.contentJson)
 
@@ -145,28 +145,28 @@ function renderLinkSectionMarkdown(title, section) {
         .trim()
         .split('\n')
         .filter(Boolean)
-        .map((line) => `- ${line}`),
+        .map((/** @type {any} */ line) => `- ${line}`),
     )
   }
 
   return lines.join('\n').trim()
 }
 
-function renderTitledSection(title, body) {
+function renderTitledSection(/** @type {any} */ title, /** @type {any} */ body) {
   if (!body) return ''
   return [`## ${title}`, '', body].join('\n')
 }
 
-function normalizeParagraphs(text) {
+function normalizeParagraphs(/** @type {any} */ text) {
   if (!text?.trim()) return ''
   return text
     .trim()
     .split(/\n{2,}/)
-    .map((paragraph) => paragraph.replace(/\n+/g, ' ').trim())
+    .map((/** @type {any} */ paragraph) => paragraph.replace(/\n+/g, ' ').trim())
     .join('\n\n')
 }
 
-function formatPlatforms(platformsJson) {
+function formatPlatforms(/** @type {any} */ platformsJson) {
   const parsed = typeof platformsJson === 'string' ? safeJson(platformsJson) : platformsJson
   if (Array.isArray(parsed)) return parsed
   if (!parsed || typeof parsed !== 'object') return undefined
@@ -174,7 +174,8 @@ function formatPlatforms(platformsJson) {
   return Object.entries(parsed).map(([platform, version]) => (version ? `${prettyPlatform(platform)} ${version}+` : prettyPlatform(platform)))
 }
 
-function prettyPlatform(platform) {
+function prettyPlatform(/** @type {any} */ platform) {
+  /** @type {Record<string, string>} */
   const map = {
     ios: 'iOS',
     macos: 'macOS',
@@ -187,7 +188,7 @@ function prettyPlatform(platform) {
   return map[platform] ?? platform
 }
 
-function coerceDocument(document) {
+function coerceDocument(/** @type {any} */ document) {
   return {
     key: document?.key ?? document?.path ?? null,
     title: document?.title ?? null,
@@ -199,7 +200,7 @@ function coerceDocument(document) {
   }
 }
 
-function coerceSection(section) {
+function coerceSection(/** @type {any} */ section) {
   return {
     sectionKind: section?.sectionKind ?? section?.section_kind ?? null,
     heading: section?.heading ?? null,
@@ -209,11 +210,11 @@ function coerceSection(section) {
   }
 }
 
-function compactObject(input) {
+function compactObject(/** @type {any} */ input) {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && value !== null))
 }
 
-function humanize(value) {
+function humanize(/** @type {any} */ value) {
   return String(value ?? 'Section')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())

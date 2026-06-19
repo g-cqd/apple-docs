@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // HTML → text/markdown converters used by extractHtmlContent and the
 // section splitter. htmlToPlainText drops every structural tag in favour
 // of paragraph breaks; htmlToMarkdown preserves code, links, lists,
@@ -9,7 +8,7 @@ import { BLOCK_TAGS, STRIP_ELEMENTS } from './constants.js'
 import { decodeEntities } from './entities.js'
 import { stripElements } from './strip-elements.js'
 
-export function htmlToPlainText(html) {
+export function htmlToPlainText(/** @type {any} */ html) {
   if (!html) return ''
 
   // Strip XML declarations and processing instructions
@@ -18,7 +17,7 @@ export function htmlToPlainText(html) {
   cleaned = cleaned.replace(/<svg[\s\S]*?<\/svg>/gi, '')
 
   // Replace opening block tags with a paragraph-break sentinel
-  const withBreaks = cleaned.replace(/<(\/?)(\w+)([^>]*)>/g, (_match, _slash, tag) => {
+  const withBreaks = cleaned.replace(/<(\/?)(\w+)([^>]*)>/g, (/** @type {any} */ _match, /** @type {any} */ _slash, /** @type {any} */ tag) => {
     const lower = tag.toLowerCase()
     if (BLOCK_TAGS.has(lower)) return '\n\n'
     return ' '
@@ -28,7 +27,7 @@ export function htmlToPlainText(html) {
 
   // Normalise: collapse runs of spaces/tabs within each paragraph; then
   // collapse 3+ newlines to exactly 2 (one blank line).
-  const lines = decoded.split('\n').map((line) => line.replace(/[ \t]+/g, ' ').trim())
+  const lines = decoded.split('\n').map((/** @type {any} */ line) => line.replace(/[ \t]+/g, ' ').trim())
 
   const joined = lines.join('\n').replace(/\n{3,}/g, '\n\n')
 
@@ -63,8 +62,9 @@ export function htmlToMarkdown(html, opts = {}) {
   // Apple-archive code samples: <div class="codesample"><table>...<tr><td><pre>line</pre></td></tr>...
   // Concatenate every <pre> cell into a single fenced code block.
   s = s.replace(/<div[^>]+class=["'][^"']*codesample[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi, (_m, inner) => {
+    /** @type {any[]} */
     const cellLines = []
-    inner.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_, code) => {
+    inner.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (/** @type {any} */ _, /** @type {any} */ code) => {
       cellLines.push(decodeEntities(stripInlineTags(code)))
       return ''
     })
@@ -178,6 +178,7 @@ export function htmlToMarkdown(html, opts = {}) {
 
   // Stash fenced code content in opaque sentinels so whitespace normalization
   // below cannot collapse leading indentation inside code blocks.
+  /** @type {any[]} */
   const fences = []
   s = s.replace(/@@FENCE\n([\s\S]*?)\n@@\/FENCE/g, (_m, code) => {
     fences.push(code)
@@ -201,7 +202,7 @@ export function htmlToMarkdown(html, opts = {}) {
   return s.trim()
 }
 
-function stripInlineTags(s) {
+function stripInlineTags(/** @type {any} */ s) {
   // Iterate until idempotent so a pathological input like `<<x>>` (where
   // the first replace leaves `<>` which is itself a degenerate tag) is
   // fully sanitised. Resolves CodeQL
@@ -218,7 +219,7 @@ function stripInlineTags(s) {
   return s
 }
 
-function listToMarkdown(inner, ordered) {
+function listToMarkdown(/** @type {any} */ inner, /** @type {any} */ ordered) {
   const items = []
   const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi
   let n = 1

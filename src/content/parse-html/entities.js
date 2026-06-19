@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // HTML entity decoding. Handles named entities + decimal/hex numeric
 // character references.
 //
@@ -14,7 +13,7 @@
 // exactly this reason. Decoding `&amp;` last leaves the inner entity
 // untouched: `&amp;lt;` → (no other rule matches) → `&amp;lt;` →
 // `&lt;`, which is the original literal string.
-export function decodeEntities(text) {
+export function decodeEntities(/** @type {any} */ text) {
   return (
     text
       // Named entities other than &amp; (process FIRST so &amp;-encoded
@@ -27,8 +26,8 @@ export function decodeEntities(text) {
       .replace(/&#x2F;/g, '/')
       .replace(/&nbsp;/g, ' ')
       // Numeric entities (decimal + hex).
-      .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-      .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+      .replace(/&#(\d+);/g, (/** @type {any} */ _, /** @type {any} */ code) => String.fromCodePoint(Number(code)))
+      .replace(/&#x([0-9a-fA-F]+);/gi, (/** @type {any} */ _, /** @type {any} */ hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
       // &amp; LAST so already-double-encoded entities round-trip correctly.
       .replace(/&amp;/g, '&')
   )

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Document-level meta extraction: <title>, <meta name="description">,
 // <meta property="og:title">, plus the redirect-stub detector.
 
@@ -41,7 +40,7 @@ export function extractMetaInfo(html) {
  *   <meta http-equiv="refresh" content="0; url=…">
  * and the bare HTTP-server "Document Has Moved" page.
  */
-export function detectRedirectStub(html) {
+export function detectRedirectStub(/** @type {any} */ html) {
   if (typeof html !== 'string') return null
   // Quick reject: must be small (<2KB) — real content pages are larger.
   if (html.length > 2048) return null

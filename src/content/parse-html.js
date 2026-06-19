@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * HTML content extraction utilities for converting HTML documentation pages
  * into the normalized document model.
@@ -39,7 +38,7 @@ export function extractHtmlContent(html, opts = {}) {
   if (!html) return { title: null, description: null, sections: [] }
 
   const meta = extractMetaInfo(html)
-  const renderText = opts.preserveStructure ? (frag) => htmlToMarkdown(frag, { linkResolver: opts.linkResolver }) : htmlToPlainText
+  const renderText = opts.preserveStructure ? (/** @type {any} */ frag) => htmlToMarkdown(frag, { linkResolver: opts.linkResolver }) : htmlToPlainText
 
   // ── Locate content container ───────────────────────────────────────────────
   let container = null

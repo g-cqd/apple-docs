@@ -1,8 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { createHighlighter } from 'shiki'
 import { sha256 } from '../lib/hash.js'
 import { createLru } from '../lib/lru.js'
 
+/** @type {Record<string, string>} */
 const LANG_MAP = {
   swift: 'swift',
   occ: 'objective-c',
@@ -73,7 +73,9 @@ const HIGHLIGHT_MAX_BYTES = Math.max(256, Number.parseInt(process.env.APPLE_DOCS
  */
 const HIGHLIGHT_DISABLED = process.env.APPLE_DOCS_NO_HIGHLIGHT === '1'
 
+/** @type {any} */
 let _highlighter = null
+/** @type {any} */
 let _highlighterPromise = null
 const _highlightCache = createLru({ max: 1000 })
 
@@ -94,7 +96,7 @@ export function initHighlighter() {
   return _highlighterPromise
 }
 
-export function highlightCode(code, lang) {
+export function highlightCode(/** @type {any} */ code, /** @type {any} */ lang) {
   if (HIGHLIGHT_DISABLED) return null
   const grammar = LANG_MAP[lang?.toLowerCase()] ?? null
   if (!grammar) return null

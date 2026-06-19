@@ -1,10 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Pure HTML helpers used across the render-html cluster.
 
 import { coerceDocument as _coerceDocument, coerceSection as _coerceSection } from '../coercion.js'
 
 /** Generate a URL-safe slug from heading text. */
-export function slugify(text) {
+export function slugify(/** @type {any} */ text) {
   return String(text ?? '')
     .toLowerCase()
     .trim()
@@ -14,7 +13,7 @@ export function slugify(text) {
     .replace(/^-|-$/g, '')
 }
 
-export function escapeHtml(value) {
+export function escapeHtml(/** @type {any} */ value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -30,7 +29,7 @@ export function escapeHtml(value) {
  * resolve to something unexpected. javascript:/data:/etc are rejected
  * by exclusion.
  */
-export function isSafeHref(href) {
+export function isSafeHref(/** @type {any} */ href) {
   if (!href) return false
   if (href.startsWith('#')) return true
   if (href.startsWith('//')) return false
@@ -42,13 +41,13 @@ export function isSafeHref(href) {
  * Extract a human-readable name from the last segment of a canonical key.
  * e.g. "swiftui/animation/linear" → "Linear"
  */
-export function readableNameFromKey(key) {
+export function readableNameFromKey(/** @type {any} */ key) {
   if (!key) return ''
   const segments = key.split('/')
   const last = segments[segments.length - 1]
   return last
     .split('-')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((/** @type {any} */ word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
 
@@ -56,7 +55,7 @@ export function readableNameFromKey(key) {
  * Skip the first heading node if it matches the section heading
  * (prevents "Overview" / "Overview" duplication).
  */
-export function skipDuplicateHeading(nodes, sectionHeading) {
+export function skipDuplicateHeading(/** @type {any} */ nodes, /** @type {any} */ sectionHeading) {
   if (!Array.isArray(nodes) || nodes.length === 0) return nodes
   const first = nodes[0]
   if (first.type === 'heading') {
@@ -75,7 +74,7 @@ export function skipDuplicateHeading(nodes, sectionHeading) {
  *
  * @returns {{ href: string, title: string } | null}
  */
-export function resolveReferenceUrl(identifier) {
+export function resolveReferenceUrl(/** @type {any} */ identifier) {
   if (!identifier) return null
 
   // Direct https:// or http:// URL
@@ -86,7 +85,7 @@ export function resolveReferenceUrl(identifier) {
       .replace(/[-_]/g, ' ')
       .replace(/\.\w+$/, '')
       .split(' ')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .map((/** @type {any} */ w) => w.charAt(0).toUpperCase() + w.slice(1))
       .join(' ')
     return { href: identifier, title: title || identifier }
   }
@@ -115,10 +114,10 @@ export function resolveReferenceUrl(identifier) {
   return null
 }
 
-export function coerceDocument(document) {
+export function coerceDocument(/** @type {any} */ document) {
   return _coerceDocument(document)
 }
 
-export function coerceSection(section) {
+export function coerceSection(/** @type {any} */ section) {
   return _coerceSection(section, { includeContentJson: true })
 }

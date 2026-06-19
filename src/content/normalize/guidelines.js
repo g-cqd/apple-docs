@@ -1,11 +1,10 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // App Store Review Guidelines normalizer.
 //
 // The guidelines adapter delivers a pre-parsed payload (title + markdown
 // + children), so this normalizer is much simpler than the DocC one —
 // it just projects onto the document/section/relationship shape.
 
-export function normalizeGuidelines(payload, key) {
+export function normalizeGuidelines(/** @type {any} */ payload, /** @type {any} */ key) {
   // payload: { title, role, roleHeading, path, markdown, abstract, id, children: [childPath...] }
   const title = payload?.title ?? null
   const role = payload?.role ?? null
