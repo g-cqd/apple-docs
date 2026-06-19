@@ -120,11 +120,12 @@ func zstdSeedFrameRoundTrips() throws {
     let shim = try #require(ZstdCompressShim.shared)
     let payload = corpusPayload()
     let frame = try #require(shim.frame(payload))
-    // The frame carries the zstd magic the production gate checks before calling.
-    #expect(Array(frame.prefix(4)) == [0x28, 0xB5, 0x2F, 0xFD])
+    // The frame carries the zstd magic the production gate checks before calling. Typed asserts keep the
+    // byte-array comparisons off the macro's re-type-check path so the body stays under the 100ms budget.
+    expectEqual(Array(frame.prefix(4)), [0x28, 0xB5, 0x2F, 0xFD])
     let decoded = try #require(ZstdDecoder.decompress(frame), "valid frame must inflate")
-    #expect(decoded == payload)
-    #expect(decoded.count <= zstdDecodeCapBytes)
+    expectEqual(decoded, payload)
+    expectTrue(decoded.count <= zstdDecodeCapBytes)
 }
 
 /// Fixed-seed byte-mutation fuzz: clone the valid frame, scribble on it, and

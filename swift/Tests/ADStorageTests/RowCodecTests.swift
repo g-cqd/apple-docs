@@ -4,6 +4,7 @@
 // frames a SELECT and decodes the bytes. The full searchPages/FTS5 path is
 // gated by the JS A/B test against the real corpus schema.
 
+import ADTestKit
 import Testing
 
 @testable import ADStorage
@@ -101,17 +102,19 @@ private func decode(_ bytes: [UInt8]) -> Decoded {
 
         let stmt = try #require(PreparedStatement(lib: lib, db: db, sql: "SELECT i, r, s, n, b FROM t ORDER BY i DESC"))
         var out: [UInt8] = []
-        #expect(stmt.run(into: &out))
+        expectTrue(stmt.run(into: &out))
         let d = decode(out)
-        #expect(d.columnCount == 5)
-        #expect(d.rows.count == 2)
-        #expect(d.rows[0] == [.int(42), .real(3.5), .text("héllo"), .null, .blob([0x00, 0xff])])
-        #expect(d.rows[1] == [.int(-7), .real(0.0), .text(""), .null, .null])
+        // Typed asserts keep the per-cell enum-array literals off the `#expect` macro's re-type-check
+        // path (the inline `[.int(42), .real(3.5), …]` inference is what pushed the body past 100ms).
+        expectEqual(d.columnCount, 5)
+        expectEqual(d.rows.count, 2)
+        expectEqual(d.rows[0], [.int(42), .real(3.5), .text("héllo"), .null, .blob([0x00, 0xff])])
+        expectEqual(d.rows[1], [.int(-7), .real(0.0), .text(""), .null, .null])
 
         // Re-run the same statement: reset + clear_bindings must yield identical
         // rows (no leaked state).
         var again: [UInt8] = []
-        #expect(stmt.run(into: &again))
-        #expect(again == out)
+        expectTrue(stmt.run(into: &again))
+        expectEqual(again, out)
     }
 }
