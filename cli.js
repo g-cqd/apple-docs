@@ -31,6 +31,8 @@ import { config } from './src/config.js'
 import { installCrashHandlers, lifecycle } from './src/lib/lifecycle.js'
 import { createLogger } from './src/lib/logger.js'
 import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
+import { adServerBinaryPath, nativeServeArgs } from './src/native/ad-server.js'
+import { isNativeServeEnabled } from './src/native/loader.js'
 import { projectStatus } from './src/output/projection.js'
 import { DocsDatabase } from './src/storage/database.js'
 
@@ -84,6 +86,22 @@ const cleanup = () => {
 if (command === 'sync' || command === 'setup') {
   const { resolveGitHubAuth } = await import('./src/lib/git-auth-resolve.js')
   await resolveGitHubAuth({ flags, env: process.env, logger })
+}
+
+// RFC 0005 Phase E serving flip (default-off): hand the serve verbs (web serve,
+// mcp serve, mcp start) to the native ad-server when APPLE_DOCS_NATIVE includes
+// `serve` + the binary resolves; any unsupported flag (or other verb) falls
+// through to the Bun servers. stdio inherited; the child's exit code propagates.
+if (isNativeServeEnabled()) {
+  const serveArgs = nativeServeArgs({ command, subcommand, flags, dbPath: join(dataDir, 'apple-docs.db') })
+  const bin = serveArgs && adServerBinaryPath()
+  if (serveArgs && bin) {
+    logger.info(`serving via native ad-server (${bin})`)
+    const child = Bun.spawn([bin, ...serveArgs], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
+    const code = await child.exited
+    cleanup()
+    process.exit(code)
+  }
 }
 
 try {

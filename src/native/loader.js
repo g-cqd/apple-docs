@@ -88,6 +88,20 @@ export function isNativeEnabled(module) {
 }
 
 /**
+ * Serve flip gate (RFC 0005 Phase E) — a PROCESS-level swap to the `ad-server`
+ * binary, not a bit-identical pure-function module, so it is DEFAULT-OFF until
+ * its bake completes: blanket on/unset does NOT enable it; only an explicit
+ * `serve` token in the comma-list does. `off`/'0' force it off like everything.
+ *
+ * @returns {boolean}
+ */
+export function isNativeServeEnabled() {
+  const raw = (process.env.APPLE_DOCS_NATIVE ?? '').trim().toLowerCase()
+  if (raw === '0' || raw === 'off') return false
+  return raw.split(',').some((entry) => entry.trim() === 'serve')
+}
+
+/**
  * Memoized dlopen + ABI handshake. Returns the bound library or null
  * (never throws). Callers must already have passed `isNativeEnabled`.
  */
