@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * MCP response pagination.
  *
@@ -34,6 +33,7 @@ export const MIN_PAGINATED_MAX_CHARS = 512
 
 const { MAX_PLAN_ITERATIONS } = PAGINATION_LIMITS
 
+/** @param {any} payload */
 export function createMcpTextResult(payload) {
   const text = serializePayload(payload)
   return {
@@ -42,6 +42,7 @@ export function createMcpTextResult(payload) {
   }
 }
 
+/** @param {Record<string, any>} payload @param {string} fieldName @param {Record<string, any>} [opts] */
 export function paginateArrayField(payload, fieldName, opts = {}) {
   const { maxChars, page = 1, strategy = 'items' } = opts
   if (maxChars == null) return payload
@@ -51,7 +52,7 @@ export function paginateArrayField(payload, fieldName, opts = {}) {
     items,
     maxChars,
     initialTotalPages: 1,
-    buildPayload: (slice, pageIndex, assumedTotalPages) => ({
+    buildPayload: (/** @type {any} */ slice, /** @type {number} */ pageIndex, /** @type {number} */ assumedTotalPages) => ({
       ...payload,
       [fieldName]: slice,
       pageInfo: {
@@ -74,6 +75,7 @@ export function paginateArrayField(payload, fieldName, opts = {}) {
   return pages[page - 1]
 }
 
+/** @param {Record<string, any>} payload @param {Record<string, any>} [opts] */
 export function paginateDocumentPayload(payload, opts = {}) {
   const { maxChars, page = 1, document = payload?.metadata ?? null } = opts
   if (maxChars == null) return payload
@@ -109,7 +111,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
   // single section overflows on its own, recursively split it along
   // paragraph / line / character-window boundaries until each fragment
   // fits. Bail to text-window mode if even the smallest unit overflows.
-  const units = sections.map((section) => ({
+  const units = sections.map((/** @type {any} */ section) => ({
     ...section,
     contentText: section?.contentText ?? section?.content_text ?? '',
   }))
@@ -124,7 +126,7 @@ export function paginateDocumentPayload(payload, opts = {}) {
         items: units,
         totalPages: assumedTotalPages,
         maxChars,
-        buildPayload: (slice, pageIndex, totalPages) =>
+        buildPayload: (/** @type {any} */ slice, /** @type {number} */ pageIndex, /** @type {number} */ totalPages) =>
           buildDocumentPagePayload({
             payload,
             document,
@@ -168,10 +170,12 @@ export function paginateDocumentPayload(payload, opts = {}) {
   return pagePayloads[page - 1]
 }
 
+/** @param {Record<string, any>} payload @param {Record<string, any>} [opts] */
 export function buildMatchedDocumentPayload(payload, opts = {}) {
   const { match, caseSensitive = false, contextChars = 140, maxMatches = 5 } = opts
 
   const sections = Array.isArray(payload?.sections) ? payload.sections : []
+  /** @type {any[]} */
   const matches = []
   const needle = caseSensitive ? match : match.toLowerCase()
 
@@ -203,6 +207,7 @@ export function buildMatchedDocumentPayload(payload, opts = {}) {
   }
 }
 
+/** @param {Record<string, any>} payload @param {Record<string, any>} opts */
 function paginateTextWindowPayload(payload, opts) {
   const { maxChars, page = 1 } = opts
   const content = String(payload?.content ?? '')
@@ -210,7 +215,7 @@ function paginateTextWindowPayload(payload, opts) {
   const plan = buildTextPaginationPlan({
     text: content,
     maxChars,
-    buildPayload: (slice, pageIndex, totalPages) =>
+    buildPayload: (/** @type {any} */ slice, /** @type {number} */ pageIndex, /** @type {number} */ totalPages) =>
       withDocumentPageInfo(
         {
           ...payload,
@@ -236,6 +241,7 @@ function paginateTextWindowPayload(payload, opts) {
   return plan.pages[page - 1]
 }
 
+/** @param {Record<string, any>} payload @param {Record<string, any>} opts */
 function paginateMatchedDocumentPayload(payload, opts) {
   const { maxChars, page = 1 } = opts
   const matches = Array.isArray(payload?.matches) ? payload.matches : []
@@ -243,7 +249,7 @@ function paginateMatchedDocumentPayload(payload, opts) {
     items: matches,
     maxChars,
     initialTotalPages: 1,
-    buildPayload: (slice, pageIndex, assumedTotalPages) => ({
+    buildPayload: (/** @type {any} */ slice, /** @type {number} */ pageIndex, /** @type {number} */ assumedTotalPages) => ({
       ...payload,
       note: undefined,
       matches: slice,

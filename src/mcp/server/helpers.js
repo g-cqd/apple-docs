@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Shared helpers for the MCP tool / resource handlers.
 
 import { coerceSection } from '../../content/coercion.js'
@@ -10,14 +9,16 @@ import { MIN_PAGINATED_MAX_CHARS } from '../pagination.js'
  * camelCase and snake_case, but tools receive the row shape directly so
  * this is the single boundary that normalises before serialisation.
  */
+/** @param {Record<string, any>} payload */
 export function sanitizeDocumentPayload(payload) {
   if (!Array.isArray(payload?.sections) || payload.sections.length === 0) return payload
   return {
     ...payload,
-    sections: payload.sections.map((section) => coerceSection(section)),
+    sections: payload.sections.map((/** @type {any} */ section) => coerceSection(section)),
   }
 }
 
+/** @param {Record<string, any>} args */
 export function validatePaginationArgs(args) {
   if (args.page != null && args.maxChars == null) {
     throw new ValidationError('The page parameter requires maxChars.', { field: 'page' })
@@ -29,6 +30,7 @@ export function validatePaginationArgs(args) {
  * encode pagination as query params. Parse + validate them with the same
  * minimum-budget rule as the tool args.
  */
+/** @param {URL} uri */
 export function parseResourcePagination(uri) {
   const maxCharsValue = uri.searchParams.get('maxChars')
   const pageValue = uri.searchParams.get('page')

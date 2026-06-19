@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // MCP tool surface for asset rendering: search_sf_symbols, list_apple_fonts,
 // render_sf_symbol, render_font_text. Render outputs are deterministic for
 // the same args; results are cached at the DB / disk layer (sf_symbol_renders)
@@ -16,6 +15,11 @@ const READ_ONLY_HINTS = {
   openWorldHint: false,
 }
 
+/**
+ * @param {any} server
+ * @param {any} ctx
+ * @param {{ wrap: (name: string, fn: (args: any) => any) => any }} cache
+ */
 export function registerAssetTools(server, ctx, cache) {
   server.registerTool(
     'search_sf_symbols',
@@ -61,7 +65,7 @@ export function registerAssetTools(server, ctx, cache) {
         scale: z.enum(SYMBOL_SCALES).optional().describe('Public symbols only.'),
       },
     },
-    async (args) => {
+    async (/** @type {any} */ args) => {
       const render = await renderSfSymbol(args, ctx)
       const payload = {
         ...render,
@@ -85,7 +89,7 @@ export function registerAssetTools(server, ctx, cache) {
         size: z.coerce.number().int().min(8).max(512).optional().describe('Point size.'),
       },
     },
-    async (args) => {
+    async (/** @type {any} */ args) => {
       const render = await renderFontText(args, ctx)
       return createMcpTextResult(projectRenderFontText(render))
     },

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // MCP HTTP server /healthz + /readyz response builders.
 //
 // Pure functions with explicit deps — closures over server-internal
@@ -10,7 +9,12 @@
  * an operator can probe how the process is loaded without scraping a
  * separate metrics endpoint.
  */
+/**
+ * @param {{ exposeCacheStats?: boolean, cacheRegistry?: any, markdownCache?: any, heavyMax?: number,
+ *   heavyQueue?: number, heavySemaphore?: any, concurrencyStats?: any, readerPool?: any }} deps
+ */
 export function buildHealthBody({ exposeCacheStats, cacheRegistry, markdownCache, heavyMax, heavyQueue, heavySemaphore, concurrencyStats, readerPool }) {
+  /** @type {Record<string, any>} */
   const body = { ok: true, service: 'apple-docs-mcp' }
   if (!exposeCacheStats) return body
   body.cache = cacheRegistry.stats()
@@ -31,6 +35,7 @@ export function buildHealthBody({ exposeCacheStats, cacheRegistry, markdownCache
  * reader-pool is wired) ≥1 worker is alive. Distinct from /healthz:
  * healthz says the process is up, readyz says it can serve traffic.
  */
+/** @param {{ ctx?: any, readerPool?: any }} deps */
 export function buildReadinessResponse({ ctx, readerPool }) {
   let dbOk = false
   try {

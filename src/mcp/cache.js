@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -55,6 +54,7 @@ const DEFAULT_NEGATIVE_TTL_MS = 30_000
 // invisible to JSON.stringify and never leaks into MCP responses.
 export const CACHE_NEGATIVE = Symbol('apple-docs.cache.negative')
 
+/** @param {any} ctx @param {{ enabled?: boolean, scale?: number, sizes?: Record<string, number>, negativeTtlMs?: number, now?: () => number, dbPath?: string }} [opts] */
 export function createCacheRegistry(ctx, opts = {}) {
   const enabled = opts.enabled ?? process.env.APPLE_DOCS_MCP_CACHE !== 'off'
   // `scale` is a uniform multiplier applied to DEFAULT_SIZES. Intended use is
@@ -77,11 +77,12 @@ export function createCacheRegistry(ctx, opts = {}) {
 
   return {
     enabled,
+    /** @param {string} tool @param {(args: any) => any} handler */
     wrap(tool, handler) {
       if (!enabled || !caches.has(tool)) return handler
       const cache = caches.get(tool)
       const counter = counters.get(tool)
-      return async (args) => {
+      return async (/** @type {any} */ args) => {
         const key = cacheKey(tool, args, stamper.get())
         const hit = cache.get(key, now())
         if (hit !== undefined) {
@@ -96,6 +97,7 @@ export function createCacheRegistry(ctx, opts = {}) {
       }
     },
     stats() {
+      /** @type {Record<string, any>} */
       const tools = {}
       let totalHits = 0
       let totalMisses = 0
@@ -117,6 +119,7 @@ export function createCacheRegistry(ctx, opts = {}) {
     },
     // Legacy shape used by older tests — returns per-tool LRU size only.
     _stats() {
+      /** @type {Record<string, any>} */
       const out = {}
       for (const [tool, cache] of caches) out[tool] = cache.size
       return out
@@ -132,10 +135,12 @@ export function createCacheRegistry(ctx, opts = {}) {
   }
 }
 
+/** @param {any} ctx @param {{ dbPath?: string }} [opts] */
 export function createStamper(ctx, opts = {}) {
   const dataDir = ctx?.dataDir
   const dbPath = opts.dbPath ?? (dataDir ? join(dataDir, 'apple-docs.db') : null)
   const schemaVersion = safeSchemaVersion(ctx)
+  /** @type {string | null} */
   let cachedStamp = null
   let refreshedAt = 0
 
@@ -165,6 +170,7 @@ export function createStamper(ctx, opts = {}) {
   }
 }
 
+/** @param {any} ctx */
 function safeSchemaVersion(ctx) {
   try {
     return ctx?.db?.getSchemaVersion?.() ?? 0
@@ -173,6 +179,7 @@ function safeSchemaVersion(ctx) {
   }
 }
 
+/** @param {string} tool @param {unknown} args @param {string} stamp */
 export function cacheKey(tool, args, stamp) {
   const payload = `${tool}\0${stableJson(args ?? {})}\0${stamp}`
   return new Bun.CryptoHasher('sha256').update(payload).digest('hex')
@@ -182,6 +189,7 @@ export function cacheKey(tool, args, stamp) {
  * Deterministic JSON: sort object keys recursively.
  * String values are NOT normalized — distinct by casing/whitespace.
  */
+/** @param {any} value @returns {string} */
 export function stableJson(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
@@ -191,17 +199,19 @@ export function stableJson(value) {
 }
 
 class LruCache {
+  /** @param {number} capacity */
   constructor(capacity) {
     this.capacity = Math.max(1, capacity | 0)
-    // Map<key, { value, expiresAt: number | null }>
+    /** @type {Map<string, { value: any, expiresAt: number | null }>} */
     this.map = new Map()
   }
   get size() {
     return this.map.size
   }
+  /** @param {string} key @param {number} [nowMs] */
   get(key, nowMs = Date.now()) {
-    if (!this.map.has(key)) return undefined
     const entry = this.map.get(key)
+    if (entry === undefined) return undefined
     if (entry.expiresAt != null && entry.expiresAt <= nowMs) {
       // Expired: evict and treat as miss. The next set() rewrites freshly.
       this.map.delete(key)
@@ -211,12 +221,13 @@ class LruCache {
     this.map.set(key, entry)
     return entry.value
   }
+  /** @param {string} key @param {any} value @param {number | null} [expiresAt] */
   set(key, value, expiresAt = null) {
     if (this.map.has(key)) this.map.delete(key)
     this.map.set(key, { value, expiresAt })
     while (this.map.size > this.capacity) {
       const oldest = this.map.keys().next().value
-      this.map.delete(oldest)
+      if (oldest !== undefined) this.map.delete(oldest)
     }
   }
   clear() {

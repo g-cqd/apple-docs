@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // MCP resource registrations: stable URIs that map to corpus content
 // (apple-docs://doc/<key>, apple-docs://framework/<slug>,
 // apple-docs://sf-symbol/<scope>/<name>.<format>, apple-docs://font/<id>).
@@ -14,14 +13,15 @@ import { serializePayload } from '../pagination/text-utils.js'
 import { paginateArrayField } from '../pagination.js'
 import { parseResourcePagination, sanitizeDocumentPayload } from './helpers.js'
 
+/** @param {any} server @param {any} ctx */
 export function registerResources(server, ctx) {
   server.resource(
     'doc',
     new ResourceTemplate('apple-docs://doc/{+key}', { list: undefined }),
     { description: 'Read a documentation page by key', mimeType: 'text/markdown' },
-    async (uri, { key }) => {
+    async (/** @type {URL} */ uri, /** @type {any} */ { key }) => {
       const result = await lookup({ path: key }, ctx)
-      const projected = projectReadDoc(sanitizeDocumentPayload(result), { full: false })
+      const projected = /** @type {any} */ (projectReadDoc(sanitizeDocumentPayload(result), { full: false }))
       const text = projected.found === false ? (projected.note ?? 'Not found') : (result.content ?? result.note ?? 'Not found')
       return {
         contents: [
@@ -39,9 +39,9 @@ export function registerResources(server, ctx) {
     'framework',
     new ResourceTemplate('apple-docs://framework/{slug}', {
       list: async () => {
-        const result = projectFrameworks(await frameworks({}, ctx))
+        const result = /** @type {any} */ (projectFrameworks(await frameworks({}, ctx)))
         return {
-          resources: result.roots.map((r) => ({
+          resources: result.roots.map((/** @type {any} */ r) => ({
             uri: `apple-docs://framework/${r.slug}`,
             name: r.name ?? r.slug,
           })),
@@ -49,7 +49,7 @@ export function registerResources(server, ctx) {
       },
     }),
     { description: 'Browse a framework topic tree', mimeType: 'application/json' },
-    async (uri, { slug }) => {
+    async (/** @type {URL} */ uri, /** @type {any} */ { slug }) => {
       const { maxChars, page } = parseResourcePagination(uri)
       const result = await browse({ framework: String(slug).split('?')[0] }, ctx)
       const payload =
@@ -78,7 +78,7 @@ export function registerResources(server, ctx) {
     'sf-symbol',
     new ResourceTemplate('apple-docs://sf-symbol/{scope}/{name}.{format}', { list: undefined }),
     { description: 'Read or render an SF Symbol asset', mimeType: 'application/octet-stream' },
-    async (uri, { scope, name, format }) => {
+    async (/** @type {URL} */ uri, /** @type {any} */ { scope, name, format }) => {
       const requestedFormat = String(format) === 'svg' ? 'svg' : 'png'
       const render = await renderSfSymbol(
         {
@@ -113,7 +113,7 @@ export function registerResources(server, ctx) {
     'font',
     new ResourceTemplate('apple-docs://font/{id}', { list: undefined }),
     { description: 'Read an indexed Apple font file', mimeType: 'application/octet-stream' },
-    async (uri, { id }) => {
+    async (/** @type {URL} */ uri, /** @type {any} */ { id }) => {
       const font = ctx.db.getAppleFontFile(String(id))
       if (!font) throw new NotFoundError(`apple-docs://font/${id}`, `Font file not found: ${id}`)
       const file = Bun.file(font.file_path)
