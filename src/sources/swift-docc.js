@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { extractReferences } from '../apple/extractor.js'
 import { extractRootSlug } from '../apple/normalizer.js'
 import { normalize } from '../content/normalize.js'
@@ -17,6 +16,7 @@ const HTTP_OPTS = { headers: { 'User-Agent': USER_AGENT }, timeout: DEFAULT_TIME
  * Key format: `<slug>/documentation/<archive-internal-path>`
  * Internal paths come from the archive's own `index/index.json`.
  */
+/** @type {Record<string, any>} */
 export const ARCHIVES = {
   'swift-compiler': {
     displayName: 'Swift Compiler',
@@ -47,16 +47,17 @@ export const ARCHIVES = {
   },
 }
 
-const indexUrl = (archive) => `${archive.baseUrl}/index/index.json`
-const dataUrl = (archive, path) => `${archive.baseUrl}/data${path}.json`
-const pageUrl = (archive, path) => `${archive.baseUrl}${path}`
+const indexUrl = (/** @type {any} */ archive) => `${archive.baseUrl}/index/index.json`
+const dataUrl = (/** @type {any} */ archive, /** @type {any} */ path) => `${archive.baseUrl}/data${path}.json`
+const pageUrl = (/** @type {any} */ archive, /** @type {any} */ path) => `${archive.baseUrl}${path}`
 
-export function collectIndexPaths(index) {
+export function collectIndexPaths(/** @type {any} */ index) {
+  /** @type {any[]} */
   const out = []
   const swift = index?.interfaceLanguages?.swift
   if (!Array.isArray(swift)) return out
 
-  const walk = (node) => {
+  const walk = (/** @type {any} */ node) => {
     if (!node || typeof node !== 'object') return
     if (typeof node.path === 'string') out.push(node.path)
     if (Array.isArray(node.children)) {
@@ -67,12 +68,12 @@ export function collectIndexPaths(index) {
   return out
 }
 
-export function pathToKey(slug, internalPath) {
+export function pathToKey(/** @type {any} */ slug, /** @type {any} */ internalPath) {
   const trimmed = internalPath.startsWith('/') ? internalPath.slice(1) : internalPath
   return `${slug}/${trimmed.toLowerCase()}`
 }
 
-export function keyToPath(slug, key) {
+export function keyToPath(/** @type {any} */ slug, /** @type {any} */ key) {
   const prefix = `${slug}/`
   if (!key.startsWith(prefix)) {
     throw new ValidationError(`Key '${key}' does not belong to archive '${slug}'`, { field: 'key', value: key })
@@ -80,8 +81,8 @@ export function keyToPath(slug, key) {
   return `/${key.slice(prefix.length)}`
 }
 
-function archiveForKey(key) {
-  const slug = extractRootSlug(key)
+function archiveForKey(/** @type {any} */ key) {
+  const slug = extractRootSlug(key) ?? ''
   const archive = ARCHIVES[slug]
   if (!archive) throw new NotFoundError(slug, `Unknown swift-docc archive slug: ${slug}`)
   return { slug, archive, path: keyToPath(slug, key) }
@@ -94,7 +95,7 @@ export class SwiftDoccAdapter extends SourceAdapter {
   static displayName = 'Swift Documentation Archives'
   static syncMode = 'flat'
 
-  /** @type {import('./entry-points.js').EntryPoint[]} */
+  /** @type {import('./base.js').EntryPoint[]} */
   static entryPoints = Object.entries(ARCHIVES).map(([slug, archive]) => ({
     slug,
     key: archive.entryKey,
@@ -103,7 +104,7 @@ export class SwiftDoccAdapter extends SourceAdapter {
     parents: archive.parents ?? [],
   }))
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     const entries = Object.entries(ARCHIVES)
 
     const allRoots = []
@@ -121,7 +122,7 @@ export class SwiftDoccAdapter extends SourceAdapter {
           const { data } = await fetchWithRetry(indexUrl(archive), ctx.rateLimiter, HTTP_OPTS)
           return { slug, paths: collectIndexPaths(data) }
         } catch (e) {
-          ctx.logger?.warn?.(`swift-docc: failed to discover ${slug}`, { error: e.message })
+          ctx.logger?.warn?.(`swift-docc: failed to discover ${slug}`, { error: e instanceof Error ? e.message : e })
           return { slug, paths: [] }
         }
       }),
@@ -135,13 +136,13 @@ export class SwiftDoccAdapter extends SourceAdapter {
     return this.validateDiscoveryResult({ keys: allKeys, roots: allRoots })
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const { archive, path } = archiveForKey(key)
     const { data, etag, lastModified } = await fetchWithRetry(dataUrl(archive, path), ctx.rateLimiter, HTTP_OPTS)
     return this.validateFetchResult({ key, payload: data, etag, lastModified })
   }
 
-  async check(key, previousState, ctx) {
+  async check(/** @type {any} */ key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const { archive, path } = archiveForKey(key)
     const result = await checkResourceEtag(dataUrl(archive, path), previousState?.etag ?? null, ctx.rateLimiter, HTTP_OPTS)
     return this.validateCheckResult({
@@ -152,7 +153,7 @@ export class SwiftDoccAdapter extends SourceAdapter {
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const { slug, archive } = archiveForKey(key)
     const json = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload
 
@@ -160,8 +161,8 @@ export class SwiftDoccAdapter extends SourceAdapter {
     // resolve refs to un-prefixed paths like 'diagnostics/foo'. Override both
     // so URLs point at docs.swift.org and refs use our scoped storage keys.
     const result = normalize(json, key, SwiftDoccAdapter.type, {
-      urlBuilder: (k) => pageUrl(archive, keyToPath(slug, k)),
-      keyMapper: (internalKey) => addArchivePrefix(slug, internalKey),
+      urlBuilder: (/** @type {any} */ k) => pageUrl(archive, keyToPath(slug, k)),
+      keyMapper: (/** @type {any} */ internalKey) => addArchivePrefix(slug, internalKey),
     })
 
     // The shared normalizer derives `framework` from the first key segment, which
@@ -170,7 +171,7 @@ export class SwiftDoccAdapter extends SourceAdapter {
     return this.validateNormalizeResult(result)
   }
 
-  extractReferences(key, rawPayload) {
+  extractReferences(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const { slug } = archiveForKey(key)
     const json = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload
     return extractReferences(json).map((ref) => addArchivePrefix(slug, ref))
@@ -188,7 +189,7 @@ addEntryPoints(SwiftDoccAdapter.entryPoints)
  * (no leading 'documentation/'). Restore that segment and prepend the archive
  * slug to produce our scoped storage keys.
  */
-function addArchivePrefix(slug, internalKey) {
+function addArchivePrefix(/** @type {any} */ slug, /** @type {any} */ internalKey) {
   if (!internalKey) return internalKey
   if (internalKey.startsWith(`${slug}/`)) return internalKey
   return `${slug}/documentation/${internalKey}`

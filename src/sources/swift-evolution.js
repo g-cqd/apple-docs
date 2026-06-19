@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { parseMarkdownToSections } from '../content/parse-markdown.js'
 import { checkRawGitHub, fetchGitHubTree, fetchRawGitHub } from '../lib/github.js'
 import { SourceAdapter } from './base.js'
@@ -19,7 +18,8 @@ const ROOT_SLUG = 'swift-evolution'
  *   * Status: **Accepted**
  *   * Implementation: [apple/swift#12345](url)
  */
-function parseProposalHeader(markdown) {
+function parseProposalHeader(/** @type {any} */ markdown) {
+  /** @type {Record<string, any>} */
   const meta = {
     seNumber: null,
     status: null,
@@ -70,7 +70,7 @@ export class SwiftEvolutionAdapter extends SourceAdapter {
   static displayName = 'Swift Evolution Proposals'
   static syncMode = 'flat'
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
       ctx.db.upsertRoot(ROOT_SLUG, 'Swift Evolution Proposals', 'collection', ROOT_SLUG)
     }
@@ -90,7 +90,7 @@ export class SwiftEvolutionAdapter extends SourceAdapter {
     })
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const filename = key.replace(`${ROOT_SLUG}/`, '')
     const { text, etag, lastModified } = await fetchRawGitHub(OWNER, REPO, BRANCH, `proposals/${filename}.md`, ctx.rateLimiter)
 
@@ -102,7 +102,7 @@ export class SwiftEvolutionAdapter extends SourceAdapter {
     })
   }
 
-  async check(key, previousState, ctx) {
+  async check(/** @type {any} */ key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const filename = key.replace(`${ROOT_SLUG}/`, '')
     const result = await checkRawGitHub(OWNER, REPO, BRANCH, `proposals/${filename}.md`, previousState?.etag ?? null, ctx.rateLimiter)
 
@@ -114,7 +114,7 @@ export class SwiftEvolutionAdapter extends SourceAdapter {
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const markdown = typeof rawPayload === 'string' ? rawPayload : String(rawPayload)
     const header = parseProposalHeader(markdown)
 

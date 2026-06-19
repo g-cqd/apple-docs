@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Cross-source entry-point registry.
  *
@@ -40,7 +39,7 @@ export function clearEntryPoints() {
   ENTRY_POINTS.length = 0
 }
 
-/** Return all entry points whose `parents` includes the given key. */
+/** Return all entry points whose `parents` includes the given key. @param {string} parentKey */
 export function getEntryPointsForParent(parentKey) {
   return ENTRY_POINTS.filter((ep) => ep.parents.includes(parentKey))
 }

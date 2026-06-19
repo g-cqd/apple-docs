@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { AssertionError, NotFoundError } from '../lib/errors.js'
 import { AppleArchiveAdapter } from './apple-archive.js'
 import { AppleDoccAdapter } from './apple-docc.js'
@@ -16,6 +15,7 @@ import { WwdcAdapter } from './wwdc.js'
 
 const registry = new Map()
 
+/** @param {any} AdapterClass */
 function registerAdapter(AdapterClass) {
   if (!(AdapterClass.prototype instanceof SourceAdapter)) {
     throw new AssertionError('Adapter must extend SourceAdapter')
@@ -23,6 +23,7 @@ function registerAdapter(AdapterClass) {
   registry.set(AdapterClass.type, AdapterClass)
 }
 
+/** @param {any} sourceType */
 export function getAdapter(sourceType) {
   const AdapterClass = registry.get(sourceType)
   if (!AdapterClass) {

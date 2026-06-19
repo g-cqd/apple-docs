@@ -1,9 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
- * @typedef {{ keys: string[], roots?: Array<object> }} DiscoveryResult
- * @typedef {{ key: string, payload: object, etag?: string|null, lastModified?: string|null }} FetchResult
- * @typedef {{ status: 'unchanged'|'modified'|'deleted'|'error', changed: boolean, newState?: object, deleted?: boolean }} CheckResult
- * @typedef {{ document: object, sections: object[], relationships: object[] }} NormalizeResult
+ * @typedef {{ keys: string[], roots?: Array<any> }} DiscoveryResult
+ * @typedef {{ key: string, payload: any, etag?: string|null, lastModified?: string|null }} FetchResult
+ * @typedef {{ status: 'unchanged'|'modified'|'deleted'|'error', changed: boolean, newState?: any, deleted?: boolean }} CheckResult
+ * @typedef {{ document: any, sections: any[], relationships: any[] }} NormalizeResult
  *
  * @typedef {object} EntryPoint
  * @property {string} slug      The owning root slug (e.g. 'swift-compiler').
@@ -20,7 +19,7 @@ export class SourceAdapter {
   static type = 'base'
   static displayName = 'Base Source'
   static requiresNetwork = true
-  /** @type {'crawl'|'flat'|'snapshot'} */
+  /** @type {string} */
   static syncMode = 'crawl'
 
   /**
@@ -31,58 +30,68 @@ export class SourceAdapter {
    */
   static entryPoints = []
 
+  /** @param {any} _ctx @returns {Promise<any>} */
   async discover(_ctx) {
     throw new AssertionError('Not implemented')
   }
 
+  /** @param {any} _key @param {any} _ctx @returns {Promise<any>} */
   async fetch(_key, _ctx) {
     throw new AssertionError('Not implemented')
   }
 
+  /** @param {any} _key @param {any} _previousState @param {any} _ctx @returns {Promise<any>} */
   async check(_key, _previousState, _ctx) {
     throw new AssertionError('Not implemented')
   }
 
+  /** @param {any} _key @param {any} _rawPayload @returns {any} */
   normalize(_key, _rawPayload) {
     throw new AssertionError('Not implemented')
   }
 
+  /** @param {any} _key @param {any} _rawPayload @returns {any[]} */
   extractReferences(_key, _rawPayload) {
     return []
   }
 
+  /** @returns {any} */
   renderHints() {
     return {}
   }
 
+  /** @param {any} result */
   validateDiscoveryResult(result) {
     if (!result || !Array.isArray(result.keys)) {
-      throw new AssertionError(`${this.constructor.type}.discover() must return { keys: [] }`)
+      throw new AssertionError(`${/** @type {any} */ (this.constructor).type}.discover() must return { keys: [] }`)
     }
     return result
   }
 
+  /** @param {any} result */
   validateFetchResult(result) {
     if (!result || typeof result.key !== 'string' || result.payload == null) {
-      throw new AssertionError(`${this.constructor.type}.fetch() must return { key, payload }`)
+      throw new AssertionError(`${/** @type {any} */ (this.constructor).type}.fetch() must return { key, payload }`)
     }
     return result
   }
 
+  /** @param {any} result */
   validateCheckResult(result) {
     const validStatuses = new Set(['unchanged', 'modified', 'deleted', 'error'])
     if (!result || !validStatuses.has(result.status)) {
-      throw new AssertionError(`${this.constructor.type}.check() must return a valid status`)
+      throw new AssertionError(`${/** @type {any} */ (this.constructor).type}.check() must return a valid status`)
     }
     return result
   }
 
+  /** @param {any} result */
   validateNormalizeResult(result) {
     if (!result?.document || !Array.isArray(result?.sections) || !Array.isArray(result?.relationships)) {
-      throw new AssertionError(`${this.constructor.type}.normalize() must return { document, sections, relationships }`)
+      throw new AssertionError(`${/** @type {any} */ (this.constructor).type}.normalize() must return { document, sections, relationships }`)
     }
     if (typeof result.document.key !== 'string') {
-      throw new AssertionError(`${this.constructor.type}.normalize() must return document.key`)
+      throw new AssertionError(`${/** @type {any} */ (this.constructor).type}.normalize() must return document.key`)
     }
     return result
   }

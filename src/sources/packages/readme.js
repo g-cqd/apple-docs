@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchRawGitHub } from '../../lib/github.js'
 
 const README_FILENAMES = ['README.md', 'readme.md', 'README.markdown']
@@ -10,7 +9,7 @@ const DEFAULT_BRANCHES = ['main', 'master']
  * possible; the abstract is the first prose paragraph after the title.
  */
 
-async function fetchRawReadmeOnBranch(owner, repo, branch, rateLimiter) {
+async function fetchRawReadmeOnBranch(/** @type {any} */ owner, /** @type {any} */ repo, /** @type {any} */ branch, /** @type {any} */ rateLimiter) {
   for (const filename of README_FILENAMES) {
     try {
       const result = await fetchRawGitHub(owner, repo, branch, filename, rateLimiter)
@@ -25,7 +24,7 @@ async function fetchRawReadmeOnBranch(owner, repo, branch, rateLimiter) {
         branch,
       }
     } catch (error) {
-      if (error?.status === 404) continue
+      if (/** @type {any} */ (error)?.status === 404) continue
       throw error
     }
   }
@@ -37,7 +36,7 @@ async function fetchRawReadmeOnBranch(owner, repo, branch, rateLimiter) {
  * README filename variant. Returns the first match or null if nothing was
  * found across all permutations.
  */
-export async function discoverRawReadme(owner, repo, preferredBranch, rateLimiter) {
+export async function discoverRawReadme(/** @type {any} */ owner, /** @type {any} */ repo, /** @type {any} */ preferredBranch, /** @type {any} */ rateLimiter) {
   const branches = []
   if (preferredBranch) branches.push(preferredBranch)
   for (const b of DEFAULT_BRANCHES) {
@@ -54,7 +53,7 @@ export async function discoverRawReadme(owner, repo, preferredBranch, rateLimite
  * Extract a short abstract from raw README markdown — prefers the first
  * non-empty line after the first H1, skipping badges and HTML-only lines.
  */
-export function extractAbstractFromMarkdown(markdown) {
+export function extractAbstractFromMarkdown(/** @type {any} */ markdown) {
   if (!markdown) return null
   const lines = markdown.split(/\r?\n/)
   let seenH1 = false

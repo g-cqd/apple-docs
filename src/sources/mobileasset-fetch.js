@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Download path for the Xcode Developer Documentation MobileAsset, for
  * machines without Xcode (CI, servers). The asset is a plain zip on Apple's
@@ -38,14 +37,14 @@ export const FALLBACK_ASSET = Object.freeze({
 })
 
 /** Parse the MobileAsset manifest plist into download candidates. */
-export function parseAssetManifest(xml) {
+export function parseAssetManifest(/** @type {any} */ xml) {
   const out = []
   // Each asset is a <dict> inside the Assets <array>; the fields we need are
   // flat string/integer/data pairs. A targeted scan keeps us free of a plist
   // dependency and is pinned by a unit test against the real structure.
   const dicts = String(xml).split('<dict>').slice(1)
   for (const d of dicts) {
-    const field = (key, tag) => {
+    const field = (/** @type {any} */ key, /** @type {any} */ tag) => {
       const m = d.match(new RegExp(`<key>${key}</key>\\s*<${tag}>([^<]*)</${tag}>`))
       return m ? m[1].trim() : null
     }
@@ -62,10 +61,11 @@ export function parseAssetManifest(xml) {
       url: base + rel,
     })
   }
-  return out.sort((a, b) => Number.parseFloat(b.osVersion) - Number.parseFloat(a.osVersion))
+  return out.sort((a, b) => Number.parseFloat(b.osVersion ?? '') - Number.parseFloat(a.osVersion ?? ''))
 }
 
-/** Pick the download: explicit url → newest manifest variant → pinned fallback. */
+/** Pick the download: explicit url → newest manifest variant → pinned fallback.
+ * @param {{ url?: string, manifestPath?: string }} [opts] */
 export async function resolveDownload({ url, manifestPath = DEFAULT_MANIFEST_PATH } = {}) {
   if (url) return { url, sha1: null, size: null, source: 'explicit' }
   if (existsSync(manifestPath)) {
@@ -80,7 +80,7 @@ export async function resolveDownload({ url, manifestPath = DEFAULT_MANIFEST_PAT
  * path. Cached: if the extracted DB already exists for this URL, no network.
  *
  * @param {{ url: string, sha1?: string|null, size?: number|null,
- *   cacheDir?: string, logger?: object, fetchImpl?: typeof fetch }} opts
+ *   cacheDir?: string, logger?: any, fetchImpl?: typeof fetch }} opts
  * @returns {Promise<{ dbPath: string, cached: boolean }>}
  */
 export async function fetchDocumentationAsset({ url, sha1 = null, size = null, cacheDir, logger, fetchImpl = fetch }) {
@@ -111,6 +111,7 @@ export async function fetchDocumentationAsset({ url, sha1 = null, size = null, c
     // bound a hostile/oversized response so it can't fill the disk.
     const MAX_BYTES = Math.max(size ?? 0, 2 * 1024 ** 3)
     let written = 0
+    if (!res.body) throw new ValidationError(`Asset download returned no body for ${url}`)
     for await (const chunk of res.body) {
       written += chunk.byteLength
       if (written > MAX_BYTES) throw new ValidationError(`Asset exceeds ${(MAX_BYTES / 1024 ** 3).toFixed(1)} GiB cap — refusing.`)

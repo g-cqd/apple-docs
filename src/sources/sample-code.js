@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { checkDocPage, fetchDocPage } from '../apple/api.js'
 import { normalize } from '../content/normalize.js'
 import { SourceAdapter } from './base.js'
@@ -130,7 +129,7 @@ export class SampleCodeAdapter extends SourceAdapter {
   static displayName = 'Apple Sample Code'
   static syncMode = 'flat'
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
       ctx.db.upsertRoot(ROOT_SLUG, 'Apple Sample Code', 'collection', ROOT_SLUG)
     }
@@ -162,7 +161,7 @@ export class SampleCodeAdapter extends SourceAdapter {
     })
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const docPath = key.replace(`${ROOT_SLUG}/`, '')
     const result = await fetchDocPage(docPath, ctx.rateLimiter)
     return this.validateFetchResult({
@@ -173,7 +172,7 @@ export class SampleCodeAdapter extends SourceAdapter {
     })
   }
 
-  async check(key, previousState, ctx) {
+  async check(/** @type {any} */ key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const docPath = key.replace(`${ROOT_SLUG}/`, '')
     const result = await checkDocPage(docPath, previousState?.etag ?? null, ctx.rateLimiter)
     return this.validateCheckResult({
@@ -184,7 +183,7 @@ export class SampleCodeAdapter extends SourceAdapter {
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const docPath = key.replace(`${ROOT_SLUG}/`, '')
     const framework = docPath.split('/')[0] ?? null
 

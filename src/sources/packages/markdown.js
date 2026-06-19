@@ -1,37 +1,36 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Markdown synthesis + section helpers for repo metadata.
  * Produces a doc-shaped Markdown for repos whose README we can pull,
  * and a metadata section the renderer surfaces alongside the README.
  */
 
-export function synthesizeMarkdown(repo) {
+export function synthesizeMarkdown(/** @type {any} */ repo) {
   const title = repo?.full_name ?? repo?.name ?? 'Swift Package'
   const description = repo?.description?.trim() || 'Package metadata imported from GitHub.'
   return `# ${title}\n\n${description}\n`
 }
 
-export function normalizeLicense(license) {
+export function normalizeLicense(/** @type {any} */ license) {
   if (!license) return null
   if (license.spdx_id && license.spdx_id !== 'NOASSERTION') return license.spdx_id
   return license.name ?? null
 }
 
-export function normalizeLanguage(language) {
+export function normalizeLanguage(/** @type {any} */ language) {
   return typeof language === 'string' && language.trim() ? language.trim().toLowerCase() : null
 }
 
-function reindexSections(sections) {
-  return sections.map((section, index) => ({
+function reindexSections(/** @type {any} */ sections) {
+  return sections.map((/** @type {any} */ section, /** @type {any} */ index) => ({
     ...section,
     sortOrder: index,
   }))
 }
 
-export function ensureAbstractSection(sections, abstractText) {
+export function ensureAbstractSection(/** @type {any} */ sections, /** @type {any} */ abstractText) {
   if (!abstractText) return sections
-  const next = sections.map((section) => ({ ...section }))
-  const index = next.findIndex((section) => section.sectionKind === 'abstract')
+  const next = sections.map((/** @type {any} */ section) => ({ ...section }))
+  const index = next.findIndex((/** @type {any} */ section) => section.sectionKind === 'abstract')
   if (index >= 0) {
     next[index].contentText = abstractText
     next[index].contentJson = null
@@ -47,7 +46,7 @@ export function ensureAbstractSection(sections, abstractText) {
   return reindexSections(next)
 }
 
-export function appendMetadataSection(sections, repo, readme) {
+export function appendMetadataSection(/** @type {any} */ sections, /** @type {any} */ repo, /** @type {any} */ readme) {
   const fields = []
   fields.push(`Repository: ${repo?.full_name ?? repo?.name ?? 'unknown'}`)
 
@@ -74,7 +73,7 @@ export function appendMetadataSection(sections, repo, readme) {
   if (fields.length === 0) return sections
 
   return reindexSections([
-    ...sections.map((section) => ({ ...section })),
+    ...sections.map((/** @type {any} */ section) => ({ ...section })),
     {
       sectionKind: 'discussion',
       heading: 'Package Metadata',
@@ -91,6 +90,7 @@ export function appendMetadataSection(sections, repo, readme) {
  * /readme API payload, or `null` if all variants 404.
  */
 
+/** @param {{ owner: string, repo: string }} repoRef @param {{ branch?: string, description?: string }} meta */
 export function synthesizeRepoShape({ owner, repo }, { branch, description }) {
   return {
     name: repo,

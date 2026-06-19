@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchHtmlPage } from '../apple/api.js'
 import { parseHtmlToNormalized } from '../content/parse-html.js'
 import { HttpError } from '../lib/errors.js'
@@ -116,12 +115,12 @@ function decodeHtmlEntities(value) {
     .replace(/&amp;/g, '&')
 }
 
-function getArchiveFormat(relativeUrl) {
+function getArchiveFormat(/** @type {any} */ relativeUrl) {
   const match = relativeUrl.match(/\.([a-z0-9]+)$/i)
   return (match?.[1] ?? 'html').toLowerCase()
 }
 
-async function fetchArchivePdfMetadata(url, rateLimiter) {
+async function fetchArchivePdfMetadata(/** @type {any} */ url, /** @type {any} */ rateLimiter) {
   await rateLimiter.acquire()
 
   const res = await fetch(url, {
@@ -168,7 +167,7 @@ export class AppleArchiveAdapter extends SourceAdapter {
     this._guideCatalog = null
   }
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
       ctx.db.upsertRoot(ROOT_SLUG, 'Apple Developer Archive', 'collection', ROOT_SLUG)
     }
@@ -182,7 +181,7 @@ export class AppleArchiveAdapter extends SourceAdapter {
     })
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const guides = await this.#loadGuideCatalog(ctx)
     const entry = guides.get(key)
     const url = entry?.url ?? keyToFallbackUrl(key)
@@ -214,14 +213,14 @@ export class AppleArchiveAdapter extends SourceAdapter {
    * Archive content is frozen and never updated by Apple.
    * Always return 'unchanged' to avoid unnecessary network requests.
    */
-  async check(_key, _previousState, _ctx) {
+  async check(/** @type {any} */ _key, /** @type {any} */ _previousState, /** @type {any} */ _ctx) {
     return this.validateCheckResult({
       status: 'unchanged',
       changed: false,
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const entry = this._guideCatalog?.get(key) ?? null
     const url = entry?.url ?? keyToFallbackUrl(key)
     const framework = deriveFramework(key)
@@ -281,7 +280,7 @@ export class AppleArchiveAdapter extends SourceAdapter {
     return this.validateNormalizeResult(result)
   }
 
-  async #loadGuideCatalog(ctx) {
+  async #loadGuideCatalog(/** @type {any} */ ctx) {
     if (this._guideCatalog) return this._guideCatalog
 
     await ctx.rateLimiter.acquire()
@@ -294,7 +293,7 @@ export class AppleArchiveAdapter extends SourceAdapter {
       throw new HttpError(res.status, ARCHIVE_LIBRARY_URL, `HTTP ${res.status} fetching ${ARCHIVE_LIBRARY_URL}`)
     }
 
-    const library = parseArchiveLibrary(await res.text())
+    const library = /** @type {any} */ (parseArchiveLibrary(await res.text()))
     const columns = library.columns ?? {}
     const guides = new Map()
 

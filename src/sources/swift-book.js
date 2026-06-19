@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { parseMarkdownToSections, splitByHeadings } from '../content/parse-markdown.js'
 import { checkRawGitHub, fetchGitHubTree, fetchRawGitHub } from '../lib/github.js'
 import { SourceAdapter } from './base.js'
@@ -13,6 +12,7 @@ const ROOT_FILE = 'The-Swift-Programming-Language'
 
 const DOC_REF_REGEX = /<doc:([A-Za-z0-9_-]+)>/g
 
+/** @type {Record<string, string>} */
 const BOOK_SECTION_TITLES = {
   GuidedTour: 'Welcome to Swift',
   LanguageGuide: 'Language Guide',
@@ -20,7 +20,7 @@ const BOOK_SECTION_TITLES = {
   RevisionHistory: 'Revision History',
 }
 
-function humanizeFilename(filename) {
+function humanizeFilename(/** @type {any} */ filename) {
   return filename
     .replace(/\.md$/, '')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -32,7 +32,7 @@ function humanizeFilename(filename) {
  * physically lives under a section directory (GuidedTour/, LanguageGuide/,
  * ReferenceManual/, RevisionHistory/). This map lets us resolve those refs.
  */
-function buildChapterIndex(keys) {
+function buildChapterIndex(/** @type {any} */ keys) {
   const index = new Map()
   for (const key of keys) {
     const path = key.replace(`${ROOT_SLUG}/`, '')
@@ -52,7 +52,7 @@ function buildChapterIndex(keys) {
  *   - <doc:ChapterName>
  *   - <doc:OtherChapter>
  */
-export function parseBookTopics(markdown) {
+export function parseBookTopics(/** @type {any} */ markdown) {
   if (typeof markdown !== 'string' || !markdown) return []
 
   const topics = splitByHeadings(markdown, 2).find((s) => s.heading === 'Topics')
@@ -75,7 +75,7 @@ export class SwiftBookAdapter extends SourceAdapter {
   static displayName = 'The Swift Programming Language'
   static syncMode = 'flat'
 
-  /** @type {import('./entry-points.js').EntryPoint[]} */
+  /** @type {import('./base.js').EntryPoint[]} */
   static entryPoints = [
     {
       slug: ROOT_SLUG,
@@ -95,7 +95,7 @@ export class SwiftBookAdapter extends SourceAdapter {
     this.chapterIndex = new Map()
   }
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
       ctx.db.upsertRoot(ROOT_SLUG, 'The Swift Programming Language', 'collection', ROOT_SLUG)
     }
@@ -117,7 +117,7 @@ export class SwiftBookAdapter extends SourceAdapter {
     })
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const relativePath = key.replace(`${ROOT_SLUG}/`, '')
     const { text, etag, lastModified } = await fetchRawGitHub(OWNER, REPO, BRANCH, `${CONTENT_PREFIX}${relativePath}.md`, ctx.rateLimiter)
 
@@ -129,7 +129,7 @@ export class SwiftBookAdapter extends SourceAdapter {
     })
   }
 
-  async check(key, previousState, ctx) {
+  async check(/** @type {any} */ key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const relativePath = key.replace(`${ROOT_SLUG}/`, '')
     const result = await checkRawGitHub(OWNER, REPO, BRANCH, `${CONTENT_PREFIX}${relativePath}.md`, previousState?.etag ?? null, ctx.rateLimiter)
 
@@ -141,7 +141,7 @@ export class SwiftBookAdapter extends SourceAdapter {
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const markdown = typeof rawPayload === 'string' ? rawPayload : String(rawPayload)
     const filename = key.split('/').pop()
     const isRoot = filename === ROOT_FILE
@@ -176,15 +176,15 @@ export class SwiftBookAdapter extends SourceAdapter {
    * grammar summary, which has no markdown source) are still listed in the
    * topics section but skipped from the relationships table.
    */
-  applyRootTopics(result, markdown, rootKey) {
+  applyRootTopics(/** @type {any} */ result, /** @type {any} */ markdown, /** @type {any} */ rootKey) {
     const groups = parseBookTopics(markdown)
     if (groups.length === 0) return
 
     // Drop the auto-generated discussion section whose heading is "Topics" —
     // the structured topics section below replaces it.
-    result.sections = result.sections.filter((s) => !(s.sectionKind === 'discussion' && s.heading === 'Topics'))
+    result.sections = result.sections.filter((/** @type {any} */ s) => !(s.sectionKind === 'discussion' && s.heading === 'Topics'))
 
-    const order = result.sections.length === 0 ? 0 : Math.max(...result.sections.map((s) => s.sortOrder ?? 0)) + 1
+    const order = result.sections.length === 0 ? 0 : Math.max(...result.sections.map((/** @type {any} */ s) => s.sortOrder ?? 0)) + 1
 
     const linkSections = groups.map((group) => ({
       title: group.title,
@@ -228,7 +228,7 @@ export class SwiftBookAdapter extends SourceAdapter {
    * (GuidedTour, LanguageGuide, ReferenceManual, RevisionHistory). Stored in
    * sourceMetadata so the renderer can show breadcrumbs / "in section X".
    */
-  applyChapterMetadata(result, key) {
+  applyChapterMetadata(/** @type {any} */ result, /** @type {any} */ key) {
     const path = key.replace(`${ROOT_SLUG}/`, '')
     const dir = path.includes('/') ? path.split('/')[0] : null
     const sectionTitle = dir ? BOOK_SECTION_TITLES[dir] : null
