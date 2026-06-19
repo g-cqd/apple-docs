@@ -57,13 +57,20 @@ jobs:
   # `.swift-format` ADBuildTools owns; the drift step fails the build if this
   # repo's `.swift-format` diverges from that canonical copy.
   swift-format:
+    # Swift CI gate — skipped until the g-cqd/AD* siblings (ADFoundation, ADDB,
+    # ADJSON, ADSQL, ADBuildTools, ADTestKit) are published and resolvable from a
+    # clean checkout. Until then they only exist as local sibling checkouts, so a
+    # CI runner can't resolve them. Flip the repo variable
+    # AD_SWIFT_SIBLINGS_PUBLISHED to 'true' once they are pushed; locally, build via
+    # swift/build.sh which exports the *_PATH overrides to those checkouts.
+    if: ${{ vars.AD_SWIFT_SIBLINGS_PUBLISHED == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Install Swift (swiftly)
         uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
         with:
-          toolchain: '6.3.2' # keep in sync with swift/.swift-version
+          toolchain: '6.4' # keep in sync with swift/.swift-version
       - name: Swift lint (ADBuildTools plugin, canonical .swift-format)
         working-directory: swift
         run: APPLEDOCS_DEV=1 swift package --disable-sandbox lint
@@ -81,6 +88,7 @@ jobs:
   # finding maps to one test. Informational (continue-on-error) until the first
   # clean run is confirmed, then flip to a hard gate.
   swift-sanitizers:
+    if: ${{ vars.AD_SWIFT_SIBLINGS_PUBLISHED == 'true' }} # see swift-format gate
     strategy:
       fail-fast: false
       matrix:
@@ -136,6 +144,7 @@ jobs:
   # involves both sides, so a fusion.js-only change must pass it too —
   # and public-repo runners (incl. ubuntu-24.04-arm) are free.
   native:
+    if: ${{ vars.AD_SWIFT_SIBLINGS_PUBLISHED == 'true' }} # see swift-format gate
     strategy:
       fail-fast: false
       matrix:
@@ -157,7 +166,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
         with:
-          toolchain: '6.3.2' # keep in sync with swift/.swift-version
+          toolchain: '6.4' # keep in sync with swift/.swift-version
 
       - name: Cache SwiftPM build
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
