@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Update path for "flat" sources (sample-code, swift-evolution, packages,
 // swift-book, swift-org, apple-archive). Discover yields a flat list of
 // keys; tracked pages get checked for changes, stale pages get tombstoned,
@@ -9,7 +8,14 @@ import { persistNormalizedPage } from '../../pipeline/persist.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'
 import { clearTombstoneCounter, gateAndTombstone404 } from './tombstone-policy.js'
 
-export async function updateFlatSource(adapter, discovery, requestedRoots, _concurrency, semaphore, ctx) {
+export async function updateFlatSource(
+  /** @type {any} */ adapter,
+  /** @type {any} */ discovery,
+  /** @type {any} */ requestedRoots,
+  /** @type {any} */ _concurrency,
+  /** @type {any} */ semaphore,
+  /** @type {any} */ ctx,
+) {
   const { db, dataDir, logger } = ctx
   const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0 }
   const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
@@ -48,7 +54,7 @@ export async function updateFlatSource(adapter, discovery, requestedRoots, _conc
     })
   }
 
-  const newKeys = discoveredKeys.filter((k) => !existingKeys.has(k))
+  const newKeys = discoveredKeys.filter((/** @type {any} */ k) => !existingKeys.has(k))
   if (newKeys.length > 0) {
     await fetchNewKeys({
       adapter,
@@ -69,12 +75,13 @@ export async function updateFlatSource(adapter, discovery, requestedRoots, _conc
   return counts
 }
 
-async function checkAndPullTrackedPages({ adapter, trackedPages, root, discoveredKeySet, semaphore, ctx, counts, db, dataDir, logger }) {
+async function checkAndPullTrackedPages(/** @type {any} */ { adapter, trackedPages, root, discoveredKeySet, semaphore, ctx, counts, db, dataDir, logger }) {
   logger.info(`Checking ${trackedPages.length} ${adapter.constructor.displayName} pages for updates...`)
+  /** @type {any[]} */
   const modified = []
 
   await Promise.all(
-    trackedPages.map((page) =>
+    trackedPages.map((/** @type {any} */ page) =>
       semaphore.run(async () => {
         try {
           const result = await adapter.check(
@@ -117,10 +124,10 @@ async function checkAndPullTrackedPages({ adapter, trackedPages, root, discovere
           }
         } catch (e) {
           if (root && discoveredKeySet.has(page.path)) {
-            markFlatSourceFailed(db, root.slug, page.path, e.message)
+            markFlatSourceFailed(db, root.slug, page.path, /** @type {any} */ (e).message)
           }
           counts.errCount++
-          logger.warn(`Check failed: ${page.path}`, { error: e.message })
+          logger.warn(`Check failed: ${page.path}`, { error: /** @type {any} */ (e).message })
         }
       }),
     ),
@@ -153,25 +160,25 @@ async function checkAndPullTrackedPages({ adapter, trackedPages, root, discovere
           counts.modCount++
         } catch (e) {
           if (root && discoveredKeySet.has(page.path)) {
-            markFlatSourceFailed(db, root.slug, page.path, e.message)
+            markFlatSourceFailed(db, root.slug, page.path, /** @type {any} */ (e).message)
           }
           counts.errCount++
-          logger.warn(`Pull failed: ${page.path}`, { error: e.message })
+          logger.warn(`Pull failed: ${page.path}`, { error: /** @type {any} */ (e).message })
         }
       }),
     ),
   )
 }
 
-async function fetchNewKeys({ adapter, newKeys, roots, root, semaphore, ctx, counts, db, dataDir, logger }) {
+async function fetchNewKeys(/** @type {any} */ { adapter, newKeys, roots, root, semaphore, ctx, counts, db, dataDir, logger }) {
   logger.info(`Fetching ${newKeys.length} new ${adapter.constructor.displayName} pages...`)
   // Adapters may publish multiple roots (e.g. swift-docc) — route each new
   // page to the root whose slug matches the key's first segment.
-  const rootBySlug = new Map(roots.map((r) => [r.slug, r]))
+  const rootBySlug = new Map(roots.map((/** @type {any} */ r) => [r.slug, r]))
   const fallbackRootId = roots[0]?.id ?? null
 
   await Promise.all(
-    newKeys.map((key) =>
+    newKeys.map((/** @type {any} */ key) =>
       semaphore.run(async () => {
         try {
           const fetchResult = await adapter.fetch(key, ctx)
@@ -194,9 +201,9 @@ async function fetchNewKeys({ adapter, newKeys, roots, root, semaphore, ctx, cou
           if (trackingRoot) markFlatSourceProcessed(db, trackingRoot.slug, key)
           counts.newCount++
         } catch (e) {
-          if (root) markFlatSourceFailed(db, root.slug, key, e.message)
+          if (root) markFlatSourceFailed(db, root.slug, key, /** @type {any} */ (e).message)
           counts.errCount++
-          logger.warn(`Fetch failed: ${key}`, { error: e.message })
+          logger.warn(`Fetch failed: ${key}`, { error: /** @type {any} */ (e).message })
         }
       }),
     ),

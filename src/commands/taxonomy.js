@@ -1,11 +1,10 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
- * @typedef {object} TaxonomyArgs
+ * @typedef {any} TaxonomyArgs
  * @property {'kind'|'role'|'docKind'|'roleHeading'|'sourceType'} [field]
  * @property {boolean} [all]      Bypass the per-field cap.
  * @property {number} [limit]     Override the per-field cap (ignored when `all: true`).
  *
- * @typedef {object} TaxonomyEntry
+ * @typedef {any} TaxonomyEntry
  * @property {string|null} value
  * @property {number} count
  *
@@ -19,17 +18,18 @@
  * distribution.
  *
  * @param {TaxonomyArgs} opts
- * @param {{ db }} ctx
+ * @param {{ db: any }} ctx
  * @returns {Promise<TaxonomyResult>}
  */
 const TAXONOMY_DEFAULT_LIMIT = 20
 
-export async function taxonomy(opts, ctx) {
+export async function taxonomy(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const { db } = ctx
   const field = opts?.field ? String(opts.field).trim() : null
   const limit = opts?.all === true ? null : (opts?.limit ?? TAXONOMY_DEFAULT_LIMIT)
 
   const limitClause = limit == null ? '' : ` LIMIT ${Number.parseInt(limit, 10)}`
+  /** @type {Record<string, any>} */
   const queries = {
     kind: `SELECT COALESCE(kind, '') AS value, COUNT(*) AS count FROM documents WHERE kind IS NOT NULL AND kind != '' GROUP BY kind ORDER BY count DESC, value ASC${limitClause}`,
     role: `SELECT COALESCE(role, '') AS value, COUNT(*) AS count FROM documents WHERE role IS NOT NULL AND role != '' GROUP BY role ORDER BY count DESC, value ASC${limitClause}`,
@@ -38,7 +38,7 @@ export async function taxonomy(opts, ctx) {
     sourceType: `SELECT COALESCE(source_type, '') AS value, COUNT(*) AS count FROM documents WHERE source_type IS NOT NULL AND source_type != '' GROUP BY source_type ORDER BY count DESC, value ASC${limitClause}`,
   }
 
-  const run = (sql) => {
+  const run = (/** @type {any} */ sql) => {
     try {
       return db.db.query(sql).all()
     } catch {

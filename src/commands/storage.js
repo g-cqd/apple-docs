@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { nativeDocMarkdownBatch } from '../content/content-native.js'
@@ -14,10 +13,10 @@ import { decodeSectionContent } from '../storage/section-codec.js'
  * Returns a storage breakdown: DB file size, rendered output dirs, raw JSON,
  * and per-table row counts.
  *
- * @param {object} opts
+ * @param {any} _opts
  * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string }} ctx
  */
-export function storageStats(_opts, ctx) {
+export function storageStats(/** @type {any} */ _opts, ctx) {
   const { db, dataDir } = ctx
 
   const dbPath = join(dataDir, 'apple-docs.db')
@@ -85,7 +84,7 @@ export function storageStats(_opts, ctx) {
  * DB rows, and optionally VACUUM the database.
  *
  * @param {{ drop?: string[], olderThan?: number, vacuum?: boolean }} opts
- * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string, logger?: object }} ctx
+ * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string, logger?: any }} ctx
  * @returns {{ droppedDirs: string[], orphansCleaned: number, vacuumed: boolean }}
  */
 export function storageGc(opts, ctx) {
@@ -146,9 +145,9 @@ export function storageGc(opts, ctx) {
  *   2. A handful of semantic orphans not modeled as FKs (e.g. documents
  *      keyed by path that are no longer in pages).
  *
- * @param {object} _opts unused
+ * @param {any} _opts unused
  * @param {{ db: import('../storage/database.js').DocsDatabase }} ctx
- * @returns {{ fkViolations: object[], semanticOrphans: object }}
+ * @returns {{ fkViolations: any[], semanticOrphans: any }}
  */
 export function storageCheckOrphans(_opts, ctx) {
   const { db } = ctx
@@ -168,9 +167,9 @@ export function storageCheckOrphans(_opts, ctx) {
  * Force-materialize rendered files (Markdown or HTML) for all documents or a
  * filtered subset.
  *
- * @param {{ format?: 'markdown' | 'html', roots?: string[] }} opts
- * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string, logger?: object }} ctx
- * @returns {Promise<{ materialized: number, format: string }>}
+ * @param {any} opts
+ * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string, logger?: any }} ctx
+ * @returns {Promise<any>}
  */
 export async function storageMaterialize(opts, ctx) {
   const { db, dataDir, logger } = ctx
@@ -190,10 +189,10 @@ export async function storageMaterialize(opts, ctx) {
       const blob = getRaw.get(row.id)
       if (!blob) return
       try {
-        await writeText(keyPath(dataDir, 'raw-json', row.key, '.json'), decodeSectionContent(blob.raw))
+        await writeText(keyPath(dataDir, 'raw-json', row.key, '.json'), /** @type {any} */ (decodeSectionContent(blob.raw)))
         materialized++
       } catch (err) {
-        logger?.error?.(`raw-json materialize failed for ${row.key}: ${err.message}`)
+        logger?.error?.(`raw-json materialize failed for ${row.key}: ${/** @type {any} */ (err).message}`)
       }
     })
     logger?.info?.(`Materialized ${materialized} raw-json files.`)
@@ -266,7 +265,7 @@ export async function storageMaterialize(opts, ctx) {
           await writeText(outPath, content)
           materialized++
         } catch (err) {
-          logger?.error?.(`Failed to write ${outPath}: ${err.message}`)
+          logger?.error?.(`Failed to write ${outPath}: ${/** @type {any} */ (err).message}`)
         }
       }
     }
@@ -291,7 +290,7 @@ export async function storageMaterialize(opts, ctx) {
       await writeText(outPath, content)
       materialized++
     } catch (err) {
-      logger?.error?.(`Failed to write ${outPath}: ${err.message}`)
+      logger?.error?.(`Failed to write ${outPath}: ${/** @type {any} */ (err).message}`)
     }
   })
 

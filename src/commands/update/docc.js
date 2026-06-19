@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Update path for DocC-shaped sources (apple-docc, hig, swift-docc) —
 // per-page check + pull, plus crawl-from-scratch for any new roots.
 
@@ -8,10 +7,19 @@ import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'
 import { clearTombstoneCounter, gateAndTombstone404 } from './tombstone-policy.js'
 
-export async function updateDoccSource(adapter, discovery, requestedRoots, concurrency, parallel, semaphore, ctx) {
+export async function updateDoccSource(
+  /** @type {any} */ adapter,
+  /** @type {any} */ discovery,
+  /** @type {any} */ requestedRoots,
+  /** @type {any} */ concurrency,
+  /** @type {any} */ parallel,
+  /** @type {any} */ semaphore,
+  /** @type {any} */ ctx,
+) {
   const { db, dataDir, logger } = ctx
   const pages = filterPagesByRoots(db.getPagesBySourceType(adapter.constructor.type), requestedRoots)
   const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0 }
+  /** @type {any[]} */
   const modified = []
   const deleted = []
   let checked = 0
@@ -57,7 +65,7 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
           }
         } catch (e) {
           counts.errCount++
-          logger.warn(`Check failed: ${page.path}`, { error: e.message })
+          logger.warn(`Check failed: ${page.path}`, { error: /** @type {any} */ (e).message })
         }
 
         checked++
@@ -94,7 +102,7 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
             counts.modCount++
           } catch (e) {
             counts.errCount++
-            logger.warn(`Pull failed: ${page.path}`, { error: e.message })
+            logger.warn(`Pull failed: ${page.path}`, { error: /** @type {any} */ (e).message })
           }
         }),
       ),
@@ -113,16 +121,16 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
   if (newRoots.length > 0) {
     logger.info(`Crawling ${newRoots.length} new ${adapter.constructor.displayName} root(s)...`)
 
-    const runOne = async (root) => {
+    const runOne = async (/** @type {any} */ root) => {
       try {
-        const result = await crawlRoot(db, dataDir, ctx.rateLimiter, root.slug, logger, null, {
+        const result = await crawlRoot(db, dataDir, ctx.rateLimiter, root.slug, logger, /** @type {any} */ (null), {
           semaphore,
           adapter,
         })
         counts.newCount += result.processed
       } catch (e) {
         counts.errCount++
-        logger.warn(`Crawl failed for new root: ${root.slug}`, { error: e.message })
+        logger.warn(`Crawl failed for new root: ${root.slug}`, { error: /** @type {any} */ (e).message })
       }
     }
 

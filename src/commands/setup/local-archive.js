@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, statSync } from 'node:fs'
 import { NotFoundError, ValidationError } from '../../lib/errors.js'
 import { sha256File } from '../../lib/hash.js'
@@ -19,7 +18,7 @@ import { formatSize, resolveArchivePath, stripTarGz } from './helpers.js'
  * `extractAndIndex` is injected by setup.js — it is the shared
  * extract → re-index → profile pipeline both install routes converge on.
  */
-export async function installFromLocalArchive(ctx, opts, { extractAndIndex, snapshotTier }) {
+export async function installFromLocalArchive(/** @type {any} */ ctx, /** @type {any} */ opts, /** @type {any} */ { extractAndIndex, snapshotTier }) {
   const { dataDir, logger } = ctx
   const archivePath = resolveArchivePath(opts.archive)
 
@@ -67,7 +66,7 @@ export async function installFromLocalArchive(ctx, opts, { extractAndIndex, snap
       const ts = manifest?.createdAt ?? manifest?.builtAt ?? 'unknown'
       logger.info(`Manifest: tag=${manifestTag} built=${ts} docs=${manifest?.documentCount ?? '?'}`)
     } catch (err) {
-      logger.warn(`Manifest at ${manifestPath} present but unreadable: ${err.message}`)
+      logger.warn(`Manifest at ${manifestPath} present but unreadable: ${/** @type {any} */ (err).message}`)
     }
   }
 

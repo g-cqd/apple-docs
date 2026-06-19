@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Update path for snapshot-style sources (the App Store Review
 // Guidelines): a single fetched HTML blob that gets re-applied when the
 // upstream ETag drifts.
@@ -7,7 +6,12 @@ import { applyGuidelinesSnapshot } from '../../pipeline/sync-guidelines.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'
 import { clearTombstoneCounter, gateAndTombstone404 } from './tombstone-policy.js'
 
-export async function updateGuidelinesSource(adapter, discovery, requestedRoots, ctx) {
+export async function updateGuidelinesSource(
+  /** @type {any} */ adapter,
+  /** @type {any} */ discovery,
+  /** @type {any} */ requestedRoots,
+  /** @type {any} */ ctx,
+) {
   const { db, dataDir, logger } = ctx
   const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0 }
   const roots = selectRootsForAdapter(adapter, discovery, db, requestedRoots)
@@ -24,7 +28,7 @@ export async function updateGuidelinesSource(adapter, discovery, requestedRoots,
     result = await adapter.check(roots[0].slug, previousState, ctx)
   } catch (e) {
     counts.errCount++
-    logger.warn(`${adapter.constructor.displayName} update check failed`, { error: e.message })
+    logger.warn(`${adapter.constructor.displayName} update check failed`, { error: /** @type {any} */ (e).message })
     return counts
   }
 

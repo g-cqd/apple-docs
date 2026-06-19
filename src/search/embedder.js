@@ -119,7 +119,7 @@ function configureEnv(env, dir) {
 
 /**
  * @param {{ logger?: any, modelsDir?: string }} [opts]
- * @returns {Promise<{ embed(text: string, opts?: { isQuery?: boolean }): Promise<Float32Array>, embedBatch(texts: string[], opts?: { isQuery?: boolean }): Promise<Float32Array[]> } | null>}
+ * @returns {Promise<any>}
  */
 export async function getEmbedder({ logger, modelsDir } = {}) {
   if (cached !== undefined) return cached

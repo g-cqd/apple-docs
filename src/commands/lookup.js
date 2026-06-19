@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { normalizeIdentifier } from '../apple/normalizer.js'
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { normalize } from '../content/normalize.js'
@@ -8,7 +7,7 @@ import { readJSON, readText, writeText } from '../storage/files.js'
 import { getProfile, getProfileConfig } from '../storage/profiles.js'
 
 /**
- * @typedef {object} LookupArgs
+ * @typedef {any} LookupArgs
  * @property {string} [path]                  Canonical page path (e.g. swiftui/view).
  * @property {string} [symbol]                Symbol name (e.g. View).
  * @property {string} [framework]             Disambiguate symbol when multiple frameworks share the name.
@@ -16,7 +15,7 @@ import { getProfile, getProfileConfig } from '../storage/profiles.js'
  * @property {boolean} [includeSections]      Return the full sections list (default: skeleton).
  * @property {boolean} [noCache]              Skip the markdown render-cache write on miss.
  *
- * @typedef {object} DocMetadata
+ * @typedef {any} DocMetadata
  * @property {string} title
  * @property {string|null} framework
  * @property {string|null} rootSlug
@@ -31,17 +30,17 @@ import { getProfile, getProfileConfig } from '../storage/profiles.js'
  * @property {true} [isReleaseNotes]
  * @property {{ inheritsFrom?: number, inheritedBy?: number, conformsTo?: number, seeAlso?: number, children?: number }} [relationships]
  *
- * @typedef {object} LookupResult
+ * @typedef {any} LookupResult
  * @property {boolean} found
  * @property {DocMetadata} [metadata]
  * @property {string|null} [content]
- * @property {object[]} [sections]
+ * @property {any[]} [sections]
  * @property {string} [note]
  *
  * Look up a specific documentation page by path or symbol name.
  *
  * @param {LookupArgs} opts
- * @param {{ db, dataDir }} ctx
+ * @param {any} ctx
  * @returns {Promise<LookupResult>}
  */
 export async function lookup(opts, ctx) {
@@ -175,13 +174,14 @@ export async function lookup(opts, ctx) {
   if (opts.section && sections.length > 0) {
     const sectionQuery = opts.section
     const match =
-      sections.find((s) => s.heading === sectionQuery || s.heading?.endsWith(sectionQuery) || (s.sectionKind ?? s.section_kind) === sectionQuery) ??
-      sections.find((s) => (s.contentText ?? s.content_text)?.includes(sectionQuery))
+      sections.find(
+        (/** @type {any} */ s) => s.heading === sectionQuery || s.heading?.endsWith(sectionQuery) || (s.sectionKind ?? s.section_kind) === sectionQuery,
+      ) ?? sections.find((/** @type {any} */ s) => (s.contentText ?? s.content_text)?.includes(sectionQuery))
     if (match) {
       return { found: true, metadata, content: match.contentText ?? match.content_text ?? 'Section content not available.', sections: [match] }
     }
     const available = sections
-      .map((s) => s.heading ?? s.sectionKind ?? s.section_kind)
+      .map((/** @type {any} */ s) => s.heading ?? s.sectionKind ?? s.section_kind)
       .filter(Boolean)
       .join(', ')
     return { found: true, metadata, content: null, sections, note: `Section not found: ${sectionQuery}. Available sections: ${available}` }

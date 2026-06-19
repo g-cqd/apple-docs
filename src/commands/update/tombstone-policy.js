@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * N=3 consecutive 404s before tombstoning a page.
  *
@@ -21,7 +20,7 @@ const CONSECUTIVE_404_THRESHOLD = 3
  *
  * @returns {boolean} true if the page was tombstoned this call.
  */
-export function gateAndTombstone404(db, path, logger) {
+export function gateAndTombstone404(/** @type {any} */ db, /** @type {any} */ path, /** @type {any} */ logger) {
   const count = db.bumpConsecutive404(path)
   if (count >= CONSECUTIVE_404_THRESHOLD) {
     db.markPageDeleted(path)
@@ -35,6 +34,6 @@ export function gateAndTombstone404(db, path, logger) {
  * Reset the streak. Called on `'unchanged'` and `'modified'` outcomes
  * so a transient 404 between successful checks doesn't carry forward.
  */
-export function clearTombstoneCounter(db, path) {
+export function clearTombstoneCounter(/** @type {any} */ db, /** @type {any} */ path) {
   db.resetConsecutive404(path)
 }

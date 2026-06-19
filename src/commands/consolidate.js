@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { fetchDocPage } from '../apple/api.js'
 import { extractMetadata, extractReferences } from '../apple/extractor.js'
@@ -23,12 +22,12 @@ import { isInvalidFailedPath, minifyDir } from './consolidate/storage-helpers.js
  * IS in the corpus under that adapter's keys, so the apple-docc 404 is a
  * false positive that should be dropped rather than reported as missing.
  */
-function isCrossAdapterFalsePositive(db, path) {
+function isCrossAdapterFalsePositive(/** @type {any} */ db, /** @type {any} */ path) {
   const root = db.getRootBySlug(extractRootSlug(path))
   return Boolean(root && !ROOT_CATALOG_SOURCE_TYPES.has(root.source_type))
 }
 
-export async function consolidate(opts, ctx) {
+export async function consolidate(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const dryRun = opts.dryRun ?? false
 
@@ -73,7 +72,7 @@ export async function consolidate(opts, ctx) {
 
       // Step 2: for remaining failures, check parent pages for correct URL
       const remaining = dryRun
-        ? all.filter((failed) => !isInvalidFailedPath(failed.path))
+        ? all.filter((/** @type {any} */ failed) => !isInvalidFailedPath(failed.path))
         : db.db.query("SELECT path, root_slug, error FROM crawl_state WHERE status = 'failed'").all()
 
       for (const failed of remaining) {
@@ -174,9 +173,9 @@ export async function consolidate(opts, ctx) {
             retried++
             retriedOk++
           } catch (error) {
-            db.setCrawlState(oldPath, 'failed', root, 0, error.message)
+            db.setCrawlState(oldPath, 'failed', root, 0, /** @type {any} */ (error).message)
             retried++
-            logger.warn(`Retry failed: ${newPath}`, { error: error.message })
+            logger.warn(`Retry failed: ${newPath}`, { error: /** @type {any} */ (error).message })
           }
         })
 

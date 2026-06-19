@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { chunkDocument } from '../search/chunker.js'
 import { getEmbedder } from '../search/embedder.js'
@@ -24,7 +23,7 @@ import { _resetVectorCache } from '../search/semantic.js'
  * fake and never need the optional `@huggingface/transformers` dependency.
  *
  * @param {{ full?: boolean, embedder?: { embed(t: string): Promise<Float32Array> } }} opts
- * @param {{ db, dataDir?, logger, onProgress? }} ctx
+ * @param {{ db: any, dataDir?: any, logger: any, onProgress?: any }} ctx
  */
 export async function indexEmbeddings(opts, ctx) {
   const { db, dataDir, logger } = ctx
@@ -78,7 +77,7 @@ export async function indexEmbeddings(opts, ctx) {
   let dims = 0
   for (let i = 0; i < total; i += BATCH) {
     const batch = rows.slice(i, i + BATCH)
-    const sectionsMap = db.getSectionsByDocumentIds(batch.map((r) => r.id))
+    const sectionsMap = db.getSectionsByDocumentIds(batch.map((/** @type {any} */ r) => r.id))
     // Flatten every chunk of the batch into one embed call so the ONNX
     // pipeline batches efficiently; map results back by index afterwards.
     const flat = []
@@ -142,7 +141,7 @@ export async function indexEmbeddings(opts, ctx) {
 }
 
 /** Fallback for embedders without embedBatch (injected test fakes). */
-async function sequentialEmbed(embedder, texts) {
+async function sequentialEmbed(/** @type {any} */ embedder, /** @type {any} */ texts) {
   const out = new Array(texts.length)
   for (let i = 0; i < texts.length; i++) out[i] = await embedder.embed(texts[i])
   return out

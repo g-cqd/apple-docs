@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { scopeRootsFor } from '../lib/scope.js'
 import { Semaphore } from '../lib/semaphore.js'
 import { discoverRoots } from '../pipeline/discover.js'
@@ -11,8 +10,8 @@ import { updateGuidelinesSource } from './update/guidelines.js'
 
 /**
  * Check for documentation updates and pull changes.
- * @param {{ roots?: string[], sources?: string[], concurrency?: number, parallel?: number }} opts
- * @param {{ db, dataDir, rateLimiter, logger }} ctx
+ * @param {any} opts
+ * @param {any} ctx
  */
 export async function update(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
@@ -37,12 +36,12 @@ export async function update(opts, ctx) {
   let errCount = 0
 
   try {
-    if (adapters.some((adapter) => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
+    if (adapters.some((/** @type {any} */ adapter) => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
       try {
         await discoverRoots(db, rateLimiter, logger)
         adapterCtx.rootCatalogReady = true
       } catch (e) {
-        logger.warn('Failed to refresh root catalog', { error: e.message })
+        logger.warn('Failed to refresh root catalog', { error: /** @type {any} */ (e).message })
       }
     }
 
@@ -81,7 +80,7 @@ export async function update(opts, ctx) {
         errCount += counts.errCount
       } catch (e) {
         errCount++
-        logger.warn(`Update failed for source: ${adapter.constructor.type}`, { error: e.message })
+        logger.warn(`Update failed for source: ${adapter.constructor.type}`, { error: /** @type {any} */ (e).message })
       }
     }
 
@@ -99,18 +98,19 @@ export async function update(opts, ctx) {
       try {
         fontsResult = await syncAppleFonts({ downloadFonts: !!opts.downloadFonts }, ctx)
       } catch (e) {
-        logger.warn('Font refresh failed', { error: e.message })
+        logger.warn('Font refresh failed', { error: /** @type {any} */ (e).message })
       }
     }
     if (!restrictedRun && opts.skipSymbols !== true) {
       try {
+        /** @type {Record<string, number>} */
         const counts = { public: 0, private: 0 }
         for (const scope of ['public', 'private']) {
           counts[scope] = await syncSfSymbols({ scope }, ctx)
         }
         symbolsResult = counts
       } catch (e) {
-        logger.warn('SF Symbols refresh failed', { error: e.message })
+        logger.warn('SF Symbols refresh failed', { error: /** @type {any} */ (e).message })
       }
     }
 

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Rebuild optional search indexes from existing data.
  * Useful for lower-tier snapshots that ship without trigram/body indexes
@@ -10,8 +9,8 @@
  * The trigram table enables substring/fuzzy matching and can be rebuilt
  * on any tier since titles are always present in the documents table.
  *
- * @param {object} _opts - unused
- * @param {{ db, logger }} ctx
+ * @param {any} _opts - unused
+ * @param {{ db: any, logger: any }} ctx
  */
 export async function rebuildTrigram(_opts, ctx) {
   const { db, logger } = ctx
@@ -49,8 +48,8 @@ export async function rebuildTrigram(_opts, ctx) {
  * Rebuild the body FTS5 index from document_sections.
  * Requires document_sections table (standard tier or above).
  *
- * @param {object} _opts - unused
- * @param {{ db, dataDir, logger }} ctx
+ * @param {any} _opts - unused
+ * @param {any} ctx
  */
 export async function rebuildBody(_opts, ctx) {
   const { db, dataDir, logger } = ctx
@@ -92,7 +91,7 @@ export async function rebuildBody(_opts, ctx) {
  * Existing triggers reference both documents_fts and documents_trigram,
  * so we recreate them to include trigram operations.
  */
-function ensureTrigramTriggers(db) {
+function ensureTrigramTriggers(/** @type {any} */ db) {
   // Check if triggers already include trigram operations
   const aiTrigger = db.db.query("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='documents_ai'").get()
   if (aiTrigger?.sql?.includes('documents_trigram')) return // Already has trigram

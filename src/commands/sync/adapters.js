@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Per-adapter sync helpers. The outer `sync()` orchestrator dispatches
  * one of these per adapter via `Promise.allSettled`, so each returns
@@ -22,7 +21,7 @@ import { selectRootsForAdapter } from '../command-helpers.js'
  * siblings — the outer reducer turns `outcome.error` into a `failedSources`
  * entry.
  */
-export async function runAdapterStep(adapter, env) {
+export async function runAdapterStep(/** @type {any} */ adapter, /** @type {any} */ env) {
   const { ctx, adapterCtx, db, dataDir, logger, discoveriesBySource, discoveryErrorsBySource, parallel, concurrency, crawlOpts } = env
   const type = adapter.constructor.type
   const displayName = adapter.constructor.displayName
@@ -71,7 +70,7 @@ export async function runAdapterStep(adapter, env) {
       }
     }
   } catch (error) {
-    logger.error(`Source ${type} failed`, { error: error.message })
+    logger.error(`Source ${type} failed`, { error: /** @type {any} */ (error).message })
     return { type, mode, error }
   }
 }
@@ -81,21 +80,29 @@ export async function runAdapterStep(adapter, env) {
  * per-root parallelism bounded by `parallel`. Each root's per-page
  * fetches go through the shared `semaphore` carried in `crawlOpts`.
  */
-export async function crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpts, adapter) {
+export async function crawlRoots(
+  /** @type {any} */ rootSlugs,
+  /** @type {any} */ parallel,
+  /** @type {any} */ concurrency,
+  /** @type {any} */ ctx,
+  /** @type {any} */ crawlOpts,
+  /** @type {any} */ adapter,
+) {
   const { db, dataDir, rateLimiter, logger } = ctx
+  /** @type {Record<string, any>} */
   const results = {}
 
   if (parallel <= 1) {
     for (const slug of rootSlugs) {
       logger.info(`Crawling ${slug}...`)
       try {
-        results[slug] = await crawlRoot(db, dataDir, rateLimiter, slug, logger, null, {
+        results[slug] = await crawlRoot(db, dataDir, rateLimiter, slug, logger, /** @type {any} */ (null), {
           ...crawlOpts,
           adapter,
         })
       } catch (e) {
-        logger.error(`Crawl failed for ${slug}`, { error: e.message })
-        results[slug] = { error: e.message }
+        logger.error(`Crawl failed for ${slug}`, { error: /** @type {any} */ (e).message })
+        results[slug] = { error: /** @type {any} */ (e).message }
       }
     }
     return results
@@ -105,15 +112,15 @@ export async function crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpt
   await pool(rootSlugs, parallel, async (slug) => {
     logger.info(`Crawling ${slug}...`)
     try {
-      results[slug] = await crawlRoot(db, dataDir, rateLimiter, slug, logger, null, {
+      results[slug] = await crawlRoot(db, dataDir, rateLimiter, slug, logger, /** @type {any} */ (null), {
         ...crawlOpts,
         adapter,
       })
       const result = results[slug]
       logger.info(`Done: ${slug} (${result.total} total, ${result.processed} new)`)
     } catch (e) {
-      logger.error(`Crawl failed for ${slug}`, { error: e.message })
-      results[slug] = { error: e.message }
+      logger.error(`Crawl failed for ${slug}`, { error: /** @type {any} */ (e).message })
+      results[slug] = { error: /** @type {any} */ (e).message }
     }
   })
   return results
@@ -125,8 +132,15 @@ export async function crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpt
  * by the first slug segment so each page is persisted under the
  * correct `root_id`.
  */
-export async function syncFlatSource(adapter, discovery, roots, concurrency, ctx) {
+export async function syncFlatSource(
+  /** @type {any} */ adapter,
+  /** @type {any} */ discovery,
+  /** @type {any} */ roots,
+  /** @type {any} */ concurrency,
+  /** @type {any} */ ctx,
+) {
   const { db, dataDir, logger } = ctx
+  /** @type {Record<string, any>} */
   const results = {}
   const keys = discovery.keys ?? []
 
@@ -172,8 +186,8 @@ export async function syncFlatSource(adapter, discovery, roots, concurrency, ctx
         markFlatSourceProcessed(db, root.slug, key)
         processed++
       } catch (e) {
-        markFlatSourceFailed(db, root.slug, key, e.message)
-        logger.warn(`Failed to sync ${key}`, { error: e.message })
+        markFlatSourceFailed(db, root.slug, key, /** @type {any} */ (e).message)
+        logger.warn(`Failed to sync ${key}`, { error: /** @type {any} */ (e).message })
       }
     })
 

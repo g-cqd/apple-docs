@@ -1,6 +1,6 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../lib/errors.js'
 
+/** @type {Record<string, any>} */
 const INSTRUCTIONS = {
   'github-pages': [
     '1. Push your built site to the `gh-pages` branch (or configure GitHub Pages to use `docs/` on `main`).',

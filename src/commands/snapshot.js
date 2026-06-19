@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { Database } from 'bun:sqlite'
 import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -39,7 +38,7 @@ const SNAPSHOT_TIER = 'full'
 // the symbols/fonts archives (no embedded build-time data) still
 // matched. Non-cron tags (test fixtures, ad-hoc dispatches) fall back
 // to the Unix epoch — still stable across reruns of the same tag.
-function deterministicCreatedAt(tag) {
+function deterministicCreatedAt(/** @type {any} */ tag) {
   const m = /^snapshot-(\d{4})(\d{2})(\d{2})$/.exec(tag)
   if (m) return `${m[1]}-${m[2]}-${m[3]}T00:00:00.000Z`
   return '1970-01-01T00:00:00.000Z'
@@ -63,7 +62,7 @@ function buildHostMacosVersion() {
   }
 }
 
-function deterministicMtimeSeconds(tag) {
+function deterministicMtimeSeconds(/** @type {any} */ tag) {
   const m = /^snapshot-(\d{4})(\d{2})(\d{2})$/.exec(tag)
   if (m) return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 1000)
   return 0
@@ -90,7 +89,7 @@ function deterministicMtimeSeconds(tag) {
  * needed). See src/lib/archive-zstd.js.
  *
  * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean, embedModel?: string }} opts
- * @param {{ db, dataDir, logger }} ctx
+ * @param {{ db: any, dataDir: any, logger: any }} ctx
  */
 export async function snapshotBuild(opts, ctx) {
   const { db, dataDir, logger } = ctx
@@ -189,6 +188,7 @@ export async function snapshotBuild(opts, ctx) {
     const dbSize = Bun.file(copyPath).size
 
     // 6. Build manifest
+    /** @type {Record<string, any>} */
     const manifest = {
       version: tag,
       schemaVersion,

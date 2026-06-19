@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * `apple-docs links audit`        — scan every rendered HTML doc for `<a href>`
  *                                    targets, classify each, and report counts
@@ -49,6 +48,7 @@ async function* walkFiles(root) {
  */
 function extractLinks(html) {
   // Find each section open + close to slice into regions.
+  /** @type {any[]} */
   const sections = []
   for (const m of html.matchAll(/<(article|nav|aside|header|footer)\b[^>]*?(?:class\s*=\s*"([^"]*)")?[^>]*>/gi)) {
     sections.push({
@@ -64,7 +64,7 @@ function extractLinks(html) {
     sections[i].end = sections[i + 1].start
   }
 
-  const labelFor = (sec) => {
+  const labelFor = (/** @type {any} */ sec) => {
     if (!sec) return 'other'
     if (sec.cls.includes('breadcrumb')) return 'breadcrumb'
     if (sec.cls.includes('topics') || sec.cls.includes('see-also')) return 'related'
@@ -77,7 +77,7 @@ function extractLinks(html) {
     return sec.tag
   }
 
-  const findSection = (pos) => {
+  const findSection = (/** @type {any} */ pos) => {
     for (let i = sections.length - 1; i >= 0; i--) {
       if (sections[i].start <= pos && pos < sections[i].end) return sections[i]
     }
@@ -101,7 +101,7 @@ function extractLinks(html) {
  * @param {object} opts
  * @param {string} opts.outDir Path to the built static site (e.g. dist/web).
  * @param {boolean} [opts.json] Return raw stats (otherwise default; consumed by formatter).
- * @param {{ db, logger }} ctx
+ * @param {{ db: any, logger: any }} ctx
  * @returns {Promise<object>}
  */
 export async function linksAudit(opts, ctx) {
@@ -181,7 +181,7 @@ export async function linksAudit(opts, ctx) {
     }
   }
 
-  const finalize = (m) =>
+  const finalize = (/** @type {any} */ m) =>
     [...m.entries()]
       .sort((a, b) => b[1].count - a[1].count)
       .slice(0, 50)
@@ -207,7 +207,7 @@ export async function linksAudit(opts, ctx) {
  *
  * Mutates the input nodes in place and returns whether anything changed.
  *
- * @param {object} node
+ * @param {any} node
  * @param {Set<string>} knownKeys
  * @returns {{ added: number, removed: number, kept: number }}
  */
@@ -313,8 +313,8 @@ function consolidateNode(node, knownKeys) {
  *
  * @param {object} opts
  * @param {boolean} [opts.dryRun]
- * @param {{ db, logger }} ctx
- * @returns {Promise<{ documentsScanned, sectionsTouched, _resolvedKeyAdded, _resolvedKeyRemoved, _resolvedKeyKept }>}
+ * @param {{ db: any, logger: any }} ctx
+ * @returns {Promise<any>}
  */
 export async function linksConsolidate(opts, ctx) {
   const { db, logger } = ctx
@@ -324,7 +324,7 @@ export async function linksConsolidate(opts, ctx) {
     db.db
       .query("SELECT path FROM pages WHERE status != 'deleted'")
       .all()
-      .map((r) => r.path),
+      .map((/** @type {any} */ r) => r.path),
   )
   logger?.info?.(`Consolidating links against ${knownKeys.size.toLocaleString('en-US')} corpus keys${dryRun ? ' (dry run)' : ''}...`)
 
@@ -338,7 +338,7 @@ export async function linksConsolidate(opts, ctx) {
   for (const row of sections) {
     let payload
     try {
-      payload = JSON.parse(decodeSectionContent(row.content_json))
+      payload = JSON.parse(/** @type {any} */ (decodeSectionContent(row.content_json)))
     } catch {
       continue
     }
@@ -347,7 +347,7 @@ export async function linksConsolidate(opts, ctx) {
     let added = 0
     let removed = 0
     let kept = 0
-    const visit = (node) => {
+    const visit = (/** @type {any} */ node) => {
       const sub = consolidateNode(node, knownKeys)
       added += sub.added
       removed += sub.removed
