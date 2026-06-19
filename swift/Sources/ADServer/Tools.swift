@@ -7,11 +7,14 @@
 // Schemas use `@Schemable(dialect: .draft7)` + `@SchemaInfo`/`@SchemaNumber` + Swift
 // enums so `tools/list` is byte-for-byte equal to the SDK's zod schemas.
 
+import ADContent
 import ADJSON
+import ADRender
 import ADSearchCascade
 import ADServeCore
 import ADServeDSL
 import ADStorage
+import Foundation
 
 /// MCP `instructions` — injected once per session by clients.
 let mcpInstructions =
@@ -25,6 +28,11 @@ func mcpServerInfo(version: String) -> MCPServerInfo {
 // MARK: - Enum fields (→ string `enum`, declaration order)
 
 enum SymbolScope: String, Codable, CaseIterable { case `public`, `private` }
+enum SymbolFormat: String, Codable, CaseIterable { case svg, png }
+enum SymbolWeight: String, Codable, CaseIterable {
+    case ultralight, thin, light, regular, medium, semibold, bold, heavy, black
+}
+enum SymbolScale: String, Codable, CaseIterable { case small, medium, large }
 enum TaxonomyField: String, Codable, CaseIterable { case kind, role, docKind, roleHeading, sourceType }
 enum SearchLanguage: String, Codable, CaseIterable { case swift, objc }
 enum SearchPlatform: String, Codable, CaseIterable { case ios, macos, watchos, tvos, visionos }
@@ -83,6 +91,34 @@ struct ListFrameworksInput: Decodable {
 }
 
 @Schemable(dialect: .draft7)
+struct ReadDocInput: Decodable {
+    /// Page path, e.g. swiftui/view, app-store-review/3.1.
+    var path: String?
+    /// Symbol name, e.g. NavigationStack.
+    var symbol: String?
+    /// Disambiguates symbol.
+    var framework: String?
+    /// Single section by heading.
+    var section: String?
+    /// Page size in chars (min 512).
+    @SchemaNumber(512...) var maxChars: Int?
+    /// 1-based page; needs maxChars.
+    @SchemaNumber(1...) var page: Int?
+    @SchemaInfo(description: "Return only excerpt windows around matches instead of full content.")
+    var match: MatchExcerpt?
+}
+
+@Schemable
+struct MatchExcerpt: Decodable {
+    @SchemaInfo(description: "Substring to locate.") var query: String
+    /// Chars around each match (default 140).
+    @SchemaNumber(20 ... 2000) var context: Int?
+    /// Max excerpts (default 5).
+    @SchemaNumber(1 ... 50) var max: Int?
+    var caseSensitive: Bool?
+}
+
+@Schemable(dialect: .draft7)
 struct SearchSfSymbolsInput: Decodable {
     /// Name or keyword; empty lists all.
     var query: String?
@@ -93,6 +129,34 @@ struct SearchSfSymbolsInput: Decodable {
 
 @Schemable(dialect: .draft7)
 struct ListAppleFontsInput: Decodable {}
+
+@Schemable(dialect: .draft7)
+struct RenderSfSymbolInput: Decodable {
+    /// Symbol name, e.g. pencil.and.sparkles.
+    var name: String
+    /// Default public.
+    var scope: SymbolScope?
+    /// Default png.
+    var format: SymbolFormat?
+    /// Square size in px.
+    @SchemaNumber(8 ... 1024) var size: Int?
+    @SchemaInfo(description: #"Foreground hex or "currentColor" (svg)."#) var color: String?
+    @SchemaInfo(description: #"Background hex or "transparent"."#) var background: String?
+    /// Public symbols only.
+    var weight: SymbolWeight?
+    /// Public symbols only.
+    var scale: SymbolScale?
+}
+
+@Schemable(dialect: .draft7)
+struct RenderFontTextInput: Decodable {
+    /// Id from list_apple_fonts.
+    var fontId: String
+    /// Text to render.
+    var text: String?
+    /// Point size.
+    @SchemaNumber(8 ... 512) var size: Int?
+}
 
 @Schemable(dialect: .draft7)
 struct BrowseInput: Decodable {
@@ -138,7 +202,21 @@ func mcpToolRegistry() -> ToolRegistry {
 
         Tool("list_apple_fonts", "List Apple font families and files (ids feed render_font_text).")
             .input(ListAppleFontsInput.self)
-            .respond { _, ctx in .ok(WebRoutes.fonts(ctx.connection)) }
+            .respond { _, ctx in .ok(WebRoutes.fonts(ctx.db)) }
+
+        // render_sf_symbol: ADRender.SymbolPdf.render → SymbolPdfToSvg.convert (the
+        // byte-exact Swift port of symbol-pdf-to-svg.js). Gated by the live
+        // `tools/call render_sf_symbol == oracle` (svg) parity test.
+        Tool(
+            "render_sf_symbol",
+            "Render an SF Symbol to SVG (inlined) or PNG (fetch via returned resource URI)."
+        )
+        .input(RenderSfSymbolInput.self)
+        .respond { input, ctx in renderSfSymbol(input, ctx) }
+
+        Tool("render_font_text", "Render a text preview as SVG using an Apple font.")
+            .input(RenderFontTextInput.self)
+            .respond { input, ctx in renderFontText(input, ctx) }
 
         Tool(
             "browse",
@@ -146,6 +224,13 @@ func mcpToolRegistry() -> ToolRegistry {
         )
         .input(BrowseInput.self)
         .respond { input, ctx in browse(input, ctx) }
+
+        Tool(
+            "read_doc",
+            "Read a documentation page as Markdown, by path or symbol name. Long pages: pass maxChars to paginate, section for one section, or match for excerpts."
+        )
+        .input(ReadDocInput.self)
+        .respond { input, ctx in readDoc(input, ctx) }
     }
 }
 
@@ -166,7 +251,7 @@ private func searchDocs(_ input: SearchDocsInput, _ ctx: MCPToolContext) -> MCPT
         minWatchos: input.minVersion?.watchos, minTvos: input.minVersion?.tvos,
         minVisionos: input.minVersion?.visionos,
         year: input.year, track: input.track, deprecated: input.deprecated?.rawValue)
-    return .ok(Cascade.search(ctx.connection, params))
+    return .ok(Cascade.search(ctx.db, params))
 }
 
 private func listTaxonomy(_ input: ListTaxonomyInput, _ ctx: MCPToolContext) -> MCPToolResult {
@@ -178,7 +263,7 @@ private func listTaxonomy(_ input: ListTaxonomyInput, _ ctx: MCPToolContext) -> 
     ]
     func entries(_ column: TaxonomyColumn) -> JSONValue {
         .array(
-            ctx.connection.taxonomyCounts(column: column, limit: limit)
+            ctx.db.taxonomyCounts(column: column, limit: limit)
                 .map {
                     .object(["value": .string($0.value), "count": .number(Double($0.count))])
                 })
@@ -192,7 +277,7 @@ private func listTaxonomy(_ input: ListTaxonomyInput, _ ctx: MCPToolContext) -> 
 }
 
 private func listFrameworks(_ input: ListFrameworksInput, _ ctx: MCPToolContext) -> MCPToolResult {
-    let roots = ctx.connection.listFrameworkRoots(kind: nonEmptyArg(input.kind))
+    let roots = ctx.db.listFrameworkRoots(kind: nonEmptyArg(input.kind))
     let payload = JSONValue.object([
         "total": .number(Double(roots.count)),
         "roots": .array(
@@ -210,7 +295,7 @@ private func searchSfSymbols(_ input: SearchSfSymbolsInput, _ ctx: MCPToolContex
     guard (input.query ?? "").utf8.count <= maxSearchQueryBytes else {
         return .failure("query too long (max \(maxSearchQueryBytes) bytes)")
     }
-    let rows = ctx.connection.searchSfSymbols(
+    let rows = ctx.db.searchSfSymbols(
         query: input.query ?? "", scope: input.scope?.rawValue, limit: clampSymbolLimitInt(input.limit))
     // Lean MCP shape: {results:[{name,scope}]} (NOT the full row).
     let payload = JSONValue.object([
@@ -219,8 +304,217 @@ private func searchSfSymbols(_ input: SearchSfSymbolsInput, _ ctx: MCPToolContex
     return .okValue(payload)
 }
 
+// MARK: - render_font_text
+//
+// Byte-faithful port of apple-assets.js `renderFontText` + `projectRenderFontText`
+// for the surface the in-process (`--db`-only) server can actually reproduce.
+//
+// The JS render: getAppleFontFile(fontId) → text=String(text ?? "Typography"),
+// pointSize=clamp(size ?? 96, 8, 512) → assertFontPathContained(file_path,
+// dataDir) (else placeholder SVG) → isLikelySfnt probe → engine chain
+// (darwin: CoreText FIRST = `FontText.renderSVG` via the dylib) → placeholder on
+// failure. Result projects to `{ text, mimeType, content }` (font + format
+// dropped).
+//
+// Two honest deviations from the JS oracle, both forced by the server having NO
+// dataDir (MCPCommand opens only --db; MCPToolContext is (connection, logger)):
+//   1. Path-safety: the JS allowlist roots are /Library/Fonts,
+//      /System/Library/Fonts, ~/Library/Fonts AND <dataDir>/resources/fonts/
+//      extracted. The first three are dataDir-independent and checked here
+//      identically; the 4th CANNOT be checked, so a font that lives ONLY under
+//      <dataDir>/.../extracted (the snapshot's downloaded Apple fonts) is treated
+//      as out-of-roots here → placeholder, whereas JS would render its glyphs.
+//      That is the one input class where this handler diverges from the oracle;
+//      it is reported, not hidden. System/home-root fonts and off-disk paths
+//      (the gate's seed) take the SAME branch as JS → byte-identical.
+//   2. Engine chain: only CoreText (`FontText.renderSVG`, the exact function the
+//      JS darwin path calls first) is invoked. The hb-native / hb-view
+//      fallbacks (used only when CoreText yields no outlines) are not chained, so
+//      a font CoreText can't outline falls to the placeholder here vs a HarfBuzz
+//      render in JS — a narrow darwin edge.
+
+private func renderFontText(_ input: RenderFontTextInput, _ ctx: MCPToolContext) -> MCPToolResult {
+    // getAppleFontFile(fontId) — a missing row is a not-found (JS NotFoundError →
+    // the dispatcher's isError result, which the parity oracle's try/catch maps to
+    // a self-skip).
+    guard let font = ctx.db.getAppleFontFileRecord(id: input.fontId) else {
+        return .failure("Font file not found: \(input.fontId)")
+    }
+    let text = input.text ?? "Typography"
+    let pointSize = clampInteger(input.size ?? 96, min: 8, max: 512)
+    let family = font.familyDisplayName ?? ""
+
+    let content: String
+    if let path = font.filePath, fontPathWithinSystemRoots(path), isLikelySfnt(path),
+        let svg = FontText.renderSVG(fontPath: path, text: text, pointSize: Double(pointSize))
+    {
+        content = svg
+    } else {
+        content = fontTextSvgFallback(fontFamily: family, text: text, pointSize: pointSize)
+    }
+    // projectRenderFontText: { text, mimeType, content } in that key order.
+    return .okValue(
+        .object([
+            "text": .string(text),
+            "mimeType": .string("image/svg+xml; charset=utf-8"),
+            "content": .string(content)
+        ]))
+}
+
+/// renderSfSymbol (apple-symbols/render.js) live path: resolve the symbol, render
+/// its PDF via ADRender, and convert to SVG (SymbolPdfToSvg). The in-process server
+/// has no dataDir/cache/snapshot layer, so this is the live render only; PNG bytes
+/// are fetched via the returned resource URI (not inlined). projectRenderSfSymbol
+/// drops file_path + (for png) svg → { name, scope, format, resourceUri, svg? }.
+private func renderSfSymbol(_ input: RenderSfSymbolInput, _ ctx: MCPToolContext) -> MCPToolResult {
+    let scope = input.scope ?? .public
+    let format = input.format ?? .png
+    let pointSize = clampInteger(input.size ?? 64, min: 8, max: 1024)
+    // weight/scale arrive pre-validated from the schema enum; public-only.
+    let weight = scope == .public ? (input.weight?.rawValue ?? "regular") : "regular"
+    let scale = scope == .public ? (input.scale?.rawValue ?? "medium") : "medium"
+    let rawColor = input.color ?? "#000000"
+    let color =
+        (format == .svg && rawColor.lowercased() == "currentcolor") ? "currentColor" : normalizeSymbolColor(rawColor)
+    let background = normalizeSymbolBackground(input.background)
+
+    guard let symbol = ctx.db.getSfSymbol(scope: scope.rawValue, name: input.name) else {
+        return .failure("SF Symbol not found: \(scope.rawValue)/\(input.name)")
+    }
+    if let unsupported = symbol.renderUnsupported, unsupported != 0 {
+        return .failure(
+            "SF Symbol \(scope.rawValue)/\(input.name) is cataloged but not renderable from this snapshot — its glyph ships with a newer macOS than the build host. Beta snapshots built on that macOS carry it (apple-docs setup --beta)."
+        )
+    }
+
+    let resourceUri = "apple-docs://sf-symbol/\(scope.rawValue)/\(encodeURIComponentJS(input.name)).\(format.rawValue)"
+    var out: OrderedDictionary<String, JSONValue> = [
+        "name": .string(input.name), "scope": .string(scope.rawValue),
+        "format": .string(format.rawValue), "resourceUri": .string(resourceUri)
+    ]
+    if format == .svg {
+        guard let pdf = SymbolPdf.render(name: input.name, scope: scope.rawValue, weight: weight, scale: scale) else {
+            return .failure("SF Symbol render failed: \(scope.rawValue)/\(input.name)")
+        }
+        let svg: String
+        do {
+            svg = try SymbolPdfToSvg.convert(
+                pdf, options: .init(name: input.name, pointSize: pointSize, color: color, background: background))
+        } catch {
+            return .failure("SF Symbol SVG conversion failed for \(scope.rawValue)/\(input.name): \(error)")
+        }
+        out["svg"] = .string(svg)
+    }
+    return .okValue(.object(out))
+}
+
+/// normalizeColor (apple-assets-helpers.js): a trimmed `#RRGGBB(AA)` hex
+/// (case-insensitive) passes through; anything else → `#000000`.
+private func normalizeSymbolColor(_ value: String?) -> String {
+    let raw = (value ?? "#000000").trimmingCharacters(in: .whitespacesAndNewlines)
+    return isHexColor(raw) ? raw : "#000000"
+}
+
+/// normalizeBackground: nil/empty/`transparent`/`none` → nil; `#RRGGBB(AA)` → raw; else nil.
+private func normalizeSymbolBackground(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let raw = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    if raw.isEmpty || raw == "transparent" || raw == "none" { return nil }
+    return isHexColor(raw) ? raw : nil
+}
+
+/// JS `/^#[0-9a-f]{6}([0-9a-f]{2})?$/i`.
+private func isHexColor(_ s: String) -> Bool {
+    let u = Array(s.utf8)
+    guard u.count == 7 || u.count == 9, u[0] == 0x23 else { return false }
+    for b in u[1...] {
+        let hex = (b >= 0x30 && b <= 0x39) || (b >= 0x41 && b <= 0x46) || (b >= 0x61 && b <= 0x66)
+        if !hex { return false }
+    }
+    return true
+}
+
+/// `encodeURIComponent`: percent-encode every byte except the JS unreserved set
+/// `A-Z a-z 0-9 - _ . ! ~ * ' ( )`.
+private func encodeURIComponentJS(_ s: String) -> String {
+    let unreserved = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()".utf8)
+    var out = ""
+    for b in s.utf8 {
+        if unreserved.contains(b) {
+            out.unicodeScalars.append(Unicode.Scalar(b))
+        } else {
+            out += String(format: "%%%02X", b)
+        }
+    }
+    return out
+}
+
+/// `clampInteger(value, min, max)` — JS `Math.min(Math.max(parseInt(value), min),
+/// max)`, NaN → min. The input is already an `Int?`, so the parse never fails.
+private func clampInteger(_ value: Int, min lo: Int, max hi: Int) -> Int {
+    min(max(value, lo), hi)
+}
+
+/// The dataDir-INDEPENDENT subset of `assertFontPathContained`'s allowlist:
+/// `/Library/Fonts`, `/System/Library/Fonts`, `~/Library/Fonts`. A path resolving
+/// under one of these (or equal to it) is safe. The `<dataDir>/resources/fonts/
+/// extracted` root is omitted (no dataDir in-process) — see the handler note.
+private func fontPathWithinSystemRoots(_ filePath: String) -> Bool {
+    guard !filePath.isEmpty else { return false }
+    let resolved = URL(fileURLWithPath: filePath).standardizedFileURL.path
+    let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+    let roots = [
+        "/Library/Fonts", "/System/Library/Fonts", home + "/Library/Fonts"
+    ]
+    for root in roots where resolved == root || resolved.hasPrefix(root + "/") {
+        return true
+    }
+    return false
+}
+
+/// `isLikelySfnt(path)` — reads the 4-byte magic: OTTO/ttcf/wOFF/wOF2, or the
+/// 0x00010000 TrueType version. Any read failure → false.
+private func isLikelySfnt(_ path: String) -> Bool {
+    guard let handle = FileHandle(forReadingAtPath: path) else { return false }
+    defer { try? handle.close() }
+    guard let head = try? handle.read(upToCount: 4), head.count == 4 else { return false }
+    let bytes = [UInt8](head)
+    if let tag = String(bytes: bytes, encoding: .ascii),
+        tag == "OTTO" || tag == "ttcf" || tag == "wOFF" || tag == "wOF2"
+    {
+        return true
+    }
+    return bytes == [0x00, 0x01, 0x00, 0x00]
+}
+
+/// `renderFontTextSvgFallback` from apple-fonts/render.js, character-for-
+/// character: a `<text>` placeholder sized from the text length + point size.
+private func fontTextSvgFallback(fontFamily: String, text: String, pointSize: Int) -> String {
+    let height = Int((Double(pointSize) * 1.6).rounded(.up))
+    // JS `text.length` is the UTF-16 code-unit count, not grapheme count.
+    let width = max(240, Int((Double(text.utf16.count) * Double(pointSize) * 0.62).rounded(.up)))
+    let baseline = Int((Double(pointSize) * 1.1).rounded(.up))
+    let label = xmlEscaped(text)
+    return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <svg xmlns="http://www.w3.org/2000/svg" width="\(width)" height="\(height)" viewBox="0 0 \(width) \(height)" role="img" aria-label="\(label)">
+          <text x="0" y="\(baseline)" font-family="\(xmlEscaped(fontFamily))" font-size="\(pointSize)" fill="black">\(label)</text>
+        </svg>
+        """
+}
+
+/// `escapeXml` from apple-assets-helpers.js: & < > " ' in that replacement order.
+private func xmlEscaped(_ value: String) -> String {
+    value
+        .replacingOccurrences(of: "&", with: "&amp;")
+        .replacingOccurrences(of: "<", with: "&lt;")
+        .replacingOccurrences(of: ">", with: "&gt;")
+        .replacingOccurrences(of: "\"", with: "&quot;")
+        .replacingOccurrences(of: "'", with: "&apos;")
+}
+
 private func browse(_ input: BrowseInput, _ ctx: MCPToolContext) -> MCPToolResult {
-    let conn = ctx.connection
+    let conn = ctx.db
     guard let root = conn.resolveRoot(input.framework) else {
         return .failure("Unknown framework: \(input.framework)")
     }
@@ -295,6 +589,216 @@ private func wwdcYear(_ path: String) -> Int? {
         return nil
     }
     return Int(digits)
+}
+
+// MARK: - read_doc
+
+/// lookup() + projectReadDoc({ full }). Resolves the page (path → document,
+/// then normalized-identifier retry; or symbol → searchByTitle), assembles the
+/// metadata + relationship counts + content + note exactly as the JS command,
+/// then projects to the public read_doc shape. Integer-valued fields use `.int`
+/// so the MCP `content[0].text` JSON matches `JSON.stringify` byte-for-byte.
+///
+/// Pagination / match-excerpt / single-section args (`maxChars` / `match` /
+/// `section`) widen `includeSections`; the JS tool then runs the
+/// buildMatchedDocumentPayload / paginateDocumentPayload transforms, which live
+/// in the MCP pagination layer (not `lookup`). Those transforms are not yet
+/// ported, so this handler covers the un-paginated lookup surface the parity
+/// gate exercises.
+private func readDoc(_ input: ReadDocInput, _ ctx: MCPToolContext) -> MCPToolResult {
+    let conn = ctx.db
+    let includeSections = input.maxChars != nil || input.match != nil || input.section != nil
+
+    // Resolve: opts.path (with a normalize-identifier retry), else opts.symbol.
+    var record: DocumentRecord?
+    let requested: String?
+    if let path = input.path {
+        requested = path
+        record = conn.readDocument(path)
+        if record == nil, let normalized = normalizeIdentifier(path), normalized != path {
+            record = conn.readDocument(normalized)
+        }
+    } else if let symbol = input.symbol {
+        requested = symbol
+        record = conn.searchByTitle(symbol, framework: input.framework)
+    } else {
+        requested = nil
+    }
+
+    guard let page = record else {
+        // { found: false, path: opts.path ?? opts.symbol } → projectReadDoc drops
+        // everything but found (no note here).
+        _ = requested
+        return .okValue(.object(["found": .bool(false)]))
+    }
+
+    let pagePath = page.path
+
+    // Content: JS `lookup` renders INDEPENDENTLY of includeSections — it always
+    // loads the DB sections and, when present, renders Markdown on-demand
+    // (fallback=true). The in-process server has no persisted .md and no
+    // raw-json/hydrate path, so the section render is the one reachable source;
+    // an empty section list leaves content null (→ the tier note). Sections are
+    // always loaded for rendering, but only RETURNED when includeSections.
+    let sections = conn.documentSections(pagePath)
+    let rendered = sections.isEmpty ? nil : renderDocMarkdown(page, sections)
+    let content: JSONValue = rendered.map(JSONValue.string) ?? .null
+
+    // relationshipCounts → camelCase, GROUP BY row order; empty object dropped by
+    // the projection.
+    let relationships = relationshipCountsObject(conn.relationshipCountsByType(pagePath))
+
+    // projectMetadata's pick keep-order: title, framework, rootSlug, roleHeading,
+    // kind, abstract, declaration, path, platforms, relationships — then the
+    // isDeprecated / isBeta flags (true-only).
+    var metadata: OrderedDictionary<String, JSONValue> = [
+        "title": page.title.map(JSONValue.string) ?? .null,
+        "framework": page.frameworkDisplay.map(JSONValue.string) ?? .null,
+        "rootSlug": page.rootSlug.map(JSONValue.string) ?? .null,
+        "roleHeading": page.roleHeading.map(JSONValue.string) ?? .null,
+        "kind": page.kind.map(JSONValue.string) ?? .null,
+        "abstract": page.abstract.map(JSONValue.string) ?? .null,
+        "declaration": page.declaration.map(JSONValue.string) ?? .null,
+        "path": .string(pagePath),
+        "platforms": platformsValue(page.platformsJSON)
+    ]
+    if let relationships { metadata["relationships"] = relationships }
+    if page.isDeprecated { metadata["isDeprecated"] = .bool(true) }
+    if page.isBeta { metadata["isBeta"] = .bool(true) }
+
+    // Section extraction (full=true): return the one matching section's raw text.
+    if let sectionQuery = input.section, !sections.isEmpty {
+        if let match = findSection(sections, query: sectionQuery) {
+            return .okValue(
+                .object([
+                    "found": .bool(true), "metadata": .object(metadata),
+                    "content": .string(match.contentText ?? "Section content not available."),
+                    "sections": .array([projectSectionFull(match)])
+                ]))
+        }
+        let available =
+            sections
+            .compactMap { $0.heading ?? $0.sectionKind }
+            .joined(separator: ", ")
+        return .okValue(
+            .object([
+                "found": .bool(true), "metadata": .object(metadata), "content": .null,
+                "sections": .array(sections.map(projectSectionFull)),
+                "note": .string("Section not found: \(sectionQuery). Available sections: \(available)")
+            ]))
+    }
+
+    // Note: when content rendered, JS emits the on-demand-fallback note (the
+    // in-process render always sets fallback=true); otherwise the tier note —
+    // lite-tier snapshots get the tier-limitation hint, every other tier the
+    // sync hint.
+    let note: JSONValue
+    if rendered != nil {
+        note = .string("Rendered on-demand from normalized content.")
+    } else if conn.snapshotTier() == "lite" {
+        note = .string(
+            "Content body unavailable on a legacy lite-tier snapshot. Metadata and declaration shown.")
+    } else {
+        note = .string("No content available. Run apple-docs sync first.")
+    }
+
+    // projectReadDoc(payload, { full }) key order: found, metadata, content,
+    // sections, note. `full` toggles the section projection shape. lookup returns
+    // `sections: includeSections ? sections : []`, so the envelope's sections are
+    // empty unless an explicit pagination/match/section arg widened the request —
+    // content rendering does NOT add them.
+    let full = input.section != nil || input.match != nil || input.maxChars != nil
+    let returnedSections = includeSections ? sections : []
+    let projectedSections = returnedSections.map(full ? projectSectionFull : sectionSkeleton)
+    return .okValue(
+        .object([
+            "found": .bool(true), "metadata": .object(metadata), "content": content,
+            "sections": .array(projectedSections), "note": note
+        ]))
+}
+
+/// `renderMarkdown({ ...page, key: pagePath }, sections)` (render-markdown.js)
+/// over the in-process document + section rows. Maps the `DocumentRecord`
+/// columns onto coerceDocument's field shape (key←path, framework←raw slug,
+/// frameworkDisplay←COALESCE display, role/roleHeading/platformsJson) and the
+/// `DocumentSectionRow`s onto coerceSection (contentText coerced to "" when
+/// null, sortOrder default 0). The default render flags (includeFrontMatter,
+/// includeTitle = true) match lookup's bare `renderMarkdown(document, sections)`
+/// call. Shared by read_doc and the doc resource so their bytes never diverge.
+func renderDocMarkdown(_ page: DocumentRecord, _ sections: [DocumentSectionRow]) -> String {
+    let document = DocMarkdownDocument(
+        key: page.path, title: page.title, framework: page.framework,
+        frameworkDisplay: page.frameworkDisplay, role: page.role, roleHeading: page.roleHeading,
+        platformsJSON: page.platformsJSON)
+    let mapped = sections.map { section in
+        DocMarkdownSection(
+            kind: section.sectionKind, heading: section.heading,
+            contentText: section.contentText ?? "", contentJSON: section.contentJSON,
+            sortOrder: section.sortOrder)
+    }
+    return DocMarkdown.render(document: document, sections: mapped)
+}
+
+/// getRelationshipCountsByType → projectMetadata's `relationships` object:
+/// relation_type mapped to camelCase (unmapped types dropped), counts as `.int`
+/// so they serialize as `2` not `2.0`. nil when the object would be empty (the
+/// projection drops the key).
+private func relationshipCountsObject(_ counts: [RelationshipCount]) -> JSONValue? {
+    var out: OrderedDictionary<String, JSONValue> = [:]
+    for entry in counts {
+        guard let camel = relationTypeToCamel(entry.relationType) else { continue }
+        out[camel] = .int(Int64(entry.count))
+    }
+    return out.isEmpty ? nil : .object(out)
+}
+
+/// RELATION_TYPE_TO_CAMEL: DB relation_type slug → camelCase public name.
+/// Anything not listed is dropped (a future relation_type never leaks).
+private func relationTypeToCamel(_ relationType: String) -> String? {
+    switch relationType {
+        case "inherits_from": return "inheritsFrom"
+        case "inherited_by": return "inheritedBy"
+        case "conforms_to": return "conformsTo"
+        case "see-also", "see_also", "seeAlso": return "seeAlso"
+        case "child": return "children"
+        default: return nil
+    }
+}
+
+/// `page.platforms ? JSON.parse(page.platforms) : []` — the parsed JSON value
+/// (array OR object) when the column is a non-empty string, else `[]`.
+private func platformsValue(_ json: String?) -> JSONValue {
+    guard let json, !json.isEmpty, let value = try? JSONValue(parsing: json) else { return .array([]) }
+    return value
+}
+
+/// lookup's section matcher: heading exact / heading suffix / sectionKind exact,
+/// then a contentText substring fallback.
+private func findSection(_ sections: [DocumentSectionRow], query: String) -> DocumentSectionRow? {
+    if let match = sections.first(where: {
+        $0.heading == query || ($0.heading?.hasSuffix(query) ?? false) || $0.sectionKind == query
+    }) {
+        return match
+    }
+    return sections.first { $0.contentText?.contains(query) ?? false }
+}
+
+/// projectSectionFull(section): { heading?, contentText? } — keys present only
+/// when defined (null kept).
+private func projectSectionFull(_ section: DocumentSectionRow) -> JSONValue {
+    var out: OrderedDictionary<String, JSONValue> = [:]
+    out["heading"] = section.heading.map(JSONValue.string) ?? .null
+    out["contentText"] = section.contentText.map(JSONValue.string) ?? .null
+    return .object(out)
+}
+
+/// sectionSkeleton(section): { heading, chars } — chars is the contentText
+/// length (UTF-16 code-unit count, matching JS String.length), as `.int`.
+private func sectionSkeleton(_ section: DocumentSectionRow) -> JSONValue {
+    let chars = section.contentText.map { $0.utf16.count } ?? 0
+    return .object([
+        "heading": section.heading.map(JSONValue.string) ?? .null, "chars": .int(Int64(chars))
+    ])
 }
 
 // MARK: - helpers

@@ -12,7 +12,33 @@ public struct AppleFontFamily: Sendable {
     public let files: [AppleFontFile]
 }
 
+/// One `apple_font_files` row by id, joined to its family — the columns the
+/// `apple-docs://font/{id}` resource and the render_font_text handler need (JS:
+/// `db.getAppleFontFile(id)` returns `f.*` plus `fam.display_name AS
+/// family_display_name`). nil = the id is absent (→ NotFoundError parity).
+public struct AppleFontFileRecord: Sendable {
+    public let id: String
+    public let filePath: String?
+    public let format: String?
+    public let familyDisplayName: String?
+}
+
 extension StorageConnection {
+    /// `apple_font_files` ⋈ `apple_font_families` lookup by id (JS `getFontFile`).
+    /// nil = no such row / the table is absent.
+    public func getAppleFontFileRecord(id: String) -> AppleFontFileRecord? {
+        let sql = """
+            SELECT f.id, f.file_path, f.format, fam.display_name
+            FROM apple_font_files f JOIN apple_font_families fam ON fam.id = f.family_id
+            WHERE f.id = ?
+            """
+        guard let stmt = conn.prepareUncached(sql) else { return nil }
+        stmt.bindText(1, id)
+        guard stmt.step() == SQLite.row, let rowId = stmt.text(0) else { return nil }
+        return AppleFontFileRecord(
+            id: rowId, filePath: stmt.text(1), format: stmt.text(2), familyDisplayName: stmt.text(3))
+    }
+
     /// families ⋈ files: families ORDER BY display_name, each family's files
     /// in (family_id, file_name) order. [] when the tables are absent.
     public func listAppleFonts() -> [AppleFontFamily] {

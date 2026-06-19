@@ -78,6 +78,12 @@ final class Connection: @unchecked Sendable {
         PreparedStatement(lib: lib, db: db, sql: sql)
     }
 
+    /// Runtime `sqlite_master` table-existence probe (mirrors database.hasTable),
+    /// used by read_doc's tier fallback ('full' when a documents table exists).
+    func tableExists(_ name: String) -> Bool {
+        Connection.tableExists(lib, db, name)
+    }
+
     // MARK: - boot helpers
 
     private static func exec(_ lib: SQLiteLib, _ db: OpaquePointer, _ sql: String) {
