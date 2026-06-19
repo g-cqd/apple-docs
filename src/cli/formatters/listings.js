@@ -1,10 +1,11 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { bold, dim } from './_shared.js'
 
+/** @param {any} result */
 export function formatFrameworks(result) {
   if (result.roots.length === 0) return 'No frameworks found. Run `apple-docs sync` first.'
 
   const lines = []
+  /** @type {Record<string, any[]>} */
   const byKind = {}
   for (const r of result.roots) {
     const k = r.kind ?? 'unknown'
@@ -24,9 +25,11 @@ export function formatFrameworks(result) {
   return lines.join('\n')
 }
 
+/** @param {any} result */
 export function formatBrowse(result) {
   if (result.children) {
     const lines = [`${bold(result.title)} ${dim(result.path)}\n`]
+    /** @type {Record<string, any[]>} */
     const bySection = {}
     for (const c of result.children) {
       const s = c.section ?? 'other'
@@ -66,6 +69,7 @@ export function formatBrowse(result) {
   return lines.join('\n')
 }
 
+/** @param {any} result */
 export function formatTaxonomy(result) {
   const sections = result.field && result.values ? [[result.field, result.values]] : Object.entries(result)
   const lines = []

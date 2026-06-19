@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Shared CLI formatter helpers (TTY detection, bytes formatter, search
  * quality badge). Pulled out so per-output-kind formatters can share
@@ -7,9 +6,10 @@
 
 const isTTY = process.stdout.isTTY
 
-export const bold = (s) => (isTTY ? `\x1b[1m${s}\x1b[0m` : s)
-export const dim = (s) => (isTTY ? `\x1b[2m${s}\x1b[0m` : s)
+export const bold = (/** @type {any} */ s) => (isTTY ? `\x1b[1m${s}\x1b[0m` : s)
+export const dim = (/** @type {any} */ s) => (isTTY ? `\x1b[2m${s}\x1b[0m` : s)
 
+/** @param {number} bytes */
 export function formatBytes(bytes) {
   if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
   if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
@@ -19,6 +19,7 @@ export function formatBytes(bytes) {
 
 const RELAXED_QUALITIES = new Set(['relaxed', 'relaxed-or', 'relaxed-token'])
 
+/** @param {any} quality @param {any} [distance] */
 export function qualityBadge(quality, distance) {
   if (quality === 'match') return ''
   if (quality === 'fuzzy') return dim(` [fuzzy d=${distance}]`)

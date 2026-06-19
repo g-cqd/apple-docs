@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * CLI-specific pagination for markdown content.
  *
@@ -14,6 +13,7 @@ const MIN_MAX_CHARS = 200
  * breaking at paragraph boundaries (\n\n), then line boundaries (\n),
  * then falling back to a hard cut.
  */
+/** @param {string} text @param {number} maxChars */
 function splitPages(text, maxChars) {
   if (text.length <= maxChars) return [text]
 
@@ -57,7 +57,7 @@ function splitPages(text, maxChars) {
 /**
  * Paginate a lookup result for CLI output.
  *
- * @param {object} result  - lookup result with `content` (string) and optionally `metadata`
+ * @param {any} result  - lookup result with `content` (string) and optionally `metadata`
  * @param {number} maxChars - maximum characters per page
  * @param {number} pageNum  - 1-based page number to return
  * @returns {object} result with `content` replaced by the requested page and `pageInfo` added

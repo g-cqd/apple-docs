@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // CLI `--json` projection dispatcher: maps each command to its
 // public-output projection in src/output/projection.js. Anything not
 // listed here passes through unprojected — those commands either don't
@@ -8,6 +7,7 @@
 
 import { projectBrowse, projectFrameworks, projectReadDoc, projectSearchResult, projectStatus, projectTaxonomy } from '../output/projection.js'
 
+/** @param {string} command @param {any} result @param {any} flags */
 export function jsonProject(command, result, flags) {
   switch (command) {
     case 'search':
@@ -30,7 +30,8 @@ export function jsonProject(command, result, flags) {
   }
 }
 
+/** @param {any} hit */
 function projectHit(hit) {
   if (!hit) return hit
-  return projectSearchResult({ results: [hit] }).results[0]
+  return projectSearchResult({ results: [hit] })?.results?.[0]
 }

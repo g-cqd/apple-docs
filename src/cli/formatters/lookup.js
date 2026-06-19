@@ -1,6 +1,6 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { bold, dim } from './_shared.js'
 
+/** @param {any} result */
 export function formatLookup(result) {
   if (!result.found) {
     return `Not found: ${result.path}`
@@ -16,7 +16,7 @@ export function formatLookup(result) {
       if (m.framework) lines.push(`Framework: ${m.framework}`)
       if (m.abstract) lines.push(`\n${m.abstract}`)
       if (m.declaration) lines.push(`\n${dim('Declaration:')} ${m.declaration}`)
-      if (m.platforms?.length) lines.push(`Platforms: ${m.platforms.map((p) => `${p.name} ${p.introducedAt ?? ''}`).join(', ')}`)
+      if (m.platforms?.length) lines.push(`Platforms: ${m.platforms.map((/** @type {any} */ p) => `${p.name} ${p.introducedAt ?? ''}`).join(', ')}`)
       lines.push('')
     }
     if (result.tierLimitation) {

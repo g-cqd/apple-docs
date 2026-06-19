@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Dispatch table for low-frequency maintenance subcommands —
  * storage, snapshot, consolidate, index. Each entry returns
@@ -12,15 +11,18 @@
 import { formatStorageGc, formatStorageStats } from './formatter.js'
 import { showHelp } from './help.js'
 
+/** @param {any} family */
 function exitHelp(family) {
   showHelp(family)
   process.exit(1)
 }
 
+/** @param {string} label */
 function summary(label) {
-  return (result) => `${label}: ${JSON.stringify(result)}`
+  return (/** @type {any} */ result) => `${label}: ${JSON.stringify(result)}`
 }
 
+/** @param {any} subcommand @param {any} positional @param {any} flags @param {any} ctx */
 async function dispatchStorage(subcommand, positional, flags, ctx) {
   if (subcommand === 'stats') {
     const { storageStats } = await import('../commands/storage.js')
@@ -50,7 +52,7 @@ async function dispatchStorage(subcommand, positional, flags, ctx) {
   }
   if (subcommand === 'gc') {
     const { storageGc } = await import('../commands/storage.js')
-    const drop = flags.drop ? flags.drop.split(',').map((s) => s.trim()) : []
+    const drop = flags.drop ? flags.drop.split(',').map((/** @type {any} */ s) => s.trim()) : []
     const olderThan = flags['older-than'] ? Number.parseInt(flags['older-than'], 10) : undefined
     return {
       result: await storageGc({ drop, olderThan, vacuum: !flags['no-vacuum'] }, ctx),
@@ -64,6 +66,7 @@ async function dispatchStorage(subcommand, positional, flags, ctx) {
   return exitHelp('storage')
 }
 
+/** @param {any} subcommand @param {any} _positional @param {any} flags @param {any} ctx */
 async function dispatchSnapshot(subcommand, _positional, flags, ctx) {
   if (subcommand === 'build') {
     if (flags.tier && flags.tier !== 'full') {
@@ -86,6 +89,7 @@ async function dispatchSnapshot(subcommand, _positional, flags, ctx) {
   return exitHelp('snapshot')
 }
 
+/** @param {any} _subcommand @param {any} _positional @param {any} flags @param {any} ctx */
 async function dispatchConsolidate(_subcommand, _positional, flags, ctx) {
   const { consolidate } = await import('../commands/consolidate.js')
   const result = await consolidate(
@@ -98,6 +102,7 @@ async function dispatchConsolidate(_subcommand, _positional, flags, ctx) {
   return { result, formatter: summary('consolidate') }
 }
 
+/** @param {any} subcommand @param {any} positional @param {any} flags @param {any} ctx */
 async function dispatchIndex(subcommand, positional, flags, ctx) {
   if (subcommand === 'embeddings') {
     const { indexEmbeddings } = await import('../commands/index-embeddings.js')
@@ -119,15 +124,18 @@ async function dispatchIndex(subcommand, positional, flags, ctx) {
   return exitHelp('index')
 }
 
+/** @param {any} flags @param {any} ctx */
 async function dispatchPrune(flags, ctx) {
   const { prune } = await import('../commands/prune.js')
   const result = await prune({ dryRun: !!flags['dry-run'], noVacuum: !!flags['no-vacuum'] }, ctx)
   return { result, formatter: summary('prune') }
 }
 
+/** @param {any} ctx */
 async function dispatchVersion(ctx) {
   const { VERSION } = await import('../lib/version.js')
   const { getCommitHash } = await import('../lib/git-version.js')
+  /** @type {{ version: string, commit: string | null, snapshot?: any, snapshotBuildMacos?: any }} */
   const result = { version: VERSION, commit: getCommitHash() }
   // Corpus provenance is a bonus — `version` must work on a machine
   // with no corpus at all (fresh install, standalone binary).
@@ -139,7 +147,7 @@ async function dispatchVersion(ctx) {
   } catch {
     /* no corpus — version info stands alone */
   }
-  const formatter = (r) => {
+  const formatter = (/** @type {any} */ r) => {
     const lines = [`apple-docs ${r.version}${r.commit ? ` (${r.commit})` : ''}`]
     if (r.snapshot) {
       lines.push(`corpus: ${r.snapshot}${r.snapshotBuildMacos ? ` (built on macOS ${r.snapshotBuildMacos})` : ''}`)
@@ -149,6 +157,7 @@ async function dispatchVersion(ctx) {
   return { result, formatter }
 }
 
+/** @param {any} command @param {any} subcommand @param {any} positional @param {any} flags @param {any} ctx */
 export async function dispatchMaintenance(command, subcommand, positional, flags, ctx) {
   if (command === 'storage') return dispatchStorage(subcommand, positional, flags, ctx)
   if (command === 'snapshot') return dispatchSnapshot(subcommand, positional, flags, ctx)

@@ -1,6 +1,6 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { bold, dim, qualityBadge } from './_shared.js'
 
+/** @param {any} result */
 export function formatSearchResults(result) {
   if (result.results.length === 0) {
     return `No results for "${result.query}"`
@@ -28,6 +28,7 @@ export function formatSearchResults(result) {
   return lines.join('\n')
 }
 
+/** @param {any} result */
 export function formatSearchRead(result) {
   const { hit, page } = result
   const quality = hit.matchQuality ?? 'match'
