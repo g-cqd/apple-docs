@@ -118,25 +118,33 @@ private enum Fixture {
 
 @Suite(.serialized)
 struct EmbedExportsTests {
-    @Test func initThenBatchReproducesFixtureVectors() throws {
+    // Split from a single `initThenBatch…` test (which fluctuated 107–154ms): the diagnostic Comment is
+    // hoisted to a typed `let`, and the init-shape vs batch-vectors halves are separate focused tests, so
+    // each body type-checks well under the 100ms budget with margin against the boundary's noise.
+    @Test func initReturnsDimsAndBehavior() throws {
         adEmbedReset()
         let vocab = try Fixture.vocab()
         let initResult = Fixture.initRequest(vocab: vocab).call(adEmbedInit)
-        #expect(initResult?.status == 0, initResult.map { Comment(rawValue: $0.message) } ?? "no result")
+        let initComment: Comment = initResult.map { Comment(rawValue: $0.message) } ?? "no result"
+        #expect(initResult?.status == 0, initComment)
         let dims = initResult!.payload.withUnsafeBytes { UInt32(littleEndian: $0.load(as: UInt32.self)) }
         #expect(dims == 512)
         #expect(initResult!.payload.count == 12)
-        let behavior = initResult!.payload
-            .withUnsafeBytes {
-                UInt32(littleEndian: $0.load(fromByteOffset: 8, as: UInt32.self))
-            }
+        let behavior = initResult!.payload.withUnsafeBytes {
+            UInt32(littleEndian: $0.load(fromByteOffset: 8, as: UInt32.self))
+        }
         #expect(behavior == EmbedBehavior.version)
+    }
 
+    @Test func batchReproducesFixtureVectors() throws {
+        adEmbedReset()
+        _ = Fixture.initRequest(vocab: try Fixture.vocab()).call(adEmbedInit)
         let cases = try Fixture.cases()
         let vectors = try Fixture.caseVectors()
         let sample = [0, 7, 42, 100, cases.count - 1]
         let batch = Fixture.batchRequest(sample.map { cases[$0].text }).call(adEmbedBatch)
-        #expect(batch?.status == 0, batch.map { Comment(rawValue: $0.message) } ?? "no result")
+        let batchComment: Comment = batch.map { Comment(rawValue: $0.message) } ?? "no result"
+        #expect(batch?.status == 0, batchComment)
         let payload = batch!.payload
         #expect(payload.count == sample.count * 512 * 4)
         for (k, caseIndex) in sample.enumerated() {
@@ -154,7 +162,8 @@ struct EmbedExportsTests {
         let stride = 64 + 512 + 4
         let sample = [0, 7, 42, 100, cases.count - 1]
         let batch = Fixture.batchRequest(sample.map { cases[$0].text }).call(adEmbedBatchCodes)
-        #expect(batch?.status == 0, batch.map { Comment(rawValue: $0.message) } ?? "no result")
+        let batchComment: Comment = batch.map { Comment(rawValue: $0.message) } ?? "no result"
+        #expect(batch?.status == 0, batchComment)
         let payload = batch!.payload
         #expect(payload.count == sample.count * stride)
         for (k, caseIndex) in sample.enumerated() {

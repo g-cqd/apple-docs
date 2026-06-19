@@ -3,6 +3,7 @@
 // + full-corpus A/B are the real parity gates; these pin the constructed edge cases.
 
 import ADJSONCore
+import ADTestKit
 import Testing
 
 @testable import ADContent
@@ -247,7 +248,11 @@ struct PageMarkdownTests {
             - doc://x/not-a-doc
 
             """
-        #expect(try renderPageString(pageJson, path: "swiftui/view") == want)
+        // Bind the rendered string and the expected fixture to typed `let`s, then compare with the
+        // typed `expectEqual`, so the solver never faces the whole `render == bigLiteral` expression as
+        // one constraint system (the type-check-timing flake this suite triggered).
+        let rendered: String = try renderPageString(pageJson, path: "swiftui/view")
+        expectEqual(rendered, want)
     }
 
     @Test func relativePathMatchesJs() {
