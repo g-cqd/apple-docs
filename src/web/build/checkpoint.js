@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Build checkpoint helpers — section batching, render-fingerprint digest,
  * and the template-version stamp used to invalidate the per-doc render
@@ -10,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { sha256 } from '../../lib/hash.js'
 import { decodeSectionRow } from '../../storage/section-codec.js'
 
-export function batchFetchSections(db, docIds, chunkSize) {
+export function batchFetchSections(/** @type {any} */ db, /** @type {any} */ docIds, /** @type {any} */ chunkSize) {
   const result = new Map()
   for (let i = 0; i < docIds.length; i += chunkSize) {
     const chunk = docIds.slice(i, i + chunkSize)
@@ -42,7 +41,7 @@ export function batchFetchSections(db, docIds, chunkSize) {
  * not "is the rendered HTML byte-identical?". A full content hash would more
  * than double the per-doc CPU cost during the digest phase, which is hot.
  */
-export function computeSectionsDigest(sections) {
+export function computeSectionsDigest(/** @type {any} */ sections) {
   if (!sections || sections.length === 0) return 'empty'
   const parts = []
   for (const s of sections) {

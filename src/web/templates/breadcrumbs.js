@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Breadcrumbs and the matching `BreadcrumbList` JSON-LD shape.
 //
 // Extracted from src/web/templates.js so the parent stays under the
@@ -126,6 +125,7 @@ export function buildBreadcrumbListJsonLd(key, baseUrl, opts = {}) {
     } else {
       name = segments[i]
     }
+    /** @type {Record<string, any>} */
     const entry = {
       '@type': 'ListItem',
       position: i + 1,

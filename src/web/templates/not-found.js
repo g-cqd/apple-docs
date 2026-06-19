@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { html, raw } from '../lib/html.js'
 import { buildFooter, buildHead, buildHeader } from '../templates.js'
 
@@ -48,7 +47,7 @@ export const NOT_FOUND_INLINE_SCRIPT = `
 })();
 `
 
-export function renderNotFoundPage(siteConfig) {
+export function renderNotFoundPage(/** @type {any} */ siteConfig) {
   const pageTitle = `Not Found — ${siteConfig.siteName}`
   return html`<!DOCTYPE html>
 <html lang="en" data-theme="auto">

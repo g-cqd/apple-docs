@@ -1,6 +1,5 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
- * @typedef {object} SymbolsPageProps
+ * @typedef {any} SymbolsPageProps
  * @property {Array<{ scope: string, count: number }>} totals
  */
 
@@ -8,7 +7,7 @@
  * Build the props consumed by `renderSymbolsPage`. Used by both the live
  * dev server (`/symbols`, `/symbols/<name>`) and the static build.
  *
- * @param {{ db: object }} ctx
+ * @param {{ db: any }} ctx
  * @returns {SymbolsPageProps}
  */
 export function buildSymbolsPageProps(ctx) {

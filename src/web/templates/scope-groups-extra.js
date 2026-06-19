@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Scope-specific grouping for the remaining collection-style roots —
  * App Store Review's numbered sections, release-notes versions, the
@@ -10,27 +9,27 @@
 
 import { slugify } from '../../content/render-html.js'
 
-function docTitle(doc) {
+function docTitle(/** @type {any} */ doc) {
   return String(doc?.title ?? doc?.key ?? doc?.path ?? '')
 }
 
-function byTitle(a, b) {
+function byTitle(/** @type {any} */ a, /** @type {any} */ b) {
   return docTitle(a).localeCompare(docTitle(b))
 }
 
-function lastSegment(doc) {
+function lastSegment(/** @type {any} */ doc) {
   const path = String(doc?.path ?? doc?.key ?? '')
   return path.slice(path.lastIndexOf('/') + 1)
 }
 
-function numericParts(s) {
+function numericParts(/** @type {any} */ s) {
   return String(s)
     .split(/[._]/)
     .map((n) => Number.parseInt(n, 10))
     .filter(Number.isFinite)
 }
 
-function compareNumericParts(a, b) {
+function compareNumericParts(/** @type {any} */ a, /** @type {any} */ b) {
   const pa = numericParts(a)
   const pb = numericParts(b)
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -46,7 +45,7 @@ function compareNumericParts(a, b) {
  * labelled by the section page's own title ("1. Safety"), rules in
  * numeric order (1.2 before 1.10) with the section page first.
  */
-export function groupGuidelinesBySection(docs) {
+export function groupGuidelinesBySection(/** @type {any} */ docs) {
   const bySection = new Map()
   const rest = []
   for (const doc of docs ?? []) {
@@ -63,8 +62,8 @@ export function groupGuidelinesBySection(docs) {
   const sections = [...bySection.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([section, sectionDocs]) => {
-      sectionDocs.sort((a, b) => compareNumericParts(lastSegment(a), lastSegment(b)))
-      const header = sectionDocs.find((d) => lastSegment(d) === String(section))
+      sectionDocs.sort((/** @type {any} */ a, /** @type {any} */ b) => compareNumericParts(lastSegment(a), lastSegment(b)))
+      const header = sectionDocs.find((/** @type {any} */ d) => lastSegment(d) === String(section))
       return {
         id: `section-${section}`,
         label: header ? docTitle(header) : `Section ${section}`,
@@ -86,7 +85,7 @@ const VERSION_IN_TITLE = /(\d+(?:[._]\d+)*)/
  * version first within a group. Versionless pages (e.g. "Foundation
  * Release Notes") land in a trailing "Other" section.
  */
-export function groupReleaseNotesByVersion(docs) {
+export function groupReleaseNotesByVersion(/** @type {any} */ docs) {
   const byMajor = new Map()
   const rest = []
   for (const doc of docs ?? []) {
@@ -109,7 +108,9 @@ export function groupReleaseNotesByVersion(docs) {
       id: `v-${major}`,
       label: group.product ? `${group.product} ${major}` : `Version ${major}`,
       count: group.docs.length,
-      docs: group.docs.sort((a, b) => compareNumericParts(b.version, a.version)).map((entry) => entry.doc),
+      docs: group.docs
+        .sort((/** @type {any} */ a, /** @type {any} */ b) => compareNumericParts(b.version, a.version))
+        .map((/** @type {any} */ entry) => entry.doc),
     }))
   if (rest.length > 0) {
     sections.push({ id: 'v-other', label: 'Other', count: rest.length, docs: rest.sort(byTitle) })
@@ -127,7 +128,7 @@ const SWIFT_BOOK_PARTS = new Map([
 ])
 
 /** The Swift book: one section per book part, in reading order. */
-export function groupSwiftBookByPart(docs) {
+export function groupSwiftBookByPart(/** @type {any} */ docs) {
   const byPart = new Map()
   for (const doc of docs ?? []) {
     const part = String(doc?.path ?? '').split('/')[1] ?? ''
@@ -150,7 +151,7 @@ export function groupSwiftBookByPart(docs) {
  * Swift package catalog: `packages/<owner>/<repo>` grouped by owner,
  * largest catalogs first so apple/swiftlang/vapor surface at the top.
  */
-export function groupPackagesByOwner(docs) {
+export function groupPackagesByOwner(/** @type {any} */ docs) {
   const byOwner = new Map()
   const rest = []
   for (const doc of docs ?? []) {
@@ -179,7 +180,7 @@ export function groupPackagesByOwner(docs) {
 const TN_NUMBER = /TN(\d+)/i
 
 /** Technotes: a single section, newest TN number first. */
-export function sortTechnotes(docs) {
+export function sortTechnotes(/** @type {any} */ docs) {
   const items = [...(docs ?? [])].sort((a, b) => {
     const ta = TN_NUMBER.exec(docTitle(a))
     const tb = TN_NUMBER.exec(docTitle(b))
@@ -215,7 +216,7 @@ const ARCHIVE_LABELS = new Map([
  * even though no root carries those slugs — group by it, biggest
  * categories first.
  */
-export function groupArchiveByCategory(docs) {
+export function groupArchiveByCategory(/** @type {any} */ docs) {
   const byCategory = new Map()
   for (const doc of docs ?? []) {
     const raw = String(doc?.framework ?? '')
@@ -246,7 +247,7 @@ export function groupArchiveByCategory(docs) {
  * `higGroups` map (topic path → { label, order }); see
  * src/web/scope-group-data.js. Category pages head their own section.
  */
-export function groupHigByCategory(docs, higGroups) {
+export function groupHigByCategory(/** @type {any} */ docs, /** @type {any} */ higGroups) {
   if (!(higGroups instanceof Map) || higGroups.size === 0) return null
   const sections = new Map()
   const rest = []

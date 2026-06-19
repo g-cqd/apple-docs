@@ -1,8 +1,7 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { html, raw } from '../lib/html.js'
 import { assetUrl, buildFooter, buildHead, buildHeader } from '../templates.js'
 
-export function renderFontsPage(siteConfig, data = {}) {
+export function renderFontsPage(/** @type {any} */ siteConfig, /** @type {any} */ data = {}) {
   const pageTitle = `Fonts — ${siteConfig.siteName}`
   const canonical = `${siteConfig.baseUrl || ''}/fonts`
   const description = 'Browse, preview, and download Apple typography (SF Pro, SF Mono, New York, …).'
@@ -13,10 +12,10 @@ export function renderFontsPage(siteConfig, data = {}) {
   const familiesJson = JSON.stringify(families).replace(/</g, '\\u003c')
   const baseUrl = siteConfig.baseUrl || ''
 
-  const familyMarkup = families.map((family) => {
-    const variableCount = family.files.filter((f) => f.is_variable).length
-    const remoteCount = family.files.filter((f) => f.source === 'remote').length
-    const systemCount = family.files.filter((f) => f.source === 'system').length
+  const familyMarkup = families.map((/** @type {any} */ family) => {
+    const variableCount = family.files.filter((/** @type {any} */ f) => f.is_variable).length
+    const remoteCount = family.files.filter((/** @type {any} */ f) => f.source === 'remote').length
+    const systemCount = family.files.filter((/** @type {any} */ f) => f.source === 'system').length
     const meta = [
       `${family.files.length} file${family.files.length === 1 ? '' : 's'}`,
       variableCount > 0 ? `${variableCount} variable` : null,
@@ -25,7 +24,7 @@ export function renderFontsPage(siteConfig, data = {}) {
     ]
       .filter(Boolean)
       .join(' · ')
-    const familyZip = (subset) =>
+    const familyZip = (/** @type {any} */ subset) =>
       `${baseUrl}/api/fonts/family/${encodeURIComponent(family.id)}.zip${subset && subset !== 'all' ? `?subset=${encodeURIComponent(subset)}` : ''}`
     const downloadButtons = [
       html`<a class="font-family__download" href="${familyZip('all')}" download>Download all</a>`,

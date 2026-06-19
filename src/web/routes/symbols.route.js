@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { BackpressureError } from '../../lib/errors.js'
 import { getPrerenderedSymbolPath, renderSfSymbol, searchSfSymbols } from '../../resources/apple-assets.js'
 import { fileResponseRevalidated, jsonResponse, notFoundResponse } from '../responses.js'
@@ -29,7 +28,7 @@ export function symbolsSearchHandler(_request, ctx, url) {
  * @type {import('../route-registry.js').RouteHandler}
  */
 export function symbolMetadataHandler(_request, ctx, _url, match) {
-  const [, scope, encodedName] = match
+  const [, scope, encodedName] = /** @type {any} */ (match)
   const decodedName = decodeURIComponent(encodedName)
   const row = ctx.db.getSfSymbol(scope, decodedName)
   if (!row) return new Response('Not Found', { status: 404 })
@@ -55,7 +54,7 @@ export function symbolMetadataHandler(_request, ctx, _url, match) {
  * @type {import('../route-registry.js').RouteHandler}
  */
 export async function symbolRenderHandler(request, ctx, url, match) {
-  const [, scope, encodedName, format] = match
+  const [, scope, encodedName, format] = /** @type {any} */ (match)
   const decodedName = decodeURIComponent(encodedName)
   const fgParam = url.searchParams.get('fg') ?? url.searchParams.get('color')
   const bgParam = url.searchParams.get('bg')

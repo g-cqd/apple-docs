@@ -21,7 +21,7 @@ import { minifyCSS } from './minify-css.js'
  *
  * @param {{ srcWebDir: string, buildDir: string, isOrchestratorRun: boolean }} args
  */
-export async function runAssetPipeline({ srcWebDir, buildDir, isOrchestratorRun }) {
+export async function runAssetPipeline(/** @type {any} */ { srcWebDir, buildDir, isOrchestratorRun }) {
   const rawCSS = readFileSync(join(srcWebDir, 'assets', 'style.css'), 'utf8')
   await Bun.write(join(buildDir, 'assets', 'style.css'), minifyCSS(rawCSS))
 

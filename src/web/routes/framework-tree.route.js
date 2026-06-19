@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { sha256 } from '../../lib/hash.js'
 import { buildFrameworkTreeData } from '../templates.js'
 
@@ -13,7 +12,7 @@ import { buildFrameworkTreeData } from '../templates.js'
  */
 export function frameworkTreeHandler(_request, ctx, _url, match) {
   const { db, frameworkTreeCache, siteConfig } = ctx
-  const [, slug, hash] = match
+  const [, slug, hash] = /** @type {any} */ (match)
   const cacheKey = `${slug}:${hash}`
   let json = frameworkTreeCache.get(cacheKey)
   if (json === undefined) {

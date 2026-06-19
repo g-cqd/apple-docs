@@ -10,7 +10,7 @@ import { AssertionError } from '../lib/errors.js'
  * `Response` (or null to defer to the next match). If `dispatch` finds no
  * match it returns null; the caller renders the 404.
  *
- * @typedef {(request: Request, ctx: import('./context.js').WebContext, url: URL, match?: RegExpMatchArray) => Response | Promise<Response> | null | Promise<null>} RouteHandler
+ * @typedef {(request: Request, ctx: import("./context.js").WebContext, url: URL, match?: RegExpMatchArray) => Response | Promise<Response> | null | Promise<null> | Promise<Response | null>} RouteHandler
  */
 
 /**

@@ -1,9 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Minify CSS by stripping comments, collapsing whitespace, and removing
  * unnecessary characters.
  */
-export function minifyCSS(css) {
+export function minifyCSS(/** @type {any} */ css) {
   return css
     .replace(/\/\*[\s\S]*?\*\//g, '') // strip block comments
     .replace(/\s*([{}:;,>~+])\s*/g, '$1') // collapse whitespace around syntax chars

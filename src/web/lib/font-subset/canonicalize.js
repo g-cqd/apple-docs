@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Canonicalize a font-subset request into a deterministic shape suitable
  * for SHA-256 cache keying. Both the POST JSON body and the GET query
@@ -32,7 +31,7 @@ export const MAX_CODEPOINTS_PER_REQUEST = 10_000
 const UNICODE_MAX = 0x10ffff
 
 export class CanonicalizeError extends Error {
-  constructor(message, { status = 400, details } = {}) {
+  constructor(/** @type {any} */ message, /** @type {any} */ { status = 400, details } = {}) {
     super(message)
     this.name = 'CanonicalizeError'
     this.status = status
@@ -42,7 +41,7 @@ export class CanonicalizeError extends Error {
 
 /**
  * Canonicalize a parsed POST body shape.
- * @param {object} body
+ * @param {any} body
  * @returns {{ font: string, codepoints: number[], format: string }}
  */
 export function canonicalizePostBody(body) {
@@ -89,7 +88,10 @@ export function canonicalizePostBody(body) {
  * @param {URLSearchParams | Record<string, string>} params
  */
 export function canonicalizeQuery(params) {
-  const get = params instanceof URLSearchParams ? (k) => params.get(k) : (k) => (params && Object.hasOwn(params, k) ? params[k] : null)
+  const get =
+    params instanceof URLSearchParams
+      ? (/** @type {any} */ k) => params.get(k)
+      : (/** @type {any} */ k) => (params && Object.hasOwn(params, k) ? params[k] : null)
   const font = requireFontId(get('font'))
   const format = normalizeFormat(get('format') ?? undefined)
   const set = new Set()
@@ -116,7 +118,7 @@ export function canonicalizeQuery(params) {
   return finalize(font, set, format)
 }
 
-function finalize(font, set, format) {
+function finalize(/** @type {any} */ font, /** @type {any} */ set, /** @type {any} */ format) {
   if (set.size === 0) {
     throw new CanonicalizeError('at least one of codepoints, characters, or ranges must be provided')
   }
@@ -127,7 +129,7 @@ function finalize(font, set, format) {
   return { font, codepoints, format }
 }
 
-function requireFontId(value) {
+function requireFontId(/** @type {any} */ value) {
   if (typeof value !== 'string' || value.length === 0) {
     throw new CanonicalizeError('font is required (string)')
   }
@@ -140,7 +142,7 @@ function requireFontId(value) {
   return value
 }
 
-function normalizeFormat(value) {
+function normalizeFormat(/** @type {any} */ value) {
   if (value == null || value === '') return DEFAULT_FORMAT
   if (typeof value !== 'string') throw new CanonicalizeError('format must be a string')
   const lower = value.toLowerCase()
@@ -150,14 +152,14 @@ function normalizeFormat(value) {
   return lower
 }
 
-function splitList(s) {
+function splitList(/** @type {any} */ s) {
   return String(s)
     .split(',')
     .map((t) => t.trim())
     .filter(Boolean)
 }
 
-function parseCodepointToken(token) {
+function parseCodepointToken(/** @type {any} */ token) {
   if (typeof token === 'number') return token
   if (typeof token !== 'string') {
     throw new CanonicalizeError(`invalid codepoint: ${token}`)
@@ -181,7 +183,7 @@ function parseCodepointToken(token) {
   return n
 }
 
-function parseRangeToken(token) {
+function parseRangeToken(/** @type {any} */ token) {
   // Accept `U+xxxx-U+yyyy`, `0xNN-0xMM`, `lo-hi`. Be careful: `U+0041-U+005A`
   // has TWO `-` if split naively — but the first `-` after the first valid
   // codepoint terminator is the range separator. Split on the last `-`
@@ -194,12 +196,12 @@ function parseRangeToken(token) {
   return [parseCodepointToken(m[1]), parseCodepointToken(m[2])]
 }
 
-function addCodepoint(set, value) {
+function addCodepoint(/** @type {any} */ set, /** @type {any} */ value) {
   const n = parseCodepointToken(value)
   addCodepointInt(set, n)
 }
 
-function addCodepointInt(set, n) {
+function addCodepointInt(/** @type {any} */ set, /** @type {any} */ n) {
   if (!Number.isInteger(n) || n < 0 || n > UNICODE_MAX) {
     throw new CanonicalizeError(`codepoint out of range: ${n}`)
   }
@@ -209,7 +211,7 @@ function addCodepointInt(set, n) {
   }
 }
 
-function addRange(set, loRaw, hiRaw) {
+function addRange(/** @type {any} */ set, /** @type {any} */ loRaw, /** @type {any} */ hiRaw) {
   const lo = typeof loRaw === 'number' ? loRaw : parseCodepointToken(loRaw)
   const hi = typeof hiRaw === 'number' ? hiRaw : parseCodepointToken(hiRaw)
   if (!Number.isInteger(lo) || !Number.isInteger(hi) || lo < 0 || hi < 0 || lo > UNICODE_MAX || hi > UNICODE_MAX) {
@@ -231,7 +233,7 @@ function addRange(set, loRaw, hiRaw) {
  * Compute the canonical JSON string for a SHA-256 cache key. Stable across
  * GET and POST so the LRU and Cloudflare share a single key.
  */
-export function canonicalKeyString(canonical) {
+export function canonicalKeyString(/** @type {any} */ canonical) {
   return JSON.stringify({
     font: canonical.font,
     format: canonical.format,

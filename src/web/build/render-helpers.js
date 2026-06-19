@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Per-page render helpers — promise-race timeout wrapper and the
  * skiplist placeholder fallback for documents that wedge the synchronous
@@ -7,7 +6,8 @@
 
 import { safeWebDocKey } from '../../lib/safe-path.js'
 
-export function renderWithTimeout(fn, ms) {
+export function renderWithTimeout(/** @type {any} */ fn, /** @type {any} */ ms) {
+  /** @type {any} */
   let timer
   const renderPromise = Promise.resolve().then(fn)
   const timeoutPromise = new Promise((_, reject) => {
@@ -22,8 +22,8 @@ export function renderWithTimeout(fn, ms) {
  * URL — enough for SEO + the sitemap, with a banner explaining that the
  * full body is unavailable.
  */
-export function renderSkiplistPlaceholder(doc, siteConfig) {
-  const esc = (s) =>
+export function renderSkiplistPlaceholder(/** @type {any} */ doc, /** @type {any} */ siteConfig) {
+  const esc = (/** @type {any} */ s) =>
     String(s ?? '')
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')

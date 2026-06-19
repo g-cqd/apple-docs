@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { extname, join } from 'node:path'
 import { BackpressureError, ValidationError } from '../../lib/errors.js'
@@ -53,7 +52,7 @@ export function fontFacesCssHandler(_request, ctx) {
  * @type {import('../route-registry.js').RouteHandler}
  */
 export async function fontFileHandler(request, ctx, _url, match) {
-  const font = ctx.db.getAppleFontFile(decodeURIComponent(match[1]))
+  const font = ctx.db.getAppleFontFile(decodeURIComponent(/** @type {any} */ (match)[1]))
   if (!font) return new Response('Not Found', { status: 404 })
   // refuse to serve any font whose stored file_path resolves outside
   // the approved roots (system font dirs + dataDir/resources/fonts/extracted).
@@ -93,12 +92,12 @@ export async function fontFileHandler(request, ctx, _url, match) {
  * @type {import('../route-registry.js').RouteHandler}
  */
 export async function fontFamilyZipHandler(request, ctx, url, match) {
-  const familyId = decodeURIComponent(match[1])
+  const familyId = decodeURIComponent(/** @type {any} */ (match)[1])
   const subset = String(url.searchParams.get('subset') ?? 'all').toLowerCase()
   const families = ctx.db.listAppleFonts()
-  const family = families.find((f) => f.id === familyId)
+  const family = families.find((/** @type {any} */ f) => f.id === familyId)
   if (!family || family.files.length === 0) return new Response('Not Found', { status: 404 })
-  const filtered = family.files.filter((file) => {
+  const filtered = family.files.filter((/** @type {any} */ file) => {
     switch (subset) {
       case 'variable':
         return !!file.is_variable
@@ -190,10 +189,10 @@ export async function fontFamilyZipHandler(request, ctx, url, match) {
     // Caching is best-effort; failing to write the disk copy must not
     // fail the response. Surface as a warning so operators see chronic
     // failures.
-    ctx.logger?.warn?.(`fontFamilyZipHandler: cache write failed: ${err?.message ?? err}`)
+    ctx.logger?.warn?.(`fontFamilyZipHandler: cache write failed: ${err instanceof Error ? err.message : err}`)
   }
 
-  return new Response(zip, {
+  return new Response(/** @type {any} */ (zip), {
     status: 200,
     headers: { ...baseHeaders, 'Content-Length': String(zip.byteLength) },
   })

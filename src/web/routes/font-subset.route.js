@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * `/api/fonts/subset` — accept a list of codepoints / characters / ranges
  * and return a subset of the requested family's variable master.
@@ -40,7 +39,9 @@ import { PoolUnavailableError } from '../lib/font-subset/pyftsubset-pool.js'
 import { matchesIfNoneMatch } from '../responses.js'
 
 const MAX_BODY_BYTES = 256 * 1024 // 256 KB
+/** @type {Record<string, string>} */
 const FORMAT_EXT = { woff2: 'woff2', ttf: 'ttf', otf: 'otf' }
+/** @type {Record<string, string>} */
 const FORMAT_MIME = {
   woff2: 'font/woff2',
   ttf: 'font/ttf',
@@ -92,7 +93,7 @@ export async function fontSubsetHandler(request, ctx) {
   try {
     legalSet = await getLegalCodepointSet(canonical.font, fontPath)
   } catch (err) {
-    ctx.logger?.warn?.(`font-subset: failed to parse cmap for ${canonical.font}: ${err?.message ?? err}`)
+    ctx.logger?.warn?.(`font-subset: failed to parse cmap for ${canonical.font}: ${err instanceof Error ? err.message : err}`)
     return jsonError(500, 'failed to inspect source font')
   }
   const capped = capAgainst(legalSet, canonical.codepoints)
@@ -143,7 +144,7 @@ export async function fontSubsetHandler(request, ctx) {
         headers: { ...baseHeaders, 'Content-Length': String(bytes.byteLength) },
       })
     } catch (err) {
-      ctx.logger?.warn?.(`font-subset: disk read failed for ${sha}: ${err?.message ?? err}`)
+      ctx.logger?.warn?.(`font-subset: disk read failed for ${sha}: ${err instanceof Error ? err.message : err}`)
       // Fall through to a fresh subset.
     }
   }
@@ -178,7 +179,7 @@ export async function fontSubsetHandler(request, ctx) {
       if (err instanceof PoolUnavailableError) {
         return jsonError(503, err.message, { 'Retry-After': '60' }, { setupHint: err.setupHint })
       }
-      ctx.logger?.warn?.(`font-subset: pool error: ${err?.message ?? err}`)
+      ctx.logger?.warn?.(`font-subset: pool error: ${err instanceof Error ? err.message : err}`)
       return jsonError(500, 'subset failed')
     }
 
@@ -190,7 +191,7 @@ export async function fontSubsetHandler(request, ctx) {
       await Bun.write(tempPath, bytes)
       renameSync(tempPath, diskPath)
     } catch (err) {
-      ctx.logger?.warn?.(`font-subset: disk cache write failed: ${err?.message ?? err}`)
+      ctx.logger?.warn?.(`font-subset: disk cache write failed: ${err instanceof Error ? err.message : err}`)
     }
 
     return new Response(bytes, {
@@ -202,7 +203,7 @@ export async function fontSubsetHandler(request, ctx) {
   }
 }
 
-function jsonError(status, message, extraHeaders, details) {
+function jsonError(/** @type {any} */ status, /** @type {any} */ message, /** @type {any} */ extraHeaders = undefined, /** @type {any} */ details = undefined) {
   const body = { error: message }
   if (details && typeof details === 'object') Object.assign(body, details)
   return new Response(JSON.stringify(body), {

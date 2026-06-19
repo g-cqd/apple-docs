@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { search } from '../../commands/search.js'
 import { BackpressureError, Semaphore } from '../../lib/semaphore.js'
 import { projectSearchResult } from '../../output/projection.js'
@@ -22,7 +21,7 @@ const DEEP_GATE_MAX_INFLIGHT = parsePositiveInt(process.env.APPLE_DOCS_WEB_DEEP_
 const DEEP_GATE_MAX_WAITERS = parsePositiveInt(process.env.APPLE_DOCS_WEB_DEEP_QUEUE) ?? 8
 const deepGate = new Semaphore(DEEP_GATE_MAX_INFLIGHT, { maxWaiters: DEEP_GATE_MAX_WAITERS })
 
-function parsePositiveInt(value) {
+function parsePositiveInt(/** @type {any} */ value) {
   const n = value == null ? Number.NaN : Number.parseInt(value, 10)
   return Number.isFinite(n) && n > 0 ? n : null
 }
@@ -44,6 +43,7 @@ export async function searchHandler(_request, ctx, url) {
   const query = url.searchParams.get('q')
   if (!query) return jsonResponse({ query: '', total: 0, results: [] })
   const deep = url.searchParams.get('deep') === '1' || url.searchParams.get('full_text') === '1'
+  /** @type {Record<string, any>} */
   const searchOpts = {
     query,
     limit: Math.min(Number.parseInt(url.searchParams.get('limit') ?? '50', 10) || 50, 200),
@@ -107,13 +107,14 @@ export async function searchHandler(_request, ctx, url) {
   })
 }
 
-function searchResponseCacheKey(searchOpts, stamp) {
+function searchResponseCacheKey(/** @type {any} */ searchOpts, /** @type {any} */ stamp) {
   return new Bun.CryptoHasher('sha256').update(`${stableJson(searchOpts)}\0${stamp}`).digest('hex')
 }
 
 // Stable, key-sorted JSON so logically-equal opts hash to the same key
 // regardless of insertion order.
-function stableJson(value) {
+/** @returns {string} */
+function stableJson(/** @type {any} */ value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
   return `{${Object.keys(value)

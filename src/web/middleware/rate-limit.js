@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Per-IP token-bucket rate limiter for the public web server.
  *
@@ -21,7 +20,7 @@
 
 const DEFAULT_LRU_CAP = 4096
 
-function resolveIp(request, server) {
+function resolveIp(/** @type {any} */ request, /** @type {any} */ server) {
   const forwarded = request.headers.get('x-forwarded-for')
   if (forwarded) {
     const first = forwarded.split(',')[0]?.trim()
@@ -50,7 +49,7 @@ export function createRateLimiter(opts = {}) {
   /** @type {Map<string, { tokens: number, lastRefill: number }>} */
   const buckets = new Map()
 
-  function refillAndTake(ip) {
+  function refillAndTake(/** @type {any} */ ip) {
     const now = Date.now()
     let bucket = buckets.get(ip)
     if (bucket) {
@@ -96,7 +95,7 @@ export function createRateLimiter(opts = {}) {
  * 429 response with a Retry-After header (seconds, integer-rounded).
  * Plain text body so curl / proxy logs surface a readable reason.
  */
-export function tooManyRequestsResponse(retryAfterMs, name = 'default') {
+export function tooManyRequestsResponse(/** @type {any} */ retryAfterMs, name = 'default') {
   const retryAfterSec = Math.max(1, Math.ceil(retryAfterMs / 1000))
   return new Response(`Too many requests (${name}). Retry after ${retryAfterSec}s.\n`, {
     status: 429,

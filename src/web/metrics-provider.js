@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Metrics builder + optional Prometheus-scrape starter for
  * `apple-docs web serve`. Mirrors the shape of
@@ -40,7 +39,7 @@ export function maybeStartWebMetricsServer(opts, deps) {
   })
 }
 
-export function buildWebMetrics(deps) {
+export function buildWebMetrics(/** @type {any} */ deps) {
   const metrics = []
 
   // ---- Per-request latency + counter (from the observability shim).
@@ -138,7 +137,7 @@ export function buildWebMetrics(deps) {
   return metrics
 }
 
-function safeCall(fn) {
+function safeCall(/** @type {any} */ fn) {
   try {
     return fn()
   } catch {
@@ -152,7 +151,7 @@ function safeCall(fn) {
  * (e.g. tests pass a single-pool stub), fall back to flat single-pool
  * gauges.
  */
-function pushReaderPoolMetrics(metrics, rp) {
+function pushReaderPoolMetrics(/** @type {any} */ metrics, /** @type {any} */ rp) {
   const pools = rp.pools
   const FIELDS = [
     ['size', 'gauge', 'Reader-pool worker count.'],
@@ -163,6 +162,7 @@ function pushReaderPoolMetrics(metrics, rp) {
     ['timeouts', 'counter', 'Reader-pool per-call deadline expirations.'],
     ['backpressureRejects', 'counter', 'Reader-pool backpressure rejections.'],
   ]
+  /** @type {Record<string, string>} */
   const NAME = {
     size: 'apple_docs_reader_pool_size',
     active: 'apple_docs_reader_pool_active',

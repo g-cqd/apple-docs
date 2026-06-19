@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { AssertionError } from '../lib/errors.js'
 import { safeWebDocKey } from '../lib/safe-path.js'
@@ -16,6 +15,7 @@ const URLS_PER_SITEMAP = 50_000
  * normalises to [0, 1]); `changefreq` is a hint, not a contract — Google
  * mostly ignores it and uses lastmod, but Bing still honours it.
  */
+/** @type {Record<string, any>} */
 const KIND_DEFAULTS = {
   framework: { priority: 0.8, changefreq: 'weekly' },
   tooling: { priority: 0.7, changefreq: 'monthly' },
@@ -29,7 +29,7 @@ const ROLE_NOTES_HINT = /release-notes/i
 const DOC_DEFAULT = { priority: 0.6, changefreq: 'monthly' }
 
 /** Escape a string for safe inclusion in XML text and attribute contexts. */
-function escapeXml(s) {
+function escapeXml(/** @type {any} */ s) {
   return String(s ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -42,7 +42,7 @@ function escapeXml(s) {
  * Render one `<url>` block. Pulled out so the per-framework sitemap and the
  * homepage entry share the same shape and indentation.
  */
-function urlEntry({ loc, lastmod, changefreq, priority }) {
+function urlEntry(/** @type {any} */ { loc, lastmod, changefreq, priority }) {
   const parts = ['  <url>', `    <loc>${escapeXml(loc)}</loc>`]
   if (lastmod) parts.push(`    <lastmod>${escapeXml(lastmod)}</lastmod>`)
   if (changefreq) parts.push(`    <changefreq>${escapeXml(changefreq)}</changefreq>`)
@@ -55,7 +55,7 @@ function urlEntry({ loc, lastmod, changefreq, priority }) {
  * Produce the urlset XML for a single framework. Returns `null` if the
  * framework has no documents (caller skips).
  */
-function buildFrameworkSitemapXml({ root, docs, baseUrl, lastmod }) {
+function buildFrameworkSitemapXml(/** @type {any} */ { root, docs, baseUrl, lastmod }) {
   if (!docs || docs.length === 0) return null
   const kindDefaults = KIND_DEFAULTS[root.kind] ?? DOC_DEFAULT
 
@@ -100,7 +100,7 @@ function buildFrameworkSitemapXml({ root, docs, baseUrl, lastmod }) {
  * Produce the top-level <sitemapindex> XML pointing at every per-framework
  * file. The homepage and search are inlined as a single tiny "_root" sitemap.
  */
-function buildSitemapIndexXml({ baseUrl, frameworkSlugs, lastmod }) {
+function buildSitemapIndexXml(/** @type {any} */ { baseUrl, frameworkSlugs, lastmod }) {
   const sitemaps = ['_root', ...frameworkSlugs].map((slug) => {
     const path = slug === '_root' ? '/sitemaps/_root.xml.gz' : `/sitemaps/${slug}.xml.gz`
     return ['  <sitemap>', `    <loc>${escapeXml(baseUrl + path)}</loc>`, `    <lastmod>${escapeXml(lastmod)}</lastmod>`, '  </sitemap>'].join('\n')
@@ -131,7 +131,7 @@ function buildSitemapIndexXml({ baseUrl, frameworkSlugs, lastmod }) {
  * @param {string} opts.buildDate   YYYY-MM-DD timestamp for `<lastmod>`.
  * @returns {Promise<{ totalUrls: number, sitemapsBuilt: number }>}
  */
-export async function generateSitemaps({ db, outputDir, baseUrl, buildDate }) {
+export async function generateSitemaps(/** @type {any} */ { db, outputDir, baseUrl, buildDate }) {
   const sitemapsDir = join(outputDir, 'sitemaps')
   ensureDir(sitemapsDir)
 

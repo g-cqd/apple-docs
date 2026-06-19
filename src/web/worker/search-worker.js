@@ -1,5 +1,6 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
+/** @type {any} */
 let titleIndex = null // v2 columnar or v1 row-based (normalized on load)
+/** @type {any} */
 let aliases = null
 let baseUrl = ''
 
@@ -19,7 +20,7 @@ let prefixIndex = null
 // shapes: empty / undefined; a root-relative path (`/…`); an absolute URL
 // whose origin matches `self.location.origin`. Anything else throws.
 // Closes the CSRF surface flagged by CodeQL on this worker's init path.
-function validateBase(rawBase) {
+function validateBase(/** @type {any} */ rawBase) {
   if (rawBase == null || rawBase === '') return ''
   if (typeof rawBase !== 'string') throw new Error('base must be a string')
   if (rawBase.startsWith('/') && !rawBase.startsWith('//')) return rawBase
@@ -42,7 +43,7 @@ self.addEventListener('message', async (event) => {
     try {
       baseUrl = validateBase(base)
     } catch (e) {
-      self.postMessage({ type: 'error', message: e.message })
+      self.postMessage({ type: 'error', message: /** @type {any} */ (e).message })
       return
     }
     try {
@@ -74,7 +75,7 @@ self.addEventListener('message', async (event) => {
       buildIndices()
       self.postMessage({ type: 'ready' })
     } catch (e) {
-      self.postMessage({ type: 'error', message: e.message })
+      self.postMessage({ type: 'error', message: /** @type {any} */ (e).message })
     }
     return
   }
@@ -112,12 +113,12 @@ function normalizeIndex() {
 
   // v1 row-based format: { frameworks, entries: [[key, title, abstract, fwIdx, kind, roleHeading], ...] }
   const entries = titleIndex.entries || []
-  titleIndex.keys = entries.map((e) => e[0])
-  titleIndex.titles = entries.map((e) => e[1])
-  titleIndex.abstracts = entries.map((e) => e[2])
-  titleIndex.fwIndices = entries.map((e) => e[3])
-  titleIndex.kinds = entries.map((e) => e[4])
-  titleIndex.roleHeadings = entries.map((e) => e[5])
+  titleIndex.keys = entries.map((/** @type {any} */ e) => e[0])
+  titleIndex.titles = entries.map((/** @type {any} */ e) => e[1])
+  titleIndex.abstracts = entries.map((/** @type {any} */ e) => e[2])
+  titleIndex.fwIndices = entries.map((/** @type {any} */ e) => e[3])
+  titleIndex.kinds = entries.map((/** @type {any} */ e) => e[4])
+  titleIndex.roleHeadings = entries.map((/** @type {any} */ e) => e[5])
   titleIndex.count = entries.length
 }
 
@@ -125,13 +126,13 @@ function normalizeIndex() {
  * Tokenize a string by splitting on camelCase boundaries, spaces, dots,
  * underscores, slashes, and lowercasing.
  */
-function tokenize(text) {
+function tokenize(/** @type {any} */ text) {
   // Insert a space before uppercase letters that follow a lowercase letter (camelCase)
   const expanded = text.replace(/([a-z])([A-Z])/g, '$1 $2')
   return expanded
     .toLowerCase()
     .split(/[\s._/\\]+/)
-    .filter((t) => t.length > 0)
+    .filter((/** @type {any} */ t) => t.length > 0)
 }
 
 /**
@@ -191,10 +192,10 @@ function buildIndices() {
  * Uint32Array. After this the build-phase Map+Array structure is
  * eligible for GC; only the typed arrays survive.
  */
-function freezePostings(builders) {
+function freezePostings(/** @type {any} */ builders) {
   const out = new Map()
   for (const [term, list] of builders) {
-    list.sort((a, b) => a - b)
+    list.sort((/** @type {any} */ a, /** @type {any} */ b) => a - b)
     // Dedup in place. Each `seenTerm` Set at build prevents duplicates
     // within a single doc; the remaining duplicates would be from
     // tokens appearing in both `title` and `key`. Inline dedup keeps
@@ -218,18 +219,18 @@ function freezePostings(builders) {
  *
  * @returns {Uint32Array | null}
  */
-function lookupTerm(term) {
-  const exact = invertedIndex.get(term)
+function lookupTerm(/** @type {any} */ term) {
+  const exact = /** @type {any} */ (invertedIndex).get(term)
   if (exact && exact.length > 0) return exact
 
   if (term.length <= PREFIX_MAX_LEN) {
-    const prefixed = prefixIndex.get(term)
+    const prefixed = /** @type {any} */ (prefixIndex).get(term)
     if (prefixed && prefixed.length > 0) return prefixed
   } else {
     // Longer query terms: a prefix lookup on the first PREFIX_MAX_LEN
     // chars gives a superset; the scoring loop below filters to actual
     // substring matches.
-    const prefixed = prefixIndex.get(term.substring(0, PREFIX_MAX_LEN))
+    const prefixed = /** @type {any} */ (prefixIndex).get(term.substring(0, PREFIX_MAX_LEN))
     if (prefixed && prefixed.length > 0) return prefixed
   }
 
@@ -241,12 +242,12 @@ function lookupTerm(term) {
  * Returns a new Uint32Array. O(sum of lengths) — much cheaper than
  * the previous Set-based approach for large posting lists.
  */
-function intersectPostings(lists) {
+function intersectPostings(/** @type {any} */ lists) {
   if (lists.length === 0) return new Uint32Array(0)
   if (lists.length === 1) return lists[0]
 
   // Start from the smallest list so the candidate set is bounded by it.
-  const sorted = lists.slice().sort((a, b) => a.length - b.length)
+  const sorted = lists.slice().sort((/** @type {any} */ a, /** @type {any} */ b) => a.length - b.length)
   let acc = sorted[0]
   for (let i = 1; i < sorted.length; i++) {
     acc = intersectTwoSorted(acc, sorted[i])
@@ -255,7 +256,7 @@ function intersectPostings(lists) {
   return acc
 }
 
-function intersectTwoSorted(a, b) {
+function intersectTwoSorted(/** @type {any} */ a, /** @type {any} */ b) {
   const out = new Uint32Array(Math.min(a.length, b.length))
   let ai = 0
   let bi = 0
@@ -278,7 +279,7 @@ function intersectTwoSorted(a, b) {
  * walk — simple and fast for the small list count we hit (one per
  * query term).
  */
-function unionPostings(lists) {
+function unionPostings(/** @type {any} */ lists) {
   if (lists.length === 0) return new Uint32Array(0)
   if (lists.length === 1) return lists[0]
   let acc = lists[0]
@@ -286,7 +287,7 @@ function unionPostings(lists) {
   return acc
 }
 
-function unionTwoSorted(a, b) {
+function unionTwoSorted(/** @type {any} */ a, /** @type {any} */ b) {
   const out = new Uint32Array(a.length + b.length)
   let ai = 0
   let bi = 0
@@ -311,7 +312,7 @@ function unionTwoSorted(a, b) {
   return out.subarray(0, oi)
 }
 
-function searchEntries(query, limit) {
+function searchEntries(/** @type {any} */ query, /** @type {any} */ limit) {
   const terms = tokenize(query)
   if (terms.length === 0) return []
 
@@ -387,12 +388,12 @@ function searchEntries(query, limit) {
       score = 75
     }
     // All terms found in title
-    else if (terms.every((t) => titleLower.includes(t))) {
+    else if (terms.every((/** @type {any} */ t) => titleLower.includes(t))) {
       score = 60
     }
     // Some terms found in title or key
     else {
-      const matched = terms.filter((t) => titleLower.includes(t) || keyLower.includes(t))
+      const matched = terms.filter((/** @type {any} */ t) => titleLower.includes(t) || keyLower.includes(t))
       if (matched.length > 0) {
         score = 30 * (matched.length / terms.length)
       }

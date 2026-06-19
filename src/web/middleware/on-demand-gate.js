@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Composite gate for the on-demand docs fetch path.
  *
@@ -35,7 +34,7 @@ const DEFAULT_NEGATIVE_LRU = 1024
 const DEFAULT_FETCH_MAX_CONCURRENT = 8
 const DEFAULT_FETCH_MAX_WAITERS = 16
 
-export function createOnDemandGate(opts = {}) {
+export function createOnDemandGate(/** @type {any} */ opts = {}) {
   const perIpLimiter = createRateLimiter({
     rate: opts.perIpRate ?? DEFAULT_PER_IP_RATE,
     burst: opts.perIpBurst ?? DEFAULT_PER_IP_BURST,
@@ -51,11 +50,11 @@ export function createOnDemandGate(opts = {}) {
     maxWaiters: opts.fetchMaxWaiters ?? DEFAULT_FETCH_MAX_WAITERS,
   })
 
-  function checkPerIp(request, server) {
+  function checkPerIp(/** @type {any} */ request, /** @type {any} */ server) {
     return perIpLimiter.take(request, server)
   }
 
-  function isNegativelyCached(key) {
+  function isNegativelyCached(/** @type {any} */ key) {
     const deniedUntil = negativeCache.get(key)
     if (deniedUntil == null) return false
     if (deniedUntil < Date.now()) {
@@ -69,7 +68,7 @@ export function createOnDemandGate(opts = {}) {
     return true
   }
 
-  function recordMiss(key) {
+  function recordMiss(/** @type {any} */ key) {
     if (negativeCache.size >= negativeLruCap) {
       const oldest = negativeCache.keys().next().value
       if (oldest !== undefined) negativeCache.delete(oldest)
@@ -82,7 +81,7 @@ export function createOnDemandGate(opts = {}) {
    * the queue exceeds maxWaiters; the caller should translate that to a
    * 503 + Retry-After response.
    */
-  async function withFetchPermit(fn) {
+  async function withFetchPermit(/** @type {any} */ fn) {
     await fetchSemaphore.acquire()
     try {
       return await fn()

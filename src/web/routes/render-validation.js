@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Public render endpoints (SF Symbols, font text samples) sit on a CPU
  * budget that's the project's only constrained resource — every render
@@ -21,11 +20,13 @@ export const ALLOWED_SYMBOL_SIZES = new Set([8, 12, 16, 20, 24, 32, 48, 64, 96, 
 
 const COLOR_RE = /^#?[0-9A-Fa-f]{6}$/
 
-function fail(error) {
+/** @returns {{ ok: false, error: any }} */
+function fail(/** @type {any} */ error) {
   return { ok: false, error }
 }
 
-function ok(value) {
+/** @returns {{ ok: true, value: any }} */
+function ok(/** @type {any} */ value) {
   return { ok: true, value }
 }
 
@@ -50,7 +51,7 @@ export function validateFontText(text) {
  * present-but-invalid param yields a 400-shaped error — no silent fallback.
  *
  * @param {{ size?: string|null, color?: string|null, background?: string|null, weight?: string|null, scale?: string|null }} params
- * @returns {{ ok: true, value: object } | { ok: false, error: string }}
+ * @returns {{ ok: true, value: any } | { ok: false, error: string }}
  */
 export function validateSymbolParams(params) {
   const out = {}

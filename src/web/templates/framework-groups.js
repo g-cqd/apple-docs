@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Scope-aware grouping for framework listing pages. Non-framework roots
  * (WWDC, Swift Evolution, sample code) collapse into a useless "Other"
@@ -38,7 +37,7 @@ const SE_STATUS_FAMILIES = [
   ['expired', 'Expired'],
 ]
 
-function parseSourceMetadata(doc) {
+function parseSourceMetadata(/** @type {any} */ doc) {
   const rawMeta = doc?.source_metadata ?? doc?.sourceMetadata
   if (rawMeta == null) return null
   if (typeof rawMeta === 'object') return rawMeta
@@ -50,11 +49,11 @@ function parseSourceMetadata(doc) {
   }
 }
 
-function docTitle(doc) {
+function docTitle(/** @type {any} */ doc) {
   return String(doc?.title ?? doc?.key ?? doc?.path ?? '')
 }
 
-function byTitle(a, b) {
+function byTitle(/** @type {any} */ a, /** @type {any} */ b) {
   return docTitle(a).localeCompare(docTitle(b))
 }
 
@@ -65,7 +64,7 @@ function byTitle(a, b) {
  * "Other" section.
  *
  * @param {Array<{path?: string, key?: string, title?: string}>} docs
- * @returns {Array<{id: string, label: string, count: number, docs: Array}>}
+ * @returns {Array<{id: string, label: string, count: number, docs: Array<any>}>}
  */
 export function groupWwdcByYear(docs) {
   const byYear = new Map()
@@ -99,7 +98,7 @@ export function groupWwdcByYear(docs) {
  * (Swift 5.9)", "Accepted with modifications") to its status family
  * label, or 'Other' when unrecognized/missing.
  */
-export function swiftEvolutionStatusLabel(status) {
+export function swiftEvolutionStatusLabel(/** @type {any} */ status) {
   const normalized = String(status ?? '')
     .trim()
     .toLowerCase()
@@ -110,7 +109,7 @@ export function swiftEvolutionStatusLabel(status) {
   return 'Other'
 }
 
-function seNumberValue(meta) {
+function seNumberValue(/** @type {any} */ meta) {
   const match = /(\d+)/.exec(String(meta?.seNumber ?? ''))
   return match ? Number(match[1]) : -1
 }
@@ -121,9 +120,9 @@ function seNumberValue(meta) {
  * within a group. Each doc gains a `meta` line (SE number + Swift
  * version) shown next to the title.
  *
- * @returns {Array<{id: string, label: string, count: number, docs: Array}>}
+ * @returns {Array<{id: string, label: string, count: number, docs: Array<any>}>}
  */
-export function groupSwiftEvolutionByStatus(docs) {
+export function groupSwiftEvolutionByStatus(/** @type {any} */ docs) {
   const byStatus = new Map()
   for (const doc of docs ?? []) {
     const metadata = parseSourceMetadata(doc)
@@ -144,7 +143,7 @@ export function groupSwiftEvolutionByStatus(docs) {
       id: `status-${slugify(label)}`,
       label,
       count: statusDocs.length,
-      docs: statusDocs.sort((a, b) => b._seNumber - a._seNumber || byTitle(a, b)),
+      docs: statusDocs.sort((/** @type {any} */ a, /** @type {any} */ b) => b._seNumber - a._seNumber || byTitle(a, b)),
     }))
 }
 
@@ -152,9 +151,9 @@ export function groupSwiftEvolutionByStatus(docs) {
  * Group sample-code projects by the first entry of
  * `source_metadata.frameworks`, alphabetically with 'Other' last.
  *
- * @returns {Array<{id: string, label: string, count: number, docs: Array}>}
+ * @returns {Array<{id: string, label: string, count: number, docs: Array<any>}>}
  */
-export function groupSampleCodeByFramework(docs) {
+export function groupSampleCodeByFramework(/** @type {any} */ docs) {
   const byFramework = new Map()
   for (const doc of docs ?? []) {
     const metadata = parseSourceMetadata(doc)
@@ -181,10 +180,10 @@ export function groupSampleCodeByFramework(docs) {
  * Build scope-specific list sections for a root, or null when the root
  * should keep the default role-based grouping.
  *
- * @param {object|null} root Root record ({ slug, kind, source_type, ... }).
- * @param {Array} docs Document rows for the root's page list.
- * @param {{ higGroups?: Map }} [extras] Loaded by src/web/scope-group-data.js.
- * @returns {{ scope: string, sections: Array, nav?: Array<{href: string, label: string, count: number}> } | null}
+ * @param {any} root Root record ({ slug, kind, source_type, ... }).
+ * @param {Array<any>} docs Document rows for the root's page list.
+ * @param {{ higGroups?: Map<any, any> }} [extras] Loaded by src/web/scope-group-data.js.
+ * @returns {{ scope: string, sections: Array<any>, nav?: Array<{href: string, label: string, count: number}> } | null}
  */
 export function buildScopeGroups(root, docs, extras = {}) {
   const scope = root?.source_type ?? root?.slug

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Per-request observability shim. Captures route latency into a shared
  * histogram and bumps a per-route counter so the /metrics provider can
@@ -22,7 +21,7 @@ import { createHistogram } from '../../lib/histogram.js'
  * `/api/symbols/*`. Everything else either matches a literal path or
  * falls through to `other`.
  */
-function classifyRoute(pathname) {
+function classifyRoute(/** @type {any} */ pathname) {
   if (!pathname || pathname === '/') return '/'
   if (pathname.startsWith('/api/search')) return '/api/search'
   if (pathname.startsWith('/api/filters')) return '/api/filters'

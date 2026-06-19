@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { getCommitHash } from '../../lib/git-version.js'
 import { VERSION } from '../../lib/version.js'
 import { jsonResponse } from '../responses.js'
@@ -33,7 +32,7 @@ export function readinessHandler(_request, ctx) {
     ctx.db?.db?.query('SELECT 1').get()
     dbOk = true
   } catch (err) {
-    ctx.logger?.warn?.(`/readyz: db probe failed: ${err?.message ?? err}`)
+    ctx.logger?.warn?.(`/readyz: db probe failed: ${err instanceof Error ? err.message : err}`)
   }
   let readerOk = true
   let readerStats = null
@@ -43,7 +42,7 @@ export function readinessHandler(_request, ctx) {
       readerOk = (readerStats?.active ?? 0) > 0
     } catch (err) {
       readerOk = false
-      ctx.logger?.warn?.(`/readyz: reader-pool probe failed: ${err?.message ?? err}`)
+      ctx.logger?.warn?.(`/readyz: reader-pool probe failed: ${err instanceof Error ? err.message : err}`)
     }
   }
   const ready = dbOk && readerOk
