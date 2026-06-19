@@ -1,12 +1,11 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Pure formatting + DOM helpers for the symbols page. All exports are
 // stateless so the controller can use them without threading globals.
 
-export function readVar(root, name) {
+export function readVar(/** @type {any} */ root, /** @type {any} */ name) {
   return getComputedStyle(root).getPropertyValue(name).trim()
 }
 
-export function normaliseHex(value) {
+export function normaliseHex(/** @type {any} */ value) {
   const raw = String(value || '').trim()
   if (!raw) return ''
   const match = raw.match(/^#?([0-9a-fA-F]{6})$/)
@@ -14,7 +13,7 @@ export function normaliseHex(value) {
   return `#${match[1].toLowerCase()}`
 }
 
-export function bindColorPair(picker, hex, onChange) {
+export function bindColorPair(/** @type {any} */ picker, /** @type {any} */ hex, /** @type {any} */ onChange) {
   picker.addEventListener('input', () => {
     hex.value = picker.value
     onChange()
@@ -31,7 +30,7 @@ export function bindColorPair(picker, hex, onChange) {
 // give the metadata block something distinctive per symbol, decompose
 // the dotted name into base + modifiers ("circle.fill" → base "circle"
 // with modifier "fill").
-export function describeComposition(name) {
+export function describeComposition(/** @type {any} */ name) {
   if (!name) return ''
   const parts = name.split('.').filter(Boolean)
   if (parts.length === 1) return ''
@@ -40,7 +39,7 @@ export function describeComposition(name) {
   return `${stem} → ${modifiers.join(' → ')}`
 }
 
-export function formatAliases(aliases) {
+export function formatAliases(/** @type {any} */ aliases) {
   if (!aliases) return ''
   if (Array.isArray(aliases)) return aliases.length ? aliases.join(', ') : ''
   if (typeof aliases === 'object') {
@@ -52,7 +51,7 @@ export function formatAliases(aliases) {
 
 // Availability is shipped as `{ "iOS": "18.0", "macOS": "15.0", … }`.
 // Render in OS order, omit unset platforms.
-export function formatAvailability(availability) {
+export function formatAvailability(/** @type {any} */ availability) {
   if (!availability || typeof availability !== 'object') return ''
   const platformOrder = ['iOS', 'iPadOS', 'macOS', 'watchOS', 'tvOS', 'visionOS']
   const seen = new Set(platformOrder)
@@ -72,6 +71,6 @@ export function resolvedThemeFg() {
   const raw = getComputedStyle(document.body).color || ''
   const m = raw.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
   if (!m) return '#000000'
-  const hex = (n) => Number(n).toString(16).padStart(2, '0')
+  const hex = (/** @type {any} */ n) => Number(n).toString(16).padStart(2, '0')
   return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`
 }

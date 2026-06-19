@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Symbols page — Phosphor-style global toolbar + Lucide-style
 // label-less tile grid.
 //
@@ -14,31 +13,32 @@ import { createGridRenderer } from './symbols-page/grid.js'
 import { parseDetailRoute, readUrlState, writeUrlState } from './symbols-page/url-state.js'
 
 function init() {
-  const GRID = document.getElementById('symbols-grid')
-  const SCROLLER = document.getElementById('symbols-scroller')
-  const QUERY = document.getElementById('symbols-q')
-  const SCOPE = document.getElementById('symbols-scope')
-  const CATEGORY_RAIL = document.getElementById('symbols-categories-list')
-  const CATEGORY_MOBILE = document.getElementById('symbols-category-mobile')
-  const STATUS = document.getElementById('symbols-status')
-  const COUNT = document.getElementById('symbols-count')
-  const TYPING_HINT = document.getElementById('symbols-typing-hint')
-  const COLOR = document.getElementById('symbols-color')
-  const COLOR_HEX = document.getElementById('symbols-color-hex')
-  const SIZE = document.getElementById('symbols-size')
-  const SIZE_VAL = document.getElementById('symbols-size-value')
-  const LAYOUT = document.getElementById('symbols-layout')
+  const GRID = /** @type {any} */ (document.getElementById('symbols-grid'))
+  const SCROLLER = /** @type {any} */ (document.getElementById('symbols-scroller'))
+  const QUERY = /** @type {any} */ (document.getElementById('symbols-q'))
+  const SCOPE = /** @type {any} */ (document.getElementById('symbols-scope'))
+  const CATEGORY_RAIL = /** @type {any} */ (document.getElementById('symbols-categories-list'))
+  const CATEGORY_MOBILE = /** @type {any} */ (document.getElementById('symbols-category-mobile'))
+  const STATUS = /** @type {any} */ (document.getElementById('symbols-status'))
+  const COUNT = /** @type {any} */ (document.getElementById('symbols-count'))
+  const TYPING_HINT = /** @type {any} */ (document.getElementById('symbols-typing-hint'))
+  const COLOR = /** @type {any} */ (document.getElementById('symbols-color'))
+  const COLOR_HEX = /** @type {any} */ (document.getElementById('symbols-color-hex'))
+  const SIZE = /** @type {any} */ (document.getElementById('symbols-size'))
+  const SIZE_VAL = /** @type {any} */ (document.getElementById('symbols-size-value'))
+  const LAYOUT = /** @type {any} */ (document.getElementById('symbols-layout'))
 
   if (!GRID || !SCROLLER) return
 
   const DESKTOP_MQ = window.matchMedia('(min-width: 1024px)')
-  const root = document.querySelector('.symbols-page')
+  const root = /** @type {any} */ (document.querySelector('.symbols-page'))
 
+  /** @type {any[]} */
   let allSymbols = []
   let categories = new Map()
   let currentCat = ''
 
-  function setStatus(text) {
+  function setStatus(/** @type {any} */ text) {
     if (STATUS) STATUS.textContent = text
   }
 
@@ -70,7 +70,7 @@ function init() {
   })
 
   // ---- Tile click → inspector (desktop) or route (mobile) ----
-  function onTileClick(symbol, tile) {
+  function onTileClick(/** @type {any} */ symbol, /** @type {any} */ tile) {
     if (DESKTOP_MQ.matches) {
       panel.open(symbol, tile)
     } else {
@@ -102,7 +102,7 @@ function init() {
       // load that symbol into the inspector / mobile route.
       const routeName = parseDetailRoute(window.location.pathname)
       if (routeName) {
-        const sym = allSymbols.find((s) => s.name === routeName)
+        const sym = allSymbols.find((/** @type {any} */ s) => s.name === routeName)
         if (sym) panel.open(sym, null)
       }
     })
@@ -118,11 +118,11 @@ function init() {
       ? allSymbols
       : allSymbols.filter((s) => {
           if (scope && s.scope !== scope) return false
-          if (cat && !(s.categories || []).some((c) => c.toLowerCase() === cat.toLowerCase())) return false
+          if (cat && !(s.categories || []).some((/** @type {any} */ c) => c.toLowerCase() === cat.toLowerCase())) return false
           if (!q) return true
           if (s.name.toLowerCase().includes(q)) return true
-          if ((s.categories || []).some((v) => v.toLowerCase().includes(q))) return true
-          if ((s.keywords || []).some((v) => v.toLowerCase().includes(q))) return true
+          if ((s.categories || []).some((/** @type {any} */ v) => v.toLowerCase().includes(q))) return true
+          if ((s.keywords || []).some((/** @type {any} */ v) => v.toLowerCase().includes(q))) return true
           return false
         })
     if (TYPING_HINT) {
@@ -133,6 +133,7 @@ function init() {
     grid.render(next)
   }
 
+  /** @type {any} */
   let filterTimer = 0
   if (QUERY) {
     QUERY.addEventListener('input', () => {
@@ -205,9 +206,9 @@ function init() {
     reflectCategory()
   }
 
-  function catRailItem(value, label, count) {
+  function catRailItem(/** @type {any} */ value, /** @type {any} */ label, /** @type {any} */ count) {
     const li = document.createElement('li')
-    const btn = document.createElement('button')
+    const btn = /** @type {any} */ (document.createElement('button'))
     btn.type = 'button'
     btn.className = 'symbols-category'
     btn.dataset.cat = value
@@ -240,20 +241,20 @@ function init() {
   // Default behaviour: leave `--symbol-color` unset so the CSS fallback
   // resolves to the page's text colour. Only override once the user
   // touches the picker.
-  document.querySelectorAll('.symbols-control--weight .symbols-pill').forEach((pill) => {
+  document.querySelectorAll('.symbols-control--weight .symbols-pill').forEach((/** @type {any} */ pill) => {
     pill.addEventListener('click', () => {
       pickPill(pill, '.symbols-control--weight .symbols-pill')
       panel.setWeight(pill.dataset.weight)
     })
   })
-  document.querySelectorAll('.symbols-control--scale .symbols-pill').forEach((pill) => {
+  document.querySelectorAll('.symbols-control--scale .symbols-pill').forEach((/** @type {any} */ pill) => {
     pill.addEventListener('click', () => {
       pickPill(pill, '.symbols-control--scale .symbols-pill')
       panel.setScale(pill.dataset.scale)
     })
   })
 
-  function pickPill(activePill, selector) {
+  function pickPill(/** @type {any} */ activePill, /** @type {any} */ selector) {
     document.querySelectorAll(selector).forEach((p) => {
       p.setAttribute('aria-checked', p === activePill ? 'true' : 'false')
     })
@@ -290,7 +291,7 @@ function init() {
     if (panel.close()) history.pushState({}, '', `/symbols${window.location.search}`)
   })
   mobileBar.back?.addEventListener('click', () => history.back())
-  SCROLLER.addEventListener('keydown', (event) => {
+  SCROLLER.addEventListener('keydown', (/** @type {any} */ event) => {
     if (event.key === 'Escape') panel.close()
   })
   detail.copyBtn?.addEventListener('click', () => panel.copySvg())

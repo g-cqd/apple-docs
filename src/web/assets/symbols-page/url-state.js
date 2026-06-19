@@ -1,10 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // URL-state contract for the symbols page.
 //   ?q=…&scope=…&cat=…  filter state
 //   /symbols/<name>     detail-route (mobile + bookmark-friendly)
 // Both layers compose: /symbols/<name>?cat=… is valid.
 
-export function parseDetailRoute(pathname) {
+export function parseDetailRoute(/** @type {any} */ pathname) {
   const m = pathname.match(/^\/symbols\/(.+?)\/?$/)
   return m ? decodeURIComponent(m[1]) : null
 }
@@ -18,7 +17,7 @@ export function readUrlState() {
   }
 }
 
-export function writeUrlState({ q, scope, cat }) {
+export function writeUrlState(/** @type {any} */ { q, scope, cat }) {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (scope) params.set('scope', scope)

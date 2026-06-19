@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Tree-view controller for framework listing pages. Loads the
 // hierarchical JSON and renders the tree; on scope-grouped roots
 // (which server-render their curated list) it also drives the
@@ -13,14 +12,14 @@ import { applyTreeFilters, expandLazy, renderNode } from './tree-view/render.js'
 import { buildTreeState } from './tree-view/state.js'
 
 export function init() {
-  const treeContainer = document.getElementById('tree-container')
+  const treeContainer = /** @type {any} */ (document.getElementById('tree-container'))
   if (!treeContainer) return
 
   // Present only on scope-grouped roots, where the server renders the
   // curated list and the tree is the optional view. Tree-only pages
   // (symbol frameworks) ship neither list nor toggle.
-  const listContainer = document.getElementById('list-container')
-  const collectionControls = document.getElementById('collection-controls')
+  const listContainer = /** @type {any} */ (document.getElementById('list-container'))
+  const collectionControls = /** @type {any} */ (document.getElementById('collection-controls'))
 
   // Bail out early if no tree data exists at all (legacy frameworks without
   // DocC `topics` relationships) — the list HTML is already rendered
@@ -30,7 +29,7 @@ export function init() {
   const loader = createTreeDataLoader(treeContainer)
 
   // ---- View toggle (sync; data load is gated downstream) ----
-  function setViewMode(mode) {
+  function setViewMode(/** @type {any} */ mode) {
     if (mode === 'tree') {
       listContainer?.classList.add('hidden')
       treeContainer.classList.remove('hidden')
@@ -43,10 +42,10 @@ export function init() {
     }
   }
 
-  const viewToggle = document.querySelector('.view-toggle')
+  const viewToggle = /** @type {any} */ (document.querySelector('.view-toggle'))
   if (viewToggle) {
-    viewToggle.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-view]')
+    viewToggle.addEventListener('click', (/** @type {any} */ e) => {
+      const btn = /** @type {any} */ (e.target.closest('button[data-view]'))
       if (!btn) return
 
       const mode = btn.getAttribute('data-view')
@@ -62,16 +61,17 @@ export function init() {
   }
 
   // ---- Tree state (lazy-initialised once data arrives) ----
+  /** @type {any} */
   let treeState = null
   let treeBuilt = false
   let inflight = false
 
   treeContainer.addEventListener(
     'toggle',
-    (e) => {
-      const details = e.target.closest('details.tree-node')
+    (/** @type {any} */ e) => {
+      const details = /** @type {any} */ (e.target.closest('details.tree-node'))
       if (!details?.open || !treeState) return
-      const lazyUl = details.querySelector(':scope > ul[data-lazy-parent]')
+      const lazyUl = /** @type {any} */ (details.querySelector(':scope > ul[data-lazy-parent]'))
       if (lazyUl) {
         expandLazy(treeState, treeContainer, lazyUl.getAttribute('data-lazy-parent'))
       }
@@ -83,7 +83,7 @@ export function init() {
     if (treeBuilt || inflight) return
     inflight = true
     treeContainer.innerHTML = '<p class="loading">Loading tree…</p>'
-    loader.load().then((data) => {
+    loader.load().then((/** @type {any} */ data) => {
       inflight = false
       if (!data) {
         treeContainer.innerHTML = '<p>Failed to load tree data.</p>'
@@ -116,21 +116,21 @@ export function init() {
   }
 
   function bindBulkButtons() {
-    const expandAllBtn = document.getElementById('tree-expand-all')
-    const collapseAllBtn = document.getElementById('tree-collapse-all')
+    const expandAllBtn = /** @type {any} */ (document.getElementById('tree-expand-all'))
+    const collapseAllBtn = /** @type {any} */ (document.getElementById('tree-collapse-all'))
 
     if (expandAllBtn) {
       expandAllBtn.addEventListener('click', async () => {
         expandAllBtn.disabled = true
         expandAllBtn.textContent = 'Expanding…'
         while (true) {
-          const lazyEls = treeContainer.querySelectorAll('[data-lazy-parent]')
+          const lazyEls = /** @type {any} */ (treeContainer.querySelectorAll('[data-lazy-parent]'))
           if (lazyEls.length === 0) break
           const batch = [...lazyEls].slice(0, 20)
           for (const el of batch) expandLazy(treeState, treeContainer, el.getAttribute('data-lazy-parent'))
           await new Promise((r) => requestAnimationFrame(r))
         }
-        const allDetails = [...treeContainer.querySelectorAll('details.tree-node')]
+        const allDetails = /** @type {any} */ ([...treeContainer.querySelectorAll('details.tree-node')])
         for (let i = 0; i < allDetails.length; i += 100) {
           for (let j = i; j < Math.min(i + 100, allDetails.length); j++) {
             allDetails[j].open = true
@@ -152,7 +152,7 @@ export function init() {
   }
 
   // ---- Integration with collection-filters ----
-  const filterBar = document.querySelector('.collection-filter-bar')
+  const filterBar = /** @type {any} */ (document.querySelector('.collection-filter-bar'))
   if (filterBar) {
     filterBar.addEventListener('click', () => {
       if (treeBuilt) requestAnimationFrame(() => applyTreeFilters(treeContainer))

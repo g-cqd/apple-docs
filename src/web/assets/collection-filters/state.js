@@ -1,9 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Collection-filter state: kind counts, current selection, URL-hash
 // serialization. All pure helpers — the controller wires them onto DOM
 // events.
 
-export function escapeHtml(s) {
+export function escapeHtml(/** @type {any} */ s) {
   return String(s || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -11,7 +10,7 @@ export function escapeHtml(s) {
     .replace(/"/g, '&quot;')
 }
 
-export function slugify(text) {
+export function slugify(/** @type {any} */ text) {
   return String(text || '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -19,7 +18,7 @@ export function slugify(text) {
 }
 
 /** Build the kind → count map from the server-rendered list items. */
-export function collectKindCounts({ filterableItems }) {
+export function collectKindCounts(/** @type {any} */ { filterableItems }) {
   const kindCounts = new Map()
   for (const el of filterableItems) {
     if (el.tagName !== 'LI') continue
@@ -43,7 +42,7 @@ export function createFilterState() {
  * is the default. Uses replaceState so back-button history isn't polluted
  * with one entry per chip click.
  */
-export function writeStateToHash(state) {
+export function writeStateToHash(/** @type {any} */ state) {
   const params = []
   if (state.currentSort !== 'alpha') params.push(`sort=${state.currentSort}`)
   if (state.activeFilters.size > 0) params.push(`filter=${[...state.activeFilters].join(',')}`)
@@ -63,7 +62,7 @@ export function writeStateToHash(state) {
  * Returns true when any non-default value was restored — caller decides
  * whether to re-apply filters.
  */
-export function readStateFromHash(state, kindCounts) {
+export function readStateFromHash(/** @type {any} */ state, /** @type {any} */ kindCounts) {
   const hash = location.hash
   if (!hash || hash.length < 2) return false
 

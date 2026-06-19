@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Framework-listing filter UI: kind chips, fuzzy text filter, deep-link
 // state via the URL hash. Operates on the server-rendered list only —
 // tree-only pages render neither the list nor these controls.
@@ -11,8 +10,8 @@ import { applyFilters, applySort, buildControls, insertControls, syncToc } from 
 import { collectKindCounts, createFilterState, readStateFromHash, writeStateToHash } from './collection-filters/state.js'
 
 export function init() {
-  const listContainer = document.getElementById('list-container')
-  const filterableItems = document.querySelectorAll('[data-filter-kind]')
+  const listContainer = /** @type {any} */ (document.getElementById('list-container'))
+  const filterableItems = /** @type {any} */ (document.querySelectorAll('[data-filter-kind]'))
   if (filterableItems.length === 0) return
 
   const kindCounts = collectKindCounts({ filterableItems })
@@ -38,7 +37,7 @@ export function init() {
 
   // ---- Chip click ----
   bar.addEventListener('click', (e) => {
-    const btn = e.target.closest('.filter-chip')
+    const btn = /** @type {any} */ (/** @type {any} */ (e.target).closest('.filter-chip'))
     if (!btn) return
     const value = btn.getAttribute('data-value')
     if (value === '') {
@@ -87,7 +86,7 @@ export function init() {
       applySort(state, originalListHtml)
     }
     for (const v of state.activeFilters) {
-      const btn = bar.querySelector(`[data-value="${CSS.escape(v)}"]`)
+      const btn = /** @type {any} */ (bar.querySelector(`[data-value="${CSS.escape(v)}"]`))
       if (btn) btn.classList.add('active')
     }
     if (state.activeFilters.size > 0) allBtn.classList.remove('active')

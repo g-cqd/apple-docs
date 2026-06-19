@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Symbols-page detail panel: inspector on desktop, full-page route on
 // mobile. Decouples the metadata fetch + render + copy/download wiring
 // from the controller so the boot path stays focused on filters + grid.
@@ -12,7 +11,7 @@ import { describeComposition, formatAliases, formatAvailability, readVar, resolv
  */
 const metadataCache = new Map()
 
-async function fetchMetadata(symbol) {
+async function fetchMetadata(/** @type {any} */ symbol) {
   const key = `${symbol.scope}/${symbol.name}`
   if (metadataCache.has(key)) return metadataCache.get(key)
   try {
@@ -35,7 +34,7 @@ async function fetchMetadata(symbol) {
  * the structural pieces of the symbol name as a "Composition" row so each
  * symbol shows something distinctive.
  */
-function renderMetadata(detailMeta, symbol) {
+function renderMetadata(/** @type {any} */ detailMeta, /** @type {any} */ symbol) {
   if (!detailMeta) return
   detailMeta.replaceChildren()
   const rows = []
@@ -74,7 +73,7 @@ function renderMetadata(detailMeta, symbol) {
  * with `font-family: system-ui` so the user agent picks the platform
  * font without us having to ship SF Pro as a webfont on this page.
  */
-function renderCodepointCell(codepoint, display) {
+function renderCodepointCell(/** @type {any} */ codepoint, /** @type {any} */ display) {
   const wrap = document.createElement('span')
   wrap.className = 'symbol-codepoint'
   const code = document.createElement('code')
@@ -94,14 +93,16 @@ function renderCodepointCell(codepoint, display) {
  * refresh / copy methods so the page-level controller can drive the
  * inspector from outside (tile clicks, popstate, keyboard, etc).
  *
- * @param {object} deps DOM refs + a `setStatus(text)` callback + the
+ * @param {any} deps DOM refs + a `setStatus(text)` callback + the
  *   page root element (used for `--symbol-color` lookups).
  */
 export function createDetailPanel(deps) {
   const { detail, mobileBar, layout, root, setStatus, isDesktop } = deps
   const detailWeight = { value: 'regular' }
   const detailScale = { value: 'medium' }
+  /** @type {any} */
   let activeSymbol = null
+  /** @type {any} */
   let lastClickedTile = null
 
   function refreshDetail() {
@@ -138,7 +139,7 @@ export function createDetailPanel(deps) {
     }
   }
 
-  function open(symbol, tile) {
+  function open(/** @type {any} */ symbol, /** @type {any} */ tile) {
     activeSymbol = symbol
     lastClickedTile = tile
     if (detail.root) detail.root.hidden = false
@@ -189,15 +190,15 @@ export function createDetailPanel(deps) {
       await navigator.clipboard.writeText(text)
       setStatus('SVG copied to clipboard')
     } catch (err) {
-      setStatus(`Copy failed: ${err.message}`)
+      setStatus(`Copy failed: ${/** @type {any} */ (err).message}`)
     }
   }
 
-  function setWeight(value) {
+  function setWeight(/** @type {any} */ value) {
     detailWeight.value = value
     refreshDetail()
   }
-  function setScale(value) {
+  function setScale(/** @type {any} */ value) {
     detailScale.value = value
     refreshDetail()
   }

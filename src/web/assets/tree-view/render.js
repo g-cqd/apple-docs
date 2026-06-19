@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Tree-view DOM rendering. Each helper takes the `state` object built
 // in tree-view/state.js as its first argument so the render layer stays
 // stateless — easier to reason about and easier to test if we ever
@@ -6,7 +5,7 @@
 
 import { compactChain, disambiguateChildren } from './state.js'
 
-export function escapeHtml(s) {
+export function escapeHtml(/** @type {any} */ s) {
   return String(s || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -14,7 +13,14 @@ export function escapeHtml(s) {
     .replace(/"/g, '&quot;')
 }
 
-export function renderNode(state, key, depth, maxDepth, visited, displayTitle = null) {
+export function renderNode(
+  /** @type {any} */ state,
+  /** @type {any} */ key,
+  /** @type {any} */ depth,
+  /** @type {any} */ maxDepth,
+  /** @type {any} */ visited,
+  displayTitle = null,
+) {
   if (visited.has(key)) return ''
   visited.add(key)
 
@@ -59,7 +65,7 @@ export function renderNode(state, key, depth, maxDepth, visited, displayTitle = 
     childHtml = `<ul class="tree-children" data-lazy-parent="${escapeHtml(renderKey)}"></ul>`
   } else {
     const items = (renderKids || [])
-      .map((k) => {
+      .map((/** @type {any} */ k) => {
         const dt = overrides.get(k)
         return renderNode(state, k, depth + 1, maxDepth, visited, dt)
       })
@@ -73,8 +79,8 @@ export function renderNode(state, key, depth, maxDepth, visited, displayTitle = 
 </details>`
 }
 
-export function expandLazy(state, treeContainer, parentKey) {
-  const placeholder = treeContainer.querySelector(`[data-lazy-parent="${CSS.escape(parentKey)}"]`)
+export function expandLazy(/** @type {any} */ state, /** @type {any} */ treeContainer, /** @type {any} */ parentKey) {
+  const placeholder = /** @type {any} */ (treeContainer.querySelector(`[data-lazy-parent="${CSS.escape(parentKey)}"]`))
   if (!placeholder) return
 
   const kids = state.children.get(parentKey) || []
@@ -82,7 +88,7 @@ export function expandLazy(state, treeContainer, parentKey) {
   const visited = new Set()
   visited.add(parentKey)
   const items = kids
-    .map((k) => {
+    .map((/** @type {any} */ k) => {
       const displayTitle = overrides.get(k)
       return renderNode(state, k, 0, 2, visited, displayTitle)
     })
@@ -94,8 +100,8 @@ export function expandLazy(state, treeContainer, parentKey) {
 
 // Read the active filter chips and hide tree nodes whose data-filter-kind
 // isn't currently selected. Empty selection means "show everything".
-export function applyTreeFilters(treeContainer) {
-  const bar = document.querySelector('.collection-filter-bar')
+export function applyTreeFilters(/** @type {any} */ treeContainer) {
+  const bar = /** @type {any} */ (document.querySelector('.collection-filter-bar'))
   const active = new Set()
   if (bar) {
     for (const chip of bar.querySelectorAll('.filter-chip.active')) {

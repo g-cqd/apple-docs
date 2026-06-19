@@ -1,10 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Tree-view state derivation: builds the parent → children adjacency map,
 // the root list, and memoised descendant counts from the wire-format JSON.
 // All helpers below take this state object as their first argument so the
 // render layer doesn't reach into module-level globals.
 
-export function buildTreeState(data) {
+export function buildTreeState(/** @type {any} */ data) {
   const docs = data.docs
   const edges = data.edges
   const children = new Map()
@@ -24,9 +23,9 @@ export function buildTreeState(data) {
   const rootKeys = allParents.filter((k) => !childSet.has(k))
 
   // Sort children alphabetically within each parent by title.
-  const titleOf = (k) => (docs[k]?.title ?? k).toLowerCase()
+  const titleOf = (/** @type {any} */ k) => (docs[k]?.title ?? k).toLowerCase()
   for (const [, kids] of children) {
-    kids.sort((a, b) => {
+    kids.sort((/** @type {any} */ a, /** @type {any} */ b) => {
       const ta = titleOf(a)
       const tb = titleOf(b)
       return ta < tb ? -1 : ta > tb ? 1 : 0
@@ -41,7 +40,7 @@ export function buildTreeState(data) {
   // Memoised descendant counts for the badges next to each tree node.
   const descendantCounts = new Map()
   const visited = new Set()
-  function count(key) {
+  function count(/** @type {any} */ key) {
     if (visited.has(key)) return 0
     visited.add(key)
     const kids = children.get(key)
@@ -62,7 +61,7 @@ export function buildTreeState(data) {
 
 // Disambiguate sibling overloads: items sharing a title get a parent prefix
 // like `View.body` so the user can tell two `body`s apart.
-export function disambiguateChildren(state, parentKey, childKeys) {
+export function disambiguateChildren(/** @type {any} */ state, /** @type {any} */ parentKey, /** @type {any} */ childKeys) {
   const { docs } = state
   const titleCounts = new Map()
   for (const key of childKeys) {
@@ -83,7 +82,7 @@ export function disambiguateChildren(state, parentKey, childKeys) {
 // Walk down a single-child chain, accumulating titles into one label.
 // `View > Body > Modifier` collapses to a single `View.Body.Modifier`
 // row when each parent has exactly one child.
-export function compactChain(state, key) {
+export function compactChain(/** @type {any} */ state, /** @type {any} */ key) {
   const { docs, children } = state
   const parts = [docs[key]?.title || key]
   const seen = new Set([key])

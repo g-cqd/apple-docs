@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Theme switcher: persists the user's auto/light/dark preference and
 // reflects it via `<html data-theme="...">` so the CSS variable layer
 // can pick up the right palette.
@@ -20,18 +19,18 @@ function readPreference() {
   return 'auto'
 }
 
-function savePreference(theme) {
+function savePreference(/** @type {any} */ theme) {
   try {
     localStorage.setItem(STORAGE_KEY, theme)
   } catch {}
 }
 
-function applyTheme(theme) {
+function applyTheme(/** @type {any} */ theme) {
   document.documentElement.setAttribute('data-theme', theme)
 }
 
-function updateActiveButton(theme) {
-  const buttons = document.querySelectorAll('.theme-option')
+function updateActiveButton(/** @type {any} */ theme) {
+  const buttons = /** @type {any} */ (document.querySelectorAll('.theme-option'))
   for (let i = 0; i < buttons.length; i++) {
     const btn = buttons[i]
     const isActive = btn.getAttribute('data-theme-value') === theme
@@ -40,7 +39,7 @@ function updateActiveButton(theme) {
   }
 }
 
-function setTheme(theme) {
+function setTheme(/** @type {any} */ theme) {
   applyTheme(theme)
   savePreference(theme)
   updateActiveButton(theme)
@@ -55,7 +54,7 @@ applyTheme(INITIAL_THEME)
 export function init() {
   document.addEventListener('DOMContentLoaded', () => {
     updateActiveButton(INITIAL_THEME)
-    const buttons = document.querySelectorAll('.theme-option')
+    const buttons = /** @type {any} */ (document.querySelectorAll('.theme-option'))
     for (let i = 0; i < buttons.length; i++) {
       buttons[i].addEventListener('click', () => {
         setTheme(buttons[i].getAttribute('data-theme-value') || 'auto')

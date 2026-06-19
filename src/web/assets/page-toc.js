@@ -1,10 +1,11 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Page TOC active-link highlighter. Watches `<h2>`/`<h3>` sections via
 // IntersectionObserver and toggles `.toc-active` on the matching
 // `.page-toc a[href^="#"]` link as the user scrolls. The `page-toc:refresh`
 // event lets dynamic content (collapsible sections rebuilt by other
 // controllers) request a re-scan without reloading the bundle.
+/** @type {any} */
 let observer = null
+/** @type {any} */
 let currentActiveId = null
 
 function refresh() {
@@ -14,7 +15,7 @@ function refresh() {
   }
   currentActiveId = null
 
-  const tocs = [...document.querySelectorAll('.page-toc')]
+  const tocs = /** @type {any} */ ([...document.querySelectorAll('.page-toc')])
   if (tocs.length === 0) return
 
   const sectionMap = new Map()
@@ -22,7 +23,7 @@ function refresh() {
     for (const link of toc.querySelectorAll('a[href^="#"]')) {
       const id = link.getAttribute('href')?.slice(1)
       if (!id) continue
-      const el = document.getElementById(id)
+      const el = /** @type {any} */ (document.getElementById(id))
       if (!el) continue
       const existing = sectionMap.get(id)
       if (existing) {
