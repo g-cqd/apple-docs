@@ -116,3 +116,29 @@ describe('nativeCliArgs — read-verb mapping + conservative fallback', () => {
     expect(nativeCliArgs({ command: 'read', subcommand: undefined, positional: ['x/y'], flags: {}, dbPath: DB })).toBeNull()
   })
 })
+
+describe('nativeCliArgs — browse mapping (positional framework)', () => {
+  /** @param {Record<string, unknown>} flags @param {string[]} [positional] @returns {string[] | null} */
+  const browse = (flags, positional = ['swiftui']) => nativeCliArgs({ command: 'browse', subcommand: undefined, positional, flags, dbPath: DB })
+
+  test('framework positional + path/limit/year/json pass through', () => {
+    expect(browse({})).toEqual(['browse', 'swiftui', '--db', DB])
+    expect(browse({ json: true })).toEqual(['browse', 'swiftui', '--db', DB, '--json'])
+    expect(browse({ path: 'swiftui/view' })).toEqual(['browse', 'swiftui', '--db', DB, '--path', 'swiftui/view'])
+    expect(browse({ limit: '5' })).toEqual(['browse', 'swiftui', '--db', DB, '--limit', '5'])
+    expect(browse({ year: '2024' }, ['wwdc'])).toEqual(['browse', 'wwdc', '--db', DB, '--year', '2024'])
+  })
+  test('exactly one positional required (none → help via Bun; duplicate → Bun)', () => {
+    expect(browse({}, [])).toBeNull()
+    expect(browse({}, ['a', 'b'])).toBeNull()
+  })
+  test('non-integer / negative limit or year → fall back to Bun', () => {
+    expect(browse({ limit: '5x' })).toBeNull()
+    expect(browse({ limit: '-3' })).toBeNull()
+    expect(browse({ year: 'abc' }, ['wwdc'])).toBeNull()
+  })
+  test('--path without a value, or an unsupported flag → fall back', () => {
+    expect(browse({ path: true })).toBeNull()
+    expect(browse({ source: 'apple' })).toBeNull()
+  })
+})

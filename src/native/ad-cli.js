@@ -37,31 +37,34 @@ const GLOBAL_PASSTHROUGH = ['home', 'verbose']
 /**
  * Map a cli.js read-verb invocation to `ad-cli` argv, or null to fall back to the
  * Bun CLI — for a verb not yet flipped, or a flag/positional ad-cli can't honour.
- * This slice flips two read verbs: `frameworks` (→ `--kind`) and `kinds`
- * (→ `--field`). Both are read-only, take no positional, and only their single
- * filter + `--json` ride through; anything else forces the Bun path so nothing is
- * silently dropped.
+ * This slice flips three read verbs: `frameworks` (→ `--kind`), `kinds`
+ * (→ `--field`), and `browse <framework>` (→ `--path/--limit/--year`). Only the
+ * verb's own flags + `--json` ride through; anything else forces the Bun path so
+ * nothing is silently dropped.
  *
  * @param {{ command: string, subcommand: string | undefined, positional: string[], flags: Record<string, unknown>, dbPath: string }} invocation
  * @returns {string[] | null}
  */
 export function nativeCliArgs({ command, subcommand, positional, flags, dbPath }) {
   if (subcommand) return null
-  if (Array.isArray(positional) && positional.length > 0) return null
-  if (command === 'frameworks') return readVerbArgs('frameworks', 'kind', flags, dbPath)
-  if (command === 'kinds') return readVerbArgs('kinds', 'field', flags, dbPath)
+  const pos = Array.isArray(positional) ? positional : []
+  if (command === 'frameworks') return readVerbArgs('frameworks', 'kind', pos, flags, dbPath)
+  if (command === 'kinds') return readVerbArgs('kinds', 'field', pos, flags, dbPath)
+  if (command === 'browse') return browseArgs(pos, flags, dbPath)
   return null
 }
 
 /**
- * Shared shape for the two single-filter read verbs. Falls back (null) on any
- * unsupported flag, or a filter passed without a string value (`--kind --json`
- * leaves `flags.kind === true`, whose JS coercion we don't replicate).
+ * Shared shape for the two single-filter, no-positional read verbs. Falls back
+ * (null) on any positional, unsupported flag, or a filter passed without a string
+ * value (`--kind --json` leaves `flags.kind === true`, whose JS coercion we don't
+ * replicate).
  *
- * @param {string} verb @param {string} filter @param {Record<string, unknown>} flags @param {string} dbPath
+ * @param {string} verb @param {string} filter @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
  * @returns {string[] | null}
  */
-function readVerbArgs(verb, filter, flags, dbPath) {
+function readVerbArgs(verb, filter, positional, flags, dbPath) {
+  if (positional.length > 0) return null
   const allowed = new Set([filter, 'json', ...GLOBAL_PASSTHROUGH])
   if (Object.keys(flags).some((k) => !allowed.has(k))) return null
   const filterValue = flags[filter]
@@ -69,6 +72,34 @@ function readVerbArgs(verb, filter, flags, dbPath) {
 
   const args = [verb, '--db', dbPath]
   if (typeof filterValue === 'string') args.push(`--${filter}`, filterValue)
+  if (flags.json) args.push('--json')
+  return args
+}
+
+/**
+ * `browse <framework> [--path P] [--limit N] [--year Y] [--json]`. Needs exactly
+ * one positional (the framework); falls back when it's missing (cli.js shows help)
+ * or duplicated. `--limit`/`--year` ride through only as clean non-negative
+ * integers (a NaN/negative is left to the Bun path, whose coercion we don't
+ * mirror), and `--path` only as a string.
+ *
+ * @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
+ * @returns {string[] | null}
+ */
+function browseArgs(positional, flags, dbPath) {
+  if (positional.length !== 1) return null
+  const allowed = new Set(['path', 'limit', 'year', 'json', ...GLOBAL_PASSTHROUGH])
+  if (Object.keys(flags).some((k) => !allowed.has(k))) return null
+  if (flags.path != null && typeof flags.path !== 'string') return null
+  for (const k of ['limit', 'year']) {
+    const v = flags[k]
+    if (v != null && (typeof v !== 'string' || !/^\d+$/.test(v))) return null
+  }
+
+  const args = ['browse', positional[0], '--db', dbPath]
+  if (typeof flags.path === 'string') args.push('--path', flags.path)
+  if (typeof flags.limit === 'string') args.push('--limit', flags.limit)
+  if (typeof flags.year === 'string') args.push('--year', flags.year)
   if (flags.json) args.push('--json')
   return args
 }

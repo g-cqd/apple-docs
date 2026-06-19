@@ -14,7 +14,7 @@ struct ADCLICommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ad-cli",
         abstract: "Apple Docs native read CLI (mirrors the Bun cli.js read verbs).",
-        subcommands: [FrameworksCommand.self, KindsCommand.self])
+        subcommands: [FrameworksCommand.self, KindsCommand.self, BrowseCommand.self])
 }
 
 /// The corpus path — required by every verb. Mirrors ad-server's `CorpusOptions`.
@@ -34,6 +34,13 @@ private func openCorpus(_ path: String) -> StorageConnection {
         exit(1)
     }
     return connection
+}
+
+/// The `browse` error contract: cli.js prints `Error: <message>` to stderr and
+/// exits 1 with EMPTY stdout. Replicates that — call BEFORE any stdout output.
+private func failBrowse(_ message: String) -> Never {
+    FileHandle.standardError.write(Data("Error: \(message)\n".utf8))
+    exit(1)
 }
 
 /// `ad-cli frameworks --db <PATH> [--kind <K>] [--json]` — list documentation
@@ -105,6 +112,128 @@ struct KindsCommand: ParsableCommand {
     }
 }
 
+/// `ad-cli browse <framework> --db <PATH> [--path <P>] [--limit <N>] [--year <Y>]
+/// [--json]` — explore a documentation root. Resolves the root (exact → fuzzy),
+/// then produces one of three shapes: a page's children (`--path`), wwdc session
+/// counts per year (wwdc default), or a page listing (default / wwdc+year/limit).
+struct BrowseCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "browse", abstract: "Explore a documentation root's pages and children.")
+
+    @Argument(help: "The framework/root slug or name to browse.")
+    var framework: String
+
+    @OptionGroup var corpus: CorpusOptions
+
+    @Option(name: .long, help: "Browse the children of a specific page path.")
+    var path: String?
+
+    @Option(name: .long, help: "Cap the number of listed pages.")
+    var limit: Int?
+
+    @Option(name: .long, help: "Filter the wwdc root to one year.")
+    var year: Int?
+
+    @Flag(name: .long, help: "Emit JSON instead of the human listing.")
+    var json = false
+
+    func run() throws {
+        let connection = openCorpus(corpus.db)
+
+        guard let root = connection.resolveRoot(framework) else {
+            failBrowse("Unknown framework: \(framework)")
+        }
+        let isWwdc = root.sourceType == "wwdc"
+        if year != nil && !isWwdc {
+            failBrowse("year only applies to the wwdc root")
+        }
+
+        // --path: a page's children, grouped by section.
+        if let path {
+            guard let page = connection.browsePage(path) else {
+                failBrowse("Page not found: \(path)")
+            }
+            let refs = connection.documentChildren(page.path)
+            let children = refs.map { BrowseChildEntry(path: $0.targetPath, title: $0.title, section: $0.section) }
+            emit(.children(framework: root.displayName, path: path, title: page.title, children: children))
+            return
+        }
+
+        var allPages = connection.pagesByRoot(root.slug)
+
+        if isWwdc, let year {
+            // Keep only this year's sessions: `wwdc/wwdc<year>-` prefix.
+            let prefix = "wwdc/wwdc\(year)-"
+            allPages = allPages.filter { $0.path.hasPrefix(prefix) }
+            if allPages.isEmpty {
+                failBrowse("No WWDC sessions indexed for \(year)")
+            }
+        } else if isWwdc && limit == nil {
+            // GROUPS variant: count sessions per year, sort year DESC.
+            var order: [Int] = []
+            var counts: [Int: Int] = [:]
+            for page in allPages {
+                guard let sessionYear = wwdcYear(of: page.path) else { continue }
+                if counts[sessionYear] == nil { order.append(sessionYear) }
+                counts[sessionYear, default: 0] += 1
+            }
+            let groups = order
+                .sorted { $0 > $1 }
+                .map { BrowseGroupEntry(year: $0, count: counts[$0] ?? 0) }
+            emit(.groups(framework: root.displayName, slug: root.slug, kind: root.kind, groups: groups, total: allPages.count))
+            return
+        }
+
+        // PAGES variant (default, or wwdc+year, or wwdc+limit). JS truthy-checks
+        // `opts.limit`: 0 is falsy ⇒ no cap; any non-zero ⇒ max(n, 1).
+        let effectiveLimit: Int? = (limit != nil && limit != 0) ? max(limit!, 1) : nil
+        let pages = effectiveLimit.map { Array(allPages.prefix($0)) } ?? allPages
+        let pageEntries = pages.map {
+            BrowsePageEntry(path: $0.path, title: $0.title, kind: $0.roleHeading ?? $0.role, abstract: $0.abstract)
+        }
+        emit(
+            .pages(
+                framework: root.displayName, slug: root.slug, kind: root.kind, year: year, pages: pageEntries,
+                total: allPages.count, limited: effectiveLimit.map { $0 < allPages.count } ?? false))
+    }
+
+    /// Print the result as JSON or the human listing.
+    private func emit(_ result: BrowseResult) {
+        if json {
+            print(stringifyPretty(projectBrowse(result)))
+        } else {
+            print(formatBrowse(result))
+        }
+    }
+}
+
+/// The 4-digit year of a WWDC session path: matches `wwdc/wwdc` + exactly four
+/// digits + `-` and returns those digits. Mirrors JS `/^wwdc\/wwdc(\d{4})-/`.
+func wwdcYear(of path: String) -> Int? {
+    let prefix = "wwdc/wwdc"
+    guard path.hasPrefix(prefix) else { return nil }
+    let digits = path.dropFirst(prefix.count)
+    var scanned = ""
+    for character in digits {
+        if character.isASCIIDigit {
+            scanned.append(character)
+            if scanned.count > 4 { return nil }  // more than 4 leading digits ⇒ no match
+        } else {
+            break
+        }
+    }
+    guard scanned.count == 4 else { return nil }
+    // The char right after the 4 digits must be '-'.
+    let afterDigits = digits.dropFirst(4)
+    guard afterDigits.first == "-" else { return nil }
+    return Int(scanned)
+}
+
+extension Character {
+    /// ASCII `0`–`9` (JS `\d` is ASCII-only here; session years are plain digits).
+    fileprivate var isASCIIDigit: Bool { self >= "0" && self <= "9" }
+}
+
 // MARK: - taxonomy field plumbing
 
 /// The Bun `kinds` verb calls taxonomy with no limit override ⇒ always 20.
@@ -158,6 +287,61 @@ func projectFrameworks(_ roots: [FrameworkRoot]) -> J {
 /// `[ {"value":...,"count":...}, ... ]` for a taxonomy field.
 func taxonomyEntries(_ values: [TaxonomyCount]) -> J {
     .arr(values.map { .obj([("value", .s($0.value)), ("count", .i($0.count))]) })
+}
+
+/// browse → the allowlisted projection, per-variant, in the pinned key order of
+/// JS `projectBrowse` (framework, title, path, year, groups+total, pages+total,
+/// children). `pick` keeps JSON `null` values, so a nil `String?` emits `null`
+/// rather than being omitted; a field the variant lacks is dropped entirely.
+func projectBrowse(_ result: BrowseResult) -> J {
+    switch result {
+    case let .children(framework, path, title, children):
+        // Command children are `{path,title,section}`; pick(['path','title','kind','section'])
+        // drops the absent `kind` and keeps null title/section.
+        let childValues: [J] = children.map { child in
+            .obj([
+                ("path", .s(child.path)),
+                ("title", jOptional(child.title)),
+                ("section", jOptional(child.section))
+            ])
+        }
+        return .obj([
+            ("framework", .s(framework)),
+            ("title", jOptional(title)),
+            ("path", .s(path)),
+            ("children", .arr(childValues))
+        ])
+
+    case let .groups(framework, _, _, groups, total):
+        let groupValues: [J] = groups.map {
+            .obj([("year", .i(Int64($0.year))), ("count", .i(Int64($0.count)))])
+        }
+        return .obj([
+            ("framework", .s(framework)),
+            ("groups", .arr(groupValues)),
+            ("total", .i(Int64(total)))
+        ])
+
+    case let .pages(framework, _, _, year, pages, total, _):
+        let pageValues: [J] = pages.map { page in
+            .obj([
+                ("path", .s(page.path)),
+                ("title", jOptional(page.title)),
+                ("kind", jOptional(page.kind)),
+                ("abstract", jOptional(page.abstract))
+            ])
+        }
+        var pairs: [(String, J)] = [("framework", .s(framework))]
+        if let year { pairs.append(("year", .i(Int64(year)))) }
+        pairs.append(("pages", .arr(pageValues)))
+        pairs.append(("total", .i(Int64(total))))
+        return .obj(pairs)
+    }
+}
+
+/// An optional string as JSON: a value → string, nil → `null` (pick keeps nulls).
+private func jOptional(_ value: String?) -> J {
+    value.map(J.s) ?? .null
 }
 
 /// JS `String.prototype.trim()` for `--field` (ASCII whitespace — field values are tokens).
