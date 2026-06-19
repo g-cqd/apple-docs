@@ -20,6 +20,7 @@
 // the same dlopen the decoder uses) makes the seed frame. Skipped when libzstd
 // is absent, like the rest of the suite.
 
+import ADTestKit
 import Foundation
 import Testing
 
@@ -31,26 +32,10 @@ import Testing
     import Glibc
 #endif
 
-// MARK: - Seeded PRNG (SplitMix64; identical stream every run)
-
-private struct SplitMix64 {
-    var state: UInt64
-    init(seed: UInt64) { state = seed }
-    mutating func next() -> UInt64 {
-        state &+= 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
-    }
-    /// Uniform-ish in `0 ..< bound` (bound > 0). Modulo bias is irrelevant to a
-    /// fuzz corpus and keeps the generator fully deterministic.
-    mutating func below(_ bound: Int) -> Int {
-        precondition(bound > 0)
-        return Int(next() % UInt64(bound))
-    }
-    mutating func byte() -> UInt8 { UInt8(truncatingIfNeeded: next()) }
-}
+// The seeded generator and the four-shape byte mutator are now the shared
+// `ADTestKit.SeededRNG` + `ByteMutator`, driven by `fuzzNeverTraps`. The mutator's
+// default config reproduces this suite's original inline overwrite / bit-flip /
+// truncate / extend switch draw-for-draw, so the same seed yields the identical corpus.
 
 // MARK: - Test-side one-shot zstd compressor (valid-frame source)
 
@@ -150,46 +135,32 @@ func zstdDecodeSurvivesMutatedFrames() throws {
     let shim = try #require(ZstdCompressShim.shared)
     let base = try #require(shim.frame(corpusPayload()))
 
-    var rng = SplitMix64(seed: 0x5EED_A11C_E5_F0_0D)
-    let iterations = 4000
-    var survived = 0
     var inflated = 0
     var maxDecoded = 0
 
-    for _ in 0 ..< iterations {
-        var blob = base
-        // 1–8 edits per iteration across the four shapes a corrupt BLOB takes.
-        let edits = 1 + rng.below(8)
-        for _ in 0 ..< edits {
-            switch rng.below(4) {
-                case 0 where !blob.isEmpty:  // overwrite a byte
-                    blob[rng.below(blob.count)] = rng.byte()
-                case 1 where !blob.isEmpty:  // flip a bit
-                    let i = rng.below(blob.count)
-                    blob[i] ^= UInt8(1 << rng.below(8))
-                case 2 where blob.count > 1:  // truncate
-                    blob.removeLast(1 + rng.below(blob.count - 1))
-                default:  // extend with random tail bytes
-                    let extra = 1 + rng.below(64)
-                    for _ in 0 ..< extra { blob.append(rng.byte()) }
-            }
-        }
-
-        // The production gate only calls the decoder on a magic-prefixed BLOB;
-        // mirror it so we fuzz the path that actually runs, but still feed the
-        // decoder directly (it must self-defend regardless of the gate).
-        let result = ZstdDecoder.decompress(blob)
-        survived += 1
-        if let out = result {
+    // `fuzzNeverTraps` owns the seed, the 4000-iteration budget, the 1…8-edits-per-
+    // iteration draw, and the `ADARCHIVE_FUZZ_TRACE` repro; `ByteMutator()`'s default
+    // four-shape switch reproduces the old inline mutator draw-for-draw. Survival is
+    // the contract — only a trap / OOB / cap breach fails (a `nil` decode is fine).
+    let report = fuzzNeverTraps(
+        seed: Seed(0x5EED_A11C_E5_F0_0D),
+        iterations: 4000,
+        edits: 1 ... 8,
+        mutator: ByteMutator(),
+        traceEnv: "ADARCHIVE_FUZZ_TRACE",
+        corpus: { base },
+        exercise: { blob in
+            // The production gate only calls the decoder on a magic-prefixed BLOB; feed
+            // it directly anyway, since it must self-defend regardless of the gate.
+            guard let out = ZstdDecoder.decompress(blob) else { return }
             inflated += 1
             maxDecoded = max(maxDecoded, out.count)
             // The cap is the OOM guard: a decoded buffer can NEVER exceed it.
             #expect(out.count <= zstdDecodeCapBytes, "decoded \(out.count) bytes exceeds the 32 MiB cap")
-        }
-    }
+        })
 
     // Reaching here at all means no mutation trapped/OOB'd the decoder.
-    #expect(survived == iterations)
+    #expect(report.iterations == 4000)
     #expect(maxDecoded <= zstdDecodeCapBytes)
     // Sanity that the corpus is exercising the inflate path (not 100% rejects),
     // so "all survived" is not vacuously true because every blob was malformed.

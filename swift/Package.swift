@@ -1,4 +1,4 @@
-// swift-tools-version: 6.3
+// swift-tools-version: 6.4
 // libAppleDocsCore — the Swift side of the bridge era. ABI contract v0. The library
 // product depends only on the first-party g-cqd/ADJSON (its `ADJSONCore` target —
 // Foundation-free, swift-syntax-free, static-linked, no runtime .so), which backs the
@@ -101,6 +101,17 @@ let adbuildToolsDependencies: [Package.Dependency] = {
     return [.package(url: "https://github.com/g-cqd/ADBuildTools.git", branch: "main")]
 }()
 
+// ADTestKit — the shared AD-family testing architecture (SeededRNG, Fuzz/ByteMutator, oracles,
+// async/time tools). Test-only and dev-gated, so normal/CI dylib builds never resolve it. Local
+// checkout via `ADTESTKIT_PATH`, otherwise the published `main`.
+let adtestkitDependencies: [Package.Dependency] = {
+    guard isDev else { return [] }
+    if let path = Context.environment["ADTESTKIT_PATH"], !path.isEmpty {
+        return [.package(path: path)]
+    }
+    return [.package(url: "https://github.com/g-cqd/ADTestKit.git", branch: "main")]
+}()
+
 let package = Package(
     name: "AppleDocsCore",
     // macOS one generation below the device platforms. Synchronization (Mutex/Atomic) ships in
@@ -160,7 +171,7 @@ let package = Package(
         // ADServeCore only (ServiceGroup graceful shutdown); NOT pulled by ADCore
         // (the dylib stays zero-external-dep).
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0")
-    ] + http3PackageDependencies + adbuildToolsDependencies,
+    ] + http3PackageDependencies + adbuildToolsDependencies + adtestkitDependencies,
     targets: [
         .target(
             name: "ADBase",
@@ -328,3 +339,10 @@ let package = Package(
             swiftSettings: testSettings)
     ]
 )
+
+if isDev {
+    // Wire the dev-only ADTestKit into the archive test target (downstream consumers never see it).
+    if let tests = package.targets.first(where: { $0.name == "ADArchiveTests" }) {
+        tests.dependencies.append(.product(name: "ADTestKit", package: "ADTestKit"))
+    }
+}
