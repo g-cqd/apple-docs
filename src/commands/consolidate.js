@@ -157,7 +157,9 @@ export async function consolidate(/** @type {any} */ opts, /** @type {any} */ ct
                 const markdown = renderPage(json, newPath)
                 await writeText(keyPath(dataDir, 'markdown', newPath, '.md'), markdown)
                 db.markConverted(newPath)
-              } catch {}
+              } catch (err) {
+                logger.warn(`consolidate: markdown materialize failed for ${newPath}`, { error: /** @type {any} */ (err).message })
+              }
 
               const refs = extractReferences(json)
               for (const refPath of refs) {

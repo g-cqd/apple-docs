@@ -107,7 +107,10 @@ export async function searchHandler(_request, ctx, url) {
   })
 }
 
-function searchResponseCacheKey(/** @type {any} */ searchOpts, /** @type {any} */ stamp) {
+// Exported for the cache-coherency test: the corpus stamp must be part of the
+// key so a re-sync invalidates every cached response, and key-order must not
+// matter (stableJson). See test/unit/web/search-route-cache.test.js.
+export function searchResponseCacheKey(/** @type {any} */ searchOpts, /** @type {any} */ stamp) {
   return new Bun.CryptoHasher('sha256').update(`${stableJson(searchOpts)}\0${stamp}`).digest('hex')
 }
 
