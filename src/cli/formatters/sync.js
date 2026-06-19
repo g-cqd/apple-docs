@@ -1,6 +1,6 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { bold, formatBytes } from './_shared.js'
 
+/** @param {any} result */
 export function formatSync(result) {
   const lines = [bold('Sync complete')]
   const u = result.update
@@ -42,7 +42,7 @@ export function formatSync(result) {
     lines.push(`  Doctor:           ${parts.join(', ')}`)
   }
   if (Array.isArray(result.failedSources) && result.failedSources.length > 0) {
-    lines.push(`  Failed sources:   ${result.failedSources.map((f) => f.source).join(', ')}`)
+    lines.push(`  Failed sources:   ${result.failedSources.map((/** @type {any} */ f) => f.source).join(', ')}`)
   }
   lines.push(`  Duration:         ${(result.durationMs / 1000).toFixed(1)}s`)
   return lines.join('\n')

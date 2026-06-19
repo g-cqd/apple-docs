@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Commands that accept a second-level subcommand (e.g. `mcp start`, `web serve`).
  * For these, the next non-flag argument after the command is consumed as `subcommand`.
@@ -36,6 +35,7 @@ const BOOLEAN_FLAGS = new Set([
  * Minimal argv parser. Returns { command, subcommand, positional, flags }.
  * Handles: --key value, --bool, positional args, -- separator, 2-level commands.
  */
+/** @param {string[]} argv */
 export function parseArgs(argv) {
   const args = argv.slice(2) // skip runtime and script path
   // `--version` / `-V` are the conventional spellings; route them to the
@@ -55,6 +55,7 @@ export function parseArgs(argv) {
   }
 
   const positional = []
+  /** @type {Record<string, string | boolean>} */
   const flags = {}
   const start = command ? (subcommand ? 2 : 1) : 0
 

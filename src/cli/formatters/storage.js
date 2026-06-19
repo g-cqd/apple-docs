@@ -1,6 +1,6 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { bold, formatBytes } from './_shared.js'
 
+/** @param {any} result */
 export function formatStorageStats(result) {
   const lines = [
     bold('Storage Breakdown'),
@@ -19,6 +19,7 @@ export function formatStorageStats(result) {
   return lines.join('\n')
 }
 
+/** @param {any} result */
 export function formatStorageGc(result) {
   const lines = [bold('Garbage Collection')]
   if (result.droppedDirs.length > 0) {

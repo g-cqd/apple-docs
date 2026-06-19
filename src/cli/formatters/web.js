@@ -1,6 +1,6 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { bold } from './_shared.js'
 
+/** @param {any} result */
 export function formatWebBuild(result) {
   const lines = [bold('Static site built'), `  Pages built:   ${result.pagesBuilt}`]
   if (result.pagesSkipped) lines.push(`  Pages skipped: ${result.pagesSkipped}`)
@@ -21,6 +21,7 @@ export function formatWebBuild(result) {
   return lines.join('\n')
 }
 
+/** @param {any} result */
 export function formatWebDeploy(result) {
   const lines = [bold(`Deploy to ${result.platform}`), '']
   for (const step of result.instructions) {

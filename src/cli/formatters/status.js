@@ -1,10 +1,10 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { bold, dim, formatBytes } from './_shared.js'
 
+/** @param {any} result */
 export function formatStatus(result) {
   const fmt = formatBytes
 
-  const bar = (processed, total) => {
+  const bar = (/** @type {number} */ processed, /** @type {number} */ total) => {
     if (total === 0) return ''
     const pct = Math.round((processed / total) * 100)
     const width = 20
@@ -74,8 +74,8 @@ export function formatStatus(result) {
 
     // Per-root breakdown (only show roots with pending or failed)
     const crawlByRoot = result.crawlByRoot ?? []
-    const active = crawlByRoot.filter((r) => r.pending > 0 || r.failed > 0)
-    const done = crawlByRoot.filter((r) => r.pending === 0 && r.failed === 0)
+    const active = crawlByRoot.filter((/** @type {any} */ r) => r.pending > 0 || r.failed > 0)
+    const done = crawlByRoot.filter((/** @type {any} */ r) => r.pending === 0 && r.failed === 0)
 
     if (active.length > 0) {
       lines.push('')
@@ -87,7 +87,7 @@ export function formatStatus(result) {
 
     if (done.length > 0 && done.length <= 10) {
       lines.push('')
-      lines.push(`  ${bold('Complete:')} ${done.map((r) => `${r.root} (${r.total})`).join(', ')}`)
+      lines.push(`  ${bold('Complete:')} ${done.map((/** @type {any} */ r) => `${r.root} (${r.total})`).join(', ')}`)
     } else if (done.length > 10) {
       lines.push('')
       lines.push(`  ${bold('Complete:')} ${done.length} roots`)
@@ -110,7 +110,7 @@ export function formatStatus(result) {
       // The user projection drops `staleRoots` (projectStatus) — only
       // `--advanced` envelopes carry it.
       if (f.staleRoots?.length > 0) {
-        lines.push(`  Stale roots:     ${f.staleRoots.map((r) => `${r.slug} (${r.daysSince}d)`).join(', ')}`)
+        lines.push(`  Stale roots:     ${f.staleRoots.map((/** @type {any} */ r) => `${r.slug} (${r.daysSince}d)`).join(', ')}`)
       }
     } else {
       lines.push('  Freshness:       No sync history')

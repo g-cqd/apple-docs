@@ -1,7 +1,7 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { GLOBAL } from './help-global.js'
 import { INDEX_HELP, PRUNE_HELP } from './help-maintenance.js'
 
+/** @type {Record<string, string>} */
 const COMMANDS = {
   index: INDEX_HELP,
   prune: PRUNE_HELP,
@@ -369,6 +369,7 @@ Resumable: re-run after interruption to continue from the last checkpoint.
 `.trim(),
 }
 
+/** @param {string} [command] */
 export function showHelp(command) {
   if (command && COMMANDS[command]) {
     console.log(COMMANDS[command])

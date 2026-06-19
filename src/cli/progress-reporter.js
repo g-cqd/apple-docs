@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Throttled TTY progress reporter for `web build`. Emits at most once per
  * second and replaces the line with a carriage return; computes a smoothed
@@ -8,16 +7,17 @@
 export function makeProgressReporter() {
   const startTs = Date.now()
   let lastFlush = 0
+  /** @type {{ t: number, n: number }[]} */
   const window = []
   const WINDOW_MS = 5_000
 
-  const fmt = (n) => n.toLocaleString('en-US')
-  const fmtBytes = (b) => {
+  const fmt = (/** @type {number} */ n) => n.toLocaleString('en-US')
+  const fmtBytes = (/** @type {number} */ b) => {
     if (b > 1e9) return `${(b / 1e9).toFixed(1)}G`
     if (b > 1e6) return `${(b / 1e6).toFixed(0)}M`
     return `${(b / 1e3).toFixed(0)}K`
   }
-  const fmtDuration = (ms) => {
+  const fmtDuration = (/** @type {number} */ ms) => {
     if (ms < 1000) return `${ms}ms`
     const s = Math.round(ms / 1000)
     if (s < 60) return `${s}s`
@@ -25,6 +25,7 @@ export function makeProgressReporter() {
     return `${m}m${String(s % 60).padStart(2, '0')}s`
   }
 
+  /** @param {any} p */
   function reporter(p) {
     const now = Date.now()
     window.push({ t: now, n: p.total })
@@ -34,6 +35,7 @@ export function makeProgressReporter() {
     lastFlush = now
 
     const oldest = window[0]
+    if (!oldest) return
     const elapsedSec = Math.max(1e-3, (now - oldest.t) / 1000)
     const rate = (p.total - oldest.n) / elapsedSec
     const elapsedTotal = now - startTs

@@ -1,6 +1,6 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { bold, dim } from './_shared.js'
 
+/** @param {any} result */
 export function formatSetup(result) {
   if (result.status === 'exists') {
     const lines = [`Corpus already exists at ${result.dataDir} (${result.pages} pages)`]
