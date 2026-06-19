@@ -14,7 +14,10 @@ struct ADCLICommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ad-cli",
         abstract: "Apple Docs native read CLI (mirrors the Bun cli.js read verbs).",
-        subcommands: [FrameworksCommand.self, KindsCommand.self, BrowseCommand.self, ReadCommand.self])
+        subcommands: [
+            FrameworksCommand.self, KindsCommand.self, BrowseCommand.self, ReadCommand.self,
+            SearchCommand.self, SemanticProbeCommand.self
+        ])
 }
 
 /// The corpus path — required by every verb. Mirrors ad-server's `CorpusOptions`.

@@ -111,8 +111,8 @@ describe('nativeCliArgs — read-verb mapping + conservative fallback', () => {
     expect(nativeCliArgs({ command: 'frameworks', subcommand: 'x', positional: [], flags: {}, dbPath: DB })).toBeNull()
   })
   test('not-yet-flipped verbs return null', () => {
-    expect(nativeCliArgs({ command: 'search', subcommand: undefined, positional: ['view'], flags: {}, dbPath: DB })).toBeNull()
     expect(nativeCliArgs({ command: 'status', subcommand: undefined, positional: [], flags: {}, dbPath: DB })).toBeNull()
+    expect(nativeCliArgs({ command: 'sync', subcommand: undefined, positional: [], flags: {}, dbPath: DB })).toBeNull()
   })
 })
 
@@ -162,5 +162,27 @@ describe('nativeCliArgs — read mapping (positional target)', () => {
     expect(read({ page: '-1' })).toBeNull()
     expect(read({ section: true })).toBeNull()
     expect(read({ limit: '5' })).toBeNull()
+  })
+})
+
+describe('nativeCliArgs — search mapping (joined query positional)', () => {
+  /** @param {Record<string, unknown>} flags @param {string[]} [positional] @returns {string[] | null} */
+  const search = (flags, positional = ['view']) => nativeCliArgs({ command: 'search', subcommand: undefined, positional, flags, dbPath: DB })
+
+  test('query + filters + toggles + json pass through (string→int→bool→json order)', () => {
+    expect(search({})).toEqual(['search', 'view', '--db', DB])
+    expect(search({}, ['navigation', 'stack'])).toEqual(['search', 'navigation stack', '--db', DB])
+    expect(search({ framework: 'swiftui', limit: '5' })).toEqual(['search', 'view', '--db', DB, '--framework', 'swiftui', '--limit', '5'])
+    expect(search({ json: true })).toEqual(['search', 'view', '--db', DB, '--json'])
+    expect(search({ 'no-fuzzy': true, 'no-deep': true })).toEqual(['search', 'view', '--db', DB, '--no-fuzzy', '--no-deep'])
+    expect(search({ read: true, 'max-chars': '4000' })).toEqual(['search', 'view', '--db', DB, '--max-chars', '4000', '--read'])
+  })
+  test('empty query (no positional) → fall back to Bun', () => {
+    expect(search({}, [])).toBeNull()
+  })
+  test('unsupported flag or non-integer/negative int-flag → fall back', () => {
+    expect(search({ bogus: 'x' })).toBeNull()
+    expect(search({ limit: 'lots' })).toBeNull()
+    expect(search({ year: '-1' })).toBeNull()
   })
 })

@@ -21,9 +21,11 @@ default_root="$(cd "$script_dir/../.." && pwd)"
 siblings_root="${AD_SIBLINGS_ROOT:-$default_root}"
 
 # "<dir-name> <ENV_VAR>" pairs. ADFoundation/ADJSON/ADDB/ADSQL + the extracted
-# server engine (ADServe) and its ResourcePool leaf (ADConcurrency) are required
-# for ad-server; ADBuildTools/ADTestKit are consumed only under APPLEDOCS_DEV but
-# exported anyway (the manifest ignores them otherwise).
+# server engine (ADServe), its ResourcePool leaf (ADConcurrency) and the standalone
+# MCP core it re-exports (ADMCP) are required for ad-server; ADBuildTools/ADTestKit
+# are consumed only under APPLEDOCS_DEV but exported anyway (the manifest ignores
+# them otherwise). Package resolution is global, so a missing override here (e.g.
+# ADMCP, pulled in transitively via ADServe) fails EVERY product, not just ad-server.
 siblings="
 ADFoundation ADFOUNDATION_PATH
 ADJSON ADJSON_PATH
@@ -31,6 +33,7 @@ ADDB ADDB_PATH
 ADSQL ADSQL_PATH
 ADConcurrency ADCONCURRENCY_PATH
 ADServe ADSERVE_PATH
+ADMCP ADMCP_PATH
 ADBuildTools ADBUILDTOOLS_PATH
 ADTestKit ADTESTKIT_PATH
 "

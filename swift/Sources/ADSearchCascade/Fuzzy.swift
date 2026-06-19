@@ -31,10 +31,11 @@ enum Fuzzy {
         return tris.map { "\"\(escapeFtsQuotes($0))\"" }.joined(separator: " OR ")
     }
 
-    /// fuzzyMatchTitles(query, db, {limit, maxDist}): candidate ids in
-    /// distance-then-candidate order, sliced to `limit`.
+    /// fuzzyMatchTitles(query, db, {limit, maxDist}): candidate ids + their
+    /// Levenshtein distance, in distance-then-candidate order, sliced to `limit`
+    /// (the distance feeds the CLI fuzzy badge — JS `fm.distance`).
     static func matchTitles(_ conn: StorageConnection, query: String, limit: Int, maxDist: Int = 2)
-        -> [Int64]
+        -> [(id: Int64, distance: Int)]
     {
         let tris = trigrams(query)
         guard tris.count >= 2, let orQuery = buildTrigramOrQuery(tris) else { return [] }
@@ -60,6 +61,6 @@ enum Fuzzy {
             matches.min(count: limit) {
                 $0.distance != $1.distance ? $0.distance < $1.distance : $0.orig < $1.orig
             }
-            .map(\.id)
+            .map { (id: $0.id, distance: $0.distance) }
     }
 }

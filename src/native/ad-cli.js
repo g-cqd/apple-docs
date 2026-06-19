@@ -53,7 +53,64 @@ export function nativeCliArgs({ command, subcommand, positional, flags, dbPath }
   if (command === 'kinds') return readVerbArgs('kinds', 'field', pos, flags, dbPath)
   if (command === 'browse') return browseArgs(pos, flags, dbPath)
   if (command === 'read') return readDocArgs(pos, flags, dbPath)
+  if (command === 'search') return searchArgs(pos, flags, dbPath)
   return null
+}
+
+// search's flag surface (cli.js search dispatch). String/int filters push down;
+// the three negation toggles + --read + --json are booleans. The query is the
+// joined positional(s).
+const SEARCH_STRING_FLAGS = [
+  'framework',
+  'source',
+  'kind',
+  'language',
+  'platform',
+  'min-ios',
+  'min-macos',
+  'min-watchos',
+  'min-tvos',
+  'min-visionos',
+  'track',
+  'deprecated',
+]
+const SEARCH_INT_FLAGS = ['limit', 'year', 'max-chars', 'page']
+const SEARCH_BOOL_FLAGS = ['no-fuzzy', 'no-deep', 'no-eager', 'read', 'json']
+
+/**
+ * `search <query…> [filters] [--read [--max-chars N] [--page P]] [--json]`. The
+ * query is the joined positional(s); requires at least one. Every recognized flag
+ * rides through (string filters as-is, int filters only as clean non-negative
+ * integers, the boolean toggles as bare flags); any unknown flag forces the Bun
+ * path so nothing is silently dropped.
+ *
+ * @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
+ * @returns {string[] | null}
+ */
+function searchArgs(positional, flags, dbPath) {
+  if (positional.length === 0) return null
+  const allowed = new Set([...SEARCH_STRING_FLAGS, ...SEARCH_INT_FLAGS, ...SEARCH_BOOL_FLAGS, ...GLOBAL_PASSTHROUGH])
+  if (Object.keys(flags).some((k) => !allowed.has(k))) return null
+  for (const k of SEARCH_STRING_FLAGS) {
+    if (flags[k] != null && typeof flags[k] !== 'string') return null
+  }
+  for (const k of SEARCH_INT_FLAGS) {
+    const v = flags[k]
+    if (v != null && (typeof v !== 'string' || !/^\d+$/.test(v))) return null
+  }
+
+  const args = ['search', positional.join(' '), '--db', dbPath]
+  for (const k of SEARCH_STRING_FLAGS) {
+    if (typeof flags[k] === 'string') args.push(`--${k}`, flags[k])
+  }
+  for (const k of SEARCH_INT_FLAGS) {
+    if (typeof flags[k] === 'string') args.push(`--${k}`, /** @type {string} */ (flags[k]))
+  }
+  for (const k of SEARCH_BOOL_FLAGS) {
+    if (k !== 'json' && flags[k]) args.push(`--${k}`)
+  }
+  if (flags.json) args.push('--json')
+  return args
 }
 
 /**

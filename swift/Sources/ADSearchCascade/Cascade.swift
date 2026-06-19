@@ -3,6 +3,7 @@
 // slices, and projects to the public JSON envelope.
 
 import ADContent
+import ADSemantic  // Semantic.candidates — the Stage-1 retrieval the semantic path calls
 public import ADStorage
 
 public struct SearchParams: Sendable {
@@ -110,10 +111,23 @@ public enum Cascade {
     }
 
     /// Runs the cascade on `conn` SEQUENTIALLY and returns the JSON envelope
-    /// (convenience for tests; the server fans the tiers in parallel + calls
-    /// `assemble`).
+    /// (convenience for the server; it fans the tiers in parallel + calls
+    /// `assemble`). Lexical-only — the semantic step is dormant (server/MCP).
     public static func search(_ conn: StorageConnection, _ params: SearchParams) -> [UInt8] {
-        guard let prepared = prepare(params) else { return emptyEnvelope }
+        search(conn, params, semantic: nil).envelope
+    }
+
+    /// Full cascade with the OPTIONAL semantic step (the CLI path). When
+    /// `semantic` is non-nil, after rerank and before the slice the cascade
+    /// retrieves semantic candidates and fuses them (see `SemanticFusion`); when
+    /// nil, behavior is identical to the lexical `search` above. Returns the
+    /// structured hits + the projected envelope.
+    public static func search(_ conn: StorageConnection, _ params: SearchParams, semantic: SemanticContext?)
+        -> SearchOutcome
+    {
+        guard let prepared = prepare(params) else {
+            return SearchOutcome(hits: [], total: 0, hasMore: false, query: "", envelope: emptyEnvelope)
+        }
         // Framework-synonym expansion: run each strict tier once per framework
         // (canonical + synonyms) and concatenate, widening the framework filter set.
         let frameworks = resolveFrameworks(conn, nonEmptyValue(params.framework))
@@ -122,8 +136,9 @@ public enum Cascade {
         let p = PreparedSearch(
             q: prepared.q, ftsParams: prepared.ftsParams, trigramParams: prepared.trigramParams,
             limit: prepared.limit, offset: prepared.offset, activeFilters: filters)
-        return assemble(
-            p, conn: conn, titleExact: fanout(frameworks, p.ftsParams) { conn.titleExactRows($0) },
+        return assembleOutcome(
+            p, conn: conn, semantic: semantic,
+            titleExact: fanout(frameworks, p.ftsParams) { conn.titleExactRows($0) },
             fts: fanout(frameworks, p.ftsParams) { conn.ftsRows($0) },
             trigram: fanout(frameworks, p.trigramParams) { conn.trigramRows($0) })
     }
@@ -157,11 +172,27 @@ public enum Cascade {
     /// Merges the three tiers (title-exact → FTS → trigram, dedup-by-path
     /// keep-first), reranks, slices, and projects to the JSON envelope. Pure —
     /// identical regardless of how the tiers were executed, so byte-parity is
-    /// independent of the parallel/sequential choice.
+    /// independent of the parallel/sequential choice. Lexical-only — the server's
+    /// parallel-fanout path; the CLI uses `assembleOutcome` (semantic-aware).
     public static func assemble(
         _ p: PreparedSearch, conn: StorageConnection? = nil, titleExact: [SearchRow], fts: [SearchRow],
         trigram: [SearchRow]
     ) -> [UInt8] {
+        assembleOutcome(
+            p, conn: conn, semantic: nil, titleExact: titleExact, fts: fts, trigram: trigram
+        ).envelope
+    }
+
+    /// `assemble` + the optional semantic fusion step, returning the structured
+    /// hits alongside the projected envelope. When `semantic` is nil this is
+    /// exactly `assemble` (the lexical bounded-rerank path); when non-nil it
+    /// retrieves candidates and fuses them AFTER the full rerank, BEFORE the slice
+    /// (mirroring src/commands/search.js's order: rerank → fuseSemanticResults →
+    /// slice).
+    public static func assembleOutcome(
+        _ p: PreparedSearch, conn: StorageConnection? = nil, semantic: SemanticContext?,
+        titleExact: [SearchRow], fts: [SearchRow], trigram: [SearchRow]
+    ) -> SearchOutcome {
         let q = p.q
         let limit = p.limit
         let offset = p.offset
@@ -193,14 +224,15 @@ public enum Cascade {
             // query is >= 4 UTF-16 units. Candidates in distance order, deduped,
             // merged with matchQuality 'fuzzy'.
             if results.count < 5, q.utf16.count >= 4 {
-                let ids = Fuzzy.matchTitles(conn, query: q, limit: Int(p.ftsParams.limit))
-                if !ids.isEmpty {
-                    let records = conn.searchRecordsByIds(ids)
-                    for id in ids {
-                        guard let record = records[id], Filters.matches(record, filters),
+                let matches = Fuzzy.matchTitles(conn, query: q, limit: Int(p.ftsParams.limit))
+                if !matches.isEmpty {
+                    let records = conn.searchRecordsByIds(matches.map(\.id))
+                    for match in matches {
+                        guard let record = records[match.id], Filters.matches(record, filters),
                             seen.insert(record.path).inserted
                         else { continue }
                         var hit = ResultHit(record, matchQuality: "fuzzy")
+                        hit.distance = match.distance
                         hit.origIndex = results.count
                         results.append(hit)
                     }
@@ -248,10 +280,31 @@ public enum Cascade {
         }
 
         let intent = IntentDetector.detect(q)
-        let total = results.count
-        // Only the [offset, offset+limit) window survives, so rank just the top
-        // `offset+limit` hits; the envelope `total` is the full merged count.
-        let ranked = Rerank.apply(&results, query: q, intent: intent, window: offset + limit)
+
+        // Intent-aware rerank, then (semantic only) candidate fusion, then slice —
+        // the JS `search.js` order. LEXICAL path: bounded rerank (only the top
+        // `offset+limit` survive, identical to a full sort + slice). SEMANTIC path:
+        // full rerank (fusion blends the COMPLETE lexical rank list with the
+        // candidates, so a hit beyond the window can still surface), then fuse, then
+        // slice — and `total` is the POST-fusion count (fusion appends semantic-only
+        // docs, growing `results`, exactly like JS `total: results.length`).
+        let ranked: [ResultHit]
+        let total: Int
+        if let conn, let semantic {
+            Rerank.applyFull(&results, query: q, intent: intent)
+            let sem = Semantic.candidates(
+                conn, embedder: semantic.embedder, query: q, topK: semantic.topK)
+            if !sem.isEmpty {
+                SemanticFusion.fuse(
+                    &results, sem: sem, conn: conn, filters: filters, seen: &seen,
+                    requestedWindow: offset + limit)
+            }
+            ranked = results
+            total = results.count
+        } else {
+            total = results.count
+            ranked = Rerank.apply(&results, query: q, intent: intent, window: offset + limit)
+        }
 
         let start = min(offset, ranked.count)
         let end = min(offset + limit, ranked.count)
@@ -259,7 +312,9 @@ public enum Cascade {
         let hasMore = total >= offset + limit && sliced.count == limit
 
         if let conn { enrich(conn, &sliced, query: q) }
-        return projectEnvelope(query: q, total: total, hasMore: hasMore, hits: sliced)
+        let envelope = projectEnvelope(query: q, total: total, hasMore: hasMore, hits: sliced)
+        return SearchOutcome(
+            hits: sliced.map(\.publicHit), total: total, hasMore: hasMore, query: q, envelope: envelope)
     }
 
     /// Snippet + relatedCount enrichment of the final page. Best-effort: a
