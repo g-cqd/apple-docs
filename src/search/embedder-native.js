@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Native embedder dispatch (RFC 0002 phase 3): the bit-exact Swift pipeline
  * (libAppleDocsCore ad_embed_*) behind the `APPLE_DOCS_NATIVE=embed` kill
@@ -37,8 +36,10 @@ const DEFAULT_HF_ID = 'minishlab/potion-retrieval-32M'
 export const EXPECTED_EMBED_VERSION = 2
 const encoder = new TextEncoder()
 
+/** @type {'js'|'native'|null} */
 let forced = null // 'js' | 'native' | null
 let announced = false
+/** @type {any} */
 let logger
 
 function log() {
@@ -46,7 +47,7 @@ function log() {
   return logger
 }
 
-/** Test seams. */
+/** Test seams. @param {'js'|'native'|null} impl */
 export function _forceImpl(impl) {
   forced = impl
   announced = false
@@ -56,6 +57,7 @@ export function _resetNativeEmbedder() {
   announced = false
 }
 
+/** @param {boolean} served @param {number} [version] */
 function announce(served, version) {
   if (announced) return
   log().info(`embed: served by ${served ? `native libAppleDocsCore (behavior v${version})` : 'js (native unavailable)'}`)
@@ -66,6 +68,7 @@ function announce(served, version) {
  * Make sure the ADMX artifact exists next to the model, generating it from
  * the pinned model.onnx when needed. Returns the artifact path or null.
  */
+/** @param {string} modelsDir @param {string} hfId @param {string[]} reasons */
 async function ensureMatrixArtifact(modelsDir, hfId, reasons) {
   const matrixPath = join(modelsDir, hfId, 'matrix-v1.admx')
   if (existsSync(matrixPath)) return matrixPath
@@ -98,7 +101,7 @@ async function ensureMatrixArtifact(modelsDir, hfId, reasons) {
     log().info(`embed: generated ${matrixPath} (${rows}×${dims}) from the pinned model.onnx`)
     return matrixPath
   } catch (error) {
-    reasons.push(`matrix artifact generation failed: ${error.message}`)
+    reasons.push(`matrix artifact generation failed: ${error instanceof Error ? error.message : error}`)
     return null
   }
 }
@@ -108,14 +111,16 @@ async function ensureMatrixArtifact(modelsDir, hfId, reasons) {
  * warn-only (a missing model or read-only dir just means the artifact gets
  * derived lazily at first native-embed use instead).
  */
+/** @param {any} modelsDir @param {any} logger */
 export async function pregenerateMatrixArtifact(modelsDir, logger) {
+  /** @type {string[]} */
   const reasons = []
   const path = await ensureMatrixArtifact(modelsDir, DEFAULT_HF_ID, reasons)
   if (!path) logger?.warn?.(`native embed artifact not pre-generated (${reasons.join('; ')})`)
   return path
 }
 
-/** Parse the sha-pinned tokenizer.json without touching transformers.js. */
+/** Parse the sha-pinned tokenizer.json without touching transformers.js. @param {string} modelDir @param {string[]} reasons */
 function loadTokenizerConfig(modelDir, reasons) {
   try {
     const tk = JSON.parse(readFileSync(join(modelDir, 'tokenizer.json'), 'utf8'))
@@ -130,27 +135,29 @@ function loadTokenizerConfig(modelDir, reasons) {
     }
     return {
       vocab,
-      added: tk.added_tokens.map((a) => ({ id: a.id, content: a.content })),
+      added: tk.added_tokens.map((/** @type {any} */ a) => ({ id: a.id, content: a.content })),
       unkToken: tk.model.unk_token,
       prefix: tk.model.continuing_subword_prefix,
       maxInputCharsPerWord: tk.model.max_input_chars_per_word ?? 100,
     }
   } catch (error) {
-    reasons.push(`tokenizer.json unreadable: ${error.message}`)
+    reasons.push(`tokenizer.json unreadable: ${error instanceof Error ? error.message : error}`)
     return null
   }
 }
 
+/** @param {string} matrixPath @param {any} config */
 function packInitRequest(matrixPath, config) {
+  /** @type {Uint8Array[]} */
   const parts = []
   let total = 0
-  const pushU32 = (value) => {
+  const pushU32 = (/** @type {number} */ value) => {
     const bytes = new Uint8Array(4)
     new DataView(bytes.buffer).setUint32(0, value, true)
     parts.push(bytes)
     total += 4
   }
-  const pushString = (text) => {
+  const pushString = (/** @type {string} */ text) => {
     const utf8 = encoder.encode(text)
     pushU32(utf8.length)
     parts.push(utf8)
@@ -185,6 +192,7 @@ let scratch = new ArrayBuffer(16384)
 let scratchU8 = new Uint8Array(scratch)
 let scratchView = new DataView(scratch)
 
+/** @param {number} byteLength */
 function ensureScratch(byteLength) {
   if (scratch.byteLength < byteLength) {
     let size = scratch.byteLength * 2
@@ -195,6 +203,7 @@ function ensureScratch(byteLength) {
   }
 }
 
+/** @param {string[]} texts */
 function packBatchRequest(texts) {
   const encoded = texts.map((text) => encoder.encode(text))
   let total = 8
@@ -222,6 +231,7 @@ function packBatchRequest(texts) {
  */
 export async function buildNativeModel2Vec(spec, modelsDir, opts = {}) {
   if (forced === 'js') return null
+  /** @type {string[]} */
   const reasons = []
   try {
     if (spec.hfId !== DEFAULT_HF_ID) {
@@ -263,7 +273,7 @@ export async function buildNativeModel2Vec(spec, modelsDir, opts = {}) {
       )
     }
 
-    const embedBatch = async (texts) => {
+    const embedBatch = async (/** @type {string[]} */ texts) => {
       if (!texts || texts.length === 0) return []
       const { bytes, length } = packBatchRequest(texts.map((t) => t ?? ''))
       const result = readNativeResult(lib, lib.symbols.ad_embed_batch(bytes, BigInt(length)))
@@ -279,7 +289,7 @@ export async function buildNativeModel2Vec(spec, modelsDir, opts = {}) {
     // 580 B/chunk across the bridge instead of the 2 KB f32 vector plus a JS
     // quantize pass. Views are stable: readNativeResult copies per call.
     const codeStride = dims / 8 + dims + 4
-    const embedBatchCodes = async (texts) => {
+    const embedBatchCodes = async (/** @type {string[]} */ texts) => {
       if (!texts || texts.length === 0) return []
       const { bytes, length } = packBatchRequest(texts.map((t) => t ?? ''))
       const result = readNativeResult(lib, lib.symbols.ad_embed_batch_codes(bytes, BigInt(length)))
@@ -300,7 +310,7 @@ export async function buildNativeModel2Vec(spec, modelsDir, opts = {}) {
     return {
       dims,
       embedVersion,
-      async embed(text) {
+      async embed(/** @type {string} */ text) {
         return (await embedBatch([text ?? '']))[0]
       },
       embedBatch,
@@ -308,11 +318,12 @@ export async function buildNativeModel2Vec(spec, modelsDir, opts = {}) {
     }
   } catch (error) {
     // Defensive: nothing above should throw, but this builder must not.
-    reasons.push(`unexpected: ${error.message}`)
+    reasons.push(`unexpected: ${error instanceof Error ? error.message : error}`)
     return logAndNull(reasons)
   }
 }
 
+/** @param {string[]} reasons */
 function logAndNull(reasons) {
   announce(false)
   log().warn(`embed: native path unavailable (${reasons.join('; ')}) — semantic tier dormant (lexical-only)`)

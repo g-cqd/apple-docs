@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Fusion dispatch: native (libAppleDocsCore via bun:ffi) when the
  * `APPLE_DOCS_NATIVE` kill switch enables the `fusion` module, JS
@@ -15,12 +14,13 @@ import { hamming } from './embedding.js'
 import { hybridFusion as jsHybridFusion, mmrSelect as jsMmrSelect, weightedRRF as jsWeightedRRF } from './fusion.js'
 
 const MODULE = 'fusion'
+/** @type {'js'|'native'|null} */
 let forced = null // 'js' | 'native' | null
 let announced = false
 let nativeCalls = 0
 let logger
 
-/** Test seams. */
+/** Test seams. @param {'js'|'native'|null} impl */
 export function _forceImpl(impl) {
   forced = impl
   announced = false
@@ -29,7 +29,7 @@ export function _nativeCallCount() {
   return nativeCalls
 }
 
-/** The production MMR similarity (fuse-semantic.js): 1 − hamming/bits. */
+/** The production MMR similarity (fuse-semantic.js): 1 − hamming/bits. @param {any} a @param {any} b */
 export function hammingSim(a, b) {
   const w = Math.min(a.length, b.length)
   return 1 - hamming(a, b, 0, w) / (w * 8)
@@ -55,6 +55,7 @@ let scratch = new ArrayBuffer(4096)
 let scratchU8 = new Uint8Array(scratch)
 let scratchView = new DataView(scratch)
 
+/** @param {number} byteLength */
 function ensureScratch(byteLength) {
   if (scratch.byteLength < byteLength) {
     let size = scratch.byteLength * 2
@@ -72,6 +73,7 @@ function ensureScratch(byteLength) {
  * null when the inputs sit outside the codec contract (per-list scores not
  * aligned 1:1 with ranked) — the caller then uses the JS implementation.
  */
+/** @param {any[]} lists @param {number} k @param {number} beta @param {boolean} useScores */
 function packFusion(lists, k, beta, useScores) {
   const ids = []
   const indexOf = new Map()
@@ -129,6 +131,7 @@ function packFusion(lists, k, beta, useScores) {
   return { request: scratchU8.subarray(0, totalBytes), ids }
 }
 
+/** @param {any} lib @param {any} symbol @param {any} packed */
 function callFusion(lib, symbol, packed) {
   const result = readNativeResult(lib, symbol(packed.request, packed.request.length))
   if (result.status !== 0) {
@@ -143,7 +146,7 @@ function callFusion(lib, symbol, packed) {
   return map
 }
 
-/** @see fusion.js weightedRRF — identical contract. */
+/** @see fusion.js weightedRRF — identical contract. @param {any[]} lists @param {{ k?: number }} [opts] */
 export function weightedRRF(lists, opts = {}) {
   const lib = nativeLib()
   if (lib) {
@@ -157,7 +160,7 @@ export function weightedRRF(lists, opts = {}) {
   return jsWeightedRRF(lists, opts)
 }
 
-/** @see fusion.js hybridFusion — identical contract. */
+/** @see fusion.js hybridFusion — identical contract. @param {any[]} lists @param {{ k?: number, beta?: number }} [opts] */
 export function hybridFusion(lists, opts = {}) {
   const lib = nativeLib()
   if (lib) {
@@ -170,6 +173,7 @@ export function hybridFusion(lists, opts = {}) {
   return jsHybridFusion(lists, opts)
 }
 
+/** @param {any[]} ranked @param {(item: any) => any} vecOf @param {number} lambda @param {number} limit */
 function packMmr(ranked, vecOf, lambda, limit) {
   const n = ranked.length
   const vecs = []
@@ -210,6 +214,7 @@ function packMmr(ranked, vecOf, lambda, limit) {
  * @see fusion.js mmrSelect — identical contract. Native only for the
  * production shape: the tagged `hammingSim`, uniform Uint8Array vectors,
  * and `limit` either absent or ≥ 1; anything else runs the JS reference.
+ * @param {any[]} ranked @param {(item: any) => any} vecOf @param {(a: any, b: any) => number} sim @param {{ lambda?: number, limit?: number }} [opts]
  */
 export function mmrSelect(ranked, vecOf, sim, opts = {}) {
   const { lambda = 0.7, limit } = opts

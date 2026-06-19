@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 const HOWTO_WORDS = /\b(how|guide|tutorial|example|implement|create|build|use|setup|configure|add|make)\b/i
 const ERROR_WORDS = /\b(error|crash|exception|fail|issue|bug|fix|troubleshoot|exc_bad|abort|segfault)\b/i
 const CONCEPT_PATTERNS = /\b(what\s+is|difference\s+between|vs\.?|overview|introduction|explain)\b/i
@@ -10,7 +9,7 @@ const SINGLE_CAPITALIZED = /^[A-Z][A-Za-z0-9]+$/
 /**
  * Detect the intent behind a search query.
  * @param {string} query
- * @returns {{ type: 'symbol'|'howto'|'error'|'concept'|'general', confidence: number }}
+ * @returns {{ type: 'symbol'|'howto'|'error'|'concept'|'wwdc'|'general', confidence: number }}
  */
 export function detectIntent(query) {
   if (!query?.trim()) return { type: 'general', confidence: 0.5 }

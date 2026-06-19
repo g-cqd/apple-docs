@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Result-row formatter. Maps the wide search row produced by the storage
  * layer to the public CLI/MCP shape that the formatter / projection
@@ -30,9 +29,9 @@ function parsePlatformsString(value) {
 }
 
 /**
- * @param {object} r — search row from the storage layer.
- * @param {string} [matchQuality='match'] — relevance label propagated to clients.
- * @param {number} [distance] — Levenshtein distance (fuzzy results only).
+ * @param {any} r - search row from the storage layer.
+ * @param {string} [matchQuality='match'] - relevance label propagated to clients.
+ * @param {number} [distance] - Levenshtein distance (fuzzy results only).
  */
 export function formatResult(r, matchQuality = 'match', distance = undefined) {
   // `platformsParsed` is the post-arrival cached parse (search.js

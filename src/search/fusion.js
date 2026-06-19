@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Result fusion for the hybrid lexical + semantic tier.
  *
@@ -91,7 +90,7 @@ export function hybridFusion(lists, { k = 60, beta = 0.5 } = {}) {
  * @template T
  * @param {T[]} ranked items in best-first order
  * @param {(item: T) => (Uint8Array|Float32Array|null)} vecOf vector accessor
- * @param {(a, b) => number} sim similarity in [0, 1]
+ * @param {(a: any, b: any) => number} sim similarity in [0, 1]
  * @param {{ lambda?: number, limit?: number }} [opts]
  * @returns {T[]} re-ordered items
  */
@@ -102,9 +101,11 @@ export function mmrSelect(ranked, vecOf, sim, { lambda = 0.7, limit } = {}) {
   const rel = ranked.map((_, i) => (n - i) / n) // position-derived relevance
   const vecs = ranked.map(vecOf)
   const remaining = ranked.map((_, i) => i)
+  /** @type {number[]} */
   const selected = []
   // Seed with the top item — nothing to be redundant against yet.
-  selected.push(remaining.shift())
+  const first = remaining.shift()
+  if (first !== undefined) selected.push(first)
   while (selected.length < cap && remaining.length > 0) {
     let bestPos = 0
     let bestScore = Number.NEGATIVE_INFINITY
@@ -126,7 +127,8 @@ export function mmrSelect(ranked, vecOf, sim, { lambda = 0.7, limit } = {}) {
         bestPos = p
       }
     }
-    selected.push(remaining.splice(bestPos, 1)[0])
+    const [next] = remaining.splice(bestPos, 1)
+    if (next !== undefined) selected.push(next)
   }
   // Anything beyond the cap keeps its incoming order, appended after the window.
   return [...selected.map((i) => ranked[i]), ...remaining.map((i) => ranked[i])]

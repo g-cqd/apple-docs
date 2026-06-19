@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pure ranking-quality metrics for the search eval harness (no deps).
  *
@@ -8,7 +7,7 @@
  * output so quality is gated by numbers on our own corpus, not generic MTEB.
  */
 
-/** Coerce `relevant` (Set | Array | iterable) to a Set for O(1) membership. */
+/** Coerce `relevant` (Set | Array | iterable) to a Set for O(1) membership. @param {any} relevant @returns {Set<any>} */
 function toSet(relevant) {
   return relevant instanceof Set ? relevant : new Set(relevant ?? [])
 }
@@ -16,7 +15,7 @@ function toSet(relevant) {
 /**
  * recall@k — fraction of the relevant items that appear in the top-k retrieved.
  * @param {Array<string|number>} retrieved best-first ranked keys
- * @param {Set|Array} relevant judged-relevant keys
+ * @param {Set<any>|Array<any>} relevant judged-relevant keys
  * @param {number} [k=10]
  * @returns {number} 0..1 (0 when nothing is relevant)
  */
@@ -33,7 +32,7 @@ export function recallAtK(retrieved, relevant, k = 10) {
  * nDCG@k with binary relevance. DCG sums 1/log2(rank+1) over relevant hits in
  * the top-k; IDCG is the best achievable given how many relevant docs exist.
  * @param {Array<string|number>} retrieved
- * @param {Set|Array} relevant
+ * @param {Set<any>|Array<any>} relevant
  * @param {number} [k=10]
  * @returns {number} 0..1
  */
@@ -55,7 +54,7 @@ export function ndcgAtK(retrieved, relevant, k = 10) {
  * Mean Reciprocal Rank for a single query: 1/(rank of first relevant hit), or
  * 0 when no relevant item is retrieved. Average across queries in the harness.
  * @param {Array<string|number>} retrieved
- * @param {Set|Array} relevant
+ * @param {Set<any>|Array<any>} relevant
  * @returns {number} 0..1
  */
 export function mrr(retrieved, relevant) {
@@ -68,7 +67,7 @@ export function mrr(retrieved, relevant) {
   return 0
 }
 
-/** Mean of a numeric array (0 for empty) — small helper the harness reuses. */
+/** Mean of a numeric array (0 for empty) — small helper the harness reuses. @param {number[]} values */
 export function mean(values) {
   if (!values || values.length === 0) return 0
   let sum = 0

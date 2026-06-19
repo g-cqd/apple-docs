@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Post-cascade JS filtering for search results. The SQL planner pushes
  * single-value filters (framework, source_type) down to the prepared
@@ -9,6 +8,7 @@
 
 const ROLE_KIND_FILTERS = new Set(['symbol', 'article', 'collection', 'overview', 'tutorial', 'samplecode', 'sample_code', 'sample-project', 'sampleproject'])
 
+/** @param {any} source */
 export function normalizeSourceFilter(source) {
   if (!source) return null
   const values = Array.isArray(source) ? source : String(source).split(',')
@@ -16,6 +16,7 @@ export function normalizeSourceFilter(source) {
   return normalized.length > 0 ? new Set(normalized) : null
 }
 
+/** @param {any} value */
 export function normalizeDeprecatedFilter(value) {
   if (value == null || value === '') return 'include'
   const v = String(value).trim().toLowerCase()
@@ -23,7 +24,9 @@ export function normalizeDeprecatedFilter(value) {
   return 'include'
 }
 
+/** @param {any} platform @param {any} explicit */
 export function buildPlatformFilters(platform, explicit) {
+  /** @type {Record<string, string | null>} */
   const filters = {
     minIos: explicit.minIos ?? null,
     minMacos: explicit.minMacos ?? null,
@@ -32,18 +35,21 @@ export function buildPlatformFilters(platform, explicit) {
     minVisionos: explicit.minVisionos ?? null,
   }
   if (platform) {
-    const key = {
+    /** @type {Record<string, string>} */
+    const platformKeyMap = {
       ios: 'minIos',
       macos: 'minMacos',
       watchos: 'minWatchos',
       tvos: 'minTvos',
       visionos: 'minVisionos',
-    }[platform.toLowerCase()]
+    }
+    const key = platformKeyMap[platform.toLowerCase()]
     if (key && !filters[key]) filters[key] = '0'
   }
   return filters
 }
 
+/** @param {any} row @param {any} filters */
 export function matchesSearchFilters(row, filters) {
   // SourceTypes IN, year, track, and deprecated mode push into SQL via
   // FILTER_PREDICATES. The JS implementations below cover callers that
@@ -60,12 +66,14 @@ export function matchesSearchFilters(row, filters) {
   )
 }
 
+/** @param {any} row @param {any} sourceTypes */
 function matchesSourceFilter(row, sourceTypes) {
   if (!sourceTypes) return true
   const sourceType = String(row?.source_type ?? row?.sourceType ?? '').toLowerCase()
   return sourceTypes.has(sourceType)
 }
 
+/** @param {any} row @param {any} mode */
 function matchesDeprecatedFilter(row, mode) {
   if (!mode || mode === 'include') return true
   const deprecated = !!(row?.is_deprecated ?? row?.isDeprecated)
@@ -74,6 +82,7 @@ function matchesDeprecatedFilter(row, mode) {
   return true
 }
 
+/** @param {any} row @param {any} frameworks */
 function matchesFrameworkFilter(row, frameworks) {
   const candidates = (frameworks ?? []).filter(Boolean).map(normalizeFilterValue)
   if (candidates.length === 0) return true
@@ -81,6 +90,7 @@ function matchesFrameworkFilter(row, frameworks) {
   return rowValues.some((value) => candidates.includes(value))
 }
 
+/** @param {any} row @param {any} kind */
 function matchesKindFilter(row, kind) {
   if (!kind) return true
   const target = normalizeFilterValue(kind)
@@ -99,6 +109,7 @@ function matchesKindFilter(row, kind) {
   return displayedKind === target
 }
 
+/** @param {any} row @param {any} language */
 function matchesLanguageFilter(row, language) {
   if (!language) return true
   const normalizedLanguage = normalizeFilterValue(language)
@@ -106,6 +117,7 @@ function matchesLanguageFilter(row, language) {
   return !value || value === normalizedLanguage || value === 'both'
 }
 
+/** @param {any} row @param {any} platformFilters */
 function matchesPlatformFilters(row, platformFilters) {
   // Prefer the cached parse on `platformsParsed` (search.js attaches it
   // once per row); fall back to parsing `platforms` for callers that
@@ -125,18 +137,20 @@ function matchesPlatformFilters(row, platformFilters) {
   )
 }
 
+/** @param {any} actual @param {any} requested @param {{ platforms?: any, platformKey?: string }} [opts] */
 function matchesPlatformVersion(actual, requested, opts = {}) {
   if (!requested) return true
   if (requested === '0') {
     if (actual) return true
     const explicitPlatforms = opts.platforms ? Object.keys(opts.platforms) : []
     if (explicitPlatforms.length === 0) return true
-    return explicitPlatforms.includes(opts.platformKey)
+    return explicitPlatforms.includes(opts.platformKey ?? '')
   }
   if (!actual) return true
   return compareVersions(actual, requested) <= 0
 }
 
+/** @param {any} row @param {any} year @param {any} track */
 function matchesMetadataFilters(row, year, track) {
   if (!year && !track) return true
   let metadata = null
@@ -155,12 +169,14 @@ function matchesMetadataFilters(row, year, track) {
   return true
 }
 
+/** @param {any} value */
 function normalizeFilterValue(value) {
   return String(value ?? '')
     .trim()
     .toLowerCase()
 }
 
+/** @param {any} left @param {any} right */
 function compareVersions(left, right) {
   const leftParts = parseVersionParts(left)
   const rightParts = parseVersionParts(right)
@@ -173,6 +189,7 @@ function compareVersions(left, right) {
   return 0
 }
 
+/** @param {any} version */
 function parseVersionParts(version) {
   return (
     String(version ?? '')
@@ -182,6 +199,7 @@ function parseVersionParts(version) {
   )
 }
 
+/** @param {any} platforms */
 function parsePlatforms(platforms) {
   if (!platforms) return null
   if (typeof platforms === 'string') {
