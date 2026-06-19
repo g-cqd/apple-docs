@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Apple-font discovery + DMG extraction helpers. Used by syncAppleFonts
  * (in apple-assets.js) and the symbol-bundle plist reader sites that
@@ -18,12 +17,13 @@ import { parseHdiutilMountPoints } from '../sf-symbols-app/dmg-helpers.js'
 
 const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.dfont'])
 
-export function discoverAppleFontFiles(dirs) {
+export function discoverAppleFontFiles(/** @type {any} */ dirs) {
+  /** @type {any[]} */
   const files = []
   const seen = new Set()
   for (const dir of dirs) {
     if (!existsSync(dir)) continue
-    walkFiles(dir, (filePath) => {
+    walkFiles(dir, (/** @type {any} */ filePath) => {
       const ext = extname(filePath).toLowerCase()
       if (!FONT_EXTENSIONS.has(ext)) return
       const resolved = resolve(filePath)
@@ -35,7 +35,7 @@ export function discoverAppleFontFiles(dirs) {
   return files
 }
 
-function walkFiles(dir, visit) {
+function walkFiles(/** @type {any} */ dir, /** @type {any} */ visit) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
@@ -47,7 +47,7 @@ function walkFiles(dir, visit) {
   }
 }
 
-export async function downloadFileIfNeeded(url, filePath) {
+export async function downloadFileIfNeeded(/** @type {any} */ url, /** @type {any} */ filePath) {
   if (existsSync(filePath) && statSync(filePath).size > 0) return false
   ensureDir(dirname(filePath))
   const tmpPath = `${filePath}.${process.pid}.tmp`
@@ -66,13 +66,13 @@ export async function downloadFileIfNeeded(url, filePath) {
     ended = true
     await rename(tmpPath, filePath)
   } finally {
-    if (!ended) await sink.end().catch(() => {})
+    if (!ended) await Promise.resolve(sink.end()).catch(() => {})
     await rm(tmpPath, { force: true }).catch(() => {})
   }
   return true
 }
 
-export async function extractDmgFonts(dmgPath, destinationDir, logger) {
+export async function extractDmgFonts(/** @type {any} */ dmgPath, /** @type {any} */ destinationDir, /** @type {any} */ logger) {
   ensureDir(destinationDir)
   const expandedDir = await mkdtemp(join(tmpdir(), 'apple-docs-font-pkg-'))
   // Attach with `-plist` and NO forced `-mountpoint`: Apple font DMGs can be
@@ -115,18 +115,21 @@ export async function extractDmgFonts(dmgPath, destinationDir, logger) {
   }
 }
 
-function findByExtension(dir, extension) {
+function findByExtension(/** @type {any} */ dir, /** @type {any} */ extension) {
+  /** @type {any[]} */
   const out = []
   if (!existsSync(dir)) return out
-  walkFiles(dir, (filePath) => {
+  walkFiles(dir, (/** @type {any} */ filePath) => {
     if (extname(filePath).toLowerCase() === extension) out.push(filePath)
   })
   return out
 }
 
-export async function readStringsMap(path) {
+/** @returns {Promise<Record<string, any>>} */
+export async function readStringsMap(/** @type {any} */ path) {
   const value = await readPlist(path).catch(() => null)
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  /** @type {Record<string, any>} */
   const aliases = {}
   for (const [alias, canonical] of Object.entries(value)) {
     if (typeof canonical !== 'string') continue
@@ -135,12 +138,12 @@ export async function readStringsMap(path) {
   return aliases
 }
 
-export async function readBundleVersion(contentsDir) {
+export async function readBundleVersion(/** @type {any} */ contentsDir) {
   const info = await readPlist(join(contentsDir, 'Info.plist')).catch(() => null)
   return info?.CFBundleVersion ?? null
 }
 
-async function run(args) {
+async function run(/** @type {any} */ args) {
   // hdiutil attach / detach and pkgutil --expand-full each finish in seconds
   // on a normal DMG; 60s is generous and bounds an OS-level hang.
   const { stderr, exitCode } = await spawnWithDeadline(args, { deadlineMs: 60_000 })
@@ -148,7 +151,7 @@ async function run(args) {
 }
 
 /** Like {@link run} but returns stdout (used for `hdiutil attach -plist`). */
-async function runCapture(args) {
+async function runCapture(/** @type {any} */ args) {
   const { stdout, stderr, exitCode } = await spawnWithDeadline(args, { deadlineMs: 60_000 })
   if (exitCode !== 0) throw new ValidationError(stderr.trim() || `exited ${exitCode}`)
   // spawnWithDeadline returns stdout as an ArrayBuffer; the old
@@ -159,7 +162,7 @@ async function runCapture(args) {
   return new TextDecoder().decode(stdout ?? new ArrayBuffer(0))
 }
 
-export async function hashFile(path) {
+export async function hashFile(/** @type {any} */ path) {
   const { sha256 } = await import('../../lib/hash.js')
   const bytes = await Bun.file(path).arrayBuffer()
   return sha256(bytes)

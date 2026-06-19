@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Ensure a working SF Symbols.app is on disk before the codepoint
  * worker runs. The worker depends on two private frameworks
@@ -41,7 +40,7 @@ const DMG_URL_PATTERN = /https:\/\/devimages-cdn\.apple\.com\/design\/resources\
  * the highest major + cache-buster found on the landing page. Throws
  * when the page can't be reached or contains no recognisable link.
  *
- * @param {{ fetcher?: typeof fetch, logger?: object }} [opts]
+ * @param {{ fetcher?: typeof fetch, logger?: any }} [opts]
  * @returns {Promise<{ url: string, major: number, cacheBuster: number,
  *   etag?: string, lastModified?: string }>}
  */
@@ -82,7 +81,7 @@ export async function discoverLatest(opts = {}) {
       lastModified = head.headers.get('last-modified') ?? undefined
     }
   } catch (err) {
-    logger?.debug?.(`HEAD probe of ${top.url} failed: ${err?.message ?? err}`)
+    logger?.debug?.(`HEAD probe of ${top.url} failed: ${err instanceof Error ? err.message : err}`)
   }
   return { url: top.url, major: top.major, cacheBuster: top.cacheBuster, etag, lastModified }
 }
@@ -109,7 +108,7 @@ async function readInstalledVersion(appPath) {
  * dot-separated segments. Returns -1 / 0 / 1. Missing segments are
  * treated as 0. `compareVersions("7.2", "7")` → 1.
  */
-export function compareVersions(a, b) {
+export function compareVersions(/** @type {any} */ a, /** @type {any} */ b) {
   const pa = String(a)
     .split('.')
     .map((s) => Number.parseInt(s, 10) || 0)
@@ -150,7 +149,7 @@ export function versionFromUrl({ major, cacheBuster }) {
  *
  * @param {{
  *   dataDir: string,
- *   logger?: object,
+ *   logger?: any,
  *   fetcher?: typeof fetch,
  *   skipDiscovery?: boolean,
  *   forceRefresh?: boolean,
@@ -171,7 +170,7 @@ export async function ensureSfSymbolsApp(opts) {
     try {
       latest = await discoverLatest({ fetcher, logger })
     } catch (err) {
-      logger?.warn?.(`SF Symbols discovery failed (${err?.message ?? err}); will use whatever is on disk`)
+      logger?.warn?.(`SF Symbols discovery failed (${err instanceof Error ? err.message : err}); will use whatever is on disk`)
     }
   }
 
@@ -318,6 +317,7 @@ async function provisionFromDmg(dmgPath, { appPath }) {
   }
 }
 
+/** @param {any} url @param {any} destPath @param {{ fetcher?: typeof fetch, logger?: any }} [opts] */
 async function downloadFile(url, destPath, { fetcher = fetch, logger } = {}) {
   const res = await fetcher(url, { redirect: 'follow' })
   if (!res.ok) {
@@ -349,7 +349,7 @@ async function downloadFile(url, destPath, { fetcher = fetch, logger } = {}) {
   }
 }
 
-async function readJsonIfExists(path) {
+async function readJsonIfExists(/** @type {any} */ path) {
   if (!existsSync(path)) return null
   try {
     return JSON.parse(await readFile(path, 'utf8'))
@@ -358,7 +358,7 @@ async function readJsonIfExists(path) {
   }
 }
 
-function runCmd(cmd, args) {
+function runCmd(/** @type {any} */ cmd, /** @type {any} */ args) {
   return new Promise((resolve, reject) => {
     const proc = nodeSpawn(cmd, args)
     let out = ''

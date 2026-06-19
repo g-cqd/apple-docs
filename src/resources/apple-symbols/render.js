@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SF Symbol render pipeline (SVG + PNG).
  *
@@ -60,7 +59,7 @@ function symbolsOfflineMode() {
   return process.env.APPLE_DOCS_SYMBOLS_OFFLINE === '1'
 }
 
-export async function renderSfSymbol(opts, ctx) {
+export async function renderSfSymbol(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const scope = opts.scope === 'private' ? 'private' : 'public'
   const format = opts.format === 'svg' ? 'svg' : 'png'
   const pointSize = clampInteger(opts.size ?? opts.pointSize ?? 64, 8, 1024)
@@ -132,11 +131,11 @@ export async function renderSfSymbol(opts, ctx) {
           // rasterizer error so the operator knows librsvg/sips is the
           // missing piece.
           throw new ValidationError(
-            `SF Symbol PNG rasterization failed for ${scope}/${opts.name} (offline mode): ${error.message}. ` +
+            `SF Symbol PNG rasterization failed for ${scope}/${opts.name} (offline mode): ${/** @type {any} */ (error).message}. ` +
               'Install rsvg-convert (librsvg2-bin) or run on macOS where sips is available.',
           )
         }
-        ctx.logger?.warn?.(`SF Symbol snapshot PNG rasterization failed for ${scope}/${opts.name}: ${error.message}`)
+        ctx.logger?.warn?.(`SF Symbol snapshot PNG rasterization failed for ${scope}/${opts.name}: ${/** @type {any} */ (error).message}`)
       }
     }
   }
@@ -154,7 +153,7 @@ export async function renderSfSymbol(opts, ctx) {
       try {
         data = await renderSymbolSvgCurves({ name: opts.name, scope, pointSize, weight, scale, color, background })
       } catch (error) {
-        ctx.logger?.warn?.(`SF Symbol SVG outline render failed for ${scope}/${opts.name}: ${error.message}`)
+        ctx.logger?.warn?.(`SF Symbol SVG outline render failed for ${scope}/${opts.name}: ${/** @type {any} */ (error).message}`)
         data = renderSymbolSvgFallback({ name: opts.name, scope, pointSize, color, background })
       }
     } else {
@@ -182,7 +181,7 @@ export async function renderSfSymbol(opts, ctx) {
   return ctx.db.getSfSymbolRender(cacheKey)
 }
 
-async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
+async function renderSymbolPng(/** @type {any} */ { name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
   // Native in-process AppKit NSBitmap render first (RFC 0003 phase 2;
   // D-0003-3 Probe B confirmed crash-free + byte-identical). null → dylib
   // absent / native off / non-darwin / symbol unrenderable → spawn fallback.
@@ -207,12 +206,12 @@ async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', sca
   }
 }
 
-async function renderSymbolSvgCurves({ name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
+async function renderSymbolSvgCurves(/** @type {any} */ { name, scope, pointSize, weight = 'regular', scale = 'medium', color, background }) {
   const pdfBytes = await renderSymbolToPdfBytes({ name, scope, weight, scale })
   return symbolPdfToSvg(pdfBytes, { name, pointSize, color, background })
 }
 
-async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale = 'medium' }) {
+async function renderSymbolToPdfBytes(/** @type {any} */ { name, scope, weight = 'regular', scale = 'medium' }) {
   // Native in-process AppKit render first (RFC 0003 P3-darwin; D-0003-3
   // probe confirmed crash-free + byte-identical post symbolPdfToSvg). null
   // → dylib absent / native off / non-darwin / symbol unrenderable, so
@@ -234,7 +233,7 @@ async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale =
   }
 }
 
-async function renderSymbolSvgFromSnapshot({ name, scope, pointSize, weight, scale, color, background }, ctx) {
+async function renderSymbolSvgFromSnapshot(/** @type {any} */ { name, scope, pointSize, weight, scale, color, background }, /** @type {any} */ ctx) {
   const filePath = getPrerenderedSymbolPath(ctx, scope, name, { weight, scale })
   const file = Bun.file(filePath)
   if (!(await file.exists())) return null
@@ -242,12 +241,12 @@ async function renderSymbolSvgFromSnapshot({ name, scope, pointSize, weight, sca
     const svg = await file.text()
     return customizePrerenderedSymbolSvg(svg, { pointSize, color, background })
   } catch (error) {
-    ctx.logger?.warn?.(`SF Symbol snapshot SVG read failed for ${scope}/${name}: ${error.message}`)
+    ctx.logger?.warn?.(`SF Symbol snapshot SVG read failed for ${scope}/${name}: ${/** @type {any} */ (error).message}`)
     return null
   }
 }
 
-async function renderPngFromSvg(svg, { pointSize }) {
+async function renderPngFromSvg(/** @type {any} */ svg, /** @type {any} */ { pointSize }) {
   const dir = await mkdtemp(join(tmpdir(), 'apple-docs-symbol-snapshot-'))
   const svgPath = join(dir, 'symbol.svg')
   const pngPath = join(dir, 'symbol.png')
@@ -273,14 +272,14 @@ async function renderPngFromSvg(svg, { pointSize }) {
   }
 }
 
-async function readRasterizedPng(path) {
+async function readRasterizedPng(/** @type {any} */ path) {
   if (!existsSync(path) || statSync(path).size === 0) {
     throw new ValidationError('rasterizer did not produce a PNG')
   }
   return await Bun.file(path).arrayBuffer()
 }
 
-async function runRasterCommand(args) {
+async function runRasterCommand(/** @type {any} */ args) {
   try {
     const { stdout, stderr, exitCode } = await spawnWithDeadline(args, { deadlineMs: 10_000 })
     if (exitCode !== 0) {
@@ -289,6 +288,6 @@ async function runRasterCommand(args) {
     }
     return { ok: true, error: null }
   } catch (error) {
-    return { ok: false, error: error.message }
+    return { ok: false, error: /** @type {any} */ (error).message }
   }
 }

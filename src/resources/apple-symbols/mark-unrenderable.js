@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * The catalog is sourced from the current SF Symbols.app release, which
  * can be newer than the building macOS (SF Symbols 8.2 lists
@@ -7,7 +6,7 @@
  * (v27 `render_unsupported`) so the snapshot completeness gate skips
  * them — partial failures stay loud and still fail the gate.
  */
-export function markUnrenderableSymbols({ ctx, scope, variants, result, logger }) {
+export function markUnrenderableSymbols(/** @type {any} */ { ctx, scope, variants, result, logger }) {
   const failedBySymbol = new Map()
   for (const f of result.failures) {
     if (f.scope !== scope) continue

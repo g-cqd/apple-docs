@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Snapshot pre-render completeness gate.
  *
@@ -20,10 +19,10 @@ import { getPrerenderedSymbolPath, symbolVariantMatrix } from './cache-key.js'
  * pre-renders. The DB catalog is the source of truth; if a row is in
  * `sf_symbols`, the snapshot must carry every variant of that name.
  *
- * @param {{ db: object, dataDir: string }} ctx
+ * @param {{ db: any, dataDir: string }} ctx
  * @param {{ maxMissingSamples?: number }} [opts]
  * @returns {{ complete: boolean, missingCount: number, missing: string[],
- *   counts: { public: number, private: number } }}
+ *   counts: { public: number, private: number }, skippedBitmapOnly?: any, skippedRenderUnsupported?: any }}
  */
 export function validateSymbolMatrixComplete(ctx, opts = {}) {
   const maxSamples = Math.max(1, opts.maxMissingSamples ?? 50)

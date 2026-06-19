@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SFNT (TrueType / OpenType) header inspection + filename parsing.
  *
@@ -46,7 +45,7 @@ export async function isLikelySfnt(path) {
   }
 }
 
-export function normalizeStringArray(value) {
+export function normalizeStringArray(/** @type {any} */ value) {
   if (Array.isArray(value)) return value.map(String).filter(Boolean)
   if (typeof value === 'string') return [value]
   return []
@@ -61,7 +60,7 @@ export function normalizeStringArray(value) {
  *   SF-Mono-Bold.otf               → { variant: null, weight: 'Bold', italic: false }
  *   SF-Pro.ttf                     → { variant: null, weight: null, italic: false }
  */
-export function parseFontFilename(fileName) {
+export function parseFontFilename(/** @type {any} */ fileName) {
   const stem = basename(fileName, extname(fileName))
   // Tail token: weight or weightItalic (after the last dash, or no dash).
   const dashIndex = stem.lastIndexOf('-')
@@ -113,7 +112,7 @@ export function parseFontFilename(fileName) {
  * fonts and an array of `{ tag, min, default, max }` entries for variable
  * fonts. Best-effort: any parse error returns the static defaults.
  */
-export function inspectSfntFile(filePath) {
+export function inspectSfntFile(/** @type {any} */ filePath) {
   try {
     const buffer = readSfntHeader(filePath)
     if (!buffer) return { isVariable: false, axes: [] }
@@ -156,7 +155,7 @@ export function inspectSfntFile(filePath) {
   }
 }
 
-function readSfntHeader(filePath) {
+function readSfntHeader(/** @type {any} */ filePath) {
   // Need at least 12 bytes (offset table) + numTables × 16. 16 KB is plenty
   // for any real font's directory and avoids reading the whole file just to
   // peek at the header.
@@ -172,7 +171,7 @@ function readSfntHeader(filePath) {
   return readBytes(filePath, 0, 12 + numTables * 16)
 }
 
-function readBytes(filePath, offset, length) {
+function readBytes(/** @type {any} */ filePath, /** @type {any} */ offset, /** @type {any} */ length) {
   if (length <= 0) return null
   const buffer = Buffer.alloc(length)
   const fd = openSync(filePath, 'r')

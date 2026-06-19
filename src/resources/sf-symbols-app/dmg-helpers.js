@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pure (no-spawn) helpers for SF Symbols .dmg provisioning, split out of
  * install.js to keep that file under the 400-line ceiling and to make the
@@ -17,11 +16,11 @@ export const SF_SYMBOLS_APP = 'SF Symbols.app'
 // caller normalises the on-disk name back to SF_SYMBOLS_APP.
 const SF_SYMBOLS_APP_RE = /^SF Symbols\b.*\.app$/i
 
-export function isSfSymbolsAppName(name) {
+export function isSfSymbolsAppName(/** @type {any} */ name) {
   return typeof name === 'string' && SF_SYMBOLS_APP_RE.test(name)
 }
 
-function isAppBundleName(name) {
+function isAppBundleName(/** @type {any} */ name) {
   return typeof name === 'string' && name.toLowerCase().endsWith('.app')
 }
 
@@ -44,7 +43,7 @@ export function parseHdiutilMountPoints(plistText) {
   return out
 }
 
-function decodeXmlEntities(s) {
+function decodeXmlEntities(/** @type {any} */ s) {
   return s
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -53,7 +52,7 @@ function decodeXmlEntities(s) {
     .replace(/&amp;/g, '&')
 }
 
-export function safeReaddir(dir) {
+export function safeReaddir(/** @type {any} */ dir) {
   try {
     return readdirSync(dir)
   } catch {
@@ -66,7 +65,7 @@ export function safeReaddir(dir) {
  * Prefers an `SF Symbols*.app`; falls back to any loose `.app` so a renamed
  * future bundle still provisions.
  */
-export function findAppInVolumes(mountPoints) {
+export function findAppInVolumes(/** @type {any} */ mountPoints) {
   let fallback = null
   for (const mp of mountPoints) {
     for (const name of safeReaddir(mp)) {
@@ -81,7 +80,7 @@ export function findAppInVolumes(mountPoints) {
 }
 
 /** First `.pkg` installer found at a mounted volume root. */
-export function findPkgInVolumes(mountPoints) {
+export function findPkgInVolumes(/** @type {any} */ mountPoints) {
   for (const mp of mountPoints) {
     for (const name of safeReaddir(mp)) {
       if (name.toLowerCase().endsWith('.pkg')) return join(mp, name)
@@ -105,10 +104,13 @@ export function findPkgInVolumes(mountPoints) {
  * @returns {string | null}
  */
 export function findAppInTree(root, maxDepth = 8) {
+  /** @type {[string, number][]} */
   const queue = [[root, 0]]
   let fallback = null
   while (queue.length > 0) {
-    const [dir, depth] = queue.shift()
+    const item = queue.shift()
+    if (!item) break
+    const [dir, depth] = item
     let entries
     try {
       entries = readdirSync(dir, { withFileTypes: true })

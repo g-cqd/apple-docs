@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pure formatting / normalization helpers shared across the apple-fonts
  * and apple-symbols modules.
@@ -22,7 +21,7 @@ export function tempSuffix() {
   return randomBytes(8).toString('hex')
 }
 
-export function sanitizeFileName(value) {
+export function sanitizeFileName(/** @type {any} */ value) {
   return (
     String(value)
       .replace(/[^a-z0-9_.-]+/gi, '-')
@@ -30,25 +29,25 @@ export function sanitizeFileName(value) {
   )
 }
 
-export function clampInteger(value, min, max) {
+export function clampInteger(/** @type {any} */ value, /** @type {any} */ min, /** @type {any} */ max) {
   const parsed = Number.parseInt(value, 10)
   if (!Number.isFinite(parsed)) return min
   return Math.min(Math.max(parsed, min), max)
 }
 
-export function normalizeColor(value) {
+export function normalizeColor(/** @type {any} */ value) {
   const raw = String(value ?? '#000000').trim()
   return /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(raw) ? raw : '#000000'
 }
 
-export function normalizeBackground(value) {
+export function normalizeBackground(/** @type {any} */ value) {
   if (value == null) return null
   const raw = String(value).trim()
   if (!raw || raw === 'transparent' || raw === 'none') return null
   return /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(raw) ? raw : null
 }
 
-export function escapeXml(value) {
+export function escapeXml(/** @type {any} */ value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')

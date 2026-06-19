@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Font preview renderer.
  *
@@ -21,6 +20,7 @@ import { assertFontPathContained } from './safe-font-path.js'
 import { isLikelySfnt } from './sfnt.js'
 
 const ENGINE_ENV = 'APPLE_DOCS_FONT_RENDERER'
+/** @type {any} */
 let enginesCache // string[] | undefined
 
 /**
@@ -50,7 +50,7 @@ export function _resetFontTextEngines() {
   enginesCache = undefined
 }
 
-export async function renderFontText(opts, ctx) {
+export async function renderFontText(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const font = ctx.db.getAppleFontFile(opts.fontId)
   if (!font) throw new NotFoundError(opts.fontId, `Font file not found: ${opts.fontId}`)
   const text = String(opts.text ?? 'Typography')
@@ -63,7 +63,7 @@ export async function renderFontText(opts, ctx) {
   try {
     safeFontPath = assertFontPathContained(font.file_path, ctx.dataDir)
   } catch (error) {
-    ctx.logger?.warn?.(`renderFontText: refused unsafe path for ${font.id}: ${error.message}`)
+    ctx.logger?.warn?.(`renderFontText: refused unsafe path for ${font.id}: ${/** @type {any} */ (error).message}`)
     return {
       font,
       text,
@@ -91,7 +91,7 @@ export async function renderFontText(opts, ctx) {
               : await renderFontTextSvgCurves({ fontPath: safeFontPath, text, pointSize })
         if (content) break
       } catch (error) {
-        ctx.logger?.warn?.(`${engine} outline render failed for ${font.file_name}: ${error.message}`)
+        ctx.logger?.warn?.(`${engine} outline render failed for ${font.file_name}: ${/** @type {any} */ (error).message}`)
       }
     }
   }
@@ -107,7 +107,7 @@ export async function renderFontText(opts, ctx) {
   }
 }
 
-function renderFontTextSvgFallback({ fontFamily, text, pointSize }) {
+function renderFontTextSvgFallback(/** @type {any} */ { fontFamily, text, pointSize }) {
   const height = Math.ceil(pointSize * 1.6)
   const width = Math.max(240, Math.ceil(text.length * pointSize * 0.62))
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -124,7 +124,7 @@ function renderFontTextSvgFallback({ fontFamily, text, pointSize }) {
  * Linux containers reject non-ASCII arguments with "Invalid byte
  * sequence"), and a file can never be parsed as an option either.
  */
-async function renderFontTextSvgHarfBuzz({ fontPath, text, pointSize }) {
+async function renderFontTextSvgHarfBuzz(/** @type {any} */ { fontPath, text, pointSize }) {
   const stagingDir = mkdtempSync(join(tmpdir(), 'apple-docs-hb-text-'))
   const textPath = join(stagingDir, 'text.txt')
   await Bun.write(textPath, text)
@@ -148,7 +148,7 @@ async function renderFontTextSvgHarfBuzz({ fontPath, text, pointSize }) {
   }
 }
 
-async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
+async function renderFontTextSvgCurves(/** @type {any} */ { fontPath, text, pointSize }) {
   // Native in-process CoreText render first (RFC 0003 P3-darwin): same
   // Swift body, byte-identical output, no ~200 ms JIT spawn. null → the
   // dylib is absent / native off / non-darwin / produced nothing, so fall

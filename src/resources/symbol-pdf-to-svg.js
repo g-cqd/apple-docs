@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ParseError } from '../lib/errors.js'
 
 /**
@@ -46,6 +45,7 @@ export function symbolPdfToSvg(pdfBytes, opts = {}) {
   if (!page) throw new ParseError('symbol PDF: no /Type /Page object found')
   const resources = resolveDict(page.dict.Resources, objects)
   const extGState = resolveDict(resources?.ExtGState, objects) ?? {}
+  /** @type {Record<string, any>} */
   const alphaByName = {}
   for (const [name, ref] of Object.entries(extGState)) {
     const dict = resolveDict(ref, objects)

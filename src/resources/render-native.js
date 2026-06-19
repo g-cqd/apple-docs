@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Render dispatch (RFC 0003 P3-darwin phase 1): the in-process Swift
  * renderers (libAppleDocsCore ad_render_*) behind the `render`
@@ -20,6 +19,7 @@ import { NATIVE_STATUS_OK, readNativeResult } from '../native/result.js'
 
 const MODULE = 'render'
 const NULL_SENTINEL = 0xffffffff
+/** @type {'js'|'native'|null} */
 let forced = null // 'js' | 'native' | null
 let announced = false
 let logger
@@ -28,7 +28,7 @@ const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
 /** Test seam. */
-export function _forceImpl(impl) {
+export function _forceImpl(/** @type {any} */ impl) {
   forced = impl
   announced = false
 }
@@ -58,7 +58,7 @@ let scratch = new ArrayBuffer(8192)
 let scratchU8 = new Uint8Array(scratch)
 let scratchView = new DataView(scratch)
 
-function ensure(byteLength) {
+function ensure(/** @type {any} */ byteLength) {
   if (scratch.byteLength < byteLength) {
     let size = scratch.byteLength * 2
     while (size < byteLength) size *= 2
@@ -74,17 +74,17 @@ class Packer {
   constructor() {
     this.offset = 0
   }
-  u32(value) {
+  u32(/** @type {any} */ value) {
     ensure(this.offset + 4)
     scratchView.setUint32(this.offset, value, true)
     this.offset += 4
   }
-  f64(value) {
+  f64(/** @type {any} */ value) {
     ensure(this.offset + 8)
     scratchView.setFloat64(this.offset, value, true)
     this.offset += 8
   }
-  string(value) {
+  string(/** @type {any} */ value) {
     if (value === null || value === undefined) {
       this.u32(NULL_SENTINEL)
       return
@@ -100,8 +100,8 @@ class Packer {
   }
 }
 
-function callBytes(symbol, packer) {
-  const lib = nativeLib()
+function callBytes(/** @type {any} */ symbol, /** @type {any} */ packer) {
+  const lib = /** @type {any} */ (nativeLib())
   if (!lib?.symbols?.[symbol]) return null
   try {
     const { bytes, length } = packer.finish()
@@ -113,14 +113,14 @@ function callBytes(symbol, packer) {
   }
 }
 
-function callUtf8(symbol, packer) {
+function callUtf8(/** @type {any} */ symbol, /** @type {any} */ packer) {
   const bytes = callBytes(symbol, packer)
   return bytes === null ? null : decoder.decode(bytes)
 }
 
 /** Decode count × [u32 len][bytes] (sentinel = null entry) into subarrays
  * of the (JS-owned) result copy. */
-function decodeLenPrefixedBytes(result, count) {
+function decodeLenPrefixedBytes(/** @type {any} */ result, /** @type {any} */ count) {
   const view = new DataView(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength)
   const out = new Array(count)
   let offset = 0
@@ -137,8 +137,8 @@ function decodeLenPrefixedBytes(result, count) {
   return out
 }
 
-function callBatch(symbol, packer, count) {
-  const lib = nativeLib()
+function callBatch(/** @type {any} */ symbol, /** @type {any} */ packer, /** @type {any} */ count) {
+  const lib = /** @type {any} */ (nativeLib())
   if (!lib?.symbols?.[symbol]) return null
   try {
     const { bytes, length } = packer.finish()
@@ -155,7 +155,7 @@ function callBatch(symbol, packer, count) {
  * spawn path). darwin-only in the dylib; the JS caller's path-safety and
  * SFNT validation run BEFORE this.
  */
-export function nativeFontTextSvg({ fontPath, text, pointSize }) {
+export function nativeFontTextSvg(/** @type {any} */ { fontPath, text, pointSize }) {
   if (forced === 'js') return null
   if (typeof fontPath !== 'string' || typeof text !== 'string') return null
   const packer = new Packer()
@@ -173,7 +173,7 @@ export function nativeFontTextSvg({ fontPath, text, pointSize }) {
  * placeholder). Cross-platform; on darwin the engine chain prefers
  * CoreText, so this is exercised on Linux + by the parity gate.
  */
-export function nativeFontTextShaped({ fontPath, text, pointSize }) {
+export function nativeFontTextShaped(/** @type {any} */ { fontPath, text, pointSize }) {
   if (forced === 'js') return null
   if (typeof fontPath !== 'string' || typeof text !== 'string') return null
   const packer = new Packer()
@@ -189,7 +189,7 @@ export function nativeFontTextShaped({ fontPath, text, pointSize }) {
  * path). darwin-only (AppKit). D-0003-3: only engaged after the probe
  * confirms the in-process AppKit render is crash-free + byte-identical.
  */
-export function nativeSymbolPdf({ name, scope, weight = 'regular', scale = 'medium' }) {
+export function nativeSymbolPdf(/** @type {any} */ { name, scope, weight = 'regular', scale = 'medium' }) {
   if (forced === 'js') return null
   if (typeof name !== 'string' || typeof scope !== 'string') return null
   const packer = new Packer()
@@ -209,7 +209,7 @@ export function nativeSymbolPdf({ name, scope, weight = 'regular', scale = 'medi
  * (native off / dylib absent / non-darwin / call failed → worker pool).
  * One FFI call fans out across cores inside the dylib.
  */
-export function nativeSymbolPdfBatch(items) {
+export function nativeSymbolPdfBatch(/** @type {any} */ items) {
   if (forced === 'js') return null
   if (!Array.isArray(items) || items.length === 0) return null
   const packer = new Packer()
@@ -231,7 +231,7 @@ export function nativeSymbolPdfBatch(items) {
  * argv exactly so the bytes match: color/background are nullable hex (null
  * → labelColor / no background). D-0003-3 Probe B gates the wiring.
  */
-export function nativeSymbolPng({ name, scope, pointSize, color, background, weight = 'regular', scale = 'medium' }) {
+export function nativeSymbolPng(/** @type {any} */ { name, scope, pointSize, color, background, weight = 'regular', scale = 'medium' }) {
   if (forced === 'js') return null
   if (typeof name !== 'string' || typeof scope !== 'string') return null
   const packer = new Packer()

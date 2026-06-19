@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ParseError } from '../../lib/errors.js'
 /**
  * SFNT `cmap` table parser — codepoint → glyph-index map.
@@ -39,7 +38,7 @@ export function parseCmap(cmapTable) {
   }
   // Preference order: Unicode full repertoire (0,4 / 0,6); Windows UCS-4 (3,10);
   // Unicode 2.0 BMP (0,3); Windows UCS-2 (3,1). SF-Pro.ttf ships format 12.
-  const priority = (c) => {
+  const priority = (/** @type {any} */ c) => {
     if (c.platformID === 0 && c.encodingID === 4) return 0
     if (c.platformID === 0 && c.encodingID === 6) return 1
     if (c.platformID === 3 && c.encodingID === 10) return 2
@@ -55,14 +54,14 @@ export function parseCmap(cmapTable) {
   throw new ParseError('no usable cmap subtable (formats 4/12) found')
 }
 
-function tryParseCmapSubtable(cmapTable, view, offset) {
+function tryParseCmapSubtable(/** @type {any} */ cmapTable, /** @type {any} */ view, /** @type {any} */ offset) {
   const format = view.getUint16(offset, false)
   if (format === 4) return parseCmapFormat4(cmapTable, offset)
   if (format === 12) return parseCmapFormat12(view, offset)
   return null
 }
 
-function parseCmapFormat4(cmapTable, offset) {
+function parseCmapFormat4(/** @type {any} */ cmapTable, /** @type {any} */ offset) {
   const view = new DataView(cmapTable.buffer, cmapTable.byteOffset, cmapTable.byteLength)
   const length = view.getUint16(offset + 2, false)
   const segCountX2 = view.getUint16(offset + 6, false)
@@ -99,7 +98,7 @@ function parseCmapFormat4(cmapTable, offset) {
   return map
 }
 
-function parseCmapFormat12(view, offset) {
+function parseCmapFormat12(/** @type {any} */ view, /** @type {any} */ offset) {
   // format 12: uint16 format, uint16 reserved, uint32 length, uint32 language,
   //            uint32 numGroups, then numGroups × (uint32 startChar, uint32 endChar, uint32 startGlyph)
   const numGroups = view.getUint32(offset + 12, false)

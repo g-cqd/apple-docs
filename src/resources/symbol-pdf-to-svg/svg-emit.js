@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ParseError } from '../../lib/errors.js'
 // Compose the parsed PDF fills into an SVG that mirrors Apple's
 // destination-out compositing. Visible (alpha>0) fills paint normally;
@@ -6,7 +5,7 @@ import { ParseError } from '../../lib/errors.js'
 // so the cut geometry removes pixels from earlier layers (and only those
 // — subsequent layers escape the cut and become subject to any later one).
 
-export function assembleSvg(fills, opts) {
+export function assembleSvg(/** @type {any} */ fills, /** @type {any} */ opts) {
   const { name = '', pointSize = 128, color = 'currentColor', background = null } = opts
 
   // Compute the global bbox across every fill so we can normalise to a
@@ -33,8 +32,8 @@ export function assembleSvg(fills, opts) {
   if (!Number.isFinite(minX)) throw new ParseError('symbol PDF: empty geometry')
   const span = Math.max(maxX - minX, maxY - minY) || 1
   const pad = span * 0.06
-  const flipY = (y) => maxY - y + pad
-  const flipX = (x) => x - minX + pad
+  const flipY = (/** @type {any} */ y) => maxY - y + pad
+  const flipX = (/** @type {any} */ x) => x - minX + pad
   const vbW = maxX - minX + pad * 2
   const vbH = maxY - minY + pad * 2
 
@@ -63,11 +62,12 @@ export function assembleSvg(fills, opts) {
   // prerendered SVG is byte-reproducible run-to-run — distinct symbols
   // still get distinct prefixes (same collision resistance as the old
   // 6-char random base, now deterministic).
-  const ds = fills.map((fill) => subpathsToD(fill.subpaths, flipX, flipY))
+  const ds = fills.map((/** @type {any} */ fill) => subpathsToD(fill.subpaths, flipX, flipY))
   const idBase = `c${fnv1a(`${name}|${vbW}x${vbH}|${ds.join('|')}`)}`
   let defs = ''
+  /** @type {any[]} */
   let nodes = []
-  fills.forEach((fill, idx) => {
+  fills.forEach((/** @type {any} */ fill, /** @type {any} */ idx) => {
     if (fill.alpha > 0) {
       const ruleAttr = fillRuleAttr(fill.fillRule)
       nodes.push(`<path d="${ds[idx]}" fill="${fillColor}"${ruleAttr}/>`)
@@ -92,7 +92,7 @@ export function assembleSvg(fills, opts) {
 <svg xmlns="http://www.w3.org/2000/svg" width="${pointSize}" height="${pointSize}" viewBox="${viewBox}" role="img" aria-label="${escapedName}">${defsBlock}${bgRect}${body}</svg>`
 }
 
-function subpathsToD(subpaths, flipX, flipY) {
+function subpathsToD(/** @type {any} */ subpaths, /** @type {any} */ flipX, /** @type {any} */ flipY) {
   const parts = []
   for (const sub of subpaths) {
     for (const cmd of sub.commands) {
@@ -111,7 +111,7 @@ function subpathsToD(subpaths, flipX, flipY) {
   return parts.join(' ')
 }
 
-function fnv1a(str) {
+function fnv1a(/** @type {any} */ str) {
   let h = 0x811c9dc5
   for (let i = 0; i < str.length; i++) {
     h ^= str.charCodeAt(i)
@@ -120,7 +120,7 @@ function fnv1a(str) {
   return (h >>> 0).toString(36)
 }
 
-function formatNumber(n) {
+function formatNumber(/** @type {any} */ n) {
   if (!Number.isFinite(n)) return '0'
   // 3-decimal precision is enough for sub-device-pixel accuracy at 2048pt
   // viewBox sizes; trim trailing zeros so the SVG stays compact.
@@ -128,10 +128,13 @@ function formatNumber(n) {
   return s.replace(/\.?0+$/, '') || '0'
 }
 
-function fillRuleAttr(fillRule) {
+function fillRuleAttr(/** @type {any} */ fillRule) {
   return fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''
 }
 
-function escapeXml(value) {
-  return String(value).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c])
+function escapeXml(/** @type {any} */ value) {
+  return String(value).replace(
+    /[<>&"']/g,
+    (c) => /** @type {Record<string, string>} */ ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c] ?? c,
+  )
 }
