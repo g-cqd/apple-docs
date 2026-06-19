@@ -108,3 +108,101 @@ func isASCIIWhitespace(_ scalar: Unicode.Scalar) -> Bool {
     default: return false
     }
 }
+
+// MARK: - browse
+
+/// JS template-literal coercion of an optional string: `${x}` renders a null as
+/// the literal text `"null"`. Used where the JS formatter interpolates a
+/// possibly-null value directly (e.g. `bold(result.title)` with a null title)
+/// rather than via `?? path`.
+private func jsString(_ value: String?) -> String {
+    value ?? "null"
+}
+
+/// The three browse result shapes (one is produced per invocation). Mirrors the
+/// JS result object whose present keys select the formatter branch.
+enum BrowseResult {
+    /// `--path` variant: the page's children grouped by section.
+    case children(framework: String, path: String, title: String?, children: [BrowseChildEntry])
+    /// wwdc default variant: session counts per year.
+    case groups(framework: String, slug: String, kind: String, groups: [BrowseGroupEntry], total: Int)
+    /// default / wwdc+year / wwdc+limit variant: a page listing.
+    case pages(
+        framework: String, slug: String, kind: String, year: Int?, pages: [BrowsePageEntry], total: Int,
+        limited: Bool)
+}
+
+/// A child row of the `--path` variant (`{ path, title, section }`).
+struct BrowseChildEntry {
+    let path: String
+    let title: String?
+    let section: String?
+}
+
+/// A year bucket of the wwdc groups variant (`{ year, count }`).
+struct BrowseGroupEntry {
+    let year: Int
+    let count: Int
+}
+
+/// A page row of the listing variant (`{ path, title, kind, abstract }`).
+struct BrowsePageEntry {
+    let path: String
+    let title: String?
+    let kind: String?
+    let abstract: String?
+}
+
+/// Port of JS `formatBrowse`. Each branch's header element carries a literal
+/// trailing `\n` (so `join('\n')` yields a blank line after it). No trailing
+/// trim — the joined string is returned as-is to match the oracle byte-for-byte.
+func formatBrowse(_ result: BrowseResult) -> String {
+    switch result {
+    case let .children(_, path, title, children):
+        // `bold(result.title)` with a null title → JS interpolates "null".
+        var lines = ["\(bold(jsString(title))) \(dim(path))\n"]
+        // Group by `section ?? 'other'` in first-seen order (Object.entries order).
+        var order: [String] = []
+        var bySection: [String: [BrowseChildEntry]] = [:]
+        for child in children {
+            let key = child.section ?? "other"
+            if bySection[key] == nil {
+                bySection[key] = []
+                order.append(key)
+            }
+            bySection[key]?.append(child)
+        }
+        for section in order {
+            lines.append(bold(section))
+            for child in bySection[section] ?? [] {
+                lines.append("  \(child.title ?? child.path)")
+            }
+            lines.append("")
+        }
+        return lines.joined(separator: "\n")
+
+    case let .groups(framework, slug, kind, groups, total):
+        var lines = ["\(bold(framework)) \(dim("(\(slug), \(kind))"))\n"]
+        for group in groups {
+            // TWO spaces between the bold year and the dim count.
+            lines.append("  \(bold(String(group.year)))  \(dim("\(group.count) sessions"))")
+        }
+        lines.append("\n\(total) sessions across \(groups.count) years")
+        lines.append(dim("Use `browse \(slug) --year <year>` to list one year."))
+        return lines.joined(separator: "\n")
+
+    case let .pages(framework, slug, kind, year, pages, total, _):
+        // `result.year ? (slug, year) : (slug, kind)` — WWDC years are 4-digit so truthy.
+        let scope = year != nil ? "\(slug), \(year!)" : "\(slug), \(kind)"
+        var lines = ["\(bold(framework)) \(dim("(\(scope))"))\n"]
+        for page in pages.prefix(50) {
+            let kindSuffix = page.kind.map { dim(" [\($0)]") } ?? ""
+            lines.append("  \(page.title ?? page.path)\(kindSuffix)")
+        }
+        if total > 50 {
+            lines.append(dim("  ... and \(total - 50) more"))
+        }
+        lines.append("\n\(total) pages")
+        return lines.joined(separator: "\n")
+    }
+}

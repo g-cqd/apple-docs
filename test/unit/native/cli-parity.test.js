@@ -12,10 +12,15 @@
 // suite stays green on a bare checkout. Point it explicitly with AD_CLI_BIN +
 // AD_PARITY_HOME.
 
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+
+// Each case spawns a real Bun cli.js (and sometimes a nested ad-cli) against the
+// full ~2.6 GB corpus; a cold broad `kinds` (5 GROUP BYs) or an unbounded browse
+// can take ~10 s, well past bun's 5 s default. Give the whole suite room.
+setDefaultTimeout(30_000)
 
 const ROOT = new URL('../../../', import.meta.url).pathname
 const dec = new TextDecoder()
@@ -75,6 +80,8 @@ const HUMAN_CASES = [
   ['kinds', ['--field', 'role']],
   ['kinds', ['--field', 'docKind']], // kind-alias
   ['kinds', ['--field', 'bogus']], // unknown field ⇒ broad shape on both sides
+  ['browse', ['swiftui', '--limit', '5']], // browse pages variant, bounded so --json fits Bun.spawnSync's stdout buffer
+  ['browse', ['wwdc']], // browse wwdc groups variant
 ]
 
 const JSON_CASES = HUMAN_CASES.map(([verb, flags]) => /** @type {[string, string[]]} */ ([verb, [...flags, '--json']]))
@@ -116,4 +123,67 @@ d('CLI flip wiring: cli.js (APPLE_DOCS_NATIVE=cli) == cli.js (Bun oracle)', () =
       expect(runFlip(args)).toBe(runJs(args))
     })
   }
+})
+
+/** @type {Array<[string, string[]]>} */
+const BROWSE_ERROR_CASES = [
+  ['unknown framework', ['browse', '__nonexistent__']],
+  ['year on a non-wwdc root', ['browse', 'swiftui', '--year', '2024']],
+]
+
+d('browse errors: ad-cli == cli.js (empty stdout + exit 1)', () => {
+  for (const [label, args] of BROWSE_ERROR_CASES) {
+    test(label, () => {
+      const js = Bun.spawnSync(['bun', join(ROOT, 'cli.js'), ...args, '--home', /** @type {string} */ (dataDir)], {
+        env: { ...process.env, APPLE_DOCS_NATIVE: 'off' },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+      const nat = Bun.spawnSync([/** @type {string} */ (adCli), ...args, '--db', dbPath], { stdout: 'pipe', stderr: 'pipe' })
+      expect(dec.decode(js.stdout)).toBe('')
+      expect(dec.decode(nat.stdout)).toBe('')
+      expect(js.exitCode).toBe(1)
+      expect(nat.exitCode).toBe(1)
+    })
+  }
+})
+
+// The children (--path) and wwdc-year variants need a real path/year from the
+// corpus; discover one from the Bun oracle, then assert both sides agree. Skips
+// (returns) gracefully if the corpus lacks swiftui pages / wwdc groups.
+d('browse dynamic variants (discovered path/year)', () => {
+  test('children variant via a discovered page path', () => {
+    let path
+    try {
+      path = JSON.parse(runJs(['browse', 'swiftui', '--limit', '1', '--json'])).pages?.[0]?.path
+    } catch {
+      return
+    }
+    if (typeof path !== 'string') return
+    const args = ['browse', 'swiftui', '--path', path]
+    expect(runNative(args)).toBe(runJs(args))
+    expect(runNative([...args, '--json'])).toBe(runJs([...args, '--json']))
+  })
+  test('wwdc year variant via a discovered year', () => {
+    let year
+    try {
+      year = JSON.parse(runJs(['browse', 'wwdc', '--json'])).groups?.[0]?.year
+    } catch {
+      return
+    }
+    if (typeof year !== 'number') return
+    const args = ['browse', 'wwdc', '--year', String(year)]
+    expect(runNative(args)).toBe(runJs(args))
+    expect(runNative([...args, '--json'])).toBe(runJs([...args, '--json']))
+  })
+})
+
+// The default (unbounded) browse — human only. The formatter caps the listing at
+// 50 rows + a "... and N more" footer, so the human output stays small; the --json
+// variant would be megabytes and overflow Bun.spawnSync's stdout buffer (the
+// JSON cases above are deliberately bounded), so it isn't asserted here.
+d('browse default unbounded (human, capped display)', () => {
+  test('browse swiftui', () => {
+    expect(runNative(['browse', 'swiftui'])).toBe(runJs(['browse', 'swiftui']))
+  })
 })

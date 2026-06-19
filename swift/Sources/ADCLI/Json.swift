@@ -6,9 +6,14 @@
 
 /// An ordered JSON value. `obj` preserves declared key order (the projection
 /// pins it), which matters for byte parity with the JS object-literal order.
+/// `null`/`bool` exist because `pick` copies JSON `null` values through (a nil
+/// optional field is emitted as `null`, not omitted) and the read/search verbs
+/// carry boolean fields (e.g. `limited`).
 enum J {
     case s(String)
     case i(Int64)
+    case bool(Bool)
+    case null
     case arr([J])
     case obj([(String, J)])
 }
@@ -20,6 +25,10 @@ func stringifyPretty(_ v: J, _ level: Int = 0) -> String {
         return encodeJSONString(string)
     case let .i(int):
         return String(int)
+    case let .bool(flag):
+        return flag ? "true" : "false"
+    case .null:
+        return "null"
     case let .arr(items):
         if items.isEmpty { return "[]" }
         let inner = String(repeating: " ", count: (level + 1) * 2)
