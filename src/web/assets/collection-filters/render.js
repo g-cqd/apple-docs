@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Collection-filter DOM rendering. The controller composes these into
 // the page; each function takes only what it needs (no module-level
 // state).
@@ -10,7 +9,7 @@ import { escapeHtml, slugify } from './state.js'
  * search input, the sort dropdown, the "hide deprecated" toggle. Returns
  * the elements so the controller can wire events onto them.
  */
-export function buildControls(sortedKinds) {
+export function buildControls(/** @type {any} */ sortedKinds) {
   const searchInput = document.createElement('input')
   searchInput.type = 'search'
   searchInput.className = 'framework-search'
@@ -72,7 +71,7 @@ export function buildControls(sortedKinds) {
   return { searchInput, sortSelect, deprecatedCb, bar, allBtn, inlineRow }
 }
 
-export function insertControls({ controls, controlsHost }) {
+export function insertControls(/** @type {any} */ { controls, controlsHost }) {
   const { searchInput, inlineRow, bar } = controls
   if (controlsHost) {
     controlsHost.appendChild(searchInput)
@@ -80,7 +79,7 @@ export function insertControls({ controls, controlsHost }) {
     controlsHost.appendChild(bar)
     return
   }
-  const firstGroup = document.querySelector('.framework-group, .role-group')
+  const firstGroup = /** @type {any} */ (document.querySelector('.framework-group, .role-group'))
   if (firstGroup?.parentNode) {
     firstGroup.parentNode.insertBefore(bar, firstGroup)
     firstGroup.parentNode.insertBefore(inlineRow, bar)
@@ -99,9 +98,9 @@ export function insertControls({ controls, controlsHost }) {
  *        kind-sort so we can restore the canonical layout.
  */
 export function applySort(state, originalListHtml) {
-  const container = document.getElementById('list-container')
+  const container = /** @type {any} */ (document.getElementById('list-container'))
   if (!container) return
-  const sections = [...container.querySelectorAll('.framework-group, .role-group')]
+  const sections = /** @type {any} */ ([...container.querySelectorAll('.framework-group, .role-group')])
   if (sections.length === 0) return
 
   if (state.currentSort === 'kind') {
@@ -131,9 +130,9 @@ export function applySort(state, originalListHtml) {
       section.appendChild(heading)
       const ul = document.createElement('ul')
       ul.className = 'doc-list'
-      lis.sort((a, b) => {
-        const aText = (a.querySelector('a')?.textContent ?? '').toLowerCase()
-        const bText = (b.querySelector('a')?.textContent ?? '').toLowerCase()
+      lis.sort((/** @type {any} */ a, /** @type {any} */ b) => {
+        const aText = /** @type {any} */ ((a.querySelector('a')?.textContent ?? '').toLowerCase())
+        const bText = /** @type {any} */ ((b.querySelector('a')?.textContent ?? '').toLowerCase())
         return aText.localeCompare(bText)
       })
       for (const li of lis) ul.appendChild(li)
@@ -146,9 +145,9 @@ export function applySort(state, originalListHtml) {
 }
 
 /** Apply kind/search/deprecated filters to the currently-rendered list. */
-export function applyFilters(state) {
+export function applyFilters(/** @type {any} */ state) {
   const showAllKinds = state.activeFilters.size === 0
-  const items = document.querySelectorAll('.role-group li[data-filter-kind], .framework-group li[data-filter-kind]')
+  const items = /** @type {any} */ (document.querySelectorAll('.role-group li[data-filter-kind], .framework-group li[data-filter-kind]'))
   for (const el of items) {
     const kind = el.getAttribute('data-filter-kind')
     const isDeprecated = el.getAttribute('data-deprecated') === 'true'
@@ -159,15 +158,15 @@ export function applyFilters(state) {
     if (visible && state.searchQuery && !text.includes(state.searchQuery)) visible = false
     el.hidden = !visible
   }
-  for (const section of document.querySelectorAll('.framework-group, .role-group')) {
-    const visibleItems = section.querySelectorAll('li:not([hidden])')
+  for (const section of /** @type {any} */ (document.querySelectorAll('.framework-group, .role-group'))) {
+    const visibleItems = /** @type {any} */ (section.querySelectorAll('li:not([hidden])'))
     section.hidden = visibleItems.length === 0
   }
 }
 
 /** Sync the page-TOC links to the currently visible group sections. */
 export function syncToc() {
-  const container = document.getElementById('list-container')
+  const container = /** @type {any} */ (document.getElementById('list-container'))
   if (!container) return
   const sections = [...container.children]
     .filter((el) => (el.classList.contains('framework-group') || el.classList.contains('role-group')) && !el.hidden && el.id)
@@ -178,8 +177,8 @@ export function syncToc() {
 
   const tocHtml = `<ul>${sections.map((section) => `<li><a href="#${escapeHtml(section.id)}">${escapeHtml(section.label)}</a></li>`).join('')}</ul>`
 
-  for (const toc of document.querySelectorAll('.page-toc')) {
-    const mobileDetails = toc.closest('.page-toc-mobile')
+  for (const toc of /** @type {any} */ (document.querySelectorAll('.page-toc'))) {
+    const mobileDetails = /** @type {any} */ (toc.closest('.page-toc-mobile'))
     toc.hidden = sections.length < 2
     toc.innerHTML = tocHtml
     if (mobileDetails) mobileDetails.hidden = sections.length < 2
@@ -187,12 +186,12 @@ export function syncToc() {
 
   // Hide the TOC sidebar block if it's the only block left and there's
   // not enough to show.
-  const sidebar = document.querySelector('.doc-sidebar')
-  const mainContent = document.querySelector('.main-content')
+  const sidebar = /** @type {any} */ (document.querySelector('.doc-sidebar'))
+  const mainContent = /** @type {any} */ (document.querySelector('.main-content'))
   if (sidebar) {
-    const tocBlock = sidebar.querySelector('.sidebar-block:has(> .page-toc)')
+    const tocBlock = /** @type {any} */ (sidebar.querySelector('.sidebar-block:has(> .page-toc)'))
     if (tocBlock) tocBlock.hidden = sections.length < 2
-    const visibleBlocks = Array.from(sidebar.querySelectorAll(':scope > .sidebar-block')).filter((el) => !el.hidden)
+    const visibleBlocks = /** @type {any} */ (Array.from(sidebar.querySelectorAll(':scope > .sidebar-block')).filter((el) => !el.hidden))
     const hasSidebarVisible = visibleBlocks.length > 0
     sidebar.hidden = !hasSidebarVisible
     if (mainContent) mainContent.classList.toggle('has-sidebar', hasSidebarVisible)

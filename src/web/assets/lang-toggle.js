@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Language toggle controller for the doc page declaration block.
 //
 // Served as a standalone `<script src="/assets/lang-toggle.js">`, so it
@@ -14,7 +13,7 @@ function readStored() {
   }
 }
 
-function persist(lang) {
+function persist(/** @type {any} */ lang) {
   try {
     localStorage.setItem(STORAGE_KEY, lang)
   } catch {
@@ -22,7 +21,7 @@ function persist(lang) {
   }
 }
 
-function activate(lang, buttons, variants) {
+function activate(/** @type {any} */ lang, /** @type {any} */ buttons, /** @type {any} */ variants) {
   for (const btn of buttons) {
     const isActive = btn.dataset.lang === lang
     btn.classList.toggle('active', isActive)
@@ -35,15 +34,15 @@ function activate(lang, buttons, variants) {
 }
 
 function init() {
-  const toggle = document.querySelector('.lang-toggle')
+  const toggle = /** @type {any} */ (document.querySelector('.lang-toggle'))
   if (!toggle) return
 
-  const buttons = toggle.querySelectorAll('.lang-btn')
-  const variants = document.querySelectorAll('.decl-variant[data-lang]')
+  const buttons = /** @type {any} */ (toggle.querySelectorAll('.lang-btn'))
+  const variants = /** @type {any} */ (document.querySelectorAll('.decl-variant[data-lang]'))
   if (variants.length === 0) return
 
   // Collect available languages from the declaration section.
-  const declSection = document.querySelector('[data-languages]')
+  const declSection = /** @type {any} */ (document.querySelector('[data-languages]'))
   const available = new Set(declSection?.dataset.languages?.split(',') ?? [])
 
   // Restore preference, or fall back to the first available language (e.g. ObjC-only docs).
@@ -52,8 +51,8 @@ function init() {
   const initial = stored && available.has(stored) ? stored : fallback
   activate(initial, buttons, variants)
 
-  toggle.addEventListener('click', (e) => {
-    const btn = e.target.closest('.lang-btn')
+  toggle.addEventListener('click', (/** @type {any} */ e) => {
+    const btn = /** @type {any} */ (e.target.closest('.lang-btn'))
     if (!btn || btn.classList.contains('active')) return
     activate(btn.dataset.lang, buttons, variants)
   })

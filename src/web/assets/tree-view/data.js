@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Tree-view data loader. The framework page emits the hierarchical
 // JSON in one of two places:
 //   1. Inline `<script type="application/json" id="tree-data">` — the
@@ -12,7 +11,7 @@
 // receive the same parsed payload.
 
 export function readInlineTreeData() {
-  const dataEl = document.getElementById('tree-data')
+  const dataEl = /** @type {any} */ (document.getElementById('tree-data'))
   if (!dataEl) return null
   try {
     return JSON.parse(dataEl.textContent || dataEl.innerText)
@@ -21,12 +20,14 @@ export function readInlineTreeData() {
   }
 }
 
-export function hasTreeData(treeContainer) {
+export function hasTreeData(/** @type {any} */ treeContainer) {
   return readInlineTreeData() !== null || !!treeContainer.getAttribute('data-tree-src')
 }
 
-export function createTreeDataLoader(treeContainer) {
+export function createTreeDataLoader(/** @type {any} */ treeContainer) {
+  /** @type {any} */
   let cached = null
+  /** @type {any} */
   let inFlight = null
 
   function fetchExternal() {

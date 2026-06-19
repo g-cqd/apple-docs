@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Fonts page — Google-Fonts-style global tester.
 //
 // Sample text · size · weight · italic are SINGLE controls at the top
@@ -21,6 +20,7 @@ import { fontFaceName } from '../lib/font-faces.js'
 
 function init() {
   const VARIANT_ORDER = ['Display', 'Text', 'Rounded', 'ExtraLarge', 'Large', 'Medium', 'Small', '__default__']
+  /** @type {Record<string, number>} */
   const WEIGHT_NUMERIC = {
     Ultralight: 100,
     Thin: 200,
@@ -33,7 +33,7 @@ function init() {
     Black: 900,
   }
 
-  const dataNode = document.getElementById('fonts-data')
+  const dataNode = /** @type {any} */ (document.getElementById('fonts-data'))
   if (!dataNode) return
   let families
   try {
@@ -43,17 +43,17 @@ function init() {
   }
   if (!families.length) return
 
-  const sampleEl = document.getElementById('fonts-sample')
-  const sizeEl = document.getElementById('fonts-size')
-  const sizeValueEl = document.getElementById('fonts-size-value')
-  const weightEl = document.getElementById('fonts-weight')
-  const weightValueEl = document.getElementById('fonts-weight-value')
-  const italicEl = document.getElementById('fonts-italic')
-  const styleEl = document.getElementById('fonts-style')
-  const grid = document.getElementById('font-family-grid')
-  const bottomCta = document.getElementById('fonts-bottom-bar-cta')
-  const bottomAll = document.getElementById('fonts-bottom-bar-all')
-  const root = document.querySelector('.fonts-page') || document.body
+  const sampleEl = /** @type {any} */ (document.getElementById('fonts-sample'))
+  const sizeEl = /** @type {any} */ (document.getElementById('fonts-size'))
+  const sizeValueEl = /** @type {any} */ (document.getElementById('fonts-size-value'))
+  const weightEl = /** @type {any} */ (document.getElementById('fonts-weight'))
+  const weightValueEl = /** @type {any} */ (document.getElementById('fonts-weight-value'))
+  const italicEl = /** @type {any} */ (document.getElementById('fonts-italic'))
+  const styleEl = /** @type {any} */ (document.getElementById('fonts-style'))
+  const grid = /** @type {any} */ (document.getElementById('font-family-grid'))
+  const bottomCta = /** @type {any} */ (document.getElementById('fonts-bottom-bar-cta'))
+  const bottomAll = /** @type {any} */ (document.getElementById('fonts-bottom-bar-all'))
+  const root = /** @type {any} */ (document.querySelector('.fonts-page') || document.body)
 
   // Single global state. Family previews react via `applyGlobals()`.
   const globals = {
@@ -75,13 +75,14 @@ function init() {
   //    The variant container (`[data-variants]`) stays in the DOM but
   //    empty — kept for layout slot symmetry, removed from a11y tree.
   // ---------------------------------------------------------------------
+  /** @type {any[]} */
   const cardStates = []
   document.querySelectorAll('.font-family').forEach((card) => {
     const familyId = card.getAttribute('data-family-id')
-    const family = families.find((f) => f.id === familyId)
+    const family = families.find((/** @type {any} */ f) => f.id === familyId)
     if (!family) return
-    const variantsEl = card.querySelector('[data-variants]')
-    const previewEl = card.querySelector('[data-preview]')
+    const variantsEl = /** @type {any} */ (card.querySelector('[data-variants]'))
+    const previewEl = /** @type {any} */ (card.querySelector('[data-preview]'))
     if (variantsEl) {
       variantsEl.replaceChildren()
       variantsEl.hidden = true
@@ -137,7 +138,7 @@ function init() {
   function applySample() {
     const text = sampleEl?.value || 'Reading Apple docs in good type.'
     root.style.setProperty('--sample-text', JSON.stringify(text))
-    document.querySelectorAll('.font-preview-line').forEach((line) => {
+    document.querySelectorAll('.font-preview-line').forEach((/** @type {any} */ line) => {
       if (line.dataset.overridden === 'true') return
       line.textContent = text
     })
@@ -147,7 +148,7 @@ function init() {
     const size = Number.parseInt(sizeEl?.value, 10) || 48
     if (sizeValueEl) sizeValueEl.textContent = String(size)
     root.style.setProperty('--sample-size', `${size}px`)
-    document.querySelectorAll('.font-preview-line').forEach((line) => {
+    document.querySelectorAll('.font-preview-line').forEach((/** @type {any} */ line) => {
       line.style.fontSize = `${size}px`
     })
   }
@@ -180,8 +181,9 @@ function init() {
   // Mark per-row overrides so applySample skips them on subsequent
   // typing in the global input.
   document.addEventListener('input', (e) => {
-    if (e.target.classList?.contains('font-preview-line')) {
-      e.target.dataset.overridden = 'true'
+    const t = /** @type {any} */ (e.target)
+    if (t.classList?.contains('font-preview-line')) {
+      t.dataset.overridden = 'true'
     }
   })
 
@@ -192,7 +194,7 @@ function init() {
   //    New York and SF-Mono, so the filter was a single-bit selector.)
   // ---------------------------------------------------------------------
   if (bottomAll) {
-    bottomAll.addEventListener('click', (e) => {
+    bottomAll.addEventListener('click', (/** @type {any} */ e) => {
       e.preventDefault()
       grid?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -201,7 +203,7 @@ function init() {
   // family card. Lightweight contextual primary action.
   if (bottomCta) {
     document.addEventListener('click', (e) => {
-      const card = e.target.closest('.font-family')
+      const card = /** @type {any} */ (/** @type {any} */ (e.target).closest('.font-family'))
       if (!card) return
       const familyId = card.getAttribute('data-family-id')
       bottomCta.hidden = false
@@ -213,7 +215,7 @@ function init() {
   // ---------------------------------------------------------------------
   // helpers
   // ---------------------------------------------------------------------
-  function groupByVariant(files) {
+  function groupByVariant(/** @type {any} */ files) {
     const groups = new Map()
     for (const file of files) {
       const key = file.variant ?? '__default__'
@@ -235,7 +237,7 @@ function init() {
   //   3. Static files: pick the file whose weight is nearest to the
   //      requested numeric weight, preferring italic when the toggle
   //      is on (fall back to upright if no italic ships).
-  function pickFileForGlobals(_family, groups, state) {
+  function pickFileForGlobals(/** @type {any} */ _family, /** @type {any} */ groups, /** @type {any} */ state) {
     const autoPriority = ['Text', '__default__', 'Display', 'Rounded', 'Large', 'Medium', 'Small', 'ExtraLarge']
     let variant
     if (state.style && state.style !== 'auto' && groups.has(state.style)) {
@@ -246,12 +248,12 @@ function init() {
     const files = variant ? groups.get(variant) : []
     if (files.length === 0) return null
 
-    const variable = files.find((f) => f.is_variable)
+    const variable = files.find((/** @type {any} */ f) => f.is_variable)
     if (variable) return variable
 
     const target = state.weight
     const wantItalic = state.italic
-    const candidates = files.filter((f) => (f.italic ?? false) === wantItalic)
+    const candidates = files.filter((/** @type {any} */ f) => (f.italic ?? false) === wantItalic)
     const pool = candidates.length ? candidates : files
     let best = pool[0]
     let bestDelta = Number.POSITIVE_INFINITY

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Chunked progressive grid renderer for the SF Symbols page.
 //
 // Mounting all ~10k tiles up-front makes the DOM and the initial layout
@@ -10,18 +9,18 @@
 const DEFAULT_CHUNK_SIZE = 480
 
 /**
- * @param {HTMLElement} grid       The grid container that holds the tiles.
- * @param {HTMLElement} scroller   The scrollable parent (root for IntersectionObserver).
- * @param {(symbol: object, tile: HTMLElement) => void} onTileClick
- * @param {{ chunkSize?: number }} [opts]
+ * @param {{ grid: any, scroller: any, onTileClick: any, chunkSize?: number }} opts
  */
 export function createGridRenderer({ grid, scroller, onTileClick, chunkSize = DEFAULT_CHUNK_SIZE }) {
+  /** @type {any[]} */
   let filtered = []
   let renderedCount = 0
+  /** @type {any} */
   let endSentinel = null
+  /** @type {any} */
   let chunkObserver = null
 
-  function buildTile(symbol) {
+  function buildTile(/** @type {any} */ symbol) {
     const tile = document.createElement('button')
     tile.type = 'button'
     tile.className = 'symbol-tile'
@@ -72,7 +71,7 @@ export function createGridRenderer({ grid, scroller, onTileClick, chunkSize = DE
     })
   }
 
-  function render(nextFiltered) {
+  function render(/** @type {any} */ nextFiltered) {
     filtered = nextFiltered
     if (chunkObserver) {
       chunkObserver.disconnect()

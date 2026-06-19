@@ -1,16 +1,15 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Bun.build's `format: 'iife'` adds the outer scope shield in the
 // minified output, so the source-level IIFE was redundant — `init()`
 // is called explicitly by the bundle entry. Early-return bails
 // (`if (!form) return`) stay intact because the body still lives
 // inside a function.
 function init() {
-  const form = document.getElementById('search-form')
-  const queryInput = document.getElementById('search-q')
-  const statusEl = document.getElementById('search-status')
-  const resultsEl = document.getElementById('search-results')
-  const loadMoreBtn = document.getElementById('search-load-more')
-  const submitBtn = form?.querySelector('button[type="submit"]')
+  const form = /** @type {any} */ (document.getElementById('search-form'))
+  const queryInput = /** @type {any} */ (document.getElementById('search-q'))
+  const statusEl = /** @type {any} */ (document.getElementById('search-status'))
+  const resultsEl = /** @type {any} */ (document.getElementById('search-results'))
+  const loadMoreBtn = /** @type {any} */ (document.getElementById('search-load-more'))
+  const submitBtn = /** @type {any} */ (form?.querySelector('button[type="submit"]'))
   if (!form || !queryInput || !resultsEl) return
 
   const LIMIT = 50
@@ -20,9 +19,10 @@ function init() {
   let currentTotal = 0
   let currentResultCount = 0
   let searchSeqId = 0
+  /** @type {any} */
   let abortController = null
 
-  function esc(s) {
+  function esc(/** @type {any} */ s) {
     return String(s || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -40,7 +40,7 @@ function init() {
       populateSelect('filter-kind', data.kinds)
       populateSelect(
         'filter-year',
-        (data.wwdcYears || []).map((y) => ({
+        (data.wwdcYears || []).map((/** @type {any} */ y) => ({
           value: String(y.year),
           label: `${y.year} (${y.count})`,
         })),
@@ -50,8 +50,8 @@ function init() {
     }
   }
 
-  function populateSelect(id, values) {
-    const select = document.getElementById(id)
+  function populateSelect(/** @type {any} */ id, /** @type {any} */ values) {
+    const select = /** @type {any} */ (document.getElementById(id))
     if (!select || !values) return
     for (const val of values) {
       const value = typeof val === 'object' && val.value !== undefined ? val.value : val
@@ -68,7 +68,7 @@ function init() {
     }
   }
 
-  function ensureSelectOption(select, value) {
+  function ensureSelectOption(/** @type {any} */ select, /** @type {any} */ value) {
     if ([...select.options].some((option) => option.value === value)) return
     const opt = document.createElement('option')
     opt.value = value
@@ -77,7 +77,7 @@ function init() {
   }
 
   // Build search URL from form state
-  function buildSearchUrl(offset) {
+  function buildSearchUrl(/** @type {any} */ offset) {
     const params = new URLSearchParams()
     const q = queryInput.value.trim()
     if (!q) return null
@@ -87,27 +87,27 @@ function init() {
 
     // Selects
     for (const name of ['framework', 'kind']) {
-      const val = form.querySelector(`[name="${name}"]`)?.value
+      const val = /** @type {any} */ (form.querySelector(`[name="${name}"]`)?.value)
       if (val) params.set(name, val)
     }
 
     // Language radio
-    const lang = form.querySelector('input[name="language"]:checked')?.value
+    const lang = /** @type {any} */ (form.querySelector('input[name="language"]:checked')?.value)
     if (lang) params.set('language', lang)
 
     // Platform checkboxes — send comma-joined list
-    const platforms = [...form.querySelectorAll('input[name="platform"]:checked')].map((el) => el.value)
+    const platforms = /** @type {any} */ ([...form.querySelectorAll('input[name="platform"]:checked')].map((el) => el.value))
     if (platforms.length > 0) params.set('platform', platforms.join(','))
 
     // Text inputs
     for (const name of ['min_ios', 'min_macos', 'min_watchos', 'min_tvos', 'min_visionos', 'year', 'track']) {
-      const el = form.querySelector(`[name="${name}"]`)
+      const el = /** @type {any} */ (form.querySelector(`[name="${name}"]`))
       if (el?.value) params.set(name, el.value)
     }
 
     // Checkboxes
     for (const name of ['fuzzy', 'deep']) {
-      const el = form.querySelector(`[name="${name}"]`)
+      const el = /** @type {any} */ (form.querySelector(`[name="${name}"]`))
       if (el?.checked) params.set(name, '1')
     }
 
@@ -120,19 +120,19 @@ function init() {
     const q = queryInput.value.trim()
     if (q) params.set('q', q)
     for (const name of ['framework', 'kind']) {
-      const val = form.querySelector(`[name="${name}"]`)?.value
+      const val = /** @type {any} */ (form.querySelector(`[name="${name}"]`)?.value)
       if (val) params.set(name, val)
     }
-    const lang = form.querySelector('input[name="language"]:checked')?.value
+    const lang = /** @type {any} */ (form.querySelector('input[name="language"]:checked')?.value)
     if (lang) params.set('language', lang)
-    const platforms = [...form.querySelectorAll('input[name="platform"]:checked')].map((el) => el.value)
+    const platforms = /** @type {any} */ ([...form.querySelectorAll('input[name="platform"]:checked')].map((el) => el.value))
     if (platforms.length > 0) params.set('platform', platforms.join(','))
     for (const name of ['min_ios', 'min_macos', 'min_watchos', 'min_tvos', 'min_visionos', 'year', 'track']) {
-      const el = form.querySelector(`[name="${name}"]`)
+      const el = /** @type {any} */ (form.querySelector(`[name="${name}"]`))
       if (el?.value) params.set(name, el.value)
     }
     for (const name of ['fuzzy', 'deep']) {
-      const el = form.querySelector(`[name="${name}"]`)
+      const el = /** @type {any} */ (form.querySelector(`[name="${name}"]`))
       if (el?.checked) params.set(name, '1')
     }
     const qs = params.toString()
@@ -145,7 +145,7 @@ function init() {
     const q = params.get('q')
     if (q) queryInput.value = q
     for (const name of ['framework', 'kind']) {
-      const el = form.querySelector(`[name="${name}"]`)
+      const el = /** @type {any} */ (form.querySelector(`[name="${name}"]`))
       const val = params.get(name)
       if (el && val) {
         if (el.tagName === 'SELECT') ensureSelectOption(el, val)
@@ -154,18 +154,18 @@ function init() {
     }
     const lang = params.get('language')
     if (lang) {
-      const radio = form.querySelector(`input[name="language"][value="${CSS.escape(lang)}"]`)
+      const radio = /** @type {any} */ (form.querySelector(`input[name="language"][value="${CSS.escape(lang)}"]`))
       if (radio) radio.checked = true
     }
     const platform = params.get('platform')
     if (platform) {
       for (const p of platform.split(',')) {
-        const cb = form.querySelector(`input[name="platform"][value="${CSS.escape(p)}"]`)
+        const cb = /** @type {any} */ (form.querySelector(`input[name="platform"][value="${CSS.escape(p)}"]`))
         if (cb) cb.checked = true
       }
     }
     for (const name of ['min_ios', 'min_macos', 'min_watchos', 'min_tvos', 'min_visionos', 'year', 'track']) {
-      const el = form.querySelector(`[name="${name}"]`)
+      const el = /** @type {any} */ (form.querySelector(`[name="${name}"]`))
       const val = params.get(name)
       if (el && val) {
         // The year filter is a <select> populated async from /api/filters;
@@ -175,7 +175,7 @@ function init() {
       }
     }
     for (const name of ['fuzzy', 'deep', 'no_fuzzy', 'no_deep']) {
-      const el = form.querySelector(`[name="${name}"]`)
+      const el = /** @type {any} */ (form.querySelector(`[name="${name}"]`))
       if (el && params.get(name) === '1') el.checked = true
     }
     return !!q
@@ -185,14 +185,14 @@ function init() {
   // returns `confidence: 'exact' | 'partial' | 'approximate'` — only
   // approximate gets a visible badge so the user can tell when a hit
   // came from relaxed matching.
-  function displayConfidence(confidence) {
+  function displayConfidence(/** @type {any} */ confidence) {
     return confidence === 'approximate' ? 'approximate' : null
   }
 
   // Render results
-  function renderResults(results, append) {
+  function renderResults(/** @type {any} */ results, /** @type {any} */ append) {
     const html = results
-      .map((r) => {
+      .map((/** @type {any} */ r) => {
         const label = displayConfidence(r.confidence)
         const qualityHtml = label ? `<span class="result-card-quality" data-confidence="${esc(r.confidence)}">${esc(label)}</span>` : ''
         return `
@@ -222,7 +222,7 @@ function init() {
     }
   }
 
-  function renderLoadingState(message, keepResults) {
+  function renderLoadingState(/** @type {any} */ message, /** @type {any} */ keepResults) {
     statusEl.textContent = message
     statusEl.hidden = false
     resultsEl.classList.add('is-loading')
@@ -246,7 +246,7 @@ function init() {
   }
 
   // Perform search
-  async function doSearch(offset, { preserveResults = false } = {}) {
+  async function doSearch(/** @type {any} */ offset, { preserveResults = false } = {}) {
     const searchUrl = buildSearchUrl(offset)
     if (!searchUrl) {
       if (abortController) abortController.abort()
@@ -321,7 +321,7 @@ function init() {
 
       loadMoreBtn.hidden = !hasMore || results.length === 0
     } catch (error) {
-      if (error?.name === 'AbortError') return
+      if (/** @type {any} */ (error)?.name === 'AbortError') return
       statusEl.textContent = 'Search requires the live server. Run: apple-docs web serve'
       if (!keepResults) resultsEl.innerHTML = ''
       loadMoreBtn.hidden = true
@@ -331,7 +331,7 @@ function init() {
   }
 
   // Event handlers
-  form.addEventListener('submit', (e) => {
+  form.addEventListener('submit', (/** @type {any} */ e) => {
     e.preventDefault()
     pushState()
     doSearch(0)
@@ -347,7 +347,7 @@ function init() {
   })
 
   // Auto-search when filters change
-  form.addEventListener('change', (e) => {
+  form.addEventListener('change', (/** @type {any} */ e) => {
     if (e.target === queryInput) return
     pushState()
     doSearch(0)

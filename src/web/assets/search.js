@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Header quick-search controller. Debounces /api/search calls, renders
 // the dropdown of hits, handles keyboard navigation (arrow keys, Enter,
 // Escape, `/` shortcut), and announces result counts via an aria-live
@@ -7,29 +6,31 @@
 // All state and helpers stay inside `init()` so the bundled output keeps
 // a closed scope without an explicit IIFE wrapper.
 export function init() {
-  const input = document.querySelector('.search-input')
-  const dropdown = document.querySelector('.search-dropdown')
-  const clearBtn = document.querySelector('.search-clear')
-  const statusEl = document.getElementById('header-search-status')
+  const input = /** @type {any} */ (document.querySelector('.search-input'))
+  const dropdown = /** @type {any} */ (document.querySelector('.search-dropdown'))
+  const clearBtn = /** @type {any} */ (document.querySelector('.search-clear'))
+  const statusEl = /** @type {any} */ (document.getElementById('header-search-status'))
   if (!input || !dropdown) return
 
+  /** @type {any} */
   let debounceTimer = null
   let activeIndex = -1
   let _currentResults = []
   let _currentQuery = ''
   let _searchSeqId = 0
+  /** @type {any} */
   let _abortController = null
 
   // Debounce helper
-  function debounce(fn, ms) {
-    return (...args) => {
+  function debounce(/** @type {any} */ fn, /** @type {any} */ ms) {
+    return (/** @type {any} */ ...args) => {
       clearTimeout(debounceTimer)
       debounceTimer = setTimeout(() => fn(...args), ms)
     }
   }
 
   // Escape HTML for safe rendering
-  function esc(s) {
+  function esc(/** @type {any} */ s) {
     return String(s || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -38,7 +39,7 @@ export function init() {
   }
 
   // Highlight matching portions of text with <mark> elements
-  function highlightMatch(text, query) {
+  function highlightMatch(/** @type {any} */ text, /** @type {any} */ query) {
     if (!query || !text) return esc(text)
     const escaped = esc(text)
     const queryEscaped = esc(query)
@@ -48,7 +49,7 @@ export function init() {
   }
 
   // Update the ARIA expanded state
-  function setExpanded(expanded) {
+  function setExpanded(/** @type {any} */ expanded) {
     input.setAttribute('aria-expanded', String(expanded))
   }
 
@@ -60,7 +61,7 @@ export function init() {
   }
 
   // Announce status to screen readers
-  function announce(message) {
+  function announce(/** @type {any} */ message) {
     if (statusEl) {
       statusEl.textContent = message
     }
@@ -113,7 +114,7 @@ export function init() {
       _currentResults = data.results || []
       renderResults(_currentResults, query)
     } catch (e) {
-      if (e.name !== 'AbortError') {
+      if (/** @type {any} */ (e).name !== 'AbortError') {
         renderResults([], query)
       }
     }
@@ -121,7 +122,7 @@ export function init() {
 
   input.addEventListener('input', onInput)
 
-  function renderResults(hits, query) {
+  function renderResults(/** @type {any} */ hits, /** @type {any} */ query) {
     activeIndex = -1
     input.setAttribute('aria-activedescendant', '')
 
@@ -133,7 +134,7 @@ export function init() {
     }
     dropdown.innerHTML = `${hits
       .map(
-        (hit, i) => `
+        (/** @type {any} */ hit, /** @type {any} */ i) => `
       <a href="/docs/${esc(hit.webPath ?? hit.path)}/" class="search-result" role="option" id="search-result-${i}" data-index="${i}" aria-selected="false">
         <span class="result-title">${highlightMatch(hit.title, query)}</span>
         <span class="result-meta">${esc(hit.framework || '')}${hit.kind ? ` · ${esc(hit.kind)}` : ''}</span>
@@ -151,8 +152,8 @@ export function init() {
   }
 
   // Keyboard navigation
-  input.addEventListener('keydown', (e) => {
-    const items = dropdown.querySelectorAll('.search-result, .search-view-all')
+  input.addEventListener('keydown', (/** @type {any} */ e) => {
+    const items = /** @type {any} */ (dropdown.querySelectorAll('.search-result, .search-view-all'))
     if (items.length === 0) return
 
     if (e.key === 'ArrowDown') {
@@ -171,8 +172,8 @@ export function init() {
     }
   })
 
-  function updateActive(items) {
-    items.forEach((item, i) => {
+  function updateActive(/** @type {any} */ items) {
+    items.forEach((/** @type {any} */ item, /** @type {any} */ i) => {
       const isActive = i === activeIndex
       item.classList.toggle('active', isActive)
       item.setAttribute('aria-selected', String(isActive))
@@ -201,7 +202,7 @@ export function init() {
 
   // Close dropdown when clicking outside
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('.search-container')) {
+    if (!(/** @type {any} */ (e.target).closest('.search-container'))) {
       hideDropdown()
     }
   })
