@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -12,7 +11,7 @@ import { join } from 'node:path'
  *   and the size of the unconverted-page queue.
  */
 
-export function verifySnapshot(db, _logger) {
+export function verifySnapshot(/** @type {any} */ db, /** @type {any} */ _logger) {
   const tier = db.getSnapshotMeta('snapshot_tier')
   if (!tier) {
     return { installed: false, message: 'No snapshot found. Corpus was built locally.' }
@@ -45,7 +44,7 @@ export function verifySnapshot(db, _logger) {
     db.db.query("INSERT INTO documents_fts(documents_fts) VALUES('integrity-check')").run()
     checks.push({ name: 'fts_integrity', ok: true })
   } catch (e) {
-    checks.push({ name: 'fts_integrity', ok: false, error: e.message })
+    checks.push({ name: 'fts_integrity', ok: false, error: /** @type {any} */ (e).message })
   }
 
   const allOk = checks.every((c) => c.ok)
@@ -64,10 +63,10 @@ export function verifySnapshot(db, _logger) {
  *
  * @param {import('../../storage/database.js').DocsDatabase} db
  * @param {string} dataDir
- * @param {{ debug: Function, info: Function, warn: Function, error: Function }} logger
+ * @param {{ debug: Function, info: Function, warn: Function, error: Function }} _logger
  * @returns {{ checks: Array<{ name: string, ok: boolean, detail?: string }>, allOk: boolean }}
  */
-export function verifyCorpusIntegrity(db, dataDir, _logger) {
+export function verifyCorpusIntegrity(db, dataDir, /** @type {any} */ _logger) {
   const checks = []
 
   // Check 1: FTS integrity for documents_fts
@@ -75,7 +74,7 @@ export function verifyCorpusIntegrity(db, dataDir, _logger) {
     db.db.query("INSERT INTO documents_fts(documents_fts) VALUES('integrity-check')").run()
     checks.push({ name: 'documents_fts', ok: true })
   } catch (e) {
-    checks.push({ name: 'documents_fts', ok: false, detail: e.message })
+    checks.push({ name: 'documents_fts', ok: false, detail: /** @type {any} */ (e).message })
   }
 
   // Check 2: FTS integrity for documents_body_fts (if exists)
@@ -84,7 +83,7 @@ export function verifyCorpusIntegrity(db, dataDir, _logger) {
       db.db.query("INSERT INTO documents_body_fts(documents_body_fts) VALUES('integrity-check')").run()
       checks.push({ name: 'body_fts', ok: true })
     } catch (e) {
-      checks.push({ name: 'body_fts', ok: false, detail: e.message })
+      checks.push({ name: 'body_fts', ok: false, detail: /** @type {any} */ (e).message })
     }
   } else {
     checks.push({ name: 'body_fts', ok: true, detail: 'table not present' })

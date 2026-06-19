@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { normalizeIdentifier } from '../../apple/normalizer.js'
@@ -12,7 +11,7 @@ import { stableStringify } from '../../storage/files.js'
  *   place — runs as the trailing pass of consolidate --minify.
  */
 
-export function isInvalidFailedPath(path) {
+export function isInvalidFailedPath(/** @type {any} */ path) {
   const renorm = normalizeIdentifier(path)
   // Three independent rejection reasons:
   //   - the normalizer rejected the path outright
@@ -37,16 +36,13 @@ export function isInvalidFailedPath(path) {
  * 1. Cleans up entries that are now rejected by the updated normalizer (fragments, dot-ops)
  * 2. Re-resolves remaining failures by checking parent page references for correct URLs
  * 3. Retries re-resolved paths
- *
- * @param {{ dryRun?: boolean, minify?: boolean }} opts
- * @param {{ db, dataDir, rateLimiter, logger }} ctx
  */
 
-export function minifyDir(dirPath, logger) {
+export function minifyDir(/** @type {any} */ dirPath, /** @type {any} */ logger) {
   let count = 0
   let saved = 0
 
-  const walk = (dir) => {
+  const walk = (/** @type {any} */ dir) => {
     let entries
     try {
       entries = readdirSync(dir, { withFileTypes: true })
@@ -72,7 +68,7 @@ export function minifyDir(dirPath, logger) {
         // Already minified if no newline in first 200 bytes
         if (!head.includes(10)) continue // 10 = '\n'
 
-        const obj = JSON.parse(raw)
+        const obj = JSON.parse(/** @type {any} */ (raw))
         const minStr = stableStringify(obj)
         const oldSize = raw.length
         const newSize = Buffer.byteLength(minStr)
@@ -83,7 +79,7 @@ export function minifyDir(dirPath, logger) {
           count++
         }
       } catch (e) {
-        logger.warn(`Minify failed: ${full}`, { error: e.message })
+        logger.warn(`Minify failed: ${full}`, { error: /** @type {any} */ (e).message })
       }
 
       if (count > 0 && count % 5000 === 0) {

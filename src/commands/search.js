@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { renderSnippet } from '../content/render-snippet.js'
 import { buildCascadeRunners, runRelaxationCascade } from '../search/cascade.js'
 import { buildPlatformFilters, matchesSearchFilters, normalizeDeprecatedFilter, normalizeSourceFilter } from '../search/filters.js'
@@ -15,7 +14,7 @@ const SEMANTIC_TOP_K = 50
 const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
 
 /**
- * @typedef {object} SearchArgs
+ * @typedef {any} SearchArgs
  * @property {string} query
  * @property {string} [framework]
  * @property {string} [source]
@@ -37,7 +36,7 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
  * @property {boolean} [noEager]
  * @property {boolean} [fast]
  *
- * @typedef {object} SearchHit
+ * @typedef {any} SearchHit
  * @property {string} path
  * @property {string} title
  * @property {string|null} framework
@@ -55,13 +54,13 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
  * @property {true} [isBeta]
  * @property {true} [isReleaseNotes]
  *
- * @typedef {object} SearchResult
+ * @typedef {any} SearchResult
  * @property {string} query
  * @property {number} total
  * @property {SearchHit[]} results
  * @property {true} [approximate]
  * @property {true} [truncated]
- * @property {object} [pageInfo]
+ * @property {any} [pageInfo]
  *
  * Search with tiered cascade: fast title/path tiers first, deep body search only
  * when needed.
@@ -74,7 +73,7 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
  * satisfied, or when explicitly forced with `noEager`.
  *
  * @param {SearchArgs} opts
- * @param {{ db, dataDir, logger }} ctx
+ * @param {{ db: any, dataDir: any, logger: any }} ctx
  * @returns {Promise<SearchResult>}
  */
 export async function search(opts, ctx) {
@@ -163,7 +162,7 @@ export async function search(opts, ctx) {
   // stable shape sees one type for that property); the parsed Array
   // lives on `r.platformsParsed`. Filters and `formatResult` read
   // `platformsParsed` first.
-  const parseRowPlatforms = (rows) => {
+  const parseRowPlatforms = (/** @type {any} */ rows) => {
     for (const r of rows) {
       if (r.platformsParsed !== undefined) continue
       if (typeof r.platforms === 'string') {
@@ -180,7 +179,7 @@ export async function search(opts, ctx) {
     }
   }
 
-  const addResults = (rows, quality) => {
+  const addResults = (/** @type {any} */ rows, /** @type {any} */ quality) => {
     parseRowPlatforms(rows)
     for (const r of rows) {
       if (!matchesSearchFilters(r, activeFilters)) continue
@@ -210,7 +209,9 @@ export async function search(opts, ctx) {
   // results — fuzzy substring matches inside that scope are mostly noise.
   const userNarrowedScope = !!framework || !!kind || !!sqlSourceType
   addResults(await runTitleExact(), 'exact')
+  /** @type {any} */
   let ftsResults = []
+  /** @type {any} */
   let triResults = []
   if (fast && results.length >= requestedWindow) {
     // Already filled — skip both fast tiers.
@@ -255,8 +256,8 @@ export async function search(opts, ctx) {
     try {
       const fuzzyMatches = await runRead(ctx, 'fuzzyMatchTitles', [q, { framework, kind, limit: searchLimit }])
       // One batched fetch instead of N per-candidate round-trips (§10(B)).
-      const records = await runRead(ctx, 'getSearchRecordsByIds', [fuzzyMatches.map((fm) => fm.id)])
-      const recordById = new Map(records.map((r) => [r.id, r]))
+      const records = await runRead(ctx, 'getSearchRecordsByIds', [fuzzyMatches.map((/** @type {any} */ fm) => fm.id)])
+      const recordById = new Map(records.map((/** @type {any} */ r) => [r.id, r]))
       parseRowPlatforms(records)
       // Iterate fuzzyMatches (distance order preserved) so output is identical.
       for (const fm of fuzzyMatches) {
@@ -272,7 +273,7 @@ export async function search(opts, ctx) {
         partial = true
         partialReasons.push('fuzzy')
       } else {
-        ctx.logger?.warn?.('search fuzzy failed', { error: err.message })
+        ctx.logger?.warn?.('search fuzzy failed', { error: /** @type {any} */ (err).message })
       }
     }
   }
@@ -286,7 +287,7 @@ export async function search(opts, ctx) {
         partial = true
         partialReasons.push('body')
       } else {
-        ctx.logger?.warn?.('search body failed', { error: err.message })
+        ctx.logger?.warn?.('search body failed', { error: /** @type {any} */ (err).message })
       }
     }
   }
@@ -327,9 +328,10 @@ export async function search(opts, ctx) {
     const snippetData = ctx.db.getDocumentSnippetData(resultKeys)
     const relatedCounts = ctx.db.getRelatedDocCounts(resultKeys)
     for (const r of sliced) {
+      const rr = /** @type {any} */ (r)
       const data = snippetData.get(r.path)
-      if (data) r.snippet = renderSnippet(data.document, data.sections, q)
-      r.relatedCount = relatedCounts.get(r.path) ?? 0
+      if (data) rr.snippet = renderSnippet(data.document, data.sections, q)
+      rr.relatedCount = relatedCounts.get(r.path) ?? 0
     }
   } catch {
     // Best-effort: snippet failure shouldn't sink the response.

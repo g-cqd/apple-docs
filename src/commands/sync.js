@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../lib/errors.js'
 import { runStep } from '../lib/run-step.js'
 import { filterAdaptersByScope, loadScope } from '../lib/scope.js'
@@ -37,8 +36,8 @@ import { update } from './update.js'
  * Per-adapter logic lives in `./sync/adapters.js`; post-crawl phases in
  * `./sync/phases.js`. This file is the orchestrator.
  *
- * @param {{ full?: boolean, aggressive?: boolean }} opts
- * @param {{ db, dataDir, rateLimiter, logger, semaphore?, adapters?, readerPool? }} ctx
+ * @param {any} opts
+ * @param {{ db: any, dataDir: any, rateLimiter: any, logger: any, semaphore?: any, adapters?: any, readerPool?: any }} ctx
  */
 export async function sync(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
@@ -81,7 +80,7 @@ export async function sync(opts, ctx) {
     db.setActivity('sync', null)
 
     // 2. Root discovery for catalog-driven sources (apple-docc et al).
-    if (adapters.some((adapter) => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
+    if (adapters.some((/** @type {any} */ adapter) => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
       await discoverRoots(db, rateLimiter, logger)
       adapterCtx.rootCatalogReady = true
     }
@@ -96,7 +95,7 @@ export async function sync(opts, ctx) {
     //    hosts so concurrent crawls do not contend on the same upstream
     //    budget.
     const adapterOutcomes = await Promise.allSettled(
-      adapters.map((adapter) =>
+      adapters.map((/** @type {any} */ adapter) =>
         runAdapterStep(adapter, {
           ctx,
           adapterCtx,
@@ -135,17 +134,18 @@ export async function sync(opts, ctx) {
       if (outcome.rootsCrawled) rootsCrawled += outcome.rootsCrawled
     }
 
-    const activeSourceTypes = adapters.map((adapter) => adapter.constructor.type)
+    const activeSourceTypes = adapters.map((/** @type {any} */ adapter) => adapter.constructor.type)
+    /** @type {any} */
     const filters = { roots: null, sources: activeSourceTypes }
 
     // 4. Backfill any missing raw payloads + materialize Markdown.
-    const dlResult = await downloadMissing(db, dataDir, rateLimiter, logger, null, filters, { semaphore })
+    const dlResult = await downloadMissing(db, dataDir, rateLimiter, logger, /** @type {any} */ (null), filters, { semaphore })
 
     const pendingConversions = filterPages(db.getUnconvertedPages(), null, activeSourceTypes)
     let cvResult = { converted: 0, total: 0 }
     if (pendingConversions.length > 0) {
       logger.info(`Converting ${pendingConversions.length} remaining pages to Markdown...`)
-      cvResult = await convertAll(db, dataDir, logger, null, filters, { semaphore })
+      cvResult = await convertAll(db, dataDir, logger, /** @type {any} */ (null), filters, { semaphore })
     }
 
     // 5. Merge Xcode's offline Developer Documentation asset BEFORE the

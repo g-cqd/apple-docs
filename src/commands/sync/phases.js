@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Post-crawl sync phases — body-index + resources. Both run
  * concurrently because they touch disjoint tables (body index:
@@ -15,7 +14,7 @@ import { prerenderSfSymbols, stampSfSymbolCodepoints, syncAppleFonts, syncSfSymb
  * Body-index phase. Incremental by default; `--full` triggers a clean
  * rebuild. Returns `{ indexed }` so the outer sync() can surface it.
  */
-export async function runBodyIndex({ db, dataDir, logger, fullRebuild }) {
+export async function runBodyIndex(/** @type {any} */ { db, dataDir, logger, fullRebuild }) {
   logger.info(fullRebuild ? 'Rebuilding body index...' : 'Indexing body content...')
   const idxResult = fullRebuild ? await indexBodyFull(db, dataDir, logger) : await indexBodyIncremental(db, dataDir, logger)
   return { indexed: idxResult.indexed ?? 0 }
@@ -33,7 +32,8 @@ export async function runBodyIndex({ db, dataDir, logger, fullRebuild }) {
  * Each task is wrapped in runStep so failures stay isolated and
  * activity tracking captures per-step duration.
  */
-export async function runResourcesPhase({ ctx, logger, scope }) {
+export async function runResourcesPhase(/** @type {any} */ { ctx, logger, scope }) {
+  /** @type {any[]} */
   const failedSources = []
   let fontsResult = null
   let symbolsResult = null
@@ -49,7 +49,7 @@ export async function runResourcesPhase({ ctx, logger, scope }) {
   // public/private VISIBILITY scope syncSfSymbols takes.
   const keepFonts = scope?.keepFonts !== false
   const keepSymbols = scope?.keepSymbols !== false
-  const skippedOutcome = (label) => ({ ok: true, label, result: null, ms: 0 })
+  const skippedOutcome = (/** @type {any} */ label) => ({ ok: true, label, result: null, ms: 0 })
 
   const downloadFonts = process.env.APPLE_DOCS_DOWNLOAD_FONTS === '1'
   if (keepFonts) logger.info(`Syncing Apple typography${downloadFonts ? ' (downloading DMGs)' : ''}...`)
@@ -104,25 +104,25 @@ export async function runResourcesPhase({ ctx, logger, scope }) {
       logger.info(`Synced ${fontsResult.families} font families, ${fontsResult.files} font files`)
     }
   } else {
-    failedSources.push({ source: 'apple-fonts', error: fontsOutcome.error.message })
+    failedSources.push({ source: 'apple-fonts', error: /** @type {any} */ (fontsOutcome).error.message })
   }
 
   if (symbolsOutcome.ok) {
     symbolsResult = symbolsOutcome.result
   } else {
-    failedSources.push({ source: 'sf-symbols', error: symbolsOutcome.error.message })
+    failedSources.push({ source: 'sf-symbols', error: /** @type {any} */ (symbolsOutcome).error.message })
   }
 
   if (prerenderOutcome.ok) {
     symbolsRenderResult = prerenderOutcome.result
   } else {
-    failedSources.push({ source: 'sf-symbols-prerender', error: prerenderOutcome.error.message })
+    failedSources.push({ source: 'sf-symbols-prerender', error: /** @type {any} */ (prerenderOutcome).error.message })
   }
 
   if (!stampOutcome.ok) {
     // Stamping is best-effort; surface as a warning, not a failure,
     // matching the previous try/catch behaviour.
-    logger.warn(`SF Symbol codepoint stamping failed: ${stampOutcome.error.message}`)
+    logger.warn(`SF Symbol codepoint stamping failed: ${/** @type {any} */ (stampOutcome).error.message}`)
   }
 
   return { failedSources, fontsResult, symbolsResult, symbolsRenderResult }

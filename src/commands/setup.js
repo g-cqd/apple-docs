@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveSevenZipBinary } from '../lib/archive-7z.js'
@@ -22,7 +21,7 @@ const SNAPSHOT_TIER = 'full'
 // a local --archive path. Both routes converge on
 // validateArchive → tar extract → post-install resource re-index.
 // Local archives verify a sibling .sha256 when present, warn when absent.
-export async function setup(opts, ctx) {
+export async function setup(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const { db } = ctx
   const force = opts.force ?? false
 
@@ -67,7 +66,7 @@ export async function setup(opts, ctx) {
  * Pulled out of the previous monolithic setup() so the local-archive
  * path can short-circuit before any network call.
  */
-async function installFromGithubRelease(ctx, opts) {
+async function installFromGithubRelease(/** @type {any} */ ctx, /** @type {any} */ opts) {
   const { db, dataDir, logger } = ctx
 
   // Beta installs refuse to regress to a stable built on an older macOS
@@ -88,10 +87,13 @@ async function installFromGithubRelease(ctx, opts) {
   // smaller than gzip -9, decompressed in-process via Bun's native zstd so
   // no system zstd is needed). Accept `.tar.gz` then legacy `.7z` so a host
   // pulling an older release still installs.
-  const findAsset = (ext) => release.assets.find((a) => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith(ext))
+  const findAsset = (/** @type {any} */ ext) => release.assets.find((/** @type {any} */ a) => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith(ext))
   const archiveAsset = findAsset('.tar.zst') ?? findAsset('.tar.gz') ?? findAsset('.7z')
   if (!archiveAsset) {
-    throw new NotFoundError(`release/${release.tag}`, `No snapshot found in release ${release.tag}. Available: ${release.assets.map((a) => a.name).join(', ')}`)
+    throw new NotFoundError(
+      `release/${release.tag}`,
+      `No snapshot found in release ${release.tag}. Available: ${release.assets.map((/** @type {any} */ a) => a.name).join(', ')}`,
+    )
   }
   const isSevenZip = archiveAsset.name.endsWith('.7z')
 
@@ -100,10 +102,10 @@ async function installFromGithubRelease(ctx, opts) {
   // flow could omit the sidecar and still ship arbitrary bytes.
   const expectedSidecar = `${archiveAsset.name}.sha256`
   const checksumAsset =
-    release.assets.find((a) => a.name === expectedSidecar) ??
+    release.assets.find((/** @type {any} */ a) => a.name === expectedSidecar) ??
     // Legacy shape: `<base>.sha256` (no double extension). Accept on the
     // tar.gz path only.
-    (isSevenZip ? null : release.assets.find((a) => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256')))
+    (isSevenZip ? null : release.assets.find((/** @type {any} */ a) => a.name.includes(`-${SNAPSHOT_TIER}-`) && a.name.endsWith('.sha256')))
   if (!checksumAsset) {
     throw new ValidationError(
       `Refusing to install: release ${release.tag} ships ${archiveAsset.name} without a matching .sha256 sidecar. ` + 'Snapshot integrity cannot be verified.',
@@ -203,7 +205,11 @@ async function installFromGithubRelease(ctx, opts) {
  * Source-specific concerns (network fetch, sidecar discovery, manifest
  * parsing) stay in the calling function.
  */
-async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, embedder, tag = null, profile = null, yes = false } = {}) {
+async function extractAndIndex(
+  /** @type {any} */ ctx,
+  /** @type {any} */ archivePath,
+  /** @type {any} */ { skipResources, skipSemantic, embedder, tag = null, profile = null, yes = false } = {},
+) {
   const { db, dataDir, logger } = ctx
   const dbPath = join(dataDir, 'apple-docs.db')
   const isSevenZip = archivePath.endsWith('.7z')
@@ -215,7 +221,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
     try {
       resolveSevenZipBinary()
     } catch (err) {
-      throw new ValidationError(`${err.message}\nThe snapshot is shipped as a .7z archive; p7zip is required to install it.`)
+      throw new ValidationError(`${/** @type {any} */ (err).message}\nThe snapshot is shipped as a .7z archive; p7zip is required to install it.`)
     }
   }
 
@@ -299,14 +305,14 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
       try {
         await syncAppleFonts({ downloadFonts: false }, { db: verifyDb, dataDir, logger })
       } catch (e) {
-        logger?.warn?.(`Font index refresh skipped: ${e.message}`)
+        logger?.warn?.(`Font index refresh skipped: ${/** @type {any} */ (e).message}`)
       }
       try {
         for (const scope of ['public', 'private']) {
           await syncSfSymbols({ scope }, { db: verifyDb, dataDir, logger })
         }
       } catch (e) {
-        logger?.warn?.(`SF Symbols refresh skipped: ${e.message}`)
+        logger?.warn?.(`SF Symbols refresh skipped: ${/** @type {any} */ (e).message}`)
       }
     }
 
@@ -320,7 +326,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
         const sem = await indexEmbeddings({ full: true, embedder }, { db: verifyDb, dataDir, logger })
         if (sem.status !== 'ok') logger.warn(`Semantic index skipped (lexical-only): ${sem.message}`)
       } catch (e) {
-        logger?.warn?.(`Semantic index build failed (search stays lexical-only): ${e.message}`)
+        logger?.warn?.(`Semantic index build failed (search stays lexical-only): ${/** @type {any} */ (e).message}`)
       }
     }
 

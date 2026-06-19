@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Small helpers shared by `apple-docs setup` — extracted from
 // src/commands/setup.js to keep that file under the 400-line ceiling.
 
@@ -16,7 +15,7 @@ const USER_AGENT = 'apple-docs/2.0'
  * operator-supplied `--archive` value from being pointed at `/etc/...`
  * or another sensitive tree.
  */
-export function resolveArchivePath(archive) {
+export function resolveArchivePath(/** @type {any} */ archive) {
   const absolute = isAbsolute(archive) ? archive : resolve(process.cwd(), archive)
   const home = process.env.HOME
   // Allow $HOME and the current repo checkout (a developer building +
@@ -34,7 +33,7 @@ export function resolveArchivePath(archive) {
  * Strip the tar archive extension (`.tar.zst` / `.tar.gz` / `.tgz`) from a
  * path. Used to derive the manifest path from the archive path.
  */
-export function stripTarGz(p) {
+export function stripTarGz(/** @type {any} */ p) {
   const name = basename(p)
   for (const ext of ['.tar.zst', '.tar.gz', '.tgz']) {
     if (name.endsWith(ext)) return join(dirname(p), name.slice(0, -ext.length))
@@ -48,7 +47,7 @@ export function stripTarGz(p) {
  * zstd (`DecompressionStream`) and pipe plain tar to `tar -xf -`. Streaming
  * keeps memory bounded on a multi-GB archive; no system zstd required.
  */
-export async function extractTarZst(archivePath, dataDir) {
+export async function extractTarZst(/** @type {any} */ archivePath, /** @type {any} */ dataDir) {
   // Decompress to a temp `.tar`, then extract from the real file. Streaming the
   // decompressed bytes to `tar -xf -` over stdin truncates past one pipe buffer
   // under Bun on Linux (GNU tar then errors mid-archive); materializing the tar
@@ -58,7 +57,10 @@ export async function extractTarZst(archivePath, dataDir) {
   const tarPath = join(dataDir, `.setup-extract-${process.pid}-${Date.now()}.tar`)
   try {
     const sink = Bun.file(tarPath).writer()
-    for await (const chunk of Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))) sink.write(chunk)
+    for await (const chunk of Bun.file(archivePath)
+      .stream()
+      .pipeThrough(new DecompressionStream(/** @type {any} */ ('zstd'))))
+      sink.write(chunk)
     await sink.end()
     const proc = Bun.spawn(['tar', '--no-same-owner', '--no-same-permissions', '-xf', tarPath, '-C', dataDir], {
       stdout: 'ignore',
@@ -88,12 +90,12 @@ function ghHeaders() {
   }
 }
 
-function shapeRelease(data) {
+function shapeRelease(/** @type {any} */ data) {
   return {
     tag: data.tag_name,
     date: data.published_at?.slice(0, 10) ?? 'unknown',
     prerelease: !!data.prerelease,
-    assets: (data.assets ?? []).map((a) => ({
+    assets: (data.assets ?? []).map((/** @type {any} */ a) => ({
       name: a.name,
       size: a.size,
       downloadUrl: a.browser_download_url,
@@ -104,7 +106,7 @@ function shapeRelease(data) {
 const SNAPSHOT_ASSET = /^apple-docs-full-.*\.tar\.zst$/
 
 /** Major component of a macOS version string ("27.1" → 27), or null. */
-export function macosMajor(version) {
+export function macosMajor(/** @type {any} */ version) {
   const m = /^(\d+)/.exec(String(version ?? '').trim())
   return m ? Number(m[1]) : null
 }
@@ -114,8 +116,8 @@ export function macosMajor(version) {
  * asset. Stable releases older than the field (or without status.json)
  * return null — callers treat that as unknown provenance.
  */
-async function fetchReleaseBuildMacos(release) {
-  const status = release.assets.find((a) => a.name === 'status.json')
+async function fetchReleaseBuildMacos(/** @type {any} */ release) {
+  const status = release.assets.find((/** @type {any} */ a) => a.name === 'status.json')
   if (!status) return null
   try {
     const res = await fetch(status.downloadUrl, {
@@ -175,7 +177,9 @@ export async function fetchLatestRelease({ channel = 'stable', localBuildMacos =
   if (channel !== 'beta') return shapeRelease(data)
 
   const localMajor = macosMajor(localBuildMacos)
-  const candidates = (Array.isArray(data) ? data : []).filter((r) => !r.draft && (r.assets ?? []).some((a) => SNAPSHOT_ASSET.test(a.name))).map(shapeRelease)
+  const candidates = (Array.isArray(data) ? data : [])
+    .filter((r) => !r.draft && (r.assets ?? []).some((/** @type {any} */ a) => SNAPSHOT_ASSET.test(a.name)))
+    .map(shapeRelease)
   if (localMajor == null && candidates.length > 0) {
     // Fresh install — nothing to protect yet, but "newest release" is the
     // wrong pick when a beta from a newer macOS base exists: the channel
@@ -193,7 +197,7 @@ export async function fetchLatestRelease({ channel = 'stable', localBuildMacos =
   }
   for (const release of candidates) {
     const releaseMajor = macosMajor(await fetchReleaseBuildMacos(release))
-    if (releaseMajor != null && releaseMajor >= localMajor) return release
+    if (releaseMajor != null && releaseMajor >= /** @type {any} */ (localMajor)) return release
   }
   throw new NotFoundError(
     `https://api.github.com/repos/${GITHUB_REPO}/releases`,
@@ -205,7 +209,7 @@ export async function fetchLatestRelease({ channel = 'stable', localBuildMacos =
  * Human-readable byte size with two-digit precision for GB / one-digit
  * for MB and KB.
  */
-export function formatSize(bytes) {
+export function formatSize(/** @type {any} */ bytes) {
   if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
   if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
   if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} KB`

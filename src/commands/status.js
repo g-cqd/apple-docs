@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { dirSize, fileCount } from '../storage/files.js'
@@ -12,7 +11,7 @@ const STALE_THRESHOLD_DAYS = 14
  */
 function freshnessCheck(db) {
   // Last global sync time
-  const lastLogRow = db.db.query('SELECT timestamp FROM update_log ORDER BY id DESC LIMIT 1').get()
+  const lastLogRow = /** @type {any} */ (db.db).query('SELECT timestamp FROM update_log ORDER BY id DESC LIMIT 1').get()
 
   if (!lastLogRow) {
     return { lastSyncAt: null, daysSinceSync: null, isStale: true, staleRoots: [] }
@@ -23,22 +22,24 @@ function freshnessCheck(db) {
   const isStale = daysSinceSync > STALE_THRESHOLD_DAYS
 
   // Per-root staleness: last update_log entry per root_slug
-  const rootRows = db.db.query('SELECT root_slug, MAX(timestamp) as last_update FROM update_log WHERE root_slug IS NOT NULL GROUP BY root_slug').all()
+  const rootRows = /** @type {any} */ (db.db)
+    .query('SELECT root_slug, MAX(timestamp) as last_update FROM update_log WHERE root_slug IS NOT NULL GROUP BY root_slug')
+    .all()
 
   const staleRoots = rootRows
-    .map((r) => ({
+    .map((/** @type {any} */ r) => ({
       slug: r.root_slug,
       daysSince: Math.floor((Date.now() - new Date(r.last_update).getTime()) / 86400000),
     }))
-    .filter((r) => r.daysSince > STALE_THRESHOLD_DAYS)
+    .filter((/** @type {any} */ r) => r.daysSince > STALE_THRESHOLD_DAYS)
 
   return { lastSyncAt, daysSinceSync, isStale, staleRoots }
 }
 
 /**
  * Return corpus status, activity state, and crawl progress.
- * @param {object} opts - (unused)
- * @param {{ db, dataDir }} ctx
+ * @param {any} opts - (unused)
+ * @param {{ db: any, dataDir: any }} ctx
  */
 export async function status(opts, ctx) {
   const { db, dataDir } = ctx
@@ -72,7 +73,7 @@ export async function status(opts, ctx) {
     failed: stats.crawlProgress.failed,
   }
 
-  const crawlByRoot = stats.crawlByRoot.map((r) => ({
+  const crawlByRoot = stats.crawlByRoot.map((/** @type {any} */ r) => ({
     root: r.root_slug,
     processed: r.processed,
     pending: r.pending,
@@ -111,7 +112,7 @@ export async function status(opts, ctx) {
     markdown: { size: markdownSize, files: markdownFiles },
     roots: {
       total: stats.totalRoots,
-      byKind: Object.fromEntries(stats.rootsByKind.map((r) => [r.kind, r.count])),
+      byKind: Object.fromEntries(stats.rootsByKind.map((/** @type {any} */ r) => [r.kind, r.count])),
     },
     pages: {
       active: stats.totalPages,
@@ -127,7 +128,7 @@ export async function status(opts, ctx) {
   }
 }
 
-async function checkForUpdate(db) {
+async function checkForUpdate(/** @type {any} */ db) {
   try {
     const currentTag = db.getSnapshotMeta('snapshot_tag')
     if (!currentTag) return null

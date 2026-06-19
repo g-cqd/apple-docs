@@ -1,23 +1,22 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { NotFoundError, ValidationError } from '../lib/errors.js'
 
 const WWDC_PATH_YEAR = /^wwdc\/wwdc(\d{4})-/
 
 /**
- * @typedef {object} BrowseArgs
+ * @typedef {any} BrowseArgs
  * @property {string} framework   Framework slug (e.g. swiftui, design, app-store-review).
  * @property {string} [path]      Page path to drill into; omit to list framework root.
  * @property {number} [limit]     Max pages when listing a full framework (cap 200).
  * @property {number} [year]      WWDC only: list one year's sessions.
  *
- * @typedef {object} BrowsePageEntry
+ * @typedef {any} BrowsePageEntry
  * @property {string} path
  * @property {string|null} title
  * @property {string|null} kind
  * @property {string|null} [abstract]
  * @property {string|null} [section]
  *
- * @typedef {object} BrowseResult
+ * @typedef {any} BrowseResult
  * @property {string} framework
  * @property {string} [slug]
  * @property {string} [kind]
@@ -38,7 +37,7 @@ const WWDC_PATH_YEAR = /^wwdc\/wwdc(\d{4})-/
  * the flat list.
  *
  * @param {BrowseArgs} opts
- * @param {{ db }} ctx
+ * @param {{ db: any }} ctx
  * @returns {Promise<BrowseResult>}
  * @throws {ValidationError} when `framework` is missing.
  * @throws {NotFoundError} when the framework slug or page path is unknown.
@@ -70,7 +69,7 @@ export async function browse(opts, ctx) {
       framework: root.display_name,
       path: opts.path,
       title: page.title,
-      children: refs.map((r) => ({
+      children: refs.map((/** @type {any} */ r) => ({
         path: r.target_path,
         title: r.anchor_text,
         section: r.section,
@@ -82,7 +81,7 @@ export async function browse(opts, ctx) {
   const year = opts.year != null ? Number.parseInt(String(opts.year), 10) : null
 
   if (isWwdc && year != null) {
-    allPages = allPages.filter((p) => p.path.startsWith(`wwdc/wwdc${year}-`))
+    allPages = allPages.filter((/** @type {any} */ p) => p.path.startsWith(`wwdc/wwdc${year}-`))
     if (allPages.length === 0) {
       throw new NotFoundError(String(year), `No WWDC sessions indexed for ${year}`)
     }
@@ -110,7 +109,7 @@ export async function browse(opts, ctx) {
     slug: root.slug,
     kind: root.kind,
     ...(year != null ? { year } : {}),
-    pages: pages.map((p) => ({
+    pages: pages.map((/** @type {any} */ p) => ({
       path: p.path,
       title: p.title,
       kind: p.role_heading ?? p.role,

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Xcode-docs enrichment phase. Runs BETWEEN convert and the index phase so
  * pages inserted from Xcode's offline Developer Documentation MobileAsset
@@ -18,7 +17,7 @@ import { runStep } from '../../lib/run-step.js'
 import { enrichFromAsset, findDocumentationAssets } from '../../sources/mobileasset-docs.js'
 import { fetchDocumentationAsset, resolveDownload } from '../../sources/mobileasset-fetch.js'
 
-export async function runEnrichPhase({ db, logger, assetDbPath = null, findAssets = findDocumentationAssets }) {
+export async function runEnrichPhase(/** @type {any} */ { db, logger, assetDbPath = null, findAssets = findDocumentationAssets }) {
   const resolveAssetDb = async () => {
     if (assetDbPath) return assetDbPath
     const local = findAssets()

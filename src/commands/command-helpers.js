@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../lib/errors.js'
 import { getAdapterTypes } from '../sources/registry.js'
 
@@ -32,17 +31,17 @@ export function validateRequestedSources(requestedSources) {
 /**
  * Filters discovered roots for a given adapter down to only those that match
  * the optional requestedRoots allow-list.
- * @param {object} adapter
- * @param {{ roots?: object[] }} discovery
- * @param {object} db
+ * @param {any} adapter
+ * @param {{ roots?: any[] }} discovery
+ * @param {any} db
  * @param {string[] | null} requestedRoots
- * @returns {object[]}
+ * @returns {any[]}
  */
 export function selectRootsForAdapter(adapter, discovery, db, requestedRoots) {
   const requestedRootSet = requestedRoots ? new Set(requestedRoots) : null
-  const discoveredRoots = discovery.roots ?? db.getRoots().filter((root) => root.source_type === adapter.constructor.type)
+  const discoveredRoots = discovery.roots ?? db.getRoots().filter((/** @type {any} */ root) => root.source_type === adapter.constructor.type)
 
-  return discoveredRoots.filter((root) => {
+  return discoveredRoots.filter((/** @type {any} */ root) => {
     if (!root?.slug) return false
     if (!requestedRootSet) return true
     return requestedRootSet.has(root.slug)
@@ -52,10 +51,10 @@ export function selectRootsForAdapter(adapter, discovery, db, requestedRoots) {
 /**
  * Filters pages by both an optional root allow-list and an optional source-type
  * allow-list. Used by the sync pipeline.
- * @param {object[]} pages
+ * @param {any[]} pages
  * @param {string[] | null} requestedRoots
  * @param {string[] | null} requestedSources
- * @returns {object[]}
+ * @returns {any[]}
  */
 export function filterPages(pages, requestedRoots, requestedSources) {
   const rootSet = requestedRoots ? new Set(requestedRoots) : null
@@ -72,9 +71,9 @@ export function filterPages(pages, requestedRoots, requestedSources) {
  * Filters pages to only those belonging to one of the requested roots.
  * Returns all pages unchanged when requestedRoots is null. Used by the update
  * pipeline.
- * @param {object[]} pages
+ * @param {any[]} pages
  * @param {string[] | null} requestedRoots
- * @returns {object[]}
+ * @returns {any[]}
  */
 export function filterPagesByRoots(pages, requestedRoots) {
   if (!requestedRoots) return pages
@@ -84,8 +83,8 @@ export function filterPagesByRoots(pages, requestedRoots) {
 
 /**
  * Run adapter discovery in parallel and return results keyed by source type.
- * @param {object[]} adapters
- * @param {object} ctx
+ * @param {any[]} adapters
+ * @param {any} ctx
  * @returns {Promise<{ discoveries: Map<string, object>, errors: Map<string, Error> }>}
  */
 export async function discoverAdaptersInParallel(adapters, ctx) {

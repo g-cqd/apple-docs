@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * `apple-docs prune` — trim an existing corpus to `<dataDir>/scope.json`
  * WITHOUT re-crawling (issue #7). Deletes every page whose root falls
@@ -28,7 +27,7 @@ import { withFileTempStore } from '../storage/pragmas.js'
 
 const BATCH = 900 // SQLite bound-parameter headroom (default cap 999)
 
-export async function prune(opts, ctx) {
+export async function prune(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const { db, dataDir, logger } = ctx
   const dryRun = !!opts.dryRun
 
@@ -40,17 +39,17 @@ export async function prune(opts, ctx) {
   const roots = db.getRoots()
   validateScopeFrameworks(scope, roots)
 
-  const doomedRoots = roots.filter((root) => isRootOutOfScope(root, scope))
-  const keptRoots = roots.filter((root) => !isRootOutOfScope(root, scope))
+  const doomedRoots = roots.filter((/** @type {any} */ root) => isRootOutOfScope(root, scope))
+  const keptRoots = roots.filter((/** @type {any} */ root) => !isRootOutOfScope(root, scope))
 
   // Per-root page counts up front: the dry-run report and the real run
   // share the same accounting.
-  const plan = doomedRoots.map((root) => ({
+  const plan = doomedRoots.map((/** @type {any} */ root) => ({
     slug: root.slug,
     sourceType: root.source_type,
     pages: db.db.query('SELECT COUNT(*) AS c FROM pages WHERE root_id = ?').get(root.id).c,
   }))
-  const totalPages = plan.reduce((sum, r) => sum + r.pages, 0)
+  const totalPages = plan.reduce((/** @type {any} */ sum, /** @type {any} */ r) => sum + r.pages, 0)
 
   const summary = {
     status: dryRun ? 'dry-run' : 'ok',
@@ -74,7 +73,7 @@ export async function prune(opts, ctx) {
 
   db.setActivity(
     'prune',
-    doomedRoots.map((r) => r.slug),
+    doomedRoots.map((/** @type {any} */ r) => r.slug),
   )
   try {
     for (const root of doomedRoots) {
@@ -120,7 +119,7 @@ export async function prune(opts, ctx) {
   return summary
 }
 
-function isRootOutOfScope(root, scope) {
+function isRootOutOfScope(/** @type {any} */ root, /** @type {any} */ scope) {
   if (scope.sources && !scope.sources.includes(root.source_type)) return true
   if (root.source_type === 'apple-docc' && scope.appleDoccFrameworks && !scope.appleDoccFrameworks.includes(root.slug)) return true
   return false
@@ -131,10 +130,10 @@ function isRootOutOfScope(root, scope) {
  * slug must error (listing the valid ones) instead of silently nuking
  * everything else. Only slugs of EXISTING apple-docc roots count.
  */
-function validateScopeFrameworks(scope, roots) {
+function validateScopeFrameworks(/** @type {any} */ scope, /** @type {any} */ roots) {
   if (!scope.appleDoccFrameworks) return
-  const known = new Set(roots.filter((r) => r.source_type === 'apple-docc').map((r) => r.slug))
-  const unknown = scope.appleDoccFrameworks.filter((slug) => !known.has(slug))
+  const known = new Set(roots.filter((/** @type {any} */ r) => r.source_type === 'apple-docc').map((/** @type {any} */ r) => r.slug))
+  const unknown = scope.appleDoccFrameworks.filter((/** @type {any} */ slug) => !known.has(slug))
   if (unknown.length > 0) {
     const sample = [...known].sort().slice(0, 15).join(', ')
     throw new ValidationError(
@@ -145,21 +144,21 @@ function validateScopeFrameworks(scope, roots) {
 }
 
 /** Delete one root's pages + documents + files. Returns counts. */
-function pruneRoot(db, dataDir, root, logger) {
+function pruneRoot(/** @type {any} */ db, /** @type {any} */ dataDir, /** @type {any} */ root, /** @type {any} */ logger) {
   const rows = db.db.query('SELECT id, path FROM pages WHERE root_id = ?').all(root.id)
   let documents = 0
   let files = 0
 
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH)
-    const paths = batch.map((r) => r.path)
+    const paths = batch.map((/** @type {any} */ r) => r.path)
     const marks = paths.map(() => '?').join(',')
 
     db.tx(() => {
       const docIds = db.db
         .query(`SELECT id FROM documents WHERE key IN (${marks})`)
         .all(...paths)
-        .map((r) => r.id)
+        .map((/** @type {any} */ r) => r.id)
       if (docIds.length > 0) {
         const docMarks = docIds.map(() => '?').join(',')
         if (db.hasTable('documents_body_fts')) {
@@ -174,7 +173,7 @@ function pruneRoot(db, dataDir, root, logger) {
       db.db.run(`DELETE FROM document_relationships WHERE from_key IN (${marks})`, paths)
       db.db.run(
         `DELETE FROM pages WHERE id IN (${batch.map(() => '?').join(',')})`,
-        batch.map((r) => r.id),
+        batch.map((/** @type {any} */ r) => r.id),
       )
     })
 

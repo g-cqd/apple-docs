@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Delayed retry of *transient* crawl failures.
  *
@@ -22,12 +21,12 @@ import { persistFetchedDocPage } from '../../pipeline/persist.js'
 // (e.g. "HTTP 503 fetching https://…", "fetch failed", "… timed out").
 const TRANSIENT_RE = /\bHTTP (5\d{2}|408|429)\b|timed? ?out|timeout|fetch failed|unable to connect|network|socket|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN/i
 
-export function isTransientError(error) {
+export function isTransientError(/** @type {any} */ error) {
   return typeof error === 'string' && TRANSIENT_RE.test(error)
 }
 
 /**
- * @param {{ db, dataDir, rateLimiter, logger, semaphore? }} ctx
+ * @param {{ db: any, dataDir: any, rateLimiter: any, logger: any, semaphore?: any }} ctx
  * @param {{
  *   rounds?: number,
  *   baseDelayMs?: number,
@@ -50,7 +49,7 @@ export async function retryTransientFailures(ctx, opts = {}) {
     db.db
       .query("SELECT path, root_slug, error FROM crawl_state WHERE status = 'failed'")
       .all()
-      .filter((row) => isTransientError(row.error))
+      .filter((/** @type {any} */ row) => isTransientError(row.error))
 
   let recovered = 0
   let roundsRun = 0
@@ -81,7 +80,7 @@ export async function retryTransientFailures(ctx, opts = {}) {
         recovered++
       } catch (error) {
         // Still failing — keep the row (its error may now be permanent).
-        db.setCrawlState(path, 'failed', root_slug, 0, error.message)
+        db.setCrawlState(path, 'failed', root_slug, 0, /** @type {any} */ (error).message)
       }
     })
   }

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Optional native-bundle install (`apple-docs setup --native`).
  *
@@ -76,8 +75,8 @@ export async function installNativeBundle(release, { logger }) {
     logger.info?.(`Native bundle installed: ${targetDir}`)
     return { status: 'installed', dir: targetDir }
   } catch (error) {
-    logger.warn?.(`Native bundle install failed (JS implementations serve): ${error.message}`)
-    return { status: 'failed', message: error.message }
+    logger.warn?.(`Native bundle install failed (JS implementations serve): ${/** @type {any} */ (error).message}`)
+    return { status: 'failed', message: /** @type {any} */ (error).message }
   } finally {
     rmSync(tmpArchive, { force: true })
     rmSync(staging, { recursive: true, force: true })

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../lib/errors.js'
 import { withFileTempStore } from '../storage/pragmas.js'
 import { getProfile, setProfile } from '../storage/profiles.js'
@@ -25,7 +24,7 @@ const BODY_FTS_CONTENTLESS = `CREATE VIRTUAL TABLE documents_body_fts USING fts5
  * Idempotent: already-compressed rows and rows that don't shrink are left as-is.
  *
  * @param {{ force?: boolean, keepRaw?: boolean }} opts
- * @param {{ db, dataDir, logger }} ctx
+ * @param {{ db: any, dataDir: any, logger: any }} ctx
  */
 export async function storageCompact(opts, ctx) {
   const { db, dataDir, logger } = ctx

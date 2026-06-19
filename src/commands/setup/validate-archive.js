@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../../lib/errors.js'
 
 /**
@@ -51,12 +50,15 @@ export async function validateArchive(archivePath, destDir, deps = {}) {
  * `tar -tvf -` over stdin truncates past one pipe buffer under Bun on Linux —
  * same reason setup/helpers.js materializes the tar before extracting.)
  */
-export async function validateZstArchive(archivePath, destDir, deps = {}) {
+export async function validateZstArchive(/** @type {any} */ archivePath, /** @type {any} */ destDir, /** @type {any} */ deps = {}) {
   const spawn = deps.spawn ?? Bun.spawn
   const tarPath = join(destDir, `.setup-validate-${process.pid}-${Date.now()}.tar`)
   try {
     const sink = Bun.file(tarPath).writer()
-    for await (const chunk of Bun.file(archivePath).stream().pipeThrough(new DecompressionStream('zstd'))) sink.write(chunk)
+    for await (const chunk of Bun.file(archivePath)
+      .stream()
+      .pipeThrough(new DecompressionStream(/** @type {any} */ ('zstd'))))
+      sink.write(chunk)
     await sink.end()
     const proc = spawn(['tar', '-tvf', tarPath], { stdout: 'pipe', stderr: 'pipe' })
     const stdoutP = new Response(proc.stdout).text()
@@ -76,7 +78,7 @@ export async function validateZstArchive(archivePath, destDir, deps = {}) {
 }
 
 /** Shared member-safety check over a `tar -tv…` long listing. */
-function validateTarListing(stdoutText, destDir) {
+function validateTarListing(/** @type {any} */ stdoutText, /** @type {any} */ destDir) {
   const root = resolve(destDir) + sep
   const entries = []
   let lineno = 0
@@ -121,7 +123,7 @@ function validateTarListing(stdoutText, destDir) {
  * @param {{ spawn?: typeof Bun.spawn, which?: Function }} [deps]
  * @returns {Promise<{ entries: Array<{ type: string, path: string }> }>}
  */
-export async function validate7zArchive(archivePath, destDir, deps = {}) {
+export async function validate7zArchive(archivePath, destDir, /** @type {any} */ deps = {}) {
   const spawn = deps.spawn ?? Bun.spawn
   const binary = resolveSevenZipBinary(deps)
   const proc = spawn([binary, 'l', '-slt', archivePath], { stdout: 'pipe', stderr: 'pipe' })
@@ -177,7 +179,7 @@ export async function validate7zArchive(archivePath, destDir, deps = {}) {
  * target is captured but unused — symlinks are rejected upstream regardless
  * of where they point.
  */
-export function parseTarVerboseLine(line) {
+export function parseTarVerboseLine(/** @type {any} */ line) {
   const m = line.match(/^([-dlhfpcs])[rwxstST-]{9}\s+(.+)$/)
   if (!m) return null
   const [, type, rest] = m
