@@ -14,7 +14,7 @@ struct ADCLICommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ad-cli",
         abstract: "Apple Docs native read CLI (mirrors the Bun cli.js read verbs).",
-        subcommands: [FrameworksCommand.self, KindsCommand.self, BrowseCommand.self])
+        subcommands: [FrameworksCommand.self, KindsCommand.self, BrowseCommand.self, ReadCommand.self])
 }
 
 /// The corpus path — required by every verb. Mirrors ad-server's `CorpusOptions`.
@@ -203,6 +203,62 @@ struct BrowseCommand: ParsableCommand {
             print(stringifyPretty(projectBrowse(result)))
         } else {
             print(formatBrowse(result))
+        }
+    }
+}
+
+/// `ad-cli read <target> --db <PATH> [--framework F] [--section S]
+/// [--max-chars N] [--page P] [--json]` — document lookup. Ports cli.js's `read`
+/// verb: resolve the page (path → document with a normalize retry, else symbol →
+/// searchByTitle), render Markdown from the DB sections, optionally extract one
+/// section / paginate the content, then print the human formatter or the
+/// `projectReadDoc({full:true})` JSON. Mirrors ad-server read_doc's orchestration
+/// (the parity-proven native read), plus the CLI-only pagination + formatter.
+struct ReadCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "read", abstract: "Read a documentation page as Markdown, by path or symbol name.")
+
+    @Argument(help: "The page path (contains '/') or symbol name to read.")
+    var target: String
+
+    @OptionGroup var corpus: CorpusOptions
+
+    @Option(name: .long, help: "Disambiguate a symbol target by framework slug.")
+    var framework: String?
+
+    @Option(name: .long, help: "Extract a single section by heading or kind.")
+    var section: String?
+
+    @Option(name: .long, help: "Paginate the content to at most N chars per page (floor 200).")
+    var maxChars: Int?
+
+    @Option(name: .long, help: "1-based page number (needs --max-chars).")
+    var page: Int?
+
+    @Flag(name: .long, help: "Emit JSON instead of the human listing.")
+    var json = false
+
+    func run() throws {
+        let connection = openCorpus(corpus.db)
+
+        // cli.js: a '/'-bearing target is a path; otherwise a symbol (with the
+        // optional --framework disambiguator). --section widens the lookup.
+        let opts: LookupOptions =
+            target.contains("/")
+            ? LookupOptions(path: target, symbol: nil, framework: nil, section: section)
+            : LookupOptions(path: nil, symbol: target, framework: framework, section: section)
+
+        var result = lookup(opts, connection)
+        // Paginate only when --max-chars is given AND content rendered (JS:
+        // `maxChars != null && result.found && result.content`).
+        if let maxChars, result.found, let content = result.content {
+            result = paginateCliContent(result, content: content, maxChars: maxChars, pageNum: page ?? 1)
+        }
+
+        if json {
+            print(stringifyPretty(projectReadDoc(result)))
+        } else {
+            print(formatLookup(result))
         }
     }
 }

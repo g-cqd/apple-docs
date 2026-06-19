@@ -12,6 +12,12 @@
 enum J {
     case s(String)
     case i(Int64)
+    /// A JSON number parsed from input (e.g. a `platforms_json` value) that must
+    /// round-trip through `JSON.parse`→`JSON.stringify`. Serialized via the
+    /// JS-aligned formatter in `stringifyPretty` (integers bare; the `.0` of an
+    /// integral double dropped, matching JS). `.i` stays the canonical integer
+    /// constructor for counts/totals.
+    case num(Double)
     case bool(Bool)
     case null
     case arr([J])
@@ -25,6 +31,8 @@ func stringifyPretty(_ v: J, _ level: Int = 0) -> String {
         return encodeJSONString(string)
     case let .i(int):
         return String(int)
+    case let .num(number):
+        return formatJSONNumber(number)
     case let .bool(flag):
         return flag ? "true" : "false"
     case .null:
@@ -71,6 +79,21 @@ private func encodeJSONString(_ string: String) -> String {
     }
     out += "\""
     return out
+}
+
+/// Serialize a parsed JSON number the way `JSON.stringify` does: an integral
+/// value (within Int64 range) prints with no decimal point (`13.0` → `13`), so a
+/// `JSON.parse("13.0")`→stringify round-trip matches. Non-integral finite values
+/// use Swift's shortest round-trippable `Double` description, which coincides with
+/// JS for ordinary decimals (no JSON number in the corpus's platforms exercises
+/// this branch). NaN/Infinity can't appear in valid JSON input.
+private func formatJSONNumber(_ value: Double) -> String {
+    if value.rounded(.towardZero) == value, value.isFinite,
+        value >= -9.223_372_036_854_775_8e18, value < 9.223_372_036_854_775_8e18
+    {
+        return String(Int64(value))
+    }
+    return String(value)
 }
 
 /// Four lowercase hex digits, zero-padded (Foundation-free).

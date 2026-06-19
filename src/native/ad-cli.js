@@ -37,10 +37,11 @@ const GLOBAL_PASSTHROUGH = ['home', 'verbose']
 /**
  * Map a cli.js read-verb invocation to `ad-cli` argv, or null to fall back to the
  * Bun CLI — for a verb not yet flipped, or a flag/positional ad-cli can't honour.
- * This slice flips three read verbs: `frameworks` (→ `--kind`), `kinds`
- * (→ `--field`), and `browse <framework>` (→ `--path/--limit/--year`). Only the
- * verb's own flags + `--json` ride through; anything else forces the Bun path so
- * nothing is silently dropped.
+ * This slice flips four read verbs: `frameworks` (→ `--kind`), `kinds`
+ * (→ `--field`), `browse <framework>` (→ `--path/--limit/--year`), and
+ * `read <target>` (→ `--framework/--section/--max-chars/--page`). Only the verb's
+ * own flags + `--json` ride through; anything else forces the Bun path so nothing
+ * is silently dropped.
  *
  * @param {{ command: string, subcommand: string | undefined, positional: string[], flags: Record<string, unknown>, dbPath: string }} invocation
  * @returns {string[] | null}
@@ -51,6 +52,7 @@ export function nativeCliArgs({ command, subcommand, positional, flags, dbPath }
   if (command === 'frameworks') return readVerbArgs('frameworks', 'kind', pos, flags, dbPath)
   if (command === 'kinds') return readVerbArgs('kinds', 'field', pos, flags, dbPath)
   if (command === 'browse') return browseArgs(pos, flags, dbPath)
+  if (command === 'read') return readDocArgs(pos, flags, dbPath)
   return null
 }
 
@@ -100,6 +102,38 @@ function browseArgs(positional, flags, dbPath) {
   if (typeof flags.path === 'string') args.push('--path', flags.path)
   if (typeof flags.limit === 'string') args.push('--limit', flags.limit)
   if (typeof flags.year === 'string') args.push('--year', flags.year)
+  if (flags.json) args.push('--json')
+  return args
+}
+
+/**
+ * `read <target> [--framework F] [--section S] [--max-chars N] [--page P] [--json]`.
+ * The target (a path when it contains `/`, else a symbol) is the sole positional;
+ * cli.js shows help when it's missing, so fall back then. `--max-chars`/`--page`
+ * ride through only as clean non-negative integers (the native verb itself honours
+ * the `< 200` floor, so a small value is NOT a fallback trigger); `--framework`/
+ * `--section` only as strings.
+ *
+ * @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
+ * @returns {string[] | null}
+ */
+function readDocArgs(positional, flags, dbPath) {
+  if (positional.length !== 1) return null
+  const allowed = new Set(['framework', 'section', 'max-chars', 'page', 'json', ...GLOBAL_PASSTHROUGH])
+  if (Object.keys(flags).some((k) => !allowed.has(k))) return null
+  for (const k of ['framework', 'section']) {
+    if (flags[k] != null && typeof flags[k] !== 'string') return null
+  }
+  for (const k of ['max-chars', 'page']) {
+    const v = flags[k]
+    if (v != null && (typeof v !== 'string' || !/^\d+$/.test(v))) return null
+  }
+
+  const args = ['read', positional[0], '--db', dbPath]
+  if (typeof flags.framework === 'string') args.push('--framework', flags.framework)
+  if (typeof flags.section === 'string') args.push('--section', flags.section)
+  if (typeof flags['max-chars'] === 'string') args.push('--max-chars', flags['max-chars'])
+  if (typeof flags.page === 'string') args.push('--page', flags.page)
   if (flags.json) args.push('--json')
   return args
 }

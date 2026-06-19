@@ -110,10 +110,9 @@ describe('nativeCliArgs — read-verb mapping + conservative fallback', () => {
     expect(fw({}, ['extra'])).toBeNull()
     expect(nativeCliArgs({ command: 'frameworks', subcommand: 'x', positional: [], flags: {}, dbPath: DB })).toBeNull()
   })
-  test('non-flipped verbs return null', () => {
+  test('not-yet-flipped verbs return null', () => {
     expect(nativeCliArgs({ command: 'search', subcommand: undefined, positional: ['view'], flags: {}, dbPath: DB })).toBeNull()
     expect(nativeCliArgs({ command: 'status', subcommand: undefined, positional: [], flags: {}, dbPath: DB })).toBeNull()
-    expect(nativeCliArgs({ command: 'read', subcommand: undefined, positional: ['x/y'], flags: {}, dbPath: DB })).toBeNull()
   })
 })
 
@@ -140,5 +139,28 @@ describe('nativeCliArgs — browse mapping (positional framework)', () => {
   test('--path without a value, or an unsupported flag → fall back', () => {
     expect(browse({ path: true })).toBeNull()
     expect(browse({ source: 'apple' })).toBeNull()
+  })
+})
+
+describe('nativeCliArgs — read mapping (positional target)', () => {
+  /** @param {Record<string, unknown>} flags @param {string[]} [positional] @returns {string[] | null} */
+  const read = (flags, positional = ['swiftui/view']) => nativeCliArgs({ command: 'read', subcommand: undefined, positional, flags, dbPath: DB })
+
+  test('target positional + framework/section/max-chars/page/json pass through', () => {
+    expect(read({})).toEqual(['read', 'swiftui/view', '--db', DB])
+    expect(read({ json: true })).toEqual(['read', 'swiftui/view', '--db', DB, '--json'])
+    expect(read({ framework: 'swiftui' }, ['View'])).toEqual(['read', 'View', '--db', DB, '--framework', 'swiftui'])
+    expect(read({ section: 'Overview' })).toEqual(['read', 'swiftui/view', '--db', DB, '--section', 'Overview'])
+    expect(read({ 'max-chars': '4000', page: '2' })).toEqual(['read', 'swiftui/view', '--db', DB, '--max-chars', '4000', '--page', '2'])
+  })
+  test('exactly one positional required', () => {
+    expect(read({}, [])).toBeNull()
+    expect(read({}, ['a', 'b'])).toBeNull()
+  })
+  test('non-integer max-chars/page, non-string section, or an unsupported flag → fall back', () => {
+    expect(read({ 'max-chars': 'lots' })).toBeNull()
+    expect(read({ page: '-1' })).toBeNull()
+    expect(read({ section: true })).toBeNull()
+    expect(read({ limit: '5' })).toBeNull()
   })
 })

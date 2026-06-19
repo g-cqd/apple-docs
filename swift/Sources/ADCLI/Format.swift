@@ -206,3 +206,95 @@ func formatBrowse(_ result: BrowseResult) -> String {
         return lines.joined(separator: "\n")
     }
 }
+
+// MARK: - read (lookup)
+
+/// Port of JS `formatLookup`. Three shapes:
+///   - not found → `Not found: <target>`.
+///   - no content (metadata-only / section miss) → the bold title, dim
+///     roleHeading, dim `[deprecated]`/`[beta]` flags, `Framework: …`, a
+///     blank-prefixed abstract / `Declaration:` line, a `Platforms:` line (only
+///     when platforms is a non-empty ARRAY), a blank line, then the note.
+///   - content → the content, plus (after pagination) a blank line + the dim
+///     `--- Page p/total (strategy) ---` footer and a next-page hint.
+/// No trailing trim — the joined string is returned as-is (the caller's `print`
+/// adds the single `\n`).
+func formatLookup(_ result: LookupResult) -> String {
+    if !result.found {
+        // JS `${result.path}` — the not-found target (a nil target would
+        // template-coerce to "null", but cli.js always passes a string here).
+        return "Not found: \(result.notFoundTarget ?? "null")"
+    }
+
+    guard let content = result.content else {
+        // No-content branch — drive off the metadata, then the note.
+        var lines: [String] = []
+        if let m = result.metadata {
+            // `lines.push(bold(m.title))` — non-TTY `bold` is identity, so a null
+            // title pushes `null`, which `Array.join` coerces to '' (an empty
+            // line). For a found doc the title is always a string; nil → "" here.
+            lines.append(m.title.map(bold) ?? "")
+            if let roleHeading = m.roleHeading, !roleHeading.isEmpty { lines.append(dim(roleHeading)) }
+            // `[m.isDeprecated ? '[deprecated]' : '', m.isBeta ? '[beta]' : ''].filter(Boolean).join(' ')`.
+            let flags = [m.isDeprecated ? dim("[deprecated]") : "", m.isBeta ? dim("[beta]") : ""]
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            if !flags.isEmpty { lines.append(flags) }
+            if let framework = m.framework, !framework.isEmpty { lines.append("Framework: \(framework)") }
+            if let abstract = m.abstract, !abstract.isEmpty { lines.append("\n\(abstract)") }
+            if let declaration = m.declaration, !declaration.isEmpty {
+                lines.append("\n\(dim("Declaration:")) \(declaration)")
+            }
+            // `m.platforms?.length` — truthy only for a non-empty ARRAY (a JS
+            // object has no `.length`; this corpus's platforms are objects, so
+            // the line is normally skipped). Entries are `{ name, introducedAt }`.
+            if let platformLine = platformsLine(m.platforms) { lines.append(platformLine) }
+            lines.append("")
+        }
+        // No tierLimitation is produced on this corpus (sections always render),
+        // so the else-branch note is what prints.
+        lines.append(result.note ?? "Markdown not available.")
+        return lines.joined(separator: "\n")
+    }
+
+    // Content branch.
+    var lines = [content]
+    if let pageInfo = result.pageInfo {
+        lines.append("")
+        lines.append(dim("--- Page \(pageInfo.page)/\(pageInfo.totalPages) (\(pageInfo.strategy)) ---"))
+        if pageInfo.hasNextPage {
+            lines.append(dim("Next page: add --page \(pageInfo.page + 1)"))
+        }
+    }
+    return lines.joined(separator: "\n")
+}
+
+/// JS `Platforms: ${m.platforms.map(p => \`${p.name} ${p.introducedAt ?? ''}\`).join(', ')}`
+/// — emitted only when `m.platforms?.length` is truthy, i.e. platforms is a
+/// non-empty array of `{ name, introducedAt }`. Returns nil for an empty array, an
+/// object, or any non-array value (the JS `?.length` short-circuits those).
+private func platformsLine(_ platforms: J) -> String? {
+    guard case let .arr(items) = platforms, !items.isEmpty else { return nil }
+    let parts = items.map { item -> String in
+        guard case let .obj(fields) = item else { return " " }
+        let name = jStringField(fields, "name")
+        let introducedAt = jStringField(fields, "introducedAt")
+        // `${p.name} ${p.introducedAt ?? ''}` — name then a space then the
+        // version (empty when absent/null).
+        return "\(name) \(introducedAt)"
+    }
+    return "Platforms: \(parts.joined(separator: ", "))"
+}
+
+/// Read a string field from a parsed JSON object for the human platforms line.
+/// `name` template-coerces (`${p.name}`): a string → its value, missing/null →
+/// "" for `introducedAt` (it uses `?? ''`) but a missing `name` would coerce to
+/// "undefined" in JS — however real platform entries always carry `name`, so an
+/// absent field returns "" (the line is only reached for array platforms anyway).
+private func jStringField(_ fields: [(String, J)], _ key: String) -> String {
+    for (k, v) in fields where k == key {
+        if case let .s(value) = v { return value }
+        return ""  // null / non-string → '' (matches `?? ''` for introducedAt)
+    }
+    return ""
+}

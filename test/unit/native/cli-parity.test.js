@@ -187,3 +187,67 @@ d('browse default unbounded (human, capped display)', () => {
     expect(runNative(['browse', 'swiftui'])).toBe(runJs(['browse', 'swiftui']))
   })
 })
+
+// read (lookup) parity. Content reads are bounded with --max-chars so the output
+// fits Bun.spawnSync's stdout buffer (a full doc can exceed it); the path/symbol
+// is discovered from the corpus so the suite is corpus-agnostic.
+d('read parity (discovered swiftui doc)', () => {
+  // pages[0] is the slug-less root ("swiftui") → exercises the symbol resolver
+  // (searchByTitle); the first path containing "/" exercises the path resolver
+  // (getPage). The two differ in JS (raw vs aliased columns → metadata shape),
+  // so cover both.
+  /** @type {string | undefined} */
+  let path
+  /** @type {string | undefined} */
+  let subPath
+  if (ready) {
+    try {
+      const pages = JSON.parse(runJs(['browse', 'swiftui', '--limit', '20', '--json'])).pages ?? []
+      path = pages[0]?.path
+      subPath = pages.map((/** @type {any} */ p) => p.path).find((/** @type {any} */ p) => typeof p === 'string' && p.includes('/'))
+    } catch {
+      path = undefined
+    }
+  }
+  /** Compare a read invocation human + --json. @param {string[]} args */
+  const cmp = (args) => {
+    expect(runNative(args)).toBe(runJs(args))
+    const j = [...args, '--json']
+    expect(runNative(j)).toBe(runJs(j))
+  }
+
+  test('not found (human "Not found:" + json {found:false})', () => {
+    cmp(['read', '__no/such/doc__'])
+  })
+  test('content, bounded page', () => {
+    if (typeof path !== 'string') return
+    cmp(['read', path, '--max-chars', '8000'])
+  })
+  test('content via a path target (contains /, getPage resolver)', () => {
+    if (typeof subPath !== 'string') return
+    cmp(['read', subPath, '--max-chars', '8000'])
+  })
+  test('pagination page 2, bounded', () => {
+    if (typeof path !== 'string') return
+    cmp(['read', path, '--max-chars', '2000', '--page', '2'])
+  })
+  test('--max-chars below the 200 floor → error content', () => {
+    if (typeof path !== 'string') return
+    cmp(['read', path, '--max-chars', '100'])
+  })
+  test('section extraction (deterministic whether matched or not)', () => {
+    if (typeof path !== 'string') return
+    cmp(['read', path, '--section', 'Overview'])
+  })
+  test('symbol lookup via discovered title + rootSlug', () => {
+    if (typeof path !== 'string') return
+    let meta
+    try {
+      meta = JSON.parse(runJs(['read', path, '--max-chars', '300', '--json'])).metadata
+    } catch {
+      return
+    }
+    if (typeof meta?.title !== 'string' || typeof meta?.rootSlug !== 'string') return
+    cmp(['read', meta.title, '--framework', meta.rootSlug, '--max-chars', '8000'])
+  })
+})
