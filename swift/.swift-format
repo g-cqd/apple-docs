@@ -20,7 +20,8 @@
     "reflowMultilineStringLiterals": "never",
     "fileScopedDeclarationPrivacy": { "accessLevel": "private" },
     "noAssignmentInExpressions": { "allowedFunctions": ["XCTAssertNoThrow"] },
-    "orderedImports": { "includeConditionalImports": true },
+    "multilineTrailingCommaBehavior": "keptAsWritten",
+    "orderedImports": { "includeConditionalImports": true, "shouldGroupImports": true },
     "rules": {
         "AllPublicDeclarationsHaveDocumentation": false,
         "AlwaysUseLiteralForEmptyCollectionInit": true,
