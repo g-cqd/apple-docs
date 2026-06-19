@@ -28,13 +28,13 @@ let strictSettings: [SwiftSetting] = [
 ]
 
 // Compile-time type-check timing warnings (flag slow expressions / function bodies). Unsafe flags, so
-// they live only on the internal (non-exported) test targets. The whole-FUNCTION budget is the looser
-// 250ms: a thorough test fans out into many `#expect` macro expansions whose summed type-check time
-// clears 100ms even when every expression is fast — and `treatAllWarnings` now makes these errors. 250ms
-// still catches a genuinely pathological body; the per-EXPRESSION budget stays at 100ms.
+// they live only on the internal (non-exported) test targets. Both budgets are 100ms: the slow bodies
+// (the renderer JSON literal, the RowCodec / archive suites) were fixed at the root — split into focused
+// tests, big literals hoisted to typed `let`s, chained `#expect`s moved to the kit's typed
+// `expectEqual`/`expectTrue` asserts — rather than relaxed, so a regression past 100ms is a hard error.
 let timingWarningFlags: [SwiftSetting] = [
     .unsafeFlags([
-        "-Xfrontend", "-warn-long-function-bodies=250",
+        "-Xfrontend", "-warn-long-function-bodies=100",
         "-Xfrontend", "-warn-long-expression-type-checking=100"
     ])
 ]
@@ -283,6 +283,8 @@ let package = Package(
                 "ADServeCore",
                 "ADServeDSL",
                 "ADStorage",
+                "ADContent",
+                "ADRender",
                 "ADSearchCascade",
                 "ADSQLSearch"
             ],
@@ -341,8 +343,11 @@ let package = Package(
 )
 
 if isDev {
-    // Wire the dev-only ADTestKit into the archive test target (downstream consumers never see it).
-    if let tests = package.targets.first(where: { $0.name == "ADArchiveTests" }) {
-        tests.dependencies.append(.product(name: "ADTestKit", package: "ADTestKit"))
+    // Wire the dev-only ADTestKit into the test targets that use it (downstream consumers never see it):
+    // the archive fuzz/oracle suites, the renderer's typed-fixture asserts, and the row-codec suite's
+    // typed asserts (all to keep heavy chained `#expect`s under the 100ms type-check budget).
+    let adTestKit: Target.Dependency = .product(name: "ADTestKit", package: "ADTestKit")
+    for name in ["ADArchiveTests", "ADContentTests", "ADStorageTests"] {
+        package.targets.first { $0.name == name }?.dependencies.append(adTestKit)
     }
 }
