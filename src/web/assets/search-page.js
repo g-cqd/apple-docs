@@ -252,7 +252,7 @@ function init() {
       if (abortController) abortController.abort()
       searchSeqId++
       statusEl.hidden = true
-      resultsEl.innerHTML = ''
+      resultsEl.textContent = ''
       resultsEl.classList.remove('is-loading')
       resultsEl.setAttribute('aria-busy', 'false')
       loadMoreBtn.hidden = true
@@ -286,7 +286,7 @@ function init() {
       if (seqId !== searchSeqId) return
       if (!resp.ok) {
         statusEl.textContent = 'Search requires the live server. Run: apple-docs web serve'
-        if (!keepResults) resultsEl.innerHTML = ''
+        if (!keepResults) resultsEl.textContent = ''
         loadMoreBtn.hidden = true
         return
       }
@@ -311,7 +311,7 @@ function init() {
 
       if (results.length === 0 && offset === 0) {
         statusEl.textContent = 'No results found.'
-        resultsEl.innerHTML = ''
+        resultsEl.textContent = ''
       } else {
         const intentLabel = data.intent?.type ? ` · ${data.intent.type}` : ''
         const relaxedLabel = data.relaxed ? ' · best-effort (query relaxed)' : ''
@@ -323,7 +323,7 @@ function init() {
     } catch (error) {
       if (/** @type {any} */ (error)?.name === 'AbortError') return
       statusEl.textContent = 'Search requires the live server. Run: apple-docs web serve'
-      if (!keepResults) resultsEl.innerHTML = ''
+      if (!keepResults) resultsEl.textContent = ''
       loadMoreBtn.hidden = true
     } finally {
       if (seqId === searchSeqId) resetLoadingState()
