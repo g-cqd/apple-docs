@@ -283,14 +283,17 @@ let package = Package(
                 "ADSQLSearch"
             ],
             path: "Sources/ADServer", swiftSettings: releaseCMO + strictSettings),
-        // ad-cli — the native read CLI (P7, first slice: `frameworks` + `kinds`).
+        // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
         // Byte-for-byte output-compatible with the Bun cli.js read verbs. Reads via
-        // ADStorage; a tiny local JSON model frames the `--json` output (no ADJSON
+        // ADStorage; ADContent supplies the String markdown renderer the `read` verb
+        // shares with ad-server's read_doc (DocMarkdown.render, the parity-proven
+        // path). A tiny local JSON model frames the `--json` output (no ADJSON
         // needed). swift-argument-parser only — no new external dependency.
         .executableTarget(
             name: "ADCLI",
             dependencies: [
                 "ADStorage",
+                "ADContent",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
             path: "Sources/ADCLI", swiftSettings: releaseCMO + strictSettings),
