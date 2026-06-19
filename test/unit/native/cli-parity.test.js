@@ -71,6 +71,19 @@ function runFlip(args) {
   return dec.decode(p.stdout)
 }
 
+/**
+ * Bun oracle with native compute modules ON (APPLE_DOCS_NATIVE unset = the real
+ * default UX: native fusion + embedder, so the SEMANTIC tier is live). Used for
+ * `search`, whose results differ from the lexical-only (off) path. ad-cli search
+ * is fully native and must match this. @param {string[]} args
+ */
+function runJsNativeOn(args) {
+  const env = { ...process.env }
+  delete env.APPLE_DOCS_NATIVE
+  const p = Bun.spawnSync(['bun', join(ROOT, 'cli.js'), ...args, '--home', /** @type {string} */ (dataDir)], { env, stdout: 'pipe', stderr: 'pipe' })
+  return dec.decode(p.stdout)
+}
+
 /** @type {Array<[string, string[]]>} */
 const HUMAN_CASES = [
   ['frameworks', []],
@@ -249,5 +262,37 @@ d('read parity (discovered swiftui doc)', () => {
     }
     if (typeof meta?.title !== 'string' || typeof meta?.rootSlug !== 'string') return
     cmp(['read', meta.title, '--framework', meta.rootSlug, '--max-chars', '8000'])
+  })
+})
+
+// search parity — the FULL cascade INCLUDING the semantic tier. Oracle = cli.js
+// with native compute ON (APPLE_DOCS_NATIVE unset ⇒ semantic live); ad-cli is
+// fully native and must byte-match. Bounded --limit so output fits the spawn
+// buffer. FAILS until ad-cli has `search` (Stage 2+3) — these gate that work.
+/** @type {Array<[string, string[]]>} */
+const SEARCH_CASES = [
+  ['search', ['view', '--limit', '10']],
+  ['search', ['navigation', 'stack', '--limit', '10']],
+  ['search', ['async', 'await', '--limit', '5']],
+  ['search', ['swiftui', 'button', '--framework', 'swiftui', '--limit', '5']],
+]
+
+d('search parity (native cascade + semantic) vs cli.js native-on oracle', () => {
+  for (const [verb, flags] of SEARCH_CASES) {
+    test(`human: ${verb} ${flags.join(' ')}`.trim(), () => {
+      const args = [verb, ...flags]
+      expect(runNative(args)).toBe(runJsNativeOn(args))
+    })
+    test(`json: ${verb} ${flags.join(' ')}`.trim(), () => {
+      const args = [verb, ...flags, '--json']
+      const native = runNative(args)
+      const js = runJsNativeOn(args)
+      expect(JSON.parse(native)).toEqual(JSON.parse(js))
+      expect(native).toBe(js)
+    })
+  }
+  test('--read mode (top hit + bounded content)', () => {
+    const args = ['search', 'view', '--limit', '5', '--read', '--max-chars', '4000']
+    expect(runNative(args)).toBe(runJsNativeOn(args))
   })
 })

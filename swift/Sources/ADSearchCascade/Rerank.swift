@@ -36,6 +36,39 @@ enum Rerank {
     static func apply(_ results: inout [ResultHit], query: String, intent: Intent, window: Int)
         -> [ResultHit]
     {
+        score(&results, query: query, intent: intent)
+        return results.min(count: window, sortedBy: lessThan(_:_:))
+    }
+
+    /// Scores `results` in place and returns the FULL array sorted by the same
+    /// total order. The semantic path needs every reranked hit (not just the top
+    /// window) because hybrid fusion blends the complete lexical rank list with
+    /// the semantic candidates — a hit beyond `window` can still surface once its
+    /// semantic contribution is added. Mirrors JS `rerank`, which sorts the whole
+    /// `results` array in place before `fuseSemanticResults` reads its order.
+    static func applyFull(_ results: inout [ResultHit], query: String, intent: Intent) {
+        score(&results, query: query, intent: intent)
+        results.sort(by: lessThan)
+    }
+
+    /// The strict total order shared by `apply`/`applyFull`: score desc (0.001
+    /// epsilon), then qualityOrder, then sourceOrder, then `origIndex` (the
+    /// insertion-index tie-break that reproduces JS's stable sort).
+    private static func lessThan(_ a: ResultHit, _ b: ResultHit) -> Bool {
+        let scoreDiff = b.score - a.score
+        if abs(scoreDiff) > 0.001 { return scoreDiff < 0 }  // higher score first
+        let qa = qualityOrder[a.matchQuality] ?? 9
+        let qb = qualityOrder[b.matchQuality] ?? 9
+        if qa != qb { return qa < qb }
+        let sa = sourceOrder[(a.sourceType ?? "").lowercased()] ?? 99
+        let sb = sourceOrder[(b.sourceType ?? "").lowercased()] ?? 99
+        if sa != sb { return sa < sb }
+        return a.origIndex < b.origIndex
+    }
+
+    /// The R1-R11 scoring loop (no sort). Multipliers are applied in JS order so
+    /// the `Double` results are bit-identical.
+    private static func score(_ results: inout [ResultHit], query: String, intent: Intent) {
         let lowerQuery = query.lowercased()
 
         for i in results.indices {
@@ -98,18 +131,6 @@ enum Rerank {
             if intent.type == .wwdc, sourceType == "wwdc" { score *= 1.4 }
 
             results[i].score = score
-        }
-
-        return results.min(count: window) { a, b in
-            let scoreDiff = b.score - a.score
-            if abs(scoreDiff) > 0.001 { return scoreDiff < 0 }  // higher score first
-            let qa = qualityOrder[a.matchQuality] ?? 9
-            let qb = qualityOrder[b.matchQuality] ?? 9
-            if qa != qb { return qa < qb }
-            let sa = sourceOrder[(a.sourceType ?? "").lowercased()] ?? 99
-            let sb = sourceOrder[(b.sourceType ?? "").lowercased()] ?? 99
-            if sa != sb { return sa < sb }
-            return a.origIndex < b.origIndex
         }
     }
 }

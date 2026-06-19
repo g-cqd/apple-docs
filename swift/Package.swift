@@ -148,7 +148,13 @@ let package = Package(
         // ad-cli — the native read CLI (P7). Mirrors the Bun cli.js read verbs
         // 1:1 over ADStorage. Its own executable target (separate @main from
         // ad-server). swift-argument-parser only; no new external dep.
-        .executable(name: "ad-cli", targets: ["ADCLI"])
+        .executable(name: "ad-cli", targets: ["ADCLI"]),
+        // ADSemantic — native semantic candidate retrieval (Stage 1 of the
+        // semantic-search tier): the bit-exact port of the JS `semanticCandidates`
+        // chunk path. Leaf library over ADStorage + ADEmbed + ADFoundation's
+        // ADFCore (Popcount/Endian). Not pulled by the zero-external-dep ADCore
+        // dylib — consumed by ad-cli's semantic probe (and, later, the cascade).
+        .library(name: "ADSemantic", targets: ["ADSemantic"])
     ],
     // apple/swift-nio: used ONLY by the ad-server executable. Package.resolved is committed.
     dependencies: [
@@ -247,6 +253,11 @@ let package = Package(
             name: "ADSearchCascade",
             dependencies: [
                 "ADStorage", "ADContent", "ADBase",
+                // ADSemantic (Stage-1 candidate retrieval) + ADSearch (the bit-exact
+                // Fusion/MMR math) + ADEmbed (the Embedder type the semantic context
+                // carries) wire the optional semantic step. Additive: the lexical
+                // path (server/MCP, semantic == nil) is unchanged.
+                "ADSemantic", "ADSearch", "ADEmbed",
                 .product(name: "ADFCore", package: "ADFoundation"),
                 .product(name: "ADFText", package: "ADFoundation"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
@@ -283,17 +294,34 @@ let package = Package(
                 "ADSQLSearch"
             ],
             path: "Sources/ADServer", swiftSettings: releaseCMO + strictSettings),
+        // ADSemantic — native semantic candidate retrieval (Stage 1). Ports the JS
+        // `semanticCandidates` chunk path: query embed (ADEmbed) → sign-quantize →
+        // Hamming shortlist (ADFCore.Popcount) → int8 rescore (ADFCore.Endian) →
+        // max-pool to documents. Leaf over ADStorage + ADEmbed + ADFCore; NOT in
+        // the ADCore dylib graph. Max strict concurrency.
+        .target(
+            name: "ADSemantic",
+            dependencies: [
+                "ADStorage", "ADEmbed",
+                .product(name: "ADFCore", package: "ADFoundation")
+            ],
+            swiftSettings: releaseCMO + strictSettings),
         // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
         // Byte-for-byte output-compatible with the Bun cli.js read verbs. Reads via
         // ADStorage; ADContent supplies the String markdown renderer the `read` verb
         // shares with ad-server's read_doc (DocMarkdown.render, the parity-proven
         // path). A tiny local JSON model frames the `--json` output (no ADJSON
-        // needed). swift-argument-parser only — no new external dependency.
+        // needed). swift-argument-parser only — no new external dependency. Also
+        // hosts the hidden `_semantic-probe` verb (ADSemantic + ADEmbed) used to
+        // self-verify Stage-1 semantic retrieval against the JS oracle.
         .executableTarget(
             name: "ADCLI",
             dependencies: [
                 "ADStorage",
                 "ADContent",
+                "ADSearchCascade",
+                "ADSemantic",
+                "ADEmbed",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
             path: "Sources/ADCLI", swiftSettings: releaseCMO + strictSettings),

@@ -114,8 +114,8 @@ func isASCIIWhitespace(_ scalar: Unicode.Scalar) -> Bool {
 /// JS template-literal coercion of an optional string: `${x}` renders a null as
 /// the literal text `"null"`. Used where the JS formatter interpolates a
 /// possibly-null value directly (e.g. `bold(result.title)` with a null title)
-/// rather than via `?? path`.
-private func jsString(_ value: String?) -> String {
+/// rather than via `?? path`. Shared with the search formatter (Search.swift).
+func jsString(_ value: String?) -> String {
     value ?? "null"
 }
 
