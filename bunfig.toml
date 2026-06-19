@@ -2,5 +2,6 @@
 coverageReporter = ["text", "lcov"]
 coverageDir = "coverage"
 coverageSkipTestFiles = true
-# Baseline: 80.30% functions, 78.48% lines (measured 2026-04-13)
-coverageThreshold = { line = 0.75, function = 0.75 }
+# Achieved: 87.17% functions, 86.24% lines (measured 2026-06-19, post checkJs burndown).
+# Floor raised 0.75 -> 0.78 (Workstream B.3) — meaningful gate with ~8% headroom.
+coverageThreshold = { line = 0.78, function = 0.78 }

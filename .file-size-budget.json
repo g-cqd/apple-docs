@@ -1,17 +1,17 @@
 {
   "max_lines": 400,
   "soft_target": 300,
-  "_doc": "A few files exceed the 400-line ceiling. Enabling the biome formatter (2026-06) expanded single-line method/block bodies, growing several files; each is pinned to its formatter-normalized baseline so the check still hard-fails on further drift. database.js is a delegation facade whose one-line pass-throughs biome expands to ~3 lines each — a candidate for splitting the delegation map.",
+  "_doc": "A few files exceed the 400-line ceiling. Enabling the biome formatter (2026-06) expanded single-line bodies and the checkJs burndown (2026-06, Workstream B2) added per-symbol JSDoc type annotations — both grow line counts without adding logic. Each such file is pinned to its current baseline so the check still hard-fails on further drift. database.js is a delegation facade whose one-line pass-throughs biome expands to ~3 lines each and which now carries @param types for ~90 methods — a candidate for splitting the delegation map.",
   "exempt": [
     {
       "path": "src/web/worker/search-worker.js",
-      "lines": 423,
-      "_reason": "Search Web Worker — title index, inverted/prefix builders, scoring, and postMessage protocol in one file because Web Workers can't share scope across module boundaries without a bundler. Formatter-normalized baseline (biome)."
+      "lines": 424,
+      "_reason": "Search Web Worker — title index, inverted/prefix builders, scoring, and postMessage protocol in one file because Web Workers can't share scope across module boundaries without a bundler. Baseline includes biome + checkJs JSDoc."
     },
     {
       "path": "src/storage/database.js",
-      "lines": 580,
-      "_reason": "DocsDatabase delegation facade over the per-domain repos; biome expands its one-line pass-through methods to ~3 lines each. Splitting would only scatter the delegation map. Candidate for a future split. Formatter-normalized baseline (biome)."
+      "lines": 838,
+      "_reason": "DocsDatabase delegation facade over the per-domain repos; biome expands its one-line pass-throughs to ~3 lines each and the checkJs burndown added @param/@returns JSDoc for ~90 methods. Splitting would only scatter the delegation map. Candidate for a future split."
     },
     {
       "path": "src/web/build.js",
@@ -20,13 +20,28 @@
     },
     {
       "path": "src/web/templates.js",
-      "lines": 419,
-      "_reason": "Web HTML templating cluster (routes -> templates -> context). Formatter-normalized baseline (biome)."
+      "lines": 420,
+      "_reason": "Web HTML templating cluster (routes -> templates -> context). Baseline includes biome + checkJs JSDoc."
     },
     {
       "path": "src/storage/repos/search.js",
-      "lines": 408,
-      "_reason": "Query planner with FTS5/title-exact/trigram/body variants sharing uniform filter + projection logic. Formatter-normalized baseline (biome)."
+      "lines": 430,
+      "_reason": "Query planner with FTS5/title-exact/trigram/body variants sharing uniform filter + projection logic. Baseline includes biome + checkJs JSDoc."
+    },
+    {
+      "path": "src/output/projection.js",
+      "lines": 448,
+      "_reason": "Public-output projection for every command/MCP/web payload — the single sanctioned shaping layer. The checkJs burndown added @param/@returns JSDoc across its projectors. Baseline includes biome + checkJs JSDoc."
+    },
+    {
+      "path": "src/storage/repos/documents.js",
+      "lines": 403,
+      "_reason": "Documents repo — CRUD + search-record assembly. The checkJs burndown pushed it just over 400 via @param JSDoc. Baseline includes biome + checkJs JSDoc."
+    },
+    {
+      "path": "src/storage/reader-pool.js",
+      "lines": 413,
+      "_reason": "Worker-thread reader pool (strict/deep) + main-thread fallback. The checkJs burndown added @param/@typedef JSDoc. Baseline includes biome + checkJs JSDoc."
     },
     {
       "path": "cli.js",
