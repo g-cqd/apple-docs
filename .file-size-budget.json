@@ -45,8 +45,8 @@
     },
     {
       "path": "cli.js",
-      "lines": 477,
-      "_reason": "CLI dispatcher (search/read/sync/setup/mcp/web/status) + the RFC 0005 Phase E default-off serve-flip intercept (web serve → ad-server). Formatter-normalized baseline (biome); P7 migrates this to a swift-argument-parser CLI."
+      "lines": 493,
+      "_reason": "CLI dispatcher (search/read/sync/setup/mcp/web/status) + the RFC 0005 Phase E default-off serve-flip intercept (web serve → ad-server) + the RFC 0007 P7 default-off CLI-flip intercept (frameworks/kinds → ad-cli). Formatter-normalized baseline (biome); P7 migrates this to a swift-argument-parser CLI."
     }
   ]
 }

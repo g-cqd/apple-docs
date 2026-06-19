@@ -31,8 +31,9 @@ import { config } from './src/config.js'
 import { installCrashHandlers, lifecycle } from './src/lib/lifecycle.js'
 import { createLogger } from './src/lib/logger.js'
 import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
+import { adCliBinaryPath, nativeCliArgs } from './src/native/ad-cli.js'
 import { adServerBinaryPath, nativeServeArgs } from './src/native/ad-server.js'
-import { isNativeServeEnabled } from './src/native/loader.js'
+import { isNativeCliEnabled, isNativeServeEnabled } from './src/native/loader.js'
 import { projectStatus } from './src/output/projection.js'
 import { DocsDatabase } from './src/storage/database.js'
 
@@ -98,6 +99,21 @@ if (isNativeServeEnabled()) {
   if (serveArgs && bin) {
     logger.info(`serving via native ad-server (${bin})`)
     const child = Bun.spawn([bin, ...serveArgs], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
+    const code = await child.exited
+    cleanup()
+    process.exit(code)
+  }
+}
+
+// RFC 0007 P7 CLI flip (default-off): hand the read verbs (frameworks, kinds) to
+// the native ad-cli when APPLE_DOCS_NATIVE includes `cli` + the binary resolves;
+// any unsupported flag/positional (or other verb) falls through to the Bun path.
+if (isNativeCliEnabled()) {
+  const cliArgs = nativeCliArgs({ command, subcommand, positional, flags, dbPath: join(dataDir, 'apple-docs.db') })
+  const bin = cliArgs && adCliBinaryPath()
+  if (cliArgs && bin) {
+    logger.debug(`read verb via native ad-cli (${bin})`)
+    const child = Bun.spawn([bin, ...cliArgs], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
     const code = await child.exited
     cleanup()
     process.exit(code)

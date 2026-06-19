@@ -144,7 +144,11 @@ let package = Package(
         macOSFloor, .iOS(.v26), .tvOS(.v26), .watchOS(.v26), .visionOS(.v26)
     ],
     products: [
-        .library(name: "AppleDocsCore", type: .dynamic, targets: ["ADCore"])
+        .library(name: "AppleDocsCore", type: .dynamic, targets: ["ADCore"]),
+        // ad-cli — the native read CLI (P7). Mirrors the Bun cli.js read verbs
+        // 1:1 over ADStorage. Its own executable target (separate @main from
+        // ad-server). swift-argument-parser only; no new external dep.
+        .executable(name: "ad-cli", targets: ["ADCLI"])
     ],
     // apple/swift-nio: used ONLY by the ad-server executable. Package.resolved is committed.
     dependencies: [
@@ -279,6 +283,17 @@ let package = Package(
                 "ADSQLSearch"
             ],
             path: "Sources/ADServer", swiftSettings: releaseCMO + strictSettings),
+        // ad-cli — the native read CLI (P7, first slice: `frameworks` + `kinds`).
+        // Byte-for-byte output-compatible with the Bun cli.js read verbs. Reads via
+        // ADStorage; a tiny local JSON model frames the `--json` output (no ADJSON
+        // needed). swift-argument-parser only — no new external dependency.
+        .executableTarget(
+            name: "ADCLI",
+            dependencies: [
+                "ADStorage",
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ],
+            path: "Sources/ADCLI", swiftSettings: releaseCMO + strictSettings),
         // ADSQLSearch — apple-docs' `/search` serving over the in-process ADDB engine
         // (the Swift body of the `ad_storage_search_pages` ABI): builds the main query,
         // binds the filter bag, frames the projection into the response bytes. Moved here
