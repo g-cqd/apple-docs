@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Lazy, process-cached query/document embedder backed by transformers.js
  * (the optional `@huggingface/transformers` dependency). Returns `null` when
@@ -33,6 +32,7 @@ import { l2normalize, lastTokenPool, meanPool, truncate } from './pooling.js'
 // Model registry. `APPLE_DOCS_EMBED_MODEL` selects a key; `APPLE_DOCS_EMBED_DIMS`
 // optionally Matryoshka-truncates a feature-extraction model. Adding a model is
 // a registry entry — getEmbedder() needs no changes.
+/** @type {Record<string, any>} */
 const REGISTRY = {
   'potion-retrieval-32M': {
     hfId: 'minishlab/potion-retrieval-32M',
@@ -81,6 +81,7 @@ const REGISTRY = {
 }
 
 const DEFAULT_MODEL = 'potion-retrieval-32M'
+/** @type {any} */
 let cached // { embed, embedBatch } | null | undefined
 
 /** Build-time accessor for the active spec (model-integrity, snapshot). */
@@ -92,7 +93,7 @@ export function resolveActiveSpec() {
 function resolveSpec() {
   const key = process.env.APPLE_DOCS_EMBED_MODEL || DEFAULT_MODEL
   const spec = REGISTRY[key] ?? REGISTRY[DEFAULT_MODEL]
-  const wanted = Number.parseInt(process.env.APPLE_DOCS_EMBED_DIMS, 10)
+  const wanted = Number.parseInt(process.env.APPLE_DOCS_EMBED_DIMS ?? '', 10)
   const targetDims = Number.isFinite(wanted) && wanted > 0 ? Math.min(wanted, spec.dims) : spec.dims
   return { ...spec, targetDims }
 }
@@ -100,6 +101,7 @@ function resolveSpec() {
 // Resolve the directory that holds (or will hold) the model files. Precedence:
 // explicit env override → the caller-threaded dataDir → the APPLE_DOCS_HOME
 // default. Threading the real dataDir keeps this correct under `--home`.
+/** @param {string} [explicit] */
 function resolveModelsDir(explicit) {
   if (process.env.APPLE_DOCS_MODELS_DIR) return process.env.APPLE_DOCS_MODELS_DIR
   if (explicit) return explicit
@@ -107,6 +109,7 @@ function resolveModelsDir(explicit) {
   return join(home, 'resources', 'models')
 }
 
+/** @param {any} env @param {string} dir */
 function configureEnv(env, dir) {
   env.localModelPath = dir
   env.cacheDir = dir
@@ -115,7 +118,7 @@ function configureEnv(env, dir) {
 }
 
 /**
- * @param {{ logger?: object, modelsDir?: string }} [opts]
+ * @param {{ logger?: any, modelsDir?: string }} [opts]
  * @returns {Promise<{ embed(text: string, opts?: { isQuery?: boolean }): Promise<Float32Array>, embedBatch(texts: string[], opts?: { isQuery?: boolean }): Promise<Float32Array[]> } | null>}
  */
 export async function getEmbedder({ logger, modelsDir } = {}) {
@@ -145,7 +148,7 @@ export async function getEmbedder({ logger, modelsDir } = {}) {
   // shipped default.
   try {
     await ensureOnnxRuntimeLoadable(logger)
-    const tx = await import('@huggingface/transformers')
+    const tx = /** @type {any} */ (await import('@huggingface/transformers'))
     configureEnv(tx.env, resolveModelsDir(modelsDir))
     if (onnxFallbackInstalled) {
       // Single-threaded WASM: Bun's worker support and ort-web's
@@ -156,7 +159,7 @@ export async function getEmbedder({ logger, modelsDir } = {}) {
     }
     cached = await buildFeatureExtraction(tx, spec)
   } catch (err) {
-    logger?.debug?.(`semantic embedder unavailable (${err.message}) — lexical-only`)
+    logger?.debug?.(`semantic embedder unavailable (${err instanceof Error ? err.message : err}) — lexical-only`)
     cached = null
   }
   return cached
@@ -171,6 +174,7 @@ let onnxFallbackInstalled = false
  * specifier to the API-compatible `onnxruntime-web` WASM runtime via a Bun
  * module plugin. `APPLE_DOCS_ONNX_WASM=1` forces the fallback.
  */
+/** @param {any} logger */
 async function ensureOnnxRuntimeLoadable(logger) {
   if (onnxFallbackInstalled) return
   if (process.env.APPLE_DOCS_ONNX_WASM !== '1') {
@@ -201,12 +205,13 @@ async function ensureOnnxRuntimeLoadable(logger) {
  * (asymmetric instruction-tuned models); a default of `false` keeps the
  * document side prefix-free unless the spec sets one.
  */
+/** @param {any} tx @param {any} spec */
 async function buildFeatureExtraction(tx, spec) {
   const { AutoModel, AutoTokenizer } = tx
   const model = await AutoModel.from_pretrained(spec.hfId, { dtype: spec.dtype ?? 'fp32' })
   const tokenizer = await AutoTokenizer.from_pretrained(spec.hfId)
-  const applyPrefix = (text, isQuery) => (isQuery ? (spec.queryPrefix ?? '') : (spec.docPrefix ?? '')) + (text ?? '')
-  const run = async (texts, isQuery) => {
+  const applyPrefix = (/** @type {any} */ text, /** @type {any} */ isQuery) => (isQuery ? (spec.queryPrefix ?? '') : (spec.docPrefix ?? '')) + (text ?? '')
+  const run = async (/** @type {any[]} */ texts, /** @type {any} */ isQuery) => {
     const enc = await tokenizer(
       texts.map((t) => applyPrefix(t, isQuery)),
       { padding: true, truncation: true },
@@ -230,10 +235,10 @@ async function buildFeatureExtraction(tx, spec) {
     return results
   }
   return {
-    async embed(text, opts) {
+    async embed(/** @type {any} */ text, /** @type {any} */ opts) {
       return (await run([text ?? ''], !!opts?.isQuery))[0]
     },
-    async embedBatch(texts, opts) {
+    async embedBatch(/** @type {any[]} */ texts, /** @type {any} */ opts) {
       if (!texts || texts.length === 0) return []
       return run(
         texts.map((t) => t ?? ''),
@@ -243,7 +248,8 @@ async function buildFeatureExtraction(tx, spec) {
   }
 }
 
-/** Extract row `i` of a packed [n × seq] attention mask as a 0/1 number array. */
+/** Extract row `i` of a packed [n × seq] attention mask as a 0/1 number array.
+ * @param {any} maskData @param {number} i @param {number} seq */
 function maskRow(maskData, i, seq) {
   const out = new Array(seq)
   const base = i * seq

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Supply-chain pin + acquisition for the shipped embedding model.
  *
@@ -38,6 +37,7 @@ import { getEmbedder, resolveActiveSpec } from './embedder.js'
 // but remains the immutable derivation source for matrix-v1.admx.
 export const LEGACY_ONNX_SHA256 = 'e82f46335878dd5d72f9544a2a7c61061659c6273ceb8815e10ff952c2e07457'
 
+/** @type {Record<string, Record<string, string>>} */
 export const PINNED_MODEL_FILES = {
   'minishlab/potion-retrieval-32M': {
     'tokenizer.json': '7d75cbc54318138807c401b0f0c9721117c628b39de8e8e0edb6cb17e0ee7d18',
@@ -71,7 +71,8 @@ export async function verifyPinnedModelFiles(dir, hfId, pins = PINNED_MODEL_FILE
   return { verified: Object.keys(pinned).length }
 }
 
-/** Pin-verified fetch of one model file into the models layout. Fail-closed. */
+/** Pin-verified fetch of one model file into the models layout. Fail-closed.
+ * @param {string} dir @param {string} hfId @param {string} rel @param {string} wantSha @param {any} logger */
 async function fetchPinned(dir, hfId, rel, wantSha, logger) {
   const url = `https://huggingface.co/${hfId}/resolve/main/${rel}`
   const dest = join(dir, hfId, rel)
@@ -83,6 +84,7 @@ async function fetchPinned(dir, hfId, rel, wantSha, logger) {
   if (!response.ok) {
     throw new ValidationError(`model fetch failed (${response.status}): ${url}`)
   }
+  if (!response.body) throw new ValidationError(`model fetch returned no body: ${url}`)
   const temp = `${dest}.fetch-${process.pid}`
   const sink = Bun.file(temp).writer()
   let received = 0
@@ -113,6 +115,7 @@ async function fetchPinned(dir, hfId, rel, wantSha, logger) {
  * when the ADMX artifact still needs deriving. Consumer boots never fetch:
  * they only derive ADMX from an onnx an older snapshot shipped.
  */
+/** @param {string} dir @param {string} hfId @param {{ allowRemote?: boolean, logger?: any }} opts */
 async function acquireModelInputs(dir, hfId, { allowRemote, logger }) {
   const pins = PINNED_MODEL_FILES[hfId]
   if (!pins) return
@@ -147,7 +150,7 @@ async function acquireModelInputs(dir, hfId, { allowRemote, logger }) {
  * missing model there would silently ship a snapshot with no semantic tier
  * for every consumer, so it throws instead of skipping.
  *
- * @param {{ modelsDir?: string, logger?: object, embedder?: object|null }} [opts]
+ * @param {{ modelsDir?: string, logger?: any, embedder?: any }} [opts]
  *   `embedder` is a test seam: `null` forces the unavailable path, an object
  *   skips the real getEmbedder (and skips acquisition — unit scope).
  * @returns {Promise<{ status: 'ok'|'skipped', hfId?: string, verified?: number, message?: string }>}
@@ -168,7 +171,7 @@ export async function ensureEmbeddingModel({ modelsDir, logger, embedder } = {})
       await acquireModelInputs(dir, spec.hfId, { allowRemote: isReleaseBuild, logger })
     } catch (error) {
       if (isReleaseBuild) throw error
-      logger?.debug?.(`model acquisition skipped: ${error.message}`)
+      logger?.debug?.(`model acquisition skipped: ${error instanceof Error ? error.message : error}`)
     }
   }
 

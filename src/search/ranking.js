@@ -1,4 +1,4 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
+/** @type {Record<string, number>} */
 const BASE_SCORES = {
   exact: 100,
   prefix: 80,
@@ -47,6 +47,7 @@ const SYMBOL_KINDS = new Set([
   'macro',
 ])
 
+/** @type {Record<string, number>} */
 const SOURCE_PREFERENCE_MULTIPLIERS = {
   'apple-docc': 1.3,
   hig: 1.2,
@@ -54,6 +55,7 @@ const SOURCE_PREFERENCE_MULTIPLIERS = {
   guidelines: 1.05,
 }
 
+/** @type {Record<string, number>} */
 const SOURCE_PREFERENCE_ORDER = {
   'apple-docc': 0,
   hig: 1,
@@ -64,10 +66,10 @@ const SOURCE_PREFERENCE_ORDER = {
 /**
  * Apply source-aware reranking rules to search results.
  *
- * @param {Array} results - Search results with matchQuality, sourceType, path, kind, title, etc.
+ * @param {any[]} results - Search results with matchQuality, sourceType, path, kind, title, etc.
  * @param {string} query - Original query string
  * @param {{ type: string, confidence: number }} intent - Detected query intent
- * @returns {Array} Results with `score` field, sorted by score descending
+ * @returns {any[]} Results with `score` field, sorted by score descending
  */
 export function rerank(results, query, intent) {
   const lowerQuery = (query ?? '').toLowerCase()
@@ -163,6 +165,7 @@ export function rerank(results, query, intent) {
   }
 
   // Stable sort: by score descending, then by original match quality order for ties
+  /** @type {Record<string, number>} */
   const qualityOrder = { exact: 0, prefix: 1, contains: 2, match: 3, substring: 4, fuzzy: 5, body: 6, relaxed: 7, 'relaxed-or': 8, 'relaxed-token': 9 }
   results.sort((a, b) => {
     const scoreDiff = b.score - a.score

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Optional semantic-search tier.
  *
@@ -25,7 +24,7 @@ import { dotI8, hamming, hammingU32, quantize, quantizeTo, VECTOR_BYTES, VECTOR_
 // Invalidated cheaply by row count + mode; fully dropped by _resetVectorCache.
 let caches = new WeakMap()
 
-/** Cheap gate: vectors or chunks present and not explicitly disabled. */
+/** Cheap gate: vectors or chunks present and not explicitly disabled. @param {any} db */
 export function isSemanticAvailable(db) {
   if (process.env.APPLE_DOCS_SEMANTIC === 'off') return false
   if (typeof db?.getVectorCount !== 'function') return false
@@ -33,13 +32,14 @@ export function isSemanticAvailable(db) {
   return typeof db.getChunkCount === 'function' && db.getChunkCount() > 0
 }
 
-/** Resolve the embedding width the snapshot was built at (meta, else infer). */
+/** Resolve the embedding width the snapshot was built at (meta, else infer). @param {any} db @param {number} fallback */
 function readDims(db, fallback) {
   const meta = typeof db.getSnapshotMeta === 'function' ? db.getSnapshotMeta('embed_dims') : null
   const n = meta ? Number.parseInt(meta, 10) : Number.NaN
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
+/** @param {any} db */
 function loadVectors(db) {
   const chunkCount = typeof db.getChunkCount === 'function' ? db.getChunkCount() : 0
   if (chunkCount > 0) return resolveStore(db, 'chunk', chunkCount, () => buildChunkStore(db, chunkCount))
@@ -52,7 +52,8 @@ function loadVectors(db) {
 }
 
 /** Cache + return a store; a built store carries `usable` so a degraded
- *  snapshot caches its verdict instead of rebuilding every query. */
+ *  snapshot caches its verdict instead of rebuilding every query.
+ *  @param {any} db @param {string} mode @param {number} count @param {() => any} build */
 function resolveStore(db, mode, count, build) {
   const existing = caches.get(db)
   if (existing && existing.mode === mode && existing.count === count) return existing.usable ? existing : null
@@ -61,13 +62,13 @@ function resolveStore(db, mode, count, build) {
   return store.usable ? store : null
 }
 
-/** Legacy whole-doc store: one binary code per document. */
+/** Legacy whole-doc store: one binary code per document. @param {any} db @param {number} count */
 function buildLegacyStore(db, count) {
   const rows = db.getAllVectors()
   // Keep only codes whose width matches the live size — an older snapshot
   // (48-byte MiniLM) read by the 64-byte reader is a mismatch; skipping those
   // degrades to lexical-only instead of Hamming-scanning misaligned bytes.
-  const usable = rows.filter((r) => r.vec && r.vec.length === VECTOR_BYTES)
+  const usable = rows.filter((/** @type {any} */ r) => r.vec && r.vec.length === VECTOR_BYTES)
   if (usable.length === 0) return { mode: 'legacy', count, usable: false }
   const ids = new Int32Array(usable.length)
   const packed = new Uint8Array(usable.length * VECTOR_BYTES)
@@ -78,14 +79,14 @@ function buildLegacyStore(db, count) {
   return { mode: 'legacy', count, usable: true, n: usable.length, width: VECTOR_BYTES, dims: VECTOR_DIMS, ids, packed }
 }
 
-/** Chunk store: resident binary codes + chunk→doc map (int8 fetched on demand). */
+/** Chunk store: resident binary codes + chunk→doc map (int8 fetched on demand). @param {any} db @param {number} count */
 function buildChunkStore(db, count) {
   const rows = db.getAllChunkVectors()
-  const sample = rows.find((r) => r.vec_bin)
+  const sample = rows.find((/** @type {any} */ r) => r.vec_bin)
   if (!sample) return { mode: 'chunk', count, usable: false }
   const dims = readDims(db, sample.vec_bin.length * 8)
   const binWidth = Math.ceil(dims / 8)
-  const usable = rows.filter((r) => r.vec_bin && r.vec_bin.length === binWidth)
+  const usable = rows.filter((/** @type {any} */ r) => r.vec_bin && r.vec_bin.length === binWidth)
   if (usable.length === 0) return { mode: 'chunk', count, usable: false }
   const n = usable.length
   const binPacked = new Uint8Array(n * binWidth)
@@ -102,7 +103,7 @@ function buildChunkStore(db, count) {
 
 /**
  * Top-K nearest documents to `query`.
- * @param {{ db, dataDir?, logger?, embedder? }} ctx
+ * @param {{ db: any, dataDir?: string, logger?: any, embedder?: any }} ctx
  * @param {string} query
  * @param {number} [topK]
  * @returns {Promise<Array<{ documentId: number, distance: number, score: number, vec: Uint8Array }>>}
@@ -140,7 +141,7 @@ export async function semanticCandidates(ctx, query, topK = 50) {
   return store.mode === 'chunk' ? chunkSearch(db, store, qFp32, topK, logger) : legacySearch(store, qFp32, topK)
 }
 
-/** Legacy path: Hamming top-K over whole-doc codes. */
+/** Legacy path: Hamming top-K over whole-doc codes. @param {any} store @param {Float32Array} qFp32 @param {number} topK */
 function legacySearch(store, qFp32, topK) {
   const qBin = quantize(qFp32)
   const bits = store.width * 8
@@ -153,7 +154,8 @@ function legacySearch(store, qFp32, topK) {
   }))
 }
 
-/** Chunk path: Hamming shortlist → int8 rescore → max-sim pool to documents. */
+/** Chunk path: Hamming shortlist → int8 rescore → max-sim pool to documents.
+ * @param {any} db @param {any} store @param {Float32Array} qFp32 @param {number} topK @param {any} logger */
 function chunkSearch(db, store, qFp32, topK, logger) {
   const qBin = quantizeTo(qFp32, store.dims)
   const bits = store.binWidth * 8
@@ -203,6 +205,7 @@ function chunkSearch(db, store, qFp32, topK, logger) {
  *   - return sorted ascending by (dist, idx) (matches the old `<=` insert
  *     order + ascending scan).
  */
+/** @param {any} qBin @param {Uint8Array} packed @param {number} width @param {number} n @param {number} K */
 function shortlistByHamming(qBin, packed, width, n, K) {
   const heapDist = new Int32Array(K)
   const heapIdx = new Int32Array(K)
@@ -215,7 +218,7 @@ function shortlistByHamming(qBin, packed, width, n, K) {
   const pW = swar ? new Uint32Array(packed.buffer, packed.byteOffset, n * words) : null
   const qW = swar ? new Uint32Array(qBin.buffer, qBin.byteOffset, words) : null
   for (let i = 0; i < n; i++) {
-    const d = swar ? hammingU32(qW, pW, i * words, words) : hamming(qBin, packed, i * width, width)
+    const d = swar ? hammingU32(/** @type {Uint32Array} */ (qW), /** @type {Uint32Array} */ (pW), i * words, words) : hamming(qBin, packed, i * width, width)
     if (size < K) {
       // sift up: bubble (d, i) toward the root while parents are smaller.
       let c = size++
@@ -260,6 +263,7 @@ function shortlistByHamming(qBin, packed, width, n, K) {
   return out
 }
 
+/** @param {any} value @param {number} fallback @param {number} min @param {number} max */
 function clampInt(value, fallback, min, max) {
   const n = Number.parseInt(value, 10)
   if (!Number.isFinite(n)) return fallback

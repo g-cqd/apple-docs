@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Search cascade: the four query variants (FTS5 / title-exact / trigram /
  * body) wrapped with safeCall + warn-once logging, plus the three-step
@@ -14,7 +13,8 @@ import { DeadlineError, runRead } from '../storage/reader-pool.js'
 import { buildFtsQuery, sanitizeTrigramQuery } from './fts-query-builder.js'
 import { pickHighSignalToken, pruneStopwords, tokenize } from './relaxation.js'
 
-/** Build the four cascade runners bound to the current query state. */
+/** Build the four cascade runners bound to the current query state.
+ * @param {{ ctx: any, q: string, ftsQuery: string, frameworks: any[], filterOpts: any, hasBody: boolean }} state */
 export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, hasBody }) {
   const runFts = async () => {
     const flat = await safeCall(
@@ -73,7 +73,7 @@ export function buildCascadeRunners({ ctx, q, ftsQuery, frameworks, filterOpts, 
  * the strict tiers. Mutates `state` (results, addResults closure) and
  * returns the relaxation-tier label that produced any hits, or null.
  *
- * @param {object} state — { ctx, q, frameworks, filterOpts, results, addResults }
+ * @param {{ ctx: any, q: string, frameworks: any[], filterOpts: any, results: any[], addResults: (rows: any, tier: string) => void }} state
  * @returns {Promise<'pruned'|'pruned-or'|'trigram'|null>}
  */
 export async function runRelaxationCascade(state) {
@@ -84,6 +84,7 @@ export async function runRelaxationCascade(state) {
   if (tokens.length < 3) return null
 
   const pruned = pruneStopwords(tokens)
+  /** @type {'pruned'|'pruned-or'|'trigram'|null} */
   let relaxationTier = null
 
   // R1 — pruned AND: keep only high-signal tokens and re-run FTS5.

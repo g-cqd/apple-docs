@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Deterministic, dependency-free document chunker for the body-aware semantic
  * index. The embedder used to see only `title + abstract + headings` (the
@@ -28,7 +27,7 @@ const ANCHOR_MAX = 1200
 // kept, which naturally captures DocC's open-ended "named topic" headings.
 const SKIP_SECTION_KINDS = new Set(['declaration', 'parameters', 'parameter', 'returnvalue', 'return value', 'attributes', 'availability'])
 
-/** Build the anchor string — identical to the legacy embedText() input. */
+/** Build the anchor string — identical to the legacy embedText() input. @param {any} doc */
 export function anchorText(doc) {
   return [doc.title, doc.abstract_text, doc.headings].filter(Boolean).join('. ').slice(0, ANCHOR_MAX)
 }
@@ -38,6 +37,7 @@ export function anchorText(doc) {
  * text already fits; otherwise windows of `size` chars step forward by
  * `size - overlap` so adjacent chunks share context.
  */
+/** @param {string} text @param {number} size @param {number} overlap */
 function slidingWindow(text, size, overlap) {
   if (text.length <= size) return [text]
   const step = Math.max(1, size - overlap)
@@ -50,7 +50,7 @@ function slidingWindow(text, size, overlap) {
 }
 
 /**
- * @param {{ title?, abstract_text?, headings?, sections?: Array<{ sectionKind?, section_kind?, heading?, contentText?, content_text? }> }} doc
+ * @param {{ title?: string, abstract_text?: string, headings?: string, sections?: Array<{ sectionKind?: string, section_kind?: string, heading?: string, contentText?: string, content_text?: string }> }} doc
  * @param {{ maxChunks?: number, windowChars?: number, overlapChars?: number }} [opts]
  * @returns {string[]} chunk texts, chunk 0 = anchor (always present)
  */

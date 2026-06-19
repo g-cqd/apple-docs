@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // fusion-native dispatches to libAppleDocsCore when APPLE_DOCS_NATIVE
 // enables the fusion module; ./fusion.js stays the normative JS reference.
 
@@ -16,10 +15,10 @@ import { hammingSim, hybridFusion, mmrSelect, weightedRRF } from './fusion-nativ
  * explicit hoist (below) enforces that invariant *between* exact hits too.
  * Ends with the MMR diversity pass over the head window.
  *
- * @param {Array} results   lexical results, already rule-reranked (mutated)
+ * @param {any[]} results   lexical results, already rule-reranked (mutated)
  * @param {Array<{ documentId: number, score?: number, vec?: Uint8Array }>} sem
- * @param {{ ctx, activeFilters, seen: Set<string>, requestedWindow: number,
- *           parseRowPlatforms: (rows: Array) => void }} io
+ * @param {{ ctx: any, activeFilters: any, seen: Set<string>, requestedWindow: number,
+ *           parseRowPlatforms: (rows: any[]) => void }} io
  */
 export function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, requestedWindow, parseRowPlatforms }) {
   // Capture the lexical order + the rule-reranker's calibrated scores BEFORE
@@ -28,7 +27,7 @@ export function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, re
   const lexicalRanked = results.map((r) => r.path)
   const lexicalScores = new Map(results.map((r) => [r.path, r.score ?? 0]))
 
-  const byId = new Map(ctx.db.getSearchRecordsByIds(sem.map((c) => c.documentId)).map((r) => [r.id, r]))
+  const byId = new Map(ctx.db.getSearchRecordsByIds(sem.map((c) => c.documentId)).map((/** @type {any} */ r) => [r.id, r]))
   const semanticRanked = []
   const semanticScores = new Map()
   const vecByPath = new Map()
@@ -88,7 +87,7 @@ export function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, re
     const parsed = Number.parseFloat(process.env.APPLE_DOCS_MMR_LAMBDA ?? '0.7')
     const lambda = Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 0.7
     const window = Math.min(results.length, Math.max(requestedWindow, 20))
-    const reordered = mmrSelect(results.slice(0, window), (r) => vecByPath.get(r.path) ?? null, hammingSim, { lambda })
+    const reordered = mmrSelect(results.slice(0, window), (/** @type {any} */ r) => vecByPath.get(r.path) ?? null, hammingSim, { lambda })
     results.splice(0, window, ...reordered)
   }
 }

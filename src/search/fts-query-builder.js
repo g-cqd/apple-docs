@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Build an FTS5 MATCH expression from a user-supplied search string.
  *
@@ -31,6 +30,7 @@
 // Qualified-identifier separators. Hyphen is intentionally excluded (see above).
 const QUALIFIER_SPLIT = /[._:/\\]+/
 
+/** @param {string} q @returns {string} */
 export function buildFtsQuery(q) {
   if (/\b(AND|OR|NOT)\b/.test(q) || q.includes('"')) return q
 
@@ -40,7 +40,7 @@ export function buildFtsQuery(q) {
   return groups.join(' ')
 }
 
-/** Turn one whitespace-word into a single prefix term or an OR group. */
+/** Turn one whitespace-word into a single prefix term or an OR group. @param {string} word */
 function buildWordGroup(word) {
   const segments = word.split(QUALIFIER_SPLIT).filter(Boolean)
   if (segments.length === 0) return null
@@ -62,7 +62,7 @@ function buildWordGroup(word) {
   return `(${alternatives.join(' OR ')})`
 }
 
-/** Split a CamelCase identifier into its sub-words (empty if it doesn't split). */
+/** Split a CamelCase identifier into its sub-words (empty if it doesn't split). @param {string} s */
 function camelSubwords(s) {
   const parts = s
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
