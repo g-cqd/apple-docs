@@ -1,10 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { minifyJs } from '../asset-bundler.js'
 import { ENTRY_BUNDLES } from '../assets-manifest.js'
 import { MIME_TYPES } from '../responses.js'
 
-async function getBundledJs(ctx, bundleName, entryRel) {
+async function getBundledJs(/** @type {any} */ ctx, /** @type {any} */ bundleName, /** @type {any} */ entryRel) {
   // `bundleCache` stores either the resolved bundle text (string) OR the
   // in-flight Promise<string> of a build currently running. Storing the
   // Promise (not just the resolved text) collapses parallel requests for

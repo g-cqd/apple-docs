@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Framework listing page renderer (the `/docs/<root>/index.html` shell
 // for each catalogued framework).
 //
@@ -19,7 +18,7 @@ import { maybePrecompress, PRECOMPRESS_THRESHOLD } from './io.js'
  * Build every framework listing page. Returns the count of frameworks
  * that produced output (skipped frameworks with zero docs are excluded).
  */
-export async function buildFrameworkPages({ roots, db, buildDir, siteConfig }) {
+export async function buildFrameworkPages(/** @type {any} */ { roots, db, buildDir, siteConfig }) {
   let frameworksBuilt = 0
   for (const root of roots) {
     // Root membership (pages join), not `documents.framework = slug` —
@@ -44,7 +43,7 @@ export async function buildFrameworkPages({ roots, db, buildDir, siteConfig }) {
     // renderFrameworkPage returns HtmlString; `.bytes()` gives us a
     // single Uint8Array we can hand to both Bun.write and
     // maybePrecompress without paying a second UTF-8 encode pass.
-    const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl, scopeExtras: loadScopeExtras(db, root) }).bytes()
+    const html = /** @type {any} */ (renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl, scopeExtras: loadScopeExtras(db, root) })).bytes()
     const fwFilePath = join(buildDir, 'docs', root.slug, 'index.html')
     ensureDir(dirname(fwFilePath))
     await Bun.write(fwFilePath, html)

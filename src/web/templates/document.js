@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { renderHtml } from '../../content/render-html.js'
 import { safeWebDocKey } from '../../lib/safe-path.js'
 import { html, raw } from '../lib/html.js'
@@ -18,7 +17,7 @@ import {
   renderTocHtml,
 } from '../templates.js'
 
-export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
+export function renderDocumentPage(/** @type {any} */ doc, /** @type {any} */ sections, /** @type {any} */ siteConfig, /** @type {any} */ opts = {}) {
   const sectionsList = sections ?? []
 
   // Enrich topics items with role_heading from DB (if resolver provided)
@@ -43,10 +42,12 @@ export function renderDocumentPage(doc, sections, siteConfig, opts = {}) {
     : null
 
   // Sort sections for TOC (same order as renderHtml uses)
-  const orderedSections = sectionsList.slice().sort((a, b) => (a.sortOrder ?? a.sort_order ?? 0) - (b.sortOrder ?? b.sort_order ?? 0))
+  const orderedSections = sectionsList
+    .slice()
+    .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.sortOrder ?? a.sort_order ?? 0) - (b.sortOrder ?? b.sort_order ?? 0))
   const tocItems = buildPageToc(orderedSections)
 
-  const relationshipSection = orderedSections.find((s) => (s.sectionKind ?? s.section_kind) === 'relationships')
+  const relationshipSection = orderedSections.find((/** @type {any} */ s) => (s.sectionKind ?? s.section_kind) === 'relationships')
 
   const hasSidebar = tocItems.length >= 2
 
@@ -173,7 +174,7 @@ ${buildScripts(siteConfig, ['core', ...(hasLangToggle ? ['lang-toggle'] : [])])}
 }
 
 /** Splice an HtmlString separator between every element of `items`. */
-function interleave(items, separator) {
+function interleave(/** @type {any} */ items, /** @type {any} */ separator) {
   const out = []
   for (let i = 0; i < items.length; i++) {
     if (i > 0) out.push(separator)
@@ -192,7 +193,7 @@ function interleave(items, separator) {
  *  `_resolvedRoleHeading` markers baked in. Dormant on the single-render-
  *  per-build path but real if anything ever retries a render.
  */
-function enrichTopicItems(sections, resolveRoleHeadings) {
+function enrichTopicItems(/** @type {any} */ sections, /** @type {any} */ resolveRoleHeadings) {
   for (const section of sections) {
     const kind = section.sectionKind ?? section.section_kind
     if (kind !== 'topics') continue
@@ -249,7 +250,7 @@ function enrichTopicItems(sections, resolveRoleHeadings) {
 /**
  * Render the index/landing page listing all frameworks grouped by kind.
  *
- * @param {Array}  frameworks - Framework records (slug, name, kind, doc_count)
- * @param {object} siteConfig - { baseUrl, siteName, buildDate }
+ * @param {Array<any>}  frameworks - Framework records (slug, name, kind, doc_count)
+ * @param {any} siteConfig - { baseUrl, siteName, buildDate }
  * @returns {string} Complete HTML page string
  */

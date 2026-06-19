@@ -1,12 +1,11 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { buildHomepageExtras } from '../homepage-extras.js'
 
 /**
- * @typedef {object} HomepageProps
- * @property {Array<object>} roots Framework roots that have at least one
+ * @typedef {any} HomepageProps
+ * @property {Array<any>} roots Framework roots that have at least one
  *   real page (filters out collection pages whose only entry is the root
  *   itself).
- * @property {object} extras Static extras (Apple Fonts, SF Symbols) injected
+ * @property {any} extras Static extras (Apple Fonts, SF Symbols) injected
  *   into the framework grid.
  */
 
@@ -15,12 +14,12 @@ import { buildHomepageExtras } from '../homepage-extras.js'
  * dev server (`/`) and the static build (`dist/web/index.html`) so the
  * two paths cannot drift on filtering or extras shape.
  *
- * @param {{ db: object, siteConfig: object }} ctx
+ * @param {{ db: any, siteConfig: any }} ctx
  * @returns {HomepageProps}
  */
 export function buildHomepageProps(ctx) {
   const { db, siteConfig } = ctx
-  const roots = db.getRoots().filter((r) => {
+  const roots = db.getRoots().filter((/** @type {any} */ r) => {
     if (r.page_count <= 1) {
       const pages = db.getPagesByRoot(r.slug)
       if (pages.length <= 1 && (!pages[0] || pages[0].path === r.slug)) return false

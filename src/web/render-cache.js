@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Shared render-time lookup caches for web page generation.
  *
@@ -17,8 +16,11 @@
  * @param {import('../storage/database.js').DocsDatabase} db
  */
 export function createWebRenderCache(db) {
+  /** @type {any} */
   let knownKeys = null
+  /** @type {any} */
   let ancestorTitleIndex = null
+  /** @type {any} */
   let roleHeadingIndex = null
 
   function getKnownKeys() {
@@ -55,7 +57,7 @@ export function createWebRenderCache(db) {
 
   return {
     getKnownKeys,
-    getAncestorTitles(key) {
+    getAncestorTitles(/** @type {any} */ key) {
       const titles = new Map()
       if (!key) return titles
 
@@ -68,7 +70,7 @@ export function createWebRenderCache(db) {
       }
       return titles
     },
-    getRoleHeadings(keys) {
+    getRoleHeadings(/** @type {any} */ keys) {
       const headings = new Map()
       if (!Array.isArray(keys) || keys.length === 0) return headings
 

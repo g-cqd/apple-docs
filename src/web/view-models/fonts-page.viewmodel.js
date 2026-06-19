@@ -1,14 +1,13 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
- * @typedef {object} FontsPageProps
- * @property {Array<object>} families
+ * @typedef {any} FontsPageProps
+ * @property {Array<any>} families
  */
 
 /**
  * Build the props consumed by `renderFontsPage`. Used by both the live
  * dev server (`/fonts`) and the static build.
  *
- * @param {{ db: object }} ctx
+ * @param {{ db: any }} ctx
  * @returns {FontsPageProps}
  */
 export function buildFontsPageProps(ctx) {

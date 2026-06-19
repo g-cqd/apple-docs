@@ -20,6 +20,7 @@
  * one toolchain (Bun.build) instead of having serve.js fall back to
  * string concatenation against the raw source files.
  */
+/** @type {Record<string, any>} */
 export const ENTRY_BUNDLES = {
   'core.js': 'core.bundle.js',
   'listing.js': 'listing.bundle.js',

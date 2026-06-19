@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { readFile } from 'node:fs/promises'
 import { ParseError } from '../../../lib/errors.js'
 import { parseCmap } from '../../../resources/apple-symbols/codepoint-from-font.js'
@@ -31,7 +30,7 @@ export async function getLegalCodepointSet(family, fontPath) {
   return set
 }
 
-async function loadLegalSet(fontPath) {
+async function loadLegalSet(/** @type {any} */ fontPath) {
   const buf = await readFile(fontPath)
   const tables = parseSfntDirectoryLocal(buf)
   const cmapRec = tables.get('cmap')
@@ -44,7 +43,7 @@ async function loadLegalSet(fontPath) {
 // Local SFNT-directory parser. Mirrors the helper inside
 // codepoint-from-font.js but stays unexported there, so we duplicate the
 // 10 lines here rather than widen that module's public surface.
-function parseSfntDirectoryLocal(buf) {
+function parseSfntDirectoryLocal(/** @type {any} */ buf) {
   if (buf.length < 12) throw new ParseError('font too short for SFNT header')
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
   const numTables = view.getUint16(4, false)

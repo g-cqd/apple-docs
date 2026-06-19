@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { initHighlighter } from '../content/highlight.js'
@@ -15,23 +14,23 @@ import { createWebRenderCache } from './render-cache.js'
 import { buildAliasMap, buildTitleIndex } from './search-artifacts.js'
 
 /**
- * @typedef {object} WebContext
+ * @typedef {any} WebContext
  * @property {import('../storage/database.js').DocsDatabase} db
  * @property {string} dataDir
- * @property {object} logger
- * @property {object} siteConfig
+ * @property {any} logger
+ * @property {any} siteConfig
  * @property {string} srcWebDir
- * @property {object} rateLimiter
- * @property {object} renderCache
+ * @property {any} rateLimiter
+ * @property {any} renderCache
  * @property {object | null} readerPool
- * @property {object} searchCtx Search context with optional reader pool attached.
- * @property {object} searchCache LRU keyed on normalized search opts + corpus stamp.
+ * @property {any} searchCtx Search context with optional reader pool attached.
+ * @property {any} searchCache LRU keyed on normalized search opts + corpus stamp.
  * @property {{ get: () => string, refresh: () => string }} corpusStamp
- * @property {object} frameworkTreeCache LRU of <slug>:<hash> framework-tree JSON blobs.
+ * @property {any} frameworkTreeCache LRU of <slug>:<hash> framework-tree JSON blobs.
  * @property {Map<string, string>} frameworkTreeBySlug Latest tree hash per framework slug.
  * @property {Record<string, string>} securityHeaders Default headers applied to every page response.
  * @property {Record<string, string>} assetCacheHeaders Default headers for /assets/* + /worker/*.
- * @property {object} gzipCache LRU of pre-compressed response bodies keyed by ETag.
+ * @property {any} gzipCache LRU of pre-compressed response bodies keyed by ETag.
  * @property {Map<string, string | Promise<string>>} bundleCache Per-server cache of synthesised /assets/<name>.js bundles. The Promise variant is the in-flight build that parallel requests should await rather than racing each other into Bun.build.
  * @property {() => object} getTitleIndex
  * @property {() => object} getAliasMap
@@ -45,8 +44,8 @@ import { buildAliasMap, buildTitleIndex } from './search-artifacts.js'
  * handlers can be moved to per-file modules without re-discovering 12
  * closure references each time.
  *
- * @param {{ port?: number, baseUrl?: string, siteName?: string, readerPool?: object | null }} opts
- * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string, logger: object }} ctx
+ * @param {{ port?: number, baseUrl?: string, siteName?: string, readerPool?: any | null }} opts
+ * @param {{ db: import('../storage/database.js').DocsDatabase, dataDir: string, logger: any }} ctx
  * @returns {Promise<WebContext>}
  */
 export async function createWebContext(opts, ctx) {
@@ -84,7 +83,7 @@ export async function createWebContext(opts, ctx) {
     markdownDocs: process.env.APPLE_DOCS_MARKDOWN_DOCS !== '0',
   }
 
-  void initHighlighter().catch((err) => {
+  void initHighlighter().catch((/** @type {any} */ err) => {
     logger.warn('Syntax highlighter unavailable:', err.message)
   })
 
@@ -109,7 +108,9 @@ export async function createWebContext(opts, ctx) {
   // tests that never touch the route would waste CPU and crash hosts
   // without fontTools installed. The route checks `fontSubsetPool`
   // and falls back to 503 when init failed.
+  /** @type {any} */
   let fontSubsetPool = null
+  /** @type {any} */
   let fontSubsetPoolPromise = null
   function getFontSubsetPool() {
     if (fontSubsetPool) return Promise.resolve(fontSubsetPool)
@@ -130,7 +131,7 @@ export async function createWebContext(opts, ctx) {
   const fontSubsetCache = createLru({
     max: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_LRU) ?? 256,
     maxBytes: parseNonNegativeInt(process.env.APPLE_DOCS_WEB_FONT_SUBSET_LRU_BYTES) ?? 64 * 1024 * 1024,
-    sizeFn: (v) => v?.byteLength ?? 0,
+    sizeFn: (/** @type {any} */ v) => v?.byteLength ?? 0,
   })
   const readerPool = await resolveWebReaderPool(ctx, opts, logger)
   const searchCtx = readerPool ? { ...ctx, readerPool } : ctx
@@ -152,8 +153,11 @@ export async function createWebContext(opts, ctx) {
   const frameworkTreeBySlug = new Map()
 
   // Cached search artifacts (invalidated when the document corpus changes).
+  /** @type {any} */
   let cachedTitleIndex = null
+  /** @type {any} */
   let cachedAliasMap = null
+  /** @type {any} */
   let cachedSearchManifest = null
 
   function getTitleIndex() {
@@ -296,6 +300,7 @@ export async function createWebContext(opts, ctx) {
  */
 function createCorpusStamp(ctx) {
   const dbPath = ctx?.db?.dbPath
+  /** @type {any} */
   let cached = null
   let refreshedAt = 0
 
@@ -335,7 +340,7 @@ function createCorpusStamp(ctx) {
  * is disabled, the DB is in-memory, or the pool fails to start (the search
  * path falls back to the main-thread bun:sqlite handle).
  */
-async function resolveWebReaderPool(ctx, opts, logger) {
+async function resolveWebReaderPool(/** @type {any} */ ctx, /** @type {any} */ opts, /** @type {any} */ logger) {
   if (opts && 'readerPool' in opts) return opts.readerPool ?? null
   const mode = process.env.APPLE_DOCS_WEB_READERS ?? 'auto'
   if (['off', '0', 'false', 'no'].includes(String(mode).toLowerCase())) return null
@@ -366,18 +371,18 @@ async function resolveWebReaderPool(ctx, opts, logger) {
     logger?.info?.(`web reader-pool: ready strict=${snap.pools.strict.size} deep=${snap.pools.deep.size} spawns=${snap.spawns}`)
     return pool
   } catch (err) {
-    logger?.error?.(`web reader-pool: failed to start (${err?.message ?? err}); falling back to main-thread reads`)
+    logger?.error?.(`web reader-pool: failed to start (${err instanceof Error ? err.message : err}); falling back to main-thread reads`)
     return null
   }
 }
 
-function parsePositiveInt(value) {
+function parsePositiveInt(/** @type {any} */ value) {
   if (value == null) return null
   const parsed = Number.parseInt(String(value), 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
-function parseNonNegativeInt(value) {
+function parseNonNegativeInt(/** @type {any} */ value) {
   if (value == null) return null
   const parsed = Number.parseInt(String(value), 10)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null

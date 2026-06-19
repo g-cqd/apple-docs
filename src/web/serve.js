@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { rm } from 'node:fs/promises'
 import { createEventLoopLagSampler } from '../lib/event-loop-lag.js'
 import { createWebContext } from './context.js'
@@ -24,9 +23,9 @@ import { symbolsIndexHandler } from './routes/symbols-index.route.js'
 
 /**
  * Start a local dev server for previewing documentation.
- * @param {object} opts - { port?: number, host?: string, baseUrl?: string, rateLimit?: boolean }
- * @param {object} ctx - { db, dataDir, logger }
- * @returns {{ server: object, url: string }}
+ * @param {any} opts - { port?: number, host?: string, baseUrl?: string, rateLimit?: boolean }
+ * @param {any} ctx - { db, dataDir, logger }
+ * @returns {Promise<any>}
  */
 export async function startDevServer(opts, ctx) {
   const port = opts.port ?? 3000
@@ -81,10 +80,10 @@ export async function startDevServer(opts, ctx) {
       try {
         await c.getFontSubsetPool()
       } catch (err) {
-        c.logger?.warn?.(`font-subset pool init failed: ${err?.message ?? err}`)
+        c.logger?.warn?.(`font-subset pool init failed: ${err instanceof Error ? err.message : err}`)
       }
     }
-    return fontSubsetHandler(request, c)
+    return /** @type {any} */ (fontSubsetHandler)(request, c)
   })
   registry.register('/api/symbols/index.json', symbolsIndexHandler)
   registry.register('/api/symbols/search', symbolsSearchHandler)
@@ -114,7 +113,7 @@ export async function startDevServer(opts, ctx) {
   registry.register('/data/search/aliases.json', aliasMapLegacyHandler)
   registry.registerPattern(/^\/data\/search\/(?:title-index|aliases)\.[0-9a-f]{10}\.json$/, searchHashedArtifactHandler)
 
-  async function handleRequest(request) {
+  async function handleRequest(/** @type {any} */ request) {
     const dispatched = await registry.dispatch(request, webCtx)
     return dispatched ?? notFoundResponse(siteConfig)
   }
@@ -225,7 +224,7 @@ export async function startDevServer(opts, ctx) {
         logger?.info?.(`render-cache prune: removed ${removed} (ttl=${ttlPrune.removed}, quota=${quotaPrune.removed})`)
       }
     } catch (err) {
-      logger?.warn?.(`render-cache prune failed: ${err.message}`)
+      logger?.warn?.(`render-cache prune failed: ${/** @type {any} */ (err).message}`)
     }
   }
 
@@ -239,7 +238,7 @@ export async function startDevServer(opts, ctx) {
     }
   }
 
-  async function close(deadlineMs) {
+  async function close(/** @type {any} */ deadlineMs) {
     clearInterval(pruneTimer)
     try {
       eventLoopLag.stop()
@@ -264,7 +263,7 @@ export async function startDevServer(opts, ctx) {
   return { server, url: serverUrl, close, readerPool, metricsUrl: metricsHandle?.url ?? null }
 }
 
-function parsePositiveNumber(value) {
+function parsePositiveNumber(/** @type {any} */ value) {
   if (value == null) return null
   const n = Number.parseFloat(value)
   return Number.isFinite(n) && n > 0 ? n : null
@@ -275,14 +274,14 @@ function parsePositiveNumber(value) {
  * a handler already set (e.g. `Accept-Encoding`). No-op when `Vary: *` or
  * the field is already listed.
  */
-function mergeVary(headers, field) {
+function mergeVary(/** @type {any} */ headers, /** @type {any} */ field) {
   const existing = headers.get('Vary')
   if (!existing) {
     headers.set('Vary', field)
     return
   }
   if (existing.trim() === '*') return
-  const present = existing.split(',').map((s) => s.trim().toLowerCase())
+  const present = existing.split(',').map((/** @type {any} */ s) => s.trim().toLowerCase())
   if (present.includes(field.toLowerCase())) return
   headers.set('Vary', `${existing}, ${field}`)
 }

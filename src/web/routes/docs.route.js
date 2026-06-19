@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchDocPage } from '../../apple/api.js'
 import { lookup } from '../../commands/lookup.js'
 import { BackpressureError } from '../../lib/errors.js'
@@ -29,7 +28,7 @@ const webKeyMaps = new WeakMap()
  * to those that actually map (~40). Returns null when the path carries no
  * hash tag or no mapping exists.
  */
-function resolveHashedWebKey(db, key) {
+function resolveHashedWebKey(/** @type {any} */ db, /** @type {any} */ key) {
   if (!HASHED_SEGMENT_RE.test(key)) return null
   let map = webKeyMaps.get(db)
   if (!map) {
@@ -105,7 +104,7 @@ export async function docsHandler(request, ctx, url) {
       }
       const scopeExtras = loadScopeExtras(db, root)
       const html = renderFrameworkPage(root, docs, siteConfig, { treeEdges, treeDataUrl, scopeExtras })
-      return textResponse(html.bytes(), HTML_HASHABLE)
+      return textResponse(/** @type {any} */ (html).bytes(), HTML_HASHABLE)
     }
   }
 
@@ -224,7 +223,7 @@ export async function docsHandler(request, ctx, url) {
     const html = renderDocumentPage(doc, sections, siteConfig, {
       knownKeys: renderCache.getKnownKeys(),
       ancestorTitles: renderCache.getAncestorTitles(doc.key),
-      resolveRoleHeadings: (keys) => renderCache.getRoleHeadings(keys),
+      resolveRoleHeadings: (/** @type {any} */ keys) => renderCache.getRoleHeadings(keys),
     })
     return textResponse(html.bytes(), HTML_HASHABLE)
   }

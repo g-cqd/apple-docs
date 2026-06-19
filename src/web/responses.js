@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { sha256 } from '../lib/hash.js'
 import { renderNotFoundPage } from './templates.js'
 
@@ -18,6 +17,7 @@ export const API_CORPUS_CACHE_CONTROL = 'public, max-age=300, stale-while-revali
  * the file-response helpers. Lives at module scope so route handlers don't
  * have to import the table from a stateful context object.
  */
+/** @type {Record<string, string>} */
 export const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -40,7 +40,7 @@ export const MIME_TYPES = {
 export const COMPRESSIBLE = new Set(['text/html', 'text/css', 'text/javascript', 'text/markdown', 'application/json'])
 
 /**
- * @typedef {object} JsonResponseOptions
+ * @typedef {any} JsonResponseOptions
  * @property {Record<string, string>} [headers]
  * @property {number} [status]
  * @property {boolean} [hashable] When true, finalizeResponse will hash the
@@ -59,7 +59,7 @@ export function jsonResponse(data, { headers = {}, status = 200, hashable = fals
 }
 
 /**
- * @typedef {object} TextResponseOptions
+ * @typedef {any} TextResponseOptions
  * @property {string} [contentType]
  * @property {Record<string, string>} [headers]
  * @property {number} [status]
@@ -71,7 +71,7 @@ export function jsonResponse(data, { headers = {}, status = 200, hashable = fals
  * @param {TextResponseOptions} [options]
  * @returns {Response}
  */
-export function textResponse(body, { contentType = 'text/plain; charset=utf-8', headers = {}, status = 200, hashable = false } = {}) {
+export function textResponse(/** @type {any} */ body, { contentType = 'text/plain; charset=utf-8', headers = {}, status = 200, hashable = false } = {}) {
   const response = new Response(body, {
     status,
     headers: {
@@ -87,7 +87,7 @@ export function textResponse(body, { contentType = 'text/plain; charset=utf-8', 
  * Render the corpus-aware 404 page. The HTML's inline JS reads
  * window.location to derive a search query from the requested URL, so users
  * land on the search page pre-filled with what they were looking for.
- * @param {object} siteConfig
+ * @param {any} siteConfig
  * @returns {Response}
  */
 export function notFoundResponse(siteConfig) {
@@ -112,10 +112,11 @@ export function notFoundResponse(siteConfig) {
  * @param {Error|string} error
  * @param {{ status?: number, exposeStack?: boolean }} [opts]
  */
-export function errorResponse(error, opts = {}) {
+export function errorResponse(/** @type {any} */ error, /** @type {any} */ opts = {}) {
   const status = opts.status ?? 500
   const exposeStack = opts.exposeStack ?? process.env.NODE_ENV !== 'production'
   const message = typeof error === 'string' ? error : (error?.message ?? 'Internal error')
+  /** @type {Record<string, any>} */
   const body = { error: message }
   if (exposeStack && error?.stack) body.stack = String(error.stack)
   return new Response(JSON.stringify(body), {
@@ -143,7 +144,7 @@ export function matchesIfNoneMatch(headerValue, etag) {
 }
 
 /**
- * @typedef {object} FileResponseOptions
+ * @typedef {any} FileResponseOptions
  * @property {string} contentType
  * @property {string} [contentDisposition]
  * @property {number} [maxAge]
@@ -226,7 +227,7 @@ export async function finalizeResponse(request, response, { gzipCache }) {
       }
       headers.set('Content-Encoding', 'gzip')
       headers.set('Content-Length', String(compressed.length))
-      return new Response(compressed, { status: response.status, headers })
+      return new Response(/** @type {any} */ (compressed), { status: response.status, headers })
     }
 
     return new Response(body, { status: response.status, headers })

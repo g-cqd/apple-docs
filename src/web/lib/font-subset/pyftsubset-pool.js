@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, unlink } from 'node:fs/promises'
@@ -34,7 +33,7 @@ const WORKER_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'python-work
 const DEFAULT_PYTHON = process.env.APPLE_DOCS_FONT_SUBSET_PYTHON || 'python3'
 
 export class PoolUnavailableError extends Error {
-  constructor(message, { setupHint } = {}) {
+  constructor(/** @type {any} */ message, /** @type {any} */ { setupHint } = {}) {
     super(message)
     this.name = 'PoolUnavailableError'
     if (setupHint) this.setupHint = setupHint
@@ -42,7 +41,7 @@ export class PoolUnavailableError extends Error {
 }
 
 /**
- * @param {{ size?: number, tempDir?: string, python?: string, logger?: object, scriptPath?: string }} opts
+ * @param {{ size?: number, tempDir?: string, python?: string, logger?: any, scriptPath?: string }} opts
  */
 export function createPyftsubsetPool(opts = {}) {
   const size = Math.max(1, Math.min(opts.size ?? autoSize(), 8))
@@ -61,11 +60,12 @@ export function createPyftsubsetPool(opts = {}) {
 
   /** @type {Array<Worker>} */
   const workers = []
-  /** @type {Array<{ canonical: object, fontPath: string, resolve: (b:Uint8Array)=>void, reject:(e:Error)=>void }>} */
+  /** @type {Array<{ canonical: any, fontPath: string, resolve: (b:Uint8Array)=>void, reject:(e:Error)=>void }>} */
   const queue = []
   let nextJobId = 1
   let closed = false
   let degraded = false
+  /** @type {any} */
   let degradeReason = null
 
   async function ensureTempDir() {
@@ -92,7 +92,7 @@ export function createPyftsubsetPool(opts = {}) {
       })
     } catch (err) {
       degraded = true
-      degradeReason = err?.message ?? String(err)
+      degradeReason = err instanceof Error ? err.message : String(err)
       logger?.warn?.(`font-subset pool: spawn failed: ${degradeReason}`)
       return null
     }
@@ -108,7 +108,7 @@ export function createPyftsubsetPool(opts = {}) {
     }
     child.on('error', (err) => {
       w.crashed = true
-      w.stderr += `[spawn error] ${err?.message ?? err}\n`
+      w.stderr += `[spawn error] ${err instanceof Error ? err.message : err}\n`
       handleWorkerExit(w)
     })
     child.on('exit', () => {
@@ -129,7 +129,7 @@ export function createPyftsubsetPool(opts = {}) {
     return w
   }
 
-  function handleWorkerExit(w) {
+  function handleWorkerExit(/** @type {any} */ w) {
     if (w.pending) {
       const pending = w.pending
       w.pending = null
@@ -147,12 +147,14 @@ export function createPyftsubsetPool(opts = {}) {
         logger?.error?.(`font-subset pool: worker died after ${lifespanMs} ms — pool degraded`)
         // Fail every pending queued job; otherwise they'd hang forever.
         while (queue.length > 0) {
-          const j = queue.shift()
-          j.reject(
-            new PoolUnavailableError(`font subsetting unavailable: ${degradeReason}`, {
-              setupHint: 'install Python 3 + fontTools: python3 -m pip install fonttools brotli',
-            }),
-          )
+          const j = /** @type {any} */ (queue.shift())
+          if (j) {
+            j.reject(
+              new PoolUnavailableError(`font subsetting unavailable: ${degradeReason}`, {
+                setupHint: 'install Python 3 + fontTools: python3 -m pip install fonttools brotli',
+              }),
+            )
+          }
         }
       } else {
         // Healthy worker died after long uptime — replace it.
@@ -163,7 +165,7 @@ export function createPyftsubsetPool(opts = {}) {
     pump()
   }
 
-  function drainStdout(w) {
+  function drainStdout(/** @type {any} */ w) {
     let idx
     while ((idx = w.buffer.indexOf('\n')) >= 0) {
       const line = w.buffer.slice(0, idx).trim()
@@ -203,9 +205,9 @@ export function createPyftsubsetPool(opts = {}) {
     }
   }
 
-  function dispatch(w, job) {
+  function dispatch(/** @type {any} */ w, /** @type {any} */ job) {
     const id = String(nextJobId++)
-    const outPath = join(tempDir, `subset-${process.pid}-${id}.bin`)
+    const outPath = join(/** @type {any} */ (tempDir), `subset-${process.pid}-${id}.bin`)
     const req = {
       id,
       font_path: job.fontPath,
@@ -216,7 +218,7 @@ export function createPyftsubsetPool(opts = {}) {
     w.busy = true
     w.pending = {
       id,
-      resolveOk: async (_reply) => {
+      resolveOk: async (/** @type {any} */ _reply) => {
         try {
           const bytes = new Uint8Array(await readFile(outPath))
           // Best-effort cleanup; the bytes are already in memory and
@@ -227,7 +229,7 @@ export function createPyftsubsetPool(opts = {}) {
           job.reject(err instanceof Error ? err : new Error(String(err)))
         }
       },
-      reject: (err) => {
+      reject: (/** @type {any} */ err) => {
         unlink(outPath).catch(() => {})
         job.reject(err)
       },
@@ -276,8 +278,8 @@ export function createPyftsubsetPool(opts = {}) {
   async function close() {
     closed = true
     while (queue.length > 0) {
-      const j = queue.shift()
-      j.reject(new Error('font-subset pool: closed'))
+      const j = /** @type {any} */ (queue.shift())
+      if (j) j.reject(new Error('font-subset pool: closed'))
     }
     for (const w of workers) {
       try {

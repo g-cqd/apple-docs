@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -28,6 +27,7 @@ import { join } from 'node:path'
  * sf-mono and any other family return null.
  */
 
+/** @type {Record<string, string>} */
 const FAMILY_MASTER_FILENAMES = Object.freeze({
   'sf-pro': 'SF-Pro.ttf',
   'sf-compact': 'SF-Compact.ttf',

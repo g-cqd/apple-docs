@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Shared @font-face construction for the /fonts page.
 //
 // Both the server-side `/api/fonts/faces.css` route and the client-side
@@ -71,7 +70,7 @@ export function buildFontFaceCss(families, { fileUrl = defaultFileUrl } = {}) {
     for (const file of family.files ?? []) {
       const name = fontFaceName(family.id, file.id)
       const url = fileUrl(file.id)
-      const format = formatHint(file.format)
+      const format = formatHint(/** @type {any} */ (file.format))
       rules.push(`@font-face { font-family: "${name}"; src: url("${url}")${format ? ` format("${format}")` : ''}; font-display: swap; }`)
     }
   }

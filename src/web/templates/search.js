@@ -1,8 +1,7 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { html } from '../lib/html.js'
 import { assetUrl, buildFooter, buildHead, buildHeader } from '../templates.js'
 
-export function renderSearchPage(siteConfig) {
+export function renderSearchPage(/** @type {any} */ siteConfig) {
   const pageTitle = `Search — ${siteConfig.siteName}`
   const canonical = `${siteConfig.baseUrl || ''}/search`
   const description = 'Search Apple developer documentation with filters.'

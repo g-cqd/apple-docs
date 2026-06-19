@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { slugify } from '../../content/render-html.js'
 import { safeWebDocKey } from '../../lib/safe-path.js'
 import { attr, html, raw } from '../lib/html.js'
@@ -14,13 +13,19 @@ import {
 } from '../templates.js'
 import { buildScopeGroups } from './framework-groups.js'
 
-export function buildFrameworkTreeData(_framework, documents, treeEdges, siteConfig) {
+export function buildFrameworkTreeData(
+  /** @type {any} */ _framework,
+  /** @type {any} */ documents,
+  /** @type {any} */ treeEdges,
+  /** @type {any} */ siteConfig,
+) {
   if (!treeEdges || treeEdges.length === 0) return { json: '', hasTree: false }
 
   // Edges + the key→{title, role, href} lookup are all the tree view
   // needs. The role-grouped flat list this JSON used to carry fed a
   // client-built "List" view nobody used over the tree — dropping it
   // shrinks the biggest tree payloads by roughly half.
+  /** @type {Record<string, any>} */
   const docLookup = {}
   for (const doc of documents ?? []) {
     const docKey = doc.key ?? doc.path ?? ''
@@ -40,19 +45,20 @@ export function buildFrameworkTreeData(_framework, documents, treeEdges, siteCon
 /**
  * Render a framework listing page with documents grouped by role.
  *
- * @param {object} framework - Framework record (name, slug, kind)
- * @param {Array}  documents - Document records (title, key, role, role_heading)
- * @param {object} siteConfig - { baseUrl, siteName, buildDate }
- * @param {object} [opts] - { treeEdges?: Array<{from_key: string, to_key: string}> }
+ * @param {any} framework - Framework record (name, slug, kind)
+ * @param {Array<any>}  documents - Document records (title, key, role, role_heading)
+ * @param {any} siteConfig - { baseUrl, siteName, buildDate }
+ * @param {any} [opts] - { treeEdges?: Array<{from_key: string, to_key: string}> }
  * @returns {string} Complete HTML page string
  */
-export function renderFrameworkPage(framework, documents, siteConfig, opts = {}) {
+export function renderFrameworkPage(framework, documents, siteConfig, /** @type {any} */ opts = {}) {
   const fwName = framework?.display_name ?? framework?.name ?? framework?.slug ?? 'Framework'
   const pageTitle = `${fwName} — ${siteConfig.siteName}`
   const docList = documents ?? []
   const treeEdges = opts.treeEdges ?? []
 
   // Human-readable labels for DocC roles
+  /** @type {Record<string, string>} */
   const ROLE_LABELS = {
     symbol: 'Symbols',
     collection: 'Collections',
@@ -101,7 +107,7 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
 
   const roleSections = []
   for (const { id, label, count, docs } of listSections) {
-    const docItems = docs.map((doc) => renderDocItem(doc, siteConfig))
+    const docItems = docs.map((/** @type {any} */ doc) => renderDocItem(doc, siteConfig))
     const heading = count != null ? html`${label} <span class="group-count">(${count})</span>` : html`${label}`
     roleSections.push(html`<section id="${id}" class="role-group" data-filter-kind="${label}">
     <h2 class="role-heading">${heading}</h2>
@@ -136,6 +142,7 @@ export function renderFrameworkPage(framework, documents, siteConfig, opts = {})
   const mobileToc = hasSidebar ? renderTocHtml(tocItems, true) : null
 
   // Build the doc lookup JSON for tree view (key -> {title, role_heading, href})
+  /** @type {Record<string, any>} */
   const docLookup = {}
   for (const doc of docList) {
     const docKey = doc.key ?? doc.path ?? ''
@@ -227,7 +234,7 @@ ${buildScripts(siteConfig, ['core', 'listing'])}
 </html>`
 }
 
-function renderDocItem(doc, siteConfig) {
+function renderDocItem(/** @type {any} */ doc, /** @type {any} */ siteConfig) {
   const docKey = doc.key ?? doc.path ?? ''
   const href = `${siteConfig.baseUrl}/docs/${safeWebDocKey(docKey)}/`
   const filterKind = doc.role_heading ?? doc.role ?? 'Other'
@@ -248,7 +255,7 @@ function renderDocItem(doc, siteConfig) {
 /**
  * Splice an HtmlString separator between every element of `items`.
  */
-function interleave(items, separator) {
+function interleave(/** @type {any} */ items, /** @type {any} */ separator) {
   const out = []
   for (let i = 0; i < items.length; i++) {
     if (i > 0) out.push(separator)

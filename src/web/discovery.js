@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Agent-discovery affordances, shared by the Bun server routes
 // (src/web/serve.js) and the static build (src/web/build.js) so the live
 // site and the prebuilt CDN artifact emit byte-identical metadata.
@@ -55,17 +54,17 @@ export const DISCOVERY_LINKS = [
 ].join(', ')
 
 /** Resolve the configured content-signal policy string. */
-export function contentSignal(siteConfig = {}) {
+export function contentSignal(/** @type {any} */ siteConfig = {}) {
   return siteConfig.contentSignal || process.env.APPLE_DOCS_CONTENT_SIGNAL || DEFAULT_CONTENT_SIGNAL
 }
 
 /** Trim trailing slashes off the configured base URL (may be empty in dev). */
-function originOf(siteConfig = {}) {
+function originOf(/** @type {any} */ siteConfig = {}) {
   return (siteConfig.baseUrl || '').replace(/\/+$/, '')
 }
 
 /** Absolute URL when an origin is configured; otherwise the bare path. */
-function url(origin, path) {
+function url(/** @type {any} */ origin, /** @type {any} */ path) {
   return origin ? `${origin}${path}` : path
 }
 
@@ -125,14 +124,14 @@ Sitemap: ${url(origin, '/sitemap.xml')}
  *
  * `ShortName` is capped at the spec's 16-character limit.
  *
- * @param {{ baseUrl?: string, siteName?: string }} [siteConfig]
+ * @param {any} [siteConfig]
  * @returns {string} `application/opensearchdescription+xml` body
  */
 export function buildOpenSearchXml(siteConfig = {}) {
   const origin = originOf(siteConfig)
   const longName = siteConfig.siteName || 'Apple Developer Docs'
   const shortName = (siteConfig.searchShortName || 'Apple Docs').slice(0, 16)
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const esc = (/** @type {any} */ s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   return `<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
   <ShortName>${esc(shortName)}</ShortName>
@@ -152,7 +151,7 @@ export function buildOpenSearchXml(siteConfig = {}) {
  * server card (`related`).
  *
  * @param {{ baseUrl?: string }} [siteConfig]
- * @returns {object} `application/linkset+json` payload.
+ * @returns {any} `application/linkset+json` payload.
  */
 export function buildApiCatalog(siteConfig = {}) {
   const origin = originOf(siteConfig)
@@ -208,9 +207,9 @@ export function buildHeadersFile(siteConfig = {}) {
  *
  * @param {{ baseUrl?: string }} [siteConfig]
  * @param {string} version
- * @returns {object}
+ * @returns {any}
  */
-export function buildMcpServerCard(siteConfig = {}, version) {
+export function buildMcpServerCard(/** @type {any} */ siteConfig = {}, /** @type {any} */ version = undefined) {
   const origin = originOf(siteConfig)
   return {
     serverInfo: { name: 'apple-docs', version },

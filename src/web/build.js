@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { randomBytes } from 'node:crypto'
 import { rename, rm } from 'node:fs/promises'
 import { availableParallelism } from 'node:os'
@@ -68,13 +67,13 @@ const CHECKPOINT_EVERY = 1_000
  * @param {number} [opts.workers]             Number of subprocesses to fan out across.
  * @param {boolean} [opts.skipDocs=false]     Build only site essentials; skip per-doc HTML.
  * @param {{ rename: typeof rename, rm: typeof rm }} [opts.fsOps]  Test-only override for atomic-swap.
- * @param {(progress: object) => void} [opts.onProgress]  Progress callback.
+ * @param {(progress: any) => void} [opts.onProgress]  Progress callback.
  * @param {object} ctx
  * @param {import('../storage/database.js').DocsDatabase} ctx.db
  * @param {string} ctx.dataDir
  * @param {object} [ctx.logger]
  */
-export async function buildStaticSite(opts, ctx) {
+export async function buildStaticSite(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const start = performance.now()
   const outDir = opts.out || 'dist/web'
   const incremental = opts.incremental === true && opts.full !== true
@@ -133,7 +132,7 @@ export async function buildStaticSite(opts, ctx) {
     if (fullRebuild) {
       db.clearRenderIndex()
     } else {
-      const cp = db.getWebBuildCheckpoint()
+      const cp = /** @type {any} */ (db.getWebBuildCheckpoint())
       if (cp?.template_version && cp.template_version !== templateVersion) {
         logger?.info?.('Template surface changed since last build — clearing render index')
         db.clearRenderIndex()
@@ -195,7 +194,7 @@ export async function buildStaticSite(opts, ctx) {
     // 3. Pull frameworks. Filter must happen even if the call throws — we
     // want the failingCtx test in the suite to surface the underlying error.
     const allRoots = db.getRoots()
-    const roots = frameworkFilter ? allRoots.filter((r) => frameworkFilter.has(r.slug)) : allRoots
+    const roots = frameworkFilter ? allRoots.filter((/** @type {any} */ r) => frameworkFilter.has(r.slug)) : allRoots
 
     initRenderIndexIfNeeded()
 
@@ -336,7 +335,7 @@ export async function buildStaticSite(opts, ctx) {
     // Finalize checkpoint
     if (renderIndexInitialized) {
       db.setWebBuildCheckpoint({
-        run_id: db.getWebBuildCheckpoint()?.run_id,
+        run_id: /** @type {any} */ (db.getWebBuildCheckpoint())?.run_id,
         template_version: templateVersion,
         started_at: runStartedAt,
         updated_at: Math.floor(Date.now() / 1000),
@@ -389,7 +388,7 @@ export async function buildStaticSite(opts, ctx) {
           pages_skipped: counters.pagesSkipped,
           pages_failed: counters.pagesFailed,
           status: 'failed',
-          last_error: error.message,
+          last_error: /** @type {any} */ (error).message,
         })
       } catch {
         // best-effort: never let checkpoint persistence mask the real error

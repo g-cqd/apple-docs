@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Atomic publish step for full builds: the orchestrator writes into a
 // staging dir alongside `outDir`, then renames staging over the live
 // directory in a single filesystem op so no partial output is ever
@@ -14,7 +13,7 @@ import { existsSync } from 'node:fs'
  * @param {{ rename: typeof import('node:fs/promises').rename, rm: typeof import('node:fs/promises').rm }} args.fsOps
  * @param {object} [args.logger]
  */
-export async function atomicPublish({ outDir, buildDir, previousDir, fsOps, logger }) {
+export async function atomicPublish(/** @type {any} */ { outDir, buildDir, previousDir, fsOps, logger }) {
   let hadPreviousOutput = false
   if (existsSync(outDir)) {
     await fsOps.rename(outDir, previousDir)
@@ -26,7 +25,7 @@ export async function atomicPublish({ outDir, buildDir, previousDir, fsOps, logg
     if (hadPreviousOutput && existsSync(previousDir) && !existsSync(outDir)) {
       await fsOps.rename(previousDir, outDir)
     }
-    logger?.error?.(`Static site publish failed: ${error.message}`)
+    logger?.error?.(`Static site publish failed: ${/** @type {any} */ (error).message}`)
     throw error
   }
   if (hadPreviousOutput) {

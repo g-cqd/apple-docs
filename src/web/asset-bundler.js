@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../lib/errors.js'
 /**
  * Build a single browser-targeted JS entrypoint via `Bun.build` and return
@@ -31,7 +30,7 @@ export async function minifyJs(entrypoint) {
       format: 'iife',
     })
   } catch (err) {
-    throw new ValidationError(`Bun.build failed for ${entrypoint}: ${err?.message ?? err}`)
+    throw new ValidationError(`Bun.build failed for ${entrypoint}: ${err instanceof Error ? err.message : err}`)
   }
   if (!result.success) {
     const message = result.logs?.map((l) => l.message ?? String(l)).join('\n') ?? 'build failed'

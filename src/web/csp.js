@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Content-Security-Policy emitter for the public web server.
  *
@@ -19,7 +18,7 @@
 
 import { NOT_FOUND_INLINE_SCRIPT } from './templates/not-found.js'
 
-function sha256Base64(text) {
+function sha256Base64(/** @type {any} */ text) {
   const hasher = new Bun.CryptoHasher('sha256')
   hasher.update(text)
   return hasher.digest('base64')
@@ -56,6 +55,7 @@ const POLICY_DIRECTIVES = [
  * Cached — the policy is fully static once `INLINE_SCRIPT_HASHES` is
  * computed at module load.
  */
+/** @type {any} */
 let _cached = null
 export function buildCsp() {
   if (_cached === null) _cached = POLICY_DIRECTIVES.join('; ')

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../../lib/errors.js'
 /**
  * Worker fan-out for src/web/build.js. Partitions the framework list
@@ -7,13 +6,13 @@ import { ValidationError } from '../../lib/errors.js'
 
 import { dirname, join } from 'node:path'
 
-function partitionFrameworksByDocCount(roots, db, n) {
-  const counts = roots.map((root) => ({
+function partitionFrameworksByDocCount(/** @type {any} */ roots, /** @type {any} */ db, /** @type {any} */ n) {
+  const counts = roots.map((/** @type {any} */ root) => ({
     root,
     count: db.db.query('SELECT COUNT(*) as c FROM documents WHERE framework = ?').get(root.slug).c,
   }))
-  counts.sort((a, b) => b.count - a.count)
-  const bins = Array.from({ length: n }, () => ({ slugs: [], total: 0 }))
+  counts.sort((/** @type {any} */ a, /** @type {any} */ b) => b.count - a.count)
+  const bins = Array.from({ length: n }, () => ({ slugs: /** @type {any[]} */ ([]), total: 0 }))
   for (const { root, count } of counts) {
     if (count === 0) continue
     const smallest = bins.reduce((acc, b) => (b.total < acc.total ? b : acc), bins[0])
@@ -35,7 +34,7 @@ function partitionFrameworksByDocCount(roots, db, n) {
  * children finish.
  *
  * @param {object} args
- * @param {Array}  args.roots          Filtered framework list to fan out across.
+ * @param {Array<any>}  args.roots          Filtered framework list to fan out across.
  * @param {object} args.siteConfig
  * @param {number} args.workers        Number of subprocesses to spawn.
  * @param {number} args.concurrency    Per-process pool concurrency.
@@ -43,7 +42,7 @@ function partitionFrameworksByDocCount(roots, db, n) {
  * @param {import('../../storage/database.js').DocsDatabase} args.db  For doc-count partitioning.
  * @param {object} [args.logger]
  */
-export async function runWorkerBuilds({ roots, siteConfig, workers, concurrency, outDir, db, logger }) {
+export async function runWorkerBuilds(/** @type {any} */ { roots, siteConfig, workers, concurrency, outDir, db, logger }) {
   const bins = partitionFrameworksByDocCount(roots, db, workers)
   if (bins.length === 0) {
     return { pagesBuilt: 0, pagesSkipped: 0, pagesFailed: 0 }

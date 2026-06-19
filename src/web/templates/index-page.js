@@ -1,9 +1,8 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { slugify } from '../../content/render-html.js'
 import { html } from '../lib/html.js'
 import { buildFooter, buildHead, buildHeader, buildScripts, renderTocHtml } from '../templates.js'
 
-export function renderIndexPage(frameworks, siteConfig, opts = {}) {
+export function renderIndexPage(/** @type {any} */ frameworks, /** @type {any} */ siteConfig, /** @type {any} */ opts = {}) {
   const pageTitle = siteConfig.siteName
   const frameworkList = frameworks ?? []
 
@@ -26,7 +25,7 @@ export function renderIndexPage(frameworks, siteConfig, opts = {}) {
 
   const sections = []
   for (const [kind, items] of byKind) {
-    const listItems = items.map((fw) => {
+    const listItems = items.map((/** @type {any} */ fw) => {
       const href = fw.href ?? `${siteConfig.baseUrl}/docs/${fw.slug}/`
       const countBadge = fw.doc_count != null ? html` <span class="badge badge-count">${String(fw.doc_count)}</span>` : null
       return html`<li data-filter-kind="${kind}"><a href="${href}">${fw.display_name ?? fw.name ?? fw.slug}</a>${countBadge}</li>`
@@ -95,7 +94,7 @@ ${buildScripts(siteConfig, ['core', 'listing'])}
  * to recreate the `array.join('\n  ')` shape with template-literal
  * whitespace preserved for byte-level snapshot stability.
  */
-function interleave(items, separator) {
+function interleave(/** @type {any} */ items, /** @type {any} */ separator) {
   const out = []
   for (let i = 0; i < items.length; i++) {
     if (i > 0) out.push(separator)
@@ -111,10 +110,10 @@ function interleave(items, separator) {
  * exported lets us assert framework-page weight in tests without re-running
  * the entire page render.
  *
- * @param {object} framework
- * @param {Array}  documents
+ * @param {any} framework
+ * @param {Array<any>}  documents
  * @param {Array<{from_key: string, to_key: string}>} treeEdges
- * @param {object} siteConfig
+ * @param {any} siteConfig
  * @returns {{ json: string, hasTree: boolean }} `json` is empty when the
  *   framework has no tree edges (and so no tree-view).
  */

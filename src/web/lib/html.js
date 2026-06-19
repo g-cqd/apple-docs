@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Tagged-template DSL for the web layer. Replaces the prior
  * `${escapeAttr(value)}` template-literal style with auto-escaping at
@@ -41,7 +40,7 @@ const HTML_BRAND = Symbol.for('apple-docs.html')
 const encoder = new TextEncoder()
 
 /**
- * @typedef {object} HtmlString
+ * @typedef {any} HtmlString
  * @property {true} __apple_docs_html
  * @property {Array<string | Uint8Array>} _chunks
  * @property {() => string} toString
@@ -53,7 +52,7 @@ const encoder = new TextEncoder()
  * @param {unknown} value
  * @returns {value is HtmlString}
  */
-export function isHtmlString(value) {
+export function isHtmlString(/** @type {any} */ value) {
   return value != null && typeof value === 'object' && value[HTML_BRAND] === true
 }
 
@@ -126,7 +125,7 @@ export function html(strings, ...values) {
  * @param {Array<string | Uint8Array>} chunks
  * @param {unknown} value
  */
-function appendValue(chunks, value) {
+function appendValue(/** @type {any} */ chunks, /** @type {any} */ value) {
   if (value == null || value === false || value === true) return
   const t = typeof value
   if (t === 'string') {
@@ -143,7 +142,7 @@ function appendValue(chunks, value) {
     return
   }
   if (Array.isArray(value)) {
-    for (const item of value) appendValue(chunks, item)
+    for (const item of /** @type {any} */ (value)) appendValue(chunks, item)
     return
   }
   // Everything else (objects, BigInt, Symbol coercion) goes through

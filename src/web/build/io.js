@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Build-time IO helpers — brotli precompression for static assets and
  * recursive directory copy for the public/ tree.
@@ -17,7 +16,7 @@ import { ensureDir } from '../../storage/files.js'
  */
 export const PRECOMPRESS_THRESHOLD = 16 * 1024
 
-export async function maybePrecompress(filePath, body) {
+export async function maybePrecompress(/** @type {any} */ filePath, /** @type {any} */ body) {
   const len = typeof body === 'string' ? Buffer.byteLength(body) : body.length
   if (len < PRECOMPRESS_THRESHOLD) return
   const buf = typeof body === 'string' ? Buffer.from(body) : body
@@ -35,7 +34,7 @@ export async function maybePrecompress(filePath, body) {
  * stage the static `public/` tree (robots.txt, llms.txt, security.txt) into
  * the build output. Doesn't follow symlinks.
  */
-export async function copyDirRecursive(src, dst) {
+export async function copyDirRecursive(/** @type {any} */ src, /** @type {any} */ dst) {
   ensureDir(dst)
   for (const entry of readdirSync(src, { withFileTypes: true })) {
     const from = join(src, entry.name)

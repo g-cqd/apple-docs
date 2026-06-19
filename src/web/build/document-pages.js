@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Per-document HTML render loop — the hottest path of the build. Sync
 // shiki render, chunked sections fetch, render-index incremental skip,
 // sidecar failure log. Each framework runs through here; the
@@ -39,23 +38,25 @@ import { renderSkiplistPlaceholder, renderWithTimeout } from './render-helpers.j
  * @param {object} [args.logger]
  * @param {string} args.failuresPath
  */
-export async function buildDocumentPages({
-  roots,
-  db,
-  buildDir,
-  siteConfig,
-  renderCache,
-  knownKeys,
-  skipList,
-  renderTimeoutMs,
-  concurrency,
-  incremental,
-  templateVersion,
-  counters,
-  tickProgress,
-  logger,
-  failuresPath,
-}) {
+export async function buildDocumentPages(
+  /** @type {any} */ {
+    roots,
+    db,
+    buildDir,
+    siteConfig,
+    renderCache,
+    knownKeys,
+    skipList,
+    renderTimeoutMs,
+    concurrency,
+    incremental,
+    templateVersion,
+    counters,
+    tickProgress,
+    logger,
+    failuresPath,
+  },
+) {
   for (const root of roots) {
     const docs = db.db
       .query(
@@ -77,7 +78,7 @@ export async function buildDocumentPages({
     const sectionsByDoc = db.hasTable('document_sections')
       ? batchFetchSections(
           db,
-          docs.map((d) => d.id),
+          docs.map((/** @type {any} */ d) => d.id),
           500,
         )
       : new Map()
@@ -130,7 +131,7 @@ export async function buildDocumentPages({
                 renderDocumentPage(doc, sections, siteConfig, {
                   knownKeys,
                   ancestorTitles: renderCache.getAncestorTitles(doc.key),
-                  resolveRoleHeadings: (keys) => renderCache.getRoleHeadings(keys),
+                  resolveRoleHeadings: (/** @type {any} */ keys) => renderCache.getRoleHeadings(keys),
                 }),
               renderTimeoutMs,
             )
@@ -154,7 +155,7 @@ export async function buildDocumentPages({
         counters.pagesBuilt++
       } catch (err) {
         counters.pagesFailed++
-        logger?.warn?.(`Failed to build page ${doc.key}: ${err.message}`)
+        logger?.warn?.(`Failed to build page ${doc.key}: ${/** @type {any} */ (err).message}`)
         // Persist failures to a sidecar log; the build run should not abort
         // because of a single bad doc.
         try {
@@ -164,7 +165,7 @@ export async function buildDocumentPages({
               t: new Date().toISOString(),
               doc_id: doc.id,
               key: doc.key,
-              error: err.message,
+              error: /** @type {any} */ (err).message,
             })}\n`,
           )
         } catch {

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { sha256 } from '../lib/hash.js'
 import { ensureDir } from '../storage/files.js'
@@ -55,6 +54,7 @@ export function buildTitleIndex(db) {
  */
 export function buildAliasMap(db) {
   const synonyms = db.db.query('SELECT canonical, alias FROM framework_synonyms').all()
+  /** @type {Record<string, string>} */
   const aliasMap = {}
   for (const { canonical, alias } of synonyms) {
     aliasMap[alias] = canonical
@@ -93,7 +93,7 @@ export async function buildBodyShards(db, outputDir) {
 
   /** @type {Map<string, Record<string, string>>} */
   const shards = new Map()
-  const ensureShard = (letter) => {
+  const ensureShard = (/** @type {any} */ letter) => {
     let s = shards.get(letter)
     if (!s) {
       s = {}
@@ -101,7 +101,7 @@ export async function buildBodyShards(db, outputDir) {
     }
     return s
   }
-  const letterFor = (framework) =>
+  const letterFor = (/** @type {any} */ framework) =>
     framework
       ? framework
           .charAt(0)
@@ -197,7 +197,7 @@ export async function writeSearchManifest(outputDir, stats) {
  *
  * @param {string} outputDir - Directory to write into
  * @param {string} baseName - Logical name without extension (e.g. "title-index")
- * @param {object} data - Object to serialize as JSON
+ * @param {any} data - Object to serialize as JSON
  * @returns {Promise<{ hash: string, json: string }>}
  */
 async function writeHashedJSON(outputDir, baseName, data) {

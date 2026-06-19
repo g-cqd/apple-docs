@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { html, raw } from './lib/html.js'
 
 export { renderFontsPage } from './templates/fonts.js'
@@ -9,7 +8,7 @@ export { renderNotFoundPage } from './templates/not-found.js'
 export { renderSearchPage } from './templates/search.js'
 export { renderSymbolsPage } from './templates/symbols.js'
 
-export function assetUrl(siteConfig, file) {
+export function assetUrl(/** @type {any} */ siteConfig, /** @type {any} */ file) {
   const base = `${siteConfig.baseUrl}/assets/${file}`
   if (!siteConfig.assetVersion) return base
   return `${base}?v=${encodeURIComponent(siteConfig.assetVersion)}`
@@ -25,7 +24,7 @@ export function assetUrl(siteConfig, file) {
  * not JavaScript, so the rest of the string is safe — but tags inside JSON
  * keys/values would still terminate the script element.
  */
-function escapeJsonLd(value) {
+function escapeJsonLd(/** @type {any} */ value) {
   return JSON.stringify(value).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e').replaceAll('&', '\\u0026')
 }
 
@@ -38,7 +37,7 @@ function escapeJsonLd(value) {
  *
  * @returns {import('./lib/html.js').HtmlString}
  */
-function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots }) {
+function buildSeoBlock(/** @type {any} */ { siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots }) {
   if (!canonical) return html``
   let altHost = ''
   if (alternate) {
@@ -87,7 +86,7 @@ function buildSeoBlock({ siteConfig, canonical, alternate, ogType, ogTitle, ogDe
  *   page, so the static-build snapshots stay stable.
  * @returns {import('./lib/html.js').HtmlString}
  */
-export function buildHead({ title, description, siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots, headExtra }) {
+export function buildHead(/** @type {any} */ { title, description, siteConfig, canonical, alternate, ogType, ogTitle, ogDesc, jsonLd, robots, headExtra }) {
   const cssHref = assetUrl(siteConfig, 'style.css')
   const headScriptHref = assetUrl(siteConfig, siteConfig.bundled ? 'core.js' : 'theme.js')
   const seo = buildSeoBlock({
@@ -128,7 +127,7 @@ const footerCache = new WeakMap()
 const scriptsCache = new WeakMap()
 
 /** @returns {import('./lib/html.js').HtmlString} */
-export function buildHeader(siteConfig) {
+export function buildHeader(/** @type {any} */ siteConfig) {
   const cached = headerCache.get(siteConfig)
   if (cached) return cached
   const out = renderHeader(siteConfig)
@@ -136,7 +135,7 @@ export function buildHeader(siteConfig) {
   return out
 }
 
-function renderHeader(siteConfig) {
+function renderHeader(/** @type {any} */ siteConfig) {
   const homeHref = `${siteConfig.baseUrl}/`
   // /fonts and /symbols deliberately removed from the global header nav —
   // they remain reachable from the home page's Design section. Keeping them
@@ -161,7 +160,7 @@ function renderHeader(siteConfig) {
 }
 
 /** @returns {import('./lib/html.js').HtmlString} */
-export function buildFooter(siteConfig) {
+export function buildFooter(/** @type {any} */ siteConfig) {
   const cached = footerCache.get(siteConfig)
   if (cached) return cached
   const out = renderFooter(siteConfig)
@@ -169,7 +168,7 @@ export function buildFooter(siteConfig) {
   return out
 }
 
-function renderFooter(siteConfig) {
+function renderFooter(/** @type {any} */ siteConfig) {
   const buildDate = siteConfig.buildDate ?? new Date().toISOString().slice(0, 10)
   // Snapshot tag is sourced from the installed DB's snapshot_meta at build
   // time (see src/web/build.js); fall back to an em-dash when the corpus
@@ -202,13 +201,14 @@ function renderFooter(siteConfig) {
  * Script bundles map. When siteConfig.bundled is true, emit bundles.
  * When false (dev server), emit individual script tags.
  */
+/** @type {Record<string, string[]>} */
 const BUNDLES = {
   core: ['theme.js', 'search.js', 'page-toc.js'],
   listing: ['collection-filters.js', 'tree-view.js'],
 }
 
 /** @returns {import('./lib/html.js').HtmlString} */
-export function buildScripts(siteConfig, groups) {
+export function buildScripts(/** @type {any} */ siteConfig, /** @type {any} */ groups) {
   // Memoize on (siteConfig, sorted groups). Templates currently call
   // with `['core']` or `['core', 'listing']` plus an optional
   // `lang-toggle` — small enumeration of distinct calls, no risk of
@@ -226,7 +226,7 @@ export function buildScripts(siteConfig, groups) {
   return out
 }
 
-function renderScripts(siteConfig, groups) {
+function renderScripts(/** @type {any} */ siteConfig, /** @type {any} */ groups) {
   const files = []
   if (siteConfig.bundled) {
     for (const group of groups) {
@@ -270,7 +270,7 @@ export {
  * per-page `url` column, but framework landing pages don't — we synthesize
  * from source_type + slug.
  */
-export function frameworkOriginalUrl(root) {
+export function frameworkOriginalUrl(/** @type {any} */ root) {
   if (!root) return null
   if (root.url) return root.url
   const slug = root.slug ?? ''
@@ -299,7 +299,7 @@ export function frameworkOriginalUrl(root) {
 }
 
 /** Short hostname label ("developer.apple.com") used in the link text. */
-function hostLabel(url) {
+function hostLabel(/** @type {any} */ url) {
   try {
     return new URL(url).host
   } catch {
@@ -313,7 +313,7 @@ function hostLabel(url) {
  *
  * @returns {import('./lib/html.js').HtmlString}
  */
-export function buildOriginalResourceBlock(url) {
+export function buildOriginalResourceBlock(/** @type {any} */ url) {
   if (!url) return html``
   const host = hostLabel(url) || 'source'
   return html`<div class="sidebar-block sidebar-source">
@@ -326,7 +326,7 @@ export function buildOriginalResourceBlock(url) {
 // ---------------------------------------------------------------------------
 
 /** @returns {import('./lib/html.js').HtmlString} */
-export function buildDocMeta(doc) {
+export function buildDocMeta(/** @type {any} */ doc) {
   const badges = []
   const frameworkLabel = doc.framework_display ?? doc.framework
   if (frameworkLabel) {
@@ -359,7 +359,7 @@ export function buildDocMeta(doc) {
 }
 
 /** Parse platforms_json from DB (string or object). */
-export function parsePlatformsJson(platformsJson) {
+export function parsePlatformsJson(/** @type {any} */ platformsJson) {
   if (!platformsJson) return null
   if (typeof platformsJson === 'object') return platformsJson
   try {
@@ -370,8 +370,9 @@ export function parsePlatformsJson(platformsJson) {
 }
 
 /** Build a platform availability line from a platforms map. */
-function buildPlatformBadges(platforms) {
+function buildPlatformBadges(/** @type {any} */ platforms) {
   if (!platforms || typeof platforms !== 'object') return null
+  /** @type {Record<string, string>} */
   const platformNames = {
     ios: 'iOS',
     macos: 'macOS',

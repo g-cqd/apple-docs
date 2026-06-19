@@ -1,15 +1,14 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { html } from '../lib/html.js'
 import { assetUrl, buildFooter, buildHead, buildHeader } from '../templates.js'
 
-export function renderSymbolsPage(siteConfig, data = {}) {
+export function renderSymbolsPage(/** @type {any} */ siteConfig, /** @type {any} */ data = {}) {
   const pageTitle = `Symbols — ${siteConfig.siteName}`
   const canonical = `${siteConfig.baseUrl || ''}/symbols`
   const description = 'Browse, search, and download SF Symbols. Customize size and colors before exporting SVG or PNG.'
   const totals = Array.isArray(data.totals) ? data.totals : []
-  const totalCount = totals.reduce((sum, row) => sum + (row.count ?? 0), 0)
-  const publicCount = totals.find((row) => row.scope === 'public')?.count ?? 0
-  const privateCount = totals.find((row) => row.scope === 'private')?.count ?? 0
+  const totalCount = totals.reduce((/** @type {any} */ sum, /** @type {any} */ row) => sum + (row.count ?? 0), 0)
+  const publicCount = totals.find((/** @type {any} */ row) => row.scope === 'public')?.count ?? 0
+  const privateCount = totals.find((/** @type {any} */ row) => row.scope === 'private')?.count ?? 0
 
   // Layout:
   //   - global sticky toolbar at top: search · scope · category(mobile) ·

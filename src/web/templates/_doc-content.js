@@ -1,10 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { slugify } from '../../content/render-html.js'
 import { safeWebDocKey } from '../../lib/safe-path.js'
 import { html, raw } from '../lib/html.js'
 
 /** @returns {import('../lib/html.js').HtmlString} */
-export function buildRelationshipContent(section) {
+export function buildRelationshipContent(/** @type {any} */ section) {
   const contentJson = section?.content_json ?? section?.contentJson ?? null
   let groups = null
   if (contentJson && typeof contentJson === 'string') {
@@ -25,7 +24,7 @@ export function buildRelationshipContent(section) {
       if (group?.title) {
         parts.push(html`<h3 class="sidebar-group-title">${group.title}</h3>`)
       }
-      const items = (group?.items ?? []).map((item) => {
+      const items = (group?.items ?? []).map((/** @type {any} */ item) => {
         if (item?.key) {
           return html`<li><a href="/docs/${safeWebDocKey(item.key)}/"><code>${item.title ?? item.key}</code></a></li>`
         }
@@ -53,7 +52,7 @@ export function buildRelationshipContent(section) {
 // ---------------------------------------------------------------------------
 
 /** Build TOC item list from ordered sections. Skips abstract and empty sections. */
-export function buildPageToc(sections) {
+export function buildPageToc(/** @type {any} */ sections) {
   const items = []
   for (const section of sections ?? []) {
     const kind = section.sectionKind ?? section.section_kind
@@ -131,7 +130,7 @@ export function buildPageToc(sections) {
 }
 
 /** Check if a JSON content string (or parsed object) for a link section has at least one renderable item. */
-export function hasRenderableItems(json) {
+export function hasRenderableItems(/** @type {any} */ json) {
   if (!json) return false
   let groups = null
   if (typeof json === 'string') {
@@ -157,9 +156,9 @@ export function hasRenderableItems(json) {
  * Render the TOC HTML. In mobile mode, wraps in a <details> element.
  * @returns {import('../lib/html.js').HtmlString}
  */
-export function renderTocHtml(tocItems, mobile = false) {
+export function renderTocHtml(/** @type {any} */ tocItems, mobile = false) {
   if (tocItems.length < 2) return html``
-  const list = tocItems.map((item) => html`<li><a href="#${item.id}">${item.label}</a></li>`)
+  const list = tocItems.map((/** @type {any} */ item) => html`<li><a href="#${item.id}">${item.label}</a></li>`)
   const listHtml = html`<ul>${list}</ul>`
   if (mobile) {
     return html`<details class="page-toc-mobile"><summary>Contents</summary><nav class="page-toc">${listHtml}</nav></details>`
