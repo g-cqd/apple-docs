@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { inflateSync } from 'node:zlib'
 import { ParseError } from '../../lib/errors.js'
 // PDF object-graph extraction. Walks the (latin-1-decoded) PDF source,
@@ -16,7 +15,7 @@ import { ParseError } from '../../lib/errors.js'
 // keeping `node:zlib` here costs nothing and protects against
 // regression for the symbol-prerender pipeline.
 
-export function bytesToLatin1(buf) {
+export function bytesToLatin1(/** @type {any} */ buf) {
   // latin-1 round-trip preserves every byte 1:1, which is what PDF text
   // assumes for non-stream content. Streams are still read from the original
   // Uint8Array via byte offsets recorded here.
@@ -28,7 +27,7 @@ export function bytesToLatin1(buf) {
   return s
 }
 
-export function collectObjects(text, bytes) {
+export function collectObjects(/** @type {any} */ text, /** @type {any} */ bytes) {
   // Two-pass extraction so indirect-reference `/Length N gen R` values
   // (used by Apple's symbol PDFs for larger streams) can be resolved
   // against the full object table before slicing stream bytes. Treating
@@ -101,7 +100,7 @@ export function collectObjects(text, bytes) {
  *                        indirect-reference target objects
  * @returns {number | null}
  */
-function resolveStreamLength(value, text) {
+function resolveStreamLength(/** @type {any} */ value, /** @type {any} */ text) {
   if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value
   if (value && typeof value === 'object' && typeof value.ref === 'string') {
     const refMatch = value.ref.match(/^(\d+)\s+(\d+)$/)
@@ -117,7 +116,7 @@ function resolveStreamLength(value, text) {
  * return the integer body. Returns null when the target object isn't a
  * bare numeric literal.
  */
-function findLiteralNumber(text, objNum, genNum) {
+function findLiteralNumber(/** @type {any} */ text, /** @type {any} */ objNum, /** @type {any} */ genNum) {
   // Anchor on the actual obj header so we don't collide with the same
   // digit sequence appearing inside another stream's text.
   const headerRe = new RegExp(`(?:^|[\\s\\r\\n])${objNum}\\s+${genNum}\\s+obj\\b`)
@@ -132,7 +131,7 @@ function findLiteralNumber(text, objNum, genNum) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function parseDictionary(text) {
+function parseDictionary(/** @type {any} */ text) {
   // Minimal PDF dictionary parser. We only need to extract the entries that
   // appear in CGContext-emitted PDFs: simple names, numbers, indirect refs,
   // arrays of numbers, and nested dictionaries. Strings, hex strings, and
@@ -140,9 +139,10 @@ function parseDictionary(text) {
   const start = text.indexOf('<<')
   if (start < 0) return {}
   let i = start + 2
+  /** @type {Record<string, any>} */
   const out = {}
   while (i < text.length) {
-    skipWs(text, i, (value) => {
+    skipWs(text, i, (/** @type {any} */ value) => {
       i = value
     })
     if (text.startsWith('>>', i)) break
@@ -154,7 +154,7 @@ function parseDictionary(text) {
     const keyStart = i
     while (i < text.length && !/[\s/<>[\]]/.test(text[i])) i++
     const key = text.slice(keyStart, i)
-    skipWs(text, i, (value) => {
+    skipWs(text, i, (/** @type {any} */ value) => {
       i = value
     })
     if (text.startsWith('<<', i)) {
@@ -195,13 +195,13 @@ function parseDictionary(text) {
   return out
 }
 
-function skipWs(text, start, set) {
+function skipWs(/** @type {any} */ text, /** @type {any} */ start, /** @type {any} */ set) {
   let i = start
   while (i < text.length && /[\s\r\n]/.test(text[i])) i++
   set(i)
 }
 
-function findMatching(text, start, open, close) {
+function findMatching(/** @type {any} */ text, /** @type {any} */ start, /** @type {any} */ open, /** @type {any} */ close) {
   let depth = 1
   let i = start + open.length
   while (i < text.length && depth > 0) {
@@ -217,14 +217,14 @@ function findMatching(text, start, open, close) {
   return text.length - close.length
 }
 
-export function findPage(objects) {
+export function findPage(/** @type {any} */ objects) {
   for (const obj of objects.values()) {
     if (obj.dict?.Type === '/Page') return obj
   }
   return null
 }
 
-export function resolveDict(value, objects) {
+export function resolveDict(/** @type {any} */ value, /** @type {any} */ objects) {
   if (value == null || typeof value !== 'object') return null
   if ('ref' in value) {
     return objects.get(value.ref)?.dict ?? null
@@ -232,7 +232,7 @@ export function resolveDict(value, objects) {
   return value
 }
 
-export function resolveStreamObject(value, objects) {
+export function resolveStreamObject(/** @type {any} */ value, /** @type {any} */ objects) {
   if (value == null || typeof value !== 'object') return null
   if ('ref' in value) {
     return objects.get(value.ref) ?? null
@@ -240,7 +240,7 @@ export function resolveStreamObject(value, objects) {
   return null
 }
 
-export function decodeStream(obj) {
+export function decodeStream(/** @type {any} */ obj) {
   const filter = obj.dict.Filter
   if (filter === '/FlateDecode') return inflateSync(obj.stream)
   if (!filter) return obj.stream

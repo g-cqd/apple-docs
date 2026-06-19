@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SVG post-processing helpers for SF Symbol rendering.
  *
@@ -15,7 +14,7 @@
 
 import { escapeXml } from '../apple-assets-helpers.js'
 
-export function renderSymbolSvgFallback({ name, scope, pointSize, color, background }) {
+export function renderSymbolSvgFallback(/** @type {any} */ { name, scope, pointSize, color, background }) {
   const escapedName = escapeXml(name)
   const escapedColor = escapeXml(color)
   const escapedScope = escapeXml(scope)
@@ -29,22 +28,22 @@ export function renderSymbolSvgFallback({ name, scope, pointSize, color, backgro
 </svg>`
 }
 
-export function customizePrerenderedSymbolSvg(svg, { pointSize, color, background }) {
+export function customizePrerenderedSymbolSvg(/** @type {any} */ svg, /** @type {any} */ { pointSize, color, background }) {
   let output = setSvgDimensionAttributes(String(svg), pointSize)
   output = replaceVisibleBlackFill(output, color)
   if (background) output = insertSvgBackground(output, background)
   return output
 }
 
-function setSvgDimensionAttributes(svg, pointSize) {
-  return svg.replace(/<svg\b([^>]*)>/i, (_match, attrs) => {
+function setSvgDimensionAttributes(/** @type {any} */ svg, /** @type {any} */ pointSize) {
+  return svg.replace(/<svg\b([^>]*)>/i, (/** @type {any} */ _match, /** @type {any} */ attrs) => {
     let nextAttrs = upsertSvgAttribute(attrs, 'width', pointSize)
     nextAttrs = upsertSvgAttribute(nextAttrs, 'height', pointSize)
     return `<svg${nextAttrs}>`
   })
 }
 
-function upsertSvgAttribute(attrs, name, value) {
+function upsertSvgAttribute(/** @type {any} */ attrs, /** @type {any} */ name, /** @type {any} */ value) {
   const escapedValue = escapeXml(value)
   const attrRe = new RegExp(`\\s${name}=(["'])[^"']*\\1`, 'i')
   if (attrRe.test(attrs)) {
@@ -53,9 +52,10 @@ function upsertSvgAttribute(attrs, name, value) {
   return `${attrs} ${name}="${escapedValue}"`
 }
 
-function replaceVisibleBlackFill(svg, color) {
+function replaceVisibleBlackFill(/** @type {any} */ svg, /** @type {any} */ color) {
   const escapedColor = escapeXml(color)
-  const replaceFill = (chunk) => chunk.replace(/\bfill=(["'])#000000\1/gi, (_match, quote) => `fill=${quote}${escapedColor}${quote}`)
+  const replaceFill = (/** @type {any} */ chunk) =>
+    chunk.replace(/\bfill=(["'])#000000\1/gi, (/** @type {any} */ _match, /** @type {any} */ quote) => `fill=${quote}${escapedColor}${quote}`)
   const maskRe = /<mask\b[\s\S]*?<\/mask>/gi
   let output = ''
   let cursor = 0
@@ -68,31 +68,31 @@ function replaceVisibleBlackFill(svg, color) {
   return output
 }
 
-function insertSvgBackground(svg, background) {
+function insertSvgBackground(/** @type {any} */ svg, /** @type {any} */ background) {
   const rect = svgBackgroundRect(svg, background)
   if (/<defs[\s>]/i.test(svg) && /<\/defs>/i.test(svg)) {
     return svg.replace(/<\/defs>/i, `</defs>\n  ${rect}`)
   }
-  return svg.replace(/<svg\b[^>]*>/i, (match) => `${match}\n  ${rect}`)
+  return svg.replace(/<svg\b[^>]*>/i, (/** @type {any} */ match) => `${match}\n  ${rect}`)
 }
 
-function svgBackgroundRect(svg, background) {
+function svgBackgroundRect(/** @type {any} */ svg, /** @type {any} */ background) {
   const box = parseSvgViewBox(svg) ?? { x: 0, y: 0, width: 100, height: 100 }
   return `<rect x="${formatSvgNumber(box.x)}" y="${formatSvgNumber(box.y)}" width="${formatSvgNumber(box.width)}" height="${formatSvgNumber(box.height)}" fill="${escapeXml(background)}"/>`
 }
 
-function parseSvgViewBox(svg) {
+function parseSvgViewBox(/** @type {any} */ svg) {
   const match = svg.match(/\bviewBox=(["'])([^"']+)\1/i)
   if (!match) return null
   const parts = match[2]
     .trim()
     .split(/[\s,]+/)
     .map(Number)
-  if (parts.length !== 4 || parts.some((value) => !Number.isFinite(value))) return null
+  if (parts.length !== 4 || parts.some((/** @type {any} */ value) => !Number.isFinite(value))) return null
   return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] }
 }
 
-function formatSvgNumber(value) {
+function formatSvgNumber(/** @type {any} */ value) {
   return Number(value)
     .toFixed(3)
     .replace(/\.?0+$/u, '')

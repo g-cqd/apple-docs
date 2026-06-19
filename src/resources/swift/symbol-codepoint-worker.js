@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Long-lived SF Symbol -> Unicode codepoint dump worker.
  *
@@ -223,7 +222,7 @@ const V7_META_INIT = `    public init(
 
 const V8_ENHANCED_ARG = ',\n  enhancedKeywordsURL: nil'
 
-function downgrade(text, marker, replacement) {
+function downgrade(/** @type {any} */ text, /** @type {any} */ marker, /** @type {any} */ replacement) {
   if (!text.includes(marker)) {
     throw new Error('symbol-codepoint-worker: version template drifted (v8 marker not found)')
   }
@@ -231,13 +230,13 @@ function downgrade(text, marker, replacement) {
 }
 
 /** SFSymbolsShared `.swiftinterface` matched to the app's major version. */
-export function sfSymbolsSharedInterface(major) {
+export function sfSymbolsSharedInterface(/** @type {any} */ major) {
   if (major >= 8) return SF_SYMBOLS_SHARED_INTERFACE
   return downgrade(SF_SYMBOLS_SHARED_INTERFACE, V8_META_INIT, V7_META_INIT)
 }
 
 /** Worker Swift source matched to the app's major version. */
-export function symbolCodepointWorkerScript(major) {
+export function symbolCodepointWorkerScript(/** @type {any} */ major) {
   if (major >= 8) return SYMBOL_CODEPOINT_WORKER_SCRIPT
   return downgrade(SYMBOL_CODEPOINT_WORKER_SCRIPT, V8_ENHANCED_ARG, '')
 }

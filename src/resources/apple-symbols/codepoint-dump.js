@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../../lib/errors.js'
 /**
  * Drive the Swift codepoint-dump worker against the catalog of
@@ -39,10 +38,10 @@ const DEFAULT_APP_PATH = '/Applications/SF Symbols.app'
  * the call is cheap and the caller can validate or pretend (for tests).
  *
  * @param {string} appPath absolute path to SF Symbols.app
- * @returns {{ fontPath: string, metadataDir: string, sharedFramework: string,
+ * @returns {{ appPath: string, fontPath: string, metadataDir: string, sharedFramework: string,
  *   sharedFrameworkDir: string, glyphsLibFrameworkDir: string }}
  */
-function pathsForApp(appPath) {
+function pathsForApp(/** @type {any} */ appPath) {
   const sharedFrameworkDir = join(appPath, 'Contents', 'Frameworks')
   const sharedFramework = join(sharedFrameworkDir, 'SFSymbolsShared.framework')
   const glyphsLibFrameworkDir = join(sharedFramework, 'Versions', 'A', 'Frameworks')
@@ -57,7 +56,7 @@ function pathsForApp(appPath) {
   }
 }
 
-function isPrivateUseCodepoint(cp) {
+function isPrivateUseCodepoint(/** @type {any} */ cp) {
   if (!Number.isInteger(cp) || cp < 0 || cp > 0x10ffff) return false
   return (cp >= 0xe000 && cp <= 0xf8ff) || (cp >= 0xf0000 && cp <= 0xffffd) || (cp >= 0x100000 && cp <= 0x10fffd)
 }
@@ -95,10 +94,10 @@ export function resolveSymbolFontPath(_dataDir, opts = {}) {
  * row was not touched.
  *
  * @param {string[]} names — list of catalog names to query
- * @param {{ fontPath: string, metadataDir?: string, logger?: object,
- *   spawn?: Function, wallClockMs?: number, lineTimeoutMs?: number }} opts
+ * @param {{ fontPath: string, metadataDir?: string, appPath?: string, logger?: any,
+ *   spawn?: Function, wallClockMs?: number, lineTimeoutMs?: number, startupTimeoutMs?: number }} opts
  */
-export async function dumpSymbolCodepoints(names, opts) {
+export async function dumpSymbolCodepoints(/** @type {any} */ names, /** @type {any} */ opts) {
   const {
     fontPath,
     metadataDir = METADATA_DIR,
@@ -136,7 +135,7 @@ export async function dumpSymbolCodepoints(names, opts) {
   const decoder = new TextDecoder()
   let buffer = ''
 
-  async function readLine(timeoutMs) {
+  async function readLine(/** @type {any} */ timeoutMs) {
     while (true) {
       const newlineIdx = buffer.indexOf('\n')
       if (newlineIdx !== -1) {
@@ -176,7 +175,7 @@ export async function dumpSymbolCodepoints(names, opts) {
       try {
         line = await readLine(firstLine ? startupTimeoutMs : lineTimeoutMs)
       } catch (error) {
-        logger?.warn?.(`codepoint dump aborted at ${name}: ${error.message}`)
+        logger?.warn?.(`codepoint dump aborted at ${name}: ${/** @type {any} */ (error).message}`)
         break
       }
       if (line == null) break
@@ -219,7 +218,7 @@ export async function dumpSymbolCodepoints(names, opts) {
   return { map, total: names.length, resolved, skipped, fontPath }
 }
 
-function parseLine(line) {
+function parseLine(/** @type {any} */ line) {
   const trimmed = line.trim()
   if (!trimmed) return null
   try {
@@ -238,7 +237,7 @@ function parseLine(line) {
  * Falls back to the latest known major when unreadable, since we always
  * provision the newest app.
  */
-async function appMajorVersion(appPath, logger) {
+async function appMajorVersion(/** @type {any} */ appPath, /** @type {any} */ logger) {
   try {
     const proc = Bun.spawn(['defaults', 'read', join(appPath, 'Contents', 'Info.plist'), 'CFBundleShortVersionString'], { stdout: 'pipe', stderr: 'ignore' })
     const out = (await new Response(proc.stdout).text()).trim()
@@ -252,7 +251,7 @@ async function appMajorVersion(appPath, logger) {
   return 8
 }
 
-async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH, logger }) {
+async function defaultSpawn(/** @type {any} */ { fontPath, metadataDir, appPath = DEFAULT_APP_PATH, logger }) {
   const { symbolCodepointWorkerScript, sfSymbolsSharedInterface, CORE_GLYPHS_LIB_INTERFACE } = await import('../swift/symbol-codepoint-worker.js')
   const { tmpdir } = await import('node:os')
   const { mkdtemp, rm, mkdir, symlink } = await import('node:fs/promises')

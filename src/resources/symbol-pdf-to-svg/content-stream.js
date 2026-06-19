@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // PDF content-stream interpreter for the SF-Symbol-shaped subset emitted
 // by CGContext: q/Q, cs, sc, gs, m/l/c/h/re, f, B/b. No text, no images,
 // no shading. Extracts a flat list of `fill` records (subpaths + alpha
@@ -7,11 +6,13 @@
 
 import { bytesToLatin1 } from './pdf-objects.js'
 
-export function parseContentStream(buffer, alphaByName) {
+export function parseContentStream(/** @type {any} */ buffer, /** @type {any} */ alphaByName) {
   const text = bytesToLatin1(buffer)
   const tokens = tokenize(text)
   const operands = []
+  /** @type {any[]} */
   const fills = []
+  /** @type {any[]} */
   let path = []
   let currentX = 0
   let currentY = 0
@@ -23,12 +24,12 @@ export function parseContentStream(buffer, alphaByName) {
     fills.push({ subpaths: path, alpha: top().alpha, fillRule })
     path = []
   }
-  const startSubpath = (x, y) => {
+  const startSubpath = (/** @type {any} */ x, /** @type {any} */ y) => {
     path.push({ commands: [{ op: 'M', args: [x, y] }] })
     currentX = x
     currentY = y
   }
-  const appendCommand = (cmd) => {
+  const appendCommand = (/** @type {any} */ cmd) => {
     if (path.length === 0) return
     path[path.length - 1].commands.push(cmd)
   }
@@ -137,7 +138,7 @@ export function parseContentStream(buffer, alphaByName) {
   return fills
 }
 
-function tokenize(text) {
+function tokenize(/** @type {any} */ text) {
   const tokens = []
   let i = 0
   while (i < text.length) {

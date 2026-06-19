@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // SF Symbols snapshot meta helpers.
 //
 // Extracted from src/resources/apple-symbols/sync.js so the parent
@@ -21,7 +20,7 @@ import { SYMBOL_RENDERER_VERSION } from './render.js'
  * the caller will populate it from scratch) or when everything looks
  * current.
  */
-export async function symbolSnapshotNeedsReset(baseDir) {
+export async function symbolSnapshotNeedsReset(/** @type {any} */ baseDir) {
   if (!existsSync(baseDir)) return false
   const entries = readdirSync(baseDir, { withFileTypes: true }).filter((entry) => entry.name !== 'meta.json')
   if (entries.length === 0) return false
@@ -31,7 +30,7 @@ export async function symbolSnapshotNeedsReset(baseDir) {
   return !hasSnapshotVariantSet(meta, 'public') || !hasSnapshotVariantSet(meta, 'private')
 }
 
-async function readJsonIfExists(path) {
+async function readJsonIfExists(/** @type {any} */ path) {
   try {
     return await Bun.file(path).json()
   } catch {
@@ -39,7 +38,7 @@ async function readJsonIfExists(path) {
   }
 }
 
-function hasSnapshotVariantSet(meta, scope) {
+function hasSnapshotVariantSet(/** @type {any} */ meta, /** @type {any} */ scope) {
   const expected = symbolVariantMatrix(scope).map(symbolVariantKey).sort()
   const actual = Array.isArray(meta?.variants?.[scope]) ? meta.variants[scope].map(symbolVariantKey).sort() : []
   return expected.length === actual.length && expected.every((key, index) => key === actual[index])

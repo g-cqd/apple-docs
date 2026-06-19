@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SF Symbol catalog sync + snapshot pre-rendering.
  *
@@ -30,6 +29,7 @@ import { symbolSnapshotNeedsReset } from './snapshot-meta.js'
 
 export { stampSfSymbolCodepoints }
 
+/** @type {Record<string, string>} */
 const SYMBOL_BUNDLES = {
   public: '/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphs.bundle/Contents/Resources',
   private: '/System/Library/PrivateFrameworks/SFSymbols.framework/Versions/A/Resources/CoreGlyphsPrivate.bundle/Contents/Resources',
@@ -49,7 +49,7 @@ const SYMBOL_BUNDLES = {
 // cleanup script (or test) can also use the same source of truth.
 const CATALOG_META_NAMES = new Set(['symbols', 'year_to_release'])
 
-export async function syncSfSymbols(opts, ctx) {
+export async function syncSfSymbols(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const { db, logger } = ctx
   const scope = opts.scope === 'private' ? 'private' : 'public'
   const bundleDir = opts.bundleDir ?? SYMBOL_BUNDLES[scope]
@@ -102,7 +102,7 @@ export async function syncSfSymbols(opts, ctx) {
  * avoids the per-symbol Swift cold-start cost (~200ms each); a single worker
  * churns through ~10–20 symbols/sec.
  */
-export async function prerenderSfSymbols(opts, ctx) {
+export async function prerenderSfSymbols(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const { dataDir, logger } = ctx
   const concurrency = Math.max(1, Math.min(opts.concurrency ?? 4, 16))
   const scopeFilter = opts.scope === 'public' || opts.scope === 'private' ? opts.scope : null
@@ -118,11 +118,12 @@ export async function prerenderSfSymbols(opts, ctx) {
   // 27 variants × ~scopes worth of doomed worker calls for no payoff.
   const symbols = ctx.db
     .listSfSymbolsCatalog()
-    .filter((symbol) => !scopeFilter || symbol.scope === scopeFilter)
-    .filter((symbol) => !CATALOG_META_NAMES.has(symbol.name))
+    .filter((/** @type {any} */ symbol) => !scopeFilter || symbol.scope === scopeFilter)
+    .filter((/** @type {any} */ symbol) => !CATALOG_META_NAMES.has(symbol.name))
   const result = { rendered: 0, skipped: 0, failed: 0, total: 0, symbols: symbols.length, failures: [] }
 
   // Cluster work by scope so each worker only handles one bundle path.
+  /** @type {Record<string, any[]>} */
   const buckets = { public: [], private: [] }
   for (const symbol of symbols) buckets[symbol.scope].push(symbol)
   for (const scope of ['public', 'private']) {
@@ -188,7 +189,7 @@ async function getSymbolRenderProvenance() {
   }
 }
 
-async function getSymbolSourceProvenance(scope) {
+async function getSymbolSourceProvenance(/** @type {any} */ scope) {
   const resourcesPath = SYMBOL_BUNDLES[scope]
   const contentsPath = dirname(resourcesPath)
   return {

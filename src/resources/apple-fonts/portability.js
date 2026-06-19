@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Pre-publish invariant: a snapshot's font catalog must be self-contained.
  *
@@ -21,7 +20,7 @@ import { existsSync } from 'node:fs'
 /**
  * @param {import('../../storage/database.js').DocsDatabase} db
  * @param {string} dataDir
- * @param {{ logger?: object }} [opts]
+ * @param {{ logger?: any }} [opts]
  * @returns {{ total: number, purged: number, kept: number, families: number, missing: string[] }}
  */
 export function enforceFontPortability(db, dataDir, { logger } = {}) {

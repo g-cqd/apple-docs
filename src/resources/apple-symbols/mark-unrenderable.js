@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * The catalog is sourced from the current SF Symbols.app release, which
  * can be newer than the building macOS (SF Symbols 8.2 lists
@@ -16,8 +15,7 @@
  * `unsupported_variants`): the validator skips those variants and still flags
  * anything else, so a genuine regression stays loud.
  */
-export function markUnrenderableSymbols({ ctx, scope, variants, result, logger }) {
-  /** @type {Map<string, string[]>} */
+export function markUnrenderableSymbols(/** @type {any} */ { ctx, scope, variants, result, logger }) {
   const failedBySymbol = new Map()
   for (const f of result.failures) {
     if (f.scope !== scope) continue

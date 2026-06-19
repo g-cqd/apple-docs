@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Codepoint stamping orchestrator. Pulled out of `sync.js` to keep that
  * file inside the 400-line ceiling enforced by `scripts/check-file-size.js`.
@@ -22,8 +21,8 @@ import { dumpSymbolCodepoints, resolveSymbolFontPath } from './codepoint-dump.js
 
 /**
  * @param {{ appPath?: string, fontPath?: string, metadataDir?: string,
- *   forceRefresh?: boolean }} opts
- * @param {{ db, dataDir, logger }} ctx
+ *   forceRefresh?: boolean, version?: string }} opts
+ * @param {{ db: any, dataDir: any, logger: any }} ctx
  * @returns {Promise<{ stamped: number, total: number, fontPath: string | null }>}
  */
 export async function stampSfSymbolCodepoints(opts, ctx) {
@@ -48,7 +47,7 @@ export async function stampSfSymbolCodepoints(opts, ctx) {
       appPath = installed.appPath
       version = installed.version ?? version
     } catch (err) {
-      logger?.warn?.(`SF Symbols.app provisioning failed (${err?.message ?? err}); ` + 'falling back to any local install')
+      logger?.warn?.(`SF Symbols.app provisioning failed (${err instanceof Error ? err.message : err}); ` + 'falling back to any local install')
     }
   }
 
@@ -58,7 +57,7 @@ export async function stampSfSymbolCodepoints(opts, ctx) {
         fontPath: opts.fontPath,
         metadataDir: opts.metadataDir,
       }
-    : resolveSymbolFontPath(dataDir, { appPath })
+    : resolveSymbolFontPath(dataDir, { appPath: appPath ?? undefined })
   if (!resolved || !resolved.fontPath) {
     logger?.warn?.(
       'SF Symbols.app not available; skipping SF Symbol codepoint stamping. ' +
@@ -66,11 +65,11 @@ export async function stampSfSymbolCodepoints(opts, ctx) {
     )
     return { stamped: 0, total: 0, fontPath: null }
   }
-  const { fontPath, metadataDir, appPath: usedAppPath } = resolved
-  const catalog = db.listSfSymbolsCatalog().filter((symbol) => symbol.scope === 'public')
+  const { fontPath, metadataDir, appPath: usedAppPath } = /** @type {any} */ (resolved)
+  const catalog = db.listSfSymbolsCatalog().filter((/** @type {any} */ symbol) => symbol.scope === 'public')
   if (catalog.length === 0) return { stamped: 0, total: 0, fontPath }
 
-  const names = catalog.map((symbol) => symbol.name)
+  const names = catalog.map((/** @type {any} */ symbol) => symbol.name)
   const { map } = await dumpSymbolCodepoints(names, {
     fontPath,
     metadataDir,
@@ -84,7 +83,7 @@ export async function stampSfSymbolCodepoints(opts, ctx) {
       db.updateSfSymbolCodepoint('public', name, codepoint, version)
       if (codepoint != null) stamped++
     } catch (err) {
-      logger?.warn?.(`failed to stamp codepoint for ${name}: ${err.message ?? err}`)
+      logger?.warn?.(`failed to stamp codepoint for ${name}: ${(/** @type {any} */ (err)).message ?? err}`)
     }
   }
   const pct = catalog.length === 0 ? 0 : ((stamped / catalog.length) * 100).toFixed(1)

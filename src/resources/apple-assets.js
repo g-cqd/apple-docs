@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Apple-asset facade. The font / symbol pipelines live in per-concern
  * modules under apple-fonts/ and apple-symbols/; this module is the
@@ -102,7 +101,7 @@ const DEFAULT_FONT_DIRS = ['/Library/Fonts', '/System/Library/Fonts', join(homed
 
 const FONT_FILE_RE = /\.(ttf|otf|ttc|dfont)$/i
 
-export async function syncAppleFonts(opts, ctx) {
+export async function syncAppleFonts(/** @type {any} */ opts, /** @type {any} */ ctx) {
   const { db, dataDir, logger } = ctx
   const resourcesDir = join(dataDir, 'resources', 'fonts')
   const originalsDir = join(resourcesDir, 'original')
@@ -145,7 +144,7 @@ export async function syncAppleFonts(opts, ctx) {
           status: 'downloaded',
         })
       } catch (error) {
-        logger?.warn?.(`Apple font download/extract failed for ${family.displayName}: ${error.message}`)
+        logger?.warn?.(`Apple font download/extract failed for ${family.displayName}: ${/** @type {any} */ (error).message}`)
       }
     }
   }
@@ -156,7 +155,7 @@ export async function syncAppleFonts(opts, ctx) {
   // (family_id, file_name) means a later upsert with source='system'
   // overwrites the row — so we run remote first and skip system entries
   // whose names already landed.
-  const indexFile = (file, source) => {
+  const indexFile = (/** @type {any} */ file, /** @type {any} */ source) => {
     const family = APPLE_FONT_FAMILIES.find((f) => f.match.test(file.fileName))
     if (!family) return false
     const { variant, weight, italic } = parseFontFilename(file.fileName)
@@ -199,7 +198,7 @@ export async function syncAppleFonts(opts, ctx) {
   return result
 }
 
-function matchFamilyId(fileName) {
+function matchFamilyId(/** @type {any} */ fileName) {
   const family = APPLE_FONT_FAMILIES.find((f) => f.match.test(fileName))
   return family?.id ?? ''
 }
@@ -214,7 +213,7 @@ function matchFamilyId(fileName) {
  * (no cached DMG) — that family stays absent on both passes, still
  * deterministic.
  */
-export async function ensureFontsExtracted(dataDir, logger) {
+export async function ensureFontsExtracted(/** @type {any} */ dataDir, /** @type {any} */ logger) {
   const extractedDir = join(dataDir, 'resources', 'fonts', 'extracted')
   const originalsDir = join(dataDir, 'resources', 'fonts', 'original')
   const repaired = []
@@ -231,17 +230,17 @@ export async function ensureFontsExtracted(dataDir, logger) {
       extracted += (await extractDmgFonts(dmgPath, familyDir, logger)).length
       repaired.push(family.id)
     } catch (error) {
-      logger?.warn?.(`Apple font re-extract failed for ${family.displayName}: ${error.message}`)
+      logger?.warn?.(`Apple font re-extract failed for ${family.displayName}: ${/** @type {any} */ (error).message}`)
     }
   }
   return { extracted, families: repaired }
 }
 
-export function listAppleFonts(ctx) {
+export function listAppleFonts(/** @type {any} */ ctx) {
   return { families: ctx.db.listAppleFonts() }
 }
 
-export function searchSfSymbols(query, opts, ctx) {
+export function searchSfSymbols(/** @type {any} */ query, /** @type {any} */ opts, /** @type {any} */ ctx) {
   return { results: ctx.db.searchSfSymbols(query, opts), query: query ?? '', scope: opts.scope ?? null }
 }
 

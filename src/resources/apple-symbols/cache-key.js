@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * SF Symbols cache-key + variant matrix.
  *
@@ -17,12 +16,12 @@ import { sanitizeFileName } from '../apple-assets-helpers.js'
 export const SYMBOL_WEIGHTS = ['ultralight', 'thin', 'light', 'regular', 'medium', 'semibold', 'bold', 'heavy', 'black']
 export const SYMBOL_SCALES = ['small', 'medium', 'large']
 
-export function normalizeSymbolWeight(value) {
+export function normalizeSymbolWeight(/** @type {any} */ value) {
   const weight = String(value ?? '').toLowerCase()
   return SYMBOL_WEIGHTS.includes(weight) ? weight : 'regular'
 }
 
-export function normalizeSymbolScale(value) {
+export function normalizeSymbolScale(/** @type {any} */ value) {
   const scale = String(value ?? '').toLowerCase()
   return SYMBOL_SCALES.includes(scale) ? scale : 'medium'
 }
@@ -36,7 +35,7 @@ export function normalizeSymbolScale(value) {
  * "private is regular/medium only" note was wrong — confirmed on macOS
  * 26.4 by re-rendering `10.timer.enclosure` at bold/large (15→198 px).
  */
-export function symbolVariantMatrix(_scope) {
+export function symbolVariantMatrix(/** @type {any} */ _scope) {
   const variants = []
   for (const weight of SYMBOL_WEIGHTS) {
     for (const scale of SYMBOL_SCALES) variants.push({ weight, scale })
@@ -44,7 +43,7 @@ export function symbolVariantMatrix(_scope) {
   return variants
 }
 
-export function symbolVariantKey(variant) {
+export function symbolVariantKey(/** @type {any} */ variant) {
   return `${normalizeSymbolWeight(variant?.weight)}/${normalizeSymbolScale(variant?.scale)}`
 }
 
