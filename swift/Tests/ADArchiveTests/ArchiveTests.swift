@@ -4,6 +4,7 @@
 // parity suite. Foundation here is test-only — the shipped targets stay
 // Foundation-free.
 
+import ADTestKit
 import Foundation
 import Testing
 
@@ -58,22 +59,24 @@ private func cString(_ bytes: [UInt8]) -> String {
 @Test func headerGoldenFields() throws {
     var block = [UInt8](repeating: 0, count: 512)
     try Tar.writeHeader(into: &block, path: "docs/readme.md", size: 5, mtime: 1_700_000_000, executable: false)
-    #expect(cString(field(block[...], 0, 100)) == "docs/readme.md")
-    #expect(cString(field(block[...], 100, 8)) == "0000644")
-    #expect(cString(field(block[...], 108, 8)) == "0000000")  // uid 0
-    #expect(cString(field(block[...], 124, 12)) == "00000000005")  // size 5
-    #expect(field(block[...], 156, 1) == [UInt8(ascii: "0")])  // typeflag
-    #expect(field(block[...], 257, 6) == Array("ustar".utf8) + [0])  // magic
-    #expect(field(block[...], 263, 2) == Array("00".utf8))  // version
-    #expect(cString(field(block[...], 265, 32)) == "root")
+    // Typed asserts keep each `field`/`cString` slice operand off the `#expect` macro's re-type-check
+    // path, so the fanned-out golden-field checks stay under the 100ms whole-body budget.
+    expectEqual(cString(field(block[...], 0, 100)), "docs/readme.md")
+    expectEqual(cString(field(block[...], 100, 8)), "0000644")
+    expectEqual(cString(field(block[...], 108, 8)), "0000000")  // uid 0
+    expectEqual(cString(field(block[...], 124, 12)), "00000000005")  // size 5
+    expectEqual(field(block[...], 156, 1), [UInt8(ascii: "0")])  // typeflag
+    expectEqual(field(block[...], 257, 6), Array("ustar".utf8) + [0])  // magic
+    expectEqual(field(block[...], 263, 2), Array("00".utf8))  // version
+    expectEqual(cString(field(block[...], 265, 32)), "root")
     // Checksum: recompute with the chksum field as spaces and compare.
     var copy = block
     for i in 148 ..< 156 { copy[i] = UInt8(ascii: " ") }
     let expected = copy.reduce(0) { $0 + Int($1) }
     let digits = cString(field(block[...], 148, 7))
-    #expect(Int(digits, radix: 8) == expected)
-    #expect(block[154] == 0)
-    #expect(block[155] == UInt8(ascii: " "))
+    expectEqual(Int(digits, radix: 8), expected)
+    expectEqual(block[154], 0)
+    expectEqual(block[155], UInt8(ascii: " "))
 }
 
 @Test func executableModeAndPrefixSplit() throws {
@@ -115,22 +118,22 @@ private func cString(_ bytes: [UInt8]) -> String {
     try ArchiveWriter.streamTar(metas: metas, into: &sink)
     let bytes = sink.bytes
 
-    #expect(bytes.count % Tar.recordSize == 0)  // padded to the 10240 record
+    expectEqual(bytes.count % Tar.recordSize, 0)  // padded to the 10240 record
 
     // Member 1: a.txt, 5 bytes, data at 512.
-    #expect(cString(field(bytes[0 ..< 512], 0, 100)) == "a.txt")
-    #expect(Array(bytes[512 ..< 517]) == Array("hello".utf8))
-    #expect(bytes[517 ..< 1024].allSatisfy { $0 == 0 })  // body padding
+    expectEqual(cString(field(bytes[0 ..< 512], 0, 100)), "a.txt")
+    expectEqual(Array(bytes[512 ..< 517]), Array("hello".utf8))
+    expectTrue(bytes[517 ..< 1024].allSatisfy { $0 == 0 })  // body padding
 
     // Member 2: empty.dat — header only, no data blocks.
-    #expect(cString(field(bytes[1024 ..< 1536], 0, 100)) == "empty.dat")
+    expectEqual(cString(field(bytes[1024 ..< 1536], 0, 100)), "empty.dat")
     // Member 3 header follows immediately.
-    #expect(cString(field(bytes[1536 ..< 2048], 0, 100)) == "nested/dir/b.bin")
+    expectEqual(cString(field(bytes[1536 ..< 2048], 0, 100)), "nested/dir/b.bin")
     let sizeOctal = cString(field(bytes[1536 ..< 2048], 124, 12))
-    #expect(Int(sizeOctal, radix: 8) == 600)
+    expectEqual(Int(sizeOctal, radix: 8), 600)
     // 600 bytes of data → 2 blocks; then EOF: two zero blocks.
     let eofStart = 2048 + 1024
-    #expect(bytes[eofStart ..< (eofStart + 1024)].allSatisfy { $0 == 0 })
+    expectTrue(bytes[eofStart ..< (eofStart + 1024)].allSatisfy { $0 == 0 })
 }
 
 @Test(.enabled(if: Zstd.shared != nil))
@@ -151,12 +154,12 @@ func writeTarZstIsDeterministicAndFramed() throws {
         Issue.record("archive build failed: \(r1) / \(r2)")
         return
     }
-    #expect(done.fileCount == 2)
+    expectEqual(done.fileCount, 2)
     let bytes1 = try Data(contentsOf: URL(fileURLWithPath: out1))
     let bytes2 = try Data(contentsOf: URL(fileURLWithPath: out2))
-    #expect([UInt8](bytes1.prefix(4)) == [0x28, 0xB5, 0x2F, 0xFD])  // zstd magic
-    #expect(bytes1 == bytes2)  // rebuild-twice determinism
-    #expect(Int64(bytes1.count) == done.size)
+    expectEqual([UInt8](bytes1.prefix(4)), [0x28, 0xB5, 0x2F, 0xFD])  // zstd magic
+    expectEqual(bytes1, bytes2)  // rebuild-twice determinism
+    expectEqual(Int64(bytes1.count), done.size)
 }
 
 // The exact path that fell back in production: the FILENAME alone is 103
@@ -187,39 +190,42 @@ private let productionLongPath =
     #expect(blocks[0] == classic)
 }
 
-@Test func encodeMemberEmitsPaxForTheProductionPath() throws {
+@Test func encodeMemberEmitsPaxExtendedHeaderForTheProductionPath() throws {
+    // Typed asserts plus a split (the pax extended header + its data block here; the file header and
+    // determinism in the next test) keep each body under the 100ms budget — the combined form hit 217ms.
     let blocks = try Tar.encodeMember(path: productionLongPath, size: 1234, mtime: 1_700_000_000, executable: false)
-    #expect(blocks.count == 3)  // xhdr + one data block + file header
+    expectEqual(blocks.count, 3)  // xhdr + one data block + file header
 
     let xhdr = blocks[0]
-    #expect(xhdr.count == 512)
-    #expect(xhdr[156] == UInt8(ascii: "x"))
+    expectEqual(xhdr.count, 512)
+    expectEqual(xhdr[156], UInt8(ascii: "x"))
     let paxName = cString(field(xhdr[...], 0, 100))
-    #expect(paxName.hasPrefix("PaxHeaders/figure.seated"))
-    #expect(Array(paxName.utf8).count <= 100)
+    expectTrue(paxName.hasPrefix("PaxHeaders/figure.seated"))
+    expectTrue(Array(paxName.utf8).count <= 100)
     let record = Tar.paxPathRecord(Array(productionLongPath.utf8))
-    #expect(Int(cString(field(xhdr[...], 124, 12)), radix: 8) == record.count)  // size pre-padding
+    expectEqual(Int(cString(field(xhdr[...], 124, 12)), radix: 8), record.count)  // size pre-padding
     // Checksum is valid under the spaces-while-summing rule.
     var copy = xhdr
     for i in 148 ..< 156 { copy[i] = UInt8(ascii: " ") }
-    #expect(Int(cString(field(xhdr[...], 148, 7)), radix: 8) == copy.reduce(0) { $0 + Int($1) })
+    expectEqual(Int(cString(field(xhdr[...], 148, 7)), radix: 8), copy.reduce(0) { $0 + Int($1) })
 
     let data = blocks[1]
-    #expect(data.count == 512)
-    #expect(Array(data.prefix(record.count)) == record)
-    #expect(data.dropFirst(record.count).allSatisfy { $0 == 0 })
-    #expect(
-        String(decoding: record, as: UTF8.self)
-            == "\(record.count) path=\(productionLongPath)\n")
+    expectEqual(data.count, 512)
+    expectEqual(Array(data.prefix(record.count)), record)
+    expectTrue(data.dropFirst(record.count).allSatisfy { $0 == 0 })
+    expectEqual(String(decoding: record, as: UTF8.self), "\(record.count) path=\(productionLongPath)\n")
+}
 
+@Test func encodeMemberPaxFileHeaderTruncatesNameAndIsDeterministic() throws {
+    let blocks = try Tar.encodeMember(path: productionLongPath, size: 1234, mtime: 1_700_000_000, executable: false)
     let fileHeader = blocks[2]
-    #expect(fileHeader[156] == UInt8(ascii: "0"))
-    #expect(Int(cString(field(fileHeader[...], 124, 12)), radix: 8) == 1234)
+    expectEqual(fileHeader[156], UInt8(ascii: "0"))
+    expectEqual(Int(cString(field(fileHeader[...], 124, 12)), radix: 8), 1234)
     let truncated = cString(field(fileHeader[...], 0, 100))
-    #expect(Array(truncated.utf8) == Array(productionLongPath.utf8.prefix(100)))
+    expectEqual(Array(truncated.utf8), Array(productionLongPath.utf8.prefix(100)))
     // Determinism: same input, same bytes.
     let again = try Tar.encodeMember(path: productionLongPath, size: 1234, mtime: 1_700_000_000, executable: false)
-    #expect(again == blocks)
+    expectEqual(again, blocks)
 }
 
 @Test func streamTarPlacesPaxBlocksAndKeepsByteAccounting() throws {
@@ -232,16 +238,16 @@ private let productionLongPath =
     var sink = CollectSink()
     try ArchiveWriter.streamTar(metas: metas, into: &sink)
     let bytes = sink.bytes
-    #expect(bytes.count % Tar.recordSize == 0)
+    expectEqual(bytes.count % Tar.recordSize, 0)
     // a.txt: header @0, data @512. pax member: xhdr @1024, pax data @1536,
     // file header @2048, file data @2560.
-    #expect(cString(field(bytes[0 ..< 512], 0, 100)) == "a.txt")
-    #expect(bytes[1024 + 156] == UInt8(ascii: "x"))
-    #expect(cString(field(bytes[1024 ..< 1536], 0, 100)).hasPrefix("PaxHeaders/"))
+    expectEqual(cString(field(bytes[0 ..< 512], 0, 100)), "a.txt")
+    expectEqual(bytes[1024 + 156], UInt8(ascii: "x"))
+    expectTrue(cString(field(bytes[1024 ..< 1536], 0, 100)).hasPrefix("PaxHeaders/"))
     let record = Tar.paxPathRecord(Array(productionLongPath.utf8))
-    #expect(Array(bytes[1536 ..< (1536 + record.count)]) == record)
-    #expect(bytes[2048 + 156] == UInt8(ascii: "0"))
-    #expect(Array(bytes[2560 ..< 2569]) == Array("svg-bytes".utf8))
+    expectEqual(Array(bytes[1536 ..< (1536 + record.count)]), record)
+    expectEqual(bytes[2048 + 156], UInt8(ascii: "0"))
+    expectEqual(Array(bytes[2560 ..< 2569]), Array("svg-bytes".utf8))
 }
 
 @Test(.enabled(if: Zstd.shared != nil))
@@ -267,8 +273,8 @@ func writeTarZstHandlesPaxPathsWithPledgedSizeIntact() throws {
         Issue.record("pax archive build failed: \(r1) / \(r2)")
         return
     }
-    #expect(done.fileCount == 3)  // pax blocks are not members
-    #expect(try Data(contentsOf: URL(fileURLWithPath: out1)) == Data(contentsOf: URL(fileURLWithPath: out2)))
+    expectEqual(done.fileCount, 3)  // pax blocks are not members
+    expectEqual(try Data(contentsOf: URL(fileURLWithPath: out1)), try Data(contentsOf: URL(fileURLWithPath: out2)))
 }
 
 @Test func writeTarZstRejectsBadInputs() {
