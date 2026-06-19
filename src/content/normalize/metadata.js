@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Metadata extraction helpers for the DocC normalizer:
 //   - resolveKind / resolveLanguage / resolveDeclarationText / resolvePlatforms
 //   - findSection / extractFirstHeading / collectHeadings
@@ -9,12 +8,14 @@ import { normalizeIdentifier } from '../../apple/normalizer.js'
 import { resolveRefKey } from './refs.js'
 import { renderInlineNodes } from './render-content.js'
 
-const identity = (v) => v
+const identity = (/** @type {any} */ v) => v
 
 /** Determine doc kind from symbolKind or role. */
-export function resolveKind(json) {
+export function resolveKind(/** @type {any} */ json) {
   const meta = json?.metadata ?? {}
   if (meta.symbolKind) return meta.symbolKind
+
+  /** @type {Record<string, string>} */
 
   const roleMap = {
     symbol: 'symbol',
@@ -43,7 +44,7 @@ export function resolveKind(json) {
  * (doc:// URL) via the references map, or fall back to matching the token
  * text against reference titles. Stores resolved path as `_resolvedKey`.
  */
-export function enrichDeclarationTokens(declarations, refs, mapKey = identity) {
+export function enrichDeclarationTokens(/** @type {any} */ declarations, /** @type {any} */ refs, mapKey = identity) {
   if (!Array.isArray(declarations) || declarations.length === 0) return declarations
 
   // Build a title → canonical key lookup from references
@@ -89,7 +90,7 @@ export function enrichDeclarationTokens(declarations, refs, mapKey = identity) {
  * Enrich type tokens (from properties, restParameters, restResponses)
  * with resolved keys for linking, similar to declaration tokens.
  */
-export function enrichTypeTokens(tokens, refs, mapKey = identity) {
+export function enrichTypeTokens(/** @type {any} */ tokens, /** @type {any} */ refs, mapKey = identity) {
   if (!Array.isArray(tokens) || tokens.length === 0) return tokens
   return tokens.map((token) => {
     if (token.kind !== 'typeIdentifier') return token
@@ -102,7 +103,7 @@ export function enrichTypeTokens(tokens, refs, mapKey = identity) {
 }
 
 /** Detect the primary language from module name or declaration tokens. */
-export function resolveLanguage(json) {
+export function resolveLanguage(/** @type {any} */ json) {
   // Scan explicit declaration languages first — they are the most precise signal
   for (const section of json?.primaryContentSections ?? []) {
     if (section.kind !== 'declarations') continue
@@ -121,12 +122,12 @@ export function resolveLanguage(json) {
 }
 
 /** Concatenate all declaration token texts from the first declarations section. */
-export function resolveDeclarationText(json) {
+export function resolveDeclarationText(/** @type {any} */ json) {
   for (const section of json?.primaryContentSections ?? []) {
     if (section.kind !== 'declarations') continue
     const decl = section.declarations?.[0]
     if (decl?.tokens) {
-      return decl.tokens.map((t) => t.text ?? '').join('') || null
+      return decl.tokens.map((/** @type {any} */ t) => t.text ?? '').join('') || null
     }
   }
   return null
@@ -136,8 +137,10 @@ export function resolveDeclarationText(json) {
  * Build a flat { ios, macos, watchos, tvos, visionos } map from metadata.platforms.
  * Keys are lowercase platform name slugs; values are the introducedAt version string.
  */
-export function resolvePlatforms(meta) {
+export function resolvePlatforms(/** @type {any} */ meta) {
+  /** @type {Record<string, any>} */
   const map = {}
+  /** @type {Record<string, string>} */
   const nameToKey = {
     iOS: 'ios',
     macOS: 'macos',
@@ -157,13 +160,13 @@ export function resolvePlatforms(meta) {
 }
 
 /** Find the first section with a matching kind in an array of sections. */
-export function findSection(sections, kind) {
+export function findSection(/** @type {any} */ sections, /** @type {any} */ kind) {
   if (!Array.isArray(sections)) return null
   return sections.find((s) => s.kind === kind) ?? null
 }
 
 /** Extract the text of the first heading node from a content nodes array. */
-export function extractFirstHeading(nodes, refs) {
+export function extractFirstHeading(/** @type {any} */ nodes, /** @type {any} */ refs) {
   if (!Array.isArray(nodes)) return null
   for (const node of nodes) {
     if (node.type === 'heading') {
@@ -177,7 +180,7 @@ export function extractFirstHeading(nodes, refs) {
  * Collect all heading texts from all 'content' primary sections, space-joined,
  * for use as an FTS hint field.
  */
-export function collectHeadings(json, refs) {
+export function collectHeadings(/** @type {any} */ json, /** @type {any} */ refs) {
   const texts = []
   for (const section of json?.primaryContentSections ?? []) {
     if (section.kind !== 'content') continue

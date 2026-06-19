@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Shared constants + regex caches for the parse-html cluster.
 
 /** Block-level HTML tags that should produce paragraph breaks. */
@@ -50,27 +49,27 @@ export const SECTION_SPLIT_REGEX_BY_TAG = {
   h3: /(<h3[\s>][\s\S]*?<\/h3>)/gi,
 }
 
-export function getSelectorIdRegex(id) {
+export function getSelectorIdRegex(/** @type {any} */ id) {
   if (!selectorIdRegexCache.has(id)) {
     selectorIdRegexCache.set(id, new RegExp(`\\bid\\s*=\\s*["']${escapeRegex(id)}["']`))
   }
   return selectorIdRegexCache.get(id)
 }
 
-export function getSelectorClassRegex(className) {
+export function getSelectorClassRegex(/** @type {any} */ className) {
   if (!selectorClassRegexCache.has(className)) {
     selectorClassRegexCache.set(className, new RegExp(`\\bclass\\s*=\\s*["'][^"']*\\b${escapeRegex(className)}\\b[^"']*["']`))
   }
   return selectorClassRegexCache.get(className)
 }
 
-export function getOpenTagRegex(tagPattern) {
+export function getOpenTagRegex(/** @type {any} */ tagPattern) {
   if (!openTagRegexCache.has(tagPattern)) {
     openTagRegexCache.set(tagPattern, new RegExp(`<(${tagPattern})\\b[^>]*>`, 'gi'))
   }
   return openTagRegexCache.get(tagPattern)
 }
 
-export function escapeRegex(s) {
+export function escapeRegex(/** @type {any} */ s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

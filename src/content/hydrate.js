@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { join } from 'node:path'
 import { parseGuidelinesHtml, ROOT_SLUG } from '../apple/guidelines-parser.js'
 import { sha256 } from '../lib/hash.js'
@@ -10,7 +9,7 @@ import { normalize } from './normalize.js'
  * Rebuild normalized sections/relationships from stored raw payloads for legacy
  * corpora that were migrated before section backfill was added.
  */
-export async function ensureNormalizedDocument(db, dataDir, key, sourceType = 'apple-docc') {
+export async function ensureNormalizedDocument(/** @type {any} */ db, /** @type {any} */ dataDir, /** @type {any} */ key, sourceType = 'apple-docc') {
   const existingSections = db.getDocumentSections(key)
   if (existingSections.length > 0) return true
 
@@ -42,7 +41,7 @@ export async function ensureNormalizedDocument(db, dataDir, key, sourceType = 'a
   return db.getDocumentSections(key).length > 0
 }
 
-async function hydrateGuidelines(db, dataDir, key) {
+async function hydrateGuidelines(/** @type {any} */ db, /** @type {any} */ dataDir, /** @type {any} */ key) {
   const html = await readText(join(dataDir, 'raw-json', `${ROOT_SLUG}.html`))
   if (!html) return false
 

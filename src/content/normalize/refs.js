@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // References resolution. DocC ships a flat `references` map keyed by
 // identifier; downstream code needs three things:
 //   1. Resolve an identifier to a corpus key (`resolveRefKey`).
@@ -9,7 +8,7 @@
 import { normalizeIdentifier } from '../../apple/normalizer.js'
 import { mapUrlToKey } from '../../lib/link-resolver.js'
 
-const identity = (v) => v
+const identity = (/** @type {any} */ v) => v
 
 /**
  * Resolve a DocC identifier to its canonical corpus key.
@@ -23,7 +22,7 @@ const identity = (v) => v
  *      our cross-source link rules know about).
  *   3. The identifier itself via `normalizeIdentifier`.
  */
-export function resolveRefKey(id, refs) {
+export function resolveRefKey(/** @type {any} */ id, /** @type {any} */ refs) {
   const ref = refs?.[id]
   if (ref?.url) {
     const norm = normalizeIdentifier(ref.url)
@@ -41,7 +40,7 @@ export function resolveRefKey(id, refs) {
  * Render an array of link-section objects (topicSections / seeAlsoSections)
  * to a plain-text string: section title, then referenced doc titles, newline-separated.
  */
-export function renderLinkSectionsToText(sections, refs) {
+export function renderLinkSectionsToText(/** @type {any} */ sections, /** @type {any} */ refs) {
   const lines = []
   for (const section of sections ?? []) {
     if (section.title) lines.push(section.title)
@@ -54,11 +53,11 @@ export function renderLinkSectionsToText(sections, refs) {
   return lines.join('\n') || null
 }
 
-export function normalizeLinkSections(sections, refs, mapKey = identity) {
-  return (sections ?? []).map((section) => ({
+export function normalizeLinkSections(/** @type {any} */ sections, /** @type {any} */ refs, mapKey = identity) {
+  return (sections ?? []).map((/** @type {any} */ section) => ({
     title: section.title ?? null,
     type: section.type ?? null,
-    items: (section.identifiers ?? []).map((id) => {
+    items: (section.identifiers ?? []).map((/** @type {any} */ id) => {
       const ref = refs?.[id]
       return {
         identifier: id,
@@ -73,12 +72,12 @@ export function normalizeLinkSections(sections, refs, mapKey = identity) {
  * Deep-clone content nodes and resolve all reference identifiers to include
  * human-readable titles and canonical keys for HTML rendering.
  */
-export function resolveContentReferences(nodes, refs, mapKey = identity) {
+export function resolveContentReferences(/** @type {any} */ nodes, /** @type {any} */ refs, mapKey = identity) {
   if (!Array.isArray(nodes)) return nodes
   return nodes.map((node) => resolveNodeRefs(node, refs, mapKey))
 }
 
-function resolveNodeRefs(node, refs, mapKey = identity) {
+function resolveNodeRefs(/** @type {any} */ node, /** @type {any} */ refs, mapKey = identity) {
   if (!node || typeof node !== 'object') return node
 
   // Reference inline node — embed title and key
@@ -91,7 +90,7 @@ function resolveNodeRefs(node, refs, mapKey = identity) {
 
   // Links block node — resolve each item identifier
   if (node.type === 'links' && Array.isArray(node.items)) {
-    const resolvedItems = node.items.map((id) => {
+    const resolvedItems = node.items.map((/** @type {any} */ id) => {
       const ref = refs?.[id]
       const key = mapKey(resolveRefKey(id, refs))
       const title = ref?.title ?? null
@@ -115,26 +114,29 @@ function resolveNodeRefs(node, refs, mapKey = identity) {
   // Recurse into child content
   const clone = { ...node }
   if (Array.isArray(clone.inlineContent)) {
-    clone.inlineContent = clone.inlineContent.map((child) => resolveNodeRefs(child, refs, mapKey))
+    clone.inlineContent = clone.inlineContent.map((/** @type {any} */ child) => resolveNodeRefs(child, refs, mapKey))
   }
   if (Array.isArray(clone.content)) {
-    clone.content = clone.content.map((child) => resolveNodeRefs(child, refs, mapKey))
+    clone.content = clone.content.map((/** @type {any} */ child) => resolveNodeRefs(child, refs, mapKey))
   }
   if (Array.isArray(clone.items)) {
-    clone.items = clone.items.map((item) => {
-      if (item?.content) return { ...item, content: item.content.map((child) => resolveNodeRefs(child, refs, mapKey)) }
+    clone.items = clone.items.map((/** @type {any} */ item) => {
+      if (item?.content) return { ...item, content: item.content.map((/** @type {any} */ child) => resolveNodeRefs(child, refs, mapKey)) }
       return item
     })
   }
   // Term list items
   if (node.type === 'termList' && Array.isArray(clone.items)) {
-    clone.items = clone.items.map((item) => {
+    clone.items = clone.items.map((/** @type {any} */ item) => {
       const resolved = { ...item }
       if (resolved.term?.inlineContent) {
-        resolved.term = { ...resolved.term, inlineContent: resolved.term.inlineContent.map((child) => resolveNodeRefs(child, refs, mapKey)) }
+        resolved.term = { ...resolved.term, inlineContent: resolved.term.inlineContent.map((/** @type {any} */ child) => resolveNodeRefs(child, refs, mapKey)) }
       }
       if (resolved.definition?.content) {
-        resolved.definition = { ...resolved.definition, content: resolved.definition.content.map((child) => resolveNodeRefs(child, refs, mapKey)) }
+        resolved.definition = {
+          ...resolved.definition,
+          content: resolved.definition.content.map((/** @type {any} */ child) => resolveNodeRefs(child, refs, mapKey)),
+        }
       }
       return resolved
     })

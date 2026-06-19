@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Declaration / type-token rendering. Walks the DocC `tokens` array
 // (semantic kind + text + optional `_resolvedKey` for type linking) and
 // emits HTML with semantic CSS classes and per-type anchor links.
@@ -9,7 +8,7 @@ import { escapeHtml } from './helpers.js'
 const SEMANTIC_TOKEN_KINDS = new Set(['keyword', 'attribute', 'typeIdentifier', 'identifier', 'genericParameter', 'externalParam', 'internalParam', 'number'])
 
 /** Join token texts, inserting spaces between adjacent semantic tokens that lack whitespace separators. */
-export function joinTokenTexts(tokens) {
+export function joinTokenTexts(/** @type {any} */ tokens) {
   let result = ''
   let prevWasSemantic = false
   let prevText = ''
@@ -29,7 +28,7 @@ export function joinTokenTexts(tokens) {
  * Render declaration tokens with semantic CSS classes and type links.
  * Used when tokens have resolved type references for interactive navigation.
  */
-export function renderDeclarationTokens(tokens, knownKeys) {
+export function renderDeclarationTokens(/** @type {any} */ tokens, /** @type {any} */ knownKeys) {
   const spans = []
   let prevWasSemantic = false
   let prevTokenText = ''
@@ -85,7 +84,7 @@ export function renderDeclarationTokens(tokens, knownKeys) {
 }
 
 /** Render type tokens (from properties, restParams, restResponses) with links. */
-export function renderTypeTokens(tokens, knownKeys) {
+export function renderTypeTokens(/** @type {any} */ tokens, /** @type {any} */ knownKeys) {
   if (!Array.isArray(tokens) || tokens.length === 0) return ''
   return tokens
     .map((token) => {

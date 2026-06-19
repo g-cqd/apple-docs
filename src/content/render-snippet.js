@@ -1,7 +1,6 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { renderPlainText } from './render-text.js'
 
-export function renderSnippet(document, sections = [], query = '', maxLength = 220) {
+export function renderSnippet(/** @type {any} */ document, /** @type {any[]} */ sections = [], query = '', maxLength = 220) {
   const text = renderPlainText(document, sections)
   if (!text) return ''
 
@@ -33,7 +32,7 @@ export function renderSnippet(document, sections = [], query = '', maxLength = 2
   return `${prefix}${slice}${suffix}`
 }
 
-function truncate(text, maxLength) {
+function truncate(/** @type {any} */ text, /** @type {any} */ maxLength) {
   if (text.length <= maxLength) return text
   return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`
 }

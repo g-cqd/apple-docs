@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Markdown parsing utilities that convert Markdown source files into the
  * normalized document model used throughout the app.
@@ -10,7 +9,7 @@ import { createDocumentTemplate } from './document-template.js'
 
 const headingScanRegexCache = new Map()
 
-function getHeadingScanRegex(level) {
+function getHeadingScanRegex(/** @type {any} */ level) {
   if (!headingScanRegexCache.has(level)) {
     const prefix = '#'.repeat(level)
     headingScanRegexCache.set(level, new RegExp(`^(${prefix}(?!#) +(.+))$`, 'mg'))
@@ -30,7 +29,7 @@ function getHeadingScanRegex(level) {
  * lines), and list items (lines starting with `- `).
  *
  * @param {string} markdown - Raw Markdown source.
- * @returns {{ frontmatter: object|null, body: string }}
+ * @returns {{ frontmatter: any, body: string }}
  */
 export function extractFrontmatter(markdown) {
   if (typeof markdown !== 'string') return { frontmatter: null, body: markdown ?? '' }
@@ -68,9 +67,10 @@ export function extractFrontmatter(markdown) {
  *   unless they form a list.
  *
  * @param {string} yaml
- * @returns {object}
+ * @returns {Record<string, any>}
  */
 function parseYaml(yaml) {
+  /** @type {Record<string, any>} */
   const result = {}
   const lines = yaml.split('\n')
 
@@ -291,6 +291,7 @@ export function parseMarkdownToSections(markdown, key, opts = {}) {
 
   // ── Relationships ─────────────────────────────────────────────────────────
   // Markdown sources don't carry typed relationships
+  /** @type {any[]} */
   const relationships = []
 
   return { document, sections, relationships }

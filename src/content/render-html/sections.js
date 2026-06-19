@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Per-section HTML renderers. Each function consumes a single
 // (sectionKind, contentJson, contentText) tuple and emits the matching
 // <section>…</section> markup. The dispatcher in render-html.js routes
@@ -20,7 +19,7 @@ import { joinTokenTexts, renderDeclarationTokens, renderTypeTokens } from './tok
  */
 const MARKDOWN_MAX_BYTES = Math.max(512, Number.parseInt(process.env.APPLE_DOCS_MD_MAX_BYTES ?? '', 10) || 256 * 1024)
 
-export function renderAbstractHtml(section) {
+export function renderAbstractHtml(/** @type {any} */ section) {
   const nodes = safeJson(section.contentJson)
   if (Array.isArray(nodes) && nodes.length > 0) {
     return `<p>${renderInlineNodesToHtml(nodes)}</p>`
@@ -34,7 +33,7 @@ export function renderAbstractHtml(section) {
   return text.length > MARKDOWN_MAX_BYTES ? `<p>${escapeHtml(text)}</p>` : markdownToHtml(text)
 }
 
-export function renderDeclarationHtml(section, opts = {}) {
+export function renderDeclarationHtml(/** @type {any} */ section, /** @type {any} */ opts = {}) {
   const declarations = safeJson(section.contentJson)
   const blocks = Array.isArray(declarations) ? declarations : []
   const knownKeys = opts.knownKeys
@@ -50,7 +49,7 @@ export function renderDeclarationHtml(section, opts = {}) {
     .map((declaration) => {
       const tokens = declaration?.tokens ?? []
       if (tokens.length === 0) return null
-      const hasTypeLinks = knownKeys && tokens.some((t) => t._resolvedKey && (t.kind === 'typeIdentifier' || t.kind === 'attribute'))
+      const hasTypeLinks = knownKeys && tokens.some((/** @type {any} */ t) => t._resolvedKey && (t.kind === 'typeIdentifier' || t.kind === 'attribute'))
       let html
       if (hasTypeLinks) {
         html = renderDeclarationTokens(tokens, knownKeys)
@@ -82,7 +81,7 @@ export function renderDeclarationHtml(section, opts = {}) {
   return `<section id="declaration"${langAttr}><h2>Declaration</h2>${snippets.join('')}</section>`
 }
 
-export function renderParametersHtml(section) {
+export function renderParametersHtml(/** @type {any} */ section) {
   const parameters = safeJson(section.contentJson)
   const items = Array.isArray(parameters)
     ? parameters.map((parameter) => {
@@ -94,14 +93,14 @@ export function renderParametersHtml(section) {
           .trim()
           .split('\n')
           .filter(Boolean)
-          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .map((/** @type {any} */ line) => `<li>${escapeHtml(line)}</li>`)
       : []
 
   if (items.length === 0) return ''
   return `<section id="parameters"><h2>Parameters</h2><ul>${items.join('')}</ul></section>`
 }
 
-export function renderPropertiesHtml(section, opts = {}) {
+export function renderPropertiesHtml(/** @type {any} */ section, /** @type {any} */ opts = {}) {
   const items = safeJson(section.contentJson)
   if (!Array.isArray(items) || items.length === 0) return ''
   const knownKeys = opts.knownKeys
@@ -117,7 +116,7 @@ export function renderPropertiesHtml(section, opts = {}) {
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><table class="properties-table"><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>${rows.join('')}</tbody></table></section>`
 }
 
-export function renderRestEndpointHtml(section) {
+export function renderRestEndpointHtml(/** @type {any} */ section) {
   const tokens = safeJson(section.contentJson)
   if (!Array.isArray(tokens) || tokens.length === 0) return ''
   const heading = section.heading ?? 'URL'
@@ -140,7 +139,7 @@ export function renderRestEndpointHtml(section) {
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><pre class="rest-endpoint"><code>${spans.join('')}</code></pre></section>`
 }
 
-export function renderRestParametersHtml(section, opts = {}) {
+export function renderRestParametersHtml(/** @type {any} */ section, /** @type {any} */ opts = {}) {
   const items = safeJson(section.contentJson)
   if (!Array.isArray(items) || items.length === 0) return ''
   const knownKeys = opts.knownKeys
@@ -156,7 +155,7 @@ export function renderRestParametersHtml(section, opts = {}) {
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><table class="params-table"><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>${rows.join('')}</tbody></table></section>`
 }
 
-export function renderRestResponsesHtml(section, opts = {}) {
+export function renderRestResponsesHtml(/** @type {any} */ section, /** @type {any} */ opts = {}) {
   const items = safeJson(section.contentJson)
   if (!Array.isArray(items) || items.length === 0) return ''
   const knownKeys = opts.knownKeys
@@ -173,7 +172,7 @@ export function renderRestResponsesHtml(section, opts = {}) {
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><table class="responses-table"><thead><tr><th>Status</th><th>Reason</th><th>Type</th><th>Description</th></tr></thead><tbody>${rows.join('')}</tbody></table></section>`
 }
 
-export function renderPossibleValuesHtml(section) {
+export function renderPossibleValuesHtml(/** @type {any} */ section) {
   const values = safeJson(section.contentJson)
   if (!Array.isArray(values) || values.length === 0) return ''
   const heading = section.heading ?? 'Possible Values'
@@ -186,7 +185,7 @@ export function renderPossibleValuesHtml(section) {
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><dl class="possible-values">${items.join('')}</dl></section>`
 }
 
-export function renderMentionedInHtml(section) {
+export function renderMentionedInHtml(/** @type {any} */ section) {
   const items = safeJson(section.contentJson)
   if (!Array.isArray(items) || items.length === 0) return ''
   const heading = section.heading ?? 'Mentioned in'
@@ -200,7 +199,7 @@ export function renderMentionedInHtml(section) {
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2><ul>${listItems.join('')}</ul></section>`
 }
 
-export function renderDiscussionHtml(section) {
+export function renderDiscussionHtml(/** @type {any} */ section) {
   const heading = section.heading ?? 'Overview'
   const sectionId = slugify(heading)
   const nodes = safeJson(section.contentJson)
@@ -223,7 +222,7 @@ export function renderDiscussionHtml(section) {
   return `<section id="${sectionId}"><h2>${escapeHtml(heading)}</h2>${body}</section>`
 }
 
-export function renderLinkSectionHtml(title, section) {
+export function renderLinkSectionHtml(/** @type {any} */ title, /** @type {any} */ section) {
   const sectionId = slugify(title)
   const groups = safeJson(section.contentJson)
   const body = []
@@ -234,7 +233,7 @@ export function renderLinkSectionHtml(title, section) {
         body.push(`<h3>${escapeHtml(group.title)}</h3>`)
       }
       const items = (group?.items ?? [])
-        .map((item) => {
+        .map((/** @type {any} */ item) => {
           const filterAttr = item?._resolvedRoleHeading ? ` data-filter-kind="${escapeHtml(item._resolvedRoleHeading)}"` : ''
           return item?.key
             ? `<li${filterAttr}><a href="/docs/${escapeHtml(safeWebDocKey(item.key))}/"><code>${escapeHtml(item.title ?? item.key)}</code></a></li>`
@@ -250,7 +249,7 @@ export function renderLinkSectionHtml(title, section) {
       .trim()
       .split('\n')
       .filter(Boolean)
-      .map((line) => `<li>${escapeHtml(line)}</li>`)
+      .map((/** @type {any} */ line) => `<li>${escapeHtml(line)}</li>`)
       .join('')
     body.push(`<ul>${items}</ul>`)
   }

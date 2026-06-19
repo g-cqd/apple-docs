@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Apple DocC normalizer (apple-docc | hig | swift-docc).
 
 import { normalizeIdentifier } from '../../apple/normalizer.js'
@@ -17,9 +16,9 @@ import { normalizeLinkSections, renderLinkSectionsToText, resolveContentReferenc
 import { extractDocCRelationships } from './relationships.js'
 import { renderContentNodesToText, renderInlineNodes } from './render-content.js'
 
-const identity = (v) => v
+const identity = (/** @type {any} */ v) => v
 
-export function normalizeDocC(json, key, sourceType, opts = {}) {
+export function normalizeDocC(/** @type {any} */ json, /** @type {any} */ key, /** @type {any} */ sourceType, /** @type {any} */ opts = {}) {
   const meta = json?.metadata ?? {}
   const refs = json?.references ?? {}
   const mapKey = opts.keyMapper ?? identity
@@ -119,7 +118,7 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
     sections.push({
       sectionKind: 'declaration',
       heading: 'Declaration',
-      contentText: tokens.map((t) => t.text ?? '').join('') || null,
+      contentText: tokens.map((/** @type {any} */ t) => t.text ?? '').join('') || null,
       contentJson: JSON.stringify(enrichedDeclarations),
       sortOrder: order++,
     })
@@ -132,7 +131,7 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
   if (parametersSection?.parameters?.length) {
     const contentText =
       parametersSection.parameters
-        .map((p) => {
+        .map((/** @type {any} */ p) => {
           const desc = p.content ? renderContentNodesToText(p.content, refs) : ''
           return `${p.name ?? ''}: ${desc}`.trim()
         })
@@ -151,7 +150,7 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
   // 4. Properties (sortOrder 3, for objects/structs with property definitions)
   const propertiesSection = findSection(json?.primaryContentSections, 'properties')
   if (propertiesSection?.items?.length) {
-    const items = propertiesSection.items.map((item) => ({
+    const items = propertiesSection.items.map((/** @type {any} */ item) => ({
       name: item.name ?? null,
       type: enrichTypeTokens(item.type ?? [], refs, mapKey),
       content: resolveContentReferences(item.content ?? [], refs, mapKey),
@@ -161,7 +160,7 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
     }))
     const contentText =
       items
-        .map((p) => {
+        .map((/** @type {any} */ p) => {
           const desc = p.content ? renderContentNodesToText(p.content, refs) : ''
           return `${p.name ?? ''}: ${desc}`.trim()
         })
@@ -178,13 +177,13 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
   }
 
   // 5. REST endpoints (URL, Sandbox URL)
-  const restEndpointSections = (json?.primaryContentSections ?? []).filter((s) => s.kind === 'restEndpoint')
+  const restEndpointSections = (json?.primaryContentSections ?? []).filter((/** @type {any} */ s) => s.kind === 'restEndpoint')
   for (const endpoint of restEndpointSections) {
-    const tokens = (endpoint.tokens ?? []).map((t) => ({
+    const tokens = (endpoint.tokens ?? []).map((/** @type {any} */ t) => ({
       kind: t.kind ?? 'text',
       text: t.text ?? '',
     }))
-    const contentText = tokens.map((t) => t.text).join('')
+    const contentText = tokens.map((/** @type {any} */ t) => t.text).join('')
     sections.push({
       sectionKind: 'rest_endpoint',
       heading: endpoint.title ?? 'URL',
@@ -195,9 +194,9 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
   }
 
   // 6. REST parameters (path parameters, query parameters)
-  const restParamSections = (json?.primaryContentSections ?? []).filter((s) => s.kind === 'restParameters')
+  const restParamSections = (json?.primaryContentSections ?? []).filter((/** @type {any} */ s) => s.kind === 'restParameters')
   for (const paramSection of restParamSections) {
-    const items = (paramSection.items ?? []).map((item) => ({
+    const items = (paramSection.items ?? []).map((/** @type {any} */ item) => ({
       name: item.name ?? null,
       type: enrichTypeTokens(item.type ?? [], refs, mapKey),
       content: resolveContentReferences(item.content ?? [], refs, mapKey),
@@ -207,7 +206,7 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
     }))
     const contentText =
       items
-        .map((p) => {
+        .map((/** @type {any} */ p) => {
           const desc = p.content ? renderContentNodesToText(p.content, refs) : ''
           return `${p.name ?? ''}: ${desc}`.trim()
         })
@@ -224,7 +223,7 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
   // 7. REST responses (status codes)
   const restResponsesSection = findSection(json?.primaryContentSections, 'restResponses')
   if (restResponsesSection?.items?.length) {
-    const items = restResponsesSection.items.map((item) => ({
+    const items = restResponsesSection.items.map((/** @type {any} */ item) => ({
       status: item.status ?? null,
       reason: item.reason ?? null,
       mimeType: item.mimeType ?? null,
@@ -232,7 +231,9 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
       content: resolveContentReferences(item.content ?? [], refs, mapKey),
     }))
     const contentText =
-      items.map((r) => `${r.status ?? ''} ${r.reason ?? ''}: ${r.content ? renderContentNodesToText(r.content, refs) : ''}`.trim()).join('\n') || null
+      items
+        .map((/** @type {any} */ r) => `${r.status ?? ''} ${r.reason ?? ''}: ${r.content ? renderContentNodesToText(r.content, refs) : ''}`.trim())
+        .join('\n') || null
     sections.push({
       sectionKind: 'rest_responses',
       heading: restResponsesSection.title ?? 'Response Codes',
@@ -245,13 +246,13 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
   // 8. Possible values (enums/options)
   const possibleValuesSection = findSection(json?.primaryContentSections, 'possibleValues')
   if (possibleValuesSection?.values?.length) {
-    const values = possibleValuesSection.values.map((v) => ({
+    const values = possibleValuesSection.values.map((/** @type {any} */ v) => ({
       name: v.name ?? null,
       content: resolveContentReferences(v.content ?? [], refs, mapKey),
     }))
     const contentText =
       values
-        .map((v) => {
+        .map((/** @type {any} */ v) => {
           const desc = v.content ? renderContentNodesToText(v.content, refs) : ''
           return `${v.name ?? ''}: ${desc}`.trim()
         })
@@ -268,12 +269,12 @@ export function normalizeDocC(json, key, sourceType, opts = {}) {
   // 9. Mentions ("Mentioned in")
   const mentionsSection = findSection(json?.primaryContentSections, 'mentions')
   if (mentionsSection?.mentions?.length) {
-    const items = mentionsSection.mentions.map((id) => ({
+    const items = mentionsSection.mentions.map((/** @type {any} */ id) => ({
       identifier: id,
       key: mapKey(resolveRefKey(id, refs)),
       title: refs?.[id]?.title ?? normalizeIdentifier(id) ?? id,
     }))
-    const contentText = items.map((m) => m.title).join('\n') || null
+    const contentText = items.map((/** @type {any} */ m) => m.title).join('\n') || null
     sections.push({
       sectionKind: 'mentioned_in',
       heading: 'Mentioned in',

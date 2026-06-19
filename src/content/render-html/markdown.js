@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Lightweight markdown → HTML converter. Used by:
 //   - swift-book / WWDC / Swift Evolution sources that ship raw .md
 //   - Discussion-section fallback when DocC `contentJson` isn't present
@@ -15,7 +14,8 @@ import { escapeHtml, isSafeHref } from './helpers.js'
 // imperceptible past ~6 levels and the worker stays alive.
 const MARKDOWN_MAX_BLOCKQUOTE_DEPTH = 32
 
-export function markdownToHtml(md, _depth = 0) {
+/** @returns {string} */
+export function markdownToHtml(/** @type {any} */ md, _depth = 0) {
   if (!md) return ''
 
   // Strip stray XML declarations/processing instructions
@@ -64,6 +64,7 @@ export function markdownToHtml(md, _depth = 0) {
       // so a post-Shiki regex over `&lt;#name#&gt;` can't match. Replace
       // placeholders with identifier-safe tokens BEFORE highlighting, then
       // swap them back to styled spans on the highlighted output.
+      /** @type {any[]} */
       const placeholders = []
       const codeWithTokens = fencedCode.replace(/<#([^#>\n]+?)#>/g, (_m, name) => {
         const idx = placeholders.length
@@ -74,7 +75,7 @@ export function markdownToHtml(md, _depth = 0) {
       const highlighted = highlightCode(codeWithTokens, lang)
       let block = highlighted ?? `<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(codeWithTokens)}</code></pre>`
 
-      block = block.replace(/DoccPh(\d+)DoccPh/g, (_m, idx) => {
+      block = block.replace(/DoccPh(\d+)DoccPh/g, (/** @type {any} */ _m, /** @type {any} */ idx) => {
         const name = placeholders[Number(idx)] ?? ''
         return `<span class="placeholder">${escapeHtml(name)}</span>`
       })
@@ -183,9 +184,9 @@ export function markdownToHtml(md, _depth = 0) {
 }
 
 /** Convert inline markdown syntax to HTML. */
-function inlineMarkdown(text) {
+function inlineMarkdown(/** @type {any} */ text) {
   // Pre-process: convert <doc:PageName> and <doc:PageName#Section> references before escaping
-  const pre = text.replace(/<doc:([^>#]+)(?:#([^>]+))?>/g, (_match, page, section) => {
+  const pre = text.replace(/<doc:([^>#]+)(?:#([^>]+))?>/g, (/** @type {any} */ _match, /** @type {any} */ page, /** @type {any} */ section) => {
     const displayName = section ? `${page.replace(/-/g, ' ')} — ${section.replace(/-/g, ' ')}` : page.replace(/-/g, ' ')
     // Link to a search-friendly path — use the page name as the last segment
     return `[${displayName}](/docs/swift-book/?q=${encodeURIComponent(page)})`

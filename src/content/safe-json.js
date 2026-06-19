@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ParseError } from '../lib/errors.js'
 import { createLru } from '../lib/lru.js'
 
@@ -33,16 +32,19 @@ export function safeJson(value) {
  * error. The explicit work stack here caps at FREEZE_MAX_DEPTH so a
  * malicious payload cannot exhaust resources before throwing.
  */
-function freezeJsonValue(value) {
+function freezeJsonValue(/** @type {any} */ value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value
 
   // Each frame is [container, currentDepth]. We walk depth-first, freezing
   // children before their parent so the final Object.freeze on the root sees
   // an already-frozen subtree.
+  /** @type {[any, number][]} */
   const stack = [[value, 0]]
   const toFreeze = []
   while (stack.length > 0) {
-    const [node, depth] = stack.pop()
+    const popped = stack.pop()
+    if (!popped) continue
+    const [node, depth] = popped
     if (!node || typeof node !== 'object' || Object.isFrozen(node)) continue
     if (depth > FREEZE_MAX_DEPTH) {
       throw new ParseError(`JSON value exceeds max freeze depth (${FREEZE_MAX_DEPTH})`, { source: 'safe-json' })
