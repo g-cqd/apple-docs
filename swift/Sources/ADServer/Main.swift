@@ -4,6 +4,7 @@
 // envelope, the offload) lives in ADServeCore; this is just the app's composition root.
 // Subcommands: `serve` (default), `mcp`, `bench`.
 
+import ADConcurrency
 import ADServeCore
 import ADServeDSL
 import ADStorage
@@ -82,7 +83,7 @@ struct ServeCommand: AsyncParsableCommand {
         if let contentSignal { siteConfig.contentSignal = contentSignal }
         if let appVersion { siteConfig.appVersion = appVersion }
 
-        guard let pool = ConnectionPool(path: dbPath, count: threadCount) else {
+        guard let pool = AnyConnectionPool.storage(path: dbPath, count: threadCount) else {
             fail("ad-server: cannot open \(dbPath) — libsqlite3/FTS5 unavailable?", code: 1)
         }
 
@@ -92,7 +93,8 @@ struct ServeCommand: AsyncParsableCommand {
         // The MCP dispatcher is shared by the HTTP `/mcp` transport (per-request pooled
         // connection) and the stdio mode (a fixed connection).
         let dispatcher = MCPDispatcher(
-            serverInfo: mcpServerInfo(version: siteConfig.appVersion), tools: mcpToolRegistry())
+            serverInfo: mcpServerInfo(version: siteConfig.appVersion), tools: mcpToolRegistry(),
+            resources: mcpResourceRegistry())
         // Both cert + key present ⇒ an in-process TLS listener on `tlsPort` (the "Both" model);
         // else the loopback plaintext listener alone (Caddy terminates TLS in production).
         let tls: TLSSource? =
@@ -134,7 +136,9 @@ struct MCPCommand: ParsableCommand {
         }
         var logger = Logger(label: "ad-server-mcp")
         logger.logLevel = .info
-        let dispatcher = MCPDispatcher(serverInfo: mcpServerInfo(version: version), tools: mcpToolRegistry())
+        let dispatcher = MCPDispatcher(
+            serverInfo: mcpServerInfo(version: version), tools: mcpToolRegistry(),
+            resources: mcpResourceRegistry())
         let context = MCPToolContext(connection: connection, logger: logger)
         StdioMCPTransport(dispatcher: dispatcher, context: context).run()
     }

@@ -89,6 +89,28 @@ let adsqlDependency: Package.Dependency = {
     return .package(url: "https://github.com/g-cqd/ADSQL.git", branch: "main")
 }()
 
+// ADCONCURRENCY_PATH -> the zero-dependency `ADConcurrency` leaf (the shared `ResourcePool` the
+// server's connection pool is now specialized from, plus the `TaskProvider`/`Clock` seams). Pulled by
+// the server-side `ADServeCore` only; also resolved transitively via ADJSON's umbrella. Never by the
+// zero-external-dep `ADCore` dylib.
+let adconcurrencyDependency: Package.Dependency = {
+    if let path = Context.environment["ADCONCURRENCY_PATH"], !path.isEmpty {
+        return .package(path: path)
+    }
+    return .package(url: "https://github.com/g-cqd/ADConcurrency.git", branch: "main")
+}()
+
+// ADSERVE_PATH -> the extracted, persistence-agnostic HTTP server package (`ADServeCore` engine +
+// `ADServeDSL` route/Tool DSL). The app binds the engine's type-erased pool to its concrete
+// `StorageConnection` at the composition root (Sources/ADServer/AppConnection.swift). Resolved from a
+// local checkout via `ADSERVE_PATH`, otherwise the published `main`.
+let adserveDependency: Package.Dependency = {
+    if let path = Context.environment["ADSERVE_PATH"], !path.isEmpty {
+        return .package(path: path)
+    }
+    return .package(url: "https://github.com/g-cqd/ADServe.git", branch: "main")
+}()
+
 // Shared lint/format tooling (ADBuildTools: Format/Lint plugins + canonical `.swift-format`). Dev-only,
 // gated behind APPLEDOCS_DEV so normal/CI dylib builds never resolve it; from a local checkout via
 // `ADBUILDTOOLS_PATH`, otherwise the published `main` branch.
@@ -141,6 +163,8 @@ let package = Package(
         adjsonDependency,
         adfoundationDependency,
         adsqlDependency,
+        adconcurrencyDependency,
+        adserveDependency,
         // ad-server-only. swift-http-types: type-safe HTTP headers/status; swift-log:
         // structured logging; swift-nio-extras: the NIO↔HTTPTypes HTTP/1 bridge
         // (`HTTP1ToHTTPServerCodec`) — requires swift-nio ≥ 2.94.0, so the `from:
@@ -231,44 +255,10 @@ let package = Package(
         .executableTarget(
             name: "ad-embed-dump", dependencies: ["ADEmbed"], path: "Sources/ADEmbedDump",
             swiftSettings: releaseCMO + strictSettings),
-        // The server ENGINE (the optimizable layer): NIO bootstrap, HTTP/1.1
-        // on swift-http-types, the response envelope + middleware, the `.storage`
-        // offload, swift-log, and the MCP JSON-RPC core + transports.
-        // ad-server-only; knows nothing route-specific. Max strict concurrency.
-        .target(
-            name: "ADServeCore",
-            dependencies: [
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOPosix", package: "swift-nio"),
-                .product(name: "NIOHTTP1", package: "swift-nio"),
-                .product(name: "NIOExtras", package: "swift-nio-extras"),
-                .product(name: "NIOHTTPTypes", package: "swift-nio-extras"),
-                .product(name: "NIOHTTPTypesHTTP1", package: "swift-nio-extras"),
-                .product(name: "NIOHTTPTypesHTTP2", package: "swift-nio-extras"),
-                .product(name: "NIOSSL", package: "swift-nio-ssl"),
-                .product(name: "NIOHTTP2", package: "swift-nio-http2"),
-                .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
-                .product(name: "HTTPTypes", package: "swift-http-types"),
-                .product(name: "Logging", package: "swift-log"),
-                .product(name: "Crypto", package: "swift-crypto"),
-                .product(name: "ADJSON", package: "ADJSON"),
-                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
-                .product(name: "UnixSignals", package: "swift-service-lifecycle"),
-                "ADStorage"
-            ] + http3TargetDependencies,
-            swiftSettings: releaseCMO + strictSettings + http3Settings),
-        // The endpoint DSL: @RouteBuilder, Route/Group, the typed Path
-        // (RegexBuilder captures), RequestContext, RouteQuery, ResponseContent, the
-        // .cache/.storage modifiers (and the Tool DSL). Sees only ADServeCore's
-        // public surface — the engine internals stay out of reach.
-        .target(
-            name: "ADServeDSL",
-            dependencies: [
-                "ADServeCore",
-                .product(name: "HTTPTypes", package: "swift-http-types"),
-                .product(name: "ADJSON", package: "ADJSON")
-            ],
-            swiftSettings: releaseCMO + strictSettings),
+        // The server ENGINE (`ADServeCore`) + the route/Tool DSL (`ADServeDSL`) were extracted into
+        // the standalone, persistence-agnostic `ADServe` package and are consumed via its products by
+        // `ad-server` below. They are no longer apple-docs targets. (The HTTP/3 conditional that gated
+        // those targets is now dormant — `ADServe` will carry it if/when h3 is adopted there.)
         // The app layer — endpoint declarations + Services over the engine + DSL.
         // Serves /healthz + /search + the web routes over ADStorage IN-PROCESS (no FFI).
         .executableTarget(
@@ -280,8 +270,8 @@ let package = Package(
                 .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "ADJSON", package: "ADJSON"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
-                "ADServeCore",
-                "ADServeDSL",
+                .product(name: "ADServeCore", package: "ADServe"),
+                .product(name: "ADServeDSL", package: "ADServe"),
                 "ADStorage",
                 "ADContent",
                 "ADRender",
@@ -323,19 +313,7 @@ let package = Package(
         .testTarget(name: "ADStorageTests", dependencies: ["ADStorage"], swiftSettings: testSettings),
         .testTarget(
             name: "ADSearchCascadeTests", dependencies: ["ADSearchCascade"], swiftSettings: testSettings),
-        .testTarget(
-            name: "ADServeCoreTests",
-            dependencies: [
-                "ADServeCore", .product(name: "ADJSON", package: "ADJSON"),
-                .product(name: "HTTPTypes", package: "swift-http-types")
-            ],
-            swiftSettings: testSettings),
-        .testTarget(
-            name: "ADServeDSLTests",
-            dependencies: [
-                "ADServeDSL", "ADServeCore", .product(name: "HTTPTypes", package: "swift-http-types")
-            ],
-            swiftSettings: testSettings),
+        // ADServeCoreTests + ADServeDSLTests moved to the standalone ADServe package.
         .testTarget(
             name: "ADServerTests", dependencies: ["ad-server", "ADSearchCascade"],
             swiftSettings: testSettings)
