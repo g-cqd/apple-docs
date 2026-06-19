@@ -291,6 +291,10 @@ jobs:
   # Swift runtime ships in macOS, so it travels alone; Linux bundles carry
   # the stripped Swift runtime set resolved from ldd with an $ORIGIN rpath.
   build-native:
+    # Gated like ci.yml's swift jobs — skipped until the g-cqd/AD* siblings are
+    # published (set repo variable AD_SWIFT_SIBLINGS_PUBLISHED='true'); without them
+    # a clean runner can't resolve the native build. Nothing else needs this job.
+    if: ${{ vars.AD_SWIFT_SIBLINGS_PUBLISHED == 'true' }}
     needs: build-snapshot
     strategy:
       fail-fast: false
@@ -313,7 +317,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
         with:
-          toolchain: '6.3.2' # keep in sync with swift/.swift-version
+          toolchain: '6.4' # keep in sync with swift/.swift-version
 
       - name: Build, test, stage
         run: |

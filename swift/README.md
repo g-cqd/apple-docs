@@ -5,7 +5,7 @@ that the Bun/TypeScript CLI loads for hot paths, plus `ad-server` — an Apple-n
 HTTP + MCP host that serves the same SQLite corpus in-process (no FFI).
 
 Everything builds with the toolchain pinned in [`.swift-version`](.swift-version)
-(currently `6.3.2`), under Swift 6 language mode with complete strict-concurrency
+(currently `6.4`), under Swift 6 language mode with complete strict-concurrency
 checking. The package floors at macOS 15 / Linux (Swift 6); only `ad-server` is
 Apple-native — the dylib stays cross-platform.
 
@@ -36,6 +36,26 @@ swift build                 # debug
 swift build -c release      # release (cross-module optimization on)
 AD_HTTP3=1 swift build       # opt-in QUIC/HTTP3 (raises the macOS floor to 26)
 ```
+
+### Building against unpublished siblings
+
+The first-party `g-cqd/AD*` dependencies (ADFoundation, ADDB, ADJSON, ADSQL, and
+the dev-only ADBuildTools/ADTestKit) resolve from their published `main` branch by
+default. While they are unpublished, point the manifest at local checkouts via the
+`*_PATH` env overrides (see the `Context.environment[...]` blocks in `Package.swift`).
+The committed [`build.sh`](build.sh) wrapper does this for you — it exports every
+`*_PATH` to sibling checkouts beside this repo, then execs `swift`:
+
+```sh
+./build.sh build -c release   # release dylib (what CI's `native` job builds)
+./build.sh test               # full suite (auto-sets APPLEDOCS_DEV for ADTestKit)
+AD_SIBLINGS_ROOT=/abs/path ./build.sh build -c release   # siblings located elsewhere
+```
+
+CI's swift jobs (`swift-format`, `swift-sanitizers`, `native`, and the snapshot
+workflow's `build-native`) are gated behind the `AD_SWIFT_SIBLINGS_PUBLISHED` repo
+variable and stay skipped until the siblings are published; flip it to `'true'` once
+they are pushed.
 
 The dylib is emitted as `.build/<config>/libAppleDocsCore.{dylib,so}`. Its ABI
 contract (v0) is fixed; the `@_cdecl` exports never trap on input — a malformed
