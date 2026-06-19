@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ParseError } from '../lib/errors.js'
 
 /**
@@ -30,8 +29,10 @@ import { buildHierarchy } from './guidelines/hierarchy.js'
 import { htmlToMarkdown } from './guidelines/html-to-markdown.js'
 import { extractAbstract, extractLastUpdated, extractSectionNumber, resolveTitle } from './guidelines/section-meta.js'
 
+/** @param {string} html */
 export async function parseGuidelinesHtml(html) {
   // ── Pass 1: Extract metadata + inject markers ──────────────────────
+  /** @type {any[]} */
   const sectionMeta = [] // { id, sidenavTitle, notarization }
   const MARKER = '<!--§SPLIT:'
 
@@ -39,7 +40,9 @@ export async function parseGuidelinesHtml(html) {
 
   // Major sections (<h3 data-sidenav>) and subsections (<li data-sidenav>)
   // capture identically — only the selector and the recorded tag differ.
+  /** @param {string} tag */
   const captureSidenav = (tag) => ({
+    /** @param {any} el */
     element(el) {
       const id = el.getAttribute('id') ?? ''
       const sidenavVal = el.getAttribute('data-sidenav')

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { fetchWithRetry as _fetchWithRetry, checkResourceEtag } from '../lib/fetch-with-retry.js'
 
 const TUTORIALS_BASE = process.env.APPLE_DOCS_API_BASE ?? 'https://developer.apple.com/tutorials/data'
@@ -11,6 +10,7 @@ const MAX_RETRIES = 3
  * Paths starting with 'design/' use the /tutorials/data/design/ base.
  * All others use /tutorials/data/documentation/.
  */
+/** @param {string} path */
 function resolveUrl(path) {
   if (path.startsWith('design/')) {
     return `${TUTORIALS_BASE}/${path}.json`
@@ -37,7 +37,8 @@ export async function fetchDocPage(path, rateLimiter) {
 
 /**
  * Check if a page has changed via HEAD request.
- * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
+ * @param {string} path @param {string | null} etag @param {import('../lib/rate-limiter.js').RateLimiter} rateLimiter
+ * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string | null }>}
  */
 export async function checkDocPage(path, etag, rateLimiter) {
   return checkResourceEtag(resolveUrl(path), etag, rateLimiter, {
@@ -48,6 +49,7 @@ export async function checkDocPage(path, etag, rateLimiter) {
 
 /**
  * Fetch the technologies index to discover documentation roots.
+ * @param {import('../lib/rate-limiter.js').RateLimiter} rateLimiter
  */
 export async function fetchTechnologies(rateLimiter) {
   const url = `${TUTORIALS_BASE}/documentation/technologies.json`
@@ -66,12 +68,13 @@ export async function fetchHtmlPage(url, rateLimiter) {
     ...defaultOpts,
     parseAs: 'text',
   })
-  return { html: text, etag, lastModified }
+  return { html: text ?? '', etag, lastModified }
 }
 
 /**
  * Check if an HTML page has changed via HEAD request.
- * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
+ * @param {string} url @param {string | null} etag @param {import('../lib/rate-limiter.js').RateLimiter} rateLimiter
+ * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string | null }>}
  */
 export async function checkHtmlPage(url, etag, rateLimiter) {
   return checkResourceEtag(url, etag, rateLimiter, {

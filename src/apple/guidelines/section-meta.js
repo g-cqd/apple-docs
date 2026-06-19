@@ -1,10 +1,10 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Section metadata extractors — title, number, abstract, last-updated.
  * Operate on already-converted Markdown (or the source HTML for last-
  * updated, which lives in a structural element).
  */
 
+/** @param {Record<string, any>} meta @param {string} markdown */
 export function resolveTitle(meta, markdown) {
   // data-sidenav attribute value is the cleanest title source for <li> elements
   if (meta.sidenavTitle) {
@@ -21,12 +21,15 @@ export function resolveTitle(meta, markdown) {
   }
 
   // Fallback to id
-  return meta.id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  return String(meta.id)
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (/** @type {string} */ c) => c.toUpperCase())
 }
 
 /**
  * Extract a section number like "1.1" or "3.1.3(a)" from a title.
  */
+/** @param {string} title */
 export function extractSectionNumber(title) {
   const m = title.match(/^(\d+(?:\.\d+)*(?:\([a-z]\))?)[\s.]/)
   if (m) return m[1]
@@ -39,6 +42,7 @@ export function extractSectionNumber(title) {
 /**
  * Extract the first sentence as an abstract.
  */
+/** @param {string} markdown @param {string} [_title] */
 export function extractAbstract(markdown, _title) {
   // Remove the title line, heading lines, and list prefixes
   const lines = markdown
@@ -60,6 +64,7 @@ export function extractAbstract(markdown, _title) {
 /**
  * Extract the "Last Updated" date from the page.
  */
+/** @param {string} html */
 export function extractLastUpdated(html) {
   const m = html.match(/Last Updated:\s*<a[^>]*>([^<]+)<\/a>/)
   return m ? m[1].trim() : null

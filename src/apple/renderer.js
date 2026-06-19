@@ -1,11 +1,10 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { nativePageMarkdown } from '../content/content-native.js'
 import { toFrontMatter } from '../lib/yaml.js'
 import { normalizeIdentifier } from './normalizer.js'
 
 /**
  * Render a full Apple DocC JSON page to Markdown.
- * @param {object} json - The Apple documentation JSON
+ * @param {Record<string, any>} json - The Apple documentation JSON
  * @param {string} canonicalPath - The canonical path of this page (e.g. 'swiftui/view')
  * @returns {string} Complete Markdown document
  */
@@ -22,7 +21,9 @@ export function renderPage(json, canonicalPath) {
     framework: meta.modules?.[0]?.name,
     role: meta.role,
     role_heading: meta.roleHeading,
-    platforms: (meta.platforms ?? []).map((p) => (p.introducedAt ? `${p.name} ${p.introducedAt}+` : p.name)).filter(Boolean),
+    platforms: /** @type {any[]} */ (meta.platforms ?? [])
+      .map((/** @type {any} */ p) => (p.introducedAt ? `${p.name} ${p.introducedAt}+` : p.name))
+      .filter(Boolean),
     path: canonicalPath,
   }
   parts.push(toFrontMatter(fm))
@@ -99,10 +100,11 @@ export function renderPage(json, canonicalPath) {
 
 // --- Section renderers ---
 
+/** @param {Record<string, any>} section */
 function renderDeclarations(section) {
   const lines = ['## Declaration', '']
   for (const decl of section.declarations ?? []) {
-    const code = (decl.tokens ?? []).map((t) => t.text).join('')
+    const code = (decl.tokens ?? []).map((/** @type {any} */ t) => t.text).join('')
     const lang = decl.languages?.[0] ?? 'swift'
     lines.push(`\`\`\`${lang}`)
     lines.push(code)
@@ -112,13 +114,14 @@ function renderDeclarations(section) {
   return lines.join('\n')
 }
 
+/** @param {Record<string, any>} section */
 function renderParameters(section) {
   const lines = ['## Parameters', '']
   for (const param of section.parameters ?? []) {
     const name = param.name ?? ''
     const desc = param.content
       ? param.content
-          .map((n) => renderContentNode(n, {}, ''))
+          .map((/** @type {any} */ n) => renderContentNode(n, {}, ''))
           .join(' ')
           .trim()
       : ''
@@ -128,6 +131,7 @@ function renderParameters(section) {
   return lines.join('\n')
 }
 
+/** @param {Record<string, any>} section @param {Record<string, any>} refs @param {string} fromPath */
 function renderLinkSection(section, refs, fromPath) {
   const lines = []
   if (section.title) {
@@ -151,10 +155,12 @@ function renderLinkSection(section, refs, fromPath) {
 
 // --- Content node renderers ---
 
+/** @param {any[]} nodes @param {Record<string, any>} refs @param {string} fromPath @returns {string} */
 function renderContentNodes(nodes, refs, fromPath) {
-  return nodes.map((n) => renderContentNode(n, refs, fromPath)).join('\n')
+  return nodes.map((/** @type {any} */ n) => renderContentNode(n, refs, fromPath)).join('\n')
 }
 
+/** @param {any} node @param {Record<string, any>} refs @param {string} fromPath @returns {string} */
 function renderContentNode(node, refs, fromPath) {
   switch (node.type) {
     case 'paragraph':
@@ -170,10 +176,10 @@ function renderContentNode(node, refs, fromPath) {
     }
 
     case 'unorderedList':
-      return `${(node.items ?? []).map((item) => renderListItem(item, '- ', refs, fromPath)).join('\n')}\n`
+      return `${(node.items ?? []).map((/** @type {any} */ item) => renderListItem(item, '- ', refs, fromPath)).join('\n')}\n`
 
     case 'orderedList':
-      return `${(node.items ?? []).map((item, i) => renderListItem(item, `${i + 1}. `, refs, fromPath)).join('\n')}\n`
+      return `${(node.items ?? []).map((/** @type {any} */ item, /** @type {number} */ i) => renderListItem(item, `${i + 1}. `, refs, fromPath)).join('\n')}\n`
 
     case 'aside': {
       const style = node.style ?? 'Note'
@@ -187,7 +193,7 @@ function renderContentNode(node, refs, fromPath) {
     case 'links':
       // Links section: render as list
       return `${(node.items ?? [])
-        .map((id) => {
+        .map((/** @type {any} */ id) => {
           const ref = refs[id]
           const normPath = normalizeIdentifier(id)
           const title = ref?.title ?? normPath ?? id
@@ -210,29 +216,33 @@ function renderContentNode(node, refs, fromPath) {
   }
 }
 
+/** @param {any} item @param {string} prefix @param {Record<string, any>} refs @param {string} fromPath */
 function renderListItem(item, prefix, refs, fromPath) {
   const content = (item.content ?? [])
-    .map((n) => renderContentNode(n, refs, fromPath))
+    .map((/** @type {any} */ n) => renderContentNode(n, refs, fromPath))
     .join('')
     .trim()
   return prefix + content
 }
 
+/** @param {any} node @param {Record<string, any>} refs @param {string} fromPath */
 function renderTable(node, refs, fromPath) {
   const rows = node.rows ?? []
   if (rows.length === 0) return ''
 
+  /** @param {any} cell */
   const renderCell = (cell) => {
     return (cell.content ?? [])
-      .map((n) => renderContentNode(n, refs, fromPath))
+      .map((/** @type {any} */ n) => renderContentNode(n, refs, fromPath))
       .join('')
       .trim()
       .replace(/\n/g, ' ')
   }
 
   const header = rows[0]
-  const _headerCells = (header.cells ?? header).map?.((c) => (Array.isArray(c) ? c : c)) ?? []
+  const _headerCells = (header.cells ?? header).map?.((/** @type {any} */ c) => (Array.isArray(c) ? c : c)) ?? []
   // Handle both { cells: [...] } format and direct array format
+  /** @param {any} row */
   const getRowCells = (row) => {
     if (Array.isArray(row)) return row
     return row.cells ?? []
@@ -251,11 +261,13 @@ function renderTable(node, refs, fromPath) {
 
 // --- Inline content renderer ---
 
+/** @param {any[]} nodes @param {Record<string, any>} refs @param {string} fromPath @returns {string} */
 function renderInline(nodes, refs, fromPath) {
   if (!Array.isArray(nodes)) return ''
-  return nodes.map((node) => renderInlineNode(node, refs, fromPath)).join('')
+  return nodes.map((/** @type {any} */ node) => renderInlineNode(node, refs, fromPath)).join('')
 }
 
+/** @param {any} node @param {Record<string, any>} refs @param {string} fromPath @returns {string} */
 function renderInlineNode(node, refs, fromPath) {
   switch (node.type) {
     case 'text':
@@ -313,6 +325,7 @@ function renderInlineNode(node, refs, fromPath) {
  * Compute a relative path from one doc to another.
  * Both paths are canonical (e.g. 'swiftui/view', 'swiftui/view/body').
  */
+/** @param {string | null | undefined} fromPath @param {string | null | undefined} toPath */
 export function relativePath(fromPath, toPath) {
   if (!fromPath || !toPath) return toPath || ''
   if (fromPath === toPath) return toPath.split('/').pop()

@@ -1,9 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Normalize any Apple documentation identifier to a canonical lowercase path.
  * Handles: doc://..., /documentation/..., documentation/..., mixed-case paths.
  * Returns null for identifiers that can't be valid documentation pages.
  */
+/** @param {unknown} raw */
 export function normalizeIdentifier(raw) {
   if (!raw || typeof raw !== 'string') return null
 
@@ -59,6 +59,7 @@ export function normalizeIdentifier(raw) {
 /**
  * Extract the root slug (first path segment) from a canonical path.
  */
+/** @param {string | null | undefined} canonicalPath */
 export function extractRootSlug(canonicalPath) {
   if (!canonicalPath) return null
   const slash = canonicalPath.indexOf('/')

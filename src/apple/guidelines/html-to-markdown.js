@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * HTML → Markdown converter for Apple's App Store Review Guidelines page.
  * The HTML is hand-curated and Apple-stable; the regex pipeline here is
@@ -6,14 +5,18 @@
  * hand-rolled callouts, etc.) and would need rework for any other source.
  */
 
+/** @param {string} html */
 export async function htmlToMarkdown(html) {
   // Wrap in a root element so HTMLRewriter processes it properly
   const wrapped = `<div id="md-root">${html}</div>`
 
+  /** @type {string[]} */
   const parts = []
+  /** @type {string | null} */
   let linkHref = null
   let inStrong = false
   let strongBuf = ''
+  /** @type {string[]} */
   const listStack = [] // track list nesting: 'disc' | 'no-bullet'
   let _inListItem = false
   let skipDepth = 0 // for elements we want to skip entirely
@@ -24,25 +27,33 @@ export async function htmlToMarkdown(html) {
   rw.on('.sidenav-container', {
     element(el) {
       skipDepth++
-      el.onEndTag(() => skipDepth--)
+      el.onEndTag(() => {
+        skipDepth--
+      })
     },
   })
   rw.on('.sticky-container', {
     element(el) {
       skipDepth++
-      el.onEndTag(() => skipDepth--)
+      el.onEndTag(() => {
+        skipDepth--
+      })
     },
   })
   rw.on('.form-checkbox', {
     element(el) {
       skipDepth++
-      el.onEndTag(() => skipDepth--)
+      el.onEndTag(() => {
+        skipDepth--
+      })
     },
   })
   rw.on('#documentation', {
     element(el) {
       skipDepth++
-      el.onEndTag(() => skipDepth--)
+      el.onEndTag(() => {
+        skipDepth--
+      })
     },
   })
 
@@ -52,7 +63,9 @@ export async function htmlToMarkdown(html) {
       if (skipDepth > 0) return
       const level = Number.parseInt(el.tagName[1], 10)
       parts.push(`\n${'#'.repeat(level)} `)
-      el.onEndTag(() => parts.push('\n\n'))
+      el.onEndTag(() => {
+        parts.push('\n\n')
+      })
     },
   })
 
@@ -60,7 +73,9 @@ export async function htmlToMarkdown(html) {
   rw.on('p', {
     element(el) {
       if (skipDepth > 0) return
-      el.onEndTag(() => parts.push('\n\n'))
+      el.onEndTag(() => {
+        parts.push('\n\n')
+      })
     },
   })
 
@@ -83,7 +98,9 @@ export async function htmlToMarkdown(html) {
     element(el) {
       if (skipDepth > 0) return
       parts.push('*')
-      el.onEndTag(() => parts.push('*'))
+      el.onEndTag(() => {
+        parts.push('*')
+      })
     },
   })
 
@@ -114,7 +131,9 @@ export async function htmlToMarkdown(html) {
     element(el) {
       if (skipDepth > 0) return
       parts.push('`')
-      el.onEndTag(() => parts.push('`'))
+      el.onEndTag(() => {
+        parts.push('`')
+      })
     },
   })
 

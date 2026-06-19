@@ -1,9 +1,9 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Hierarchy resolution: walks the dotted section numbering
  * (1, 1.1, 1.1.2, 1.1.2(a)) to derive parent links.
  */
 
+/** @param {any[]} sections */
 export function buildHierarchy(sections) {
   const byNumber = new Map()
   for (const s of sections) {
@@ -22,6 +22,7 @@ export function buildHierarchy(sections) {
 /**
  * Given "1.1.1", return "1.1". Given "3.1.3(a)", return "3.1.3".
  */
+/** @param {string} num */
 function findParentNumber(num) {
   // Handle parenthetical suffixes: "3.1.3(a)" → parent is "3.1.3"
   if (num.includes('(')) {
