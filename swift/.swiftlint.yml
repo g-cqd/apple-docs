@@ -1,0 +1,69 @@
+# Canonical SwiftLint configuration for the g-cqd AD-family — METRICS ONLY.
+#
+# swift-format (driven by ADBuildTools' Format/Lint plugins) owns ALL style and formatting.
+# SwiftLint is added ONLY for the size/complexity metrics swift-format cannot express:
+# file length, type/function body length, cyclomatic complexity, tuple/parameter arity, nesting.
+# `only_rules` guarantees no SwiftLint style rule can ever fight swift-format.
+#
+# This file is the single source of truth: `scripts/sync-config.sh` copies it into every
+# consumer package and the reusable `swift-quality.yml` workflow fails on drift (same model as
+# the canonical `.swift-format`). All metric rules here are plain `lint` rules (NOT analyzer
+# rules), so they run from a normal `swiftlint lint` with no compiler invocation log.
+#
+# Thresholds are intentionally LENIENT for the initial warning-mode roll-out (they flag the known
+# >600 LOC outliers as warnings without failing CI). They ratchet DOWN as WS3 splits those files,
+# at which point CI flips to `--strict` so any warning fails the gate.
+
+only_rules:
+  - file_length
+  - type_body_length
+  - function_body_length
+  - cyclomatic_complexity
+  - large_tuple
+  - function_parameter_count
+  - nesting
+
+# Not hand-authored / not shipped source, so excluded from the metrics. SwiftLint resolves these
+# relative to THIS config file's directory, which is why the config is synced to every package root
+# (by scripts/sync-config.sh) and run from there — the same single-source-of-truth model as
+# `.swift-format`. The metrics gate the shipped `Sources/` tree; `Tests/` are gated separately.
+excluded:
+  - .build
+  - .git
+  - Tests        # test suites are out of the metrics gate for the initial roll-out (revisit in WS3)
+  - Benchmarks   # ordo-one statistical benchmark suites, not shipped source
+  - "**/GeneratedUnicodeTables.swift"  # generated Unicode tables (ADFoundation) — not hand-authored
+
+file_length:
+  warning: 500
+  error: 800
+  ignore_comment_only_lines: true
+
+type_body_length:
+  warning: 300
+  error: 450
+
+function_body_length:
+  warning: 80
+  error: 150
+
+cyclomatic_complexity:
+  # SQL/JSON code is switch-heavy; a wide switch is not "complex" in the risky sense, so the
+  # per-case increment is ignored. Real branching (if/guard/for/while/&&/||) still counts.
+  warning: 15
+  error: 25
+  ignores_case_statements: true
+
+large_tuple:
+  warning: 3
+  error: 4
+
+function_parameter_count:
+  warning: 6
+  error: 8
+
+nesting:
+  type_level:
+    warning: 3
+  function_level:
+    warning: 5
