@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Apple WWDC year-index + per-session HTML scraping.
 //
 // Apple's video pages for 2020+ are server-rendered HTML; the parsing
@@ -14,7 +13,7 @@ import { APPLE_BASE, APPLE_VIDEOS_INDEX, DEFAULT_TIMEOUT, USER_AGENT } from './c
  * plus a sessionId -> track map; the per-session play pages never name
  * their topic, so the index is the only scrape point for tracks.
  */
-export async function fetchAppleYearIndex(year, rateLimiter) {
+export async function fetchAppleYearIndex(/** @type {any} */ year, /** @type {any} */ rateLimiter) {
   const url = `${APPLE_VIDEOS_INDEX}/wwdc${year}/`
   try {
     await rateLimiter.acquire()
@@ -41,7 +40,7 @@ function emptyYearIndex() {
  * Extract session IDs from a WWDC year-index HTML page.
  * Session links have shape: /videos/play/wwdc{year}/{id}/
  */
-function extractSessionIdsFromHtml(html, year) {
+function extractSessionIdsFromHtml(/** @type {any} */ html, /** @type {any} */ year) {
   const ids = new Set()
   const re = new RegExp(`/videos/play/wwdc${year}/(\\d+)/?["']`, 'g')
   for (const match of html.matchAll(re)) {
@@ -56,7 +55,7 @@ function extractSessionIdsFromHtml(html, year) {
  * whose body carries the human-readable, pipe-separated topic names in
  * a `data-filter-topics` attribute.
  */
-function extractSessionTracksFromHtml(html, year) {
+function extractSessionTracksFromHtml(/** @type {any} */ html, /** @type {any} */ year) {
   const tracks = new Map()
   const anchorRe = new RegExp(`<a\\s[^>]*href="/videos/play/wwdc${year}/(\\d+)/?"[^>]*>`, 'gi')
   const anchors = [...html.matchAll(anchorRe)]
@@ -72,7 +71,7 @@ function extractSessionTracksFromHtml(html, year) {
 }
 
 /** Fetch one Apple WWDC session page by scraping. */
-export async function fetchAppleSession(year, sessionId, rateLimiter) {
+export async function fetchAppleSession(/** @type {any} */ year, /** @type {any} */ sessionId, /** @type {any} */ rateLimiter) {
   const url = `${APPLE_BASE}/wwdc${year}/${sessionId}/`
   await rateLimiter.acquire()
 
@@ -97,7 +96,7 @@ export async function fetchAppleSession(year, sessionId, rateLimiter) {
 }
 
 /** Parse a session HTML page into a structured payload. */
-function parseSessionHtml(html, year, sessionId) {
+function parseSessionHtml(/** @type {any} */ html, /** @type {any} */ year, /** @type {any} */ sessionId) {
   // Strip noise elements (including site chrome)
   let cleaned = html
   for (const tag of ['script', 'style', 'noscript', 'nav', 'header', 'footer']) {
@@ -137,17 +136,17 @@ function parseSessionHtml(html, year, sessionId) {
   }
 }
 
-function stripHtmlTags(html) {
+function stripHtmlTags(/** @type {any} */ html) {
   return decodeHtmlEntities(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')).trim()
 }
 
-function extractChaptersFromHtml(html) {
+function extractChaptersFromHtml(/** @type {any} */ html) {
   const match = html.match(/<h2[^>]*>\s*Chapters\s*<\/h2>\s*<ul[^>]*>([\s\S]*?)<\/ul>/i)
   if (!match) return []
   return [...match[1].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map((m) => stripHtmlTags(m[1])).filter(Boolean)
 }
 
-export function decodeHtmlEntities(value) {
+export function decodeHtmlEntities(/** @type {any} */ value) {
   // Decode &amp; LAST so an input like `&amp;lt;` (a literal `&lt;`
   // string that was further escaped) round-trips correctly. Otherwise
   // we'd produce `<` instead of `&lt;`. Resolves CodeQL

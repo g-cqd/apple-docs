@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { ValidationError } from '../../lib/errors.js'
 
 const ROOT_SLUG = 'packages'
@@ -9,11 +8,11 @@ const ROOT_SLUG = 'packages'
  * so a change to either side counts as a corpus change.
  */
 
-export function packageKey(owner, repo) {
+export function packageKey(/** @type {any} */ owner, /** @type {any} */ repo) {
   return `${ROOT_SLUG}/${owner.toLowerCase()}/${repo.toLowerCase()}`
 }
 
-export function parsePackageUrl(url) {
+export function parsePackageUrl(/** @type {any} */ url) {
   const match = String(url ?? '')
     .trim()
     .match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i)
@@ -24,7 +23,7 @@ export function parsePackageUrl(url) {
   }
 }
 
-export function parsePackageKey(key) {
+export function parsePackageKey(/** @type {any} */ key) {
   const match = String(key ?? '').match(/^packages\/([^/]+)\/([^/]+)$/)
   if (!match) {
     throw new ValidationError(`Invalid package key: ${key}`, { field: 'key', value: key })
@@ -32,7 +31,7 @@ export function parsePackageKey(key) {
   return { owner: match[1], repo: match[2] }
 }
 
-export function parseCompositeEtag(value) {
+export function parseCompositeEtag(/** @type {any} */ value) {
   if (!value) return { source: 'api', repo: null, readme: null, branch: null, readmeFilename: null }
   try {
     const parsed = JSON.parse(value)

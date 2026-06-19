@@ -111,8 +111,8 @@ export function extractHtmlContent(html, opts = {}) {
  *
  * @param {string} html
  * @param {string} key  - Canonical path key, e.g. 'swift/generics'.
- * @param {object} [opts]
- * @returns {{ document: object, sections: object[], relationships: [] }}
+ * @param {any} [opts]
+ * @returns {{ document: any, sections: any[], relationships: any[] }}
  */
 export function parseHtmlToNormalized(html, key, opts = {}) {
   const redirectTarget = detectRedirectStub(html)

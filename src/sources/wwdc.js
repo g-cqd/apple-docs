@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // WWDC source adapter. Two corpora behind one adapter:
 //   - Apple's developer.apple.com video pages (2020+, HTML scrape)
 //   - ASCIIwwdc community transcripts (1997-2019, GitHub raw .vtt files)
@@ -39,7 +38,7 @@ export class WwdcAdapter extends SourceAdapter {
   /** @type {Map<number, Promise<Map<string, string>>>} year -> sessionId -> track */
   #tracksByYear = new Map()
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
       ctx.db.upsertRoot(ROOT_SLUG, 'WWDC Sessions', 'collection', ROOT_SLUG)
     }
@@ -64,7 +63,8 @@ export class WwdcAdapter extends SourceAdapter {
   }
 
   /** Discover Apple session keys for years 2020+. Failed years skipped silently. */
-  async #discoverAppleKeys(ctx) {
+  async #discoverAppleKeys(/** @type {any} */ ctx) {
+    /** @type {any[]} */
     const keys = []
     await Promise.all(
       APPLE_YEARS.map(async (year) => {
@@ -85,7 +85,7 @@ export class WwdcAdapter extends SourceAdapter {
    * per-session fetch downloads — memoize one index lookup per year so
    * fetch() works with or without a prior discover().
    */
-  async #lookupTrack(year, sessionId, rateLimiter) {
+  async #lookupTrack(/** @type {any} */ year, /** @type {any} */ sessionId, /** @type {any} */ rateLimiter) {
     let tracks = this.#tracksByYear.get(year)
     if (!tracks) {
       tracks = fetchAppleYearIndex(year, rateLimiter)
@@ -97,7 +97,7 @@ export class WwdcAdapter extends SourceAdapter {
   }
 
   /** Discover ASCIIwwdc session keys for years 1997-2019. */
-  async #discoverAsciiwwdcKeys(ctx) {
+  async #discoverAsciiwwdcKeys(/** @type {any} */ ctx) {
     const tree = await fetchGitHubTree(ASCIIWWDC_OWNER, ASCIIWWDC_REPO, ASCIIWWDC_BRANCH, ctx.rateLimiter)
 
     const keys = []
@@ -113,7 +113,7 @@ export class WwdcAdapter extends SourceAdapter {
     return keys
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const parsed = parseWwdcKey(key)
     if (!parsed) throw new ValidationError(`Invalid WWDC key: ${key}`, { field: 'key', value: key })
 
@@ -122,7 +122,7 @@ export class WwdcAdapter extends SourceAdapter {
     if (year >= 2020) {
       const { payload, etag, lastModified } = await fetchAppleSession(year, sessionId, ctx.rateLimiter)
       const track = await this.#lookupTrack(year, sessionId, ctx.rateLimiter)
-      if (track) payload.track = track
+      if (track) /** @type {any} */ (payload).track = track
       return this.validateFetchResult({ key, payload, etag, lastModified })
     }
 
@@ -142,7 +142,7 @@ export class WwdcAdapter extends SourceAdapter {
     })
   }
 
-  async check(key, previousState, ctx) {
+  async check(/** @type {any} */ key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const parsed = parseWwdcKey(key)
     if (!parsed) {
       return this.validateCheckResult({
@@ -182,7 +182,7 @@ export class WwdcAdapter extends SourceAdapter {
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const parsed = parseWwdcKey(key)
     if (!parsed) throw new ValidationError(`Invalid WWDC key: ${key}`, { field: 'key', value: key })
     const { year, sessionId } = parsed
@@ -193,12 +193,13 @@ export class WwdcAdapter extends SourceAdapter {
     return this.validateNormalizeResult(this.#normalizeAsciiwwdc(key, rawPayload, year, sessionId))
   }
 
-  #normalizeApple(key, json, year, sessionId) {
+  #normalizeApple(/** @type {any} */ key, /** @type {any} */ json, /** @type {any} */ year, /** @type {any} */ sessionId) {
     const title = extractAppleTitle(json, year, sessionId)
     const description = extractAppleDescription(json)
     const { text: transcript, nodes: transcriptNodes } = extractAppleTranscript(json)
     const url = `${APPLE_BASE}/wwdc${year}/${sessionId}/`
     const track = typeof json?.track === 'string' && json.track.trim() ? json.track.trim() : null
+    /** @type {Record<string, any>} */
     const sourceMetadata = { year, sessionId, source: 'apple' }
     if (track) sourceMetadata.track = track
 
@@ -247,7 +248,7 @@ export class WwdcAdapter extends SourceAdapter {
     return { document, sections, relationships: [] }
   }
 
-  #normalizeAsciiwwdc(key, payload, year, sessionId) {
+  #normalizeAsciiwwdc(/** @type {any} */ key, /** @type {any} */ payload, /** @type {any} */ year, /** @type {any} */ sessionId) {
     const rawText = typeof payload?.transcript === 'string' ? payload.transcript : typeof payload === 'string' ? payload : ''
     const text = normalizeAsciiwwdcTranscript(rawText)
 

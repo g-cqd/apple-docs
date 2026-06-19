@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * Offline enrichment source: Xcode's Developer Documentation MobileAsset
  * (`com.apple.MobileAsset.AppleDeveloperDocumentation`).
@@ -35,6 +34,7 @@ import { encodeVersion } from '../lib/version-encode.js'
 export const DEFAULT_ASSET_ROOT = '/System/Library/AssetsV2/com_apple_MobileAsset_AppleDeveloperDocumentation'
 
 // Apple platform display names → the project's platforms_json keys.
+/** @type {Record<string, string>} */
 const PLATFORM_KEYS = {
   iOS: 'ios',
   iPadOS: 'ipados',
@@ -69,21 +69,23 @@ export function findDocumentationAssets(rootDir = DEFAULT_ASSET_ROOT) {
  *  flags form is required: `immutable=1` only takes effect when SQLITE_OPEN_URI
  *  is set, and bun:sqlite enables URI parsing implicitly on macOS but not on
  *  Linux, so the object-options form silently fails there (CANTOPEN). */
-export function openAssetDb(dbPath) {
+export function openAssetDb(/** @type {any} */ dbPath) {
   return new Database(`file:${dbPath}?immutable=1`, constants.SQLITE_OPEN_READONLY | constants.SQLITE_OPEN_URI)
 }
 
 /** `/documentation/SwiftUI/View` → `swiftui/view` (the project's key shape). */
-export function normalizeAssetUri(uri) {
+export function normalizeAssetUri(/** @type {any} */ uri) {
   let s = String(uri).replace(/^\//, '')
   if (s.toLowerCase().startsWith('documentation/')) s = s.slice('documentation/'.length)
   return s.toLowerCase()
 }
 
 /** Apple `platforms[]` → { platformsJson, minIos, … } in project shape. */
-export function platformsToProject(platforms) {
+export function platformsToProject(/** @type {any} */ platforms) {
   if (!Array.isArray(platforms) || platforms.length === 0) return null
+  /** @type {Record<string, string>} */
   const map = {}
+  /** @type {Record<string, string>} */
   const mins = {}
   for (const p of platforms) {
     const key = PLATFORM_KEYS[p?.platform]
@@ -108,14 +110,14 @@ export function platformsToProject(platforms) {
  *  Apple ships `introduced` as JSON floats carrying IEEE-754 noise — 17.2 is
  *  serialized as 17.199999999999999 — so round to 2 decimals (the depth of a
  *  real major.minor) and strip trailing zeros instead of stringifying raw. */
-function formatVersion(v) {
+function formatVersion(/** @type {any} */ v) {
   const n = Number(v)
   if (!Number.isFinite(n) || n <= 0) return null
   const s = n.toFixed(2).replace(/\.?0+$/, '')
   return s.includes('.') ? s : `${s}.0`
 }
 
-function languageFromUsr(usr) {
+function languageFromUsr(/** @type {any} */ usr) {
   if (typeof usr !== 'string') return null
   if (usr.startsWith('s:')) return 'swift'
   if (usr.startsWith('c:')) return 'occ'
@@ -125,9 +127,9 @@ function languageFromUsr(usr) {
 /**
  * Run the merge against an open project DocsDatabase.
  *
- * @param {object} projectDb DocsDatabase (schema ≥ v26)
+ * @param {any} projectDb DocsDatabase (schema ≥ v26)
  * @param {string} assetDbPath the asset's index.sql
- * @param {{ apply?: boolean, logger?: object, sourceTag?: string }} [opts]
+ * @param {{ apply?: boolean, logger?: any, sourceTag?: string }} [opts]
  *   `apply: false` (default) computes counts without writing.
  * @returns {{ pages: number, anchorsSkipped: number, usrBackfilled: number,
  *   platformsBackfilled: number, novelInserted: number }}
@@ -232,7 +234,7 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
       // key/browse tree. `modules[0]` is a display name and may contain
       // spaces ("Apple News Format"), so it is never used as a slug.
       const framework = n.key.split('/')[0] || null
-      const plat = platformsToProject(n.doc.platforms) ?? {}
+      const plat = platformsToProject(n.doc.platforms) ?? /** @type {any} */ ({})
       const sections = []
       let title = n.doc.fileName ?? n.key.split('/').pop()
       for (const [i, c] of chunksFor.all(n.uri).entries()) {

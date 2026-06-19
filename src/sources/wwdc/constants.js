@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Shared constants for the WWDC source. Keys, year ranges, and the
 // upstream endpoints.
 
@@ -24,17 +23,17 @@ export const VTT_TIMESTAMP_RE = /^(?:\d{2}:)?\d{2}:\d{2}\.\d{3}\s+-->\s+(?:\d{2}
  * Parse a WWDC key like `wwdc/wwdc2024-10001` into its components.
  * Returns null if the key does not match the expected shape.
  */
-export function parseWwdcKey(key) {
+export function parseWwdcKey(/** @type {any} */ key) {
   const match = key.match(/^wwdc\/wwdc(\d{4})-(\d+)$/)
   if (!match) return null
   return { year: Number.parseInt(match[1], 10), sessionId: match[2] }
 }
 
 /** Build the canonical key for a WWDC session. */
-export function buildKey(year, sessionId) {
+export function buildKey(/** @type {any} */ year, /** @type {any} */ sessionId) {
   return `${ROOT_SLUG}/wwdc${year}-${sessionId}`
 }
 
-export function buildAsciiwwdcPath(year, sessionId) {
+export function buildAsciiwwdcPath(/** @type {any} */ year, /** @type {any} */ sessionId) {
   return `${ASCIIWWDC_LANGUAGE}/${year}/${sessionId}.vtt`
 }

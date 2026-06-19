@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Transcript extraction across both supported corpora:
 //   - Apple JSON sessions (DocC-style render-tree, 2020+)
 //   - ASCIIwwdc community transcripts (VTT-flavoured plain text, 1997-2019)
@@ -14,7 +13,7 @@ import { VTT_TIMESTAMP_RE } from './constants.js'
  * Returns the joined text plus the raw nodes (when available) so callers
  * can preserve the structured layout downstream.
  */
-export function extractAppleTranscript(json) {
+export function extractAppleTranscript(/** @type {any} */ json) {
   const candidate = deepFind(json, 'transcript')
   if (typeof candidate === 'string' && candidate.length > 0) {
     return { text: candidate, nodes: null }
@@ -34,8 +33,8 @@ export function extractAppleTranscript(json) {
   return { text: texts.join('\n\n'), nodes: allNodes.length > 0 ? allNodes : null }
 }
 
-/** Recursively find the first value at `key` in a tree. */
-function deepFind(obj, key, maxDepth = 6) {
+/** Recursively find the first value at `key` in a tree. @returns {any} */
+function deepFind(/** @type {any} */ obj, /** @type {any} */ key, maxDepth = 6) {
   if (maxDepth <= 0 || obj == null || typeof obj !== 'object') return undefined
   if (Object.hasOwn(obj, key)) return obj[key]
   for (const v of Object.values(obj)) {
@@ -45,8 +44,8 @@ function deepFind(obj, key, maxDepth = 6) {
   return undefined
 }
 
-/** Collect plain text strings from a DocC render-tree content array. */
-function collectInlineText(content) {
+/** Collect plain text strings from a DocC render-tree content array. @returns {any} */
+function collectInlineText(/** @type {any} */ content) {
   const texts = []
   for (const node of Array.isArray(content) ? content : []) {
     if (node?.type === 'text' && typeof node.text === 'string') {
@@ -66,12 +65,12 @@ function collectInlineText(content) {
   return texts
 }
 
-export function extractAppleDescription(json) {
+export function extractAppleDescription(/** @type {any} */ json) {
   if (typeof json?.description === 'string' && json.description.length > 0) {
     return json.description
   }
 
-  const abstractSection = (json?.primaryContentSections ?? []).find((s) => s?.kind === 'abstract')
+  const abstractSection = (json?.primaryContentSections ?? []).find((/** @type {any} */ s) => s?.kind === 'abstract')
   if (abstractSection) {
     const parts = collectInlineText(abstractSection?.content ?? [])
     if (parts.length > 0) return parts.join(' ')
@@ -84,7 +83,7 @@ export function extractAppleDescription(json) {
   return null
 }
 
-export function extractAppleTitle(json, year, sessionId) {
+export function extractAppleTitle(/** @type {any} */ json, /** @type {any} */ year, /** @type {any} */ sessionId) {
   const candidate = json?.title ?? json?.metadata?.title ?? deepFind(json, 'title')
   if (typeof candidate === 'string' && candidate.length > 0) return candidate
   return `WWDC${year} Session ${sessionId}`
@@ -95,12 +94,12 @@ export function extractAppleTitle(json, year, sessionId) {
  * files occasionally start with a heading line; otherwise we fall back
  * to the session number.
  */
-export function extractAsciiwwdcTitle(text, year, sessionId) {
+export function extractAsciiwwdcTitle(/** @type {any} */ text, /** @type {any} */ year, /** @type {any} */ sessionId) {
   if (String(text).includes('WEBVTT') || VTT_TIMESTAMP_RE.test(String(text).split('\n')[0]?.trim() ?? '')) {
     return `WWDC${year} Session ${sessionId}`
   }
 
-  const firstLine = text.split('\n').find((line) => line.trim().length > 0)
+  const firstLine = text.split('\n').find((/** @type {any} */ line) => line.trim().length > 0)
   if (firstLine && !/^\[?\d{2}:\d{2}/.test(firstLine.trim())) {
     const candidate = firstLine.trim()
     if (candidate.length > 0 && candidate.length < 200) return candidate
@@ -108,11 +107,12 @@ export function extractAsciiwwdcTitle(text, year, sessionId) {
   return `WWDC${year} Session ${sessionId}`
 }
 
-export function normalizeAsciiwwdcTranscript(text) {
+export function normalizeAsciiwwdcTranscript(/** @type {any} */ text) {
   const lines = String(text ?? '')
     .replace(/\r\n?/g, '\n')
     .split('\n')
 
+  /** @type {string[]} */
   const cleaned = []
   for (const rawLine of lines) {
     // Strip every inline tag iteratively so nested or back-to-back

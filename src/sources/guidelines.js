@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { checkHtmlPage, fetchHtmlPage } from '../apple/api.js'
 import { GUIDELINES_URL, parseGuidelinesHtml, ROOT_SLUG } from '../apple/guidelines-parser.js'
 import { normalize } from '../content/normalize.js'
@@ -9,7 +8,7 @@ export class GuidelinesAdapter extends SourceAdapter {
   static displayName = 'App Store Review Guidelines'
   static syncMode = 'snapshot'
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
       ctx.db.upsertRoot(ROOT_SLUG, 'App Store Review Guidelines', 'guidelines', 'html-scrape')
     }
@@ -21,7 +20,7 @@ export class GuidelinesAdapter extends SourceAdapter {
     })
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const { html, etag, lastModified } = await fetchHtmlPage(GUIDELINES_URL, ctx.rateLimiter)
     const parsed = await parseGuidelinesHtml(html)
     const section = key === ROOT_SLUG ? null : (parsed.sections.find((item) => item.path === key) ?? null)
@@ -41,7 +40,7 @@ export class GuidelinesAdapter extends SourceAdapter {
     })
   }
 
-  async check(_key, previousState, ctx) {
+  async check(/** @type {any} */ _key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const result = await checkHtmlPage(GUIDELINES_URL, previousState?.etag ?? null, ctx.rateLimiter)
     return this.validateCheckResult({
       status: result.status,
@@ -51,12 +50,12 @@ export class GuidelinesAdapter extends SourceAdapter {
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const section = rawPayload?.section ?? rawPayload
     return this.validateNormalizeResult(normalize(section, key, GuidelinesAdapter.type))
   }
 
-  extractReferences(_key, rawPayload) {
+  extractReferences(/** @type {any} */ _key, /** @type {any} */ rawPayload) {
     const section = rawPayload?.section ?? rawPayload
     return section?.children ?? []
   }

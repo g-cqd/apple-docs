@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { parseMarkdownToSections } from '../content/parse-markdown.js'
 import { ParseError } from '../lib/errors.js'
 import { checkGitHubReadme, checkGitHubRepo, checkRawGitHub, fetchGitHubReadme, fetchGitHubRepo, fetchRawGitHub, hasGitHubToken } from '../lib/github.js'
@@ -66,7 +65,7 @@ function packageCatalogScope(ctx) {
  *
  * @returns {'raw'|'api'}
  */
-function packageFetchMode(_ctx) {
+function packageFetchMode(/** @type {any} */ _ctx) {
   const override = (process.env.APPLE_DOCS_PACKAGES_FETCH ?? '').trim().toLowerCase()
   if (override === 'raw') return 'raw'
   if (override === 'api') return hasGitHubToken() ? 'api' : 'raw'
@@ -78,7 +77,7 @@ export class PackagesAdapter extends SourceAdapter {
   static displayName = 'Swift Package Catalog'
   static syncMode = 'flat'
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
       ctx.db.upsertRoot(ROOT_SLUG, 'Swift Package Catalog', 'collection', ROOT_SLUG)
     }
@@ -131,7 +130,7 @@ export class PackagesAdapter extends SourceAdapter {
     })
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const { owner, repo } = parsePackageKey(key)
     const scope = packageCatalogScope(ctx)
     const fetchMode = packageFetchMode(ctx)
@@ -164,13 +163,13 @@ export class PackagesAdapter extends SourceAdapter {
     }
 
     const repoResult = await fetchGitHubRepo(owner, repo, ctx.rateLimiter)
-    const branch = repoResult.data?.default_branch ?? 'main'
+    const branch = /** @type {any} */ (repoResult.data)?.default_branch ?? 'main'
 
     let readme = null
     try {
       readme = await fetchGitHubReadme(owner, repo, branch, ctx.rateLimiter)
     } catch (error) {
-      if (error?.status !== 404) throw error
+      if (/** @type {any} */ (error)?.status !== 404) throw error
     }
 
     return this.validateFetchResult({
@@ -191,7 +190,7 @@ export class PackagesAdapter extends SourceAdapter {
     })
   }
 
-  async check(key, previousState, ctx) {
+  async check(/** @type {any} */ key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const { owner, repo } = parsePackageKey(key)
     const state = parseCompositeEtag(previousState?.etag ?? null)
     const branch = state.branch ?? 'main'
@@ -243,7 +242,7 @@ export class PackagesAdapter extends SourceAdapter {
     return this.validateCheckResult({ status: 'unchanged', changed: false })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const repo = rawPayload?.repo
     if (!repo || typeof repo !== 'object') {
       throw new ParseError('Package payload is missing repository metadata', { source: 'packages' })

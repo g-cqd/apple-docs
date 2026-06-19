@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { checkDocPage, fetchDocPage } from '../apple/api.js'
 import { extractReferences } from '../apple/extractor.js'
 import { normalize } from '../content/normalize.js'
@@ -9,18 +8,18 @@ export class HigAdapter extends SourceAdapter {
   static type = 'hig'
   static displayName = 'Human Interface Guidelines'
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     if (!ctx.rootCatalogReady) {
       await discoverRoots(ctx.db, ctx.rateLimiter, ctx.logger)
     }
-    const roots = ctx.db.getRoots().filter((root) => root.source_type === HigAdapter.type)
+    const roots = ctx.db.getRoots().filter((/** @type {any} */ root) => root.source_type === HigAdapter.type)
     return this.validateDiscoveryResult({
-      keys: roots.map((root) => root.seed_path ?? root.slug),
+      keys: roots.map((/** @type {any} */ root) => root.seed_path ?? root.slug),
       roots,
     })
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const result = await fetchDocPage(key, ctx.rateLimiter)
     return this.validateFetchResult({
       key,
@@ -30,7 +29,7 @@ export class HigAdapter extends SourceAdapter {
     })
   }
 
-  async check(key, previousState, ctx) {
+  async check(/** @type {any} */ key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const result = await checkDocPage(key, previousState?.etag ?? null, ctx.rateLimiter)
     return this.validateCheckResult({
       status: result.status,
@@ -40,11 +39,11 @@ export class HigAdapter extends SourceAdapter {
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     return this.validateNormalizeResult(normalize(rawPayload, key, HigAdapter.type))
   }
 
-  extractReferences(_key, rawPayload) {
+  extractReferences(/** @type {any} */ _key, /** @type {any} */ rawPayload) {
     return extractReferences(rawPayload)
   }
 

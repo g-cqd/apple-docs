@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 import { checkHtmlPage, fetchHtmlPage } from '../apple/api.js'
 import { parseHtmlToNormalized } from '../content/parse-html.js'
 import { createLinkResolver } from '../lib/link-resolver.js'
@@ -91,7 +90,7 @@ export class SwiftOrgAdapter extends SourceAdapter {
   static displayName = 'Swift.org Documentation'
   static syncMode = 'flat'
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     if (ctx.db && !ctx.db.getRootBySlug(ROOT_SLUG)) {
       ctx.db.upsertRoot(ROOT_SLUG, 'Swift.org Documentation', 'collection', ROOT_SLUG)
     }
@@ -105,7 +104,7 @@ export class SwiftOrgAdapter extends SourceAdapter {
     })
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const url = `https://swift.org/${key.replace(`${ROOT_SLUG}/`, '')}`
     const { html, etag, lastModified } = await fetchHtmlPage(url, ctx.rateLimiter)
 
@@ -117,7 +116,7 @@ export class SwiftOrgAdapter extends SourceAdapter {
     })
   }
 
-  async check(key, previousState, ctx) {
+  async check(/** @type {any} */ key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const url = `https://swift.org/${key.replace(`${ROOT_SLUG}/`, '')}`
     const result = await checkHtmlPage(url, previousState?.etag ?? null, ctx.rateLimiter)
 
@@ -129,7 +128,7 @@ export class SwiftOrgAdapter extends SourceAdapter {
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const html = typeof rawPayload === 'string' ? rawPayload : String(rawPayload)
     const url = `https://swift.org/${key.replace(`${ROOT_SLUG}/`, '')}`
 
@@ -163,11 +162,11 @@ export class SwiftOrgAdapter extends SourceAdapter {
    * entry-point registry. Any adapter that registers an entry point with
    * `parents` containing this page's key will be linked here automatically.
    */
-  applyArchiveCrossLinks(result, key) {
+  applyArchiveCrossLinks(/** @type {any} */ result, /** @type {any} */ key) {
     const links = getEntryPointsForParent(key)
     if (links.length === 0) return
 
-    const order = result.sections.length === 0 ? 0 : Math.max(...result.sections.map((s) => s.sortOrder ?? 0)) + 1
+    const order = result.sections.length === 0 ? 0 : Math.max(...result.sections.map((/** @type {any} */ s) => s.sortOrder ?? 0)) + 1
 
     const items = links.map((link) => ({
       identifier: link.key,

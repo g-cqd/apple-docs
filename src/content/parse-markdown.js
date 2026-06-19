@@ -214,14 +214,8 @@ export function splitByHeadings(body, level = 2) {
  *
  * @param {string} markdown  - Raw Markdown source (may include frontmatter).
  * @param {string} key       - Canonical path key, e.g. 'swift-evolution/SE-0400'.
- * @param {object} [opts]
- * @param {string} [opts.sourceType]
- * @param {string} [opts.kind]
- * @param {string} [opts.framework]
- * @param {string} [opts.url]
- * @param {string} [opts.language]
- * @param {object} [opts.sourceMetadata]
- * @returns {{ document: object, sections: object[], relationships: [] }}
+ * @param {any} [opts]
+ * @returns {{ document: any, sections: any[], relationships: any[] }}
  */
 export function parseMarkdownToSections(markdown, key, opts = {}) {
   const { frontmatter, body } = extractFrontmatter(markdown ?? '')

@@ -1,4 +1,3 @@
-// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
  * DocC archives Apple references from outside developer.apple.com.
  *
@@ -42,12 +41,12 @@ export const CURATED_ARCHIVES = Object.freeze({
   docc: { displayName: 'DocC', kind: 'tooling', baseUrl: 'https://www.swift.org' },
 })
 
-const dataUrl = (baseUrl, key) => `${baseUrl}/data/documentation/${key}.json`
-const pageUrl = (baseUrl, key) => `${baseUrl}/documentation/${key}`
-const indexUrl = (baseUrl) => `${baseUrl}/index/index.json`
+const dataUrl = (/** @type {any} */ baseUrl, /** @type {any} */ key) => `${baseUrl}/data/documentation/${key}.json`
+const pageUrl = (/** @type {any} */ baseUrl, /** @type {any} */ key) => `${baseUrl}/documentation/${key}`
+const indexUrl = (/** @type {any} */ baseUrl) => `${baseUrl}/index/index.json`
 
 /** '/documentation/carekit/octask' → 'carekit/octask' (our storage key form). */
-export function indexPathToKey(path) {
+export function indexPathToKey(/** @type {any} */ path) {
   if (typeof path !== 'string') return null
   const m = path.match(/^\/documentation\/(.+)$/i)
   if (!m) return null
@@ -55,7 +54,7 @@ export function indexPathToKey(path) {
 }
 
 /** A minimal DocC JSON shape check, used to confirm a detected URL is real. */
-export function isDoccPayload(data) {
+export function isDoccPayload(/** @type {any} */ data) {
   if (!data || typeof data !== 'object') return false
   if (!data.schemaVersion || typeof data.schemaVersion !== 'object') return false
   return Boolean(data.identifier?.url || data.metadata || data.kind)
@@ -71,17 +70,18 @@ export class ExternalDoccAdapter extends SourceAdapter {
     // slug -> { displayName, kind, baseUrl }. Seeded with the curated set so
     // fetch()/check()/normalize() resolve even before discover() runs (e.g. an
     // incremental update of an already-stored curated page).
+    /** @type {Record<string, any>} */
     this.archives = { ...CURATED_ARCHIVES }
   }
 
-  resolveArchive(key) {
-    const slug = extractRootSlug(key)
+  resolveArchive(/** @type {any} */ key) {
+    const slug = extractRootSlug(key) ?? ''
     const archive = this.archives[slug]
     if (!archive) throw new NotFoundError(slug, `Unknown external-docc archive: ${slug}`)
     return { slug, archive }
   }
 
-  async discover(ctx) {
+  async discover(/** @type {any} */ ctx) {
     await this.detectFromTechnologies(ctx).catch((e) => ctx.logger?.warn?.(`external-docc: detection skipped: ${e.message}`))
 
     const roots = []
@@ -108,7 +108,7 @@ export class ExternalDoccAdapter extends SourceAdapter {
   }
 
   /** Add DocC archives Apple references beyond the curated set (probe-gated). */
-  async detectFromTechnologies(ctx) {
+  async detectFromTechnologies(/** @type {any} */ ctx) {
     const { json } = await fetchTechnologies(ctx.rateLimiter)
     const seen = new Set()
     for (const section of json.sections ?? []) {
@@ -128,7 +128,7 @@ export class ExternalDoccAdapter extends SourceAdapter {
     }
   }
 
-  async probe(parsed, ctx) {
+  async probe(/** @type {any} */ parsed, /** @type {any} */ ctx) {
     try {
       const { data } = await fetchWithRetry(dataUrl(parsed.baseUrl, parsed.entryKey), ctx.rateLimiter, PROBE_OPTS)
       return isDoccPayload(data)
@@ -142,13 +142,13 @@ export class ExternalDoccAdapter extends SourceAdapter {
    * fall back to a bounded BFS for archives that ship without one — CareKit's
    * older DocC has no linkable index.
    */
-  async enumerate(slug, archive, ctx) {
+  async enumerate(/** @type {any} */ slug, /** @type {any} */ archive, /** @type {any} */ ctx) {
     const fromIndex = await this.enumerateIndex(slug, archive, ctx)
     if (fromIndex.length > 0) return fromIndex
     return this.enumerateBfs(slug, archive, ctx)
   }
 
-  async enumerateIndex(slug, archive, ctx) {
+  async enumerateIndex(/** @type {any} */ slug, /** @type {any} */ archive, /** @type {any} */ ctx) {
     try {
       const { data } = await fetchWithRetry(indexUrl(archive.baseUrl), ctx.rateLimiter, PROBE_OPTS)
       const keys = []
@@ -162,7 +162,7 @@ export class ExternalDoccAdapter extends SourceAdapter {
     }
   }
 
-  async enumerateBfs(slug, archive, ctx) {
+  async enumerateBfs(/** @type {any} */ slug, /** @type {any} */ archive, /** @type {any} */ ctx) {
     const visited = new Set()
     const queue = [slug]
     while (queue.length > 0 && visited.size < MAX_BFS_PAGES) {
@@ -181,13 +181,13 @@ export class ExternalDoccAdapter extends SourceAdapter {
     return [...visited]
   }
 
-  async fetch(key, ctx) {
+  async fetch(/** @type {any} */ key, /** @type {any} */ ctx) {
     const { archive } = this.resolveArchive(key)
     const { data, etag, lastModified } = await fetchWithRetry(dataUrl(archive.baseUrl, key), ctx.rateLimiter, HTTP_OPTS)
     return this.validateFetchResult({ key, payload: data, etag, lastModified })
   }
 
-  async check(key, previousState, ctx) {
+  async check(/** @type {any} */ key, /** @type {any} */ previousState, /** @type {any} */ ctx) {
     const { archive } = this.resolveArchive(key)
     const result = await checkResourceEtag(dataUrl(archive.baseUrl, key), previousState?.etag ?? null, ctx.rateLimiter, HTTP_OPTS)
     return this.validateCheckResult({
@@ -198,17 +198,17 @@ export class ExternalDoccAdapter extends SourceAdapter {
     })
   }
 
-  normalize(key, rawPayload) {
+  normalize(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const { archive } = this.resolveArchive(key)
     const json = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload
     const result = normalize(json, key, ExternalDoccAdapter.type, {
-      urlBuilder: (k) => pageUrl(archive.baseUrl, k),
+      urlBuilder: (/** @type {any} */ k) => pageUrl(archive.baseUrl, k),
     })
     result.document.sourceType = ExternalDoccAdapter.type
     return this.validateNormalizeResult(result)
   }
 
-  extractReferences(key, rawPayload) {
+  extractReferences(/** @type {any} */ key, /** @type {any} */ rawPayload) {
     const { slug } = this.resolveArchive(key)
     const json = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload
     return extractReferences(json).filter((ref) => extractRootSlug(ref) === slug)
