@@ -296,3 +296,33 @@ d('search parity (native cascade + semantic) vs cli.js native-on oracle', () => 
     expect(runNative(args)).toBe(runJsNativeOn(args))
   })
 })
+
+// status parity. The GitHub update-check is non-deterministic, so both sides skip
+// it via APPLE_DOCS_SKIP_UPDATE_CHECK (production still checks). Corpus stats +
+// freshness (daysSinceSync via current time is stable within a run) + db/dir
+// sizing are deterministic. FAILS until ad-cli has `status` (#25).
+d('status parity (update-check skipped for determinism)', () => {
+  const STATUS_ENV = { ...process.env, APPLE_DOCS_NATIVE: 'off', APPLE_DOCS_SKIP_UPDATE_CHECK: '1' }
+  /** @param {string[]} args */
+  const js = (args) =>
+    dec.decode(
+      Bun.spawnSync(['bun', join(ROOT, 'cli.js'), ...args, '--home', /** @type {string} */ (dataDir)], { env: STATUS_ENV, stdout: 'pipe', stderr: 'pipe' })
+        .stdout,
+    )
+  /** @param {string[]} args */
+  const nat = (args) =>
+    dec.decode(Bun.spawnSync([/** @type {string} */ (adCli), ...args, '--db', dbPath], { env: STATUS_ENV, stdout: 'pipe', stderr: 'pipe' }).stdout)
+
+  for (const flags of [[], ['--advanced']]) {
+    test(`human: status ${flags.join(' ')}`.trim(), () => {
+      expect(nat(['status', ...flags])).toBe(js(['status', ...flags]))
+    })
+    test(`json: status ${flags.join(' ')}`.trim(), () => {
+      const args = ['status', ...flags, '--json']
+      const n = nat(args)
+      const j = js(args)
+      expect(JSON.parse(n)).toEqual(JSON.parse(j))
+      expect(n).toBe(j)
+    })
+  }
+})

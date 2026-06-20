@@ -111,8 +111,8 @@ describe('nativeCliArgs — read-verb mapping + conservative fallback', () => {
     expect(nativeCliArgs({ command: 'frameworks', subcommand: 'x', positional: [], flags: {}, dbPath: DB })).toBeNull()
   })
   test('not-yet-flipped verbs return null', () => {
-    expect(nativeCliArgs({ command: 'status', subcommand: undefined, positional: [], flags: {}, dbPath: DB })).toBeNull()
     expect(nativeCliArgs({ command: 'sync', subcommand: undefined, positional: [], flags: {}, dbPath: DB })).toBeNull()
+    expect(nativeCliArgs({ command: 'setup', subcommand: undefined, positional: [], flags: {}, dbPath: DB })).toBeNull()
   })
 })
 
@@ -184,5 +184,21 @@ describe('nativeCliArgs — search mapping (joined query positional)', () => {
     expect(search({ bogus: 'x' })).toBeNull()
     expect(search({ limit: 'lots' })).toBeNull()
     expect(search({ year: '-1' })).toBeNull()
+  })
+})
+
+describe('nativeCliArgs — status mapping (no positional)', () => {
+  /** @param {Record<string, unknown>} flags @returns {string[] | null} */
+  const status = (flags) => nativeCliArgs({ command: 'status', subcommand: undefined, positional: [], flags, dbPath: DB })
+
+  test('bare + --advanced + --json (env-borne update-check skip is not a flag)', () => {
+    expect(status({})).toEqual(['status', '--db', DB])
+    expect(status({ advanced: true })).toEqual(['status', '--db', DB, '--advanced'])
+    expect(status({ json: true })).toEqual(['status', '--db', DB, '--json'])
+    expect(status({ advanced: true, json: true })).toEqual(['status', '--db', DB, '--advanced', '--json'])
+  })
+  test('positional or unsupported flag → fall back', () => {
+    expect(nativeCliArgs({ command: 'status', subcommand: undefined, positional: ['x'], flags: {}, dbPath: DB })).toBeNull()
+    expect(status({ bogus: 'x' })).toBeNull()
   })
 })

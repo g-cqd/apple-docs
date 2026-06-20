@@ -25,6 +25,31 @@ func dim(_ string: String) -> String {
     stdoutIsTTY ? "\u{1B}[2m\(string)\u{1B}[0m" : string
 }
 
+// MARK: - byte sizes (status)
+
+/// Port of `formatBytes` (src/cli/formatters/_shared.js): `> 1e9 → "X.X GB"`,
+/// `> 1e6 → "X.X MB"`, `> 1e3 → "X.X KB"`, else `"N B"`. The unit values use JS
+/// `Number.prototype.toFixed(1)`; the bytes branch prints the bare integer. The
+/// boundaries are strict `>` (exactly 1000 bytes → "1000 B", not "1.0 KB").
+func formatBytes(_ bytes: Int64) -> String {
+    let value = Double(bytes)
+    if value > 1e9 { return "\(jsToFixed1(value / 1e9)) GB" }
+    if value > 1e6 { return "\(jsToFixed1(value / 1e6)) MB" }
+    if value > 1e3 { return "\(jsToFixed1(value / 1e3)) KB" }
+    return "\(bytes) B"
+}
+
+/// JS `Number.prototype.toFixed(1)`: one fractional digit, rounding ties away
+/// from zero (V8 semantics) — unlike C `printf("%.1f")`, which rounds half to
+/// even. Scale by 10, round half-away, then render with exactly one decimal.
+func jsToFixed1(_ value: Double) -> String {
+    let negative = value < 0
+    let scaled = (abs(value) * 10).rounded(.toNearestOrAwayFromZero)
+    let whole = Int64(scaled) / 10
+    let frac = Int64(scaled) % 10
+    return "\(negative && (whole != 0 || frac != 0) ? "-" : "")\(whole).\(frac)"
+}
+
 // MARK: - frameworks
 
 /// Port of JS `formatFrameworks`. Groups roots by `kind` in FIRST-SEEN order
