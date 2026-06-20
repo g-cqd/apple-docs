@@ -3,6 +3,8 @@
 // equal-length byte vectors. Scalar arithmetic only; see Fusion.swift for
 // the parity rationale.
 
+import ADFCore
+
 public enum MMR {
     /// Returns the full output permutation (selected window, then the
     /// untouched tail in incoming order), as indices into the input order.
@@ -28,40 +30,52 @@ public enum MMR {
         func present(_ i: Int) -> Bool {
             (presence[i >> 3] >> (i & 7)) & 1 == 1
         }
+        // 1 - hamming(row a, row b) / (dim*8), through the shared bit-identical `ADFCore.Popcount`
+        // kernel (SWAR; 8 bytes/step) — the same integer the per-byte `nonzeroBitCount` loop produced.
         func similarity(_ a: Int, _ b: Int) -> Double {
-            var d = 0
-            for i in 0 ..< dim {
-                let x = vectors.load(fromByteOffset: a * dim + i, as: UInt8.self)
-                let y = vectors.load(fromByteOffset: b * dim + i, as: UInt8.self)
-                d += (x ^ y).nonzeroBitCount
-            }
-            return 1 - Double(d) / Double(dim * 8)
+            let rowA = UnsafeRawBufferPointer(rebasing: vectors[(a * dim) ..< (a * dim + dim)])
+            let rowB = UnsafeRawBufferPointer(rebasing: vectors[(b * dim) ..< (b * dim + dim)])
+            return 1 - Double(Popcount.hammingDistance(rowA, rowB, count: dim)) / Double(dim * 8)
         }
 
-        var remaining = Array(1 ..< n)
-        var selected: [Int] = [0]
-        while selected.count < cap && !remaining.isEmpty {
-            var bestPos = 0
+        // O(cap·n·dim), down from O(cap²·n·dim): a removed-bitset gives O(1) logical removal (no
+        // `remove(at:)` shift) preserving the original ascending order for the tail, and a memoized
+        // per-candidate `maxSim` (max similarity to any already-selected item) is updated with ONLY the
+        // newly-selected item each round — `maxSim` is monotonic, so this reproduces the full
+        // recomputation exactly. Output is byte-identical to the original (hamming is exact; running max
+        // is order-free; the smallest-index tie-break is preserved by the ascending scan).
+        var removed = [Bool](repeating: false, count: n)
+        var maxSim = [Double](repeating: 0, count: n)
+        var selected: [Int] = []
+        selected.reserveCapacity(cap)
+
+        func selectAndFold(_ chosen: Int) {
+            removed[chosen] = true
+            selected.append(chosen)
+            guard present(chosen) else { return }  // a non-present pick contributes no similarity
+            for i in 0 ..< n where !removed[i] && present(i) {
+                let s = similarity(i, chosen)
+                if s > maxSim[i] { maxSim[i] = s }
+            }
+        }
+
+        selectAndFold(0)  // item 0 is always the seed selection (mirrors the original)
+        while selected.count < cap {
+            var best = -1
             var bestScore = -Double.infinity
-            for p in 0 ..< remaining.count {
-                let i = remaining[p]
-                var maxSim = 0.0
-                if present(i) {
-                    for j in selected where present(j) {
-                        let s = similarity(i, j)
-                        if s > maxSim { maxSim = s }
-                    }
-                }
-                let mmr = lambda * rel[i] - (1 - lambda) * maxSim
+            for i in 0 ..< n where !removed[i] {
+                let mmr = lambda * rel[i] - (1 - lambda) * maxSim[i]
                 if mmr > bestScore {
                     bestScore = mmr
-                    bestPos = p
+                    best = i
                 }
             }
-            selected.append(remaining.remove(at: bestPos))
+            if best < 0 { break }
+            selectAndFold(best)
         }
+
         var out = selected
-        out.append(contentsOf: remaining)
+        for i in 0 ..< n where !removed[i] { out.append(i) }  // tail: never-selected, original order
         return out.map(UInt32.init)
     }
 }
