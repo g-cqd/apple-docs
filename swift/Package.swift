@@ -418,6 +418,14 @@ let package = Package(
                 .product(name: "ADHTMLCore", package: "ADHTML")
             ],
             swiftSettings: releaseCMO + strictSettings),
+        // ADBuilderPipeline — the persist boundary. Maps the adapter layer's dependency-free
+        // `NormalizedPage` to ADWrite's `NormalizedDoc` and drives `CrawlPersist.persistNormalized`.
+        // Kept OUT of ADBuilder deliberately so the adapter + parser layer stays storage-free (the
+        // ADWrite/ADDB churn never reaches the adapters — the NormalizedPage DTO is the seam).
+        .target(
+            name: "ADBuilderPipeline",
+            dependencies: ["ADBuilder", "ADWrite", .product(name: "ADDB", package: "ADDB")],
+            swiftSettings: releaseCMO + strictSettings),
         // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
         // Byte-for-byte output-compatible with the Bun cli.js read verbs. Reads via
         // ADStorage; ADContent supplies the String markdown renderer the `read` verb
@@ -517,7 +525,13 @@ let package = Package(
         // interim URLSession client. No live network — the transport behavior is proven
         // by the end-to-end crawl gate later.
         .testTarget(
-            name: "ADBuilderTests", dependencies: ["ADBuilder"], swiftSettings: testSettings)
+            name: "ADBuilderTests", dependencies: ["ADBuilder"], swiftSettings: testSettings),
+        .testTarget(
+            name: "ADBuilderPipelineTests",
+            dependencies: [
+                "ADBuilderPipeline", "ADBuilder", "ADWrite", .product(name: "ADDB", package: "ADDB"),
+                .product(name: "ADSQLModel", package: "ADSQL"),
+            ], swiftSettings: testSettings)
     ]
 )
 
@@ -542,7 +556,10 @@ if isDev {
 // the whole package. (Back-compat: AD_ONLY_ADWRITE_TESTS still selects ADWriteTests.)
 let isolationClosures: [String: Set<String>] = [
     "ADWriteTests": ["ADWrite", "ADEmbed", "ADArchive", "ADWriteTests"],
-    "ADBuilderTests": ["ADBuilder", "ADBuilderTests"]
+    "ADBuilderTests": ["ADBuilder", "ADBuilderTests"],
+    "ADBuilderPipelineTests": [
+        "ADBuilder", "ADWrite", "ADEmbed", "ADArchive", "ADBuilderPipeline", "ADBuilderPipelineTests",
+    ]
 ]
 let isolateTarget: String? =
     Context.environment["AD_ISOLATE"]
