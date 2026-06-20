@@ -16,7 +16,7 @@ public enum AdapterError: Error, Sendable, Equatable {
 public struct SwiftEvolutionAdapter: SourceAdapter {
     public static let type = "swift-evolution"
     public static let displayName = "Swift Evolution Proposals"
-    public static let syncMode = SyncMode.manual
+    public static let syncMode = SyncMode.flat
 
     static let owner = "swiftlang"
     static let repo = "swift-evolution"
