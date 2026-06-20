@@ -248,35 +248,7 @@ public enum Cascade {
             // Relaxation cascade R1-R3 — only when the strict + deep tiers produced
             // NOTHING, the trimmed query is >= 4 UTF-16 units with no `"`, and it
             // tokenizes to >= 3 tokens.
-            if results.isEmpty, q.utf16.count >= 4, !q.contains("\"") {
-                let tokens = Relaxation.tokenize(q)
-                if tokens.count >= 3 {
-                    let pruned = Relaxation.pruneStopwords(tokens)
-                    // R1 — pruned AND
-                    if pruned.count >= 1 {
-                        var params = p.ftsParams
-                        params.query = FtsQuery.build(pruned.joined(separator: " "))
-                        addRows(fanout(filters.frameworks, params) { conn.ftsRows($0) }) { _ in "relaxed" }
-                    }
-                    // R2 — pruned OR (lowercased, quote-stripped, OR-joined)
-                    if results.isEmpty, pruned.count >= 2 {
-                        var params = p.ftsParams
-                        params.query =
-                            pruned.map { "\"\(stripQuotes(JsString.lowercase($0)))\"" }.joined(separator: " OR ")
-                        addRows(fanout(filters.frameworks, params) { conn.ftsRows($0) }) { _ in "relaxed-or" }
-                    }
-                    // R3 — trigram on a single high-signal token
-                    if results.isEmpty {
-                        let pool = pruned.isEmpty ? tokens : pruned
-                        if let signal = Relaxation.pickHighSignalToken(pool), signal.utf16.count >= 3 {
-                            var params = p.trigramParams
-                            params.query = FtsQuery.trigram(signal)
-                            addRows(fanout(filters.frameworks, params) { conn.trigramRows($0) }) { _ in "relaxed-token"
-                            }
-                        }
-                    }
-                }
-            }
+            appendRelaxationTiers(&results, &seen, p, conn)
         }
 
         let intent = IntentDetector.detect(q)
@@ -315,6 +287,53 @@ public enum Cascade {
         let envelope = projectEnvelope(query: q, total: total, hasMore: hasMore, hits: sliced)
         return SearchOutcome(
             hits: sliced.map(\.publicHit), total: total, hasMore: hasMore, query: q, envelope: envelope)
+    }
+
+    /// Relaxation cascade R1–R3 — reached only when the strict + deep tiers produced NOTHING and the
+    /// trimmed query is >= 4 UTF-16 units (no `"`) tokenizing to >= 3 tokens: R1 pruned-AND, R2
+    /// pruned-OR, R3 trigram on a single high-signal token. Mirrors src/commands/search.js.
+    static func appendRelaxationTiers(
+        _ results: inout [ResultHit], _ seen: inout Set<String>, _ p: PreparedSearch,
+        _ conn: StorageConnection
+    ) {
+        let q = p.q
+        let filters = p.activeFilters
+        func addRows(_ rows: [SearchRow], quality: (SearchRow) -> String) {
+            for row in rows {
+                if !Filters.matches(row, filters) { continue }
+                if seen.insert(row.path).inserted {
+                    var hit = ResultHit(row, matchQuality: quality(row))
+                    hit.origIndex = results.count
+                    results.append(hit)
+                }
+            }
+        }
+        guard results.isEmpty, q.utf16.count >= 4, !q.contains("\"") else { return }
+        let tokens = Relaxation.tokenize(q)
+        guard tokens.count >= 3 else { return }
+        let pruned = Relaxation.pruneStopwords(tokens)
+        // R1 — pruned AND
+        if pruned.count >= 1 {
+            var params = p.ftsParams
+            params.query = FtsQuery.build(pruned.joined(separator: " "))
+            addRows(fanout(filters.frameworks, params) { conn.ftsRows($0) }) { _ in "relaxed" }
+        }
+        // R2 — pruned OR (lowercased, quote-stripped, OR-joined)
+        if results.isEmpty, pruned.count >= 2 {
+            var params = p.ftsParams
+            params.query =
+                pruned.map { "\"\(stripQuotes(JsString.lowercase($0)))\"" }.joined(separator: " OR ")
+            addRows(fanout(filters.frameworks, params) { conn.ftsRows($0) }) { _ in "relaxed-or" }
+        }
+        // R3 — trigram on a single high-signal token
+        if results.isEmpty {
+            let pool = pruned.isEmpty ? tokens : pruned
+            if let signal = Relaxation.pickHighSignalToken(pool), signal.utf16.count >= 3 {
+                var params = p.trigramParams
+                params.query = FtsQuery.trigram(signal)
+                addRows(fanout(filters.frameworks, params) { conn.trigramRows($0) }) { _ in "relaxed-token" }
+            }
+        }
     }
 
     /// Snippet + relatedCount enrichment of the final page. Best-effort: a
