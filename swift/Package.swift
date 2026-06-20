@@ -375,6 +375,21 @@ let package = Package(
                 .product(name: "Crypto", package: "swift-crypto")
             ],
             swiftSettings: releaseCMO + strictSettings),
+        // ADBuilder — the native crawl + pipeline + web static build (Phase D3). Its
+        // FIRST slice is the HTTP CLIENT SEAM the crawler codes against: the
+        // `HTTPClient` protocol (modeled on swift-http-types) + the interim
+        // `URLSessionHTTPClient` conformer, per rfcs/adserve-http-client-requirements.md.
+        // Depends ONLY on swift-http-types + Foundation today, so it builds independently
+        // of the churning ADDB/ADServe graph; the heavier deps (ADContent/ADWrite/ADEmbed/
+        // ADArchive/ADFIO/ADHTML) are added as the crawler/web pieces land. NOT in the
+        // ADCore dylib graph.
+        .target(
+            name: "ADBuilder",
+            dependencies: [
+                .product(name: "HTTPTypes", package: "swift-http-types"),
+                .product(name: "HTTPTypesFoundation", package: "swift-http-types")
+            ],
+            swiftSettings: releaseCMO + strictSettings),
         // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
         // Byte-for-byte output-compatible with the Bun cli.js read verbs. Reads via
         // ADStorage; ADContent supplies the String markdown renderer the `read` verb
@@ -468,7 +483,13 @@ let package = Package(
                 .product(name: "ADSQLImport", package: "ADDB"),
                 .product(name: "ADSQLModel", package: "ADSQL")
             ],
-            swiftSettings: testSettings)
+            swiftSettings: testSettings),
+        // ADBuilderTests — the HTTP-client seam gate: the value types (request/response
+        // mapping) + the streamed `ResponseBody` (`collect(upTo:)` size guard) of the
+        // interim URLSession client. No live network — the transport behavior is proven
+        // by the end-to-end crawl gate later.
+        .testTarget(
+            name: "ADBuilderTests", dependencies: ["ADBuilder"], swiftSettings: testSettings)
     ]
 )
 
@@ -483,17 +504,22 @@ if isDev {
     }
 }
 
-// AD_ONLY_ADWRITE_TESTS — reduce the package to ONLY ADWriteTests' dependency closure
-// (the local targets ADWrite + ADEmbed + the test target itself; the rest of the graph
-// is external ADDB/ADSQL/ADTestKit products) for ISOLATED local verification while sibling
-// packages (ADServe / ADDB / ADJSON / …) are edited by other streams and intermittently
-// fail to compile. `swift test` otherwise builds EVERY package target (incl. the ad-server
-// executable → the churning ADServeCore, and ad-cli/ADCore → ADJSONCore), so a single
-// broken sibling anywhere blocks the writer gate. Dropping every other target + all
-// products removes those graphs from the build. Inert unless the env var is set; CI /
-// normal runs build the whole package.
-if Context.environment["AD_ONLY_ADWRITE_TESTS"] != nil {
-    let keep: Set<String> = ["ADWrite", "ADEmbed", "ADArchive", "ADWriteTests"]
+// AD_ISOLATE=<TestTarget> — reduce the package to ONLY that test target's local
+// dependency closure for ISOLATED local verification while sibling packages (ADServe /
+// ADDB / ADJSON / …) are edited by other streams and intermittently fail to compile.
+// `swift test` otherwise builds EVERY package target (incl. the ad-server executable →
+// the churning ADServeCore, and ad-cli/ADCore → ADJSONCore), so a single broken sibling
+// anywhere blocks an unrelated gate. Dropping every other target + all products removes
+// those graphs from the build. Inert unless the env var is set; CI / normal runs build
+// the whole package. (Back-compat: AD_ONLY_ADWRITE_TESTS still selects ADWriteTests.)
+let isolationClosures: [String: Set<String>] = [
+    "ADWriteTests": ["ADWrite", "ADEmbed", "ADArchive", "ADWriteTests"],
+    "ADBuilderTests": ["ADBuilder", "ADBuilderTests"]
+]
+let isolateTarget: String? =
+    Context.environment["AD_ISOLATE"]
+    ?? (Context.environment["AD_ONLY_ADWRITE_TESTS"] != nil ? "ADWriteTests" : nil)
+if let isolateTarget, let keep = isolationClosures[isolateTarget] {
     package.targets.removeAll { !keep.contains($0.name) }
     package.products.removeAll()
 }
