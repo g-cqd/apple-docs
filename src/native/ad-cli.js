@@ -54,7 +54,26 @@ export function nativeCliArgs({ command, subcommand, positional, flags, dbPath }
   if (command === 'browse') return browseArgs(pos, flags, dbPath)
   if (command === 'read') return readDocArgs(pos, flags, dbPath)
   if (command === 'search') return searchArgs(pos, flags, dbPath)
+  if (command === 'status') return statusArgs(pos, flags, dbPath)
   return null
+}
+
+/**
+ * `status [--advanced] [--json]`. No positional. The GitHub update-check rides on
+ * the inherited env (APPLE_DOCS_SKIP_UPDATE_CHECK), not argv, so it's not a flag
+ * here. Any other flag forces the Bun path.
+ *
+ * @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
+ * @returns {string[] | null}
+ */
+function statusArgs(positional, flags, dbPath) {
+  if (positional.length > 0) return null
+  const allowed = new Set(['advanced', 'json', ...GLOBAL_PASSTHROUGH])
+  if (Object.keys(flags).some((k) => !allowed.has(k))) return null
+  const args = ['status', '--db', dbPath]
+  if (flags.advanced) args.push('--advanced')
+  if (flags.json) args.push('--json')
+  return args
 }
 
 // search's flag surface (cli.js search dispatch). String/int filters push down;

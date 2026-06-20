@@ -16,7 +16,7 @@ struct ADCLICommand: AsyncParsableCommand {
         abstract: "Apple Docs native read CLI (mirrors the Bun cli.js read verbs).",
         subcommands: [
             FrameworksCommand.self, KindsCommand.self, BrowseCommand.self, ReadCommand.self,
-            SearchCommand.self, SemanticProbeCommand.self
+            SearchCommand.self, StatusCommand.self, SemanticProbeCommand.self
         ])
 }
 

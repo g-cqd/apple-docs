@@ -231,7 +231,7 @@ try {
     }
 
     case 'status': {
-      const raw = await status({}, ctx)
+      const raw = await status({ skipUpdateCheck: !!process.env.APPLE_DOCS_SKIP_UPDATE_CHECK }, ctx)
       // Default status hides snapshot-tier / index-table availability /
       // crawler internals; --advanced opts back into the full envelope.
       result = flags.advanced ? raw : projectStatus(raw)
