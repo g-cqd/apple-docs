@@ -13,13 +13,38 @@ extension StorageConnection: PooledResource {}
 
 // `ctx.db` / `context.db` — down-cast the engine's type-erased `any PooledResource` to the app's
 // concrete connection. Safe by construction: a `.shared` (or MCP) route's pool holds exactly
-// `StorageConnection`s, so the cast cannot fail. (The engine already force-*unwraps* the optional
-// connection for a `needsStorage` route; this is the same invariant, one cast further.)
+// `StorageConnection`s (built via `AnyConnectionPool.storage(...)` / the stdio
+// `MCPToolContext(connection:)` below), so the cast cannot fail. (The engine already
+// force-*unwraps* the optional connection for a `needsStorage` route; this is the same invariant,
+// one cast further.)
+//
+// The down-cast is a guarded `as?` rather than a bare `as!`: the invariant holds, but if a future
+// composition wired a different resource type into the pool, the bare cast would trap with an
+// opaque "Could not cast value of type …" message. `requireStorageConnection` instead traps with a
+// diagnostic that NAMES the broken invariant and the actual runtime type — far easier to localize.
+// Every call site needs the concrete connection synchronously, so a non-trapping fallback isn't
+// expressible here (there is no zero-arg `StorageConnection`); this keeps the `db: StorageConnection`
+// signature and all call sites unchanged while replacing a silent trap with a documented one.
+private func requireStorageConnection(
+    _ connection: any PooledResource, file: StaticString = #fileID, line: UInt = #line
+) -> StorageConnection {
+    guard let storage = connection as? StorageConnection else {
+        preconditionFailure(
+            """
+            ad-server invariant violated: a `.shared`/MCP route's pool must hold \
+            StorageConnection, but ctx.connection was \(type(of: connection)). \
+            Check the pool wiring at the composition root (AnyConnectionPool.storage).
+            """,
+            file: file, line: line)
+    }
+    return storage
+}
+
 extension StorageContext {
-    var db: StorageConnection { connection as! StorageConnection }
+    var db: StorageConnection { requireStorageConnection(connection) }
 }
 extension MCPToolContext {
-    var db: StorageConnection { connection as! StorageConnection }
+    var db: StorageConnection { requireStorageConnection(connection) }
 }
 
 extension AnyConnectionPool {

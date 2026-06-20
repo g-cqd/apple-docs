@@ -8,6 +8,7 @@
 
 #if canImport(CoreText)
     public import CoreGraphics
+    import ADFCore  // XMLEscape — the shared XML/SVG text escaper
     import CoreText
     import Foundation
 
@@ -168,13 +169,8 @@
     }
 
     extension String {
-        fileprivate var xmlEscaped: String {
-            self
-                .replacingOccurrences(of: "&", with: "&amp;")
-                .replacingOccurrences(of: "<", with: "&lt;")
-                .replacingOccurrences(of: ">", with: "&gt;")
-                .replacingOccurrences(of: "\"", with: "&quot;")
-                .replacingOccurrences(of: "'", with: "&apos;")
-        }
+        // The five-entity XML/SVG escape now lives once in `ADFCore.XMLEscape` (byte-identical to the
+        // prior `replacingOccurrences` chain — `& < > " '` → the XML 1.0 predefined entities).
+        fileprivate var xmlEscaped: String { XMLEscape.escaped(self) }
     }
 #endif

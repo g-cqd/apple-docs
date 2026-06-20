@@ -1,4 +1,5 @@
-public import ADSQL
+public import ADDBExec
+public import ADSQLModel
 
 /// The §2.2 "main" search query — the apple-docs hot path — as a value type that
 /// owns the SQL text and the per-request bind bag. The query string is built once

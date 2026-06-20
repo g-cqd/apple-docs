@@ -159,7 +159,9 @@ struct BenchCommand: ParsableCommand {
         guard let conn = StorageConnection(path: corpus.db) else {
             fail("ad-server: cannot open \(corpus.db)", code: 1)
         }
-        let params = parseSearchParams("/search?q=view&framework=swiftui&limit=100")
+        guard let params = parseSearchParams("/search?q=view&framework=swiftui&limit=100") else {
+            fail("ad-server: failed to parse benchmark query", code: 1)
+        }
         for _ in 0 ..< 500 { _ = conn.searchPagesJSON(params) }
         let t0 = DispatchTime.now().uptimeNanoseconds
         for _ in 0 ..< iters { _ = conn.searchPagesJSON(params) }

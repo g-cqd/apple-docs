@@ -34,48 +34,6 @@ export function adCliBinaryPath() {
 // presence must NOT force the Bun path; any OTHER flag must.
 const GLOBAL_PASSTHROUGH = ['home', 'verbose']
 
-/**
- * Map a cli.js read-verb invocation to `ad-cli` argv, or null to fall back to the
- * Bun CLI — for a verb not yet flipped, or a flag/positional ad-cli can't honour.
- * This slice flips four read verbs: `frameworks` (→ `--kind`), `kinds`
- * (→ `--field`), `browse <framework>` (→ `--path/--limit/--year`), and
- * `read <target>` (→ `--framework/--section/--max-chars/--page`). Only the verb's
- * own flags + `--json` ride through; anything else forces the Bun path so nothing
- * is silently dropped.
- *
- * @param {{ command: string, subcommand: string | undefined, positional: string[], flags: Record<string, unknown>, dbPath: string }} invocation
- * @returns {string[] | null}
- */
-export function nativeCliArgs({ command, subcommand, positional, flags, dbPath }) {
-  if (subcommand) return null
-  const pos = Array.isArray(positional) ? positional : []
-  if (command === 'frameworks') return readVerbArgs('frameworks', 'kind', pos, flags, dbPath)
-  if (command === 'kinds') return readVerbArgs('kinds', 'field', pos, flags, dbPath)
-  if (command === 'browse') return browseArgs(pos, flags, dbPath)
-  if (command === 'read') return readDocArgs(pos, flags, dbPath)
-  if (command === 'search') return searchArgs(pos, flags, dbPath)
-  if (command === 'status') return statusArgs(pos, flags, dbPath)
-  return null
-}
-
-/**
- * `status [--advanced] [--json]`. No positional. The GitHub update-check rides on
- * the inherited env (APPLE_DOCS_SKIP_UPDATE_CHECK), not argv, so it's not a flag
- * here. Any other flag forces the Bun path.
- *
- * @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
- * @returns {string[] | null}
- */
-function statusArgs(positional, flags, dbPath) {
-  if (positional.length > 0) return null
-  const allowed = new Set(['advanced', 'json', ...GLOBAL_PASSTHROUGH])
-  if (Object.keys(flags).some((k) => !allowed.has(k))) return null
-  const args = ['status', '--db', dbPath]
-  if (flags.advanced) args.push('--advanced')
-  if (flags.json) args.push('--json')
-  return args
-}
-
 // search's flag surface (cli.js search dispatch). String/int filters push down;
 // the three negation toggles + --read + --json are booleans. The query is the
 // joined positional(s).
@@ -97,119 +55,94 @@ const SEARCH_INT_FLAGS = ['limit', 'year', 'max-chars', 'page']
 const SEARCH_BOOL_FLAGS = ['no-fuzzy', 'no-deep', 'no-eager', 'read', 'json']
 
 /**
- * `search <query…> [filters] [--read [--max-chars N] [--page P]] [--json]`. The
- * query is the joined positional(s); requires at least one. Every recognized flag
- * rides through (string filters as-is, int filters only as clean non-negative
- * integers, the boolean toggles as bare flags); any unknown flag forces the Bun
- * path so nothing is silently dropped.
+ * The per-verb flag contract. A verb is flippable iff its invocation matches its
+ * spec exactly; anything outside it (extra positional, unknown flag, mistyped
+ * value) returns null so the Bun CLI handles it — nothing is silently dropped.
  *
- * @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
+ * @typedef {object} VerbSpec
+ * @property {number} [minPositional]  minimum positionals (default 0)
+ * @property {number} [maxPositional]  maximum positionals (default 0; Infinity ⇒ unbounded)
+ * @property {boolean} [joinPositional]  emit all positionals joined by a space as ONE arg (the query)
+ * @property {string[]} [string]  string-valued flags (`--k v`), passed through only as strings
+ * @property {string[]} [int]  flags accepted only as clean non-negative integer strings (`--k n`)
+ * @property {string[]} [bool]  boolean flags emitted as bare `--k` when truthy (declare `json` last)
+ */
+
+/** @type {Record<string, VerbSpec>} */
+const VERB_SPECS = {
+  frameworks: { string: ['kind'], bool: ['json'] },
+  kinds: { string: ['field'], bool: ['json'] },
+  status: { bool: ['advanced', 'json'] },
+  browse: { minPositional: 1, maxPositional: 1, string: ['path'], int: ['limit', 'year'], bool: ['json'] },
+  read: { minPositional: 1, maxPositional: 1, string: ['framework', 'section'], int: ['max-chars', 'page'], bool: ['json'] },
+  search: {
+    minPositional: 1,
+    maxPositional: Number.POSITIVE_INFINITY,
+    joinPositional: true,
+    string: SEARCH_STRING_FLAGS,
+    int: SEARCH_INT_FLAGS,
+    bool: SEARCH_BOOL_FLAGS,
+  },
+}
+
+/**
+ * Map a cli.js read-verb invocation to `ad-cli` argv, or null to fall back to the
+ * Bun CLI — for a verb not yet flipped, a subcommand, or a flag/positional the
+ * native verb can't faithfully honour. Each flippable verb is described
+ * declaratively in `VERB_SPECS`; the shared `validateFlags` enforces it.
+ *
+ * @param {{ command: string, subcommand: string | undefined, positional: string[], flags: Record<string, unknown>, dbPath: string }} invocation
  * @returns {string[] | null}
  */
-function searchArgs(positional, flags, dbPath) {
-  if (positional.length === 0) return null
-  const allowed = new Set([...SEARCH_STRING_FLAGS, ...SEARCH_INT_FLAGS, ...SEARCH_BOOL_FLAGS, ...GLOBAL_PASSTHROUGH])
+export function nativeCliArgs({ command, subcommand, positional, flags, dbPath }) {
+  if (subcommand) return null
+  const spec = VERB_SPECS[command]
+  if (!spec) return null
+  const pos = Array.isArray(positional) ? positional : []
+  return validateFlags(command, spec, pos, flags, dbPath)
+}
+
+/**
+ * Validate an invocation against `spec` and build the ad-cli argv, or null to fall
+ * back to Bun. The rules are identical for every verb: the positional arity must
+ * fit `[minPositional, maxPositional]`; only the verb's own flags + the
+ * STDOUT-neutral globals may appear; a string flag must be a string when present;
+ * an int flag must be a clean non-negative integer string when present. The argv
+ * is `[verb, …positionals, --db, dbPath]` then string, int, then boolean flags in
+ * declared order (so the `json` boolean, declared last, trails).
+ *
+ * @param {string} verb @param {VerbSpec} spec @param {string[]} pos
+ * @param {Record<string, unknown>} flags @param {string} dbPath
+ * @returns {string[] | null}
+ */
+function validateFlags(verb, spec, pos, flags, dbPath) {
+  const min = spec.minPositional ?? 0
+  const max = spec.maxPositional ?? 0
+  if (pos.length < min || pos.length > max) return null
+
+  const stringFlags = spec.string ?? []
+  const intFlags = spec.int ?? []
+  const boolFlags = spec.bool ?? []
+  const allowed = new Set([...stringFlags, ...intFlags, ...boolFlags, ...GLOBAL_PASSTHROUGH])
   if (Object.keys(flags).some((k) => !allowed.has(k))) return null
-  for (const k of SEARCH_STRING_FLAGS) {
+  for (const k of stringFlags) {
     if (flags[k] != null && typeof flags[k] !== 'string') return null
   }
-  for (const k of SEARCH_INT_FLAGS) {
+  for (const k of intFlags) {
     const v = flags[k]
     if (v != null && (typeof v !== 'string' || !/^\d+$/.test(v))) return null
   }
 
-  const args = ['search', positional.join(' '), '--db', dbPath]
-  for (const k of SEARCH_STRING_FLAGS) {
+  const positionals = max === 0 ? [] : spec.joinPositional ? [pos.join(' ')] : [...pos]
+  const args = [verb, ...positionals, '--db', dbPath]
+  for (const k of stringFlags) {
     if (typeof flags[k] === 'string') args.push(`--${k}`, flags[k])
   }
-  for (const k of SEARCH_INT_FLAGS) {
+  for (const k of intFlags) {
     if (typeof flags[k] === 'string') args.push(`--${k}`, /** @type {string} */ (flags[k]))
   }
-  for (const k of SEARCH_BOOL_FLAGS) {
-    if (k !== 'json' && flags[k]) args.push(`--${k}`)
+  for (const k of boolFlags) {
+    if (flags[k]) args.push(`--${k}`)
   }
-  if (flags.json) args.push('--json')
-  return args
-}
-
-/**
- * Shared shape for the two single-filter, no-positional read verbs. Falls back
- * (null) on any positional, unsupported flag, or a filter passed without a string
- * value (`--kind --json` leaves `flags.kind === true`, whose JS coercion we don't
- * replicate).
- *
- * @param {string} verb @param {string} filter @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
- * @returns {string[] | null}
- */
-function readVerbArgs(verb, filter, positional, flags, dbPath) {
-  if (positional.length > 0) return null
-  const allowed = new Set([filter, 'json', ...GLOBAL_PASSTHROUGH])
-  if (Object.keys(flags).some((k) => !allowed.has(k))) return null
-  const filterValue = flags[filter]
-  if (filterValue != null && typeof filterValue !== 'string') return null
-
-  const args = [verb, '--db', dbPath]
-  if (typeof filterValue === 'string') args.push(`--${filter}`, filterValue)
-  if (flags.json) args.push('--json')
-  return args
-}
-
-/**
- * `browse <framework> [--path P] [--limit N] [--year Y] [--json]`. Needs exactly
- * one positional (the framework); falls back when it's missing (cli.js shows help)
- * or duplicated. `--limit`/`--year` ride through only as clean non-negative
- * integers (a NaN/negative is left to the Bun path, whose coercion we don't
- * mirror), and `--path` only as a string.
- *
- * @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
- * @returns {string[] | null}
- */
-function browseArgs(positional, flags, dbPath) {
-  if (positional.length !== 1) return null
-  const allowed = new Set(['path', 'limit', 'year', 'json', ...GLOBAL_PASSTHROUGH])
-  if (Object.keys(flags).some((k) => !allowed.has(k))) return null
-  if (flags.path != null && typeof flags.path !== 'string') return null
-  for (const k of ['limit', 'year']) {
-    const v = flags[k]
-    if (v != null && (typeof v !== 'string' || !/^\d+$/.test(v))) return null
-  }
-
-  const args = ['browse', positional[0], '--db', dbPath]
-  if (typeof flags.path === 'string') args.push('--path', flags.path)
-  if (typeof flags.limit === 'string') args.push('--limit', flags.limit)
-  if (typeof flags.year === 'string') args.push('--year', flags.year)
-  if (flags.json) args.push('--json')
-  return args
-}
-
-/**
- * `read <target> [--framework F] [--section S] [--max-chars N] [--page P] [--json]`.
- * The target (a path when it contains `/`, else a symbol) is the sole positional;
- * cli.js shows help when it's missing, so fall back then. `--max-chars`/`--page`
- * ride through only as clean non-negative integers (the native verb itself honours
- * the `< 200` floor, so a small value is NOT a fallback trigger); `--framework`/
- * `--section` only as strings.
- *
- * @param {string[]} positional @param {Record<string, unknown>} flags @param {string} dbPath
- * @returns {string[] | null}
- */
-function readDocArgs(positional, flags, dbPath) {
-  if (positional.length !== 1) return null
-  const allowed = new Set(['framework', 'section', 'max-chars', 'page', 'json', ...GLOBAL_PASSTHROUGH])
-  if (Object.keys(flags).some((k) => !allowed.has(k))) return null
-  for (const k of ['framework', 'section']) {
-    if (flags[k] != null && typeof flags[k] !== 'string') return null
-  }
-  for (const k of ['max-chars', 'page']) {
-    const v = flags[k]
-    if (v != null && (typeof v !== 'string' || !/^\d+$/.test(v))) return null
-  }
-
-  const args = ['read', positional[0], '--db', dbPath]
-  if (typeof flags.framework === 'string') args.push('--framework', flags.framework)
-  if (typeof flags.section === 'string') args.push('--section', flags.section)
-  if (typeof flags['max-chars'] === 'string') args.push('--max-chars', flags['max-chars'])
-  if (typeof flags.page === 'string') args.push('--page', flags.page)
-  if (flags.json) args.push('--json')
   return args
 }

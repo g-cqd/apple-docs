@@ -1,6 +1,7 @@
 // Minimal query-string parsing for /search. No Foundation. Builds a
 // SearchPagesParams from ?q=&framework=&limit=… ; unused filter fields stay nil.
 
+import ADFCore
 import ADSearchCascade
 import ADStorage
 
@@ -19,8 +20,8 @@ func clampSearchLimit(_ value: Int, upperBound: Int = 200) -> Int {
 
 /// Parses ?q=&limit=&offset= + the filter bag (framework/source/kind/language/
 /// platform/minVersion/year/track/deprecated) into the cascade's SearchParams.
-func parseCascadeParams(_ uri: String) -> SearchParams {
-    let q = parseQuery(uri)
+func parseCascadeParams(_ uri: String) -> SearchParams? {
+    guard let q = parseQuery(uri) else { return nil }
     return SearchParams(
         query: q["q"] ?? "",
         limit: clampSearchLimit(Int(q["limit"] ?? "") ?? 100),
@@ -40,8 +41,8 @@ func parseCascadeParams(_ uri: String) -> SearchParams {
         deprecated: q["deprecated"])
 }
 
-func parseSearchParams(_ uri: String) -> SearchPagesParams {
-    let q = parseQuery(uri)
+func parseSearchParams(_ uri: String) -> SearchPagesParams? {
+    guard let q = parseQuery(uri) else { return nil }
     let query = q["q"] ?? ""
     let limit = Int64(clampSearchLimit(Int(q["limit"] ?? "") ?? 100))
     return SearchPagesParams(
@@ -57,45 +58,35 @@ private func nonEmpty(_ value: String?) -> String? {
     return value
 }
 
-func parseQuery(_ uri: String) -> [String: String] {
+/// Parses the query string into decoded key/value pairs, or `nil` if ANY component is malformed
+/// (a bad percent-escape or invalid UTF-8) — the caller then rejects the request rather than
+/// serving a silently mis-decoded query. A URI with no `?` yields an empty bag.
+func parseQuery(_ uri: String) -> [String: String]? {
     guard let mark = uri.firstIndex(of: "?") else { return [:] }
     var out: [String: String] = [:]
     for pair in uri[uri.index(after: mark)...].split(separator: "&") {
         let kv = pair.split(separator: "=", maxSplits: 1)
         guard let key = kv.first else { continue }
-        out[percentDecode(String(key))] = kv.count > 1 ? percentDecode(String(kv[1])) : ""
+        guard let decodedKey = percentDecode(String(key)) else { return nil }
+        if kv.count > 1 {
+            guard let decodedValue = percentDecode(String(kv[1])) else { return nil }
+            out[decodedKey] = decodedValue
+        } else {
+            out[decodedKey] = ""
+        }
     }
     return out
 }
 
-func percentDecode(_ s: String) -> String {
-    let chars = Array(s.utf8)
-    var bytes: [UInt8] = []
-    bytes.reserveCapacity(chars.count)
-    var i = 0
-    while i < chars.count {
-        let c = chars[i]
-        if c == UInt8(ascii: "+") {
-            bytes.append(UInt8(ascii: " "))
-            i += 1
-        } else if c == UInt8(ascii: "%"), i + 2 < chars.count,
-            let hi = hexVal(chars[i + 1]), let lo = hexVal(chars[i + 2])
-        {
-            bytes.append(hi << 4 | lo)
-            i += 3
-        } else {
-            bytes.append(c)
-            i += 1
-        }
-    }
+/// Percent-decodes one `application/x-www-form-urlencoded` query component (the `"+"`→space rule)
+/// through the audited ``ADFCore/PercentCoding/decodeForm(_:)``, then *validates* the result is
+/// well-formed UTF-8 via ``ADFCore/UTF8Validation``. Returns `nil` on a malformed escape (`"%"`,
+/// `"%G0"`) OR invalid UTF-8 (`"%FF"`, a bad continuation) so the caller can reject the request —
+/// rather than the prior `String(decoding:as:)`, which silently substituted U+FFFD for adversarial
+/// query bytes.
+func percentDecode(_ s: String) -> String? {
+    guard let bytes = PercentCoding.decodeForm(Array(s.utf8)),
+        UTF8Validation.firstInvalidByte(bytes) == nil
+    else { return nil }
     return String(decoding: bytes, as: UTF8.self)
-}
-
-private func hexVal(_ b: UInt8) -> UInt8? {
-    switch b {
-        case UInt8(ascii: "0") ... UInt8(ascii: "9"): return b - UInt8(ascii: "0")
-        case UInt8(ascii: "a") ... UInt8(ascii: "f"): return b - UInt8(ascii: "a") + 10
-        case UInt8(ascii: "A") ... UInt8(ascii: "F"): return b - UInt8(ascii: "A") + 10
-        default: return nil
-    }
 }

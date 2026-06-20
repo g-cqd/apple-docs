@@ -89,10 +89,11 @@ if (command === 'sync' || command === 'setup') {
   await resolveGitHubAuth({ flags, env: process.env, logger })
 }
 
-// RFC 0005 Phase E serving flip (default-off): hand the serve verbs (web serve,
-// mcp serve, mcp start) to the native ad-server when APPLE_DOCS_NATIVE includes
-// `serve` + the binary resolves; any unsupported flag (or other verb) falls
-// through to the Bun servers. stdio inherited; the child's exit code propagates.
+// RFC 0005 Phase E serving flip (DEFAULT-ON): hand the serve verbs (web serve,
+// mcp serve, mcp start) to the native ad-server when APPLE_DOCS_NATIVE doesn't
+// disable it + the binary resolves; any unsupported flag (or other verb), or an
+// absent binary, falls through to the Bun servers. stdio inherited; the child's
+// exit code propagates.
 if (isNativeServeEnabled()) {
   const serveArgs = nativeServeArgs({ command, subcommand, flags, dbPath: join(dataDir, 'apple-docs.db') })
   const bin = serveArgs && adServerBinaryPath()
@@ -105,10 +106,13 @@ if (isNativeServeEnabled()) {
   }
 }
 
-// RFC 0007 P7 CLI flip (default-off): hand the read verbs (frameworks, kinds) to
-// the native ad-cli when APPLE_DOCS_NATIVE includes `cli` + the binary resolves;
-// any unsupported flag/positional (or other verb) falls through to the Bun path.
-if (isNativeCliEnabled()) {
+// RFC 0007 P7 CLI flip (DEFAULT-ON): hand the read verbs to the native ad-cli when
+// APPLE_DOCS_NATIVE doesn't disable it + the binary resolves; any unsupported
+// flag/positional (or other verb), or an absent binary, falls through to the Bun
+// path. APPLE_DOCS_DEBUG (raw-envelope passthrough — `src/output/projection.js`)
+// is a JS-only output mode the native verbs don't implement, so defer to Bun when
+// it is set, preserving the debug bypass.
+if (isNativeCliEnabled() && !config.APPLE_DOCS_DEBUG) {
   const cliArgs = nativeCliArgs({ command, subcommand, positional, flags, dbPath: join(dataDir, 'apple-docs.db') })
   const bin = cliArgs && adCliBinaryPath()
   if (cliArgs && bin) {
@@ -241,36 +245,20 @@ try {
 
     case 'mcp': {
       switch (subcommand) {
-        case 'start': {
-          const { startServer } = await import('./src/mcp/server.js')
-          const handle = await startServer(ctx)
-          lifecycle.register({ name: 'mcp-stdio', stop: (deadlineMs) => handle.close(deadlineMs) })
-          await handle.closed
-          break
-        }
+        case 'start':
         case 'serve': {
-          const { startHttpServer } = await import('./src/mcp/http-server.js')
-          const port = flags.port ? Number.parseInt(flags.port, 10) : 3031
-          const host = flags.host ?? '127.0.0.1'
-          const allowedOrigins = flags['allow-origin']
-            ? String(flags['allow-origin'])
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean)
-            : []
-          const heavyConcurrency = parseOptionalInt(flags.concurrency) || undefined
-          const heavyQueue = parseOptionalInt(flags.queue)
-          const handle = await startHttpServer({ port, host, allowedOrigins, ...metricsOpts(flags) }, ctx, {
-            ...(heavyConcurrency != null ? { heavyConcurrency } : {}),
-            ...(heavyQueue != null ? { heavyQueue } : {}),
-          })
-          lifecycle.register({ name: 'mcp-http', stop: (deadlineMs) => handle.close(deadlineMs) })
-          console.log(`MCP HTTP server running at ${handle.url}`)
-          if (handle.metricsUrl) console.log(`Metrics endpoint at ${handle.metricsUrl}`)
-          console.log('Press Ctrl+C to stop')
-          // Keep process alive — process signal handlers at the top of this file
-          // close the DB; Bun releases sockets on exit.
-          await new Promise(() => {})
+          // The JS MCP server has been retired (RFC 0005): the native ad-server is the
+          // sole MCP implementation, dispatched by the serve flip at the top of this
+          // file when its binary resolves. Reaching here means that flip did NOT fire —
+          // the ad-server binary was not found, or APPLE_DOCS_NATIVE is `off`. There is
+          // no JS fallback any more, so fail with actionable guidance.
+          console.error(
+            `apple-docs mcp ${subcommand}: requires the native ad-server, which was not found. ` +
+              'Install the native bundle (`apple-docs setup --native`) or build it (`swift build -c release` in swift/), ' +
+              'and make sure APPLE_DOCS_NATIVE is not set to "off".',
+          )
+          cleanup()
+          process.exit(1)
           break
         }
         case 'install': {

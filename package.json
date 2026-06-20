@@ -74,8 +74,8 @@
     "vitepress-plugin-mermaid": "^2.0.17"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "shiki": "^4.1.0"
+    "shiki": "^4.1.0",
+    "zod": "^4.3.6"
   },
   "overrides": {
     "fast-uri": "^3.1.2",

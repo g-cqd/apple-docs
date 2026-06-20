@@ -57,10 +57,31 @@ struct ZstdLib: @unchecked Sendable {
     // compactor does via Bun.zstdCompressSync).
     let decompress: @convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int) -> Int
     let getFrameContentSize: @convention(c) (UnsafeRawPointer?, Int) -> UInt64
+    // One-shot compression (the snapshot `document_raw` codec). The simple
+    // `ZSTD_compress` writes the content size into the frame header, so the output
+    // round-trips through `decompressFrame` (which reads it via getFrameContentSize).
+    let compressBound: @convention(c) (Int) -> Int
+    let compress: @convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int, Int32) -> Int
 
     func errorName(_ code: Int) -> String {
         guard let cstr = getErrorName(code) else { return "zstd error \(code)" }
         return String(cString: cstr)
+    }
+
+    /// Compresses `bytes` into a single zstd frame at `level`. nil on a zstd error.
+    /// The frame carries its content size, so `decompressFrame` inflates it.
+    func compressFrame(_ bytes: [UInt8], level: Int32) -> [UInt8]? {
+        let bound = compressBound(bytes.count)
+        guard bound > 0 else { return nil }
+        var out = [UInt8](repeating: 0, count: bound)
+        let written = out.withUnsafeMutableBytes { dst -> Int in
+            bytes.withUnsafeBytes { src in
+                compress(dst.baseAddress, bound, src.baseAddress, bytes.count, level)
+            }
+        }
+        guard isError(written) == 0, written <= out.count else { return nil }
+        out.removeLast(out.count - written)
+        return out
     }
 
     /// Decompresses a complete zstd frame. nil on a malformed frame, an
@@ -93,6 +114,18 @@ struct ZstdLib: @unchecked Sendable {
 public enum ZstdDecoder {
     public static func decompress(_ blob: [UInt8]) -> [UInt8]? {
         Zstd.shared?.decompressFrame(blob)
+    }
+}
+
+/// Public one-shot zstd compression — the snapshot builder zstd-embeds raw upstream
+/// payloads into `document_raw`. nil when libzstd is absent (the caller stores the
+/// payload uncompressed). The frame round-trips through ``ZstdDecoder/decompress``.
+public enum ZstdEncoder {
+    /// Default level 19 — strong ratio for the (large, compressible) raw JSON
+    /// payloads, within `ZSTD_compress`'s 1...22 range. Deterministic for a fixed
+    /// level + input, so the snapshot determinism gate holds.
+    public static func compress(_ bytes: [UInt8], level: Int32 = 19) -> [UInt8]? {
+        Zstd.shared?.compressFrame(bytes, level: level)
     }
 }
 
@@ -140,7 +173,12 @@ enum Zstd {
                     as: (@convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int) -> Int).self),
                 let frameContentSize = sym(
                     "ZSTD_getFrameContentSize",
-                    as: (@convention(c) (UnsafeRawPointer?, Int) -> UInt64).self)
+                    as: (@convention(c) (UnsafeRawPointer?, Int) -> UInt64).self),
+                let compressBound = sym(
+                    "ZSTD_compressBound", as: (@convention(c) (Int) -> Int).self),
+                let compress = sym(
+                    "ZSTD_compress",
+                    as: (@convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int, Int32) -> Int).self)
             else { continue }
             // ZSTD_compressStream2 + the parameter API appeared in 1.4.0.
             guard version() >= 10400 else { continue }
@@ -149,6 +187,7 @@ enum Zstd {
                 setParameter: setParam, setPledgedSrcSize: setPledged,
                 compressStream2: stream, isError: isErr, getErrorName: errName,
                 cStreamOutSize: outSize, decompress: decompress, getFrameContentSize: frameContentSize,
+                compressBound: compressBound, compress: compress,
             )
         }
         return nil

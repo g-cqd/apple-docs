@@ -1,4 +1,5 @@
-import ADSQL
+import ADFCore
+import ADSQLModel
 
 /// The response wire format (the `ad_storage_search_pages` return
 /// payload): a header `[u32 colCount][u32 rowCount]` followed by
@@ -12,9 +13,10 @@ import ADSQL
 /// | `3` | TEXT | `[u32 len][utf8 bytes]` |
 /// | `4` | BLOB | `[u32 len][raw bytes]` |
 ///
-/// Every multi-byte field is little-endian. The integers are emitted by explicit
-/// byte shifts (never a host-`withUnsafeBytes` reinterpret), so the bytes are
-/// identical regardless of CPU endianness — a requirement for the Linux gate.
+/// Every multi-byte field is little-endian, emitted through `ADFCore`'s canonical `appendLE*`
+/// (the byte-swapped scalar's in-memory bytes — little-endian on every host, the swap happening on a
+/// big-endian one), so the bytes are identical regardless of CPU endianness — a requirement for the
+/// Linux gate. (`SearchDenormEquivalenceTests`/`ResponseFramingTests` pin the exact bytes.)
 enum ResponseFraming {
     /// Cell type tags (§2.5).
     enum Tag: UInt8 {
@@ -67,24 +69,15 @@ enum ResponseFraming {
         }
     }
 
-    // MARK: - Little-endian primitives (endianness-independent)
+    // MARK: - Little-endian primitives (endianness-independent, via ADFCore)
 
-    private static func appendUInt32(_ out: inout [UInt8], _ value: UInt32) {
-        out.append(UInt8(truncatingIfNeeded: value))
-        out.append(UInt8(truncatingIfNeeded: value >> 8))
-        out.append(UInt8(truncatingIfNeeded: value >> 16))
-        out.append(UInt8(truncatingIfNeeded: value >> 24))
-    }
+    // The shared `appendLE*` emit each scalar in one bounded copy — replacing the per-shift `append`
+    // loops here (notably eight `append`s per `UInt64`) while keeping the identical LE byte layout.
+    private static func appendUInt32(_ out: inout [UInt8], _ value: UInt32) { out.appendLE32(value) }
 
-    private static func appendUInt64(_ out: inout [UInt8], _ value: UInt64) {
-        var shifted = value
-        for _ in 0 ..< 8 {
-            out.append(UInt8(truncatingIfNeeded: shifted))
-            shifted >>= 8
-        }
-    }
+    private static func appendUInt64(_ out: inout [UInt8], _ value: UInt64) { out.appendLE64(value) }
 
     private static func appendInt64(_ out: inout [UInt8], _ value: Int64) {
-        appendUInt64(&out, UInt64(bitPattern: value))
+        out.appendLE64(UInt64(bitPattern: value))
     }
 }
