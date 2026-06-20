@@ -64,8 +64,9 @@ private func renderDoc(
         var sectionW = ByteWriter()
         var out: [UInt8] = []
         DocMarkdown.render(
-            document: document, sections: sects, includeFrontMatter: includeFrontMatter,
-            includeTitle: includeTitle, w: &w, sectionW: &sectionW, out: &out)
+            document: document, sections: sects,
+            options: .init(includeFrontMatter: includeFrontMatter, includeTitle: includeTitle),
+            w: &w, sectionW: &sectionW, out: &out)
         return String(decoding: out, as: UTF8.self)
     }
 }
