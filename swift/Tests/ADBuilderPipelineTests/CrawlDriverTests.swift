@@ -170,4 +170,56 @@ struct CrawlDriverTests {
         #expect(peak > 1)  // genuinely concurrent
         #expect(peak <= 4)  // bounded by maxConcurrency
     }
+
+    /// An adapter whose `fetch` throws for keys ending in `bad` — to exercise the per-key failure path.
+    private struct FlakyAdapter: SourceAdapter {
+        static let type = "flaky"
+        static let displayName = "Flaky"
+        init() {}
+        func discover(_ context: SourceContext) async throws -> DiscoveryResult {
+            DiscoveryResult(keys: ["flaky/ok1", "flaky/bad", "flaky/ok2"])
+        }
+        func fetch(_ key: String, _ context: SourceContext) async throws -> FetchResult {
+            if key.hasSuffix("bad") { throw AdapterError.unexpectedPayload("boom: \(key)") }
+            return FetchResult(key: key, payload: .html("<main><h1>\(key)</h1><p>body</p></main>"))
+        }
+        func check(_ key: String, previousState: String?, _ context: SourceContext) async throws
+            -> CheckResult
+        { CheckResult(status: .modified, changed: true) }
+        func normalize(_ key: String, _ payload: SourcePayload) throws -> NormalizedPage {
+            guard case .html(let html) = payload else { throw AdapterError.unexpectedPayload("html") }
+            return HtmlNormalize.parse(
+                html, key: key, sourceType: Self.type, kind: "article", framework: Self.type,
+                url: "https://flaky/\(key)")
+        }
+    }
+
+    @Test func perKeyFailuresAreCountedNotFatal() async throws {
+        let context = SourceContext(
+            client: StubClient { _ in
+                HTTPClientResponse(status: .init(code: 200), headerFields: [:], body: ResponseBody(buffered: []))
+            },
+            rateLimiter: RateLimiter(rate: 1_000_000, burst: 1_000_000))
+
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("crawlflaky-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try Database.open(
+            at: dir.appendingPathComponent("f.adsql").path, options: DatabaseOptions())
+        defer { db.close() }
+        _ = try migrateSchema(db)
+
+        let now = "2026-06-20T00:00:00.000Z"
+        let rootId = try CrawlPersist.upsertRoot(
+            db, slug: "flaky", displayName: "Flaky", kind: "collection", source: "flaky", now: now)
+
+        let driver = CrawlDriver(registry: SourceRegistry([FlakyAdapter.self]))
+        let stats = try await driver.crawl(
+            sourceType: "flaky", into: db, rootId: rootId, context: context, now: now)
+
+        #expect(stats.discovered == 3)
+        #expect(stats.persisted == 2)  // ok1 + ok2
+        #expect(stats.failed == 1)  // bad — counted, not fatal
+    }
 }
