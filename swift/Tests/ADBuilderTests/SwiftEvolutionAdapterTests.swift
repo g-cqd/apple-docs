@@ -51,11 +51,31 @@ struct SwiftEvolutionAdapterTests {
         #expect(page.sections.contains { $0.heading == "Motivation" })
     }
 
-    @Test("network steps throw notImplemented until the GitHub client lands")
-    func networkPending() async {
-        let context = SourceContext(client: URLSessionHTTPClient(), rateLimiter: RateLimiter())
-        await #expect(throws: AdapterError.self) {
-            _ = try await SwiftEvolutionAdapter().discover(context)
+    @Test("discover lists proposal keys from the git tree (skips non-proposals)")
+    func discover() async throws {
+        let json = """
+            {"tree":[\
+            {"path":"proposals/0001-foo.md","type":"blob","sha":"a"},\
+            {"path":"proposals/0002-bar.md","type":"blob","sha":"b"},\
+            {"path":"README.md","type":"blob","sha":"c"}]}
+            """
+        let context = SourceContext(
+            client: StubHTTPClient { _ in httpResponse(200, body: json) }, rateLimiter: instantRateLimiter())
+        let result = try await SwiftEvolutionAdapter().discover(context)
+        #expect(result.keys == ["swift-evolution/0001-foo", "swift-evolution/0002-bar"])
+        #expect(result.roots.first?.slug == "swift-evolution")
+    }
+
+    @Test("fetch returns the proposal markdown payload")
+    func fetch() async throws {
+        let context = SourceContext(
+            client: StubHTTPClient { _ in httpResponse(200, body: "# Proposal body") },
+            rateLimiter: instantRateLimiter())
+        let result = try await SwiftEvolutionAdapter().fetch("swift-evolution/0001-foo", context)
+        guard case .markdown(let text) = result.payload else {
+            Issue.record("expected a markdown payload")
+            return
         }
+        #expect(text == "# Proposal body")
     }
 }
