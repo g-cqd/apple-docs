@@ -96,27 +96,12 @@ public enum IndexEmbeddings {
         batchSize: Int = 64,
         onProgress: ((_ done: Int, _ total: Int) -> Void)? = nil
     ) throws -> Result {
-        // ── snapshot_meta helpers (single-row auto-commit each, as the JS does) ──
-        func setMeta(_ key: String, _ value: String) throws(DBError) {
-            try db.prepare("INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES ($key, $value)")
-                .run(["key": .text(key), "value": .text(value)])
-        }
-        func getMeta(_ key: String) throws(DBError) -> String? {
-            let rows = try db.prepare("SELECT value FROM snapshot_meta WHERE key = $key")
-                .all(["key": .text(key)])
-            return rows.first.flatMap { cellText($0["value"]) }
-        }
-        func chunkCount() throws(DBError) -> Int64 {
-            let rows = try db.prepare("SELECT COUNT(*) AS c FROM document_chunks").all()
-            return rows.first.flatMap { cellInt($0["c"]) } ?? 0
-        }
-
         // A deliberate embedding-behavior change (stamped as `embed_version`)
         // invalidates stored chunks wholesale — resuming would mix versions. Checked
         // BEFORE the resume scan so an "up to date" v1 store still re-embeds under v2.
         var resolvedFull = full
-        if !resolvedFull, let embedVersion, try chunkCount() > 0 {
-            let stored = try getMeta("embed_version") ?? "1"
+        if !resolvedFull, let embedVersion, try snapshotChunkCount(db) > 0 {
+            let stored = try getSnapshotMeta(db, "embed_version") ?? "1"
             if stored != String(embedVersion) { resolvedFull = true }
         }
 
@@ -175,9 +160,9 @@ public enum IndexEmbeddings {
             // Model meta is written with the first non-empty batch (idempotent) so an
             // interrupted run never leaves chunks on disk with absent/stale meta.
             if indexed == 0, !flat.isEmpty {
-                try setMeta("embed_dims", String(dims))
-                try setMeta("embed_model", embedModel)
-                if let embedVersion { try setMeta("embed_version", String(embedVersion)) }
+                try setSnapshotMeta(db, "embed_dims", String(dims))
+                try setSnapshotMeta(db, "embed_model", embedModel)
+                if let embedVersion { try setSnapshotMeta(db, "embed_version", String(embedVersion)) }
             }
 
             try db.transaction { (txn) throws(DBError) in
@@ -213,6 +198,23 @@ public enum IndexEmbeddings {
         }
 
         return Result(status: "ok", indexed: indexed, total: total, chunks: chunkTotal)
+    }
+
+    // snapshot_meta single-row helpers (auto-commit each, as the JS does).
+    private static func setSnapshotMeta(_ db: Database, _ key: String, _ value: String) throws(DBError) {
+        try db.prepare("INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES ($key, $value)")
+            .run(["key": .text(key), "value": .text(value)])
+    }
+
+    private static func getSnapshotMeta(_ db: Database, _ key: String) throws(DBError) -> String? {
+        let rows = try db.prepare("SELECT value FROM snapshot_meta WHERE key = $key")
+            .all(["key": .text(key)])
+        return rows.first.flatMap { cellText($0["value"]) }
+    }
+
+    private static func snapshotChunkCount(_ db: Database) throws(DBError) -> Int64 {
+        let rows = try db.prepare("SELECT COUNT(*) AS c FROM document_chunks").all()
+        return rows.first.flatMap { cellInt($0["c"]) } ?? 0
     }
 
     // MARK: - reads
