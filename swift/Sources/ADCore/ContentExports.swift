@@ -99,7 +99,7 @@ public func adContentDocMarkdown(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Un
     var out: [UInt8] = []
     DocMarkdown.render(
         document: document, sections: sections,
-        includeFrontMatter: flags & 1 != 0, includeTitle: flags & 2 != 0,
+        options: .init(includeFrontMatter: flags & 1 != 0, includeTitle: flags & 2 != 0),
         w: &w, sectionW: &sectionW, out: &out)
     return payload(from: out)
 }
@@ -319,7 +319,7 @@ public func adContentDocMarkdownBatch(_ ptr: UnsafePointer<UInt8>?, _ len: Int) 
         var sectionW = ByteWriter(capacity: 2048)
         DocMarkdown.render(
             document: frozen[i].document, sections: frozen[i].sections,
-            includeFrontMatter: includeFrontMatter, includeTitle: includeTitle,
+            options: .init(includeFrontMatter: includeFrontMatter, includeTitle: includeTitle),
             w: &w, sectionW: &sectionW, out: &out)
         return true
     }

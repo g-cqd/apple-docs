@@ -129,7 +129,7 @@ extension DocMarkdown {
             var sectionW = ByteWriter(capacity: 2048)
             DocMarkdown.render(
                 document: docSpans, sections: sectionSpans,
-                includeFrontMatter: includeFrontMatter, includeTitle: includeTitle,
+                options: .init(includeFrontMatter: includeFrontMatter, includeTitle: includeTitle),
                 w: &w, sectionW: &sectionW, out: &out)
         }
         return String(decoding: out, as: UTF8.self)
