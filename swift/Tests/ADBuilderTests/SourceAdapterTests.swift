@@ -32,9 +32,9 @@ struct SourceAdapterTests {
         }
     }
 
-    @Test("registry resolves a registered adapter by type; unknown throws")
+    @Test("registry vends a fresh adapter by type; unknown throws")
     func registryDispatch() throws {
-        let registry = SourceRegistry([FakeAdapter()])
+        let registry = SourceRegistry([FakeAdapter.self])
         #expect(registry.types == ["fake"])
         let adapter = try registry.adapter(for: "fake")
         #expect(adapter.type == "fake")

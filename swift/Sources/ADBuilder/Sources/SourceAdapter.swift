@@ -23,6 +23,7 @@ public enum SourcePayload: Sendable, Equatable {
 /// How a source is synced (JS `syncMode`).
 public enum SyncMode: String, Sendable {
     case crawl
+    case flat
     case manual
 }
 
@@ -119,7 +120,13 @@ public struct SourceContext: Sendable {
 /// One documentation source. `discover`/`fetch`/`check` are async (network);
 /// `normalize`/`extractReferences` are pure. Protocol extensions supply the JS
 /// defaults (`requiresNetwork`/`syncMode`/`entryPoints`/`extractReferences`).
+///
+/// `init()` is required so the registry can vend a FRESH instance per crawl (the JS
+/// `new AdapterClass()`): a stateful adapter (e.g. swift-book's `chapterIndex`, built
+/// in `discover` and read in `normalize`) must not share state across crawls.
 public protocol SourceAdapter: Sendable {
+    init()
+
     /// The canonical source-type tag (the registry key), e.g. `"apple-docc"`.
     static var type: String { get }
     static var displayName: String { get }
@@ -145,29 +152,29 @@ extension SourceAdapter {
     public var type: String { Self.type }
 }
 
-/// The adapter registry (port of registry.js): source-type → adapter. Built once from
-/// the registered adapters; the pipeline resolves an adapter by a page's `source_type`.
+/// The adapter registry (port of registry.js): source-type → adapter FACTORY. Built
+/// from the adapter metatypes; `adapter(for:)` vends a fresh instance (the JS `new
+/// AdapterClass()`), so stateful adapters never share state across crawls.
 public struct SourceRegistry: Sendable {
     public enum RegistryError: Error, Sendable, Equatable {
         case unknownSourceType(String)
     }
 
-    private let adapters: [String: any SourceAdapter]
+    private let factories: [String: @Sendable () -> any SourceAdapter]
 
-    public init(_ adapters: [any SourceAdapter]) {
-        var byType: [String: any SourceAdapter] = [:]
-        for adapter in adapters { byType[adapter.type] = adapter }
-        self.adapters = byType
+    public init(_ adapterTypes: [any SourceAdapter.Type]) {
+        var byType: [String: @Sendable () -> any SourceAdapter] = [:]
+        for adapterType in adapterTypes { byType[adapterType.type] = { adapterType.init() } }
+        self.factories = byType
     }
 
-    /// Resolve an adapter by source type, or throw `unknownSourceType`.
+    /// Resolve a FRESH adapter instance by source type, or throw `unknownSourceType`.
     public func adapter(for sourceType: String) throws -> any SourceAdapter {
-        guard let adapter = adapters[sourceType] else {
+        guard let make = factories[sourceType] else {
             throw RegistryError.unknownSourceType(sourceType)
         }
-        return adapter
+        return make()
     }
 
-    public var types: [String] { Array(adapters.keys).sorted() }
-    public var all: [any SourceAdapter] { Array(adapters.values) }
+    public var types: [String] { Array(factories.keys).sorted() }
 }
