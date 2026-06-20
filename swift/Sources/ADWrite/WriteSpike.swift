@@ -43,24 +43,9 @@ public struct SpikeReport: Sendable {
 }
 
 public enum WriteSpike {
-    /// Runs the full write→read round-trip against a fresh ADDB database created
-    /// under `directory`. Returns a ``SpikeReport`` for inspection; the CLI verb
-    /// prints it. Throws the engine's `DBError` unchanged on any failure.
-    ///
-    /// - Parameter directory: an existing, writable directory (a temp dir for the
-    ///   spike). The database file is created at `<directory>/addb-write-spike.adsql`.
-    public static func run(inDirectory directory: String) throws -> SpikeReport {
-        // ── 1. Open / create a fresh writable ADDB database ──────────────────
-        // `DatabaseOptions()` defaults are already the writable profile we want:
-        // readOnly=false, createIfMissing=true, durability=.barrier. The engine
-        // has no `:memory:` mode — a real file under the temp dir is the idiom
-        // (every ADDB test opens a throwaway on-disk db the same way).
-        let path = directory.hasSuffix("/")
-            ? directory + "addb-write-spike.adsql"
-            : directory + "/addb-write-spike.adsql"
-        let db = try Database.open(at: path, options: DatabaseOptions())
-        defer { db.close() }
-
+    /// Creates the two apple-docs-representative tables (roots + pages) + secondary indexes via
+    /// the ADDB engine; each DDL is auto-committed in its own write transaction.
+    private static func createSpikeSchema(_ db: Database) throws {
         // ── 2. DDL — two apple-docs-representative tables via the ADDB engine ─
         // These are the real apple-docs `roots` + `pages` definitions from
         // v1-initial-schema.js, adapted to ADDB's STRICT relational model.
@@ -134,6 +119,28 @@ public enum WriteSpike {
         try db.prepare(ddlPages).run()
         try db.prepare(ddlIndexPagesRoot).run()
         try db.prepare(ddlIndexPagesRole).run()
+    }
+
+    /// Runs the full write→read round-trip against a fresh ADDB database created
+    /// under `directory`. Returns a ``SpikeReport`` for inspection; the CLI verb
+    /// prints it. Throws the engine's `DBError` unchanged on any failure.
+    ///
+    /// - Parameter directory: an existing, writable directory (a temp dir for the
+    ///   spike). The database file is created at `<directory>/addb-write-spike.adsql`.
+    public static func run(inDirectory directory: String) throws -> SpikeReport {
+        // ── 1. Open / create a fresh writable ADDB database ──────────────────
+        // `DatabaseOptions()` defaults are already the writable profile we want:
+        // readOnly=false, createIfMissing=true, durability=.barrier. The engine
+        // has no `:memory:` mode — a real file under the temp dir is the idiom
+        // (every ADDB test opens a throwaway on-disk db the same way).
+        let path = directory.hasSuffix("/")
+            ? directory + "addb-write-spike.adsql"
+            : directory + "/addb-write-spike.adsql"
+        let db = try Database.open(at: path, options: DatabaseOptions())
+        defer { db.close() }
+
+        // ── 2. DDL — create the apple-docs-representative tables + indexes ─
+        try createSpikeSchema(db)
 
         // ── 3. INSERT a root + 2 pages via prepared INSERT + bind, in ONE txn ─
         // `db.transaction { … }` runs every statement against one shared WriteTxn

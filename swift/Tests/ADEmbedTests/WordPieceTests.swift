@@ -57,10 +57,7 @@ struct WordPieceTests {
         var offsets: [Int] = []
         WordPiece.encode(
             word: scalars(word)[...],
-            vocab: vocab,
-            unkId: 1,
-            continuationPrefix: prefix,
-            maxInputCharsPerWord: max,
+            config: .init(vocab: vocab, unkId: 1, continuationPrefix: prefix, maxInputCharsPerWord: max),
             wordBytes: &wordBytes,
             offsets: &offsets,
             into: &out
