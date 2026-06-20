@@ -10,8 +10,8 @@
 
 public import ADBuilder
 public import ADDB
+public import ADWrite
 
-import ADWrite
 import Crypto
 import Foundation
 
@@ -22,6 +22,16 @@ public struct CrawlDriver: Sendable {
         public var persisted = 0
         public var failed = 0
         public init() {}
+    }
+
+    /// A `sync` outcome: the crawl stats plus the embedding-index result.
+    public struct SyncResult: Sendable, Equatable {
+        public var crawl: Stats
+        public var index: IndexEmbeddings.Result
+        public init(crawl: Stats, index: IndexEmbeddings.Result) {
+            self.crawl = crawl
+            self.index = index
+        }
     }
 
     private let registry: SourceRegistry
@@ -51,6 +61,26 @@ public struct CrawlDriver: Sendable {
             }
         }
         return stats
+    }
+
+    /// Build (or resume) the embedding index over everything persisted so far — what makes crawled
+    /// pages searchable. A thin pass-through to `IndexEmbeddings.run`.
+    @discardableResult
+    public func index(
+        _ db: Database, embedder: some ChunkEmbedder, full: Bool = false
+    ) throws -> IndexEmbeddings.Result {
+        try IndexEmbeddings.run(db, embedder: embedder, full: full)
+    }
+
+    /// Crawl a source then index it — the full `ad-build sync` for one source.
+    public func sync(
+        sourceType: String, into db: Database, rootId: Int64, context: SourceContext, now: String,
+        embedder: some ChunkEmbedder
+    ) async throws -> SyncResult {
+        let crawlStats = try await crawl(
+            sourceType: sourceType, into: db, rootId: rootId, context: context, now: now)
+        let indexResult = try IndexEmbeddings.run(db, embedder: embedder)
+        return SyncResult(crawl: crawlStats, index: indexResult)
     }
 
     private static func rawBytes(_ payload: SourcePayload) -> [UInt8] {
