@@ -67,41 +67,12 @@ private func decodeAndFuse(_ ptr: UnsafePointer<UInt8>?, _ len: Int, hybrid: Boo
     }
 
     var rankedArrays: [[UInt32]] = []
-    rankedArrays.reserveCapacity(listCount)
-    for meta in metas {
-        guard let byteLen = meta.rankedLen.checkedMultiplied(by: 4), let view = reader.bytes(byteLen) else {
-            return ResultBuffer.error(.invalidInput, "truncated ranked array")
-        }
-        var ranked = [UInt32](repeating: 0, count: meta.rankedLen)
-        for i in 0 ..< meta.rankedLen {
-            let value = UInt32(littleEndian: view.loadUnaligned(fromByteOffset: i * 4, as: UInt32.self))
-            guard value < UInt32(idCount) else {
-                return ResultBuffer.error(.invalidInput, "ranked index \(value) out of range (U=\(idCount))")
-            }
-            ranked[i] = value
-        }
-        rankedArrays.append(ranked)
-    }
+    if let err = decodeRankedArrays(&reader, metas, idCount, into: &rankedArrays) { return err }
 
     guard reader.align8() else { return ResultBuffer.error(.invalidInput, "truncated padding") }
 
     var lists: [Fusion.List] = []
-    lists.reserveCapacity(listCount)
-    for (index, meta) in metas.enumerated() {
-        var scores: [Double]?
-        if meta.hasScores {
-            guard let byteLen = meta.rankedLen.checkedMultiplied(by: 8), let view = reader.bytes(byteLen) else {
-                return ResultBuffer.error(.invalidInput, "truncated score array")
-            }
-            var values = [Double](repeating: 0, count: meta.rankedLen)
-            for i in 0 ..< meta.rankedLen {
-                let bits = view.loadUnaligned(fromByteOffset: i * 8, as: UInt64.self)
-                values[i] = Double(bitPattern: UInt64(littleEndian: bits))
-            }
-            scores = values
-        }
-        lists.append(.init(ranked: rankedArrays[index], weight: meta.weight, scores: scores))
-    }
+    if let err = decodeLists(&reader, metas, rankedArrays, into: &lists) { return err }
 
     guard reader.remaining == 0 else {
         return ResultBuffer.error(.invalidInput, "\(reader.remaining) trailing bytes in fusion request")
@@ -121,6 +92,56 @@ private func decodeAndFuse(_ ptr: UnsafePointer<UInt8>?, _ len: Int, hybrid: Boo
         payload.storeBytes(of: fused[i].bitPattern.littleEndian, toByteOffset: i * 8, as: UInt64.self)
     }
     return base
+}
+
+private typealias ListMeta = (rankedLen: Int, hasScores: Bool, weight: Double)
+
+/// Decodes each list's ranked id array, validating every index is `< idCount`. Returns nil on
+/// success (filling `rankedArrays`), or the `ResultBuffer.error` for the first malformed array.
+private func decodeRankedArrays(
+    _ reader: inout RequestReader, _ metas: [ListMeta], _ idCount: Int, into rankedArrays: inout [[UInt32]]
+) -> UnsafeMutableRawPointer? {
+    rankedArrays.reserveCapacity(metas.count)
+    for meta in metas {
+        guard let byteLen = meta.rankedLen.checkedMultiplied(by: 4), let view = reader.bytes(byteLen) else {
+            return ResultBuffer.error(.invalidInput, "truncated ranked array")
+        }
+        var ranked = [UInt32](repeating: 0, count: meta.rankedLen)
+        for i in 0 ..< meta.rankedLen {
+            let value = UInt32(littleEndian: view.loadUnaligned(fromByteOffset: i * 4, as: UInt32.self))
+            guard value < UInt32(idCount) else {
+                return ResultBuffer.error(.invalidInput, "ranked index \(value) out of range (U=\(idCount))")
+            }
+            ranked[i] = value
+        }
+        rankedArrays.append(ranked)
+    }
+    return nil
+}
+
+/// Decodes the optional per-list score arrays and assembles the `Fusion.List`s. Returns nil on
+/// success (filling `lists`), or the `ResultBuffer.error` for the first truncated score array.
+private func decodeLists(
+    _ reader: inout RequestReader, _ metas: [ListMeta], _ rankedArrays: [[UInt32]],
+    into lists: inout [Fusion.List]
+) -> UnsafeMutableRawPointer? {
+    lists.reserveCapacity(metas.count)
+    for (index, meta) in metas.enumerated() {
+        var scores: [Double]?
+        if meta.hasScores {
+            guard let byteLen = meta.rankedLen.checkedMultiplied(by: 8), let view = reader.bytes(byteLen) else {
+                return ResultBuffer.error(.invalidInput, "truncated score array")
+            }
+            var values = [Double](repeating: 0, count: meta.rankedLen)
+            for i in 0 ..< meta.rankedLen {
+                let bits = view.loadUnaligned(fromByteOffset: i * 8, as: UInt64.self)
+                values[i] = Double(bitPattern: UInt64(littleEndian: bits))
+            }
+            scores = values
+        }
+        lists.append(.init(ranked: rankedArrays[index], weight: meta.weight, scores: scores))
+    }
+    return nil
 }
 
 @_cdecl("ad_fusion_mmr")

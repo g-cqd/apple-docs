@@ -32,6 +32,31 @@ func endpoints(
     }
 }
 
+/// `GET /search` handler: parse cascade params, bound the query length, run the lexical cascade.
+func searchHandler(_ ctx: StorageContext) -> ResponseContent {
+    guard let params = parseCascadeParams(ctx.target) else {
+        return .plain(.badRequest, "malformed query\n")
+    }
+    guard params.query.utf8.count <= maxSearchQueryBytes else {
+        return .plain(.badRequest, "query too long\n")
+    }
+    return .json(Cascade.search(ctx.db, params), as: .jsonRaw)
+}
+
+/// `GET /api/symbols/search` handler: parse the query map, bound the query length, run symbol search.
+func symbolsSearchHandler(_ ctx: StorageContext) -> ResponseContent {
+    guard let query = parseQuery(ctx.target) else {
+        return .plain(.badRequest, "malformed query\n")
+    }
+    guard (query["q"] ?? "").utf8.count <= maxSearchQueryBytes else {
+        return .plain(.badRequest, "query too long\n")
+    }
+    return .json(
+        WebRoutes.symbolsSearch(
+            ctx.db, query: query["q"] ?? "", scope: nonEmptyScope(query["scope"]),
+            limit: clampSymbolLimit(query["limit"])), as: .json)
+}
+
 /// The whole route surface, shared by every `App`/listener. The pool picks the handler context
 /// (`.shared` → `ctx.db`; `.none` → no DB); handlers are trailing closures; output is a typed
 /// `MediaType`. The engine applies the cross-cutting envelope to every response.
@@ -46,15 +71,7 @@ func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher, readiness: Ser
     .cache(.noStore)
 
     // Lexical search cascade. `application/json` (no charset) + no cache, as Bun.
-    GET("search") { ctx in
-        guard let params = parseCascadeParams(ctx.target) else {
-            return .plain(.badRequest, "malformed query\n")
-        }
-        guard params.query.utf8.count <= maxSearchQueryBytes else {
-            return .plain(.badRequest, "query too long\n")
-        }
-        return .json(Cascade.search(ctx.db, params), as: .jsonRaw)
-    }
+    GET("search") { searchHandler($0) }
 
     // Readiness — 503 while draining (orchestrators stop new traffic), else the DB probe.
     GET("readyz") { ctx in
@@ -72,18 +89,7 @@ func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher, readiness: Ser
         .cache(.apiCorpus, etag: true)
         Group("symbols") {
             GET("index.json") { ctx in .json(WebRoutes.symbolsIndex(ctx.db), as: .json) }.etag
-            GET("search") { ctx in
-                guard let query = parseQuery(ctx.target) else {
-                    return .plain(.badRequest, "malformed query\n")
-                }
-                guard (query["q"] ?? "").utf8.count <= maxSearchQueryBytes else {
-                    return .plain(.badRequest, "query too long\n")
-                }
-                return .json(
-                    WebRoutes.symbolsSearch(
-                        ctx.db, query: query["q"] ?? "", scope: nonEmptyScope(query["scope"]),
-                        limit: clampSymbolLimit(query["limit"])), as: .json)
-            }
+            GET("search") { symbolsSearchHandler($0) }
             .etag
         }
     }
