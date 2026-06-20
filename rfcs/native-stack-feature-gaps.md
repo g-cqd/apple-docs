@@ -297,3 +297,83 @@ This is the single change that unlocks request-skipping incremental re-crawls (t
 | 1.5 | CDATA / script-escape | ADHTML | P2 | parse fidelity |
 | 1.6 | Zero-alloc tape cursor | ADHTML | P2 | extraction perf |
 | 3.2 | Static-site serving | ADServe | P2 | local preview of D3a |
+
+---
+
+# Counter-assessment (self-review, verified)
+
+The assessment above was written fast and **under-verified**. On review — checking the actual schema, the JS
+pipeline, and swift-markdown — several findings are overstated, mis-categorized, or simply wrong. Corrections,
+strongest first.
+
+## C1. §4 is wrong — no schema gap exists (verified)
+
+I claimed `crawl_state` needs new validator columns. Both halves are false:
+- **The columns already exist.** `AppleDocsSchema` defines `etag`, `last_modified`, `content_hash` on the
+  **`pages`** table (not `crawl_state`), and the JS `persist.js` writes them there via `upsertPageFromDocument`.
+- **The real gap is much smaller.** Native `CrawlPersist.persistNormalized(_:rootId:path:_:hashes:now:)` takes
+  no `etag` — so it writes a `pages` row with the validator left NULL, even though `FetchResult` already carries
+  `etag`/`lastModified`. The fix is a **parameter addition** (thread the validator into the existing column),
+  plus a `CrawlPersist.pageValidator(path:)` read for the driver's check. **No migration.** Incremental re-crawl
+  is materially closer than §4 implied. I prescribed a schema change without reading the schema.
+
+## C2. The doc conflates two different things
+
+It lists "foundation gaps" and "ADBuilder's own unbuilt work" under one banner. They are not the same question.
+The user asked what **ADHTML / ADBuilder / ADServe lack** — but most of the ADBuilder items are not gaps in a
+*dependency*; they are features **ADBuilder owes itself**:
+- §2.2 link-resolver RULES, §2.3 entry-point registry, §2.4 the whole web-build subsystem, §2.5 the driver's
+  incremental wiring — **all ADBuilder's own code to write.** Nothing is missing *from a foundation* there.
+- The genuine cross-package asks are only: a Markdown renderer (ADHTML), zip (ADArchive), the NIO client
+  (ADServe), and the persist-`etag` thread (ADWrite, per C1). Everything else is "I haven't built it yet,"
+  which is a backlog item, not a gap.
+
+## C3. Almost nothing is actually P0/blocking
+
+I stamped five P0s. Under scrutiny the crawl **runs today** and D3a can proceed without any of them:
+- **§1.2 DOCTYPE (P0 → non-issue).** "Generation can't emit a doctype" is true but irrelevant — the consumer
+  prepends the 15-byte string `"<!DOCTYPE html>\n"`. Asking ADHTML for an `HTMLDocument` type for a string
+  concat is gold-plating, not a gap.
+- **§1.1 Markdown renderer (P0 → P1, "biggest blocker" retracted).** swift-markdown is AST-only (no HTML
+  renderer — confirmed), so *someone* writes the visitor. But ADBuilder can write a `MarkupWalker`→HTML pass
+  itself in an afternoon; it is not *blocked* on ADHTML. The right call is still "this belongs in ADHTML"
+  (per ADHTMLMarkdown's own stated intent, for reuse) — but as an ownership/reuse argument, not a blocker.
+- **§3.1 NIO client (P0 → P1).** The interim `URLSessionHTTPClient` is functional and the crawl gates pass on
+  it. The NIO client is a production-quality upgrade (pooling, NIOSSL reuse, streaming), not a blocker.
+- **§2.4 web build / §2.1 unzip (P0 → P1).** These are real work, but the web build is *ADBuilder's own* (C2)
+  and unzip has a trivial `Process("unzip")` interim. Neither blocks today.
+
+Honest verdict: there are **no true P0 dependency blockers**. The path to D3a is ADBuilder-local code.
+
+## C4. Misplaced ownership
+
+- **§1.3 highlighting** — I put it in ADHTML, but the dual-theme `github-light/dark` classes, the 8 KB guard,
+  and the killswitch are **apple-docs conventions**. The Swift-classifier core could be shared, but the feature
+  belongs in **ADBuilder/Web** (or its own package), not ADHTML. Reclassify.
+
+## C5. Speculative / premature — should be dropped, not listed
+
+- **§1.6 zero-alloc tape cursor.** The tape is zero-alloc on the *tokenize* step; consumption (tree/extract)
+  allocating is fine because a page is parsed **once** and is dwarfed by network + embedding cost. Optimizing
+  it is premature; drop from the ask list.
+- **§3.2 static-site serving.** Any static server / CDN serves the D3a output. "ad-server could serve it" is a
+  convenience, not a need. Drop to "maybe later."
+- **§1.4 full entity table (P1 → P2).** The shipped ~30 common entities cover Apple/DocC HTML; the 2,200-entry
+  long tail (greek/math) is rare in this corpus. Fidelity nice-to-have, not P1.
+
+## Revised, honest ask list
+
+What I'd actually request of the foundations (everything else is ADBuilder's backlog or non-issues):
+
+| Real ask | Pkg | Pri | Interim that unblocks today |
+|---|---|---|---|
+| Markdown → HTML renderer (own the visitor) | ADHTML | P1 | ADBuilder-local `MarkupWalker`→HTML |
+| Thread `etag`/`lastModified` through `persistNormalized` (columns exist) | ADWrite | P1 | — (small, enables incremental) |
+| `zip` unpack | ADArchive | P1 | `Process("unzip")` |
+| NIO `HTTPClient` (D2.5) | ADServe | P1 | `URLSessionHTTPClient` (works) |
+| Full entity table; CDATA states | ADHTML | P2 | common subset covers the corpus |
+
+Everything in §2.x and the §1.2/1.3/1.6/3.2 rows is either ADBuilder's own work or a non-issue. The corrected
+bottom line: **D3a is not blocked on the foundations** — it is blocked on writing ADBuilder/Web (plus an
+afternoon's Markdown visitor), and the highest-leverage *foundation* change is the trivial ADWrite `etag`
+thread that turns on incremental re-crawl.
