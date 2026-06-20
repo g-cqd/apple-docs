@@ -25,13 +25,29 @@ public struct SwiftOrgAdapter: SourceAdapter {
         guard case .html(let html) = payload else {
             throw AdapterError.unexpectedPayload("swift-org expects html, got \(payload)")
         }
+        let pageURL = Self.pageURL(forKey: key)
         var page = HtmlNormalize.parse(
             html, key: key, sourceType: Self.type, kind: "article", framework: Self.rootSlug,
-            url: Self.pageURL(forKey: key), preserveStructure: true)
+            url: pageURL, preserveStructure: true, linkResolver: Self.resolveLink(base: pageURL))
         if let title = page.document.title {
             page.document.title = Self.stripBrandSuffix(title)
         }
         return page
+    }
+
+    /// Resolve a link's href: relative URLs become absolute against the page URL; absolute URLs
+    /// (and `mailto:` etc.) are kept verbatim. Full cross-source internalization to corpus keys (the
+    /// JS link-resolver RULES table) is a follow-up; resolving to absolute is the safe, useful base.
+    static func resolveLink(base: String) -> (String) -> String? {
+        let baseURL = URL(string: base)
+        return { href in
+            if href.isEmpty { return href }
+            if let parsed = URL(string: href), parsed.scheme != nil { return href }  // already absolute
+            if let baseURL, let absolute = URL(string: href, relativeTo: baseURL)?.absoluteString {
+                return absolute
+            }
+            return href
+        }
     }
 
     // MARK: - network (over the HTTPClient seam)
