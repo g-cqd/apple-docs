@@ -10,9 +10,10 @@
 # the canonical `.swift-format`). All metric rules here are plain `lint` rules (NOT analyzer
 # rules), so they run from a normal `swiftlint lint` with no compiler invocation log.
 #
-# Thresholds are intentionally LENIENT for the initial warning-mode roll-out (they flag the known
-# >600 LOC outliers as warnings without failing CI). They ratchet DOWN as WS3 splits those files,
-# at which point CI flips to `--strict` so any warning fails the gate.
+# WS3 is complete: every shipped file now fits these thresholds, so the gate is ENFORCING — CI runs
+# `swiftlint --strict` (any warning fails the gate) and the local `swift package lint` plugin does the
+# same. Tighten a threshold only after confirming the whole family still passes at the new value
+# (`swiftlint --config .swiftlint.yml Sources` across every package, 0 violations).
 
 only_rules:
   - file_length
@@ -32,6 +33,9 @@ excluded:
   - .git
   - Tests        # test suites are out of the metrics gate for the initial roll-out (revisit in WS3)
   - Benchmarks   # ordo-one statistical benchmark suites, not shipped source
+  - Plugins      # build/command plugins (BenchCompare, Lint, …) are tooling, not shipped library
+  - "**/ADSQLBench/**"  # ADDB's SQL benchmark executable harness (scenario tables), like Benchmarks/ — not a shipped library
+  - "**/Generated/**"   # machine-generated sources (e.g. ADHTML's DOM codegen) — not hand-authored, regenerate at the source
   - "**/GeneratedUnicodeTables.swift"  # generated Unicode tables (ADFoundation) — not hand-authored
 
 file_length:

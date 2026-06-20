@@ -156,7 +156,15 @@ enum ComparedTable: String, CaseIterable {
             case .pages:
                 return ["id", "root_id", "downloaded_at", "converted_at"]
             case .documents:
-                return ["id", "created_at", "updated_at"]
+                // id + wall-clock, plus the v28 apple-docs-native search-denorm columns: they have no
+                // JS-writer equivalent, so the imported reference always holds NULL there. They are
+                // populated by the native writer / the post-import backfill (the 5A serving path), not
+                // compared against the JS catalog here — excluded so the row-multiset parity stays a
+                // statement about the columns the JS writer actually produces.
+                return [
+                    "id", "created_at", "updated_at",
+                    "title_lc", "key_lc", "year_num", "track_lc", "root_display", "root_slug"
+                ]
             case .documentSections:
                 // document_id is a surrogate FK (allocation-order dependent); the
                 // section's logical identity is (its document's key via the row order)

@@ -41,6 +41,15 @@ struct TableModel: Equatable, Sendable {
     /// `.rowidAlias`; composite / TEXT PKs are nil on BOTH sides (each falls back
     /// to a hidden rowid + an implied unique index, which the index set compares).
     var rowidAlias: String?
+
+    /// A copy with the named columns removed — used to drop apple-docs-native columns (the v28
+    /// search-denorm set) from the native side before comparing against the JS reference catalog.
+    func droppingColumns(_ names: Set<String>) -> TableModel {
+        guard !names.isEmpty else { return self }
+        var copy = self
+        copy.columns = columns.filter { !names.contains($0.name) }
+        return copy
+    }
 }
 
 /// One secondary / implied index. `unique` covers both explicit `CREATE UNIQUE

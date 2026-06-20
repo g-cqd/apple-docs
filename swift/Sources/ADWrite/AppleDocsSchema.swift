@@ -91,7 +91,11 @@ import ADSQLModel
 public enum AppleDocsSchema {
     /// The latest schema version this catalog builds to. Mirrors the JS
     /// `SCHEMA_VERSION` (the last entry of the JS MIGRATIONS list).
-    public static let latestVersion = 27
+    // 28 = the apple-docs-native search-denorm extension (v28; folded into the v6 CREATE). The JS
+    // migration log stops at 27; this one-ahead version records the native column set on the migrator
+    // cursor. SchemaParity compares catalog SHAPE (not the schema_meta version value), so the
+    // native=28 / JS=27 cursor difference is invisible to it; the column-set divergence is whitelisted.
+    public static let latestVersion = 28
 
     /// Every migration, ascending. The `Migrator` re-sorts, but we keep them in
     /// order for readability and to mirror the JS history one-for-one.
@@ -185,7 +189,21 @@ public enum AppleDocsSchema {
               min_watchos_num  INTEGER,
               min_tvos_num     INTEGER,
               min_visionos_num INTEGER,
-              usr              TEXT
+              usr              TEXT,
+              -- apple-docs NATIVE denormalization columns (v28; no JS-migration equivalent). Each
+              -- folds a per-row SQLite scalar the §2.2 search query otherwise recomputes for every
+              -- match, so the denormalized read path (`ADSQLSearch.SearchQuery.denormSQL`) can drop the
+              -- `LEFT JOIN roots` + the per-row `LOWER`/`json_extract`/`CAST`. Populated from the
+              -- structured inputs (NOT by re-parsing JSON) via `ADDenorm.SearchDenorm`; the
+              -- equivalence to the SQLite scalars is what `SearchDenorm` documents column-by-column.
+              -- NULL until populated (the native writer / post-import backfill fills them); folded into
+              -- this CREATE rather than ALTERed because the engine has no ALTER TABLE ADD COLUMN.
+              title_lc         TEXT,
+              key_lc           TEXT,
+              year_num         INTEGER,
+              track_lc         TEXT,
+              root_display     TEXT,
+              root_slug        TEXT
             )
             """)
 
@@ -462,10 +480,22 @@ public enum AppleDocsSchema {
         _ throws(DBError) in
     }
 
+    // MARK: - v28 — apple-docs NATIVE search-denorm columns (folded into v6; no JS equivalent)
+
+    // The first migration with NO JS counterpart: `documents.{title_lc,key_lc,year_num,track_lc,
+    // root_display,root_slug}` is an apple-docs-native optimization for the denormalized search read
+    // path. The columns are folded into the v6 CREATE (the engine has no ALTER TABLE ADD COLUMN), so on
+    // a fresh catalog they already exist — this is the documented marker, a no-op like v24/v27. It bumps
+    // the schema version so the cursor records the native extension. (SchemaParity whitelists these six
+    // as a native-only divergence from the JS catalog, which stops at v27.)
+    private static let v28 = Migration(version: 28, name: "documents search-denorm columns (folded into v6; native)") {
+        _ throws(DBError) in
+    }
+
     private static let allMigrations: [Migration] = [
         v1, v2, v3, v4, v5, v6, v7, v8, v9, v10,
         v11, v12, v13, v14, v15, v16, v17, v18, v19, v20,
-        v21, v22, v23, v24, v25, v26, v27
+        v21, v22, v23, v24, v25, v26, v27, v28
     ]
 }
 

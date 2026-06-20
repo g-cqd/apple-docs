@@ -63,6 +63,12 @@ struct SchemaParityTests {
 
 /// A structural diff of two ``CatalogModel``s, rendered as a human-readable report.
 enum SchemaDiff {
+    /// apple-docs NATIVE columns absent from the JS reference catalog (the v28 search-denorm columns).
+    /// Dropped from the native side before the per-table column compare — see the note at the call site.
+    static let nativeOnlyColumns: [String: Set<String>] = [
+        "documents": ["title_lc", "key_lc", "year_num", "track_lc", "root_display", "root_slug"]
+    ]
+
     struct Report {
         var tableOnlyInNative: [String] = []
         var tableOnlyInReference: [String] = []
@@ -169,9 +175,14 @@ enum SchemaDiff {
         for name in nativeTableNames.intersection(refTableNames).sorted() {
             let nativeTable = native.tables[name]!
             let refTable = reference.tables[name]!
-            if nativeTable.columns != refTable.columns {
+            // apple-docs NATIVE columns with no JS-catalog equivalent (the v28 search-denorm columns on
+            // `documents`) are dropped from the native side before the column compare — the JS reference
+            // schema stops at v27 and never declares them. This is the documented native-only divergence
+            // (mirrors the `schema_version` table exclusion); every other column must still match exactly.
+            let nativeCompared = nativeTable.droppingColumns(Self.nativeOnlyColumns[name] ?? [])
+            if nativeCompared.columns != refTable.columns {
                 report.columnDiffs.append(
-                    columnDiffDescription(table: name, native: nativeTable, reference: refTable))
+                    columnDiffDescription(table: name, native: nativeCompared, reference: refTable))
             }
             if nativeTable.rowidAlias != refTable.rowidAlias {
                 report.rowidAliasDiffs.append(
