@@ -1,11 +1,9 @@
 // SwiftEvolutionAdapter — the Swift Evolution proposals source (port of
 // src/sources/swift-evolution.js). The NORMALIZE path is fully native + pure (parse
 // the proposal's metadata header, then MarkdownSections for the body), demonstrating
-// the adapter stack end-to-end. The network steps (discover/fetch/check) depend on a
-// GitHub client over the `HTTPClient` transport — the next D3b foundation — and throw
-// `AdapterError.notImplemented` until it lands.
+// the adapter stack end-to-end. The network steps (discover/fetch/check) run over the
+// shared `GitHubClient` (recursive tree → keys; raw fetch; conditional-GET check).
 import Foundation
-import HTTPTypes
 
 /// Shared adapter faults.
 public enum AdapterError: Error, Sendable, Equatable {
@@ -52,16 +50,35 @@ public struct SwiftEvolutionAdapter: SourceAdapter {
         return page
     }
 
-    // MARK: - network (pending the GitHub client foundation)
+    // MARK: - network (over the shared GitHubClient)
 
     public func discover(_ context: SourceContext) async throws -> DiscoveryResult {
-        throw AdapterError.notImplemented("swift-evolution.discover needs the GitHub tree client")
+        let github = GitHubClient(client: context.client, rateLimiter: context.rateLimiter)
+        let tree = try await github.fetchTree(owner: Self.owner, repo: Self.repo, branch: Self.branch)
+        let keys = tree
+            .filter { $0.type == "blob" && $0.path.hasPrefix("proposals/") && $0.path.hasSuffix(".md") }
+            .map { entry -> String in
+                let filename = entry.path.dropFirst("proposals/".count).dropLast(".md".count)
+                return "\(Self.rootSlug)/\(filename)"
+            }
+        let root = DiscoveredRoot(
+            slug: Self.rootSlug, displayName: Self.displayName, kind: "collection", source: Self.rootSlug)
+        return DiscoveryResult(keys: keys, roots: [root])
     }
+
     public func fetch(_ key: String, _ context: SourceContext) async throws -> FetchResult {
-        throw AdapterError.notImplemented("swift-evolution.fetch needs the GitHub raw client")
+        let github = GitHubClient(client: context.client, rateLimiter: context.rateLimiter)
+        let raw = try await github.fetchRaw(
+            owner: Self.owner, repo: Self.repo, branch: Self.branch,
+            filePath: "proposals/\(Self.filename(forKey: key)).md")
+        return FetchResult(key: key, payload: .markdown(raw.text), etag: raw.etag, lastModified: raw.lastModified)
     }
+
     public func check(_ key: String, previousState: String?, _ context: SourceContext) async throws -> CheckResult {
-        throw AdapterError.notImplemented("swift-evolution.check needs the GitHub raw client")
+        let github = GitHubClient(client: context.client, rateLimiter: context.rateLimiter)
+        return try await github.checkRaw(
+            owner: Self.owner, repo: Self.repo, branch: Self.branch,
+            filePath: "proposals/\(Self.filename(forKey: key)).md", previousEtag: previousState)
     }
 
     // MARK: - helpers
