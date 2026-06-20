@@ -219,14 +219,26 @@ let package = Package(
         // swift-server/swift-service-lifecycle — already resolved transitively. Used by
         // ADServeCore only (ServiceGroup graceful shutdown); NOT pulled by ADCore
         // (the dylib stays zero-external-dep).
-        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0")
+        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0"),
+        // swiftlang/swift-markdown (on cmark-gfm) — Apple's CommonMark parser, already
+        // trusted by the family (ADHTML uses it). Used by ADBuilder ONLY to parse
+        // Markdown SOURCES (Swift Evolution proposals, the Swift book) into the
+        // normalized section model — a real parser instead of the retiring JS regex
+        // extractor (parse-markdown.js), so normalize is structure-level (cmark skips a
+        // `## ` inside a code fence; the JS regex did not). A build-tool dep; NOT pulled
+        // by the ADCore dylib.
+        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.4.0")
     ] + http3PackageDependencies + adbuildToolsDependencies + adtestkitDependencies,
     targets: [
         .target(
             name: "ADBase",
             dependencies: [.product(name: "ADFCore", package: "ADFoundation")],
             swiftSettings: releaseCMO + strictSettings),
-        .target(name: "ADSearch", swiftSettings: releaseCMO + strictSettings),
+        .target(
+            name: "ADSearch",
+            // ADFCore: `Popcount.hammingDistance` (the shared SWAR bit-distance kernel) for MMR.
+            dependencies: [.product(name: "ADFCore", package: "ADFoundation")],
+            swiftSettings: releaseCMO + strictSettings),
         .target(name: "ADArchive", swiftSettings: releaseCMO + strictSettings),
         .target(
             name: "ADEmbed",
@@ -387,7 +399,9 @@ let package = Package(
             name: "ADBuilder",
             dependencies: [
                 .product(name: "HTTPTypes", package: "swift-http-types"),
-                .product(name: "HTTPTypesFoundation", package: "swift-http-types")
+                .product(name: "HTTPTypesFoundation", package: "swift-http-types"),
+                // swift-markdown: the CommonMark AST for Markdown-source adapters.
+                .product(name: "Markdown", package: "swift-markdown")
             ],
             swiftSettings: releaseCMO + strictSettings),
         // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
