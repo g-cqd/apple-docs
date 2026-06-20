@@ -116,4 +116,58 @@ struct CrawlDriverTests {
         }
         #expect(Int(chunkCount) == result.index.chunks)
     }
+
+    private actor ConcurrencyTracker {
+        private(set) var peak = 0
+        private var current = 0
+        func enter() {
+            current += 1
+            peak = Swift.max(peak, current)
+        }
+        func leave() { current -= 1 }
+    }
+
+    /// A transport that records peak in-flight `send`s while holding each briefly.
+    private struct SlowClient: HTTPClient {
+        let tracker: ConcurrencyTracker
+        let body: [UInt8]
+        func send(_ request: HTTPClientRequest) async throws -> HTTPClientResponse {
+            await tracker.enter()
+            try? await Task.sleep(for: .milliseconds(10))
+            await tracker.leave()
+            return HTTPClientResponse(
+                status: .init(code: 200), headerFields: [:], body: ResponseBody(buffered: body))
+        }
+    }
+
+    @Test func crawlBoundsConcurrency() async throws {
+        let tracker = ConcurrencyTracker()
+        let context = SourceContext(
+            client: SlowClient(tracker: tracker, body: Array("<main><h1>P</h1><p>x</p></main>".utf8)),
+            rateLimiter: RateLimiter(rate: 1_000_000, burst: 1_000_000))
+
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("crawlconc-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try Database.open(
+            at: dir.appendingPathComponent("c.adsql").path, options: DatabaseOptions())
+        defer { db.close() }
+        _ = try migrateSchema(db)
+
+        let now = "2026-06-20T00:00:00.000Z"
+        let rootId = try CrawlPersist.upsertRoot(
+            db, slug: "swift-org", displayName: "Swift.org", kind: "collection", source: "swift-org",
+            now: now)
+
+        let driver = CrawlDriver(registry: SourceRegistry([SwiftOrgAdapter.self]))
+        let stats = try await driver.crawl(
+            sourceType: "swift-org", into: db, rootId: rootId, context: context, now: now,
+            maxConcurrency: 4)
+
+        #expect(stats.persisted == stats.discovered)
+        let peak = await tracker.peak
+        #expect(peak > 1)  // genuinely concurrent
+        #expect(peak <= 4)  // bounded by maxConcurrency
+    }
 }

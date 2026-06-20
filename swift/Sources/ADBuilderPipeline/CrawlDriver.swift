@@ -37,30 +37,66 @@ public struct CrawlDriver: Sendable {
     private let registry: SourceRegistry
     public init(registry: SourceRegistry) { self.registry = registry }
 
-    /// Crawl one source end-to-end into `db`. Discovers keys, then fetch → normalize → persist each.
+    /// Crawl one source end-to-end into `db`. Discovers keys, then fetch + normalize each (up to
+    /// `maxConcurrency` in flight — the network-bound steps run in parallel), persisting results
+    /// serially as they arrive (ADDB is single-writer, and `db` never crosses to a child task).
     @discardableResult
     public func crawl(
-        sourceType: String, into db: Database, rootId: Int64, context: SourceContext, now: String
+        sourceType: String, into db: Database, rootId: Int64, context: SourceContext, now: String,
+        maxConcurrency: Int = 8
     ) async throws -> Stats {
         let adapter = try registry.adapter(for: sourceType)
         let discovery = try await adapter.discover(context)
 
         var stats = Stats()
         stats.discovered = discovery.keys.count
-        for key in discovery.keys {
-            do {
-                let fetched = try await adapter.fetch(key, context)
-                let page = try adapter.normalize(fetched.key, fetched.payload)
-                let hash = Self.sha256Hex(Self.rawBytes(fetched.payload))
-                try CrawlPipeline.persist(
-                    page, into: db, rootId: rootId, path: page.document.url ?? "/\(key)",
-                    hashes: .init(content: hash, rawPayload: hash), now: now)
-                stats.persisted += 1
-            } catch {
-                stats.failed += 1
+
+        var keys = discovery.keys.makeIterator()
+        try await withThrowingTaskGroup(of: Fetched?.self) { group in
+            for _ in 0 ..< Swift.max(1, maxConcurrency) {
+                guard let key = keys.next() else { break }
+                group.addTask { await self.fetchNormalize(adapter, key, context) }
+            }
+            while let result = try await group.next() {
+                if let fetched = result {
+                    do {
+                        try CrawlPipeline.persist(
+                            fetched.page, into: db, rootId: rootId, path: fetched.path,
+                            hashes: .init(content: fetched.hash, rawPayload: fetched.hash), now: now)
+                        stats.persisted += 1
+                    } catch {
+                        stats.failed += 1
+                    }
+                } else {
+                    stats.failed += 1
+                }
+                if let key = keys.next() {
+                    group.addTask { await self.fetchNormalize(adapter, key, context) }
+                }
             }
         }
         return stats
+    }
+
+    /// One fetched + normalized page (or nil on a per-key failure). Carried out of a child task.
+    private struct Fetched: Sendable {
+        let page: NormalizedPage
+        let path: String
+        let hash: String
+    }
+
+    private func fetchNormalize(
+        _ adapter: any SourceAdapter, _ key: String, _ context: SourceContext
+    ) async -> Fetched? {
+        do {
+            let result = try await adapter.fetch(key, context)
+            let page = try adapter.normalize(result.key, result.payload)
+            return Fetched(
+                page: page, path: page.document.url ?? "/\(key)",
+                hash: Self.sha256Hex(Self.rawBytes(result.payload)))
+        } catch {
+            return nil
+        }
     }
 
     /// Build (or resume) the embedding index over everything persisted so far — what makes crawled
