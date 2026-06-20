@@ -110,6 +110,16 @@ let adconcurrencyDependency: Package.Dependency = {
     return .package(url: "https://github.com/g-cqd/ADConcurrency.git", branch: "main")
 }()
 
+// ADHTML_PATH -> the Foundation-free HTML engine. ADBuilder pulls `ADHTMLCore` for the crawl's HTML
+// parser + extractor (the HTMLTape tokenizer → HTMLNode DOM → Markdown/plain-text + HTMLDocument.extract),
+// replacing the JS regex `parse-html.js`. Resolves from a local checkout via ADHTML_PATH, else main.
+let adhtmlDependency: Package.Dependency = {
+    if let path = Context.environment["ADHTML_PATH"], !path.isEmpty {
+        return .package(path: path)
+    }
+    return .package(url: "https://github.com/g-cqd/ADHTML.git", branch: "main")
+}()
+
 // ADSERVE_PATH -> the extracted, persistence-agnostic HTTP server package (`ADServeCore` engine +
 // `ADServeDSL` route/Tool DSL). The app binds the engine's type-erased pool to its concrete
 // `StorageConnection` at the composition root (Sources/ADServer/AppConnection.swift). Resolved from a
@@ -186,6 +196,7 @@ let package = Package(
         addbDependency,
         adconcurrencyDependency,
         adserveDependency,
+        adhtmlDependency,
         // ad-server-only. swift-http-types: type-safe HTTP headers/status; swift-log:
         // structured logging; swift-nio-extras: the NIO↔HTTPTypes HTTP/1 bridge
         // (`HTTP1ToHTTPServerCodec`) — requires swift-nio ≥ 2.94.0, so the `from:
@@ -401,7 +412,10 @@ let package = Package(
                 .product(name: "HTTPTypes", package: "swift-http-types"),
                 .product(name: "HTTPTypesFoundation", package: "swift-http-types"),
                 // swift-markdown: the CommonMark AST for Markdown-source adapters.
-                .product(name: "Markdown", package: "swift-markdown")
+                .product(name: "Markdown", package: "swift-markdown"),
+                // ADHTMLCore: the HTML parser + extractor for the HTML-scrape adapters
+                // (guidelines / swift-org), replacing the JS regex parse-html.js.
+                .product(name: "ADHTMLCore", package: "ADHTML")
             ],
             swiftSettings: releaseCMO + strictSettings),
         // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
