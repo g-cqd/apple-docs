@@ -79,5 +79,13 @@ struct CrawlPipelineTests {
         ).all(["h": .text("Linux")])
         #expect(sections.count == 1)
         #expect(sections.first?["content_text"] == .text("apt install swift."))
+
+        // The relationship maps through too; from_key falls back to the document key.
+        let relationships = try db.prepare(
+            "SELECT to_key, relation_type FROM document_relationships WHERE from_key = $k"
+        ).all(["k": .text("swift-org/install")])
+        #expect(relationships.count == 1)
+        #expect(relationships.first?["to_key"] == .text("swift-org/about"))
+        #expect(relationships.first?["relation_type"] == .text("see_also"))
     }
 }
