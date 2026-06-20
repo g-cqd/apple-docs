@@ -59,6 +59,16 @@ struct SwiftOrgAdapterTests {
         #expect(deleted.deleted)
     }
 
+    @Test func normalizeResolvesRelativeLinksToAbsolute() throws {
+        let html =
+            "<main><h2>Links</h2><p>see <a href=\"/install/linux\">linux</a> and <a href=\"https://example.com\">ext</a></p></main>"
+        let page = try SwiftOrgAdapter().normalize("swift-org/about", .html(html))
+        let section = page.sections.first { $0.heading == "Links" }
+        #expect(
+            section?.contentText
+                == "see [linux](https://swift.org/install/linux) and [ext](https://example.com)")
+    }
+
     @Test func brandSuffixStrippingVariants() {
         #expect(SwiftOrgAdapter.stripBrandSuffix("About — Swift.org") == "About")
         #expect(SwiftOrgAdapter.stripBrandSuffix("Install - Swift.org") == "Install")

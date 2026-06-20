@@ -27,14 +27,16 @@ public enum HtmlNormalize {
         language: String? = nil,
         sourceMetadata: String? = nil,
         containerSelector: String? = nil,
-        preserveStructure: Bool = false
+        preserveStructure: Bool = false,
+        linkResolver: ((String) -> String?)? = nil
     ) -> NormalizedPage {
         if let target = detectRedirect(html) {
             return redirectPage(key: key, target: target, sourceType: sourceType, framework: framework, language: language, sourceMetadata: sourceMetadata)
         }
 
         let extracted = HTMLDocument.extract(
-            html, containerSelector: containerSelector, preserveStructure: preserveStructure)
+            html, containerSelector: containerSelector, preserveStructure: preserveStructure,
+            linkResolver: linkResolver)
         let description = extracted.description
 
         // abstractText: the description, else the first paragraph of the lead section.
