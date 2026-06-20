@@ -7,6 +7,17 @@
     import Foundation
 
     public enum SymbolPng {
+        /// The SF Symbol weight + scale a render uses (bundled to keep `render` within the
+        /// parameter-count gate).
+        public struct SymbolStyle {
+            public let weight: String
+            public let scale: String
+            public init(weight: String, scale: String) {
+                self.weight = weight
+                self.scale = scale
+            }
+        }
+
         private static func parseWeight(_ s: String) -> NSFont.Weight {
             switch s.lowercased() {
                 case "ultralight": return .ultraLight
@@ -40,7 +51,7 @@
         /// drain the NSBitmap/NSImage temporaries).
         public static func render(
             name: String, scope: String, pointSize: Double, color: String?, background: String?,
-            weight: String, scale: String
+            style: SymbolStyle
         ) -> [UInt8]? {
             autoreleasepool {
                 let size = CGFloat(pointSize)
@@ -59,7 +70,7 @@
                 let configured =
                     scope == "public"
                     ? (base.withSymbolConfiguration(
-                        .init(pointSize: size, weight: parseWeight(weight), scale: parseScale(scale)))
+                        .init(pointSize: size, weight: parseWeight(style.weight), scale: parseScale(style.scale)))
                         ?? base)
                     : base
                 let px = Int((size * 2).rounded())

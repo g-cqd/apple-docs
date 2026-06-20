@@ -72,10 +72,9 @@ public struct Tokenizer: Sendable {
                     for word in PreTokenizer.split(normalized) {
                         WordPiece.encode(
                             word: word,
-                            vocab: vocab,
-                            unkId: unkId,
-                            continuationPrefix: continuationPrefix,
-                            maxInputCharsPerWord: maxInputCharsPerWord,
+                            config: .init(
+                                vocab: vocab, unkId: unkId, continuationPrefix: continuationPrefix,
+                                maxInputCharsPerWord: maxInputCharsPerWord),
                             wordBytes: &wordBytes,
                             offsets: &offsets,
                             into: &out

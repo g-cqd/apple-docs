@@ -147,7 +147,7 @@ public func adRenderSymbolPng(_ ptr: UnsafePointer<UInt8>?, _ len: Int) -> Unsaf
         guard
             let png = SymbolPng.render(
                 name: name, scope: scope, pointSize: pointSize, color: colorField, background: backgroundField,
-                weight: weightField ?? "regular", scale: scaleField ?? "medium")
+                style: .init(weight: weightField ?? "regular", scale: scaleField ?? "medium"))
         else {
             return ResultBuffer.error(.invalidInput, "symbol-png render produced no output")
         }

@@ -114,15 +114,21 @@ private func sfSymbolResource(_ conn: StorageConnection, uri: String) -> MCPReso
     guard
         let png = SymbolPng.render(
             name: p.name, scope: p.scope, pointSize: Double(pointSize), color: color, background: background,
-            weight: weight, scale: scale)
+            style: .init(weight: weight, scale: scale))
     else { return .notFound(uri) }
     return .contents([MCPResourceContent(uri: uri, blob: Data(png).base64EncodedString(), mimeType: "image/png")])
 }
 
 /// `apple-docs://sf-symbol/{scope}/{name}.{format}?query` → its parts. `name` is
 /// percent-decoded (JS decodeURIComponent); `format` is the final extension.
-private func parseSfSymbolUri(_ uri: String) -> (scope: String, name: String, format: String, query: [String: String])?
-{
+private struct SfSymbolURI {
+    let scope: String
+    let name: String
+    let format: String
+    let query: [String: String]
+}
+
+private func parseSfSymbolUri(_ uri: String) -> SfSymbolURI? {
     let prefix = "apple-docs://sf-symbol/"
     guard uri.hasPrefix(prefix) else { return nil }
     let rest = String(uri.dropFirst(prefix.count))
@@ -143,7 +149,7 @@ private func parseSfSymbolUri(_ uri: String) -> (scope: String, name: String, fo
     let name = encodedName.removingPercentEncoding ?? encodedName
     let format = String(nameDotFormat[nameDotFormat.index(after: dot)...])
     guard !name.isEmpty, !format.isEmpty else { return nil }
-    return (scope, name, format, sfParseQuery(queryPart))
+    return SfSymbolURI(scope: scope, name: name, format: format, query: sfParseQuery(queryPart))
 }
 
 private func sfParseQuery(_ s: String) -> [String: String] {

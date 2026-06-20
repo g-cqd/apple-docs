@@ -18,16 +18,26 @@
 // changed, not the bytes/offsets computed into it.
 
 enum WordPiece {
+    /// The fixed tokenizer config a WordPiece encode reads (bundled to keep `encode` within the
+    /// parameter-count gate).
+    struct Config {
+        let vocab: Vocab
+        let unkId: Int32
+        let continuationPrefix: [UInt8]
+        let maxInputCharsPerWord: Int
+    }
+
     static func encode(
         word: ArraySlice<Unicode.Scalar>,
-        vocab: Vocab,
-        unkId: Int32,
-        continuationPrefix: [UInt8],
-        maxInputCharsPerWord: Int,
+        config: Config,
         wordBytes: inout [UInt8],
         offsets: inout [Int],
         into out: inout [Int32]
     ) {
+        let vocab = config.vocab
+        let unkId = config.unkId
+        let continuationPrefix = config.continuationPrefix
+        let maxInputCharsPerWord = config.maxInputCharsPerWord
         let n = word.count
         if n > maxInputCharsPerWord {
             out.append(unkId)
