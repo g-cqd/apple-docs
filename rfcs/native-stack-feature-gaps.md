@@ -377,3 +377,68 @@ Everything in §2.x and the §1.2/1.3/1.6/3.2 rows is either ADBuilder's own wor
 bottom line: **D3a is not blocked on the foundations** — it is blocked on writing ADBuilder/Web (plus an
 afternoon's Markdown visitor), and the highest-leverage *foundation* change is the trivial ADWrite `etag`
 thread that turns on incremental re-crawl.
+
+---
+
+# Consolidated position (third pass — read this one)
+
+Two passes produced one false alarm, one overcorrection, and a pile of mis-priced items. This is the settled
+position after verifying the load-bearing claims against the actual source. Prior sections are the audit trail.
+
+## Verified facts (survived three passes)
+
+- **The incremental-re-crawl "gap" is almost nothing — and the original §4 was backwards.** `pages` already has
+  `etag`/`last_modified`/`content_hash`, and `CrawlPersist.insertPageRow` *already binds* `$etag`/`$last_modified`
+  with `COALESCE(…, pages.etag)` preservation in its `ON CONFLICT`. The SQL is complete. The *only* missing piece
+  is the **parameter**: `persistNormalized`/`insertPageRow` don't accept `etag`/`lastModified`, so they bind NULL
+  even though `FetchResult` carries them. Fix = add two optional params + bind them; **no migration, no new SQL.**
+  This is the single highest-leverage change and it is tiny.
+- **ADHTMLMarkdown is an empty placeholder** and swift-markdown is AST-only, so a `Markup`→HTML visitor must be
+  written by someone. ADHTML is the *intended* owner (the gated target exists precisely for this).
+- **ADArchive** has tar.zst + zstd/gzip, **no zip**.
+- **ADServe** is server-only; the crawl runs on the interim `URLSessionHTTPClient`. The NIO client is specced
+  separately (D2.5).
+- The generation DSL has **no DOCTYPE/document wrapper** — but that is a 15-byte string prepend, not a gap.
+
+## Challenging the counter-assessment's own overcorrections
+
+- **"The crawl runs today" is unverified.** It is *stub*-tested end-to-end (a handler-driven `HTTPClient` +
+  in-memory ADDB). **No live crawl against `swift.org` with `URLSessionHTTPClient` has been executed.** The
+  wiring is proven; the *integration* is not. "Runs today" should read "is wired and gated; a live run is the
+  next proof." This matters: it is the difference between "works" and "should work."
+- **"An afternoon's Markdown visitor" was glib.** A correct CommonMark + GFM `Markup`→HTML walker (headings,
+  lists, tables, fenced code, links, emphasis, blockquotes, images, thematic breaks, inline HTML) is a few
+  hundred lines with real edge cases. And writing a *throwaway* is wasteful if ADHTML will own it. So the
+  Markdown renderer is the **one genuine soft-dependency** for D3a: the sensible move is for ADHTML to land it,
+  not for ADBuilder to write disposable code. Not a hard block, but a real coordination point — softer than the
+  original "P0 blocker," harder than the counter's "afternoon."
+- **C2 over-rotated.** "What does ADBuilder lack?" is fairly answered by "a web build, a link resolver, an
+  entry-point registry" — those *are* things it lacks. The dependency-vs-backlog split is useful **nuance**, not
+  grounds to dismiss the original list. Both framings answer the user's question; the honest report keeps both.
+
+## Final calibrated ask list
+
+Genuine foundation asks (everything else is ADBuilder's backlog or a non-issue):
+
+| Ask | Pkg | Size | Pri | Live interim |
+|---|---|---|---|---|
+| Thread `etag`/`lastModified` params into `persistNormalized`→`insertPageRow` (SQL already there) | ADWrite | tiny | **P1** | — (unlocks incremental) |
+| Land the `Markup`→HTML renderer in `ADHTMLMarkdown` | ADHTML | medium | **P1** | ADBuilder throwaway (discouraged) |
+| `zip` unpack | ADArchive | small | P2 | `Process("unzip")` |
+| NIO `HTTPClient` (D2.5) | ADServe | large | P2 | `URLSessionHTTPClient` (wired, unrun live) |
+| Full entity table; CDATA states | ADHTML | small/med | P2 | common subset covers the corpus |
+
+ADBuilder's own backlog (not foundation gaps): the web-build subsystem (D3a), the link-resolver RULES table,
+the entry-point registry, and the driver's incremental wiring (once the ADWrite param lands).
+
+Non-issues, struck from the list: DOCTYPE wrapper (string prepend), zero-alloc tape cursor (consumption isn't
+the bottleneck — a page is parsed once, network/embed dominate), ADServe static-serving (any CDN), and
+highlighting-as-an-ADHTML-feature (its theming is consumer-specific → ADBuilder/Web).
+
+## Settled bottom line
+
+1. **Nothing hard-blocks D3a.** The one real coordination point is the Markdown renderer (have ADHTML land it).
+2. **The highest-value foundation change is trivial:** two parameters threaded through `persistNormalized` turn
+   on incremental re-crawl, because the column and the `COALESCE` SQL already exist.
+3. **Before claiming the crawl "works," run it live once** against a real source on `URLSessionHTTPClient` — that
+   is the missing proof, and it is a consumer task, not a foundation gap.
