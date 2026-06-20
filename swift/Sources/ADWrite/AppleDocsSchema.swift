@@ -97,244 +97,6 @@ public enum AppleDocsSchema {
     /// order for readability and to mirror the JS history one-for-one.
     public static var migrations: [Migration] { allMigrations }
 
-    // MARK: - v1 — initial schema (union through v13, per the JS v1 comment)
-
-    // Folds the v3/v5/v17 ALTERs into `roots`/`pages`, and the v15a/v26 ALTERs into
-    // `documents`, so a fresh catalog lands the final column shape directly. The
-    // `refs` table and the legacy `pages_fts`/`titles_trigram`/`pages_body_fts`
-    // subsystem (created by JS v1/v4 then dropped by v15/v21) are intentionally
-    // NOT created — the net effect after replaying the full JS history is their
-    // absence, which a from-scratch port reaches by simply omitting them.
-    private static let v1 = Migration(version: 1, name: "initial schema") { ctx throws(DBError) in
-        // schema_meta — apple-docs' own TEXT key/value version table (distinct from
-        // ADSQLMigrate's integer `schema_version` cursor). Created so the catalog
-        // matches the reference; its 'schema_version' row is seeded in migrateSchema.
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS schema_meta (
-              key   TEXT PRIMARY KEY,
-              value TEXT NOT NULL
-            )
-            """)
-
-        // roots — with seed_path (v3) and source_type (v5) folded in.
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS roots (
-              id           INTEGER PRIMARY KEY AUTOINCREMENT,
-              slug         TEXT    NOT NULL UNIQUE,
-              display_name TEXT    NOT NULL,
-              kind         TEXT    NOT NULL DEFAULT 'unknown',
-              status       TEXT    NOT NULL DEFAULT 'active',
-              source       TEXT    NOT NULL,
-              page_count   INTEGER NOT NULL DEFAULT 0,
-              seed_path    TEXT,
-              first_seen   TEXT    NOT NULL,
-              last_seen    TEXT    NOT NULL,
-              source_type  TEXT    NOT NULL DEFAULT 'apple-docc'
-            )
-            """)
-
-        // pages — with the v5 multi-source columns and v17 consecutive_404_count
-        // folded in (final column order matches the reference table_info dump).
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS pages (
-              id            INTEGER PRIMARY KEY AUTOINCREMENT,
-              root_id       INTEGER NOT NULL REFERENCES roots(id),
-              path          TEXT    NOT NULL UNIQUE,
-              url           TEXT    NOT NULL,
-              title         TEXT,
-              role          TEXT,
-              role_heading  TEXT,
-              abstract      TEXT,
-              platforms     TEXT,
-              declaration   TEXT,
-              etag          TEXT,
-              last_modified TEXT,
-              content_hash  TEXT,
-              downloaded_at TEXT,
-              converted_at  TEXT,
-              status        TEXT    NOT NULL DEFAULT 'active',
-              source_type   TEXT    NOT NULL DEFAULT 'apple-docc',
-              language      TEXT,
-              is_release_notes INTEGER DEFAULT 0,
-              url_depth     INTEGER DEFAULT 0,
-              doc_kind      TEXT,
-              source_metadata TEXT,
-              min_ios       TEXT,
-              min_macos     TEXT,
-              min_watchos   TEXT,
-              min_tvos      TEXT,
-              min_visionos  TEXT,
-              consecutive_404_count INTEGER NOT NULL DEFAULT 0
-            )
-            """)
-
-        try ctx.run("CREATE INDEX IF NOT EXISTS idx_pages_root   ON pages(root_id)")
-        try ctx.run("CREATE INDEX IF NOT EXISTS idx_pages_role   ON pages(role)")
-        try ctx.run("CREATE INDEX IF NOT EXISTS idx_pages_title  ON pages(title)")
-        try ctx.run("CREATE INDEX IF NOT EXISTS idx_pages_status ON pages(status)")
-
-        // Other v1 tables carried verbatim.
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS crawl_state (
-              path      TEXT    PRIMARY KEY,
-              status    TEXT    NOT NULL DEFAULT 'pending',
-              root_slug TEXT    NOT NULL,
-              depth     INTEGER NOT NULL DEFAULT 0,
-              error     TEXT
-            )
-            """)
-
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS activity (
-              id         INTEGER PRIMARY KEY CHECK (id = 1),
-              action     TEXT    NOT NULL,
-              started_at TEXT    NOT NULL,
-              pid        INTEGER NOT NULL,
-              roots      TEXT
-            )
-            """)
-
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS update_log (
-              id          INTEGER PRIMARY KEY AUTOINCREMENT,
-              timestamp   TEXT    NOT NULL,
-              root_slug   TEXT,
-              action      TEXT    NOT NULL,
-              new_count   INTEGER NOT NULL DEFAULT 0,
-              mod_count   INTEGER NOT NULL DEFAULT 0,
-              del_count   INTEGER NOT NULL DEFAULT 0,
-              err_count   INTEGER NOT NULL DEFAULT 0,
-              duration_ms INTEGER
-            )
-            """)
-
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS sync_checkpoint (
-              key        TEXT PRIMARY KEY,
-              value      TEXT NOT NULL,
-              updated_at TEXT NOT NULL
-            )
-            """)
-
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS document_render_index (
-              doc_id           INTEGER PRIMARY KEY,
-              sections_digest  TEXT    NOT NULL,
-              template_version TEXT    NOT NULL,
-              html_hash        TEXT    NOT NULL,
-              updated_at       INTEGER NOT NULL
-            )
-            """)
-
-        // apple_font_families — with the v12 `category` column folded in.
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS apple_font_families (
-              id              TEXT PRIMARY KEY,
-              display_name    TEXT NOT NULL,
-              source_url      TEXT,
-              source_sha256   TEXT,
-              source_size     INTEGER,
-              source_path     TEXT,
-              extracted_path  TEXT,
-              status          TEXT NOT NULL DEFAULT 'available',
-              category        TEXT,
-              updated_at      TEXT NOT NULL
-            )
-            """)
-
-        // apple_font_files — final v12 shape (the v10 table is created and then
-        // recreated by v12 with UNIQUE(family_id, file_name) and the classification
-        // columns; we emit the final shape directly).
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS apple_font_files (
-              id             TEXT PRIMARY KEY,
-              family_id      TEXT NOT NULL REFERENCES apple_font_families(id) ON DELETE CASCADE,
-              file_name      TEXT NOT NULL,
-              file_path      TEXT NOT NULL,
-              postscript_name TEXT,
-              style_name     TEXT,
-              weight         TEXT,
-              variant        TEXT,
-              italic         INTEGER NOT NULL DEFAULT 0,
-              format         TEXT,
-              source         TEXT NOT NULL DEFAULT 'remote' CHECK(source IN ('remote', 'system')),
-              is_variable    INTEGER NOT NULL DEFAULT 0,
-              axes_json      TEXT,
-              sha256         TEXT,
-              size           INTEGER,
-              updated_at     TEXT NOT NULL,
-              UNIQUE(family_id, file_name)
-            )
-            """)
-        try ctx.run("CREATE INDEX IF NOT EXISTS idx_apple_font_files_family ON apple_font_files(family_id)")
-
-        // sf_symbols — with bitmap_only (v18), codepoint (v19), codepoint_version
-        // (v24), render_unsupported (v27) folded in, in that column order.
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS sf_symbols (
-              name              TEXT NOT NULL,
-              scope             TEXT NOT NULL CHECK(scope IN ('public', 'private')),
-              categories_json   TEXT,
-              keywords_json     TEXT,
-              aliases_json      TEXT,
-              availability_json TEXT,
-              order_index       INTEGER,
-              bundle_path       TEXT,
-              bundle_version    TEXT,
-              updated_at        TEXT NOT NULL,
-              bitmap_only       INTEGER NOT NULL DEFAULT 0,
-              codepoint         INTEGER,
-              codepoint_version TEXT,
-              render_unsupported INTEGER NOT NULL DEFAULT 0,
-              PRIMARY KEY (scope, name)
-            )
-            """)
-
-        // sf_symbols_fts — the FINAL shape (JS v10 creates it, v11 drops + rebuilds
-        // it identically; the net shape is this one).
-        try ctx.run(
-            """
-            CREATE VIRTUAL TABLE IF NOT EXISTS sf_symbols_fts USING fts5(
-              name,
-              keywords,
-              categories,
-              aliases,
-              tokenize='porter unicode61'
-            )
-            """)
-
-        try ctx.run(
-            """
-            CREATE TABLE IF NOT EXISTS sf_symbol_renders (
-              cache_key    TEXT PRIMARY KEY,
-              name         TEXT NOT NULL,
-              scope        TEXT NOT NULL,
-              format       TEXT NOT NULL,
-              mode         TEXT,
-              weight       TEXT,
-              symbol_scale TEXT,
-              point_size   INTEGER,
-              color        TEXT,
-              file_path    TEXT NOT NULL,
-              mime_type    TEXT NOT NULL,
-              sha256       TEXT,
-              size         INTEGER,
-              updated_at   TEXT NOT NULL
-            )
-            """)
-    }
-
     // MARK: - v2 — activity table (already created in v1; no-op for a fresh DB)
 
     // JS v1 already includes `activity` (the v1 union spans v1…v13), so on a fresh
@@ -705,6 +467,249 @@ public enum AppleDocsSchema {
         v11, v12, v13, v14, v15, v16, v17, v18, v19, v20,
         v21, v22, v23, v24, v25, v26, v27
     ]
+}
+
+// The v1 "initial schema" migration — the union of JS v1…v13 with every later ALTER folded into
+// each table's CREATE (see the file header). Its size (the full final-shape DDL) lives in this
+// extension so the AppleDocsSchema enum body stays within the size/complexity gate.
+extension AppleDocsSchema {
+    // MARK: - v1 — initial schema (union through v13, per the JS v1 comment)
+
+    // Folds the v3/v5/v17 ALTERs into `roots`/`pages`, and the v15a/v26 ALTERs into
+    // `documents`, so a fresh catalog lands the final column shape directly. The
+    // `refs` table and the legacy `pages_fts`/`titles_trigram`/`pages_body_fts`
+    // subsystem (created by JS v1/v4 then dropped by v15/v21) are intentionally
+    // NOT created — the net effect after replaying the full JS history is their
+    // absence, which a from-scratch port reaches by simply omitting them.
+    private static let v1 = Migration(version: 1, name: "initial schema") { ctx throws(DBError) in
+        // schema_meta — apple-docs' own TEXT key/value version table (distinct from
+        // ADSQLMigrate's integer `schema_version` cursor). Created so the catalog
+        // matches the reference; its 'schema_version' row is seeded in migrateSchema.
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS schema_meta (
+              key   TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            )
+            """)
+
+        // roots — with seed_path (v3) and source_type (v5) folded in.
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS roots (
+              id           INTEGER PRIMARY KEY AUTOINCREMENT,
+              slug         TEXT    NOT NULL UNIQUE,
+              display_name TEXT    NOT NULL,
+              kind         TEXT    NOT NULL DEFAULT 'unknown',
+              status       TEXT    NOT NULL DEFAULT 'active',
+              source       TEXT    NOT NULL,
+              page_count   INTEGER NOT NULL DEFAULT 0,
+              seed_path    TEXT,
+              first_seen   TEXT    NOT NULL,
+              last_seen    TEXT    NOT NULL,
+              source_type  TEXT    NOT NULL DEFAULT 'apple-docc'
+            )
+            """)
+
+        // pages — with the v5 multi-source columns and v17 consecutive_404_count
+        // folded in (final column order matches the reference table_info dump).
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS pages (
+              id            INTEGER PRIMARY KEY AUTOINCREMENT,
+              root_id       INTEGER NOT NULL REFERENCES roots(id),
+              path          TEXT    NOT NULL UNIQUE,
+              url           TEXT    NOT NULL,
+              title         TEXT,
+              role          TEXT,
+              role_heading  TEXT,
+              abstract      TEXT,
+              platforms     TEXT,
+              declaration   TEXT,
+              etag          TEXT,
+              last_modified TEXT,
+              content_hash  TEXT,
+              downloaded_at TEXT,
+              converted_at  TEXT,
+              status        TEXT    NOT NULL DEFAULT 'active',
+              source_type   TEXT    NOT NULL DEFAULT 'apple-docc',
+              language      TEXT,
+              is_release_notes INTEGER DEFAULT 0,
+              url_depth     INTEGER DEFAULT 0,
+              doc_kind      TEXT,
+              source_metadata TEXT,
+              min_ios       TEXT,
+              min_macos     TEXT,
+              min_watchos   TEXT,
+              min_tvos      TEXT,
+              min_visionos  TEXT,
+              consecutive_404_count INTEGER NOT NULL DEFAULT 0
+            )
+            """)
+
+        try ctx.run("CREATE INDEX IF NOT EXISTS idx_pages_root   ON pages(root_id)")
+        try ctx.run("CREATE INDEX IF NOT EXISTS idx_pages_role   ON pages(role)")
+        try ctx.run("CREATE INDEX IF NOT EXISTS idx_pages_title  ON pages(title)")
+        try ctx.run("CREATE INDEX IF NOT EXISTS idx_pages_status ON pages(status)")
+
+        // Other v1 tables carried verbatim.
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS crawl_state (
+              path      TEXT    PRIMARY KEY,
+              status    TEXT    NOT NULL DEFAULT 'pending',
+              root_slug TEXT    NOT NULL,
+              depth     INTEGER NOT NULL DEFAULT 0,
+              error     TEXT
+            )
+            """)
+
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS activity (
+              id         INTEGER PRIMARY KEY CHECK (id = 1),
+              action     TEXT    NOT NULL,
+              started_at TEXT    NOT NULL,
+              pid        INTEGER NOT NULL,
+              roots      TEXT
+            )
+            """)
+
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS update_log (
+              id          INTEGER PRIMARY KEY AUTOINCREMENT,
+              timestamp   TEXT    NOT NULL,
+              root_slug   TEXT,
+              action      TEXT    NOT NULL,
+              new_count   INTEGER NOT NULL DEFAULT 0,
+              mod_count   INTEGER NOT NULL DEFAULT 0,
+              del_count   INTEGER NOT NULL DEFAULT 0,
+              err_count   INTEGER NOT NULL DEFAULT 0,
+              duration_ms INTEGER
+            )
+            """)
+
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS sync_checkpoint (
+              key        TEXT PRIMARY KEY,
+              value      TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+            """)
+
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS document_render_index (
+              doc_id           INTEGER PRIMARY KEY,
+              sections_digest  TEXT    NOT NULL,
+              template_version TEXT    NOT NULL,
+              html_hash        TEXT    NOT NULL,
+              updated_at       INTEGER NOT NULL
+            )
+            """)
+
+        // apple_font_families — with the v12 `category` column folded in.
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS apple_font_families (
+              id              TEXT PRIMARY KEY,
+              display_name    TEXT NOT NULL,
+              source_url      TEXT,
+              source_sha256   TEXT,
+              source_size     INTEGER,
+              source_path     TEXT,
+              extracted_path  TEXT,
+              status          TEXT NOT NULL DEFAULT 'available',
+              category        TEXT,
+              updated_at      TEXT NOT NULL
+            )
+            """)
+
+        // apple_font_files — final v12 shape (the v10 table is created and then
+        // recreated by v12 with UNIQUE(family_id, file_name) and the classification
+        // columns; we emit the final shape directly).
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS apple_font_files (
+              id             TEXT PRIMARY KEY,
+              family_id      TEXT NOT NULL REFERENCES apple_font_families(id) ON DELETE CASCADE,
+              file_name      TEXT NOT NULL,
+              file_path      TEXT NOT NULL,
+              postscript_name TEXT,
+              style_name     TEXT,
+              weight         TEXT,
+              variant        TEXT,
+              italic         INTEGER NOT NULL DEFAULT 0,
+              format         TEXT,
+              source         TEXT NOT NULL DEFAULT 'remote' CHECK(source IN ('remote', 'system')),
+              is_variable    INTEGER NOT NULL DEFAULT 0,
+              axes_json      TEXT,
+              sha256         TEXT,
+              size           INTEGER,
+              updated_at     TEXT NOT NULL,
+              UNIQUE(family_id, file_name)
+            )
+            """)
+        try ctx.run("CREATE INDEX IF NOT EXISTS idx_apple_font_files_family ON apple_font_files(family_id)")
+
+        // sf_symbols — with bitmap_only (v18), codepoint (v19), codepoint_version
+        // (v24), render_unsupported (v27) folded in, in that column order.
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS sf_symbols (
+              name              TEXT NOT NULL,
+              scope             TEXT NOT NULL CHECK(scope IN ('public', 'private')),
+              categories_json   TEXT,
+              keywords_json     TEXT,
+              aliases_json      TEXT,
+              availability_json TEXT,
+              order_index       INTEGER,
+              bundle_path       TEXT,
+              bundle_version    TEXT,
+              updated_at        TEXT NOT NULL,
+              bitmap_only       INTEGER NOT NULL DEFAULT 0,
+              codepoint         INTEGER,
+              codepoint_version TEXT,
+              render_unsupported INTEGER NOT NULL DEFAULT 0,
+              PRIMARY KEY (scope, name)
+            )
+            """)
+
+        // sf_symbols_fts — the FINAL shape (JS v10 creates it, v11 drops + rebuilds
+        // it identically; the net shape is this one).
+        try ctx.run(
+            """
+            CREATE VIRTUAL TABLE IF NOT EXISTS sf_symbols_fts USING fts5(
+              name,
+              keywords,
+              categories,
+              aliases,
+              tokenize='porter unicode61'
+            )
+            """)
+
+        try ctx.run(
+            """
+            CREATE TABLE IF NOT EXISTS sf_symbol_renders (
+              cache_key    TEXT PRIMARY KEY,
+              name         TEXT NOT NULL,
+              scope        TEXT NOT NULL,
+              format       TEXT NOT NULL,
+              mode         TEXT,
+              weight       TEXT,
+              symbol_scale TEXT,
+              point_size   INTEGER,
+              color        TEXT,
+              file_path    TEXT NOT NULL,
+              mime_type    TEXT NOT NULL,
+              sha256       TEXT,
+              size         INTEGER,
+              updated_at   TEXT NOT NULL
+            )
+            """)
+    }
 }
 
 /// Runs the full apple-docs schema against `db`: applies every pending migration

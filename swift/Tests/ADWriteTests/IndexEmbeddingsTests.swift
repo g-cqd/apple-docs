@@ -104,7 +104,7 @@ struct IndexEmbeddingsTests {
     private func persist(_ db: Database, _ rootId: Int64, _ doc: NormalizedDoc) throws {
         try CrawlPersist.persistNormalized(
             db, rootId: rootId, path: "/documentation/\(doc.document.key)", doc,
-            contentHash: "ch-\(doc.document.key)", rawPayloadHash: "rh-\(doc.document.key)",
+            hashes: .init(content: "ch-\(doc.document.key)", rawPayload: "rh-\(doc.document.key)"),
             now: "2026-06-20T00:00:00.000Z")
     }
 

@@ -69,8 +69,7 @@ struct CrawlPersistParityTests {
                 rootId: rootId,
                 path: record.path,
                 record.normalized,
-                contentHash: record.contentHash,
-                rawPayloadHash: record.rawPayloadHash,
+                hashes: .init(content: record.contentHash, rawPayload: record.rawPayloadHash),
                 now: now)
         }
 

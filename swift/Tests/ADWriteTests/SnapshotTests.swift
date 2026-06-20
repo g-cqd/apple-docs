@@ -47,7 +47,7 @@ struct SnapshotTests {
                 relationships: [])
             try CrawlPersist.persistNormalized(
                 db, rootId: rootId, path: "/documentation/\(key)", doc,
-                contentHash: "ch-\(key)", rawPayloadHash: "rh-\(key)", now: now)
+                hashes: .init(content: "ch-\(key)", rawPayload: "rh-\(key)"), now: now)
         }
         return db
     }

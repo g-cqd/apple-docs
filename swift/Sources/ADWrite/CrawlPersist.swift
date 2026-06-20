@@ -51,6 +51,18 @@ public import ADSQLModel
 /// writable ADDB `Database` whose schema is already at `AppleDocsSchema`.
 public enum CrawlPersist {
 
+    /// The two content hashes threaded into a persist: `content` (the normalized document hash) and
+    /// `rawPayload` (the upstream payload hash). Bundled so `persistNormalized` stays within the
+    /// parameter-count gate.
+    public struct DocumentHashes: Sendable, Equatable {
+        public let content: String
+        public let rawPayload: String
+        public init(content: String, rawPayload: String) {
+            self.content = content
+            self.rawPayload = rawPayload
+        }
+    }
+
     // MARK: - roots
 
     /// Upserts a documentation root, mirroring `repos/roots.js` `upsertRoot`
@@ -114,11 +126,102 @@ public enum CrawlPersist {
     /// exactly as the JS persist threads them.
     public static func persistNormalized(
         _ db: Database, rootId: Int64, path: String, _ normalized: NormalizedDoc,
-        contentHash: String, rawPayloadHash: String, now: String
+        hashes: DocumentHashes, now: String
     ) throws(DBError) {
         let doc = normalized.document
 
         try db.transaction { (txn) throws(DBError) in
+            try insertPageRow(
+                txn, rootId: rootId, path: path, normalized, rawPayloadHash: hashes.rawPayload, now: now)
+
+            let documentId = try insertDocumentRow(
+                txn, normalized, contentHash: hashes.content, rawPayloadHash: hashes.rawPayload, now: now)
+
+            // ── 3. replace document_sections ────────────────────────────────────
+            // documents.js replaceSections: delete all for the doc, then insert each
+            // with ON CONFLICT(document_id, section_kind, sort_order) DO UPDATE.
+            //
+            // ADDB's ON CONFLICT parser accepts only a SINGLE target column — a
+            // COMPOSITE conflict target is rejected (DBError "expected ')'"). But in
+            // the REPLACE path the preceding DELETE-all guarantees no row collision,
+            // so the upsert's ON CONFLICT branch is dead; the only thing it provides
+            // is INTRA-batch dedup (a later section with the same composite key
+            // overwrites an earlier one — last-wins). We reproduce that EXACTLY by
+            // deduping in Swift (last-wins, preserving first-seen order) then issuing
+            // PLAIN inserts. The resulting rows are byte-identical to the JS upsert's.
+            try txn.run(
+                "DELETE FROM document_sections WHERE document_id = $document_id",
+                ["document_id": .integer(documentId)])
+            for section in dedupedLastWins(
+                normalized.sections, key: { "\($0.sectionKind)\u{1F}\($0.sortOrder)" })
+            {
+                try txn.run(
+                    """
+                    INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order)
+                    VALUES ($document_id, $section_kind, $heading, $content_text, $content_json, $sort_order)
+                    """,
+                    [
+                        "document_id": .integer(documentId),
+                        "section_kind": .text(section.sectionKind),
+                        "heading": section.heading.map(Value.text) ?? .null,
+                        // content_text is NOT NULL; null normalized text → '' (JS `?? ''`).
+                        // Plain TEXT — the zstd codec is compact/snapshot-only.
+                        "content_text": .text(section.contentText ?? ""),
+                        "content_json": section.contentJson.map(Value.text) ?? .null,
+                        "sort_order": .integer(Int64(section.sortOrder)),
+                    ])
+            }
+
+            // ── 4. replace document_relationships ───────────────────────────────
+            // documents.js replaceRelationships(fromKey=normalized.document.key):
+            // delete all from that key, then insert each with ON CONFLICT(from_key,
+            // to_key, relation_type) DO UPDATE. Same composite-conflict-target story
+            // as sections: the DELETE-all makes the upsert branch dead except for
+            // intra-batch last-wins dedup, which we reproduce in Swift, then PLAIN
+            // insert. The from_key is the document key (the relationship's own
+            // fromKey falls back to it).
+            try txn.run(
+                "DELETE FROM document_relationships WHERE from_key = $from_key",
+                ["from_key": .text(doc.key)])
+            for relationship in dedupedLastWins(
+                normalized.relationships,
+                key: { "\($0.fromKey ?? doc.key)\u{1F}\($0.toKey)\u{1F}\($0.relationType)" })
+            {
+                try txn.run(
+                    """
+                    INSERT INTO document_relationships (from_key, to_key, relation_type, section, sort_order)
+                    VALUES ($from_key, $to_key, $relation_type, $section, $sort_order)
+                    """,
+                    [
+                        "from_key": .text(relationship.fromKey ?? doc.key),
+                        "to_key": .text(relationship.toKey),
+                        "relation_type": .text(relationship.relationType),
+                        "section": relationship.section.map(Value.text) ?? .null,
+                        "sort_order": .integer(Int64(relationship.sortOrder ?? 0)),
+                    ])
+            }
+
+            // ── 5. markConverted ────────────────────────────────────────────────
+            // pages.js markConverted: UPDATE pages SET converted_at = ? WHERE path = ?
+            // (wall-clock; excluded from parity but written for completeness).
+            try txn.run(
+                "UPDATE pages SET converted_at = $converted_at WHERE path = $path",
+                ["converted_at": .text(now), "path": .text(path)])
+        }
+    }
+}
+
+// Bit-for-bit reproductions of the JS persist helpers (source-type coercion, framework derivation,
+// platform/metadata serialization, version encoding, last-wins dedup). Split from the enum body to
+// stay within the size/complexity gate; each mirrors its cited JS function exactly.
+extension CrawlPersist {
+
+    /// Step 1 of `persistNormalized`: the pages-row upsert (pages.js upsertPageRow).
+    private static func insertPageRow(
+        _ txn: SQLTransaction, rootId: Int64, path: String, _ normalized: NormalizedDoc,
+        rawPayloadHash: String, now: String
+    ) throws(DBError) {
+        let doc = normalized.document
             // ── 1. pages row ────────────────────────────────────────────────────
             // persist.js upsertPageFromDocument → db.upsertPage. The facade derives
             // source_type (doc.sourceType ?? fallback ?? root.source_type ?? default)
@@ -200,15 +303,12 @@ public enum CrawlPersist {
                     "min_tvos": doc.minTvos.map(Value.text) ?? .null,
                     "min_visionos": doc.minVisionos.map(Value.text) ?? .null,
                 ])
+    }
 
-            // ── 2. documents row ─────────────────────────────────────────────────
-            // database.js upsertNormalizedDocument → documents.js upsertDocument
-            // with the spread normalized.document + the two hashes. $now → both
-            // created_at and updated_at (wall-clock).
-            let documentSourceType = coerceSourceType(doc.sourceType)
-            let framework = doc.framework ?? deriveFrameworkFromPath(doc.key)
-            let title = doc.title ?? doc.key  // documents.js: $title = title ?? key
-            let docResult = try txn.run(
+
+    /// The documents-row upsert SQL (verbatim from documents.js upsertDocument), held as a
+    /// constant so insertDocumentRow stays within the body-length gate.
+    static let documentsUpsertSQL =
                 """
                 INSERT INTO documents (
                   source_type, key, title, kind, role, role_heading, framework, url, language,
@@ -258,7 +358,23 @@ public enum CrawlPersist {
                   raw_payload_hash = COALESCE($raw_payload_hash, documents.raw_payload_hash),
                   updated_at = $now
                 RETURNING id
-                """,
+        """
+    /// Step 2 of `persistNormalized`: the documents-row upsert (database.js
+    /// upsertNormalizedDocument → documents.js upsertDocument). Returns the document id.
+    private static func insertDocumentRow(
+        _ txn: SQLTransaction, _ normalized: NormalizedDoc, contentHash: String,
+        rawPayloadHash: String, now: String
+    ) throws(DBError) -> Int64 {
+        let doc = normalized.document
+            // ── 2. documents row ─────────────────────────────────────────────────
+            // database.js upsertNormalizedDocument → documents.js upsertDocument
+            // with the spread normalized.document + the two hashes. $now → both
+            // created_at and updated_at (wall-clock).
+            let documentSourceType = coerceSourceType(doc.sourceType)
+            let framework = doc.framework ?? deriveFrameworkFromPath(doc.key)
+            let title = doc.title ?? doc.key  // documents.js: $title = title ?? key
+            let docResult = try txn.run(
+            Self.documentsUpsertSQL,
                 [
                     "source_type": .text(documentSourceType),
                     "key": .text(doc.key),
@@ -294,80 +410,8 @@ public enum CrawlPersist {
                     "now": .text(now),
                 ])
             let documentId = docResult.lastInsertRowid
-
-            // ── 3. replace document_sections ────────────────────────────────────
-            // documents.js replaceSections: delete all for the doc, then insert each
-            // with ON CONFLICT(document_id, section_kind, sort_order) DO UPDATE.
-            //
-            // ADDB's ON CONFLICT parser accepts only a SINGLE target column — a
-            // COMPOSITE conflict target is rejected (DBError "expected ')'"). But in
-            // the REPLACE path the preceding DELETE-all guarantees no row collision,
-            // so the upsert's ON CONFLICT branch is dead; the only thing it provides
-            // is INTRA-batch dedup (a later section with the same composite key
-            // overwrites an earlier one — last-wins). We reproduce that EXACTLY by
-            // deduping in Swift (last-wins, preserving first-seen order) then issuing
-            // PLAIN inserts. The resulting rows are byte-identical to the JS upsert's.
-            try txn.run(
-                "DELETE FROM document_sections WHERE document_id = $document_id",
-                ["document_id": .integer(documentId)])
-            for section in dedupedLastWins(
-                normalized.sections, key: { "\($0.sectionKind)\u{1F}\($0.sortOrder)" })
-            {
-                try txn.run(
-                    """
-                    INSERT INTO document_sections (document_id, section_kind, heading, content_text, content_json, sort_order)
-                    VALUES ($document_id, $section_kind, $heading, $content_text, $content_json, $sort_order)
-                    """,
-                    [
-                        "document_id": .integer(documentId),
-                        "section_kind": .text(section.sectionKind),
-                        "heading": section.heading.map(Value.text) ?? .null,
-                        // content_text is NOT NULL; null normalized text → '' (JS `?? ''`).
-                        // Plain TEXT — the zstd codec is compact/snapshot-only.
-                        "content_text": .text(section.contentText ?? ""),
-                        "content_json": section.contentJson.map(Value.text) ?? .null,
-                        "sort_order": .integer(Int64(section.sortOrder)),
-                    ])
-            }
-
-            // ── 4. replace document_relationships ───────────────────────────────
-            // documents.js replaceRelationships(fromKey=normalized.document.key):
-            // delete all from that key, then insert each with ON CONFLICT(from_key,
-            // to_key, relation_type) DO UPDATE. Same composite-conflict-target story
-            // as sections: the DELETE-all makes the upsert branch dead except for
-            // intra-batch last-wins dedup, which we reproduce in Swift, then PLAIN
-            // insert. The from_key is the document key (the relationship's own
-            // fromKey falls back to it).
-            try txn.run(
-                "DELETE FROM document_relationships WHERE from_key = $from_key",
-                ["from_key": .text(doc.key)])
-            for relationship in dedupedLastWins(
-                normalized.relationships,
-                key: { "\($0.fromKey ?? doc.key)\u{1F}\($0.toKey)\u{1F}\($0.relationType)" })
-            {
-                try txn.run(
-                    """
-                    INSERT INTO document_relationships (from_key, to_key, relation_type, section, sort_order)
-                    VALUES ($from_key, $to_key, $relation_type, $section, $sort_order)
-                    """,
-                    [
-                        "from_key": .text(relationship.fromKey ?? doc.key),
-                        "to_key": .text(relationship.toKey),
-                        "relation_type": .text(relationship.relationType),
-                        "section": relationship.section.map(Value.text) ?? .null,
-                        "sort_order": .integer(Int64(relationship.sortOrder ?? 0)),
-                    ])
-            }
-
-            // ── 5. markConverted ────────────────────────────────────────────────
-            // pages.js markConverted: UPDATE pages SET converted_at = ? WHERE path = ?
-            // (wall-clock; excluded from parity but written for completeness).
-            try txn.run(
-                "UPDATE pages SET converted_at = $converted_at WHERE path = $path",
-                ["converted_at": .text(now), "path": .text(path)])
-        }
+        return documentId
     }
-
     // MARK: - JS-helper reproductions (bit-for-bit)
 
     /// `storage/source-types.js` DEFAULT_SOURCE_TYPE.
