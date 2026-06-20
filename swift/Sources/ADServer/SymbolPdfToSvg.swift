@@ -17,6 +17,7 @@
 // avoids any encoding ambiguity). Number/coordinate formatting and the FNV-1a
 // mask-id hashing reproduce the JS string production exactly.
 
+import ADFCore
 import Foundation
 
 #if canImport(Compression)
@@ -1007,19 +1008,7 @@ enum SvgEmit {
 
     private static func fillRuleAttr(_ rule: String) -> String { rule == "evenodd" ? " fill-rule=\"evenodd\"" : "" }
 
-    static func escapeXml(_ value: String) -> String {
-        var out = ""
-        out.reserveCapacity(value.count)
-        for ch in value {
-            switch ch {
-                case "<": out += "&lt;"
-                case ">": out += "&gt;"
-                case "&": out += "&amp;"
-                case "\"": out += "&quot;"
-                case "'": out += "&apos;"
-                default: out.append(ch)
-            }
-        }
-        return out
-    }
+    /// XML/SVG escape — the five XML 1.0 predefined entities — via the shared `ADFCore.XMLEscape`
+    /// (byte-identical to the prior per-character switch).
+    static func escapeXml(_ value: String) -> String { XMLEscape.escaped(value) }
 }

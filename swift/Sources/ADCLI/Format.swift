@@ -10,7 +10,9 @@ import Darwin
 import Glibc
 #endif
 
+import ADJSONCore
 import ADStorage
+import OrderedCollections
 
 /// stdout is a terminal (fd 1). Mirrors JS `process.stdout.isTTY`.
 let stdoutIsTTY: Bool = isatty(1) != 0
@@ -298,10 +300,10 @@ func formatLookup(_ result: LookupResult) -> String {
 /// — emitted only when `m.platforms?.length` is truthy, i.e. platforms is a
 /// non-empty array of `{ name, introducedAt }`. Returns nil for an empty array, an
 /// object, or any non-array value (the JS `?.length` short-circuits those).
-private func platformsLine(_ platforms: J) -> String? {
-    guard case let .arr(items) = platforms, !items.isEmpty else { return nil }
+private func platformsLine(_ platforms: JSONValue) -> String? {
+    guard case let .array(items) = platforms, !items.isEmpty else { return nil }
     let parts = items.map { item -> String in
-        guard case let .obj(fields) = item else { return " " }
+        guard case let .object(fields) = item else { return " " }
         let name = jStringField(fields, "name")
         let introducedAt = jStringField(fields, "introducedAt")
         // `${p.name} ${p.introducedAt ?? ''}` — name then a space then the
@@ -316,10 +318,9 @@ private func platformsLine(_ platforms: J) -> String? {
 /// "" for `introducedAt` (it uses `?? ''`) but a missing `name` would coerce to
 /// "undefined" in JS — however real platform entries always carry `name`, so an
 /// absent field returns "" (the line is only reached for array platforms anyway).
-private func jStringField(_ fields: [(String, J)], _ key: String) -> String {
-    for (k, v) in fields where k == key {
-        if case let .s(value) = v { return value }
-        return ""  // null / non-string → '' (matches `?? ''` for introducedAt)
-    }
+private func jStringField(_ fields: OrderedDictionary<String, JSONValue>, _ key: String) -> String {
+    // null / non-string / absent → '' (matches `?? ''` for introducedAt; a real
+    // platform entry always carries a string `name`).
+    if case let .string(value)? = fields[key] { return value }
     return ""
 }

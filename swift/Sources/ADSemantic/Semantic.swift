@@ -18,8 +18,8 @@
 //   8. emit in docBest INSERTION order, STABLE-sort by score DESC (carry an
 //      insertion index, tie-break on it — Swift's sort isn't stable), take topK
 //
-// Deps: ADStorage (chunk reads), ADEmbed (Embedder + Quantize.signCode), ADFCore
-// (Popcount + Endian, transitively via ShortlistByHamming / DotI8).
+// Deps: ADStorage (chunk reads), ADEmbed (Embedder + Quantize.signCode +
+// Quantize.dequantDot, the int8 rescore), ADFCore (Popcount, via ShortlistByHamming).
 
 #if canImport(Darwin)
     import Darwin
@@ -27,6 +27,7 @@
     import Glibc
 #endif
 
+import ADFCore  // NumberParse — the shared JS-parseInt-prefix env parser
 public import ADEmbed
 public import ADStorage
 
@@ -114,7 +115,7 @@ public enum Semantic {
         for hit in shortlist {
             var score = 1.0 - Double(hit.dist) / Double(bits)
             if rescore, let i8 = i8Map[chunkId[hit.idx]], i8.count == dims + 4 {
-                score = DotI8.dot(qFp32, i8, off: 0, dims: dims)
+                score = Quantize.dequantDot(q: qFp32, i8: i8, dims: dims)
             }
             let docId = chunkDocId[hit.idx]
             if let prev = docBest[docId] {
@@ -176,28 +177,13 @@ private func clampInt(_ value: String?, fallback: Int, min minValue: Int, max ma
     return Swift.min(maxValue, Swift.max(minValue, parsed))
 }
 
-/// JS `Number.parseInt(_, 10)` prefix parse; nil for NaN (no leading digits).
+/// JS `Number.parseInt(_, 10)` prefix parse via the shared `ADFCore.NumberParse`: skip leading ASCII
+/// whitespace, an optional sign, then the leading decimal-digit run; nil for NaN (no leading digits).
+/// Trailing non-digits are ignored (JS `parseInt('200x') === 200`).
+///
+/// Intrinsic-parity: identical for the small ASCII config integers read here (shortlist size, top-K).
+/// It sheds the old wrapping-overflow quirk — a pathologically long run now returns nil (→ the
+/// caller's `fallback`) instead of a wrapped value the clamp then bounded; no real config hits that.
 private func parseIntPrefix(_ value: String?) -> Int? {
-    guard let value else { return nil }
-    var scalars = Array(value.unicodeScalars)[...]
-    // Leading whitespace (ASCII space/tab/newline/CR/FF/VT — the JS StrWhiteSpace subset that matters here).
-    while let first = scalars.first, first == " " || first == "\t" || first == "\n" || first == "\r"
-        || first == "\u{0B}" || first == "\u{0C}"
-    {
-        scalars = scalars.dropFirst()
-    }
-    var negative = false
-    if let first = scalars.first, first == "+" || first == "-" {
-        negative = first == "-"
-        scalars = scalars.dropFirst()
-    }
-    var magnitude = 0
-    var sawDigit = false
-    for scalar in scalars {
-        guard scalar.value >= 0x30, scalar.value <= 0x39 else { break }
-        sawDigit = true
-        magnitude = magnitude * 10 + Int(scalar.value - 0x30)
-    }
-    guard sawDigit else { return nil }
-    return negative ? -magnitude : magnitude
+    value.flatMap { NumberParse.intPrefix(Array($0.utf8)) }
 }

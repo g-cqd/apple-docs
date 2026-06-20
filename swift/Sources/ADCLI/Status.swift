@@ -13,6 +13,7 @@
 // Key order is pinned to the JS oracle: projectStatus's STATUS_KEEP_USER order
 // for the default shape, status.js's return order for `--advanced`.
 
+import ADJSONCore
 import ADStorage
 import ArgumentParser
 import Foundation
@@ -293,42 +294,42 @@ func checkForUpdate(_ connection: StorageConnection) -> UpdateAvailable? {
 /// each emitted only if present, `pick` keeping defined-but-null), then `pages`,
 /// `roots`, then (only if present) `activity`, `updateAvailable` (only when
 /// `available`), `freshness` (only when `lastSyncAt`).
-func statusDefaultJSON(_ raw: StatusEnvelope) -> J {
-    var pairs: [(String, J)] = []
+func statusDefaultJSON(_ raw: StatusEnvelope) -> JSONValue {
+    var pairs: [(String, JSONValue)] = []
 
     // STATUS_KEEP_USER pick (in order). `dataDir` / `databaseSize` always set;
     // `snapshot` only when non-nil; `rawJson` / `markdown` always set; `lastSync`
     // / `lastAction` are defined (possibly null) on the raw envelope ⇒ kept.
-    pairs.append(("dataDir", .s(raw.dataDir)))
-    pairs.append(("databaseSize", .i(raw.databaseSize)))
+    pairs.append(("dataDir", .string(raw.dataDir)))
+    pairs.append(("databaseSize", .int(raw.databaseSize)))
     if let snapshot = raw.snapshot { pairs.append(("snapshot", snapshotJSON(snapshot))) }
     pairs.append(("rawJson", dirStatsJSON(raw.rawJson)))
     pairs.append(("markdown", dirStatsJSON(raw.markdown)))
     pairs.append(("lastSync", optString(raw.lastSync)))
     pairs.append(("lastAction", optString(raw.lastAction)))
 
-    pairs.append(("pages", .obj([("active", .i(raw.pagesActive)), ("deleted", .i(raw.pagesDeleted))])))
-    pairs.append(("roots", .obj([("total", .i(raw.rootsTotal)), ("byKind", byKindJSON(raw.rootsByKind))])))
+    pairs.append(("pages", .obj([("active", .int(raw.pagesActive)), ("deleted", .int(raw.pagesDeleted))])))
+    pairs.append(("roots", .obj([("total", .int(raw.rootsTotal)), ("byKind", byKindJSON(raw.rootsByKind))])))
 
     if let activity = raw.activity {
         pairs.append(
             (
                 "activity",
                 .obj([
-                    ("action", optString(activity.action)), ("status", .s(activity.status)),
+                    ("action", optString(activity.action)), ("status", .string(activity.status)),
                     ("startedAt", optString(activity.startedAt))
                 ])))
     }
     if let update = raw.updateAvailable, update.available {
         pairs.append(
-            ("updateAvailable", .obj([("current", .s(update.current)), ("latest", .s(update.latest))])))
+            ("updateAvailable", .obj([("current", .string(update.current)), ("latest", .string(update.latest))])))
     }
     if let lastSyncAt = raw.freshness.lastSyncAt {
         pairs.append(
             (
                 "freshness",
                 .obj([
-                    ("lastSyncAt", .s(lastSyncAt)), ("daysSinceSync", optInt(raw.freshness.daysSinceSync)),
+                    ("lastSyncAt", .string(lastSyncAt)), ("daysSinceSync", optInt(raw.freshness.daysSinceSync)),
                     ("isStale", .bool(raw.freshness.isStale))
                 ])))
     }
@@ -341,20 +342,20 @@ func statusDefaultJSON(_ raw: StatusEnvelope) -> J {
 /// dataDir, tier, snapshot, capabilities, databaseSize, rawJson, markdown, roots,
 /// pages, activity, crawlProgress, crawlByRoot, lastSync, lastAction,
 /// updateAvailable, freshness. nil scalars / objects serialize as JSON `null`.
-func statusAdvancedJSON(_ raw: StatusEnvelope) -> J {
+func statusAdvancedJSON(_ raw: StatusEnvelope) -> JSONValue {
     .obj([
-        ("dataDir", .s(raw.dataDir)),
+        ("dataDir", .string(raw.dataDir)),
         ("tier", optString(raw.tier)),
         ("snapshot", raw.snapshot.map(snapshotJSON) ?? .null),
         ("capabilities", capabilitiesJSON(raw.capabilities)),
-        ("databaseSize", .i(raw.databaseSize)),
+        ("databaseSize", .int(raw.databaseSize)),
         ("rawJson", dirStatsJSON(raw.rawJson)),
         ("markdown", dirStatsJSON(raw.markdown)),
-        ("roots", .obj([("total", .i(raw.rootsTotal)), ("byKind", byKindJSON(raw.rootsByKind))])),
-        ("pages", .obj([("active", .i(raw.pagesActive)), ("deleted", .i(raw.pagesDeleted))])),
+        ("roots", .obj([("total", .int(raw.rootsTotal)), ("byKind", byKindJSON(raw.rootsByKind))])),
+        ("pages", .obj([("active", .int(raw.pagesActive)), ("deleted", .int(raw.pagesDeleted))])),
         ("activity", raw.activity.map(activityJSON) ?? .null),
         ("crawlProgress", crawlProgressJSON(raw.crawlProgress)),
-        ("crawlByRoot", .arr(raw.crawlByRoot.map(crawlByRootJSON))),
+        ("crawlByRoot", .array(raw.crawlByRoot.map(crawlByRootJSON))),
         ("lastSync", optString(raw.lastSync)),
         ("lastAction", optString(raw.lastAction)),
         ("updateAvailable", raw.updateAvailable.map(updateJSON) ?? .null),
@@ -364,15 +365,15 @@ func statusAdvancedJSON(_ raw: StatusEnvelope) -> J {
 
 // MARK: - JSON fragment builders (pinned key order each)
 
-private func snapshotJSON(_ s: SnapshotInfo) -> J {
+private func snapshotJSON(_ s: SnapshotInfo) -> JSONValue {
     .obj([("tag", optString(s.tag)), ("buildMacos", optString(s.buildMacos))])
 }
 
-private func dirStatsJSON(_ d: DirStats) -> J {
-    .obj([("size", .i(d.size)), ("files", .i(d.files))])
+private func dirStatsJSON(_ d: DirStats) -> JSONValue {
+    .obj([("size", .int(d.size)), ("files", .int(d.files))])
 }
 
-private func capabilitiesJSON(_ c: Capabilities) -> J {
+private func capabilitiesJSON(_ c: Capabilities) -> JSONValue {
     .obj([
         ("search", .bool(c.search)), ("searchTrigram", .bool(c.searchTrigram)),
         ("searchBody", .bool(c.searchBody)), ("readContent", .bool(c.readContent))
@@ -381,51 +382,51 @@ private func capabilitiesJSON(_ c: Capabilities) -> J {
 
 /// `Object.fromEntries(rootsByKind.map(...))` — insertion-ordered object keyed by
 /// kind. A NULL kind column coalesces to "null" (jsKey, set at gather time).
-private func byKindJSON(_ entries: [(String, Int64)]) -> J {
-    .obj(entries.map { ($0.0, .i($0.1)) })
+private func byKindJSON(_ entries: [(String, Int64)]) -> JSONValue {
+    .obj(entries.map { ($0.0, .int($0.1)) })
 }
 
-private func activityJSON(_ a: StatusActivity) -> J {
+private func activityJSON(_ a: StatusActivity) -> JSONValue {
     // status.js order: action, startedAt, pid, alive, roots, status.
     .obj([
         ("action", optString(a.action)),
         ("startedAt", optString(a.startedAt)),
         ("pid", optInt(a.pid)),
         ("alive", .bool(a.alive)),
-        ("roots", a.roots.map { .arr($0.map(J.s)) } ?? .null),
-        ("status", .s(a.status))
+        ("roots", a.roots.map { .array($0.map(JSONValue.string)) } ?? .null),
+        ("status", .string(a.status))
     ])
 }
 
-private func crawlProgressJSON(_ c: CrawlProgress) -> J {
+private func crawlProgressJSON(_ c: CrawlProgress) -> JSONValue {
     .obj([
-        ("total", .i(c.total)), ("processed", .i(c.processed)),
-        ("pending", .i(c.pending)), ("failed", .i(c.failed))
+        ("total", .int(c.total)), ("processed", .int(c.processed)),
+        ("pending", .int(c.pending)), ("failed", .int(c.failed))
     ])
 }
 
-private func crawlByRootJSON(_ r: CrawlByRootEntry) -> J {
+private func crawlByRootJSON(_ r: CrawlByRootEntry) -> JSONValue {
     .obj([
-        ("root", optString(r.root)), ("processed", .i(r.processed)), ("pending", .i(r.pending)),
-        ("failed", .i(r.failed)), ("total", .i(r.total)), ("percent", .i(r.percent))
+        ("root", optString(r.root)), ("processed", .int(r.processed)), ("pending", .int(r.pending)),
+        ("failed", .int(r.failed)), ("total", .int(r.total)), ("percent", .int(r.percent))
     ])
 }
 
-private func updateJSON(_ u: UpdateAvailable) -> J {
-    .obj([("current", .s(u.current)), ("latest", .s(u.latest)), ("available", .bool(u.available))])
+private func updateJSON(_ u: UpdateAvailable) -> JSONValue {
+    .obj([("current", .string(u.current)), ("latest", .string(u.latest)), ("available", .bool(u.available))])
 }
 
-private func freshnessJSON(_ f: Freshness) -> J {
+private func freshnessJSON(_ f: Freshness) -> JSONValue {
     .obj([
         ("lastSyncAt", optString(f.lastSyncAt)),
         ("daysSinceSync", optInt(f.daysSinceSync)),
         ("isStale", .bool(f.isStale)),
-        ("staleRoots", .arr(f.staleRoots.map { .obj([("slug", .s($0.slug)), ("daysSince", .i($0.daysSince))]) }))
+        ("staleRoots", .array(f.staleRoots.map { .obj([("slug", .string($0.slug)), ("daysSince", .int($0.daysSince))]) }))
     ])
 }
 
-private func optString(_ value: String?) -> J { value.map(J.s) ?? .null }
-private func optInt(_ value: Int64?) -> J { value.map(J.i) ?? .null }
+private func optString(_ value: String?) -> JSONValue { value.map(JSONValue.string) ?? .null }
+private func optInt(_ value: Int64?) -> JSONValue { value.map(JSONValue.int) ?? .null }
 
 // MARK: - human formatter (src/cli/formatters/status.js `formatStatus`)
 
@@ -582,14 +583,14 @@ func jsRound(_ value: Double) -> Int64 {
 
 /// `JSON.parse(rootsJSON)` for the activity roots column → `[String]`, or nil
 /// (NULL / non-array / non-string-element / parse error), matching the JS truthy
-/// use of the parsed value. Reuses ADCLI's JSON parser to stay Foundation-light
-/// on the hot path; falls back to a plain decode for the array shape.
+/// use of the parsed value. Parses through ADJSON's `JSONValue` and accepts only
+/// an array of strings (any other shape ⇒ nil).
 func parseRootsArray(_ json: String?) -> [String]? {
-    guard let json, !json.isEmpty, case let .arr(items)? = parseJSONValue(json) else { return nil }
+    guard let json, !json.isEmpty, case let .array(items)? = parseJSONValue(json) else { return nil }
     var out: [String] = []
     out.reserveCapacity(items.count)
     for item in items {
-        guard case let .s(string) = item else { return nil }
+        guard case let .string(string) = item else { return nil }
         out.append(string)
     }
     return out

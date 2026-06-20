@@ -89,31 +89,31 @@ export function isNativeEnabled(module) {
 
 /**
  * Serve flip gate (RFC 0005 Phase E) — a PROCESS-level swap to the `ad-server`
- * binary, not a bit-identical pure-function module, so it is DEFAULT-OFF until
- * its bake completes: blanket on/unset does NOT enable it; only an explicit
- * `serve` token in the comma-list does. `off`/'0' force it off like everything.
+ * binary for the serve verbs (`web serve`, `mcp serve`, `mcp start`). Now
+ * DEFAULT-ON (bake complete): unset/''/'1'/'on' enable it, `off`/'0' force it off,
+ * a comma-list enables it only when it names `serve`. It activates only where the
+ * `ad-server` binary resolves; the JS servers remain the graceful fallback when it
+ * is absent or a flag isn't supported (cli.js does the binary check).
  *
  * @returns {boolean}
  */
 export function isNativeServeEnabled() {
-  const raw = (process.env.APPLE_DOCS_NATIVE ?? '').trim().toLowerCase()
-  if (raw === '0' || raw === 'off') return false
-  return raw.split(',').some((entry) => entry.trim() === 'serve')
+  return isNativeEnabled('serve')
 }
 
 /**
- * CLI flip gate (RFC 0007 P7) — like the serve flip, a PROCESS-level swap to the
- * `ad-cli` binary for the read verbs (`frameworks`, `kinds`, …) rather than a
- * bit-identical pure-function module, so it is DEFAULT-OFF until its per-verb
- * golden bake completes: blanket on/unset does NOT enable it; only an explicit
- * `cli` token in the comma-list does. `off`/'0' force it off like everything.
+ * CLI flip gate (RFC 0007 P7) — a PROCESS-level swap to the `ad-cli` binary for
+ * the read verbs (`frameworks`, `kinds`, `browse`, `read`, `search`, `status`).
+ * Now DEFAULT-ON (bake complete: cli-parity is byte-identical, semantic search
+ * included): unset/''/'1'/'on' enable it, `off`/'0' force it off, a comma-list
+ * enables it only when it names `cli`. It activates only where the `ad-cli` binary
+ * resolves; the Bun read verbs remain the fallback when it is absent or a
+ * flag/positional isn't supported (cli.js does the binary check).
  *
  * @returns {boolean}
  */
 export function isNativeCliEnabled() {
-  const raw = (process.env.APPLE_DOCS_NATIVE ?? '').trim().toLowerCase()
-  if (raw === '0' || raw === 'off') return false
-  return raw.split(',').some((entry) => entry.trim() === 'cli')
+  return isNativeEnabled('cli')
 }
 
 /**

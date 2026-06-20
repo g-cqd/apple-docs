@@ -3,6 +3,7 @@
 // of every execution so stale bindings from a prior call can never leak
 // into the next and silently return wrong rows.
 
+import ADFCore
 import ADJSONCore
 
 #if canImport(Darwin)
@@ -253,32 +254,20 @@ final class PreparedStatement {
     }
 }
 
-// MARK: - little-endian byte appenders
+// MARK: - little-endian byte appenders (delegated to ADFCore's canonical endian primitives)
 
-func appendU32(_ out: inout [UInt8], _ value: UInt32) {
-    var le = value.littleEndian
-    withUnsafeBytes(of: &le) { out.append(contentsOf: $0) }
-}
+// One LE encoder for the whole family lives in `ADFCore.Endian`; these keep the local call-site
+// names but route through it (byte-identical — the response frame's wire layout is unchanged).
+func appendU32(_ out: inout [UInt8], _ value: UInt32) { out.appendLE32(value) }
 
-func appendI64(_ out: inout [UInt8], _ value: Int64) {
-    var le = value.littleEndian
-    withUnsafeBytes(of: &le) { out.append(contentsOf: $0) }
-}
+func appendI64(_ out: inout [UInt8], _ value: Int64) { out.appendLE64(UInt64(bitPattern: value)) }
 
-func appendU64(_ out: inout [UInt8], _ value: UInt64) {
-    var le = value.littleEndian
-    withUnsafeBytes(of: &le) { out.append(contentsOf: $0) }
-}
+func appendU64(_ out: inout [UInt8], _ value: UInt64) { out.appendLE64(value) }
 
-func appendF64(_ out: inout [UInt8], _ value: Double) {
-    appendU64(&out, value.bitPattern)
-}
+func appendF64(_ out: inout [UInt8], _ value: Double) { out.appendLE64(value.bitPattern) }
 
 func patchU32(_ out: inout [UInt8], at offset: Int, _ value: UInt32) {
-    let le = value.littleEndian
-    withUnsafeBytes(of: le) { bytes in
-        for i in 0 ..< 4 { out[offset + i] = bytes[i] }
-    }
+    out.withUnsafeMutableBytes { $0.storeLE32(value, at: offset) }
 }
 
 /// Appends the base-10 ASCII of an Int64 with no heap allocation.

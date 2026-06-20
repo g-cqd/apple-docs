@@ -1,6 +1,8 @@
 // Storage quantizers. Bit-exact for comparisons, clamps and one f64→f32
 // store — no float summation anywhere.
 
+import ADFCore
+
 public enum Quantize {
     /// Sign code: bit i set iff vec[i] >= 0, LSB-first within each byte.
     /// -0.0 sets the bit (-0.0 >= 0 in both Swift and JS); NaN does not
@@ -31,11 +33,10 @@ public enum Quantize {
             if q > 127 { q = 127 } else if q < -127 { q = -127 }
             out[i] = q.isNaN ? 0 : UInt8(bitPattern: Int8(q))
         }
-        let scaleBits = Float(scale).bitPattern
-        out[n] = UInt8(truncatingIfNeeded: scaleBits)
-        out[n + 1] = UInt8(truncatingIfNeeded: scaleBits >> 8)
-        out[n + 2] = UInt8(truncatingIfNeeded: scaleBits >> 16)
-        out[n + 3] = UInt8(truncatingIfNeeded: scaleBits >> 24)
+        // The f32 absmax/127 scale trails the int8 codes as 4 little-endian bytes (the shared
+        // `ADFCore` store, replacing the hand-rolled per-shift writes — byte-identical, one unaligned
+        // store). `out` is uniquely owned here, so this stays copy-free.
+        out.withUnsafeMutableBytes { $0.storeLE32(Float(scale).bitPattern, at: n) }
         return out
     }
 }

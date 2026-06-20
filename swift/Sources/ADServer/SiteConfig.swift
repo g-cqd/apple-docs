@@ -3,6 +3,7 @@
 // of siteConfig (no DB), so it serves on the event loop (no offload). siteConfig
 // is plumbed from ad-server flags (Main.swift).
 
+import ADFCore
 import ADJSON
 
 struct SiteConfig: Sendable {
@@ -27,21 +28,10 @@ private func url(_ origin: String, _ path: String) -> String {
     origin.isEmpty ? path : origin + path
 }
 
-/// XML escape: & first, then < > ".
-private func xmlEscape(_ s: String) -> String {
-    var out = ""
-    out.reserveCapacity(s.count)
-    for ch in s {
-        switch ch {
-            case "&": out += "&amp;"
-            case "<": out += "&lt;"
-            case ">": out += "&gt;"
-            case "\"": out += "&quot;"
-            default: out.append(ch)
-        }
-    }
-    return out
-}
+/// XML escape via the shared `ADFCore.XMLEscape` — the five XML 1.0 predefined entities. This now also
+/// escapes `'` (→ `&apos;`) vs the prior four-character set: harmless over-escaping for these
+/// double-quoted OpenSearch attribute / element values (valid XML that parses identically).
+private func xmlEscape(_ s: String) -> String { XMLEscape.escaped(s) }
 
 /// JS `String.prototype.slice(0, n)` — UTF-16 code units (identity for ASCII).
 private func sliceUTF16(_ s: String, _ n: Int) -> String {

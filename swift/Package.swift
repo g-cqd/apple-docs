@@ -89,6 +89,16 @@ let adsqlDependency: Package.Dependency = {
     return .package(url: "https://github.com/g-cqd/ADSQL.git", branch: "main")
 }()
 
+// ADDB_PATH -> the ADDB engine + SQL EXECUTION package. Post-inversion ADDB hosts the executor
+// (`ADDBExec`) + the FTS/JSON supersets the `/search` query runs over; the `ADSQLSearch` target
+// executes against it (ADSQL is now the engine-free frontend, which `/search` no longer needs).
+let addbDependency: Package.Dependency = {
+    if let path = Context.environment["ADDB_PATH"], !path.isEmpty {
+        return .package(path: path)
+    }
+    return .package(url: "https://github.com/g-cqd/ADDB.git", branch: "main")
+}()
+
 // ADCONCURRENCY_PATH -> the zero-dependency `ADConcurrency` leaf (the shared `ResourcePool` the
 // server's connection pool is now specialized from, plus the `TaskProvider`/`Clock` seams). Pulled by
 // the server-side `ADServeCore` only; also resolved transitively via ADJSON's umbrella. Never by the
@@ -173,6 +183,7 @@ let package = Package(
         adjsonDependency,
         adfoundationDependency,
         adsqlDependency,
+        addbDependency,
         adconcurrencyDependency,
         adserveDependency,
         // ad-server-only. swift-http-types: type-safe HTTP headers/status; swift-log:
@@ -192,11 +203,15 @@ let package = Package(
         // apple/swift-argument-parser: used ONLY by the ad-server executable for its
         // serve/mcp/bench subcommands; NOT pulled by ADCore (the dylib stays zero-external-dep).
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
-        // apple/swift-collections — already resolved (1.6.0) transitively, so a direct dep
-        // adds no download or supply-chain surface. Used by the server side only
-        // (ADSearchCascade: OrderedSet for the FTS term builder); NOT pulled by ADCore
+        // apple/swift-collections — floored at 1.6.0 to MATCH ADTestKit's requirement
+        // (`from: "1.6.0"`) and the committed Package.resolved pin. A lower floor let a
+        // transient re-resolution (a sibling momentarily pulling swift-foundation, which
+        // caps collections at 1.1.x) silently DOWNGRADE the graph and then break ADTestKit
+        // (needs ≥1.6.0) under APPLEDOCS_DEV; the explicit floor turns that into a loud,
+        // diagnosable resolution error instead. Used by the server side (ADSearchCascade:
+        // OrderedSet for the FTS term builder) + the dev test harness; NOT pulled by ADCore
         // (the dylib stays zero-external-dep).
-        .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
+        .package(url: "https://github.com/apple/swift-collections.git", from: "1.6.0"),
         // apple/swift-algorithms — already resolved transitively (zero new download). Used by
         // ADSearchCascade only (bounded top-K via min(count:sortedBy:)); NOT pulled by ADCore
         // (the dylib stays zero-external-dep).
@@ -214,7 +229,14 @@ let package = Package(
         .target(name: "ADSearch", swiftSettings: releaseCMO + strictSettings),
         .target(name: "ADArchive", swiftSettings: releaseCMO + strictSettings),
         .target(
-            name: "ADEmbed", dependencies: [.product(name: "ADFUnicode", package: "ADFoundation")],
+            name: "ADEmbed",
+            dependencies: [
+                // ADFUnicode: JS string semantics for the tokenizer. ADFCore: the
+                // little-endian f32 read (`Endian.loadLE32`) the int8 rescore dot
+                // (`Quantize.dequantDot`) shares with the rest of the AD family.
+                .product(name: "ADFUnicode", package: "ADFoundation"),
+                .product(name: "ADFCore", package: "ADFoundation")
+            ],
             swiftSettings: releaseCMO + strictSettings),
         // Content pipeline: reuses ADFoundation's engine-derived JS string semantics (via ADFUnicode)
         // (CaseFolding = JS toLowerCase, jsWhitespace = JS trim/\s). The DocC JSON is
@@ -232,7 +254,14 @@ let package = Package(
         // Render service: symbol/font renderers. darwin links CoreText/AppKit;
         // the Linux slice compiles to stubs (#if canImport) so the dylib still
         // builds with no AppKit/CoreText.
-        .target(name: "ADRender", dependencies: ["ADBase"], swiftSettings: releaseCMO + strictSettings),
+        .target(
+            name: "ADRender",
+            dependencies: [
+                "ADBase",
+                // ADFCore: the shared `XMLEscape` the glyph/symbol SVG builders escape text through.
+                .product(name: "ADFCore", package: "ADFoundation")
+            ],
+            swiftSettings: releaseCMO + strictSettings),
         // Tiny C shim to call the dlsym'd variadic `sqlite3_config` with the
         // correct ABI (disables the global memstatus allocator mutex).
         .target(name: "CSQLiteShim"),
@@ -243,7 +272,13 @@ let package = Package(
         // the dylib stays zero external dep.
         .target(
             name: "ADStorage",
-            dependencies: ["ADBase", "ADArchive", "CSQLiteShim", .product(name: "ADJSONCore", package: "ADJSON")],
+            dependencies: [
+                "ADBase", "ADArchive", "CSQLiteShim",
+                .product(name: "ADJSONCore", package: "ADJSON"),
+                // ADFCore: the shared little-endian `appendLE*`/`storeLE*` the row framer emits the
+                // §2.5 response wire bytes through (already in the dylib graph via ADCore → ADFCore).
+                .product(name: "ADFCore", package: "ADFoundation")
+            ],
             swiftSettings: releaseCMO + strictSettings),
         // Search cascade: the byte-exact in-process port of the JS lexical search
         // (fts-query-builder, intent, the tier merge, ranking, projection).
@@ -287,6 +322,9 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "ADServeCore", package: "ADServe"),
                 .product(name: "ADServeDSL", package: "ADServe"),
+                // ADFCore: the audited `PercentCoding.decodeForm` + `UTF8Validation` the query parser
+                // decodes/validates `?q=…` through (rejecting malformed/invalid-UTF-8 input).
+                .product(name: "ADFCore", package: "ADFoundation"),
                 "ADStorage",
                 "ADContent",
                 "ADRender",
@@ -306,14 +344,49 @@ let package = Package(
                 .product(name: "ADFCore", package: "ADFoundation")
             ],
             swiftSettings: releaseCMO + strictSettings),
+        // ADWrite — SPIKE foundation for the native crawl WRITER on the ADDB engine
+        // (own on-disk format "ADSQLv0"). Proves the write path: open/create a
+        // writable ADDB db, run apple-docs `roots`/`pages` DDL, prepared INSERT +
+        // bind (text/int/BLOB/NULL) in one transaction (lastInsertRowid), read back
+        // via the query API. The full writer (32 apple-docs migrations + crawl
+        // persist) will be built on the API this pins. Depends on the ADDB engine
+        // products (ADDBExec executor + the ADSQLMigrate framework the full writer
+        // will define its schema in) + ADSQL's ADSQLModel (the `Value` type). Same
+        // first-party AD* sibling resolution as ADSQLSearch; no new external dep.
+        // Consumed by ad-cli's hidden `_addb-write-spike` verb; NOT in the ADCore
+        // dylib graph.
+        .target(
+            name: "ADWrite",
+            dependencies: [
+                .product(name: "ADDB", package: "ADDB"),
+                .product(name: "ADDBExec", package: "ADDB"),
+                .product(name: "ADSQLMigrate", package: "ADDB"),
+                .product(name: "ADSQLModel", package: "ADSQL"),
+                // ADEmbed: the Chunker (anchor + body chunks), Quantize (signCode →
+                // vec_bin / i8Code → vec_i8) and Embedder the chunks/vectors writer
+                // (IndexEmbeddings) is the native port of src/commands/index-embeddings.js.
+                "ADEmbed",
+                // ADArchive: ArchiveWriter.writeTarZst (deterministic tar.zst) for the
+                // snapshot build (Snapshot, port of src/commands/snapshot.js). Crypto:
+                // swift-crypto SHA-256 for the DB/archive checksums + the .sha256 sidecar
+                // (the JS Bun.CryptoHasher('sha256')). Both are build-tool deps of the
+                // snapshot path only; NOT in the ADCore dylib graph.
+                "ADArchive",
+                .product(name: "Crypto", package: "swift-crypto")
+            ],
+            swiftSettings: releaseCMO + strictSettings),
         // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
         // Byte-for-byte output-compatible with the Bun cli.js read verbs. Reads via
         // ADStorage; ADContent supplies the String markdown renderer the `read` verb
         // shares with ad-server's read_doc (DocMarkdown.render, the parity-proven
-        // path). A tiny local JSON model frames the `--json` output (no ADJSON
-        // needed). swift-argument-parser only — no new external dependency. Also
-        // hosts the hidden `_semantic-probe` verb (ADSemantic + ADEmbed) used to
-        // self-verify Stage-1 semantic retrieval against the JS oracle.
+        // path). The `--json` output is projected into ADJSON's `JSONValue` and
+        // serialized with `.javaScript(space: 2)` (JSON.stringify byte parity) via the
+        // static, Foundation-free `ADJSONCore` (the codec the dylib already links);
+        // `OrderedCollections` backs the ordered-object builder. swift-argument-parser
+        // is the only external CLI dep. Also hosts the hidden `_semantic-probe` verb
+        // (ADSemantic + ADEmbed) used to self-verify Stage-1 semantic retrieval
+        // against the JS oracle, and the hidden `_addb-write-spike` verb (ADWrite)
+        // proving the native write path.
         .executableTarget(
             name: "ADCLI",
             dependencies: [
@@ -322,6 +395,9 @@ let package = Package(
                 "ADSearchCascade",
                 "ADSemantic",
                 "ADEmbed",
+                "ADWrite",
+                .product(name: "ADJSONCore", package: "ADJSON"),
+                .product(name: "OrderedCollections", package: "swift-collections"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
             path: "Sources/ADCLI", swiftSettings: releaseCMO + strictSettings),
@@ -333,8 +409,12 @@ let package = Package(
         .target(
             name: "ADSQLSearch",
             dependencies: [
-                .product(name: "ADSQL", package: "ADSQL"),
-                .product(name: "ADSQLFullTextSearch", package: "ADSQL")
+                .product(name: "ADDBExec", package: "ADDB"),
+                .product(name: "ADSQLModel", package: "ADSQL"),
+                .product(name: "ADSQLFullTextSearch", package: "ADDB"),
+                .product(name: "ADSQLJSON", package: "ADDB"),
+                // ADFCore: the shared little-endian `appendLE*` the §2.5 response framer emits through.
+                .product(name: "ADFCore", package: "ADFoundation")
             ],
             swiftSettings: releaseCMO + strictSettings),
         .target(
@@ -357,21 +437,63 @@ let package = Package(
             dependencies: ["ADContent", .product(name: "ADJSONCore", package: "ADJSON")],
             swiftSettings: testSettings),
         .testTarget(name: "ADStorageTests", dependencies: ["ADStorage"], swiftSettings: testSettings),
+        // ADSQLSearchTests — byte-identity golden for the §2.5 response wire layout (`ResponseFraming`),
+        // the gate for the A1 endian consolidation. The server-only `ADSQLSearch` target had no test
+        // home; this also seats the future `SearchQuery`-vs-SQLite parity suite (Phase 5A).
+        .testTarget(name: "ADSQLSearchTests", dependencies: ["ADSQLSearch"], swiftSettings: testSettings),
         .testTarget(
             name: "ADSearchCascadeTests", dependencies: ["ADSearchCascade"], swiftSettings: testSettings),
         // ADServeCoreTests + ADServeDSLTests moved to the standalone ADServe package.
         .testTarget(
             name: "ADServerTests", dependencies: ["ad-server", "ADSearchCascade"],
+            swiftSettings: testSettings),
+        // ADWriteTests — the catalog-parity gate for the native apple-docs schema
+        // (ADWrite/AppleDocsSchema). Builds a fresh ADDB catalog via migrateSchema and
+        // introspects it through ADDB's public `txn.schema()` (the engine catalog), then
+        // shells out to `bun` from the apple-docs root to build the JS-migrated SQLite
+        // reference and read its sqlite_master / PRAGMA table_info, and asserts the two
+        // catalogs MATCH (tables, columns, indexes, triggers, FTS), normalizing ADDB's
+        // strict-typing representation and reporting any differences. Depends on ADWrite
+        // (+ the engine façade for the Schema model). No new external dep.
+        .testTarget(
+            name: "ADWriteTests",
+            dependencies: [
+                "ADWrite",
+                .product(name: "ADDB", package: "ADDB"),
+                .product(name: "ADSQLMigrate", package: "ADDB"),
+                // ADSQLImport — the "apple-docs swap gate". The persist PARITY gate
+                // uses it as the reference bridge: it ingests the JS-writer SQLite
+                // into a fresh ADDB DB (DB_ref), so the native persist (DB_native) is
+                // compared ADDB-to-ADDB. Additive test-only dep; no new external dep.
+                .product(name: "ADSQLImport", package: "ADDB"),
+                .product(name: "ADSQLModel", package: "ADSQL")
+            ],
             swiftSettings: testSettings)
     ]
 )
 
 if isDev {
     // Wire the dev-only ADTestKit into the test targets that use it (downstream consumers never see it):
-    // the archive fuzz/oracle suites, the renderer's typed-fixture asserts, and the row-codec suite's
-    // typed asserts (all to keep heavy chained `#expect`s under the 100ms type-check budget).
+    // the archive fuzz/oracle suites, the renderer's typed-fixture asserts, the row-codec suite's typed
+    // asserts (all to keep heavy chained `#expect`s under the 100ms type-check budget), and the embed
+    // writer gate's deterministic `SeededRNG`-backed fake embedder (IndexEmbeddingsTests).
     let adTestKit: Target.Dependency = .product(name: "ADTestKit", package: "ADTestKit")
-    for name in ["ADArchiveTests", "ADContentTests", "ADStorageTests"] {
+    for name in ["ADArchiveTests", "ADContentTests", "ADStorageTests", "ADWriteTests"] {
         package.targets.first { $0.name == name }?.dependencies.append(adTestKit)
     }
+}
+
+// AD_ONLY_ADWRITE_TESTS — reduce the package to ONLY ADWriteTests' dependency closure
+// (the local targets ADWrite + ADEmbed + the test target itself; the rest of the graph
+// is external ADDB/ADSQL/ADTestKit products) for ISOLATED local verification while sibling
+// packages (ADServe / ADDB / ADJSON / …) are edited by other streams and intermittently
+// fail to compile. `swift test` otherwise builds EVERY package target (incl. the ad-server
+// executable → the churning ADServeCore, and ad-cli/ADCore → ADJSONCore), so a single
+// broken sibling anywhere blocks the writer gate. Dropping every other target + all
+// products removes those graphs from the build. Inert unless the env var is set; CI /
+// normal runs build the whole package.
+if Context.environment["AD_ONLY_ADWRITE_TESTS"] != nil {
+    let keep: Set<String> = ["ADWrite", "ADEmbed", "ADArchive", "ADWriteTests"]
+    package.targets.removeAll { !keep.contains($0.name) }
+    package.products.removeAll()
 }

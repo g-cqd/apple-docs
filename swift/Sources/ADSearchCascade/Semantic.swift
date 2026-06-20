@@ -25,6 +25,7 @@
 #endif
 
 public import ADEmbed  // Embedder is exposed by the public SemanticContext
+import ADFCore  // NumberParse — the shared JS-parseFloat-prefix env parser
 import ADSearch  // Fusion / MMR — used by the internal SemanticFusion methods
 import ADSemantic  // Semantic.candidates + SemanticCandidate (internal use)
 import ADStorage  // StorageConnection — the internal SemanticFusion.fuse param
@@ -261,58 +262,15 @@ private func envValue(_ name: String) -> String? {
     return String(cString: raw)
 }
 
-/// JS `Number.parseFloat(value)` prefix parse: skip leading ASCII whitespace,
-/// an optional sign, then the longest leading numeric run (digits, one optional
-/// `.`-fraction, an optional `e`/`E` exponent). nil when no number leads
-/// (`NaN`). Trailing non-numeric chars are ignored (JS `parseFloat('0.7x')`).
-/// `Double(_:)` of the captured prefix matches JS's IEEE-754 parse.
+/// JS `Number.parseFloat(value)` prefix parse via the shared `ADFCore.NumberParse`: skip leading
+/// ASCII whitespace, an optional sign, then the longest leading numeric run (digits, one optional
+/// `.`-fraction, an optional `e`/`E` exponent). nil when no number leads (`NaN`); trailing
+/// non-numeric chars are ignored (JS `parseFloat('0.7x')`).
+///
+/// Intrinsic-parity: identical to the JS parser for the ASCII env-config values read here
+/// (`APPLE_DOCS_MMR_LAMBDA` etc.). The over-long-literal path is correctly rounded by the shared
+/// Clinger kernel rather than a second `Double(String)` pass; it sheds only the (irrelevant-here)
+/// non-ASCII-digit handling the scalar loop carried.
 private func parseFloatPrefix(_ value: String?) -> Double? {
-    guard let value else { return nil }
-    var scalars = Array(value.unicodeScalars)[...]
-    func isWS(_ s: Unicode.Scalar) -> Bool {
-        s == " " || s == "\t" || s == "\n" || s == "\r" || s == "\u{0B}" || s == "\u{0C}"
-    }
-    while let first = scalars.first, isWS(first) { scalars = scalars.dropFirst() }
-
-    var captured = ""
-    if let first = scalars.first, first == "+" || first == "-" {
-        captured.unicodeScalars.append(first)
-        scalars = scalars.dropFirst()
-    }
-    func takeDigits() -> Bool {
-        var any = false
-        while let s = scalars.first, s.value >= 0x30, s.value <= 0x39 {
-            captured.unicodeScalars.append(s)
-            scalars = scalars.dropFirst()
-            any = true
-        }
-        return any
-    }
-    let intDigits = takeDigits()
-    var fracDigits = false
-    if let s = scalars.first, s == "." {
-        captured.unicodeScalars.append(s)
-        scalars = scalars.dropFirst()
-        fracDigits = takeDigits()
-    }
-    // A bare sign / lone "." with no digits is NaN.
-    guard intDigits || fracDigits else { return nil }
-    // Optional exponent — only kept when it is well-formed (digits follow the
-    // optional sign), matching JS parseFloat.
-    if let e = scalars.first, e == "e" || e == "E" {
-        var exp = String(e)
-        var rest = scalars.dropFirst()
-        if let sign = rest.first, sign == "+" || sign == "-" {
-            exp.unicodeScalars.append(sign)
-            rest = rest.dropFirst()
-        }
-        var expDigits = false
-        while let s = rest.first, s.value >= 0x30, s.value <= 0x39 {
-            exp.unicodeScalars.append(s)
-            rest = rest.dropFirst()
-            expDigits = true
-        }
-        if expDigits { captured += exp }
-    }
-    return Double(captured)
+    value.flatMap { NumberParse.doublePrefix(Array($0.utf8)) }
 }

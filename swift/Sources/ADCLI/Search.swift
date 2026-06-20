@@ -11,6 +11,7 @@
 // JS flip pre-joins to one element, but the parity harness passes several
 // positionals directly — both must yield the same joined string.
 
+import ADJSONCore
 import ADSearchCascade
 import ADSemantic
 import ADStorage
@@ -123,7 +124,7 @@ struct SearchCommand: ParsableCommand {
 
         if json {
             // `{ hit: projectHit(hit), page: projectReadDoc(page, {full:true}) }`.
-            let object = J.obj([
+            let object = JSONValue.obj([
                 ("hit", projectSearchHitJSON(top)),
                 ("page", projectReadDoc(pageResult))
             ])
@@ -226,7 +227,7 @@ func qualityBadge(_ quality: String, _ distance: Int?) -> String {
     return dim(" [\(quality)]")
 }
 
-// MARK: - --read --json hit projection (projectSearchHit, via the J model)
+// MARK: - --read --json hit projection (projectSearchHit, via ADJSON's JSONValue)
 
 /// `projectSearchHit(hit)` for the `--read --json` `{ hit }` slot: the
 /// SEARCH_HIT_KEEP allowlist (path, title, framework, rootSlug, kind, sourceType,
@@ -235,9 +236,9 @@ func qualityBadge(_ quality: String, _ distance: Int?) -> String {
 /// flags. `pick` keeps a defined-but-null value as JSON `null` and omits an
 /// undefined one; the rich search hit always carries these keys (snippet/
 /// relatedCount only after enrichment), so the present-key set is mirrored here.
-private func projectSearchHitJSON(_ h: SearchHitView) -> J {
-    var pairs: [(String, J)] = [
-        ("path", .s(h.path)),
+private func projectSearchHitJSON(_ h: SearchHitView) -> JSONValue {
+    var pairs: [(String, JSONValue)] = [
+        ("path", .string(h.path)),
         ("title", jOptionalSearch(h.title)),
         ("framework", jOptionalSearch(h.framework)),
         ("rootSlug", jOptionalSearch(h.rootSlug)),
@@ -248,9 +249,9 @@ private func projectSearchHitJSON(_ h: SearchHitView) -> J {
         ("platforms", parseSearchPlatforms(h.platforms)),
         ("language", jOptionalSearch(h.language))
     ]
-    if let snippet = h.snippet { pairs.append(("snippet", .s(snippet))) }
-    if let relatedCount = h.relatedCount { pairs.append(("relatedCount", .i(Int64(relatedCount)))) }
-    pairs.append(("confidence", .s(h.confidence)))
+    if let snippet = h.snippet { pairs.append(("snippet", .string(snippet))) }
+    if let relatedCount = h.relatedCount { pairs.append(("relatedCount", .int(Int64(relatedCount)))) }
+    pairs.append(("confidence", .string(h.confidence)))
     if h.isDeprecated { pairs.append(("isDeprecated", .bool(true))) }
     if h.isBeta { pairs.append(("isBeta", .bool(true))) }
     if h.isReleaseNotes { pairs.append(("isReleaseNotes", .bool(true))) }
@@ -261,14 +262,14 @@ private func projectSearchHitJSON(_ h: SearchHitView) -> J {
 /// by `JSON.stringify`. We parse the raw JSON string and emit the value (object
 /// OR array), or `[]` for a nil/empty/unparseable column (matching `formatResult`'s
 /// `parsePlatformsString` → `[]` and the cascade's `rawOrEmptyArray`).
-private func parseSearchPlatforms(_ json: String?) -> J {
-    guard let json, !json.isEmpty, let value = parseJSONValue(json) else { return .arr([]) }
+private func parseSearchPlatforms(_ json: String?) -> JSONValue {
+    guard let json, !json.isEmpty, let value = parseJSONValue(json) else { return .array([]) }
     return value
 }
 
 /// An optional string as JSON: a value → string, nil → `null` (pick keeps nulls).
-private func jOptionalSearch(_ value: String?) -> J {
-    value.map(J.s) ?? .null
+private func jOptionalSearch(_ value: String?) -> JSONValue {
+    value.map(JSONValue.string) ?? .null
 }
 
 // MARK: - embedder loading for the search verb

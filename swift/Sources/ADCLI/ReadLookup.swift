@@ -18,6 +18,7 @@
 //      pages with `String(decoding:as:UTF16.self)` so a byte never drifts.
 
 import ADContent
+import ADJSONCore
 import ADStorage
 
 /// The resolved `lookup` opts (path XOR symbol, plus the optional disambiguators).
@@ -80,7 +81,7 @@ struct LookupMetadata {
     let declarationPresent: Bool
     let path: String
     /// Parsed `platforms_json` (object/array), or `[]` (symbol path / null column).
-    let platforms: J
+    let platforms: JSONValue
     /// camelCase relation_type → count, in GROUP BY row order. Empty ⇒ key dropped.
     let relationships: [(String, Int64)]
     let isDeprecated: Bool
@@ -189,7 +190,7 @@ private func buildMetadata(
             roleHeading: page.roleHeading, kind: page.kind,
             abstract: nil, abstractPresent: false,
             declaration: nil, declarationPresent: false,
-            path: pagePath, platforms: .arr([]), relationships: relationships,
+            path: pagePath, platforms: .array([]), relationships: relationships,
             isDeprecated: page.isDeprecated, isBeta: page.isBeta)
     }
 }
@@ -239,8 +240,8 @@ private func relationTypeToCamel(_ relationType: String) -> String? {
 
 /// `page.platforms ? JSON.parse(page.platforms) : []` — the parsed JSON value
 /// (object OR array) for a non-empty `platforms_json`, else `[]`.
-private func parsePlatforms(_ json: String?) -> J {
-    guard let json, !json.isEmpty, let value = parseJSONValue(json) else { return .arr([]) }
+private func parsePlatforms(_ json: String?) -> JSONValue {
+    guard let json, !json.isEmpty, let value = parseJSONValue(json) else { return .array([]) }
     return value
 }
 
@@ -362,27 +363,27 @@ private func lastIndexOfNewline(_ units: ArraySlice<UInt16>, from: Int) -> Int {
 /// (string or null), `sections` (full projection), `note`, and `pageInfo`
 /// (strategy dropped). The not-found branch drops everything but `found` (the
 /// lookup result carries no note then).
-func projectReadDoc(_ result: LookupResult) -> J {
+func projectReadDoc(_ result: LookupResult) -> JSONValue {
     if !result.found {
         // JS: `payload.note ? {found:false, note} : {found:false}` — lookup's
         // not-found result has no note, so this is always `{found:false}`.
         if let note = result.note {
-            return .obj([("found", .bool(false)), ("note", .s(note))])
+            return .obj([("found", .bool(false)), ("note", .string(note))])
         }
         return .obj([("found", .bool(false))])
     }
 
-    var pairs: [(String, J)] = [("found", .bool(true))]
+    var pairs: [(String, JSONValue)] = [("found", .bool(true))]
     if let metadata = result.metadata {
         pairs.append(("metadata", projectMetadata(metadata)))
     }
     // `payload.content !== undefined` — lookup always sets content (string or
     // nil), so the key is always emitted (null for the no-content/section-miss).
-    pairs.append(("content", result.content.map(J.s) ?? .null))
+    pairs.append(("content", result.content.map(JSONValue.string) ?? .null))
     // `Array.isArray(payload.sections)` — always an array here → always emitted.
-    pairs.append(("sections", .arr(result.sections.map(projectSectionFull))))
+    pairs.append(("sections", .array(result.sections.map(projectSectionFull))))
     if let note = result.note {
-        pairs.append(("note", .s(note)))
+        pairs.append(("note", .string(note)))
     }
     if let pageInfo = result.pageInfo {
         pairs.append(("pageInfo", projectPageInfo(pageInfo)))
@@ -400,20 +401,20 @@ func projectReadDoc(_ result: LookupResult) -> J {
 /// declaration exist only on the PATH path (`abstractPresent`/`declarationPresent`).
 /// path always exists. platforms always exists. relationships is emitted only when
 /// non-empty (JS spreads it only then).
-private func projectMetadata(_ m: LookupMetadata) -> J {
-    var pairs: [(String, J)] = [
-        ("title", m.title.map(J.s) ?? .null),
-        ("framework", m.framework.map(J.s) ?? .null),
-        ("rootSlug", m.rootSlug.map(J.s) ?? .null),
-        ("roleHeading", m.roleHeading.map(J.s) ?? .null),
-        ("kind", m.kind.map(J.s) ?? .null)
+private func projectMetadata(_ m: LookupMetadata) -> JSONValue {
+    var pairs: [(String, JSONValue)] = [
+        ("title", m.title.map(JSONValue.string) ?? .null),
+        ("framework", m.framework.map(JSONValue.string) ?? .null),
+        ("rootSlug", m.rootSlug.map(JSONValue.string) ?? .null),
+        ("roleHeading", m.roleHeading.map(JSONValue.string) ?? .null),
+        ("kind", m.kind.map(JSONValue.string) ?? .null)
     ]
-    if m.abstractPresent { pairs.append(("abstract", m.abstract.map(J.s) ?? .null)) }
-    if m.declarationPresent { pairs.append(("declaration", m.declaration.map(J.s) ?? .null)) }
-    pairs.append(("path", .s(m.path)))
+    if m.abstractPresent { pairs.append(("abstract", m.abstract.map(JSONValue.string) ?? .null)) }
+    if m.declarationPresent { pairs.append(("declaration", m.declaration.map(JSONValue.string) ?? .null)) }
+    pairs.append(("path", .string(m.path)))
     pairs.append(("platforms", m.platforms))
     if !m.relationships.isEmpty {
-        pairs.append(("relationships", .obj(m.relationships.map { ($0.0, .i($0.1)) })))
+        pairs.append(("relationships", .obj(m.relationships.map { ($0.0, .int($0.1)) })))
     }
     if m.isDeprecated { pairs.append(("isDeprecated", .bool(true))) }
     if m.isBeta { pairs.append(("isBeta", .bool(true))) }
@@ -425,20 +426,20 @@ private func projectMetadata(_ m: LookupMetadata) -> J {
 /// `contentText` only when `section.contentText ?? section.content_text !==
 /// undefined` — i.e. only when contentText is non-nil (a nil contentText becomes
 /// `null ?? undefined === undefined`, so the key is DROPPED, not emitted as null).
-private func projectSectionFull(_ section: DocumentSectionRow) -> J {
-    var pairs: [(String, J)] = [("heading", section.heading.map(J.s) ?? .null)]
+private func projectSectionFull(_ section: DocumentSectionRow) -> JSONValue {
+    var pairs: [(String, JSONValue)] = [("heading", section.heading.map(JSONValue.string) ?? .null)]
     if let contentText = section.contentText {
-        pairs.append(("contentText", .s(contentText)))
+        pairs.append(("contentText", .string(contentText)))
     }
     return .obj(pairs)
 }
 
 /// `projectPageInfo`: keep page/totalPages/hasNextPage/hasPreviousPage/totalItems
 /// (DROP strategy). `totalItems` is never set by CLI pagination, so it's omitted.
-private func projectPageInfo(_ pageInfo: LookupPageInfo) -> J {
+private func projectPageInfo(_ pageInfo: LookupPageInfo) -> JSONValue {
     .obj([
-        ("page", .i(Int64(pageInfo.page))),
-        ("totalPages", .i(Int64(pageInfo.totalPages))),
+        ("page", .int(Int64(pageInfo.page))),
+        ("totalPages", .int(Int64(pageInfo.totalPages))),
         ("hasNextPage", .bool(pageInfo.hasNextPage)),
         ("hasPreviousPage", .bool(pageInfo.hasPreviousPage))
     ])

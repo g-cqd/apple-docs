@@ -37,12 +37,31 @@ function resolveAdCli() {
   return candidates.find((p) => existsSync(/** @type {string} */ (p))) ?? null
 }
 
+/**
+ * @returns {string | null} The libAppleDocsCore dylib, or null. The Bun search
+ * oracle (`runJsNativeOn`) embeds via this dylib; without it the JS embed path is
+ * unavailable and the JS SEMANTIC TIER goes DORMANT (lexical-only), so a native
+ * (semantic-live) vs JS (lexical-only) search comparison would FALSELY diverge.
+ * The search block is gated on this so it skips — rather than false-fails — when
+ * the dylib isn't built. Read verbs don't touch it.
+ */
+function resolveDylib() {
+  const arch = process.arch === 'x64' ? 'x64' : process.arch
+  const candidates = [join(ROOT, `dist/native/${process.platform}-${arch}/libAppleDocsCore.dylib`), join(ROOT, 'swift/.build/release/libAppleDocsCore.dylib')]
+  return candidates.find((p) => existsSync(p)) ?? null
+}
+
 const dataDir = resolveHome()
 const adCli = resolveAdCli()
+const dylib = resolveDylib()
 const dbPath = dataDir ? join(dataDir, 'apple-docs.db') : ''
 const ready = Boolean(dataDir && adCli)
 if (!ready) {
   console.warn(`cli-parity: skipped (adCli=${adCli ?? 'none'}, home=${dataDir ?? 'none'}); build ad-cli + install a corpus, or set AD_CLI_BIN + AD_PARITY_HOME`)
+} else if (!dylib) {
+  console.warn(
+    'cli-parity: SEARCH cases skipped — libAppleDocsCore.dylib not built, so the Bun oracle’s semantic tier is dormant (lexical-only). Run `swift build -c release` (or build the AppleDocsCore product) to enable the fair semantic comparison.',
+  )
 }
 
 /** Bun JS oracle — force the JS path (APPLE_DOCS_NATIVE=off ⇒ no cli flip). @param {string[]} args */
@@ -277,7 +296,9 @@ const SEARCH_CASES = [
   ['search', ['swiftui', 'button', '--framework', 'swiftui', '--limit', '5']],
 ]
 
-d('search parity (native cascade + semantic) vs cli.js native-on oracle', () => {
+// Gated on the dylib too: the oracle's semantic tier needs the native embed path.
+const dSearch = ready && dylib ? describe : describe.skip
+dSearch('search parity (native cascade + semantic) vs cli.js native-on oracle', () => {
   for (const [verb, flags] of SEARCH_CASES) {
     test(`human: ${verb} ${flags.join(' ')}`.trim(), () => {
       const args = [verb, ...flags]

@@ -10,28 +10,16 @@ import { join } from 'node:path'
 import { VERSION } from '../../../src/lib/version.js'
 import { adServerBinaryPath, nativeServeArgs } from '../../../src/native/ad-server.js'
 import { isNativeServeEnabled } from '../../../src/native/loader.js'
+import { withNative } from '../../helpers/env.js'
 
 const DB = '/data/apple-docs.db'
 
-/** @param {string | undefined} value @param {() => boolean} fn @returns {boolean} */
-function withNative(value, fn) {
-  const prev = process.env.APPLE_DOCS_NATIVE
-  if (value === undefined) delete process.env.APPLE_DOCS_NATIVE
-  else process.env.APPLE_DOCS_NATIVE = value
-  try {
-    return fn()
-  } finally {
-    if (prev === undefined) delete process.env.APPLE_DOCS_NATIVE
-    else process.env.APPLE_DOCS_NATIVE = prev
-  }
-}
-
-describe('isNativeServeEnabled — default-off serve gate', () => {
-  test('unset / blanket-on never enable serve', () => {
-    expect(withNative(undefined, isNativeServeEnabled)).toBe(false)
-    expect(withNative('', isNativeServeEnabled)).toBe(false)
-    expect(withNative('1', isNativeServeEnabled)).toBe(false)
-    expect(withNative('on', isNativeServeEnabled)).toBe(false)
+describe('isNativeServeEnabled — default-on serve gate', () => {
+  test('unset / blanket-on enable serve', () => {
+    expect(withNative(undefined, isNativeServeEnabled)).toBe(true)
+    expect(withNative('', isNativeServeEnabled)).toBe(true)
+    expect(withNative('1', isNativeServeEnabled)).toBe(true)
+    expect(withNative('on', isNativeServeEnabled)).toBe(true)
   })
   test('off / 0 force it off', () => {
     expect(withNative('off', isNativeServeEnabled)).toBe(false)
@@ -42,8 +30,9 @@ describe('isNativeServeEnabled — default-off serve gate', () => {
     expect(withNative('fusion,serve', isNativeServeEnabled)).toBe(true)
     expect(withNative(' fusion , serve ', isNativeServeEnabled)).toBe(true)
   })
-  test('other module lists do not enable it', () => {
+  test('a comma-list WITHOUT serve disables it', () => {
     expect(withNative('fusion,archive', isNativeServeEnabled)).toBe(false)
+    expect(withNative('cli', isNativeServeEnabled)).toBe(false)
   })
 })
 

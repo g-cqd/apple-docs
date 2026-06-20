@@ -278,7 +278,8 @@ func matchSymbolMetadataPath(_ path: Substring) -> (scope: String, name: String)
         let nameStart = path.index(path.startIndex, offsetBy: prefix.count)
         let nameEnd = path.index(path.endIndex, offsetBy: -5)
         guard nameStart < nameEnd else { continue }
-        return (scope, percentDecode(String(path[nameStart ..< nameEnd])))
+        guard let name = percentDecode(String(path[nameStart ..< nameEnd])) else { return nil }
+        return (scope, name)
     }
     return nil
 }

@@ -74,9 +74,8 @@
     "vitepress-plugin-mermaid": "^2.0.17"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "shiki": "^4.1.0"
+    "shiki": "^4.1.0",
+    "zod": "^4.3.6"
   },
   "overrides": {
     "fast-uri": "^4.1.1",
@@ -87,10 +86,10 @@
     "qs": "^6.15.2",
     "brace-expansion": "^5.0.6",
     "vite": "^8.0.0",
-    "dompurify": "^3.4.12",
-    "protobufjs": "^7.6.5",
-    "postcss": "^8.5.23",
-    "adm-zip": "^0.6.0",
-    "sharp": "^0.35.3"
+    "dompurify": "^3.4.11",
+    "protobufjs": "^7.6.4"
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "^4.2.0"
   }
 }

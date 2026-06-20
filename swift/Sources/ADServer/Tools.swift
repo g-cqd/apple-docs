@@ -8,6 +8,7 @@
 // enums so `tools/list` is byte-for-byte equal to the SDK's zod schemas.
 
 import ADContent
+import ADFCore
 import ADJSON
 import ADRender
 import ADSearchCascade
@@ -503,15 +504,9 @@ private func fontTextSvgFallback(fontFamily: String, text: String, pointSize: In
         """
 }
 
-/// `escapeXml` from apple-assets-helpers.js: & < > " ' in that replacement order.
-private func xmlEscaped(_ value: String) -> String {
-    value
-        .replacingOccurrences(of: "&", with: "&amp;")
-        .replacingOccurrences(of: "<", with: "&lt;")
-        .replacingOccurrences(of: ">", with: "&gt;")
-        .replacingOccurrences(of: "\"", with: "&quot;")
-        .replacingOccurrences(of: "'", with: "&apos;")
-}
+/// XML/SVG attribute & text escape — the five XML 1.0 predefined entities (`& < > " '`), now via the
+/// shared `ADFCore.XMLEscape` (byte-identical to the prior `replacingOccurrences` chain).
+private func xmlEscaped(_ value: String) -> String { XMLEscape.escaped(value) }
 
 private func browse(_ input: BrowseInput, _ ctx: MCPToolContext) -> MCPToolResult {
     let conn = ctx.db

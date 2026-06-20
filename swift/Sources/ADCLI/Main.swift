@@ -2,9 +2,10 @@
 // verbs (`frameworks`, `kinds`) that mirror the Bun `cli.js` output 1:1 (the Bun
 // CLI stays the parity oracle). Opens the corpus read-only via ADStorage and
 // prints either the human formatter (Format.swift) or `JSON.stringify`-identical
-// JSON (Json.swift) when `--json` is passed. A separate target from ad-server
-// because each needs its own `@main`.
+// JSON (JsonBridge.swift, via ADJSON) when `--json` is passed. A separate target
+// from ad-server because each needs its own `@main`.
 
+import ADJSONCore
 import ADStorage
 import ArgumentParser
 import Foundation
@@ -16,7 +17,8 @@ struct ADCLICommand: AsyncParsableCommand {
         abstract: "Apple Docs native read CLI (mirrors the Bun cli.js read verbs).",
         subcommands: [
             FrameworksCommand.self, KindsCommand.self, BrowseCommand.self, ReadCommand.self,
-            SearchCommand.self, StatusCommand.self, SemanticProbeCommand.self
+            SearchCommand.self, StatusCommand.self, SemanticProbeCommand.self,
+            AddbWriteSpikeCommand.self
         ])
 }
 
@@ -328,79 +330,79 @@ func broadTaxonomy(_ connection: StorageConnection) -> [TaxonomySection] {
 // MARK: - JSON projections (allowlist + pinned key order)
 
 /// frameworks → `{ "total": <int>, "roots": [ {slug,name,kind,pageCount}, ... ] }`.
-func projectFrameworks(_ roots: [FrameworkRoot]) -> J {
-    let rootValues: [J] = roots.map { root in
+func projectFrameworks(_ roots: [FrameworkRoot]) -> JSONValue {
+    let rootValues: [JSONValue] = roots.map { root in
         .obj([
-            ("slug", .s(root.slug)),
-            ("name", .s(root.name)),
-            ("kind", .s(root.kind)),
-            ("pageCount", .i(root.pageCount))
+            ("slug", .string(root.slug)),
+            ("name", .string(root.name)),
+            ("kind", .string(root.kind)),
+            ("pageCount", .int(root.pageCount))
         ])
     }
     return .obj([
-        ("total", .i(Int64(roots.count))),
-        ("roots", .arr(rootValues))
+        ("total", .int(Int64(roots.count))),
+        ("roots", .array(rootValues))
     ])
 }
 
 /// `[ {"value":...,"count":...}, ... ]` for a taxonomy field.
-func taxonomyEntries(_ values: [TaxonomyCount]) -> J {
-    .arr(values.map { .obj([("value", .s($0.value)), ("count", .i($0.count))]) })
+func taxonomyEntries(_ values: [TaxonomyCount]) -> JSONValue {
+    .array(values.map { .obj([("value", .string($0.value)), ("count", .int($0.count))]) })
 }
 
 /// browse → the allowlisted projection, per-variant, in the pinned key order of
 /// JS `projectBrowse` (framework, title, path, year, groups+total, pages+total,
 /// children). `pick` keeps JSON `null` values, so a nil `String?` emits `null`
 /// rather than being omitted; a field the variant lacks is dropped entirely.
-func projectBrowse(_ result: BrowseResult) -> J {
+func projectBrowse(_ result: BrowseResult) -> JSONValue {
     switch result {
     case let .children(framework, path, title, children):
         // Command children are `{path,title,section}`; pick(['path','title','kind','section'])
         // drops the absent `kind` and keeps null title/section.
-        let childValues: [J] = children.map { child in
+        let childValues: [JSONValue] = children.map { child in
             .obj([
-                ("path", .s(child.path)),
+                ("path", .string(child.path)),
                 ("title", jOptional(child.title)),
                 ("section", jOptional(child.section))
             ])
         }
         return .obj([
-            ("framework", .s(framework)),
+            ("framework", .string(framework)),
             ("title", jOptional(title)),
-            ("path", .s(path)),
-            ("children", .arr(childValues))
+            ("path", .string(path)),
+            ("children", .array(childValues))
         ])
 
     case let .groups(framework, _, _, groups, total):
-        let groupValues: [J] = groups.map {
-            .obj([("year", .i(Int64($0.year))), ("count", .i(Int64($0.count)))])
+        let groupValues: [JSONValue] = groups.map {
+            .obj([("year", .int(Int64($0.year))), ("count", .int(Int64($0.count)))])
         }
         return .obj([
-            ("framework", .s(framework)),
-            ("groups", .arr(groupValues)),
-            ("total", .i(Int64(total)))
+            ("framework", .string(framework)),
+            ("groups", .array(groupValues)),
+            ("total", .int(Int64(total)))
         ])
 
     case let .pages(framework, _, _, year, pages, total, _):
-        let pageValues: [J] = pages.map { page in
+        let pageValues: [JSONValue] = pages.map { page in
             .obj([
-                ("path", .s(page.path)),
+                ("path", .string(page.path)),
                 ("title", jOptional(page.title)),
                 ("kind", jOptional(page.kind)),
                 ("abstract", jOptional(page.abstract))
             ])
         }
-        var pairs: [(String, J)] = [("framework", .s(framework))]
-        if let year { pairs.append(("year", .i(Int64(year)))) }
-        pairs.append(("pages", .arr(pageValues)))
-        pairs.append(("total", .i(Int64(total))))
+        var pairs: [(String, JSONValue)] = [("framework", .string(framework))]
+        if let year { pairs.append(("year", .int(Int64(year)))) }
+        pairs.append(("pages", .array(pageValues)))
+        pairs.append(("total", .int(Int64(total))))
         return .obj(pairs)
     }
 }
 
 /// An optional string as JSON: a value → string, nil → `null` (pick keeps nulls).
-private func jOptional(_ value: String?) -> J {
-    value.map(J.s) ?? .null
+private func jOptional(_ value: String?) -> JSONValue {
+    value.map(JSONValue.string) ?? .null
 }
 
 /// JS `String.prototype.trim()` for `--field` (ASCII whitespace — field values are tokens).

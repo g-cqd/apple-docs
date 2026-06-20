@@ -47,7 +47,9 @@ func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher, readiness: Ser
 
     // Lexical search cascade. `application/json` (no charset) + no cache, as Bun.
     GET("search") { ctx in
-        let params = parseCascadeParams(ctx.target)
+        guard let params = parseCascadeParams(ctx.target) else {
+            return .plain(.badRequest, "malformed query\n")
+        }
         guard params.query.utf8.count <= maxSearchQueryBytes else {
             return .plain(.badRequest, "query too long\n")
         }
@@ -71,7 +73,9 @@ func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher, readiness: Ser
         Group("symbols") {
             GET("index.json") { ctx in .json(WebRoutes.symbolsIndex(ctx.db), as: .json) }.etag
             GET("search") { ctx in
-                let query = parseQuery(ctx.target)
+                guard let query = parseQuery(ctx.target) else {
+                    return .plain(.badRequest, "malformed query\n")
+                }
                 guard (query["q"] ?? "").utf8.count <= maxSearchQueryBytes else {
                     return .plain(.badRequest, "query too long\n")
                 }

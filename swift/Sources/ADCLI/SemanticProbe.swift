@@ -57,8 +57,8 @@ struct SemanticProbeCommand: ParsableCommand {
 /// `[{"documentId":…,"distance":…,"score":…}]` matching the JS oracle's array
 /// shape. `score` is a JSON number; integral scores print bare (the JS
 /// `JSON.stringify` of an integral float), non-integral via the shortest
-/// round-trippable Double description. Hand-rendered to avoid the recursive `J`
-/// model in this const-extracted command file.
+/// round-trippable Double description. A minimal inline renderer (this hidden
+/// self-verify probe carries no projection-bridge dependency).
 func renderCandidatesJSON(_ candidates: [SemanticCandidate]) -> String {
     if candidates.isEmpty { return "[]" }
     var out = "[\n"
@@ -156,8 +156,8 @@ func loadPotionEmbedder(modelDir: String) throws -> Embedder {
 }
 
 /// The tokenizer.json subset the embedder needs (the same fields
-/// embedder-native.js's loadTokenizerConfig reads). Decoded with `Codable` so
-/// the recursive `J` model never enters this const-extracted command file.
+/// embedder-native.js's loadTokenizerConfig reads). Decoded with `Codable` —
+/// a typed struct, not a generic JSON tree, in this const-extracted command file.
 private struct TokenizerJSON: Decodable {
     struct Model: Decodable {
         let vocab: [String: Int]
