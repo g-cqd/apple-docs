@@ -75,7 +75,18 @@ enum Rerank {
             let r = results[i]
             let sourceType = (r.sourceType ?? "").lowercased()
             var score = baseScores[r.matchQuality] ?? 50
+            applyBoostsEarly(&score, r, query, lowerQuery, sourceType, intent)
+            applyBoostsLate(&score, r, lowerQuery, sourceType, intent)
+            results[i].score = score
+        }
+    }
 
+    /// Boosts R1–R6 (exact match, symbol/howto intent, release-notes/archived penalties, sample-code)
+    /// applied in JS order via `score`-inout so the Double result stays bit-identical.
+    private static func applyBoostsEarly(
+        _ score: inout Double, _ r: ResultHit, _ query: String, _ lowerQuery: String,
+        _ sourceType: String, _ intent: Intent
+    ) {
             // R1: exact path/title match
             let lastSegment = (r.path.split(separator: "/").last.map(String.init) ?? "").lowercased()
             if lastSegment == lowerQuery || (r.title ?? "").lowercased() == lowerQuery {
@@ -101,6 +112,13 @@ enum Rerank {
                     score *= 1.2
                 }
             }
+    }
+
+    /// Boosts R6b–R11 (package penalty, source preference, depth penalty, error/concept/wwdc intent)
+    /// applied in JS order via `score`-inout, continuing the bit-identical sequence.
+    private static func applyBoostsLate(
+        _ score: inout Double, _ r: ResultHit, _ lowerQuery: String, _ sourceType: String, _ intent: Intent
+    ) {
             // R6b: package penalty
             if sourceType == "packages" {
                 score *= 0.45
@@ -129,8 +147,5 @@ enum Rerank {
             }
             // R11: WWDC intent
             if intent.type == .wwdc, sourceType == "wwdc" { score *= 1.4 }
-
-            results[i].score = score
-        }
     }
 }
