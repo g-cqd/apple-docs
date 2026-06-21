@@ -11,7 +11,6 @@
 public import ADBuilder
 public import ADDB
 public import ADWrite
-
 import Crypto
 import Foundation
 
@@ -21,6 +20,9 @@ public struct CrawlDriver: Sendable {
         public var discovered = 0
         public var persisted = 0
         public var failed = 0
+        /// Pages whose stored validator + the adapter's conditional `check` reported `unchanged`, so
+        /// the fetch (and persist) was skipped — the incremental re-crawl's request-saving outcome.
+        public var skipped = 0
         public init() {}
     }
 
@@ -37,9 +39,11 @@ public struct CrawlDriver: Sendable {
     private let registry: SourceRegistry
     public init(registry: SourceRegistry) { self.registry = registry }
 
-    /// Crawl one source end-to-end into `db`. Discovers keys, then fetch + normalize each (up to
-    /// `maxConcurrency` in flight — the network-bound steps run in parallel), persisting results
-    /// serially as they arrive (ADDB is single-writer, and `db` never crosses to a child task).
+    /// Crawl one source end-to-end into `db`. Discovers keys; for each key already on disk with a stored
+    /// HTTP validator, asks the adapter's conditional `check` whether the upstream changed and SKIPS the
+    /// fetch when it hasn't (the incremental re-crawl). Survivors are then fetched + normalized (up to
+    /// `maxConcurrency` in flight — the network-bound steps run in parallel) and persisted serially as
+    /// they arrive (ADDB is single-writer, and `db` never crosses to a child task).
     @discardableResult
     public func crawl(
         sourceType: String, into db: Database, rootId: Int64, context: SourceContext, now: String,
@@ -51,7 +55,25 @@ public struct CrawlDriver: Sendable {
         var stats = Stats()
         stats.discovered = discovery.keys.count
 
-        var keys = discovery.keys.makeIterator()
+        // ── Phase 1: incremental check (serial; `db` stays on the consuming side) ───────────────────
+        // For each key that already has a persisted validator, run the adapter's conditional check. The
+        // validator READ touches `db` here, on the serial side, so `db` never crosses into a child task —
+        // preserving the single-writer invariant. A check failure is non-fatal: we fall through to fetch.
+        var keysToFetch: [String] = []
+        keysToFetch.reserveCapacity(discovery.keys.count)
+        for key in discovery.keys {
+            if let etag = pagePreviousEtag(db, key: key),
+                let result = try? await adapter.check(key, previousState: etag, context),
+                result.status == .unchanged
+            {
+                stats.skipped += 1
+                continue
+            }
+            keysToFetch.append(key)
+        }
+
+        // ── Phase 2: fetch + normalize survivors concurrently, persist serially ─────────────────────
+        var keys = keysToFetch.makeIterator()
         try await withThrowingTaskGroup(of: Fetched?.self) { group in
             for _ in 0 ..< Swift.max(1, maxConcurrency) {
                 guard let key = keys.next() else { break }
@@ -62,7 +84,8 @@ public struct CrawlDriver: Sendable {
                     do {
                         try CrawlPipeline.persist(
                             fetched.page, into: db, rootId: rootId, path: fetched.path,
-                            hashes: .init(content: fetched.hash, rawPayload: fetched.hash), now: now)
+                            hashes: .init(content: fetched.hash, rawPayload: fetched.hash),
+                            etag: fetched.etag, lastModified: fetched.lastModified, now: now)
                         stats.persisted += 1
                     } catch {
                         stats.failed += 1
@@ -78,11 +101,27 @@ public struct CrawlDriver: Sendable {
         return stats
     }
 
-    /// One fetched + normalized page (or nil on a per-key failure). Carried out of a child task.
+    /// The ETag stored for `key`'s page, or `nil` when the page is new, has no stored ETag, or the read
+    /// fails. Read on the SERIAL side so `db` never crosses into a child task. A non-nil result is the
+    /// trigger for the conditional `check`; `nil` means "no prior state" → always fetch (a fresh crawl).
+    private func pagePreviousEtag(_ db: Database, key: String) -> String? {
+        let validator = try? CrawlPersist.pageValidator(db, path: Self.crawlPath(forKey: key))
+        return validator?.etag
+    }
+
+    /// The storage path a key is persisted under when the normalized doc carries no URL — the same
+    /// `fetchNormalize` fallback. Used to look the validator up BEFORE the fetch, by the key alone.
+    static func crawlPath(forKey key: String) -> String { "/\(key)" }
+
+    /// One fetched + normalized page (or nil on a per-key failure). Carried out of a child task. The
+    /// `etag`/`lastModified` are the upstream HTTP validators (`FetchResult`), persisted for the next
+    /// re-crawl's conditional check.
     private struct Fetched: Sendable {
         let page: NormalizedPage
         let path: String
         let hash: String
+        let etag: String?
+        let lastModified: String?
     }
 
     private func fetchNormalize(
@@ -92,8 +131,9 @@ public struct CrawlDriver: Sendable {
             let result = try await adapter.fetch(key, context)
             let page = try adapter.normalize(result.key, result.payload)
             return Fetched(
-                page: page, path: page.document.url ?? "/\(key)",
-                hash: Self.sha256Hex(Self.rawBytes(result.payload)))
+                page: page, path: page.document.url ?? Self.crawlPath(forKey: key),
+                hash: Self.sha256Hex(Self.rawBytes(result.payload)),
+                etag: result.etag, lastModified: result.lastModified)
         } catch {
             return nil
         }

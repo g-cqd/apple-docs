@@ -1,5 +1,6 @@
 public import ADDBExec
 public import ADSQLModel
+import ADSQLJSON  // JSON_EXTRACT registration (the year/track folds) — see `enableJSON()` below
 
 /// Populates the apple-docs NATIVE search-denorm columns
 /// (`documents.{title_lc,key_lc,year_num,track_lc,root_display,root_slug}`, the v28 set) over a DB that
@@ -17,6 +18,11 @@ extension Database {
     /// Backfills the six denorm columns for every `documents` row. Idempotent (a re-run recomputes the
     /// same values). Runs in one pass: read the roots map, project the SQL-folded scalars, write each row.
     public func backfillSearchDenorm() throws(DBError) {
+        // The year/track folds use `JSON_EXTRACT`, which is opt-in (ADSQLJSON). The denorm serving path
+        // needs JSON registered anyway (the `$sources_json` filter uses `json_each`), so enabling it here
+        // makes the backfill self-sufficient; `enableJSON()` is idempotent registration.
+        enableJSON()
+
         // roots.slug → display_name. The denorm join is `roots r ON r.slug = d.framework`, so a document's
         // framework keys into this map; a miss falls back to the framework itself (the COALESCE default).
         var rootDisplayBySlug: [String: String] = [:]

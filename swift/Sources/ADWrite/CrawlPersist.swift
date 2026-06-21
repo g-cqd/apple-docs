@@ -50,7 +50,6 @@ public import ADSQLModel
 /// The native crawl persist. A namespace of pure write functions over an open,
 /// writable ADDB `Database` whose schema is already at `AppleDocsSchema`.
 public enum CrawlPersist {
-
     /// The two content hashes threaded into a persist: `content` (the normalized document hash) and
     /// `rawPayload` (the upstream payload hash). Bundled so `persistNormalized` stays within the
     /// parameter-count gate.
@@ -101,11 +100,26 @@ public enum CrawlPersist {
                     "source": .text(source),
                     "seed_path": seedPath.map(Value.text) ?? .null,
                     "source_type": .text(resolvedSourceType),
-                    "now": .text(now),
+                    "now": .text(now)
                 ])
             rowid = result.lastInsertRowid
         }
         return rowid
+    }
+
+    // MARK: - reads
+
+    /// The HTTP validators (`etag` / `last_modified`) stored for the page at `path`, or `nil` when no
+    /// page row exists. The incremental re-crawl reads this back BEFORE fetching and feeds the `etag`
+    /// into the adapter's conditional `check` (`If-None-Match`), so an unchanged upstream resource is
+    /// skipped without re-downloading. A single-row projection in the IndexEmbeddings read-helper idiom.
+    public static func pageValidator(
+        _ db: Database, path: String
+    ) throws(DBError) -> (etag: String?, lastModified: String?)? {
+        let rows = try db.prepare("SELECT etag, last_modified FROM pages WHERE path = $path")
+            .all(["path": .text(path)])
+        guard let row = rows.first else { return nil }
+        return (etag: cellText(row["etag"]), lastModified: cellText(row["last_modified"]))
     }
 
     // MARK: - persistNormalized
@@ -123,16 +137,22 @@ public enum CrawlPersist {
     /// All five steps share one write transaction (the JS wraps them in `db.tx`),
     /// committing once. `contentHash`/`rawPayloadHash` flow into both the pages
     /// content_hash and the documents content_hash/raw_payload_hash columns,
-    /// exactly as the JS persist threads them.
+    /// exactly as the JS persist threads them. `etag`/`lastModified` are the upstream
+    /// HTTP validators (`FetchResult.etag`/`.lastModified`); they flow into the pages
+    /// `etag`/`last_modified` columns so the incremental re-crawl can read them back
+    /// for a conditional `check`. Defaulted to `nil` so the flat callers (parity /
+    /// snapshot / index fixtures) that have no validators stay source-compatible — a
+    /// `nil` is COALESCE-preserved against any existing row value, never overwriting it.
     public static func persistNormalized(
         _ db: Database, rootId: Int64, path: String, _ normalized: NormalizedDoc,
-        hashes: DocumentHashes, now: String
+        hashes: DocumentHashes, etag: String? = nil, lastModified: String? = nil, now: String
     ) throws(DBError) {
         let doc = normalized.document
 
         try db.transaction { (txn) throws(DBError) in
             try insertPageRow(
-                txn, rootId: rootId, path: path, normalized, rawPayloadHash: hashes.rawPayload, now: now)
+                txn, rootId: rootId, path: path, normalized, rawPayloadHash: hashes.rawPayload,
+                etag: etag, lastModified: lastModified, now: now)
 
             let documentId = try insertDocumentRow(
                 txn, normalized, contentHash: hashes.content, rawPayloadHash: hashes.rawPayload, now: now)
@@ -168,7 +188,7 @@ public enum CrawlPersist {
                         // Plain TEXT — the zstd codec is compact/snapshot-only.
                         "content_text": .text(section.contentText ?? ""),
                         "content_json": section.contentJson.map(Value.text) ?? .null,
-                        "sort_order": .integer(Int64(section.sortOrder)),
+                        "sort_order": .integer(Int64(section.sortOrder))
                     ])
             }
 
@@ -197,7 +217,7 @@ public enum CrawlPersist {
                         "to_key": .text(relationship.toKey),
                         "relation_type": .text(relationship.relationType),
                         "section": relationship.section.map(Value.text) ?? .null,
-                        "sort_order": .integer(Int64(relationship.sortOrder ?? 0)),
+                        "sort_order": .integer(Int64(relationship.sortOrder ?? 0))
                     ])
             }
 
@@ -215,101 +235,102 @@ public enum CrawlPersist {
 // platform/metadata serialization, version encoding, last-wins dedup). Split from the enum body to
 // stay within the size/complexity gate; each mirrors its cited JS function exactly.
 extension CrawlPersist {
-
     /// Step 1 of `persistNormalized`: the pages-row upsert (pages.js upsertPageRow).
     private static func insertPageRow(
         _ txn: SQLTransaction, rootId: Int64, path: String, _ normalized: NormalizedDoc,
-        rawPayloadHash: String, now: String
+        rawPayloadHash: String, etag: String? = nil, lastModified: String? = nil, now: String
     ) throws(DBError) {
         let doc = normalized.document
-            // ── 1. pages row ────────────────────────────────────────────────────
-            // persist.js upsertPageFromDocument → db.upsertPage. The facade derives
-            // source_type (doc.sourceType ?? fallback ?? root.source_type ?? default)
-            // and url_depth (doc.urlDepth ?? max(0, path.split('/').len-1)). For the
-            // normalized path the doc carries both, so we use them directly; the
-            // facade's root lookup only matters when the doc omits them.
-            let pageSourceType = doc.sourceType ?? DEFAULT_SOURCE_TYPE
-            let pageUrlDepth = doc.urlDepth ?? max(0, path.split(separator: "/", omittingEmptySubsequences: true).count - 1)
-            // pages.js upsertPageRow — verbatim column set + ON CONFLICT(path).
-            try txn.run(
-                """
-                INSERT INTO pages (
-                  root_id, path, url, title, role, role_heading, abstract, platforms, declaration,
-                  etag, last_modified, content_hash, downloaded_at, status,
-                  source_type, language, is_release_notes, url_depth, doc_kind, source_metadata,
-                  min_ios, min_macos, min_watchos, min_tvos, min_visionos
-                )
-                VALUES (
-                  $root_id, $path, $url, $title, $role, $role_heading, $abstract, $platforms, $declaration,
-                  $etag, $last_modified, $content_hash, $downloaded_at, 'active',
-                  $source_type, $language, $is_release_notes, $url_depth, $doc_kind, $source_metadata,
-                  $min_ios, $min_macos, $min_watchos, $min_tvos, $min_visionos
-                )
-                ON CONFLICT(path) DO UPDATE SET
-                  title = COALESCE($title, pages.title),
-                  role = COALESCE($role, pages.role),
-                  role_heading = COALESCE($role_heading, pages.role_heading),
-                  abstract = COALESCE($abstract, pages.abstract),
-                  platforms = COALESCE($platforms, pages.platforms),
-                  declaration = COALESCE($declaration, pages.declaration),
-                  etag = COALESCE($etag, pages.etag),
-                  last_modified = COALESCE($last_modified, pages.last_modified),
-                  content_hash = COALESCE($content_hash, pages.content_hash),
-                  downloaded_at = COALESCE($downloaded_at, pages.downloaded_at),
-                  source_type = COALESCE($source_type, pages.source_type),
-                  language = COALESCE($language, pages.language),
-                  is_release_notes = COALESCE($is_release_notes, pages.is_release_notes),
-                  url_depth = COALESCE($url_depth, pages.url_depth),
-                  doc_kind = COALESCE($doc_kind, pages.doc_kind),
-                  source_metadata = COALESCE($source_metadata, pages.source_metadata),
-                  min_ios = COALESCE($min_ios, pages.min_ios),
-                  min_macos = COALESCE($min_macos, pages.min_macos),
-                  min_watchos = COALESCE($min_watchos, pages.min_watchos),
-                  min_tvos = COALESCE($min_tvos, pages.min_tvos),
-                  min_visionos = COALESCE($min_visionos, pages.min_visionos),
-                  status = 'active'
-                """,
-                [
-                    "root_id": .integer(rootId),
-                    // persist.js: url = doc.url ?? defaultUrl ?? null. For the
-                    // normalized path defaultUrl is unset (sourceTypeFallback path),
-                    // so url is doc.url (always set by normalize) or null.
-                    "path": .text(path),
-                    "url": doc.url.map(Value.text) ?? .null,
-                    "title": doc.title.map(Value.text) ?? .null,
-                    "role": doc.role.map(Value.text) ?? .null,
-                    "role_heading": doc.roleHeading.map(Value.text) ?? .null,
-                    "abstract": doc.abstractText.map(Value.text) ?? .null,
-                    "platforms": serializePlatforms(doc.platformsJson),
-                    "declaration": doc.declarationText.map(Value.text) ?? .null,
-                    // etag/last_modified are persist meta; the normalized flat path
-                    // passes null for both (no HTTP validators).
-                    "etag": .null,
-                    "last_modified": .null,
-                    "content_hash": .text(rawPayloadHash),  // meta.rawPayloadHash
-                    "downloaded_at": .text(now),
-                    "source_type": .text(pageSourceType),
-                    "language": doc.language.map(Value.text) ?? .null,
-                    // pages.js: isReleaseNotes == null ? 0 : (… ? 1 : 0)
-                    "is_release_notes": .integer(pagesReleaseNotesInt(doc.isReleaseNotes)),
-                    "url_depth": .integer(Int64(pageUrlDepth)),
-                    // pages.js: $doc_kind = params.docKind ?? params.role ?? null.
-                    // persist passes docKind = doc.kind, role = doc.role.
-                    "doc_kind": (doc.kind ?? doc.role).map(Value.text) ?? .null,
-                    "source_metadata": serializeMetadata(doc.sourceMetadata),
-                    "min_ios": doc.minIos.map(Value.text) ?? .null,
-                    "min_macos": doc.minMacos.map(Value.text) ?? .null,
-                    "min_watchos": doc.minWatchos.map(Value.text) ?? .null,
-                    "min_tvos": doc.minTvos.map(Value.text) ?? .null,
-                    "min_visionos": doc.minVisionos.map(Value.text) ?? .null,
-                ])
+        // ── 1. pages row ────────────────────────────────────────────────────
+        // persist.js upsertPageFromDocument → db.upsertPage. The facade derives
+        // source_type (doc.sourceType ?? fallback ?? root.source_type ?? default)
+        // and url_depth (doc.urlDepth ?? max(0, path.split('/').len-1)). For the
+        // normalized path the doc carries both, so we use them directly; the
+        // facade's root lookup only matters when the doc omits them.
+        let pageSourceType = doc.sourceType ?? DEFAULT_SOURCE_TYPE
+        let pageUrlDepth = doc.urlDepth ?? max(0, path.split(separator: "/", omittingEmptySubsequences: true).count - 1)
+        // pages.js upsertPageRow — verbatim column set + ON CONFLICT(path).
+        try txn.run(
+            """
+            INSERT INTO pages (
+              root_id, path, url, title, role, role_heading, abstract, platforms, declaration,
+              etag, last_modified, content_hash, downloaded_at, status,
+              source_type, language, is_release_notes, url_depth, doc_kind, source_metadata,
+              min_ios, min_macos, min_watchos, min_tvos, min_visionos
+            )
+            VALUES (
+              $root_id, $path, $url, $title, $role, $role_heading, $abstract, $platforms, $declaration,
+              $etag, $last_modified, $content_hash, $downloaded_at, 'active',
+              $source_type, $language, $is_release_notes, $url_depth, $doc_kind, $source_metadata,
+              $min_ios, $min_macos, $min_watchos, $min_tvos, $min_visionos
+            )
+            ON CONFLICT(path) DO UPDATE SET
+              title = COALESCE($title, pages.title),
+              role = COALESCE($role, pages.role),
+              role_heading = COALESCE($role_heading, pages.role_heading),
+              abstract = COALESCE($abstract, pages.abstract),
+              platforms = COALESCE($platforms, pages.platforms),
+              declaration = COALESCE($declaration, pages.declaration),
+              etag = COALESCE($etag, pages.etag),
+              last_modified = COALESCE($last_modified, pages.last_modified),
+              content_hash = COALESCE($content_hash, pages.content_hash),
+              downloaded_at = COALESCE($downloaded_at, pages.downloaded_at),
+              source_type = COALESCE($source_type, pages.source_type),
+              language = COALESCE($language, pages.language),
+              is_release_notes = COALESCE($is_release_notes, pages.is_release_notes),
+              url_depth = COALESCE($url_depth, pages.url_depth),
+              doc_kind = COALESCE($doc_kind, pages.doc_kind),
+              source_metadata = COALESCE($source_metadata, pages.source_metadata),
+              min_ios = COALESCE($min_ios, pages.min_ios),
+              min_macos = COALESCE($min_macos, pages.min_macos),
+              min_watchos = COALESCE($min_watchos, pages.min_watchos),
+              min_tvos = COALESCE($min_tvos, pages.min_tvos),
+              min_visionos = COALESCE($min_visionos, pages.min_visionos),
+              status = 'active'
+            """,
+            [
+                "root_id": .integer(rootId),
+                // persist.js: url = doc.url ?? defaultUrl ?? null. For the
+                // normalized path defaultUrl is unset (sourceTypeFallback path),
+                // so url is doc.url (always set by normalize) or null.
+                "path": .text(path),
+                "url": doc.url.map(Value.text) ?? .null,
+                "title": doc.title.map(Value.text) ?? .null,
+                "role": doc.role.map(Value.text) ?? .null,
+                "role_heading": doc.roleHeading.map(Value.text) ?? .null,
+                "abstract": doc.abstractText.map(Value.text) ?? .null,
+                "platforms": serializePlatforms(doc.platformsJson),
+                "declaration": doc.declarationText.map(Value.text) ?? .null,
+                // etag/last_modified are persist meta — the upstream HTTP validators
+                // (FetchResult.etag/.lastModified) threaded in for the incremental
+                // re-crawl. A nil (flat callers with no validators) binds NULL, which
+                // the ON CONFLICT `COALESCE($etag, pages.etag)` preserves against any
+                // prior value rather than clobbering it.
+                "etag": etag.map(Value.text) ?? .null,
+                "last_modified": lastModified.map(Value.text) ?? .null,
+                "content_hash": .text(rawPayloadHash),  // meta.rawPayloadHash
+                "downloaded_at": .text(now),
+                "source_type": .text(pageSourceType),
+                "language": doc.language.map(Value.text) ?? .null,
+                // pages.js: isReleaseNotes == null ? 0 : (… ? 1 : 0)
+                "is_release_notes": .integer(pagesReleaseNotesInt(doc.isReleaseNotes)),
+                "url_depth": .integer(Int64(pageUrlDepth)),
+                // pages.js: $doc_kind = params.docKind ?? params.role ?? null.
+                // persist passes docKind = doc.kind, role = doc.role.
+                "doc_kind": (doc.kind ?? doc.role).map(Value.text) ?? .null,
+                "source_metadata": serializeMetadata(doc.sourceMetadata),
+                "min_ios": doc.minIos.map(Value.text) ?? .null,
+                "min_macos": doc.minMacos.map(Value.text) ?? .null,
+                "min_watchos": doc.minWatchos.map(Value.text) ?? .null,
+                "min_tvos": doc.minTvos.map(Value.text) ?? .null,
+                "min_visionos": doc.minVisionos.map(Value.text) ?? .null
+            ])
     }
-
 
     /// The documents-row upsert SQL (verbatim from documents.js upsertDocument), held as a
     /// constant so insertDocumentRow stays within the body-length gate.
     static let documentsUpsertSQL =
-                """
+        """
                 INSERT INTO documents (
                   source_type, key, title, kind, role, role_heading, framework, url, language,
                   abstract_text, declaration_text, headings, platforms_json,
@@ -366,50 +387,50 @@ extension CrawlPersist {
         rawPayloadHash: String, now: String
     ) throws(DBError) -> Int64 {
         let doc = normalized.document
-            // ── 2. documents row ─────────────────────────────────────────────────
-            // database.js upsertNormalizedDocument → documents.js upsertDocument
-            // with the spread normalized.document + the two hashes. $now → both
-            // created_at and updated_at (wall-clock).
-            let documentSourceType = coerceSourceType(doc.sourceType)
-            let framework = doc.framework ?? deriveFrameworkFromPath(doc.key)
-            let title = doc.title ?? doc.key  // documents.js: $title = title ?? key
-            let docResult = try txn.run(
+        // ── 2. documents row ─────────────────────────────────────────────────
+        // database.js upsertNormalizedDocument → documents.js upsertDocument
+        // with the spread normalized.document + the two hashes. $now → both
+        // created_at and updated_at (wall-clock).
+        let documentSourceType = coerceSourceType(doc.sourceType)
+        let framework = doc.framework ?? deriveFrameworkFromPath(doc.key)
+        let title = doc.title ?? doc.key  // documents.js: $title = title ?? key
+        let docResult = try txn.run(
             Self.documentsUpsertSQL,
-                [
-                    "source_type": .text(documentSourceType),
-                    "key": .text(doc.key),
-                    "title": .text(title),
-                    "kind": doc.kind.map(Value.text) ?? .null,
-                    "role": doc.role.map(Value.text) ?? .null,
-                    "role_heading": doc.roleHeading.map(Value.text) ?? .null,
-                    "framework": framework.map(Value.text) ?? .null,
-                    "url": doc.url.map(Value.text) ?? .null,
-                    "language": doc.language.map(Value.text) ?? .null,
-                    "abstract_text": doc.abstractText.map(Value.text) ?? .null,
-                    "declaration_text": doc.declarationText.map(Value.text) ?? .null,
-                    "headings": doc.headings.map(Value.text) ?? .null,
-                    "platforms_json": serializePlatforms(doc.platformsJson),
-                    "min_ios": doc.minIos.map(Value.text) ?? .null,
-                    "min_macos": doc.minMacos.map(Value.text) ?? .null,
-                    "min_watchos": doc.minWatchos.map(Value.text) ?? .null,
-                    "min_tvos": doc.minTvos.map(Value.text) ?? .null,
-                    "min_visionos": doc.minVisionos.map(Value.text) ?? .null,
-                    "min_ios_num": encodeVersion(doc.minIos),
-                    "min_macos_num": encodeVersion(doc.minMacos),
-                    "min_watchos_num": encodeVersion(doc.minWatchos),
-                    "min_tvos_num": encodeVersion(doc.minTvos),
-                    "min_visionos_num": encodeVersion(doc.minVisionos),
-                    // documents.js: isX == null ? null : (x ? 1 : 0)
-                    "is_deprecated": boolToValue(doc.isDeprecated),
-                    "is_beta": boolToValue(doc.isBeta),
-                    "is_release_notes": boolToValue(doc.isReleaseNotes),
-                    "url_depth": doc.urlDepth.map { .integer(Int64($0)) } ?? .null,
-                    "source_metadata": serializeMetadata(doc.sourceMetadata),
-                    "content_hash": .text(contentHash),
-                    "raw_payload_hash": .text(rawPayloadHash),
-                    "now": .text(now),
-                ])
-            let documentId = docResult.lastInsertRowid
+            [
+                "source_type": .text(documentSourceType),
+                "key": .text(doc.key),
+                "title": .text(title),
+                "kind": doc.kind.map(Value.text) ?? .null,
+                "role": doc.role.map(Value.text) ?? .null,
+                "role_heading": doc.roleHeading.map(Value.text) ?? .null,
+                "framework": framework.map(Value.text) ?? .null,
+                "url": doc.url.map(Value.text) ?? .null,
+                "language": doc.language.map(Value.text) ?? .null,
+                "abstract_text": doc.abstractText.map(Value.text) ?? .null,
+                "declaration_text": doc.declarationText.map(Value.text) ?? .null,
+                "headings": doc.headings.map(Value.text) ?? .null,
+                "platforms_json": serializePlatforms(doc.platformsJson),
+                "min_ios": doc.minIos.map(Value.text) ?? .null,
+                "min_macos": doc.minMacos.map(Value.text) ?? .null,
+                "min_watchos": doc.minWatchos.map(Value.text) ?? .null,
+                "min_tvos": doc.minTvos.map(Value.text) ?? .null,
+                "min_visionos": doc.minVisionos.map(Value.text) ?? .null,
+                "min_ios_num": encodeVersion(doc.minIos),
+                "min_macos_num": encodeVersion(doc.minMacos),
+                "min_watchos_num": encodeVersion(doc.minWatchos),
+                "min_tvos_num": encodeVersion(doc.minTvos),
+                "min_visionos_num": encodeVersion(doc.minVisionos),
+                // documents.js: isX == null ? null : (x ? 1 : 0)
+                "is_deprecated": boolToValue(doc.isDeprecated),
+                "is_beta": boolToValue(doc.isBeta),
+                "is_release_notes": boolToValue(doc.isReleaseNotes),
+                "url_depth": doc.urlDepth.map { .integer(Int64($0)) } ?? .null,
+                "source_metadata": serializeMetadata(doc.sourceMetadata),
+                "content_hash": .text(contentHash),
+                "raw_payload_hash": .text(rawPayloadHash),
+                "now": .text(now)
+            ])
+        let documentId = docResult.lastInsertRowid
         return documentId
     }
     // MARK: - JS-helper reproductions (bit-for-bit)
@@ -420,7 +441,7 @@ extension CrawlPersist {
     /// `storage/source-types.js` SOURCE_TYPES — the canonical valid set.
     static let SOURCE_TYPES: Set<String> = [
         "apple-docc", "swift-docc", "external-docc", "apple-archive", "guidelines", "hig",
-        "packages", "sample-code", "swift-book", "swift-evolution", "swift-org", "wwdc",
+        "packages", "sample-code", "swift-book", "swift-evolution", "swift-org", "wwdc"
     ]
 
     /// `storage/source-types.js` ROOT_SOURCE_TYPE_BY_SLUG.
@@ -433,7 +454,7 @@ extension CrawlPersist {
         "swift-book": "swift-book",
         "swift-evolution": "swift-evolution",
         "swift-org": "swift-org",
-        "wwdc": "wwdc",
+        "wwdc": "wwdc"
     ]
 
     /// `coerceSourceType` — valid value passes, anything else → default.
@@ -568,5 +589,12 @@ extension CrawlPersist {
     static func pagesReleaseNotesInt(_ value: Bool?) -> Int64 {
         guard let value else { return 0 }
         return value ? 1 : 0
+    }
+
+    /// Read a TEXT cell as `String?` (any non-text / NULL → nil) — the `pageValidator`
+    /// projection's unwrap, mirroring IndexEmbeddings' cell reader.
+    static func cellText(_ value: Value?) -> String? {
+        if case .text(let text) = value { return text }
+        return nil
     }
 }

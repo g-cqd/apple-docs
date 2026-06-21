@@ -491,7 +491,21 @@ let package = Package(
         // ADSQLSearchTests — byte-identity golden for the §2.5 response wire layout (`ResponseFraming`),
         // the gate for the A1 endian consolidation. The server-only `ADSQLSearch` target had no test
         // home; this also seats the future `SearchQuery`-vs-SQLite parity suite (Phase 5A).
-        .testTarget(name: "ADSQLSearchTests", dependencies: ["ADSQLSearch"], swiftSettings: testSettings),
+        .testTarget(
+            name: "ADSQLSearchTests",
+            dependencies: [
+                "ADSQLSearch",
+                // ADDB (Database.open) + ADSQLModel (Value) back the backfill/RowDecoder gates; ADWrite
+                // (migrateSchema + CrawlPersist.upsertRoot) backs the denorm-vs-normalized search-equivalence
+                // gate, which runs both `searchPagesFramed*` forms over the REAL apple-docs schema on ADDB.
+                .product(name: "ADDB", package: "ADDB"),
+                .product(name: "ADSQLModel", package: "ADSQL"),
+                // ADSQLFullTextSearch — the equivalence gate calls `enableFullTextSearch()` so the
+                // `documents_fts MATCH` in both search forms runs (FTS is opt-in, like JSON).
+                .product(name: "ADSQLFullTextSearch", package: "ADDB"),
+                "ADWrite"
+            ],
+            swiftSettings: testSettings),
         .testTarget(
             name: "ADSearchCascadeTests", dependencies: ["ADSearchCascade"], swiftSettings: testSettings),
         // ADServeCoreTests + ADServeDSLTests moved to the standalone ADServe package.
