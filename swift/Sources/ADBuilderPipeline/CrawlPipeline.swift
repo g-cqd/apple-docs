@@ -19,13 +19,16 @@ public enum CrawlPipeline {
 
     /// Persist a normalized page: map + `CrawlPersist.persistNormalized`, in one ADDB transaction.
     /// `hashes` (content / raw-payload SHA-256) are the caller's — change-detection POLICY the crawl
-    /// driver owns, not this boundary.
+    /// driver owns, not this boundary. `etag`/`lastModified` are the upstream HTTP validators the driver
+    /// carries from `FetchResult`; they land in `pages.etag`/`last_modified` so the next re-crawl can read
+    /// them back for a conditional check. Defaulted ⇒ the pure-mapping callers stay source-compatible.
     public static func persist(
         _ page: NormalizedPage, into db: Database, rootId: Int64, path: String,
-        hashes: CrawlPersist.DocumentHashes, now: String
+        hashes: CrawlPersist.DocumentHashes, etag: String? = nil, lastModified: String? = nil, now: String
     ) throws {
         try CrawlPersist.persistNormalized(
-            db, rootId: rootId, path: path, normalizedDoc(page), hashes: hashes, now: now)
+            db, rootId: rootId, path: path, normalizedDoc(page), hashes: hashes,
+            etag: etag, lastModified: lastModified, now: now)
     }
 
     // MARK: - 1:1 field mapping (ADBuilder DTO -> ADWrite DTO)
