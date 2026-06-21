@@ -99,16 +99,9 @@ let addbDependency: Package.Dependency = {
     return .package(url: "https://github.com/g-cqd/ADDB.git", branch: "main")
 }()
 
-// ADCONCURRENCY_PATH -> the zero-dependency `ADConcurrency` leaf (the shared `ResourcePool` the
-// server's connection pool is now specialized from, plus the `TaskProvider`/`Clock` seams). Pulled by
-// the server-side `ADServeCore` only; also resolved transitively via ADJSON's umbrella. Never by the
-// zero-external-dep `ADCore` dylib.
-let adconcurrencyDependency: Package.Dependency = {
-    if let path = Context.environment["ADCONCURRENCY_PATH"], !path.isEmpty {
-        return .package(path: path)
-    }
-    return .package(url: "https://github.com/g-cqd/ADConcurrency.git", branch: "main")
-}()
+// ADConcurrency (the `ResourcePool` + `TaskProvider`/`Clock` seams) is folded into the ADFoundation
+// umbrella package; ad-server takes the `ADConcurrency` product from `package: "ADFoundation"` below,
+// and ADServeCore/ADJSON also surface it transitively. Never reaches the zero-external-dep ADCore dylib.
 
 // ADHTML_PATH -> the Foundation-free HTML engine. ADBuilder pulls `ADHTMLCore` for the crawl's HTML
 // parser + extractor (the HTMLTape tokenizer → HTMLNode DOM → Markdown/plain-text + HTMLDocument.extract),
@@ -143,16 +136,8 @@ let adbuildToolsDependencies: [Package.Dependency] = {
     return [.package(url: "https://github.com/g-cqd/ADBuildTools.git", branch: "main")]
 }()
 
-// ADTestKit — the shared AD-family testing architecture (SeededRNG, Fuzz/ByteMutator, oracles,
-// async/time tools). Test-only and dev-gated, so normal/CI dylib builds never resolve it. Local
-// checkout via `ADTESTKIT_PATH`, otherwise the published `main`.
-let adtestkitDependencies: [Package.Dependency] = {
-    guard isDev else { return [] }
-    if let path = Context.environment["ADTESTKIT_PATH"], !path.isEmpty {
-        return [.package(path: path)]
-    }
-    return [.package(url: "https://github.com/g-cqd/ADTestKit.git", branch: "main")]
-}()
+// ADTestKit (the shared testing architecture) is folded into the ADFoundation umbrella package; the
+// dev test wiring below references it via `package: "ADFoundation"` (adfoundationDependency).
 
 let package = Package(
     name: "AppleDocsCore",
@@ -194,7 +179,6 @@ let package = Package(
         adfoundationDependency,
         adsqlDependency,
         addbDependency,
-        adconcurrencyDependency,
         adserveDependency,
         adhtmlDependency,
         // ad-server-only. swift-http-types: type-safe HTTP headers/status; swift-log:
@@ -239,7 +223,7 @@ let package = Package(
         // `## ` inside a code fence; the JS regex did not). A build-tool dep; NOT pulled
         // by the ADCore dylib.
         .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.4.0")
-    ] + http3PackageDependencies + adbuildToolsDependencies + adtestkitDependencies,
+    ] + http3PackageDependencies + adbuildToolsDependencies,
     targets: [
         .target(
             name: "ADBase",
@@ -348,6 +332,7 @@ let package = Package(
                 // ADFCore: the audited `PercentCoding.decodeForm` + `UTF8Validation` the query parser
                 // decodes/validates `?q=…` through (rejecting malformed/invalid-UTF-8 input).
                 .product(name: "ADFCore", package: "ADFoundation"),
+                .product(name: "ADConcurrency", package: "ADFoundation"),
                 "ADStorage",
                 "ADContent",
                 "ADRender",
@@ -554,7 +539,7 @@ if isDev {
     // the archive fuzz/oracle suites, the renderer's typed-fixture asserts, the row-codec suite's typed
     // asserts (all to keep heavy chained `#expect`s under the 100ms type-check budget), and the embed
     // writer gate's deterministic `SeededRNG`-backed fake embedder (IndexEmbeddingsTests).
-    let adTestKit: Target.Dependency = .product(name: "ADTestKit", package: "ADTestKit")
+    let adTestKit: Target.Dependency = .product(name: "ADTestKit", package: "ADFoundation")
     for name in ["ADArchiveTests", "ADContentTests", "ADStorageTests", "ADWriteTests"] {
         package.targets.first { $0.name == name }?.dependencies.append(adTestKit)
     }
