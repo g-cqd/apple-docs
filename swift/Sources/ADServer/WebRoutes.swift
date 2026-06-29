@@ -2,6 +2,7 @@
 // streaming writer (caller-ordered keys). Storage stays typed (ADStorage returns
 // facets/rows); presentation lives here.
 
+import ADBase
 import ADJSON
 import ADServeCore
 import ADStorage
@@ -9,6 +10,14 @@ import Foundation
 import HTTPTypes
 
 enum WebRoutes {
+    // `ISO8601DateFormatter` is thread-safe for `string(from:)` once configured, but
+    // isn't marked `Sendable` — `nonisolated(unsafe)` is the contained, correct
+    // annotation (same category as `IntentDetector`'s `Regex` statics). The endpoint
+    // closures dispatch concurrently, so this is shared across requests; hoisting it
+    // avoids re-allocating the formatter on every (hot) manifest request. Default
+    // options = `.withInternetDateTime` — no fractional seconds, matching prior bytes.
+    nonisolated(unsafe) private static let iso8601 = ISO8601DateFormatter()
+
     /// GET /api/filters body.
     static func filters(_ conn: StorageConnection) -> [UInt8] {
         let facets = conn.searchFilters()
@@ -144,7 +153,7 @@ enum WebRoutes {
                 "title-index": "title-index.\(String(sha256HexLower(titleBytes).prefix(10))).json",
                 "aliases": "aliases.\(String(sha256HexLower(aliasBytes).prefix(10))).json"
             ],
-            generatedAt: ISO8601DateFormatter().string(from: Date()))
+            generatedAt: iso8601.string(from: Date()))
         return WebJSON.encode(manifest)
     }
 
@@ -307,9 +316,10 @@ func matchHashedSearchArtifact(_ path: Substring) -> String? {
     return nil
 }
 
-/// Identity for keys ≤ 200 bytes (every real doc key). The oversized-segment SHA-1
-/// hashing (a >200-byte path SEGMENT) is not ported (vanishingly rare).
-private func safeWebDocKey(_ key: String) -> String { key }
+/// Canonical web path for a corpus key — oversized path segments get the
+/// deterministic truncate-and-hash treatment so the live server and the static
+/// build emit the IDENTICAL `/docs/<key>/` URL. See `ADBase.SafePath`.
+private func safeWebDocKey(_ key: String) -> String { SafePath.safeWebDocKey(key) }
 
 /// Matches `^/data/frameworks/([^/]+)/tree\.([0-9a-f]{10})\.json$` → the slug.
 func matchFrameworkTreePath(_ path: Substring) -> String? {

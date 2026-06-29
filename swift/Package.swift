@@ -333,6 +333,7 @@ let package = Package(
                 // decodes/validates `?q=…` through (rejecting malformed/invalid-UTF-8 input).
                 .product(name: "ADFCore", package: "ADFoundation"),
                 .product(name: "ADConcurrency", package: "ADFoundation"),
+                "ADBase",
                 "ADStorage",
                 "ADContent",
                 "ADRender",
@@ -432,6 +433,12 @@ let package = Package(
                 "ADSemantic",
                 "ADEmbed",
                 "ADWrite",
+                // ADBuilder (adapters + HTTP client + rate limiter) and ADBuilderPipeline
+                // (CrawlDriver) back the `crawl` write verb; ADDB supplies the writable
+                // `Database`/`DatabaseOptions` the crawl creates + migrates.
+                "ADBuilder",
+                "ADBuilderPipeline",
+                .product(name: "ADDB", package: "ADDB"),
                 .product(name: "ADJSONCore", package: "ADJSON"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
@@ -554,6 +561,7 @@ if isDev {
 // those graphs from the build. Inert unless the env var is set; CI / normal runs build
 // the whole package. (Back-compat: AD_ONLY_ADWRITE_TESTS still selects ADWriteTests.)
 let isolationClosures: [String: Set<String>] = [
+    "ADBaseTests": ["ADBase", "ADBaseTests"],
     "ADWriteTests": ["ADWrite", "ADEmbed", "ADArchive", "ADWriteTests"],
     "ADBuilderTests": ["ADBuilder", "ADBuilderTests"],
     "ADBuilderPipelineTests": [
