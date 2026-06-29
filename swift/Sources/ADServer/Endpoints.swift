@@ -1,5 +1,5 @@
 // The ad-server endpoint declarations, in the hierarchical ADServeDSL:
-// `Server { App(pool:) { Group(prefix) { GET(subpath, pool:) { ctx in … }.cache(…) } } }`.
+// `Server { App(pool:) { Scope(prefix) { GET(subpath, pool:) { ctx in … }.cache(…) } } }`.
 // The pool is a typed parameter that picks the handler context (`.shared` → `ctx.db`,
 // `.none` → no DB); handlers are trailing closures; output is a typed `MediaType`. The
 // engine applies the cross-cutting envelope (built below) to every response; routes only
@@ -80,21 +80,21 @@ func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher, readiness: Ser
     }
     .cache(.noStore)
 
-    Group("api") {
+    Scope("api") {
         GET("filters") { ctx in .json(WebRoutes.filters(ctx.db), as: .json) }.cache(.apiCorpus)
         GET("fonts") { ctx in .json(WebRoutes.fonts(ctx.db), as: .json) }.etag
         GET("fonts/faces.css") { ctx in
             .text(WebRoutes.fontFacesCss(ctx.db, baseUrl: config.baseUrl), as: .css)
         }
         .cache(.apiCorpus, etag: true)
-        Group("symbols") {
+        Scope("symbols") {
             GET("index.json") { ctx in .json(WebRoutes.symbolsIndex(ctx.db), as: .json) }.etag
             GET("search") { symbolsSearchHandler($0) }
             .etag
         }
     }
 
-    Group("data/search") {
+    Scope("data/search") {
         GET("search-manifest.json") { ctx in
             .json(WebRoutes.searchManifest(ctx.db), as: .json)
         }
@@ -112,7 +112,7 @@ func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher, readiness: Ser
         .text(Discovery.openSearchXml(config), as: .openSearch)
     }
     .cache(.discovery, etag: true)
-    Group(".well-known") {
+    Scope(".well-known") {
         GET("api-catalog", pool: .none) { _ in
             .text(Discovery.apiCatalog(config), as: .linkset)
         }
