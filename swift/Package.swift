@@ -562,6 +562,7 @@ if isDev {
 // the whole package. (Back-compat: AD_ONLY_ADWRITE_TESTS still selects ADWriteTests.)
 let isolationClosures: [String: Set<String>] = [
     "ADBaseTests": ["ADBase", "ADBaseTests"],
+    "ADContentTests": ["ADContent", "ADBase", "ADEmbed", "ADContentTests"],
     "ADWriteTests": ["ADWrite", "ADEmbed", "ADArchive", "ADWriteTests"],
     "ADBuilderTests": ["ADBuilder", "ADBuilderTests"],
     "ADBuilderPipelineTests": [

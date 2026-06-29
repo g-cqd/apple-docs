@@ -1,6 +1,6 @@
 import Testing
 
-@testable import ADBuilder
+@testable import ADContent
 
 @Test func escapesHtmlInJsOrder() {
     #expect(
