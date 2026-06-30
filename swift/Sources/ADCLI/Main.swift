@@ -7,6 +7,7 @@
 
 import ADJSONCore
 import ADStorage
+import ADWebBuild
 import ArgumentParser
 import Foundation
 
@@ -18,7 +19,7 @@ struct ADCLICommand: AsyncParsableCommand {
         subcommands: [
             FrameworksCommand.self, KindsCommand.self, BrowseCommand.self, ReadCommand.self,
             SearchCommand.self, StatusCommand.self, SemanticProbeCommand.self,
-            AddbWriteSpikeCommand.self
+            AddbWriteSpikeCommand.self, WebCommand.self
         ])
 }
 

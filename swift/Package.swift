@@ -438,6 +438,7 @@ let package = Package(
             dependencies: [
                 "ADStorage",
                 "ADContent",
+                "ADWebBuild",
                 "ADSearchCascade",
                 "ADSemantic",
                 "ADEmbed",
