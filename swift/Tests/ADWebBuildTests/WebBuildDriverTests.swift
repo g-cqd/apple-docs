@@ -32,7 +32,7 @@ private let driverConfig = SiteConfig(
 
 @Test func driverCollectsInputsFromCorpus() {
     let reader = MockCorpus(roots: twoRoots, fonts: nil, symbols: driverSymbols)
-    let inputs = BuildSite.collectInputs(from: reader, version: "1.2.3")
+    let inputs = BuildSite.collectInputs(from: reader, config: driverConfig, version: "1.2.3")
 
     #expect(inputs.indexFrameworks.count == 2)
     #expect(inputs.indexFrameworks[0].slug == "combine")
@@ -42,6 +42,15 @@ private let driverConfig = SiteConfig(
     #expect(inputs.totalDocuments == 8)
     #expect(inputs.symbolTotals.count == 2)
     #expect(inputs.version == "1.2.3")
+}
+
+@Test func driverWiresHomepageExtras() {
+    let reader = MockCorpus(roots: twoRoots, fonts: nil, symbols: driverSymbols)
+    let inputs = BuildSite.collectInputs(from: reader, config: driverConfig, version: "1.2.3")
+    // Homepage Fonts/Symbols extras injected into the design kind.
+    #expect(inputs.indexExtras.count == 1)
+    #expect(inputs.indexExtras[0].kind == "design")
+    #expect(inputs.indexExtras[0].items.count == 2)
 }
 
 @Test func driverWritesEssentialsTree() {
