@@ -412,6 +412,15 @@ let package = Package(
             name: "ADBuilderPipeline",
             dependencies: ["ADBuilder", "ADWrite", .product(name: "ADDB", package: "ADDB")],
             swiftSettings: releaseCMO + strictSettings),
+        // ADWebBuild — the native web static-site build (Phase D3a): page templates,
+        // search artifacts, sitemaps, discovery, the build orchestrator. Calls the
+        // ADContent DocC→HTML renderer IN-PROCESS (no FFI). NOT in the ADCore dylib graph.
+        // Note: the page templates escape via `Bun.escapeHTML` semantics (`&#x27;` for the
+        // apostrophe) — distinct from the content renderer's `&#39;`.
+        .target(
+            name: "ADWebBuild",
+            dependencies: ["ADContent", "ADBase"],
+            swiftSettings: releaseCMO + strictSettings),
         // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
         // Byte-for-byte output-compatible with the Bun cli.js read verbs. Reads via
         // ADStorage; ADContent supplies the String markdown renderer the `read` verb
@@ -537,7 +546,9 @@ let package = Package(
             dependencies: [
                 "ADBuilderPipeline", "ADBuilder", "ADWrite", .product(name: "ADDB", package: "ADDB"),
                 .product(name: "ADSQLModel", package: "ADSQL"),
-            ], swiftSettings: testSettings)
+            ], swiftSettings: testSettings),
+        .testTarget(
+            name: "ADWebBuildTests", dependencies: ["ADWebBuild"], swiftSettings: testSettings)
     ]
 )
 
@@ -563,6 +574,7 @@ if isDev {
 let isolationClosures: [String: Set<String>] = [
     "ADBaseTests": ["ADBase", "ADBaseTests"],
     "ADContentTests": ["ADContent", "ADBase", "ADEmbed", "ADContentTests"],
+    "ADWebBuildTests": ["ADWebBuild", "ADContent", "ADBase", "ADEmbed", "ADWebBuildTests"],
     "ADWriteTests": ["ADWrite", "ADEmbed", "ADArchive", "ADWriteTests"],
     "ADBuilderTests": ["ADBuilder", "ADBuilderTests"],
     "ADBuilderPipelineTests": [
