@@ -6,6 +6,7 @@ indirect enum JsonLd: Sendable {
     case string(String)
     case bool(Bool)
     case int(Int)
+    case null
     case object([(String, JsonLd)])
     case array([JsonLd])
 
@@ -15,6 +16,7 @@ indirect enum JsonLd: Sendable {
         case .string(let s): return "\"\(Self.escapeString(s))\""
         case .bool(let b): return b ? "true" : "false"
         case .int(let i): return String(i)
+        case .null: return "null"
         case .object(let pairs):
             return "{" + pairs.map { "\"\(Self.escapeString($0.0))\":\($0.1.serialized())" }.joined(separator: ",") + "}"
         case .array(let items):
