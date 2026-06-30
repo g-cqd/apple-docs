@@ -15,4 +15,12 @@ extension StorageConnection {
         }
         return out
     }
+
+    /// `SELECT value FROM snapshot_meta WHERE key = ?` — the install/build stamps
+    /// (`snapshot_tag` / `snapshot_version` / `build_macos`) the footer shows.
+    public func snapshotMeta(_ key: String) -> String? {
+        guard let stmt = conn.prepareUncached("SELECT value FROM snapshot_meta WHERE key = ?") else { return nil }
+        stmt.bindText(1, key)
+        return stmt.step() == SQLite.row ? stmt.text(0) : nil
+    }
 }
