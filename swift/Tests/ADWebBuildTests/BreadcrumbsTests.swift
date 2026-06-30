@@ -30,3 +30,17 @@ import Testing
 @Test func breadcrumbEmptyKey() {
     #expect(Breadcrumbs.buildBreadcrumbs("") == "")
 }
+
+@Test func breadcrumbJsonLdMulti() {
+    let actual = Breadcrumbs.buildBreadcrumbListJsonLd(
+        "swiftui/view/body", baseUrl: "https://x.test/", title: "body", framework: "SwiftUI")?.serialized()
+    let expected =
+        "{\"@type\":\"BreadcrumbList\",\"itemListElement\":[{\"@type\":\"ListItem\",\"position\":1,\"name\":\"SwiftUI\",\"item\":\"https://x.test/docs/swiftui/\"},{\"@type\":\"ListItem\",\"position\":2,\"name\":\"view\",\"item\":\"https://x.test/docs/swiftui/view/\"},{\"@type\":\"ListItem\",\"position\":3,\"name\":\"body\"}]}"
+    #expect(actual == expected)
+}
+
+@Test func breadcrumbJsonLdSingleAndNil() {
+    let one = Breadcrumbs.buildBreadcrumbListJsonLd("swiftui", baseUrl: "https://x.test", title: "SwiftUI")?.serialized()
+    #expect(one == "{\"@type\":\"BreadcrumbList\",\"itemListElement\":[{\"@type\":\"ListItem\",\"position\":1,\"name\":\"SwiftUI\"}]}")
+    #expect(Breadcrumbs.buildBreadcrumbListJsonLd("", baseUrl: "x") == nil)
+}
