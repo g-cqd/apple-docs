@@ -73,22 +73,25 @@ extension BuildSite {
     /// GAP (page-count filter, the adapter's job): the JS `buildHomepageProps`
     /// also drops roots whose only page is the root itself — that needs
     /// `getPagesByRoot`, so the ADStorage adapter pre-filters `corpusRoots()`;
-    /// this maps whatever roots it's given.
+    /// this maps whatever roots it's given. The manifest totals are 0 here — the
+    /// essentials build renders no pages (build.js reports rendered counts, so
+    /// `--skip-docs` is 0/0); the full render loop sets them.
     public static func collectInputs<R: CorpusReader>(
         from reader: R, config: SiteConfig, version: String? = nil
     ) -> BuildInputs {
         let roots = reader.corpusRoots()
+        // No count badge: `roots` has no doc_count column (getRoots = SELECT *
+        // FROM roots), so the JS homepage's fw.doc_count is always undefined.
         let frameworks = roots.map {
-            IndexFramework(kind: $0.kind, slug: $0.slug, displayName: $0.displayName, docCount: $0.documentCount)
+            IndexFramework(kind: $0.kind, slug: $0.slug, displayName: $0.displayName, docCount: nil)
         }
         let meta = roots.map {
             FrameworkMeta(slug: $0.slug, displayName: $0.displayName, kind: $0.kind, documentCount: $0.documentCount)
         }
-        let total = roots.reduce(0) { $0 + $1.documentCount }
         return BuildInputs(
             indexFrameworks: frameworks, indexExtras: homepageExtras(config),
             fontFamilies: reader.fontFamilies(), symbolTotals: reader.symbolTotals(), frameworkMeta: meta,
-            version: version, totalDocuments: total)
+            version: version, totalDocuments: 0, totalFrameworks: 0)
     }
 
     /// Collect → plan → ensure dirs → write the essentials artifact tree. I/O is

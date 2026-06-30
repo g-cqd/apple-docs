@@ -54,13 +54,19 @@ public struct BuildInputs: Sendable {
     public var symbolTotals: [(scope: String, count: Int)]
     public var frameworkMeta: [FrameworkMeta]
     public var version: String?
+    /// Manifest `totalDocuments` / `totalFrameworks` — RENDERED-page counts
+    /// (`counters.pagesBuilt+pagesSkipped` / `frameworksBuilt` in build.js), so
+    /// `--skip-docs` reports 0/0 even though the corpus is non-empty. (The
+    /// per-framework metadata `documentCount` is separate, on `frameworkMeta`.)
     public var totalDocuments: Int
+    public var totalFrameworks: Int
 
     public init(
         indexFrameworks: [IndexFramework] = [],
         indexExtras: [(kind: String, items: [IndexFramework])] = [],
         fontFamilies: JSON? = nil, symbolTotals: [(scope: String, count: Int)] = [],
-        frameworkMeta: [FrameworkMeta] = [], version: String? = nil, totalDocuments: Int = 0
+        frameworkMeta: [FrameworkMeta] = [], version: String? = nil, totalDocuments: Int = 0,
+        totalFrameworks: Int = 0
     ) {
         self.indexFrameworks = indexFrameworks
         self.indexExtras = indexExtras
@@ -69,6 +75,7 @@ public struct BuildInputs: Sendable {
         self.frameworkMeta = frameworkMeta
         self.version = version
         self.totalDocuments = totalDocuments
+        self.totalFrameworks = totalFrameworks
     }
 }
 
@@ -150,7 +157,7 @@ public enum BuildSite {
             ("buildDate", config.buildDate.map { JsonLd.string($0) } ?? .null),
             ("baseUrl", .string(config.baseUrl)),
             ("totalDocuments", .int(inputs.totalDocuments)),
-            ("totalFrameworks", .int(inputs.frameworkMeta.count)),
+            ("totalFrameworks", .int(inputs.totalFrameworks)),
             ("searchArtifacts", .null),
         ]).serializedPretty(2)
         artifacts.append(Artifact(path: "manifest.json", text: manifest))

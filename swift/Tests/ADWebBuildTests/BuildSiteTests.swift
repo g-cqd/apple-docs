@@ -16,7 +16,7 @@ private let essentialsConfig = SiteConfig(
 private let essentialsInputs = BuildInputs(
     indexFrameworks: [IndexFramework(kind: "Frameworks", slug: "combine", displayName: "Combine", docCount: 3)],
     frameworkMeta: [FrameworkMeta(slug: "combine", displayName: "Combine", kind: "framework", documentCount: 3)],
-    version: "1.2.3", totalDocuments: 3)
+    version: "1.2.3", totalDocuments: 3, totalFrameworks: 1)
 
 @Test func buildSiteEssentialsArtifactPaths() {
     let result = BuildSite.planEssentials(config: essentialsConfig, inputs: essentialsInputs)

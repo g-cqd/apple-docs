@@ -51,6 +51,28 @@ struct FileArtifactSink {
     }
 }
 
+/// `APPLE_DOCS_COMMIT` env, else `git rev-parse --short HEAD`; nil when neither
+/// resolves. Mirrors src/lib/git-version.js `getCommitHash`.
+func gitCommitHash() -> String? {
+    if let env = ProcessInfo.processInfo.environment["APPLE_DOCS_COMMIT"], !env.isEmpty { return env }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["git", "rev-parse", "--short", "HEAD"]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = Pipe()
+    do {
+        try process.run()
+        process.waitUntilExit()
+    } catch {
+        return nil
+    }
+    guard process.terminationStatus == 0 else { return nil }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    let hash = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    return hash.isEmpty ? nil : hash
+}
+
 /// `ad-cli web …` — the static-site build verb group.
 struct WebCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -87,7 +109,14 @@ struct WebBuildCommand: ParsableCommand {
             throw ExitCode(1)
         }
         let buildDate = String(ISO8601DateFormatter().string(from: Date()).prefix(10))
-        let config = SiteConfig(baseUrl: baseUrl, siteName: siteName, bundled: true, buildDate: buildDate)
+        // Footer stamps — `snapshot_tag` (or `snapshot_version`) + `build_macos`
+        // from snapshot_meta, and the short git commit (env override first), the
+        // same sources the JS build reads.
+        let snapshotTag = connection.snapshotMeta("snapshot_tag") ?? connection.snapshotMeta("snapshot_version")
+        let config = SiteConfig(
+            baseUrl: baseUrl, siteName: siteName, bundled: true, buildDate: buildDate,
+            snapshotTag: snapshotTag, buildMacos: connection.snapshotMeta("build_macos"),
+            commitHash: gitCommitHash())
         let reader = StorageCorpusReader(connection: connection)
         let sink = FileArtifactSink(outDir: out)
 

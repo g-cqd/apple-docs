@@ -39,7 +39,11 @@ private let driverConfig = SiteConfig(
     #expect(inputs.indexFrameworks[0].kind == "framework")
     #expect(inputs.indexFrameworks[1].displayName == "Human Interface Guidelines")
     #expect(inputs.frameworkMeta.count == 2)
-    #expect(inputs.totalDocuments == 8)
+    // Per-framework metadata keeps real counts; the manifest totals are
+    // rendered-counts (0 for the essentials build).
+    #expect(inputs.frameworkMeta[0].documentCount == 3)
+    #expect(inputs.totalDocuments == 0)
+    #expect(inputs.totalFrameworks == 0)
     #expect(inputs.symbolTotals.count == 2)
     #expect(inputs.version == "1.2.3")
 }
@@ -67,11 +71,12 @@ private let driverConfig = SiteConfig(
     #expect(written["data/frameworks/combine.json"] != nil)
 
     let manifest: String = written["manifest.json"] ?? ""
-    #expect(manifest.contains("\"totalDocuments\": 3,\n  \"totalFrameworks\": 1"))
+    #expect(manifest.contains("\"totalDocuments\": 0,\n  \"totalFrameworks\": 0"))
 
     let index: String = written["index.html"] ?? ""
     #expect(index.contains("data-filter-kind=\"framework\""))
-    #expect(index.contains("<a href=\"https://x.test/docs/combine/\">Combine</a>"))
+    // No count badge (roots has no doc_count column).
+    #expect(index.contains("<a href=\"https://x.test/docs/combine/\">Combine</a></li>"))
 
     let symbols: String = written["symbols/index.html"] ?? ""
     #expect(symbols.contains("<span id=\"symbols-count\">12</span> symbols indexed (10 public, 2 private)"))
