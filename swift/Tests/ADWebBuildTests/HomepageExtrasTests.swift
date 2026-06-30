@@ -1,0 +1,32 @@
+import Testing
+
+@testable import ADWebBuild
+
+// homepageExtras (buildHomepageExtras) → the index page's design-kind Fonts /
+// Symbols entries, byte-exact against renderIndexPage with the extras hook.
+
+private let extrasCfg = SiteConfig(
+    baseUrl: "https://x.test", siteName: "Docs", assetVersion: "v1", bundled: true, buildDate: "2026-06-30")
+private let extrasFrameworks: [IndexFramework] = [
+    IndexFramework(kind: "Frameworks", slug: "swiftui", displayName: "SwiftUI", docCount: 42)
+]
+
+@Test func homepageExtrasShape() {
+    let extras = BuildSite.homepageExtras(extrasCfg)
+    #expect(extras.count == 1)
+    #expect(extras[0].kind == "design")
+    let items = extras[0].items
+    #expect(items.count == 2)
+    #expect(items[0].slug == "fonts")
+    #expect(items[0].displayName == "Apple Fonts")
+    #expect(items[0].href == "https://x.test/fonts")
+    #expect(items[1].slug == "symbols")
+    #expect(items[1].href == "https://x.test/symbols")
+}
+
+@Test func indexPageWithHomepageExtrasByteExact() {
+    let actual = LandingPages.renderIndexPage(extrasFrameworks, extrasCfg, extras: BuildSite.homepageExtras(extrasCfg))
+    let expected =
+        "<!DOCTYPE html>\n<html lang=\"en\" data-theme=\"auto\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Docs</title>\n  <meta name=\"description\" content=\"Apple developer documentation, indexed locally.\">\n  <link rel=\"canonical\" href=\"https://x.test/\">\n  <meta name=\"robots\" content=\"index, follow, max-image-preview:large\">\n  <meta property=\"og:type\" content=\"website\">\n  <meta property=\"og:title\" content=\"Docs\">\n  <meta property=\"og:url\" content=\"https://x.test/\">\n  <meta property=\"og:site_name\" content=\"Docs\">\n  <meta property=\"og:description\" content=\"Apple developer documentation, indexed locally.\">\n  <meta name=\"twitter:card\" content=\"summary\">\n  <meta name=\"twitter:title\" content=\"Docs\">\n  <meta name=\"twitter:description\" content=\"Apple developer documentation, indexed locally.\">\n  <script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"WebSite\",\"name\":\"Docs\",\"url\":\"https://x.test/\",\"description\":\"Apple developer documentation, indexed locally.\",\"potentialAction\":{\"@type\":\"SearchAction\",\"target\":\"https://x.test/search?q={query}\",\"query-input\":\"required name=query\"}}</script>\n  <link rel=\"preload\" href=\"https://x.test/assets/style.css?v=v1\" as=\"style\">\n  <link rel=\"stylesheet\" href=\"https://x.test/assets/style.css?v=v1\">\n  <link rel=\"search\" type=\"application/opensearchdescription+xml\" title=\"Docs\" href=\"https://x.test/opensearch.xml\">\n  <script src=\"https://x.test/assets/core.js?v=v1\" defer></script>\n</head>\n<body>\n<a href=\"#main-content\" class=\"skip-link\">Skip to main content</a>\n<header class=\"site-header\">\n  <nav class=\"site-nav\">\n    <a class=\"site-name\" href=\"https://x.test/\">Docs</a>\n    <div class=\"search-container\">\n      <input class=\"search-input\" type=\"search\" role=\"combobox\" aria-haspopup=\"listbox\" placeholder=\"Search…\" aria-label=\"Search documentation\" autocomplete=\"off\" aria-expanded=\"false\" aria-controls=\"search-listbox\" aria-activedescendant=\"\" aria-autocomplete=\"list\">\n      <button class=\"search-clear\" type=\"button\" aria-label=\"Clear search\" hidden>&times;</button>\n      <div class=\"search-dropdown\" id=\"search-listbox\" hidden></div>\n      <div id=\"header-search-status\" aria-live=\"assertive\" class=\"sr-only\"></div>\n    </div>\n    <fieldset class=\"theme-switcher\" role=\"radiogroup\" aria-label=\"Color scheme\">\n      <button class=\"theme-option\" type=\"button\" role=\"radio\" data-theme-value=\"light\" aria-label=\"Light theme\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><circle cx=\"8\" cy=\"8\" r=\"3\"/><path d=\"M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4\"/></svg></button>\n      <button class=\"theme-option\" type=\"button\" role=\"radio\" data-theme-value=\"auto\" aria-label=\"System theme\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><circle cx=\"8\" cy=\"8\" r=\"5.5\"/><path d=\"M8 2.5v11\" fill=\"currentColor\"/><path d=\"M8 2.5A5.5 5.5 0 0 1 8 13.5\" fill=\"currentColor\"/></svg></button>\n      <button class=\"theme-option\" type=\"button\" role=\"radio\" data-theme-value=\"dark\" aria-label=\"Dark theme\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M13 9.5A5.5 5.5 0 1 1 6.5 3 4.5 4.5 0 0 0 13 9.5z\"/></svg></button>\n    </fieldset>\n  </nav>\n</header>\n<main id=\"main-content\" class=\"main-content has-sidebar listing\">\n  <h1>Docs</h1>\n  <details class=\"page-toc-mobile\"><summary>Contents</summary><nav class=\"page-toc\"><ul><li><a href=\"#frameworks\">Frameworks</a></li><li><a href=\"#design\">design</a></li></ul></nav></details>\n  <article class=\"doc-article\">\n  <section id=\"frameworks\" class=\"framework-group\" data-filter-kind=\"Frameworks\">\n    <h2 class=\"framework-kind\">Frameworks</h2>\n    <ul class=\"framework-list\">\n      <li data-filter-kind=\"Frameworks\"><a href=\"https://x.test/docs/swiftui/\">SwiftUI</a> <span class=\"badge badge-count\">42</span></li>\n    </ul>\n  </section>\n  <section id=\"design\" class=\"framework-group\" data-filter-kind=\"design\">\n    <h2 class=\"framework-kind\">design</h2>\n    <ul class=\"framework-list\">\n      <li data-filter-kind=\"design\"><a href=\"https://x.test/fonts\">Apple Fonts</a></li>\n      <li data-filter-kind=\"design\"><a href=\"https://x.test/symbols\">SF Symbols</a></li>\n    </ul>\n  </section>\n  </article>\n  <aside class=\"doc-sidebar\"><div class=\"sidebar-block\"><nav class=\"page-toc\"><ul><li><a href=\"#frameworks\">Frameworks</a></li><li><a href=\"#design\">design</a></li></ul></nav></div></aside>\n</main>\n<footer class=\"site-footer\">\n  <p>\n    Built on 2026-06-30\n    &middot; by <a href=\"https://github.com/g-cqd\" rel=\"noopener noreferrer\">@g-cqd</a>\n    &middot; based on <a href=\"https://developer.apple.com\" rel=\"noopener noreferrer\">Apple Developer Documentation</a>\n  </p>\n</footer>\n<script src=\"https://x.test/assets/listing.js?v=v1\" defer></script>\n</body>\n</html>"
+    #expect(actual == expected)
+}

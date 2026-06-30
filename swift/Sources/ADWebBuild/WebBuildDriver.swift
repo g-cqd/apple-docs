@@ -48,14 +48,35 @@ public protocol CorpusReader {
 public typealias ArtifactSink = (Artifact) throws -> Void
 
 extension BuildSite {
-    /// Map a corpus reader into the essentials `BuildInputs`.
+    /// `buildHomepageExtras(siteConfig)` — the synthetic Fonts/Symbols entries
+    /// injected into the homepage's `design` kind (no backing root, but full
+    /// pages of their own at /fonts and /symbols).
+    public static func homepageExtras(_ config: SiteConfig) -> [(kind: String, items: [IndexFramework])] {
+        [
+            (
+                kind: "design",
+                items: [
+                    IndexFramework(
+                        kind: "design", slug: "fonts", displayName: "Apple Fonts",
+                        href: "\(config.baseUrl)/fonts"),
+                    IndexFramework(
+                        kind: "design", slug: "symbols", displayName: "SF Symbols",
+                        href: "\(config.baseUrl)/symbols"),
+                ]
+            )
+        ]
+    }
+
+    /// Map a corpus reader into the essentials `BuildInputs`, with the homepage
+    /// Fonts/Symbols extras.
     ///
-    /// GAP (homepage parity, later slice): the JS `buildHomepageProps` drops
-    /// roots whose only page is the root itself and injects synthetic Fonts/
-    /// Symbols "extras" into the Design kind (`buildHomepageExtras`). This passes
-    /// every root through and emits no extras — the index roster is complete but
-    /// not yet byte-identical to the JS homepage; the S3/corpus gate will flag it.
-    public static func collectInputs<R: CorpusReader>(from reader: R, version: String? = nil) -> BuildInputs {
+    /// GAP (page-count filter, the adapter's job): the JS `buildHomepageProps`
+    /// also drops roots whose only page is the root itself — that needs
+    /// `getPagesByRoot`, so the ADStorage adapter pre-filters `corpusRoots()`;
+    /// this maps whatever roots it's given.
+    public static func collectInputs<R: CorpusReader>(
+        from reader: R, config: SiteConfig, version: String? = nil
+    ) -> BuildInputs {
         let roots = reader.corpusRoots()
         let frameworks = roots.map {
             IndexFramework(kind: $0.kind, slug: $0.slug, displayName: $0.displayName, docCount: $0.documentCount)
@@ -65,8 +86,9 @@ extension BuildSite {
         }
         let total = roots.reduce(0) { $0 + $1.documentCount }
         return BuildInputs(
-            indexFrameworks: frameworks, indexExtras: [], fontFamilies: reader.fontFamilies(),
-            symbolTotals: reader.symbolTotals(), frameworkMeta: meta, version: version, totalDocuments: total)
+            indexFrameworks: frameworks, indexExtras: homepageExtras(config),
+            fontFamilies: reader.fontFamilies(), symbolTotals: reader.symbolTotals(), frameworkMeta: meta,
+            version: version, totalDocuments: total)
     }
 
     /// Collect → plan → ensure dirs → write the essentials artifact tree. I/O is
@@ -77,7 +99,7 @@ extension BuildSite {
         config: SiteConfig, reader: R, version: String? = nil,
         ensureDir: (String) throws -> Void, write: ArtifactSink
     ) rethrows -> BuildResult {
-        let inputs = collectInputs(from: reader, version: version)
+        let inputs = collectInputs(from: reader, config: config, version: version)
         let result = planEssentials(config: config, inputs: inputs)
         for dir in result.dirs { try ensureDir(dir) }
         for artifact in result.artifacts { try write(artifact) }
