@@ -7,6 +7,7 @@
 import ADBase
 
 public import ADContent
+public import ADJSONCore
 
 extension BuildSite {
     /// Render one document page → `docs/<safeWebDocKey(key)>/index.html`.
@@ -23,5 +24,31 @@ extension BuildSite {
             ancestorTitles: ancestorTitles, markdownDocs: markdownDocs, highlight: highlight)
         let webKey = SafePath.safeWebDocKey(doc.key ?? "")
         return Artifact(path: "docs/\(webKey)/index.html", text: html)
+    }
+
+    /// Render one framework listing page (build.js step 6 /
+    /// build/framework-pages.js) → `docs/<slug>/index.html`, plus the
+    /// content-hashed `data/frameworks/<slug>/tree.<sha256(json)[:10]>.json`
+    /// sidecar when the framework has tree edges (the HTML then carries only a
+    /// `data-tree-src` ref, never the inline payload). Returns [sidecar?, html].
+    public static func planFrameworkPage(
+        framework: FrameworkRecord, documents: [JSON], config: SiteConfig,
+        treeEdges: [(fromKey: String, toKey: String)] = []
+    ) -> [Artifact] {
+        let slug = framework.slug ?? ""
+        var artifacts: [Artifact] = []
+        let tree = FrameworkPage.buildFrameworkTreeData(documents: documents, treeEdges: treeEdges, config: config)
+        var treeDataUrl: String?
+        if tree.hasTree {
+            let hash = String(Sha256.hexString(tree.json).prefix(10))
+            let treeRel = "data/frameworks/\(slug)/tree.\(hash).json"
+            artifacts.append(Artifact(path: treeRel, text: tree.json))
+            treeDataUrl = "\(config.baseUrl)/\(treeRel)"
+        }
+        let html = FrameworkPage.render(
+            framework: framework, documents: documents, config: config, treeEdges: treeEdges,
+            treeDataUrl: treeDataUrl)
+        artifacts.append(Artifact(path: "docs/\(slug)/index.html", text: html))
+        return artifacts
     }
 }
