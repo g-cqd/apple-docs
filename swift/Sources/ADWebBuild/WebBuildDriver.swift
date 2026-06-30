@@ -14,11 +14,20 @@ public struct CorpusRoot: Sendable {
     public let displayName: String?
     public let kind: String?
     public let documentCount: Int
-    public init(slug: String, displayName: String?, kind: String?, documentCount: Int) {
+    /// `source_type` + `url` for the framework page's original-resource link
+    /// (`frameworkOriginalUrl`); nil → synthesized from the slug.
+    public let sourceType: String?
+    public let url: String?
+    public init(
+        slug: String, displayName: String?, kind: String?, documentCount: Int,
+        sourceType: String? = nil, url: String? = nil
+    ) {
         self.slug = slug
         self.displayName = displayName
         self.kind = kind
         self.documentCount = documentCount
+        self.sourceType = sourceType
+        self.url = url
     }
 }
 

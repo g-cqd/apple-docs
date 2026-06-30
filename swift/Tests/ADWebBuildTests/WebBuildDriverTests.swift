@@ -5,7 +5,8 @@ import Testing
 
 // The build driver: corpus reader → BuildInputs → artifact tree, via injected
 // I/O. Exercised with an in-memory mock (the real StorageConnection adapter is a
-// later wiring slice).
+// later wiring slice). Test data is hoisted to file scope to stay under the
+// 100ms type-check budget.
 
 private struct MockCorpus: CorpusReader {
     let roots: [CorpusRoot]
@@ -16,13 +17,21 @@ private struct MockCorpus: CorpusReader {
     func symbolTotals() -> [(scope: String, count: Int)] { symbols }
 }
 
+private let driverSymbols: [(scope: String, count: Int)] = [
+    (scope: "public", count: 10), (scope: "private", count: 2),
+]
+private let twoRoots: [CorpusRoot] = [
+    CorpusRoot(slug: "combine", displayName: "Combine", kind: "framework", documentCount: 3),
+    CorpusRoot(slug: "design", displayName: "Human Interface Guidelines", kind: "design", documentCount: 5),
+]
+private let oneRoot: [CorpusRoot] = [
+    CorpusRoot(slug: "combine", displayName: "Combine", kind: "framework", documentCount: 3)
+]
+private let driverConfig = SiteConfig(
+    baseUrl: "https://x.test", siteName: "Docs", assetVersion: "v1", bundled: true, buildDate: "2026-06-30")
+
 @Test func driverCollectsInputsFromCorpus() {
-    let reader = MockCorpus(
-        roots: [
-            CorpusRoot(slug: "combine", displayName: "Combine", kind: "framework", documentCount: 3),
-            CorpusRoot(slug: "design", displayName: "Human Interface Guidelines", kind: "design", documentCount: 5),
-        ],
-        fonts: nil, symbols: [(scope: "public", count: 10), (scope: "private", count: 2)])
+    let reader = MockCorpus(roots: twoRoots, fonts: nil, symbols: driverSymbols)
     let inputs = BuildSite.collectInputs(from: reader, version: "1.2.3")
 
     #expect(inputs.indexFrameworks.count == 2)
@@ -35,34 +44,28 @@ private struct MockCorpus: CorpusReader {
     #expect(inputs.version == "1.2.3")
 }
 
-@Test func driverWritesEssentialsTree() throws {
-    let reader = MockCorpus(
-        roots: [CorpusRoot(slug: "combine", displayName: "Combine", kind: "framework", documentCount: 3)],
-        fonts: nil, symbols: [(scope: "public", count: 10), (scope: "private", count: 2)])
-    let config = SiteConfig(
-        baseUrl: "https://x.test", siteName: "Docs", assetVersion: "v1", bundled: true, buildDate: "2026-06-30")
-
+@Test func driverWritesEssentialsTree() {
+    let reader = MockCorpus(roots: oneRoot, fonts: nil, symbols: driverSymbols)
     var dirs: [String] = []
     var written: [String: String] = [:]
     let result = BuildSite.writeEssentials(
-        config: config, reader: reader, version: "1.2.3",
+        config: driverConfig, reader: reader, version: "1.2.3",
         ensureDir: { dirs.append($0) },
         write: { written[$0.path] = String(decoding: $0.bytes, as: UTF8.self) })
 
-    // Directories ensured + full artifact set written.
     #expect(dirs == BuildSite.directories)
-    #expect(written["index.html"]?.hasPrefix("<!DOCTYPE html>") == true)
+    #expect(written["index.html"]?.hasPrefix("<!DOCTYPE html>") ?? false)
     #expect(written["data/frameworks/combine.json"] != nil)
-    #expect(
-        written["manifest.json"]?.contains("\"totalDocuments\": 3,\n  \"totalFrameworks\": 1") == true)
 
-    // The roster + symbol totals flowed into the rendered pages.
-    #expect(written["index.html"]?.contains("data-filter-kind=\"framework\"") == true)
-    #expect(written["index.html"]?.contains("<a href=\"https://x.test/docs/combine/\">Combine</a>") == true)
-    #expect(
-        written["symbols/index.html"]?.contains(
-            "<span id=\"symbols-count\">12</span> symbols indexed (10 public, 2 private)") == true)
+    let manifest: String = written["manifest.json"] ?? ""
+    #expect(manifest.contains("\"totalDocuments\": 3,\n  \"totalFrameworks\": 1"))
 
-    // Stub ledger surfaced to the caller.
+    let index: String = written["index.html"] ?? ""
+    #expect(index.contains("data-filter-kind=\"framework\""))
+    #expect(index.contains("<a href=\"https://x.test/docs/combine/\">Combine</a>"))
+
+    let symbols: String = written["symbols/index.html"] ?? ""
+    #expect(symbols.contains("<span id=\"symbols-count\">12</span> symbols indexed (10 public, 2 private)"))
+
     #expect(!result.stubs.isEmpty)
 }
