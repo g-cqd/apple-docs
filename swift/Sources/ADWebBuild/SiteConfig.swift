@@ -13,11 +13,18 @@ public struct SiteConfig: Sendable {
     public let snapshotTag: String?
     public let buildMacos: String?
     public let commitHash: String?
+    /// Content-Signal policy (robots.txt / `_headers` / response header). The
+    /// caller folds the `APPLE_DOCS_CONTENT_SIGNAL` env in here; nil/empty →
+    /// `Discovery.defaultContentSignal`.
+    public let contentSignal: String?
+    /// OpenSearch `ShortName` (capped at 16 chars); nil → "Apple Docs".
+    public let searchShortName: String?
 
     public init(
         baseUrl: String = "", siteName: String = "Apple Developer Docs", assetVersion: String? = nil,
         bundled: Bool = false, buildDate: String? = nil, snapshotTag: String? = nil,
-        buildMacos: String? = nil, commitHash: String? = nil
+        buildMacos: String? = nil, commitHash: String? = nil, contentSignal: String? = nil,
+        searchShortName: String? = nil
     ) {
         self.baseUrl = baseUrl
         self.siteName = siteName
@@ -27,5 +34,7 @@ public struct SiteConfig: Sendable {
         self.snapshotTag = snapshotTag
         self.buildMacos = buildMacos
         self.commitHash = commitHash
+        self.contentSignal = contentSignal
+        self.searchShortName = searchShortName
     }
 }
