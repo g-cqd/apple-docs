@@ -30,6 +30,14 @@ struct HtmlNodes: Sendable {
         return out
     }
 
+    /// Overload for a pre-collected Swift array (e.g. `skipDuplicateHeading` output).
+    func renderNodes(_ nodes: [JSON], _ depth: Int = 0) -> String {
+        guard depth <= Self.maxRenderDepth else { return "" }
+        var out = ""
+        for node in nodes { out += renderBlock(node, depth) }
+        return out
+    }
+
     func renderBlock(_ node: JSON, _ depth: Int) -> String {
         guard node.isObject else { return "" }
         let type = node.member("type")
