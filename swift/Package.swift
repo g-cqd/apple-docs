@@ -419,7 +419,7 @@ let package = Package(
         // apostrophe) — distinct from the content renderer's `&#39;`.
         .target(
             name: "ADWebBuild",
-            dependencies: ["ADContent", "ADBase"],
+            dependencies: ["ADContent", "ADBase", .product(name: "ADJSONCore", package: "ADJSON")],
             swiftSettings: releaseCMO + strictSettings),
         // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
         // Byte-for-byte output-compatible with the Bun cli.js read verbs. Reads via

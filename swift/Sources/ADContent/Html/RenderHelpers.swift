@@ -1,7 +1,7 @@
 // Pure HTML helpers used across the render cluster — native port of
 // `src/content/render-html/helpers.js`. Regex-free for deterministic parity.
 
-enum RenderHelpers {
+public enum RenderHelpers {
     /// HTML-escape the five entities. A single pass is byte-identical to the JS
     /// sequential `replaceAll` chain (none of the replacements reintroduce a
     /// trigger char that a later pass would touch). Port of `escapeHtml`.
@@ -22,8 +22,9 @@ enum RenderHelpers {
     }
 
     /// URL-safe slug: lowercase → trim → `\s+`→`-` → drop non-`[\w-]` → collapse
-    /// `-` → strip end dashes. Port of `slugify`.
-    static func slugify(_ text: String) -> String {
+    /// `-` → strip end dashes. Port of `slugify`. Public so the web build's TOC
+    /// ids match the section ids the renderer emits.
+    public static func slugify(_ text: String) -> String {
         var s = Substring(text.lowercased())
         while let f = s.first, f.isWhitespace { s = s.dropFirst() }
         while let l = s.last, l.isWhitespace { s = s.dropLast() }
