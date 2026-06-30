@@ -24,6 +24,29 @@ indirect enum JsonLd: Sendable {
         }
     }
 
+    /// Pretty serialization, byte-identical to `JSON.stringify(value, null, space)`:
+    /// `": "` key separator, each nesting level indented by `space` spaces, empty
+    /// objects/arrays compact (`{}` / `[]`).
+    func serializedPretty(_ space: Int = 2, level: Int = 0) -> String {
+        let pad = String(repeating: " ", count: space * (level + 1))
+        let closePad = String(repeating: " ", count: space * level)
+        switch self {
+        case .object(let pairs):
+            if pairs.isEmpty { return "{}" }
+            let body = pairs.map {
+                "\(pad)\"\(Self.escapeString($0.0))\": \($0.1.serializedPretty(space, level: level + 1))"
+            }.joined(separator: ",\n")
+            return "{\n\(body)\n\(closePad)}"
+        case .array(let items):
+            if items.isEmpty { return "[]" }
+            let body = items.map { "\(pad)\($0.serializedPretty(space, level: level + 1))" }
+                .joined(separator: ",\n")
+            return "[\n\(body)\n\(closePad)]"
+        default:
+            return serialized()
+        }
+    }
+
     /// The `JSON.stringify` string-escape (does NOT touch `< > &` — that's
     /// `escapeJsonLd`'s job — and leaves non-ASCII verbatim).
     static func escapeString(_ s: String) -> String {
