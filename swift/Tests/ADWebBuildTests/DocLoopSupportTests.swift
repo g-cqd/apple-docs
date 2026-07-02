@@ -68,6 +68,25 @@ private let topicsRoleMap = ["a/b": "Protocol", "a/c": "Structure"]
     #expect(BuildSite.fontsFamiliesJson(families: [], files: []) == "[]")
 }
 
+// MARK: - computeSectionsDigest (checkpoint.js)
+
+@Test func sectionsDigestMatchesBunOracle() {
+    // Pinned from bun computeSectionsDigest: kinds + UTF-16 lengths + json
+    // length-or-flag + ECMA sort_order, '|'-joined, sha256[:16]. A NULL kind
+    // joins as '' and a NULL sort_order as '0' (the reader coalesces to 0).
+    let sections = [
+        DocSection(
+            sectionKind: "content", heading: nil, contentText: "Views are the building blocks.",
+            contentJson: nil, sortOrder: 0),
+        DocSection(
+            sectionKind: "topics", heading: nil, contentText: "",
+            contentJson: "[{\"items\":[]}]", sortOrder: 1.5),
+        DocSection(sectionKind: nil, heading: nil, contentText: nil, contentJson: nil, sortOrder: 0),
+    ]
+    #expect(BuildSite.computeSectionsDigest(sections) == "6252b23681d5120e")
+    #expect(BuildSite.computeSectionsDigest([]) == "empty")
+}
+
 // MARK: - enrichTopicSections
 
 @Test func enrichTopicSectionsByteExact() {

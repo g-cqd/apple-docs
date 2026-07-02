@@ -18,7 +18,7 @@ final class Connection: @unchecked Sendable {
     let hasRelationships: Bool
     private var cache: [String: PreparedStatement] = [:]
 
-    init?(path: String) {
+    init?(path: String, writable: Bool = false) {
         guard let lib = SQLiteLoader.shared else { return nil }
         self.lib = lib
         var handle: OpaquePointer?
@@ -34,9 +34,10 @@ final class Connection: @unchecked Sendable {
         // synchronous / wal_autocheckpoint are file/writer properties already set,
         // so a reader only needs the timeout (to wait out a checkpoint instead of
         // erroring SQLITE_BUSY), query_only (write guard), and the page-cache /
-        // mmap knobs.
+        // mmap knobs. `writable: true` (the S7 web-build incremental cache —
+        // document_render_index + sync_checkpoint upserts) skips the guard.
         Connection.exec(lib, handle, "PRAGMA busy_timeout = 5000")
-        Connection.exec(lib, handle, "PRAGMA query_only = ON")
+        if !writable { Connection.exec(lib, handle, "PRAGMA query_only = ON") }
         Connection.exec(lib, handle, "PRAGMA cache_size = -64000")
         Connection.exec(lib, handle, "PRAGMA temp_store = MEMORY")
         Connection.exec(lib, handle, "PRAGMA mmap_size = 10737418240")

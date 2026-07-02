@@ -4,6 +4,7 @@
 // `JSON.stringify` output byte-for-byte, so they build through `JsonLd`
 // (insertion-ordered stringify twin) with ECMA number rendering.
 
+import ADBase
 import ADJSONCore
 
 public import ADContent
@@ -185,6 +186,35 @@ extension BuildSite {
                 ])
             }
         ).serialized()
+    }
+}
+
+// MARK: - checkpoint digests (build/checkpoint.js)
+
+extension BuildSite {
+    /// Port of `computeSectionsDigest(sections)` — the cheap SHAPE fingerprint
+    /// the incremental skip compares: per section `section_kind`,
+    /// `(content_text ?? '').length` (UTF-16 units), the content_json length
+    /// (or '1'/'0' for non-string truthiness — always a string or null here),
+    /// and `String(sort_order)` (ECMA number form), joined with '|', then
+    /// `sha256(...).slice(0, 16)`. Empty sections ⇒ 'empty'. A null
+    /// section_kind joins as '' (JS Array.join null coercion).
+    public static func computeSectionsDigest(_ sections: [DocSection]) -> String {
+        if sections.isEmpty { return "empty" }
+        var parts: [String] = []
+        parts.reserveCapacity(sections.count * 4)
+        for section in sections {
+            parts.append(section.sectionKind ?? "")
+            parts.append(String((section.contentText ?? "").utf16.count))
+            parts.append(section.contentJson.map { String($0.utf16.count) } ?? "0")
+            parts.append(JSONOutput.ecmaNumberToString(section.sortOrder))
+        }
+        return String(Sha256.hexString(parts.joined(separator: "|")).prefix(16))
+    }
+
+    /// `sha256(html).slice(0, 16)` — the render-index html_hash.
+    static func htmlHash(_ bytes: [UInt8]) -> String {
+        String(Sha256.hex(Sha256.digest(bytes)).prefix(16))
     }
 }
 
