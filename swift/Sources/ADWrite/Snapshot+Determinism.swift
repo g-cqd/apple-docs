@@ -7,16 +7,24 @@ import Foundation
 extension Snapshot {
     // MARK: - storage key → raw-json path (mirrors lib/safe-path.js keyPath)
 
-    /// `keyPath(dataDir, 'raw-json', key, '.json')`: split the key into directory
-    /// segments + a leaf, map the leaf through ``safeFilename`` (long Apple symbol
-    /// names get truncated + SHA-1-tagged), and join under `raw-json`. nil when the
-    /// key fails ``isValidStorageKey`` (traversal / absolute / forbidden char).
-    static func rawJsonPath(dataDir: String, key: String) -> String? {
+    /// `keyPath(dataDir, subdir, key, ext)` (lib/safe-path.js): split the key into
+    /// directory segments + a leaf, map the leaf through ``safeFilename`` (long
+    /// Apple symbol names get truncated + SHA-1-tagged), and join under `subdir`.
+    /// nil when the key fails ``isValidStorageKey`` (traversal / absolute /
+    /// forbidden char). Public: the read-side lookup (ad-cli `read`) resolves the
+    /// persisted `markdown/<key>.md` render through the same mapping the writer
+    /// used, so reads and writes always agree on the on-disk path.
+    public static func storageKeyPath(dataDir: String, subdir: String, key: String, ext: String) -> String? {
         guard isValidStorageKey(key) else { return nil }
         var segments = key.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         let basename = segments.popLast() ?? ""
-        let safe = safeFilename(basename: basename, ext: ".json")
-        return ([dataDir, "raw-json"] + segments + [safe]).joined(separator: "/")
+        let safe = safeFilename(basename: basename, ext: ext)
+        return ([dataDir, subdir] + segments + [safe]).joined(separator: "/")
+    }
+
+    /// `keyPath(dataDir, 'raw-json', key, '.json')` — the writer's raw-payload path.
+    static func rawJsonPath(dataDir: String, key: String) -> String? {
+        storageKeyPath(dataDir: dataDir, subdir: "raw-json", key: key, ext: ".json")
     }
 
     /// `validateStorageKey` as a predicate: non-empty, relative (no `/`/`~`/`A:\`

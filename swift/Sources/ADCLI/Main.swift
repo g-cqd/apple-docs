@@ -254,7 +254,10 @@ struct ReadCommand: ParsableCommand {
             ? LookupOptions(path: target, symbol: nil, framework: nil, section: section)
             : LookupOptions(path: nil, symbol: target, framework: framework, section: section)
 
-        var result = lookup(opts, connection)
+        // cli.js `dataDir` = `--home` = the directory holding apple-docs.db (and
+        // the markdown/ + raw-json content trees); the native verb derives it
+        // from `--db`, exactly as `status` does.
+        var result = lookup(opts, connection, dataDir: (corpus.db as NSString).deletingLastPathComponent)
         // Paginate only when --max-chars is given AND content rendered (JS:
         // `maxChars != null && result.found && result.content`).
         if let maxChars, result.found, let content = result.content {

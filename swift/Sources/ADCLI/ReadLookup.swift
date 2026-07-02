@@ -20,6 +20,8 @@
 import ADContent
 import ADJSONCore
 import ADStorage
+import ADWrite
+import Foundation
 
 /// The resolved `lookup` opts (path XOR symbol, plus the optional disambiguators).
 struct LookupOptions {
@@ -90,12 +92,19 @@ struct LookupMetadata {
 
 // MARK: - lookup
 
-/// Port of cli.js `lookup(opts, ctx)` over the in-process corpus. Resolves the
-/// page, renders Markdown from the DB sections (the one reachable content source
-/// — sets the on-demand-fallback note), assembles metadata + relationship counts,
-/// then applies the `--section` extraction. Returns the rich envelope the
-/// formatter / projector shape.
-func lookup(_ opts: LookupOptions, _ connection: StorageConnection) -> LookupResult {
+/// Port of cli.js `lookup(opts, ctx)` over the corpus. Resolves the page, then
+/// walks the JS content cascade: the PERSISTED sync-time render
+/// (`<dataDir>/markdown/<keyPath>.md`, fallback=false → NO note) first, else an
+/// on-demand Markdown render from the DB sections (fallback=true → the
+/// on-demand note). Assembles metadata + relationship counts, then applies the
+/// `--section` extraction. Returns the rich envelope the formatter / projector
+/// shape.
+///
+/// Not ported (unreached on the tested corpora, tracked under WS-E's P4 re-port):
+/// `ensureNormalizedDocument` (hydrating sections from the raw payload when the
+/// DB has none), the raw-json → normalize → render fallback, and the
+/// `cacheOnRead` markdown write-back (the native read verbs never write).
+func lookup(_ opts: LookupOptions, _ connection: StorageConnection, dataDir: String) -> LookupResult {
     // Resolve: opts.path (with a normalize-identifier retry), else opts.symbol.
     var record: DocumentRecord?
     var resolution: LookupResolution = .path
@@ -120,11 +129,24 @@ func lookup(_ opts: LookupOptions, _ connection: StorageConnection) -> LookupRes
 
     let pagePath = page.path
 
-    // Content: load the DB sections and render Markdown on-demand when present
-    // (fallback=true). Sections are always loaded for rendering, but only RETURNED
-    // when `--section` widened the request (JS `includeSections`).
-    let sections = connection.documentSections(pagePath)
-    let rendered = sections.isEmpty ? nil : renderDocMarkdown(page, sections)
+    // Content cascade step 1: the persisted markdown file (JS `readText(mdPath)`).
+    // An empty file is falsy in JS (`if (!content)`) ⇒ treated as absent.
+    var content = readMarkdownFile(dataDir: dataDir, key: pagePath)
+    var fallback = false
+
+    // JS: sections are loaded only when `--section` widened the request (content
+    // present), or to back the on-demand render (content absent).
+    var sections: [DocumentSectionRow] = []
+    if opts.section != nil && content != nil {
+        sections = connection.documentSections(pagePath)
+    }
+    if content == nil {
+        sections = connection.documentSections(pagePath)
+        if !sections.isEmpty {
+            content = renderDocMarkdown(page, sections)
+            fallback = true
+        }
+    }
 
     let metadata = buildMetadata(page, pagePath: pagePath, resolution: resolution, connection: connection)
 
@@ -145,12 +167,12 @@ func lookup(_ opts: LookupOptions, _ connection: StorageConnection) -> LookupRes
             note: "Section not found: \(sectionQuery). Available sections: \(available)", pageInfo: nil)
     }
 
-    // Note: rendered content ⇒ the on-demand-fallback note; else the tier note
-    // (lite-tier hint, else the sync hint). On this corpus docs render, so the
-    // primary branch is the fallback note.
-    let note: String
-    if rendered != nil {
-        note = "Rendered on-demand from normalized content."
+    // Note: persisted content ⇒ NO note (JS `fallback ? '…' : undefined`);
+    // on-demand render ⇒ the fallback note; no content ⇒ the tier note
+    // (lite-tier hint, else the sync hint).
+    let note: String?
+    if content != nil {
+        note = fallback ? "Rendered on-demand from normalized content." : nil
     } else if connection.snapshotTier() == "lite" {
         note = "Content body unavailable on a legacy lite-tier snapshot. Metadata and declaration shown."
     } else {
@@ -160,8 +182,19 @@ func lookup(_ opts: LookupOptions, _ connection: StorageConnection) -> LookupRes
     // JS `sections: includeSections ? sections : []` — a plain read returns []
     // (only `--section` widens it, and that path returned above).
     return LookupResult(
-        found: true, notFoundTarget: nil, metadata: metadata, content: rendered, sections: [], note: note,
+        found: true, notFoundTarget: nil, metadata: metadata, content: content, sections: [], note: note,
         pageInfo: nil)
+}
+
+/// The persisted sync-time render: `readText(keyPath(dataDir, 'markdown', key,
+/// '.md'))`. nil when the key fails validation (unreachable — the key came from
+/// the DB), the file is missing/unreadable, or it is empty (JS falsy).
+private func readMarkdownFile(dataDir: String, key: String) -> String? {
+    guard let path = Snapshot.storageKeyPath(dataDir: dataDir, subdir: "markdown", key: key, ext: ".md"),
+        let text = try? String(contentsOfFile: path, encoding: .utf8),
+        !text.isEmpty
+    else { return nil }
+    return text
 }
 
 /// Build the typed metadata, honouring the JS resolution-path quirk (see
