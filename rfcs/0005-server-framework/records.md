@@ -260,3 +260,38 @@ arrays. **Gate:** mcp-parity extended to drive the same JSON-RPC over `POST /mcp
 (initialize / tools/call / origin-deny / OPTIONS) — full native **117/117**.
 
 ### Records D2–E — to be filled as the phases execute.
+
+### D-0005-11 — HTTP/3: roadmap, not implemented (2026-06-21)
+
+**Decision: keep the `AD_HTTP3` ALPN stub as a forward-compatible roadmap item; do
+NOT implement an HTTP/3 handler now.** (Track J "finish-or-remove" ruling — recorded so
+the stub is not mistaken for dormant/abandoned code.)
+
+**State today.** `ADServeCore` defines the negotiable application protocols as an enum —
+`ALPN.http1 = "http/1.1"`, `.http2 = "h2"`, `.http3 = "h3"` (`ADServe/Sources/ADServeCore/
+ADServeCore.swift`) — and `Wire` is shaped to "admit `.http3` later with no surface churn."
+The TLS listener negotiates **h2 + http/1.1** by ALPN (`HTTPServerBootstrap.swift`); the
+`.http3` case is "a harmless ALPN id" with **no QUIC handler** behind it. The whole h3
+listener path is `#if AD_HTTP3` in `HTTPServer.swift`, and the dependency + macOS floor are
+gated in `apple-docs/swift/Package.swift` (`AD_HTTP3=1` pulls `apple/swift-nio-http3` and
+raises the platform floor to **macOS 26**; the default macOS-15 build pulls neither).
+
+**Why roadmap, not now.**
+- **Floor cost.** `swift-nio-http3` requires macOS 26; SPM rejects it at the macOS-15
+  default. Implementing h3 as a non-gated feature would force every consumer/deployment of
+  the default build to macOS 26 — premature while the project floors at macOS 15 / Linux.
+- **Marginal latency win.** Query latency is ~99% inside SQLite (RFC 0001 §"Why this order");
+  the bottleneck the native transition targets is in-process serving (P5/P6/G3), not the
+  wire protocol. h3 (0-RTT, head-of-line-blocking elimination) helps lossy/mobile links, not
+  the localhost / same-region serving this stack does. No measured demand.
+- **Already correctly shaped.** The enum + `Wire` + conditional-manifest pattern mean
+  adopting h3 later is additive (a new child-pipeline branch behind the existing gate), not a
+  refactor. There is nothing to "finish-or-remove" — the stub is the cheapest possible
+  option value on a future capability.
+
+**Revisit when** the project's minimum platform reaches macOS 26 (so the floor is free) OR a
+deployment profile appears whose clients are on lossy links AND a measurement shows h3 beats
+h2 there. Until then `AD_HTTP3` stays an opt-in build flag, exercised only by an
+`AD_HTTP3=1` smoke build (so the gated code does not rot — mirrors the SRI-gate doctrine).
+
+**No code change** accompanies this record; the stub + its doc comments are already accurate.

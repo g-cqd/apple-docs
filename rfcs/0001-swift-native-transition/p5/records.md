@@ -126,3 +126,23 @@ corpus the bun:sqlite writer mutates, and apple-docs is first-class Linux.
 A future adoption (P7 / a §10 schema-format slice) is gated on ADSQL gaining
 FTS5 + bm25, Linux x64/arm64, and a real-SQLite→ADSQLv0 corpus-migration
 story. This slice's libsqlite3 binding is the bridge/P6 path regardless.
+
+### G3 design — in-process read-swap on ADDB (2026-06-21)
+
+The "later P5 slice / the real F3" — flipping the search `Cascade` to read from the
+**in-process ADDB engine** (no FFI), the architecture this slice's denorm read
+primitives (`searchPagesDenormRows`/`RowDecoder`/`SearchProjectionRow`) were built
+for. The ADSQL-from-scratch engine referenced above has since become **ADDB** (the
+12→8 consolidation), which now ships FTS5/bm25 + JSON + `ADSQLImport` round-trip, so
+the adoption blockers listed above are largely cleared on macOS; **Linux durability
+(Track H)** remains the cross-platform gate.
+
+Full design + sequencing: [`g3-in-process-read-swap-design.md`](g3-in-process-read-swap-design.md).
+**Headline:** the effort is gated on **Gate G3-0** — first *prove* the in-process ADDB
+FTS read beats libsqlite3 at p50/p95 on a real snapshot (an `_addb-read-spike`, mirroring
+`_addb-write-spike`), because P5 measured FFI reads *slower* and G3's entire payoff is that
+the no-FFI in-process path reverses that. GO → execute the additive reader + per-tier parity
++ the `StorageReading` seam + `--use-addb` flag; NO-GO → shelve the flip like P5's F-track,
+keeping the (shipped) read primitives. The cascade's real read surface is **~8 methods** (not
+the ~45 of the whole server); only FTS has an ADDB query today — the other tiers' denorm SQL
+is the bulk of the new code.
