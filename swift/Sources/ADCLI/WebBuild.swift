@@ -100,6 +100,11 @@ struct WebBuildCommand: ParsableCommand {
     @Option(name: .customLong("app-version"), help: "Package version (for the MCP server card).")
     var appVersion: String?
 
+    @Option(
+        name: .customLong("src-web"),
+        help: "The src/web checkout holding the static assets (style.css, JS bundles, public/).")
+    var srcWeb: String = "src/web"
+
     @Flag(name: .customLong("skip-docs"), help: "Build only site essentials (the only mode supported so far).")
     var skipDocs = false
 
@@ -120,11 +125,22 @@ struct WebBuildCommand: ParsableCommand {
         let reader = StorageCorpusReader(connection: connection)
         let sink = FileArtifactSink(outDir: out)
 
+        // build.js step order: 1 dirs → 2 asset pipeline → 4 landing/discovery
+        // (which win over any stale public/ copy of the same name) → 8/9
+        // metadata + manifest.
+        for dir in BuildSite.directories { try sink.ensureDir(dir) }
+
+        let bundler = resolveJsBundler()
+        let assetSource = FileAssetSource(srcWebDir: srcWeb, bundler: bundler)
+        let assetArtifacts = try BuildSite.planAssets(source: assetSource)
+        for artifact in assetArtifacts { try sink.write(artifact) }
+
         let result = try BuildSite.writeEssentials(
             config: config, reader: reader, version: appVersion,
             ensureDir: { try sink.ensureDir($0) }, write: { try sink.write($0) })
 
         var report = "ad-cli: built site essentials → \(out)\n"
+        report += "ad-cli: assets via \(bundler.label) (\(assetArtifacts.count) artifacts)\n"
         report += "ad-cli: still stubbed (per the build ledger):\n"
         for stub in result.stubs { report += "  - \(stub)\n" }
         FileHandle.standardError.write(Data(report.utf8))

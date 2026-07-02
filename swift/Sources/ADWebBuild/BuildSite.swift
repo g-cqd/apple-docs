@@ -96,10 +96,9 @@ public enum BuildSite {
     ]
 
     /// The not-yet-ported steps, surfaced in every result so the driver can log
-    /// what a "successful" essentials build still omits.
+    /// what a "successful" essentials build still omits. (S6 assets +
+    /// api/fonts/faces.css shipped: `planAssets` + the faces.css artifact below.)
     static let pendingSteps = [
-        "assets pipeline (CSS minify / JS bundle / public copy) [S6]",
-        "api/fonts/faces.css (font-face sheet) [font-faces]",
         "data/search/* search artifacts [S3]",
         "sitemap.xml(.gz) [S3 + S4 gzip]",
         "docs/* document pages + framework listing pages [S5 render loop]",
@@ -121,6 +120,14 @@ public enum BuildSite {
             Artifact(
                 path: "fonts/index.html",
                 text: LandingPages.renderFontsPage(config, families: inputs.fontFamilies)))
+        // External @font-face sheet the /fonts page links — build.js writes it
+        // right after the fonts page, from the same families payload, with the
+        // `${baseUrl || ''}/api/fonts/file/<encodeURIComponent(id)>` src URLs.
+        artifacts.append(
+            Artifact(
+                path: "api/fonts/faces.css",
+                text: FontFaces.buildFontFaceCss(
+                    inputs.fontFamilies, fileUrl: FontFaces.buildFileUrl(baseUrl: config.baseUrl))))
         artifacts.append(
             Artifact(
                 path: "symbols/index.html",

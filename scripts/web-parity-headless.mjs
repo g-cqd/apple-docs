@@ -119,7 +119,12 @@ const bunFiles = new Set(await walk(bunDir))
 const swiftFiles = new Set(await walk(swiftDir))
 const all = [...new Set([...bunFiles, ...swiftFiles])].sort()
 
-const browser = await chromium.launch({ channel: 'chrome', headless: true })
+// System Google Chrome by default; WEB_PARITY_CHROME overrides with any
+// Chromium-engine executable (e.g. /Applications/Chromium.app/Contents/MacOS/
+// Chromium) for hosts without the branded install. The gate renders with
+// JavaScript DISABLED, so any Chromium build serializes the same static DOM.
+const executablePath = process.env.WEB_PARITY_CHROME
+const browser = await chromium.launch(executablePath ? { executablePath, headless: true } : { channel: 'chrome', headless: true })
 const context = await browser.newContext({ javaScriptEnabled: false })
 const page = await context.newPage()
 
