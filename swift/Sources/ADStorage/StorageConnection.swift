@@ -8,10 +8,17 @@ public final class StorageConnection: @unchecked Sendable {
     let conn: Connection  // internal so the cascade tier methods (SearchRow.swift) can reach it
 
     /// Opens a read connection for `path`; nil if libsqlite3 / FTS5 / the file
-    /// is unavailable. `writable: true` drops the `query_only` guard — used
-    /// ONLY by the web build's incremental cache (render index + checkpoint);
-    /// every read verb stays on the guarded default.
-    public init?(path: String, writable: Bool = false) {
+    /// is unavailable. (Kept as the EXACT `init?(path:)` shape — it witnesses
+    /// ADServe's `PooledResource`; a defaulted extra parameter would not.)
+    public init?(path: String) {
+        guard let conn = Connection(path: path, writable: false) else { return nil }
+        self.conn = conn
+    }
+
+    /// `writable: true` drops the `query_only` guard — used ONLY by the web
+    /// build's incremental cache (render index + checkpoint); every read verb
+    /// stays on the guarded `init?(path:)`.
+    public init?(path: String, writable: Bool) {
         guard let conn = Connection(path: path, writable: writable) else { return nil }
         self.conn = conn
     }
