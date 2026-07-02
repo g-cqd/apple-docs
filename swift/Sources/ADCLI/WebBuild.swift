@@ -276,6 +276,11 @@ struct WebBuildCommand: ParsableCommand {
     @Flag(name: .customLong("skip-docs"), help: "Build only site essentials; skip the per-document render loop.")
     var skipDocs = false
 
+    @Option(
+        name: .customLong("links-audit-json"),
+        help: "Write the link-audit stats (linksAudit's return object) to this path — parity-gate tooling.")
+    var linksAuditJson: String?
+
     func run() throws {
         guard let connection = StorageConnection(path: corpus.db) else {
             FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db)\n".utf8))
@@ -352,8 +357,24 @@ struct WebBuildCommand: ParsableCommand {
 
         var report = "ad-cli: built site\(skipDocs ? " essentials" : "") → \(out)\n"
         report += "ad-cli: assets via \(bundler.label) (\(assetArtifacts.count) artifacts)\n"
-        report += "ad-cli: still stubbed (per the build ledger):\n"
-        for stub in result.stubs { report += "  - \(stub)\n" }
+
+        // 11. Link audit — full unfiltered builds only (build.js:
+        // `buildingAll && !skipDocs`). Classification failure of the WALK is a
+        // build error; the stats land in the report (+ optionally on disk).
+        if !skipDocs {
+            let audit = try WebLinksAudit.run(outDir: out, connection: connection)
+            report += "ad-cli: \(WebLinksAudit.summary(audit))\n"
+            if let path = linksAuditJson {
+                guard FileManager.default.createFile(
+                    atPath: path, contents: Data(stringifyPretty(WebLinksAudit.json(audit)).utf8))
+                else { throw ValidationError("ad-cli: cannot write \(path)") }
+            }
+        }
+
+        if !result.stubs.isEmpty {
+            report += "ad-cli: still stubbed (per the build ledger):\n"
+            for stub in result.stubs { report += "  - \(stub)\n" }
+        }
         FileHandle.standardError.write(Data(report.utf8))
     }
 }
