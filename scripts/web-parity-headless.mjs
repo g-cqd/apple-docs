@@ -90,11 +90,23 @@ function canonicalJson(value) {
   }
   return value
 }
-function compareNonHtml(ext, a, b) {
+function compareNonHtml(ext, a, b, rel) {
   if (ext === '.json' || a.startsWith('{') || a.startsWith('[')) {
     try {
-      const ca = JSON.stringify(canonicalJson(JSON.parse(a)))
-      const cb = JSON.stringify(canonicalJson(JSON.parse(b)))
+      const pa = JSON.parse(a)
+      const pb = JSON.parse(b)
+      // search-manifest.json embeds `generatedAt` = new Date().toISOString() —
+      // run-varying by definition, so the two builds can never agree on it.
+      // Compare the field's PRESENCE + shape (ISO string), not its value.
+      if (rel?.endsWith('search-manifest.json')) {
+        const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+        if (!iso.test(pa.generatedAt ?? '') || !iso.test(pb.generatedAt ?? '')) {
+          return { a: `generatedAt=${pa.generatedAt}`, b: `generatedAt=${pb.generatedAt}` }
+        }
+        pa.generatedAt = pb.generatedAt = '<generatedAt>'
+      }
+      const ca = JSON.stringify(canonicalJson(pa))
+      const cb = JSON.stringify(canonicalJson(pb))
       return ca === cb ? null : { a: ca, b: cb }
     } catch {
       /* fall through to text */
@@ -154,7 +166,7 @@ for (const rel of all) {
     if (da === db) matched++
     else diffs.push({ rel, kind: 'dom', diff: firstDiffLine(da, db) })
   } else {
-    const d = compareNonHtml(ext, a, b)
+    const d = compareNonHtml(ext, a, b, rel)
     if (!d) matched++
     else diffs.push({ rel, kind: 'data', diff: firstDiffLine(d.a, d.b) })
   }

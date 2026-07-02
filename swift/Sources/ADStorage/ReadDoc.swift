@@ -225,8 +225,10 @@ private func matchDocUri(_ id: String, segmentPrefix: String) -> String? {
 
 /// Type-directed section content decode (mirrors Enrichment's codec): TEXT
 /// passes through; a BLOB with the 4-byte zstd magic is inflated; any other
-/// BLOB is a best-effort UTF-8 decode; NULL → nil.
-private func decodeSectionColumn(_ stmt: PreparedStatement, _ col: Int32) -> String? {
+/// BLOB is a best-effort UTF-8 decode; NULL → nil. Internal: the search-artifact
+/// body-shard reader (SearchArtifacts.swift) streams sections through the same
+/// codec.
+func decodeSectionColumn(_ stmt: PreparedStatement, _ col: Int32) -> String? {
     switch stmt.columnType(col) {
         case SQLite.typeNull: return nil
         case SQLite.typeText: return stmt.text(col)

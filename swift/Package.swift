@@ -580,7 +580,8 @@ let isolationClosures: [String: Set<String>] = [
     "ADBuilderTests": ["ADBuilder", "ADBuilderTests"],
     "ADBuilderPipelineTests": [
         "ADBuilder", "ADWrite", "ADEmbed", "ADArchive", "ADBuilderPipeline", "ADBuilderPipelineTests",
-    ]
+    ],
+    "ADStorageTests": ["ADStorage", "ADBase", "ADArchive", "CSQLiteShim", "ADStorageTests"]
 ]
 let isolateTarget: String? =
     Context.environment["AD_ISOLATE"]

@@ -60,13 +60,16 @@ public struct BuildInputs: Sendable {
     /// per-framework metadata `documentCount` is separate, on `frameworkMeta`.)
     public var totalDocuments: Int
     public var totalFrameworks: Int
+    /// generateSearchArtifacts' counts for `manifest.searchArtifacts`
+    /// (JSON `null` until the S3 step ran).
+    public var searchArtifacts: SearchArtifactsStats?
 
     public init(
         indexFrameworks: [IndexFramework] = [],
         indexExtras: [(kind: String, items: [IndexFramework])] = [],
         fontFamilies: JSON? = nil, symbolTotals: [(scope: String, count: Int)] = [],
         frameworkMeta: [FrameworkMeta] = [], version: String? = nil, totalDocuments: Int = 0,
-        totalFrameworks: Int = 0
+        totalFrameworks: Int = 0, searchArtifacts: SearchArtifactsStats? = nil
     ) {
         self.indexFrameworks = indexFrameworks
         self.indexExtras = indexExtras
@@ -76,6 +79,7 @@ public struct BuildInputs: Sendable {
         self.version = version
         self.totalDocuments = totalDocuments
         self.totalFrameworks = totalFrameworks
+        self.searchArtifacts = searchArtifacts
     }
 }
 
@@ -97,10 +101,10 @@ public enum BuildSite {
 
     /// The not-yet-ported steps, surfaced in every result so the driver can log
     /// what a "successful" essentials build still omits. (S6 assets +
-    /// api/fonts/faces.css shipped: `planAssets` + the faces.css artifact below.)
+    /// api/fonts/faces.css shipped via `planAssets` + the faces.css artifact;
+    /// S3 search artifacts via `planSearchArtifacts`.)
     static let pendingSteps = [
-        "data/search/* search artifacts [S3]",
-        "sitemap.xml(.gz) [S3 + S4 gzip]",
+        "sitemap.xml(.gz) [S4 gzip]",
         "docs/* document pages + framework listing pages [S5 render loop]",
         "shiki code highlighting (NoopHighlighter until then) [S5]",
     ]
@@ -157,7 +161,17 @@ public enum BuildSite {
             artifacts.append(Artifact(path: "data/frameworks/\(meta.slug).json", text: json))
         }
 
-        // 9. Manifest (pretty, searchArtifacts stubbed null until S3).
+        // 9. Manifest (pretty). searchArtifacts = generateSearchArtifacts'
+        // `{ titleCount, aliasCount, shardCount }` return (literal key order),
+        // JSON null when the S3 step didn't run.
+        let searchStats: JsonLd =
+            inputs.searchArtifacts.map { stats in
+                .object([
+                    ("titleCount", .int(stats.titleCount)),
+                    ("aliasCount", .int(stats.aliasCount)),
+                    ("shardCount", .int(stats.shardCount)),
+                ])
+            } ?? .null
         let manifest = JsonLd.object([
             ("version", .int(1)),
             ("siteName", .string(config.siteName)),
@@ -165,7 +179,7 @@ public enum BuildSite {
             ("baseUrl", .string(config.baseUrl)),
             ("totalDocuments", .int(inputs.totalDocuments)),
             ("totalFrameworks", .int(inputs.totalFrameworks)),
-            ("searchArtifacts", .null),
+            ("searchArtifacts", searchStats),
         ]).serializedPretty(2)
         artifacts.append(Artifact(path: "manifest.json", text: manifest))
 
