@@ -109,39 +109,42 @@ public enum Gzip {
     /// Whether a system zlib was found (callers report the miss).
     public static var available: Bool { shared != nil }
 
+    /// The bound library for the streaming inflate (module-internal).
+    static var libz: ZlibLib? { shared }
+
     /// Gzip-compress `bytes` (gzip framing, zlib default level 6 / memLevel 8 /
     /// default strategy — the same SETTINGS as `Bun.gzipSync`; see the
     /// byte-parity note above). nil when libz is unavailable or zlib errors.
     public static func compress(_ bytes: [UInt8], level: Int32 = 6) -> [UInt8]? {
         guard let lib = shared else { return nil }
-        var stream = ZlibStream()
-        let streamSize = Int32(MemoryLayout<ZlibStream>.size)
-        let status = withUnsafeMutablePointer(to: &stream) { streamPtr in
-            lib.deflateInit2(
-                UnsafeMutableRawPointer(streamPtr), level, 8 /* Z_DEFLATED */, gzipEncodeWindowBits,
-                8 /* memLevel */, 0 /* Z_DEFAULT_STRATEGY */, lib.version(), streamSize)
-        }
-        guard status == zOK else { return nil }
+        // Heap-allocated so the z_stream address is STABLE across calls —
+        // zlib's deflateStateCheck compares its state's back-pointer against
+        // the pointer passed to every call.
+        let streamPtr = UnsafeMutablePointer<ZlibStream>.allocate(capacity: 1)
+        streamPtr.initialize(to: ZlibStream())
         defer {
-            _ = withUnsafeMutablePointer(to: &stream) { lib.deflateEnd(UnsafeMutableRawPointer($0)) }
+            streamPtr.deinitialize(count: 1)
+            streamPtr.deallocate()
         }
+        let streamSize = Int32(MemoryLayout<ZlibStream>.size)
+        let status = lib.deflateInit2(
+            UnsafeMutableRawPointer(streamPtr), level, 8 /* Z_DEFLATED */, gzipEncodeWindowBits,
+            8 /* memLevel */, 0 /* Z_DEFAULT_STRATEGY */, lib.version(), streamSize)
+        guard status == zOK else { return nil }
+        defer { _ = lib.deflateEnd(UnsafeMutableRawPointer(streamPtr)) }
 
         var input = bytes
-        let bound = withUnsafeMutablePointer(to: &stream) {
-            lib.deflateBound(UnsafeMutableRawPointer($0), UInt(bytes.count))
-        }
+        let bound = lib.deflateBound(UnsafeMutableRawPointer(streamPtr), UInt(bytes.count))
         var output = [UInt8](repeating: 0, count: Int(bound) + 64)
         let produced: Int? = input.withUnsafeMutableBufferPointer { inBuf in
             output.withUnsafeMutableBufferPointer { outBuf -> Int? in
-                withUnsafeMutablePointer(to: &stream) { streamPtr -> Int? in
-                    streamPtr.pointee.nextIn = inBuf.baseAddress
-                    streamPtr.pointee.availIn = UInt32(inBuf.count)
-                    streamPtr.pointee.nextOut = outBuf.baseAddress
-                    streamPtr.pointee.availOut = UInt32(outBuf.count)
-                    let result = lib.deflate(UnsafeMutableRawPointer(streamPtr), zFinish)
-                    guard result == zStreamEnd else { return nil }
-                    return Int(streamPtr.pointee.totalOut)
-                }
+                streamPtr.pointee.nextIn = inBuf.baseAddress
+                streamPtr.pointee.availIn = UInt32(inBuf.count)
+                streamPtr.pointee.nextOut = outBuf.baseAddress
+                streamPtr.pointee.availOut = UInt32(outBuf.count)
+                let result = lib.deflate(UnsafeMutableRawPointer(streamPtr), zFinish)
+                guard result == zStreamEnd else { return nil }
+                return Int(streamPtr.pointee.totalOut)
             }
         }
         guard let produced else { return nil }
@@ -161,40 +164,78 @@ public enum Gzip {
     }
 
     private static func inflate(_ bytes: [UInt8], windowBits: Int32) -> [UInt8]? {
-        guard let lib = shared, !bytes.isEmpty else { return nil }
-        var stream = ZlibStream()
-        let streamSize = Int32(MemoryLayout<ZlibStream>.size)
-        let status = withUnsafeMutablePointer(to: &stream) {
-            lib.inflateInit2(UnsafeMutableRawPointer($0), windowBits, lib.version(), streamSize)
-        }
-        guard status == zOK else { return nil }
-        defer {
-            _ = withUnsafeMutablePointer(to: &stream) { lib.inflateEnd(UnsafeMutableRawPointer($0)) }
-        }
-
-        var input = bytes
+        guard !bytes.isEmpty, let stream = InflateStream(windowBits: windowBits) else { return nil }
+        defer { stream.end() }
         var out: [UInt8] = []
-        var chunk = [UInt8](repeating: 0, count: max(64 * 1024, bytes.count * 4))
-        let ok: Bool = input.withUnsafeMutableBufferPointer { inBuf in
-            withUnsafeMutablePointer(to: &stream) { streamPtr -> Bool in
-                streamPtr.pointee.nextIn = inBuf.baseAddress
-                streamPtr.pointee.availIn = UInt32(inBuf.count)
-                while true {
-                    let result: Int32 = chunk.withUnsafeMutableBufferPointer { chunkBuf in
-                        streamPtr.pointee.nextOut = chunkBuf.baseAddress
-                        streamPtr.pointee.availOut = UInt32(chunkBuf.count)
-                        let r = lib.inflate(UnsafeMutableRawPointer(streamPtr), zNoFlush)
-                        let produced = chunkBuf.count - Int(streamPtr.pointee.availOut)
-                        if produced > 0 { out.append(contentsOf: chunkBuf[0..<produced]) }
-                        return r
-                    }
-                    if result == zStreamEnd { return true }
-                    guard result == zOK else { return false }
-                    // Z_OK with no remaining input ⇒ truncated stream.
-                    if streamPtr.pointee.availIn == 0 && streamPtr.pointee.availOut != 0 { return false }
+        let result = stream.inflate(bytes) { out.append(contentsOf: $0) }
+        return result == .finished ? out : nil
+    }
+}
+
+/// A chunked inflate over the dlopen'd zlib — the streaming half S10's Unzip
+/// extracts multi-GB members through. The z_stream is heap-allocated once
+/// (zlib's inflateStateCheck requires a stable address across calls).
+final class InflateStream {
+    enum Progress {
+        case needsMore  // consumed the chunk; the stream continues
+        case finished  // Z_STREAM_END reached
+        case failed
+    }
+
+    private let lib: ZlibLib
+    private let streamPtr: UnsafeMutablePointer<ZlibStream>
+    private var ended = false
+
+    init?(windowBits: Int32) {
+        guard let lib = Gzip.libz else { return nil }
+        self.lib = lib
+        streamPtr = UnsafeMutablePointer<ZlibStream>.allocate(capacity: 1)
+        streamPtr.initialize(to: ZlibStream())
+        let status = lib.inflateInit2(
+            UnsafeMutableRawPointer(streamPtr), windowBits, lib.version(),
+            Int32(MemoryLayout<ZlibStream>.size))
+        guard status == 0 else {
+            streamPtr.deinitialize(count: 1)
+            streamPtr.deallocate()
+            return nil
+        }
+    }
+
+    deinit {
+        end()
+    }
+
+    /// Release the zlib state (idempotent).
+    func end() {
+        guard !ended else { return }
+        ended = true
+        _ = lib.inflateEnd(UnsafeMutableRawPointer(streamPtr))
+        streamPtr.deinitialize(count: 1)
+        streamPtr.deallocate()
+    }
+
+    /// Feed one compressed chunk; `emit` receives each decompressed block.
+    func inflate(_ chunk: [UInt8], emit: ([UInt8]) throws -> Void) rethrows -> Progress {
+        guard !ended else { return .failed }
+        var input = chunk
+        var out = [UInt8](repeating: 0, count: 256 * 1024)
+        return try input.withUnsafeMutableBufferPointer { inBuf -> Progress in
+            streamPtr.pointee.nextIn = inBuf.baseAddress
+            streamPtr.pointee.availIn = UInt32(inBuf.count)
+            while true {
+                var produced = 0
+                let result: Int32 = out.withUnsafeMutableBufferPointer { outBuf in
+                    streamPtr.pointee.nextOut = outBuf.baseAddress
+                    streamPtr.pointee.availOut = UInt32(outBuf.count)
+                    let r = lib.inflate(UnsafeMutableRawPointer(streamPtr), 0 /* Z_NO_FLUSH */)
+                    produced = outBuf.count - Int(streamPtr.pointee.availOut)
+                    return r
                 }
+                if produced > 0 { try emit(Array(out[0..<produced])) }
+                if result == 1 /* Z_STREAM_END */ { return .finished }
+                guard result == 0 /* Z_OK */ else { return .failed }
+                if streamPtr.pointee.availIn == 0 { return .needsMore }
             }
         }
-        return ok ? out : nil
     }
 }
