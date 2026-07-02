@@ -59,10 +59,14 @@ public protocol DocumentCorpusReader: CorpusReader {
     /// dropped. Backs the topics-section enrichment; defaults to empty (no
     /// enrichment) for corpora/mocks without the index.
     func roleHeadings(forKeys keys: [String]) -> [String: String]
+    /// `loadScopeExtras(db, root)` — the HIG category map for the `design`
+    /// root; empty everywhere else (the default).
+    func scopeExtras(slug: String) -> ScopeExtras
 }
 
 extension DocumentCorpusReader {
     public func roleHeadings(forKeys keys: [String]) -> [String: String] { [:] }
+    public func scopeExtras(slug: String) -> ScopeExtras { ScopeExtras() }
 }
 
 extension BuildSite {
@@ -116,7 +120,8 @@ extension BuildSite {
                     sourceType: root.sourceType, url: root.url)
                 let pages = planFrameworkPage(
                     framework: framework, documents: fwDocs, config: config,
-                    treeEdges: reader.frameworkTreeEdges(slug: root.slug))
+                    treeEdges: reader.frameworkTreeEdges(slug: root.slug),
+                    scopeExtras: reader.scopeExtras(slug: root.slug))
                 for artifact in pages {
                     try ensureDir(parentDir(artifact.path))
                     try write(artifact)
