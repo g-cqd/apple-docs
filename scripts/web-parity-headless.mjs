@@ -157,6 +157,18 @@ for (const rel of all) {
     continue
   }
   checked++
+  // *.gz artifacts (sitemaps): bun's vendored deflate (zlib-ng lineage) emits a
+  // DIFFERENT bitstream than classic zlib at identical settings (verified:
+  // same header + length at level 6, different Huffman bytes; levels 1-9 all
+  // differ) — both valid gzip. Compare the gunzipped CONTENT instead.
+  if (rel.endsWith('.gz')) {
+    const { gunzipSync } = await import('node:zlib')
+    const ga = gunzipSync(await readFile(join(bunDir, rel))).toString('utf8')
+    const gb = gunzipSync(await readFile(join(swiftDir, rel))).toString('utf8')
+    if (ga === gb) matched++
+    else diffs.push({ rel, kind: 'gunzip', diff: firstDiffLine(ga, gb) })
+    continue
+  }
   const a = await readFile(join(bunDir, rel), 'utf8')
   const b = await readFile(join(swiftDir, rel), 'utf8')
   const ext = extname(rel)

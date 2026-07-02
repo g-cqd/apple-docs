@@ -437,6 +437,9 @@ let package = Package(
             name: "ADCLI",
             dependencies: [
                 "ADStorage",
+                // ADArchive: the S4 gzip seam (sitemaps/*.xml.gz via the dlopen'd
+                // system zlib) — already in the graph through ADStorage.
+                "ADArchive",
                 "ADContent",
                 "ADWebBuild",
                 "ADSearchCascade",
@@ -589,4 +592,17 @@ let isolateTarget: String? =
 if let isolateTarget, let keep = isolationClosures[isolateTarget] {
     package.targets.removeAll { !keep.contains($0.name) }
     package.products.removeAll()
+}
+
+// AD_NO_SERVE=1 — drop the ad-server vertical (the executable target, its
+// product, and the ADServe PACKAGE dependency). SwiftPM loads every declared
+// dependency's manifest before building anything, so while the ADServe sibling
+// is mid-rewrite (its manifest intermittently fails to load) even
+// `swift build --product ad-cli` — which never links ADServe — dies at
+// resolution. Same spirit as AD_ISOLATE: inert unless set; CI/normal runs keep
+// the full graph. AD_ISOLATE implies it (no isolation closure keeps ad-server).
+if Context.environment["AD_NO_SERVE"] != nil || isolateTarget != nil {
+    package.targets.removeAll { $0.name == "ad-server" || $0.name == "ADServerTests" }
+    package.products.removeAll { $0.name == "ad-server" }
+    package.dependencies.removeAll { $0 === adserveDependency }
 }
