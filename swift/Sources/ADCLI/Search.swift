@@ -116,7 +116,7 @@ struct SearchCommand: ParsableCommand {
     /// pagination, then `formatSearchRead` (human) / `{ hit, page }` (`--json`).
     private func runReadMode(connection: StorageConnection, outcome: SearchOutcome, top: SearchHitView) {
         let opts = LookupOptions(path: top.path, symbol: nil, framework: nil, section: nil)
-        var pageResult = lookup(opts, connection)
+        var pageResult = lookup(opts, connection, dataDir: (corpus.db as NSString).deletingLastPathComponent)
         if let maxChars, pageResult.found, let content = pageResult.content {
             pageResult = paginateCliContent(
                 pageResult, content: content, maxChars: maxChars, pageNum: page ?? 1)

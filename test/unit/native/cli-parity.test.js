@@ -322,6 +322,13 @@ dSearch('search parity (native cascade + semantic) vs cli.js native-on oracle', 
 // it via APPLE_DOCS_SKIP_UPDATE_CHECK (production still checks). Corpus stats +
 // freshness (daysSinceSync via current time is stable within a run) + db/dir
 // sizing are deterministic. FAILS until ad-cli has `status` (#25).
+//
+// Timeout: status recursively sizes raw-json/ + markdown/ (~727k files on the
+// live corpus). That walk is I/O-latency-bound — a bare `find -type f` over both
+// trees takes ~25 s here, and each side (Bun ~40 s, native ~40 s) sits near that
+// floor — so one test (nat + js, two full walks) runs ~80 s and the 30 s default
+// can never hold. 240 s ≈ 3× the measured worst case.
+const STATUS_TIMEOUT = 240_000
 d('status parity (update-check skipped for determinism)', () => {
   const STATUS_ENV = { ...process.env, APPLE_DOCS_NATIVE: 'off', APPLE_DOCS_SKIP_UPDATE_CHECK: '1' }
   /** @param {string[]} args */
@@ -335,15 +342,23 @@ d('status parity (update-check skipped for determinism)', () => {
     dec.decode(Bun.spawnSync([/** @type {string} */ (adCli), ...args, '--db', dbPath], { env: STATUS_ENV, stdout: 'pipe', stderr: 'pipe' }).stdout)
 
   for (const flags of [[], ['--advanced']]) {
-    test(`human: status ${flags.join(' ')}`.trim(), () => {
-      expect(nat(['status', ...flags])).toBe(js(['status', ...flags]))
-    })
-    test(`json: status ${flags.join(' ')}`.trim(), () => {
-      const args = ['status', ...flags, '--json']
-      const n = nat(args)
-      const j = js(args)
-      expect(JSON.parse(n)).toEqual(JSON.parse(j))
-      expect(n).toBe(j)
-    })
+    test(
+      `human: status ${flags.join(' ')}`.trim(),
+      () => {
+        expect(nat(['status', ...flags])).toBe(js(['status', ...flags]))
+      },
+      STATUS_TIMEOUT,
+    )
+    test(
+      `json: status ${flags.join(' ')}`.trim(),
+      () => {
+        const args = ['status', ...flags, '--json']
+        const n = nat(args)
+        const j = js(args)
+        expect(JSON.parse(n)).toEqual(JSON.parse(j))
+        expect(n).toBe(j)
+      },
+      STATUS_TIMEOUT,
+    )
   }
 })

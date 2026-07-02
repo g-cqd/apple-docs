@@ -18,6 +18,12 @@ import ADStorage
 import ArgumentParser
 import Foundation
 
+#if canImport(Darwin)
+    import Darwin
+#else
+    import Glibc
+#endif
+
 struct StatusCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status",
@@ -297,12 +303,13 @@ func checkForUpdate(_ connection: StorageConnection) -> UpdateAvailable? {
 func statusDefaultJSON(_ raw: StatusEnvelope) -> JSONValue {
     var pairs: [(String, JSONValue)] = []
 
-    // STATUS_KEEP_USER pick (in order). `dataDir` / `databaseSize` always set;
-    // `snapshot` only when non-nil; `rawJson` / `markdown` always set; `lastSync`
-    // / `lastAction` are defined (possibly null) on the raw envelope ⇒ kept.
+    // STATUS_KEEP_USER pick (in order). Every key is DEFINED on the raw
+    // envelope (status.js always sets `snapshot`, possibly to null), and `pick`
+    // keeps defined-but-null — so all seven keys are always emitted, with
+    // `snapshot` / `lastSync` / `lastAction` serializing nil as JSON null.
     pairs.append(("dataDir", .string(raw.dataDir)))
     pairs.append(("databaseSize", .int(raw.databaseSize)))
-    if let snapshot = raw.snapshot { pairs.append(("snapshot", snapshotJSON(snapshot))) }
+    pairs.append(("snapshot", raw.snapshot.map(snapshotJSON) ?? .null))
     pairs.append(("rawJson", dirStatsJSON(raw.rawJson)))
     pairs.append(("markdown", dirStatsJSON(raw.markdown)))
     pairs.append(("lastSync", optString(raw.lastSync)))
@@ -610,33 +617,65 @@ private func fileSize(_ path: String) -> Int64 {
     return size.int64Value
 }
 
-/// `{ size, files }` of a directory: recursive byte sum + file count. A missing
-/// directory → `{ 0, 0 }` (matches `dirSize` / `fileCount`, which return 0 for a
-/// non-existent path). Counts regular files only (directories are descended, not
-/// counted), mirroring `entry.isDirectory() ? walk : count++`.
+/// `{ size, files }` of a directory: recursive byte sum + file count via raw
+/// POSIX readdir + stat. A missing directory → `{ 0, 0 }` (matches `dirSize` /
+/// `fileCount`, which return 0 for a non-existent path). Directories are
+/// descended, not counted; every other dirent (files, symlinks) is counted and
+/// sized with a symlink-FOLLOWING `stat`, mirroring the JS walk exactly
+/// (`entry.isDirectory() ? walk(full) : statSync(full).size` — Dirent reflects
+/// the dirent type, so a symlink-to-dir counts as a "file" whose stat is the
+/// target's). One divergence: an unstattable entry (broken symlink) adds size 0
+/// here where `statSync` would THROW and kill the JS CLI.
+///
+/// Why not FileManager: its `enumerator(atPath:)` + `fileExists` +
+/// `attributesOfItem` cost 3+ syscalls and heavy ObjC bridging per entry — ~58 s
+/// over the 727k-file live corpus, vs ~25 s for this walk (`find`'s floor).
 private func dirStats(_ path: String) -> DirStats {
-    let fileManager = FileManager.default
-    var isDirectory: ObjCBool = false
-    guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
-        return DirStats(size: 0, files: 0)
-    }
-    guard let enumerator = fileManager.enumerator(atPath: path) else { return DirStats(size: 0, files: 0) }
-
     var totalSize: Int64 = 0
     var fileCount: Int64 = 0
-    for case let relative as String in enumerator {
-        let full = joinPath(path, relative)
-        var entryIsDir: ObjCBool = false
-        guard fileManager.fileExists(atPath: full, isDirectory: &entryIsDir) else { continue }
-        if entryIsDir.boolValue { continue }  // descended by the enumerator; not counted
-        fileCount += 1
-        if let attributes = try? fileManager.attributesOfItem(atPath: full),
-            let size = attributes[.size] as? NSNumber
-        {
-            totalSize += size.int64Value
+    walkDirStats(path, totalSize: &totalSize, fileCount: &fileCount)
+    return DirStats(size: totalSize, files: fileCount)
+}
+
+/// BSD/glibc dirent `d_type` values (ABI-stable; spelled numerically so the same
+/// code compiles against Darwin and Glibc/musl without constant-type friction).
+private let dtUnknown: UInt8 = 0  // DT_UNKNOWN — filesystem didn't say; lstat to classify
+private let dtDir: UInt8 = 4  // DT_DIR
+
+/// The recursive readdir walk behind `dirStats`. An unopenable directory
+/// contributes nothing (the JS `existsSync` guard at the root; nested unreadable
+/// dirs would throw in JS — see the divergence note above).
+private func walkDirStats(_ path: String, totalSize: inout Int64, fileCount: inout Int64) {
+    guard let dir = opendir(path) else { return }
+    defer { closedir(dir) }
+
+    while let entry = readdir(dir) {
+        let name = withUnsafeBytes(of: entry.pointee.d_name) { raw -> String in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            var length = 0
+            while length < bytes.count && bytes[length] != 0 { length += 1 }
+            return String(decoding: bytes[0 ..< length], as: UTF8.self)
+        }
+        if name == "." || name == ".." { continue }
+        let full = "\(path)/\(name)"
+
+        var type = entry.pointee.d_type
+        if type == dtUnknown {
+            // Filesystems that don't fill d_type: classify via lstat (what the
+            // JS runtime does to build the Dirent).
+            var linkInfo = stat()
+            guard lstat(full, &linkInfo) == 0 else { continue }
+            type = (linkInfo.st_mode & S_IFMT) == S_IFDIR ? dtDir : UInt8(255)
+        }
+
+        if type == dtDir {
+            walkDirStats(full, totalSize: &totalSize, fileCount: &fileCount)
+        } else {
+            fileCount += 1
+            var info = stat()
+            if stat(full, &info) == 0 { totalSize += Int64(info.st_size) }
         }
     }
-    return DirStats(size: totalSize, files: fileCount)
 }
 
 /// `path.join(a, b)` for the data-dir subpaths. Uses NSString to match the host
