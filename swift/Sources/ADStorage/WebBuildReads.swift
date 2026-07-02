@@ -37,6 +37,19 @@ extension StorageConnection {
         return out
     }
 
+    /// The link audit's known-key universe: `SELECT path FROM pages WHERE
+    /// status != 'deleted'` (every active page key, all source types).
+    public func auditPageKeys() -> [String] {
+        guard let stmt = conn.prepareUncached("SELECT path FROM pages WHERE status != 'deleted'") else {
+            return []
+        }
+        var out: [String] = []
+        while stmt.step() == SQLite.row {
+            if let path = stmt.text(0) { out.append(path) }
+        }
+        return out
+    }
+
     /// The per-framework sitemap rows: `SELECT key, role_heading FROM documents
     /// WHERE framework = ? ORDER BY key`.
     public func sitemapDocs(framework slug: String) -> [(key: String, roleHeading: String?)] {
