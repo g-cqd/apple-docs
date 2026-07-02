@@ -11,7 +11,10 @@ import ADSearchCascade
 import ADServeCore
 import ADServeDSL
 import ADStorage
-import HTTPTypes
+// HTTPCore: ADServe's engine re-based onto the HTTP package — the response
+// statuses, HTTPFields, and HTTPFieldName are defined there
+// (MemberImportVisibility requires importing the DEFINING module).
+import HTTPCore
 
 /// The server's applications — the plaintext loopback (behind Caddy) + an optional in-process
 /// TLS listener (the operator's "Both" model), both sharing `siteRoutes`. Closes over the site
@@ -161,19 +164,20 @@ func buildEnvelope() -> HTTPFields {
         #"</sitemap.xml>; rel="sitemap", </.well-known/api-catalog>; rel="api-catalog", </docs/>; rel="service-doc", </opensearch.xml>; rel="search""#
 
     var fields = HTTPFields()
-    fields[fieldName("x-content-type-options")] = "nosniff"
-    fields[fieldName("x-frame-options")] = "DENY"
-    fields[fieldName("referrer-policy")] = "strict-origin-when-cross-origin"
-    fields[fieldName("permissions-policy")] = "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
-    fields[fieldName("cross-origin-opener-policy")] = "same-origin"
-    fields[fieldName("cross-origin-resource-policy")] = "same-origin"
-    fields[fieldName("content-security-policy")] = csp
-    fields[fieldName("link")] = discoveryLinks
-    fields[fieldName("vary")] = "Accept"
+    fields.append("nosniff", for: fieldName("x-content-type-options"))
+    fields.append("DENY", for: fieldName("x-frame-options"))
+    fields.append("strict-origin-when-cross-origin", for: fieldName("referrer-policy"))
+    fields.append(
+        "camera=(), geolocation=(), microphone=(), payment=(), usb=()", for: fieldName("permissions-policy"))
+    fields.append("same-origin", for: fieldName("cross-origin-opener-policy"))
+    fields.append("same-origin", for: fieldName("cross-origin-resource-policy"))
+    fields.append(csp, for: fieldName("content-security-policy"))
+    fields.append(discoveryLinks, for: fieldName("link"))
+    fields.append("Accept", for: fieldName("vary"))
     return fields
 }
 
-private func fieldName(_ name: String) -> HTTPField.Name { HTTPField.Name(name)! }
+private func fieldName(_ name: String) -> HTTPFieldName { HTTPFieldName(name)! }
 
 // MARK: - App cache presets + route param helpers
 
