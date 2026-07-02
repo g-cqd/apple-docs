@@ -37,6 +37,19 @@ extension StorageConnection {
         return out
     }
 
+    /// Every table name in the corpus (`SELECT name FROM sqlite_master WHERE
+    /// type = 'table'` — includes FTS virtual tables and their shadow tables).
+    /// The B0 read-spike derives its import skip-list from this.
+    public func allTableNames() -> [String] {
+        guard let stmt = conn.prepareUncached("SELECT name FROM sqlite_master WHERE type = 'table'")
+        else { return [] }
+        var out: [String] = []
+        while stmt.step() == SQLite.row {
+            if let name = stmt.text(0) { out.append(name) }
+        }
+        return out
+    }
+
     /// The link audit's known-key universe: `SELECT path FROM pages WHERE
     /// status != 'deleted'` (every active page key, all source types).
     public func auditPageKeys() -> [String] {
