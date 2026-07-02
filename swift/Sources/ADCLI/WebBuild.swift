@@ -30,6 +30,22 @@ struct StorageCorpusReader: CorpusReader {
     func fontFamilies() -> JSON? { nil }
 
     func symbolTotals() -> [(scope: String, count: Int)] { connection.symbolScopeTotals() }
+
+    /// The S3 search-artifact reads (generateSearchArtifacts' corpus surface):
+    /// the columnar title index, the alias rows in table order, and the
+    /// per-document body previews (accumulated + capped in ADStorage).
+    func searchCorpus() -> SearchCorpus {
+        let title = connection.buildTitleIndex()
+        let source = connection.bodyPreviewSource()
+        return SearchCorpus(
+            titleIndex: TitleIndexData(
+                frameworks: title.frameworks, keys: title.keys, titles: title.titles,
+                abstracts: title.abstracts, fwIndices: title.fwIndices, kinds: title.kinds,
+                roleHeadings: title.roleHeadings),
+            aliases: connection.aliasEntries().map { (alias: $0.alias, canonical: $0.canonical) },
+            hasSections: source.hasSections,
+            shardDocs: source.docs.map { ShardDoc(key: $0.key, framework: $0.framework, body: $0.body) })
+    }
 }
 
 /// Writes the artifact tree under `outDir` (creating parent directories).
@@ -49,6 +65,14 @@ struct FileArtifactSink {
             throw ValidationError("ad-cli: failed to write \(path)")
         }
     }
+}
+
+/// `new Date().toISOString()` — ISO-8601 UTC with exactly 3 fractional digits
+/// (e.g. `2026-07-02T12:34:56.789Z`), the search-manifest `generatedAt` form.
+func jsIsoNow() -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.string(from: Date())
 }
 
 /// `APPLE_DOCS_COMMIT` env, else `git rev-parse --short HEAD`; nil when neither
@@ -135,8 +159,14 @@ struct WebBuildCommand: ParsableCommand {
         let assetArtifacts = try BuildSite.planAssets(source: assetSource)
         for artifact in assetArtifacts { try sink.write(artifact) }
 
+        // 7. Search artifacts (build.js runs this on every unfiltered build,
+        // --skip-docs included). generatedAt = `new Date().toISOString()`.
+        let search = BuildSite.planSearchArtifacts(
+            corpus: reader.searchCorpus(), generatedAt: jsIsoNow())
+        for artifact in search.artifacts { try sink.write(artifact) }
+
         let result = try BuildSite.writeEssentials(
-            config: config, reader: reader, version: appVersion,
+            config: config, reader: reader, version: appVersion, searchArtifacts: search.stats,
             ensureDir: { try sink.ensureDir($0) }, write: { try sink.write($0) })
 
         var report = "ad-cli: built site essentials → \(out)\n"

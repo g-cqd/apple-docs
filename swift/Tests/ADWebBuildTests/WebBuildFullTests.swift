@@ -68,7 +68,8 @@ private let fullConfig = SiteConfig(
     #expect(dirs.contains("docs/combine"))
     #expect(!written.keys.contains { $0.hasPrefix("data/frameworks/combine/tree.") })
 
-    // The doc-loop step is no longer a stub; later steps still are.
+    // The doc-loop step is no longer a stub; the S4 sitemap step still is
+    // (S3 search artifacts + S6 assets left the ledger with their slices).
     #expect(!result.stubs.contains { $0.contains("document pages") })
-    #expect(result.stubs.contains { $0.contains("search artifacts") })
+    #expect(result.stubs.contains { $0.contains("sitemap") })
 }

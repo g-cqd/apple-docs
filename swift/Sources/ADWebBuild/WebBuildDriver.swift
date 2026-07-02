@@ -77,7 +77,8 @@ extension BuildSite {
     /// essentials build renders no pages (build.js reports rendered counts, so
     /// `--skip-docs` is 0/0); the full render loop sets them.
     public static func collectInputs<R: CorpusReader>(
-        from reader: R, config: SiteConfig, version: String? = nil
+        from reader: R, config: SiteConfig, version: String? = nil,
+        searchArtifacts: SearchArtifactsStats? = nil
     ) -> BuildInputs {
         let roots = reader.corpusRoots()
         // No count badge: `roots` has no doc_count column (getRoots = SELECT *
@@ -91,18 +92,21 @@ extension BuildSite {
         return BuildInputs(
             indexFrameworks: frameworks, indexExtras: homepageExtras(config),
             fontFamilies: reader.fontFamilies(), symbolTotals: reader.symbolTotals(), frameworkMeta: meta,
-            version: version, totalDocuments: 0, totalFrameworks: 0)
+            version: version, totalDocuments: 0, totalFrameworks: 0, searchArtifacts: searchArtifacts)
     }
 
     /// Collect → plan → ensure dirs → write the essentials artifact tree. I/O is
     /// injected (`ensureDir`/`write`) so this stays Foundation-free. Returns the
-    /// `BuildResult` (so the caller can log the stub ledger).
+    /// `BuildResult` (so the caller can log the stub ledger). `searchArtifacts`
+    /// carries the S3 step's counts into the manifest (build.js step 7 → 9).
     @discardableResult
     public static func writeEssentials<R: CorpusReader>(
         config: SiteConfig, reader: R, version: String? = nil,
+        searchArtifacts: SearchArtifactsStats? = nil,
         ensureDir: (String) throws -> Void, write: ArtifactSink
     ) rethrows -> BuildResult {
-        let inputs = collectInputs(from: reader, config: config, version: version)
+        let inputs = collectInputs(
+            from: reader, config: config, version: version, searchArtifacts: searchArtifacts)
         let result = planEssentials(config: config, inputs: inputs)
         for dir in result.dirs { try ensureDir(dir) }
         for artifact in result.artifacts { try write(artifact) }
