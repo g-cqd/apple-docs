@@ -71,6 +71,7 @@ const SEARCH_BOOL_FLAGS = ['no-fuzzy', 'no-deep', 'no-eager', 'read', 'json']
 /** @type {Record<string, VerbSpec>} */
 const VERB_SPECS = {
   frameworks: { string: ['kind'], bool: ['json'] },
+  version: { bool: ['json'] },
   kinds: { string: ['field'], bool: ['json'] },
   status: { bool: ['advanced', 'json'] },
   browse: { minPositional: 1, maxPositional: 1, string: ['path'], int: ['limit', 'year'], bool: ['json'] },

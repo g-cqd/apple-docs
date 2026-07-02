@@ -12,9 +12,9 @@
 // suite stays green on a bare checkout. Point it explicitly with AD_CLI_BIN +
 // AD_PARITY_HOME.
 
-import { describe, expect, setDefaultTimeout, test } from 'bun:test'
-import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 // Each case spawns a real Bun cli.js (and sometimes a nested ad-cli) against the
@@ -155,6 +155,83 @@ d('CLI flip wiring: cli.js (APPLE_DOCS_NATIVE=cli) == cli.js (Bun oracle)', () =
       expect(runFlip(args)).toBe(runJs(args))
     })
   }
+})
+
+// ---------------------------------------------------------------------------
+// `version` (the first F1 maintenance verb): tool version + commit + corpus
+// provenance. Env-controlled cases pin the getCommitHash contract (trim +
+// lowercase + SHA_RE, invalid env falls through to git); a SEEDED corpus (the
+// web-parity seed writes snapshot_tag/build_macos) exercises the provenance
+// lines the real corpus may lack.
+
+/** Bun oracle with extra env. @param {string[]} args @param {Record<string, string>} env @param {string} [home] */
+function runJsEnv(args, env, home = /** @type {string} */ (dataDir)) {
+  const p = Bun.spawnSync(['bun', join(ROOT, 'cli.js'), ...args, '--home', home], {
+    env: { ...process.env, APPLE_DOCS_NATIVE: 'off', ...env },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  return dec.decode(p.stdout)
+}
+
+/** Native ad-cli with extra env. @param {string[]} args @param {Record<string, string>} env @param {string} [db] */
+function runNativeEnv(args, env, db = dbPath) {
+  const p = Bun.spawnSync([/** @type {string} */ (adCli), ...args, '--db', db], {
+    env: { ...process.env, ...env },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  return dec.decode(p.stdout)
+}
+
+d('version parity: ad-cli == cli.js (commit contract + provenance)', () => {
+  /** @type {string} */ let provHome
+  beforeAll(() => {
+    provHome = mkdtempSync(join(tmpdir(), 'ad-version-prov-'))
+    const seed = Bun.spawnSync(['bun', join(ROOT, 'scripts/web-parity-seed.mjs'), provHome], { stdout: 'pipe', stderr: 'pipe' })
+    if (seed.exitCode !== 0) throw new Error(`seed failed: ${dec.decode(seed.stderr)}`)
+  })
+  afterAll(() => {
+    if (provHome) rmSync(provHome, { recursive: true, force: true })
+  })
+
+  test('human + json against the live corpus', () => {
+    expect(runNative(['version'])).toBe(runJs(['version']))
+    const native = runNative(['version', '--json'])
+    const js = runJs(['version', '--json'])
+    expect(JSON.parse(native)).toEqual(JSON.parse(js))
+    expect(native).toBe(js)
+  })
+
+  test('APPLE_DOCS_COMMIT is trimmed + lowercased on both sides', () => {
+    const env = { APPLE_DOCS_COMMIT: ' ABC1234 ' }
+    const native = runNativeEnv(['version'], env)
+    expect(native).toBe(runJsEnv(['version'], env))
+    expect(native).toContain('(abc1234)') // the normalized sha, not the raw env
+  })
+
+  test('an invalid APPLE_DOCS_COMMIT falls through to git on both sides', () => {
+    const env = { APPLE_DOCS_COMMIT: 'not-a-sha' }
+    const native = runNativeEnv(['version'], env)
+    expect(native).toBe(runJsEnv(['version'], env))
+    expect(native).not.toContain('not-a-sha')
+  })
+
+  test('corpus provenance (seeded snapshot_tag + build_macos)', () => {
+    const db = join(provHome, 'apple-docs.db')
+    const nativeHuman = runNativeEnv(['version'], {}, db)
+    expect(nativeHuman).toBe(runJsEnv(['version'], {}, provHome))
+    expect(nativeHuman).toContain('corpus: snapshot-20260101 (built on macOS 26.1)')
+    const nativeJson = runNativeEnv(['version', '--json'], {}, db)
+    const jsJson = runJsEnv(['version', '--json'], {}, provHome)
+    expect(JSON.parse(nativeJson)).toEqual(JSON.parse(jsJson))
+    expect(nativeJson).toBe(jsJson)
+  })
+
+  test('flip: cli.js (APPLE_DOCS_NATIVE=cli) delegates version to ad-cli', () => {
+    expect(runFlip(['version'])).toBe(runJs(['version']))
+    expect(runFlip(['version', '--json'])).toBe(runJs(['version', '--json']))
+  })
 })
 
 /** @type {Array<[string, string[]]>} */
