@@ -48,6 +48,9 @@ jobs:
           # `security-and-quality` is the recommended baseline; the
           # `security-extended` suite adds extra precision-3 queries.
           queries: security-and-quality
+      - name: Install Swift 6.4 dev toolchain (no hosted macOS image ships 6.4)
+        if: matrix.build-mode == 'manual'
+        uses: g-cqd/ADBuildTools/.github/actions/setup-swift@v1
       - name: Build Swift (manual mode)
         if: matrix.build-mode == 'manual'
         working-directory: swift
