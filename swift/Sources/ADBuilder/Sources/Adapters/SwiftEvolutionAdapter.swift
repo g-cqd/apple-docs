@@ -11,6 +11,8 @@ public enum AdapterError: Error, Sendable, Equatable {
     case notImplemented(String)
     /// `normalize` received a payload shape it doesn't handle.
     case unexpectedPayload(String)
+    /// A non-2xx upstream response where the JS throws HttpError(status, url).
+    case httpStatus(Int, String)
 }
 
 public struct SwiftEvolutionAdapter: SourceAdapter {
