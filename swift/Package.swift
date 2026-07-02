@@ -451,6 +451,13 @@ let package = Package(
                 // `Database`/`DatabaseOptions` the crawl creates + migrates.
                 "ADBuilder",
                 "ADBuilderPipeline",
+                // ADSQLSearch + ADDBImport/FTS/JSON: the hidden B0 read-spike
+                // (_addb-read-spike) imports the corpus into ADDB and measures
+                // searchPagesDenormRows against StorageConnection.ftsRows.
+                "ADSQLSearch",
+                .product(name: "ADDBImport", package: "ADDB"),
+                .product(name: "ADDBFTS", package: "ADDB"),
+                .product(name: "ADDBJSON", package: "ADDB"),
                 .product(name: "ADDB", package: "ADDB"),
                 .product(name: "ADJSONCore", package: "ADJSON"),
                 .product(name: "OrderedCollections", package: "swift-collections"),

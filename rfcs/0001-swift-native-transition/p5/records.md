@@ -146,3 +146,40 @@ the no-FFI in-process path reverses that. GO → execute the additive reader + p
 keeping the (shipped) read primitives. The cascade's real read surface is **~8 methods** (not
 the ~45 of the whole server); only FTS has an ADDB query today — the other tiers' denorm SQL
 is the bulk of the new code.
+
+### G3-0 gate RUN — NO-GO (2026-07-02)
+
+Built the `_addb-read-spike` verb (hidden, `Sources/ADCLI/AddbReadSpike.swift`) and ran the
+gate on a **release** `ad-cli` (a debug run was discarded as unfair — libsqlite3 is optimized
+C regardless of our build mode) against a clone of the live corpus (`~/.apple-docs`,
+350 K documents):
+
+- Snapshot: `ADDBImport.importSQLite` (documents + roots only; `documents_fts` reconstructed
+  `porter unicode61` from `documents.[title, abstract_text, declaration_text, headings, key]`;
+  the v28 denorm columns + roots lookup from the DenormImportTests manifest). Import took
+  **405 s** release (one skipped index: `idx_documents_usr`, key 1033 B over the engine's key
+  limit — harmless for search). ADDB file: 1.24 GB.
+- Measurement: 200 iterations/backend/probe, 20 warmup, limit 25, per-iteration A/B
+  alternation. `searchPagesDenormRows` (ADDB, denorm, no JOIN/LOWER) vs
+  `StorageConnection.ftsRows` (libsqlite3, normalized §2.2).
+
+| probe | ADDB p50 | SQLite p50 | p50 ratio | p95 ratio |
+|---|---|---|---|---|
+| view | 88.1 ms | 16.0 ms | 5.5× | 5.9× |
+| button | 21.0 ms | 3.9 ms | 5.5× | 5.2× |
+| async await | 1.62 ms | 0.72 ms | 2.3× | 2.2× |
+| urlsession | 1.36 ms | 0.47 ms | 2.9× | 2.3× |
+| navigation stack | 1.60 ms | 0.78 ms | 2.1× | 2.1× |
+
+**Pooled: ADDB p50 2.06 ms / p95 125.2 ms vs SQLite p50 1.03 ms / p95 18.4 ms → p50 2.0×,
+p95 6.8× — NO-GO on the pooled gate AND on every probe** (gate: GO iff ADDB p50 <
+0.97×SQLite AND p95 ≤ SQLite). The gap widens with candidate volume ("view"/"button" — the
+broad-match probes), pointing at bm25 scan/merge cost in the engine, not the denorm shape
+(the denorm columns removed the JOIN/LOWER work and it still loses).
+
+**Decision (per the gate's own terms): the read-flip track (B1–B5) is SHELVED, exactly like
+P5's F-track.** The shipped denorm primitives (`searchPagesDenormRows`, `RowDecoder`,
+`SearchProjectionRow`, `prepareForDenormServing`, the import manifest) stand on their own;
+serving stays on libsqlite3. Re-open only after an ADDB engine-level FTS/bm25 win is
+demonstrated on this same spike (the harness is committed and rerunnable:
+`ad-cli _addb-read-spike --db <corpus clone> --snapshot <path>`).
