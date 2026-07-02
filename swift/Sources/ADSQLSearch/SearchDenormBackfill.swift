@@ -1,6 +1,6 @@
 public import ADDBExec
 public import ADSQLModel
-import ADSQLJSON  // JSON_EXTRACT registration (the year/track folds) — see `enableJSON()` below
+import ADDBJSON  // JSON_EXTRACT registration (the year/track folds) — see `enableJSON()` below
 
 /// Populates the apple-docs NATIVE search-denorm columns
 /// (`documents.{title_lc,key_lc,year_num,track_lc,root_display,root_slug}`, the v28 set) over a DB that

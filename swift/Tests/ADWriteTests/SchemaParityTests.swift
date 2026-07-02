@@ -22,7 +22,7 @@
 //   • ADDB's `schema_version` migrator-cursor table is excluded (its apple-docs
 //     analog, `schema_meta`, exists on both sides).
 
-import ADSQLMigrate
+import ADDBMigrate
 import Foundation
 import Testing
 
