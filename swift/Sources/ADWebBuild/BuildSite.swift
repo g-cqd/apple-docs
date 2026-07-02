@@ -160,9 +160,18 @@ public enum BuildSite {
             artifacts.append(Artifact(path: "data/frameworks/\(meta.slug).json", text: json))
         }
 
-        // 9. Manifest (pretty). searchArtifacts = generateSearchArtifacts'
-        // `{ titleCount, aliasCount, shardCount }` return (literal key order),
-        // JSON null when the S3 step didn't run.
+        // 9. Manifest (pretty; written LAST in build.js — `writeAll` re-emits
+        // it after the render loop with the real totals).
+        artifacts.append(planManifest(config: config, inputs: inputs))
+
+        return BuildResult(dirs: directories, artifacts: artifacts, stubs: pendingSteps)
+    }
+
+    /// build.js step 9 — the manifest artifact. `searchArtifacts` =
+    /// generateSearchArtifacts' `{ titleCount, aliasCount, shardCount }` return
+    /// (literal key order), JSON null when the S3 step didn't run;
+    /// totalDocuments / totalFrameworks are the RENDERED counts.
+    public static func planManifest(config: SiteConfig, inputs: BuildInputs) -> Artifact {
         let searchStats: JsonLd =
             inputs.searchArtifacts.map { stats in
                 .object([
@@ -180,8 +189,6 @@ public enum BuildSite {
             ("totalFrameworks", .int(inputs.totalFrameworks)),
             ("searchArtifacts", searchStats),
         ]).serializedPretty(2)
-        artifacts.append(Artifact(path: "manifest.json", text: manifest))
-
-        return BuildResult(dirs: directories, artifacts: artifacts, stubs: pendingSteps)
+        return Artifact(path: "manifest.json", text: manifest)
     }
 }

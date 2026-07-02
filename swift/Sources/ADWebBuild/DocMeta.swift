@@ -67,16 +67,26 @@ enum DocMeta {
         return parts.joined(separator: "\n  ")
     }
 
-    /// buildPlatformBadges(platforms) — one badge per non-empty version, in the
-    /// object's key order. "" when there are none.
+    /// buildPlatformBadges(platforms) — `Object.entries` over WHATEVER parsed
+    /// (an object gives slug keys; an ARRAY gives index keys, whose object
+    /// values template-coerce to "[object Object]" — the JS quirk, faithfully
+    /// kept), values filtered by JS truthiness. "" when there are none.
     static func buildPlatformBadges(_ platforms: JSON?) -> String {
-        guard let platforms, platforms.isObject else { return "" }
+        guard let platforms, platforms.isObject || platforms.isArray else { return "" }
         var items = ""
-        platforms.forEachMember { slug, version in
-            let v = coerce(version)
-            if v.isEmpty { return }
+        func badge(_ slug: String, _ version: JSON) {
+            guard version.isTruthy else { return }  // `if (!version) continue`
             let name = platformNames[slug] ?? slug
-            items += "<span class=\"badge badge-platform\">\(esc(name)) \(esc(v))+</span>"
+            items += "<span class=\"badge badge-platform\">\(esc(name)) \(esc(version.jsString))+</span>"
+        }
+        if platforms.isObject {
+            platforms.forEachMember { badge($0, $1) }
+        } else {
+            var index = 0
+            platforms.forEachElement { element in
+                badge(String(index), element)
+                index += 1
+            }
         }
         if items.isEmpty { return "" }
         return "<div class=\"doc-availability\">\(items)</div>"

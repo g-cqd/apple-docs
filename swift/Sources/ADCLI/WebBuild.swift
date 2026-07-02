@@ -6,6 +6,7 @@
 // from the BuildResult ledger). Parity oracle: `bun run cli.js web build`.
 
 import ADArchive
+import ADContent
 import ADJSONCore
 import ADStorage
 import ADWebBuild
@@ -16,19 +17,61 @@ import Foundation
 struct StorageCorpusReader: CorpusReader {
     let connection: StorageConnection
 
+    /// `db.getRoots()` — EVERY root in slug order (the build walk); the
+    /// per-framework metadata documentCount is build.js step 8's
+    /// `COUNT(*) FROM documents WHERE framework = slug`.
     func corpusRoots() -> [CorpusRoot] {
-        // GAP (homepage parity): the JS homepage also drops roots whose only page
-        // is the root itself (page_count filter) and reads doc_count from getRoots;
-        // here documentCount = active page count. The corpus gate flags any diff.
-        connection.listFrameworkRoots(kind: nil).map {
-            CorpusRoot(slug: $0.slug, displayName: $0.name, kind: $0.kind, documentCount: Int($0.pageCount))
+        connection.webBuildRoots().map {
+            CorpusRoot(
+                slug: $0.slug, displayName: $0.displayName, kind: $0.kind,
+                documentCount: connection.documentCount(framework: $0.slug),
+                sourceType: $0.sourceType, url: nil)
         }
     }
 
-    /// GAP (fonts JSON parity): the /fonts embedded payload must byte-match
-    /// `JSON.stringify(db.listAppleFonts())`; that serialization is a follow-up.
-    /// Until then the fonts page renders its empty shell.
-    func fontFamilies() -> JSON? { nil }
+    /// buildHomepageProps' roster: getRoots minus roots whose ONLY page is the
+    /// root itself (`page_count <= 1` AND the pages probe returns at most the
+    /// self page).
+    func homepageRoots() -> [CorpusRoot] {
+        connection.webBuildRoots().filter { root in
+            if root.pageCount <= 1 {
+                let pages = connection.frameworkPageDocs(root: root.slug)
+                if pages.count <= 1 && (pages.first == nil || pages.first?.path == root.slug) {
+                    return false
+                }
+            }
+            return true
+        }.map {
+            CorpusRoot(
+                slug: $0.slug, displayName: $0.displayName, kind: $0.kind,
+                documentCount: connection.documentCount(framework: $0.slug),
+                sourceType: $0.sourceType, url: nil)
+        }
+    }
+
+    /// The /fonts embedded payload — `JSON.stringify(db.listAppleFonts())`
+    /// byte-parity: full rows in SELECT * column order through the stringify
+    /// twin, then parsed so the template re-encodes the identical bytes.
+    func fontFamilies() -> JSON? {
+        let families = connection.appleFontFamilyRows().map { $0.map(Self.fontRow) }
+        let files = connection.appleFontFileRows().map { $0.map(Self.fontRow) }
+        guard let text = BuildSite.fontsFamiliesJson(families: families, files: files) else { return nil }
+        return try? ADJSON.parse(text, options: .init(maxDepth: 512)).root
+    }
+
+    private static func fontRow(_ row: DynamicRow) -> FontRow {
+        FontRow(
+            cells: row.cells.map { cell in
+                let value: FontCell
+                switch cell.value {
+                case .text(let s): value = .text(s)
+                case .integer(let i): value = .integer(i)
+                case .real(let d): value = .real(d)
+                case .null: value = .null
+                }
+                return (name: cell.name, value: value)
+            })
+    }
 
     func symbolTotals() -> [(scope: String, count: Int)] { connection.symbolScopeTotals() }
 
@@ -58,6 +101,94 @@ struct StorageCorpusReader: CorpusReader {
             aliases: connection.aliasEntries().map { (alias: $0.alias, canonical: $0.canonical) },
             hasSections: source.hasSections,
             shardDocs: source.docs.map { ShardDoc(key: $0.key, framework: $0.framework, body: $0.body) })
+    }
+}
+
+/// The FULL-build reader: `StorageCorpusReader` + the document render loop's
+/// enumerators (document-pages.js / framework-pages.js / render-cache.js).
+/// The ancestor-title and role-heading indexes are precomputed once (the JS
+/// render cache's O(N)-once tradeoff) — this reader is only constructed for
+/// non-`--skip-docs` builds.
+struct StorageDocumentReader: DocumentCorpusReader {
+    let base: StorageCorpusReader
+    let titleIndex: [String: String]
+    let roleIndex: [String: String]
+
+    init(base: StorageCorpusReader) {
+        self.base = base
+        self.titleIndex = base.connection.ancestorTitleIndex()
+        self.roleIndex = base.connection.roleHeadingIndex()
+    }
+
+    // CorpusReader — delegate to the essentials adapter.
+    func corpusRoots() -> [CorpusRoot] { base.corpusRoots() }
+    func homepageRoots() -> [CorpusRoot] { base.homepageRoots() }
+    func fontFamilies() -> JSON? { base.fontFamilies() }
+    func symbolTotals() -> [(scope: String, count: Int)] { base.symbolTotals() }
+
+    func knownKeys() -> Set<String> { base.connection.knownDocumentKeys() }
+
+    /// The per-framework enumerator: document rows (ORDER BY id) + each doc's
+    /// sections (ORDER BY sort_order, id — identical to batchFetchSections'
+    /// per-doc sequence) + its ancestor-title map.
+    func documents(inFramework slug: String) -> [BuildDocument] {
+        base.connection.webBuildDocuments(framework: slug).map { row in
+            let sections = base.connection.documentSections(row.key).map { section in
+                DocSection(
+                    sectionKind: section.sectionKind, heading: section.heading,
+                    contentText: section.contentText, contentJson: section.contentJSON,
+                    sortOrder: section.sortOrder)
+            }
+            let doc = DocRecord(
+                key: row.key, title: row.title, framework: row.framework,
+                frameworkDisplay: row.frameworkDisplay, roleHeading: row.roleHeading,
+                isDeprecated: row.isDeprecated, isBeta: row.isBeta, platformsJson: row.platformsJson,
+                url: row.url, abstractText: row.abstractText, language: row.language)
+            return BuildDocument(doc: doc, sections: sections, ancestorTitles: ancestorTitles(for: row.key))
+        }
+    }
+
+    /// render-cache.js `getAncestorTitles(key)`: for i in 1..<segs.count-1,
+    /// the title of segs[0...i].joined("/") when indexed.
+    private func ancestorTitles(for key: String) -> [String: String] {
+        let segs = key.split(separator: "/").map(String.init)  // split(...).filter(Boolean)
+        guard segs.count > 2 else { return [:] }
+        var titles: [String: String] = [:]
+        for i in 1..<(segs.count - 1) {
+            let partial = segs[0...i].joined(separator: "/")
+            if let title = titleIndex[partial] { titles[partial] = title }
+        }
+        return titles
+    }
+
+    /// `getPagesByRoot` rows as the [JSON] the framework page renders — built
+    /// through the stringify twin (explicit null members, like the JS row
+    /// objects) and re-parsed.
+    func frameworkPageDocuments(slug: String) -> [JSON] {
+        let rows = base.connection.frameworkPageDocs(root: slug)
+        guard !rows.isEmpty else { return [] }
+        let text = BuildSite.frameworkDocsJson(
+            rows.map {
+                FrameworkListingDoc(
+                    path: $0.path, title: $0.title, role: $0.role, roleHeading: $0.roleHeading,
+                    abstract: $0.abstract, sourceMetadata: $0.sourceMetadata, framework: $0.framework)
+            })
+        guard let root = try? ADJSON.parse(text, options: .init(maxDepth: 512)).root else { return [] }
+        return root.arrayValue
+    }
+
+    func frameworkTreeEdges(slug: String) -> [(fromKey: String, toKey: String)] {
+        base.connection.frameworkTreeEdges(slug).map { (fromKey: $0.fromKey, toKey: $0.toKey) }
+    }
+
+
+    /// render-cache.js `getRoleHeadings(keys)` — only found entries.
+    func roleHeadings(forKeys keys: [String]) -> [String: String] {
+        var out: [String: String] = [:]
+        for key in keys {
+            if let heading = roleIndex[key] { out[key] = heading }
+        }
+        return out
     }
 }
 
@@ -142,7 +273,7 @@ struct WebBuildCommand: ParsableCommand {
         help: "The src/web checkout holding the static assets (style.css, JS bundles, public/).")
     var srcWeb: String = "src/web"
 
-    @Flag(name: .customLong("skip-docs"), help: "Build only site essentials (the only mode supported so far).")
+    @Flag(name: .customLong("skip-docs"), help: "Build only site essentials; skip the per-document render loop.")
     var skipDocs = false
 
     func run() throws {
@@ -197,11 +328,25 @@ struct WebBuildCommand: ParsableCommand {
             }
         }
 
-        let result = try BuildSite.writeEssentials(
-            config: config, reader: reader, version: appVersion, searchArtifacts: search.stats,
-            ensureDir: { try sink.ensureDir($0) }, write: { try sink.write($0) })
+        let result: BuildResult
+        if skipDocs {
+            result = try BuildSite.writeEssentials(
+                config: config, reader: reader, version: appVersion, searchArtifacts: search.stats,
+                ensureDir: { try sink.ensureDir($0) }, write: { try sink.write($0) })
+        } else {
+            // The full render loop (build.js steps 5/6 + the manifest-last
+            // rule). markdownDocs mirrors the JS siteConfig flag
+            // (`process.env.APPLE_DOCS_MARKDOWN_DOCS !== '0'`, default ON);
+            // highlighting stays Noop until the S5 highlight seam.
+            let docReader = StorageDocumentReader(base: reader)
+            let markdownDocs = (ProcessInfo.processInfo.environment["APPLE_DOCS_MARKDOWN_DOCS"] ?? "") != "0"
+            result = try BuildSite.writeAll(
+                config: config, reader: docReader, version: appVersion, markdownDocs: markdownDocs,
+                highlight: nil, searchArtifacts: search.stats,
+                ensureDir: { try sink.ensureDir($0) }, write: { try sink.write($0) })
+        }
 
-        var report = "ad-cli: built site essentials → \(out)\n"
+        var report = "ad-cli: built site\(skipDocs ? " essentials" : "") → \(out)\n"
         report += "ad-cli: assets via \(bundler.label) (\(assetArtifacts.count) artifacts)\n"
         report += "ad-cli: still stubbed (per the build ledger):\n"
         for stub in result.stubs { report += "  - \(stub)\n" }

@@ -72,12 +72,26 @@ public enum DocPage {
             : nil
         let docDescription = description(doc.abstractText, "\(doc.title ?? "") — Apple developer documentation")
 
+        // `Object.keys(platforms).filter((k) => platforms[k]).map(lookup ?? k)` —
+        // key enumeration over WHATEVER parsed (an object gives platform slugs;
+        // an ARRAY gives its index keys "0","1",… — the JS quirk faithfully
+        // reproduced: applicationSuite then reads "0, 1"), values filtered by
+        // JS truthiness.
         var platformDisplayNames: [String] = []
-        if let platforms = DocMeta.parsePlatformsJson(doc.platformsJson), platforms.isObject {
-            platforms.forEachMember { slug, version in
-                let v = version.isNull ? "" : (version.string ?? version.jsString)
-                if v.isEmpty { return }
-                platformDisplayNames.append(DocMeta.platformNames[slug] ?? slug)
+        if let platforms = DocMeta.parsePlatformsJson(doc.platformsJson) {
+            if platforms.isObject {
+                platforms.forEachMember { slug, version in
+                    if version.isTruthy { platformDisplayNames.append(DocMeta.platformNames[slug] ?? slug) }
+                }
+            } else if platforms.isArray {
+                var index = 0
+                platforms.forEachElement { element in
+                    if element.isTruthy {
+                        let key = String(index)
+                        platformDisplayNames.append(DocMeta.platformNames[key] ?? key)
+                    }
+                    index += 1
+                }
             }
         }
         let programmingLanguage = (doc.language == "occ" || doc.language == "objc") ? "Objective-C" : "Swift"

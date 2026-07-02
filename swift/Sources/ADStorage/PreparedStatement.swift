@@ -164,6 +164,12 @@ final class PreparedStatement {
     /// (zstd-compacted) one.
     func columnType(_ col: Int32) -> Int32 { lib.columnType(stmt, col) }
 
+    /// The result column's name (`sqlite3_column_name`) — the dynamic-row
+    /// readers (fonts JSON parity) key cells by it in SELECT * column order.
+    func columnName(_ col: Int32) -> String? {
+        lib.columnName(stmt, col).map { String(cString: $0) }
+    }
+
     /// Raw BLOB bytes of a result column, or nil when NULL.
     func blob(_ col: Int32) -> [UInt8]? {
         guard lib.columnType(stmt, col) != SQLite.typeNull, let ptr = lib.columnBlob(stmt, col) else {
