@@ -340,12 +340,26 @@ func jsIsoNow() -> String {
 }
 
 /// `APPLE_DOCS_COMMIT` env, else `git rev-parse --short HEAD`; nil when neither
-/// resolves. Mirrors src/lib/git-version.js `getCommitHash`.
+/// yields a plausible sha. Mirrors src/lib/git-version.js `getCommitHash`
+/// exactly: trim + lowercase, validate against `^[0-9a-f]{7,40}$`, and an
+/// INVALID env value falls through to git rather than being used raw. The JS
+/// anchors git at its module's repo root ("works regardless of the process
+/// cwd"); the native twin anchors `-C` at the binary's own directory — a dev
+/// build under swift/.build resolves the repo's .git the same way, and an
+/// installed binary outside any repo returns nil, like a non-git JS install.
 func gitCommitHash() -> String? {
-    if let env = ProcessInfo.processInfo.environment["APPLE_DOCS_COMMIT"], !env.isEmpty { return env }
+    if let env = ProcessInfo.processInfo.environment["APPLE_DOCS_COMMIT"] {
+        let cleaned = env.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if isCommitSha(cleaned) { return cleaned }
+    }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["git", "rev-parse", "--short", "HEAD"]
+    var arguments = ["git"]
+    if let binary = Bundle.main.executablePath {
+        arguments += ["-C", (binary as NSString).deletingLastPathComponent]
+    }
+    arguments += ["rev-parse", "--short", "HEAD"]
+    process.arguments = arguments
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = Pipe()
@@ -357,8 +371,16 @@ func gitCommitHash() -> String? {
     }
     guard process.terminationStatus == 0 else { return nil }
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    let hash = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-    return hash.isEmpty ? nil : hash
+    let hash = String(decoding: data, as: UTF8.self)
+        .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return isCommitSha(hash) ? hash : nil
+}
+
+/// JS `SHA_RE = /^[0-9a-f]{7,40}$/` (post-lowercase, so bare `[0-9a-f]`).
+private func isCommitSha(_ candidate: String) -> Bool {
+    let scalars = candidate.unicodeScalars
+    guard scalars.count >= 7 && scalars.count <= 40 else { return false }
+    return scalars.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
 }
 
 /// `ad-cli web …` — the static-site build verb group.
