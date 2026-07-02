@@ -140,3 +140,35 @@ crawl-throughput question — deferred, not decided here.
 | Sort instability on duplicate sort_orders | explicit (sortOrder, originalIndex) comparator; production dups verified |
 | Old dylib + new JS symbols | loader whole-native fallback on missing symbols; code+dylib ship together |
 | ECMA number canonicalization (phase 3) | binary-rows-out fallback keeps JSON.stringify in JS — gated by contentHash stability (D-0004-2), still open |
+
+## WS-E re-open — phases 3-4 re-evaluated post-S5 (2026-07-02)
+
+The reopen-and-finish directive asked phases 3-4 to be re-ported +
+re-measured, documenting honestly if the NO-GO stands. The ground has moved
+since D-0004-8:
+
+**Phase 4 (render-html + highlight at build time) — SUPERSEDED, not re-opened.**
+The 2026-06-13 NO-GO measured porting render fragments INTO the Bun build
+(~6% self-time, most of it shiki's WASM). That framing is now moot: the
+`swift-port-completion` branch ships the ENTIRE static build natively
+(`ad-cli web build` — templates, render-html walk, markdown fallback,
+sections, search artifacts, sitemaps, link audit, incremental index), gated
+DOM/byte-identical against the Bun build on the synthetic corpus, with shiki
+kept as the build-only JSONL coprocess (`scripts/highlight-server.ts`) per
+operator decision #2. There is no fragment left to port into Bun; the Bun
+build itself is what gets retired at WS-G. Directional timing on the
+synthetic corpus (6 docs, 3 runs): native-debug 0.30 s vs bun 0.26 s — both
+startup-dominated (the native side pays the bun-build asset seam + the
+highlight coprocess spawn); a real-corpus wall-time comparison belongs to
+the bounded live pass, where the JS profile's 84% file-write attribution
+predicts parity to native advantage at `--workers 1`.
+
+**Phase 3 (crawl-time normalize) — PARTIALLY LANDED via WS-D, remainder
+scoped.** The native adapters now normalize natively end-to-end for
+swift-org / swift-book / swift-evolution / guidelines / apple-archive
+(HtmlNormalize over ADHTML, the guidelines parser, the archive catalog),
+each pinned against the JS oracle. The remaining phase-3 surface is the
+DocC normalize (`content/normalize/docc.js`) used by the apple-docc /
+hig / swift-docc / sample-code / wwdc adapters — it travels WITH those
+adapter ports (unscheduled), not as a standalone re-measure: normalize cost
+only matters at crawl time and those crawls still run under Bun.

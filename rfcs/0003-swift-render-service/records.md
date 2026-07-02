@@ -119,3 +119,14 @@ Only the codepoint worker (D-0003-1) stays spawned (private swiftinterfaces).
 | Private-framework drift (codepoint) | stays-spawned per D-0003-1; version-probed at spawn |
 | Prerender at scale through FFI | 256/chunk batches, RSS bounded (autoreleasepool); 2.0× over the pool |
 | Dylib size growth | render code small; no bundled runtimes — dlopen'd system libs only |
+
+## WS-E re-open — phase 3 disposition (2026-07-02)
+
+Phase 3 (darwin spawn-script kills) was revisited under the
+reopen-and-finish directive. **The hold STANDS, unchanged**: the kills are
+gated on the RFC 0001 §4 release-cycle gate (one full release with the
+dylib serving every render before the spawn fallbacks are deleted as proven
+dead code), and this pass explicitly keeps the production flip (F4)
+prepare-only. Nothing to re-port — the native renders already serve by default on
+darwin; the remaining work is a deletion whose gate is an operator release
+observation, same class as F4. Execute alongside the flip.
