@@ -23,8 +23,8 @@
 // writes the SAME rows as the Bun `bun:sqlite` writer.
 
 import ADDB
-import ADSQLImport
-import ADSQLMigrate
+import ADDBImport
+import ADDBMigrate
 import ADSQLModel
 import Foundation
 import Testing

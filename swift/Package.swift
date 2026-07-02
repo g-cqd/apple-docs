@@ -359,7 +359,7 @@ let package = Package(
         // bind (text/int/BLOB/NULL) in one transaction (lastInsertRowid), read back
         // via the query API. The full writer (32 apple-docs migrations + crawl
         // persist) will be built on the API this pins. Depends on the ADDB engine
-        // products (ADDBExec executor + the ADSQLMigrate framework the full writer
+        // products (ADDBExec executor + the ADDBMigrate framework the full writer
         // will define its schema in) + ADSQL's ADSQLModel (the `Value` type). Same
         // first-party AD* sibling resolution as ADSQLSearch; no new external dep.
         // Consumed by ad-cli's hidden `_addb-write-spike` verb; NOT in the ADCore
@@ -369,7 +369,7 @@ let package = Package(
             dependencies: [
                 .product(name: "ADDB", package: "ADDB"),
                 .product(name: "ADDBExec", package: "ADDB"),
-                .product(name: "ADSQLMigrate", package: "ADDB"),
+                .product(name: "ADDBMigrate", package: "ADDB"),
                 .product(name: "ADSQLModel", package: "ADSQL"),
                 // ADEmbed: the Chunker (anchor + body chunks), Quantize (signCode →
                 // vec_bin / i8Code → vec_i8) and Embedder the chunks/vectors writer
@@ -464,8 +464,8 @@ let package = Package(
             dependencies: [
                 .product(name: "ADDBExec", package: "ADDB"),
                 .product(name: "ADSQLModel", package: "ADSQL"),
-                .product(name: "ADSQLFullTextSearch", package: "ADDB"),
-                .product(name: "ADSQLJSON", package: "ADDB"),
+                .product(name: "ADDBFTS", package: "ADDB"),
+                .product(name: "ADDBJSON", package: "ADDB"),
                 // ADFCore: the shared little-endian `appendLE*` the §2.5 response framer emits through.
                 .product(name: "ADFCore", package: "ADFoundation")
             ],
@@ -502,9 +502,9 @@ let package = Package(
                 // gate, which runs both `searchPagesFramed*` forms over the REAL apple-docs schema on ADDB.
                 .product(name: "ADDB", package: "ADDB"),
                 .product(name: "ADSQLModel", package: "ADSQL"),
-                // ADSQLFullTextSearch — the equivalence gate calls `enableFullTextSearch()` so the
+                // ADDBFTS — the equivalence gate calls `enableFullTextSearch()` so the
                 // `documents_fts MATCH` in both search forms runs (FTS is opt-in, like JSON).
-                .product(name: "ADSQLFullTextSearch", package: "ADDB"),
+                .product(name: "ADDBFTS", package: "ADDB"),
                 "ADWrite"
             ],
             swiftSettings: testSettings),
@@ -527,12 +527,12 @@ let package = Package(
             dependencies: [
                 "ADWrite",
                 .product(name: "ADDB", package: "ADDB"),
-                .product(name: "ADSQLMigrate", package: "ADDB"),
-                // ADSQLImport — the "apple-docs swap gate". The persist PARITY gate
+                .product(name: "ADDBMigrate", package: "ADDB"),
+                // ADDBImport — the "apple-docs swap gate". The persist PARITY gate
                 // uses it as the reference bridge: it ingests the JS-writer SQLite
                 // into a fresh ADDB DB (DB_ref), so the native persist (DB_native) is
                 // compared ADDB-to-ADDB. Additive test-only dep; no new external dep.
-                .product(name: "ADSQLImport", package: "ADDB"),
+                .product(name: "ADDBImport", package: "ADDB"),
                 .product(name: "ADSQLModel", package: "ADSQL")
             ],
             swiftSettings: testSettings),

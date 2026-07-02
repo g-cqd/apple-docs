@@ -7,7 +7,7 @@
 // to stay inside the package's 100 ms type-check budget — the single-body form tripped the hard gate.
 
 import ADDB
-import ADSQLFullTextSearch
+import ADDBFTS
 import ADSQLModel
 import Foundation
 import Testing

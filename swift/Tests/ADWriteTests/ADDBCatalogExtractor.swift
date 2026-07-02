@@ -6,7 +6,7 @@
 // and normalize it to the same shape the SQLite reference is projected into.
 
 import ADDB
-import ADSQLMigrate
+import ADDBMigrate
 import ADSQLModel
 import ADWrite
 import Foundation

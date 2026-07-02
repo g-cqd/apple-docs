@@ -10,7 +10,7 @@
 // then assert byte-equality of the two framed forms for each params shape.
 
 import ADDB
-import ADSQLFullTextSearch  // enableFullTextSearch() — the test's trigger-based seeding needs FTS first
+import ADDBFTS  // enableFullTextSearch() — the test's trigger-based seeding needs FTS first
 import ADSQLModel
 import Foundation
 import Testing

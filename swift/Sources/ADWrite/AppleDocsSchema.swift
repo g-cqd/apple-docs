@@ -83,7 +83,7 @@
 // closures), never in a public or inlinable signature — a `public import` would
 // be flagged unused under -warnings-as-errors.
 public import ADDB
-public import ADSQLMigrate
+public import ADDBMigrate
 import ADSQLModel
 
 /// The apple-docs schema as ordered ADDB migrations. Versions mirror the JS
