@@ -22,7 +22,8 @@ enum FixtureError: Error, CustomStringConvertible {
             case .appleDocsRootNotFound(let from):
                 return "could not locate the apple-docs root (with src/storage/database.js) walking up from \(from)"
             case .bunNotFound:
-                return "`bun` was not found on PATH or at common locations; the persist parity gate needs it to build the fixture"
+                return
+                    "`bun` was not found on PATH or at common locations; the persist parity gate needs it to build the fixture"
             case .corpusNotFound(let path):
                 return "the apple-docs test corpus was not found at \(path) (set AD_PERSIST_CORPUS to override)"
             case .generatorFailed(let status, let stderr):
@@ -43,15 +44,27 @@ enum FixtureBuilder {
         var referenceSQLite: URL
     }
 
-    /// The default corpus path (overridable via the `AD_PERSIST_CORPUS` env var).
+    /// The default corpus path: the operator's conventional location under the CURRENT home
+    /// (machine-neutral), overridable via the `AD_PERSIST_CORPUS` env var.
     static let defaultCorpusPath =
-        "/Users/guillaumecoquard/Public/apple-docs-testing-native/apple-docs.db"
+        "\(NSHomeDirectory())/Public/apple-docs-testing-native/apple-docs.db"
+
+    /// The corpus path the fixture will read (env override, else the conventional default).
+    static var resolvedCorpusPath: String {
+        ProcessInfo.processInfo.environment["AD_PERSIST_CORPUS"] ?? defaultCorpusPath
+    }
+
+    /// Whether a corpus exists at the resolved path — the parity gate's `.enabled(if:)`
+    /// condition, so corpus-less machines record a SKIP instead of a failure.
+    static var corpusAvailable: Bool {
+        FileManager.default.fileExists(atPath: resolvedCorpusPath)
+    }
 
     /// Generate the fixture into a fresh temp directory and return its paths.
     static func build() throws -> Fixture {
         let root = try locateAppleDocsRoot()
         let bun = try locateBun()
-        let corpusPath = ProcessInfo.processInfo.environment["AD_PERSIST_CORPUS"] ?? defaultCorpusPath
+        let corpusPath = resolvedCorpusPath
         guard FileManager.default.fileExists(atPath: corpusPath) else {
             throw FixtureError.corpusNotFound(path: corpusPath)
         }
@@ -96,7 +109,7 @@ enum FixtureBuilder {
     /// `<root>/swift/Tests/ADWriteTests/FixtureBuilder.swift`.
     static func locateAppleDocsRoot(fromFile file: String = #filePath) throws -> String {
         var dir = URL(fileURLWithPath: file).deletingLastPathComponent()
-        for _ in 0..<8 {
+        for _ in 0 ..< 8 {
             let marker = dir.appendingPathComponent("src/storage/database.js")
             if FileManager.default.fileExists(atPath: marker.path) { return dir.path }
             let parent = dir.deletingLastPathComponent()
@@ -110,7 +123,7 @@ enum FixtureBuilder {
     static func locateBun() throws -> String {
         let candidates = [
             "/opt/homebrew/bin/bun", "/usr/local/bin/bun",
-            (NSHomeDirectory() as NSString).appendingPathComponent(".bun/bin/bun"),
+            (NSHomeDirectory() as NSString).appendingPathComponent(".bun/bin/bun")
         ]
         let which = Process()
         which.executableURL = URL(fileURLWithPath: "/usr/bin/env")
