@@ -25,11 +25,15 @@ private let essentialsInputs = BuildInputs(
 
     let paths: [String] = result.artifacts.map(\.path)
     let expected: [String] = [
-        "index.html", "search/index.html", "fonts/index.html", "symbols/index.html", "404.html",
+        "index.html", "search/index.html", "fonts/index.html", "api/fonts/faces.css",
+        "symbols/index.html", "404.html",
         "robots.txt", "opensearch.xml", ".well-known/api-catalog", ".well-known/mcp/server-card.json",
         "_headers", "data/frameworks/combine.json", "manifest.json",
     ]
     #expect(paths == expected)
+
+    // No font families ⇒ an EMPTY faces.css (build.js writes the file either way).
+    #expect(text(result, "api/fonts/faces.css") == "")
 
     #expect(result.stubs == BuildSite.pendingSteps)
     #expect(result.stubs.contains { $0.contains("document pages") })
