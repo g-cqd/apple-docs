@@ -336,13 +336,17 @@ struct WebBuildCommand: ParsableCommand {
         } else {
             // The full render loop (build.js steps 5/6 + the manifest-last
             // rule). markdownDocs mirrors the JS siteConfig flag
-            // (`process.env.APPLE_DOCS_MARKDOWN_DOCS !== '0'`, default ON);
-            // highlighting stays Noop until the S5 highlight seam.
+            // (`process.env.APPLE_DOCS_MARKDOWN_DOCS !== '0'`, default ON).
+            // Highlighting = the shiki JSONL coprocess (build.js's
+            // initHighlighter … disposeHighlighter bracket); Noop when bun /
+            // the script is unavailable or APPLE_DOCS_NO_HIGHLIGHT=1.
             let docReader = StorageDocumentReader(base: reader)
             let markdownDocs = (ProcessInfo.processInfo.environment["APPLE_DOCS_MARKDOWN_DOCS"] ?? "") != "0"
+            let highlighter = resolveHighlighter(srcWebDir: srcWeb)
+            defer { highlighter?.coprocess.shutdown() }
             result = try BuildSite.writeAll(
                 config: config, reader: docReader, version: appVersion, markdownDocs: markdownDocs,
-                highlight: nil, searchArtifacts: search.stats,
+                highlight: highlighter?.highlight, searchArtifacts: search.stats,
                 ensureDir: { try sink.ensureDir($0) }, write: { try sink.write($0) })
         }
 
