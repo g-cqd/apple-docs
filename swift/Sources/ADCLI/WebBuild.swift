@@ -184,6 +184,29 @@ struct StorageDocumentReader: DocumentCorpusReader {
     }
 
 
+    /// scope-group-data.js `loadScopeExtras(db, root)`: the HIG topic→category
+    /// map for the `design` root (most-specific parent wins; category order
+    /// from the HIG landing page's children), empty for every other slug.
+    func scopeExtras(slug: String) -> ScopeExtras {
+        guard slug == "design" else { return ScopeExtras() }
+        let data = base.connection.higCategoryRows()
+        var orderIndex: [String: Int] = [:]
+        for (index, key) in data.order.enumerated() where orderIndex[key] == nil {
+            orderIndex[key] = index
+        }
+        var groups: [String: HigGroup] = [:]
+        for row in data.rows {
+            if row.parent == "design/human-interface-guidelines" { continue }
+            if let existing = groups[row.child], existing.parentPath.count >= row.parent.count {
+                continue
+            }
+            groups[row.child] = HigGroup(
+                label: row.parentTitle ?? row.parent, parentPath: row.parent,
+                order: orderIndex[row.parent] ?? orderIndex.count + 1)
+        }
+        return ScopeExtras(higGroups: groups)
+    }
+
     /// render-cache.js `getRoleHeadings(keys)` — only found entries.
     func roleHeadings(forKeys keys: [String]) -> [String: String] {
         var out: [String: String] = [:]

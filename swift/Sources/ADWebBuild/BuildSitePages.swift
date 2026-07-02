@@ -33,7 +33,7 @@ extension BuildSite {
     /// `data-tree-src` ref, never the inline payload). Returns [sidecar?, html].
     public static func planFrameworkPage(
         framework: FrameworkRecord, documents: [JSON], config: SiteConfig,
-        treeEdges: [(fromKey: String, toKey: String)] = []
+        treeEdges: [(fromKey: String, toKey: String)] = [], scopeExtras: ScopeExtras = ScopeExtras()
     ) -> [Artifact] {
         let slug = framework.slug ?? ""
         var artifacts: [Artifact] = []
@@ -47,7 +47,7 @@ extension BuildSite {
         }
         let html = FrameworkPage.render(
             framework: framework, documents: documents, config: config, treeEdges: treeEdges,
-            treeDataUrl: treeDataUrl)
+            treeDataUrl: treeDataUrl, scopeExtras: scopeExtras)
         artifacts.append(Artifact(path: "docs/\(slug)/index.html", text: html))
         return artifacts
     }

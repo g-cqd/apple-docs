@@ -180,6 +180,31 @@ extension StorageConnection {
         return Int(stmt.int(0) ?? 0)
     }
 
+    /// scope-group-data.js `loadScopeExtras` — the HIG category rows:
+    /// child relationships under design/%, joined to the parent's title, plus
+    /// the canonical category order from the HIG landing page's children.
+    public func higCategoryRows() -> (
+        rows: [(parent: String, parentTitle: String?, child: String)], order: [String]
+    ) {
+        var rows: [(parent: String, parentTitle: String?, child: String)] = []
+        if let stmt = conn.prepareUncached(
+            "SELECT dr.from_key AS parent, d.title AS parent_title, dr.to_key AS child FROM document_relationships dr JOIN documents d ON d.key = dr.from_key WHERE dr.relation_type = 'child' AND dr.from_key LIKE 'design/%'")
+        {
+            while stmt.step() == SQLite.row {
+                rows.append((parent: stmt.text(0) ?? "", parentTitle: stmt.text(1), child: stmt.text(2) ?? ""))
+            }
+        }
+        var order: [String] = []
+        if let stmt = conn.prepareUncached(
+            "SELECT to_key FROM document_relationships WHERE from_key = 'design/human-interface-guidelines' AND relation_type = 'child' ORDER BY sort_order, to_key")
+        {
+            while stmt.step() == SQLite.row {
+                if let key = stmt.text(0) { order.append(key) }
+            }
+        }
+        return (rows: rows, order: order)
+    }
+
     /// The FULL `apple_font_families` rows (`SELECT * … ORDER BY display_name`)
     /// as dynamic (name, cell) pairs in column order — `listAppleFonts()`
     /// spreads whole rows into the embedded JSON, so key order must be the

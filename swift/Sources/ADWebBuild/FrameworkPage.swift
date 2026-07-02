@@ -76,7 +76,8 @@ public enum FrameworkPage {
 
     public static func render(
         framework: FrameworkRecord, documents: [JSON], config: SiteConfig,
-        treeEdges: [(fromKey: String, toKey: String)] = [], treeDataUrl: String? = nil
+        treeEdges: [(fromKey: String, toKey: String)] = [], treeDataUrl: String? = nil,
+        scopeExtras: ScopeExtras = ScopeExtras()
     ) -> String {
         let fwName = framework.displayName ?? framework.name ?? framework.slug ?? "Framework"
         let pageTitle = "\(fwName) — \(config.siteName)"
@@ -92,7 +93,8 @@ public enum FrameworkPage {
             byRole[role]!.append(doc)
         }
 
-        let scope = scopeGroups(framework: framework, documents: documents)
+        let scope = ScopeGroups.buildScopeGroups(
+            framework: framework, documents: documents, extras: scopeExtras)
         let listIsDefault = scope != nil
         let showList = !hasTree || listIsDefault
 
@@ -222,13 +224,6 @@ public enum FrameworkPage {
     struct ScopeSection { let id: String; let label: String; let count: Int?; let docs: [JSON] }
     struct ScopeNavItem { let href: String; let label: String; let count: Int }
     struct ScopeResult { let scope: String; let sections: [ScopeSection]; let nav: [ScopeNavItem] }
-
-    /// buildScopeGroups(root, docs, extras) — scope-specific sections for
-    /// non-framework roots. STUB: returns nil (→ role grouping) until the
-    /// scope-groups slice ports framework-groups.js + scope-groups-extra.js.
-    private static func scopeGroups(framework: FrameworkRecord, documents: [JSON]) -> ScopeResult? {
-        nil
-    }
 
     // MARK: - helpers
 
