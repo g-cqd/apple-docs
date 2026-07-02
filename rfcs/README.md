@@ -66,6 +66,10 @@ Every bridge-era module — `fusion`, `archive`, `embed`, `content`,
 - **Render-native dup-dylib CI flake** — the macOS symbol-pdf parity test
   intermittently fails when both the staged + `swift/.build` dylibs load;
   worth hardening (separate from the transition).
+- **HTTP/3** — the `AD_HTTP3` ALPN stub stays a *roadmap* item, not dormant code:
+  `ADServeCore`'s `ALPN.http3`/`Wire` are forward-shaped and `#if AD_HTTP3`-gated, but
+  there is no QUIC handler and enabling it floors macOS 26. Decision + revisit trigger:
+  [RFC 0005 record D-0005-11](0005-server-framework/records.md).
 
 **§10 improvement track** (RFC 0001 §10): A / B / B′ done, C resolved, D
 folded into P3, **E open**, F NO-GO.
