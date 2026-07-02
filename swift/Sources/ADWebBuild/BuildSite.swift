@@ -104,7 +104,6 @@ public enum BuildSite {
     /// api/fonts/faces.css shipped via `planAssets` + the faces.css artifact;
     /// S3 search artifacts via `planSearchArtifacts`.)
     static let pendingSteps = [
-        "sitemap.xml(.gz) [S4 gzip]",
         "docs/* document pages + framework listing pages [S5 render loop]",
         "shiki code highlighting (NoopHighlighter until then) [S5]",
     ]

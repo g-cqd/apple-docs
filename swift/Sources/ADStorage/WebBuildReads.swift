@@ -23,4 +23,32 @@ extension StorageConnection {
         stmt.bindText(1, key)
         return stmt.step() == SQLite.row ? stmt.text(0) : nil
     }
+
+    /// `db.getRoots()` for the sitemap walk: EVERY root (`SELECT slug, kind
+    /// FROM roots ORDER BY slug`) — unlike `listFrameworkRoots`, roots with no
+    /// active pages are included (their doc query decides whether a sitemap is
+    /// written).
+    public func sitemapRoots() -> [(slug: String, kind: String?)] {
+        guard let stmt = conn.prepareUncached("SELECT slug, kind FROM roots ORDER BY slug") else { return [] }
+        var out: [(slug: String, kind: String?)] = []
+        while stmt.step() == SQLite.row {
+            out.append((slug: stmt.text(0) ?? "", kind: stmt.text(1)))
+        }
+        return out
+    }
+
+    /// The per-framework sitemap rows: `SELECT key, role_heading FROM documents
+    /// WHERE framework = ? ORDER BY key`.
+    public func sitemapDocs(framework slug: String) -> [(key: String, roleHeading: String?)] {
+        guard
+            let stmt = conn.prepareUncached(
+                "SELECT key, role_heading FROM documents WHERE framework = ? ORDER BY key")
+        else { return [] }
+        stmt.bindText(1, slug)
+        var out: [(key: String, roleHeading: String?)] = []
+        while stmt.step() == SQLite.row {
+            out.append((key: stmt.text(0) ?? "", roleHeading: stmt.text(1)))
+        }
+        return out
+    }
 }

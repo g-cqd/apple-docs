@@ -5,6 +5,7 @@
 // per-document render loop + search/sitemap/assets are stubbed (logged to stderr
 // from the BuildResult ledger). Parity oracle: `bun run cli.js web build`.
 
+import ADArchive
 import ADJSONCore
 import ADStorage
 import ADWebBuild
@@ -30,6 +31,18 @@ struct StorageCorpusReader: CorpusReader {
     func fontFamilies() -> JSON? { nil }
 
     func symbolTotals() -> [(scope: String, count: Int)] { connection.symbolScopeTotals() }
+
+    /// The S4 sitemap walk: every root (getRoots ORDER BY slug) with its
+    /// `key, role_heading` doc rows.
+    func sitemapRoots() -> [SitemapRoot] {
+        connection.sitemapRoots().map { root in
+            SitemapRoot(
+                slug: root.slug, kind: root.kind,
+                docs: connection.sitemapDocs(framework: root.slug).map {
+                    SitemapDoc(key: $0.key, roleHeading: $0.roleHeading)
+                })
+        }
+    }
 
     /// The S3 search-artifact reads (generateSearchArtifacts' corpus surface):
     /// the columnar title index, the alias rows in table order, and the
@@ -164,6 +177,25 @@ struct WebBuildCommand: ParsableCommand {
         let search = BuildSite.planSearchArtifacts(
             corpus: reader.searchCorpus(), generatedAt: jsIsoNow())
         for artifact in search.artifacts { try sink.write(artifact) }
+
+        // 7b. Sitemaps: the gzip seam (ADArchive.Gzip over the system libz —
+        // SETTINGS match Bun.gzipSync; bitstreams differ, see Gzip.swift's
+        // byte-parity note, so the gate compares gunzipped content).
+        guard Gzip.available else {
+            throw ValidationError("ad-cli web build: system zlib not found — cannot write sitemaps/*.xml.gz")
+        }
+        let sitemaps = try BuildSite.planSitemaps(
+            roots: reader.sitemapRoots(), baseUrl: baseUrl, buildDate: buildDate)
+        for file in sitemaps {
+            if file.gzipped {
+                guard let compressed = Gzip.compress(Array(file.xml.utf8)) else {
+                    throw ValidationError("ad-cli web build: gzip failed for \(file.path)")
+                }
+                try sink.write(Artifact(path: file.path, bytes: compressed))
+            } else {
+                try sink.write(Artifact(path: file.path, text: file.xml))
+            }
+        }
 
         let result = try BuildSite.writeEssentials(
             config: config, reader: reader, version: appVersion, searchArtifacts: search.stats,
