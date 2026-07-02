@@ -71,7 +71,19 @@ public struct LinkResolver: Sendable {
         }
 
         // 4. Otherwise the absolute URL (at least the link works as external content).
-        return abs.string ?? rawHref
+        return Self.whatwgString(abs) ?? rawHref
+    }
+
+    /// WHATWG `URL.toString()` serialization detail Foundation omits: a URL with
+    /// a host and an EMPTY path prints with `/` (`https://example.com` →
+    /// `https://example.com/`). The JS resolver returns `url.toString()`, so the
+    /// external-fallback bytes must match.
+    static func whatwgString(_ comps: URLComponents) -> String? {
+        var copy = comps
+        if copy.percentEncodedPath.isEmpty && copy.host != nil {
+            copy.percentEncodedPath = "/"
+        }
+        return copy.string
     }
 
     // MARK: - Pure URL→key mapping

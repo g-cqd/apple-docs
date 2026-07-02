@@ -1,9 +1,11 @@
 // SwiftOrgAdapter — the Swift.org documentation source (port of src/sources/swift-org.js). The
 // NORMALIZE path is fully native + pure: HtmlNormalize.parse over ADHTML's real parser (replacing the
-// JS regex parse-html.js), then strip the " | Swift.org" brand suffix from the title. `discover` is a
-// curated path list (syncMode `flat`); `fetch`/`check` are a plain rate-limited GET / conditional HEAD
-// over the `HTTPClient` seam. TODO: the JS link-resolver + archive cross-links (applyArchiveCrossLinks)
-// depend on the link-resolver + entry-point-registry ports, deferred to a follow-up.
+// JS regex parse-html.js) with the REAL cross-source LinkResolver (createLinkResolver's port —
+// curated swift-org paths internalize to /docs/swift-org/<path>/), then the " | Swift.org" brand
+// suffix strip and the entry-point cross-links (`applyArchiveCrossLinks`: a "Related Documentation"
+// topics section + see_also relationships from the EntryPointRegistry). `discover` is a curated path
+// list (syncMode `flat`); `fetch`/`check` are a plain rate-limited GET / conditional HEAD over the
+// `HTTPClient` seam.
 import Foundation
 import HTTPTypes
 import HTTPTypesFoundation
@@ -16,6 +18,12 @@ public struct SwiftOrgAdapter: SourceAdapter {
     static let rootSlug = "swift-org"
     static let userAgent = "apple-docs/2.0"
     static let bodyLimit = 16 << 20
+    static let curatedPathSet = Set(curatedPaths)
+
+    /// The cross-source entry points other adapters contribute (swift-book +
+    /// the swift-docc archives). Injectable for tests; defaults to the native
+    /// registry (the JS module-global equivalent).
+    public var entryPointRegistry: EntryPointRegistry = .native
 
     public init() {}
 
@@ -26,27 +34,71 @@ public struct SwiftOrgAdapter: SourceAdapter {
             throw AdapterError.unexpectedPayload("swift-org expects html, got \(payload)")
         }
         let pageURL = Self.pageURL(forKey: key)
+        let resolver = LinkResolver(swiftOrgPaths: Self.curatedPathSet, sourceURL: pageURL)
         var page = HtmlNormalize.parse(
             html, key: key, sourceType: Self.type, kind: "article", framework: Self.rootSlug,
-            url: pageURL, preserveStructure: true, linkResolver: Self.resolveLink(base: pageURL))
+            url: pageURL, preserveStructure: true, linkResolver: { resolver.resolve($0) })
         if let title = page.document.title {
             page.document.title = Self.stripBrandSuffix(title)
         }
+        Self.applyArchiveCrossLinks(&page, key: key, registry: entryPointRegistry)
         return page
     }
 
-    /// Resolve a link's href: relative URLs become absolute against the page URL; absolute URLs
-    /// (and `mailto:` etc.) are kept verbatim. Full cross-source internalization to corpus keys (the
-    /// JS link-resolver RULES table) is a follow-up; resolving to absolute is the safe, useful base.
-    static func resolveLink(base: String) -> (String) -> String? {
-        let baseURL = URL(string: base)
-        return { href in
-            if href.isEmpty { return href }
-            if let parsed = URL(string: href), parsed.scheme != nil { return href }  // already absolute
-            if let baseURL, let absolute = URL(string: href, relativeTo: baseURL)?.absoluteString {
-                return absolute
-            }
-            return href
+    /// Port of `applyArchiveCrossLinks(result, key)`: when the entry-point
+    /// registry has entries whose `parents` include this page, append a
+    /// `topics` "Related Documentation" section (contentJson =
+    /// `[{title, type: null, items: [{identifier, key, title, abstract}]}]`,
+    /// stringify byte-parity via JsJson) and one `see_also` relationship per
+    /// link (sortOrder continuing after the existing relationships).
+    static func applyArchiveCrossLinks(
+        _ page: inout NormalizedPage, key: String, registry: EntryPointRegistry
+    ) {
+        let links = registry.entryPoints(forParent: key)
+        guard !links.isEmpty else { return }
+
+        // `sections.length === 0 ? 0 : max(sortOrder ?? 0) + 1`.
+        let order = page.sections.isEmpty ? 0 : (page.sections.map(\.sortOrder).max() ?? 0) + 1
+
+        let items: [JsJson] = links.map { link in
+            .object([
+                ("identifier", .string(link.key)),
+                ("key", .string(link.key)),
+                ("title", .string(link.title)),
+                (
+                    "abstract",
+                    link.summary.map { summary in
+                        .array([.object([("type", .string("text")), ("text", .string(summary))])])
+                    } ?? .null
+                ),
+            ])
+        }
+        // `${l.title}: ${l.summary ?? ''}`.trim() joined with newlines.
+        let contentText = links.map { link -> String in
+            let line = "\(link.title): \(link.summary ?? "")"
+            return line.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.joined(separator: "\n")
+
+        let contentJson = JsJson.array([
+            .object([
+                ("title", .string("Related Documentation")),
+                ("type", .null),
+                ("items", .array(items)),
+            ])
+        ]).serialized()
+
+        page.sections.append(
+            NormalizedSection(
+                sectionKind: "topics", heading: "Related Documentation", contentText: contentText,
+                contentJson: contentJson, sortOrder: order))
+
+        var relOrder = page.relationships.count
+        for link in links {
+            page.relationships.append(
+                NormalizedRelationship(
+                    fromKey: key, toKey: link.key, relationType: "see_also",
+                    section: "Related Documentation", sortOrder: relOrder))
+            relOrder += 1
         }
     }
 

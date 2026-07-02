@@ -59,14 +59,18 @@ struct SwiftOrgAdapterTests {
         #expect(deleted.deleted)
     }
 
-    @Test func normalizeResolvesRelativeLinksToAbsolute() throws {
+    @Test func normalizeResolvesLinksLikeCreateLinkResolver() throws {
+        // Pinned from the JS adapter (createLinkResolver under the curated
+        // set): a curated swift.org path INTERNALIZES to /docs/swift-org/…/,
+        // an external URL round-trips through WHATWG URL (bare host gains the
+        // trailing slash).
         let html =
             "<main><h2>Links</h2><p>see <a href=\"/install/linux\">linux</a> and <a href=\"https://example.com\">ext</a></p></main>"
         let page = try SwiftOrgAdapter().normalize("swift-org/about", .html(html))
         let section = page.sections.first { $0.heading == "Links" }
         #expect(
             section?.contentText
-                == "see [linux](https://swift.org/install/linux) and [ext](https://example.com)")
+                == "see [linux](/docs/swift-org/install/linux/) and [ext](https://example.com/)")
     }
 
     @Test func brandSuffixStrippingVariants() {
