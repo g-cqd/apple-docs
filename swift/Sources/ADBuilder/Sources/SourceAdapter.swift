@@ -25,6 +25,8 @@ public enum SyncMode: String, Sendable {
     case crawl
     case flat
     case manual
+    /// One upstream snapshot parses into many documents (guidelines).
+    case snapshot
 }
 
 /// `discover()` result: the storage keys to (re)fetch + any roots to upsert.
