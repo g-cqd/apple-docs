@@ -67,10 +67,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: Install Swift (swiftly)
-        uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
-        with:
-          toolchain: '6.4' # keep in sync with swift/.swift-version
+      - name: Install Swift 6.4 dev toolchain (pinned swift.org snapshot)
+        # swiftly can only resolve RELEASED versions for a plain '6.4' selector and Swift 6.4 has
+        # not shipped — no hosted runner or release channel carries it (swift/.swift-version: 6.4).
+        # Install the family's pinned swift-6.4.x-branch dev snapshot straight from swift.org,
+        # the Linux analogue of the g-cqd/ADBuildTools setup-swift action used on macOS.
+        run: |
+          set -euo pipefail
+          SNAP="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-06-15-a"
+          case "$(uname -m)" in
+            aarch64|arm64) DIR="ubuntu2404-aarch64"; SUF="ubuntu24.04-aarch64" ;;
+            *)             DIR="ubuntu2404";         SUF="ubuntu24.04" ;;
+          esac
+          curl -fsSL --retry 3 "https://download.swift.org/swift-6.4.x-branch/${DIR}/${SNAP}/${SNAP}-${SUF}.tar.gz" | tar xz -C "$RUNNER_TEMP"
+          echo "${RUNNER_TEMP}/${SNAP}-${SUF}/usr/bin" >> "$GITHUB_PATH"
+          "${RUNNER_TEMP}/${SNAP}-${SUF}/usr/bin/swift" --version
       - name: Swift lint (ADBuildTools plugin, canonical .swift-format)
         working-directory: swift
         run: APPLEDOCS_DEV=1 swift package --disable-sandbox lint
@@ -159,14 +170,24 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      # macOS uses the image's Xcode toolchain (ci.md allows it when it
-      # satisfies the pin); the swiftly action's prerequisite script can't
-      # drive a package manager on macos-26 images.
-      - name: Install Swift (swiftly)
+      # No hosted macOS image satisfies the 6.4 pin any more (macos-26 tops out at Xcode 26.6 /
+      # Swift 6.3.3), so macOS installs the pinned swift.org 6.4 dev snapshot via the shared
+      # g-cqd/ADBuildTools setup-swift action; Linux installs the same snapshot from the tarball.
+      - name: Install Swift 6.4 dev toolchain (macOS, pinned swift.org snapshot)
+        if: runner.os == 'macOS'
+        uses: g-cqd/ADBuildTools/.github/actions/setup-swift@v1
+      - name: Install Swift 6.4 dev toolchain (Linux, pinned swift.org snapshot)
         if: runner.os == 'Linux'
-        uses: vapor/swiftly-action@bedb227456c5f495afbef80baebee17a8a02cef4 # v0.2.1
-        with:
-          toolchain: '6.4' # keep in sync with swift/.swift-version
+        run: |
+          set -euo pipefail
+          SNAP="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-06-15-a"
+          case "$(uname -m)" in
+            aarch64|arm64) DIR="ubuntu2404-aarch64"; SUF="ubuntu24.04-aarch64" ;;
+            *)             DIR="ubuntu2404";         SUF="ubuntu24.04" ;;
+          esac
+          curl -fsSL --retry 3 "https://download.swift.org/swift-6.4.x-branch/${DIR}/${SNAP}/${SNAP}-${SUF}.tar.gz" | tar xz -C "$RUNNER_TEMP"
+          echo "${RUNNER_TEMP}/${SNAP}-${SUF}/usr/bin" >> "$GITHUB_PATH"
+          "${RUNNER_TEMP}/${SNAP}-${SUF}/usr/bin/swift" --version
 
       - name: Cache SwiftPM build
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
