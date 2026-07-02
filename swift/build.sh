@@ -20,22 +20,22 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 default_root="$(cd "$script_dir/../.." && pwd)"
 siblings_root="${AD_SIBLINGS_ROOT:-$default_root}"
 
-# "<dir-name> <ENV_VAR>" pairs. ADFoundation/ADJSON/ADDB/ADSQL + the extracted
-# server engine (ADServe), its ResourcePool leaf (ADConcurrency) and the standalone
-# MCP core it re-exports (ADMCP) are required for ad-server; ADBuildTools/ADTestKit
-# are consumed only under APPLEDOCS_DEV but exported anyway (the manifest ignores
-# them otherwise). Package resolution is global, so a missing override here (e.g.
-# ADMCP, pulled in transitively via ADServe) fails EVERY product, not just ad-server.
+# "<dir-name> <ENV_VAR>" pairs. ADFoundation/ADJSON/ADDB/ADSQL/ADHTML + the server
+# engine (ADServe) and the HTTP stack it is re-basing onto are required for ad-server;
+# ADBuildTools is consumed only under APPLEDOCS_DEV but exported anyway (the manifest
+# ignores it otherwise). ADConcurrency/ADMCP/ADTestKit are NO LONGER separate siblings —
+# they were folded into ADFoundation/ADServe (see AD-FAMILY-CONSOLIDATION-PLAN) and
+# resolve through those packages. Package resolution is global, so a missing override
+# here fails EVERY product, not just ad-server.
 siblings="
 ADFoundation ADFOUNDATION_PATH
 ADJSON ADJSON_PATH
 ADDB ADDB_PATH
 ADSQL ADSQL_PATH
-ADConcurrency ADCONCURRENCY_PATH
+ADHTML ADHTML_PATH
 ADServe ADSERVE_PATH
-ADMCP ADMCP_PATH
+HTTP HTTP_PATH
 ADBuildTools ADBUILDTOOLS_PATH
-ADTestKit ADTESTKIT_PATH
 "
 
 missing=""
