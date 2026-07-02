@@ -7,7 +7,9 @@ import ADJSON
 import ADServeCore
 import ADStorage
 import Foundation
-import HTTPTypes
+// HTTPCore: the response status statics' defining module post engine re-base
+// (MemberImportVisibility requires the direct import).
+import HTTPCore
 
 enum WebRoutes {
     // `ISO8601DateFormatter` is thread-safe for `string(from:)` once configured, but

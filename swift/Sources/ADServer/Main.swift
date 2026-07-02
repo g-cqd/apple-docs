@@ -51,8 +51,8 @@ struct ServeCommand: AsyncParsableCommand {
     var tlsKey: String?
     @Option(name: .customLong("tls-port"), help: "In-process TLS listen port.")
     var tlsPort = 8443
-    @Option(help: "Engine transport: nio or network.")
-    var transport = EngineTransport.nio.rawValue
+    @Option(help: "Engine transport: posix or network (nio remains a deprecated alias of posix).")
+    var transport = EngineTransport.posix.rawValue
     @Option(name: .customLong("base-url"), help: "Public base URL for discovery documents.")
     var baseURL: String?
     @Option(name: .customLong("site-name"))
@@ -74,7 +74,7 @@ struct ServeCommand: AsyncParsableCommand {
         let dbPath = corpus.db
         let threadCount = max(1, threads)
         let loopCount = max(1, loops)
-        let engineTransport = EngineTransport(rawValue: transport) ?? .nio
+        let engineTransport = EngineTransport(rawValue: transport) ?? .posix
 
         var siteConfig = SiteConfig()
         if let baseURL { siteConfig.baseUrl = baseURL }

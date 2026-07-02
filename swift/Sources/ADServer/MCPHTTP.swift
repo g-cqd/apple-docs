@@ -6,7 +6,8 @@
 import ADJSON
 import ADServeCore
 import ADServeDSL
-import HTTPTypes
+// HTTPCore: statuses / HTTPFields / HTTPFieldName post engine re-base.
+import HTTPCore
 
 /// `POST /mcp` — origin-gate, dispatch the JSON-RPC body, return `application/json`.
 func handleMCPPost(_ ctx: StorageContext, dispatcher: MCPDispatcher) -> ResponseContent {
@@ -27,13 +28,13 @@ func handleMCPPost(_ ctx: StorageContext, dispatcher: MCPDispatcher) -> Response
 /// `OPTIONS /mcp` — the CORS preflight.
 func handleMCPOptions(_ ctx: RequestContext) -> ResponseContent {
     let origin = ctx.headers[originName]
-    let status: HTTPResponse.Status = originAllowed(origin) ? .noContent : .forbidden
+    let status: HTTPStatus = originAllowed(origin) ? .noContent : .forbidden
     return .full(body: [], contentType: "text/plain", status: status, headers: corsPreflightHeaders(origin: origin))
 }
 
 // MARK: - origin + headers
 
-private let originName = HTTPField.Name("origin")!
+private let originName = HTTPFieldName("origin")!
 
 /// Loopback origins (and an absent Origin) are allowed; no configured allow-list yet.
 /// Mirrors JS `isLoopbackOrigin`: an http(s) origin whose host is exactly
@@ -70,29 +71,31 @@ func loopbackOriginHost(_ origin: String) -> String? {
     return authority.isEmpty ? nil : String(authority)
 }
 
-private func field(_ name: String) -> HTTPField.Name { HTTPField.Name(name)! }
+private func field(_ name: String) -> HTTPFieldName { HTTPFieldName(name)! }
 
 /// The MCP `/mcp` response headers (distinct from the web envelope) + CORS echo.
 private func mcpHeaders(origin: String?) -> HTTPFields {
     var fields = HTTPFields()
-    fields[field("referrer-policy")] = "no-referrer"
-    fields[field("vary")] = "Origin"
-    if let origin { fields[field("access-control-allow-origin")] = origin }
+    fields.append("no-referrer", for: field("referrer-policy"))
+    fields.append("Origin", for: field("vary"))
+    if let origin { fields.append(origin, for: field("access-control-allow-origin")) }
     return fields
 }
 
 private func corsPreflightHeaders(origin: String?) -> HTTPFields {
     var fields = HTTPFields()
-    fields[field("access-control-allow-methods")] = "GET, POST, DELETE, OPTIONS"
-    fields[field("access-control-allow-headers")] = "content-type, mcp-session-id, mcp-protocol-version, last-event-id"
-    fields[field("access-control-expose-headers")] = "mcp-session-id"
-    fields[field("access-control-max-age")] = "86400"
-    fields[field("vary")] = "Origin"
-    if let origin { fields[field("access-control-allow-origin")] = origin }
+    fields.append("GET, POST, DELETE, OPTIONS", for: field("access-control-allow-methods"))
+    fields.append(
+        "content-type, mcp-session-id, mcp-protocol-version, last-event-id",
+        for: field("access-control-allow-headers"))
+    fields.append("mcp-session-id", for: field("access-control-expose-headers"))
+    fields.append("86400", for: field("access-control-max-age"))
+    fields.append("Origin", for: field("vary"))
+    if let origin { fields.append(origin, for: field("access-control-allow-origin")) }
     return fields
 }
 
-private func mcpRpcError(code: Int, message: String, status: HTTPResponse.Status, origin: String?)
+private func mcpRpcError(code: Int, message: String, status: HTTPStatus, origin: String?)
     -> ResponseContent
 {
     let body = JSONValue.object([
