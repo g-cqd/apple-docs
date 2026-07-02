@@ -50,6 +50,13 @@ run(
   `INSERT INTO roots (slug, display_name, source, first_seen, last_seen, kind, page_count) VALUES (?,?,?,?,?,?,?)`,
   'foundation', 'Foundation', 'https://developer.apple.com/documentation/foundation', now, now, 'framework', 2,
 )
+// A root whose ONLY page is itself — the homepage roster drops it
+// (buildHomepageProps), but the build still emits its metadata, framework
+// page, doc page, and sitemap.
+run(
+  `INSERT INTO roots (slug, display_name, source, first_seen, last_seen, kind, page_count) VALUES (?,?,?,?,?,?,?)`,
+  'lonely', 'Lonely', 'https://developer.apple.com/documentation/lonely', now, now, 'framework', 1,
+)
 
 // --- pages -------------------------------------------------------------------
 /** @param {number} rootId @param {string} path */
@@ -59,6 +66,7 @@ page(1, 'swiftui/view')
 page(1, 'swiftui/state')
 page(2, 'foundation')
 page(2, 'foundation/urlsession')
+page(3, 'lonely')
 
 // --- documents ---------------------------------------------------------------
 /** @param {string} key @param {string} title @param {string} fw @param {Record<string, any>} extra */
@@ -79,15 +87,39 @@ doc('swiftui/view', 'View', 'swiftui', {
 doc('swiftui/state', 'State', 'swiftui', { roleHeading: 'Structure', abstract: 'A property wrapper that reads and writes a value.' })
 doc('foundation', 'Foundation', 'foundation', { kind: 'framework', role: 'collection', abstract: 'Essential data types & collections.' })
 doc('foundation/urlsession', 'URLSession', 'foundation', { roleHeading: 'Class', abstract: 'Coordinates network data-transfer tasks.' })
+doc('lonely', 'Lonely', 'lonely', { kind: 'framework', role: 'collection', abstract: 'A framework with only itself.' })
 
 // --- sections ----------------------------------------------------------------
 /** @param {number} docId @param {string} kind @param {string} text @param {number} order @param {string|null} heading */
 const section = (docId, kind, text, order, heading = null) =>
   run(`INSERT INTO document_sections (document_id, section_kind, content_text, sort_order, heading) VALUES (?,?,?,?,?)`, docId, kind, text, order, heading)
-section(2, 'declaration', 'protocol View', 0)
-section(2, 'content', 'Views are the building blocks of SwiftUI interfaces.', 1, 'Overview')
-section(3, 'declaration', '@propertyWrapper struct State<Value>', 0)
+/** Topics/link sections carry structured content_json. @param {number} docId @param {string} kind @param {any} json @param {number} order */
+const jsonSection = (docId, kind, json, order) =>
+  run(
+    `INSERT INTO document_sections (document_id, section_kind, content_text, content_json, sort_order) VALUES (?,?,?,?,?)`,
+    docId, kind, '', JSON.stringify(json), order,
+  )
+
+// NOTE: no `declaration` sections here — bun highlights their content_text
+// via shiki (content/highlight.js), which the native NoopHighlighter can't
+// match until the S5 highlight seam lands. That slice re-adds one.
+section(1, 'content', 'SwiftUI declares interfaces as value-typed view trees.', 0, 'Overview')
+// On a CHILD doc (the root doc's page is overwritten by the framework
+// listing page, so enrichment on it would be invisible to the gate).
+jsonSection(2, 'topics', [
+  { title: 'Essentials', items: [
+    { key: 'swiftui/view', title: 'View' },
+    { key: 'swiftui/state' },
+  ] },
+  { items: [
+    { key: 'missing/key', title: 'Gone' },
+    { title: 'No key at all' },
+  ] },
+], 1)
+section(2, 'content', 'Views are the building blocks of SwiftUI interfaces.', 0, 'Overview')
+section(3, 'content', 'State drives view updates when its value changes.', 0, 'Overview')
 section(5, 'content', 'URLSession coordinates a group of related network tasks.', 0, 'Overview')
+section(6, 'content', 'The lonely framework has a single page.', 0, 'Overview')
 
 // --- relationships (the framework tree) ---------------------------------------
 run(`INSERT INTO document_relationships (from_key, to_key, relation_type) VALUES (?,?,?)`, 'swiftui', 'swiftui/view', 'child')

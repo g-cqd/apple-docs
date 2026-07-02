@@ -34,29 +34,46 @@ public protocol DocumentCorpusReader: CorpusReader {
     func frameworkPageDocuments(slug: String) -> [JSON]
     /// The framework's tree edges (`getFrameworkTree`).
     func frameworkTreeEdges(slug: String) -> [(fromKey: String, toKey: String)]
+    /// render-cache.js `getRoleHeadings(keys)` — role_heading per key, misses
+    /// dropped. Backs the topics-section enrichment; defaults to empty (no
+    /// enrichment) for corpora/mocks without the index.
+    func roleHeadings(forKeys keys: [String]) -> [String: String]
+}
+
+extension DocumentCorpusReader {
+    public func roleHeadings(forKeys keys: [String]) -> [String: String] { [:] }
 }
 
 extension BuildSite {
     /// Essentials + the per-document + framework-listing render loop. I/O is
     /// injected (`ensureDir`/`write`); each page's parent directory is ensured
-    /// before its write (the JS `ensureDir(dirname(filePath))` per page). Returns
-    /// the build result with the doc-loop step removed from the stub ledger.
+    /// before its write (the JS `ensureDir(dirname(filePath))` per page).
+    /// Topics sections pass through the role-heading enrichment; the manifest
+    /// is re-emitted LAST with the RENDERED totals (build.js step 9 — the
+    /// essentials pass wrote a 0/0 one). Returns the build result with the
+    /// doc-loop step removed from the stub ledger.
     @discardableResult
     public static func writeAll<R: DocumentCorpusReader>(
         config: SiteConfig, reader: R, version: String? = nil, markdownDocs: Bool = false,
-        highlight: CodeHighlight? = nil, ensureDir: (String) throws -> Void, write: ArtifactSink
+        highlight: CodeHighlight? = nil, searchArtifacts: SearchArtifactsStats? = nil,
+        ensureDir: (String) throws -> Void, write: ArtifactSink
     ) rethrows -> BuildResult {
         let essentials = try writeEssentials(
-            config: config, reader: reader, version: version, ensureDir: ensureDir, write: write)
+            config: config, reader: reader, version: version, searchArtifacts: searchArtifacts,
+            ensureDir: ensureDir, write: write)
 
+        var pagesRendered = 0
+        var frameworksBuilt = 0
         let known = reader.knownKeys()
         for root in reader.corpusRoots() {
             for bd in reader.documents(inFramework: root.slug) {
+                let sections = enrichTopicSections(bd.sections) { reader.roleHeadings(forKeys: $0) }
                 let artifact = planDocumentPage(
-                    doc: bd.doc, sections: bd.sections, config: config, knownKeys: known,
+                    doc: bd.doc, sections: sections, config: config, knownKeys: known,
                     ancestorTitles: bd.ancestorTitles, markdownDocs: markdownDocs, highlight: highlight)
                 try ensureDir(parentDir(artifact.path))
                 try write(artifact)
+                pagesRendered += 1
             }
 
             let fwDocs = reader.frameworkPageDocuments(slug: root.slug)
@@ -71,8 +88,17 @@ extension BuildSite {
                     try ensureDir(parentDir(artifact.path))
                     try write(artifact)
                 }
+                frameworksBuilt += 1
             }
         }
+
+        // build.js step 9: the manifest is written AFTER the render loop with
+        // the rendered counts (pagesBuilt + pagesSkipped / frameworksBuilt).
+        var inputs = collectInputs(
+            from: reader, config: config, version: version, searchArtifacts: searchArtifacts)
+        inputs.totalDocuments = pagesRendered
+        inputs.totalFrameworks = frameworksBuilt
+        try write(planManifest(config: config, inputs: inputs))
 
         return BuildResult(
             dirs: essentials.dirs, artifacts: essentials.artifacts,

@@ -9,6 +9,10 @@ indirect enum JsonLd: Sendable {
     case null
     case object([(String, JsonLd)])
     case array([JsonLd])
+    /// A pre-serialized JSON fragment emitted as-is (already-stringified
+    /// numbers in ECMA form, re-encoded sub-documents). The caller vouches
+    /// for its validity.
+    case verbatim(String)
 
     /// Compact serialization, byte-identical to `JSON.stringify(value)`.
     func serialized() -> String {
@@ -21,6 +25,7 @@ indirect enum JsonLd: Sendable {
             return "{" + pairs.map { "\"\(Self.escapeString($0.0))\":\($0.1.serialized())" }.joined(separator: ",") + "}"
         case .array(let items):
             return "[" + items.map { $0.serialized() }.joined(separator: ",") + "]"
+        case .verbatim(let s): return s
         }
     }
 

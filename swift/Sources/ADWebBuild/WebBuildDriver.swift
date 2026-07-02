@@ -32,15 +32,24 @@ public struct CorpusRoot: Sendable {
 }
 
 /// The corpus reads the essentials build needs. ADStorage's `StorageConnection`
-/// will conform via a small adapter (the `listFrameworkRoots` / `listAppleFonts`
+/// will conform via a small adapter (the `listRoots` / `listAppleFonts`
 /// / `sf_symbols` readers); tests use an in-memory mock.
 public protocol CorpusReader {
-    /// Framework roots — drives the index roster + per-framework metadata.
+    /// The BUILD's root walk (`db.getRoots()` — every root, ORDER BY slug):
+    /// drives the doc/framework render loops and the per-framework metadata.
     func corpusRoots() -> [CorpusRoot]
+    /// The homepage ROSTER (buildHomepageProps): `getRoots()` minus roots whose
+    /// only page is the root itself. Defaults to `corpusRoots()` for corpora /
+    /// mocks without the pages probe.
+    func homepageRoots() -> [CorpusRoot]
     /// The `/fonts` payload (parsed JSON array), or nil when no fonts indexed.
     func fontFamilies() -> JSON?
     /// `SELECT scope, COUNT(*) FROM sf_symbols GROUP BY scope`.
     func symbolTotals() -> [(scope: String, count: Int)]
+}
+
+extension CorpusReader {
+    public func homepageRoots() -> [CorpusRoot] { corpusRoots() }
 }
 
 /// Where the driver hands each rendered artifact (the ad-cli verb supplies a
@@ -80,13 +89,15 @@ extension BuildSite {
         from reader: R, config: SiteConfig, version: String? = nil,
         searchArtifacts: SearchArtifactsStats? = nil
     ) -> BuildInputs {
-        let roots = reader.corpusRoots()
+        // Homepage roster (buildHomepageProps' filtered getRoots) vs the
+        // build's UNFILTERED walk: metadata (build.js step 8) iterates every
+        // root, the index roster drops self-page-only roots.
         // No count badge: `roots` has no doc_count column (getRoots = SELECT *
         // FROM roots), so the JS homepage's fw.doc_count is always undefined.
-        let frameworks = roots.map {
+        let frameworks = reader.homepageRoots().map {
             IndexFramework(kind: $0.kind, slug: $0.slug, displayName: $0.displayName, docCount: nil)
         }
-        let meta = roots.map {
+        let meta = reader.corpusRoots().map {
             FrameworkMeta(slug: $0.slug, displayName: $0.displayName, kind: $0.kind, documentCount: $0.documentCount)
         }
         return BuildInputs(
