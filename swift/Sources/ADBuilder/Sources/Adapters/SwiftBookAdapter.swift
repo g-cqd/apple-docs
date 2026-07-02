@@ -15,6 +15,17 @@ public final class SwiftBookAdapter: SourceAdapter, @unchecked Sendable {
     public static let displayName = "The Swift Programming Language"
     public static let syncMode = SyncMode.flat
 
+    /// The JS `static entryPoints` — TSPL's cross-source entry point (consumed
+    /// by swift-org's "Related Documentation" via the EntryPointRegistry).
+    public static let entryPoints = [
+        EntryPoint(
+            slug: rootSlug,
+            key: "\(rootSlug)/\(rootFile)",
+            title: "The Swift Programming Language",
+            summary: "The canonical Swift language guide and reference manual.",
+            parents: ["swift-org/documentation", "swift-org/documentation/tspl"])
+    ]
+
     static let owner = "swiftlang"
     static let repo = "swift-book"
     static let branch = "main"
