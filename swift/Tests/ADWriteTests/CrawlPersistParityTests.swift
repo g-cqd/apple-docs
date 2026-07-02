@@ -33,8 +33,9 @@ import Testing
 
 @Suite("apple-docs crawl-persist parity (native ADDB vs JS SQLite via ADSQLImport)")
 struct CrawlPersistParityTests {
-
-    @Test("native persist rows match the JS-writer SQLite imported into ADDB")
+    @Test(
+        "native persist rows match the JS-writer SQLite imported into ADDB",
+        .enabled(if: FixtureBuilder.corpusAvailable))
     func nativePersistMatchesImportedReference() throws {
         // ── Build the deterministic fixture from the real corpus ─────────────
         let fixture = try FixtureBuilder.build()
@@ -192,9 +193,11 @@ enum RowReader {
                 return try sectionRows(db)
             default:
                 let excluded = table.excludedColumns
-                let rows = try db.prepare(
-                    "SELECT * FROM \(table.rawValue) ORDER BY \(table.orderBy)"
-                ).all()
+                let rows =
+                    try db.prepare(
+                        "SELECT * FROM \(table.rawValue) ORDER BY \(table.orderBy)"
+                    )
+                    .all()
                 return rows.map { canonicalKey($0, excluding: excluded) }
         }
     }
@@ -202,15 +205,17 @@ enum RowReader {
     /// document_sections joined to documents.key so the surrogate document_id is
     /// replaced by the stable document key in the comparison.
     private static func sectionRows(_ db: Database) throws -> [String] {
-        let rows = try db.prepare(
-            """
-            SELECT d.key AS doc_key, s.section_kind, s.heading, s.content_text,
-                   s.content_json, s.sort_order
-            FROM document_sections s
-            JOIN documents d ON d.id = s.document_id
-            ORDER BY d.key, s.section_kind, s.sort_order
-            """
-        ).all()
+        let rows =
+            try db.prepare(
+                """
+                SELECT d.key AS doc_key, s.section_kind, s.heading, s.content_text,
+                       s.content_json, s.sort_order
+                FROM document_sections s
+                JOIN documents d ON d.id = s.document_id
+                ORDER BY d.key, s.section_kind, s.sort_order
+                """
+            )
+            .all()
         // All selected columns are part of the key (no exclusions in this projection).
         return rows.map { canonicalKey($0, excluding: []) }
     }
@@ -259,7 +264,7 @@ enum ReferenceImport {
             // embeddings / raw / chunks (later slices)
             "document_chunks", "document_raw", "document_vectors",
             // assets
-            "apple_font_families", "apple_font_files", "sf_symbols", "sf_symbol_renders",
+            "apple_font_families", "apple_font_files", "sf_symbols", "sf_symbol_renders"
         ]
         // FTS shadow tables for each FTS base in the apple-docs schema.
         let ftsBases = ["documents_fts", "documents_trigram", "documents_body_fts", "sf_symbols_fts"]
