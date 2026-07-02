@@ -99,13 +99,12 @@ public enum BuildSite {
         "api/fonts", ".well-known/mcp",
     ]
 
-    /// The not-yet-ported steps, surfaced in every result so the driver can log
-    /// what a "successful" essentials build still omits. (S6 assets +
-    /// api/fonts/faces.css shipped via `planAssets` + the faces.css artifact;
-    /// S3 search artifacts via `planSearchArtifacts`.)
+    /// The not-yet-ported steps, surfaced in every result so a partial build
+    /// never reads as complete. WS-C is fully landed (S6 assets + faces.css,
+    /// S3 search artifacts, S4 sitemaps, S5 doc loop + shiki coprocess) — only
+    /// the essentials-only mode still stubs the doc loop.
     static let pendingSteps = [
-        "docs/* document pages + framework listing pages [S5 render loop]",
-        "shiki code highlighting (NoopHighlighter until then) [S5]",
+        "docs/* document pages + framework listing pages [--skip-docs]"
     ]
 
     /// Plan the site-essentials artifacts (the build.js `--skip-docs` surface:

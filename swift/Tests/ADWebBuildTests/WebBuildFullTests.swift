@@ -68,8 +68,7 @@ private let fullConfig = SiteConfig(
     #expect(dirs.contains("docs/combine"))
     #expect(!written.keys.contains { $0.hasPrefix("data/frameworks/combine/tree.") })
 
-    // The doc-loop step is no longer a stub; the S5 highlight step still is
-    // (S3 search / S4 sitemaps / S6 assets left the ledger with their slices).
-    #expect(!result.stubs.contains { $0.contains("document pages") })
-    #expect(result.stubs.contains { $0.contains("shiki") })
+    // A FULL build has no stubs left — WS-C is fully landed; the ledger's
+    // one remaining entry (`--skip-docs` doc loop) is filtered out by writeAll.
+    #expect(result.stubs.isEmpty)
 }

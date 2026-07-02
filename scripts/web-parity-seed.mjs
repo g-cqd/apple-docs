@@ -100,9 +100,6 @@ const jsonSection = (docId, kind, json, order) =>
     docId, kind, '', JSON.stringify(json), order,
   )
 
-// NOTE: no `declaration` sections here — bun highlights their content_text
-// via shiki (content/highlight.js), which the native NoopHighlighter can't
-// match until the S5 highlight seam lands. That slice re-adds one.
 section(1, 'content', 'SwiftUI declares interfaces as value-typed view trees.', 0, 'Overview')
 // On a CHILD doc (the root doc's page is overwritten by the framework
 // listing page, so enrichment on it would be invisible to the gate).
@@ -117,7 +114,11 @@ jsonSection(2, 'topics', [
   ] },
 ], 1)
 section(2, 'content', 'Views are the building blocks of SwiftUI interfaces.', 0, 'Overview')
+// Declarations exercise the shiki highlight seam (bun highlights their
+// content_text; ad-cli routes through the highlight-server coprocess).
+section(2, 'declaration', 'protocol View {\n    associatedtype Body: View\n    var body: Self.Body { get }\n}', 2)
 section(3, 'content', 'State drives view updates when its value changes.', 0, 'Overview')
+section(3, 'declaration', '@propertyWrapper struct State<Value>', 1)
 section(5, 'content', 'URLSession coordinates a group of related network tasks.', 0, 'Overview')
 section(6, 'content', 'The lonely framework has a single page.', 0, 'Overview')
 
