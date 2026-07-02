@@ -645,17 +645,31 @@ private func joinPath(_ base: String, _ component: String) -> String {
     (base as NSString).appendingPathComponent(component)
 }
 
+/// Hoisted ISO-8601 parsers for `parseISODate`. `ISO8601DateFormatter`'s
+/// `date(from:)` is thread-safe once configured but the class isn't `Sendable` —
+/// `nonisolated(unsafe)` is the contained annotation (same category as
+/// `IntentDetector`'s `Regex` statics). Hoisting avoids rebuilding both formatters
+/// on every call.
+private enum ISODateParser {
+    nonisolated(unsafe) static let withFraction: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    nonisolated(unsafe) static let plain: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+}
+
 /// `Date.parse(iso)` → epoch milliseconds, or nil for an unparseable string.
 /// update_log timestamps are `new Date().toISOString()` (ISO-8601 UTC with
 /// milliseconds, e.g. `2026-06-14T00:00:00.000Z`); ISO8601DateFormatter with
 /// fractional seconds parses that. A plain (no-fraction) ISO string is retried.
 private func parseISODate(_ iso: String) -> Double? {
-    let withFraction = ISO8601DateFormatter()
-    withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let date = withFraction.date(from: iso) { return date.timeIntervalSince1970 * 1000 }
-    let plain = ISO8601DateFormatter()
-    plain.formatOptions = [.withInternetDateTime]
-    if let date = plain.date(from: iso) { return date.timeIntervalSince1970 * 1000 }
+    if let date = ISODateParser.withFraction.date(from: iso) { return date.timeIntervalSince1970 * 1000 }
+    if let date = ISODateParser.plain.date(from: iso) { return date.timeIntervalSince1970 * 1000 }
     return nil
 }
 
