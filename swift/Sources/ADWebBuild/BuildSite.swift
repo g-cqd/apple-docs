@@ -90,6 +90,23 @@ public struct BuildResult: Sendable {
     public let dirs: [String]
     public let artifacts: [Artifact]
     public let stubs: [String]
+    /// Render-loop counters (build.js `counters` — the checkpoint's
+    /// pages_built/pages_skipped and the manifest totals' inputs).
+    public let pagesBuilt: Int
+    public let pagesSkipped: Int
+    public let frameworksBuilt: Int
+
+    init(
+        dirs: [String], artifacts: [Artifact], stubs: [String], pagesBuilt: Int = 0,
+        pagesSkipped: Int = 0, frameworksBuilt: Int = 0
+    ) {
+        self.dirs = dirs
+        self.artifacts = artifacts
+        self.stubs = stubs
+        self.pagesBuilt = pagesBuilt
+        self.pagesSkipped = pagesSkipped
+        self.frameworksBuilt = frameworksBuilt
+    }
 }
 
 public enum BuildSite {

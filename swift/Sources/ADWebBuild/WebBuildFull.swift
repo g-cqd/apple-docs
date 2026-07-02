@@ -15,10 +15,31 @@ public struct BuildDocument: Sendable {
     public let doc: DocRecord
     public let sections: [DocSection]
     public let ancestorTitles: [String: String]
-    public init(doc: DocRecord, sections: [DocSection], ancestorTitles: [String: String] = [:]) {
+    /// `documents.id` — keys the incremental render index (0 for corpora/mocks
+    /// without one; the skip hooks are only wired when ids are real).
+    public let id: Int64
+    public init(doc: DocRecord, sections: [DocSection], ancestorTitles: [String: String] = [:], id: Int64 = 0) {
         self.doc = doc
         self.sections = sections
         self.ancestorTitles = ancestorTitles
+        self.id = id
+    }
+}
+
+/// The S7 incremental seam (document-pages.js's render-index skip):
+/// `shouldSkip(docId, sectionsDigest, artifactPath)` returns true when the
+/// cached digest matches AND the on-disk file exists (the driver also
+/// refreshes a stale template_version on that path); `didRender(docId,
+/// sectionsDigest, htmlHash)` persists the entry after a successful render.
+public struct IncrementalHooks {
+    public let shouldSkip: (Int64, String, String) -> Bool
+    public let didRender: (Int64, String, String) -> Void
+    public init(
+        shouldSkip: @escaping (Int64, String, String) -> Bool,
+        didRender: @escaping (Int64, String, String) -> Void
+    ) {
+        self.shouldSkip = shouldSkip
+        self.didRender = didRender
     }
 }
 
@@ -56,6 +77,7 @@ extension BuildSite {
     public static func writeAll<R: DocumentCorpusReader>(
         config: SiteConfig, reader: R, version: String? = nil, markdownDocs: Bool = false,
         highlight: CodeHighlight? = nil, searchArtifacts: SearchArtifactsStats? = nil,
+        incremental: IncrementalHooks? = nil,
         ensureDir: (String) throws -> Void, write: ArtifactSink
     ) rethrows -> BuildResult {
         let essentials = try writeEssentials(
@@ -63,16 +85,27 @@ extension BuildSite {
             ensureDir: ensureDir, write: write)
 
         var pagesRendered = 0
+        var pagesSkipped = 0
         var frameworksBuilt = 0
         let known = reader.knownKeys()
         for root in reader.corpusRoots() {
             for bd in reader.documents(inFramework: root.slug) {
+                // The digest fingerprints the RAW sections (document-pages.js
+                // computes it before renderDocumentPage's in-place enrichment).
+                let digest = computeSectionsDigest(bd.sections)
+                let webKey = SafePath.safeWebDocKey(bd.doc.key ?? "")
+                let path = "docs/\(webKey)/index.html"
+                if let incremental, incremental.shouldSkip(bd.id, digest, path) {
+                    pagesSkipped += 1
+                    continue
+                }
                 let sections = enrichTopicSections(bd.sections) { reader.roleHeadings(forKeys: $0) }
                 let artifact = planDocumentPage(
                     doc: bd.doc, sections: sections, config: config, knownKeys: known,
                     ancestorTitles: bd.ancestorTitles, markdownDocs: markdownDocs, highlight: highlight)
                 try ensureDir(parentDir(artifact.path))
                 try write(artifact)
+                incremental?.didRender(bd.id, digest, htmlHash(artifact.bytes))
                 pagesRendered += 1
             }
 
@@ -96,13 +129,14 @@ extension BuildSite {
         // the rendered counts (pagesBuilt + pagesSkipped / frameworksBuilt).
         var inputs = collectInputs(
             from: reader, config: config, version: version, searchArtifacts: searchArtifacts)
-        inputs.totalDocuments = pagesRendered
+        inputs.totalDocuments = pagesRendered + pagesSkipped
         inputs.totalFrameworks = frameworksBuilt
         try write(planManifest(config: config, inputs: inputs))
 
         return BuildResult(
             dirs: essentials.dirs, artifacts: essentials.artifacts,
-            stubs: essentials.stubs.filter { !$0.contains("document pages") })
+            stubs: essentials.stubs.filter { !$0.contains("document pages") },
+            pagesBuilt: pagesRendered, pagesSkipped: pagesSkipped, frameworksBuilt: frameworksBuilt)
     }
 
     /// The directory portion of a relative artifact path

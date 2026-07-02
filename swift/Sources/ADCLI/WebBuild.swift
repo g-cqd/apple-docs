@@ -6,12 +6,14 @@
 // from the BuildResult ledger). Parity oracle: `bun run cli.js web build`.
 
 import ADArchive
+import ADBase
 import ADContent
 import ADJSONCore
 import ADStorage
 import ADWebBuild
 import ArgumentParser
 import Foundation
+import OrderedCollections
 
 /// Bridges a corpus `StorageConnection` to the build's `CorpusReader`.
 struct StorageCorpusReader: CorpusReader {
@@ -144,7 +146,7 @@ struct StorageDocumentReader: DocumentCorpusReader {
                 frameworkDisplay: row.frameworkDisplay, roleHeading: row.roleHeading,
                 isDeprecated: row.isDeprecated, isBeta: row.isBeta, platformsJson: row.platformsJson,
                 url: row.url, abstractText: row.abstractText, language: row.language)
-            return BuildDocument(doc: doc, sections: sections, ancestorTitles: ancestorTitles(for: row.key))
+            return BuildDocument(doc: doc, sections: sections, ancestorTitles: ancestorTitles(for: row.key), id: row.id)
         }
     }
 
@@ -208,6 +210,101 @@ struct FileArtifactSink {
         guard FileManager.default.createFile(atPath: path, contents: Data(artifact.bytes)) else {
             throw ValidationError("ad-cli: failed to write \(path)")
         }
+    }
+}
+
+/// Random lowercase hex (`randomBytes(n).toString('hex')`).
+func randomHex(_ bytes: Int) -> String {
+    (0..<bytes).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
+}
+
+/// The native template-surface stamp: sha256("path|size|mtimeNs")[:16] of the
+/// running ad-cli binary. The JS hashes its template FILES; the compiled binary
+/// IS the native template surface, so any rebuild rotates the version —
+/// over-invalidation (a full re-render after every binary change), never a
+/// stale skip. Size+mtime instead of content keeps the stamp O(1).
+func nativeTemplateVersion() -> String {
+    let path = CommandLine.arguments.first ?? "ad-cli"
+    var size: Int64 = 0
+    var mtime: Double = 0
+    if let attrs = try? FileManager.default.attributesOfItem(atPath: path) {
+        size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+        mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+    }
+    return String(ADBase.Sha256.hexString("\(path)|\(size)|\(mtime)").prefix(16))
+}
+
+/// The document-pages.js two-tier incremental skip + upsert, bound to the
+/// writable connection. Skip: render-index digest match AND the on-disk file
+/// exists (template_version drift alone refreshes the entry instead of
+/// re-rendering). didRender persists the new entry.
+func renderIndexHooks(
+    _ writer: StorageConnection, templateVersion: String, buildDir: String, isIncremental: Bool
+) -> IncrementalHooks {
+    IncrementalHooks(
+        shouldSkip: { docId, digest, relativePath in
+            guard isIncremental, docId != 0 else { return false }
+            let filePath = "\(buildDir)/\(relativePath)"
+            guard FileManager.default.fileExists(atPath: filePath) else { return false }
+            guard let cached = writer.renderIndexEntry(docId: docId), cached.sectionsDigest == digest
+            else { return false }
+            if cached.templateVersion != templateVersion {
+                _ = writer.upsertRenderIndexEntry(
+                    docId: docId, sectionsDigest: digest, templateVersion: templateVersion,
+                    htmlHash: cached.htmlHash, updatedAt: Int64(Date().timeIntervalSince1970))
+            }
+            return true
+        },
+        didRender: { docId, digest, htmlHash in
+            guard docId != 0 else { return }
+            _ = writer.upsertRenderIndexEntry(
+                docId: docId, sectionsDigest: digest, templateVersion: templateVersion,
+                htmlHash: htmlHash, updatedAt: Int64(Date().timeIntervalSince1970))
+        })
+}
+
+/// setWebBuildCheckpoint — the JSON state row (build.js's object shape,
+/// insertion order preserved).
+func writeCheckpoint(
+    _ writer: StorageConnection, runId: String, templateVersion: String, startedAt: Int64,
+    built: Int, skipped: Int, buildDir: String, baseUrl: String, incremental: Bool, status: String
+) {
+    let state = JSONValue.obj([
+        ("run_id", .string(runId)),
+        ("template_version", .string(templateVersion)),
+        ("started_at", .int(startedAt)),
+        ("updated_at", .int(Int64(Date().timeIntervalSince1970))),
+        ("pages_built", .int(Int64(built))),
+        ("pages_skipped", .int(Int64(skipped))),
+        ("pages_failed", .int(0)),
+        ("build_dir", .string(buildDir)),
+        ("base_url", .string(baseUrl)),
+        ("incremental", .bool(incremental)),
+        ("status", .string(status)),
+    ])
+    let json = String(decoding: (try? state.encodedBytes(options: .javaScript)) ?? [], as: UTF8.self)
+    _ = writer.setSyncCheckpoint(key: "web_build", valueJSON: json, updatedAt: jsIsoNow())
+}
+
+/// atomic-swap.js `atomicPublish`: out→prev, tmp→out, rm prev; a failed second
+/// rename restores prev before rethrowing.
+func atomicPublish(outDir: String, buildDir: String, previousDir: String) throws {
+    let fileManager = FileManager.default
+    var hadPrevious = false
+    if fileManager.fileExists(atPath: outDir) {
+        try fileManager.moveItem(atPath: outDir, toPath: previousDir)
+        hadPrevious = true
+    }
+    do {
+        try fileManager.moveItem(atPath: buildDir, toPath: outDir)
+    } catch {
+        if hadPrevious, fileManager.fileExists(atPath: previousDir), !fileManager.fileExists(atPath: outDir) {
+            try? fileManager.moveItem(atPath: previousDir, toPath: outDir)
+        }
+        throw error
+    }
+    if hadPrevious {
+        try? fileManager.removeItem(atPath: previousDir)
     }
 }
 
@@ -276,6 +373,12 @@ struct WebBuildCommand: ParsableCommand {
     @Flag(name: .customLong("skip-docs"), help: "Build only site essentials; skip the per-document render loop.")
     var skipDocs = false
 
+    @Flag(name: .long, help: "Incremental: write in place and skip unchanged documents (render index).")
+    var incremental = false
+
+    @Flag(name: .long, help: "Force a full rebuild (clears the render index; wins over --incremental).")
+    var full = false
+
     @Option(
         name: .customLong("links-audit-json"),
         help: "Write the link-audit stats (linksAudit's return object) to this path — parity-gate tooling.")
@@ -286,6 +389,17 @@ struct WebBuildCommand: ParsableCommand {
             FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db)\n".utf8))
             throw ExitCode(1)
         }
+        // The incremental cache writes (render index + checkpoint) go through a
+        // second, UNguarded connection — build.js writes these on every build.
+        // A corpus without the tables (or a read-only medium) degrades to a
+        // full render (the accessors no-op).
+        let writer = StorageConnection(path: corpus.db, writable: true)
+        let isIncremental = incremental && !full
+        // build.js: full builds stage into a crypto-suffixed tmp dir and
+        // atomically swap; incremental writes IN PLACE.
+        let stamp = "\(Int(Date().timeIntervalSince1970 * 1000))-\(randomHex(8))"
+        let buildDir = isIncremental ? out : "\(out).tmp-\(stamp)"
+        let previousDir = "\(out).prev-\(stamp)"
         let buildDate = String(ISO8601DateFormatter().string(from: Date()).prefix(10))
         // Footer stamps — `snapshot_tag` (or `snapshot_version`) + `build_macos`
         // from snapshot_meta, and the short git commit (env override first), the
@@ -296,7 +410,7 @@ struct WebBuildCommand: ParsableCommand {
             snapshotTag: snapshotTag, buildMacos: connection.snapshotMeta("build_macos"),
             commitHash: gitCommitHash())
         let reader = StorageCorpusReader(connection: connection)
-        let sink = FileArtifactSink(outDir: out)
+        let sink = FileArtifactSink(outDir: buildDir)
 
         // build.js step order: 1 dirs → 2 asset pipeline → 4 landing/discovery
         // (which win over any stale public/ copy of the same name) → 8/9
@@ -333,6 +447,33 @@ struct WebBuildCommand: ParsableCommand {
             }
         }
 
+        // The render index + checkpoint lifecycle (build.js initRenderIndexIfNeeded
+        // + setWebBuildCheckpoint): --full clears the index; an incremental run
+        // whose recorded template_version drifted clears it too. The native
+        // template_version fingerprints the ad-cli binary (path|size|mtime →
+        // sha256[:16]) — the JS hashes its template FILES; the binary IS the
+        // native template surface, so any rebuild rotates the version
+        // (over-invalidation, never staleness).
+        let templateVersion = nativeTemplateVersion()
+        let runStartedAt = Int64(Date().timeIntervalSince1970)
+        if let writer {
+            if !isIncremental {
+                writer.clearRenderIndex()
+            } else if let checkpoint = writer.syncCheckpoint(key: "web_build"),
+                let parsed = parseJSONValue(checkpoint),
+                case .object(let members) = parsed,
+                case .string(let recorded)? = members["template_version"], recorded != templateVersion
+            {
+                FileHandle.standardError.write(
+                    Data("ad-cli: template surface changed since last build — clearing render index\n".utf8))
+                writer.clearRenderIndex()
+            }
+            writeCheckpoint(
+                writer, runId: "\(runStartedAt)-\(randomHex(3))", templateVersion: templateVersion,
+                startedAt: runStartedAt, built: 0, skipped: 0, buildDir: buildDir,
+                baseUrl: baseUrl, incremental: isIncremental, status: "in_progress")
+        }
+
         let result: BuildResult
         if skipDocs {
             result = try BuildSite.writeEssentials(
@@ -349,14 +490,29 @@ struct WebBuildCommand: ParsableCommand {
             let markdownDocs = (ProcessInfo.processInfo.environment["APPLE_DOCS_MARKDOWN_DOCS"] ?? "") != "0"
             let highlighter = resolveHighlighter(srcWebDir: srcWeb)
             defer { highlighter?.coprocess.shutdown() }
+            let hooks = writer.map { renderIndexHooks($0, templateVersion: templateVersion, buildDir: buildDir, isIncremental: isIncremental) }
             result = try BuildSite.writeAll(
                 config: config, reader: docReader, version: appVersion, markdownDocs: markdownDocs,
-                highlight: highlighter?.highlight, searchArtifacts: search.stats,
+                highlight: highlighter?.highlight, searchArtifacts: search.stats, incremental: hooks,
                 ensureDir: { try sink.ensureDir($0) }, write: { try sink.write($0) })
         }
 
         var report = "ad-cli: built site\(skipDocs ? " essentials" : "") → \(out)\n"
         report += "ad-cli: assets via \(bundler.label) (\(assetArtifacts.count) artifacts)\n"
+
+        // 10. Atomic publish (full builds only): rename out→prev, tmp→out,
+        // rm prev; a failed swap restores prev (atomic-swap.js).
+        if !isIncremental {
+            try atomicPublish(outDir: out, buildDir: buildDir, previousDir: previousDir)
+        }
+
+        // Finalize the checkpoint (status completed + final counters).
+        if let writer {
+            writeCheckpoint(
+                writer, runId: "\(runStartedAt)-\(randomHex(3))", templateVersion: templateVersion,
+                startedAt: runStartedAt, built: result.pagesBuilt, skipped: result.pagesSkipped,
+                buildDir: out, baseUrl: baseUrl, incremental: isIncremental, status: "completed")
+        }
 
         // 11. Link audit — full unfiltered builds only (build.js:
         // `buildingAll && !skipDocs`). Classification failure of the WALK is a
