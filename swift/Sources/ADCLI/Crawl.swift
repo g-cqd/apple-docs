@@ -23,7 +23,7 @@ struct CrawlCommand: AsyncParsableCommand {
         abstract:
             "Crawl one documentation source into a writable ADDB corpus (mirrors cli.js sync's crawl phase).")
 
-    @Argument(help: "Source to crawl: swift-org | swift-book | swift-evolution.")
+    @Argument(help: "Source to crawl (a natively-ported adapter).")
     var source: String
 
     @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated to the latest schema if missing).")
@@ -52,18 +52,16 @@ struct CrawlCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        // The registry of natively-ported adapters. `adapter(for:)` throws a clear error for
-        // the JS-only sources (those still crawl via Bun `sync` until ported).
-        let registry = SourceRegistry([
-            SwiftOrgAdapter.self, SwiftBookAdapter.self, SwiftEvolutionAdapter.self
-        ])
+        // The registry of natively-ported adapters (the shared list). `adapter(for:)`
+        // throws a clear error for the JS-only sources (those still crawl via Bun `sync`).
+        let registry = SourceRegistry(SourceRegistry.nativeAdapterTypes)
         let adapter: any SourceAdapter
         do {
             adapter = try registry.adapter(for: source)
         } catch {
             FileHandle.standardError.write(
                 Data(
-                    "ad-cli: unknown or not-yet-ported source '\(source)' (native: swift-org, swift-book, swift-evolution)\n"
+                    "ad-cli: unknown or not-yet-ported source '\(source)' (native: \(SourceRegistry.nativeSourceNames))\n"
                         .utf8))
             throw ExitCode(1)
         }

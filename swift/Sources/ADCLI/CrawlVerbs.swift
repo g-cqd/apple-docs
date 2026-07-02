@@ -1,0 +1,243 @@
+// The WS-D write verbs beyond `crawl`: `index` (embedding index), `sync`
+// (crawl + index for one source), and `snapshot` (the distributable corpus
+// archive) — thin wiring over IndexEmbeddings.run / CrawlDriver.sync /
+// Snapshot.build. All operate on a writable ADDB corpus (the native crawl
+// store), like `ad-cli crawl`.
+
+import ADBuilder
+import ADBuilderPipeline
+import ADDB
+// ADDBMigrate: Migrator.Outcome members (finalVersion) — MemberImportVisibility.
+import ADDBMigrate
+import ADEmbed
+import ADJSONCore
+import ADWrite
+import ArgumentParser
+import Foundation
+
+extension SourceRegistry {
+    /// The natively-ported adapters, in one place (the crawl/sync verbs + the
+    /// entry-point registry all build from this list).
+    static let nativeAdapterTypes: [any SourceAdapter.Type] = [
+        SwiftOrgAdapter.self, SwiftBookAdapter.self, SwiftEvolutionAdapter.self,
+        GuidelinesAdapter.self, AppleArchiveAdapter.self,
+    ]
+
+    static var nativeSourceNames: String {
+        nativeAdapterTypes.map { $0.type }.sorted().joined(separator: ", ")
+    }
+}
+
+/// Open (creating + migrating) the writable ADDB corpus the write verbs share.
+func openCrawlCorpus(_ path: String) throws -> Database {
+    do {
+        let database = try Database.open(
+            at: path, options: DatabaseOptions(readOnly: false, createIfMissing: true))
+        _ = try migrateSchema(database)
+        return database
+    } catch {
+        FileHandle.standardError.write(Data("ad-cli: cannot open/migrate \(path): \(error)\n".utf8))
+        throw ExitCode(1)
+    }
+}
+
+/// The potion embedder for the index verbs — resolved from the corpus-adjacent
+/// resources tree (`<dataDir>/resources/models/minishlab/potion-retrieval-32M`),
+/// exactly where `search`'s semantic tier loads it from.
+func loadIndexEmbedder(dbPath: String) throws -> Embedder {
+    let dataDir = (dbPath as NSString).deletingLastPathComponent
+    let modelDir = dataDir + "/resources/models/minishlab/potion-retrieval-32M"
+    do {
+        return try loadPotionEmbedder(modelDir: modelDir)
+    } catch {
+        FileHandle.standardError.write(
+            Data("ad-cli: no embedder at \(modelDir) (\(error)) — run against a data dir with the model resources\n".utf8))
+        throw ExitCode(1)
+    }
+}
+
+/// `ad-cli index --db <ADDB> [--full]` — build/resume the embedding index over
+/// everything persisted (IndexEmbeddings.run; the post-crawl pass that makes
+/// crawled pages searchable).
+struct IndexCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "index",
+        abstract: "Build or resume the embedding index over a crawled ADDB corpus.")
+
+    @Option(name: .long, help: "Path to the writable ADDB corpus.")
+    var db: String
+
+    @Flag(name: .long, help: "Re-embed every document (else resume: only documents with no chunks).")
+    var full = false
+
+    @Flag(name: .long, help: "Emit the result as JSON.")
+    var json = false
+
+    func run() throws {
+        let database = try openCrawlCorpus(db)
+        let embedder = try loadIndexEmbedder(dbPath: db)
+        let result: IndexEmbeddings.Result
+        do {
+            result = try IndexEmbeddings.run(database, embedder: embedder, full: full)
+        } catch {
+            FileHandle.standardError.write(Data("ad-cli: index failed: \(error)\n".utf8))
+            throw ExitCode(1)
+        }
+        if json {
+            print(stringifyPretty(indexResultJSON(result)))
+        } else {
+            print("indexed: \(indexResultSummary(result))")
+        }
+    }
+}
+
+/// `ad-cli sync <source> --db <ADDB>` — crawl one source then index it
+/// (CrawlDriver.sync — the native mirror of cli.js sync's crawl+index for one
+/// source).
+struct SyncCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "sync",
+        abstract: "Crawl one source into an ADDB corpus, then build its embedding index.")
+
+    @Argument(help: "Source to sync (native adapters only).")
+    var source: String
+
+    @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
+    var db: String
+
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 8).")
+    var concurrency: Int = 8
+
+    @Flag(name: .long, help: "Emit the stats as JSON.")
+    var json = false
+
+    func run() async throws {
+        let registry = SourceRegistry(SourceRegistry.nativeAdapterTypes)
+        let adapter: any SourceAdapter
+        do {
+            adapter = try registry.adapter(for: source)
+        } catch {
+            FileHandle.standardError.write(
+                Data("ad-cli: unknown or not-yet-ported source '\(source)' (native: \(SourceRegistry.nativeSourceNames))\n".utf8))
+            throw ExitCode(1)
+        }
+        let database = try openCrawlCorpus(db)
+        let embedder = try loadIndexEmbedder(dbPath: db)
+        let now = jsIsoNow()
+        let context = SourceContext(client: URLSessionHTTPClient(), rateLimiter: RateLimiter())
+
+        let result: CrawlDriver.SyncResult
+        do {
+            let discovery = try await adapter.discover(context)
+            guard let root = discovery.roots.first else {
+                FileHandle.standardError.write(Data("ad-cli: source '\(source)' discovered no root\n".utf8))
+                throw ExitCode(1)
+            }
+            let rootId = try CrawlPersist.upsertRoot(
+                database, slug: root.slug, displayName: root.displayName, kind: root.kind,
+                source: root.source, seedPath: root.seedPath, sourceType: root.sourceType, now: now)
+            result = try await CrawlDriver(registry: registry).sync(
+                sourceType: source, into: database, rootId: rootId, context: context, now: now,
+                embedder: embedder)
+        } catch let code as ExitCode {
+            throw code
+        } catch {
+            FileHandle.standardError.write(Data("ad-cli: sync \(source) failed: \(error)\n".utf8))
+            throw ExitCode(1)
+        }
+
+        if json {
+            print(
+                stringifyPretty(
+                    .obj([
+                        ("source", .string(source)),
+                        ("discovered", .int(Int64(result.crawl.discovered))),
+                        ("persisted", .int(Int64(result.crawl.persisted))),
+                        ("skipped", .int(Int64(result.crawl.skipped))),
+                        ("failed", .int(Int64(result.crawl.failed))),
+                        ("index", indexResultJSON(result.index)),
+                    ])))
+        } else {
+            print(
+                "synced \(source): discovered \(result.crawl.discovered), persisted \(result.crawl.persisted), "
+                    + "skipped \(result.crawl.skipped), failed \(result.crawl.failed); "
+                    + "index \(indexResultSummary(result.index))")
+        }
+    }
+}
+
+/// `ad-cli snapshot --db <ADDB> --out <dir> --tag <snapshot-YYYYMMDD>` — build
+/// the distributable snapshot archive (Snapshot.build; deterministic
+/// createdAt/mtimes derive from the tag).
+struct SnapshotCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "snapshot",
+        abstract: "Build the distributable snapshot archive from an ADDB corpus.")
+
+    @Option(name: .long, help: "Path to the ADDB corpus to snapshot.")
+    var db: String
+
+    @Option(name: .long, help: "Output directory for the archive + checksum + manifest.")
+    var out: String
+
+    @Option(name: .long, help: "Snapshot tag (e.g. snapshot-20260702; determinism derives from it).")
+    var tag: String
+
+    @Option(name: .customLong("data-dir"), help: "Data dir with raw-json/markdown trees to include (optional).")
+    var dataDir: String?
+
+    @Flag(name: .long, help: "Emit the result as JSON.")
+    var json = false
+
+    func run() throws {
+        let database = try openCrawlCorpus(db)
+        let schemaVersion: Int64
+        do {
+            schemaVersion = Int64(try migrateSchema(database).finalVersion)
+        } catch {
+            FileHandle.standardError.write(Data("ad-cli: cannot read schema version: \(error)\n".utf8))
+            throw ExitCode(1)
+        }
+        let result: Snapshot.Result
+        do {
+            result = try Snapshot.build(
+                database, dataDir: dataDir, outDir: out, tag: tag, schemaVersion: schemaVersion)
+        } catch {
+            FileHandle.standardError.write(Data("ad-cli: snapshot failed: \(error)\n".utf8))
+            throw ExitCode(1)
+        }
+        if json {
+            print(stringifyPretty(snapshotResultJSON(result)))
+        } else {
+            print("snapshot built: \(result.archivePath)")
+        }
+    }
+}
+
+// MARK: - result projections
+
+private func indexResultJSON(_ result: IndexEmbeddings.Result) -> JSONValue {
+    // The JS `{ status, indexed, total, chunks }` return shape.
+    .obj([
+        ("status", .string(result.status)),
+        ("indexed", .int(Int64(result.indexed))),
+        ("total", .int(Int64(result.total))),
+        ("chunks", .int(Int64(result.chunks))),
+    ])
+}
+
+private func indexResultSummary(_ result: IndexEmbeddings.Result) -> String {
+    "\(result.status): \(result.indexed)/\(result.total) documents, \(result.chunks) chunks"
+}
+
+private func snapshotResultJSON(_ result: Snapshot.Result) -> JSONValue {
+    .obj([
+        ("tag", .string(result.tag)),
+        ("documentCount", .int(Int64(result.documentCount))),
+        ("archivePath", .string(result.archivePath)),
+        ("archiveSize", .int(result.archiveSize)),
+        ("archiveChecksum", .string(result.archiveChecksum)),
+        ("checksumSidecarPath", .string(result.checksumSidecarPath)),
+        ("manifestPath", .string(result.manifestPath)),
+    ])
+}
