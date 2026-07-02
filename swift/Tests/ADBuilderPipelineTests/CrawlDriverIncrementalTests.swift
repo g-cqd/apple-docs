@@ -4,6 +4,9 @@
 // prior validator yet; the re-crawl skips every key), and one that always reports `.modified` (the
 // re-crawl re-fetches + persists). Both normalize with `url == nil` so the persisted path is the
 // key-derived fallback `/<key>` — exactly what the driver looks the validator up by pre-fetch.
+//
+// Split into one @Test per crawl outcome (shared crawl-twice helper) to stay inside the package's
+// 100 ms type-check budget — the two-phase bodies tripped the hard gate.
 
 import ADBuilder
 import ADDB
@@ -38,7 +41,6 @@ struct CrawlDriverIncrementalTests {
     private struct UnchangedAdapter: SourceAdapter {
         static let type = "inc-unchanged"
         static let displayName = "Inc Unchanged"
-        init() {}
         func discover(_ context: SourceContext) async throws -> DiscoveryResult {
             DiscoveryResult(keys: CrawlDriverIncrementalTests.keys(Self.type))
         }
@@ -57,7 +59,6 @@ struct CrawlDriverIncrementalTests {
     private struct ModifiedAdapter: SourceAdapter {
         static let type = "inc-modified"
         static let displayName = "Inc Modified"
-        init() {}
         func discover(_ context: SourceContext) async throws -> DiscoveryResult {
             DiscoveryResult(keys: CrawlDriverIncrementalTests.keys(Self.type))
         }
@@ -86,51 +87,52 @@ struct CrawlDriverIncrementalTests {
         SourceContext(client: StubClient(), rateLimiter: RateLimiter(rate: 1_000_000, burst: 1_000_000))
     }
 
-    @Test func unchangedCheckSkipsTheRecrawl() async throws {
+    /// Runs a first crawl + an immediate re-crawl of `sourceType` against ONE fresh DB (so the
+    /// re-crawl sees the validators the first crawl stored) and returns both outcome stats.
+    private func crawlTwice(
+        _ adapters: [any SourceAdapter.Type], sourceType: String
+    ) async throws -> (first: CrawlDriver.Stats, second: CrawlDriver.Stats) {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("crawlinc-unchanged-\(UUID().uuidString)")
+            .appendingPathComponent("crawlinc-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
         let now = "2026-06-20T00:00:00.000Z"
         let (db, rootId) = try freshDatabase(dir, now: now)
         defer { db.close() }
-
-        let driver = CrawlDriver(registry: SourceRegistry([UnchangedAdapter.self]))
-
-        // First crawl: no validators on disk yet, so `check` is never consulted — every page is fetched.
+        let driver = CrawlDriver(registry: SourceRegistry(adapters))
         let first = try await driver.crawl(
-            sourceType: "inc-unchanged", into: db, rootId: rootId, context: context(), now: now)
+            sourceType: sourceType, into: db, rootId: rootId, context: context(), now: now)
+        let second = try await driver.crawl(
+            sourceType: sourceType, into: db, rootId: rootId, context: context(), now: now)
+        return (first: first, second: second)
+    }
+
+    // First crawl: no validators on disk yet, so `check` is never consulted — every page is fetched.
+    @Test func firstCrawlPersistsAllBeforeValidatorsExist() async throws {
+        let first = try await crawlTwice([UnchangedAdapter.self], sourceType: "inc-unchanged").first
         #expect(first.discovered == 3)
         #expect(first.persisted == 3)
         #expect(first.skipped == 0)
         #expect(first.failed == 0)
+    }
 
-        // Re-crawl: every page now has a stored ETag and `check` says unchanged → all skipped, none fetched.
-        let second = try await driver.crawl(
-            sourceType: "inc-unchanged", into: db, rootId: rootId, context: context(), now: now)
+    // Re-crawl: every page now has a stored ETag and `check` says unchanged → all skipped, none fetched.
+    @Test func unchangedCheckSkipsTheRecrawl() async throws {
+        let second = try await crawlTwice([UnchangedAdapter.self], sourceType: "inc-unchanged").second
         #expect(second.discovered == 3)
         #expect(second.skipped == second.discovered)
         #expect(second.persisted == 0)
         #expect(second.failed == 0)
     }
 
-    @Test func modifiedCheckRefetches() async throws {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("crawlinc-modified-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let now = "2026-06-20T00:00:00.000Z"
-        let (db, rootId) = try freshDatabase(dir, now: now)
-        defer { db.close() }
-
-        let driver = CrawlDriver(registry: SourceRegistry([ModifiedAdapter.self]))
-
-        let first = try await driver.crawl(
-            sourceType: "inc-modified", into: db, rootId: rootId, context: context(), now: now)
+    @Test func modifiedAdapterFirstCrawlPersistsAll() async throws {
+        let first = try await crawlTwice([ModifiedAdapter.self], sourceType: "inc-modified").first
         #expect(first.persisted == 3)
         #expect(first.skipped == 0)
+    }
 
-        // Re-crawl: validators exist, but `check` reports modified → re-fetched + persisted, none skipped.
-        let second = try await driver.crawl(
-            sourceType: "inc-modified", into: db, rootId: rootId, context: context(), now: now)
+    // Re-crawl: validators exist, but `check` reports modified → re-fetched + persisted, none skipped.
+    @Test func modifiedCheckRefetches() async throws {
+        let second = try await crawlTwice([ModifiedAdapter.self], sourceType: "inc-modified").second
         #expect(second.discovered == 3)
         #expect(second.persisted == 3)
         #expect(second.skipped == 0)
