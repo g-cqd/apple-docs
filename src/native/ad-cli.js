@@ -68,10 +68,17 @@ const SEARCH_BOOL_FLAGS = ['no-fuzzy', 'no-deep', 'no-eager', 'read', 'json']
  * @property {string[]} [bool]  boolean flags emitted as bare `--k` when truthy (declare `json` last)
  */
 
-/** @type {Record<string, VerbSpec>} */
+/**
+ * @type {Record<string, VerbSpec>}
+ * A key is either a bare verb or `"verb subcommand"` — the subcommand-keyed
+ * form delegates exactly that subcommand (`storage stats`); every other
+ * subcommand of the family falls back to Bun.
+ */
 const VERB_SPECS = {
   frameworks: { string: ['kind'], bool: ['json'] },
   version: { bool: ['json'] },
+  'storage stats': { bool: ['json'] },
+  'storage check-orphans': { bool: ['json'] },
   kinds: { string: ['field'], bool: ['json'] },
   status: { bool: ['advanced', 'json'] },
   browse: { minPositional: 1, maxPositional: 1, string: ['path'], int: ['limit', 'year'], bool: ['json'] },
@@ -96,11 +103,15 @@ const VERB_SPECS = {
  * @returns {string[] | null}
  */
 export function nativeCliArgs({ command, subcommand, positional, flags, dbPath }) {
-  if (subcommand) return null
-  const spec = VERB_SPECS[command]
+  // A subcommand invocation flips only via its own `"verb subcommand"` spec;
+  // an unlisted subcommand (or any subcommand of a bare-keyed verb) falls
+  // back to Bun, exactly as before.
+  const key = subcommand ? `${command} ${subcommand}` : command
+  const spec = VERB_SPECS[key]
   if (!spec) return null
   const pos = Array.isArray(positional) ? positional : []
-  return validateFlags(command, spec, pos, flags, dbPath)
+  const verb = subcommand ? [command, subcommand] : [command]
+  return validateFlags(verb, spec, pos, flags, dbPath)
 }
 
 /**
@@ -109,10 +120,11 @@ export function nativeCliArgs({ command, subcommand, positional, flags, dbPath }
  * fit `[minPositional, maxPositional]`; only the verb's own flags + the
  * STDOUT-neutral globals may appear; a string flag must be a string when present;
  * an int flag must be a clean non-negative integer string when present. The argv
- * is `[verb, …positionals, --db, dbPath]` then string, int, then boolean flags in
- * declared order (so the `json` boolean, declared last, trails).
+ * is `[…verb, …positionals, --db, dbPath]` then string, int, then boolean flags
+ * in declared order (so the `json` boolean, declared last, trails). `verb` is
+ * the argv prefix — `['storage', 'stats']` for a subcommand-keyed spec.
  *
- * @param {string} verb @param {VerbSpec} spec @param {string[]} pos
+ * @param {string[]} verb @param {VerbSpec} spec @param {string[]} pos
  * @param {Record<string, unknown>} flags @param {string} dbPath
  * @returns {string[] | null}
  */
@@ -135,7 +147,7 @@ function validateFlags(verb, spec, pos, flags, dbPath) {
   }
 
   const positionals = max === 0 ? [] : spec.joinPositional ? [pos.join(' ')] : [...pos]
-  const args = [verb, ...positionals, '--db', dbPath]
+  const args = [...verb, ...positionals, '--db', dbPath]
   for (const k of stringFlags) {
     if (typeof flags[k] === 'string') args.push(`--${k}`, flags[k])
   }

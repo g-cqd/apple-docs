@@ -234,6 +234,91 @@ d('version parity: ad-cli == cli.js (commit contract + provenance)', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// `storage stats` / `storage check-orphans` (F1, read-only): gated on a SEEDED
+// corpus with INJECTED violations (an FK break + a semantic orphan), so the
+// fkViolations row serialization and both semantic counters are exercised
+// non-vacuously, plus one live-corpus case for real sizes. The write
+// subcommands (gc/compact/materialize/profile) must NOT flip.
+
+d('storage parity: ad-cli == cli.js (stats + check-orphans)', () => {
+  /** @type {string} */ let storeHome
+  /** @type {string} */ let storeDb
+  beforeAll(() => {
+    storeHome = mkdtempSync(join(tmpdir(), 'ad-storage-par-'))
+    const seed = Bun.spawnSync(['bun', join(ROOT, 'scripts/web-parity-seed.mjs'), storeHome], { stdout: 'pipe', stderr: 'pipe' })
+    if (seed.exitCode !== 0) throw new Error(`seed failed: ${dec.decode(seed.stderr)}`)
+    storeDb = join(storeHome, 'apple-docs.db')
+    // Inject one FK violation (pages.root_id → roots.id) and one semantic
+    // orphan (a documents.key with no matching page), FKs off for the write.
+    const { Database } = require('bun:sqlite')
+    const raw = new Database(storeDb)
+    raw.run('PRAGMA foreign_keys=OFF')
+    raw.run('UPDATE pages SET root_id = 99999 WHERE rowid = (SELECT MIN(rowid) FROM pages)')
+    raw.run("UPDATE documents SET key = 'ghost/orphan' WHERE rowid = (SELECT MIN(rowid) FROM documents)")
+    raw.close()
+  })
+  afterAll(() => {
+    if (storeHome) rmSync(storeHome, { recursive: true, force: true })
+  })
+
+  test('seeded corpus: stats human + json', () => {
+    expect(runNativeEnv(['storage', 'stats'], {}, storeDb)).toBe(runJsEnv(['storage', 'stats'], {}, storeHome))
+    const native = runNativeEnv(['storage', 'stats', '--json'], {}, storeDb)
+    const js = runJsEnv(['storage', 'stats', '--json'], {}, storeHome)
+    expect(JSON.parse(native)).toEqual(JSON.parse(js))
+    expect(native).toBe(js)
+  })
+
+  test('seeded corpus: check-orphans surfaces the injected violations identically', () => {
+    expect(runNativeEnv(['storage', 'check-orphans'], {}, storeDb)).toBe(runJsEnv(['storage', 'check-orphans'], {}, storeHome))
+    const native = runNativeEnv(['storage', 'check-orphans', '--json'], {}, storeDb)
+    const js = runJsEnv(['storage', 'check-orphans', '--json'], {}, storeHome)
+    const parsed = JSON.parse(native)
+    expect(parsed).toEqual(JSON.parse(js))
+    expect(native).toBe(js)
+    // Non-vacuous: the injections must actually show up.
+    expect(parsed.fkViolations.length).toBeGreaterThan(0)
+    expect(parsed.semanticOrphans.documentsMissingPage).toBeGreaterThan(0)
+  })
+
+  test(
+    'live corpus: stats + check-orphans json',
+    () => {
+      for (const sub of ['stats', 'check-orphans']) {
+        const args = ['storage', sub, '--json']
+        const native = runNative(args)
+        const js = runJs(args)
+        expect(JSON.parse(native)).toEqual(JSON.parse(js))
+        expect(native).toBe(js)
+      }
+    },
+    240_000, // four dir walks per stats invocation over the full corpus
+  )
+
+  test('flip: storage stats delegates; storage gc does NOT', async () => {
+    // End-to-end flip wiring against the SEEDED home (the live corpus would
+    // add two more full dir walks here for no extra signal).
+    const flip = Bun.spawnSync(['bun', join(ROOT, 'cli.js'), 'storage', 'stats', '--home', storeHome], {
+      env: { ...process.env, APPLE_DOCS_NATIVE: 'cli', APPLE_DOCS_NATIVE_CLI_BIN: /** @type {string} */ (adCli) },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    expect(dec.decode(flip.stdout)).toBe(runJsEnv(['storage', 'stats'], {}, storeHome))
+    // The write subcommand must fall back to Bun: its spec is deliberately
+    // absent, so nativeCliArgs maps it to null.
+    const { nativeCliArgs } = await import(join(ROOT, 'src/native/ad-cli.js'))
+    expect(nativeCliArgs({ command: 'storage', subcommand: 'gc', positional: [], flags: {}, dbPath: storeDb })).toBeNull()
+    expect(nativeCliArgs({ command: 'storage', subcommand: 'stats', positional: [], flags: { json: true }, dbPath: storeDb })).toEqual([
+      'storage',
+      'stats',
+      '--db',
+      storeDb,
+      '--json',
+    ])
+  })
+})
+
 /** @type {Array<[string, string[]]>} */
 const BROWSE_ERROR_CASES = [
   ['unknown framework', ['browse', '__nonexistent__']],

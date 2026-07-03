@@ -376,7 +376,7 @@ private func snapshotJSON(_ s: SnapshotInfo) -> JSONValue {
     .obj([("tag", optString(s.tag)), ("buildMacos", optString(s.buildMacos))])
 }
 
-private func dirStatsJSON(_ d: DirStats) -> JSONValue {
+func dirStatsJSON(_ d: DirStats) -> JSONValue {
     .obj([("size", .int(d.size)), ("files", .int(d.files))])
 }
 
@@ -610,7 +610,7 @@ private func jsKey(_ kind: String?) -> String { kind ?? "null" }
 
 /// Byte size of a file, or 0 when absent/unreadable (matches `existsSync ?
 /// statSync(p).size : 0`).
-private func fileSize(_ path: String) -> Int64 {
+func fileSize(_ path: String) -> Int64 {
     guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
         let size = attributes[.size] as? NSNumber
     else { return 0 }
@@ -630,7 +630,7 @@ private func fileSize(_ path: String) -> Int64 {
 /// Why not FileManager: its `enumerator(atPath:)` + `fileExists` +
 /// `attributesOfItem` cost 3+ syscalls and heavy ObjC bridging per entry — ~58 s
 /// over the 727k-file live corpus, vs ~25 s for this walk (`find`'s floor).
-private func dirStats(_ path: String) -> DirStats {
+func dirStats(_ path: String) -> DirStats {
     var totalSize: Int64 = 0
     var fileCount: Int64 = 0
     walkDirStats(path, totalSize: &totalSize, fileCount: &fileCount)
@@ -680,7 +680,7 @@ private func walkDirStats(_ path: String, totalSize: inout Int64, fileCount: ino
 
 /// `path.join(a, b)` for the data-dir subpaths. Uses NSString to match the host
 /// path semantics (single separator, no trailing slash issues).
-private func joinPath(_ base: String, _ component: String) -> String {
+func joinPath(_ base: String, _ component: String) -> String {
     (base as NSString).appendingPathComponent(component)
 }
 
