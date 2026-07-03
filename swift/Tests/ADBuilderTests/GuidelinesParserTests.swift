@@ -53,18 +53,31 @@ private let objectionableMarkdown =
 private let ugcMarkdown =
     "UGC apps 'must' include a method for filtering <objectionable> material.\n\n1. Filter it.\n1. Report it."
 
+// Expected projections hoisted to file scope as typed `let` so the two split assertions below
+// stay well under the 100ms type-check budget (array-literal inference is the budget cost here).
+private let expectedIds = ["safety", "1.1", "1.1.1", "1.2", "business"]
+private let expectedPaths = [
+    "app-store-review/safety", "app-store-review/1.1", "app-store-review/1.1.1",
+    "app-store-review/1.2", "app-store-review/business",
+]
+private let expectedRoles = ["collection", "article", "article", "article", "collection"]
+private let expectedRoleHeadings = ["Section", "Guideline", "Guideline", "Guideline", "Section"]
+private let expectedNotarization = [false, true, false, false, false]
+private let expectedSectionNumbers: [String?] = [nil, "1.1", "1.1.1", "1.2", nil]
+
 @Test func guidelinesParseStructureMatchesBunOracle() throws {
     let result = try GuidelinesParser.parse(guidelinesFixture)
     #expect(result.lastUpdated == "June 9, 2025")
-    #expect(result.sections.map(\.id) == ["safety", "1.1", "1.1.1", "1.2", "business"])
-    #expect(result.sections.map(\.path) == [
-        "app-store-review/safety", "app-store-review/1.1", "app-store-review/1.1.1",
-        "app-store-review/1.2", "app-store-review/business",
-    ])
-    #expect(result.sections.map(\.role) == ["collection", "article", "article", "article", "collection"])
-    #expect(result.sections.map(\.roleHeading) == ["Section", "Guideline", "Guideline", "Guideline", "Section"])
-    #expect(result.sections.map(\.notarization) == [false, true, false, false, false])
-    #expect(result.sections.map(\.sectionNumber) == [nil, "1.1", "1.1.1", "1.2", nil])
+    #expect(result.sections.map(\.id) == expectedIds)
+    #expect(result.sections.map(\.path) == expectedPaths)
+    #expect(result.sections.map(\.role) == expectedRoles)
+}
+
+@Test func guidelinesParseMetadataMatchesBunOracle() throws {
+    let result = try GuidelinesParser.parse(guidelinesFixture)
+    #expect(result.sections.map(\.roleHeading) == expectedRoleHeadings)
+    #expect(result.sections.map(\.notarization) == expectedNotarization)
+    #expect(result.sections.map(\.sectionNumber) == expectedSectionNumbers)
     // Hierarchy: 1.1 parents 1.1.1 (top h3 sections carry no number).
     #expect(result.sections[1].children == ["app-store-review/1.1.1"])
     #expect(result.sections[0].children.isEmpty)
