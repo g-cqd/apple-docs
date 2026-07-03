@@ -28,14 +28,17 @@ let strictSettings: [SwiftSetting] = [
 ]
 
 // Compile-time type-check timing warnings (flag slow expressions / function bodies). Unsafe flags, so
-// they live only on the internal (non-exported) test targets. Both budgets are 100ms: the slow bodies
-// (the renderer JSON literal, the RowCodec / archive suites) were fixed at the root — split into focused
-// tests, big literals hoisted to typed `let`s, chained `#expect`s moved to the kit's typed
-// `expectEqual`/`expectTrue` asserts — rather than relaxed, so a regression past 100ms is a hard error.
+// they live only on the internal (non-exported) test targets. The budget defaults to 100ms — the slow
+// bodies were fixed at the root (split into focused tests, big literals hoisted to typed `let`s, chained
+// `#expect`s moved to the kit's typed `expectEqual`/`expectTrue` asserts) rather than relaxed, so a
+// regression past the budget is a hard error. `AD_TYPECHECK_BUDGET_MS` raises it on shared CI runners
+// (calibrated 250) where WALL-CLOCK type-check time inflates under contention — the family knob; the
+// default keeps the strict 100ms locally.
+let typeCheckBudgetMS = Context.environment["AD_TYPECHECK_BUDGET_MS"].flatMap(Int.init) ?? 100
 let timingWarningFlags: [SwiftSetting] = [
     .unsafeFlags([
-        "-Xfrontend", "-warn-long-function-bodies=100",
-        "-Xfrontend", "-warn-long-expression-type-checking=100"
+        "-Xfrontend", "-warn-long-function-bodies=\(typeCheckBudgetMS)",
+        "-Xfrontend", "-warn-long-expression-type-checking=\(typeCheckBudgetMS)"
     ])
 ]
 
@@ -430,6 +433,16 @@ let package = Package(
             name: "ADWebBuild",
             dependencies: ["ADContent", "ADBase", .product(name: "ADJSONCore", package: "ADJSON")],
             swiftSettings: releaseCMO + strictSettings),
+        // ADOps — the native port of the `ops/` deployment tooling (ops/lib/*.js +
+        // ops/cmd/*.js). Renders launchd plists / Caddyfile / cloudflared yaml /
+        // sudoers / systemd units from ops/.env via an allowlisted `${VAR}`
+        // substitution byte-identical to the JS (the parity gate), loads + derives
+        // ops/.env, and wraps launchctl / subprocess / HTTP / GitHub-release with
+        // injected Process/clock/HTTP seams so the `ad-cli ops` verbs unit-test
+        // without side effects. Foundation-only; NOT in the ADCore dylib graph.
+        .target(
+            name: "ADOps",
+            swiftSettings: releaseCMO + strictSettings),
         // ad-cli — the native read CLI (P7: `frameworks` + `kinds` + `browse` + `read`).
         // Byte-for-byte output-compatible with the Bun cli.js read verbs. Reads via
         // ADStorage; ADContent supplies the String markdown renderer the `read` verb
@@ -451,6 +464,10 @@ let package = Package(
                 "ADArchive",
                 "ADContent",
                 "ADWebBuild",
+                // ADOps: the `ad-cli ops` verb group (render-all, install-daemons,
+                // deploy-update, pull-snapshot, watchdog, service, proxy, smoke-test,
+                // cf-purge, watch-sync) delegates to this port of the ops/ tooling.
+                "ADOps",
                 "ADSearchCascade",
                 "ADSemantic",
                 "ADEmbed",
@@ -568,7 +585,19 @@ let package = Package(
                 .product(name: "ADSQLModel", package: "ADSQL"),
             ], swiftSettings: testSettings),
         .testTarget(
-            name: "ADWebBuildTests", dependencies: ["ADWebBuild"], swiftSettings: testSettings)
+            name: "ADWebBuildTests", dependencies: ["ADWebBuild"], swiftSettings: testSettings),
+        // ADOpsTests — the byte-parity gate: render-all over the 11 committed
+        // `ops/*.tpl` files must emit plists / Caddyfile / cloudflared-yaml /
+        // sudoers BYTE-IDENTICAL to the JS oracle (`ops/cmd/render-all.js`), plus
+        // unit coverage for the allowlist substitution, OpsEnv derivation, the
+        // launchctl EEXIST→kickstart fallback, RunCmd's deadline, and the logger
+        // redaction. Fixtures (templates + JS-rendered expected outputs + the
+        // canonical .env) are bundled as resources.
+        .testTarget(
+            name: "ADOpsTests",
+            dependencies: ["ADOps"],
+            resources: [.copy("Fixtures")],
+            swiftSettings: testSettings)
     ]
 )
 
@@ -601,7 +630,10 @@ let isolationClosures: [String: Set<String>] = [
         "ADBuilder", "ADWrite", "ADEmbed", "ADArchive", "ADBuilderPipeline", "ADBuilderPipelineTests",
     ],
     "ADStorageTests": ["ADStorage", "ADBase", "ADArchive", "CSQLiteShim", "ADStorageTests"],
-    "ADArchiveTests": ["ADArchive", "ADArchiveTests"]
+    "ADArchiveTests": ["ADArchive", "ADArchiveTests"],
+    // ADOps depends only on Foundation, so its closure is just the two targets —
+    // isolates the ops parity gate from the churning ADServe/ADDB graph.
+    "ADOpsTests": ["ADOps", "ADOpsTests"]
 ]
 let isolateTarget: String? =
     Context.environment["AD_ISOLATE"]
