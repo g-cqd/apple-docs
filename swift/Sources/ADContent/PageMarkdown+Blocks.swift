@@ -1,5 +1,5 @@
 import ADBase
-import ADJSONCore
+public import ADJSONCore
 
 // Block-level markdown rendering for `PageMarkdown` (link sections, content-node dispatch, lists,
 // tables). Split from PageMarkdown.swift to keep the enum body within the size/complexity gate.
@@ -60,7 +60,10 @@ extension PageMarkdown {
     public struct Refs: Sendable {
         let index: [String: JSON]?
 
-        init(references: JSON?) {
+        /// Build a per-page reference index from a DocC `references` object node (or `nil`).
+        /// Public so out-of-module DocC consumers (the ADBuilder DocC-JSON normalizer) can
+        /// build the index ONCE per page and reuse it across the `ContentText` render calls.
+        public init(references: JSON?) {
             guard let references, references.isObject else {
                 index = nil
                 return
@@ -80,7 +83,9 @@ extension PageMarkdown {
             self.index = index
         }
 
-        func lookup(_ id: String) -> JSON? {
+        /// Resolve a reference id to its (object) node, or `nil`. Public so the ADBuilder DocC-JSON
+        /// normalizer can reuse the one per-page index for reference-key + title resolution.
+        public func lookup(_ id: String) -> JSON? {
             guard let found = index?[id], found.isObject else { return nil }
             return found
         }

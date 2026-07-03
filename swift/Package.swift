@@ -413,7 +413,16 @@ let package = Package(
                 .product(name: "Markdown", package: "swift-markdown"),
                 // ADHTMLCore: the HTML parser + extractor for the HTML-scrape adapters
                 // (guidelines / swift-org), replacing the JS regex parse-html.js.
-                .product(name: "ADHTMLCore", package: "ADHTML")
+                .product(name: "ADHTMLCore", package: "ADHTML"),
+                // ADContent: the DocC content-node → text primitive (`ContentText`, the
+                // native render-content.js) reused by the DocC-JSON normalizer, and the
+                // ADJSONCore JSON reader + `JSONValue` (JS `JSON.stringify` byte-parity)
+                // the normalizer's `contentJson` serialization builds on.
+                "ADContent",
+                .product(name: "ADJSONCore", package: "ADJSON"),
+                // OrderedCollections backs the DocC `contentJson` ordered-object builder
+                // (JS object key insertion order → byte-parity `JSON.stringify`).
+                .product(name: "OrderedCollections", package: "swift-collections")
             ],
             swiftSettings: releaseCMO + strictSettings),
         // ADBuilderPipeline — the persist boundary. Maps the adapter layer's dependency-free
@@ -577,7 +586,8 @@ let package = Package(
         // interim URLSession client. No live network — the transport behavior is proven
         // by the end-to-end crawl gate later.
         .testTarget(
-            name: "ADBuilderTests", dependencies: ["ADBuilder"], swiftSettings: testSettings),
+            name: "ADBuilderTests", dependencies: ["ADBuilder"],
+            resources: [.copy("Fixtures")], swiftSettings: testSettings),
         .testTarget(
             name: "ADBuilderPipelineTests",
             dependencies: [
@@ -625,9 +635,12 @@ let isolationClosures: [String: Set<String>] = [
     "ADContentTests": ["ADContent", "ADBase", "ADEmbed", "ADContentTests"],
     "ADWebBuildTests": ["ADWebBuild", "ADContent", "ADBase", "ADEmbed", "ADWebBuildTests"],
     "ADWriteTests": ["ADWrite", "ADEmbed", "ADArchive", "ADWriteTests"],
-    "ADBuilderTests": ["ADBuilder", "ADBuilderTests"],
+    // ADBuilder now pulls ADContent (→ ADBase, ADEmbed) for the DocC-JSON normalizer's
+    // `ContentText` text reuse, so those local targets join the isolation closure.
+    "ADBuilderTests": ["ADBuilder", "ADBuilderTests", "ADContent", "ADBase", "ADEmbed"],
     "ADBuilderPipelineTests": [
         "ADBuilder", "ADWrite", "ADEmbed", "ADArchive", "ADBuilderPipeline", "ADBuilderPipelineTests",
+        "ADContent", "ADBase",
     ],
     "ADStorageTests": ["ADStorage", "ADBase", "ADArchive", "CSQLiteShim", "ADStorageTests"],
     "ADArchiveTests": ["ADArchive", "ADArchiveTests"],
