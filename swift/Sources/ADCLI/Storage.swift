@@ -106,7 +106,7 @@ func storageStatsJSON(_ stats: StorageStatsEnvelope) -> JSONValue {
         ("html", dirStatsJSON(stats.html)),
         ("resources", dirStatsJSON(stats.resources)),
         ("tables", tableCountsJSON(stats.tables)),
-        ("total", .int(stats.total)),
+        ("total", .int(stats.total))
     ])
 }
 
@@ -117,7 +117,7 @@ private func tableCountsJSON(_ tables: StorageTableCounts) -> JSONValue {
         ("document_sections", .int(tables.documentSections)),
         ("pages", .int(tables.pages)),
         ("roots", .int(tables.roots)),
-        ("crawl_state", .int(tables.crawlState)),
+        ("crawl_state", .int(tables.crawlState))
     ])
 }
 
@@ -136,7 +136,7 @@ func formatStorageStats(_ stats: StorageStatsEnvelope) -> String {
         "  Resources:    \(formatBytes(stats.resources.size)) (\(stats.resources.files) files)",
         "  Total:        \(formatBytes(stats.total))",
         "",
-        bold("Table Row Counts"),
+        bold("Table Row Counts")
     ]
     lines.append("  documents: \(stats.tables.documents)")
     lines.append("  document_sections: \(stats.tables.documentSections)")
@@ -155,10 +155,13 @@ func checkOrphansJSON(_ connection: StorageConnection) -> JSONValue {
     let violations = connection.foreignKeyCheck().map(dynamicRowJSON)
     return .obj([
         ("fkViolations", .array(violations)),
-        ("semanticOrphans", .obj([
-            ("crawlStateMissingRoot", .int(connection.crawlStateOrphanCount())),
-            ("documentsMissingPage", .int(connection.documentsMissingPageCount())),
-        ])),
+        (
+            "semanticOrphans",
+            .obj([
+                ("crawlStateMissingRoot", .int(connection.crawlStateOrphanCount())),
+                ("documentsMissingPage", .int(connection.documentsMissingPageCount()))
+            ])
+        )
     ])
 }
 
@@ -167,19 +170,23 @@ func checkOrphansJSON(_ connection: StorageConnection) -> JSONValue {
 /// formatter (the `.javaScript` profiles), so a real round-trips exactly as
 /// `JSON.stringify` prints bun:sqlite's number.
 func dynamicRowJSON(_ row: DynamicRow) -> JSONValue {
-    .obj(row.cells.map { cell in
-        switch cell.value {
-        case .text(let text): return (cell.name, .string(text))
-        case .integer(let integer): return (cell.name, .int(integer))
-        case .real(let double): return (cell.name, .number(double))
-        case .null: return (cell.name, .null)
-        }
-    })
+    .obj(
+        row.cells.map { cell in
+            switch cell.value {
+                case .text(let text): return (cell.name, .string(text))
+                case .integer(let integer): return (cell.name, .int(integer))
+                case .real(let double): return (cell.name, .number(double))
+                case .null: return (cell.name, .null)
+            }
+        })
 }
 
 /// `JSON.stringify(value)` byte-for-byte — the compact form used by the
 /// maintenance `summary(label)` human formatter. Total for the same reason as
 /// `stringifyPretty` (non-finite → null, bounded nesting).
 func stringifyCompact(_ value: JSONValue) -> String {
-    String(decoding: try! value.encodedBytes(options: .javaScript), as: UTF8.self)
+    // Total for these projections (non-finite → null, shallow nesting), so the encode never actually
+    // throws; fall back to `null` rather than trapping if that invariant ever drifts.
+    guard let bytes = try? value.encodedBytes(options: .javaScript) else { return "null" }
+    return String(decoding: bytes, as: UTF8.self)
 }

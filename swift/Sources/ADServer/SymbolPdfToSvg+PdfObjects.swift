@@ -335,7 +335,9 @@ enum PdfObjects {
 
             var output: [UInt8] = []
             return body.withUnsafeBufferPointer { src -> [UInt8]? in
-                stream.src_ptr = src.baseAddress!
+                // An empty PDF stream has no base address; nothing to decompress → return empty.
+                guard let srcBase = src.baseAddress else { return output }
+                stream.src_ptr = srcBase
                 stream.src_size = src.count
                 let flags = Int32(COMPRESSION_STREAM_FINALIZE.rawValue)
                 while true {
