@@ -154,6 +154,10 @@ let package = Package(
         // 1:1 over ADStorage. Its own executable target (separate @main from
         // ad-server). swift-argument-parser only; no new external dep.
         .executable(name: "ad-cli", targets: ["ADCLI"]),
+        // ad-server — the native HTTP server (web + MCP) over the ADServe DSL. Apple-native only
+        // (the transport is Network.framework; NOT built on Linux). Declared as a product so the
+        // packaging scripts can `--product ad-server`.
+        .executable(name: "ad-server", targets: ["ad-server"]),
         // ADSemantic — native semantic candidate retrieval (Stage 1 of the
         // semantic-search tier): the bit-exact port of the JS `semanticCandidates`
         // chunk path. Leaf library over ADStorage + ADEmbed + ADFoundation's
