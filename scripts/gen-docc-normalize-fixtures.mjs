@@ -288,3 +288,63 @@ const cases = rawCases.map((c) => ({
 mkdirSync(dirname(OUT), { recursive: true })
 writeFileSync(OUT, JSON.stringify(cases))
 console.log(`wrote ${cases.length} cases → ${OUT}`)
+
+// ── swift-docc adapter oracle (the real JS adapter with its URL/key overrides) ────────────────
+
+const { SwiftDoccAdapter } = await import('../src/sources/swift-docc.js')
+const SWIFT_DOCC_OUT = join(
+  ROOT, 'swift', 'Tests', 'ADBuilderTests', 'Fixtures', 'SwiftDocc', 'cases.json')
+
+const swiftDoccPage = {
+  metadata: {
+    title: 'Actor-isolated call',
+    role: 'article',
+    roleHeading: 'Diagnostic',
+    modules: [{ name: 'SwiftCompiler' }],
+    platforms: [{ name: 'Swift', introducedAt: '6.0' }],
+  },
+  abstract: [{ type: 'text', text: 'An actor-isolated method was called from outside the actor.' }],
+  primaryContentSections: [
+    {
+      kind: 'content',
+      content: [
+        { type: 'heading', level: 2, text: 'Overview' },
+        {
+          type: 'paragraph',
+          inlineContent: [
+            { type: 'text', text: 'See ' },
+            { type: 'reference', identifier: 'doc://org.swift.compiler/documentation/Diagnostics/SendableConformance' },
+          ],
+        },
+      ],
+    },
+  ],
+  topicSections: [
+    { title: 'Related', identifiers: ['doc://org.swift.compiler/documentation/Diagnostics/SendableConformance'] },
+  ],
+  seeAlsoSections: [],
+  references: {
+    'doc://org.swift.compiler/documentation/Diagnostics/SendableConformance': {
+      url: '/documentation/diagnostics/sendableconformance',
+      title: 'Sendable conformance',
+      type: 'topic',
+      abstract: [{ type: 'text', text: 'A type does not conform to Sendable.' }],
+    },
+  },
+}
+
+const swiftDoccAdapter = new SwiftDoccAdapter()
+const swiftDoccKey = 'swift-compiler/documentation/diagnostics/actorisolatedcall'
+const swiftDoccCases = [
+  {
+    name: 'swift-compiler-diagnostic',
+    key: swiftDoccKey,
+    input: JSON.stringify(swiftDoccPage),
+    expected: swiftDoccAdapter.normalize(swiftDoccKey, swiftDoccPage),
+    expectedReferences: swiftDoccAdapter.extractReferences(swiftDoccKey, swiftDoccPage),
+  },
+]
+
+mkdirSync(dirname(SWIFT_DOCC_OUT), { recursive: true })
+writeFileSync(SWIFT_DOCC_OUT, JSON.stringify(swiftDoccCases))
+console.log(`wrote ${swiftDoccCases.length} swift-docc cases → ${SWIFT_DOCC_OUT}`)

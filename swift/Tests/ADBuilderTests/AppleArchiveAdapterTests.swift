@@ -109,16 +109,26 @@ private let pdfSourceMetadata =
 private let pdfExpectedContentText =
     "This archive guide is only available as a PDF.\n\nOpen the original document: https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf"
 
-@Test func archivePdfPageMatchesBunOracle() {
-    let page = AppleArchiveAdapter.pdfPage(
+private func makePdfPage() -> NormalizedPage {
+    AppleArchiveAdapter.pdfPage(
         key: pdfKey, url: pdfUrl, framework: "carbon", title: "A PDF Guide",
         sourceMetadata: pdfSourceMetadata)
+}
+
+// Split into document + section assertions (each a separate @Test) so neither function's
+// `#expect` macro-expansion crosses the 100ms type-check budget under parallel build load.
+@Test func archivePdfDocumentMatchesBunOracle() {
+    let page = makePdfPage()
     #expect(page.document.title == "A PDF Guide")
     #expect(page.document.kind == "archive-guide")
     #expect(page.document.role == "article")
     #expect(page.document.framework == "carbon")
     #expect(page.document.urlDepth == 5)
     #expect(page.document.abstractText == "Archived PDF guide. Open the original PDF URL for the full document.")
+}
+
+@Test func archivePdfSectionMatchesBunOracle() {
+    let page = makePdfPage()
     #expect(page.sections.count == 1)
     #expect(page.sections[0].sectionKind == "discussion")
     #expect(page.sections[0].heading == "Original PDF")
