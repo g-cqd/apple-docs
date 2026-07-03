@@ -46,13 +46,9 @@ describe.skipIf(!existsSync(AD_SERVER))('graceful lifecycle (SIGTERM â†’ drain â
     expect(res.status).toBe(200)
   })
 
-  test(
-    'SIGTERM drains and exits 0 (not signal-killed)',
-    async () => {
-      server.kill('SIGTERM')
-      const code = await Promise.race([server.exited, Bun.sleep(15000).then(() => 'timeout')])
-      expect(code).toBe(0)
-    },
-    20_000, // the race above is the real budget; bun's 5 s default undercuts it
-  )
+  test('SIGTERM drains and exits 0 (not signal-killed)', async () => {
+    server.kill('SIGTERM')
+    const code = await Promise.race([server.exited, Bun.sleep(15000).then(() => 'timeout')])
+    expect(code).toBe(0)
+  }, 20_000) // the race above is the real budget; bun's 5 s default undercuts it
 })
