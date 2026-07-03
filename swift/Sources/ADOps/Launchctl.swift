@@ -68,6 +68,14 @@ public struct Launchctl: Sendable {
             options: RunCmdOptions(deadlineMs: 15_000))
     }
 
+    /// `launchctl print system/<label>` capturing stdout (for `service status`).
+    /// Never throws on a non-zero exit — the caller reads exitCode + stdout.
+    public func printStatus(_ label: String) async throws -> RunCmdResult {
+        try await runner.runAllowFailure(
+            [sudoBin, "-n", launchctlBin, "print", "system/\(label)"],
+            options: RunCmdOptions(deadlineMs: 10_000))
+    }
+
     /// Stop a label if loaded; no-op (logged) when already absent.
     @discardableResult
     public func stopOne(_ label: String, logger: any OpsLogging) async throws -> StopOutcome {

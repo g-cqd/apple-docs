@@ -187,3 +187,31 @@ struct FakeGhFetcher: GhFetcher {
         responder(url)
     }
 }
+
+/// A scripted HTTP probe (no network). `ok` is computed as `status == expected`,
+/// matching the real probe.
+struct FakeProbe: HTTPProbing {
+    let responder: @Sendable (String, ProbeOptions) -> (status: Int?, body: String, outcome: ProbeOutcome)
+    func probe(_ url: String, options: ProbeOptions) async -> ProbeResult {
+        let scripted = responder(url, options)
+        return ProbeResult(
+            ok: scripted.status == options.expectedStatus, status: scripted.status,
+            elapsedMs: 1, body: scripted.body, outcome: scripted.outcome, url: url)
+    }
+}
+
+/// A probe that answers the same status/body/outcome for every request.
+func constantProbe(status: Int?, body: String = "", outcome: ProbeOutcome = .http) -> FakeProbe {
+    FakeProbe { _, _ in (status, body, outcome) }
+}
+
+/// A no-op async sleep (for verbs that inject their sleep seam).
+let instantSleep: @Sendable (Int) async -> Void = { _ in }
+
+/// A fully-derived LoadedEnv from the canonical fixture .env.
+func loadedFixtureEnv(opsDir: String = "/ops") -> LoadedEnv {
+    var vars = OpsEnv.parse(Fixtures.text("fixture.env"))
+    // applyDerived only throws on a bad channel; the fixture is valid.
+    try? OpsEnv.applyDerived(&vars)
+    return OpsEnv.finalize(vars: vars, opsDir: opsDir)
+}
