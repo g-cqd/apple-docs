@@ -50,6 +50,7 @@ ops/caddy/Caddyfile
 ops/cloudflared/config.yml
 ops/cloudflared/config-mcp.yml
 ops/systemd/*.service
+ops/state/
 
 # VitePress build artifacts. Source markdown is tracked; build output isn't.
 docs/.vitepress/dist/
