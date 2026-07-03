@@ -86,7 +86,11 @@ describe.skipIf(!enabled)('TLS 1.3 + multi-App (ad-server terminates HTTPS + loo
     }
   })
   afterAll(() => {
-    server?.kill()
+    // SIGKILL, not SIGTERM: teardown must reap unconditionally. A SIGTERM'd
+    // server that cannot bind (a squatted port) or whose drain hangs would
+    // outlive the run and squat the port for the NEXT run — the leak chain
+    // that serially poisoned these suites once ad-server started building.
+    server?.kill('SIGKILL')
     if (dir) rmSync(dir, { recursive: true, force: true })
   })
 
