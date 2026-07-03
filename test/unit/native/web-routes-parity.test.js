@@ -253,7 +253,11 @@ describe.skipIf(!existsSync(AD_SERVER))('web-routes parity (Swift ad-server == J
     }
   })
   afterAll(() => {
-    server?.kill()
+    // SIGKILL, not SIGTERM: teardown must reap unconditionally. A SIGTERM'd
+    // server that cannot bind (a squatted port) or whose drain hangs would
+    // outlive the run and squat the port for the NEXT run — the leak chain
+    // that serially poisoned these suites once ad-server started building.
+    server?.kill('SIGKILL')
     db?.close()
     if (dir) rmSync(dir, { recursive: true, force: true })
   })

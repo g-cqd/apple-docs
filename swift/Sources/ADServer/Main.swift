@@ -12,6 +12,7 @@ import ArgumentParser
 import Dispatch
 import Foundation
 import Logging
+import Synchronization
 
 @main
 struct ADServerCommand: AsyncParsableCommand {
@@ -113,8 +114,152 @@ struct ServeCommand: AsyncParsableCommand {
             loopCount: loopCount,
             readiness: readiness,
             transport: engineTransport)
-        try await server.run()
+        // SIGTERM/SIGINT shutdown ownership. ADServeCore's ServiceGroup traps
+        // these via SIG_IGN + kqueue (DispatchSourceSignal), but with the
+        // engine-swap ADServe + service-lifecycle 2.11.0 on the macOS 27 beta
+        // toolchain that path is BROKEN TWICE OVER, observed 2026-07-03:
+        //   1. Delivery is mask-distribution-dependent — Bun.spawn children
+        //      inherit SIGTERM blocked in every thread, so the signal stays
+        //      pending forever: kqueue sources and sigaction handlers never
+        //      see it and the release server survives SIGTERM indefinitely
+        //      (the exact failure the graceful-shutdown gate caught).
+        //   2. When delivery DOES occur, the group's drain has been observed
+        //      to hang after "draining (stop accepting)" — the ServiceGroup
+        //      never returns, so run() never reaches its teardown.
+        // Main therefore owns shutdown, defense-in-depth (see
+        // installShutdownOwner): a self-pipe sigaction handler for clear-mask
+        // environments, a sigwait watcher for blocked-mask ones, and a bounded
+        // hard-exit escalation for the drain hang. The library path still runs
+        // when it can; whoever finishes first wins, the result is identical:
+        // readiness off, teardown, exit 0.
+        let serveTask = Task { try await server.run() }
+        installShutdownOwner(readiness: readiness) { serveTask.cancel() }
+        try await serveTask.value
     }
+}
+
+/// The self-pipe write end for the shutdown handler. Written from an
+/// async-signal context, read by the watcher thread; set ONCE (before the
+/// sigaction install) and never mutated again, which is what makes the
+/// unsynchronized global safe.
+private nonisolated(unsafe) var shutdownPipeWriteEnd: Int32 = -1
+
+/// Installs the SIGTERM/SIGINT owner: a minimal C-convention handler writing
+/// to a self-pipe, a sigwait watcher for blocked-mask spawns, a re-armer that
+/// keeps the handler final over the library's later SIG_IGN, and the ordered
+/// teardown (not-ready → 1 s drain window → cancel → 1.5 s → hard exit 0).
+private func installShutdownOwner(
+    readiness: ServerReadiness, cancelServe: @escaping @Sendable () -> Void
+) {
+    var ends: [Int32] = [-1, -1]
+    guard pipe(&ends) == 0 else { return }  // no pipe ⇒ no owner; the library trap remains
+    shutdownPipeWriteEnd = ends[1]
+    let readEnd = ends[0]
+
+    installPipeHandler()
+
+    let shutdownStarted = Atomic<Bool>(false)
+    let orchestrate: @Sendable () -> Void = {
+        // Once-only: whichever waiter wins runs the teardown.
+        guard !shutdownStarted.exchange(true, ordering: .acquiringAndReleasing) else { return }
+        readiness.set(false)
+        Thread.sleep(forTimeInterval: 1)
+        cancelServe()
+        // Escalation: cancellation makes ServiceGroup gracefully shut its
+        // services down, and the rebased engine's drain has been observed to
+        // HANG there (drain log line, then nothing — the group never returns).
+        // If the cooperative teardown hasn't exited the process within the
+        // window, deliver the operator contract directly: the corpus is
+        // read-only and readiness has been off since the signal, so a hard
+        // exit 0 loses nothing but lingering sockets.
+        Thread.sleep(forTimeInterval: 1.5)
+        exit(0)
+    }
+
+    // Waiter 1 — CLEAR-MASK environments (launchd, a plain shell): the kernel
+    // delivers the process-directed signal to some unblocked thread, the
+    // sigaction handler fires there and writes the pipe; this thread reads it
+    // IMMEDIATELY (the re-armer below is separate so no arm delay adds to the
+    // shutdown latency).
+    Thread.detachNewThread {
+        Thread.current.name = "shutdown-owner-pipe"
+        var byte: UInt8 = 0
+        while read(readEnd, &byte, 1) == -1 && errno == EINTR { continue }
+        orchestrate()
+    }
+
+    // Re-armer — ServiceGroup's own trap (`signal(sig, SIG_IGN)` inside
+    // `HTTPServer.run()`) races the handler install and would REPLACE it with
+    // IGN; a clear-mask SIGTERM landing while IGN holds is discarded WITHOUT A
+    // TRACE (measured: kill right after readyz = swallowed forever; kill after
+    // a 3 s settle = clean 2.5 s exit). The library installs once, in the
+    // first moments of the serve task, so re-arm at 10 ms cadence through the
+    // startup phase (shrinking the IGN exposure to sub-tick slivers), then at
+    // a slow forever tick as insurance. A parked thread doing a few hundred
+    // sigactions costs nothing.
+    Thread.detachNewThread {
+        Thread.current.name = "shutdown-owner-rearm"
+        for _ in 0..<300 {
+            Thread.sleep(forTimeInterval: 0.01)
+            installPipeHandler()
+        }
+        while true {
+            Thread.sleep(forTimeInterval: 1)
+            installPipeHandler()
+        }
+    }
+
+    // Waiter 2 — BLOCKED-MASK environments (observed: Bun.spawn children
+    // inherit SIGTERM blocked in EVERY thread, so the signal stays pending
+    // forever and neither sigaction handlers nor kqueue sources ever see it).
+    // `sigwait` dequeues the pending process-directed signal synchronously,
+    // disposition and delivery notwithstanding.
+    Thread.detachNewThread {
+        Thread.current.name = "shutdown-owner-sigwait"
+        var set = sigset_t()
+        sigemptyset(&set)
+        sigaddset(&set, SIGTERM)
+        sigaddset(&set, SIGINT)
+        pthread_sigmask(SIG_BLOCK, &set, nil)
+        var which: Int32 = 0
+        while sigwait(&set, &which) != 0 { continue }
+        orchestrate()
+    }
+
+    // Waiter 3 — readiness-drop watcher. Covers the one remaining hole: a
+    // clear-mask signal landing in a re-arm gap (the library's SIG_IGN
+    // momentarily holding), where the library's OWN kqueue path starts the
+    // drain — and then hangs in the rebased engine with no orchestrator alive
+    // to finish the job. Readiness only ever drops during a shutdown (it is
+    // set true once, at bind), so true→false is a reliable "shutdown began
+    // somewhere" edge; the once-only orchestrate makes the overlap harmless.
+    Thread.detachNewThread {
+        Thread.current.name = "shutdown-owner-readiness"
+        var wasReady = false
+        while true {
+            Thread.sleep(forTimeInterval: 0.1)
+            let ready = readiness.isReady
+            if wasReady && !ready {
+                orchestrate()
+                return
+            }
+            wasReady = wasReady || ready
+        }
+    }
+}
+
+/// (Re)installs the async-signal-safe self-pipe handler for SIGTERM/SIGINT.
+private func installPipeHandler() {
+    var action = sigaction()
+    action.__sigaction_u.__sa_handler = { _ in
+        // Async-signal-safe: one write, no allocation, no locks.
+        var byte: UInt8 = 1
+        _ = write(shutdownPipeWriteEnd, &byte, 1)
+    }
+    sigemptyset(&action.sa_mask)
+    action.sa_flags = 0
+    sigaction(SIGTERM, &action, nil)
+    sigaction(SIGINT, &action, nil)
 }
 
 /// `ad-server mcp` — the stdio MCP server (one serial client; no HTTP).
