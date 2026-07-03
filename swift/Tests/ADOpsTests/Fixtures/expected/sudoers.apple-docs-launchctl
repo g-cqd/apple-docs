@@ -1,0 +1,44 @@
+# apple-docs reference deployment — passwordless launchctl drop-in.
+#
+# Install:
+#   ops/lib/render.sh ops/launchd/sudoers.apple-docs-launchctl.tpl \
+#                     ops/launchd/sudoers.apple-docs-launchctl
+#   sudo visudo -cf ops/launchd/sudoers.apple-docs-launchctl   # validate first
+#   sudo install -m 0440 -o root -g wheel \
+#        ops/launchd/sudoers.apple-docs-launchctl \
+#        /etc/sudoers.d/apple-docs-launchctl
+#
+# This grants everest the ability to bootstrap, bootout, kickstart, and
+# print only the apple-docs labels below — nothing else gains elevated privilege.
+
+Cmnd_Alias APPLE_DOCS_LAUNCHCTL = \
+    /bin/launchctl bootstrap system /Library/LaunchDaemons/mt.everest.apple-docs.proxy.plist, \
+    /bin/launchctl bootstrap system /Library/LaunchDaemons/mt.everest.apple-docs.web.plist, \
+    /bin/launchctl bootstrap system /Library/LaunchDaemons/mt.everest.apple-docs.mcp.plist, \
+    /bin/launchctl bootstrap system /Library/LaunchDaemons/mt.everest.apple-docs.watchdog.plist, \
+    /bin/launchctl bootstrap system /Library/LaunchDaemons/mt.everest.apple-docs.cloudflared.web.plist, \
+    /bin/launchctl bootstrap system /Library/LaunchDaemons/mt.everest.apple-docs.cloudflared.mcp.plist, \
+    /bin/launchctl bootout system/mt.everest.apple-docs.proxy, \
+    /bin/launchctl bootout system/mt.everest.apple-docs.web, \
+    /bin/launchctl bootout system/mt.everest.apple-docs.mcp, \
+    /bin/launchctl bootout system/mt.everest.apple-docs.watchdog, \
+    /bin/launchctl bootout system/mt.everest.apple-docs.cloudflared.web, \
+    /bin/launchctl bootout system/mt.everest.apple-docs.cloudflared.mcp, \
+    /bin/launchctl kickstart -k system/mt.everest.apple-docs.proxy, \
+    /bin/launchctl kickstart -k system/mt.everest.apple-docs.web, \
+    /bin/launchctl kickstart -k system/mt.everest.apple-docs.mcp, \
+    /bin/launchctl kickstart -k system/mt.everest.apple-docs.watchdog, \
+    /bin/launchctl kickstart -k system/mt.everest.apple-docs.cloudflared.web, \
+    /bin/launchctl kickstart -k system/mt.everest.apple-docs.cloudflared.mcp, \
+    /bin/launchctl print system/mt.everest.apple-docs.proxy, \
+    /bin/launchctl print system/mt.everest.apple-docs.web, \
+    /bin/launchctl print system/mt.everest.apple-docs.mcp, \
+    /bin/launchctl print system/mt.everest.apple-docs.watchdog, \
+    /bin/launchctl print system/mt.everest.apple-docs.cloudflared.web, \
+    /bin/launchctl print system/mt.everest.apple-docs.cloudflared.mcp, \
+    /bin/launchctl bootstrap system /Library/LaunchDaemons/mt.everest.apple-docs.autoroll.plist, \
+    /bin/launchctl bootout system/mt.everest.apple-docs.autoroll, \
+    /bin/launchctl kickstart -k system/mt.everest.apple-docs.autoroll, \
+    /bin/launchctl print system/mt.everest.apple-docs.autoroll
+
+everest ALL=(root) NOPASSWD: APPLE_DOCS_LAUNCHCTL

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${LABEL_TUNNEL_MCP}</string>
+    <key>UserName</key>
+    <string>${USER_NAME}</string>
+    <key>GroupName</key>
+    <string>staff</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${CLOUDFLARED_BIN}</string>
+        <string>tunnel</string>
+        <string>--no-autoupdate</string>
+        <string>--config</string>
+        <string>${OPS_DIR}/cloudflared/config-mcp.yml</string>
+        <string>run</string>
+        <string>${TUNNEL_NAME_MCP}</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>${OPS_DIR}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>${OPS_DIR}/logs/cloudflared-mcp.log</string>
+    <key>StandardErrorPath</key>
+    <string>${OPS_DIR}/logs/cloudflared-mcp.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/${USER_NAME}</string>
+        <key>TUNNEL_ORIGIN_CERT</key>
+        <string>/Users/${USER_NAME}/.cloudflared/cert.pem</string>
+    </dict>
+</dict>
+</plist>

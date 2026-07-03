@@ -1,0 +1,15 @@
+tunnel: apple-docs-mcp
+credentials-file: /Users/everest/.cloudflared/mcp-uuid.json
+
+# Same h2 origin treatment as the web tunnel: cloudflared talks h2c
+# to the local Caddy vhost, which then proxies HTTP/1.1 to the MCP
+# Bun backend (Bun.serve has no h2c listener as of 1.3.14).
+originRequest:
+  http2Origin: true
+  keepAliveConnections: 8
+  keepAliveTimeout: 90s
+
+ingress:
+ - hostname: apple-docs-mcp.example.com
+   service: http://127.0.0.1:3031
+ - service: http_status:404
