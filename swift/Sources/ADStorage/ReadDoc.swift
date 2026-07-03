@@ -6,6 +6,7 @@
 // metadata row plus the section bodies that feed the markdown renderer.
 
 import ADArchive
+import ADBase
 
 /// A normalized documents row as read_doc consumes it. Mirrors the fields
 /// `database.getPage` surfaces (key→path, framework_display→framework,
@@ -164,63 +165,14 @@ extension StorageConnection {
     }
 }
 
-/// normalizeIdentifier (apple/normalizer.js): canonicalize a pasted identifier
-/// — strip doc:// URIs, /documentation/ and documentation/ prefixes (keeping
-/// design/ and app-store-review/ namespaces), lowercase, trim trailing slashes
-/// and any #fragment — returning nil for non-page identifiers (full URLs, Swift
-/// operator segments, empty segments). read_doc retries getPage with this form
-/// when the raw path misses.
+/// normalizeIdentifier (apple/normalizer.js): the read-path spelling of the
+/// canonical `ADBase.Identifier.normalize` (WS-H unification — this used to be
+/// a hand-mirrored clone whose only drift was `.lowercased()` where the
+/// canonical applies the JS-exact toLowerCase). read_doc retries getPage with
+/// this form when the raw path misses; ad-server tools/resources and ad-cli
+/// read call it through this alias.
 public func normalizeIdentifier(_ raw: String?) -> String? {
-    guard var id = raw, !id.isEmpty else { return nil }
-
-    if id.hasPrefix("http://") || id.hasPrefix("https://") { return nil }
-
-    if let rest = matchDocUri(id, segmentPrefix: "documentation/") {
-        id = rest
-    } else if let rest = matchDocUri(id, segmentPrefix: "design/") {
-        id = "design/" + rest
-    }
-
-    if id.hasPrefix("/design/") || id.hasPrefix("/app-store-review/") {
-        id = String(id.dropFirst())
-    } else if id.hasPrefix("/documentation/") {
-        id = String(id.dropFirst("/documentation/".count))
-    }
-    if id.hasPrefix("documentation/") {
-        id = String(id.dropFirst("documentation/".count))
-    }
-
-    id = id.lowercased()
-
-    while id.hasSuffix("/") { id = String(id.dropLast()) }
-
-    if let hash = id.firstIndex(of: "#") { id = String(id[..<hash]) }
-
-    if id.isEmpty { return nil }
-
-    let operatorChars: Set<Character> = [".", "-", "+", "*", "/", "<", ">", "=", "!", "&", "|", "^", "~", "%", "_"]
-    for segment in id.split(separator: "/", omittingEmptySubsequences: false) {
-        if segment.isEmpty { return nil }
-        if segment.first == ".", let second = segment.dropFirst().first, operatorChars.contains(second) {
-            return nil
-        }
-    }
-    return id
-}
-
-/// `doc://<authority>/<prefix>(rest)` — for the design variant the prefix is
-/// kept by the caller. nil when the scheme/authority/prefix shape doesn't match.
-private func matchDocUri(_ id: String, segmentPrefix: String) -> String? {
-    guard id.hasPrefix("doc://") else { return nil }
-    let afterScheme = id.dropFirst("doc://".count)
-    guard let slash = afterScheme.firstIndex(of: "/") else { return nil }
-    let authority = afterScheme[..<slash]
-    guard !authority.isEmpty else { return nil }
-    let path = afterScheme[afterScheme.index(after: slash)...]
-    guard path.hasPrefix(segmentPrefix) else { return nil }
-    let rest = path.dropFirst(segmentPrefix.count)
-    guard !rest.isEmpty else { return nil }
-    return String(rest)
+    Identifier.normalize(raw)
 }
 
 /// Type-directed section content decode (mirrors Enrichment's codec): TEXT

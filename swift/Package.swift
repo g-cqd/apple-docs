@@ -227,7 +227,12 @@ let package = Package(
     targets: [
         .target(
             name: "ADBase",
-            dependencies: [.product(name: "ADFCore", package: "ADFoundation")],
+            dependencies: [
+                .product(name: "ADFCore", package: "ADFoundation"),
+                // ADFUnicode: the JS-exact toLowerCase (CaseFolding) behind the
+                // canonical Identifier.normalize (WS-H unification).
+                .product(name: "ADFUnicode", package: "ADFoundation")
+            ],
             swiftSettings: releaseCMO + strictSettings),
         .target(
             name: "ADSearch",

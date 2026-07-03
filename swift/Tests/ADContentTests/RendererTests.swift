@@ -2,6 +2,7 @@
 // by running the JS renderers on these exact inputs). The committed fixture corpus
 // + full-corpus A/B are the real parity gates; these pin the constructed edge cases.
 
+import ADBase
 import ADJSONCore
 import ADTestKit
 import Testing

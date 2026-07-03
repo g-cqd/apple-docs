@@ -1,4 +1,19 @@
+// normalizeIdentifier (apple/normalizer.js) — THE canonical identifier
+// normalization, shared by the render pipeline (ADContent link resolution),
+// the read path (ADStorage read_doc retry, ad-server tools/resources, ad-cli
+// read), and the static build. Extracted here (WS-H) from the two hand-mirrored
+// copies in ADContent and ADStorage so serve/build/CLI cannot drift.
+//
+// Foundation-free: stdlib + ADFUnicode's engine-derived case tables only.
+
+import ADFUnicode
+
 public enum Identifier {
+    /// Canonicalize a pasted identifier — strip doc:// URIs, /documentation/
+    /// and documentation/ prefixes (keeping design/ and app-store-review/
+    /// namespaces), JS-toLowerCase, trim trailing slashes and any #fragment —
+    /// returning nil for non-page identifiers (full URLs, Swift operator
+    /// segments, empty segments).
     public static func normalize(_ raw: String?) -> String? {
         guard var id = raw, !id.isEmpty else { return nil }
 
@@ -21,7 +36,7 @@ public enum Identifier {
             id = String(id.dropFirst("documentation/".count))
         }
 
-        id = JsString.lowercase(id)
+        id = jsLowercase(id)
 
         // /\/+$/ strip
         while id.hasSuffix("/") { id = String(id.dropLast()) }
@@ -56,5 +71,15 @@ public enum Identifier {
         let rest = path.dropFirst(segmentPrefix.count)
         guard !rest.isEmpty else { return nil }
         return String(rest)
+    }
+
+    /// JS toLowerCase (full Unicode incl. Final_Sigma) via the engine-derived
+    /// tables — the same lowering ADContent's JsString.lowercase applies.
+    /// Identifier-sized inputs only.
+    private static func jsLowercase(_ text: String) -> String {
+        let lowered = CaseFolding.lowercase(Array(text.unicodeScalars))
+        var out = ""
+        out.unicodeScalars.append(contentsOf: lowered)
+        return out
     }
 }
