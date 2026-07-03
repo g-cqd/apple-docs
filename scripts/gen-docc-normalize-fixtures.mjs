@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { normalize } from '../src/content/normalize.js'
 import { extractReferences } from '../src/apple/extractor.js'
+import { stableStringify } from '../src/storage/files.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = join(ROOT, 'swift', 'Tests', 'ADBuilderTests', 'Fixtures', 'DocCNormalize', 'cases.json')
@@ -276,14 +277,19 @@ const rawCases = [
   { name: 'empty', key: 'test/empty', sourceType: 'apple-docc', input: {} },
 ]
 
-const cases = rawCases.map((c) => ({
-  name: c.name,
-  key: c.key,
-  sourceType: c.sourceType,
-  input: JSON.stringify(c.input),
-  expected: normalize(c.input, c.key, c.sourceType),
-  expectedReferences: extractReferences(c.input),
-}))
+const cases = rawCases.map((c) => {
+  const normalized = normalize(c.input, c.key, c.sourceType)
+  return {
+    name: c.name,
+    key: c.key,
+    sourceType: c.sourceType,
+    input: JSON.stringify(c.input),
+    expected: normalized,
+    expectedReferences: extractReferences(c.input),
+    // The JS `content_hash` preimage — Swift `NormalizedPage.stableStringified()` must match byte-for-byte.
+    expectedStable: stableStringify(normalized),
+  }
+})
 
 mkdirSync(dirname(OUT), { recursive: true })
 writeFileSync(OUT, JSON.stringify(cases))

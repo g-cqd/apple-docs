@@ -18,6 +18,7 @@ struct DocCNormalizeParityTests {
         let input: String
         let expected: NormalizedPage
         let expectedReferences: [String]
+        let expectedStable: String
     }
 
     static let cases: [Case] = {
@@ -54,6 +55,12 @@ struct DocCNormalizeParityTests {
             if references != testCase.expectedReferences {
                 Issue.record(
                     "case \(testCase.name): extractReferences\n  actual=\(references)\n  expected=\(testCase.expectedReferences)")
+            }
+            // content_hash preimage: stableStringify(normalized) byte-parity.
+            let stable = page.stableStringified()
+            if stable != testCase.expectedStable {
+                Issue.record(
+                    "case \(testCase.name): stableStringified\n  actual=  \(stable)\n  expected=\(testCase.expectedStable)")
             }
         }
     }

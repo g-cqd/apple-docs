@@ -5,8 +5,9 @@
 //
 // v1 scope: sequential, always-fetch. Follow-ups (each independent): the incremental `check` →
 // crawl_state skip, bounded concurrency, and the post-crawl `IndexEmbeddings.run` pass. The
-// content/raw hashes are SHA-256 of the raw payload (the JS raw hash); the JS content_hash uses the
-// stable-stringified normalized doc, so cross-writer content-hash parity is a noted follow-up.
+// documents/pages `content_hash` is SHA-256 of the STABLE-STRINGIFIED normalized doc (matching the
+// JS persist.js content_hash — `sha256(stableStringify(normalized))`); the `raw_payload_hash` stays
+// SHA-256 of the raw payload bytes (JS hashes `stableStringify(json)`, a separate noted follow-up).
 
 public import ADBuilder
 public import ADDB
@@ -84,7 +85,7 @@ public struct CrawlDriver: Sendable {
                     do {
                         try CrawlPipeline.persist(
                             fetched.page, into: db, rootId: rootId, path: fetched.path,
-                            hashes: .init(content: fetched.hash, rawPayload: fetched.hash),
+                            hashes: .init(content: fetched.contentHash, rawPayload: fetched.rawHash),
                             etag: fetched.etag, lastModified: fetched.lastModified, now: now)
                         stats.persisted += 1
                     } catch {
@@ -119,7 +120,10 @@ public struct CrawlDriver: Sendable {
     private struct Fetched: Sendable {
         let page: NormalizedPage
         let path: String
-        let hash: String
+        /// `content_hash` = SHA-256 of the stable-stringified normalized doc (JS persist parity).
+        let contentHash: String
+        /// `raw_payload_hash` = SHA-256 of the raw upstream payload bytes.
+        let rawHash: String
         let etag: String?
         let lastModified: String?
     }
@@ -132,7 +136,8 @@ public struct CrawlDriver: Sendable {
             let page = try adapter.normalize(result.key, result.payload)
             return Fetched(
                 page: page, path: page.document.url ?? Self.crawlPath(forKey: key),
-                hash: Self.sha256Hex(Self.rawBytes(result.payload)),
+                contentHash: Self.sha256Hex(Array(page.stableStringified().utf8)),
+                rawHash: Self.sha256Hex(Self.rawBytes(result.payload)),
                 etag: result.etag, lastModified: result.lastModified)
         } catch {
             return nil
