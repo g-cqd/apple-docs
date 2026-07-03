@@ -80,9 +80,9 @@ enum ScopeGroups {
     /// en_US locale compare (flagged for real-corpus validation).
     static func localeCompare(_ a: String, _ b: String) -> Int {
         switch a.compare(b, options: [], range: nil, locale: Locale(identifier: "en_US")) {
-        case .orderedAscending: return -1
-        case .orderedDescending: return 1
-        case .orderedSame: return 0
+            case .orderedAscending: return -1
+            case .orderedDescending: return 1
+            case .orderedSame: return 0
         }
     }
 
@@ -112,7 +112,8 @@ enum ScopeGroups {
                 // parseInt: leading digits (an optional sign not needed here).
                 var digits = ""
                 for ch in part {
-                    if ch.isNumber, ch.isASCII { digits.append(ch) } else { break }
+                    guard ch.isNumber, ch.isASCII else { break }
+                    digits.append(ch)
                 }
                 return digits.isEmpty ? nil : Int(digits)
             }
@@ -121,7 +122,7 @@ enum ScopeGroups {
     static func compareNumericParts(_ a: String, _ b: String) -> Int {
         let pa = numericParts(a)
         let pb = numericParts(b)
-        for i in 0..<max(pa.count, pb.count) {
+        for i in 0 ..< max(pa.count, pb.count) {
             let d = (i < pa.count ? pa[i] : 0) - (i < pb.count ? pb[i] : 0)
             if d != 0 { return d }
         }
@@ -158,11 +159,12 @@ enum ScopeGroups {
             if byYear[year] == nil { years.append(year) }
             byYear[year, default: []].append(doc)
         }
-        var sections = years.sorted(by: >).map { year in
-            FrameworkPage.ScopeSection(
-                id: "year-\(year)", label: String(year), count: byYear[year]?.count ?? 0,
-                docs: sortedByTitle(byYear[year] ?? []))
-        }
+        var sections = years.sorted(by: >)
+            .map { year in
+                FrameworkPage.ScopeSection(
+                    id: "year-\(year)", label: String(year), count: byYear[year]?.count ?? 0,
+                    docs: sortedByTitle(byYear[year] ?? []))
+            }
         if !rest.isEmpty {
             sections.append(
                 FrameworkPage.ScopeSection(
@@ -199,7 +201,7 @@ enum ScopeGroups {
         ("deferred", "Deferred"),
         ("rejected", "Rejected"),
         ("withdrawn", "Withdrawn"),
-        ("expired", "Expired"),
+        ("expired", "Expired")
     ]
 
     static func swiftEvolutionStatusLabel(_ status: String?) -> String {
@@ -321,15 +323,16 @@ enum ScopeGroups {
             if bySection[section] == nil { sectionNumbers.append(section) }
             bySection[section, default: []].append(doc)
         }
-        var sections = sectionNumbers.sorted().map { section -> FrameworkPage.ScopeSection in
-            let sectionDocs = stableSorted(bySection[section] ?? []) {
-                compareNumericParts(lastSegment($0), lastSegment($1))
+        var sections = sectionNumbers.sorted()
+            .map { section -> FrameworkPage.ScopeSection in
+                let sectionDocs = stableSorted(bySection[section] ?? []) {
+                    compareNumericParts(lastSegment($0), lastSegment($1))
+                }
+                let header = sectionDocs.first { lastSegment($0) == String(section) }
+                return FrameworkPage.ScopeSection(
+                    id: "section-\(section)", label: header.map(docTitle) ?? "Section \(section)",
+                    count: sectionDocs.count, docs: sectionDocs)
             }
-            let header = sectionDocs.first { lastSegment($0) == String(section) }
-            return FrameworkPage.ScopeSection(
-                id: "section-\(section)", label: header.map(docTitle) ?? "Section \(section)",
-                count: sectionDocs.count, docs: sectionDocs)
-        }
         if !rest.isEmpty {
             sections.append(
                 FrameworkPage.ScopeSection(
@@ -365,19 +368,20 @@ enum ScopeGroups {
                 majors.append(major)
                 byMajor[major] = (product: product, entries: [])
             }
-            if byMajor[major]!.product.isEmpty && !product.isEmpty {
-                byMajor[major]!.product = product
+            if byMajor[major]?.product.isEmpty == true && !product.isEmpty {
+                byMajor[major]?.product = product
             }
-            byMajor[major]!.entries.append((doc: doc, version: version))
+            byMajor[major]?.entries.append((doc: doc, version: version))
         }
-        var sections = majors.sorted(by: >).map { major -> FrameworkPage.ScopeSection in
-            let group = byMajor[major]!
-            let ordered = stableSorted(group.entries) { compareNumericParts($1.version, $0.version) }
-            return FrameworkPage.ScopeSection(
-                id: "v-\(major)",
-                label: group.product.isEmpty ? "Version \(major)" : "\(group.product) \(major)",
-                count: group.entries.count, docs: ordered.map(\.doc))
-        }
+        var sections = majors.sorted(by: >)
+            .compactMap { major -> FrameworkPage.ScopeSection? in
+                guard let group = byMajor[major] else { return nil }
+                let ordered = stableSorted(group.entries) { compareNumericParts($1.version, $0.version) }
+                return FrameworkPage.ScopeSection(
+                    id: "v-\(major)",
+                    label: group.product.isEmpty ? "Version \(major)" : "\(group.product) \(major)",
+                    count: group.entries.count, docs: ordered.map(\.doc))
+            }
         if !rest.isEmpty {
             sections.append(
                 FrameworkPage.ScopeSection(
@@ -399,7 +403,7 @@ enum ScopeGroups {
                     if chars[j].isNumber && chars[j].isASCII {
                         version.append(chars[j])
                         j += 1
-                    } else if (chars[j] == "." || chars[j] == "_"), j + 1 < chars.count,
+                    } else if chars[j] == "." || chars[j] == "_", j + 1 < chars.count,
                         chars[j + 1].isNumber && chars[j + 1].isASCII
                     {
                         version.append(chars[j])
@@ -422,7 +426,7 @@ enum ScopeGroups {
         ("GuidedTour", "A Swift Tour"),
         ("LanguageGuide", "Language Guide"),
         ("ReferenceManual", "Language Reference"),
-        ("RevisionHistory", "Revision History"),
+        ("RevisionHistory", "Revision History")
     ]
 
     static func groupSwiftBookByPart(_ docs: [JSON]) -> [FrameworkPage.ScopeSection] {
@@ -494,10 +498,10 @@ enum ScopeGroups {
             let ta = technoteNumber(docTitle(a))
             let tb = technoteNumber(docTitle(b))
             switch (ta, tb) {
-            case let (na?, nb?): return nb - na
-            case (.some, nil): return -1
-            case (nil, .some): return 1
-            case (nil, nil): return byTitle(a, b)
+                case (let na?, let nb?): return nb - na
+                case (.some, nil): return -1
+                case (nil, .some): return 1
+                case (nil, nil): return byTitle(a, b)
             }
         }
         return [
@@ -527,7 +531,7 @@ enum ScopeGroups {
         "graphicsimaging": "Graphics & Imaging", "networkinginternet": "Networking & Internet",
         "hardwaredrivers": "Hardware & Drivers", "devicedrivers": "Device Drivers",
         "developertools": "Developer Tools", "userexperience": "User Experience",
-        "internetweb": "Internet & Web", "macosx": "Mac OS X",
+        "internetweb": "Internet & Web", "macosx": "Mac OS X"
     ]
 
     static func groupArchiveByCategory(_ docs: [JSON]) -> [FrameworkPage.ScopeSection] {
@@ -586,9 +590,9 @@ enum ScopeGroups {
                 sections[group.label] = (order: group.order, header: nil, docs: [])
             }
             if own != nil {
-                sections[group.label]!.header = doc
+                sections[group.label]?.header = doc
             } else {
-                sections[group.label]!.docs.append(doc)
+                sections[group.label]?.docs.append(doc)
             }
         }
         let ordered = stableSorted(labels) { a, b in
@@ -596,8 +600,8 @@ enum ScopeGroups {
             if d != 0 { return d }
             return localeCompare(a, b)
         }
-        var out = ordered.map { label -> FrameworkPage.ScopeSection in
-            let section = sections[label]!
+        var out = ordered.compactMap { label -> FrameworkPage.ScopeSection? in
+            guard let section = sections[label] else { return nil }
             var items = sortedByTitle(section.docs)
             if let header = section.header { items.insert(header, at: 0) }
             return FrameworkPage.ScopeSection(
@@ -653,9 +657,10 @@ enum ScopeGroups {
             let sections = groupPackagesByOwner(documents)
             return FrameworkPage.ScopeResult(
                 scope: "packages", sections: sections,
-                nav: sections.filter { ($0.count ?? 0) >= 20 }.map {
-                    FrameworkPage.ScopeNavItem(href: "#\($0.id)", label: $0.label, count: $0.count ?? 0)
-                })
+                nav: sections.filter { ($0.count ?? 0) >= 20 }
+                    .map {
+                        FrameworkPage.ScopeNavItem(href: "#\($0.id)", label: $0.label, count: $0.count ?? 0)
+                    })
         }
         if slug == "technotes" {
             return FrameworkPage.ScopeResult(

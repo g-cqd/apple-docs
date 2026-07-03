@@ -27,7 +27,10 @@ extension JSONValue {
 /// verb projections nest only a few levels, so the encode is total — it cannot
 /// throw the depth-limit or non-finite errors `encodedBytes` reserves.
 func stringifyPretty(_ value: JSONValue) -> String {
-    String(decoding: try! value.encodedBytes(options: .javaScript(space: 2)), as: UTF8.self)
+    // Total for these projections (non-finite → null, shallow nesting), so the encode never actually
+    // throws; fall back to `null` rather than trapping if that invariant ever drifts.
+    guard let bytes = try? value.encodedBytes(options: .javaScript(space: 2)) else { return "null" }
+    return String(decoding: bytes, as: UTF8.self)
 }
 
 /// Parse a complete JSON document into a `JSONValue`, or nil on malformed / trailing
