@@ -39,44 +39,11 @@ public struct EntryPointRegistry: Sendable {
     /// `getAllEntryPoints()` (read-only view).
     public var all: [EntryPoint] { entries }
 
-    /// The registry the native crawl uses — every natively-ported adapter's
-    /// entry points PLUS the swift-docc archives' entry points as a DATA-ONLY
-    /// contribution (`SwiftDoccEntryPoints`): that adapter itself still crawls
-    /// via Bun, but swift-org pages must emit the same "Related Documentation"
-    /// cross-links either way. ORDER pinned against the JS oracle: swift-docc's
-    /// module evaluates BEFORE swift-book's (an import chain reaches it first),
-    /// so its three entries register first — verified by running
-    /// `applyArchiveCrossLinks` under the real registry.js. Replace the data
-    /// stub when the swift-docc adapter is ported.
+    /// The registry the native crawl uses — the swift-docc archives' entry points then swift-book's.
+    /// swift-org pages emit the same "Related Documentation" cross-links. ORDER pinned against the JS
+    /// oracle: swift-docc's module evaluates BEFORE swift-book's (an import chain reaches it first),
+    /// so its three entries register first — verified against the real registry.js. Sourced from the
+    /// now-native `SwiftDoccAdapter.entryPoints` (was a data-only stub before the adapter was ported).
     public static let native = EntryPointRegistry(
-        entries: SwiftDoccEntryPoints.entries + SwiftBookAdapter.entryPoints)
-}
-
-/// The `ARCHIVES` table's entry points from src/sources/swift-docc.js, verbatim
-/// (slug order = the JS object literal order). Data only — the swift-docc
-/// ADAPTER is not yet ported.
-public enum SwiftDoccEntryPoints {
-    public static let entries: [EntryPoint] = [
-        EntryPoint(
-            slug: "swift-compiler",
-            key: "swift-compiler/documentation/diagnostics",
-            title: "Swift Compiler Diagnostics",
-            summary:
-                "Reference for warnings and errors emitted by the Swift compiler, including diagnostic groups and upcoming language features.",
-            parents: ["swift-org/documentation", "swift-org/documentation/swift-compiler"]),
-        EntryPoint(
-            slug: "swift-package-manager",
-            key: "swift-package-manager/documentation/packagemanagerdocs",
-            title: "Swift Package Manager",
-            summary:
-                "Full reference for the Swift Package Manager: package manifests, dependencies, build settings, and plug-in APIs.",
-            parents: ["swift-org/documentation", "swift-org/getting-started"]),
-        EntryPoint(
-            slug: "swift-migration-guide",
-            key: "swift-migration-guide/documentation/migrationguide",
-            title: "Swift 6 Concurrency Migration Guide",
-            summary:
-                "How to migrate existing Swift code to the Swift 6 concurrency model, including data-race safety and incremental adoption.",
-            parents: ["swift-org/documentation"]),
-    ]
+        entries: SwiftDoccAdapter.entryPoints + SwiftBookAdapter.entryPoints)
 }
