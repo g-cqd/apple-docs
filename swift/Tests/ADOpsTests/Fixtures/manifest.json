@@ -1,0 +1,83 @@
+[
+  {
+    "template": "Caddyfile.tpl",
+    "output": "Caddyfile",
+    "unresolved": [],
+    "ignored": [],
+    "bytes": 7469
+  },
+  {
+    "template": "config-mcp.yml.tpl",
+    "output": "config-mcp.yml",
+    "unresolved": [],
+    "ignored": [],
+    "bytes": 476
+  },
+  {
+    "template": "config.yml.tpl",
+    "output": "config.yml",
+    "unresolved": [],
+    "ignored": [],
+    "bytes": 651
+  },
+  {
+    "template": "apple-docs.autoroll.plist.tpl",
+    "output": "mt.everest.apple-docs.autoroll.plist",
+    "unresolved": [],
+    "ignored": [],
+    "bytes": 2106
+  },
+  {
+    "template": "apple-docs.mcp.plist.tpl",
+    "output": "mt.everest.apple-docs.mcp.plist",
+    "unresolved": [
+      "APPLE_DOCS_NATIVE"
+    ],
+    "ignored": [],
+    "bytes": 3996
+  },
+  {
+    "template": "apple-docs.proxy.plist.tpl",
+    "output": "mt.everest.apple-docs.proxy.plist",
+    "unresolved": [],
+    "ignored": [],
+    "bytes": 1578
+  },
+  {
+    "template": "apple-docs.watchdog.plist.tpl",
+    "output": "mt.everest.apple-docs.watchdog.plist",
+    "unresolved": [],
+    "ignored": [],
+    "bytes": 1629
+  },
+  {
+    "template": "apple-docs.web.plist.tpl",
+    "output": "mt.everest.apple-docs.web.plist",
+    "unresolved": [
+      "APPLE_DOCS_NATIVE"
+    ],
+    "ignored": [],
+    "bytes": 2337
+  },
+  {
+    "template": "cloudflared.apple-docs-mcp.plist.tpl",
+    "output": "mt.everest.apple-docs.cloudflared.mcp.plist",
+    "unresolved": [],
+    "ignored": [],
+    "bytes": 1613
+  },
+  {
+    "template": "cloudflared.apple-docs.plist.tpl",
+    "output": "mt.everest.apple-docs.cloudflared.web.plist",
+    "unresolved": [],
+    "ignored": [],
+    "bytes": 1605
+  },
+  {
+    "template": "sudoers.apple-docs-launchctl.tpl",
+    "output": "sudoers.apple-docs-launchctl",
+    "unresolved": [],
+    "ignored": [],
+    "bytes": 2825
+  }
+]
