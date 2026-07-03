@@ -99,14 +99,20 @@ private let siblingMetadataOracle =
     #expect(AppleArchiveAdapter.archiveFormat("a.v2/b") == "html")
 }
 
+// Literals hoisted to file scope as typed `let` so the assertion below stays under the 100ms
+// type-check budget (big string-literal arguments are the budget cost here).
+private let pdfKey = "apple-archive/documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf"
+private let pdfUrl =
+    "https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf"
+private let pdfSourceMetadata =
+    "{\"resourceType\":\"Guides\",\"platform\":\"Carbon\",\"archivePath\":\"documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf\",\"format\":\"pdf\"}"
+private let pdfExpectedContentText =
+    "This archive guide is only available as a PDF.\n\nOpen the original document: https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf"
+
 @Test func archivePdfPageMatchesBunOracle() {
     let page = AppleArchiveAdapter.pdfPage(
-        key: "apple-archive/documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf",
-        url: "https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf",
-        framework: "carbon", title: "A PDF Guide",
-        sourceMetadata:
-            "{\"resourceType\":\"Guides\",\"platform\":\"Carbon\",\"archivePath\":\"documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf\",\"format\":\"pdf\"}"
-    )
+        key: pdfKey, url: pdfUrl, framework: "carbon", title: "A PDF Guide",
+        sourceMetadata: pdfSourceMetadata)
     #expect(page.document.title == "A PDF Guide")
     #expect(page.document.kind == "archive-guide")
     #expect(page.document.role == "article")
@@ -116,9 +122,7 @@ private let siblingMetadataOracle =
     #expect(page.sections.count == 1)
     #expect(page.sections[0].sectionKind == "discussion")
     #expect(page.sections[0].heading == "Original PDF")
-    #expect(
-        page.sections[0].contentText
-            == "This archive guide is only available as a PDF.\n\nOpen the original document: https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf")
+    #expect(page.sections[0].contentText == pdfExpectedContentText)
 }
 
 @Test func archiveDiscoverOverStubClient() async throws {

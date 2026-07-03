@@ -17,6 +17,7 @@ struct DocCNormalizeParityTests {
         let sourceType: String
         let input: String
         let expected: NormalizedPage
+        let expectedReferences: [String]
     }
 
     static let cases: [Case] = {
@@ -48,6 +49,11 @@ struct DocCNormalizeParityTests {
             }
             if let diff = Self.difference(page, testCase.expected) {
                 Issue.record("case \(testCase.name): \(diff)")
+            }
+            let references = DocC.extractReferences(jsonBytes: bytes)
+            if references != testCase.expectedReferences {
+                Issue.record(
+                    "case \(testCase.name): extractReferences\n  actual=\(references)\n  expected=\(testCase.expectedReferences)")
             }
         }
     }
