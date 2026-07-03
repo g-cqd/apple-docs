@@ -282,19 +282,15 @@ d('storage parity: ad-cli == cli.js (stats + check-orphans)', () => {
     expect(parsed.semanticOrphans.documentsMissingPage).toBeGreaterThan(0)
   })
 
-  test(
-    'live corpus: stats + check-orphans json',
-    () => {
-      for (const sub of ['stats', 'check-orphans']) {
-        const args = ['storage', sub, '--json']
-        const native = runNative(args)
-        const js = runJs(args)
-        expect(JSON.parse(native)).toEqual(JSON.parse(js))
-        expect(native).toBe(js)
-      }
-    },
-    240_000, // four dir walks per stats invocation over the full corpus
-  )
+  test('live corpus: stats + check-orphans json', () => {
+    for (const sub of ['stats', 'check-orphans']) {
+      const args = ['storage', sub, '--json']
+      const native = runNative(args)
+      const js = runJs(args)
+      expect(JSON.parse(native)).toEqual(JSON.parse(js))
+      expect(native).toBe(js)
+    }
+  }, 240_000) // four dir walks per stats invocation over the full corpus
 
   test('flip: storage stats delegates; storage gc does NOT', async () => {
     // End-to-end flip wiring against the SEEDED home (the live corpus would

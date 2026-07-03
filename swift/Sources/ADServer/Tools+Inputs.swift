@@ -149,4 +149,3 @@ struct BrowseInput: Decodable {
     /// Max pages (default 100, cap 200).
     @SchemaNumber(1 ... 200) var limit: Int?
 }
-

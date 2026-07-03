@@ -199,7 +199,7 @@ private func installShutdownOwner(
     // sigactions costs nothing.
     Thread.detachNewThread {
         Thread.current.name = "shutdown-owner-rearm"
-        for _ in 0..<300 {
+        for _ in 0 ..< 300 {
             Thread.sleep(forTimeInterval: 0.01)
             installPipeHandler()
         }

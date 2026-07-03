@@ -13,6 +13,14 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # The per-function type-check budget (swift/Package.swift, default 100 ms) is a HARD compile gate
+  # that flakes on shared CI runners under load — real code compiles fine locally but a contended
+  # runner tips borderline functions (e.g. ADOpsTests helpers at ~120–150 ms) past 100 ms. Raise it
+  # to 250 ms in CI so a genuine regression still trips while runner contention does not. The knob is
+  # read by the manifest; see BUG-REPORTS C10.
+  AD_TYPECHECK_BUDGET_MS: "250"
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -108,6 +116,10 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      # No hosted macOS image satisfies the 6.4 pin (macos-26 tops out at Swift 6.3.x), so install the
+      # pinned swift.org 6.4 dev snapshot — otherwise the manifest's 6.4 tools-version is rejected.
+      - name: Install Swift 6.4 dev toolchain (macOS, pinned swift.org snapshot)
+        uses: g-cqd/ADBuildTools/.github/actions/setup-swift@v1
       - name: Ensure libzstd (archive module runtime dep)
         run: brew list zstd >/dev/null 2>&1 || brew install zstd
       - name: swift test (--sanitize=${{ matrix.sanitizer }})
