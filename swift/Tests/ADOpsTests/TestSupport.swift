@@ -139,3 +139,51 @@ final class MemoryFileSystem: OpsFileSystem, @unchecked Sendable {
         dirs.insert(parentPath(path))
     }
 }
+
+/// A scripted CommandRunner that records every invocation. `run` throws a
+/// `.exit` RunCmdError when the scripted result is non-zero, so the protocol's
+/// default `runAllowFailure` returns it as a value (mirrors the real runner).
+final class FakeCommandRunner: CommandRunner, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _calls: [[String]] = []
+    private let responder: @Sendable ([String]) throws -> RunCmdResult
+
+    init(_ responder: @escaping @Sendable ([String]) throws -> RunCmdResult) {
+        self.responder = responder
+    }
+
+    var calls: [[String]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _calls
+    }
+
+    func run(_ args: [String], options: RunCmdOptions) async throws -> RunCmdResult {
+        lock.withLock { _calls.append(args) }
+        let result = try responder(args)
+        if result.exitCode != 0 {
+            throw RunCmdError(
+                message: "exit \(result.exitCode)", kind: .exit, args: args,
+                exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr)
+        }
+        return result
+    }
+}
+
+/// A zero-exit result with the given streams.
+func okResult(stdout: String = "", stderr: String = "") -> RunCmdResult {
+    RunCmdResult(stdout: stdout, stderr: stderr, exitCode: 0, elapsedMs: 1)
+}
+
+/// A non-zero-exit result.
+func failResult(_ code: Int32, stderr: String = "") -> RunCmdResult {
+    RunCmdResult(stdout: "", stderr: stderr, exitCode: code, elapsedMs: 1)
+}
+
+/// A scripted GitHub fetcher.
+struct FakeGhFetcher: GhFetcher {
+    let responder: @Sendable (String) -> GhResponse
+    func get(_ url: String, headers: [String: String]) async throws -> GhResponse {
+        responder(url)
+    }
+}
