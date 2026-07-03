@@ -39,6 +39,23 @@ public protocol GhFetcher: Sendable {
     func get(_ url: String, headers: [String: String]) async throws -> GhResponse
 }
 
+/// The live fetcher over `URLSession` (used only on the production host).
+public struct URLSessionGhFetcher: GhFetcher {
+    private let session: URLSession
+    public init() { session = URLSession(configuration: .ephemeral) }
+
+    public func get(_ url: String, headers: [String: String]) async throws -> GhResponse {
+        guard let requestURL = URL(string: url) else {
+            throw GhReleaseError(message: "invalid url \(url)", code: "invalid-url")
+        }
+        var request = URLRequest(url: requestURL)
+        for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        return GhResponse(status: status, body: [UInt8](data))
+    }
+}
+
 /// Structured GitHub-release failures with the JS `code`s preserved.
 public struct GhReleaseError: Error, Sendable, Equatable {
     public let message: String

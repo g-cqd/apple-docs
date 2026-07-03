@@ -23,7 +23,11 @@ struct OpsCommand: AsyncParsableCommand {
             OpsProxyCommand.self,
             OpsCfPurgeCommand.self,
             OpsSmokeTestCommand.self,
-            OpsWatchSyncCommand.self
+            OpsWatchSyncCommand.self,
+            OpsWatchdogCommand.self,
+            OpsInstallDaemonsCommand.self,
+            OpsPullSnapshotCommand.self,
+            OpsDeployUpdateCommand.self
         ])
 }
 
@@ -269,5 +273,146 @@ struct OpsWatchSyncCommand: AsyncParsableCommand {
                     logger: OpsLogger())
             })
         exitOps(await WatchSync.run(env: loaded, syncPid: pid, deps: deps, logger: logger))
+    }
+}
+
+// MARK: - watchdog
+
+/// `ad-cli ops watchdog` — the long-running dead-service guardrail (ports
+/// ops/cmd/watchdog.js). No flags; configured via WATCHDOG_* env.
+struct OpsWatchdogCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "watchdog", abstract: "Long-running daemon that restarts dead/wedged services.")
+
+    @OptionGroup var env: OpsEnvOptions
+
+    func run() async throws {
+        let loaded: LoadedEnv
+        do { loaded = try env.load() } catch { exitOps(reportEnvError(error)) }
+        let logger = OpsRuntime.logger(logFile: "\(loaded.opsDir)/logs/watchdog.log")
+        let runner = OpsRuntime.commandRunner
+        let deps = WatchdogDeps(
+            fs: OpsRuntime.fileSystem,
+            probeReadyz: WatchdogDeps.systemProbeReadyz,
+            psLookup: WatchdogDeps.systemPsLookup(runner),
+            kickstart: WatchdogDeps.systemKickstart(runner))
+        exitOps(
+            await Watchdog.run(
+                env: loaded, processEnv: ProcessInfo.processInfo.environment, deps: deps,
+                logger: logger))
+    }
+}
+
+// MARK: - prepare-only host verbs
+
+/// The seams for a prepare-only verb: live (`--execute`) or a dry-run tracer.
+private struct HostSeams {
+    let runner: any CommandRunner
+    let launchctl: Launchctl
+    let fetcher: any GhFetcher
+    let http: any HTTPProbing
+    let fs: PosixFileSystem
+    let isRoot: @Sendable () -> Bool
+}
+
+/// Build the host seams: live when `execute`, otherwise a non-executing tracer
+/// (DryRunCommandRunner + DryRunGhFetcher + DryRunProbe) that logs each
+/// privileged/network step WITHOUT running it.
+private func hostSeams(execute: Bool, logger: OpsLogger) -> HostSeams {
+    if execute {
+        let runner = ProcessCommandRunner()
+        return HostSeams(
+            runner: runner, launchctl: Launchctl(runner: runner), fetcher: URLSessionGhFetcher(),
+            http: URLSessionProbe(), fs: PosixFileSystem(), isRoot: { getuid() == 0 })
+    }
+    let runner = DryRunCommandRunner(logger: logger)
+    return HostSeams(
+        runner: runner, launchctl: Launchctl(runner: runner),
+        fetcher: DryRunGhFetcher(logger: logger), http: DryRunProbe(), fs: PosixFileSystem(),
+        isRoot: { true })
+}
+
+/// `ad-cli ops install-daemons [--execute]` — render + install the launchd plists
+/// + sudoers drop-in (ports ops/cmd/install-daemons.js). PREPARE-ONLY: dry-run
+/// by default (traces privileged steps); `--execute` runs live (root, prod host).
+struct OpsInstallDaemonsCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "install-daemons",
+        abstract: "Render + install launchd plists and the sudoers drop-in (dry-run unless --execute).")
+
+    @OptionGroup var env: OpsEnvOptions
+
+    @Flag(name: .customLong("execute"), help: "Run the privileged steps live (production host only).")
+    var execute = false
+
+    func run() async throws {
+        let loaded: LoadedEnv
+        do { loaded = try env.load() } catch { exitOps(reportEnvError(error)) }
+        let logger = OpsRuntime.logger()
+        let seams = hostSeams(execute: execute, logger: logger)
+        let deps = InstallDaemons.Deps(
+            fs: seams.fs, runner: seams.runner, launchctl: seams.launchctl, http: seams.http,
+            isRoot: seams.isRoot)
+        exitOps(await InstallDaemons.run(env: loaded, deps: deps, logger: logger))
+    }
+}
+
+/// `ad-cli ops pull-snapshot [--force] [--execute]` — apply the latest GH snapshot
+/// (ports ops/cmd/pull-snapshot.js). PREPARE-ONLY: dry-run by default.
+struct OpsPullSnapshotCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "pull-snapshot",
+        abstract: "Apply the latest GH release snapshot (dry-run unless --execute).")
+
+    @OptionGroup var env: OpsEnvOptions
+
+    @Flag(name: [.customShort("f"), .long], help: "Reapply even when already at the latest tag.")
+    var force = false
+
+    @Flag(name: .customLong("execute"), help: "Run the privileged/network steps live (production host only).")
+    var execute = false
+
+    func run() async throws {
+        let loaded: LoadedEnv
+        do { loaded = try env.load() } catch { exitOps(reportEnvError(error)) }
+        let logger = OpsRuntime.logger()
+        let seams = hostSeams(execute: execute, logger: logger)
+        let deps = PullSnapshot.Deps(
+            fetcher: seams.fetcher, runner: seams.runner, launchctl: seams.launchctl,
+            http: seams.http, fs: seams.fs)
+        exitOps(
+            await PullSnapshot.run(
+                env: loaded, processEnv: ProcessInfo.processInfo.environment, force: force,
+                deps: deps, logger: logger))
+    }
+}
+
+/// `ad-cli ops deploy-update [--full] [--execute]` — git pull → render → refresh →
+/// cutover (ports ops/cmd/deploy-update.js). PREPARE-ONLY: dry-run by default.
+struct OpsDeployUpdateCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "deploy-update",
+        abstract: "git pull → render → reload → corpus refresh → restart (dry-run unless --execute).")
+
+    @OptionGroup var env: OpsEnvOptions
+
+    @Flag(name: .long, help: "Force a full static rebuild instead of incremental.")
+    var full = false
+
+    @Flag(name: .customLong("execute"), help: "Run the privileged/network steps live (production host only).")
+    var execute = false
+
+    func run() async throws {
+        let loaded: LoadedEnv
+        do { loaded = try env.load() } catch { exitOps(reportEnvError(error)) }
+        let logger = OpsRuntime.logger()
+        let seams = hostSeams(execute: execute, logger: logger)
+        let deps = DeployUpdate.Deps(
+            fetcher: seams.fetcher, runner: seams.runner, launchctl: seams.launchctl,
+            http: seams.http, fs: seams.fs)
+        exitOps(
+            await DeployUpdate.run(
+                env: loaded, processEnv: ProcessInfo.processInfo.environment, fullRebuild: full,
+                deps: deps, logger: logger))
     }
 }

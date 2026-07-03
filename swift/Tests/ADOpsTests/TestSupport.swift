@@ -208,6 +208,22 @@ func constantProbe(status: Int?, body: String = "", outcome: ProbeOutcome = .htt
 /// A no-op async sleep (for verbs that inject their sleep seam).
 let instantSleep: @Sendable (Int) async -> Void = { _ in }
 
+/// A thread-safe ordered string recorder (for capturing kickstart labels, etc.).
+final class StringRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [String] = []
+    func record(_ value: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        items.append(value)
+    }
+    var all: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return items
+    }
+}
+
 /// A fully-derived LoadedEnv from the canonical fixture .env.
 func loadedFixtureEnv(opsDir: String = "/ops") -> LoadedEnv {
     var vars = OpsEnv.parse(Fixtures.text("fixture.env"))
