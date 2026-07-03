@@ -1,0 +1,25 @@
+# apple-docs MCP server — systemd unit (Linux analogue of the launchd
+# apple-docs.mcp.plist, RFC 0007 §4). Rendered by `ops render-all` from ops/.env
+# with the SAME allowlisted-variable substitution as the macOS plists; every
+# placeholder below is an allowlisted primary/derived var, so the rendered unit
+# has no leftover placeholders. Install: cp the rendered file to
+# /etc/systemd/system/, then `systemctl enable --now apple-docs-mcp`.
+[Unit]
+Description=apple-docs MCP server (mt.everest.apple-docs.mcp)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=everest
+WorkingDirectory=/Users/everest/Developer/apple-docs
+ExecStart=/Users/everest/.bun/bin/bun run /Users/everest/Developer/apple-docs/cli.js mcp serve --port 3131 --host 127.0.0.1 --allow-origin https://apple-docs-mcp.example.com
+Restart=on-failure
+RestartSec=10
+Environment=APPLE_DOCS_HOME=/Users/everest/.apple-docs
+Environment=APPLE_DOCS_MCP_CACHE_SCALE=1
+StandardOutput=append:/Users/everest/Developer/apple-docs/ops/logs/apple-docs-mcp.log
+StandardError=append:/Users/everest/Developer/apple-docs/ops/logs/apple-docs-mcp.err.log
+
+[Install]
+WantedBy=multi-user.target
