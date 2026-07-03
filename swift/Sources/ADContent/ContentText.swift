@@ -1,3 +1,4 @@
+import ADBase
 public import ADJSONCore
 
 public enum ContentText {
