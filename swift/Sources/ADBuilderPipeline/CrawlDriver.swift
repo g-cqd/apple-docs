@@ -150,13 +150,17 @@ public struct CrawlDriver: Sendable {
         return stats
     }
 
-    /// Drain the whole `crawl_state` frontier — every root's `pending` work pooled into one loop. Pull a
-    /// `maxConcurrency`-wide batch ACROSS all roots, fetch+normalize each in child tasks, then — serially on
-    /// the single-writer side — persist each page under its OWN root (`rootIds[row.rootSlug] ?? rootId`),
-    /// enqueue its same-root references one level deeper, and mark it `processed`. A fetch/normalize/persist
-    /// failure demotes the path to `failed` and is non-fatal. Terminates when no `pending` paths remain
-    /// (references are seeded idempotently, so a cyclic graph converges). Pooling across roots keeps the
-    /// fan-out saturated even when individual roots have narrow early levels — the JS shared semaphore.
+    /// Drain the whole `crawl_state` frontier — every root's `pending` work pooled into one loop — as a
+    /// STREAMING sliding window: keep `maxConcurrency` fetches in flight AT ALL TIMES, refilling each slot
+    /// the instant a fetch completes rather than waiting for a whole barrier-synchronized wave. That is what
+    /// keeps the fan-out saturated: a single slow or hung fetch (up to the 30 s request deadline) ties up
+    /// only its own slot, where a barrier would leave the other `maxConcurrency - 1` workers idle until the
+    /// straggler timed out. Each completed page is persisted under its OWN root (`rootIds[row.rootSlug] ??
+    /// rootId`), its same-root references seeded one level deeper, and its path marked `processed` (batched);
+    /// a fetch/normalize/persist failure demotes the path to `failed` and is non-fatal. Every `db` write
+    /// happens on THIS serial task — child tasks only fetch/normalize, so the single-writer `db` never
+    /// crosses a task boundary (the flat path's discipline). Terminates when no `pending` paths remain
+    /// (references are seeded idempotently, so a cyclic graph converges).
     private func crawlFrontier(
         _ adapter: any SourceAdapter, rootId: Int64, rootIds: [String: Int64], run: BFSRun,
         stats: inout Stats
@@ -164,51 +168,91 @@ public struct CrawlDriver: Sendable {
         let db = run.db
         let context = run.context
         let width = Swift.max(1, run.maxConcurrency)
-        while true {
-            let pending = try CrawlPersist.getPendingCrawlAny(db, limit: width)
-            if pending.isEmpty { break }
-            var succeeded: [String] = []
-            succeeded.reserveCapacity(pending.count)
-            try await withThrowingTaskGroup(of: BFSOutcome.self) { group in
-                for item in pending {
+
+        // A path is dispatched at most once: `inFlight` holds paths being fetched, `succeeded` holds
+        // completed-OK paths not yet bulk-marked `processed`. Both are still `pending` in the DB, so the
+        // frontier pull below skips in-flight rows and flushes the marks before re-pulling — a completed row
+        // never re-enters the window.
+        var inFlight: Set<String> = []
+        var succeeded: [String] = []
+        var buffer: [(path: String, rootSlug: String, depth: Int)] = []
+        var offset = 0
+
+        // The next un-dispatched frontier path, or nil when the frontier is (currently) drained. Refills the
+        // buffer from the DB — flushing this window's `processed` marks first so completed rows drop out of
+        // the pull — and skips anything already in flight. One re-pull per drain: if it surfaces no new path
+        // it returns nil, and the in-flight fetches seed the next level (each completion re-drives `fill`).
+        func nextPath() throws -> (path: String, rootSlug: String, depth: Int)? {
+            while offset < buffer.count {
+                let row = buffer[offset]
+                offset += 1
+                if !inFlight.contains(row.path) { return row }
+            }
+            if !succeeded.isEmpty {
+                try CrawlPersist.markCrawlProcessed(db, paths: succeeded)
+                succeeded.removeAll(keepingCapacity: true)
+            }
+            buffer = try CrawlPersist.getPendingCrawlAny(db, limit: width * 8)
+            offset = 0
+            while offset < buffer.count {
+                let row = buffer[offset]
+                offset += 1
+                if !inFlight.contains(row.path) { return row }
+            }
+            return nil
+        }
+
+        try await withThrowingTaskGroup(of: BFSOutcome.self) { group in
+            // Top the window back up to `width` in-flight fetches.
+            func fill() throws {
+                while inFlight.count < width, let row = try nextPath() {
+                    inFlight.insert(row.path)
+                    let (path, rootSlug, depth) = (row.path, row.rootSlug, row.depth)
                     group.addTask {
-                        await self.bfsFetch(
-                            adapter, path: item.path, rootSlug: item.rootSlug, depth: item.depth, context)
-                    }
-                }
-                // Consume on the serial side — every `db` write happens here, so the single-writer `db`
-                // never crosses into a child task (the flat path's discipline).
-                for try await outcome in group {
-                    switch outcome {
-                        case .fetched(let f):
-                            do {
-                                try CrawlPipeline.persist(
-                                    f.page, into: db, rootId: rootIds[f.rootSlug] ?? rootId, path: f.storePath,
-                                    hashes: .init(content: f.contentHash, rawPayload: f.rawHash),
-                                    etag: f.etag, lastModified: f.lastModified, now: run.now)
-                                stats.persisted += 1
-                                // Same-root references only — a cross-root ref belongs to that root's own crawl.
-                                for ref in f.refs where Self.slug(ofKey: ref) == f.rootSlug {
-                                    try CrawlPersist.seedCrawlIfNew(
-                                        db, path: ref, rootSlug: f.rootSlug, depth: f.depth + 1)
-                                }
-                                // Deferred: the whole batch is marked `processed` in ONE bulk UPDATE below —
-                                // a per-row setCrawlState is an O(N) scan each over the growing frontier.
-                                succeeded.append(f.statePath)
-                            } catch {
-                                try CrawlPersist.setCrawlState(
-                                    db, path: f.statePath, status: "failed", rootSlug: f.rootSlug, depth: f.depth,
-                                    error: String(describing: error))
-                                stats.failed += 1
-                            }
-                        case .failed(let path, let rootSlug, let depth, let error):
-                            try CrawlPersist.setCrawlState(
-                                db, path: path, status: "failed", rootSlug: rootSlug, depth: depth, error: error)
-                            stats.failed += 1
+                        await self.bfsFetch(adapter, path: path, rootSlug: rootSlug, depth: depth, context)
                     }
                 }
             }
-            // Mark the batch's successes `processed` in one scan — before the next pull would re-read them.
+            try fill()
+            while let outcome = try await group.next() {
+                switch outcome {
+                    case .fetched(let f):
+                        inFlight.remove(f.statePath)
+                        do {
+                            try CrawlPipeline.persist(
+                                f.page, into: db, rootId: rootIds[f.rootSlug] ?? rootId, path: f.storePath,
+                                hashes: .init(content: f.contentHash, rawPayload: f.rawHash),
+                                etag: f.etag, lastModified: f.lastModified, now: run.now)
+                            stats.persisted += 1
+                            // Same-root references only — a cross-root ref belongs to that root's own crawl.
+                            for ref in f.refs where Self.slug(ofKey: ref) == f.rootSlug {
+                                try CrawlPersist.seedCrawlIfNew(
+                                    db, path: ref, rootSlug: f.rootSlug, depth: f.depth + 1)
+                            }
+                            succeeded.append(f.statePath)
+                            // Flush in `width`-sized bunches so a kill re-processes at most one window, while
+                            // still amortizing the mark over many rows (the seek fast path makes it cheap).
+                            if succeeded.count >= width {
+                                try CrawlPersist.markCrawlProcessed(db, paths: succeeded)
+                                succeeded.removeAll(keepingCapacity: true)
+                            }
+                        } catch {
+                            try CrawlPersist.setCrawlState(
+                                db, path: f.statePath, status: "failed", rootSlug: f.rootSlug, depth: f.depth,
+                                error: String(describing: error))
+                            stats.failed += 1
+                        }
+                    case .failed(let path, let rootSlug, let depth, let error):
+                        inFlight.remove(path)
+                        try CrawlPersist.setCrawlState(
+                            db, path: path, status: "failed", rootSlug: rootSlug, depth: depth, error: error)
+                        stats.failed += 1
+                }
+                try fill()
+            }
+        }
+        // Mark any successes from the final partial window.
+        if !succeeded.isEmpty {
             try CrawlPersist.markCrawlProcessed(db, paths: succeeded)
         }
     }
