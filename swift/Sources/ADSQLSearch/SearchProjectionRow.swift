@@ -65,12 +65,14 @@ public struct SearchProjectionRow: Sendable, Equatable {
 }
 
 extension Database {
-    /// Runs the DENORMALIZED §2.2 search query for `params` and returns the decoded §2.3 projection rows
-    /// (via ``RowDecoder``) — the structured form the cascade consumes, the ADDB-native counterpart to the
-    /// SQLite `StorageConnection.ftsRows`. Same query + bindings as ``searchPagesFramedDenorm(_:)``, so the
-    /// rows correspond exactly to that proven framed output (`SearchProjectionRowsTests` checks both agree).
-    /// Requires the serving setup (``prepareForDenormServing()``): FTS + JSON registered, denorm populated.
-    public func searchPagesDenormRows(_ params: SearchPagesParams) throws(DBError) -> [SearchProjectionRow] {
+    /// The score-all DENORMALIZED §2.2 read: runs ``SearchQuery/denormSQL`` verbatim
+    /// (`… ORDER BY tier, rank LIMIT $limit`), scoring EVERY match to sort by
+    /// `(tier, rank)`. This is the correctness oracle the restructured
+    /// ``searchPagesDenormRows(_:)`` (WS-C: rank-only WAND + tier reorder) is proven
+    /// identical to; it stays reachable for the parity diff (`SearchWANDRankParityTests`)
+    /// and is the fallback path for the shapes the WAND restructure declines
+    /// (active §2.4 filters, LIKE-metacharacter raw terms, pathological tier tails).
+    public func searchPagesDenormRowsScoreAll(_ params: SearchPagesParams) throws(DBError) -> [SearchProjectionRow] {
         try prepare(SearchQuery.denormSQL)
             .all(SearchQuery.denormBindings(for: params))
             .map { SearchProjectionRow($0.decode()) }
