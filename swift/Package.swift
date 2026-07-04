@@ -296,7 +296,19 @@ let package = Package(
                 .product(name: "ADJSONCore", package: "ADJSON"),
                 // ADFCore: the shared little-endian `appendLE*`/`storeLE*` the row framer emits the
                 // §2.5 response wire bytes through (already in the dylib graph via ADCore → ADFCore).
-                .product(name: "ADFCore", package: "ADFoundation")
+                .product(name: "ADFCore", package: "ADFoundation"),
+                // BUG-REPORTS B10(c): the native-corpus read backend. `StorageConnection` now opens
+                // EITHER libsqlite3 OR an ADDB corpus (`ADDBBackend`), so every read verb serves a
+                // crawl-written ADDB snapshot. The FTS ranked search routes to the parity-proven
+                // `ADSQLSearch` denorm path; the engine products back the generic read statement.
+                // (This edge makes the `ADCore` dylib no longer zero-external-dep — an intentional
+                // consequence of moving the read path onto the native engine; see the report.)
+                "ADSQLSearch",
+                .product(name: "ADDB", package: "ADDB"),
+                .product(name: "ADDBExec", package: "ADDB"),
+                .product(name: "ADDBFTS", package: "ADDB"),
+                .product(name: "ADDBJSON", package: "ADDB"),
+                .product(name: "ADSQLModel", package: "ADSQL")
             ],
             swiftSettings: releaseCMO + strictSettings),
         // Search cascade: the byte-exact in-process port of the JS lexical search
@@ -534,7 +546,21 @@ let package = Package(
             name: "ADContentTests",
             dependencies: ["ADContent", .product(name: "ADJSONCore", package: "ADJSON")],
             swiftSettings: testSettings),
-        .testTarget(name: "ADStorageTests", dependencies: ["ADStorage"], swiftSettings: testSettings),
+        .testTarget(
+            name: "ADStorageTests",
+            dependencies: [
+                "ADStorage",
+                // The B10(c) read-swap parity gate: build a SQLite corpus, import it to ADDB via
+                // `ADDBImport.importSQLite`, then diff the read verbs across BOTH backends.
+                // ADDBFTS/ADDBJSON enable the FTS + JSON function sets the import (FTS rebuild +
+                // denorm JSON folds) writes through.
+                .product(name: "ADDB", package: "ADDB"),
+                .product(name: "ADDBImport", package: "ADDB"),
+                .product(name: "ADDBFTS", package: "ADDB"),
+                .product(name: "ADDBJSON", package: "ADDB"),
+                .product(name: "ADSQLModel", package: "ADSQL")
+            ],
+            swiftSettings: testSettings),
         // ADSQLSearchTests — byte-identity golden for the §2.5 response wire layout (`ResponseFraming`),
         // the gate for the A1 endian consolidation. The server-only `ADSQLSearch` target had no test
         // home; this also seats the future `SearchQuery`-vs-SQLite parity suite (Phase 5A).
@@ -642,7 +668,7 @@ let isolationClosures: [String: Set<String>] = [
         "ADBuilder", "ADWrite", "ADEmbed", "ADArchive", "ADBuilderPipeline", "ADBuilderPipelineTests",
         "ADContent", "ADBase",
     ],
-    "ADStorageTests": ["ADStorage", "ADBase", "ADArchive", "CSQLiteShim", "ADStorageTests"],
+    "ADStorageTests": ["ADStorage", "ADBase", "ADArchive", "CSQLiteShim", "ADSQLSearch", "ADStorageTests"],
     "ADArchiveTests": ["ADArchive", "ADArchiveTests"],
     // ADOps depends only on Foundation, so its closure is just the two targets —
     // isolates the ops parity gate from the churning ADServe/ADDB graph.

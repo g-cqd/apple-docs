@@ -225,7 +225,7 @@ extension StorageConnection {
         return dynamicRows(stmt)
     }
 
-    func dynamicRows(_ stmt: PreparedStatement) -> [DynamicRow] {
+    func dynamicRows(_ stmt: any StorageStatement) -> [DynamicRow] {
         let count = stmt.columnCount()
         var names: [String] = []
         names.reserveCapacity(Int(count))

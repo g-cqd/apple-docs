@@ -1,7 +1,10 @@
-// A single read connection to the corpus DB. Opened READWRITE so it
-// participates cleanly in the WAL -shm wal-index; `PRAGMA query_only = ON`
-// then guarantees it never writes. One Connection is used by exactly one OS
-// thread, so the statement cache needs no lock.
+// The libsqlite3 `StorageBackend`. A single read connection to a SQLite corpus
+// DB, opened READWRITE so it participates cleanly in the WAL -shm wal-index;
+// `PRAGMA query_only = ON` then guarantees it never writes. One connection is
+// used by exactly one OS thread, so the statement cache needs no lock.
+//
+// This is the shipping read path renamed under the `StorageBackend` protocol
+// (no behavior change); `ADDBBackend` is the sibling native implementation.
 
 #if canImport(Darwin)
     import Darwin
@@ -9,14 +12,14 @@
     import Glibc
 #endif
 
-final class Connection: @unchecked Sendable {
+final class SQLiteConnection: StorageBackend, @unchecked Sendable {
     let lib: SQLiteLib
     let db: OpaquePointer
     let hasTrigram: Bool
     let hasBodyFts: Bool
     let hasSections: Bool
     let hasRelationships: Bool
-    private var cache: [String: PreparedStatement] = [:]
+    private var cache: [String: SQLiteStatement] = [:]
 
     init?(path: String, writable: Bool = false) {
         guard let lib = SQLiteLoader.shared else { return nil }
@@ -36,38 +39,38 @@ final class Connection: @unchecked Sendable {
         // erroring SQLITE_BUSY), query_only (write guard), and the page-cache /
         // mmap knobs. `writable: true` (the S7 web-build incremental cache —
         // document_render_index + sync_checkpoint upserts) skips the guard.
-        Connection.exec(lib, handle, "PRAGMA busy_timeout = 5000")
-        if !writable { Connection.exec(lib, handle, "PRAGMA query_only = ON") }
-        Connection.exec(lib, handle, "PRAGMA cache_size = -64000")
-        Connection.exec(lib, handle, "PRAGMA temp_store = MEMORY")
-        Connection.exec(lib, handle, "PRAGMA mmap_size = 10737418240")
+        SQLiteConnection.exec(lib, handle, "PRAGMA busy_timeout = 5000")
+        if !writable { SQLiteConnection.exec(lib, handle, "PRAGMA query_only = ON") }
+        SQLiteConnection.exec(lib, handle, "PRAGMA cache_size = -64000")
+        SQLiteConnection.exec(lib, handle, "PRAGMA temp_store = MEMORY")
+        SQLiteConnection.exec(lib, handle, "PRAGMA mmap_size = 10737418240")
 
         // FTS5 is required (searchPages MATCHes documents_fts + uses bm25). If
         // the dlopen'd libsqlite3 was built without it, fail the open so the
         // fallback path serves every query instead.
         guard
-            Connection.probeCount(
+            SQLiteConnection.probeCount(
                 lib, handle, "SELECT count(*) FROM pragma_compile_options WHERE compile_options = 'ENABLE_FTS5'") >= 1
         else {
             _ = lib.closeV2(handle)
             return nil
         }
 
-        self.hasTrigram = Connection.tableExists(lib, handle, "documents_trigram")
-        self.hasBodyFts = Connection.tableExists(lib, handle, "documents_body_fts")
-        self.hasSections = Connection.tableExists(lib, handle, "document_sections")
-        self.hasRelationships = Connection.tableExists(lib, handle, "document_relationships")
+        self.hasTrigram = SQLiteConnection.tableExists(lib, handle, "documents_trigram")
+        self.hasBodyFts = SQLiteConnection.tableExists(lib, handle, "documents_body_fts")
+        self.hasSections = SQLiteConnection.tableExists(lib, handle, "document_sections")
+        self.hasRelationships = SQLiteConnection.tableExists(lib, handle, "document_relationships")
     }
 
     deinit {
-        cache.removeAll()  // finalizes each statement via PreparedStatement.deinit
+        cache.removeAll()  // finalizes each statement via SQLiteStatement.deinit
         _ = lib.closeV2(db)
     }
 
     /// Returns the cached statement for `sql`, preparing it on first use.
-    func statement(_ sql: String) -> PreparedStatement? {
+    func statement(_ sql: String) -> (any StorageStatement)? {
         if let existing = cache[sql] { return existing }
-        guard let prepared = PreparedStatement(lib: lib, db: db, sql: sql) else { return nil }
+        guard let prepared = SQLiteStatement(lib: lib, db: db, sql: sql) else { return nil }
         cache[sql] = prepared
         return prepared
     }
@@ -75,33 +78,61 @@ final class Connection: @unchecked Sendable {
     /// Prepares a statement WITHOUT caching (finalized when the result is
     /// released). For variable-arity `IN (?,?,…)` enrichment queries whose SQL
     /// text differs per result-count — caching them would churn the per-SQL cache.
-    func prepareUncached(_ sql: String) -> PreparedStatement? {
-        PreparedStatement(lib: lib, db: db, sql: sql)
+    func prepareUncached(_ sql: String) -> (any StorageStatement)? {
+        SQLiteStatement(lib: lib, db: db, sql: sql)
     }
 
     /// Runtime `sqlite_master` table-existence probe (mirrors database.hasTable),
     /// used by read_doc's tier fallback ('full' when a documents table exists).
     func tableExists(_ name: String) -> Bool {
-        Connection.tableExists(lib, db, name)
+        SQLiteConnection.tableExists(lib, db, name)
     }
+
+    // MARK: - searchPages (framed / JSON)
+
+    /// Runs `searchPagesSQL` and frames the rows into the `[u32 colCount][u32
+    /// rowCount][cells…]` payload (the FFI packed-binary path).
+    func searchPagesFramed(_ params: SearchPagesParams) -> [UInt8]? {
+        guard let stmt = statement(searchPagesSQL) else { return nil }
+        bindSearchPages(stmt, params)
+        var out: [UInt8] = []
+        out.reserveCapacity(4096)
+        guard stmt.run(into: &out) else { return nil }
+        return out
+    }
+
+    /// Runs `searchPagesSQL` and frames the rows into a JSON array of objects
+    /// (the in-process server path).
+    func searchPagesFramedJSON(_ params: SearchPagesParams) -> [UInt8]? {
+        guard let stmt = statement(searchPagesSQL) else { return nil }
+        bindSearchPages(stmt, params)
+        var out: [UInt8] = []
+        out.reserveCapacity(8192)
+        guard stmt.runJSON(into: &out) else { return nil }
+        return out
+    }
+
+    /// No native FTS fast path — the caller runs the generic `searchPagesSQL`
+    /// statement + `SearchRow.decode` cascade.
+    func nativeFtsRows(_ params: SearchPagesParams) -> [SearchRow]? { nil }
 
     // MARK: - boot helpers
 
     private static func exec(_ lib: SQLiteLib, _ db: OpaquePointer, _ sql: String) {
-        guard let stmt = PreparedStatement(lib: lib, db: db, sql: sql) else { return }
+        guard let stmt = SQLiteStatement(lib: lib, db: db, sql: sql) else { return }
         _ = lib.step(stmt.stmt)
         // stmt finalized by deinit at scope end
     }
 
     private static func probeCount(_ lib: SQLiteLib, _ db: OpaquePointer, _ sql: String) -> Int64 {
-        guard let stmt = PreparedStatement(lib: lib, db: db, sql: sql) else { return 0 }
+        guard let stmt = SQLiteStatement(lib: lib, db: db, sql: sql) else { return 0 }
         guard lib.step(stmt.stmt) == SQLite.row else { return 0 }
         return lib.columnInt64(stmt.stmt, 0)
     }
 
     private static func tableExists(_ lib: SQLiteLib, _ db: OpaquePointer, _ name: String) -> Bool {
         guard
-            let stmt = PreparedStatement(
+            let stmt = SQLiteStatement(
                 lib: lib, db: db,
                 sql: "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1")
         else { return false }
