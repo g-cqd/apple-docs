@@ -23,13 +23,15 @@ private let minifyEdgeCases: [(String, String)] = [
     ("a /* c */ b", "a b"),
     ("p { q : r ; }\r\ns { t:u }", "p{q:r}s{t:u}"),
     ("@media screen and (min-width: 100px) { .a { b: c; } }", "@media screen and (min-width:100px){.a{b:c}}"),
-    ("sel::before{content:\"a b\"}", "sel::before{content:\"a b\"}"),
+    ("sel::before{content:\"a b\"}", "sel::before{content:\"a b\"}")
 ]
 
-private let fontFamiliesJSON: JSON? = try? ADJSON.parse(
-    #"[{"id":"sf-pro","files":[{"id":"sfpro-1","format":"ttf"},{"id":"sfpro 2","format":"otf"}]},{"id":"ny","files":[{"id":"ny&1","format":"ttc"},{"id":"ny2","format":"woff"},{"id":"ny3"}]},{"id":"empty"},{"id":"nofiles","files":[]}]"#,
-    options: .init(maxDepth: 512)
-).root
+private let fontFamiliesJSON: JSON? =
+    try? ADJSON.parse(
+        #"[{"id":"sf-pro","files":[{"id":"sfpro-1","format":"ttf"},{"id":"sfpro 2","format":"otf"}]},{"id":"ny","files":[{"id":"ny&1","format":"ttc"},{"id":"ny2","format":"woff"},{"id":"ny3"}]},{"id":"empty"},{"id":"nofiles","files":[]}]"#,
+        options: .init(maxDepth: 512)
+    )
+    .root
 
 /// `buildFontFaceCss(families)` (default /api/fonts/file/<id> URLs) from bun.
 private let fontFacesExpectedDefault =
@@ -54,7 +56,9 @@ private let fontFacesExpectedBaseUrl =
 // MARK: - FontFaces
 
 @Test func fontFaceCssByteExact() {
-    let defaultUrl = FontFaces.buildFontFaceCss(fontFamiliesJSON) { "/api/fonts/file/\(WebHtml.encodeURIComponent($0))" }
+    let defaultUrl = FontFaces.buildFontFaceCss(fontFamiliesJSON) {
+        "/api/fonts/file/\(WebHtml.encodeURIComponent($0))"
+    }
     #expect(defaultUrl == fontFacesExpectedDefault)
 
     let withBase = FontFaces.buildFontFaceCss(
@@ -82,12 +86,12 @@ private struct MockAssetSource: AssetSource {
 private let mockSource = MockAssetSource(
     assets: [
         "style.css": "a { b : c ; }",
-        "search-page.js": "s", "fonts-page.js": "f", "symbols-page.js": "y", "lang-toggle.js": "l",
+        "search-page.js": "s", "fonts-page.js": "f", "symbols-page.js": "y", "lang-toggle.js": "l"
     ],
     workers: ["search-worker.js": "worker-bytes"],
     publics: [
         (path: ".well-known/security.txt", bytes: Array("sec".utf8)),
-        (path: "llms.txt", bytes: Array("llms".utf8)),
+        (path: "llms.txt", bytes: Array("llms".utf8))
     ])
 
 @Test func planAssetsOrderAndContent() throws {
@@ -98,7 +102,7 @@ private let mockSource = MockAssetSource(
     let expected: [String] = [
         "assets/style.css", "assets/core.js", "assets/listing.js",
         "assets/search-page.js", "assets/fonts-page.js", "assets/symbols-page.js", "assets/lang-toggle.js",
-        "worker/search-worker.js", ".well-known/security.txt", "llms.txt",
+        "worker/search-worker.js", ".well-known/security.txt", "llms.txt"
     ]
     #expect(paths == expected)
 

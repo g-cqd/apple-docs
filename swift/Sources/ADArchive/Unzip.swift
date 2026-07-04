@@ -44,7 +44,7 @@ public enum Unzip {
     /// Verifies the produced byte count against the central directory.
     public static func extract(
         _ entry: Entry, from path: String, sink: ([UInt8]) throws -> Void
-    ) throws -> Void {
+    ) throws {
         let file = try ZipFile(path: path)
         defer { file.close() }
 
@@ -62,47 +62,47 @@ public enum Unzip {
         var remaining = entry.compressedSize
 
         switch entry.method {
-        case 0:  // stored — a bounded copy.
-            guard entry.compressedSize == entry.uncompressedSize else {
-                throw UnzipError.corrupt("stored entry with mismatched sizes: \(entry.name)")
-            }
-            while remaining > 0 {
-                let want = Int(min(remaining, 1 << 20))
-                let chunk = try file.read(at: offset, count: want)
-                guard !chunk.isEmpty else { throw UnzipError.corrupt("truncated stored entry: \(entry.name)") }
-                try sink(chunk)
-                offset += UInt64(chunk.count)
-                remaining -= UInt64(chunk.count)
-            }
-
-        case 8:  // deflate — chunked raw inflate (windowBits −15).
-            guard let stream = InflateStream(windowBits: -15) else { throw UnzipError.zlibUnavailable }
-            defer { stream.end() }
-            var produced: UInt64 = 0
-            var finished = false
-            while remaining > 0 && !finished {
-                let want = Int(min(remaining, 1 << 20))
-                let chunk = try file.read(at: offset, count: want)
-                guard !chunk.isEmpty else { throw UnzipError.corrupt("truncated deflate entry: \(entry.name)") }
-                offset += UInt64(chunk.count)
-                remaining -= UInt64(chunk.count)
-                let ok = try stream.inflate(chunk) { out in
-                    produced += UInt64(out.count)
-                    try sink(out)
+            case 0:  // stored — a bounded copy.
+                guard entry.compressedSize == entry.uncompressedSize else {
+                    throw UnzipError.corrupt("stored entry with mismatched sizes: \(entry.name)")
                 }
-                switch ok {
-                case .needsMore: continue
-                case .finished: finished = true
-                case .failed: throw UnzipError.corrupt("deflate stream error in \(entry.name)")
+                while remaining > 0 {
+                    let want = Int(min(remaining, 1 << 20))
+                    let chunk = try file.read(at: offset, count: want)
+                    guard !chunk.isEmpty else { throw UnzipError.corrupt("truncated stored entry: \(entry.name)") }
+                    try sink(chunk)
+                    offset += UInt64(chunk.count)
+                    remaining -= UInt64(chunk.count)
                 }
-            }
-            guard finished, produced == entry.uncompressedSize else {
-                throw UnzipError.corrupt(
-                    "size mismatch in \(entry.name): produced \(produced), expected \(entry.uncompressedSize)")
-            }
 
-        default:
-            throw UnzipError.unsupportedMethod(entry.method)
+            case 8:  // deflate — chunked raw inflate (windowBits −15).
+                guard let stream = InflateStream(windowBits: -15) else { throw UnzipError.zlibUnavailable }
+                defer { stream.end() }
+                var produced: UInt64 = 0
+                var finished = false
+                while remaining > 0 && !finished {
+                    let want = Int(min(remaining, 1 << 20))
+                    let chunk = try file.read(at: offset, count: want)
+                    guard !chunk.isEmpty else { throw UnzipError.corrupt("truncated deflate entry: \(entry.name)") }
+                    offset += UInt64(chunk.count)
+                    remaining -= UInt64(chunk.count)
+                    let ok = try stream.inflate(chunk) { out in
+                        produced += UInt64(out.count)
+                        try sink(out)
+                    }
+                    switch ok {
+                        case .needsMore: continue
+                        case .finished: finished = true
+                        case .failed: throw UnzipError.corrupt("deflate stream error in \(entry.name)")
+                    }
+                }
+                guard finished, produced == entry.uncompressedSize else {
+                    throw UnzipError.corrupt(
+                        "size mismatch in \(entry.name): produced \(produced), expected \(entry.uncompressedSize)")
+                }
+
+            default:
+                throw UnzipError.unsupportedMethod(entry.method)
         }
     }
 
@@ -146,7 +146,7 @@ public enum Unzip {
         var entries: [Entry] = []
         entries.reserveCapacity(Int(min(entryCount, 1 << 20)))
         var pos = cdOffset
-        for _ in 0..<entryCount {
+        for _ in 0 ..< entryCount {
             let rec = try file.read(at: pos, count: 46)
             guard rec.count == 46, u32(rec, 0) == 0x0201_4B50 else {
                 throw UnzipError.corrupt("bad central-directory record at \(pos)")

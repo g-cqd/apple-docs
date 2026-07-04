@@ -186,7 +186,6 @@ public enum DocMarkdown {
     static func appendQuotedBytes(_ bytes: [UInt8], _ w: inout ByteWriter) {
         bytes.withUnsafeBytes { appendQuoted(span: ByteSpan($0), &w) }
     }
-
 }
 
 #if canImport(Darwin)

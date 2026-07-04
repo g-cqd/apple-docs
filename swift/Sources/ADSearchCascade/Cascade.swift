@@ -180,7 +180,8 @@ public enum Cascade {
     ) -> [UInt8] {
         assembleOutcome(
             p, conn: conn, semantic: nil, titleExact: titleExact, fts: fts, trigram: trigram
-        ).envelope
+        )
+        .envelope
     }
 
     /// `assemble` + the optional semantic fusion step, returning the structured

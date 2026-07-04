@@ -70,22 +70,26 @@ public struct SwiftOrgAdapter: SourceAdapter {
                     link.summary.map { summary in
                         .array([.object([("type", .string("text")), ("text", .string(summary))])])
                     } ?? .null
-                ),
+                )
             ])
         }
         // `${l.title}: ${l.summary ?? ''}`.trim() joined with newlines.
-        let contentText = links.map { link -> String in
-            let line = "\(link.title): \(link.summary ?? "")"
-            return line.trimmingCharacters(in: .whitespacesAndNewlines)
-        }.joined(separator: "\n")
+        let contentText =
+            links.map { link -> String in
+                let line = "\(link.title): \(link.summary ?? "")"
+                return line.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .joined(separator: "\n")
 
-        let contentJson = JsJson.array([
-            .object([
-                ("title", .string("Related Documentation")),
-                ("type", .null),
-                ("items", .array(items)),
+        let contentJson =
+            JsJson.array([
+                .object([
+                    ("title", .string("Related Documentation")),
+                    ("type", .null),
+                    ("items", .array(items))
+                ])
             ])
-        ]).serialized()
+            .serialized()
 
         page.sections.append(
             NormalizedSection(
@@ -201,6 +205,6 @@ public struct SwiftOrgAdapter: SourceAdapter {
         "getting-started/vapor-web-server", "install", "install/linux", "install/macos",
         "install/windows", "community", "community/how-we-work", "contributing", "about",
         "platform-support", "code-of-conduct", "diversity", "mentorship", "packages", "sswg",
-        "sswg/incubation-process.html", "support/security.html", "openapi",
+        "sswg/incubation-process.html", "support/security.html", "openapi"
     ]
 }

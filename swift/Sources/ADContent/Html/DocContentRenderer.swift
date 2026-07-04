@@ -11,10 +11,12 @@ public enum DocContentRenderer {
         highlight: CodeHighlight? = nil
     ) -> String {
         // JS `Array.sort` is stable; break ties on the original index to match.
-        let ordered = sections.enumerated().sorted { a, b in
-            a.element.sortOrder == b.element.sortOrder
-                ? a.offset < b.offset : a.element.sortOrder < b.element.sortOrder
-        }.map(\.element)
+        let ordered = sections.enumerated()
+            .sorted { a, b in
+                a.element.sortOrder == b.element.sortOrder
+                    ? a.offset < b.offset : a.element.sortOrder < b.element.sortOrder
+            }
+            .map(\.element)
 
         let renderer = HtmlSections(knownKeys: knownKeys, highlight: highlight)
         var parts: [String] = []

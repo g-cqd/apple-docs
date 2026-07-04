@@ -43,7 +43,7 @@ enum DocMeta {
 
     static let platformNames: [String: String] = [
         "ios": "iOS", "macos": "macOS", "watchos": "watchOS", "tvos": "tvOS",
-        "visionos": "visionOS", "maccatalyst": "Mac Catalyst", "ipados": "iPadOS",
+        "visionos": "visionOS", "maccatalyst": "Mac Catalyst", "ipados": "iPadOS"
     ]
 
     /// buildDocMeta(doc) — framework/role/deprecated/beta badges + platform

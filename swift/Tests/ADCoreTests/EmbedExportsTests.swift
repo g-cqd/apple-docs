@@ -130,9 +130,10 @@ struct EmbedExportsTests {
         let dims = initResult!.payload.withUnsafeBytes { UInt32(littleEndian: $0.load(as: UInt32.self)) }
         #expect(dims == 512)
         #expect(initResult!.payload.count == 12)
-        let behavior = initResult!.payload.withUnsafeBytes {
-            UInt32(littleEndian: $0.load(fromByteOffset: 8, as: UInt32.self))
-        }
+        let behavior = initResult!.payload
+            .withUnsafeBytes {
+                UInt32(littleEndian: $0.load(fromByteOffset: 8, as: UInt32.self))
+            }
         #expect(behavior == EmbedBehavior.version)
     }
 

@@ -17,7 +17,7 @@ extension NormalizedPage {
         let value = DocC.object([
             ("document", Self.documentValue(document)),
             ("sections", .array(sections.map(Self.sectionValue))),
-            ("relationships", .array(relationships.map(Self.relationshipValue))),
+            ("relationships", .array(relationships.map(Self.relationshipValue)))
         ])
         // stableStringify = JSON.stringify(obj, sortReplacer): compact, ECMA-262 numbers, non-finite
         // → null, and (the replacer) recursively lexicographic object keys. Arrays keep order.
@@ -60,7 +60,7 @@ extension NormalizedPage {
             ("heading", DocC.stringOrNull(section.heading)),
             ("contentText", DocC.stringOrNull(section.contentText)),
             ("contentJson", DocC.stringOrNull(section.contentJson)),
-            ("sortOrder", .int(Int64(section.sortOrder))),
+            ("sortOrder", .int(Int64(section.sortOrder)))
         ])
     }
 
@@ -70,7 +70,7 @@ extension NormalizedPage {
             ("toKey", .string(relationship.toKey)),
             ("relationType", .string(relationship.relationType)),
             ("section", DocC.stringOrNull(relationship.section)),
-            ("sortOrder", intOrNull(relationship.sortOrder)),
+            ("sortOrder", intOrNull(relationship.sortOrder))
         ])
     }
 

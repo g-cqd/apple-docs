@@ -21,15 +21,15 @@
 // Deps: ADStorage (chunk reads), ADEmbed (Embedder + Quantize.signCode +
 // Quantize.dequantDot, the int8 rescore), ADFCore (Popcount, via ShortlistByHamming).
 
+public import ADEmbed
+import ADFCore  // NumberParse — the shared JS-parseInt-prefix env parser
+public import ADStorage
+
 #if canImport(Darwin)
     import Darwin
 #else
     import Glibc
 #endif
-
-import ADFCore  // NumberParse — the shared JS-parseInt-prefix env parser
-public import ADEmbed
-public import ADStorage
 
 /// One semantic candidate document. `distance` is the matched chunk's integer
 /// Hamming distance; `score` is the rescored similarity (or the binary
@@ -78,11 +78,11 @@ public enum Semantic {
         // Parallel arrays — index i is the load-bearing tie-break / lookup key.
         let rows = conn.getAllChunkVectors()
         guard !rows.isEmpty else { return [] }
-        var binPacked = [UInt8]()
+        var binPacked: [UInt8] = []
         binPacked.reserveCapacity(rows.count * binWidth)
-        var chunkDocId = [Int]()
+        var chunkDocId: [Int] = []
         chunkDocId.reserveCapacity(rows.count)
-        var chunkId = [Int]()
+        var chunkId: [Int] = []
         chunkId.reserveCapacity(rows.count)
         for row in rows where row.vecBin.count == binWidth {
             binPacked.append(contentsOf: row.vecBin)
@@ -109,7 +109,12 @@ public enum Semantic {
         // wins ties). `docBest` records the insertion order via `order`, plus the
         // matched chunk row index (`matchedIdx`) so the doc's binary code can be
         // sliced out for the downstream MMR pass (JS keeps `idx` here for `vec`).
-        struct DocBest { let score: Double; let distance: Int; let insertion: Int; let matchedIdx: Int }
+        struct DocBest {
+            let score: Double
+            let distance: Int
+            let insertion: Int
+            let matchedIdx: Int
+        }
         var docBest: [Int: DocBest] = [:]
         var order: [Int] = []
         for hit in shortlist {
@@ -141,7 +146,8 @@ public enum Semantic {
             return (
                 SemanticCandidate(
                     documentId: docId, distance: best.distance, score: best.score, vec: vec),
-                best.insertion)
+                best.insertion
+            )
         }
         out.sort { lhs, rhs in
             lhs.candidate.score != rhs.candidate.score

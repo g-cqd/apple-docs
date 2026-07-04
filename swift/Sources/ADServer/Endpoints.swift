@@ -93,7 +93,7 @@ func siteRoutes(config: SiteConfig, mcpDispatcher: MCPDispatcher, readiness: Ser
         Scope("symbols") {
             GET("index.json") { ctx in .json(WebRoutes.symbolsIndex(ctx.db), as: .json) }.etag
             GET("search") { symbolsSearchHandler($0) }
-            .etag
+                .etag
         }
     }
 

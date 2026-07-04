@@ -7,8 +7,8 @@
 // returning nil (the dispatch then falls back to hb-view / placeholder).
 
 #if canImport(CoreText)
-    public import CoreGraphics
     import ADFCore  // XMLEscape — the shared XML/SVG text escaper
+    public import CoreGraphics
     import CoreText
     import Foundation
 

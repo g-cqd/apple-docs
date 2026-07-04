@@ -113,7 +113,7 @@ public enum BuildSite {
     /// The directory skeleton (build.js step 1).
     public static let directories = [
         "assets", "docs", "data/search", "data/frameworks", "worker", "search", "fonts", "symbols",
-        "api/fonts", ".well-known/mcp",
+        "api/fonts", ".well-known/mcp"
     ]
 
     /// The not-yet-ported steps, surfaced in every result so a partial build
@@ -167,12 +167,14 @@ public enum BuildSite {
 
         // 8. Per-framework metadata (compact JSON, like build.js).
         for meta in inputs.frameworkMeta {
-            let json = JsonLd.object([
-                ("slug", .string(meta.slug)),
-                ("displayName", meta.displayName.map { JsonLd.string($0) } ?? .null),
-                ("kind", meta.kind.map { JsonLd.string($0) } ?? .null),
-                ("documentCount", .int(meta.documentCount)),
-            ]).serialized()
+            let json =
+                JsonLd.object([
+                    ("slug", .string(meta.slug)),
+                    ("displayName", meta.displayName.map { JsonLd.string($0) } ?? .null),
+                    ("kind", meta.kind.map { JsonLd.string($0) } ?? .null),
+                    ("documentCount", .int(meta.documentCount))
+                ])
+                .serialized()
             artifacts.append(Artifact(path: "data/frameworks/\(meta.slug).json", text: json))
         }
 
@@ -193,18 +195,20 @@ public enum BuildSite {
                 .object([
                     ("titleCount", .int(stats.titleCount)),
                     ("aliasCount", .int(stats.aliasCount)),
-                    ("shardCount", .int(stats.shardCount)),
+                    ("shardCount", .int(stats.shardCount))
                 ])
             } ?? .null
-        let manifest = JsonLd.object([
-            ("version", .int(1)),
-            ("siteName", .string(config.siteName)),
-            ("buildDate", config.buildDate.map { JsonLd.string($0) } ?? .null),
-            ("baseUrl", .string(config.baseUrl)),
-            ("totalDocuments", .int(inputs.totalDocuments)),
-            ("totalFrameworks", .int(inputs.totalFrameworks)),
-            ("searchArtifacts", searchStats),
-        ]).serializedPretty(2)
+        let manifest =
+            JsonLd.object([
+                ("version", .int(1)),
+                ("siteName", .string(config.siteName)),
+                ("buildDate", config.buildDate.map { JsonLd.string($0) } ?? .null),
+                ("baseUrl", .string(config.baseUrl)),
+                ("totalDocuments", .int(inputs.totalDocuments)),
+                ("totalFrameworks", .int(inputs.totalFrameworks)),
+                ("searchArtifacts", searchStats)
+            ])
+            .serializedPretty(2)
         return Artifact(path: "manifest.json", text: manifest)
     }
 }

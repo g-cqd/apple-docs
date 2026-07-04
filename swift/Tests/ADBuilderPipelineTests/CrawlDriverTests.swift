@@ -175,7 +175,6 @@ struct CrawlDriverTests {
     private struct FlakyAdapter: SourceAdapter {
         static let type = "flaky"
         static let displayName = "Flaky"
-        init() {}
         func discover(_ context: SourceContext) async throws -> DiscoveryResult {
             DiscoveryResult(keys: ["flaky/ok1", "flaky/bad", "flaky/ok2"])
         }
@@ -227,7 +226,6 @@ struct CrawlDriverTests {
     private struct MultiRootAdapter: SourceAdapter {
         static let type = "multiroot"
         static let displayName = "MultiRoot"
-        init() {}
         func discover(_ context: SourceContext) async throws -> DiscoveryResult {
             DiscoveryResult(
                 keys: ["alpha/one", "alpha/two", "beta/one"],

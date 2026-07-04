@@ -11,12 +11,12 @@ enum WebHtml {
         out.reserveCapacity(value.count)
         for ch in value {
             switch ch {
-            case "&": out += "&amp;"
-            case "<": out += "&lt;"
-            case ">": out += "&gt;"
-            case "\"": out += "&quot;"
-            case "'": out += "&#x27;"
-            default: out.append(ch)
+                case "&": out += "&amp;"
+                case "<": out += "&lt;"
+                case ">": out += "&gt;"
+                case "\"": out += "&quot;"
+                case "'": out += "&#x27;"
+                default: out.append(ch)
             }
         }
         return out
@@ -35,16 +35,16 @@ enum WebHtml {
         if let url, !url.isEmpty { return url }
         let slug = slug ?? ""
         switch sourceType {
-        case "hig": return "https://developer.apple.com/design/human-interface-guidelines"
-        case "guidelines": return "https://developer.apple.com/app-store/review/guidelines/"
-        case "wwdc": return "https://developer.apple.com/videos/"
-        case "sample-code": return "https://developer.apple.com/sample-code/"
-        case "swift-evolution": return "https://www.swift.org/swift-evolution/"
-        case "swift-book": return "https://docs.swift.org/swift-book/"
-        case "swift-org": return "https://www.swift.org/"
-        case "apple-archive": return "https://developer.apple.com/library/archive/"
-        case "packages": return "https://swiftpackageindex.com/"
-        default: return slug.isEmpty ? nil : "https://developer.apple.com/documentation/\(slug)"
+            case "hig": return "https://developer.apple.com/design/human-interface-guidelines"
+            case "guidelines": return "https://developer.apple.com/app-store/review/guidelines/"
+            case "wwdc": return "https://developer.apple.com/videos/"
+            case "sample-code": return "https://developer.apple.com/sample-code/"
+            case "swift-evolution": return "https://www.swift.org/swift-evolution/"
+            case "swift-book": return "https://docs.swift.org/swift-book/"
+            case "swift-org": return "https://www.swift.org/"
+            case "apple-archive": return "https://developer.apple.com/library/archive/"
+            case "packages": return "https://swiftpackageindex.com/"
+            default: return slug.isEmpty ? nil : "https://developer.apple.com/documentation/\(slug)"
         }
     }
 

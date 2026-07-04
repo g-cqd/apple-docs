@@ -14,13 +14,13 @@ private let roleToKind: [String: String] = [
     "symbol": "symbol", "article": "article", "collectionGroup": "collection",
     "collection": "collection", "overview": "overview", "sampleCode": "sampleCode",
     "framework": "framework", "class": "class", "struct": "struct", "enum": "enum",
-    "protocol": "protocol", "typealias": "typealias", "func": "func", "var": "var", "init": "init",
+    "protocol": "protocol", "typealias": "typealias", "func": "func", "var": "var", "init": "init"
 ]
 
 /// `resolvePlatforms`'s platform display-name → lowercase slug map.
 private let platformNameToSlug: [String: String] = [
     "iOS": "ios", "macOS": "macos", "watchOS": "watchos", "tvOS": "tvos", "visionOS": "visionos",
-    "Mac Catalyst": "maccatalyst", "macCatalyst": "maccatalyst", "iPadOS": "ipados",
+    "Mac Catalyst": "maccatalyst", "macCatalyst": "maccatalyst", "iPadOS": "ipados"
 ]
 
 extension DocC {
@@ -39,18 +39,22 @@ extension DocC {
     /// presence of a module name (Apple frameworks default to swift), else nil.
     static func resolveLanguage(_ root: JSON) -> String? {
         var result: String? = nil
-        root["primaryContentSections"].forEachElement { section in
-            guard result == nil, section.isObject,
-                section["kind"].utf8Equals("declarations")
-            else { return }
-            section["declarations"].forEachElement { decl in
-                guard result == nil else { return }
-                let langs = decl["languages"]
-                if arrayContains(langs, "swift") { result = "swift" } else if arrayContains(langs, "occ") {
-                    result = "occ"
-                }
+        root["primaryContentSections"]
+            .forEachElement { section in
+                guard result == nil, section.isObject,
+                    section["kind"].utf8Equals("declarations")
+                else { return }
+                section["declarations"]
+                    .forEachElement { decl in
+                        guard result == nil else { return }
+                        let langs = decl["languages"]
+                        if arrayContains(langs, "swift") {
+                            result = "swift"
+                        } else if arrayContains(langs, "occ") {
+                            result = "occ"
+                        }
+                    }
             }
-        }
         if let result { return result }
         let firstModule = root["metadata"]["modules"][index: 0]
         if firstModule.exists, firstModule.isObject, firstModule["name"].isTruthy { return "swift" }
@@ -62,18 +66,20 @@ extension DocC {
     static func resolveDeclarationText(_ root: JSON) -> String? {
         var result: String? = nil
         var found = false
-        root["primaryContentSections"].forEachElement { section in
-            guard !found, section.isObject, section["kind"].utf8Equals("declarations") else { return }
-            let decl = section["declarations"][index: 0]
-            guard decl.exists, decl["tokens"].isTruthy else { return }
-            found = true
-            var text = ""
-            decl["tokens"].forEachElement { token in
-                let value = token["text"]
-                if value.exists, !value.isNull { text += value.jsString }
+        root["primaryContentSections"]
+            .forEachElement { section in
+                guard !found, section.isObject, section["kind"].utf8Equals("declarations") else { return }
+                let decl = section["declarations"][index: 0]
+                guard decl.exists, decl["tokens"].isTruthy else { return }
+                found = true
+                var text = ""
+                decl["tokens"]
+                    .forEachElement { token in
+                        let value = token["text"]
+                        if value.exists, !value.isNull { text += value.jsString }
+                    }
+                result = text.isEmpty ? nil : text
             }
-            result = text.isEmpty ? nil : text
-        }
         return result
     }
 
@@ -81,13 +87,14 @@ extension DocC {
     /// last-wins, first position, matching the JS map assignment).
     static func resolvePlatforms(_ meta: JSON) -> OrderedDictionary<String, JSONValue> {
         var map = OrderedDictionary<String, JSONValue>()
-        meta["platforms"].forEachElement { platform in
-            guard platform.isObject else { return }
-            let introduced = platform["introducedAt"]
-            guard introduced.isTruthy else { return }
-            guard let slug = platformSlug(platform["name"]) else { return }
-            map[slug] = JSONValue(introduced)
-        }
+        meta["platforms"]
+            .forEachElement { platform in
+                guard platform.isObject else { return }
+                let introduced = platform["introducedAt"]
+                guard introduced.isTruthy else { return }
+                guard let slug = platformSlug(platform["name"]) else { return }
+                map[slug] = JSONValue(introduced)
+            }
         return map
     }
 
@@ -138,17 +145,19 @@ extension DocC {
     /// space-joined (an FTS hint), or nil.
     static func collectHeadings(_ root: JSON, _ ctx: DocCContext) -> String? {
         var texts: [String] = []
-        root["primaryContentSections"].forEachElement { section in
-            guard section.isObject, section["kind"].utf8Equals("content") else { return }
-            section["content"].forEachElement { node in
-                guard node.isObject, node["type"].utf8Equals("heading") else { return }
-                let textNode = node["text"]
-                let text =
-                    (textNode.exists && !textNode.isNull)
-                    ? textNode.jsString : renderInlineText(node["inlineContent"], ctx)
-                if !text.isEmpty { texts.append(text) }
+        root["primaryContentSections"]
+            .forEachElement { section in
+                guard section.isObject, section["kind"].utf8Equals("content") else { return }
+                section["content"]
+                    .forEachElement { node in
+                        guard node.isObject, node["type"].utf8Equals("heading") else { return }
+                        let textNode = node["text"]
+                        let text =
+                            (textNode.exists && !textNode.isNull)
+                            ? textNode.jsString : renderInlineText(node["inlineContent"], ctx)
+                        if !text.isEmpty { texts.append(text) }
+                    }
             }
-        }
         return texts.isEmpty ? nil : texts.joined(separator: " ")
     }
 
@@ -163,7 +172,10 @@ extension DocC {
         var out: [JSONValue] = []
         node.forEachElement { decl in
             let tokens = decl["tokens"]
-            guard tokens.isArray else { out.append(JSONValue(decl)); return }
+            guard tokens.isArray else {
+                out.append(JSONValue(decl))
+                return
+            }
             var enriched: [JSONValue] = []
             tokens.forEachElement { token in enriched.append(enrichDeclToken(token, titleToKey, ctx)) }
             out.append(replaceMember(decl, "tokens", .array(enriched)))

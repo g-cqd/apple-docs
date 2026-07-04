@@ -5,9 +5,8 @@
 // (insertion-ordered stringify twin) with ECMA number rendering.
 
 import ADBase
-import ADJSONCore
-
 public import ADContent
+import ADJSONCore
 
 // MARK: - JSON → JsonLd (stringify-normalizing bridge)
 
@@ -91,18 +90,18 @@ extension BuildSite {
             var axesJson: String?
             for cell in file.cells {
                 switch cell.name {
-                case "italic", "is_variable":
-                    // `row.italic === 1 || row.italic === true` — SQLite gives 0/1.
-                    if case .integer(let raw) = cell.value {
-                        pairs.append((cell.name, .bool(raw == 1)))
-                    } else {
-                        pairs.append((cell.name, .bool(false)))
-                    }
-                case "axes_json":
-                    if case .text(let text) = cell.value { axesJson = text }
-                    pairs.append((cell.name, fontCellValue(cell.value)))
-                default:
-                    pairs.append((cell.name, fontCellValue(cell.value)))
+                    case "italic", "is_variable":
+                        // `row.italic === 1 || row.italic === true` — SQLite gives 0/1.
+                        if case .integer(let raw) = cell.value {
+                            pairs.append((cell.name, .bool(raw == 1)))
+                        } else {
+                            pairs.append((cell.name, .bool(false)))
+                        }
+                    case "axes_json":
+                        if case .text(let text) = cell.value { axesJson = text }
+                        pairs.append((cell.name, fontCellValue(cell.value)))
+                    default:
+                        pairs.append((cell.name, fontCellValue(cell.value)))
                 }
             }
             // `axes: parseJsonArray(row.axes_json)` — the parsed ARRAY, else [].
@@ -115,10 +114,10 @@ extension BuildSite {
 
     private static func fontCellValue(_ cell: FontCell) -> JsonLd {
         switch cell {
-        case .text(let s): return .string(s)
-        case .integer(let i): return .verbatim(String(i))
-        case .real(let d): return .verbatim(JSONOutput.ecmaNumberToString(d))
-        case .null: return .null
+            case .text(let s): return .string(s)
+            case .integer(let i): return .verbatim(String(i))
+            case .real(let d): return .verbatim(JSONOutput.ecmaNumberToString(d))
+            case .null: return .null
         }
     }
 
@@ -173,19 +172,21 @@ extension BuildSite {
     /// re-parsing into the `[JSON]` the framework page renders.
     public static func frameworkDocsJson(_ docs: [FrameworkListingDoc]) -> String {
         func opt(_ value: String?) -> JsonLd { value.map(JsonLd.string) ?? .null }
-        return JsonLd.array(
-            docs.map { doc in
-                .object([
-                    ("path", .string(doc.path)),
-                    ("title", opt(doc.title)),
-                    ("role", opt(doc.role)),
-                    ("role_heading", opt(doc.roleHeading)),
-                    ("abstract", opt(doc.abstract)),
-                    ("source_metadata", opt(doc.sourceMetadata)),
-                    ("framework", opt(doc.framework)),
-                ])
-            }
-        ).serialized()
+        return
+            JsonLd.array(
+                docs.map { doc in
+                    .object([
+                        ("path", .string(doc.path)),
+                        ("title", opt(doc.title)),
+                        ("role", opt(doc.role)),
+                        ("role_heading", opt(doc.roleHeading)),
+                        ("abstract", opt(doc.abstract)),
+                        ("source_metadata", opt(doc.sourceMetadata)),
+                        ("framework", opt(doc.framework))
+                    ])
+                }
+            )
+            .serialized()
     }
 }
 
@@ -240,9 +241,10 @@ extension BuildSite {
             // Collect all item keys.
             var keys: [String] = []
             root.forEachElement { group in
-                group["items"].forEachElement { item in
-                    if let key = item["key"].string, !key.isEmpty { keys.append(key) }
-                }
+                group["items"]
+                    .forEachElement { item in
+                        if let key = item["key"].string, !key.isEmpty { keys.append(key) }
+                    }
             }
             guard !keys.isEmpty else { return section }
 

@@ -8,7 +8,6 @@ import Testing
 
 @Suite("SwiftEvolutionAdapter — proposal header + normalize")
 struct SwiftEvolutionAdapterTests {
-
     private static let sample = """
         # Async Functions
 
@@ -38,8 +37,9 @@ struct SwiftEvolutionAdapterTests {
 
     @Test("normalize prefixes the title with the SE number and sets document metadata")
     func normalize() throws {
-        let page = try SwiftEvolutionAdapter().normalize(
-            "swift-evolution/0296-async-await", .markdown(Self.sample))
+        let page = try SwiftEvolutionAdapter()
+            .normalize(
+                "swift-evolution/0296-async-await", .markdown(Self.sample))
         #expect(page.document.title == "SE-0296: Async Functions")
         #expect(page.document.sourceType == "swift-evolution")
         #expect(page.document.kind == "proposal")

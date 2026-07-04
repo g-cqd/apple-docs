@@ -28,7 +28,6 @@ import Testing
 
 @Suite("IndexEmbeddings — native chunks/vectors writer parity")
 struct IndexEmbeddingsTests {
-
     /// A deterministic, dependency-free embedder built on ADTestKit's `SeededRNG`
     /// (the family's reproducible SplitMix64 generator): the seed is `Seed.named` of
     /// the chunk text, so the same text always yields the same f32 vector — identical
@@ -54,7 +53,7 @@ struct IndexEmbeddingsTests {
             .init(kind: "abstract", heading: nil, contentText: "An abstract that rides in the anchor."),
             .init(kind: "declaration", heading: nil, contentText: "func body -> some View"),
             .init(kind: "discussion", heading: "Discussion", contentText: longBody),
-            .init(kind: "overview", heading: "Overview", contentText: "A short overview paragraph."),
+            .init(kind: "overview", heading: "Overview", contentText: "A short overview paragraph.")
         ]
         let doc = NormalizedDoc(
             document: NormalizedDocument(
@@ -62,11 +61,12 @@ struct IndexEmbeddingsTests {
                 url: "https://developer.apple.com/documentation/swiftui/view",
                 abstractText: "A type that represents part of your app's UI.",
                 headings: "Overview. Discussion. Conforming Types"),
-            sections: sections.enumerated().map { index, section in
-                NormalizedSection(
-                    sectionKind: section.kind, heading: section.heading,
-                    contentText: section.contentText, sortOrder: index)
-            },
+            sections: sections.enumerated()
+                .map { index, section in
+                    NormalizedSection(
+                        sectionKind: section.kind, heading: section.heading,
+                        contentText: section.contentText, sortOrder: index)
+                },
             relationships: [])
         return (doc, sections)
     }
@@ -76,18 +76,19 @@ struct IndexEmbeddingsTests {
     private static func anchorOnlyDoc() -> (NormalizedDoc, [Chunker.Section]) {
         let sections: [Chunker.Section] = [
             .init(kind: "abstract", heading: nil, contentText: "Just an abstract."),
-            .init(kind: "parameters", heading: "Parameters", contentText: "value: the input"),
+            .init(kind: "parameters", heading: "Parameters", contentText: "value: the input")
         ]
         let doc = NormalizedDoc(
             document: NormalizedDocument(
                 sourceType: "apple-docc", key: "swiftui/text", title: "Text",
                 url: "https://developer.apple.com/documentation/swiftui/text",
                 abstractText: "A view that displays read-only text.", headings: "Overview"),
-            sections: sections.enumerated().map { index, section in
-                NormalizedSection(
-                    sectionKind: section.kind, heading: section.heading,
-                    contentText: section.contentText, sortOrder: index)
-            },
+            sections: sections.enumerated()
+                .map { index, section in
+                    NormalizedSection(
+                        sectionKind: section.kind, heading: section.heading,
+                        contentText: section.contentText, sortOrder: index)
+                },
             relationships: [])
         return (doc, sections)
     }
@@ -127,7 +128,10 @@ struct IndexEmbeddingsTests {
         .map { row in
             guard case .integer(let ord) = row["ord"], case .blob(let bin) = row["vec_bin"]
             else { return (ord: Int64(-1), bin: [], i8: []) }
-            let i8: [UInt8] = { if case .blob(let b) = row["vec_i8"] { return b } else { return [] } }()
+            let i8: [UInt8] = {
+                guard case .blob(let b) = row["vec_i8"] else { return [] }
+                return b
+            }()
             return (ord: ord, bin: bin, i8: i8)
         }
     }

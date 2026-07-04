@@ -54,13 +54,15 @@ struct DocCNormalizeParityTests {
             let references = DocC.extractReferences(jsonBytes: bytes)
             if references != testCase.expectedReferences {
                 Issue.record(
-                    "case \(testCase.name): extractReferences\n  actual=\(references)\n  expected=\(testCase.expectedReferences)")
+                    "case \(testCase.name): extractReferences\n  actual=\(references)\n  expected=\(testCase.expectedReferences)"
+                )
             }
             // content_hash preimage: stableStringify(normalized) byte-parity.
             let stable = page.stableStringified()
             if stable != testCase.expectedStable {
                 Issue.record(
-                    "case \(testCase.name): stableStringified\n  actual=  \(stable)\n  expected=\(testCase.expectedStable)")
+                    "case \(testCase.name): stableStringified\n  actual=  \(stable)\n  expected=\(testCase.expectedStable)"
+                )
             }
         }
     }
@@ -107,19 +109,36 @@ struct DocCNormalizeParityTests {
         check("minVisionos", a.minVisionos, e.minVisionos)
         check("headings", a.headings, e.headings)
         check("sourceMetadata", a.sourceMetadata, e.sourceMetadata)
-        if a.isDeprecated != e.isDeprecated { diffs.append("isDeprecated: \(String(describing: a.isDeprecated)) != \(String(describing: e.isDeprecated))") }
-        if a.isBeta != e.isBeta { diffs.append("isBeta: \(String(describing: a.isBeta)) != \(String(describing: e.isBeta))") }
-        if a.isReleaseNotes != e.isReleaseNotes { diffs.append("isReleaseNotes: \(String(describing: a.isReleaseNotes)) != \(String(describing: e.isReleaseNotes))") }
-        if a.urlDepth != e.urlDepth { diffs.append("urlDepth: \(String(describing: a.urlDepth)) != \(String(describing: e.urlDepth))") }
+        if a.isDeprecated != e.isDeprecated {
+            diffs.append("isDeprecated: \(String(describing: a.isDeprecated)) != \(String(describing: e.isDeprecated))")
+        }
+        if a.isBeta != e.isBeta {
+            diffs.append("isBeta: \(String(describing: a.isBeta)) != \(String(describing: e.isBeta))")
+        }
+        if a.isReleaseNotes != e.isReleaseNotes {
+            diffs.append(
+                "isReleaseNotes: \(String(describing: a.isReleaseNotes)) != \(String(describing: e.isReleaseNotes))")
+        }
+        if a.urlDepth != e.urlDepth {
+            diffs.append("urlDepth: \(String(describing: a.urlDepth)) != \(String(describing: e.urlDepth))")
+        }
         return diffs.joined(separator: "; ")
     }
 
     private static func sectionDiff(_ a: NormalizedSection, _ e: NormalizedSection) -> String {
         var diffs: [String] = []
         if a.sectionKind != e.sectionKind { diffs.append("kind \(a.sectionKind) != \(e.sectionKind)") }
-        if a.heading != e.heading { diffs.append("heading \(String(describing: a.heading)) != \(String(describing: e.heading))") }
-        if a.contentText != e.contentText { diffs.append("contentText \(String(describing: a.contentText)) != \(String(describing: e.contentText))") }
-        if a.contentJson != e.contentJson { diffs.append("contentJson:\n    actual=  \(String(describing: a.contentJson))\n    expected=\(String(describing: e.contentJson))") }
+        if a.heading != e.heading {
+            diffs.append("heading \(String(describing: a.heading)) != \(String(describing: e.heading))")
+        }
+        if a.contentText != e.contentText {
+            diffs.append("contentText \(String(describing: a.contentText)) != \(String(describing: e.contentText))")
+        }
+        if a.contentJson != e.contentJson {
+            diffs.append(
+                "contentJson:\n    actual=  \(String(describing: a.contentJson))\n    expected=\(String(describing: e.contentJson))"
+            )
+        }
         if a.sortOrder != e.sortOrder { diffs.append("sortOrder \(a.sortOrder) != \(e.sortOrder)") }
         return diffs.joined(separator: "; ")
     }

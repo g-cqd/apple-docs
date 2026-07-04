@@ -23,32 +23,35 @@ struct StorageCorpusReader: CorpusReader {
     /// per-framework metadata documentCount is build.js step 8's
     /// `COUNT(*) FROM documents WHERE framework = slug`.
     func corpusRoots() -> [CorpusRoot] {
-        connection.webBuildRoots().map {
-            CorpusRoot(
-                slug: $0.slug, displayName: $0.displayName, kind: $0.kind,
-                documentCount: connection.documentCount(framework: $0.slug),
-                sourceType: $0.sourceType, url: nil)
-        }
+        connection.webBuildRoots()
+            .map {
+                CorpusRoot(
+                    slug: $0.slug, displayName: $0.displayName, kind: $0.kind,
+                    documentCount: connection.documentCount(framework: $0.slug),
+                    sourceType: $0.sourceType, url: nil)
+            }
     }
 
     /// buildHomepageProps' roster: getRoots minus roots whose ONLY page is the
     /// root itself (`page_count <= 1` AND the pages probe returns at most the
     /// self page).
     func homepageRoots() -> [CorpusRoot] {
-        connection.webBuildRoots().filter { root in
-            if root.pageCount <= 1 {
-                let pages = connection.frameworkPageDocs(root: root.slug)
-                if pages.count <= 1 && (pages.first == nil || pages.first?.path == root.slug) {
-                    return false
+        connection.webBuildRoots()
+            .filter { root in
+                if root.pageCount <= 1 {
+                    let pages = connection.frameworkPageDocs(root: root.slug)
+                    if pages.count <= 1 && (pages.first == nil || pages.first?.path == root.slug) {
+                        return false
+                    }
                 }
+                return true
             }
-            return true
-        }.map {
-            CorpusRoot(
-                slug: $0.slug, displayName: $0.displayName, kind: $0.kind,
-                documentCount: connection.documentCount(framework: $0.slug),
-                sourceType: $0.sourceType, url: nil)
-        }
+            .map {
+                CorpusRoot(
+                    slug: $0.slug, displayName: $0.displayName, kind: $0.kind,
+                    documentCount: connection.documentCount(framework: $0.slug),
+                    sourceType: $0.sourceType, url: nil)
+            }
     }
 
     /// The /fonts embedded payload — `JSON.stringify(db.listAppleFonts())`
@@ -66,10 +69,10 @@ struct StorageCorpusReader: CorpusReader {
             cells: row.cells.map { cell in
                 let value: FontCell
                 switch cell.value {
-                case .text(let s): value = .text(s)
-                case .integer(let i): value = .integer(i)
-                case .real(let d): value = .real(d)
-                case .null: value = .null
+                    case .text(let s): value = .text(s)
+                    case .integer(let i): value = .integer(i)
+                    case .real(let d): value = .real(d)
+                    case .null: value = .null
                 }
                 return (name: cell.name, value: value)
             })
@@ -80,13 +83,15 @@ struct StorageCorpusReader: CorpusReader {
     /// The S4 sitemap walk: every root (getRoots ORDER BY slug) with its
     /// `key, role_heading` doc rows.
     func sitemapRoots() -> [SitemapRoot] {
-        connection.sitemapRoots().map { root in
-            SitemapRoot(
-                slug: root.slug, kind: root.kind,
-                docs: connection.sitemapDocs(framework: root.slug).map {
-                    SitemapDoc(key: $0.key, roleHeading: $0.roleHeading)
-                })
-        }
+        connection.sitemapRoots()
+            .map { root in
+                SitemapRoot(
+                    slug: root.slug, kind: root.kind,
+                    docs: connection.sitemapDocs(framework: root.slug)
+                        .map {
+                            SitemapDoc(key: $0.key, roleHeading: $0.roleHeading)
+                        })
+            }
     }
 
     /// The S3 search-artifact reads (generateSearchArtifacts' corpus surface):
@@ -134,20 +139,23 @@ struct StorageDocumentReader: DocumentCorpusReader {
     /// sections (ORDER BY sort_order, id — identical to batchFetchSections'
     /// per-doc sequence) + its ancestor-title map.
     func documents(inFramework slug: String) -> [BuildDocument] {
-        base.connection.webBuildDocuments(framework: slug).map { row in
-            let sections = base.connection.documentSections(row.key).map { section in
-                DocSection(
-                    sectionKind: section.sectionKind, heading: section.heading,
-                    contentText: section.contentText, contentJson: section.contentJSON,
-                    sortOrder: section.sortOrder)
+        base.connection.webBuildDocuments(framework: slug)
+            .map { row in
+                let sections = base.connection.documentSections(row.key)
+                    .map { section in
+                        DocSection(
+                            sectionKind: section.sectionKind, heading: section.heading,
+                            contentText: section.contentText, contentJson: section.contentJSON,
+                            sortOrder: section.sortOrder)
+                    }
+                let doc = DocRecord(
+                    key: row.key, title: row.title, framework: row.framework,
+                    frameworkDisplay: row.frameworkDisplay, roleHeading: row.roleHeading,
+                    isDeprecated: row.isDeprecated, isBeta: row.isBeta, platformsJson: row.platformsJson,
+                    url: row.url, abstractText: row.abstractText, language: row.language)
+                return BuildDocument(
+                    doc: doc, sections: sections, ancestorTitles: ancestorTitles(for: row.key), id: row.id)
             }
-            let doc = DocRecord(
-                key: row.key, title: row.title, framework: row.framework,
-                frameworkDisplay: row.frameworkDisplay, roleHeading: row.roleHeading,
-                isDeprecated: row.isDeprecated, isBeta: row.isBeta, platformsJson: row.platformsJson,
-                url: row.url, abstractText: row.abstractText, language: row.language)
-            return BuildDocument(doc: doc, sections: sections, ancestorTitles: ancestorTitles(for: row.key), id: row.id)
-        }
     }
 
     /// render-cache.js `getAncestorTitles(key)`: for i in 1..<segs.count-1,
@@ -156,8 +164,8 @@ struct StorageDocumentReader: DocumentCorpusReader {
         let segs = key.split(separator: "/").map(String.init)  // split(...).filter(Boolean)
         guard segs.count > 2 else { return [:] }
         var titles: [String: String] = [:]
-        for i in 1..<(segs.count - 1) {
-            let partial = segs[0...i].joined(separator: "/")
+        for i in 1 ..< (segs.count - 1) {
+            let partial = segs[0 ... i].joined(separator: "/")
             if let title = titleIndex[partial] { titles[partial] = title }
         }
         return titles
@@ -182,7 +190,6 @@ struct StorageDocumentReader: DocumentCorpusReader {
     func frameworkTreeEdges(slug: String) -> [(fromKey: String, toKey: String)] {
         base.connection.frameworkTreeEdges(slug).map { (fromKey: $0.fromKey, toKey: $0.toKey) }
     }
-
 
     /// scope-group-data.js `loadScopeExtras(db, root)`: the HIG topic→category
     /// map for the `design` root (most-specific parent wins; category order
@@ -238,7 +245,7 @@ struct FileArtifactSink {
 
 /// Random lowercase hex (`randomBytes(n).toString('hex')`).
 func randomHex(_ bytes: Int) -> String {
-    (0..<bytes).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
+    (0 ..< bytes).map { _ in String(format: "%02x", UInt8.random(in: 0 ... 255)) }.joined()
 }
 
 /// The native template-surface stamp: sha256("path|size|mtimeNs")[:16] of the
@@ -303,7 +310,7 @@ func writeCheckpoint(
         ("build_dir", .string(buildDir)),
         ("base_url", .string(baseUrl)),
         ("incremental", .bool(incremental)),
-        ("status", .string(status)),
+        ("status", .string(status))
     ])
     let json = String(decoding: (try? state.encodedBytes(options: .javaScript)) ?? [], as: UTF8.self)
     _ = writer.setSyncCheckpoint(key: "web_build", valueJSON: json, updatedAt: jsIsoNow())
@@ -380,7 +387,7 @@ func gitCommitHash() -> String? {
 private func isCommitSha(_ candidate: String) -> Bool {
     let scalars = candidate.unicodeScalars
     guard scalars.count >= 7 && scalars.count <= 40 else { return false }
-    return scalars.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
+    return scalars.allSatisfy { ("0" ... "9").contains($0) || ("a" ... "f").contains($0) }
 }
 
 /// `ad-cli web …` — the static-site build verb group.
@@ -535,7 +542,9 @@ struct WebBuildCommand: ParsableCommand {
             let markdownDocs = (ProcessInfo.processInfo.environment["APPLE_DOCS_MARKDOWN_DOCS"] ?? "") != "0"
             let highlighter = resolveHighlighter(srcWebDir: srcWeb)
             defer { highlighter?.coprocess.shutdown() }
-            let hooks = writer.map { renderIndexHooks($0, templateVersion: templateVersion, buildDir: buildDir, isIncremental: isIncremental) }
+            let hooks = writer.map {
+                renderIndexHooks($0, templateVersion: templateVersion, buildDir: buildDir, isIncremental: isIncremental)
+            }
             result = try BuildSite.writeAll(
                 config: config, reader: docReader, version: appVersion, markdownDocs: markdownDocs,
                 highlight: highlighter?.highlight, searchArtifacts: search.stats, incremental: hooks,
@@ -566,8 +575,9 @@ struct WebBuildCommand: ParsableCommand {
             let audit = try WebLinksAudit.run(outDir: out, connection: connection)
             report += "ad-cli: \(WebLinksAudit.summary(audit))\n"
             if let path = linksAuditJson {
-                guard FileManager.default.createFile(
-                    atPath: path, contents: Data(stringifyPretty(WebLinksAudit.json(audit)).utf8))
+                guard
+                    FileManager.default.createFile(
+                        atPath: path, contents: Data(stringifyPretty(WebLinksAudit.json(audit)).utf8))
                 else { throw ValidationError("ad-cli: cannot write \(path)") }
             }
         }

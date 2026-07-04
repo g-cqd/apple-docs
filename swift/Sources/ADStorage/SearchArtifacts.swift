@@ -175,7 +175,7 @@ private func jsTrim(_ s: String) -> String {
     while end > start, isJsWhitespaceScalar(scalars[end - 1]) { end -= 1 }
     if start == 0 && end == scalars.count { return s }
     var view = String.UnicodeScalarView()
-    view.append(contentsOf: scalars[start..<end])
+    view.append(contentsOf: scalars[start ..< end])
     return String(view)
 }
 
@@ -183,10 +183,10 @@ private func jsTrim(_ s: String) -> String {
 /// LS/PS + BOM).
 private func isJsWhitespaceScalar(_ s: Unicode.Scalar) -> Bool {
     switch s.value {
-    case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029,
-        0x202F, 0x205F, 0x3000, 0xFEFF:
-        return true
-    default:
-        return false
+        case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000 ... 0x200A, 0x2028, 0x2029,
+            0x202F, 0x205F, 0x3000, 0xFEFF:
+            return true
+        default:
+            return false
     }
 }

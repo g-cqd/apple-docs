@@ -10,12 +10,12 @@ public enum RenderHelpers {
         out.reserveCapacity(value.count)
         for ch in value {
             switch ch {
-            case "&": out += "&amp;"
-            case "<": out += "&lt;"
-            case ">": out += "&gt;"
-            case "\"": out += "&quot;"
-            case "'": out += "&#39;"
-            default: out.append(ch)
+                case "&": out += "&amp;"
+                case "<": out += "&lt;"
+                case ">": out += "&gt;"
+                case "\"": out += "&quot;"
+                case "'": out += "&#39;"
+                default: out.append(ch)
             }
         }
         return out
@@ -34,7 +34,10 @@ public enum RenderHelpers {
         var inWs = false
         for ch in s {
             if ch.isWhitespace {
-                if !inWs { dashed.append("-"); inWs = true }
+                if !inWs {
+                    dashed.append("-")
+                    inWs = true
+                }
             } else {
                 dashed.append(ch)
                 inWs = false
@@ -45,7 +48,10 @@ public enum RenderHelpers {
         var inDash = false
         for ch in dashed {
             if ch == "-" {
-                if !inDash { out.append("-"); inDash = true }
+                if !inDash {
+                    out.append("-")
+                    inDash = true
+                }
             } else if isWordChar(ch) {
                 out.append(ch)
                 inDash = false

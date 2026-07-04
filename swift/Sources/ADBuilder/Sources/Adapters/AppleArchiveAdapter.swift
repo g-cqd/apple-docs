@@ -35,7 +35,7 @@ public final class AppleArchiveAdapter: SourceAdapter, @unchecked Sendable {
         "documentation/General/Conceptual/News_API_Ref/index.html",
         "documentation/Performance/Conceptual/Mac_OSX_Numerics/Mac_OSX_Numerics.pdf",
         "documentation/General/Conceptual/AppStoreSearchAdsAPIReference/index.html",
-        "documentation/QuickTime/whatsnew.htm",
+        "documentation/QuickTime/whatsnew.htm"
     ]
 
     /// One library.json guide entry (the JS catalog value).
@@ -81,15 +81,17 @@ public final class AppleArchiveAdapter: SourceAdapter, @unchecked Sendable {
             head.method = .head
             head.headerFields[.userAgent] = Self.userAgent
             let response = try await context.client.send(HTTPClientRequest(head, deadline: .seconds(30)))
-            guard (200..<300).contains(response.status.code) else {
+            guard (200 ..< 300).contains(response.status.code) else {
                 throw AdapterError.httpStatus(response.status.code, url)
             }
-            let payload = JsJson.object([
-                ("format", .string("pdf")),
-                ("url", .string(url)),
-                ("title", entry?.title.map(JsJson.string) ?? .null),
-                ("sourceMetadata", entry.map { JsJson.string($0.sourceMetadata) } ?? .null),
-            ]).serialized()
+            let payload =
+                JsJson.object([
+                    ("format", .string("pdf")),
+                    ("url", .string(url)),
+                    ("title", entry?.title.map(JsJson.string) ?? .null),
+                    ("sourceMetadata", entry.map { JsJson.string($0.sourceMetadata) } ?? .null)
+                ])
+                .serialized()
             return FetchResult(
                 key: key, payload: .json(Array(payload.utf8)), etag: response.etag,
                 lastModified: response.lastModified)
@@ -186,7 +188,7 @@ public final class AppleArchiveAdapter: SourceAdapter, @unchecked Sendable {
         get.method = .get
         get.headerFields[.userAgent] = Self.userAgent
         let response = try await context.client.send(HTTPClientRequest(get, deadline: .seconds(30)))
-        guard (200..<300).contains(response.status.code) else {
+        guard (200 ..< 300).contains(response.status.code) else {
             throw AdapterError.httpStatus(response.status.code, Self.libraryURL)
         }
         let bytes = try await response.body.collect(upTo: Self.bodyLimit)
@@ -233,12 +235,14 @@ public final class AppleArchiveAdapter: SourceAdapter, @unchecked Sendable {
 
             let title = decodeHtmlEntities(cell(nameColumn) as? String)
             let platform = decodeHtmlEntities(cell(platformColumn) as? String)
-            let sourceMetadata = JsJson.object([
-                ("resourceType", .string("Guides")),
-                ("platform", platform.map(JsJson.string) ?? .null),
-                ("archivePath", .string(relativeUrl)),
-                ("format", .string(format)),
-            ]).serialized()
+            let sourceMetadata =
+                JsJson.object([
+                    ("resourceType", .string("Guides")),
+                    ("platform", platform.map(JsJson.string) ?? .null),
+                    ("archivePath", .string(relativeUrl)),
+                    ("format", .string(format))
+                ])
+                .serialized()
             entries[key] = GuideEntry(
                 key: key, title: title, url: "\(archiveBase)/\(relativeUrl)",
                 sourceMetadata: sourceMetadata, format: format)
@@ -309,9 +313,9 @@ public final class AppleArchiveAdapter: SourceAdapter, @unchecked Sendable {
                     continue
                 }
                 // Emit: whitespace run, quoted identifier, colon.
-                for w in (i + 1)..<j { out.append(scalars[w]) }
+                for w in (i + 1) ..< j { out.append(scalars[w]) }
                 out.append("\"")
-                for w in j..<k { out.append(scalars[w]) }
+                for w in j ..< k { out.append(scalars[w]) }
                 out.append("\"")
                 out.append(":")
                 i = m + 1
@@ -387,7 +391,8 @@ public final class AppleArchiveAdapter: SourceAdapter, @unchecked Sendable {
     /// entities round-trip, CodeQL js/double-escaping).
     static func decodeHtmlEntities(_ value: String?) -> String? {
         guard let value else { return nil }
-        return value
+        return
+            value
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#39;", with: "'")
             .replacingOccurrences(of: "&lt;", with: "<")
@@ -409,16 +414,16 @@ public final class AppleArchiveAdapter: SourceAdapter, @unchecked Sendable {
     /// their ECMA form — the type column is typically the number 3).
     static func jsStringCoerce(_ value: Any?) -> String {
         switch value {
-        case nil: return ""
-        case let string as String: return string
-        case let number as NSNumber:
-            // Integral numbers print without a fraction (String(3) === '3').
-            let double = number.doubleValue
-            if double == double.rounded(), abs(double) < 1e15 {
-                return String(Int64(double))
-            }
-            return "\(number)"
-        default: return ""
+            case nil: return ""
+            case let string as String: return string
+            case let number as NSNumber:
+                // Integral numbers print without a fraction (String(3) === '3').
+                let double = number.doubleValue
+                if double == double.rounded(), abs(double) < 1e15 {
+                    return String(Int64(double))
+                }
+                return "\(number)"
+            default: return ""
         }
     }
 
@@ -439,10 +444,10 @@ public final class AppleArchiveAdapter: SourceAdapter, @unchecked Sendable {
 
     private static func isJsSpace(_ s: Unicode.Scalar) -> Bool {
         switch s.value {
-        case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029,
-            0x202F, 0x205F, 0x3000, 0xFEFF:
-            return true
-        default: return false
+            case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000 ... 0x200A, 0x2028, 0x2029,
+                0x202F, 0x205F, 0x3000, 0xFEFF:
+                return true
+            default: return false
         }
     }
     private static func isIdentStart(_ s: Unicode.Scalar) -> Bool {

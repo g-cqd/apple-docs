@@ -6,7 +6,7 @@ import ADJSONCore
 
 /// `RELATION_TYPE_MAP` — the relationshipsSections `type` → canonical relation type.
 private let relationTypeMap: [String: String] = [
-    "inheritsFrom": "inherits_from", "conformsTo": "conforms_to", "inheritedBy": "inherited_by",
+    "inheritsFrom": "inherits_from", "conformsTo": "conforms_to", "inheritedBy": "inherited_by"
 ]
 
 extension DocC {
@@ -23,15 +23,16 @@ extension DocC {
                 guard section.isObject else { return }
                 let type = relationType(section)
                 let sectionTitle = section["title"].string
-                section["identifiers"].forEachElement { idNode in
-                    guard let toKey = ctx.mapKey(ctx.resolveRefKey(idNode.string)), !toKey.isEmpty
-                    else { return }
-                    relationships.append(
-                        NormalizedRelationship(
-                            fromKey: key, toKey: toKey, relationType: type, section: sectionTitle,
-                            sortOrder: order))
-                    order += 1
-                }
+                section["identifiers"]
+                    .forEachElement { idNode in
+                        guard let toKey = ctx.mapKey(ctx.resolveRefKey(idNode.string)), !toKey.isEmpty
+                        else { return }
+                        relationships.append(
+                            NormalizedRelationship(
+                                fromKey: key, toKey: toKey, relationType: type, section: sectionTitle,
+                                sortOrder: order))
+                        order += 1
+                    }
             }
         }
 

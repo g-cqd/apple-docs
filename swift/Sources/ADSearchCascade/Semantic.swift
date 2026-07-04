@@ -18,17 +18,17 @@
 //   - Every JS `.sort((a,b) => b.score - a.score)` is STABLE; Swift's sort isn't,
 //     so the fused-score sort carries a fresh insertion index as a tie-break.
 
-#if canImport(Darwin)
-    import Darwin
-#else
-    import Glibc
-#endif
-
 public import ADEmbed  // Embedder is exposed by the public SemanticContext
 import ADFCore  // NumberParse — the shared JS-parseFloat-prefix env parser
 import ADSearch  // Fusion / MMR — used by the internal SemanticFusion methods
 import ADSemantic  // Semantic.candidates + SemanticCandidate (internal use)
 import ADStorage  // StorageConnection — the internal SemanticFusion.fuse param
+
+#if canImport(Darwin)
+    import Darwin
+#else
+    import Glibc
+#endif
 
 /// The semantic configuration the CLI threads into the cascade: the loaded
 /// embedder + the top-K candidate count (50, the JS `SEMANTIC_TOP_K`). Carried
@@ -85,7 +85,8 @@ enum SemanticFusion {
         // integer ids; `interned` maps path→index first-seen (lexical then new
         // semantic), exactly as fusion-native.js does.
         let useRRF = (envValue("APPLE_DOCS_FUSION") ?? "hybrid") == "rrf"
-        let fused = useRRF
+        let fused =
+            useRRF
             ? rrf(lexicalRanked: lexicalRanked, semanticRanked: semanticRanked)
             : hybrid(
                 lexicalRanked: lexicalRanked, lexicalScores: lexicalScores,
@@ -194,7 +195,12 @@ enum SemanticFusion {
         let head = Array(results[0 ..< window])
         // dim = first present vector's length (JS packMmr: first non-null vec).
         var dim = 0
-        for hit in head { if let v = vecByPath[hit.path] { dim = v.count; break } }
+        for hit in head {
+            if let v = vecByPath[hit.path] {
+                dim = v.count
+                break
+            }
+        }
 
         let bitmapBytes = (window + 7) >> 3
         var presence = [UInt8](repeating: 0, count: max(bitmapBytes, 1))

@@ -96,16 +96,18 @@ extension BuildSite {
 
         // title-index.<hash>.json — `{v:2, …}` in literal insertion order.
         let ti = corpus.titleIndex
-        let titleJson = JsonLd.object([
-            ("v", .int(2)),
-            ("frameworks", .array(ti.frameworks.map(JsonLd.string))),
-            ("keys", .array(ti.keys.map(JsonLd.string))),
-            ("titles", .array(ti.titles.map(JsonLd.string))),
-            ("abstracts", .array(ti.abstracts.map(JsonLd.string))),
-            ("fwIndices", .array(ti.fwIndices.map(JsonLd.int))),
-            ("kinds", .array(ti.kinds.map(JsonLd.string))),
-            ("roleHeadings", .array(ti.roleHeadings.map(JsonLd.string))),
-        ]).serialized()
+        let titleJson =
+            JsonLd.object([
+                ("v", .int(2)),
+                ("frameworks", .array(ti.frameworks.map(JsonLd.string))),
+                ("keys", .array(ti.keys.map(JsonLd.string))),
+                ("titles", .array(ti.titles.map(JsonLd.string))),
+                ("abstracts", .array(ti.abstracts.map(JsonLd.string))),
+                ("fwIndices", .array(ti.fwIndices.map(JsonLd.int))),
+                ("kinds", .array(ti.kinds.map(JsonLd.string))),
+                ("roleHeadings", .array(ti.roleHeadings.map(JsonLd.string)))
+            ])
+            .serialized()
         let titleHash = contentHash(titleJson)
         artifacts.append(Artifact(path: "data/search/title-index.\(titleHash).json", text: titleJson))
 
@@ -149,7 +151,7 @@ extension BuildSite {
         // search-manifest.json (NOT hashed — served no-cache).
         var files: [(String, JsonLd)] = [
             ("title-index", .string("title-index.\(titleHash).json")),
-            ("aliases", .string("aliases.\(aliasHash).json")),
+            ("aliases", .string("aliases.\(aliasHash).json"))
         ]
         for meta in shardMeta {
             files.append(("shard-\(meta.letter)", .string("shards/\(meta.letter).\(meta.hash).json")))
@@ -158,14 +160,16 @@ extension BuildSite {
             titleCount: ti.keys.count, aliasCount: aliasPairs.count, shardCount: shardMeta.count)
         // `files` keys ("title-index" / "aliases" / "shard-<letter>") are never
         // array-index-like, so insertion order IS the JS enumeration order.
-        let manifest = JsonLd.object([
-            ("version", .int(2)),
-            ("titleCount", .int(stats.titleCount)),
-            ("aliasCount", .int(stats.aliasCount)),
-            ("shardCount", .int(stats.shardCount)),
-            ("files", .object(files)),
-            ("generatedAt", .string(generatedAt)),
-        ]).serialized()
+        let manifest =
+            JsonLd.object([
+                ("version", .int(2)),
+                ("titleCount", .int(stats.titleCount)),
+                ("aliasCount", .int(stats.aliasCount)),
+                ("shardCount", .int(stats.shardCount)),
+                ("files", .object(files)),
+                ("generatedAt", .string(generatedAt))
+            ])
+            .serialized()
         artifacts.append(Artifact(path: "data/search/search-manifest.json", text: manifest))
 
         return (artifacts: artifacts, stats: stats)
@@ -184,12 +188,12 @@ extension BuildSite {
     static func shardLetter(_ framework: String?) -> String {
         guard let framework, let first = framework.utf16.first else { return "_" }
         switch first {
-        case 0x61...0x7A:  // a-z
-            return String(UnicodeScalar(UInt8(first)))
-        case 0x41...0x5A:  // A-Z → lowercase
-            return String(UnicodeScalar(UInt8(first + 32)))
-        default:
-            return "_"
+            case 0x61 ... 0x7A:  // a-z
+                return String(UnicodeScalar(UInt8(first)))
+            case 0x41 ... 0x5A:  // A-Z → lowercase
+                return String(UnicodeScalar(UInt8(first + 32)))
+            default:
+                return "_"
         }
     }
 

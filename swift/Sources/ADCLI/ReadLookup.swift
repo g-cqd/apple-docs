@@ -206,25 +206,25 @@ private func buildMetadata(
 ) -> LookupMetadata {
     let relationships = relationshipPairs(connection.relationshipCountsByType(pagePath))
     switch resolution {
-    case .path:
-        return LookupMetadata(
-            title: page.title, framework: page.frameworkDisplay, rootSlug: page.rootSlug,
-            roleHeading: page.roleHeading, kind: page.kind,
-            abstract: page.abstract, abstractPresent: true,
-            declaration: page.declaration, declarationPresent: true,
-            path: pagePath, platforms: parsePlatforms(page.platformsJSON), relationships: relationships,
-            isDeprecated: page.isDeprecated, isBeta: page.isBeta)
-    case .symbol:
-        // JS reads `page.abstract`/`page.declaration` off a `SELECT d.*` row whose
-        // columns are abstract_text/declaration_text — so both are undefined
-        // (dropped), and `page.platforms` is undefined → `[]`.
-        return LookupMetadata(
-            title: page.title, framework: page.frameworkDisplay, rootSlug: page.rootSlug,
-            roleHeading: page.roleHeading, kind: page.kind,
-            abstract: nil, abstractPresent: false,
-            declaration: nil, declarationPresent: false,
-            path: pagePath, platforms: .array([]), relationships: relationships,
-            isDeprecated: page.isDeprecated, isBeta: page.isBeta)
+        case .path:
+            return LookupMetadata(
+                title: page.title, framework: page.frameworkDisplay, rootSlug: page.rootSlug,
+                roleHeading: page.roleHeading, kind: page.kind,
+                abstract: page.abstract, abstractPresent: true,
+                declaration: page.declaration, declarationPresent: true,
+                path: pagePath, platforms: parsePlatforms(page.platformsJSON), relationships: relationships,
+                isDeprecated: page.isDeprecated, isBeta: page.isBeta)
+        case .symbol:
+            // JS reads `page.abstract`/`page.declaration` off a `SELECT d.*` row whose
+            // columns are abstract_text/declaration_text — so both are undefined
+            // (dropped), and `page.platforms` is undefined → `[]`.
+            return LookupMetadata(
+                title: page.title, framework: page.frameworkDisplay, rootSlug: page.rootSlug,
+                roleHeading: page.roleHeading, kind: page.kind,
+                abstract: nil, abstractPresent: false,
+                declaration: nil, declarationPresent: false,
+                path: pagePath, platforms: .array([]), relationships: relationships,
+                isDeprecated: page.isDeprecated, isBeta: page.isBeta)
     }
 }
 
@@ -262,12 +262,12 @@ private func relationshipPairs(_ counts: [RelationshipCount]) -> [(String, Int64
 /// name. Anything unlisted is dropped so a future relation_type never leaks.
 private func relationTypeToCamel(_ relationType: String) -> String? {
     switch relationType {
-    case "inherits_from": return "inheritsFrom"
-    case "inherited_by": return "inheritedBy"
-    case "conforms_to": return "conformsTo"
-    case "see-also", "see_also", "seeAlso": return "seeAlso"
-    case "child": return "children"
-    default: return nil
+        case "inherits_from": return "inheritsFrom"
+        case "inherited_by": return "inheritedBy"
+        case "conforms_to": return "conformsTo"
+        case "see-also", "see_also", "seeAlso": return "seeAlso"
+        case "child": return "children"
+        default: return nil
     }
 }
 

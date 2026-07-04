@@ -16,9 +16,9 @@ private let sitemapRootsFixture = [
         docs: [
             SitemapDoc(key: "swiftui", roleHeading: nil),
             SitemapDoc(key: "swiftui/view", roleHeading: "Protocol"),
-            SitemapDoc(key: "swiftui/notes", roleHeading: "SwiftUI Release-Notes 2026"),
+            SitemapDoc(key: "swiftui/notes", roleHeading: "SwiftUI Release-Notes 2026")
         ]),
-    SitemapRoot(slug: "zz", kind: nil, docs: [SitemapDoc(key: "zz/&<doc>\"quo'x", roleHeading: "x")]),
+    SitemapRoot(slug: "zz", kind: nil, docs: [SitemapDoc(key: "zz/&<doc>\"quo'x", roleHeading: "x")])
 ]
 
 /// gunzip(sitemaps/swiftui.xml.gz) from the bun run.
@@ -51,7 +51,7 @@ private func sitemapXml(_ files: [SitemapFile], _ path: String) -> String? {
     #expect(
         paths == [
             "sitemaps/_root.xml.gz", "sitemaps/notes.xml.gz", "sitemaps/swiftui.xml.gz",
-            "sitemaps/zz.xml.gz", "sitemap.xml",
+            "sitemaps/zz.xml.gz", "sitemap.xml"
         ])
     #expect(files.map(\.gzipped) == [true, true, true, true, false])
 
@@ -66,8 +66,14 @@ private func sitemapXml(_ files: [SitemapFile], _ path: String) -> String? {
     let files = try BuildSite.planSitemaps(
         roots: sitemapRootsFixture, baseUrl: "https://x.test", buildDate: "2026-06-30")
     let notes = sitemapXml(files, "sitemaps/notes.xml.gz") ?? ""
-    #expect(notes.contains("<loc>https://x.test/docs/notes/</loc>\n    <lastmod>2026-06-30</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>"))
-    #expect(notes.contains("<loc>https://x.test/docs/notes/only/</loc>\n    <lastmod>2026-06-30</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.6</priority>"))
+    #expect(
+        notes.contains(
+            "<loc>https://x.test/docs/notes/</loc>\n    <lastmod>2026-06-30</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>"
+        ))
+    #expect(
+        notes.contains(
+            "<loc>https://x.test/docs/notes/only/</loc>\n    <lastmod>2026-06-30</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.6</priority>"
+        ))
 
     // Empty buildDate is JS-falsy ⇒ no <lastmod> line anywhere.
     let noDate = try BuildSite.planSitemaps(roots: [], baseUrl: "https://x.test", buildDate: "")
@@ -75,7 +81,7 @@ private func sitemapXml(_ files: [SitemapFile], _ path: String) -> String? {
 }
 
 @Test func sitemapCapThrows() {
-    let docs = (0..<50_000).map { SitemapDoc(key: "big/doc\($0)", roleHeading: nil) }
+    let docs = (0 ..< 50_000).map { SitemapDoc(key: "big/doc\($0)", roleHeading: nil) }
     let roots = [SitemapRoot(slug: "big", kind: "framework", docs: docs)]
     #expect(throws: SitemapCapExceeded.self) {
         try BuildSite.planSitemaps(roots: roots, baseUrl: "https://x.test", buildDate: "2026-06-30")

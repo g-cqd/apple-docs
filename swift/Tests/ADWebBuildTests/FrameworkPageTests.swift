@@ -12,10 +12,12 @@ private let combine = FrameworkRecord(slug: "combine", displayName: "Combine", k
 private let combineEdges: [(fromKey: String, toKey: String)] = [(fromKey: "combine", toKey: "combine/publisher")]
 
 private func combineDocs() -> [JSON] {
-    let root = try? ADJSON.parse(
-        #"[{"key":"combine/publisher","title":"Publisher","role":"symbol","role_heading":"Protocol"},{"key":"combine/just","title":"Just","role":"symbol","role_heading":"Structure","abstract_text":"A publisher that emits an output once."},{"key":"combine/using-combine","title":"Using Combine","role":"article","role_heading":"Article"}]"#,
-        options: .init(maxDepth: 512)
-    ).root
+    let root =
+        try? ADJSON.parse(
+            #"[{"key":"combine/publisher","title":"Publisher","role":"symbol","role_heading":"Protocol"},{"key":"combine/just","title":"Just","role":"symbol","role_heading":"Structure","abstract_text":"A publisher that emits an output once."},{"key":"combine/using-combine","title":"Using Combine","role":"article","role_heading":"Article"}]"#,
+            options: .init(maxDepth: 512)
+        )
+        .root
     var out: [JSON] = []
     root?.forEachElement { out.append($0) }
     return out

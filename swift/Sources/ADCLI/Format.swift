@@ -4,15 +4,15 @@
 // branch. Strings are built with the JS join semantics — no trailing newline
 // here; the caller's `print` adds exactly one `\n` (matching `console.log`).
 
-#if canImport(Darwin)
-import Darwin
-#elseif canImport(Glibc)
-import Glibc
-#endif
-
 import ADJSONCore
 import ADStorage
 import OrderedCollections
+
+#if canImport(Darwin)
+    import Darwin
+#elseif canImport(Glibc)
+    import Glibc
+#endif
 
 /// stdout is a terminal (fd 1). Mirrors JS `process.stdout.isTTY`.
 let stdoutIsTTY: Bool = isatty(1) != 0
@@ -131,8 +131,8 @@ private func trimEnd(_ string: String) -> String {
 /// ASCII whitespace per JS `\s` for the trimming helpers (space, \t, \n, \v, \f, \r).
 func isASCIIWhitespace(_ scalar: Unicode.Scalar) -> Bool {
     switch scalar {
-    case " ", "\t", "\n", "\u{0B}", "\u{0C}", "\r": return true
-    default: return false
+        case " ", "\t", "\n", "\u{0B}", "\u{0C}", "\r": return true
+        default: return false
     }
 }
 
@@ -185,52 +185,52 @@ struct BrowsePageEntry {
 /// trim — the joined string is returned as-is to match the oracle byte-for-byte.
 func formatBrowse(_ result: BrowseResult) -> String {
     switch result {
-    case let .children(_, path, title, children):
-        // `bold(result.title)` with a null title → JS interpolates "null".
-        var lines = ["\(bold(jsString(title))) \(dim(path))\n"]
-        // Group by `section ?? 'other'` in first-seen order (Object.entries order).
-        var order: [String] = []
-        var bySection: [String: [BrowseChildEntry]] = [:]
-        for child in children {
-            let key = child.section ?? "other"
-            if bySection[key] == nil {
-                bySection[key] = []
-                order.append(key)
+        case .children(_, let path, let title, let children):
+            // `bold(result.title)` with a null title → JS interpolates "null".
+            var lines = ["\(bold(jsString(title))) \(dim(path))\n"]
+            // Group by `section ?? 'other'` in first-seen order (Object.entries order).
+            var order: [String] = []
+            var bySection: [String: [BrowseChildEntry]] = [:]
+            for child in children {
+                let key = child.section ?? "other"
+                if bySection[key] == nil {
+                    bySection[key] = []
+                    order.append(key)
+                }
+                bySection[key]?.append(child)
             }
-            bySection[key]?.append(child)
-        }
-        for section in order {
-            lines.append(bold(section))
-            for child in bySection[section] ?? [] {
-                lines.append("  \(child.title ?? child.path)")
+            for section in order {
+                lines.append(bold(section))
+                for child in bySection[section] ?? [] {
+                    lines.append("  \(child.title ?? child.path)")
+                }
+                lines.append("")
             }
-            lines.append("")
-        }
-        return lines.joined(separator: "\n")
+            return lines.joined(separator: "\n")
 
-    case let .groups(framework, slug, kind, groups, total):
-        var lines = ["\(bold(framework)) \(dim("(\(slug), \(kind))"))\n"]
-        for group in groups {
-            // TWO spaces between the bold year and the dim count.
-            lines.append("  \(bold(String(group.year)))  \(dim("\(group.count) sessions"))")
-        }
-        lines.append("\n\(total) sessions across \(groups.count) years")
-        lines.append(dim("Use `browse \(slug) --year <year>` to list one year."))
-        return lines.joined(separator: "\n")
+        case .groups(let framework, let slug, let kind, let groups, let total):
+            var lines = ["\(bold(framework)) \(dim("(\(slug), \(kind))"))\n"]
+            for group in groups {
+                // TWO spaces between the bold year and the dim count.
+                lines.append("  \(bold(String(group.year)))  \(dim("\(group.count) sessions"))")
+            }
+            lines.append("\n\(total) sessions across \(groups.count) years")
+            lines.append(dim("Use `browse \(slug) --year <year>` to list one year."))
+            return lines.joined(separator: "\n")
 
-    case let .pages(framework, slug, kind, year, pages, total, _):
-        // `result.year ? (slug, year) : (slug, kind)` — WWDC years are 4-digit so truthy.
-        let scope = year != nil ? "\(slug), \(year!)" : "\(slug), \(kind)"
-        var lines = ["\(bold(framework)) \(dim("(\(scope))"))\n"]
-        for page in pages.prefix(50) {
-            let kindSuffix = page.kind.map { dim(" [\($0)]") } ?? ""
-            lines.append("  \(page.title ?? page.path)\(kindSuffix)")
-        }
-        if total > 50 {
-            lines.append(dim("  ... and \(total - 50) more"))
-        }
-        lines.append("\n\(total) pages")
-        return lines.joined(separator: "\n")
+        case .pages(let framework, let slug, let kind, let year, let pages, let total, _):
+            // `result.year ? (slug, year) : (slug, kind)` — WWDC years are 4-digit so truthy.
+            let scope = year != nil ? "\(slug), \(year!)" : "\(slug), \(kind)"
+            var lines = ["\(bold(framework)) \(dim("(\(scope))"))\n"]
+            for page in pages.prefix(50) {
+                let kindSuffix = page.kind.map { dim(" [\($0)]") } ?? ""
+                lines.append("  \(page.title ?? page.path)\(kindSuffix)")
+            }
+            if total > 50 {
+                lines.append(dim("  ... and \(total - 50) more"))
+            }
+            lines.append("\n\(total) pages")
+            return lines.joined(separator: "\n")
     }
 }
 
@@ -301,9 +301,9 @@ func formatLookup(_ result: LookupResult) -> String {
 /// non-empty array of `{ name, introducedAt }`. Returns nil for an empty array, an
 /// object, or any non-array value (the JS `?.length` short-circuits those).
 private func platformsLine(_ platforms: JSONValue) -> String? {
-    guard case let .array(items) = platforms, !items.isEmpty else { return nil }
+    guard case .array(let items) = platforms, !items.isEmpty else { return nil }
     let parts = items.map { item -> String in
-        guard case let .object(fields) = item else { return " " }
+        guard case .object(let fields) = item else { return " " }
         let name = jStringField(fields, "name")
         let introducedAt = jStringField(fields, "introducedAt")
         // `${p.name} ${p.introducedAt ?? ''}` — name then a space then the
@@ -321,6 +321,6 @@ private func platformsLine(_ platforms: JSONValue) -> String? {
 private func jStringField(_ fields: OrderedDictionary<String, JSONValue>, _ key: String) -> String {
     // null / non-string / absent → '' (matches `?? ''` for introducedAt; a real
     // platform entry always carries a string `name`).
-    if case let .string(value)? = fields[key] { return value }
+    if case .string(let value)? = fields[key] { return value }
     return ""
 }

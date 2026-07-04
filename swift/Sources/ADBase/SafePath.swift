@@ -36,7 +36,8 @@ public enum SafePath {
     /// hot path (350k render calls) costs one byteLength.
     public static func webKeyNeedsMapping(_ key: String) -> Bool {
         if key.utf8.count <= webSegmentMaxBytes { return false }
-        return key
+        return
+            key
             .split(separator: "/", omittingEmptySubsequences: false)
             .contains { $0.utf8.count > webSegmentMaxBytes }
     }
@@ -46,7 +47,8 @@ public enum SafePath {
     /// Returns the key unchanged when no segment exceeds the threshold.
     public static func safeWebDocKey(_ key: String) -> String {
         if !webKeyNeedsMapping(key) { return key }
-        return key
+        return
+            key
             .split(separator: "/", omittingEmptySubsequences: false)
             .map { safeWebSegment(String($0)) }
             .joined(separator: "/")

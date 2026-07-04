@@ -97,7 +97,7 @@ public struct GitHubClient: Sendable {
             switch response.status.code {
                 case 304: return CheckResult(status: .unchanged, changed: false, newState: previousEtag)
                 case 404: return CheckResult(status: .deleted, changed: false, deleted: true)
-                case 200..<300: return CheckResult(status: .modified, changed: true, newState: response.etag)
+                case 200 ..< 300: return CheckResult(status: .modified, changed: true, newState: response.etag)
                 default: return CheckResult(status: .error, changed: false)
             }
         } catch {
@@ -127,7 +127,7 @@ public struct GitHubClient: Sendable {
         if status == 404 {
             throw notFoundIsError ? GitHubError.httpStatus(404, url) : GitHubError.notFound(url)
         }
-        guard (200..<300).contains(status) else { throw GitHubError.httpStatus(status, url) }
+        guard (200 ..< 300).contains(status) else { throw GitHubError.httpStatus(status, url) }
         return response
     }
 

@@ -27,13 +27,13 @@ public enum AssetsManifest {
     /// (`ENTRY_BUNDLES`, in `Object.entries` insertion order).
     public static let entryBundles: [(output: String, entry: String)] = [
         ("core.js", "core.bundle.js"),
-        ("listing.js", "listing.bundle.js"),
+        ("listing.js", "listing.bundle.js")
     ]
 
     /// Single-file page controllers, bundled 1:1 to `/assets/<name>`
     /// (`STANDALONE_ASSETS`).
     public static let standaloneAssets = [
-        "search-page.js", "fonts-page.js", "symbols-page.js", "lang-toggle.js",
+        "search-page.js", "fonts-page.js", "symbols-page.js", "lang-toggle.js"
     ]
 
     /// Files copied verbatim to `/worker/<name>` (`WORKER_ASSETS` — workers ship
@@ -120,11 +120,11 @@ public enum MinifyCss {
     /// whitespace + NBSP + the Unicode space separators + LS/PS + BOM.
     static func isJsWhitespace(_ s: Unicode.Scalar) -> Bool {
         switch s.value {
-        case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029,
-            0x202F, 0x205F, 0x3000, 0xFEFF:
-            return true
-        default:
-            return false
+            case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000 ... 0x200A, 0x2028, 0x2029,
+                0x202F, 0x205F, 0x3000, 0xFEFF:
+                return true
+            default:
+                return false
         }
     }
 
@@ -173,7 +173,7 @@ public enum MinifyCss {
                     i = j + 1
                     while i < n, isJsWhitespace(input[i]) { i += 1 }  // trailing \s*
                 } else {
-                    out.append(contentsOf: input[i..<j])
+                    out.append(contentsOf: input[i ..< j])
                     i = j
                 }
             } else if isSyntax(input[i]) {
@@ -237,7 +237,7 @@ public enum MinifyCss {
         while start < end, isJsWhitespace(input[start]) { start += 1 }
         while end > start, isJsWhitespace(input[end - 1]) { end -= 1 }
         var view = String.UnicodeScalarView()
-        view.append(contentsOf: input[start..<end])
+        view.append(contentsOf: input[start ..< end])
         return String(view)
     }
 }
@@ -256,10 +256,10 @@ public enum FontFaces {
     /// caller then omits the clause), like `formatHint`.
     static func formatHint(_ format: String) -> String {
         switch format.lowercased() {
-        case "ttf": return "truetype"
-        case "otf": return "opentype"
-        case "ttc": return "collection"
-        default: return ""
+            case "ttf": return "truetype"
+            case "otf": return "opentype"
+            case "ttc": return "collection"
+            default: return ""
         }
     }
 
@@ -270,22 +270,24 @@ public enum FontFaces {
     /// nothing (`family.files ?? []`).
     public static func buildFontFaceCss(_ families: JSON?, fileUrl: (String) -> String) -> String {
         var rules: [String] = []
-        families?.forEachElement { family in
-            family["files"].forEachElement { file in
-                // JS template coercion of the ids; both are TEXT NOT NULL in the
-                // corpus, so the string read always hits (jsString covers a
-                // numeric id; a malformed null would render '' vs JS 'null').
-                let familyId = family["id"].string ?? family["id"].jsString
-                let fileId = file["id"].string ?? file["id"].jsString
-                let name = fontFaceName(familyId: familyId, fileId: fileId)
-                let url = fileUrl(fileId)
-                let format = formatHint(file["format"].string ?? file["format"].jsString)
-                let formatClause = format.isEmpty ? "" : " format(\"\(format)\")"
-                rules.append(
-                    "@font-face { font-family: \"\(name)\"; src: url(\"\(url)\")\(formatClause); font-display: swap; }"
-                )
+        families?
+            .forEachElement { family in
+                family["files"]
+                    .forEachElement { file in
+                        // JS template coercion of the ids; both are TEXT NOT NULL in the
+                        // corpus, so the string read always hits (jsString covers a
+                        // numeric id; a malformed null would render '' vs JS 'null').
+                        let familyId = family["id"].string ?? family["id"].jsString
+                        let fileId = file["id"].string ?? file["id"].jsString
+                        let name = fontFaceName(familyId: familyId, fileId: fileId)
+                        let url = fileUrl(fileId)
+                        let format = formatHint(file["format"].string ?? file["format"].jsString)
+                        let formatClause = format.isEmpty ? "" : " format(\"\(format)\")"
+                        rules.append(
+                            "@font-face { font-family: \"\(name)\"; src: url(\"\(url)\")\(formatClause); font-display: swap; }"
+                        )
+                    }
             }
-        }
         return rules.joined(separator: "\n")
     }
 

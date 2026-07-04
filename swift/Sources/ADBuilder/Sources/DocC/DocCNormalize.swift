@@ -19,6 +19,7 @@ extension DocC {
     ///   - keyMapper: `opts.keyMapper` — remap every resolved reference key (default identity).
     ///   - urlBuilder: `opts.urlBuilder` — override the document URL from the key (default nil →
     ///     the developer.apple.com documentation/design URL).
+    /// - Returns: the normalized page (document + sections + relationships).
     public static func normalizeDocC(
         _ root: JSON, key: String, sourceType: String,
         keyMapper: ((String) -> String)? = nil, urlBuilder: ((String) -> String?)? = nil

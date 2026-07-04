@@ -13,10 +13,11 @@ extension DocC {
         let decl = declarationSection["declarations"][index: 0]
         guard decl.exists else { return nil }
         var text = ""
-        decl["tokens"].forEachElement { token in
-            let value = token["text"]
-            if value.exists, !value.isNull { text += value.jsString }
-        }
+        decl["tokens"]
+            .forEachElement { token in
+                let value = token["text"]
+                if value.exists, !value.isNull { text += value.jsString }
+            }
         return text.isEmpty ? nil : text
     }
 
@@ -61,7 +62,7 @@ extension DocC {
             ("content", resolveContentNodesOr(item["content"], ctx)),
             ("required", valueOr(item["required"], .bool(false))),
             ("attributes", valueOr(item["attributes"], .array([]))),
-            ("introducedVersion", valueOr(item["introducedVersion"], .null)),
+            ("introducedVersion", valueOr(item["introducedVersion"], .null))
         ])
     }
 
@@ -70,14 +71,15 @@ extension DocC {
     static func restEndpointSection(_ endpoint: JSON, order: Int) -> NormalizedSection {
         var tokens: [JSONValue] = []
         var text = ""
-        endpoint["tokens"].forEachElement { token in
-            tokens.append(
-                object([
-                    ("kind", valueOr(token["kind"], .string("text"))),
-                    ("text", valueOr(token["text"], .string(""))),
-                ]))
-            text += coerceOrEmpty(token["text"])
-        }
+        endpoint["tokens"]
+            .forEachElement { token in
+                tokens.append(
+                    object([
+                        ("kind", valueOr(token["kind"], .string("text"))),
+                        ("text", valueOr(token["text"], .string("")))
+                    ]))
+                text += coerceOrEmpty(token["text"])
+            }
         return NormalizedSection(
             sectionKind: "rest_endpoint",
             heading: strField(endpoint["title"]) ?? "URL",
@@ -103,26 +105,27 @@ extension DocC {
             ("content", resolveContentNodesOr(item["content"], ctx)),
             ("required", valueOr(item["required"], .bool(false))),
             ("source", source),
-            ("attributes", valueOr(item["attributes"], .array([]))),
+            ("attributes", valueOr(item["attributes"], .array([])))
         ])
     }
 
     static func restResponsesSection(_ section: JSON, _ ctx: DocCContext, order: Int) -> NormalizedSection {
         var items: [JSONValue] = []
         var lines: [String] = []
-        section["items"].forEachElement { item in
-            items.append(
-                object([
-                    ("status", valueOr(item["status"], .null)),
-                    ("reason", valueOr(item["reason"], .null)),
-                    ("mimeType", valueOr(item["mimeType"], .null)),
-                    ("type", enrichTypeTokens(item["type"], ctx)),
-                    ("content", resolveContentNodesOr(item["content"], ctx)),
-                ]))
-            let status = coerceOrEmpty(item["status"])
-            let reason = coerceOrEmpty(item["reason"])
-            lines.append(trimJS("\(status) \(reason): \(descriptionText(item["content"], ctx))"))
-        }
+        section["items"]
+            .forEachElement { item in
+                items.append(
+                    object([
+                        ("status", valueOr(item["status"], .null)),
+                        ("reason", valueOr(item["reason"], .null)),
+                        ("mimeType", valueOr(item["mimeType"], .null)),
+                        ("type", enrichTypeTokens(item["type"], ctx)),
+                        ("content", resolveContentNodesOr(item["content"], ctx))
+                    ]))
+                let status = coerceOrEmpty(item["status"])
+                let reason = coerceOrEmpty(item["reason"])
+                lines.append(trimJS("\(status) \(reason): \(descriptionText(item["content"], ctx))"))
+            }
         let joined = lines.joined(separator: "\n")
         return NormalizedSection(
             sectionKind: "rest_responses",
@@ -135,13 +138,14 @@ extension DocC {
 
     static func possibleValuesSection(_ section: JSON, _ ctx: DocCContext, order: Int) -> NormalizedSection {
         var values: [JSONValue] = []
-        section["values"].forEachElement { value in
-            values.append(
-                object([
-                    ("name", valueOr(value["name"], .null)),
-                    ("content", resolveContentNodesOr(value["content"], ctx)),
-                ]))
-        }
+        section["values"]
+            .forEachElement { value in
+                values.append(
+                    object([
+                        ("name", valueOr(value["name"], .null)),
+                        ("content", resolveContentNodesOr(value["content"], ctx))
+                    ]))
+            }
         return NormalizedSection(
             sectionKind: "possible_values",
             heading: strField(section["title"]) ?? "Possible Values",
@@ -154,16 +158,17 @@ extension DocC {
     static func mentionsSection(_ section: JSON, _ ctx: DocCContext, order: Int) -> NormalizedSection {
         var items: [JSONValue] = []
         var titles: [String] = []
-        section["mentions"].forEachElement { idNode in
-            let id = idNode.string
-            items.append(
-                object([
-                    ("identifier", JSONValue(idNode)),
-                    ("key", ctx.resolvedKeyValue(id)),
-                    ("title", ctx.refTitleValue(ctx.lookup(id)) ?? resolvedTitleValue(id, idNode)),
-                ]))
-            titles.append(resolvedTitleText(idNode, ctx))
-        }
+        section["mentions"]
+            .forEachElement { idNode in
+                let id = idNode.string
+                items.append(
+                    object([
+                        ("identifier", JSONValue(idNode)),
+                        ("key", ctx.resolvedKeyValue(id)),
+                        ("title", ctx.refTitleValue(ctx.lookup(id)) ?? resolvedTitleValue(id, idNode))
+                    ]))
+                titles.append(resolvedTitleText(idNode, ctx))
+            }
         let joined = titles.joined(separator: "\n")
         return NormalizedSection(
             sectionKind: "mentioned_in", heading: "Mentioned in",

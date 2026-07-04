@@ -17,16 +17,16 @@ public indirect enum JsJson: Sendable {
     /// this value domain (strings/ints/bools/null/containers).
     public func serialized() -> String {
         switch self {
-        case .string(let s): return "\"\(Self.escape(s))\""
-        case .int(let i): return String(i)
-        case .bool(let b): return b ? "true" : "false"
-        case .null: return "null"
-        case .object(let pairs):
-            return "{"
-                + pairs.map { "\"\(Self.escape($0.0))\":\($0.1.serialized())" }.joined(separator: ",")
-                + "}"
-        case .array(let items):
-            return "[" + items.map { $0.serialized() }.joined(separator: ",") + "]"
+            case .string(let s): return "\"\(Self.escape(s))\""
+            case .int(let i): return String(i)
+            case .bool(let b): return b ? "true" : "false"
+            case .null: return "null"
+            case .object(let pairs):
+                return "{"
+                    + pairs.map { "\"\(Self.escape($0.0))\":\($0.1.serialized())" }.joined(separator: ",")
+                    + "}"
+            case .array(let items):
+                return "[" + items.map { $0.serialized() }.joined(separator: ",") + "]"
         }
     }
 
@@ -37,20 +37,20 @@ public indirect enum JsJson: Sendable {
         out.reserveCapacity(s.count + 2)
         for scalar in s.unicodeScalars {
             switch scalar {
-            case "\"": out += "\\\""
-            case "\\": out += "\\\\"
-            case "\u{08}": out += "\\b"
-            case "\u{0C}": out += "\\f"
-            case "\n": out += "\\n"
-            case "\r": out += "\\r"
-            case "\t": out += "\\t"
-            default:
-                if scalar.value < 0x20 {
-                    let hex = String(scalar.value, radix: 16)
-                    out += "\\u" + String(repeating: "0", count: 4 - hex.count) + hex
-                } else {
-                    out.unicodeScalars.append(scalar)
-                }
+                case "\"": out += "\\\""
+                case "\\": out += "\\\\"
+                case "\u{08}": out += "\\b"
+                case "\u{0C}": out += "\\f"
+                case "\n": out += "\\n"
+                case "\r": out += "\\r"
+                case "\t": out += "\\t"
+                default:
+                    if scalar.value < 0x20 {
+                        let hex = String(scalar.value, radix: 16)
+                        out += "\\u" + String(repeating: "0", count: 4 - hex.count) + hex
+                    } else {
+                        out.unicodeScalars.append(scalar)
+                    }
             }
         }
         return out

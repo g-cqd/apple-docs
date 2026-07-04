@@ -20,7 +20,7 @@ extension SourceRegistry {
     /// entry-point registry all build from this list).
     static let nativeAdapterTypes: [any SourceAdapter.Type] = [
         SwiftOrgAdapter.self, SwiftBookAdapter.self, SwiftEvolutionAdapter.self,
-        GuidelinesAdapter.self, AppleArchiveAdapter.self, SwiftDoccAdapter.self,
+        GuidelinesAdapter.self, AppleArchiveAdapter.self, SwiftDoccAdapter.self
     ]
 
     static var nativeSourceNames: String {
@@ -51,7 +51,9 @@ func loadIndexEmbedder(dbPath: String) throws -> Embedder {
         return try loadPotionEmbedder(modelDir: modelDir)
     } catch {
         FileHandle.standardError.write(
-            Data("ad-cli: no embedder at \(modelDir) (\(error)) — run against a data dir with the model resources\n".utf8))
+            Data(
+                "ad-cli: no embedder at \(modelDir) (\(error)) — run against a data dir with the model resources\n".utf8
+            ))
         throw ExitCode(1)
     }
 }
@@ -118,7 +120,9 @@ struct SyncCommand: AsyncParsableCommand {
             adapter = try registry.adapter(for: source)
         } catch {
             FileHandle.standardError.write(
-                Data("ad-cli: unknown or not-yet-ported source '\(source)' (native: \(SourceRegistry.nativeSourceNames))\n".utf8))
+                Data(
+                    "ad-cli: unknown or not-yet-ported source '\(source)' (native: \(SourceRegistry.nativeSourceNames))\n"
+                        .utf8))
             throw ExitCode(1)
         }
         let database = try openCrawlCorpus(db)
@@ -134,9 +138,10 @@ struct SyncCommand: AsyncParsableCommand {
                 throw ExitCode(1)
             }
             let (rootId, rootIds) = try upsertCrawlRoots(database, discovery.roots, now: now)
-            result = try await CrawlDriver(registry: registry).sync(
-                sourceType: source, into: database, rootId: rootId, rootIds: rootIds, context: context,
-                now: now, embedder: embedder)
+            result = try await CrawlDriver(registry: registry)
+                .sync(
+                    sourceType: source, into: database, rootId: rootId, rootIds: rootIds, context: context,
+                    now: now, embedder: embedder)
         } catch let code as ExitCode {
             throw code
         } catch {
@@ -153,7 +158,7 @@ struct SyncCommand: AsyncParsableCommand {
                         ("persisted", .int(Int64(result.crawl.persisted))),
                         ("skipped", .int(Int64(result.crawl.skipped))),
                         ("failed", .int(Int64(result.crawl.failed))),
-                        ("index", indexResultJSON(result.index)),
+                        ("index", indexResultJSON(result.index))
                     ])))
         } else {
             print(
@@ -220,7 +225,7 @@ private func indexResultJSON(_ result: IndexEmbeddings.Result) -> JSONValue {
         ("status", .string(result.status)),
         ("indexed", .int(Int64(result.indexed))),
         ("total", .int(Int64(result.total))),
-        ("chunks", .int(Int64(result.chunks))),
+        ("chunks", .int(Int64(result.chunks)))
     ])
 }
 
@@ -236,6 +241,6 @@ private func snapshotResultJSON(_ result: Snapshot.Result) -> JSONValue {
         ("archiveSize", .int(result.archiveSize)),
         ("archiveChecksum", .string(result.archiveChecksum)),
         ("checksumSidecarPath", .string(result.checksumSidecarPath)),
-        ("manifestPath", .string(result.manifestPath)),
+        ("manifestPath", .string(result.manifestPath))
     ])
 }

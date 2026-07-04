@@ -43,7 +43,8 @@ public final class SwiftBookAdapter: SourceAdapter, @unchecked Sendable {
     public func discover(_ context: SourceContext) async throws -> DiscoveryResult {
         let github = GitHubClient(client: context.client, rateLimiter: context.rateLimiter)
         let tree = try await github.fetchTree(owner: Self.owner, repo: Self.repo, branch: Self.branch)
-        let keys = tree
+        let keys =
+            tree
             .filter {
                 $0.type == "blob" && $0.path.hasPrefix(Self.contentPrefix) && $0.path.hasSuffix(".md")
                     && !$0.path.contains("/Snippets/")
@@ -119,12 +120,13 @@ public final class SwiftBookAdapter: SourceAdapter, @unchecked Sendable {
                     [
                         "identifier": "swift-book://\(chapter)",
                         "key": chapterIndex[chapter.lowercased()] ?? NSNull(),
-                        "title": Self.humanize(chapter),
+                        "title": Self.humanize(chapter)
                     ]
-                },
+                }
             ]
         }
-        let contentText = groups
+        let contentText =
+            groups
             .map { group in ([group.title] + group.items.map { Self.humanize($0) }).joined(separator: "\n") }
             .joined(separator: "\n")
 
@@ -154,7 +156,7 @@ public final class SwiftBookAdapter: SourceAdapter, @unchecked Sendable {
             let sectionTitle = Self.bookSectionTitles[dir]
         else { return }
         page.document.sourceMetadata = Self.jsonString([
-            "bookSection": sectionTitle, "bookSectionDir": dir,
+            "bookSection": sectionTitle, "bookSectionDir": dir
         ])
     }
 
@@ -162,7 +164,7 @@ public final class SwiftBookAdapter: SourceAdapter, @unchecked Sendable {
 
     static let bookSectionTitles = [
         "GuidedTour": "Welcome to Swift", "LanguageGuide": "Language Guide",
-        "ReferenceManual": "Language Reference", "RevisionHistory": "Revision History",
+        "ReferenceManual": "Language Reference", "RevisionHistory": "Revision History"
     ]
 
     /// The repo-relative path for a key (`swift-book/LanguageGuide/TheBasics` →

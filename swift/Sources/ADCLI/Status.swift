@@ -325,7 +325,8 @@ func statusDefaultJSON(_ raw: StatusEnvelope) -> JSONValue {
                 .obj([
                     ("action", optString(activity.action)), ("status", .string(activity.status)),
                     ("startedAt", optString(activity.startedAt))
-                ])))
+                ])
+            ))
     }
     if let update = raw.updateAvailable, update.available {
         pairs.append(
@@ -338,7 +339,8 @@ func statusDefaultJSON(_ raw: StatusEnvelope) -> JSONValue {
                 .obj([
                     ("lastSyncAt", .string(lastSyncAt)), ("daysSinceSync", optInt(raw.freshness.daysSinceSync)),
                     ("isStale", .bool(raw.freshness.isStale))
-                ])))
+                ])
+            ))
     }
     return .obj(pairs)
 }
@@ -428,7 +430,10 @@ private func freshnessJSON(_ f: Freshness) -> JSONValue {
         ("lastSyncAt", optString(f.lastSyncAt)),
         ("daysSinceSync", optInt(f.daysSinceSync)),
         ("isStale", .bool(f.isStale)),
-        ("staleRoots", .array(f.staleRoots.map { .obj([("slug", .string($0.slug)), ("daysSince", .int($0.daysSince))]) }))
+        (
+            "staleRoots",
+            .array(f.staleRoots.map { .obj([("slug", .string($0.slug)), ("daysSince", .int($0.daysSince))]) })
+        )
     ])
 }
 
@@ -484,9 +489,11 @@ func formatStatus(_ raw: StatusEnvelope, advanced: Bool) -> String {
         let rootsStr = a.roots.map { " (\($0.joined(separator: ", ")))" } ?? ""
         let pidStr = a.pid.map { " [pid \($0)]" } ?? ""
         if a.status == "running" {
-            lines.append(bold("  Active:  \(a.action ?? "null")\(rootsStr) running since \(a.startedAt ?? "null")\(pidStr)"))
+            lines.append(
+                bold("  Active:  \(a.action ?? "null")\(rootsStr) running since \(a.startedAt ?? "null")\(pidStr)"))
         } else {
-            lines.append(bold("  Stopped: \(a.action ?? "null")\(rootsStr) was interrupted (started \(a.startedAt ?? "null"))"))
+            lines.append(
+                bold("  Stopped: \(a.action ?? "null")\(rootsStr) was interrupted (started \(a.startedAt ?? "null"))"))
             lines.append("           Run \"apple-docs sync\" again to resume")
         }
     }
@@ -534,7 +541,8 @@ private func appendCrawlProgress(_ lines: inout [String], _ raw: StatusEnvelope)
         lines.append("  \(bold("In progress / incomplete:"))")
         for r in active {
             let failed = r.failed > 0 ? dim(" (\(r.failed) failed)") : ""
-            lines.append("    \(r.root ?? "null"): \(r.processed)/\(r.total) \(progressBar(r.processed, r.total))\(failed)")
+            lines.append(
+                "    \(r.root ?? "null"): \(r.processed)/\(r.total) \(progressBar(r.processed, r.total))\(failed)")
         }
     }
 
@@ -557,7 +565,7 @@ private func appendFreshness(_ lines: inout [String], _ f: Freshness, advanced: 
     let freshnessPresent = advanced || f.lastSyncAt != nil
     guard freshnessPresent else { return }
     lines.append("")
-    if let _ = f.lastSyncAt {
+    if f.lastSyncAt != nil {
         let staleLabel = f.isStale ? " (STALE)" : ""
         lines.append("  Last sync:       \(f.daysSinceSync.map(String.init) ?? "null") days ago\(staleLabel)")
         if advanced && !f.staleRoots.isEmpty {
@@ -577,7 +585,8 @@ private func progressBar(_ processed: Int64, _ total: Int64) -> String {
     let width = 20
     let filled = Int(jsRound(Double(pct) / 100 * Double(width)))
     let clampedFilled = max(0, min(width, filled))
-    return "[\(String(repeating: "=", count: clampedFilled))\(String(repeating: " ", count: width - clampedFilled))] \(pct)%"
+    return
+        "[\(String(repeating: "=", count: clampedFilled))\(String(repeating: " ", count: width - clampedFilled))] \(pct)%"
 }
 
 // MARK: - helpers
@@ -593,11 +602,11 @@ func jsRound(_ value: Double) -> Int64 {
 /// use of the parsed value. Parses through ADJSON's `JSONValue` and accepts only
 /// an array of strings (any other shape ⇒ nil).
 func parseRootsArray(_ json: String?) -> [String]? {
-    guard let json, !json.isEmpty, case let .array(items)? = parseJSONValue(json) else { return nil }
+    guard let json, !json.isEmpty, case .array(let items)? = parseJSONValue(json) else { return nil }
     var out: [String] = []
     out.reserveCapacity(items.count)
     for item in items {
-        guard case let .string(string) = item else { return nil }
+        guard case .string(let string) = item else { return nil }
         out.append(string)
     }
     return out

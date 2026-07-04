@@ -94,10 +94,10 @@ enum EmbedderLoadError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .matrixMissing(let path): return "matrix artifact missing at \(path)"
-        case .tokenizerUnreadable(let path): return "tokenizer.json unreadable at \(path)"
-        case .tokenizerMalformed(let reason): return "tokenizer.json malformed: \(reason)"
-        case .matrixLoad(let error): return "matrix artifact load failed: \(error)"
+            case .matrixMissing(let path): return "matrix artifact missing at \(path)"
+            case .tokenizerUnreadable(let path): return "tokenizer.json unreadable at \(path)"
+            case .tokenizerMalformed(let reason): return "tokenizer.json malformed: \(reason)"
+            case .matrixLoad(let error): return "matrix artifact load failed: \(error)"
         }
     }
 }

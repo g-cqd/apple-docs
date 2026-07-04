@@ -67,10 +67,10 @@ public final class GuidelinesAdapter: SourceAdapter, @unchecked Sendable {
         do {
             let response = try await context.client.send(HTTPClientRequest(head, deadline: .seconds(30)))
             switch response.status.code {
-            case 304: return CheckResult(status: .unchanged, changed: false, newState: previousState)
-            case 404: return CheckResult(status: .deleted, changed: false, deleted: true)
-            case 200..<300: return CheckResult(status: .modified, changed: true, newState: response.etag)
-            default: return CheckResult(status: .error, changed: false)
+                case 304: return CheckResult(status: .unchanged, changed: false, newState: previousState)
+                case 404: return CheckResult(status: .deleted, changed: false, deleted: true)
+                case 200 ..< 300: return CheckResult(status: .modified, changed: true, newState: response.etag)
+                default: return CheckResult(status: .error, changed: false)
             }
         } catch {
             return CheckResult(status: .error, changed: false)

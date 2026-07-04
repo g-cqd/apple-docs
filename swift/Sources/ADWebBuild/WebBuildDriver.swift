@@ -70,7 +70,7 @@ extension BuildSite {
                         href: "\(config.baseUrl)/fonts"),
                     IndexFramework(
                         kind: "design", slug: "symbols", displayName: "SF Symbols",
-                        href: "\(config.baseUrl)/symbols"),
+                        href: "\(config.baseUrl)/symbols")
                 ]
             )
         ]
@@ -94,12 +94,15 @@ extension BuildSite {
         // root, the index roster drops self-page-only roots.
         // No count badge: `roots` has no doc_count column (getRoots = SELECT *
         // FROM roots), so the JS homepage's fw.doc_count is always undefined.
-        let frameworks = reader.homepageRoots().map {
-            IndexFramework(kind: $0.kind, slug: $0.slug, displayName: $0.displayName, docCount: nil)
-        }
-        let meta = reader.corpusRoots().map {
-            FrameworkMeta(slug: $0.slug, displayName: $0.displayName, kind: $0.kind, documentCount: $0.documentCount)
-        }
+        let frameworks = reader.homepageRoots()
+            .map {
+                IndexFramework(kind: $0.kind, slug: $0.slug, displayName: $0.displayName, docCount: nil)
+            }
+        let meta = reader.corpusRoots()
+            .map {
+                FrameworkMeta(
+                    slug: $0.slug, displayName: $0.displayName, kind: $0.kind, documentCount: $0.documentCount)
+            }
         return BuildInputs(
             indexFrameworks: frameworks, indexExtras: homepageExtras(config),
             fontFamilies: reader.fontFamilies(), symbolTotals: reader.symbolTotals(), frameworkMeta: meta,

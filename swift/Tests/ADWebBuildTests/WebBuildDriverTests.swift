@@ -18,11 +18,11 @@ private struct MockCorpus: CorpusReader {
 }
 
 private let driverSymbols: [(scope: String, count: Int)] = [
-    (scope: "public", count: 10), (scope: "private", count: 2),
+    (scope: "public", count: 10), (scope: "private", count: 2)
 ]
 private let twoRoots: [CorpusRoot] = [
     CorpusRoot(slug: "combine", displayName: "Combine", kind: "framework", documentCount: 3),
-    CorpusRoot(slug: "design", displayName: "Human Interface Guidelines", kind: "design", documentCount: 5),
+    CorpusRoot(slug: "design", displayName: "Human Interface Guidelines", kind: "design", documentCount: 5)
 ]
 private let oneRoot: [CorpusRoot] = [
     CorpusRoot(slug: "combine", displayName: "Combine", kind: "framework", documentCount: 3)

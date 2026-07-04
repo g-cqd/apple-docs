@@ -85,6 +85,7 @@ public enum IndexEmbeddings {
     ///   - full: re-embed every document (else only documents with no chunks).
     ///   - batchSize: documents per embed/transaction batch (JS `BATCH` = 64).
     ///   - onProgress: invoked after each committed batch with `(done, total)`.
+    /// - Throws: a ``DBError`` (or the embedder's error) if a storage write or embedding pass fails.
     /// - Returns: the run ``Result``.
     @discardableResult
     public static func run(
@@ -110,9 +111,11 @@ public enum IndexEmbeddings {
         // the ADDB frontend does not support an `IN (SELECT …)` subquery, so the
         // anti-join is done in Swift: read every document (id order), then drop the
         // already-chunked ids on a resume. Same result set + order as the JS scan.
-        var docRows = try db.prepare(
-            "SELECT id, title, abstract_text, headings FROM documents ORDER BY id"
-        ).all().compactMap(DocRow.init)
+        var docRows =
+            try db.prepare(
+                "SELECT id, title, abstract_text, headings FROM documents ORDER BY id"
+            )
+            .all().compactMap(DocRow.init)
         if !resolvedFull {
             let chunked = try chunkedDocumentIds(db)
             docRows = docRows.filter { !chunked.contains($0.id) }
@@ -181,7 +184,7 @@ public enum IndexEmbeddings {
                             "ord": .integer(Int64(chunk.ord)),
                             "text": .null,
                             "bin": .blob(code.bin),
-                            "i8": .blob(code.i8),
+                            "i8": .blob(code.i8)
                         ])
                     if chunk.ord == 0 {
                         try txn.run(
@@ -261,24 +264,27 @@ public enum IndexEmbeddings {
             placeholders.append("$\(name)")
             params[name] = .integer(id)
         }
-        let rows = try db.prepare(
-            """
-            SELECT document_id, section_kind, heading, content_text, sort_order
-            FROM document_sections WHERE document_id IN (\(placeholders.joined(separator: ", ")))
-            ORDER BY document_id, sort_order, id
-            """
-        ).all(params)
+        let rows =
+            try db.prepare(
+                """
+                SELECT document_id, section_kind, heading, content_text, sort_order
+                FROM document_sections WHERE document_id IN (\(placeholders.joined(separator: ", ")))
+                ORDER BY document_id, sort_order, id
+                """
+            )
+            .all(params)
 
         var out: [Int64: [Chunker.Section]] = [:]
         for row in rows {
             guard let docId = cellInt(row["document_id"]),
                 let kind = cellText(row["section_kind"])
             else { continue }
-            out[docId, default: []].append(
-                Chunker.Section(
-                    kind: kind,
-                    heading: cellText(row["heading"]),
-                    contentText: cellText(row["content_text"])))
+            out[docId, default: []]
+                .append(
+                    Chunker.Section(
+                        kind: kind,
+                        heading: cellText(row["heading"]),
+                        contentText: cellText(row["content_text"])))
         }
         return out
     }

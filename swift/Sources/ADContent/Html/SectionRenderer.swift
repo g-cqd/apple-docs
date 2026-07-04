@@ -40,20 +40,20 @@ struct HtmlSections {
 
     func renderSection(_ s: DocSection) -> String {
         switch s.sectionKind {
-        case "abstract": return abstract(s)
-        case "declaration": return declaration(s)
-        case "parameters": return parameters(s)
-        case "properties": return properties(s)
-        case "rest_endpoint": return restEndpoint(s)
-        case "rest_parameters": return restParameters(s)
-        case "rest_responses": return restResponses(s)
-        case "possible_values": return possibleValues(s)
-        case "mentioned_in": return mentionedIn(s)
-        case "discussion": return discussion(s)
-        case "topics": return linkSection("Topics", s)
-        case "relationships": return linkSection("Relationships", s)
-        case "see_also": return linkSection("See Also", s)
-        default: return discussion(s)
+            case "abstract": return abstract(s)
+            case "declaration": return declaration(s)
+            case "parameters": return parameters(s)
+            case "properties": return properties(s)
+            case "rest_endpoint": return restEndpoint(s)
+            case "rest_parameters": return restParameters(s)
+            case "rest_responses": return restResponses(s)
+            case "possible_values": return possibleValues(s)
+            case "mentioned_in": return mentionedIn(s)
+            case "discussion": return discussion(s)
+            case "topics": return linkSection("Topics", s)
+            case "relationships": return linkSection("Relationships", s)
+            case "see_also": return linkSection("See Also", s)
+            default: return discussion(s)
         }
     }
 
@@ -102,7 +102,9 @@ struct HtmlSections {
                 let code = JsString.trim(HtmlTokens.joinTokenTexts(decl.member("tokens")))
                 if code.isEmpty { continue }
                 let language = firstLanguage(decl)
-                html = highlight?(code, language) ?? "<pre><code class=\"language-\(esc(language))\">\(esc(code))</code></pre>"
+                html =
+                    highlight?(code, language)
+                    ?? "<pre><code class=\"language-\(esc(language))\">\(esc(code))</code></pre>"
             }
             let declLangs = elements(decl.member("languages"))
             if hasMultipleLangs, !declLangs.isEmpty {
@@ -115,7 +117,8 @@ struct HtmlSections {
         if snippets.isEmpty {
             let ct = JsString.trim(s.contentText ?? "")
             if !ct.isEmpty {
-                snippets.append(highlight?(ct, "swift") ?? "<pre><code class=\"language-swift\">\(esc(ct))</code></pre>")
+                snippets.append(
+                    highlight?(ct, "swift") ?? "<pre><code class=\"language-swift\">\(esc(ct))</code></pre>")
             }
         }
         if snippets.isEmpty { return "" }
@@ -129,7 +132,9 @@ struct HtmlSections {
         var items: [String] = []
         if let json, json.isArray {
             for p in elements(json) {
-                items.append("<li><strong>\(esc(coerceOr(p.member("name"), "Value")))</strong>: \(nodes.renderNodes(p.member("content")))</li>")
+                items.append(
+                    "<li><strong>\(esc(coerceOr(p.member("name"), "Value")))</strong>: \(nodes.renderNodes(p.member("content")))</li>"
+                )
             }
         } else {
             for line in lines(s.contentText) { items.append("<li>\(esc(line))</li>") }
@@ -143,10 +148,14 @@ struct HtmlSections {
         if items.isEmpty { return "" }
         let heading = s.heading ?? "Properties"
         let rows = items.map { item -> String in
-            let badge = (item.member("required")?.isTruthy ?? false) ? " <span class=\"badge badge-required\">Required</span>" : ""
-            return "<tr><td><code>\(esc(coerce(item.member("name"))))</code>\(badge)</td><td>\(HtmlTokens.renderTypeTokens(item.member("type"), knownKeys))</td><td>\(nodes.renderNodes(item.member("content")))</td></tr>"
+            let badge =
+                (item.member("required")?.isTruthy ?? false)
+                ? " <span class=\"badge badge-required\">Required</span>" : ""
+            return
+                "<tr><td><code>\(esc(coerce(item.member("name"))))</code>\(badge)</td><td>\(HtmlTokens.renderTypeTokens(item.member("type"), knownKeys))</td><td>\(nodes.renderNodes(item.member("content")))</td></tr>"
         }
-        return "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><table class=\"properties-table\"><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>\(rows.joined())</tbody></table></section>"
+        return
+            "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><table class=\"properties-table\"><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>\(rows.joined())</tbody></table></section>"
     }
 
     func restEndpoint(_ s: DocSection) -> String {
@@ -156,14 +165,15 @@ struct HtmlSections {
         let spans = tokens.map { token -> String in
             let text = esc(coerce(token.member("text")))
             switch token.member("kind")?.string {
-            case "method": return "<span class=\"rest-method\">\(text)</span>"
-            case "baseURL": return "<span class=\"rest-base-url\">\(text)</span>"
-            case "path": return "<span class=\"rest-path\">\(text)</span>"
-            case "parameter": return "<span class=\"rest-param\">\(text)</span>"
-            default: return text
+                case "method": return "<span class=\"rest-method\">\(text)</span>"
+                case "baseURL": return "<span class=\"rest-base-url\">\(text)</span>"
+                case "path": return "<span class=\"rest-path\">\(text)</span>"
+                case "parameter": return "<span class=\"rest-param\">\(text)</span>"
+                default: return text
             }
         }
-        return "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><pre class=\"rest-endpoint\"><code>\(spans.joined())</code></pre></section>"
+        return
+            "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><pre class=\"rest-endpoint\"><code>\(spans.joined())</code></pre></section>"
     }
 
     func restParameters(_ s: DocSection) -> String {
@@ -171,11 +181,15 @@ struct HtmlSections {
         if items.isEmpty { return "" }
         let heading = s.heading ?? "Parameters"
         let rows = items.map { item -> String in
-            let badge = (item.member("required")?.isTruthy ?? false)
-                ? "<span class=\"badge badge-required\">Required</span>" : "<span class=\"badge badge-optional\">Optional</span>"
-            return "<tr><td><code>\(esc(coerce(item.member("name"))))</code> \(badge)</td><td>\(HtmlTokens.renderTypeTokens(item.member("type"), knownKeys))</td><td>\(nodes.renderNodes(item.member("content")))</td></tr>"
+            let badge =
+                (item.member("required")?.isTruthy ?? false)
+                ? "<span class=\"badge badge-required\">Required</span>"
+                : "<span class=\"badge badge-optional\">Optional</span>"
+            return
+                "<tr><td><code>\(esc(coerce(item.member("name"))))</code> \(badge)</td><td>\(HtmlTokens.renderTypeTokens(item.member("type"), knownKeys))</td><td>\(nodes.renderNodes(item.member("content")))</td></tr>"
         }
-        return "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><table class=\"params-table\"><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>\(rows.joined())</tbody></table></section>"
+        return
+            "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><table class=\"params-table\"><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody>\(rows.joined())</tbody></table></section>"
     }
 
     func restResponses(_ s: DocSection) -> String {
@@ -183,19 +197,25 @@ struct HtmlSections {
         if items.isEmpty { return "" }
         let heading = s.heading ?? "Response Codes"
         let rows = items.map { item -> String in
-            let mime = (item.member("mimeType")?.isTruthy ?? false)
+            let mime =
+                (item.member("mimeType")?.isTruthy ?? false)
                 ? "<div class=\"rest-mime\">Content-Type: \(esc(coerce(item.member("mimeType"))))</div>" : ""
-            return "<tr><td><strong>\(esc(coerce(item.member("status"))))</strong></td><td>\(esc(coerce(item.member("reason"))))\(mime)</td><td>\(HtmlTokens.renderTypeTokens(item.member("type"), knownKeys))</td><td>\(nodes.renderNodes(item.member("content")))</td></tr>"
+            return
+                "<tr><td><strong>\(esc(coerce(item.member("status"))))</strong></td><td>\(esc(coerce(item.member("reason"))))\(mime)</td><td>\(HtmlTokens.renderTypeTokens(item.member("type"), knownKeys))</td><td>\(nodes.renderNodes(item.member("content")))</td></tr>"
         }
-        return "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><table class=\"responses-table\"><thead><tr><th>Status</th><th>Reason</th><th>Type</th><th>Description</th></tr></thead><tbody>\(rows.joined())</tbody></table></section>"
+        return
+            "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><table class=\"responses-table\"><thead><tr><th>Status</th><th>Reason</th><th>Type</th><th>Description</th></tr></thead><tbody>\(rows.joined())</tbody></table></section>"
     }
 
     func possibleValues(_ s: DocSection) -> String {
         let values = elements(safeJson(s.contentJson))
         if values.isEmpty { return "" }
         let heading = s.heading ?? "Possible Values"
-        let items = values.map { "<dt><code>\(esc(coerce($0.member("name"))))</code></dt><dd>\(nodes.renderNodes($0.member("content")))</dd>" }
-        return "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><dl class=\"possible-values\">\(items.joined())</dl></section>"
+        let items = values.map {
+            "<dt><code>\(esc(coerce($0.member("name"))))</code></dt><dd>\(nodes.renderNodes($0.member("content")))</dd>"
+        }
+        return
+            "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><dl class=\"possible-values\">\(items.joined())</dl></section>"
     }
 
     func mentionedIn(_ s: DocSection) -> String {
@@ -204,11 +224,13 @@ struct HtmlSections {
         let heading = s.heading ?? "Mentioned in"
         let list = items.map { item -> String in
             if let key = item.member("key"), key.isTruthy {
-                return "<li><a href=\"/docs/\(esc(SafePath.safeWebDocKey(coerce(key))))/\">\(esc(coerceOr(item.member("title"), coerce(key))))</a></li>"
+                return
+                    "<li><a href=\"/docs/\(esc(SafePath.safeWebDocKey(coerce(key))))/\">\(esc(coerceOr(item.member("title"), coerce(key))))</a></li>"
             }
             return "<li>\(esc(coerceOr(item.member("title"), coerce(item.member("identifier")))))</li>"
         }
-        return "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><ul>\(list.joined())</ul></section>"
+        return
+            "<section id=\"\(RenderHelpers.slugify(heading))\"><h2>\(esc(heading))</h2><ul>\(list.joined())</ul></section>"
     }
 
     func discussion(_ s: DocSection) -> String {
@@ -223,7 +245,8 @@ struct HtmlSections {
         }
         let text = JsString.trim(s.contentText ?? "")
         if text.isEmpty { return "" }
-        let body = text.utf16.count > Self.markdownMaxBytes
+        let body =
+            text.utf16.count > Self.markdownMaxBytes
             ? "<pre class=\"markdown-fallback\"><code>\(esc(text))</code></pre>"
             : HtmlMarkdown.markdownToHtml(text, highlight: highlight)
         return "<section id=\"\(sectionId)\"><h2>\(esc(heading))</h2>\(body)</section>"
@@ -240,10 +263,12 @@ struct HtmlSections {
                 }
                 var items = ""
                 for item in elements(group.member("items")) {
-                    let filterAttr = (item.member("_resolvedRoleHeading")?.isTruthy ?? false)
+                    let filterAttr =
+                        (item.member("_resolvedRoleHeading")?.isTruthy ?? false)
                         ? " data-filter-kind=\"\(esc(coerce(item.member("_resolvedRoleHeading"))))\"" : ""
                     if let key = item.member("key"), key.isTruthy {
-                        items += "<li\(filterAttr)><a href=\"/docs/\(esc(SafePath.safeWebDocKey(coerce(key))))/\"><code>\(esc(coerceOr(item.member("title"), coerce(key))))</code></a></li>"
+                        items +=
+                            "<li\(filterAttr)><a href=\"/docs/\(esc(SafePath.safeWebDocKey(coerce(key))))/\"><code>\(esc(coerceOr(item.member("title"), coerce(key))))</code></a></li>"
                     } else {
                         items += "<li>\(esc(coerceOr(item.member("title"), coerce(item.member("identifier")))))</li>"
                     }

@@ -10,7 +10,6 @@ import Testing
 
 @Suite("Crawl policy — RateLimiter token bucket + RetryPolicy backoff/loop")
 struct RetryPolicyTests {
-
     private func response(_ code: Int, _ headerFields: HTTPFields = [:]) -> HTTPClientResponse {
         HTTPClientResponse(
             status: HTTPResponse.Status(code: code), headerFields: headerFields,

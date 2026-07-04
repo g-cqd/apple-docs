@@ -12,31 +12,31 @@ private let fontFamiliesFixture: [FontRow] = [
     FontRow(cells: [
         ("id", .text("sf-pro")), ("display_name", .text("SF Pro")), ("source_url", .null),
         ("source_size", .integer(1234)), ("status", .text("available")),
-        ("updated_at", .text("2026-01-01T00:00:00.000Z")),
+        ("updated_at", .text("2026-01-01T00:00:00.000Z"))
     ]),
     FontRow(cells: [
         ("id", .text("zz")), ("display_name", .text("ZZ")), ("source_url", .text("https://x/y.zip")),
         ("source_size", .null), ("status", .text("available")),
-        ("updated_at", .text("2026-01-01T00:00:00.000Z")),
-    ]),
+        ("updated_at", .text("2026-01-01T00:00:00.000Z"))
+    ])
 ]
 
 private let fontFilesFixture: [FontRow] = [
     FontRow(cells: [
         ("id", .text("f1")), ("family_id", .text("sf-pro")), ("file_name", .text("A.ttf")),
         ("italic", .integer(0)), ("is_variable", .integer(1)), ("format", .text("ttf")),
-        ("axes_json", .text("[{\"tag\":\"wght\",\"min\":100.5,\"max\":900}]")), ("size", .integer(10)),
+        ("axes_json", .text("[{\"tag\":\"wght\",\"min\":100.5,\"max\":900}]")), ("size", .integer(10))
     ]),
     FontRow(cells: [
         ("id", .text("f2")), ("family_id", .text("sf-pro")), ("file_name", .text("B.otf")),
         ("italic", .integer(1)), ("is_variable", .integer(0)), ("format", .null),
-        ("axes_json", .null), ("size", .null),
+        ("axes_json", .null), ("size", .null)
     ]),
     FontRow(cells: [
         ("id", .text("f3")), ("family_id", .text("orphan")), ("file_name", .text("C.ttc")),
         ("italic", .integer(0)), ("is_variable", .integer(0)), ("format", .text("ttc")),
-        ("axes_json", .text("not-json")), ("size", .integer(5)),
-    ]),
+        ("axes_json", .text("not-json")), ("size", .integer(5))
+    ])
 ]
 
 /// `JSON.stringify(listFonts())` for the fixtures, pinned from bun (note the
@@ -81,7 +81,7 @@ private let topicsRoleMap = ["a/b": "Protocol", "a/c": "Structure"]
         DocSection(
             sectionKind: "topics", heading: nil, contentText: "",
             contentJson: "[{\"items\":[]}]", sortOrder: 1.5),
-        DocSection(sectionKind: nil, heading: nil, contentText: nil, contentJson: nil, sortOrder: 0),
+        DocSection(sectionKind: nil, heading: nil, contentText: nil, contentJson: nil, sortOrder: 0)
     ]
     #expect(BuildSite.computeSectionsDigest(sections) == "6252b23681d5120e")
     #expect(BuildSite.computeSectionsDigest([]) == "empty")
@@ -92,7 +92,7 @@ private let topicsRoleMap = ["a/b": "Protocol", "a/c": "Structure"]
 @Test func enrichTopicSectionsByteExact() {
     let sections = [
         DocSection(sectionKind: "topics", heading: nil, contentText: "", contentJson: topicsInput, sortOrder: 0),
-        DocSection(sectionKind: "content", heading: "Overview", contentText: "text", contentJson: nil, sortOrder: 1),
+        DocSection(sectionKind: "content", heading: "Overview", contentText: "text", contentJson: nil, sortOrder: 1)
     ]
     let enriched = BuildSite.enrichTopicSections(sections) { keys in
         var out: [String: String] = [:]

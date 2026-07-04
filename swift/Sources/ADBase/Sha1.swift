@@ -43,23 +43,27 @@ public enum Sha1 {
                 w[i] = rotl(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1)
             }
 
-            var a = h0, b = h1, c = h2, d = h3, e = h4
+            var a = h0
+            var b = h1
+            var c = h2
+            var d = h3
+            var e = h4
             for i in 0 ..< 80 {
                 let f: UInt32
                 let k: UInt32
                 switch i {
-                case 0 ..< 20:
-                    f = (b & c) | (~b & d)
-                    k = 0x5A82_7999
-                case 20 ..< 40:
-                    f = b ^ c ^ d
-                    k = 0x6ED9_EBA1
-                case 40 ..< 60:
-                    f = (b & c) | (b & d) | (c & d)
-                    k = 0x8F1B_BCDC
-                default:
-                    f = b ^ c ^ d
-                    k = 0xCA62_C1D6
+                    case 0 ..< 20:
+                        f = (b & c) | (~b & d)
+                        k = 0x5A82_7999
+                    case 20 ..< 40:
+                        f = b ^ c ^ d
+                        k = 0x6ED9_EBA1
+                    case 40 ..< 60:
+                        f = (b & c) | (b & d) | (c & d)
+                        k = 0x8F1B_BCDC
+                    default:
+                        f = b ^ c ^ d
+                        k = 0xCA62_C1D6
                 }
                 let temp = rotl(a, 5) &+ f &+ e &+ k &+ w[i]
                 e = d
@@ -77,7 +81,7 @@ public enum Sha1 {
             chunk += 64
         }
 
-        var out = [UInt8]()
+        var out: [UInt8] = []
         out.reserveCapacity(20)
         for h in [h0, h1, h2, h3, h4] {
             out.append(UInt8((h >> 24) & 0xFF))
@@ -91,7 +95,7 @@ public enum Sha1 {
     /// Lowercase hex encoding of `bytes`.
     public static func hex(_ bytes: [UInt8]) -> String {
         let digits = Array("0123456789abcdef".utf8)
-        var chars = [UInt8]()
+        var chars: [UInt8] = []
         chars.reserveCapacity(bytes.count * 2)
         for b in bytes {
             chars.append(digits[Int(b >> 4)])

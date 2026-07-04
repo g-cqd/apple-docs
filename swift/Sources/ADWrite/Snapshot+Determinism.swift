@@ -78,7 +78,7 @@ extension Snapshot {
     /// `^[a-z0-9._-]{1,64}$` (case-insensitive) — rejects path-escape / shell-meta
     /// tags before they reach archive/checksum/manifest filenames.
     static func isValidTag(_ tag: String) -> Bool {
-        guard (1...64).contains(tag.count) else { return false }
+        guard (1 ... 64).contains(tag.count) else { return false }
         return tag.utf8.allSatisfy { byte in
             (byte >= 0x61 && byte <= 0x7A)  // a-z
                 || (byte >= 0x41 && byte <= 0x5A)  // A-Z
@@ -117,10 +117,10 @@ extension Snapshot {
         let digits = tag.dropFirst(prefix.count)
         guard digits.count == 8, digits.allSatisfy(\.isNumber) else { return nil }
         let chars = Array(digits)
-        guard let year = Int(String(chars[0..<4])),
-            let month = Int(String(chars[4..<6])),
-            let day = Int(String(chars[6..<8])),
-            (1...12).contains(month), (1...31).contains(day)
+        guard let year = Int(String(chars[0 ..< 4])),
+            let month = Int(String(chars[4 ..< 6])),
+            let day = Int(String(chars[6 ..< 8])),
+            (1 ... 12).contains(month), (1 ... 31).contains(day)
         else { return nil }
         return (year, month, day)
     }

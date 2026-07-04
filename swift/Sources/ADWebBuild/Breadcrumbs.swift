@@ -24,7 +24,7 @@ enum Breadcrumbs {
         var parts: [String] = []
         for i in segments.indices {
             let isLast = i == segments.count - 1
-            let partialKey = segments[0...i].joined(separator: "/")
+            let partialKey = segments[0 ... i].joined(separator: "/")
 
             let label: String
             if isLast {
@@ -67,7 +67,7 @@ enum Breadcrumbs {
         var items: [JsonLd] = []
         for i in segments.indices {
             let isLast = i == segments.count - 1
-            let partialKey = segments[0...i].joined(separator: "/")
+            let partialKey = segments[0 ... i].joined(separator: "/")
 
             let name: String
             if isLast {
@@ -81,7 +81,7 @@ enum Breadcrumbs {
             }
 
             var entry: [(String, JsonLd)] = [
-                ("@type", .string("ListItem")), ("position", .int(i + 1)), ("name", .string(name)),
+                ("@type", .string("ListItem")), ("position", .int(i + 1)), ("name", .string(name))
             ]
             if !isLast {
                 entry.append(("item", .string("\(cleanBase)/docs/\(SafePath.safeWebDocKey(partialKey))/")))

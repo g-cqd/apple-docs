@@ -13,12 +13,25 @@ import Testing
         url: "https://developer.apple.com/documentation/swiftui/view",
         abstractText: "A type that represents part of your app UI.", language: "swift")
     let sections = [
-        DocSection(sectionKind: "abstract", heading: nil, contentText: nil, contentJson: #"[{"type":"text","text":"A type that represents part of your app UI."}]"#, sortOrder: 0),
-        DocSection(sectionKind: "declaration", heading: nil, contentText: nil, contentJson: #"[{"languages":["swift"],"tokens":[{"kind":"keyword","text":"protocol"},{"kind":"identifier","text":"View"}]}]"#, sortOrder: 1),
-        DocSection(sectionKind: "discussion", heading: "Overview", contentText: nil, contentJson: #"[{"type":"paragraph","inlineContent":[{"type":"text","text":"Views are the building blocks."}]}]"#, sortOrder: 2),
-        DocSection(sectionKind: "relationships", heading: nil, contentText: nil, contentJson: #"[{"title":"Inherited By","items":[{"key":"swiftui/text","title":"Text"}]}]"#, sortOrder: 3),
+        DocSection(
+            sectionKind: "abstract", heading: nil, contentText: nil,
+            contentJson: #"[{"type":"text","text":"A type that represents part of your app UI."}]"#, sortOrder: 0),
+        DocSection(
+            sectionKind: "declaration", heading: nil, contentText: nil,
+            contentJson:
+                #"[{"languages":["swift"],"tokens":[{"kind":"keyword","text":"protocol"},{"kind":"identifier","text":"View"}]}]"#,
+            sortOrder: 1),
+        DocSection(
+            sectionKind: "discussion", heading: "Overview", contentText: nil,
+            contentJson:
+                #"[{"type":"paragraph","inlineContent":[{"type":"text","text":"Views are the building blocks."}]}]"#,
+            sortOrder: 2),
+        DocSection(
+            sectionKind: "relationships", heading: nil, contentText: nil,
+            contentJson: #"[{"title":"Inherited By","items":[{"key":"swiftui/text","title":"Text"}]}]"#, sortOrder: 3)
     ]
-    let config = SiteConfig(baseUrl: "https://x.test", siteName: "Docs", assetVersion: "v1", bundled: true, buildDate: "2026-06-30")
+    let config = SiteConfig(
+        baseUrl: "https://x.test", siteName: "Docs", assetVersion: "v1", bundled: true, buildDate: "2026-06-30")
     let actual = DocPage.render(
         doc: doc, sections: sections, config: config,
         knownKeys: ["swiftui", "swiftui/view", "swiftui/text"])

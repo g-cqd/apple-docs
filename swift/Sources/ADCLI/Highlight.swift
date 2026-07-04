@@ -107,8 +107,8 @@ final class ShikiCoprocess: @unchecked Sendable {
     private func readLine1() -> String? {
         while true {
             if let newline = buffer.firstIndex(of: 0x0A) {
-                let line = buffer.subdata(in: buffer.startIndex..<newline)
-                buffer.removeSubrange(buffer.startIndex...newline)
+                let line = buffer.subdata(in: buffer.startIndex ..< newline)
+                buffer.removeSubrange(buffer.startIndex ... newline)
                 return String(decoding: line, as: UTF8.self)
             }
             let chunk = responsePipe.fileHandleForReading.availableData
@@ -131,17 +131,17 @@ enum JsonLine {
         out.reserveCapacity(s.count + 2)
         for scalar in s.unicodeScalars {
             switch scalar {
-            case "\"": out += "\\\""
-            case "\\": out += "\\\\"
-            case "\n": out += "\\n"
-            case "\r": out += "\\r"
-            case "\t": out += "\\t"
-            default:
-                if scalar.value < 0x20 {
-                    out += String(format: "\\u%04x", scalar.value)
-                } else {
-                    out.unicodeScalars.append(scalar)
-                }
+                case "\"": out += "\\\""
+                case "\\": out += "\\\\"
+                case "\n": out += "\\n"
+                case "\r": out += "\\r"
+                case "\t": out += "\\t"
+                default:
+                    if scalar.value < 0x20 {
+                        out += String(format: "\\u%04x", scalar.value)
+                    } else {
+                        out.unicodeScalars.append(scalar)
+                    }
             }
         }
         return out

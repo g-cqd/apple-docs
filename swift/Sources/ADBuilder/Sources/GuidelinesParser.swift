@@ -61,11 +61,10 @@ public enum GuidelinesParser {
         var sections: [Section] = []
         let contentScalars = Array(contentHtml.unicodeScalars)
         let markers = markerPositions(contentHtml)
-        for (index, marker) in markers.enumerated() {
-            guard marker.metaIndex < meta.count else { continue }
+        for (index, marker) in markers.enumerated() where marker.metaIndex < meta.count {
             let entry = meta[marker.metaIndex]
             let chunkEnd = index + 1 < markers.count ? markers[index + 1].start : contentScalars.count
-            let chunkHtml = String(String.UnicodeScalarView(contentScalars[marker.end..<chunkEnd]))
+            let chunkHtml = String(String.UnicodeScalarView(contentScalars[marker.end ..< chunkEnd]))
 
             let markdown = htmlToMarkdown(chunkHtml)
             let title = resolveTitle(sidenavTitle: entry.sidenavTitle, id: entry.id, markdown: markdown)
@@ -116,7 +115,7 @@ public enum GuidelinesParser {
             }
 
             // Marker injection for data-sidenav h3/li inside the container.
-            if !tag.isClosing, (tag.name == "h3" || tag.name == "li"),
+            if !tag.isClosing, tag.name == "h3" || tag.name == "li",
                 tag.attributes.keys.contains("data-sidenav"), i >= containerAt
             {
                 let sidenav = tag.attributes["data-sidenav"] ?? ""
@@ -131,7 +130,7 @@ public enum GuidelinesParser {
             }
 
             // Copy the tag verbatim.
-            for k in i..<tag.end { out.append(scalars[k]) }
+            for k in i ..< tag.end { out.append(scalars[k]) }
             i = tag.end
         }
         return String(out)
@@ -261,7 +260,9 @@ public enum GuidelinesParser {
                 || classes.contains("form-checkbox") || id == "documentation"
             {
                 skipDepth += 1
-                if !tag.selfClosing && !isVoid(tag.name) { stack.append((tag.name, .endSkip)) } else {
+                if !tag.selfClosing && !isVoid(tag.name) {
+                    stack.append((tag.name, .endSkip))
+                } else {
                     skipDepth -= 1
                 }
                 continue
@@ -273,45 +274,45 @@ public enum GuidelinesParser {
             }
 
             switch tag.name {
-            case "h1", "h2", "h3":
-                let level = Int(String(tag.name.dropFirst())) ?? 1
-                parts.append("\n\(String(repeating: "#", count: level)) ")
-                stack.append((tag.name, .emit("\n\n")))
-            case "p":
-                stack.append((tag.name, .emit("\n\n")))
-            case "strong":
-                inStrong = true
-                strongBuf = ""
-                stack.append((tag.name, .endStrong))
-            case "em":
-                emit("*")
-                stack.append((tag.name, .emit("*")))
-            case "a" where tag.attributes.keys.contains("href"):
-                linkHref = tag.attributes["href"]
-                emit("[")
-                stack.append((tag.name, .endLink))
-            case "code":
-                emit("`")
-                stack.append((tag.name, .emit("`")))
-            case "ul":
-                listStack.append(cls.contains("disc") ? "disc" : "no-bullet")
-                stack.append((tag.name, .endList))
-            case "ol":
-                listStack.append("ordered")
-                stack.append((tag.name, .endList))
-            case "li":
-                let depth = max(0, listStack.count - 1)
-                let indent = String(repeating: "  ", count: depth)
-                switch listStack.last {
-                case "disc": parts.append("\(indent)- ")
-                case "ordered": parts.append("\(indent)1. ")
-                default: break  // no-bullet
-                }
-                stack.append((tag.name, .emit("\n")))
-            case "br":
-                parts.append("\n")
-            default:
-                if !tag.selfClosing && !isVoid(tag.name) { stack.append((tag.name, .none)) }
+                case "h1", "h2", "h3":
+                    let level = Int(String(tag.name.dropFirst())) ?? 1
+                    parts.append("\n\(String(repeating: "#", count: level)) ")
+                    stack.append((tag.name, .emit("\n\n")))
+                case "p":
+                    stack.append((tag.name, .emit("\n\n")))
+                case "strong":
+                    inStrong = true
+                    strongBuf = ""
+                    stack.append((tag.name, .endStrong))
+                case "em":
+                    emit("*")
+                    stack.append((tag.name, .emit("*")))
+                case "a" where tag.attributes.keys.contains("href"):
+                    linkHref = tag.attributes["href"]
+                    emit("[")
+                    stack.append((tag.name, .endLink))
+                case "code":
+                    emit("`")
+                    stack.append((tag.name, .emit("`")))
+                case "ul":
+                    listStack.append(cls.contains("disc") ? "disc" : "no-bullet")
+                    stack.append((tag.name, .endList))
+                case "ol":
+                    listStack.append("ordered")
+                    stack.append((tag.name, .endList))
+                case "li":
+                    let depth = max(0, listStack.count - 1)
+                    let indent = String(repeating: "  ", count: depth)
+                    switch listStack.last {
+                        case "disc": parts.append("\(indent)- ")
+                        case "ordered": parts.append("\(indent)1. ")
+                        default: break  // no-bullet
+                    }
+                    stack.append((tag.name, .emit("\n")))
+                case "br":
+                    parts.append("\n")
+                default:
+                    if !tag.selfClosing && !isVoid(tag.name) { stack.append((tag.name, .none)) }
             }
             continue
         }
@@ -334,23 +335,23 @@ public enum GuidelinesParser {
         // The close-action runner uses these captured vars.
         func runClose(_ action: CloseAction) {
             switch action {
-            case .none: break
-            case .emit(let text):
-                emit(text)
-            case .endStrong:
-                inStrong = false
-                parts.append("**\(strongBuf)**")
-                strongBuf = ""
-            case .endLink:
-                var href = linkHref
-                if let h = href, h.hasPrefix("/") { href = "https://developer.apple.com\(h)" }
-                emit("](\(href ?? "null"))")
-                linkHref = nil
-            case .endList:
-                _ = listStack.popLast()
-                parts.append("\n")
-            case .endSkip:
-                skipDepth -= 1
+                case .none: break
+                case .emit(let text):
+                    emit(text)
+                case .endStrong:
+                    inStrong = false
+                    parts.append("**\(strongBuf)**")
+                    strongBuf = ""
+                case .endLink:
+                    var href = linkHref
+                    if let h = href, h.hasPrefix("/") { href = "https://developer.apple.com\(h)" }
+                    emit("](\(href ?? "null"))")
+                    linkHref = nil
+                case .endList:
+                    _ = listStack.popLast()
+                    parts.append("\n")
+                case .endSkip:
+                    skipDepth -= 1
             }
         }
     }
@@ -426,7 +427,7 @@ public enum GuidelinesParser {
         }
         // Terminator [\s.]
         if i < scalars.count, isJsSpace(scalars[i]) || scalars[i] == "." {
-            return String(String.UnicodeScalarView(scalars[0..<i]))
+            return String(String.UnicodeScalarView(scalars[0 ..< i]))
         }
         // Fallback `/^(\d+)\.?\s/`.
         var j = 0
@@ -435,7 +436,7 @@ public enum GuidelinesParser {
         var k = j
         if k < scalars.count, scalars[k] == "." { k += 1 }
         if k < scalars.count, isJsSpace(scalars[k]) {
-            return String(String.UnicodeScalarView(scalars[0..<j]))
+            return String(String.UnicodeScalarView(scalars[0 ..< j]))
         }
         return nil
     }
@@ -526,7 +527,7 @@ public enum GuidelinesParser {
             if scalars.count >= 3, scalars[scalars.count - 3] == "(",
                 isLowerAlpha(scalars[scalars.count - 2]), scalars[scalars.count - 1] == ")"
             {
-                return String(String.UnicodeScalarView(scalars[0..<(scalars.count - 3)]))
+                return String(String.UnicodeScalarView(scalars[0 ..< (scalars.count - 3)]))
             }
             return number
         }
@@ -635,7 +636,7 @@ public enum GuidelinesParser {
     static func indexOf(_ scalars: [Unicode.Scalar], needle: String) -> Int? {
         let target = Array(needle.unicodeScalars)
         guard !target.isEmpty, scalars.count >= target.count else { return nil }
-        outer: for i in 0...(scalars.count - target.count) {
+        outer: for i in 0 ... (scalars.count - target.count) {
             for (k, c) in target.enumerated() where scalars[i + k] != c { continue outer }
             return i
         }
@@ -749,16 +750,16 @@ public enum GuidelinesParser {
     static func firstSentence(_ s: String) -> String? {
         let scalars = Array(s.unicodeScalars)
         guard !scalars.isEmpty else { return nil }
-        for i in 0..<(scalars.count - 1) {
+        for i in 0 ..< (scalars.count - 1) {
             let c = scalars[i]
-            if (c == "." || c == "!" || c == "?"), isJsSpace(scalars[i + 1]), i >= 0 {
+            if c == "." || c == "!" || c == "?", isJsSpace(scalars[i + 1]), i >= 0 {
                 // `.+?` needs at least one char before the terminator ⇒ i >= 1
                 // is implied when the terminator is at 0? JS `.+?[.!?]` requires
                 // ≥1 char BEFORE the punctuation only if the punctuation itself
                 // isn't matched by `.+?`… `.` matches any char, so a leading
                 // "." could satisfy `.+?` with the NEXT terminator. Minimal
                 // correct port: require i >= 1.
-                if i >= 1 { return String(String.UnicodeScalarView(scalars[0...i])) }
+                if i >= 1 { return String(String.UnicodeScalarView(scalars[0 ... i])) }
             }
         }
         return nil
@@ -768,10 +769,10 @@ public enum GuidelinesParser {
 
     static func isJsSpace(_ s: Unicode.Scalar) -> Bool {
         switch s.value {
-        case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029,
-            0x202F, 0x205F, 0x3000, 0xFEFF:
-            return true
-        default: return false
+            case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000 ... 0x200A, 0x2028, 0x2029,
+                0x202F, 0x205F, 0x3000, 0xFEFF:
+                return true
+            default: return false
         }
     }
     static func isDigit(_ s: Unicode.Scalar) -> Bool { s.value >= 48 && s.value <= 57 }

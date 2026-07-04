@@ -36,12 +36,14 @@ final class ADDBBackend: StorageBackend, @unchecked Sendable {
     init?(path: String) {
         // Read-only probe: a SQLite file (or any non-ADDB file) throws `badMagic`
         // here, before any lock/write, so falling back to libsqlite3 is safe.
-        guard (try? Database.open(at: path, options: DatabaseOptions(readOnly: true, createIfMissing: false)))
-            != nil
+        guard
+            (try? Database.open(at: path, options: DatabaseOptions(readOnly: true, createIfMissing: false)))
+                != nil
         else { return nil }
         // It is an ADDB corpus — reopen writable to serve (the denorm backfill writes).
-        guard let database = try? Database.open(
-            at: path, options: DatabaseOptions(readOnly: false, createIfMissing: false))
+        guard
+            let database = try? Database.open(
+                at: path, options: DatabaseOptions(readOnly: false, createIfMissing: false))
         else { return nil }
 
         database.enableFullTextSearch()

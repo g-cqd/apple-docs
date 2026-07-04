@@ -111,7 +111,7 @@ struct SwiftDoccAdapterTests {
         #expect(
             discovery.keys == [
                 "swift-compiler/documentation/diagnostics",
-                "swift-compiler/documentation/diagnostics/actorisolatedcall",
+                "swift-compiler/documentation/diagnostics/actorisolatedcall"
             ])
         #expect(discovery.roots.map(\.slug) == ["swift-compiler", "swift-package-manager", "swift-migration-guide"])
         #expect(discovery.roots.allSatisfy { $0.source == "swift-docc" })

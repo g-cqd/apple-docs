@@ -83,6 +83,7 @@ private let dCustom = SiteConfig(
 @Test func discoveryConstants() {
     #expect(
         Discovery.discoveryLinks
-            == "</sitemap.xml>; rel=\"sitemap\", </.well-known/api-catalog>; rel=\"api-catalog\", </docs/>; rel=\"service-doc\", </opensearch.xml>; rel=\"search\"")
+            == "</sitemap.xml>; rel=\"sitemap\", </.well-known/api-catalog>; rel=\"api-catalog\", </docs/>; rel=\"service-doc\", </opensearch.xml>; rel=\"search\""
+    )
     #expect(Discovery.defaultContentSignal == "search=yes, ai-input=yes, ai-train=yes")
 }

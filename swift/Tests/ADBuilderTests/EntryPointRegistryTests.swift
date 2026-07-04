@@ -18,12 +18,13 @@ private let crossLinksContentTextOracle =
 
 @Test func nativeRegistryMatchesJsForSwiftOrgDocumentation() {
     let links = EntryPointRegistry.native.entryPoints(forParent: "swift-org/documentation")
-    #expect(links.map(\.key) == [
-        "swift-compiler/documentation/diagnostics",
-        "swift-package-manager/documentation/packagemanagerdocs",
-        "swift-migration-guide/documentation/migrationguide",
-        "swift-book/The-Swift-Programming-Language",
-    ])
+    #expect(
+        links.map(\.key) == [
+            "swift-compiler/documentation/diagnostics",
+            "swift-package-manager/documentation/packagemanagerdocs",
+            "swift-migration-guide/documentation/migrationguide",
+            "swift-book/The-Swift-Programming-Language"
+        ])
     // Parent filtering: getting-started sees only swiftpm.
     let gettingStarted = EntryPointRegistry.native.entryPoints(forParent: "swift-org/getting-started")
     #expect(gettingStarted.map(\.slug) == ["swift-package-manager"])
@@ -60,12 +61,13 @@ private let crossLinksContentTextOracle =
 
     // see_also relationships continue the sortOrder after the existing one.
     let added = Array(page.relationships.dropFirst())
-    #expect(added.map(\.toKey) == [
-        "swift-compiler/documentation/diagnostics",
-        "swift-package-manager/documentation/packagemanagerdocs",
-        "swift-migration-guide/documentation/migrationguide",
-        "swift-book/The-Swift-Programming-Language",
-    ])
+    #expect(
+        added.map(\.toKey) == [
+            "swift-compiler/documentation/diagnostics",
+            "swift-package-manager/documentation/packagemanagerdocs",
+            "swift-migration-guide/documentation/migrationguide",
+            "swift-book/The-Swift-Programming-Language"
+        ])
     #expect(added.allSatisfy { $0.relationType == "see_also" && $0.section == "Related Documentation" })
     #expect(added.map(\.sortOrder) == [1, 2, 3, 4])
     #expect(added.allSatisfy { $0.fromKey == "swift-org/documentation" })

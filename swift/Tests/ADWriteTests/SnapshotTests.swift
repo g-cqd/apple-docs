@@ -22,7 +22,6 @@ import Testing
 
 @Suite("Snapshot — deterministic .tar.zst build")
 struct SnapshotTests {
-
     /// A minimal corpus: a root + two documents (each with a prose section), written
     /// through the REAL persist so pages/documents/sections are exactly what a crawl
     /// produces. The operational + regenerable tables exist (migrated) but are empty.
@@ -75,12 +74,14 @@ struct SnapshotTests {
 
     /// `document_raw` as `documents.key → raw bytes`.
     private func documentRawByKey(_ db: Database) throws -> [String: [UInt8]] {
-        let rows = try db.prepare(
-            """
-            SELECT d.key AS key, r.raw AS raw FROM document_raw r
-            JOIN documents d ON d.id = r.document_id ORDER BY d.key
-            """
-        ).all()
+        let rows =
+            try db.prepare(
+                """
+                SELECT d.key AS key, r.raw AS raw FROM document_raw r
+                JOIN documents d ON d.id = r.document_id ORDER BY d.key
+                """
+            )
+            .all()
         var byKey: [String: [UInt8]] = [:]
         for row in rows {
             guard case .text(let key) = row["key"], case .blob(let bytes) = row["raw"] else { continue }
