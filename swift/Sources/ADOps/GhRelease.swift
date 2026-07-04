@@ -5,6 +5,10 @@
 
 private import Foundation
 
+#if canImport(FoundationNetworking)
+    private import FoundationNetworking  // URLSession/URLRequest live here on Linux (the Foundation split)
+#endif
+
 private let userAgent = "apple-docs-ops/2.0"
 
 /// A GitHub release asset.

@@ -5,6 +5,10 @@
 
 private import Foundation
 
+#if canImport(FoundationNetworking)
+    private import FoundationNetworking  // URLSession/URLRequest live here on Linux (the Foundation split)
+#endif
+
 /// How a probe resolved.
 public enum ProbeOutcome: Sendable, Equatable {
     case http
