@@ -11,93 +11,99 @@ import Testing
 
 @testable import ADBuilder
 
-@Suite("URLSessionHTTPClient → HTTPClientResponse mapping (URLProtocol stub)", .serialized)
-struct URLSessionHTTPClientMappingTests {
-    /// A `URLProtocol` that answers every request with `Self.canned` — intercepting URLSession so the
-    /// real `URLSessionHTTPClient.send` path runs without a network. The suite is `.serialized`, so the
-    /// single shared slot is set + cleared within one test at a time.
-    final class StubURLProtocol: URLProtocol {
-        struct Canned: Sendable {
-            var status: Int
-            var headers: [String: String]
-            var body: Data
-        }
-        nonisolated(unsafe) static var canned: Canned?
-
-        override class func canInit(with request: URLRequest) -> Bool { true }
-        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-        override func stopLoading() {}
-        override func startLoading() {
-            guard let canned = Self.canned, let url = request.url,
-                let response = HTTPURLResponse(
-                    url: url, statusCode: canned.status, httpVersion: "HTTP/1.1",
-                    headerFields: canned.headers)
-            else {
-                client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-                return
+// URLProtocol-based URLSession interception is a Darwin capability — Linux's URLSession is the curl-backed
+// FoundationNetworking one, which does not route requests through URLProtocol (and `URLRequest`/`URLProtocol`
+// move to FoundationNetworking there). The interim transport's live mapping is proven on Darwin only; the
+// portable value-type + handler-stub coverage lives in HTTPClientTests.
+#if canImport(Darwin)
+    @Suite("URLSessionHTTPClient → HTTPClientResponse mapping (URLProtocol stub)", .serialized)
+    struct URLSessionHTTPClientMappingTests {
+        /// A `URLProtocol` that answers every request with `Self.canned` — intercepting URLSession so the
+        /// real `URLSessionHTTPClient.send` path runs without a network. The suite is `.serialized`, so the
+        /// single shared slot is set + cleared within one test at a time.
+        final class StubURLProtocol: URLProtocol {
+            struct Canned: Sendable {
+                var status: Int
+                var headers: [String: String]
+                var body: Data
             }
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            if !canned.body.isEmpty { client?.urlProtocol(self, didLoad: canned.body) }
-            client?.urlProtocolDidFinishLoading(self)
+            nonisolated(unsafe) static var canned: Canned?
+
+            override class func canInit(with request: URLRequest) -> Bool { true }
+            override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+            override func stopLoading() {}
+            override func startLoading() {
+                guard let canned = Self.canned, let url = request.url,
+                    let response = HTTPURLResponse(
+                        url: url, statusCode: canned.status, httpVersion: "HTTP/1.1",
+                        headerFields: canned.headers)
+                else {
+                    client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+                    return
+                }
+                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                if !canned.body.isEmpty { client?.urlProtocol(self, didLoad: canned.body) }
+                client?.urlProtocolDidFinishLoading(self)
+            }
+        }
+
+        /// A `URLSessionHTTPClient` over an ephemeral session wired to the stub protocol.
+        private func makeClient() -> URLSessionHTTPClient {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [StubURLProtocol.self]
+            return URLSessionHTTPClient(session: URLSession(configuration: configuration))
+        }
+
+        private func getRequest() -> HTTPClientRequest {
+            HTTPClientRequest(
+                HTTPRequest(method: .get, scheme: "https", authority: "example.test", path: "/doc"))
+        }
+
+        @Test("200 maps status, ETag, Last-Modified, and the buffered body")
+        func mapsOK() async throws {
+            StubURLProtocol.canned = .init(
+                status: 200,
+                headers: [
+                    "ETag": "\"v1\"",
+                    "Last-Modified": "Mon, 01 Jan 2026 00:00:00 GMT",
+                    "Content-Type": "text/html; charset=utf-8"
+                ],
+                body: Data("<h1>hi</h1>".utf8))
+            defer { StubURLProtocol.canned = nil }
+
+            let response = try await makeClient().send(getRequest())
+
+            #expect(response.status.code == 200)
+            #expect(response.etag == "\"v1\"")
+            #expect(response.lastModified == "Mon, 01 Jan 2026 00:00:00 GMT")
+            let body = try await response.body.collect(upTo: 1 << 20)
+            #expect(body == Array("<h1>hi</h1>".utf8))
+        }
+
+        @Test("304 surfaces the not-modified status (never collapsed) with the ETag and an empty body")
+        func mapsNotModified() async throws {
+            StubURLProtocol.canned = .init(status: 304, headers: ["ETag": "\"v1\""], body: Data())
+            defer { StubURLProtocol.canned = nil }
+
+            let response = try await makeClient().send(getRequest())
+
+            #expect(response.status.code == 304)
+            #expect(response.etag == "\"v1\"")
+            let body = try await response.body.collect(upTo: 1 << 20)
+            #expect(body.isEmpty)
+        }
+
+        @Test("a 404 is surfaced as a response, not thrown as a transport fault")
+        func mapsNotFound() async throws {
+            StubURLProtocol.canned = .init(status: 404, headers: [:], body: Data("not found".utf8))
+            defer { StubURLProtocol.canned = nil }
+
+            let response = try await makeClient().send(getRequest())
+
+            #expect(response.status.code == 404)
+            #expect(response.etag == nil)
+            let body = try await response.body.collect(upTo: 1 << 20)
+            #expect(body == Array("not found".utf8))
         }
     }
-
-    /// A `URLSessionHTTPClient` over an ephemeral session wired to the stub protocol.
-    private func makeClient() -> URLSessionHTTPClient {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [StubURLProtocol.self]
-        return URLSessionHTTPClient(session: URLSession(configuration: configuration))
-    }
-
-    private func getRequest() -> HTTPClientRequest {
-        HTTPClientRequest(
-            HTTPRequest(method: .get, scheme: "https", authority: "example.test", path: "/doc"))
-    }
-
-    @Test("200 maps status, ETag, Last-Modified, and the buffered body")
-    func mapsOK() async throws {
-        StubURLProtocol.canned = .init(
-            status: 200,
-            headers: [
-                "ETag": "\"v1\"",
-                "Last-Modified": "Mon, 01 Jan 2026 00:00:00 GMT",
-                "Content-Type": "text/html; charset=utf-8"
-            ],
-            body: Data("<h1>hi</h1>".utf8))
-        defer { StubURLProtocol.canned = nil }
-
-        let response = try await makeClient().send(getRequest())
-
-        #expect(response.status.code == 200)
-        #expect(response.etag == "\"v1\"")
-        #expect(response.lastModified == "Mon, 01 Jan 2026 00:00:00 GMT")
-        let body = try await response.body.collect(upTo: 1 << 20)
-        #expect(body == Array("<h1>hi</h1>".utf8))
-    }
-
-    @Test("304 surfaces the not-modified status (never collapsed) with the ETag and an empty body")
-    func mapsNotModified() async throws {
-        StubURLProtocol.canned = .init(status: 304, headers: ["ETag": "\"v1\""], body: Data())
-        defer { StubURLProtocol.canned = nil }
-
-        let response = try await makeClient().send(getRequest())
-
-        #expect(response.status.code == 304)
-        #expect(response.etag == "\"v1\"")
-        let body = try await response.body.collect(upTo: 1 << 20)
-        #expect(body.isEmpty)
-    }
-
-    @Test("a 404 is surfaced as a response, not thrown as a transport fault")
-    func mapsNotFound() async throws {
-        StubURLProtocol.canned = .init(status: 404, headers: [:], body: Data("not found".utf8))
-        defer { StubURLProtocol.canned = nil }
-
-        let response = try await makeClient().send(getRequest())
-
-        #expect(response.status.code == 404)
-        #expect(response.etag == nil)
-        let body = try await response.body.collect(upTo: 1 << 20)
-        #expect(body == Array("not found".utf8))
-    }
-}
+#endif
