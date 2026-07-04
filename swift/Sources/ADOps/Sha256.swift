@@ -25,6 +25,66 @@ public enum SHA256Hex {
     }
 }
 
+/// Incremental SHA-256 for hashing a large file (or any chunked stream) without
+/// buffering the whole input in memory — the multi-GB snapshot archive the
+/// one-shot ``SHA256Hex/hex(_:)`` can't serve. Feed chunks with ``update(_:)``,
+/// then ``finalize()`` → the 64-char lowercase hex. The digest is identical to
+/// `SHA256Hex.hex` over the concatenated chunks (block boundaries are handled by
+/// the internal `pending` buffer, which never exceeds 63 bytes between updates).
+public struct SHA256Streaming {
+    private var state = initialState
+    /// Bytes not yet in a full 64-byte block (< 64).
+    private var pending: [UInt8] = []
+    private var totalBytes: UInt64 = 0
+    private var block = [UInt32](repeating: 0, count: 64)
+
+    public init() {}
+
+    /// Feed the next chunk. Full 64-byte blocks are compressed straight from
+    /// `bytes` (no whole-chunk copy); only the sub-block remainder is retained.
+    public mutating func update(_ bytes: [UInt8]) {
+        guard !bytes.isEmpty else { return }
+        totalBytes &+= UInt64(bytes.count)
+        var start = 0
+        // Top off a partial block held from a previous update first.
+        if !pending.isEmpty {
+            let need = 64 - pending.count
+            if bytes.count < need {
+                pending.append(contentsOf: bytes)
+                return
+            }
+            pending.append(contentsOf: bytes[0 ..< need])
+            compress(&state, pending, 0, &block)
+            pending.removeAll(keepingCapacity: true)
+            start = need
+        }
+        var offset = start
+        while bytes.count - offset >= 64 {
+            compress(&state, bytes, offset, &block)
+            offset += 64
+        }
+        if offset < bytes.count { pending.append(contentsOf: bytes[offset ..< bytes.count]) }
+    }
+
+    /// Append the FIPS 180-4 padding (0x80, zero-fill to 56 mod 64, 64-bit
+    /// big-endian bit length), compress the tail, and return the hex digest.
+    public mutating func finalize() -> String {
+        let bitLength = totalBytes &* 8
+        var tail = pending
+        tail.append(0x80)
+        while tail.count % 64 != 56 { tail.append(0) }
+        for shift in stride(from: 56, through: 0, by: -8) {
+            tail.append(UInt8((bitLength >> UInt64(shift)) & 0xFF))
+        }
+        var offset = 0
+        while offset < tail.count {
+            compress(&state, tail, offset, &block)
+            offset += 64
+        }
+        return state.map { hex32($0) }.joined()
+    }
+}
+
 private let initialState: [UInt32] = [
     0x6a09_e667, 0xbb67_ae85, 0x3c6e_f372, 0xa54f_f53a,
     0x510e_527f, 0x9b05_688c, 0x1f83_d9ab, 0x5be0_cd19
