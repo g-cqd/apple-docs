@@ -1,8 +1,9 @@
 // The full render loop — essentials + per-document pages + framework listing
-// pages (build.js steps 4-9, minus the still-stubbed search-artifacts/sitemap/
-// assets). Dependency-inverted via `DocumentCorpusReader` so the template module
-// stays SQLite-free; I/O is injected. The ADStorage adapter conforms the reader;
-// tests use a mock.
+// pages (build.js steps 4-9). The search artifacts, sitemaps, and assets around
+// this loop are planned by the `ad-cli web build` driver (SearchArtifacts /
+// Sitemaps / Assets). Dependency-inverted via `DocumentCorpusReader` so the
+// template module stays SQLite-free; I/O is injected. The ADStorage adapter
+// conforms the reader; tests use a mock.
 
 import ADBase
 public import ADContent

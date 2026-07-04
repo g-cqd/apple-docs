@@ -1,19 +1,17 @@
-// The static-site build orchestrator — skeleton port of `src/web/build.js`'s
-// 13-step `buildStaticSite`. This is the PURE planner: given corpus-derived
-// inputs it returns the artifact tree (path → bytes) to write, plus the explicit
-// list of not-yet-ported steps. The I/O driver (`ad-cli web build`) enumerates
-// the corpus into `BuildInputs`, calls this, and writes the artifacts; keeping
-// the planner I/O-free makes it testable without a DB or filesystem.
+// The static-site build orchestrator — the PURE planner behind `src/web/build.js`'s
+// `buildStaticSite`. Given corpus-derived inputs it returns the artifact tree
+// (path → bytes) to write; the I/O driver (`ad-cli web build`) enumerates the corpus
+// into the reader, calls this, and writes the artifacts. Keeping the planner I/O-free
+// makes it testable without a DB or filesystem.
 //
-// Implemented here: the site-essentials artifacts (build.js steps 1/4/8/9 + the
-// discovery writes) — landing pages, discovery files, per-framework metadata,
-// manifest. Stubs (each surfaced in `BuildResult.stubs`, fixed by later slices):
-//   - assets pipeline (CSS minify / JS bundle / public copy) ........ S6
-//   - api/fonts/faces.css (font-face sheet) ......................... font-faces
-//   - data/search/* search artifacts ............................... S3
-//   - sitemap.xml(.gz) ............................................. S3 + S4 gzip
-//   - docs/* document pages + framework listing pages .............. S5 loop
-//   - shiki highlighting (NoopHighlighter until then) .............. S5
+// The full pipeline is ported and wired. This module plans the site essentials
+// (landing pages, discovery files, per-framework metadata, manifest); its siblings
+// plan the assets pipeline (Assets.swift), search artifacts (SearchArtifacts.swift),
+// sitemaps (Sitemaps.swift), and the per-document + framework render loop
+// (WebBuildFull.swift / DocPage.swift / FrameworkPage.swift, with shiki highlighting
+// via the ad-cli coprocess seam). The only build.js feature with no native twin is
+// multi-process worker fan-out (a throughput knob); `BuildResult.stubs` therefore
+// carries only the intentional `--skip-docs` note.
 
 public import ADJSONCore
 
