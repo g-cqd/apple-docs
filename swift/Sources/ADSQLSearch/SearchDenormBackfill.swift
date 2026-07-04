@@ -15,8 +15,11 @@ public import ADSQLModel
 ///     Swift over a roots map, because the engine does not yet support the correlated scalar subquery the
 ///     in-SQL form would need (it throws `sqlUnsupported`). The map form is the same COALESCE result.
 extension Database {
-    /// Backfills the six denorm columns for every `documents` row. Idempotent (a re-run recomputes the
-    /// same values). Runs in one pass: read the roots map, project the SQL-folded scalars, write each row.
+    /// Backfills the six denorm columns for every `documents` row that still needs it (`root_slug IS NULL`
+    /// — the writer never sets the v28 denorm set, so NULL marks an un-backfilled row). Incremental: a
+    /// re-crawl that appended pages backfills only those, and a fully-populated corpus updates zero rows
+    /// (no per-row `documents_au` FTS-trigger re-encode). Idempotent (a re-run recomputes the same values).
+    /// Runs in one pass: read the roots map, project the SQL-folded scalars, write each row.
     public func backfillSearchDenorm() throws(DBError) {
         // The year/track folds use `JSON_EXTRACT`, which is opt-in (ADSQLJSON). The denorm serving path
         // needs JSON registered anyway (the `$sources_json` filter uses `json_each`), so enabling it here
@@ -42,6 +45,7 @@ extension Database {
                    LOWER(COALESCE(JSON_EXTRACT(source_metadata, '$.track'), '')) AS track_lc,
                    framework
             FROM documents
+            WHERE root_slug IS NULL
             """
         )
         .all()
