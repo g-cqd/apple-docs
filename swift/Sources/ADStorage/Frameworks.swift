@@ -11,16 +11,18 @@ public struct FrameworkRoot: Sendable {
 }
 
 extension StorageConnection {
-    /// roots ⋈ active-page-count, `WHERE live>0 [AND r.kind=?] ORDER BY r.slug`.
+    /// roots with a live page, `WHERE page_count>0 [AND kind=?] ORDER BY slug`. `roots.page_count` is the
+    /// maintained active-page count — verified identical, per root, to `COUNT(pages WHERE status='active')`
+    /// — so we read it directly. That keeps this a single-table scan ADDB compiles cleanly, rather than the
+    /// former `LEFT JOIN (… GROUP BY …)` derived table (which ADDB's planner can't build) or a per-root
+    /// correlated aggregate (which it doesn't evaluate).
     public func listFrameworkRoots(kind: String?) -> [FrameworkRoot] {
-        let kindClause = kind != nil ? " AND r.kind = $kind" : ""
+        let kindClause = kind != nil ? " AND kind = $kind" : ""
         let sql = """
-            SELECT r.slug, r.display_name, r.kind, COALESCE(c.n, 0) AS live_page_count
-            FROM roots r
-            LEFT JOIN (SELECT root_id, COUNT(*) AS n FROM pages WHERE status = 'active' GROUP BY root_id) c
-              ON c.root_id = r.id
-            WHERE COALESCE(c.n, 0) > 0\(kindClause)
-            ORDER BY r.slug
+            SELECT slug, display_name, kind, page_count
+            FROM roots
+            WHERE page_count > 0\(kindClause)
+            ORDER BY slug
             """
         guard let stmt = conn.prepareUncached(sql) else { return [] }
         if let kind { stmt.bind("$kind", .text(kind)) }
