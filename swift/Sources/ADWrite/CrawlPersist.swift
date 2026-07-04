@@ -44,6 +44,9 @@
 // `throws(DBError)` contracts — an internal import would leak it). `Value` is
 // also used in bodies; both modules are genuinely part of the public surface, so
 // neither triggers the unused-`public import` warning under InternalImportsByDefault.
+
+// swiftlint:disable file_length  // the statement-for-statement JS persist port is legitimately long
+
 public import ADDB
 public import ADSQLModel
 
