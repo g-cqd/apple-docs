@@ -158,6 +158,18 @@ private func installShutdownOwner(
 
     installPipeHandler()
 
+    // Unblock SIGTERM/SIGINT in this thread (now that the handler is installed) so the process actually
+    // RECEIVES them: Bun.spawn children inherit these blocked in every thread, which keeps the signal
+    // pending and lets the sigaction handler above never fire — the `sigwait` waiter below is the intended
+    // fallback for that case, but it has not proven reliable on every macOS runner (the graceful-shutdown
+    // gate times out on macos-26 while passing on macOS 27). A live handler on an unblocked thread is the
+    // dependable primary path; the other three waiters stay as defense-in-depth.
+    var owned = sigset_t()
+    sigemptyset(&owned)
+    sigaddset(&owned, SIGTERM)
+    sigaddset(&owned, SIGINT)
+    pthread_sigmask(SIG_UNBLOCK, &owned, nil)
+
     let shutdownStarted = Atomic<Bool>(false)
     let orchestrate: @Sendable () -> Void = {
         // Once-only: whichever waiter wins runs the teardown.
