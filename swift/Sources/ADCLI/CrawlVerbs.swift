@@ -20,7 +20,9 @@ extension SourceRegistry {
     /// entry-point registry all build from this list).
     static let nativeAdapterTypes: [any SourceAdapter.Type] = [
         SwiftOrgAdapter.self, SwiftBookAdapter.self, SwiftEvolutionAdapter.self,
-        GuidelinesAdapter.self, AppleArchiveAdapter.self, SwiftDoccAdapter.self
+        GuidelinesAdapter.self, AppleArchiveAdapter.self, SwiftDoccAdapter.self,
+        PackagesAdapter.self, SampleCodeAdapter.self, ExternalDoccAdapter.self,
+        WwdcAdapter.self, HigAdapter.self, AppleDoccAdapter.self,
     ]
 
     static var nativeSourceNames: String {
