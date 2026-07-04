@@ -22,7 +22,7 @@ extension SourceRegistry {
         SwiftOrgAdapter.self, SwiftBookAdapter.self, SwiftEvolutionAdapter.self,
         GuidelinesAdapter.self, AppleArchiveAdapter.self, SwiftDoccAdapter.self,
         PackagesAdapter.self, SampleCodeAdapter.self, ExternalDoccAdapter.self,
-        WwdcAdapter.self, HigAdapter.self, AppleDoccAdapter.self,
+        WwdcAdapter.self, HigAdapter.self, AppleDoccAdapter.self
     ]
 
     static var nativeSourceNames: String {
@@ -167,6 +167,76 @@ struct SyncCommand: AsyncParsableCommand {
                 "synced \(source): discovered \(result.crawl.discovered), persisted \(result.crawl.persisted), "
                     + "skipped \(result.crawl.skipped), failed \(result.crawl.failed); "
                     + "index \(indexResultSummary(result.index))")
+        }
+    }
+}
+
+/// `ad-cli sync-all --db <ADDB>` — crawl EVERY native source into the corpus (each
+/// source's discover → upsert-roots → crawl, flat or BFS per its syncMode), then build
+/// the embedding index once. The native mirror of `bun cli.js sync` over all sources;
+/// one source's failure is logged and never aborts the run.
+struct SyncAllCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "sync-all",
+        abstract: "Crawl every native source into an ADDB corpus, then build the embedding index once.")
+
+    @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
+    var db: String
+
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 8).")
+    var concurrency: Int = 8
+
+    @Option(name: .long, help: "Comma-separated source subset (default: all native sources).")
+    var only: String?
+
+    @Flag(name: .long, help: "Crawl only — skip the final embedding-index pass.")
+    var skipIndex = false
+
+    func run() async throws {
+        let registry = SourceRegistry(SourceRegistry.nativeAdapterTypes)
+        let database = try openCrawlCorpus(db)
+        let context = SourceContext(client: URLSessionHTTPClient(), rateLimiter: RateLimiter())
+        let driver = CrawlDriver(registry: registry)
+
+        let sources =
+            only.map { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
+            ?? SourceRegistry.nativeAdapterTypes.map { $0.type }
+
+        var totals = CrawlDriver.Stats()
+        for source in sources {
+            let now = jsIsoNow()
+            do {
+                let adapter = try registry.adapter(for: source)
+                let discovery = try await adapter.discover(context)
+                guard !discovery.roots.isEmpty else {
+                    FileHandle.standardError.write(
+                        Data("ad-cli: sync-all: '\(source)' discovered no root; skipping\n".utf8))
+                    continue
+                }
+                let (rootId, rootIds) = try upsertCrawlRoots(database, discovery.roots, now: now)
+                let stats = try await driver.crawl(
+                    sourceType: source, into: database, rootId: rootId, rootIds: rootIds,
+                    context: context, now: now, maxConcurrency: concurrency)
+                totals.discovered += stats.discovered
+                totals.persisted += stats.persisted
+                totals.skipped += stats.skipped
+                totals.failed += stats.failed
+                print(
+                    "[\(source)] discovered \(stats.discovered), persisted \(stats.persisted), "
+                        + "skipped \(stats.skipped), failed \(stats.failed)")
+            } catch {
+                FileHandle.standardError.write(
+                    Data("ad-cli: sync-all: '\(source)' failed: \(error) — continuing\n".utf8))
+            }
+        }
+        print(
+            "crawled \(sources.count) sources: discovered \(totals.discovered), "
+                + "persisted \(totals.persisted), skipped \(totals.skipped), failed \(totals.failed)")
+
+        if !skipIndex {
+            let embedder = try loadIndexEmbedder(dbPath: db)
+            let indexResult = try driver.index(database, embedder: embedder)
+            print("index: \(indexResultSummary(indexResult))")
         }
     }
 }
