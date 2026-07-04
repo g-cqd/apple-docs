@@ -14,11 +14,12 @@ private func sec(_ kind: String, heading: String? = nil, text: String? = nil, js
         title: "MyType",
         sections: [
             sec("abstract", json: #"[{"type":"text","text":"An abstract."}]"#, sort: 0),
-            sec("discussion", heading: "Discussion", text: "Body text.", sort: 1),
+            sec("discussion", heading: "Discussion", text: "Body text.", sort: 1)
         ])
     expectEqual(
         html,
-        "<h1>MyType</h1>\n<p>An abstract.</p>\n<section id=\"discussion\"><h2>Discussion</h2><p>Body text.</p></section>")
+        "<h1>MyType</h1>\n<p>An abstract.</p>\n<section id=\"discussion\"><h2>Discussion</h2><p>Body text.</p></section>"
+    )
 }
 
 @Test func dispatchStableSortsAndSkipsEmptyAndOmitsAbsentTitle() {
@@ -27,7 +28,7 @@ private func sec(_ kind: String, heading: String? = nil, text: String? = nil, js
         sections: [
             sec("discussion", heading: "B", text: "second", sort: 2),
             sec("abstract", sort: 1),  // no json + no text → "" → skipped
-            sec("discussion", heading: "A", text: "first", sort: 0),
+            sec("discussion", heading: "A", text: "first", sort: 0)
         ])
     expectEqual(
         html,

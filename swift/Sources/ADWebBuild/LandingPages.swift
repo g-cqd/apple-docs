@@ -28,9 +28,9 @@ public enum LandingPages {
                 .object([
                     ("@type", .string("SearchAction")),
                     ("target", .string("\(config.baseUrl)/search?q={query}")),
-                    ("query-input", .string("required name=query")),
+                    ("query-input", .string("required name=query"))
                 ])
-            ),
+            )
         ])
         let head = PageShell.buildHead(
             config: config, title: pageTitle,
@@ -43,39 +43,40 @@ public enum LandingPages {
 
     /// `NOT_FOUND_INLINE_SCRIPT` — verbatim (leading + trailing newline; literal
     /// regex backslashes preserved via the raw literal).
-    static let notFoundInlineScript = "\n" + #"""
-        (function () {
-          // Derive a search-friendly query from the requested URL. The terminal
-          // path segment is the most likely page name; humanize CamelCase / kebab-
-          // case / snake_case and decode percent escapes so users land on the
-          // search page with a meaningful pre-filled query instead of a blank box.
-          var url = window.location;
-          var displayUrl = (url.pathname || '') + (url.search || '') + (url.hash || '');
-          var urlEl = document.getElementById('not-found-url');
-          if (urlEl) urlEl.textContent = displayUrl;
+    static let notFoundInlineScript =
+        "\n" + #"""
+            (function () {
+              // Derive a search-friendly query from the requested URL. The terminal
+              // path segment is the most likely page name; humanize CamelCase / kebab-
+              // case / snake_case and decode percent escapes so users land on the
+              // search page with a meaningful pre-filled query instead of a blank box.
+              var url = window.location;
+              var displayUrl = (url.pathname || '') + (url.search || '') + (url.hash || '');
+              var urlEl = document.getElementById('not-found-url');
+              if (urlEl) urlEl.textContent = displayUrl;
 
-          var path = (url.pathname || '').replace(/\/+$/, '').replace(/^\/+/, '');
-          // Drop /docs/ prefix and known framework segments — they're not the
-          // search target. Keep only the last two segments at most so multi-level
-          // misses (e.g. /docs/foo/bar/baz) yield "bar baz".
-          if (path.indexOf('docs/') === 0) path = path.slice(5);
-          var segs = path.split('/').filter(Boolean).slice(-2);
-          var raw = segs.join(' ');
-          var pretty = '';
-          try { pretty = decodeURIComponent(raw); } catch (_) { pretty = raw; }
-          pretty = pretty
-            .replace(/[-_]+/g, ' ')                  // kebab/snake → space
-            .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // CamelCase split
-            .replace(/\.html?$/i, '')               // drop terminal .html
-            .replace(/\s+/g, ' ')
-            .trim();
+              var path = (url.pathname || '').replace(/\/+$/, '').replace(/^\/+/, '');
+              // Drop /docs/ prefix and known framework segments — they're not the
+              // search target. Keep only the last two segments at most so multi-level
+              // misses (e.g. /docs/foo/bar/baz) yield "bar baz".
+              if (path.indexOf('docs/') === 0) path = path.slice(5);
+              var segs = path.split('/').filter(Boolean).slice(-2);
+              var raw = segs.join(' ');
+              var pretty = '';
+              try { pretty = decodeURIComponent(raw); } catch (_) { pretty = raw; }
+              pretty = pretty
+                .replace(/[-_]+/g, ' ')                  // kebab/snake → space
+                .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // CamelCase split
+                .replace(/\.html?$/i, '')               // drop terminal .html
+                .replace(/\s+/g, ' ')
+                .trim();
 
-          var input = document.getElementById('not-found-q');
-          if (input && pretty) {
-            input.value = pretty;
-            // Pre-select so a single keystroke replaces the inferred query.
-            input.select();
-          }
-        })();
-        """# + "\n"
+              var input = document.getElementById('not-found-q');
+              if (input && pretty) {
+                input.value = pretty;
+                // Pre-select so a single keystroke replaces the inferred query.
+                input.select();
+              }
+            })();
+            """# + "\n"
 }

@@ -214,7 +214,7 @@ public struct LinkResolver: Sendable {
     static let swiftOrgRedirects: [String: String] = [
         "documentation/concurrency": "swift-migration-guide/documentation/migrationguide",
         "documentation/package-manager": "swift-package-manager/documentation/packagemanagerdocs",
-        "documentation/tspl": "swift-book/The-Swift-Programming-Language",
+        "documentation/tspl": "swift-book/The-Swift-Programming-Language"
     ]
 
     static func isSwiftOrg(_ host: String?) -> Bool {
@@ -228,7 +228,9 @@ public struct LinkResolver: Sendable {
     /// `new URL()` throwing on a relative ref with no base.
     static func absolute(_ rawHref: String, relativeTo base: URL?) -> URLComponents? {
         let resolved: URL?
-        if let base { resolved = URL(string: rawHref, relativeTo: base)?.absoluteURL } else {
+        if let base {
+            resolved = URL(string: rawHref, relativeTo: base)?.absoluteURL
+        } else {
             resolved = URL(string: rawHref)
         }
         guard let resolved,
@@ -275,7 +277,8 @@ public struct LinkResolver: Sendable {
     static func matchWwdc(_ path: String) -> (year: String, id: String)? {
         let parts = path.split(separator: "/", omittingEmptySubsequences: true)
         guard parts.count == 4, parts[0] == "videos", parts[1] == "play" else { return nil }
-        let year = parts[2], id = parts[3]
+        let year = parts[2]
+        let id = parts[3]
         guard year.hasPrefix("wwdc"), year.count == 8,
             year.dropFirst(4).allSatisfy(\.isNumber),
             !id.isEmpty, id.allSatisfy(\.isNumber)
@@ -293,8 +296,9 @@ public struct LinkResolver: Sendable {
     static func matchProposalId(_ path: String) -> String? {
         guard let r = path.range(of: "/proposals/") else { return nil }
         var rest = trimTrailingSlashes(String(path[r.upperBound...]))
-        if rest.hasSuffix(".md") { rest = String(rest.dropLast(3)) } else if rest.hasSuffix(".html")
-        {
+        if rest.hasSuffix(".md") {
+            rest = String(rest.dropLast(3))
+        } else if rest.hasSuffix(".html") {
             rest = String(rest.dropLast(5))
         }
         guard !rest.contains("/"), startsWithProposalNumber(rest) else { return nil }

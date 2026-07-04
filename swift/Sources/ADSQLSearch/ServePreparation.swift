@@ -1,6 +1,6 @@
 public import ADDBExec
-public import ADSQLModel  // DBError (the typed-throws error in the public signature)
 import ADDBFTS  // enableFullTextSearch() — `documents_fts MATCH` is opt-in
+public import ADSQLModel  // DBError (the typed-throws error in the public signature)
 
 /// Makes an `ADSQLImport`-produced ADDB database ready to serve the apple-docs search read path — the
 /// one-call setup the 5A read swap performs once, after import, before the first `/search`.

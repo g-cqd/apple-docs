@@ -30,8 +30,9 @@ import Testing
 
 @Suite("apple-docs schema parity (native ADDB vs JS SQLite reference)")
 struct SchemaParityTests {
-
-    @Test("native ADDB catalog matches the JS-migrated SQLite reference")
+    @Test(
+        "native ADDB catalog matches the JS-migrated SQLite reference",
+        .enabled(if: SQLiteReferenceExtractor.bunAvailable, "requires bun to build the SQLite reference"))
     func nativeCatalogMatchesSQLiteReference() throws {
         // ── Native ADDB catalog ──────────────────────────────────────────────
         let tmpDir = FileManager.default.temporaryDirectory
@@ -161,10 +162,12 @@ enum SchemaDiff {
     static func compare(native: CatalogModel, reference: CatalogModel) -> Report {
         var report = Report()
         report.nativeCounts = (
-            native.tables.count, native.indexes.count, native.fts.count, native.triggers.count)
+            native.tables.count, native.indexes.count, native.fts.count, native.triggers.count
+        )
         report.referenceCounts = (
             reference.tables.count, reference.indexes.count, reference.fts.count,
-            reference.triggers.count)
+            reference.triggers.count
+        )
 
         // Tables + columns.
         let nativeTableNames = Set(native.tables.keys)

@@ -1,6 +1,6 @@
 public import ADDBExec
-public import ADSQLModel
 import ADDBJSON  // JSON_EXTRACT registration (the year/track folds) — see `enableJSON()` below
+public import ADSQLModel
 
 /// Populates the apple-docs NATIVE search-denorm columns
 /// (`documents.{title_lc,key_lc,year_num,track_lc,root_display,root_slug}`, the v28 set) over a DB that
@@ -43,7 +43,8 @@ extension Database {
                    framework
             FROM documents
             """
-        ).all()
+        )
+        .all()
 
         let update = try prepare(
             """
@@ -55,7 +56,10 @@ extension Database {
 
         for row in projected {
             guard case .integer(let id) = row["id"] else { continue }
-            let framework: String = { if case .text(let f) = row["framework"] { return f } else { return "" } }()
+            let framework: String = {
+                guard case .text(let f) = row["framework"] else { return "" }
+                return f
+            }()
             // root_display = COALESCE(r.display_name, framework); root_slug = COALESCE(r.slug, framework)
             // where r.slug == framework on a hit (the join key), so root_slug is `framework` either way.
             let display = rootDisplayBySlug[framework]

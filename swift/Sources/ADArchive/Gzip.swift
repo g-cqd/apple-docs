@@ -44,9 +44,10 @@ struct ZlibStream {
 /// pass ZLIB_VERSION + sizeof(z_stream) for ABI checking).
 struct ZlibLib {
     let version: @convention(c) () -> UnsafePointer<CChar>?
-    let deflateInit2: @convention(c) (
-        UnsafeMutableRawPointer?, Int32, Int32, Int32, Int32, Int32, UnsafePointer<CChar>?, Int32
-    ) -> Int32
+    let deflateInit2:
+        @convention(c) (
+            UnsafeMutableRawPointer?, Int32, Int32, Int32, Int32, Int32, UnsafePointer<CChar>?, Int32
+        ) -> Int32
     let deflate: @convention(c) (UnsafeMutableRawPointer?, Int32) -> Int32
     let deflateEnd: @convention(c) (UnsafeMutableRawPointer?) -> Int32
     let deflateBound: @convention(c) (UnsafeMutableRawPointer?, UInt) -> UInt
@@ -87,7 +88,8 @@ public enum Gzip {
                     "deflateInit2_",
                     as: (@convention(c) (
                         UnsafeMutableRawPointer?, Int32, Int32, Int32, Int32, Int32, UnsafePointer<CChar>?, Int32
-                    ) -> Int32).self),
+                    ) -> Int32)
+                    .self),
                 let deflate = sym("deflate", as: (@convention(c) (UnsafeMutableRawPointer?, Int32) -> Int32).self),
                 let dEnd = sym("deflateEnd", as: (@convention(c) (UnsafeMutableRawPointer?) -> Int32).self),
                 let dBound = sym(
@@ -127,9 +129,10 @@ public enum Gzip {
             streamPtr.deallocate()
         }
         let streamSize = Int32(MemoryLayout<ZlibStream>.size)
+        // deflateInit2 magic args (zlib.h): 8 = Z_DEFLATED method, 8 = memLevel, 0 = Z_DEFAULT_STRATEGY.
         let status = lib.deflateInit2(
-            UnsafeMutableRawPointer(streamPtr), level, 8 /* Z_DEFLATED */, gzipEncodeWindowBits,
-            8 /* memLevel */, 0 /* Z_DEFAULT_STRATEGY */, lib.version(), streamSize)
+            UnsafeMutableRawPointer(streamPtr), level, 8, gzipEncodeWindowBits,
+            8, 0, lib.version(), streamSize)
         guard status == zOK else { return nil }
         defer { _ = lib.deflateEnd(UnsafeMutableRawPointer(streamPtr)) }
 
@@ -148,7 +151,7 @@ public enum Gzip {
             }
         }
         guard let produced else { return nil }
-        return Array(output[0..<produced])
+        return Array(output[0 ..< produced])
     }
 
     /// Gunzip `bytes` (auto-detecting gzip/zlib framing). The shared inflate
@@ -227,13 +230,13 @@ final class InflateStream {
                 let result: Int32 = out.withUnsafeMutableBufferPointer { outBuf in
                     streamPtr.pointee.nextOut = outBuf.baseAddress
                     streamPtr.pointee.availOut = UInt32(outBuf.count)
-                    let r = lib.inflate(UnsafeMutableRawPointer(streamPtr), 0 /* Z_NO_FLUSH */)
+                    let r = lib.inflate(UnsafeMutableRawPointer(streamPtr), 0)  // 0 = Z_NO_FLUSH
                     produced = outBuf.count - Int(streamPtr.pointee.availOut)
                     return r
                 }
-                if produced > 0 { try emit(Array(out[0..<produced])) }
-                if result == 1 /* Z_STREAM_END */ { return .finished }
-                guard result == 0 /* Z_OK */ else { return .failed }
+                if produced > 0 { try emit(Array(out[0 ..< produced])) }
+                if result == 1 { return .finished }  // 1 = Z_STREAM_END
+                guard result == 0 else { return .failed }  // 0 = Z_OK
                 if streamPtr.pointee.availIn == 0 { return .needsMore }
             }
         }

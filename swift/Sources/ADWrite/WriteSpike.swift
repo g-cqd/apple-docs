@@ -127,13 +127,16 @@ public enum WriteSpike {
     ///
     /// - Parameter directory: an existing, writable directory (a temp dir for the
     ///   spike). The database file is created at `<directory>/addb-write-spike.adsql`.
+    /// - Returns: a ``SpikeReport`` capturing the write→read round-trip outcome.
+    /// - Throws: the engine's `DBError`, unchanged, on any failure.
     public static func run(inDirectory directory: String) throws -> SpikeReport {
         // ── 1. Open / create a fresh writable ADDB database ──────────────────
         // `DatabaseOptions()` defaults are already the writable profile we want:
         // readOnly=false, createIfMissing=true, durability=.barrier. The engine
         // has no `:memory:` mode — a real file under the temp dir is the idiom
         // (every ADDB test opens a throwaway on-disk db the same way).
-        let path = directory.hasSuffix("/")
+        let path =
+            directory.hasSuffix("/")
             ? directory + "addb-write-spike.adsql"
             : directory + "/addb-write-spike.adsql"
         let db = try Database.open(at: path, options: DatabaseOptions())
@@ -163,11 +166,11 @@ public enum WriteSpike {
                 INSERT INTO roots (slug, display_name, source, first_seen, last_seen)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                .text("swiftui"),                 // slug         (TEXT NOT NULL UNIQUE)
-                .text("SwiftUI"),                 // display_name (TEXT NOT NULL)
-                .text("seed"),                    // source       (TEXT NOT NULL)
-                .text("2026-06-20T00:00:00Z"),    // first_seen   (TEXT NOT NULL)
-                .text("2026-06-20T00:00:00Z"))    // last_seen    (TEXT NOT NULL)
+                .text("swiftui"),  // slug         (TEXT NOT NULL UNIQUE)
+                .text("SwiftUI"),  // display_name (TEXT NOT NULL)
+                .text("seed"),  // source       (TEXT NOT NULL)
+                .text("2026-06-20T00:00:00Z"),  // first_seen   (TEXT NOT NULL)
+                .text("2026-06-20T00:00:00Z"))  // last_seen    (TEXT NOT NULL)
             rootRowid = rootResult.lastInsertRowid
 
             // Page 1 — a fully-populated row, including a real BLOB
@@ -178,14 +181,14 @@ public enum WriteSpike {
                   (root_id, path, url, title, role, abstract, status, content_blob)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                .integer(rootRowid),                                  // root_id  (INTEGER NOT NULL, FK)
-                .text("/documentation/swiftui/view"),                 // path     (TEXT NOT NULL UNIQUE)
+                .integer(rootRowid),  // root_id  (INTEGER NOT NULL, FK)
+                .text("/documentation/swiftui/view"),  // path     (TEXT NOT NULL UNIQUE)
                 .text("https://developer.apple.com/documentation/swiftui/view"),  // url (TEXT NOT NULL)
-                .text("View"),                                        // title    (TEXT)
-                .text("symbol"),                                      // role     (TEXT)
+                .text("View"),  // title    (TEXT)
+                .text("symbol"),  // role     (TEXT)
                 .text("A type that represents part of your app's UI."),  // abstract (TEXT)
-                .text("active"),                                      // status   (TEXT NOT NULL)
-                .blob([0xDE, 0xAD, 0xBE, 0xEF]))                      // content_blob (BLOB) — BLOB bind
+                .text("active"),  // status   (TEXT NOT NULL)
+                .blob([0xDE, 0xAD, 0xBE, 0xEF]))  // content_blob (BLOB) — BLOB bind
             pageRowids.append(page1.lastInsertRowid)
 
             // Page 2 — exercises a real NULL bind: `title` is NULL (nullable TEXT),
@@ -197,13 +200,13 @@ public enum WriteSpike {
                   (root_id, path, url, title, role, abstract, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                .integer(rootRowid),                                  // root_id  (INTEGER NOT NULL, FK)
-                .text("/documentation/swiftui/text"),                 // path     (TEXT NOT NULL UNIQUE)
+                .integer(rootRowid),  // root_id  (INTEGER NOT NULL, FK)
+                .text("/documentation/swiftui/text"),  // path     (TEXT NOT NULL UNIQUE)
                 .text("https://developer.apple.com/documentation/swiftui/text"),  // url (TEXT NOT NULL)
-                .null,                                                // title    (TEXT) — explicit NULL bind
-                .text("symbol"),                                      // role     (TEXT)
+                .null,  // title    (TEXT) — explicit NULL bind
+                .text("symbol"),  // role     (TEXT)
                 .text("A view that displays one or more lines of read-only text."),  // abstract (TEXT)
-                .text("active"))                                      // status   (TEXT NOT NULL)
+                .text("active"))  // status   (TEXT NOT NULL)
             pageRowids.append(page2.lastInsertRowid)
         }
 
@@ -211,26 +214,28 @@ public enum WriteSpike {
         // `prepare(sql).all()` runs in a read snapshot and returns `[SQLRow]`;
         // each `SQLRow` is positional (`row[i]`) and name-addressable
         // (`row["col"]`), yielding a `Value`.
-        let rootsReadBack = try db.prepare(
-            "SELECT id, slug, display_name, kind, status, page_count FROM roots ORDER BY id"
-        )
-        .all()
-        .map { row in
-            "root #\(render(row["id"])) slug=\(render(row["slug"])) "
-                + "name=\(render(row["display_name"])) kind=\(render(row["kind"])) "
-                + "status=\(render(row["status"])) page_count=\(render(row["page_count"]))"
-        }
+        let rootsReadBack =
+            try db.prepare(
+                "SELECT id, slug, display_name, kind, status, page_count FROM roots ORDER BY id"
+            )
+            .all()
+            .map { row in
+                "root #\(render(row["id"])) slug=\(render(row["slug"])) "
+                    + "name=\(render(row["display_name"])) kind=\(render(row["kind"])) "
+                    + "status=\(render(row["status"])) page_count=\(render(row["page_count"]))"
+            }
 
-        let pagesReadBack = try db.prepare(
-            "SELECT id, root_id, path, title, role, status, content_blob FROM pages ORDER BY id"
-        )
-        .all()
-        .map { row in
-            "page #\(render(row["id"])) root_id=\(render(row["root_id"])) "
-                + "path=\(render(row["path"])) title=\(render(row["title"])) "
-                + "role=\(render(row["role"])) status=\(render(row["status"])) "
-                + "content_blob=\(render(row["content_blob"]))"
-        }
+        let pagesReadBack =
+            try db.prepare(
+                "SELECT id, root_id, path, title, role, status, content_blob FROM pages ORDER BY id"
+            )
+            .all()
+            .map { row in
+                "page #\(render(row["id"])) root_id=\(render(row["root_id"])) "
+                    + "path=\(render(row["path"])) title=\(render(row["title"])) "
+                    + "role=\(render(row["role"])) status=\(render(row["status"])) "
+                    + "content_blob=\(render(row["content_blob"]))"
+            }
 
         return SpikeReport(
             databasePath: db.path,

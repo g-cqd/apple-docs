@@ -188,16 +188,16 @@ extension StorageConnection {
     ) {
         var rows: [(parent: String, parentTitle: String?, child: String)] = []
         if let stmt = conn.prepareUncached(
-            "SELECT dr.from_key AS parent, d.title AS parent_title, dr.to_key AS child FROM document_relationships dr JOIN documents d ON d.key = dr.from_key WHERE dr.relation_type = 'child' AND dr.from_key LIKE 'design/%'")
-        {
+            "SELECT dr.from_key AS parent, d.title AS parent_title, dr.to_key AS child FROM document_relationships dr JOIN documents d ON d.key = dr.from_key WHERE dr.relation_type = 'child' AND dr.from_key LIKE 'design/%'"
+        ) {
             while stmt.step() == SQLite.row {
                 rows.append((parent: stmt.text(0) ?? "", parentTitle: stmt.text(1), child: stmt.text(2) ?? ""))
             }
         }
         var order: [String] = []
         if let stmt = conn.prepareUncached(
-            "SELECT to_key FROM document_relationships WHERE from_key = 'design/human-interface-guidelines' AND relation_type = 'child' ORDER BY sort_order, to_key")
-        {
+            "SELECT to_key FROM document_relationships WHERE from_key = 'design/human-interface-guidelines' AND relation_type = 'child' ORDER BY sort_order, to_key"
+        ) {
             while stmt.step() == SQLite.row {
                 if let key = stmt.text(0) { order.append(key) }
             }
@@ -229,18 +229,18 @@ extension StorageConnection {
         let count = stmt.columnCount()
         var names: [String] = []
         names.reserveCapacity(Int(count))
-        for i in 0..<count { names.append(stmt.columnName(i) ?? "") }
+        for i in 0 ..< count { names.append(stmt.columnName(i) ?? "") }
         var out: [DynamicRow] = []
         while stmt.step() == SQLite.row {
             var cells: [(name: String, value: SQLiteCell)] = []
             cells.reserveCapacity(Int(count))
-            for i in 0..<count {
+            for i in 0 ..< count {
                 let value: SQLiteCell
                 switch stmt.columnType(i) {
-                case SQLite.typeNull: value = .null
-                case SQLite.typeInteger: value = .integer(stmt.int(i) ?? 0)
-                case SQLite.typeFloat: value = .real(stmt.double(i) ?? 0)
-                default: value = .text(stmt.text(i) ?? "")
+                    case SQLite.typeNull: value = .null
+                    case SQLite.typeInteger: value = .integer(stmt.int(i) ?? 0)
+                    case SQLite.typeFloat: value = .real(stmt.double(i) ?? 0)
+                    default: value = .text(stmt.text(i) ?? "")
                 }
                 cells.append((name: names[Int(i)], value: value))
             }

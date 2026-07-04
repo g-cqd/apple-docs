@@ -20,8 +20,12 @@ import Testing
 
 @Test func frameworkOriginalUrlSynthesis() {
     #expect(WebHtml.frameworkOriginalUrl(sourceType: nil, slug: nil, url: "https://u") == "https://u")
-    #expect(WebHtml.frameworkOriginalUrl(sourceType: "hig", slug: "x", url: nil) == "https://developer.apple.com/design/human-interface-guidelines")
+    #expect(
+        WebHtml.frameworkOriginalUrl(sourceType: "hig", slug: "x", url: nil)
+            == "https://developer.apple.com/design/human-interface-guidelines")
     #expect(WebHtml.frameworkOriginalUrl(sourceType: "swift-org", slug: nil, url: nil) == "https://www.swift.org/")
-    #expect(WebHtml.frameworkOriginalUrl(sourceType: nil, slug: "swiftui", url: nil) == "https://developer.apple.com/documentation/swiftui")
+    #expect(
+        WebHtml.frameworkOriginalUrl(sourceType: nil, slug: "swiftui", url: nil)
+            == "https://developer.apple.com/documentation/swiftui")
     #expect(WebHtml.frameworkOriginalUrl(sourceType: nil, slug: nil, url: nil) == nil)
 }

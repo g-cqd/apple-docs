@@ -62,19 +62,43 @@ enum DocSidebar {
             let id: String
             let label: String
             switch kind {
-            case "declaration": id = "declaration"; label = "Declaration"
-            case "parameters": id = "parameters"; label = "Parameters"
-            case "properties": label = section.heading ?? "Properties"; id = RenderHelpers.slugify(label)
-            case "rest_endpoint": label = section.heading ?? "URL"; id = RenderHelpers.slugify(label)
-            case "rest_parameters": label = section.heading ?? "Parameters"; id = RenderHelpers.slugify(label)
-            case "rest_responses": label = section.heading ?? "Response Codes"; id = RenderHelpers.slugify(label)
-            case "possible_values": label = section.heading ?? "Possible Values"; id = RenderHelpers.slugify(label)
-            case "mentioned_in": id = "mentioned-in"; label = "Mentioned in"
-            case "discussion": label = section.heading ?? "Overview"; id = RenderHelpers.slugify(label)
-            case "topics": id = "topics"; label = "Topics"
-            case "relationships": continue  // sidebar, not the article body
-            case "see_also": id = "see-also"; label = "See Also"
-            default: label = section.heading ?? "Section"; id = RenderHelpers.slugify(label)
+                case "declaration":
+                    id = "declaration"
+                    label = "Declaration"
+                case "parameters":
+                    id = "parameters"
+                    label = "Parameters"
+                case "properties":
+                    label = section.heading ?? "Properties"
+                    id = RenderHelpers.slugify(label)
+                case "rest_endpoint":
+                    label = section.heading ?? "URL"
+                    id = RenderHelpers.slugify(label)
+                case "rest_parameters":
+                    label = section.heading ?? "Parameters"
+                    id = RenderHelpers.slugify(label)
+                case "rest_responses":
+                    label = section.heading ?? "Response Codes"
+                    id = RenderHelpers.slugify(label)
+                case "possible_values":
+                    label = section.heading ?? "Possible Values"
+                    id = RenderHelpers.slugify(label)
+                case "mentioned_in":
+                    id = "mentioned-in"
+                    label = "Mentioned in"
+                case "discussion":
+                    label = section.heading ?? "Overview"
+                    id = RenderHelpers.slugify(label)
+                case "topics":
+                    id = "topics"
+                    label = "Topics"
+                case "relationships": continue  // sidebar, not the article body
+                case "see_also":
+                    id = "see-also"
+                    label = "See Also"
+                default:
+                    label = section.heading ?? "Section"
+                    id = RenderHelpers.slugify(label)
             }
             if !id.isEmpty { items.append(TocItem(id: id, label: label)) }
         }
@@ -93,7 +117,8 @@ enum DocSidebar {
         let list = items.map { "<li><a href=\"#\(esc($0.id))\">\(esc($0.label))</a></li>" }.joined()
         let listHtml = "<ul>\(list)</ul>"
         if mobile {
-            return "<details class=\"page-toc-mobile\"><summary>Contents</summary><nav class=\"page-toc\">\(listHtml)</nav></details>"
+            return
+                "<details class=\"page-toc-mobile\"><summary>Contents</summary><nav class=\"page-toc\">\(listHtml)</nav></details>"
         }
         return "<nav class=\"page-toc\">\(listHtml)</nav>"
     }

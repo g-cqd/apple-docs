@@ -5,7 +5,6 @@
 // writes the result.
 
 import ADBase
-
 public import ADContent
 public import ADJSONCore
 

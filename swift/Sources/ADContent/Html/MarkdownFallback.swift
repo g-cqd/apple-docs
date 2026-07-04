@@ -20,7 +20,10 @@ enum HtmlMarkdown {
             let line = lines[i]
             let trimmed = JsString.trim(line)
 
-            if trimmed.isEmpty { i += 1; continue }
+            if trimmed.isEmpty {
+                i += 1
+                continue
+            }
 
             // HTML comment — skip until '-->'
             if trimmed.hasPrefix("<!--") {
@@ -162,7 +165,10 @@ enum HtmlMarkdown {
         // `\w*` info string (ASCII word chars).
         var lang = ""
         var k = n
-        while k < chars.count, isWordChar(chars[k]) { lang.append(chars[k]); k += 1 }
+        while k < chars.count, isWordChar(chars[k]) {
+            lang.append(chars[k])
+            k += 1
+        }
         return (String(repeating: first, count: n), lang)
     }
 
@@ -282,14 +288,23 @@ enum HtmlMarkdown {
             if matchAt(chars, i, "<doc:") {
                 var j = i + 5
                 var page = ""
-                while j < chars.count, chars[j] != ">", chars[j] != "#" { page.append(chars[j]); j += 1 }
+                while j < chars.count, chars[j] != ">", chars[j] != "#" {
+                    page.append(chars[j])
+                    j += 1
+                }
                 if !page.isEmpty {
                     var section: String? = nil
                     if j < chars.count, chars[j] == "#" {
                         var sec = ""
                         var k = j + 1
-                        while k < chars.count, chars[k] != ">" { sec.append(chars[k]); k += 1 }
-                        if !sec.isEmpty { section = sec; j = k }
+                        while k < chars.count, chars[k] != ">" {
+                            sec.append(chars[k])
+                            k += 1
+                        }
+                        if !sec.isEmpty {
+                            section = sec
+                            j = k
+                        }
                     }
                     if j < chars.count, chars[j] == ">" {
                         let pageSpaced = page.replacingDashes()
@@ -316,7 +331,10 @@ enum HtmlMarkdown {
             if matchAt(chars, i, "&lt;#") {
                 var j = i + 5
                 var name = ""
-                while j < chars.count, chars[j] != "#" { name.append(chars[j]); j += 1 }
+                while j < chars.count, chars[j] != "#" {
+                    name.append(chars[j])
+                    j += 1
+                }
                 if !name.isEmpty, matchAt(chars, j, "#&gt;") {
                     out += "<span class=\"placeholder\">\(name)</span>"
                     i = j + 5
@@ -380,7 +398,10 @@ enum HtmlMarkdown {
             if matchAt(chars, i, "[](") {
                 var j = i + 3
                 while j < chars.count, chars[j] != ")" { j += 1 }
-                if j < chars.count, chars[j] == ")" { i = j + 1; continue }
+                if j < chars.count, chars[j] == ")" {
+                    i = j + 1
+                    continue
+                }
             }
             out.append(chars[i])
             i += 1
@@ -466,14 +487,20 @@ enum HtmlMarkdown {
         guard open < chars.count, chars[open] == "[" else { return nil }
         var j = open + 1
         var first = ""
-        while j < chars.count, chars[j] != "]" { first.append(chars[j]); j += 1 }
+        while j < chars.count, chars[j] != "]" {
+            first.append(chars[j])
+            j += 1
+        }
         guard j < chars.count, chars[j] == "]" else { return nil }
         if !allowEmptyFirst && first.isEmpty { return nil }
         j += 1
         guard j < chars.count, chars[j] == "(" else { return nil }
         j += 1
         var second = ""
-        while j < chars.count, chars[j] != ")" { second.append(chars[j]); j += 1 }
+        while j < chars.count, chars[j] != ")" {
+            second.append(chars[j])
+            j += 1
+        }
         guard j < chars.count, chars[j] == ")", !second.isEmpty else { return nil }
         return (first, second, j + 1)
     }
@@ -529,7 +556,10 @@ enum HtmlMarkdown {
             if matchAt(chars, i, "DoccPh") {
                 var j = i + 6
                 var digits = ""
-                while j < chars.count, chars[j] >= "0", chars[j] <= "9" { digits.append(chars[j]); j += 1 }
+                while j < chars.count, chars[j] >= "0", chars[j] <= "9" {
+                    digits.append(chars[j])
+                    j += 1
+                }
                 if !digits.isEmpty, matchAt(chars, j, "DoccPh"), let idx = Int(digits) {
                     let name = idx < placeholders.count ? placeholders[idx] : ""
                     out += "<span class=\"placeholder\">\(RenderHelpers.escapeHtml(name))</span>"

@@ -8,7 +8,6 @@ import Testing
 
 @Suite("SwiftBookAdapter — discover + stateful root topics")
 struct SwiftBookAdapterTests {
-
     private static let treeJSON = """
         {"tree":[\
         {"path":"TSPL.docc/The-Swift-Programming-Language.md","type":"blob","sha":"r"},\
@@ -50,7 +49,7 @@ struct SwiftBookAdapterTests {
             result.keys == [
                 "swift-book/The-Swift-Programming-Language",
                 "swift-book/GuidedTour/AboutSwift",
-                "swift-book/LanguageGuide/TheBasics",
+                "swift-book/LanguageGuide/TheBasics"
             ])
     }
 
@@ -78,8 +77,9 @@ struct SwiftBookAdapterTests {
 
     @Test("chapter normalize tags the TSPL section group in sourceMetadata")
     func chapterMetadata() throws {
-        let page = try SwiftBookAdapter().normalize(
-            "swift-book/LanguageGuide/TheBasics", .markdown("# The Basics\n\nProse."))
+        let page = try SwiftBookAdapter()
+            .normalize(
+                "swift-book/LanguageGuide/TheBasics", .markdown("# The Basics\n\nProse."))
         #expect(page.document.kind == "book-chapter")
         #expect(page.document.sourceMetadata?.contains("Language Guide") == true)
     }

@@ -14,9 +14,15 @@ public enum HtmlNormalize {
     ///   - html: the page source.
     ///   - key: the canonical path key (e.g. `swift/generics`).
     ///   - sourceType: the adapter's source tag.
-    ///   - kind/framework/url/language/sourceMetadata: document fields the adapter supplies.
+    ///   - kind: the document kind the adapter supplies.
+    ///   - framework: the owning framework/collection.
+    ///   - url: the canonical page URL.
+    ///   - language: the primary language.
+    ///   - sourceMetadata: adapter-specific metadata JSON.
     ///   - containerSelector: optional content-container selector (`tag` / `.class` / `#id`).
     ///   - preserveStructure: render section bodies as Markdown (true) or plain text (false).
+    ///   - linkResolver: optional rewrite applied to every extracted link target.
+    /// - Returns: the normalized page.
     public static func parse(
         _ html: String,
         key: String,
@@ -31,7 +37,9 @@ public enum HtmlNormalize {
         linkResolver: ((String) -> String?)? = nil
     ) -> NormalizedPage {
         if let target = detectRedirect(html) {
-            return redirectPage(key: key, target: target, sourceType: sourceType, framework: framework, language: language, sourceMetadata: sourceMetadata)
+            return redirectPage(
+                key: key, target: target, sourceType: sourceType, framework: framework, language: language,
+                sourceMetadata: sourceMetadata)
         }
 
         let extracted = HTMLDocument.extract(
@@ -42,7 +50,8 @@ public enum HtmlNormalize {
         // abstractText: the description, else the first paragraph of the lead section.
         var abstractText = description
         if abstractText == nil, let lead = extracted.sections.first?.content, !lead.isEmpty {
-            let firstParagraph = lead.components(separatedBy: "\n\n").first?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstParagraph = lead.components(separatedBy: "\n\n").first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             abstractText = (firstParagraph?.isEmpty == false) ? firstParagraph : nil
         }
 
@@ -87,8 +96,11 @@ public enum HtmlNormalize {
             else { continue }
             // content is "<seconds>; url=<target>".
             guard let range = content.range(of: "url=", options: .caseInsensitive) else { continue }
-            let target = content[range.upperBound...].trimmingCharacters(
-                in: CharacterSet(charactersIn: " '\"")).trimmingCharacters(in: .whitespacesAndNewlines)
+            let target = content[range.upperBound...]
+                .trimmingCharacters(
+                    in: CharacterSet(charactersIn: " '\"")
+                )
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             if !target.isEmpty { return target }
         }
         return nil

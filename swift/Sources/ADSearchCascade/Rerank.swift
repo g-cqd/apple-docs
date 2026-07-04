@@ -87,31 +87,31 @@ enum Rerank {
         _ score: inout Double, _ r: ResultHit, _ query: String, _ lowerQuery: String,
         _ sourceType: String, _ intent: Intent
     ) {
-            // R1: exact path/title match
-            let lastSegment = (r.path.split(separator: "/").last.map(String.init) ?? "").lowercased()
-            if lastSegment == lowerQuery || (r.title ?? "").lowercased() == lowerQuery {
-                score *= 3.0
-                if r.title == query { score *= 1.1 }
+        // R1: exact path/title match
+        let lastSegment = (r.path.split(separator: "/").last.map(String.init) ?? "").lowercased()
+        if lastSegment == lowerQuery || (r.title ?? "").lowercased() == lowerQuery {
+            score *= 3.0
+            if r.title == query { score *= 1.1 }
+        }
+        // R2: symbol-kind boost
+        if intent.type == .symbol, symbolKinds.contains((r.kind ?? "").lowercased()) {
+            score *= 1.5
+        }
+        // R3: guide/article boost
+        if intent.type == .howto {
+            let kind = (r.kind ?? "").lowercased()
+            if sourceType == "hig" || sourceType == "guidelines" || kind == "article" { score *= 1.3 }
+        }
+        // R4: release-notes penalty
+        if r.isReleaseNotes || r.path.contains("release-notes") { score *= 0.4 }
+        // R5: archived penalty
+        if sourceType == "apple-archive" { score *= 0.6 }
+        // R6: sample-code boost
+        if sourceType == "sample-code" {
+            if intent.type == .howto || lowerQuery.contains("example") || lowerQuery.contains("sample") {
+                score *= 1.2
             }
-            // R2: symbol-kind boost
-            if intent.type == .symbol, symbolKinds.contains((r.kind ?? "").lowercased()) {
-                score *= 1.5
-            }
-            // R3: guide/article boost
-            if intent.type == .howto {
-                let kind = (r.kind ?? "").lowercased()
-                if sourceType == "hig" || sourceType == "guidelines" || kind == "article" { score *= 1.3 }
-            }
-            // R4: release-notes penalty
-            if r.isReleaseNotes || r.path.contains("release-notes") { score *= 0.4 }
-            // R5: archived penalty
-            if sourceType == "apple-archive" { score *= 0.6 }
-            // R6: sample-code boost
-            if sourceType == "sample-code" {
-                if intent.type == .howto || lowerQuery.contains("example") || lowerQuery.contains("sample") {
-                    score *= 1.2
-                }
-            }
+        }
     }
 
     /// Boosts R6b–R11 (package penalty, source preference, depth penalty, error/concept/wwdc intent)
@@ -119,33 +119,33 @@ enum Rerank {
     private static func applyBoostsLate(
         _ score: inout Double, _ r: ResultHit, _ lowerQuery: String, _ sourceType: String, _ intent: Intent
     ) {
-            // R6b: package penalty
-            if sourceType == "packages" {
-                score *= 0.45
-                if lowerQuery.contains("package") || lowerQuery.contains("library")
-                    || (r.title ?? "").lowercased() == lowerQuery
-                {
-                    score *= 1.5
-                }
+        // R6b: package penalty
+        if sourceType == "packages" {
+            score *= 0.45
+            if lowerQuery.contains("package") || lowerQuery.contains("library")
+                || (r.title ?? "").lowercased() == lowerQuery
+            {
+                score *= 1.5
             }
-            // R7: source preference
-            score *= sourceMultipliers[sourceType] ?? 1.0
-            // R8: depth penalty
-            if r.urlDepth > 0 { score *= max(0.3, 1.0 - Double(r.urlDepth) * 0.05) }
-            // R9: error intent
-            if intent.type == .error {
-                let kind = (r.kind ?? "").lowercased()
-                let title = (r.title ?? "").lowercased()
-                if kind == "article" || title.contains("error") || title.contains("troubleshoot") {
-                    score *= 1.2
-                }
+        }
+        // R7: source preference
+        score *= sourceMultipliers[sourceType] ?? 1.0
+        // R8: depth penalty
+        if r.urlDepth > 0 { score *= max(0.3, 1.0 - Double(r.urlDepth) * 0.05) }
+        // R9: error intent
+        if intent.type == .error {
+            let kind = (r.kind ?? "").lowercased()
+            let title = (r.title ?? "").lowercased()
+            if kind == "article" || title.contains("error") || title.contains("troubleshoot") {
+                score *= 1.2
             }
-            // R10: concept intent
-            if intent.type == .concept {
-                let kind = (r.kind ?? "").lowercased()
-                if kind == "article" || sourceType == "hig" || sourceType == "swift-book" { score *= 1.2 }
-            }
-            // R11: WWDC intent
-            if intent.type == .wwdc, sourceType == "wwdc" { score *= 1.4 }
+        }
+        // R10: concept intent
+        if intent.type == .concept {
+            let kind = (r.kind ?? "").lowercased()
+            if kind == "article" || sourceType == "hig" || sourceType == "swift-book" { score *= 1.2 }
+        }
+        // R11: WWDC intent
+        if intent.type == .wwdc, sourceType == "wwdc" { score *= 1.4 }
     }
 }

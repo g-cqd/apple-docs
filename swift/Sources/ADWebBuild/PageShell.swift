@@ -49,7 +49,7 @@ enum PageShell {
             ("og:type", ogType ?? "website"),
             ("og:title", ogTitle ?? config.siteName),
             ("og:url", canonical),
-            ("og:site_name", config.siteName),
+            ("og:site_name", config.siteName)
         ]
         if truthy(ogDesc) { og.append(("og:description", ogDesc!)) }
 
@@ -77,7 +77,7 @@ enum PageShell {
     /// `buildScripts`/`renderScripts`.
     static let bundles: [String: [String]] = [
         "core": ["theme.js", "search.js", "page-toc.js"],
-        "listing": ["collection-filters.js", "tree-view.js"],
+        "listing": ["collection-filters.js", "tree-view.js"]
     ]
     static func buildScripts(_ config: SiteConfig, _ groups: [String]) -> String {
         var files: [String] = []
@@ -88,9 +88,11 @@ enum PageShell {
                 if let bundle = bundles[group] { files.append(contentsOf: bundle) } else { files.append("\(group).js") }
             }
         }
-        return files.enumerated().map { i, file in
-            "\(i > 0 ? "\n" : "")<script src=\"\(esc(WebHtml.assetUrl(config, file)))\" defer></script>"
-        }.joined()
+        return files.enumerated()
+            .map { i, file in
+                "\(i > 0 ? "\n" : "")<script src=\"\(esc(WebHtml.assetUrl(config, file)))\" defer></script>"
+            }
+            .joined()
     }
 
     /// buildHeader(siteConfig) — the global site header (nav + search + theme
@@ -130,10 +132,10 @@ enum PageShell {
         out.reserveCapacity(json.count)
         for ch in json {
             switch ch {
-            case "<": out += "\\u003c"
-            case ">": out += "\\u003e"
-            case "&": out += "\\u0026"
-            default: out.append(ch)
+                case "<": out += "\\u003c"
+                case ">": out += "\\u003e"
+                case "&": out += "\\u0026"
+                default: out.append(ch)
             }
         }
         return out
@@ -146,7 +148,10 @@ enum PageShell {
         var start = -1
         var i = 0
         while i + 2 < chars.count {
-            if chars[i] == ":", chars[i + 1] == "/", chars[i + 2] == "/" { start = i + 3; break }
+            if chars[i] == ":", chars[i + 1] == "/", chars[i + 2] == "/" {
+                start = i + 3
+                break
+            }
             i += 1
         }
         guard start >= 0 else { return "" }

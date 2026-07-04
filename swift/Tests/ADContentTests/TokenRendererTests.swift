@@ -22,11 +22,14 @@ private func tokens(_ json: String) throws -> JSON {
 
 @Test func declarationTokensLinkAndClasses() throws {
     let html: String = try HtmlTokens.renderDeclarationTokens(
-        tokens(#"[{"kind":"keyword","text":"struct"},{"kind":"typeIdentifier","text":"Foo","_resolvedKey":"swiftui/foo"}]"#),
+        tokens(
+            #"[{"kind":"keyword","text":"struct"},{"kind":"typeIdentifier","text":"Foo","_resolvedKey":"swiftui/foo"}]"#
+        ),
         ["swiftui/foo"])
     expectEqual(
         html,
-        #"<pre class="decl-tokens"><code><span class="decl-keyword">struct</span> <a href="/docs/swiftui/foo/" class="code-type-link"><span class="decl-typeIdentifier">Foo</span></a></code></pre>"#)
+        #"<pre class="decl-tokens"><code><span class="decl-keyword">struct</span> <a href="/docs/swiftui/foo/" class="code-type-link"><span class="decl-typeIdentifier">Foo</span></a></code></pre>"#
+    )
 }
 
 @Test func declarationTokensWithoutKnownKeyFallsBackToClass() throws {

@@ -23,10 +23,11 @@ extension DocC {
             guard section.isObject else { return }
             let title = section["title"]
             if title.isTruthy { lines.append(title.jsString) }
-            section["identifiers"].forEachElement { idNode in
-                let text = linkTitleText(idNode, ctx)
-                if !text.isEmpty { lines.append(text) }
-            }
+            section["identifiers"]
+                .forEachElement { idNode in
+                    let text = linkTitleText(idNode, ctx)
+                    if !text.isEmpty { lines.append(text) }
+                }
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
@@ -52,14 +53,15 @@ extension DocC {
                 return
             }
             var items: [JSONValue] = []
-            section["identifiers"].forEachElement { idNode in
-                items.append(linkItem(idNode, ctx))
-            }
+            section["identifiers"]
+                .forEachElement { idNode in
+                    items.append(linkItem(idNode, ctx))
+                }
             out.append(
                 object([
                     ("title", valueOr(section["title"], .null)),
                     ("type", valueOr(section["type"], .null)),
-                    ("items", .array(items)),
+                    ("items", .array(items))
                 ]))
         }
         return .array(out)
@@ -73,7 +75,7 @@ extension DocC {
         return object([
             ("identifier", JSONValue(idNode)),
             ("key", ctx.resolvedKeyValue(id)),
-            ("title", title),
+            ("title", title)
         ])
     }
 
@@ -143,7 +145,7 @@ extension DocC {
                         object([
                             ("identifier", JSONValue(idNode)),
                             ("_resolvedTitle", ctx.refTitleValue(ctx.lookup(id)) ?? .null),
-                            ("_resolvedKey", ctx.resolvedKeyValue(id)),
+                            ("_resolvedKey", ctx.resolvedKeyValue(id))
                         ]))
                 }
                 pairs.append(("items", .array(items)))
@@ -166,7 +168,7 @@ extension DocC {
     private static func resolveGeneralNode(_ node: JSON, _ type: String?, _ ctx: DocCContext) -> JSONValue {
         var pairs: [(String, JSONValue)] = []
         node.forEachMember { key, value in
-            if (key == "inlineContent" || key == "content"), value.isArray {
+            if key == "inlineContent" || key == "content", value.isArray {
                 pairs.append((key, mapNodes(value, ctx)))
             } else if key == "items", value.isArray {
                 let mapped = type == "termList" ? mapTermListItems(value, ctx) : mapGenericItems(value, ctx)
@@ -195,7 +197,10 @@ extension DocC {
     private static func mapTermListItems(_ items: JSON, _ ctx: DocCContext) -> [JSONValue] {
         var out: [JSONValue] = []
         items.forEachElement { item in
-            guard item.isObject else { out.append(JSONValue(item)); return }
+            guard item.isObject else {
+                out.append(JSONValue(item))
+                return
+            }
             var pairs: [(String, JSONValue)] = []
             item.forEachMember { key, value in
                 if key == "term", value.isObject, value["inlineContent"].isArray {

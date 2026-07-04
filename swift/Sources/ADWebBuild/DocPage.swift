@@ -5,9 +5,8 @@
 // rewrite. Calls ADContent's DocContentRenderer in-process (no FFI).
 
 import ADBase
-import ADJSONCore
-
 public import ADContent
+import ADJSONCore
 
 public enum DocPage {
     private static func esc(_ s: String) -> String { WebHtml.escape(s) }
@@ -30,10 +29,12 @@ public enum DocPage {
                     ancestorTitles: ancestorTitles, knownKeys: knownKeys)
             } ?? ""
 
-        let ordered = sections.enumerated().sorted {
-            $0.element.sortOrder == $1.element.sortOrder
-                ? $0.offset < $1.offset : $0.element.sortOrder < $1.element.sortOrder
-        }.map(\.element)
+        let ordered = sections.enumerated()
+            .sorted {
+                $0.element.sortOrder == $1.element.sortOrder
+                    ? $0.offset < $1.offset : $0.element.sortOrder < $1.element.sortOrder
+            }
+            .map(\.element)
         let tocItems = DocSidebar.buildPageToc(ordered)
         let relationshipSection = ordered.first { ($0.sectionKind ?? "") == "relationships" }
         let hasSidebar = tocItems.count >= 2
@@ -55,13 +56,15 @@ public enum DocPage {
             )
         }
         if hasSidebar {
-            sidebarParts.append("<div class=\"sidebar-block\">\(DocSidebar.renderTocHtml(tocItems, mobile: false))</div>")
+            sidebarParts.append(
+                "<div class=\"sidebar-block\">\(DocSidebar.renderTocHtml(tocItems, mobile: false))</div>")
         }
         if let rel = relationshipSection, DocSidebar.hasRenderableItems(rel.contentJson ?? "") {
             sidebarParts.append("<div class=\"sidebar-block\">\(DocSidebar.buildRelationshipContent(rel))</div>")
         }
         let hasSidebarFinal = !sidebarParts.isEmpty
-        let sidebar = hasSidebarFinal ? "<aside class=\"doc-sidebar\">\(sidebarParts.joined(separator: "\n"))</aside>" : ""
+        let sidebar =
+            hasSidebarFinal ? "<aside class=\"doc-sidebar\">\(sidebarParts.joined(separator: "\n"))</aside>" : ""
         let mobileToc = hasSidebar ? DocSidebar.renderTocHtml(tocItems, mobile: true) : ""
 
         let webKey = doc.key.map { SafePath.safeWebDocKey($0) }
@@ -114,9 +117,9 @@ public enum DocPage {
                 "publisher",
                 .object([
                     ("@type", .string("Organization")), ("name", .string(config.siteName)),
-                    ("url", .string("\(config.baseUrl)/")),
+                    ("url", .string("\(config.baseUrl)/"))
                 ])
-            ),
+            )
         ]
         if !docDescription.isEmpty { jsonLdPairs.append(("description", .string(docDescription))) }
         if let bd = config.buildDate, !bd.isEmpty { jsonLdPairs.append(("dateModified", .string(bd))) }

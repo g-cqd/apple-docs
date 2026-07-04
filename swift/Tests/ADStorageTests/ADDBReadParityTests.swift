@@ -33,7 +33,9 @@ struct ADDBReadParityTests {
 
     /// Opens both backends over the SAME logical corpus and hands them to `body`.
     /// The SQLite corpus is built once; the ADDB corpus is imported from it.
-    private func withBothBackends(_ body: (_ sqlite: StorageConnection, _ addb: StorageConnection) throws -> Void) throws {
+    private func withBothBackends(_ body: (_ sqlite: StorageConnection, _ addb: StorageConnection) throws -> Void)
+        throws
+    {
         let dir = "/tmp/adstorage-parity-\(UInt64.random(in: 0 ..< .max))"
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: dir) }
@@ -244,7 +246,8 @@ struct ADDBReadParityTests {
         for k in st.rootsByKind { s += "byKind \(opt(k.kind))=\(k.count)\n" }
         if let l = st.lastLog { s += "lastLog \(opt(l.timestamp)) \(opt(l.action))\n" }
         if let a = st.activity {
-            s += "activity \(opt(a.action)) \(opt(a.startedAt)) pid=\(a.pid.map { "\($0)" } ?? "nil") roots=\(opt(a.rootsJSON))\n"
+            s +=
+                "activity \(opt(a.action)) \(opt(a.startedAt)) pid=\(a.pid.map { "\($0)" } ?? "nil") roots=\(opt(a.rootsJSON))\n"
         }
         let p = st.crawlProgress
         s += "crawl pending=\(p.pending) processed=\(p.processed) failed=\(p.failed) total=\(p.total)\n"
@@ -269,7 +272,8 @@ struct ADDBReadParityTests {
     }
 
     private func pagesString(_ c: StorageConnection, _ slug: String) -> String {
-        c.pagesByRoot(slug).map { "PAGE \($0.path) \(opt($0.title)) \(opt($0.role)) \(opt($0.roleHeading)) \(opt($0.abstract))" }
+        c.pagesByRoot(slug)
+            .map { "PAGE \($0.path) \(opt($0.title)) \(opt($0.role)) \(opt($0.roleHeading)) \(opt($0.abstract))" }
             .joined(separator: "\n")
     }
 
@@ -292,7 +296,11 @@ struct ADDBReadParityTests {
 
 private struct FramedRows {
     enum Cell: Equatable, CustomStringConvertible {
-        case null, int(Int64), real(Double), text(String), blob([UInt8])
+        case null
+        case int(Int64)
+        case real(Double)
+        case text(String)
+        case blob([UInt8])
         var description: String {
             switch self {
                 case .null: return "null"
@@ -317,7 +325,8 @@ private struct FramedRows {
     init(_ bytes: [UInt8]) {
         var off = 0
         func u32() -> UInt32 {
-            let v = UInt32(bytes[off]) | UInt32(bytes[off + 1]) << 8 | UInt32(bytes[off + 2]) << 16
+            let v =
+                UInt32(bytes[off]) | UInt32(bytes[off + 1]) << 8 | UInt32(bytes[off + 2]) << 16
                 | UInt32(bytes[off + 3]) << 24
             off += 4
             return v

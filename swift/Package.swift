@@ -618,7 +618,7 @@ let package = Package(
             name: "ADBuilderPipelineTests",
             dependencies: [
                 "ADBuilderPipeline", "ADBuilder", "ADWrite", .product(name: "ADDB", package: "ADDB"),
-                .product(name: "ADSQLModel", package: "ADSQL"),
+                .product(name: "ADSQLModel", package: "ADSQL")
             ], swiftSettings: testSettings),
         .testTarget(
             name: "ADWebBuildTests", dependencies: ["ADWebBuild"], swiftSettings: testSettings),
@@ -666,7 +666,7 @@ let isolationClosures: [String: Set<String>] = [
     "ADBuilderTests": ["ADBuilder", "ADBuilderTests", "ADContent", "ADBase", "ADEmbed"],
     "ADBuilderPipelineTests": [
         "ADBuilder", "ADWrite", "ADEmbed", "ADArchive", "ADBuilderPipeline", "ADBuilderPipelineTests",
-        "ADContent", "ADBase",
+        "ADContent", "ADBase"
     ],
     "ADStorageTests": ["ADStorage", "ADBase", "ADArchive", "CSQLiteShim", "ADSQLSearch", "ADStorageTests"],
     "ADArchiveTests": ["ADArchive", "ADArchiveTests"],

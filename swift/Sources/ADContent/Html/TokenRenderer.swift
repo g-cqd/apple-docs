@@ -8,7 +8,7 @@ import ADJSONCore
 enum HtmlTokens {
     static let semanticKinds: Set<String> = [
         "keyword", "attribute", "typeIdentifier", "identifier",
-        "genericParameter", "externalParam", "internalParam", "number",
+        "genericParameter", "externalParam", "internalParam", "number"
     ]
 
     /// Join token texts, inserting a space between adjacent semantic tokens that
@@ -57,13 +57,13 @@ enum HtmlTokens {
             }
 
             switch k {
-            case "keyword", "attribute": spans += "<span class=\"decl-keyword\">\(text)</span>"
-            case "typeIdentifier": spans += "<span class=\"decl-type\">\(text)</span>"
-            case "identifier": spans += "<span class=\"decl-identifier\">\(text)</span>"
-            case "genericParameter": spans += "<span class=\"decl-generic\">\(text)</span>"
-            case "externalParam", "internalParam": spans += "<span class=\"decl-param\">\(text)</span>"
-            case "number": spans += "<span class=\"decl-number\">\(text)</span>"
-            default: spans += text
+                case "keyword", "attribute": spans += "<span class=\"decl-keyword\">\(text)</span>"
+                case "typeIdentifier": spans += "<span class=\"decl-type\">\(text)</span>"
+                case "identifier": spans += "<span class=\"decl-identifier\">\(text)</span>"
+                case "genericParameter": spans += "<span class=\"decl-generic\">\(text)</span>"
+                case "externalParam", "internalParam": spans += "<span class=\"decl-param\">\(text)</span>"
+                case "number": spans += "<span class=\"decl-number\">\(text)</span>"
+                default: spans += text
             }
         }
         return "<pre class=\"decl-tokens\"><code>\(spans)</code></pre>"

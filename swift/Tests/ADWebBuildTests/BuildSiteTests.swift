@@ -28,7 +28,7 @@ private let essentialsInputs = BuildInputs(
         "index.html", "search/index.html", "fonts/index.html", "api/fonts/faces.css",
         "symbols/index.html", "404.html",
         "robots.txt", "opensearch.xml", ".well-known/api-catalog", ".well-known/mcp/server-card.json",
-        "_headers", "data/frameworks/combine.json", "manifest.json",
+        "_headers", "data/frameworks/combine.json", "manifest.json"
     ]
     #expect(paths == expected)
 
@@ -43,12 +43,14 @@ private let essentialsInputs = BuildInputs(
     let result = BuildSite.planEssentials(config: essentialsConfig, inputs: essentialsInputs)
 
     let perFramework: String? = text(result, "data/frameworks/combine.json")
-    #expect(perFramework == "{\"slug\":\"combine\",\"displayName\":\"Combine\",\"kind\":\"framework\",\"documentCount\":3}")
+    #expect(
+        perFramework == "{\"slug\":\"combine\",\"displayName\":\"Combine\",\"kind\":\"framework\",\"documentCount\":3}")
 
     let manifest: String? = text(result, "manifest.json")
     #expect(
         manifest
-            == "{\n  \"version\": 1,\n  \"siteName\": \"Docs\",\n  \"buildDate\": \"2026-06-30\",\n  \"baseUrl\": \"https://x.test\",\n  \"totalDocuments\": 3,\n  \"totalFrameworks\": 1,\n  \"searchArtifacts\": null\n}")
+            == "{\n  \"version\": 1,\n  \"siteName\": \"Docs\",\n  \"buildDate\": \"2026-06-30\",\n  \"baseUrl\": \"https://x.test\",\n  \"totalDocuments\": 3,\n  \"totalFrameworks\": 1,\n  \"searchArtifacts\": null\n}"
+    )
 
     let index: String? = text(result, "index.html")
     #expect(index?.hasPrefix("<!DOCTYPE html>\n<html lang=\"en\" data-theme=\"auto\">") == true)
@@ -70,5 +72,6 @@ private let essentialsInputs = BuildInputs(
     let manifest: String? = text(result, "manifest.json")
     #expect(
         manifest
-            == "{\n  \"version\": 1,\n  \"siteName\": \"Apple Developer Docs\",\n  \"buildDate\": null,\n  \"baseUrl\": \"\",\n  \"totalDocuments\": 0,\n  \"totalFrameworks\": 0,\n  \"searchArtifacts\": null\n}")
+            == "{\n  \"version\": 1,\n  \"siteName\": \"Apple Developer Docs\",\n  \"buildDate\": null,\n  \"baseUrl\": \"\",\n  \"totalDocuments\": 0,\n  \"totalFrameworks\": 0,\n  \"searchArtifacts\": null\n}"
+    )
 }

@@ -215,12 +215,17 @@ struct HtmlNodes: Sendable {
             let title =
                 (titleNode != nil && !titleNode!.isNull)
                 ? coerce(titleNode)
-                : { let r = renderInlines(node.member("inlineContent"), depth + 1); return r.isEmpty ? href : r }()
+                : {
+                    let r = renderInlines(node.member("inlineContent"), depth + 1)
+                    return r.isEmpty ? href : r
+                }()
             return "<a href=\"\(esc(href))\">\(esc(title))</a>"
         }
 
         if eq(type, "image") {
-            let altRaw = (node.member("alt").map { !$0.isNull } ?? false) ? coerce(node.member("alt")) : coerce(node.member("title"))
+            let altRaw =
+                (node.member("alt").map { !$0.isNull } ?? false)
+                ? coerce(node.member("alt")) : coerce(node.member("title"))
             let alt = esc(altRaw)
             return "<span>[\(alt.isEmpty ? "Image" : alt)]</span>"
         }

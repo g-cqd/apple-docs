@@ -11,13 +11,13 @@ public enum Discovery {
     /// MCP tool names (src/mcp/tools/*).
     public static let mcpTools = [
         "search_docs", "read_doc", "list_frameworks", "browse", "list_taxonomy",
-        "search_sf_symbols", "list_apple_fonts", "render_sf_symbol", "render_font_text",
+        "search_sf_symbols", "list_apple_fonts", "render_sf_symbol", "render_font_text"
     ]
 
     /// MCP resource templates (src/mcp/server/resources.js).
     public static let mcpResourceTemplates = [
         "apple-docs://doc/{+key}", "apple-docs://framework/{slug}",
-        "apple-docs://sf-symbol/{scope}/{name}.{format}", "apple-docs://font/{id}",
+        "apple-docs://sf-symbol/{scope}/{name}.{format}", "apple-docs://font/{id}"
     ]
 
     /// RFC 8288 `Link` header set advertised on every response.
@@ -25,8 +25,9 @@ public enum Discovery {
         "</sitemap.xml>; rel=\"sitemap\"",
         "</.well-known/api-catalog>; rel=\"api-catalog\"",
         "</docs/>; rel=\"service-doc\"",
-        "</opensearch.xml>; rel=\"search\"",
-    ].joined(separator: ", ")
+        "</opensearch.xml>; rel=\"search\""
+    ]
+    .joined(separator: ", ")
 
     /// Resolve the configured content-signal policy.
     public static func contentSignal(_ config: SiteConfig) -> String {
@@ -88,7 +89,7 @@ public enum Discovery {
                                 link(url(origin, "/api/filters"), "Search filter facets", "application/json"),
                                 link(url(origin, "/api/symbols/search"), "SF Symbols search", "application/json"),
                                 link(url(origin, "/api/fonts"), "Apple fonts catalog", "application/json"),
-                                link(url(origin, "/api/fonts/faces.css"), "Apple fonts @font-face sheet", "text/css"),
+                                link(url(origin, "/api/fonts/faces.css"), "Apple fonts @font-face sheet", "text/css")
                             ])
                         ),
                         (
@@ -98,7 +99,7 @@ public enum Discovery {
                                     url(origin, "/.well-known/mcp/server-card.json"), "MCP Server Card",
                                     "application/json")
                             ])
-                        ),
+                        )
                     ])
                 ])
             )
@@ -132,7 +133,7 @@ public enum Discovery {
                 .object([("health", .string(url(origin, "/healthz"))), ("ready", .string(url(origin, "/readyz")))])
             ),
             ("tools", .array(mcpTools.map { .string($0) })),
-            ("resources", .array(mcpResourceTemplates.map { .string($0) })),
+            ("resources", .array(mcpResourceTemplates.map { .string($0) }))
         ])
     }
 
@@ -158,11 +159,11 @@ public enum Discovery {
         out.reserveCapacity(s.count)
         for ch in s {
             switch ch {
-            case "&": out += "&amp;"
-            case "<": out += "&lt;"
-            case ">": out += "&gt;"
-            case "\"": out += "&quot;"
-            default: out.append(ch)
+                case "&": out += "&amp;"
+                case "<": out += "&lt;"
+                case ">": out += "&gt;"
+                case "\"": out += "&quot;"
+                default: out.append(ch)
             }
         }
         return out

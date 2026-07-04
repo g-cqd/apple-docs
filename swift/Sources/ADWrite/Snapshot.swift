@@ -1,3 +1,4 @@
+import ADArchive
 // Snapshot — the native apple-docs SNAPSHOT build on the ADDB engine ("ADSQLv0").
 // The port of `snapshotBuild` (apple-docs/src/commands/snapshot.js): it packages the
 // corpus as a single deterministic `.tar.zst` artifact alongside a `manifest.json`
@@ -35,7 +36,6 @@
 // Foundation into ADWrite, but ADWrite is NOT in the zero-dep ADCore dylib graph, so
 // the dylib's no-Foundation property is unaffected.
 public import ADDB
-import ADArchive
 import ADSQLModel
 import Crypto
 import Foundation
@@ -100,7 +100,9 @@ public enum Snapshot {
     ///     yields the deterministic createdAt/mtime.
     ///   - schemaVersion: the corpus schema version (the migrator knows it) — recorded
     ///     in `snapshot_meta` + the manifest.
-    ///   - level/workers: zstd params (JS uses `-9 -T3`).
+    ///   - level: the zstd compression level (JS uses `-9`).
+    ///   - workers: the zstd worker-thread count (JS uses `-T3`).
+    /// - Throws: a ``SnapshotError`` on an invalid tag, or a ``DBError`` on a clone/write failure.
     /// - Returns: the build ``Result``.
     @discardableResult
     public static func build(
@@ -213,7 +215,7 @@ public enum Snapshot {
             ("snapshot_created_at", createdAt),
             ("snapshot_schema_version", String(schemaVersion)),
             ("snapshot_document_count", String(documentCount)),
-            ("snapshot_page_count", String(pageCount)),
+            ("snapshot_page_count", String(pageCount))
         ]
         try copyDb.transaction { (txn) throws(DBError) in
             for (key, value) in meta {
@@ -398,7 +400,7 @@ public enum Snapshot {
             "createdAt": createdAt,
             "documentCount": documentCount,
             "dbChecksum": dbChecksum,
-            "dbSize": dbSize,
+            "dbSize": dbSize
         ]
         if let archive {
             object["archiveSize"] = archive.size
@@ -418,5 +420,4 @@ public enum Snapshot {
         guard let row = rows.first, case .integer(let value) = row["c"] else { return 0 }
         return Int(value)
     }
-
 }

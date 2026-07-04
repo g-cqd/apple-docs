@@ -10,7 +10,6 @@ import Testing
 
 @Suite("HTTPClient seam — request/response value types + ResponseBody")
 struct HTTPClientTests {
-
     @Test("collect(upTo:) buffers a fully-in-memory body")
     func collectBuffered() async throws {
         let body = ResponseBody(buffered: Array("hello world".utf8))

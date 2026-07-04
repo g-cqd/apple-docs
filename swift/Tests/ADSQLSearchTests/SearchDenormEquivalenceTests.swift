@@ -20,7 +20,6 @@ import Testing
 
 @Suite("search denorm vs normalized equivalence (real schema, ADDB FTS)")
 struct SearchDenormEquivalenceTests {
-
     @Test("denorm framing is byte-identical to the normalized query across queries + filters")
     func denormMatchesNormalized() throws {
         let dir = FileManager.default.temporaryDirectory
@@ -62,16 +61,20 @@ struct SearchDenormEquivalenceTests {
                 "dep": .integer(deprecated), "st": .text(sourceType), "meta": meta
             ])
         }
-        try add(key: "swiftui/view", title: "View", abstract: "A layout primitive for building interfaces",
+        try add(
+            key: "swiftui/view", title: "View", abstract: "A layout primitive for building interfaces",
             framework: "swiftui", roleHeading: "Protocol", kind: "symbol", deprecated: 0,
             sourceType: "apple-docc", meta: .text(#"{"year":2024}"#))
-        try add(key: "swiftui/stack", title: "Stack View layout", abstract: "Arrange views in a stack",
+        try add(
+            key: "swiftui/stack", title: "Stack View layout", abstract: "Arrange views in a stack",
             framework: "swiftui", roleHeading: "Article", kind: "article", deprecated: 0,
             sourceType: "apple-docc", meta: .text(#"{"year":2023}"#))
-        try add(key: "uikit/uiview", title: "UIView", abstract: "The view class for interfaces",
+        try add(
+            key: "uikit/uiview", title: "UIView", abstract: "The view class for interfaces",
             framework: "uikit", roleHeading: "Class", kind: "symbol", deprecated: 0,
             sourceType: "apple-docc", meta: .null)
-        try add(key: "uikit/old", title: "Old View thing", abstract: "A deprecated view helper",
+        try add(
+            key: "uikit/old", title: "Old View thing", abstract: "A deprecated view helper",
             framework: "uikit", roleHeading: "Class", kind: "symbol", deprecated: 1,
             sourceType: "apple-docc", meta: .null)
 
@@ -86,10 +89,14 @@ struct SearchDenormEquivalenceTests {
             ("plain view", SearchPagesParams(query: "view", raw: "view", limit: 20)),
             ("framework swiftui", SearchPagesParams(query: "view", raw: "view", limit: 20, framework: "swiftui")),
             ("kind symbol", SearchPagesParams(query: "view", raw: "view", limit: 20, kind: "symbol")),
-            ("exclude deprecated",
-                SearchPagesParams(query: "view", raw: "view", limit: 20, deprecatedMode: "exclude")),
-            ("only deprecated",
-                SearchPagesParams(query: "view", raw: "view", limit: 20, deprecatedMode: "only")),
+            (
+                "exclude deprecated",
+                SearchPagesParams(query: "view", raw: "view", limit: 20, deprecatedMode: "exclude")
+            ),
+            (
+                "only deprecated",
+                SearchPagesParams(query: "view", raw: "view", limit: 20, deprecatedMode: "only")
+            ),
             ("year 2024", SearchPagesParams(query: "view", raw: "view", limit: 20, year: 2024)),
             ("exact title tier", SearchPagesParams(query: "view", raw: "View", limit: 20))
         ]

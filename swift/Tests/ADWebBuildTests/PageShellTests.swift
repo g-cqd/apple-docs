@@ -45,7 +45,8 @@ private let staticConfig = SiteConfig(baseUrl: "https://x.test", siteName: "Docs
 }
 
 @Test func buildFooterFull() {
-    let config = SiteConfig(buildDate: "2026-06-30", snapshotTag: "snapshot-20260630", buildMacos: "26.0", commitHash: "abc1234")
+    let config = SiteConfig(
+        buildDate: "2026-06-30", snapshotTag: "snapshot-20260630", buildMacos: "26.0", commitHash: "abc1234")
     let actual = PageShell.buildFooter(config)
     let expected =
         "<footer class=\"site-footer\">\n  <p>\n    Built on 2026-06-30 &middot; <span class=\"footer-snapshot\">Snapshot <a href=\"https://github.com/g-cqd/apple-docs/releases/tag/snapshot-20260630\" rel=\"noopener noreferrer\"><code>snapshot-20260630</code></a> (macOS 26.0)</span> &middot; <span class=\"footer-commit\">Commit <a href=\"https://github.com/g-cqd/apple-docs/commit/abc1234\" rel=\"noopener noreferrer\"><code>abc1234</code></a></span>\n    &middot; by <a href=\"https://github.com/g-cqd\" rel=\"noopener noreferrer\">@g-cqd</a>\n    &middot; based on <a href=\"https://developer.apple.com\" rel=\"noopener noreferrer\">Apple Developer Documentation</a>\n  </p>\n</footer>"

@@ -33,7 +33,7 @@ public enum Chunker {
     /// Section kinds carrying declaration / parameter / REST-schema noise rather
     /// than prose; everything else (discussion, overview, topics, …) is kept.
     static let skipSectionKinds: Set<String> = [
-        "declaration", "parameters", "parameter", "returnvalue", "return value", "attributes", "availability",
+        "declaration", "parameters", "parameter", "returnvalue", "return value", "attributes", "availability"
     ]
 
     /// The anchor string: `[title, abstract, headings].filter(Boolean).join('. ')`
@@ -115,8 +115,10 @@ public enum Chunker {
     /// ASCII lowercase — the section-kind vocabulary is ASCII, so this matches JS
     /// `toLowerCase()` for every real kind without pulling the full case-folding table.
     static func asciiLowercased(_ text: String) -> String {
-        String(String.UnicodeScalarView(text.unicodeScalars.map { s in
-            (s.value >= 0x41 && s.value <= 0x5A) ? Unicode.Scalar(s.value + 0x20)! : s
-        }))
+        String(
+            String.UnicodeScalarView(
+                text.unicodeScalars.map { s in
+                    (s.value >= 0x41 && s.value <= 0x5A) ? Unicode.Scalar(s.value + 0x20)! : s
+                }))
     }
 }

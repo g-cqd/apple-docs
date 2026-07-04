@@ -27,11 +27,13 @@ import Testing
             == "apple-archive/documentation/Cocoa/Conceptual/Foo.html")
     // index.html collapses to the directory.
     #expect(
-        LinkResolver.mapUrlToKey("https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/index.html")
+        LinkResolver.mapUrlToKey(
+            "https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/index.html")
             == "apple-archive/documentation/Cocoa/Conceptual")
     // base == parent collapses to the directory.
     #expect(
-        LinkResolver.mapUrlToKey("https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Conceptual.html")
+        LinkResolver.mapUrlToKey(
+            "https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Conceptual.html")
             == "apple-archive/documentation/Cocoa/Conceptual")
     // No html file → passthrough.
     #expect(
@@ -52,7 +54,8 @@ import Testing
 
 @Test func mapsDocsSwiftOrg() {
     #expect(
-        LinkResolver.mapUrlToKey("https://docs.swift.org/swift-book/documentation/the-swift-programming-language/thebasics")
+        LinkResolver.mapUrlToKey(
+            "https://docs.swift.org/swift-book/documentation/the-swift-programming-language/thebasics")
             == "swift-book/documentation/the-swift-programming-language/thebasics")
     #expect(LinkResolver.mapUrlToKey("https://docs.swift.org/swift-book/") == "swift-book")
     #expect(LinkResolver.mapUrlToKey("https://docs.swift.org/compiler/llvm") == "swift-compiler/llvm")
@@ -65,15 +68,18 @@ import Testing
         LinkResolver.mapUrlToKey("https://swift.org/swift-evolution/proposals/0001-keywords-as-argument-labels.html")
             == "swift-evolution/0001-keywords-as-argument-labels")
     #expect(
-        LinkResolver.mapUrlToKey("https://github.com/apple/swift-evolution/blob/main/proposals/0001-keywords-as-argument-labels.md")
+        LinkResolver.mapUrlToKey(
+            "https://github.com/apple/swift-evolution/blob/main/proposals/0001-keywords-as-argument-labels.md")
             == "swift-evolution/0001-keywords-as-argument-labels")
     #expect(
-        LinkResolver.mapUrlToKey("https://github.com/swiftlang/swift-evolution/tree/main/proposals/0400-init-accessors.md")
+        LinkResolver.mapUrlToKey(
+            "https://github.com/swiftlang/swift-evolution/tree/main/proposals/0400-init-accessors.md")
             == "swift-evolution/0400-init-accessors")
 }
 
 @Test func mapsSwiftOrgRedirectsBeforeGenericRules() {
-    #expect(LinkResolver.mapUrlToKey("https://swift.org/documentation/tspl") == "swift-book/The-Swift-Programming-Language")
+    #expect(
+        LinkResolver.mapUrlToKey("https://swift.org/documentation/tspl") == "swift-book/The-Swift-Programming-Language")
     #expect(
         LinkResolver.mapUrlToKey("https://www.swift.org/documentation/concurrency")
             == "swift-migration-guide/documentation/migrationguide")
@@ -145,7 +151,8 @@ import Testing
     #expect(LinkResolver.classify("/elsewhere", knownKeys: known) == .relativeBroken(normalized: "/elsewhere"))
     #expect(
         LinkResolver.classify("https://developer.apple.com/documentation/swiftui/view", knownKeys: known)
-            == .externalResolvable(key: "swiftui/view", normalized: "https://developer.apple.com/documentation/swiftui/view"))
+            == .externalResolvable(
+                key: "swiftui/view", normalized: "https://developer.apple.com/documentation/swiftui/view"))
     #expect(
         LinkResolver.classify("https://example.com/x", knownKeys: known)
             == .external(normalized: "https://example.com/x"))

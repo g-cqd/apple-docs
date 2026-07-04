@@ -72,14 +72,14 @@ enum WebLinksAudit {
                 byCategoryAndSection.bump("\(category)/\(link.section)")
 
                 switch classified {
-                case .internalBroken(let key):
-                    broken.record(key, source: fromPath)
-                case .relativeBroken:
-                    relative.record(link.href, source: fromPath)
-                case .externalResolvable(let key, _):
-                    resolvable.record(key, source: fromPath)
-                default:
-                    break
+                    case .internalBroken(let key):
+                        broken.record(key, source: fromPath)
+                    case .relativeBroken:
+                        relative.record(link.href, source: fromPath)
+                    case .externalResolvable(let key, _):
+                        resolvable.record(key, source: fromPath)
+                    default:
+                        break
                 }
             }
         }
@@ -104,7 +104,7 @@ enum WebLinksAudit {
                     .obj([
                         ("value", .string(entry.value)),
                         ("count", .int(Int64(entry.count))),
-                        ("sources", .array(entry.sources.map(JSONValue.string))),
+                        ("sources", .array(entry.sources.map(JSONValue.string)))
                     ])
                 })
         }
@@ -116,7 +116,7 @@ enum WebLinksAudit {
             ("byCategoryAndSection", counts(result.byCategoryAndSection)),
             ("topBrokenInternal", top(result.topBrokenInternal)),
             ("topRelativeBroken", top(result.topRelativeBroken)),
-            ("topExternalResolvable", top(result.topExternalResolvable)),
+            ("topExternalResolvable", top(result.topExternalResolvable))
         ])
     }
 
@@ -132,12 +132,12 @@ enum WebLinksAudit {
 
     private static func categoryName(_ classified: LinkResolver.LinkClass) -> String {
         switch classified {
-        case .fragment: return "fragment"
-        case .internalOk: return "internal_ok"
-        case .internalBroken: return "internal_broken"
-        case .externalResolvable: return "external_resolvable"
-        case .external: return "external"
-        case .relativeBroken: return "relative_broken"
+            case .fragment: return "fragment"
+            case .internalOk: return "internal_ok"
+            case .internalBroken: return "internal_broken"
+            case .externalResolvable: return "external_resolvable"
+            case .external: return "external"
+            case .relativeBroken: return "relative_broken"
         }
     }
 
@@ -210,11 +210,11 @@ enum WebLinksAudit {
         if cls.contains("topics") || cls.contains("see-also") { return "related" }
         if cls.contains("symbols-detail") { return "sidebar" }
         switch tag {
-        case "article": return "article"
-        case "aside": return "sidebar"
-        case "nav": return "breadcrumb"
-        case "header", "footer": return "chrome"
-        default: return tag
+            case "article": return "article"
+            case "aside": return "sidebar"
+            case "nav": return "breadcrumb"
+            case "header", "footer": return "chrome"
+            default: return tag
         }
     }
 
@@ -306,11 +306,11 @@ enum WebLinksAudit {
     }
     private static func isJsSpace(_ s: Unicode.Scalar) -> Bool {
         switch s.value {
-        case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029,
-            0x202F, 0x205F, 0x3000, 0xFEFF:
-            return true
-        default:
-            return false
+            case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000 ... 0x200A, 0x2028, 0x2029,
+                0x202F, 0x205F, 0x3000, 0xFEFF:
+                return true
+            default:
+                return false
         }
     }
     private static func lowercased(_ s: String) -> String {
@@ -329,7 +329,7 @@ enum WebLinksAudit {
                 let bytes = raw.bindMemory(to: UInt8.self)
                 var length = 0
                 while length < bytes.count && bytes[length] != 0 { length += 1 }
-                return String(decoding: bytes[0..<length], as: UTF8.self)
+                return String(decoding: bytes[0 ..< length], as: UTF8.self)
             }
             if name == "." || name == ".." { continue }
             names.append((name: name, isDir: entry.pointee.d_type == 4))
@@ -383,9 +383,10 @@ private struct TopMap {
             if ca != cb { return ca > cb }
             return a.index < b.index  // JS stable sort tiebreak
         }
-        return sorted.prefix(50).map { item in
-            let entry = entries[item.key] ?? (count: 0, sources: [])
-            return (value: item.key, count: entry.count, sources: entry.sources)
-        }
+        return sorted.prefix(50)
+            .map { item in
+                let entry = entries[item.key] ?? (count: 0, sources: [])
+                return (value: item.key, count: entry.count, sources: entry.sources)
+            }
     }
 }

@@ -11,7 +11,6 @@ import Testing
 
 @Suite("MarkdownSections — swift-markdown structural extraction")
 struct MarkdownSectionsTests {
-
     private static let proposal = """
         # Feature Name
 

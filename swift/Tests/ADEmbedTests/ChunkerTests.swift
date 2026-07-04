@@ -8,7 +8,9 @@ import Testing
 
 struct ChunkerTests {
     @Test func anchorJoinsTruthyFieldsWithDotSpace() {
-        #expect(Chunker.anchorText(title: "View", abstractText: "An abstract.", headings: "Overview") == "View. An abstract.. Overview")
+        #expect(
+            Chunker.anchorText(title: "View", abstractText: "An abstract.", headings: "Overview")
+                == "View. An abstract.. Overview")
         // filter(Boolean): nil + empty fields drop out (no leading/double separators).
         #expect(Chunker.anchorText(title: "View", abstractText: nil, headings: "") == "View")
         #expect(Chunker.anchorText(title: nil, abstractText: "", headings: nil) == "")
@@ -60,7 +62,7 @@ struct ChunkerTests {
             Chunker.Section(kind: "Parameters", heading: nil, contentText: "p"),
             Chunker.Section(kind: "restResponse", heading: nil, contentText: "{}"),
             Chunker.Section(kind: "abstract", heading: nil, contentText: "dup abstract"),
-            Chunker.Section(kind: "discussion", heading: nil, contentText: "kept"),
+            Chunker.Section(kind: "discussion", heading: nil, contentText: "kept")
         ]
         let chunks = Chunker.chunkDocument(title: "T", abstractText: "A", headings: nil, sections: sections)
         // anchor + only the discussion body; declaration/parameters/rest*/abstract all skipped.

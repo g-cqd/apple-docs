@@ -17,7 +17,8 @@ enum ADDBCatalogExtractor {
     /// it into a normalized ``CatalogModel``. Also returns the migrator outcome so
     /// the test can assert the cursor landed on the expected version.
     static func build(inDirectory directory: String) throws -> (CatalogModel, Migrator.Outcome) {
-        let path = directory.hasSuffix("/")
+        let path =
+            directory.hasSuffix("/")
             ? directory + "apple-docs-schema.adsql"
             : directory + "/apple-docs-schema.adsql"
         let db = try Database.open(at: path, options: DatabaseOptions())

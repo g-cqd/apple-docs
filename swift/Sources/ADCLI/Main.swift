@@ -185,10 +185,14 @@ struct BrowseCommand: ParsableCommand {
                 if counts[sessionYear] == nil { order.append(sessionYear) }
                 counts[sessionYear, default: 0] += 1
             }
-            let groups = order
+            let groups =
+                order
                 .sorted { $0 > $1 }
                 .map { BrowseGroupEntry(year: $0, count: counts[$0] ?? 0) }
-            emit(.groups(framework: root.displayName, slug: root.slug, kind: root.kind, groups: groups, total: allPages.count))
+            emit(
+                .groups(
+                    framework: root.displayName, slug: root.slug, kind: root.kind, groups: groups, total: allPages.count
+                ))
             return
         }
 
@@ -282,12 +286,11 @@ func wwdcYear(of path: String) -> Int? {
     let digits = path.dropFirst(prefix.count)
     var scanned = ""
     for character in digits {
-        if character.isASCIIDigit {
-            scanned.append(character)
-            if scanned.count > 4 { return nil }  // more than 4 leading digits ⇒ no match
-        } else {
+        guard character.isASCIIDigit else {
             break
         }
+        scanned.append(character)
+        if scanned.count > 4 { return nil }  // more than 4 leading digits ⇒ no match
     }
     guard scanned.count == 4 else { return nil }
     // The char right after the 4 digits must be '-'.
@@ -314,12 +317,12 @@ private let broadTaxonomyFields = ["kind", "role", "docKind", "roleHeading", "so
 /// back to the broad shape, matching JS `field && queries[field]`).
 func taxonomyColumn(for field: String) -> TaxonomyColumn? {
     switch field {
-    case "kind": return .kind
-    case "role": return .role
-    case "docKind": return .kind  // alias: same query as kind
-    case "roleHeading": return .roleHeading
-    case "sourceType": return .sourceType
-    default: return nil
+        case "kind": return .kind
+        case "role": return .role
+        case "docKind": return .kind  // alias: same query as kind
+        case "roleHeading": return .roleHeading
+        case "sourceType": return .sourceType
+        default: return nil
     }
 }
 
@@ -362,47 +365,47 @@ func taxonomyEntries(_ values: [TaxonomyCount]) -> JSONValue {
 /// rather than being omitted; a field the variant lacks is dropped entirely.
 func projectBrowse(_ result: BrowseResult) -> JSONValue {
     switch result {
-    case let .children(framework, path, title, children):
-        // Command children are `{path,title,section}`; pick(['path','title','kind','section'])
-        // drops the absent `kind` and keeps null title/section.
-        let childValues: [JSONValue] = children.map { child in
-            .obj([
-                ("path", .string(child.path)),
-                ("title", jOptional(child.title)),
-                ("section", jOptional(child.section))
+        case .children(let framework, let path, let title, let children):
+            // Command children are `{path,title,section}`; pick(['path','title','kind','section'])
+            // drops the absent `kind` and keeps null title/section.
+            let childValues: [JSONValue] = children.map { child in
+                .obj([
+                    ("path", .string(child.path)),
+                    ("title", jOptional(child.title)),
+                    ("section", jOptional(child.section))
+                ])
+            }
+            return .obj([
+                ("framework", .string(framework)),
+                ("title", jOptional(title)),
+                ("path", .string(path)),
+                ("children", .array(childValues))
             ])
-        }
-        return .obj([
-            ("framework", .string(framework)),
-            ("title", jOptional(title)),
-            ("path", .string(path)),
-            ("children", .array(childValues))
-        ])
 
-    case let .groups(framework, _, _, groups, total):
-        let groupValues: [JSONValue] = groups.map {
-            .obj([("year", .int(Int64($0.year))), ("count", .int(Int64($0.count)))])
-        }
-        return .obj([
-            ("framework", .string(framework)),
-            ("groups", .array(groupValues)),
-            ("total", .int(Int64(total)))
-        ])
-
-    case let .pages(framework, _, _, year, pages, total, _):
-        let pageValues: [JSONValue] = pages.map { page in
-            .obj([
-                ("path", .string(page.path)),
-                ("title", jOptional(page.title)),
-                ("kind", jOptional(page.kind)),
-                ("abstract", jOptional(page.abstract))
+        case .groups(let framework, _, _, let groups, let total):
+            let groupValues: [JSONValue] = groups.map {
+                .obj([("year", .int(Int64($0.year))), ("count", .int(Int64($0.count)))])
+            }
+            return .obj([
+                ("framework", .string(framework)),
+                ("groups", .array(groupValues)),
+                ("total", .int(Int64(total)))
             ])
-        }
-        var pairs: [(String, JSONValue)] = [("framework", .string(framework))]
-        if let year { pairs.append(("year", .int(Int64(year)))) }
-        pairs.append(("pages", .array(pageValues)))
-        pairs.append(("total", .int(Int64(total))))
-        return .obj(pairs)
+
+        case .pages(let framework, _, _, let year, let pages, let total, _):
+            let pageValues: [JSONValue] = pages.map { page in
+                .obj([
+                    ("path", .string(page.path)),
+                    ("title", jOptional(page.title)),
+                    ("kind", jOptional(page.kind)),
+                    ("abstract", jOptional(page.abstract))
+                ])
+            }
+            var pairs: [(String, JSONValue)] = [("framework", .string(framework))]
+            if let year { pairs.append(("year", .int(Int64(year)))) }
+            pairs.append(("pages", .array(pageValues)))
+            pairs.append(("total", .int(Int64(total))))
+            return .obj(pairs)
     }
 }
 

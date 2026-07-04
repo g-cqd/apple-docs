@@ -8,16 +8,17 @@ import Testing
 
 @Suite("SourceAdapter protocol + registry")
 struct SourceAdapterTests {
-
     /// A canned adapter exercising the protocol surface.
     private struct FakeAdapter: SourceAdapter {
         static let type = "fake"
         static let displayName = "Fake Source"
 
         func discover(_ context: SourceContext) async throws -> DiscoveryResult {
-            DiscoveryResult(keys: ["fake/a", "fake/b"], roots: [
-                DiscoveredRoot(slug: "fake", displayName: "Fake", kind: "collection", source: "fake")
-            ])
+            DiscoveryResult(
+                keys: ["fake/a", "fake/b"],
+                roots: [
+                    DiscoveredRoot(slug: "fake", displayName: "Fake", kind: "collection", source: "fake")
+                ])
         }
         func fetch(_ key: String, _ context: SourceContext) async throws -> FetchResult {
             FetchResult(key: key, payload: .markdown("# Title"), etag: "abc")

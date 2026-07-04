@@ -53,7 +53,7 @@ struct AddbReadSpikeCommand: ParsableCommand {
         ("button", "Button"),
         ("async await", "async await"),
         ("urlsession", "URLSession"),
-        ("navigation stack", "navigation stack"),
+        ("navigation stack", "navigation stack")
     ]
 
     func run() throws {
@@ -124,7 +124,7 @@ struct AddbReadSpikeCommand: ParsableCommand {
             parityAll = parityAll && parity
             let parityNote = parity ? "PARITY OK" : "PARITY FAIL"
 
-            for _ in 0..<warmup {
+            for _ in 0 ..< warmup {
                 _ = try addbRows(database, addbParams)
                 _ = connection.ftsRows(sqliteParams)
             }
@@ -133,7 +133,7 @@ struct AddbReadSpikeCommand: ParsableCommand {
             var sqliteTimes: [Double] = []
             addbTimes.reserveCapacity(iterations)
             sqliteTimes.reserveCapacity(iterations)
-            for _ in 0..<iterations {
+            for _ in 0 ..< iterations {
                 // Alternate per iteration so cache drift is shared fairly.
                 let t0 = ContinuousClock.now
                 _ = try addbRows(database, addbParams)
@@ -159,8 +159,11 @@ struct AddbReadSpikeCommand: ParsableCommand {
         let pa = Stats(pooledAddb)
         let ps = Stats(pooledSqlite)
         let pooledGo = pa.p50 < 0.97 * ps.p50 && pa.p95 <= ps.p95
-        print("POOLED  addb p50 \(fmt(pa.p50))µs p95 \(fmt(pa.p95))µs · sqlite p50 \(fmt(ps.p50))µs p95 \(fmt(ps.p95))µs")
-        print("GATE (pooled): \(pooledGo ? "GO" : "NO-GO") — ADDB p50 \(fmt(pa.p50 / ps.p50))× / p95 \(fmt(pa.p95 / ps.p95))× of SQLite")
+        print(
+            "POOLED  addb p50 \(fmt(pa.p50))µs p95 \(fmt(pa.p95))µs · sqlite p50 \(fmt(ps.p50))µs p95 \(fmt(ps.p95))µs")
+        print(
+            "GATE (pooled): \(pooledGo ? "GO" : "NO-GO") — ADDB p50 \(fmt(pa.p50 / ps.p50))× / p95 \(fmt(pa.p95 / ps.p95))× of SQLite"
+        )
         print("GATE (every probe): \(goAll ? "GO" : "NO-GO")")
         print("PARITY (WAND vs score-all, all probes): \(parityAll ? "OK" : "FAIL")")
     }
@@ -219,7 +222,7 @@ struct AddbReadSpikeCommand: ParsableCommand {
                         .init(
                             name: "track_lc", type: .text,
                             valueSQL: "LOWER(COALESCE(json_extract(source_metadata, '$.track'), ''))"),
-                        .init(name: "root_slug", type: .text, valueSQL: "framework"),
+                        .init(name: "root_slug", type: .text, valueSQL: "framework")
                     ],
                     lookups: [
                         .init(

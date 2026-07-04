@@ -8,10 +8,10 @@
 // the archive's URL + key OVERRIDES: URLs point at docs.swift.org and references are re-scoped to
 // `<slug>/documentation/…` storage keys (the `keyMapper` / `urlBuilder` opts B1 exposes).
 
+import ADJSONCore
 import Foundation
 import HTTPTypes
 import HTTPTypesFoundation
-import ADJSONCore
 
 public final class SwiftDoccAdapter: SourceAdapter, @unchecked Sendable {
     public static let type = "swift-docc"
@@ -55,7 +55,7 @@ public final class SwiftDoccAdapter: SourceAdapter, @unchecked Sendable {
             entryTitle: "Swift 6 Concurrency Migration Guide",
             entrySummary:
                 "How to migrate existing Swift code to the Swift 6 concurrency model, including data-race safety and incremental adoption.",
-            parents: ["swift-org/documentation"]),
+            parents: ["swift-org/documentation"])
     ]
 
     public static let entryPoints: [EntryPoint] = archives.map {
@@ -124,7 +124,7 @@ public final class SwiftDoccAdapter: SourceAdapter, @unchecked Sendable {
             switch response.status.code {
                 case 304: return CheckResult(status: .unchanged, changed: false, newState: previousState)
                 case 404: return CheckResult(status: .deleted, changed: false, deleted: true)
-                case 200..<300: return CheckResult(status: .modified, changed: true, newState: response.etag)
+                case 200 ..< 300: return CheckResult(status: .modified, changed: true, newState: response.etag)
                 default: return CheckResult(status: .error, changed: false)
             }
         } catch {
@@ -225,7 +225,7 @@ public final class SwiftDoccAdapter: SourceAdapter, @unchecked Sendable {
         let response = try await RetryPolicy.fetchWithRetry(
             HTTPClientRequest(get, deadline: .seconds(30)), using: context.client,
             rateLimiter: context.rateLimiter)
-        guard (200..<300).contains(response.status.code) else {
+        guard (200 ..< 300).contains(response.status.code) else {
             throw AdapterError.httpStatus(response.status.code, indexUrl(archive))
         }
         let bytes = try await response.body.collect(upTo: bodyLimit)

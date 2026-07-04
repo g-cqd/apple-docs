@@ -58,7 +58,7 @@ private let ugcMarkdown =
 private let expectedIds = ["safety", "1.1", "1.1.1", "1.2", "business"]
 private let expectedPaths = [
     "app-store-review/safety", "app-store-review/1.1", "app-store-review/1.1.1",
-    "app-store-review/1.2", "app-store-review/business",
+    "app-store-review/1.2", "app-store-review/business"
 ]
 private let expectedRoles = ["collection", "article", "article", "article", "collection"]
 private let expectedRoleHeadings = ["Section", "Guideline", "Guideline", "Guideline", "Section"]
@@ -85,17 +85,19 @@ private let expectedSectionNumbers: [String?] = [nil, "1.1", "1.1.1", "1.2", nil
 
 @Test func guidelinesTitlesAndAbstractsMatchBunOracle() throws {
     let result = try GuidelinesParser.parse(guidelinesFixture)
-    #expect(result.sections.map(\.title) == [
-        "Safety", "1.1 Objectionable Content", "1.1.1 First subrule. Details follow here. More text.",
-        "1.2 User-Generated Content", "Business",
-    ])
-    #expect(result.sections.map(\.abstract) == [
-        "When people install an app, they want to know it is safe.",
-        "Apps should not include content that is *offensive*.",
-        "1.1.1 First subrule.",
-        "UGC apps 'must' include a method for filtering <objectionable> material.",
-        "There are many ways to monetize your app.",
-    ])
+    #expect(
+        result.sections.map(\.title) == [
+            "Safety", "1.1 Objectionable Content", "1.1.1 First subrule. Details follow here. More text.",
+            "1.2 User-Generated Content", "Business"
+        ])
+    #expect(
+        result.sections.map(\.abstract) == [
+            "When people install an app, they want to know it is safe.",
+            "Apps should not include content that is *offensive*.",
+            "1.1.1 First subrule.",
+            "UGC apps 'must' include a method for filtering <objectionable> material.",
+            "There are many ways to monetize your app."
+        ])
 }
 
 @Test func guidelinesMarkdownMatchesBunOracle() throws {
@@ -104,7 +106,8 @@ private let expectedSectionNumbers: [String?] = [nil, "1.1", "1.1.1", "1.2", nil
     #expect(result.sections[1].markdown == objectionableMarkdown)
     #expect(result.sections[2].markdown == "1.1.1 First subrule. Details follow here. More text.")
     #expect(result.sections[3].markdown == ugcMarkdown)
-    #expect(result.sections[4].markdown == "### 2. Business\n\nThere are many ways to monetize your app. Choose wisely.")
+    #expect(
+        result.sections[4].markdown == "### 2. Business\n\nThere are many ways to monetize your app. Choose wisely.")
 }
 
 @Test func guidelinesNormalizeProjectsSection() throws {

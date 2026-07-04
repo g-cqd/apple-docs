@@ -123,7 +123,7 @@ public enum MarkdownSections {
         }
         guard let closingRange = afterOpen.range(of: "\n---") else { return (nil, markdown) }
         let yamlStart = afterOpen.index(afterOpen.startIndex, offsetBy: firstChar == "\n" ? 1 : 2)
-        let yamlBlock = String(afterOpen[yamlStart..<closingRange.lowerBound])
+        let yamlBlock = String(afterOpen[yamlStart ..< closingRange.lowerBound])
         var afterClose = String(afterOpen[closingRange.upperBound...])  // after "\n---"
         // The JS skips to the end of the closing `---` line + a following newline.
         if let newline = afterClose.firstIndex(of: "\n") {
@@ -142,7 +142,8 @@ public enum MarkdownSections {
             let value = trimmed(String(parts[1]))
             if value.isEmpty { return nil }
             if (value.hasPrefix("\"") && value.hasSuffix("\"")) || (value.hasPrefix("'") && value.hasSuffix("'")),
-                value.count >= 2 {
+                value.count >= 2
+            {
                 return String(value.dropFirst().dropLast())
             }
             return value

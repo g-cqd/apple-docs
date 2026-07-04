@@ -59,13 +59,14 @@ private func writeFixture(_ b64: String) throws -> String {
     var finished = false
     var i = 0
     while i < compressed.count && !finished {
-        let chunk = Array(compressed[i..<min(i + 7, compressed.count)])
+        let chunk = Array(compressed[i ..< min(i + 7, compressed.count)])
         i += chunk.count
         switch stream.inflate(chunk, emit: { out.append(contentsOf: $0) }) {
-        case .needsMore: continue
-        case .finished: finished = true
-        case .failed: Issue.record("inflate failed mid-stream")
-            return
+            case .needsMore: continue
+            case .finished: finished = true
+            case .failed:
+                Issue.record("inflate failed mid-stream")
+                return
         }
     }
     #expect(finished)

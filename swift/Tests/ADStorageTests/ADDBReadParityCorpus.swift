@@ -98,8 +98,10 @@ enum Corpus {
                 "INSERT INTO pages(path, title, status, root_id) VALUES ("
                     + "\(sql(doc.key)), \(sql(doc.title)), 'active', \(rid))")
         }
-        try exec("INSERT INTO pages(path, title, status, root_id) VALUES ('doc/swiftui/oldview', 'OldView', 'deleted', 1)")
-        try exec("INSERT INTO pages(path, title, status, root_id) VALUES ('doc/uikit/oldcell', 'OldCell', 'deleted', 2)")
+        try exec(
+            "INSERT INTO pages(path, title, status, root_id) VALUES ('doc/swiftui/oldview', 'OldView', 'deleted', 1)")
+        try exec(
+            "INSERT INTO pages(path, title, status, root_id) VALUES ('doc/uikit/oldcell', 'OldCell', 'deleted', 2)")
 
         // ── sections (read content for a few keys) ───────────────────────────
         let viewId = idOf("doc/swiftui/view")
@@ -249,41 +251,58 @@ enum Corpus {
                     language: language, sourceType: sourceType, metadata: metadata))
         }
 
-        add("doc/swiftui/collection", "SwiftUI", "Declarative UI framework to build a view hierarchy.",
+        add(
+            "doc/swiftui/collection", "SwiftUI", "Declarative UI framework to build a view hierarchy.",
             role: "collection", roleHeading: "Framework", framework: "swiftui", kind: "collection")
-        add("doc/swiftui/view", "View", "A type that represents part of your app's UI. Compose a view hierarchy.",
+        add(
+            "doc/swiftui/view", "View", "A type that represents part of your app's UI. Compose a view hierarchy.",
             declaration: "protocol View", framework: "swiftui")
-        add("doc/swiftui/viewbuilder", "ViewBuilder", "A result builder for composing views from closures.",
+        add(
+            "doc/swiftui/viewbuilder", "ViewBuilder", "A result builder for composing views from closures.",
             declaration: "struct ViewBuilder", framework: "swiftui")
-        add("doc/swiftui/button", "Button", "A control that performs an action when the user taps the button.",
+        add(
+            "doc/swiftui/button", "Button", "A control that performs an action when the user taps the button.",
             declaration: "struct Button", framework: "swiftui")
-        add("doc/swiftui/buttonstyle", "ButtonStyle", "Applies standard interaction behavior to a button.",
+        add(
+            "doc/swiftui/buttonstyle", "ButtonStyle", "Applies standard interaction behavior to a button.",
             declaration: "protocol ButtonStyle", framework: "swiftui")
-        add("doc/swiftui/navigationstack", "NavigationStack",
+        add(
+            "doc/swiftui/navigationstack", "NavigationStack",
             "A container view that presents a stack of views over a navigation root.",
             declaration: "struct NavigationStack", framework: "swiftui")
-        add("doc/swiftui/asyncawait", "Using async and await",
+        add(
+            "doc/swiftui/asyncawait", "Using async and await",
             "Call an async function and await its result to render data.",
             role: "article", roleHeading: "Article", framework: "swiftui", kind: "article")
-        add("doc/swiftui/list", "List", "A container that presents rows of data in a single scrollable view.",
+        add(
+            "doc/swiftui/list", "List", "A container that presents rows of data in a single scrollable view.",
             declaration: "struct List", framework: "swiftui")
-        add("doc/foundation/urlsession", "URLSession",
+        add(
+            "doc/foundation/urlsession", "URLSession",
             "An object that coordinates a group of related network data transfer tasks.",
             declaration: "class URLSession", framework: "foundation")
-        add("doc/foundation/urlrequest", "URLRequest", "A URL load request that a URLSession task runs.",
+        add(
+            "doc/foundation/urlrequest", "URLRequest", "A URL load request that a URLSession task runs.",
             declaration: "struct URLRequest", framework: "foundation")
-        add("doc/foundation/data", "Data", "A byte buffer in memory.", declaration: "struct Data",
+        add(
+            "doc/foundation/data", "Data", "A byte buffer in memory.", declaration: "struct Data",
             framework: "foundation", language: "occ")
-        add("doc/uikit/uiview", "UIView", "An object that manages the content for a rectangular area; the base view class.",
+        add(
+            "doc/uikit/uiview", "UIView",
+            "An object that manages the content for a rectangular area; the base view class.",
             declaration: "class UIView", framework: "uikit", language: "occ")
-        add("doc/uikit/uibutton", "UIButton", "A control that executes code in response to a button tap.",
+        add(
+            "doc/uikit/uibutton", "UIButton", "A control that executes code in response to a button tap.",
             declaration: "class UIButton", framework: "uikit", language: "occ")
-        add("doc/uikit/uinavigationcontroller", "UINavigationController",
+        add(
+            "doc/uikit/uinavigationcontroller", "UINavigationController",
             "A container that manages navigation through a stack of view controllers.",
             declaration: "class UINavigationController", framework: "uikit", language: "occ")
-        add("doc/combine/asyncsequence", "AsyncSequence", "An async sequence you await over time.",
+        add(
+            "doc/combine/asyncsequence", "AsyncSequence", "An async sequence you await over time.",
             declaration: "protocol AsyncSequence", framework: "combine")
-        add("wwdc/2024/10144", "Demystify SwiftUI performance",
+        add(
+            "wwdc/2024/10144", "Demystify SwiftUI performance",
             "Keep the view body fast and avoid render churn in your navigation stack.",
             role: "article", roleHeading: "Article", framework: "swiftui", kind: "article",
             sourceType: "wwdc", metadata: "{\"year\":2024,\"track\":\"SwiftUI\"}")

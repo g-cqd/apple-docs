@@ -93,10 +93,11 @@ enum SearchWAND {
             SELECT documents_fts.rowid AS id, bm25(documents_fts, 10.0, 5.0, 3.0, 2.0, 1.0) AS rank
             FROM documents_fts WHERE documents_fts MATCH $query ORDER BY rank LIMIT \(k)
             """
-        return try db.prepare(sql).all(["query": .text(query)]).map { row in
-            let d = row.decode()
-            return (d.int("id") ?? -1, d.double("rank") ?? 0)
-        }
+        return try db.prepare(sql).all(["query": .text(query)])
+            .map { row in
+                let d = row.decode()
+                return (d.int("id") ?? -1, d.double("rank") ?? 0)
+            }
     }
 
     /// The set of `documents.id` a scalar `id` query returns (tier-candidate discovery).
@@ -251,10 +252,12 @@ extension Database {
             // Need the tier-1 distinction. Enumerate the prefix set (index range) once.
             if t1 == nil {
                 guard let hi = SearchWAND.prefixUpperBound(rawLc) else { return nil }
-                t1 = try SearchWAND.idSet(
-                    self, "SELECT id FROM documents WHERE title_lc >= $lo AND title_lc < $hi",
-                    ["lo": .text(rawLc), "hi": .text(hi)]
-                ).subtracting(t0)
+                t1 =
+                    try SearchWAND.idSet(
+                        self, "SELECT id FROM documents WHERE title_lc >= $lo AND title_lc < $hi",
+                        ["lo": .text(rawLc), "hi": .text(hi)]
+                    )
+                    .subtracting(t0)
             }
             let t1set = t1 ?? []
 

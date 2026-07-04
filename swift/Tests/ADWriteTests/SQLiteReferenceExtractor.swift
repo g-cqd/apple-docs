@@ -22,7 +22,8 @@ enum SQLiteReferenceError: Error, CustomStringConvertible {
             case .appleDocsRootNotFound(let from):
                 return "could not locate the apple-docs root (with src/storage/database.js) walking up from \(from)"
             case .bunNotFound:
-                return "`bun` was not found on PATH or at common locations; the parity gate needs it to build the SQLite reference"
+                return
+                    "`bun` was not found on PATH or at common locations; the parity gate needs it to build the SQLite reference"
             case .bunFailed(let status, let stderr):
                 return "bun exited \(status) building the SQLite reference:\n\(stderr)"
             case .manifestParse(let detail):
@@ -48,94 +49,94 @@ enum SQLiteReferenceExtractor {
     /// The Swift side ignores FTS shadow tables + sqlite_sequence (it has the same
     /// exclusion list); the script already drops shadow tables to keep output lean.
     private static let manifestScript = #"""
-    import { DocsDatabase } from "./src/storage/database.js";
-    import { Database } from "bun:sqlite";
+        import { DocsDatabase } from "./src/storage/database.js";
+        import { Database } from "bun:sqlite";
 
-    // `bun -e <script> <dbPath>` exposes argv as [bunPath, dbPath] (the inline
-    // script is NOT in argv, and bun strips a leading `--`), so the DB path is
-    // argv[1].
-    const path = process.argv[1];
-    new DocsDatabase(path).close();
-    const db = new Database(path, { readonly: true });
+        // `bun -e <script> <dbPath>` exposes argv as [bunPath, dbPath] (the inline
+        // script is NOT in argv, and bun strips a leading `--`), so the DB path is
+        // argv[1].
+        const path = process.argv[1];
+        new DocsDatabase(path).close();
+        const db = new Database(path, { readonly: true });
 
-    const out = [];
-    const objs = db.query("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all();
+        const out = [];
+        const objs = db.query("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all();
 
-    const ftsBases = new Set(
-      objs.filter(o => o.type === "table" && o.sql && /USING\s+fts5/i.test(o.sql)).map(o => o.name)
-    );
+        const ftsBases = new Set(
+          objs.filter(o => o.type === "table" && o.sql && /USING\s+fts5/i.test(o.sql)).map(o => o.name)
+        );
 
-    function parseFTS(name, sql) {
-      const m = sql.match(/USING\s+fts5\s*\(([\s\S]*)\)/i);
-      const body = m ? m[1] : "";
-      const parts = body.split(",").map(s => s.trim()).filter(Boolean);
-      const cols = [];
-      let tokenize = "unicode61";
-      let contentTable = null, contentRowid = "rowid", contentless = false, deleteEnabled = false;
-      for (const p of parts) {
-        const eq = p.indexOf("=");
-        if (eq === -1) { cols.push(p); continue; }
-        const key = p.slice(0, eq).trim().toLowerCase();
-        let val = p.slice(eq + 1).trim();
-        if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
-        if (key === "tokenize") tokenize = val;
-        else if (key === "content") { if (val === "") contentless = true; else contentTable = val; }
-        else if (key === "content_rowid") contentRowid = val;
-        else if (key === "contentless_delete") deleteEnabled = val === "1";
-      }
-      let contentSpec;
-      if (contentless) contentSpec = `contentless:${deleteEnabled ? 1 : 0}`;
-      else if (contentTable) contentSpec = `external:${contentTable}:${contentRowid}`;
-      else contentSpec = "self";
-      return { cols, tokenize, contentSpec };
-    }
-
-    function isShadow(name) {
-      for (const b of ftsBases) {
-        for (const suf of ["_data", "_idx", "_docsize", "_config", "_content"]) {
-          if (name === b + suf) return true;
+        function parseFTS(name, sql) {
+          const m = sql.match(/USING\s+fts5\s*\(([\s\S]*)\)/i);
+          const body = m ? m[1] : "";
+          const parts = body.split(",").map(s => s.trim()).filter(Boolean);
+          const cols = [];
+          let tokenize = "unicode61";
+          let contentTable = null, contentRowid = "rowid", contentless = false, deleteEnabled = false;
+          for (const p of parts) {
+            const eq = p.indexOf("=");
+            if (eq === -1) { cols.push(p); continue; }
+            const key = p.slice(0, eq).trim().toLowerCase();
+            let val = p.slice(eq + 1).trim();
+            if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
+            if (key === "tokenize") tokenize = val;
+            else if (key === "content") { if (val === "") contentless = true; else contentTable = val; }
+            else if (key === "content_rowid") contentRowid = val;
+            else if (key === "contentless_delete") deleteEnabled = val === "1";
+          }
+          let contentSpec;
+          if (contentless) contentSpec = `contentless:${deleteEnabled ? 1 : 0}`;
+          else if (contentTable) contentSpec = `external:${contentTable}:${contentRowid}`;
+          else contentSpec = "self";
+          return { cols, tokenize, contentSpec };
         }
-      }
-      return false;
-    }
 
-    for (const o of objs) {
-      if (o.type === "table") {
-        if (o.name.startsWith("sqlite_")) continue;
-        if (ftsBases.has(o.name)) {
-          const f = parseFTS(o.name, o.sql);
-          out.push(`F|${o.name}|${f.cols.join(",")}|${f.tokenize}|${f.contentSpec}`);
-          continue;
+        function isShadow(name) {
+          for (const b of ftsBases) {
+            for (const suf of ["_data", "_idx", "_docsize", "_config", "_content"]) {
+              if (name === b + suf) return true;
+            }
+          }
+          return false;
         }
-        if (isShadow(o.name)) continue;
-        out.push(`T|${o.name}`);
-        const cols = db.query(`PRAGMA table_info(${o.name})`).all();
-        for (const c of cols) {
-          const dflt = c.dflt_value === null ? "__NO_DEFAULT__" : String(c.dflt_value);
-          out.push(`C|${o.name}|${c.cid}|${c.name}|${c.type}|${c.notnull}|${dflt}|${c.pk}`);
+
+        for (const o of objs) {
+          if (o.type === "table") {
+            if (o.name.startsWith("sqlite_")) continue;
+            if (ftsBases.has(o.name)) {
+              const f = parseFTS(o.name, o.sql);
+              out.push(`F|${o.name}|${f.cols.join(",")}|${f.tokenize}|${f.contentSpec}`);
+              continue;
+            }
+            if (isShadow(o.name)) continue;
+            out.push(`T|${o.name}`);
+            const cols = db.query(`PRAGMA table_info(${o.name})`).all();
+            for (const c of cols) {
+              const dflt = c.dflt_value === null ? "__NO_DEFAULT__" : String(c.dflt_value);
+              out.push(`C|${o.name}|${c.cid}|${c.name}|${c.type}|${c.notnull}|${dflt}|${c.pk}`);
+            }
+          } else if (o.type === "index") {
+            if (ftsBases.has(o.tbl_name)) continue;
+            const info = db.query(`PRAGMA index_info(${o.name})`).all();
+            const cols = info.map(r => r.name);
+            const xinfo = db.query(`PRAGMA index_list(${o.tbl_name})`).all();
+            const meta = xinfo.find(r => r.name === o.name);
+            const unique = meta ? meta.unique : 0;
+            out.push(`I|${o.name}|${o.tbl_name}|${unique}|${cols.join(",")}`);
+          } else if (o.type === "trigger") {
+            const b64 = Buffer.from(o.sql, "utf8").toString("base64");
+            out.push(`G|${o.name}|${b64}`);
+          }
         }
-      } else if (o.type === "index") {
-        if (ftsBases.has(o.tbl_name)) continue;
-        const info = db.query(`PRAGMA index_info(${o.name})`).all();
-        const cols = info.map(r => r.name);
-        const xinfo = db.query(`PRAGMA index_list(${o.tbl_name})`).all();
-        const meta = xinfo.find(r => r.name === o.name);
-        const unique = meta ? meta.unique : 0;
-        out.push(`I|${o.name}|${o.tbl_name}|${unique}|${cols.join(",")}`);
-      } else if (o.type === "trigger") {
-        const b64 = Buffer.from(o.sql, "utf8").toString("base64");
-        out.push(`G|${o.name}|${b64}`);
-      }
-    }
-    process.stdout.write(out.join("\n"));
-    """#
+        process.stdout.write(out.join("\n"));
+        """#
 
     /// Walks up from this source file to find the apple-docs root (the directory
     /// that contains `src/storage/database.js`). The test file lives at
     /// `<root>/swift/Tests/ADWriteTests/SQLiteReferenceExtractor.swift`.
     static func locateAppleDocsRoot(fromFile file: String = #filePath) throws -> String {
         var dir = URL(fileURLWithPath: file).deletingLastPathComponent()
-        for _ in 0..<8 {
+        for _ in 0 ..< 8 {
             let marker = dir.appendingPathComponent("src/storage/database.js")
             if FileManager.default.fileExists(atPath: marker.path) {
                 return dir.path
@@ -174,6 +175,11 @@ enum SQLiteReferenceExtractor {
         }
         throw SQLiteReferenceError.bunNotFound
     }
+
+    /// Whether `bun` is resolvable. The parity gates are `.enabled(if:)` on this so they SKIP
+    /// (not fail) on a CI leg without `bun`, where the JS SQLite reference can't be built — they
+    /// still run wherever `bun` is installed (dev machines + the JS-parity CI legs).
+    static var bunAvailable: Bool { (try? locateBun()) != nil }
 
     /// Build the SQLite reference and return its normalized ``CatalogModel``.
     static func build() throws -> CatalogModel {
@@ -238,8 +244,9 @@ enum SQLiteReferenceExtractor {
                     let column = ColumnModel(
                         name: name, type: declaredType.uppercased(), notNull: notNull,
                         defaultValue: dflt)
-                    tableColumns[table, default: []].append(
-                        (cid: cid, col: column, pk: pk, type: declaredType.uppercased()))
+                    tableColumns[table, default: []]
+                        .append(
+                            (cid: cid, col: column, pk: pk, type: declaredType.uppercased()))
                 case "I":
                     guard fields.count >= 5 else { throw SQLiteReferenceError.manifestParse(line) }
                     let name = fields[1]
@@ -273,7 +280,8 @@ enum SQLiteReferenceExtractor {
             let sorted = entries.sorted { $0.cid < $1.cid }
             // Rowid alias: exactly one PK column AND it is INTEGER-typed.
             let pkCols = sorted.filter { $0.pk > 0 }.sorted { $0.pk < $1.pk }
-            let rowidAlias: String? = (pkCols.count == 1 && pkCols[0].type == "INTEGER")
+            let rowidAlias: String? =
+                (pkCols.count == 1 && pkCols[0].type == "INTEGER")
                 ? pkCols[0].col.name
                 : nil
 

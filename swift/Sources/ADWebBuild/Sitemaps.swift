@@ -68,7 +68,7 @@ extension BuildSite {
             urlEntry(loc: "\(cleanBase)/", lastmod: lastmod, changefreq: "daily", priority: 1.0),
             urlEntry(loc: "\(cleanBase)/search", lastmod: lastmod, changefreq: "monthly", priority: 0.7),
             urlEntry(loc: "\(cleanBase)/symbols", lastmod: lastmod, changefreq: "weekly", priority: 0.7),
-            urlEntry(loc: "\(cleanBase)/fonts", lastmod: lastmod, changefreq: "weekly", priority: 0.7),
+            urlEntry(loc: "\(cleanBase)/fonts", lastmod: lastmod, changefreq: "weekly", priority: 0.7)
         ]
         files.append(SitemapFile(path: "sitemaps/_root.xml.gz", xml: urlset(rootEntries), gzipped: true))
 
@@ -113,21 +113,24 @@ extension BuildSite {
 
     /// `buildSitemapIndexXml`.
     private static func sitemapIndexXml(baseUrl: String, frameworkSlugs: [String], lastmod: String) -> String {
-        let blocks = (["_root"] + frameworkSlugs).map { slug in
-            [
-                "  <sitemap>",
-                "    <loc>\(escapeXml("\(baseUrl)/sitemaps/\(slug).xml.gz"))</loc>",
-                "    <lastmod>\(escapeXml(lastmod))</lastmod>",
-                "  </sitemap>",
-            ].joined(separator: "\n")
-        }
+        let blocks = (["_root"] + frameworkSlugs)
+            .map { slug in
+                [
+                    "  <sitemap>",
+                    "    <loc>\(escapeXml("\(baseUrl)/sitemaps/\(slug).xml.gz"))</loc>",
+                    "    <lastmod>\(escapeXml(lastmod))</lastmod>",
+                    "  </sitemap>"
+                ]
+                .joined(separator: "\n")
+            }
         return [
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
             "<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">",
             blocks.joined(separator: "\n"),
             "</sitemapindex>",
-            "",
-        ].joined(separator: "\n")
+            ""
+        ]
+        .joined(separator: "\n")
     }
 
     /// One `<url>` block. `lastmod`/`changefreq` are omitted when empty (JS
@@ -147,21 +150,22 @@ extension BuildSite {
             "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">",
             entries.joined(separator: "\n"),
             "</urlset>",
-            "",
-        ].joined(separator: "\n")
+            ""
+        ]
+        .joined(separator: "\n")
     }
 
     /// KIND_DEFAULTS[kind] ?? DOC_DEFAULT.
     private static func kindDefaults(_ kind: String?) -> (priority: Double, changefreq: String) {
         switch kind {
-        case "framework": return (0.8, "weekly")
-        case "tooling": return (0.7, "monthly")
-        case "guidelines": return (0.7, "monthly")
-        case "collection": return (0.6, "weekly")
-        case "design": return (0.7, "monthly")
-        case "release-notes": return (0.7, "weekly")
-        case "technology": return (0.6, "monthly")
-        default: return (0.6, "monthly")
+            case "framework": return (0.8, "weekly")
+            case "tooling": return (0.7, "monthly")
+            case "guidelines": return (0.7, "monthly")
+            case "collection": return (0.6, "weekly")
+            case "design": return (0.7, "monthly")
+            case "release-notes": return (0.7, "weekly")
+            case "technology": return (0.6, "monthly")
+            default: return (0.6, "monthly")
         }
     }
 
@@ -171,9 +175,9 @@ extension BuildSite {
         let needle = Array("release-notes".unicodeScalars)
         let hay = roleHeading.unicodeScalars.map(asciiLower)
         if hay.count < needle.count { return false }
-        for start in 0...(hay.count - needle.count) {
+        for start in 0 ... (hay.count - needle.count) {
             var match = true
-            for i in 0..<needle.count where hay[start + i] != needle[i] {
+            for i in 0 ..< needle.count where hay[start + i] != needle[i] {
                 match = false
                 break
             }
@@ -192,12 +196,12 @@ extension BuildSite {
         out.reserveCapacity(s.count)
         for scalar in s.unicodeScalars {
             switch scalar {
-            case "&": out += "&amp;"
-            case "<": out += "&lt;"
-            case ">": out += "&gt;"
-            case "\"": out += "&quot;"
-            case "'": out += "&apos;"
-            default: out.unicodeScalars.append(scalar)
+                case "&": out += "&amp;"
+                case "<": out += "&lt;"
+                case ">": out += "&gt;"
+                case "\"": out += "&quot;"
+                case "'": out += "&apos;"
+                default: out.unicodeScalars.append(scalar)
             }
         }
         return out

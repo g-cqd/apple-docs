@@ -37,7 +37,7 @@ private let expectedKeys = [
     "apple-archive/documentation/Cocoa/Conceptual/DragDrop",
     "apple-archive/documentation/Cocoa/Conceptual/DragDrop/ch02.html",
     "apple-archive/documentation/Carbon/Conceptual/SomeGuide/SomeGuide.pdf",
-    "apple-archive/featuredarticles/RoadMapiOS",
+    "apple-archive/featuredarticles/RoadMapiOS"
 ]
 
 private let coreDataMetadataOracle =
@@ -61,7 +61,9 @@ private let siblingMetadataOracle =
     // Entity decoding (&amp; LAST) + fragment strip.
     let dragDrop = entries["apple-archive/documentation/Cocoa/Conceptual/DragDrop"]
     #expect(dragDrop?.title == "Drag & Drop <b>")
-    #expect(dragDrop?.url == "https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/DragDrop/DragDrop.html")
+    #expect(
+        dragDrop?.url
+            == "https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/DragDrop/DragDrop.html")
     // null platform serializes as JSON null.
     let sibling = entries["apple-archive/documentation/Cocoa/Conceptual/DragDrop/ch02.html"]
     #expect(sibling?.sourceMetadata == siblingMetadataOracle)
@@ -171,10 +173,13 @@ private func makePdfPage() -> NormalizedPage {
     #expect(page.document.sourceType == "apple-archive")
     #expect(page.document.kind == "archive-guide")
     #expect(page.document.framework == "cocoa")
-    #expect(page.document.url == "https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreData/index.html")
+    #expect(
+        page.document.url
+            == "https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreData/index.html")
     #expect(
         page.document.sourceMetadata
-            == "{\"resourceType\":\"Guides\",\"platform\":\"macOS\",\"archivePath\":\"documentation/Cocoa/Conceptual/CoreData/index.html\",\"format\":\"html\"}")
+            == "{\"resourceType\":\"Guides\",\"platform\":\"macOS\",\"archivePath\":\"documentation/Cocoa/Conceptual/CoreData/index.html\",\"format\":\"html\"}"
+    )
     #expect(page.sections.contains { $0.heading == "Stack" && $0.contentText == "Contexts." })
     #expect(!page.sections.contains { $0.contentText?.contains("chrome to ignore") == true })
 }

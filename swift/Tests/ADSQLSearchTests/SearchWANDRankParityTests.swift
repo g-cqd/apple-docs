@@ -19,7 +19,6 @@ import Testing
 
 @Suite("search WAND rank restructure vs score-all parity (real schema, ADDB FTS)")
 struct SearchWANDRankParityTests {
-
     /// Seeds `documents` so a `MATCH view` query spans all four tiers with varied
     /// ranks: every doc carries `view` in its abstract (so it matches), and the title
     /// selects the tier — exact (`View`, tier 0), prefix (`Viewport…`, tier 1),
@@ -41,10 +40,10 @@ struct SearchWANDRankParityTests {
             let abstract = String(repeating: "view ", count: weight) + "helper text"
             _ = try insert.run(["key": .text(key), "title": .text(title), "abstract": .text(abstract)])
         }
-        for i in 0..<5 { try add("t0/\(i)", "View", weight: 1 + i % 3) }  // tier 0 (exact)
-        for i in 0..<10 { try add("t1/\(i)", "Viewport\(i)", weight: 1 + i % 4) }  // tier 1 (prefix)
-        for i in 0..<10 { try add("t2/\(i)", "Nsview\(i)", weight: 1 + i % 5) }  // tier 2 (substring)
-        for i in 0..<120 { try add("t3/\(i)", "Gadget\(i)", weight: 1 + i % 7) }  // tier 3 (abstract only)
+        for i in 0 ..< 5 { try add("t0/\(i)", "View", weight: 1 + i % 3) }  // tier 0 (exact)
+        for i in 0 ..< 10 { try add("t1/\(i)", "Viewport\(i)", weight: 1 + i % 4) }  // tier 1 (prefix)
+        for i in 0 ..< 10 { try add("t2/\(i)", "Nsview\(i)", weight: 1 + i % 5) }  // tier 2 (substring)
+        for i in 0 ..< 120 { try add("t3/\(i)", "Gadget\(i)", weight: 1 + i % 7) }  // tier 3 (abstract only)
     }
 
     @Test("WAND path == score-all oracle across limits that cut each tier")
@@ -72,7 +71,8 @@ struct SearchWANDRankParityTests {
                 let oracle = try db.searchPagesDenormRowsScoreAll(params)
                 #expect(
                     wand == oracle,
-                    "WAND/score-all diverged for limit \(limit) raw \"\(raw)\": wand=\(wand.map(\.path)) oracle=\(oracle.map(\.path))")
+                    "WAND/score-all diverged for limit \(limit) raw \"\(raw)\": wand=\(wand.map(\.path)) oracle=\(oracle.map(\.path))"
+                )
             }
         }
     }
@@ -97,7 +97,7 @@ struct SearchWANDRankParityTests {
         let cases = [
             SearchPagesParams(query: "view", raw: "view", limit: 25, framework: "swiftui"),
             SearchPagesParams(query: "view", raw: "view", limit: 25, kind: "symbol"),
-            SearchPagesParams(query: "view", raw: "view", limit: 25, deprecatedMode: "exclude"),
+            SearchPagesParams(query: "view", raw: "view", limit: 25, deprecatedMode: "exclude")
         ]
         for params in cases {
             let wand = try db.searchPagesDenormRows(params)

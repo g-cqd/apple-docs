@@ -57,7 +57,8 @@ public struct SwiftEvolutionAdapter: SourceAdapter {
     public func discover(_ context: SourceContext) async throws -> DiscoveryResult {
         let github = GitHubClient(client: context.client, rateLimiter: context.rateLimiter)
         let tree = try await github.fetchTree(owner: Self.owner, repo: Self.repo, branch: Self.branch)
-        let keys = tree
+        let keys =
+            tree
             .filter { $0.type == "blob" && $0.path.hasPrefix("proposals/") && $0.path.hasSuffix(".md") }
             .map { entry -> String in
                 let filename = entry.path.dropFirst("proposals/".count).dropLast(".md".count)
@@ -105,7 +106,7 @@ public struct SwiftEvolutionAdapter: SourceAdapter {
             let object: [String: Any] = [
                 "seNumber": seNumber ?? NSNull(), "status": status ?? NSNull(),
                 "swiftVersion": swiftVersion ?? NSNull(), "authors": authors ?? NSNull(),
-                "reviewManager": reviewManager ?? NSNull(),
+                "reviewManager": reviewManager ?? NSNull()
             ]
             guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
                 let string = String(data: data, encoding: .utf8)
@@ -166,10 +167,11 @@ public struct SwiftEvolutionAdapter: SourceAdapter {
     private static func allGroups(_ pattern: String, _ text: String) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let nsText = text as NSString
-        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap {
-            $0.numberOfRanges > 1 && $0.range(at: 1).location != NSNotFound
-                ? nsText.substring(with: $0.range(at: 1)) : nil
-        }
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+            .compactMap {
+                $0.numberOfRanges > 1 && $0.range(at: 1).location != NSNotFound
+                    ? nsText.substring(with: $0.range(at: 1)) : nil
+            }
     }
 
     private static func trimmed(_ text: String) -> String {

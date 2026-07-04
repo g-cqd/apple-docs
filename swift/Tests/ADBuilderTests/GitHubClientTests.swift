@@ -8,7 +8,6 @@ import Testing
 
 @Suite("GitHubClient — tree / raw / conditional check")
 struct GitHubClientTests {
-
     private func client(_ handler: @escaping @Sendable (HTTPClientRequest) -> HTTPClientResponse) -> GitHubClient {
         GitHubClient(client: StubHTTPClient(handler), rateLimiter: instantRateLimiter(), token: nil)
     }

@@ -5,10 +5,12 @@ import Testing
 @testable import ADWebBuild
 
 private func combineDocs() -> [JSON] {
-    let root = try? ADJSON.parse(
-        #"[{"key":"combine/publisher","title":"Publisher","role":"symbol","role_heading":"Protocol"},{"key":"combine/just","title":"Just","role":"symbol","role_heading":"Structure"},{"key":"combine/using-combine","title":"Using Combine","role":"article","role_heading":"Article"}]"#,
-        options: .init(maxDepth: 512)
-    ).root
+    let root =
+        try? ADJSON.parse(
+            #"[{"key":"combine/publisher","title":"Publisher","role":"symbol","role_heading":"Protocol"},{"key":"combine/just","title":"Just","role":"symbol","role_heading":"Structure"},{"key":"combine/using-combine","title":"Using Combine","role":"article","role_heading":"Article"}]"#,
+            options: .init(maxDepth: 512)
+        )
+        .root
     var out: [JSON] = []
     root?.forEachElement { out.append($0) }
     return out
@@ -56,9 +58,10 @@ private func combineDocs() -> [JSON] {
     // HTML carries the external data-tree-src ref, never the inline payload.
     #expect(artifacts[1].path == "docs/combine/index.html")
     #expect(
-        String(decoding: artifacts[1].bytes, as: UTF8.self).contains(
-            "<div id=\"tree-container\" data-tree-src=\"https://x.test/data/frameworks/combine/tree.3e57e4c6ac.json\"></div>"
-        ))
+        String(decoding: artifacts[1].bytes, as: UTF8.self)
+            .contains(
+                "<div id=\"tree-container\" data-tree-src=\"https://x.test/data/frameworks/combine/tree.3e57e4c6ac.json\"></div>"
+            ))
 }
 
 @Test func planFrameworkPageTreeless() {

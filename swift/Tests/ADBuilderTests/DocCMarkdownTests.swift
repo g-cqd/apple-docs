@@ -8,7 +8,6 @@ import Testing
 
 @Suite("DocCMarkdown — doc references + Topics curation")
 struct DocCMarkdownTests {
-
     private static let book = """
         # The Swift Programming Language
 

@@ -306,5 +306,4 @@ extension PageMarkdown {
         }
         w.append(0x0A)
     }
-
 }

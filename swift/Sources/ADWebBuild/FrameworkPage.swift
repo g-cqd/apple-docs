@@ -12,7 +12,6 @@
 
 import ADBase
 import ADContent
-
 public import ADJSONCore
 
 /// A framework/root record for the listing page. Mirrors the JS `{ slug, name,
@@ -53,7 +52,7 @@ public enum FrameworkPage {
         "symbol": "Symbols", "collection": "Collections", "collectionGroup": "Collection Groups",
         "sampleCode": "Sample Code", "article": "Articles", "dictionarySymbol": "Dictionary Symbols",
         "overview": "Overview", "pseudoSymbol": "Pseudo Symbols", "restRequestSymbol": "REST Requests",
-        "link": "Links",
+        "link": "Links"
     ]
 
     private static let symbolRoles: Set<String> = ["symbol", "dictionarySymbol", "pseudoSymbol", "restRequestSymbol"]
@@ -89,7 +88,10 @@ public enum FrameworkPage {
         for doc in documents {
             let rawRole = coerceOr(doc.member("role"), coerceOr(doc.member("role_heading"), "Other"))
             let role = roleLabels[rawRole] ?? rawRole
-            if byRole[role] == nil { roleOrder.append(role); byRole[role] = [] }
+            if byRole[role] == nil {
+                roleOrder.append(role)
+                byRole[role] = []
+            }
             byRole[role]!.append(doc)
         }
 
@@ -119,9 +121,11 @@ public enum FrameworkPage {
 
         var jumpNav = ""
         if let nav = scope?.nav, !nav.isEmpty {
-            let items = nav.map {
-                "<a href=\"\(esc($0.href))\">\(esc($0.label)) <span class=\"group-count\">(\($0.count))</span></a>"
-            }.joined(separator: "\n    ")
+            let items =
+                nav.map {
+                    "<a href=\"\(esc($0.href))\">\(esc($0.label)) <span class=\"group-count\">(\($0.count))</span></a>"
+                }
+                .joined(separator: "\n    ")
             jumpNav = "<nav class=\"scope-jump-nav\" aria-label=\"Jump to section\">\n    \(items)\n  </nav>\n  "
         }
         let mainContent =
@@ -141,7 +145,8 @@ public enum FrameworkPage {
         let originalBlock = DocMeta.buildOriginalResourceBlock(originalUrl)
         if !originalBlock.isEmpty { sidebarBlocks.append(originalBlock) }
         if hasSidebar {
-            sidebarBlocks.append("<div class=\"sidebar-block\">\(DocSidebar.renderTocHtml(tocItems, mobile: false))</div>")
+            sidebarBlocks.append(
+                "<div class=\"sidebar-block\">\(DocSidebar.renderTocHtml(tocItems, mobile: false))</div>")
         }
         let sidebar =
             sidebarBlocks.isEmpty ? "" : "<aside class=\"doc-sidebar\">\(sidebarBlocks.joined(separator: "\n"))</aside>"
@@ -170,7 +175,7 @@ public enum FrameworkPage {
             ("name", .string(fwName)),
             ("inLanguage", .string("en")),
             ("description", .string(description)),
-            ("isAccessibleForFree", .bool(true)),
+            ("isAccessibleForFree", .bool(true))
         ]
         if let canonical { jsonLdPairs.append(("mainEntityOfPage", .string(canonical))) }
         if let bd = config.buildDate, !bd.isEmpty { jsonLdPairs.append(("dateModified", .string(bd))) }
@@ -221,9 +226,22 @@ public enum FrameworkPage {
 
     // MARK: - Scope groups (stub)
 
-    struct ScopeSection { let id: String; let label: String; let count: Int?; let docs: [JSON] }
-    struct ScopeNavItem { let href: String; let label: String; let count: Int }
-    struct ScopeResult { let scope: String; let sections: [ScopeSection]; let nav: [ScopeNavItem] }
+    struct ScopeSection {
+        let id: String
+        let label: String
+        let count: Int?
+        let docs: [JSON]
+    }
+    struct ScopeNavItem {
+        let href: String
+        let label: String
+        let count: Int
+    }
+    struct ScopeResult {
+        let scope: String
+        let sections: [ScopeSection]
+        let nav: [ScopeNavItem]
+    }
 
     // MARK: - helpers
 
@@ -242,7 +260,7 @@ public enum FrameworkPage {
             let roleHeading = coerceOr(doc.member("role_heading"), coerceOr(doc.member("role"), "Other"))
             let href = "\(config.baseUrl)/docs/\(SafePath.safeWebDocKey(key))/"
             lookup[key] = .object([
-                ("title", .string(title)), ("role_heading", .string(roleHeading)), ("href", .string(href)),
+                ("title", .string(title)), ("role_heading", .string(roleHeading)), ("href", .string(href))
             ])
         }
         let docsObj = JsonLd.object(order.map { ($0, lookup[$0]!) })
@@ -259,11 +277,11 @@ public enum FrameworkPage {
         out.reserveCapacity(json.count)
         for ch in json {
             switch ch {
-            case "<": out += "\\u003c"
-            case ">": out += "\\u003e"
-            case "/": out += "\\u002f"
-            case "&": out += "\\u0026"
-            default: out.append(ch)
+                case "<": out += "\\u003c"
+                case ">": out += "\\u003e"
+                case "/": out += "\\u002f"
+                case "&": out += "\\u0026"
+                default: out.append(ch)
             }
         }
         return out

@@ -27,9 +27,10 @@ extension DocC {
 
         // topicSections / relationshipsSections / seeAlsoSections identifiers, in that order.
         for field in ["topicSections", "relationshipsSections", "seeAlsoSections"] {
-            root[field].forEachElement { section in
-                section["identifiers"].forEachElement { add(resolve($0.string, index)) }
-            }
+            root[field]
+                .forEachElement { section in
+                    section["identifiers"].forEachElement { add(resolve($0.string, index)) }
+                }
         }
 
         // Body cross-reference sweep: `type == 'topic'` refs with a `/documentation/` URL and a

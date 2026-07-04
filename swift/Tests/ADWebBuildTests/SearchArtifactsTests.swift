@@ -12,7 +12,7 @@ private let titleFixture = TitleIndexData(
     keys: ["foundation", "swiftui", "swiftui/view"],
     titles: ["Foundation", "SwiftUI", "View"],
     abstracts: [
-        "Essential data types & collections.", "Declarative UI.", "A view with “quotes” and <tags>.",
+        "Essential data types & collections.", "Declarative UI.", "A view with “quotes” and <tags>."
     ],
     fwIndices: [0, 1, 1],
     kinds: ["framework", "framework", "symbol"],
@@ -28,7 +28,7 @@ private let shardDocsFixture = [
     ShardDoc(key: "foundation", framework: "Foundation", body: "Data types."),
     ShardDoc(key: "empty/doc", framework: "swiftui", body: ""),  // no body ⇒ no entry
     ShardDoc(key: "3dkit", framework: "3dkit", body: "three dee"),  // non-letter ⇒ _
-    ShardDoc(key: "orphan", framework: nil, body: "no framework"),  // nil ⇒ _
+    ShardDoc(key: "orphan", framework: nil, body: "no framework")  // nil ⇒ _
 ]
 
 private func artifactText(_ artifacts: [Artifact], _ path: String) -> String? {
@@ -55,7 +55,7 @@ private func artifactText(_ artifacts: [Artifact], _ path: String) -> String? {
     // {"10":"ten","2020":"wwdc","swiftui-alias":"swiftui2","a":"x"}
     let pairs = BuildSite.jsObjectPairs([
         ("swiftui-alias", "swiftui"), ("2020", "wwdc"), ("10", "ten"), ("a", "x"),
-        ("swiftui-alias", "swiftui2"),
+        ("swiftui-alias", "swiftui2")
     ])
     #expect(pairs.map(\.0) == ["10", "2020", "swiftui-alias", "a"])
     #expect(pairs.map(\.1) == ["ten", "wwdc", "swiftui2", "x"])
@@ -100,7 +100,8 @@ private func artifactText(_ artifacts: [Artifact], _ path: String) -> String? {
     let manifest = artifactText(artifacts, "data/search/search-manifest.json")
     #expect(
         manifest
-            == "{\"version\":2,\"titleCount\":3,\"aliasCount\":0,\"shardCount\":0,\"files\":{\"title-index\":\"title-index.266c61f39e.json\",\"aliases\":\"aliases.44136fa355.json\"},\"generatedAt\":\"2026-01-01T00:00:00.000Z\"}")
+            == "{\"version\":2,\"titleCount\":3,\"aliasCount\":0,\"shardCount\":0,\"files\":{\"title-index\":\"title-index.266c61f39e.json\",\"aliases\":\"aliases.44136fa355.json\"},\"generatedAt\":\"2026-01-01T00:00:00.000Z\"}"
+    )
 }
 
 @Test func liteTierTouchesEmptyShards() {

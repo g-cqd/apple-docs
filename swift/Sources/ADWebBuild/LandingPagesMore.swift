@@ -4,7 +4,6 @@
 // `DocSidebar.renderTocHtml` + `RenderHelpers.slugify` so its anchors match.
 
 import ADContent
-
 public import ADJSONCore
 
 /// One framework/extras entry for the home index listing (`renderIndexPage`'s
@@ -60,7 +59,7 @@ extension LandingPages {
                 "isPartOf",
                 .object([
                     ("@type", .string("WebSite")), ("name", .string(config.siteName)),
-                    ("url", .string("\(config.baseUrl)/")),
+                    ("url", .string("\(config.baseUrl)/"))
                 ])
             ),
             (
@@ -70,10 +69,10 @@ extension LandingPages {
                     (
                         "description",
                         .string("Apple's icon library shipped with iOS, macOS, watchOS, tvOS, and visionOS.")
-                    ),
+                    )
                 ])
             ),
-            ("numberOfItems", .int(totalCount)),
+            ("numberOfItems", .int(totalCount))
         ])
         let head = PageShell.buildHead(
             config: config, title: pageTitle, description: description,
@@ -111,7 +110,7 @@ extension LandingPages {
                 "isPartOf",
                 .object([
                     ("@type", .string("WebSite")), ("name", .string(config.siteName)),
-                    ("url", .string("\(config.baseUrl)/")),
+                    ("url", .string("\(config.baseUrl)/"))
                 ])
             ),
             (
@@ -123,10 +122,10 @@ extension LandingPages {
                         .string(
                             "San Francisco type-family variants distributed by Apple: SF Pro, SF Mono, SF Compact, New York."
                         )
-                    ),
+                    )
                 ])
             ),
-            ("numberOfItems", .int(familyList.count)),
+            ("numberOfItems", .int(familyList.count))
         ])
         let head = PageShell.buildHead(
             config: config, title: pageTitle, description: description, canonical: canonical,
@@ -194,7 +193,10 @@ extension LandingPages {
         var order: [String] = []
         var groups: [String: [IndexFramework]] = [:]
         func push(_ kind: String, _ fw: IndexFramework) {
-            if groups[kind] == nil { order.append(kind); groups[kind] = [] }
+            if groups[kind] == nil {
+                order.append(kind)
+                groups[kind] = []
+            }
             groups[kind]!.append(fw)
         }
         for fw in frameworks { push(fw.kind ?? "other", fw) }
@@ -237,9 +239,9 @@ extension LandingPages {
                 .object([
                     ("@type", .string("SearchAction")),
                     ("target", .string("\(config.baseUrl)/search?q={query}")),
-                    ("query-input", .string("required name=query")),
+                    ("query-input", .string("required name=query"))
                 ])
-            ),
+            )
         ])
         let head = PageShell.buildHead(
             config: config, title: pageTitle, description: description,

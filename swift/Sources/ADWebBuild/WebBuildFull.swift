@@ -5,7 +5,6 @@
 // tests use a mock.
 
 import ADBase
-
 public import ADContent
 public import ADJSONCore
 

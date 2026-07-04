@@ -60,7 +60,7 @@ struct VersionInfo {
 func versionJSON(_ info: VersionInfo) -> JSONValue {
     var pairs: [(String, JSONValue)] = [
         ("version", .string(info.version)),
-        ("commit", info.commit.map(JSONValue.string) ?? .null),
+        ("commit", info.commit.map(JSONValue.string) ?? .null)
     ]
     if let snapshot = info.snapshot, !snapshot.isEmpty {
         pairs.append(("snapshot", .string(snapshot)))
