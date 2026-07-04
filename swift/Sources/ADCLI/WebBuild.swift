@@ -397,8 +397,8 @@ private func isCommitSha(_ candidate: String) -> Bool {
 /// `ad-cli web …` — the static-site build verb group.
 struct WebCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "web", abstract: "Static documentation site build.",
-        subcommands: [WebBuildCommand.self])
+        commandName: "web", abstract: "Static documentation site build + deploy.",
+        subcommands: [WebBuildCommand.self, WebDeployCommand.self])
 }
 
 /// `ad-cli web build --db <PATH> [--out dist/web] [--base-url …] [--site-name …]`.
