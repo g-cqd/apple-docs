@@ -17,6 +17,25 @@ import ADWrite
 import ArgumentParser
 import Foundation
 
+/// Upsert every discovered root, returning the default (first) rootId and the `slug -> rootId` map the
+/// crawl driver attributes pages by. A multi-root flat source (swift-docc's three archives) then
+/// persists each page under its own root; a single-root source yields a one-entry map + that root as
+/// the default. Assumes `roots` is non-empty (the verbs guard that first, for a clear error message).
+func upsertCrawlRoots(
+    _ database: Database, _ roots: [DiscoveredRoot], now: String
+) throws -> (defaultRootId: Int64, rootIds: [String: Int64]) {
+    var rootIds: [String: Int64] = [:]
+    var defaultRootId: Int64 = 0
+    for (index, root) in roots.enumerated() {
+        let id = try CrawlPersist.upsertRoot(
+            database, slug: root.slug, displayName: root.displayName, kind: root.kind,
+            source: root.source, seedPath: root.seedPath, sourceType: root.sourceType, now: now)
+        rootIds[root.slug] = id
+        if index == 0 { defaultRootId = id }
+    }
+    return (defaultRootId, rootIds)
+}
+
 struct CrawlCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "crawl",
@@ -86,17 +105,15 @@ struct CrawlCommand: AsyncParsableCommand {
             // then drive the crawl against it. CrawlDriver re-discovers the page keys internally
             // with its own fresh adapter instance, so no adapter state crosses between the two.
             let discovery = try await adapter.discover(context)
-            guard let root = discovery.roots.first else {
+            guard !discovery.roots.isEmpty else {
                 FileHandle.standardError.write(Data("ad-cli: source '\(source)' discovered no root\n".utf8))
                 throw ExitCode(1)
             }
-            let rootId = try CrawlPersist.upsertRoot(
-                database, slug: root.slug, displayName: root.displayName, kind: root.kind,
-                source: root.source, seedPath: root.seedPath, sourceType: root.sourceType, now: now)
+            let (rootId, rootIds) = try upsertCrawlRoots(database, discovery.roots, now: now)
             stats = try await CrawlDriver(registry: registry)
                 .crawl(
-                    sourceType: source, into: database, rootId: rootId, context: context, now: now,
-                    maxConcurrency: concurrency)
+                    sourceType: source, into: database, rootId: rootId, rootIds: rootIds,
+                    context: context, now: now, maxConcurrency: concurrency)
         } catch let code as ExitCode {
             throw code
         } catch {
