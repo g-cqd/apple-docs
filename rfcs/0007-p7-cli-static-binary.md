@@ -1,8 +1,17 @@
 # RFC 0007 — P7: CLI + single static binary, Bun retired
 
-- **Status**: Planned (not started). Authored as the execution-ready plan for
-  the final migration phase; sequenced behind P5 (storage flip), P6 /
-  [RFC 0005](0005-server-framework.md) (servers + native MCP), and
+- **Status**: Planned — **groundwork underway (2026-07-05)**. Prerequisites have
+  advanced past authoring: storage is native (the ADDB corpus is built via
+  `ad-cli import` — SQLite→ADDB in ~5 min — and **PROMOTED**, so `bun:sqlite` can no
+  longer open the live `apple-docs.db`; the old SQLite is kept as `.sqlite.bak`), and
+  `ad-cli` / `ad-server` serve the full read + serve + ops surface native-by-default.
+  **Oracle-migration groundwork landed** (the §6 step-1 prerequisite): the `swift/Tests`
+  suite is a confirmed **standalone** gate (621 green, 0 failures, covers every Bucket-A
+  parity domain), `SchemaParityTests` was reference-flipped off live `bun`/`src` onto a
+  committed fixture, and 5 redundant JS-side FFI-parity tests were retired (RFC 0001 §10).
+  Still gated on: the native web **static build** (kept shelling to `bun build` + a shiki
+  coprocess as BUILD-only tools, operator decision), the `cli.js` sync/build pipeline, and
+  the entry-point flip. Sequenced behind P6 / [RFC 0005](0005-server-framework.md) +
   [RFC 0006](0006-codebase-health.md).
 - **Audience**: maintainers. Like every RFC here this is repo documentation,
   not product documentation — not built or indexed by the docs site.
