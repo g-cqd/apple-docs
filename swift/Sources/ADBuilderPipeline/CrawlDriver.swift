@@ -58,6 +58,14 @@ public struct CrawlDriver: Sendable {
         let adapter = try registry.adapter(for: sourceType)
         let discovery = try await adapter.discover(context)
 
+        // A reference-following source (`.crawl`, e.g. hig / apple-docc) drives a BFS over the
+        // `crawl_state` frontier instead of the flat key list.
+        if type(of: adapter).syncMode == .crawl {
+            return try await crawlBFS(
+                adapter, discovery: discovery, into: db, rootId: rootId, rootIds: rootIds,
+                context: context, now: now)
+        }
+
         var stats = Stats()
         stats.discovered = discovery.keys.count
 
@@ -113,7 +121,73 @@ public struct CrawlDriver: Sendable {
     /// The leading segment is the key's root slug (`<slug>/…`, the JS `key.split('/', 1)[0]`).
     static func rootId(forKey key: String, rootIds: [String: Int64], default defaultRootId: Int64) -> Int64 {
         guard !rootIds.isEmpty else { return defaultRootId }
-        return rootIds[String(key.prefix { $0 != "/" })] ?? defaultRootId
+        return rootIds[Self.slug(ofKey: key)] ?? defaultRootId
+    }
+
+    /// A key's root slug — its leading path segment (`<slug>/…`, the JS `key.split('/', 1)[0]`).
+    static func slug(ofKey key: String) -> String { String(key.prefix { $0 != "/" }) }
+
+    /// The reference-following (`.crawl`) path: seed the `crawl_state` frontier from the discovered keys,
+    /// then BFS each root to exhaustion. Serial (single-writer `db`; the flat path's bounded concurrency
+    /// is a follow-up). Mirrors the JS `discover.js` crawlRoot loop over the shared `crawl_state` queue.
+    private func crawlBFS(
+        _ adapter: any SourceAdapter, discovery: DiscoveryResult, into db: Database, rootId: Int64,
+        rootIds: [String: Int64], context: SourceContext, now: String
+    ) async throws -> Stats {
+        // Seed: each discovered key is a root-owned entry point at depth 0 (idempotent — a re-seed of an
+        // already-tracked path never resets its processed/failed status).
+        for key in discovery.keys {
+            try CrawlPersist.seedCrawlIfNew(db, path: key, rootSlug: Self.slug(ofKey: key), depth: 0)
+        }
+        var stats = Stats()
+        for root in discovery.roots {
+            try await crawlRoot(
+                adapter, rootSlug: root.slug, rootId: rootIds[root.slug] ?? rootId, into: db,
+                context: context, now: now, stats: &stats)
+        }
+        stats.discovered = stats.persisted + stats.failed
+        return stats
+    }
+
+    /// BFS one root's `crawl_state` frontier: repeatedly pull the `pending` batch, and for each path
+    /// fetch → normalize → persist → enqueue its same-root references one level deeper → mark it
+    /// `processed`. A fetch/normalize failure (404/403 or otherwise) demotes the path to `failed` and is
+    /// non-fatal. Terminates when no `pending` paths remain (references are seeded idempotently, so a
+    /// cyclic reference graph converges).
+    private func crawlRoot(
+        _ adapter: any SourceAdapter, rootSlug: String, rootId: Int64, into db: Database,
+        context: SourceContext, now: String, stats: inout Stats
+    ) async throws {
+        while true {
+            let pending = try CrawlPersist.getPendingCrawl(db, rootSlug: rootSlug, limit: 64)
+            if pending.isEmpty { break }
+            for (path, depth) in pending {
+                do {
+                    let result = try await adapter.fetch(path, context)
+                    let page = try adapter.normalize(result.key, result.payload)
+                    try CrawlPipeline.persist(
+                        page, into: db, rootId: rootId,
+                        path: page.document.url ?? Self.crawlPath(forKey: path),
+                        hashes: .init(
+                            content: Self.sha256Hex(Array(page.stableStringified().utf8)),
+                            rawPayload: Self.sha256Hex(Self.rawBytes(result.payload))),
+                        etag: result.etag, lastModified: result.lastModified, now: now)
+                    stats.persisted += 1
+                    // Same-root references only — a cross-root ref belongs to that root's own crawl.
+                    for ref in adapter.extractReferences(result.key, result.payload)
+                    where Self.slug(ofKey: ref) == rootSlug {
+                        try CrawlPersist.seedCrawlIfNew(db, path: ref, rootSlug: rootSlug, depth: depth + 1)
+                    }
+                    try CrawlPersist.setCrawlState(
+                        db, path: path, status: "processed", rootSlug: rootSlug, depth: depth)
+                } catch {
+                    try CrawlPersist.setCrawlState(
+                        db, path: path, status: "failed", rootSlug: rootSlug, depth: depth,
+                        error: String(describing: error))
+                    stats.failed += 1
+                }
+            }
+        }
     }
 
     /// The ETag stored for `key`'s page, or `nil` when the page is new, has no stored ETag, or the read

@@ -122,6 +122,89 @@ public enum CrawlPersist {
         return (etag: cellText(row["etag"]), lastModified: cellText(row["last_modified"]))
     }
 
+    // MARK: - crawl_state work-queue (BFS)
+    //
+    // The reference-following crawl's frontier: one row per discovered path (pending → processed /
+    // failed), keyed by path with the seeding root_slug + BFS depth. Ports src/storage/repos/crawl.js
+    // so a native crawl's queue is byte-identical to the JS crawler's.
+
+    /// Upsert a crawl_state row (JS `setCrawlState`): set the path's `status` + `error`. `ON CONFLICT(path)`
+    /// touches only status/error, so re-marking a path keeps its original `root_slug`/`depth`.
+    public static func setCrawlState(
+        _ db: Database, path: String, status: String, rootSlug: String, depth: Int = 0,
+        error: String? = nil
+    ) throws(DBError) {
+        try db.transaction { (txn) throws(DBError) in
+            _ = try txn.run(
+                """
+                INSERT INTO crawl_state (path, status, root_slug, depth, error)
+                VALUES ($path, $status, $root_slug, $depth, $error)
+                ON CONFLICT(path) DO UPDATE SET status = $status, error = $error
+                """,
+                [
+                    "path": .text(path), "status": .text(status), "root_slug": .text(rootSlug),
+                    "depth": .integer(Int64(depth)), "error": error.map(Value.text) ?? .null
+                ])
+        }
+    }
+
+    /// Seed a path as `pending` only if not already tracked (JS `seedCrawlIfNew`), so re-discovering a
+    /// path never resets a `processed`/`failed` row. Returns `true` when a new row was inserted.
+    @discardableResult
+    public static func seedCrawlIfNew(
+        _ db: Database, path: String, rootSlug: String, depth: Int = 0
+    ) throws(DBError) -> Bool {
+        let existing = try db.prepare("SELECT 1 FROM crawl_state WHERE path = $path")
+            .all(["path": .text(path)])
+        guard existing.isEmpty else { return false }
+        try setCrawlState(db, path: path, status: "pending", rootSlug: rootSlug, depth: depth)
+        return true
+    }
+
+    /// The next batch of `pending` paths for a root (JS `getPendingCrawl`): `(path, depth)`, up to `limit`.
+    /// `limit` is a trusted caller constant, interpolated (ADSQL's `LIMIT` takes no bind parameter).
+    public static func getPendingCrawl(
+        _ db: Database, rootSlug: String, limit: Int = 10
+    ) throws(DBError) -> [(path: String, depth: Int)] {
+        let rows =
+            try db.prepare(
+                "SELECT path, depth FROM crawl_state WHERE status = 'pending' AND root_slug = $slug"
+                    + " LIMIT \(Swift.max(0, limit))"
+            )
+            .all(["slug": .text(rootSlug)])
+        return rows.compactMap { row in
+            guard let path = cellText(row["path"]) else { return nil }
+            var depth = 0
+            if case .integer(let d)? = row["depth"] { depth = Int(d) }
+            return (path: path, depth: depth)
+        }
+    }
+
+    /// The `(pending, processed, failed)` counts for a root (JS `getCrawlStats`).
+    public static func getCrawlStats(
+        _ db: Database, rootSlug: String
+    ) throws(DBError) -> (pending: Int, processed: Int, failed: Int) {
+        let rows =
+            try db.prepare(
+                "SELECT status, COUNT(*) AS c FROM crawl_state WHERE root_slug = $slug GROUP BY status"
+            )
+            .all(["slug": .text(rootSlug)])
+        var pending = 0
+        var processed = 0
+        var failed = 0
+        for row in rows {
+            var count = 0
+            if case .integer(let c)? = row["c"] { count = Int(c) }
+            switch cellText(row["status"]) {
+                case "pending": pending = count
+                case "processed": processed = count
+                case "failed": failed = count
+                default: break
+            }
+        }
+        return (pending, processed, failed)
+    }
+
     // MARK: - persistNormalized
 
     /// Persists a normalized document, mirroring `persist.js`
