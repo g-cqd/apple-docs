@@ -13,7 +13,6 @@ import Testing
 
 @Suite("ExternalDoccAdapter — external DocC archives (curated + probe-detected)")
 struct ExternalDoccAdapterTests {
-
     // MARK: - parseDoccArchiveUrl (docc-url shape recognition)
 
     @Test("parseDoccArchiveUrl recognises the CareKit GitHub Pages project site")
@@ -41,7 +40,8 @@ struct ExternalDoccAdapterTests {
         #expect(ExternalDoccAdapter.parseDoccArchiveUrl("https://github.com/ResearchKit/ResearchKit") == nil)
         // developer.apple.com is the primary corpus (apple-docc adapter), never external.
         #expect(ExternalDoccAdapter.parseDoccArchiveUrl("https://developer.apple.com/documentation/swiftui") == nil)
-        #expect(ExternalDoccAdapter.parseDoccArchiveUrl("https://beta.developer.apple.com/documentation/swiftui") == nil)
+        #expect(
+            ExternalDoccAdapter.parseDoccArchiveUrl("https://beta.developer.apple.com/documentation/swiftui") == nil)
         // Not https (http://, doc://, a bare identifier).
         #expect(ExternalDoccAdapter.parseDoccArchiveUrl("http://security.apple.com/documentation/pcc") == nil)
         #expect(ExternalDoccAdapter.parseDoccArchiveUrl("doc://com.apple.SwiftUI/documentation/swiftui") == nil)

@@ -132,8 +132,9 @@ struct HigAdapterTests {
 
     @Test("normalize delegates to the DocC normalizer with the hig source type + design URL")
     func normalize() throws {
-        let page = try HigAdapter().normalize(
-            "design/human-interface-guidelines", .json(Array(Self.higJSON.utf8)))
+        let page = try HigAdapter()
+            .normalize(
+                "design/human-interface-guidelines", .json(Array(Self.higJSON.utf8)))
         #expect(page.document.sourceType == "hig")
         #expect(page.document.key == "design/human-interface-guidelines")
         #expect(page.document.title == "Human Interface Guidelines")
@@ -153,8 +154,9 @@ struct HigAdapterTests {
 
     @Test("extractReferences yields same-root design keys, dropping external symbols")
     func extractReferences() {
-        let refs = HigAdapter().extractReferences(
-            "design/human-interface-guidelines", .json(Array(Self.higJSON.utf8)))
+        let refs = HigAdapter()
+            .extractReferences(
+                "design/human-interface-guidelines", .json(Array(Self.higJSON.utf8)))
         #expect(refs == ["design/human-interface-guidelines/accessibility"])
     }
 

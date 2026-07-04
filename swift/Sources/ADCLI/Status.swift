@@ -18,6 +18,10 @@ import ADStorage
 import ArgumentParser
 import Foundation
 
+#if canImport(FoundationNetworking)
+    import FoundationNetworking  // URLSession/URLRequest live here on Linux (the Foundation split)
+#endif
+
 #if canImport(Darwin)
     import Darwin
 #else
@@ -249,6 +253,14 @@ private func daysSince(_ iso: String, nowMs: Double) -> Int64? {
 
 // MARK: - update check (status.js `checkForUpdate`)
 
+/// A Sendable results box for `checkForUpdate`'s URLSession completion handler: on Linux that closure is
+/// `@Sendable`, so it can't mutate captured `var`s under -warnings-as-errors. The caller's semaphore is the
+/// happens-before edge (closure finishes before the reads), so unsynchronized access is safe (`@unchecked`).
+private final class UpdateProbeBox: @unchecked Sendable {
+    var statusCode = 0
+    var responseData: Data?
+}
+
 /// checkForUpdate(db): null when there's no `snapshot_tag`; else GET the GitHub
 /// `releases/latest` (User-Agent / Accept / optional Bearer, 5 s timeout) and
 /// compare `tag_name` to the current tag. Any non-200 / network / parse failure
@@ -270,11 +282,13 @@ func checkForUpdate(_ connection: StorageConnection) -> UpdateAvailable? {
     request.timeoutInterval = 5
 
     let semaphore = DispatchSemaphore(value: 0)
-    var responseData: Data?
-    var statusCode = 0
+    // A Sendable box for the completion results: on Linux `URLSession.dataTask`'s completion closure is
+    // `@Sendable`, so mutating captured `var`s there is a data-race error under -warnings-as-errors. The
+    // semaphore is the happens-before edge (the closure finishes before the reads below), hence @unchecked.
+    let box = UpdateProbeBox()
     let task = URLSession.shared.dataTask(with: request) { data, response, _ in
-        if let http = response as? HTTPURLResponse { statusCode = http.statusCode }
-        responseData = data
+        if let http = response as? HTTPURLResponse { box.statusCode = http.statusCode }
+        box.responseData = data
         semaphore.signal()
     }
     task.resume()
@@ -285,7 +299,7 @@ func checkForUpdate(_ connection: StorageConnection) -> UpdateAvailable? {
         return nil
     }
 
-    guard statusCode == 200, let data = responseData,
+    guard box.statusCode == 200, let data = box.responseData,
         let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
         let latestTag = object["tag_name"] as? String
     else { return nil }

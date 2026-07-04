@@ -12,7 +12,6 @@ import Testing
 
 @Suite("SampleCodeAdapter — DocC sample projects, bootstrap seed set")
 struct SampleCodeAdapterTests {
-
     // MARK: - static metadata
 
     @Test("type / displayName / syncMode mirror the JS statics")
