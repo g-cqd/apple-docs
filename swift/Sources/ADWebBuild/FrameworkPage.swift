@@ -226,7 +226,7 @@ public enum FrameworkPage {
             "<li data-filter-kind=\"\(esc(filterKind))\"\(deprecatedAttr)><a href=\"\(esc(href))\">\(titleContent)</a>\(meta)\(abstract)</li>"
     }
 
-    // MARK: - Scope groups (stub)
+    // MARK: - Scope groups
 
     struct ScopeSection {
         let id: String

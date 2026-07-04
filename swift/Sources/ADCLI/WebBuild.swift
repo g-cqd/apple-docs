@@ -1,9 +1,11 @@
 // `ad-cli web build` — the native static-site build (P7 / WS-C). Opens the corpus
 // read-only, bridges it to the ADWebBuild orchestrator via a `CorpusReader`
-// adapter, and writes the artifact tree. This first slice emits the site
-// essentials (landing + discovery + per-framework metadata + manifest); the
-// per-document render loop + search/sitemap/assets are stubbed (logged to stderr
-// from the BuildResult ledger). Parity oracle: `bun run cli.js web build`.
+// adapter, and writes the artifact tree. The full pipeline is wired: assets
+// (bun-build bundle + CSS minify), search artifacts, sitemaps (gzip), the
+// per-document + framework render loop (shiki highlighting via the coprocess
+// seam), the incremental render index, atomic swap, and the link audit. Only the
+// intentional `--skip-docs` mode short-circuits the render loop. Parity oracle:
+// `bun run cli.js web build`.
 
 // swiftlint:disable cyclomatic_complexity function_body_length function_parameter_count
 
@@ -403,7 +405,7 @@ struct WebCommand: ParsableCommand {
 struct WebBuildCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "build",
-        abstract: "Build the static site essentials (per-document render loop is WIP).")
+        abstract: "Build the static documentation site.")
 
     @OptionGroup var corpus: CorpusOptions
 
