@@ -128,9 +128,10 @@ public struct CrawlDriver: Sendable {
     static func slug(ofKey key: String) -> String { String(key.prefix { $0 != "/" }) }
 
     /// The reference-following (`.crawl`) path: seed the `crawl_state` frontier from the discovered keys,
-    /// then BFS each root to exhaustion. Fetch+normalize run `maxConcurrency`-wide per batch; every `db`
-    /// write (persist / seed / state) stays on the single-writer consuming side. Mirrors the JS
-    /// `discover.js` crawlRoot loop over the shared `crawl_state` queue (its `pool(batch, concurrency)`).
+    /// then drain the WHOLE frontier — every root pooled into one loop — to exhaustion. Fetch+normalize run
+    /// `maxConcurrency`-wide per batch; every `db` write (persist / seed / state) stays on the single-writer
+    /// consuming side. Mirrors the JS `discover.js` crawl over the shared `crawl_state` queue (its one
+    /// `pool(batch, concurrency)` across all roots).
     private func crawlBFS(
         _ adapter: any SourceAdapter, discovery: DiscoveryResult, rootId: Int64,
         rootIds: [String: Int64], run: BFSRun
@@ -141,32 +142,34 @@ public struct CrawlDriver: Sendable {
             try CrawlPersist.seedCrawlIfNew(run.db, path: key, rootSlug: Self.slug(ofKey: key), depth: 0)
         }
         var stats = Stats()
-        for root in discovery.roots {
-            try await crawlRoot(
-                adapter, rootSlug: root.slug, rootId: rootIds[root.slug] ?? rootId, run: run, stats: &stats)
-        }
+        try await crawlFrontier(adapter, rootId: rootId, rootIds: rootIds, run: run, stats: &stats)
         stats.discovered = stats.persisted + stats.failed
         return stats
     }
 
-    /// BFS one root's `crawl_state` frontier: repeatedly pull the `pending` batch, fetch+normalize its
-    /// paths `maxConcurrency`-wide (network-bound, in child tasks), then — serially on the single-writer
-    /// side — persist each page, enqueue its same-root references one level deeper, and mark it
-    /// `processed`. A fetch/normalize failure (404/403 or otherwise) demotes the path to `failed` and is
-    /// non-fatal. Terminates when no `pending` paths remain (references are seeded idempotently, so a
-    /// cyclic reference graph converges). The batch width tracks `maxConcurrency` so every slot stays busy.
-    private func crawlRoot(
-        _ adapter: any SourceAdapter, rootSlug: String, rootId: Int64, run: BFSRun, stats: inout Stats
+    /// Drain the whole `crawl_state` frontier — every root's `pending` work pooled into one loop. Pull a
+    /// `maxConcurrency`-wide batch ACROSS all roots, fetch+normalize each in child tasks, then — serially on
+    /// the single-writer side — persist each page under its OWN root (`rootIds[row.rootSlug] ?? rootId`),
+    /// enqueue its same-root references one level deeper, and mark it `processed`. A fetch/normalize/persist
+    /// failure demotes the path to `failed` and is non-fatal. Terminates when no `pending` paths remain
+    /// (references are seeded idempotently, so a cyclic graph converges). Pooling across roots keeps the
+    /// fan-out saturated even when individual roots have narrow early levels — the JS shared semaphore.
+    private func crawlFrontier(
+        _ adapter: any SourceAdapter, rootId: Int64, rootIds: [String: Int64], run: BFSRun,
+        stats: inout Stats
     ) async throws {
         let db = run.db
         let context = run.context
         let width = Swift.max(1, run.maxConcurrency)
         while true {
-            let pending = try CrawlPersist.getPendingCrawl(db, rootSlug: rootSlug, limit: width)
+            let pending = try CrawlPersist.getPendingCrawlAny(db, limit: width)
             if pending.isEmpty { break }
             try await withThrowingTaskGroup(of: BFSOutcome.self) { group in
-                for (path, depth) in pending {
-                    group.addTask { await self.bfsFetch(adapter, path: path, depth: depth, context) }
+                for item in pending {
+                    group.addTask {
+                        await self.bfsFetch(
+                            adapter, path: item.path, rootSlug: item.rootSlug, depth: item.depth, context)
+                    }
                 }
                 // Consume on the serial side — every `db` write happens here, so the single-writer `db`
                 // never crosses into a child task (the flat path's discipline).
@@ -175,24 +178,25 @@ public struct CrawlDriver: Sendable {
                         case .fetched(let f):
                             do {
                                 try CrawlPipeline.persist(
-                                    f.page, into: db, rootId: rootId, path: f.storePath,
+                                    f.page, into: db, rootId: rootIds[f.rootSlug] ?? rootId, path: f.storePath,
                                     hashes: .init(content: f.contentHash, rawPayload: f.rawHash),
                                     etag: f.etag, lastModified: f.lastModified, now: run.now)
                                 stats.persisted += 1
                                 // Same-root references only — a cross-root ref belongs to that root's own crawl.
-                                for ref in f.refs where Self.slug(ofKey: ref) == rootSlug {
+                                for ref in f.refs where Self.slug(ofKey: ref) == f.rootSlug {
                                     try CrawlPersist.seedCrawlIfNew(
-                                        db, path: ref, rootSlug: rootSlug, depth: f.depth + 1)
+                                        db, path: ref, rootSlug: f.rootSlug, depth: f.depth + 1)
                                 }
                                 try CrawlPersist.setCrawlState(
-                                    db, path: f.statePath, status: "processed", rootSlug: rootSlug, depth: f.depth)
+                                    db, path: f.statePath, status: "processed", rootSlug: f.rootSlug,
+                                    depth: f.depth)
                             } catch {
                                 try CrawlPersist.setCrawlState(
-                                    db, path: f.statePath, status: "failed", rootSlug: rootSlug, depth: f.depth,
+                                    db, path: f.statePath, status: "failed", rootSlug: f.rootSlug, depth: f.depth,
                                     error: String(describing: error))
                                 stats.failed += 1
                             }
-                        case .failed(let path, let depth, let error):
+                        case .failed(let path, let rootSlug, let depth, let error):
                             try CrawlPersist.setCrawlState(
                                 db, path: path, status: "failed", rootSlug: rootSlug, depth: depth, error: error)
                             stats.failed += 1
@@ -213,18 +217,21 @@ public struct CrawlDriver: Sendable {
     }
 
     /// A BFS batch item's outcome, carried out of its child task. `.fetched` still needs the serial
-    /// persist; `.failed` only needs its `crawl_state` demotion (both carry the original state path/depth).
+    /// persist; `.failed` only needs its `crawl_state` demotion. Both carry the original state path, its
+    /// root slug (the frontier pools all roots, so each item names its own), and depth.
     private enum BFSOutcome: Sendable {
         case fetched(BFSFetched)
-        case failed(path: String, depth: Int, error: String)
+        case failed(path: String, rootSlug: String, depth: Int, error: String)
     }
 
     /// One BFS page fetched + normalized in a child task. `statePath` is the `crawl_state` key the state
-    /// row is keyed by; `storePath` is where the page persists (its doc URL, or the `/<key>` fallback).
+    /// row is keyed by; `storePath` is where the page persists (its doc URL, or the `/<key>` fallback);
+    /// `rootSlug` is the page's owning root (the cross-root frontier pools all roots into one wave).
     /// `refs` is pre-extracted in the child (a pure step) so the consuming side only writes.
     private struct BFSFetched: Sendable {
         let statePath: String
         let storePath: String
+        let rootSlug: String
         let depth: Int
         let page: NormalizedPage
         let refs: [String]
@@ -235,9 +242,10 @@ public struct CrawlDriver: Sendable {
     }
 
     /// Fetch + normalize + extract-references one BFS path (all pure/network — no `db`), for concurrent
-    /// execution in a task group. Any failure becomes `.failed` (non-fatal; the path is demoted).
+    /// execution in a task group. `rootSlug` (the page's owning root) is threaded through so the serial
+    /// consumer can attribute + re-seed without re-deriving it. Any failure becomes `.failed` (non-fatal).
     private func bfsFetch(
-        _ adapter: any SourceAdapter, path: String, depth: Int, _ context: SourceContext
+        _ adapter: any SourceAdapter, path: String, rootSlug: String, depth: Int, _ context: SourceContext
     ) async -> BFSOutcome {
         do {
             let result = try await adapter.fetch(path, context)
@@ -246,12 +254,12 @@ public struct CrawlDriver: Sendable {
             return .fetched(
                 BFSFetched(
                     statePath: path, storePath: page.document.url ?? Self.crawlPath(forKey: path),
-                    depth: depth, page: page, refs: refs,
+                    rootSlug: rootSlug, depth: depth, page: page, refs: refs,
                     contentHash: Self.sha256Hex(Array(page.stableStringified().utf8)),
                     rawHash: Self.sha256Hex(Self.rawBytes(result.payload)),
                     etag: result.etag, lastModified: result.lastModified))
         } catch {
-            return .failed(path: path, depth: depth, error: String(describing: error))
+            return .failed(path: path, rootSlug: rootSlug, depth: depth, error: String(describing: error))
         }
     }
 
