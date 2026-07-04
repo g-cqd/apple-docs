@@ -17,9 +17,10 @@ import Testing
 struct PackagesAdapterTests {
     // MARK: - normalize (README path)
 
-    @Test("normalize (README path) overrides title/abstract and appends Package Metadata")
-    func normalizeReadme() throws {
-        let key = "packages/apple/swift-nio"
+    // The canonical README-path input (repo + README + scope), shared by the split document/sections tests
+    // below. Each `@Test` asserts against a typed intermediate (`doc` / `sections`) so its body type-checks
+    // under the 250 ms budget — the single combined form tripped it (~266 ms).
+    private func readmeInput() -> (key: String, payload: SourcePayload) {
         let input = #"""
             {
               "repo": {
@@ -42,37 +43,45 @@ struct PackagesAdapterTests {
               "fetchMode": "raw"
             }
             """#
-        let payload = SourcePayload.json(Array(input.utf8))
-        let page = try PackagesAdapter().normalize(key, payload)
+        return ("packages/apple/swift-nio", SourcePayload.json(Array(input.utf8)))
+    }
 
+    @Test("normalize (README path) overrides title/abstract + emits ordered source metadata")
+    func normalizeReadmeDocument() throws {
+        let (key, payload) = readmeInput()
         // Document: repo full_name wins the title; the trimmed description overrides the abstract.
-        #expect(page.document.sourceType == "packages")
-        #expect(page.document.key == key)
-        #expect(page.document.kind == "package")
-        #expect(page.document.framework == "packages")
-        #expect(page.document.title == "apple/swift-nio")
-        #expect(page.document.abstractText == "Event-driven network application framework")
-        #expect(page.document.url == "https://github.com/apple/swift-nio")
-        #expect(page.document.language == nil)
-
-        // Sections: abstract (overridden) + the README's `## Overview` + the Package Metadata block.
-        #expect(page.sections.map(\.sectionKind) == ["abstract", "discussion", "discussion"])
-        #expect(page.sections.map(\.sortOrder) == [0, 1, 2])
-        #expect(page.sections[0].contentText == "Event-driven network application framework")
-        #expect(page.sections[1].heading == "Overview")
-        #expect(page.sections.last?.heading == "Package Metadata")
-        #expect(
-            page.sections.last?.contentText
-                == "Repository: apple/swift-nio\n\nDefault branch: main\n\nREADME: README.md")
-
+        let doc = try PackagesAdapter().normalize(key, payload).document
+        #expect(doc.sourceType == "packages")
+        #expect(doc.key == key)
+        #expect(doc.kind == "package")
+        #expect(doc.framework == "packages")
+        #expect(doc.title == "apple/swift-nio")
+        #expect(doc.abstractText == "Event-driven network application framework")
+        #expect(doc.url == "https://github.com/apple/swift-nio")
+        #expect(doc.language == nil)
         // source_metadata: insertion-ordered JSON, byte-identical to JSON.stringify.
         #expect(
-            page.document.sourceMetadata
+            doc.sourceMetadata
                 == #"{"package":true,"scope":"official","source":"raw","owner":"apple","repo":"swift-nio","fullName":"apple/swift-nio","defaultBranch":"main","stars":0,"forks":0,"openIssues":0,"topics":[],"archived":false,"fork":false,"homepage":null,"license":null,"primaryLanguage":null,"readmePath":"README.md","readmeUrl":"https://github.com/apple/swift-nio/blob/main/README.md","pushedAt":null,"updatedAt":null}"#
         )
-
         // packages contributes no cross-references (default extractReferences).
         #expect(PackagesAdapter().extractReferences(key, payload) == [])
+    }
+
+    @Test("normalize (README path) builds abstract + Overview + Package Metadata sections")
+    func normalizeReadmeSections() throws {
+        let (key, payload) = readmeInput()
+        let page = try PackagesAdapter().normalize(key, payload)
+        // Sections: abstract (overridden) + the README's `## Overview` + the Package Metadata block.
+        let sections = page.sections
+        #expect(sections.map(\.sectionKind) == ["abstract", "discussion", "discussion"])
+        #expect(sections.map(\.sortOrder) == [0, 1, 2])
+        #expect(sections[0].contentText == "Event-driven network application framework")
+        #expect(sections[1].heading == "Overview")
+        #expect(sections.last?.heading == "Package Metadata")
+        #expect(
+            sections.last?.contentText
+                == "Repository: apple/swift-nio\n\nDefault branch: main\n\nREADME: README.md")
         #expect(page.relationships == [])
     }
 

@@ -101,36 +101,46 @@ struct WwdcAdapterTests {
 
     // MARK: - Apple normalize (pure)
 
-    @Test("normalize (Apple) builds the session document, sections, and source metadata")
-    func normalizeApple() throws {
-        let payload = applePayload(
+    // The canonical Apple WWDC session payload, shared by the split document/sections tests below. Each
+    // `@Test` asserts against a typed intermediate (`doc` / `sections`) so its body type-checks under the
+    // 250 ms budget — the single combined form's long `#expect` chain tripped it (390 ms).
+    private func appleSessionPayload() -> SourcePayload {
+        applePayload(
             title: "Meet SwiftData", description: "SwiftData is great and powerful for data.",
             chapters: ["0:00 Intro", "2:00 Details"], transcript: "Line one of transcript.\n\nLine two.",
             track: "SwiftUI & UI Frameworks")
-        let page = try WwdcAdapter().normalize("wwdc/wwdc2024-10001", payload)
+    }
 
-        #expect(page.document.title == "Meet SwiftData")
-        #expect(page.document.sourceType == "wwdc")
-        #expect(page.document.kind == "wwdc-session")
-        #expect(page.document.role == "article")
-        #expect(page.document.framework == "wwdc")
-        #expect(page.document.url == "https://developer.apple.com/videos/play/wwdc2024/10001/")
-        #expect(page.document.abstractText == "SwiftData is great and powerful for data.")
-        #expect(page.document.urlDepth == 1)
+    @Test("normalize (Apple) builds the session document + source metadata")
+    func normalizeAppleDocument() throws {
+        let doc = try WwdcAdapter().normalize("wwdc/wwdc2024-10001", appleSessionPayload()).document
+        #expect(doc.title == "Meet SwiftData")
+        #expect(doc.sourceType == "wwdc")
+        #expect(doc.kind == "wwdc-session")
+        #expect(doc.role == "article")
+        #expect(doc.framework == "wwdc")
+        #expect(doc.url == "https://developer.apple.com/videos/play/wwdc2024/10001/")
+        #expect(doc.abstractText == "SwiftData is great and powerful for data.")
+        #expect(doc.urlDepth == 1)
         #expect(
-            page.document.sourceMetadata
+            doc.sourceMetadata
                 == #"{"year":2024,"sessionId":"10001","source":"apple","track":"SwiftUI & UI Frameworks"}"#)
+    }
 
-        #expect(page.sections.count == 3)
-        #expect(page.sections[0].sectionKind == "abstract")
-        #expect(page.sections[0].heading == nil)
-        #expect(page.sections[1].sectionKind == "content")
-        #expect(page.sections[1].heading == "Chapters")
-        #expect(page.sections[1].contentText == "0:00 Intro\n2:00 Details")
-        #expect(page.sections[2].sectionKind == "content")
-        #expect(page.sections[2].heading == "Transcript")
-        #expect(page.sections[2].contentText == "Line one of transcript.\n\nLine two.")
-        #expect(page.sections[2].contentJson == nil)
+    @Test("normalize (Apple) builds the abstract + chapters + transcript sections")
+    func normalizeAppleSections() throws {
+        let page = try WwdcAdapter().normalize("wwdc/wwdc2024-10001", appleSessionPayload())
+        let sections = page.sections
+        #expect(sections.count == 3)
+        #expect(sections[0].sectionKind == "abstract")
+        #expect(sections[0].heading == nil)
+        #expect(sections[1].sectionKind == "content")
+        #expect(sections[1].heading == "Chapters")
+        #expect(sections[1].contentText == "0:00 Intro\n2:00 Details")
+        #expect(sections[2].sectionKind == "content")
+        #expect(sections[2].heading == "Transcript")
+        #expect(sections[2].contentText == "Line one of transcript.\n\nLine two.")
+        #expect(sections[2].contentJson == nil)
         #expect(page.relationships.isEmpty)
     }
 
