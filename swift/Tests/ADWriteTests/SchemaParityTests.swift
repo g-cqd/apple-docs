@@ -28,12 +28,17 @@ import Testing
 
 @testable import ADWrite
 
-@Suite("apple-docs schema parity (native ADDB vs JS SQLite reference)")
+@Suite("apple-docs schema parity (native ADDB vs the committed JS SQLite reference)")
 struct SchemaParityTests {
-    @Test(
-        "native ADDB catalog matches the JS-migrated SQLite reference",
-        .enabled(if: SQLiteReferenceExtractor.bunAvailable, "requires bun to build the SQLite reference"))
-    func nativeCatalogMatchesSQLiteReference() throws {
+    /// The JS-migrated SQLite catalog, captured ONCE from the Bun `bun:sqlite` migrations (see
+    /// `captureReferenceFixture`) and frozen here as the parity reference — so the gate runs with no `bun`
+    /// or `src/` dependency (the JS is the original reference; it is now committed, per the RFC 0001 §10
+    /// reference-flip). Read from the source tree via `#filePath` (like ADEmbedTests' fixtures).
+    static let fixtureURL = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().appendingPathComponent("Fixtures/js-sqlite-catalog.json")
+
+    @Test("native ADDB catalog matches the committed JS SQLite reference")
+    func nativeCatalogMatchesReference() throws {
         // ── Native ADDB catalog ──────────────────────────────────────────────
         let tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("addb-parity-native-\(UUID().uuidString)")
@@ -41,24 +46,36 @@ struct SchemaParityTests {
         defer { try? FileManager.default.removeItem(at: tmpDir) }
 
         let (native, outcome) = try ADDBCatalogExtractor.build(inDirectory: tmpDir.path)
-
         // The migrator must have driven the cursor to the apple-docs latest version.
         #expect(outcome.finalVersion == AppleDocsSchema.latestVersion)
 
-        // ── SQLite reference catalog ─────────────────────────────────────────
-        let reference = try SQLiteReferenceExtractor.build()
+        // ── Committed JS SQLite reference (no bun) ────────────────────────────
+        let reference = try JSONDecoder()
+            .decode(
+                CatalogModel.self, from: Data(contentsOf: Self.fixtureURL))
 
         // ── Diff ─────────────────────────────────────────────────────────────
         let report = SchemaDiff.compare(native: native, reference: reference)
-        if !report.isMatch {
-            // Print the full diff so the failure is actionable, then fail.
-            print(report.render())
-            Issue.record("schema parity mismatch — see the printed diff above")
-        } else {
-            // Print a concise success summary (counts + the normalizations relied on).
-            print(report.render())
-        }
-        #expect(report.isMatch)
+        print(report.render())
+        #expect(report.isMatch, "schema parity mismatch — see the printed diff above")
+    }
+
+    /// Regenerates `Fixtures/js-sqlite-catalog.json` from the live Bun `bun:sqlite` migrations. Disabled by
+    /// default; run explicitly with `AD_CAPTURE_SCHEMA_FIXTURE=1` (needs `bun` + `src/storage/database.js`)
+    /// when the JS schema changes. NOT a gate — the frozen fixture is what `nativeCatalogMatchesReference`
+    /// compares against.
+    @Test(
+        "capture the JS SQLite reference fixture (regeneration tool, off by default)",
+        .enabled(
+            if: SQLiteReferenceExtractor.bunAvailable
+                && ProcessInfo.processInfo.environment["AD_CAPTURE_SCHEMA_FIXTURE"] != nil,
+            "set AD_CAPTURE_SCHEMA_FIXTURE=1 (with bun on PATH) to regenerate"))
+    func captureReferenceFixture() throws {
+        let reference = try SQLiteReferenceExtractor.build()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(reference).write(to: Self.fixtureURL)
+        print("captured JS SQLite reference → \(Self.fixtureURL.path)")
     }
 }
 
@@ -159,6 +176,7 @@ enum SchemaDiff {
         }
     }
 
+    // swiftlint:disable:next function_body_length  // one sequential table/index/fts/trigger diff pass
     static func compare(native: CatalogModel, reference: CatalogModel) -> Report {
         var report = Report()
         report.nativeCounts = (
