@@ -148,6 +148,34 @@ public enum CrawlPersist {
         }
     }
 
+    /// Bulk-mark a batch of already-tracked paths `processed` in ONE `UPDATE` — one `crawl_state` scan for
+    /// the whole batch, not one per path. ADDB collects an UPDATE's matches by a full table scan
+    /// (`Writer.collectMatches`), so a per-row `setCrawlState` is O(N) each and O(N²) over a frontier that
+    /// grows toward the corpus size; the `path IN (…)` batch amortizes the scan by the batch width. Clears
+    /// any prior error. Paths must already exist (they were seeded `pending`).
+    public static func markCrawlProcessed(_ db: Database, paths: [String]) throws(DBError) {
+        guard !paths.isEmpty else { return }
+        var placeholders: [String] = []
+        placeholders.reserveCapacity(paths.count)
+        var params: [String: Value] = [:]
+        for (index, path) in paths.enumerated() {
+            placeholders.append("$p\(index)")
+            params["p\(index)"] = .text(path)
+        }
+        let sql =
+            "UPDATE crawl_state SET status = 'processed', error = NULL WHERE path IN ("
+            + placeholders.joined(separator: ", ") + ")"
+        try db.transaction { (txn) throws(DBError) in _ = try txn.run(sql, params) }
+    }
+
+    /// One-time (idempotent): index `crawl_state.status` so `getPendingCrawlAny` (`WHERE status='pending'`)
+    /// is an index seek rather than a scan that skips past an ever-growing pile of `processed` rows.
+    public static func ensureCrawlStatusIndex(_ db: Database) throws(DBError) {
+        try db.transaction { (txn) throws(DBError) in
+            _ = try txn.run("CREATE INDEX IF NOT EXISTS idx_crawl_state_status ON crawl_state(status)")
+        }
+    }
+
     /// Seed a path as `pending` only if not already tracked (JS `seedCrawlIfNew`), so re-discovering a
     /// path never resets a `processed`/`failed` row. Returns `true` when a new row was inserted.
     @discardableResult
@@ -157,7 +185,17 @@ public enum CrawlPersist {
         let existing = try db.prepare("SELECT 1 FROM crawl_state WHERE path = $path")
             .all(["path": .text(path)])
         guard existing.isEmpty else { return false }
-        try setCrawlState(db, path: path, status: "pending", rootSlug: rootSlug, depth: depth)
+        // A PLAIN insert (the row is known-new from the probe above). setCrawlState's `INSERT … ON CONFLICT
+        // DO UPDATE` makes the engine collect the (non-existent) conflict by a full `crawl_state` scan —
+        // O(N) per seed, O(N²) over a frontier that grows to the corpus size (millions of refs seeded).
+        try db.transaction { (txn) throws(DBError) in
+            _ = try txn.run(
+                """
+                INSERT INTO crawl_state (path, status, root_slug, depth, error)
+                VALUES ($path, 'pending', $root_slug, $depth, NULL)
+                """,
+                ["path": .text(path), "root_slug": .text(rootSlug), "depth": .integer(Int64(depth))])
+        }
         return true
     }
 
@@ -256,6 +294,15 @@ public enum CrawlPersist {
     ) throws(DBError) {
         let doc = normalized.document
 
+        // Only an EXISTING doc needs the "replace children" DELETEs + the pages markConverted UPDATE below.
+        // A fresh page has no prior rows, so those would full-scan document_sections / document_relationships
+        // / pages for nothing (the engine collects an UPDATE/DELETE's matches by a full table scan) — O(N²)
+        // over a corpus that grows into the hundreds of thousands. `documents.key` is UNIQUE-indexed, so this
+        // probe is a cheap seek; on a first crawl it's always false and the scans never run.
+        let isReplace =
+            try !db.prepare("SELECT 1 FROM documents WHERE key = $key")
+            .all(["key": .text(doc.key)]).isEmpty
+
         try db.transaction { (txn) throws(DBError) in
             try insertPageRow(
                 txn, rootId: rootId, path: path, normalized, rawPayloadHash: hashes.rawPayload,
@@ -276,9 +323,11 @@ public enum CrawlPersist {
             // overwrites an earlier one — last-wins). We reproduce that EXACTLY by
             // deduping in Swift (last-wins, preserving first-seen order) then issuing
             // PLAIN inserts. The resulting rows are byte-identical to the JS upsert's.
-            try txn.run(
-                "DELETE FROM document_sections WHERE document_id = $document_id",
-                ["document_id": .integer(documentId)])
+            if isReplace {
+                try txn.run(
+                    "DELETE FROM document_sections WHERE document_id = $document_id",
+                    ["document_id": .integer(documentId)])
+            }
             for section in dedupedLastWins(
                 normalized.sections, key: { "\($0.sectionKind)\u{1F}\($0.sortOrder)" })
             {
@@ -307,9 +356,11 @@ public enum CrawlPersist {
             // intra-batch last-wins dedup, which we reproduce in Swift, then PLAIN
             // insert. The from_key is the document key (the relationship's own
             // fromKey falls back to it).
-            try txn.run(
-                "DELETE FROM document_relationships WHERE from_key = $from_key",
-                ["from_key": .text(doc.key)])
+            if isReplace {
+                try txn.run(
+                    "DELETE FROM document_relationships WHERE from_key = $from_key",
+                    ["from_key": .text(doc.key)])
+            }
             for relationship in dedupedLastWins(
                 normalized.relationships,
                 key: { "\($0.fromKey ?? doc.key)\u{1F}\($0.toKey)\u{1F}\($0.relationType)" })
@@ -330,10 +381,13 @@ public enum CrawlPersist {
 
             // ── 5. markConverted ────────────────────────────────────────────────
             // pages.js markConverted: UPDATE pages SET converted_at = ? WHERE path = ?
-            // (wall-clock; excluded from parity but written for completeness).
-            try txn.run(
-                "UPDATE pages SET converted_at = $converted_at WHERE path = $path",
-                ["converted_at": .text(now), "path": .text(path)])
+            // (wall-clock; excluded from parity). Only on a re-persist — a fresh page's row was just
+            // inserted (converted_at NULL, non-parity), and the UPDATE would otherwise full-scan `pages`.
+            if isReplace {
+                try txn.run(
+                    "UPDATE pages SET converted_at = $converted_at WHERE path = $path",
+                    ["converted_at": .text(now), "path": .text(path)])
+            }
         }
     }
 }

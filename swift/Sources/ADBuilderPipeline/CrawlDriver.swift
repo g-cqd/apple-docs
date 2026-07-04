@@ -136,6 +136,9 @@ public struct CrawlDriver: Sendable {
         _ adapter: any SourceAdapter, discovery: DiscoveryResult, rootId: Int64,
         rootIds: [String: Int64], run: BFSRun
     ) async throws -> Stats {
+        // Index `crawl_state.status` once so pulling the pending frontier stays an index seek as the
+        // processed pile grows (else `getPendingCrawlAny` degrades to an O(N) scan per pull).
+        try CrawlPersist.ensureCrawlStatusIndex(run.db)
         // Seed: each discovered key is a root-owned entry point at depth 0 (idempotent — a re-seed of an
         // already-tracked path never resets its processed/failed status).
         for key in discovery.keys {
@@ -164,6 +167,8 @@ public struct CrawlDriver: Sendable {
         while true {
             let pending = try CrawlPersist.getPendingCrawlAny(db, limit: width)
             if pending.isEmpty { break }
+            var succeeded: [String] = []
+            succeeded.reserveCapacity(pending.count)
             try await withThrowingTaskGroup(of: BFSOutcome.self) { group in
                 for item in pending {
                     group.addTask {
@@ -187,9 +192,9 @@ public struct CrawlDriver: Sendable {
                                     try CrawlPersist.seedCrawlIfNew(
                                         db, path: ref, rootSlug: f.rootSlug, depth: f.depth + 1)
                                 }
-                                try CrawlPersist.setCrawlState(
-                                    db, path: f.statePath, status: "processed", rootSlug: f.rootSlug,
-                                    depth: f.depth)
+                                // Deferred: the whole batch is marked `processed` in ONE bulk UPDATE below —
+                                // a per-row setCrawlState is an O(N) scan each over the growing frontier.
+                                succeeded.append(f.statePath)
                             } catch {
                                 try CrawlPersist.setCrawlState(
                                     db, path: f.statePath, status: "failed", rootSlug: f.rootSlug, depth: f.depth,
@@ -203,6 +208,8 @@ public struct CrawlDriver: Sendable {
                     }
                 }
             }
+            // Mark the batch's successes `processed` in one scan — before the next pull would re-read them.
+            try CrawlPersist.markCrawlProcessed(db, paths: succeeded)
         }
     }
 
