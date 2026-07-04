@@ -262,16 +262,24 @@ private func installShutdownOwner(
 
 /// (Re)installs the async-signal-safe self-pipe handler for SIGTERM/SIGINT.
 private func installPipeHandler() {
-    var action = sigaction()
-    action.__sigaction_u.__sa_handler = { _ in
-        // Async-signal-safe: one write, no allocation, no locks.
+    // Async-signal-safe: one write, no allocation, no locks.
+    let handler: @convention(c) (Int32) -> Void = { _ in
         var byte: UInt8 = 1
         _ = write(shutdownPipeWriteEnd, &byte, 1)
     }
+    #if canImport(Darwin)
+    var action = sigaction()
+    action.__sigaction_u.__sa_handler = handler
     sigemptyset(&action.sa_mask)
     action.sa_flags = 0
     sigaction(SIGTERM, &action, nil)
     sigaction(SIGINT, &action, nil)
+    #else
+    // Glibc's `struct sigaction` handler field has no portable Swift spelling; `signal` does, and its
+    // glibc BSD-persistent semantics are exactly what the re-armed self-pipe handler needs.
+    _ = signal(SIGTERM, handler)
+    _ = signal(SIGINT, handler)
+    #endif
 }
 
 /// `ad-server mcp` — the stdio MCP server (one serial client; no HTTP).
