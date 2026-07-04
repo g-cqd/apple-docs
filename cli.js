@@ -59,6 +59,33 @@ if (flags.help || !command) {
 const dataDir = flags.home ?? config.APPLE_DOCS_HOME
 const logLevel = flags.verbose ? 'debug' : config.APPLE_DOCS_LOG_LEVEL
 const logger = createLogger(logLevel)
+const dbPath = join(dataDir, 'apple-docs.db')
+
+// Native delegation runs BEFORE any DB is opened. The corpus is an ADDB file that
+// `bun:sqlite` cannot parse, so the `new DocsDatabase(dbPath)` below throws on it —
+// the flip therefore MUST precede it. RFC 0005 Phase E (serve verbs → ad-server) and
+// RFC 0007 P7 (CLI verbs → ad-cli) both default ON: a delegated verb execs the native
+// binary and the child's exit code propagates; only a verb/flag the native binaries
+// don't cover falls through to the Bun path (which opens the DB). stdio inherited.
+if (isNativeServeEnabled()) {
+  const serveArgs = nativeServeArgs({ command, subcommand, flags, dbPath })
+  const bin = serveArgs && adServerBinaryPath()
+  if (serveArgs && bin) {
+    logger.info(`serving via native ad-server (${bin})`)
+    const child = Bun.spawn([bin, ...serveArgs], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
+    process.exit(await child.exited)
+  }
+}
+if (isNativeCliEnabled() && !config.APPLE_DOCS_DEBUG) {
+  const cliArgs = nativeCliArgs({ command, subcommand, positional, flags, dbPath })
+  const bin = cliArgs && adCliBinaryPath()
+  if (cliArgs && bin) {
+    logger.debug(`verb via native ad-cli (${bin})`)
+    const child = Bun.spawn([bin, ...cliArgs], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
+    process.exit(await child.exited)
+  }
+}
+
 const isCrawlCommand = command === 'sync'
 const defaultRate = isCrawlCommand ? 500 : 5
 const defaultBurst = isCrawlCommand ? 500 : 2
@@ -83,45 +110,12 @@ const cleanup = () => {
   } catch {}
 }
 
-// Commands that hit the GitHub API benefit from local credentials.
+// Commands that hit the GitHub API benefit from local credentials. Only the Bun
+// fallback verbs reach here (the native flip above already exited for delegated
+// verbs); `setup` is the remaining user of this path.
 if (command === 'sync' || command === 'setup') {
   const { resolveGitHubAuth } = await import('./src/lib/git-auth-resolve.js')
   await resolveGitHubAuth({ flags, env: process.env, logger })
-}
-
-// RFC 0005 Phase E serving flip (DEFAULT-ON): hand the serve verbs (web serve,
-// mcp serve, mcp start) to the native ad-server when APPLE_DOCS_NATIVE doesn't
-// disable it + the binary resolves; any unsupported flag (or other verb), or an
-// absent binary, falls through to the Bun servers. stdio inherited; the child's
-// exit code propagates.
-if (isNativeServeEnabled()) {
-  const serveArgs = nativeServeArgs({ command, subcommand, flags, dbPath: join(dataDir, 'apple-docs.db') })
-  const bin = serveArgs && adServerBinaryPath()
-  if (serveArgs && bin) {
-    logger.info(`serving via native ad-server (${bin})`)
-    const child = Bun.spawn([bin, ...serveArgs], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
-    const code = await child.exited
-    cleanup()
-    process.exit(code)
-  }
-}
-
-// RFC 0007 P7 CLI flip (DEFAULT-ON): hand the read verbs to the native ad-cli when
-// APPLE_DOCS_NATIVE doesn't disable it + the binary resolves; any unsupported
-// flag/positional (or other verb), or an absent binary, falls through to the Bun
-// path. APPLE_DOCS_DEBUG (raw-envelope passthrough — `src/output/projection.js`)
-// is a JS-only output mode the native verbs don't implement, so defer to Bun when
-// it is set, preserving the debug bypass.
-if (isNativeCliEnabled() && !config.APPLE_DOCS_DEBUG) {
-  const cliArgs = nativeCliArgs({ command, subcommand, positional, flags, dbPath: join(dataDir, 'apple-docs.db') })
-  const bin = cliArgs && adCliBinaryPath()
-  if (cliArgs && bin) {
-    logger.debug(`read verb via native ad-cli (${bin})`)
-    const child = Bun.spawn([bin, ...cliArgs], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
-    const code = await child.exited
-    cleanup()
-    process.exit(code)
-  }
 }
 
 try {
