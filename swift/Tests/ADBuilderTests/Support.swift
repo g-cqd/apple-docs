@@ -2,21 +2,26 @@
 // network) and a response builder, used by the GitHubClient + adapter gates.
 
 import HTTPTypes
+import Synchronization
 
 @testable import ADBuilder
 
-/// A handler-driven `HTTPClient` stub — each `send` returns `handler(request)`. Single-
-/// threaded test use ⇒ `@unchecked Sendable` + an unguarded request log.
-final class StubHTTPClient: HTTPClient, @unchecked Sendable {
+/// A handler-driven `HTTPClient` stub — each `send` returns `handler(request)`. The request log is
+/// `Mutex`-guarded so concurrent `send`s (adapters fetch in parallel; the thread sanitizer flagged the
+/// former unguarded append) don't race — which also makes the stub a checked `Sendable`.
+final class StubHTTPClient: HTTPClient {
     let handler: @Sendable (HTTPClientRequest) -> HTTPClientResponse
-    nonisolated(unsafe) private(set) var requests: [HTTPClientRequest] = []
+    private let requestLog = Mutex<[HTTPClientRequest]>([])
+
+    /// The requests seen so far, in order (a snapshot taken under the lock).
+    var requests: [HTTPClientRequest] { requestLog.withLock { $0 } }
 
     init(_ handler: @escaping @Sendable (HTTPClientRequest) -> HTTPClientResponse) {
         self.handler = handler
     }
 
     func send(_ request: HTTPClientRequest) async throws -> HTTPClientResponse {
-        requests.append(request)
+        requestLog.withLock { $0.append(request) }
         return handler(request)
     }
 }
