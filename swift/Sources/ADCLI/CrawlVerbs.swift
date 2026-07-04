@@ -129,16 +129,14 @@ struct SyncCommand: AsyncParsableCommand {
         let result: CrawlDriver.SyncResult
         do {
             let discovery = try await adapter.discover(context)
-            guard let root = discovery.roots.first else {
+            guard !discovery.roots.isEmpty else {
                 FileHandle.standardError.write(Data("ad-cli: source '\(source)' discovered no root\n".utf8))
                 throw ExitCode(1)
             }
-            let rootId = try CrawlPersist.upsertRoot(
-                database, slug: root.slug, displayName: root.displayName, kind: root.kind,
-                source: root.source, seedPath: root.seedPath, sourceType: root.sourceType, now: now)
+            let (rootId, rootIds) = try upsertCrawlRoots(database, discovery.roots, now: now)
             result = try await CrawlDriver(registry: registry).sync(
-                sourceType: source, into: database, rootId: rootId, context: context, now: now,
-                embedder: embedder)
+                sourceType: source, into: database, rootId: rootId, rootIds: rootIds, context: context,
+                now: now, embedder: embedder)
         } catch let code as ExitCode {
             throw code
         } catch {

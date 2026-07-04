@@ -45,10 +45,15 @@ public struct CrawlDriver: Sendable {
     /// fetch when it hasn't (the incremental re-crawl). Survivors are then fetched + normalized (up to
     /// `maxConcurrency` in flight — the network-bound steps run in parallel) and persisted serially as
     /// they arrive (ADDB is single-writer, and `db` never crosses to a child task).
+    ///
+    /// A multi-root flat source (e.g. swift-docc's three archives) passes `rootIds` — a `slug -> rootId`
+    /// map — so each page persists under its own root: the key's leading path segment is its root slug
+    /// (`<slug>/…`, the JS `key.split('/', 1)[0]`). Keys whose slug matches no entry fall back to
+    /// `rootId`; a single-root source leaves `rootIds` empty and everything lands under `rootId`.
     @discardableResult
     public func crawl(
-        sourceType: String, into db: Database, rootId: Int64, context: SourceContext, now: String,
-        maxConcurrency: Int = 8
+        sourceType: String, into db: Database, rootId: Int64, rootIds: [String: Int64] = [:],
+        context: SourceContext, now: String, maxConcurrency: Int = 8
     ) async throws -> Stats {
         let adapter = try registry.adapter(for: sourceType)
         let discovery = try await adapter.discover(context)
@@ -78,13 +83,14 @@ public struct CrawlDriver: Sendable {
         try await withThrowingTaskGroup(of: Fetched?.self) { group in
             for _ in 0 ..< Swift.max(1, maxConcurrency) {
                 guard let key = keys.next() else { break }
-                group.addTask { await self.fetchNormalize(adapter, key, context) }
+                let keyRootId = Self.rootId(forKey: key, rootIds: rootIds, default: rootId)
+                group.addTask { await self.fetchNormalize(adapter, key, keyRootId, context) }
             }
             while let result = try await group.next() {
                 if let fetched = result {
                     do {
                         try CrawlPipeline.persist(
-                            fetched.page, into: db, rootId: rootId, path: fetched.path,
+                            fetched.page, into: db, rootId: fetched.rootId, path: fetched.path,
                             hashes: .init(content: fetched.contentHash, rawPayload: fetched.rawHash),
                             etag: fetched.etag, lastModified: fetched.lastModified, now: now)
                         stats.persisted += 1
@@ -95,11 +101,19 @@ public struct CrawlDriver: Sendable {
                     stats.failed += 1
                 }
                 if let key = keys.next() {
-                    group.addTask { await self.fetchNormalize(adapter, key, context) }
+                    let keyRootId = Self.rootId(forKey: key, rootIds: rootIds, default: rootId)
+                    group.addTask { await self.fetchNormalize(adapter, key, keyRootId, context) }
                 }
             }
         }
         return stats
+    }
+
+    /// The rootId a key persists under: `rootIds[<leading path segment>]`, else the default `rootId`.
+    /// The leading segment is the key's root slug (`<slug>/…`, the JS `key.split('/', 1)[0]`).
+    static func rootId(forKey key: String, rootIds: [String: Int64], default defaultRootId: Int64) -> Int64 {
+        guard !rootIds.isEmpty else { return defaultRootId }
+        return rootIds[String(key.prefix { $0 != "/" })] ?? defaultRootId
     }
 
     /// The ETag stored for `key`'s page, or `nil` when the page is new, has no stored ETag, or the read
@@ -120,6 +134,9 @@ public struct CrawlDriver: Sendable {
     private struct Fetched: Sendable {
         let page: NormalizedPage
         let path: String
+        /// The root this key resolved to (`crawl`'s `rootIds[slug] ?? rootId`), carried out of the child
+        /// task so the serial persist attributes each page to its own root.
+        let rootId: Int64
         /// `content_hash` = SHA-256 of the stable-stringified normalized doc (JS persist parity).
         let contentHash: String
         /// `raw_payload_hash` = SHA-256 of the raw upstream payload bytes.
@@ -129,13 +146,13 @@ public struct CrawlDriver: Sendable {
     }
 
     private func fetchNormalize(
-        _ adapter: any SourceAdapter, _ key: String, _ context: SourceContext
+        _ adapter: any SourceAdapter, _ key: String, _ rootId: Int64, _ context: SourceContext
     ) async -> Fetched? {
         do {
             let result = try await adapter.fetch(key, context)
             let page = try adapter.normalize(result.key, result.payload)
             return Fetched(
-                page: page, path: page.document.url ?? Self.crawlPath(forKey: key),
+                page: page, path: page.document.url ?? Self.crawlPath(forKey: key), rootId: rootId,
                 contentHash: Self.sha256Hex(Array(page.stableStringified().utf8)),
                 rawHash: Self.sha256Hex(Self.rawBytes(result.payload)),
                 etag: result.etag, lastModified: result.lastModified)
@@ -155,11 +172,11 @@ public struct CrawlDriver: Sendable {
 
     /// Crawl a source then index it — the full `ad-build sync` for one source.
     public func sync(
-        sourceType: String, into db: Database, rootId: Int64, context: SourceContext, now: String,
-        embedder: some ChunkEmbedder
+        sourceType: String, into db: Database, rootId: Int64, rootIds: [String: Int64] = [:],
+        context: SourceContext, now: String, embedder: some ChunkEmbedder
     ) async throws -> SyncResult {
         let crawlStats = try await crawl(
-            sourceType: sourceType, into: db, rootId: rootId, context: context, now: now)
+            sourceType: sourceType, into: db, rootId: rootId, rootIds: rootIds, context: context, now: now)
         let indexResult = try IndexEmbeddings.run(db, embedder: embedder)
         return SyncResult(crawl: crawlStats, index: indexResult)
     }
