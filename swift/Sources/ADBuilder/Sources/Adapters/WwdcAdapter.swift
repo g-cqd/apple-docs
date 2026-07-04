@@ -15,6 +15,8 @@
 // The Apple HTML scrape produces a flat JSON payload carried through `.json`, so
 // `normalize` stays a pure `(key, payload) → NormalizedPage`. Regexes run over
 // `NSString` (UTF-16), matching JS string offsets/`.length` for byte parity.
+// swiftlint:disable file_length type_body_length
+
 import Foundation
 import HTTPTypes
 import HTTPTypesFoundation

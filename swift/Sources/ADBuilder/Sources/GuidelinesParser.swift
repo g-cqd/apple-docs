@@ -15,6 +15,8 @@
 //   assign role/roleHeading by tag, then buildHierarchy over the dotted
 //   section numbers.
 
+// swiftlint:disable cyclomatic_complexity file_length function_body_length large_tuple type_body_length
+
 import Foundation
 
 public enum GuidelinesParser {

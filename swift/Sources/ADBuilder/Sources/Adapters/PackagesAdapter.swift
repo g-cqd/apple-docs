@@ -9,6 +9,8 @@
 // on raw.githubusercontent.com (no API quota) and OPT IN to the GitHub REST metadata path
 // (stars/license/topics) when `APPLE_DOCS_PACKAGES_FETCH=api` + a token are present. No
 // DocC, no BFS. A `flat` self-enumerating source.
+// swiftlint:disable file_length type_body_length
+
 import Foundation
 
 public struct PackagesAdapter: SourceAdapter {

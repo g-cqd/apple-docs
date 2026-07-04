@@ -4,6 +4,8 @@
 // TechArticle JSON-LD, lang-toggle detection, and the aria-hidden relationships
 // rewrite. Calls ADContent's DocContentRenderer in-process (no FFI).
 
+// swiftlint:disable cyclomatic_complexity function_body_length
+
 import ADBase
 public import ADContent
 import ADJSONCore

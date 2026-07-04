@@ -90,6 +90,19 @@ jobs:
           curl -fsSL --retry 3 "https://download.swift.org/swift-6.4.x-branch/${DIR}/${SNAP}/${SNAP}-${SUF}.tar.gz" | tar xz -C "$RUNNER_TEMP"
           echo "${RUNNER_TEMP}/${SNAP}-${SUF}/usr/bin" >> "$GITHUB_PATH"
           "${RUNNER_TEMP}/${SNAP}-${SUF}/usr/bin/swift" --version
+      - name: Install SwiftLint (Linux, pinned)
+        # The ADBuildTools Lint plugin runs BOTH swift-format AND `swiftlint --strict` over the canonical
+        # .swiftlint.yml metrics gate; the ubuntu runner has no swiftlint, so install the pinned portable
+        # Linux binary (SwiftLint publishes swiftlint_linux_{amd64,arm64}.zip).
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in aarch64|arm64) ARCH=arm64 ;; *) ARCH=amd64 ;; esac
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/swiftlint.zip" \
+            "https://github.com/realm/SwiftLint/releases/download/0.65.0/swiftlint_linux_${ARCH}.zip"
+          unzip -oq "$RUNNER_TEMP/swiftlint.zip" -d "$RUNNER_TEMP/swiftlint"
+          chmod +x "$RUNNER_TEMP/swiftlint/swiftlint"
+          echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/swiftlint/swiftlint" version
       - name: Swift lint (ADBuildTools plugin, canonical .swift-format)
         working-directory: swift
         run: APPLEDOCS_DEV=1 swift package --disable-sandbox lint

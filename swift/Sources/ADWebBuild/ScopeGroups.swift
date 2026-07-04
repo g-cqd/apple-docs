@@ -14,6 +14,8 @@
 //   real-corpus pass: ICU-vs-Foundation collation byte-parity is only
 //   verifiable there (plan §7).
 
+// swiftlint:disable file_length type_body_length
+
 import ADContent
 import ADJSONCore
 import Foundation

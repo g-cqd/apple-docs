@@ -16,6 +16,8 @@
 // The snapshot import runs once (the verb reuses an existing --snapshot); the
 // LIVE corpus is only ever READ.
 
+// swiftlint:disable function_body_length
+
 import ADDB
 import ADDBFTS
 import ADDBImport

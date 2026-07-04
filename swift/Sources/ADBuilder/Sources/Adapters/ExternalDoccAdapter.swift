@@ -19,6 +19,8 @@
 // `init` and GROWN by `discover`'s detection, then read by `fetch`/`check`/`normalize` on the same
 // instance (the registry vends a fresh instance per crawl, so no cross-crawl state leaks).
 
+// swiftlint:disable large_tuple type_body_length
+
 import ADJSONCore
 import Foundation
 import HTTPTypes

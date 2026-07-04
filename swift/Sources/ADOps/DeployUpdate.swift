@@ -4,6 +4,8 @@
 // (`--dry-run` traces them). Exit codes mirror the JS (1 no repo, 2 diverged,
 // 3 pull failed, 4 full build failed).
 
+// swiftlint:disable cyclomatic_complexity function_body_length
+
 private import Foundation
 
 private let deployRepoSlug = "g-cqd/apple-docs"

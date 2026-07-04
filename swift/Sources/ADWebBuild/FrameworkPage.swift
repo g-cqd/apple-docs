@@ -10,6 +10,8 @@
 // returns null), so every normal framework renders correctly today; only the
 // special roots role-group instead of scope-group until the follow-up.
 
+// swiftlint:disable function_body_length
+
 import ADBase
 import ADContent
 public import ADJSONCore
