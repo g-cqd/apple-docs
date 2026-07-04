@@ -4,6 +4,8 @@
 // Launchctl, so `--dry-run` traces them without executing. Must be run as root
 // on the live host (the CLI's `--execute`).
 
+// swiftlint:disable function_body_length
+
 private import Foundation
 
 private let appLabelKeys = ["LABEL_PROXY", "LABEL_WEB", "LABEL_MCP", "LABEL_WATCHDOG", "LABEL_AUTOROLL"]

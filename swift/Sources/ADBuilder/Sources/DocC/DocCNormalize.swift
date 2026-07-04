@@ -6,6 +6,8 @@
 // overrides ride in as `keyMapper` / `urlBuilder` (identity + the default developer.apple.com
 // URL for the base normalize — the B3 adapters pass their overrides).
 
+// swiftlint:disable function_parameter_count
+
 public import ADJSONCore
 import OrderedCollections
 

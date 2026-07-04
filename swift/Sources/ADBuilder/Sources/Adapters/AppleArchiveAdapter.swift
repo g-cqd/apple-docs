@@ -9,6 +9,8 @@
 // A `final class` (like SwiftBookAdapter): the guide catalog is built in
 // `discover` and read by `fetch`/`normalize` on the same instance.
 
+// swiftlint:disable type_body_length
+
 import Foundation
 import HTTPTypes
 import HTTPTypesFoundation

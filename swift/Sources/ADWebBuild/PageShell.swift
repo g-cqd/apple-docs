@@ -3,6 +3,8 @@
 // against the JS `html` DSL output (2-space-indented SEO lines), escaping via
 // `WebHtml.escape` (Bun.escapeHTML semantics).
 
+// swiftlint:disable function_parameter_count
+
 enum PageShell {
     private static func esc(_ s: String) -> String { WebHtml.escape(s) }
 

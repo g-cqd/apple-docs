@@ -4,6 +4,8 @@
 // raw `.md`, HTML-source article intros). ADContent is Foundation-free, so the
 // JS regexes are replicated as hand-rolled scanners (a build-time path).
 
+// swiftlint:disable cyclomatic_complexity file_length function_body_length type_body_length
+
 enum HtmlMarkdown {
     static let maxBlockquoteDepth = 32
 

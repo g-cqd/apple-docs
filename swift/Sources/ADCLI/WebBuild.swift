@@ -5,6 +5,8 @@
 // per-document render loop + search/sitemap/assets are stubbed (logged to stderr
 // from the BuildResult ledger). Parity oracle: `bun run cli.js web build`.
 
+// swiftlint:disable cyclomatic_complexity function_body_length function_parameter_count
+
 import ADArchive
 import ADBase
 import ADContent
