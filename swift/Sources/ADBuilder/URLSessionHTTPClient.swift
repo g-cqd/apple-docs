@@ -23,11 +23,15 @@ public struct URLSessionHTTPClient: HTTPClient {
     }
 
     /// The default crawl session: ephemeral (no shared cache so `304` is observable
-    /// rather than transparently served from cache), advertises gzip/deflate.
-    public init() {
+    /// rather than transparently served from cache), advertises gzip/deflate, and lifts
+    /// the per-host connection cap to `maxConnectionsPerHost` (Foundation's default is 6,
+    /// which would collapse a `maxConcurrency`-wide crawl to 6 in-flight requests against
+    /// a single origin — the bottleneck on a latency-heavy host like developer.apple.com).
+    public init(maxConnectionsPerHost: Int = 100) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.httpAdditionalHeaders = ["Accept-Encoding": "gzip, deflate"]
+        configuration.httpMaximumConnectionsPerHost = Swift.max(1, maxConnectionsPerHost)
         self.session = URLSession(configuration: configuration)
     }
 
