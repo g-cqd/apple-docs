@@ -173,6 +173,70 @@ public enum GhRelease {
         return (response.body.count, actual)
     }
 
+    /// Stream a URL to `destPath` with BOUNDED memory and return its size + the
+    /// streamed SHA-256. `URLSession.downloadTask` writes the body straight to a
+    /// temp file (never buffered whole — the multi-GB snapshot asset the buffering
+    /// `downloadAndVerify` above cannot serve), following the HTTP/2 redirects
+    /// GitHub asset URLs use; the file is then hashed in 1 MiB chunks. The
+    /// completion-handler form is used (not `download(for:)`) because it is
+    /// available on Linux's FoundationNetworking too. Network-only — no GhFetcher
+    /// seam (the caller verifies the returned digest against the sidecar).
+    public static func downloadToFile(_ url: String, to destPath: String) async throws -> (
+        bytes: Int64, sha256: String
+    ) {
+        guard let requestURL = URL(string: url) else {
+            throw GhReleaseError(message: "invalid url \(url)", code: "invalid-url")
+        }
+        var request = URLRequest(url: requestURL)
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+        let session = URLSession(configuration: .ephemeral)
+
+        // The handler's temp file is deleted when it returns, so move it aside first.
+        let (staged, status): (URL, Int) = try await withCheckedThrowingContinuation { continuation in
+            let task = session.downloadTask(with: request) { location, response, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let location else {
+                    continuation.resume(
+                        throwing: GhReleaseError(
+                            message: "download produced no file for \(url)", code: "download-failed"))
+                    return
+                }
+                let kept = location.deletingLastPathComponent()
+                    .appendingPathComponent("adcli-download-\(UUID().uuidString)")
+                do {
+                    try FileManager.default.moveItem(at: location, to: kept)
+                } catch {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: (kept, (response as? HTTPURLResponse)?.statusCode ?? 0))
+            }
+            task.resume()
+        }
+
+        guard (200 ..< 300).contains(status) else {
+            try? FileManager.default.removeItem(at: staged)
+            throw GhReleaseError(
+                message: "download failed: HTTP \(status) for \(url)", code: "download-failed", status: status)
+        }
+        guard let sha = SHA256Hex.hexOfFile(staged.path) else {
+            try? FileManager.default.removeItem(at: staged)
+            throw GhReleaseError(message: "cannot hash downloaded file at \(staged.path)", code: "hash-failed")
+        }
+        let destURL = URL(fileURLWithPath: destPath)
+        try? FileManager.default.removeItem(at: destURL)
+        try FileManager.default.createDirectory(
+            at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: staged, to: destURL)
+        let attributes = try? FileManager.default.attributesOfItem(atPath: destPath)
+        let size = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+        return (size, sha)
+    }
+
     /// Channel-aware resolution. `stable` → `fetchLatest`. `beta` requires the JS
     /// setup --beta macOS-base policy (src/commands/setup/helpers.js), which is
     /// not ported here — the CLI passes a resolver seam; absent it, beta errors.
@@ -218,3 +282,19 @@ private func leadingSha256Hex(_ text: String) -> String? {
 }
 
 private func prefix16(_ value: String) -> String { String(value.prefix(16)) }
+
+extension SHA256Hex {
+    /// Streamed SHA-256 of a file's contents → 64-char lowercase hex, read in
+    /// bounded 1 MiB chunks (via ``SHA256Streaming``) so a multi-GB archive never
+    /// lands wholly in memory. nil when the file can't be opened. Identical digest
+    /// to `SHA256Hex.hex` over the file's bytes.
+    public static func hexOfFile(_ path: String, chunkSize: Int = 1 << 20) -> String? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        var hasher = SHA256Streaming()
+        while let data = try? handle.read(upToCount: chunkSize), !data.isEmpty {
+            hasher.update([UInt8](data))
+        }
+        return hasher.finalize()
+    }
+}
