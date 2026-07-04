@@ -64,28 +64,41 @@ public struct AppleDoccAdapter: SourceAdapter {
         var seen = Set<String>()  // dedupe by slug (the JS `db.upsertRoot` → unique `getRoots()`).
 
         // sections → groups → technologies.
-        index["sections"].forEachElement { section in
-            section["groups"].forEachElement { group in
-                let kind = Self.kindMap[group["name"].string ?? ""] ?? "unknown"
-                group["technologies"].forEachElement { tech in
-                    // `normalizeIdentifier(tech.destination?.identifier)` — nil for non-page identifiers
-                    // (full `https://` URLs, e.g. HIG's destination → rejected → not a DocC root here).
-                    guard let id = Identifier.normalize(tech["destination"]["identifier"].string) else {
-                        return
+        index["sections"]
+            .forEachElement { section in
+                section["groups"]
+                    .forEachElement { group in
+                        let kind = Self.kindMap[group["name"].string ?? ""] ?? "unknown"
+                        group["technologies"]
+                            .forEachElement { tech in
+                                // `normalizeIdentifier(tech.destination?.identifier)` — nil for non-page identifiers
+                                // (full `https://` URLs, e.g. HIG's destination → rejected → not a DocC root here).
+                                guard let id = Identifier.normalize(tech["destination"]["identifier"].string) else {
+                                    return
+                                }
+                                let slug = Self.extractRootSlug(id)
+                                guard !slug.isEmpty, seen.insert(slug).inserted else { return }
+                                // `source` = the adapter type (JS `upsertRoot(slug, title, kind, 'apple-index')`;
+                                // the roots `source_type` is derived downstream). Seed each root at its slug — the
+                                // JS `keys: roots.map(root => root.slug)`, and DocC roots carry no explicit seed_path
+                                // (`seedPath = root.seed_path ?? rootSlug` = the slug).
+                                roots.append(
+                                    DiscoveredRoot(
+                                        slug: slug, displayName: tech["title"].string ?? "", kind: kind,
+                                        source: Self.type))
+                                keys.append(slug)
+                            }
                     }
-                    let slug = Self.extractRootSlug(id)
-                    guard !slug.isEmpty, seen.insert(slug).inserted else { return }
-                    // `source` = the adapter type (JS `upsertRoot(slug, title, kind, 'apple-index')`;
-                    // the roots `source_type` is derived downstream). Seed each root at its slug — the
-                    // JS `keys: roots.map(root => root.slug)`, and DocC roots carry no explicit seed_path
-                    // (`seedPath = root.seed_path ?? rootSlug` = the slug).
-                    roots.append(
-                        DiscoveredRoot(
-                            slug: slug, displayName: tech["title"].string ?? "", kind: kind,
-                            source: Self.type))
-                    keys.append(slug)
-                }
             }
+        // Optional scope knob for the ~350k crawl: `AD_APPLEDOCC_SCOPE=swiftui,foundation` restricts the
+        // discovered roots to the listed slugs, so a first pass can validate the BFS frontier on a framework
+        // subset before widening to every root. Unset (or empty) ⇒ every DocC root (the JS default).
+        if let scope = ProcessInfo.processInfo.environment["AD_APPLEDOCC_SCOPE"],
+            !scope.trimmingCharacters(in: .whitespaces).isEmpty
+        {
+            let wanted = Set(scope.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+            roots = roots.filter { wanted.contains($0.slug) }
+            keys = roots.map(\.slug)
         }
         return DiscoveryResult(keys: keys, roots: roots)
     }
