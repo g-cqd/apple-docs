@@ -13,6 +13,10 @@ import Foundation
 import HTTPTypes
 import HTTPTypesFoundation
 
+#if canImport(FoundationNetworking)
+    import FoundationNetworking  // URLSession/URLRequest live here on Linux (the Foundation split)
+#endif
+
 public struct URLSessionHTTPClient: HTTPClient {
     private let session: URLSession
 

@@ -10,6 +10,10 @@
 
 private import Foundation
 
+#if canImport(FoundationNetworking)
+    private import FoundationNetworking  // URLSession/URLRequest live here on Linux (the Foundation split)
+#endif
+
 /// The two supervised backends.
 private struct Backend {
     let name: String
