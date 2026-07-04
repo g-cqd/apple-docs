@@ -41,6 +41,7 @@ struct CrawlDriverIncrementalTests {
     private struct UnchangedAdapter: SourceAdapter {
         static let type = "inc-unchanged"
         static let displayName = "Inc Unchanged"
+        static let syncMode = SyncMode.flat
         func discover(_ context: SourceContext) async throws -> DiscoveryResult {
             DiscoveryResult(keys: CrawlDriverIncrementalTests.keys(Self.type))
         }
@@ -59,6 +60,7 @@ struct CrawlDriverIncrementalTests {
     private struct ModifiedAdapter: SourceAdapter {
         static let type = "inc-modified"
         static let displayName = "Inc Modified"
+        static let syncMode = SyncMode.flat
         func discover(_ context: SourceContext) async throws -> DiscoveryResult {
             DiscoveryResult(keys: CrawlDriverIncrementalTests.keys(Self.type))
         }

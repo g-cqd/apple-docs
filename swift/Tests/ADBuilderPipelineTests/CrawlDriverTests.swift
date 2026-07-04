@@ -175,6 +175,7 @@ struct CrawlDriverTests {
     private struct FlakyAdapter: SourceAdapter {
         static let type = "flaky"
         static let displayName = "Flaky"
+        static let syncMode = SyncMode.flat
         func discover(_ context: SourceContext) async throws -> DiscoveryResult {
             DiscoveryResult(keys: ["flaky/ok1", "flaky/bad", "flaky/ok2"])
         }
@@ -226,6 +227,7 @@ struct CrawlDriverTests {
     private struct MultiRootAdapter: SourceAdapter {
         static let type = "multiroot"
         static let displayName = "MultiRoot"
+        static let syncMode = SyncMode.flat
         func discover(_ context: SourceContext) async throws -> DiscoveryResult {
             DiscoveryResult(
                 keys: ["alpha/one", "alpha/two", "beta/one"],
@@ -288,5 +290,84 @@ struct CrawlDriverTests {
         }
         #expect(byRoot[alphaId] == 2)
         #expect(byRoot[betaId] == 1)
+    }
+
+    /// A `.crawl` (reference-following) adapter over a small graph: seed → {a, b, cross-root x};
+    /// a → {c, missing}; b,c → {}. `docs/missing` 404s (→ failed); the cross-root ref is ignored.
+    private struct CrawlAdapter: SourceAdapter {
+        static let type = "crawlmock"
+        static let displayName = "CrawlMock"
+        static let syncMode = SyncMode.crawl
+        func discover(_ context: SourceContext) async throws -> DiscoveryResult {
+            DiscoveryResult(
+                keys: ["docs/seed"],
+                roots: [DiscoveredRoot(slug: "docs", displayName: "Docs", kind: "collection", source: Self.type)])
+        }
+        func fetch(_ key: String, _ context: SourceContext) async throws -> FetchResult {
+            if key == "docs/missing" { throw AdapterError.httpStatus(404, key) }
+            return FetchResult(key: key, payload: .html("<main><h1>\(key)</h1><p>body</p></main>"))
+        }
+        func check(_ key: String, previousState: String?, _ context: SourceContext) async throws
+            -> CheckResult
+        { CheckResult(status: .modified, changed: true) }
+        func normalize(_ key: String, _ payload: SourcePayload) throws -> NormalizedPage {
+            guard case .html(let html) = payload else { throw AdapterError.unexpectedPayload("html") }
+            return HtmlNormalize.parse(
+                html, key: key, sourceType: Self.type, kind: "article", framework: Self.type,
+                url: "https://crawl/\(key)")
+        }
+        func extractReferences(_ key: String, _ payload: SourcePayload) -> [String] {
+            switch key {
+                case "docs/seed": return ["docs/a", "docs/b", "other/x"]  // other/x is cross-root → ignored
+                case "docs/a": return ["docs/c", "docs/missing"]
+                default: return []
+            }
+        }
+    }
+
+    @Test func crawlModeBFSFollowsReferencesAndDemotes404() async throws {
+        let context = SourceContext(
+            client: StubClient { _ in
+                HTTPClientResponse(status: .init(code: 200), headerFields: [:], body: ResponseBody(buffered: []))
+            },
+            rateLimiter: RateLimiter(rate: 1_000_000, burst: 1_000_000))
+
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("crawlbfs-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try Database.open(
+            at: dir.appendingPathComponent("bfs.adsql").path, options: DatabaseOptions())
+        defer { db.close() }
+        _ = try migrateSchema(db)
+
+        let now = "2026-06-20T00:00:00.000Z"
+        let rootId = try CrawlPersist.upsertRoot(
+            db, slug: "docs", displayName: "Docs", kind: "collection", source: "crawlmock", now: now)
+
+        let driver = CrawlDriver(registry: SourceRegistry([CrawlAdapter.self]))
+        let stats = try await driver.crawl(
+            sourceType: "crawlmock", into: db, rootId: rootId, context: context, now: now)
+
+        // Persisted: seed + a + b + c = 4; failed: docs/missing (404) = 1.
+        #expect(stats.persisted == 4)
+        #expect(stats.failed == 1)
+
+        // The frontier drained: every path processed or failed, none pending.
+        let crawl = try CrawlPersist.getCrawlStats(db, rootSlug: "docs")
+        #expect(crawl.pending == 0)
+        #expect(crawl.processed == 4)
+        #expect(crawl.failed == 1)
+
+        // The cross-root `other/x` reference was never enqueued.
+        let other = try CrawlPersist.getCrawlStats(db, rootSlug: "other")
+        #expect(other.pending == 0 && other.processed == 0 && other.failed == 0)
+
+        let rows = try db.prepare("SELECT COUNT(*) AS c FROM pages").all([:])
+        #expect(
+            {
+                guard case .integer(let c)? = rows.first?["c"] else { return -1 }
+                return Int(c)
+            }() == 4)
     }
 }
