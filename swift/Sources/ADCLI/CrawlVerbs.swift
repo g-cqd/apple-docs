@@ -60,6 +60,16 @@ func loadIndexEmbedder(dbPath: String) throws -> Embedder {
     }
 }
 
+/// Build the crawl HTTP context. A bulk crawl is throughput-bound, not politeness-bound, so this
+/// mirrors the JS `sync` budget (rate 500 req/s — `config.js` `APPLE_DOCS_RATE` sync default) rather
+/// than the interactive 5 req/s; `burst` = the rate so a `--concurrency`-deep first wave isn't stalled
+/// on an empty token bucket.
+func crawlContext(rate: Double, concurrency: Int) -> SourceContext {
+    SourceContext(
+        client: URLSessionHTTPClient(maxConnectionsPerHost: concurrency),
+        rateLimiter: RateLimiter(rate: rate, burst: Swift.max(rate, 1)))
+}
+
 /// `ad-cli index --db <ADDB> [--full]` — build/resume the embedding index over
 /// everything persisted (IndexEmbeddings.run; the post-crawl pass that makes
 /// crawled pages searchable).
@@ -109,8 +119,11 @@ struct SyncCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
     var db: String
 
-    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 8).")
-    var concurrency: Int = 8
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 100).")
+    var concurrency: Int = 100
+
+    @Option(name: .long, help: "Rate-limiter budget in requests/sec (default 500, matching bun sync).")
+    var rate: Double = 500
 
     @Flag(name: .long, help: "Emit the stats as JSON.")
     var json = false
@@ -130,7 +143,7 @@ struct SyncCommand: AsyncParsableCommand {
         let database = try openCrawlCorpus(db)
         let embedder = try loadIndexEmbedder(dbPath: db)
         let now = jsIsoNow()
-        let context = SourceContext(client: URLSessionHTTPClient(), rateLimiter: RateLimiter())
+        let context = crawlContext(rate: rate, concurrency: concurrency)
 
         let result: CrawlDriver.SyncResult
         do {
@@ -183,8 +196,11 @@ struct SyncAllCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
     var db: String
 
-    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 8).")
-    var concurrency: Int = 8
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 100).")
+    var concurrency: Int = 100
+
+    @Option(name: .long, help: "Rate-limiter budget in requests/sec (default 500, matching bun sync).")
+    var rate: Double = 500
 
     @Option(name: .long, help: "Comma-separated source subset (default: all native sources).")
     var only: String?
@@ -195,7 +211,7 @@ struct SyncAllCommand: AsyncParsableCommand {
     func run() async throws {
         let registry = SourceRegistry(SourceRegistry.nativeAdapterTypes)
         let database = try openCrawlCorpus(db)
-        let context = SourceContext(client: URLSessionHTTPClient(), rateLimiter: RateLimiter())
+        let context = crawlContext(rate: rate, concurrency: concurrency)
         let driver = CrawlDriver(registry: registry)
 
         let sources =
