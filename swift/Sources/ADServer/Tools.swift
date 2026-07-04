@@ -200,13 +200,18 @@ private func renderFontText(_ input: RenderFontTextInput, _ ctx: MCPToolContext)
     let family = font.familyDisplayName ?? ""
 
     let content: String
-    if let path = font.filePath, fontPathWithinSystemRoots(path), isLikelySfnt(path),
-        let svg = FontText.renderSVG(fontPath: path, text: text, pointSize: Double(pointSize))
-    {
-        content = svg
-    } else {
+    // CoreText (FontText.renderSVG) is Darwin-only; elsewhere the placeholder SVG is the whole story.
+    #if canImport(CoreText)
+        if let path = font.filePath, fontPathWithinSystemRoots(path), isLikelySfnt(path),
+            let svg = FontText.renderSVG(fontPath: path, text: text, pointSize: Double(pointSize))
+        {
+            content = svg
+        } else {
+            content = fontTextSvgFallback(fontFamily: family, text: text, pointSize: pointSize)
+        }
+    #else
         content = fontTextSvgFallback(fontFamily: family, text: text, pointSize: pointSize)
-    }
+    #endif
     // projectRenderFontText: { text, mimeType, content } in that key order.
     return .okValue(
         .object([
@@ -222,45 +227,53 @@ private func renderFontText(_ input: RenderFontTextInput, _ ctx: MCPToolContext)
 /// are fetched via the returned resource URI (not inlined). projectRenderSfSymbol
 /// drops file_path + (for png) svg → { name, scope, format, resourceUri, svg? }.
 private func renderSfSymbol(_ input: RenderSfSymbolInput, _ ctx: MCPToolContext) -> MCPToolResult {
-    let scope = input.scope ?? .public
-    let format = input.format ?? .png
-    let pointSize = clampInteger(input.size ?? 64, min: 8, max: 1024)
-    // weight/scale arrive pre-validated from the schema enum; public-only.
-    let weight = scope == .public ? (input.weight?.rawValue ?? "regular") : "regular"
-    let scale = scope == .public ? (input.scale?.rawValue ?? "medium") : "medium"
-    let rawColor = input.color ?? "#000000"
-    let color =
-        (format == .svg && rawColor.lowercased() == "currentcolor") ? "currentColor" : normalizeSymbolColor(rawColor)
-    let background = normalizeSymbolBackground(input.background)
+    // SF Symbol PDF→SVG rasterization needs AppKit/CoreGraphics — Darwin only.
+    #if canImport(AppKit)
+        let scope = input.scope ?? .public
+        let format = input.format ?? .png
+        let pointSize = clampInteger(input.size ?? 64, min: 8, max: 1024)
+        // weight/scale arrive pre-validated from the schema enum; public-only.
+        let weight = scope == .public ? (input.weight?.rawValue ?? "regular") : "regular"
+        let scale = scope == .public ? (input.scale?.rawValue ?? "medium") : "medium"
+        let rawColor = input.color ?? "#000000"
+        let color =
+            (format == .svg && rawColor.lowercased() == "currentcolor")
+            ? "currentColor" : normalizeSymbolColor(rawColor)
+        let background = normalizeSymbolBackground(input.background)
 
-    guard let symbol = ctx.db.getSfSymbol(scope: scope.rawValue, name: input.name) else {
-        return .failure("SF Symbol not found: \(scope.rawValue)/\(input.name)")
-    }
-    if let unsupported = symbol.renderUnsupported, unsupported != 0 {
-        return .failure(
-            "SF Symbol \(scope.rawValue)/\(input.name) is cataloged but not renderable from this snapshot — its glyph ships with a newer macOS than the build host. Beta snapshots built on that macOS carry it (apple-docs setup --beta)."
-        )
-    }
+        guard let symbol = ctx.db.getSfSymbol(scope: scope.rawValue, name: input.name) else {
+            return .failure("SF Symbol not found: \(scope.rawValue)/\(input.name)")
+        }
+        if let unsupported = symbol.renderUnsupported, unsupported != 0 {
+            return .failure(
+                "SF Symbol \(scope.rawValue)/\(input.name) is cataloged but not renderable from this snapshot — its glyph ships with a newer macOS than the build host. Beta snapshots built on that macOS carry it (apple-docs setup --beta)."
+            )
+        }
 
-    let resourceUri = "apple-docs://sf-symbol/\(scope.rawValue)/\(encodeURIComponentJS(input.name)).\(format.rawValue)"
-    var out: OrderedDictionary<String, JSONValue> = [
-        "name": .string(input.name), "scope": .string(scope.rawValue),
-        "format": .string(format.rawValue), "resourceUri": .string(resourceUri)
-    ]
-    if format == .svg {
-        guard let pdf = SymbolPdf.render(name: input.name, scope: scope.rawValue, weight: weight, scale: scale) else {
-            return .failure("SF Symbol render failed: \(scope.rawValue)/\(input.name)")
+        let resourceUri =
+            "apple-docs://sf-symbol/\(scope.rawValue)/\(encodeURIComponentJS(input.name)).\(format.rawValue)"
+        var out: OrderedDictionary<String, JSONValue> = [
+            "name": .string(input.name), "scope": .string(scope.rawValue),
+            "format": .string(format.rawValue), "resourceUri": .string(resourceUri)
+        ]
+        if format == .svg {
+            guard let pdf = SymbolPdf.render(name: input.name, scope: scope.rawValue, weight: weight, scale: scale)
+            else {
+                return .failure("SF Symbol render failed: \(scope.rawValue)/\(input.name)")
+            }
+            let svg: String
+            do {
+                svg = try SymbolPdfToSvg.convert(
+                    pdf, options: .init(name: input.name, pointSize: pointSize, color: color, background: background))
+            } catch {
+                return .failure("SF Symbol SVG conversion failed for \(scope.rawValue)/\(input.name): \(error)")
+            }
+            out["svg"] = .string(svg)
         }
-        let svg: String
-        do {
-            svg = try SymbolPdfToSvg.convert(
-                pdf, options: .init(name: input.name, pointSize: pointSize, color: color, background: background))
-        } catch {
-            return .failure("SF Symbol SVG conversion failed for \(scope.rawValue)/\(input.name): \(error)")
-        }
-        out["svg"] = .string(svg)
-    }
-    return .okValue(.object(out))
+        return .okValue(.object(out))
+    #else
+        return .failure("SF Symbol rendering needs AppKit/CoreGraphics — unavailable on this platform.")
+    #endif
 }
 
 /// normalizeColor (apple-assets-helpers.js): a trimmed `#RRGGBB(AA)` hex
