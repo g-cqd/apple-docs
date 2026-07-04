@@ -119,8 +119,8 @@ struct SyncCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
     var db: String
 
-    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 100).")
-    var concurrency: Int = 100
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 200).")
+    var concurrency: Int = 200
 
     @Option(name: .long, help: "Rate-limiter budget in requests/sec (default 500, matching bun sync).")
     var rate: Double = 500
@@ -196,8 +196,8 @@ struct SyncAllCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
     var db: String
 
-    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 100).")
-    var concurrency: Int = 100
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 200).")
+    var concurrency: Int = 200
 
     @Option(name: .long, help: "Rate-limiter budget in requests/sec (default 500, matching bun sync).")
     var rate: Double = 500
