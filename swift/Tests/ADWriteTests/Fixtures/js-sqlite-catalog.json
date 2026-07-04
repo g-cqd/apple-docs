@@ -1,0 +1,1429 @@
+{
+  "fts" : {
+    "documents_body_fts" : {
+      "columns" : [
+        "body"
+      ],
+      "content" : "self",
+      "name" : "documents_body_fts",
+      "tokenize" : "porter unicode61"
+    },
+    "documents_fts" : {
+      "columns" : [
+        "title",
+        "abstract",
+        "declaration",
+        "headings",
+        "key"
+      ],
+      "content" : "self",
+      "name" : "documents_fts",
+      "tokenize" : "porter unicode61"
+    },
+    "documents_trigram" : {
+      "columns" : [
+        "title"
+      ],
+      "content" : "external:documents:id",
+      "name" : "documents_trigram",
+      "tokenize" : "trigram case_sensitive 0"
+    },
+    "sf_symbols_fts" : {
+      "columns" : [
+        "name",
+        "keywords",
+        "categories",
+        "aliases"
+      ],
+      "content" : "self",
+      "name" : "sf_symbols_fts",
+      "tokenize" : "porter unicode61"
+    }
+  },
+  "indexes" : {
+    "idx_apple_font_files_family" : {
+      "columns" : [
+        "family_id"
+      ],
+      "name" : "idx_apple_font_files_family",
+      "table" : "apple_font_files",
+      "unique" : false
+    },
+    "idx_chunks_doc" : {
+      "columns" : [
+        "document_id"
+      ],
+      "name" : "idx_chunks_doc",
+      "table" : "document_chunks",
+      "unique" : false
+    },
+    "idx_documents_framework" : {
+      "columns" : [
+        "framework"
+      ],
+      "name" : "idx_documents_framework",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_key" : {
+      "columns" : [
+        "key"
+      ],
+      "name" : "idx_documents_key",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_kind" : {
+      "columns" : [
+        "kind"
+      ],
+      "name" : "idx_documents_kind",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_language" : {
+      "columns" : [
+        "language"
+      ],
+      "name" : "idx_documents_language",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_min_ios_num" : {
+      "columns" : [
+        "min_ios_num"
+      ],
+      "name" : "idx_documents_min_ios_num",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_min_macos_num" : {
+      "columns" : [
+        "min_macos_num"
+      ],
+      "name" : "idx_documents_min_macos_num",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_min_tvos_num" : {
+      "columns" : [
+        "min_tvos_num"
+      ],
+      "name" : "idx_documents_min_tvos_num",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_min_visionos_num" : {
+      "columns" : [
+        "min_visionos_num"
+      ],
+      "name" : "idx_documents_min_visionos_num",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_min_watchos_num" : {
+      "columns" : [
+        "min_watchos_num"
+      ],
+      "name" : "idx_documents_min_watchos_num",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_source" : {
+      "columns" : [
+        "source_type"
+      ],
+      "name" : "idx_documents_source",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_title_nocase" : {
+      "columns" : [
+        "title"
+      ],
+      "name" : "idx_documents_title_nocase",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_documents_usr" : {
+      "columns" : [
+        "usr"
+      ],
+      "name" : "idx_documents_usr",
+      "table" : "documents",
+      "unique" : false
+    },
+    "idx_pages_role" : {
+      "columns" : [
+        "role"
+      ],
+      "name" : "idx_pages_role",
+      "table" : "pages",
+      "unique" : false
+    },
+    "idx_pages_root" : {
+      "columns" : [
+        "root_id"
+      ],
+      "name" : "idx_pages_root",
+      "table" : "pages",
+      "unique" : false
+    },
+    "idx_pages_status" : {
+      "columns" : [
+        "status"
+      ],
+      "name" : "idx_pages_status",
+      "table" : "pages",
+      "unique" : false
+    },
+    "idx_pages_title" : {
+      "columns" : [
+        "title"
+      ],
+      "name" : "idx_pages_title",
+      "table" : "pages",
+      "unique" : false
+    },
+    "idx_sections_doc" : {
+      "columns" : [
+        "document_id"
+      ],
+      "name" : "idx_sections_doc",
+      "table" : "document_sections",
+      "unique" : false
+    },
+    "idx_sections_kind" : {
+      "columns" : [
+        "section_kind"
+      ],
+      "name" : "idx_sections_kind",
+      "table" : "document_sections",
+      "unique" : false
+    },
+    "idx_sf_symbols_codepoint" : {
+      "columns" : [
+        "codepoint"
+      ],
+      "name" : "idx_sf_symbols_codepoint",
+      "table" : "sf_symbols",
+      "unique" : false
+    },
+    "sqlite_autoindex_apple_font_families_1" : {
+      "columns" : [
+        "id"
+      ],
+      "name" : "sqlite_autoindex_apple_font_families_1",
+      "table" : "apple_font_families",
+      "unique" : true
+    },
+    "sqlite_autoindex_apple_font_files_1" : {
+      "columns" : [
+        "id"
+      ],
+      "name" : "sqlite_autoindex_apple_font_files_1",
+      "table" : "apple_font_files",
+      "unique" : true
+    },
+    "sqlite_autoindex_apple_font_files_2" : {
+      "columns" : [
+        "family_id",
+        "file_name"
+      ],
+      "name" : "sqlite_autoindex_apple_font_files_2",
+      "table" : "apple_font_files",
+      "unique" : true
+    },
+    "sqlite_autoindex_crawl_state_1" : {
+      "columns" : [
+        "path"
+      ],
+      "name" : "sqlite_autoindex_crawl_state_1",
+      "table" : "crawl_state",
+      "unique" : true
+    },
+    "sqlite_autoindex_document_chunks_1" : {
+      "columns" : [
+        "document_id",
+        "ord"
+      ],
+      "name" : "sqlite_autoindex_document_chunks_1",
+      "table" : "document_chunks",
+      "unique" : true
+    },
+    "sqlite_autoindex_document_relationships_1" : {
+      "columns" : [
+        "from_key",
+        "to_key",
+        "relation_type"
+      ],
+      "name" : "sqlite_autoindex_document_relationships_1",
+      "table" : "document_relationships",
+      "unique" : true
+    },
+    "sqlite_autoindex_document_sections_1" : {
+      "columns" : [
+        "document_id",
+        "section_kind",
+        "sort_order"
+      ],
+      "name" : "sqlite_autoindex_document_sections_1",
+      "table" : "document_sections",
+      "unique" : true
+    },
+    "sqlite_autoindex_documents_1" : {
+      "columns" : [
+        "key"
+      ],
+      "name" : "sqlite_autoindex_documents_1",
+      "table" : "documents",
+      "unique" : true
+    },
+    "sqlite_autoindex_framework_synonyms_1" : {
+      "columns" : [
+        "alias"
+      ],
+      "name" : "sqlite_autoindex_framework_synonyms_1",
+      "table" : "framework_synonyms",
+      "unique" : true
+    },
+    "sqlite_autoindex_framework_synonyms_2" : {
+      "columns" : [
+        "canonical",
+        "alias"
+      ],
+      "name" : "sqlite_autoindex_framework_synonyms_2",
+      "table" : "framework_synonyms",
+      "unique" : true
+    },
+    "sqlite_autoindex_pages_1" : {
+      "columns" : [
+        "path"
+      ],
+      "name" : "sqlite_autoindex_pages_1",
+      "table" : "pages",
+      "unique" : true
+    },
+    "sqlite_autoindex_roots_1" : {
+      "columns" : [
+        "slug"
+      ],
+      "name" : "sqlite_autoindex_roots_1",
+      "table" : "roots",
+      "unique" : true
+    },
+    "sqlite_autoindex_schema_meta_1" : {
+      "columns" : [
+        "key"
+      ],
+      "name" : "sqlite_autoindex_schema_meta_1",
+      "table" : "schema_meta",
+      "unique" : true
+    },
+    "sqlite_autoindex_sf_symbol_renders_1" : {
+      "columns" : [
+        "cache_key"
+      ],
+      "name" : "sqlite_autoindex_sf_symbol_renders_1",
+      "table" : "sf_symbol_renders",
+      "unique" : true
+    },
+    "sqlite_autoindex_sf_symbols_1" : {
+      "columns" : [
+        "scope",
+        "name"
+      ],
+      "name" : "sqlite_autoindex_sf_symbols_1",
+      "table" : "sf_symbols",
+      "unique" : true
+    },
+    "sqlite_autoindex_snapshot_meta_1" : {
+      "columns" : [
+        "key"
+      ],
+      "name" : "sqlite_autoindex_snapshot_meta_1",
+      "table" : "snapshot_meta",
+      "unique" : true
+    },
+    "sqlite_autoindex_sync_checkpoint_1" : {
+      "columns" : [
+        "key"
+      ],
+      "name" : "sqlite_autoindex_sync_checkpoint_1",
+      "table" : "sync_checkpoint",
+      "unique" : true
+    }
+  },
+  "tables" : {
+    "activity" : {
+      "columns" : [
+        {
+          "name" : "id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "action",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "started_at",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "pid",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "roots",
+          "notNull" : false,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "activity",
+      "rowidAlias" : "id"
+    },
+    "apple_font_families" : {
+      "columns" : [
+        {
+          "name" : "id",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "display_name",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "source_url",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "source_sha256",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "source_size",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "source_path",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "extracted_path",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "'available'",
+          "name" : "status",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "category",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "updated_at",
+          "notNull" : true,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "apple_font_families"
+    },
+    "apple_font_files" : {
+      "columns" : [
+        {
+          "name" : "id",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "family_id",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "file_name",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "file_path",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "postscript_name",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "style_name",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "weight",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "variant",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "italic",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "format",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "'remote'",
+          "name" : "source",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "is_variable",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "axes_json",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "sha256",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "size",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "updated_at",
+          "notNull" : true,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "apple_font_files"
+    },
+    "crawl_state" : {
+      "columns" : [
+        {
+          "name" : "path",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "'pending'",
+          "name" : "status",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "root_slug",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "depth",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "error",
+          "notNull" : false,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "crawl_state"
+    },
+    "document_chunks" : {
+      "columns" : [
+        {
+          "name" : "chunk_id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "document_id",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "ord",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "text",
+          "notNull" : false,
+          "type" : "BLOB"
+        },
+        {
+          "name" : "vec_bin",
+          "notNull" : true,
+          "type" : "BLOB"
+        },
+        {
+          "name" : "vec_i8",
+          "notNull" : false,
+          "type" : "BLOB"
+        }
+      ],
+      "name" : "document_chunks",
+      "rowidAlias" : "chunk_id"
+    },
+    "document_raw" : {
+      "columns" : [
+        {
+          "name" : "document_id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "raw",
+          "notNull" : true,
+          "type" : "BLOB"
+        }
+      ],
+      "name" : "document_raw",
+      "rowidAlias" : "document_id"
+    },
+    "document_relationships" : {
+      "columns" : [
+        {
+          "name" : "id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "from_key",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "to_key",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "relation_type",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "section",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "sort_order",
+          "notNull" : false,
+          "type" : "INTEGER"
+        }
+      ],
+      "name" : "document_relationships",
+      "rowidAlias" : "id"
+    },
+    "document_render_index" : {
+      "columns" : [
+        {
+          "name" : "doc_id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "sections_digest",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "template_version",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "html_hash",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "updated_at",
+          "notNull" : true,
+          "type" : "INTEGER"
+        }
+      ],
+      "name" : "document_render_index",
+      "rowidAlias" : "doc_id"
+    },
+    "document_sections" : {
+      "columns" : [
+        {
+          "name" : "id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "document_id",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "section_kind",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "heading",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "content_text",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "content_json",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "sort_order",
+          "notNull" : true,
+          "type" : "INTEGER"
+        }
+      ],
+      "name" : "document_sections",
+      "rowidAlias" : "id"
+    },
+    "document_vectors" : {
+      "columns" : [
+        {
+          "name" : "document_id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "vec",
+          "notNull" : true,
+          "type" : "BLOB"
+        }
+      ],
+      "name" : "document_vectors",
+      "rowidAlias" : "document_id"
+    },
+    "documents" : {
+      "columns" : [
+        {
+          "name" : "id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "defaultValue" : "'apple-docc'",
+          "name" : "source_type",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "key",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "title",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "kind",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "role",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "role_heading",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "framework",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "url",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "language",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "abstract_text",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "declaration_text",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "headings",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "platforms_json",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_ios",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_macos",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_watchos",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_tvos",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_visionos",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "is_deprecated",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "is_beta",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "is_release_notes",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "url_depth",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "source_metadata",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "content_hash",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "raw_payload_hash",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "datetime('now')",
+          "name" : "created_at",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "datetime('now')",
+          "name" : "updated_at",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_ios_num",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "min_macos_num",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "min_watchos_num",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "min_tvos_num",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "min_visionos_num",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "usr",
+          "notNull" : false,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "documents",
+      "rowidAlias" : "id"
+    },
+    "framework_synonyms" : {
+      "columns" : [
+        {
+          "name" : "canonical",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "alias",
+          "notNull" : true,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "framework_synonyms"
+    },
+    "pages" : {
+      "columns" : [
+        {
+          "name" : "id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "root_id",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "path",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "url",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "title",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "role",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "role_heading",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "abstract",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "platforms",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "declaration",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "etag",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "last_modified",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "content_hash",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "downloaded_at",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "converted_at",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "'active'",
+          "name" : "status",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "'apple-docc'",
+          "name" : "source_type",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "language",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "is_release_notes",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "url_depth",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "doc_kind",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "source_metadata",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_ios",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_macos",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_watchos",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_tvos",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "min_visionos",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "consecutive_404_count",
+          "notNull" : true,
+          "type" : "INTEGER"
+        }
+      ],
+      "name" : "pages",
+      "rowidAlias" : "id"
+    },
+    "roots" : {
+      "columns" : [
+        {
+          "name" : "id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "slug",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "display_name",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "'unknown'",
+          "name" : "kind",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "'active'",
+          "name" : "status",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "source",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "page_count",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "seed_path",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "first_seen",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "last_seen",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "'apple-docc'",
+          "name" : "source_type",
+          "notNull" : true,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "roots",
+      "rowidAlias" : "id"
+    },
+    "schema_meta" : {
+      "columns" : [
+        {
+          "name" : "key",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "value",
+          "notNull" : true,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "schema_meta"
+    },
+    "sf_symbol_renders" : {
+      "columns" : [
+        {
+          "name" : "cache_key",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "name",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "scope",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "format",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "mode",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "weight",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "symbol_scale",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "point_size",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "color",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "file_path",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "mime_type",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "sha256",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "size",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "updated_at",
+          "notNull" : true,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "sf_symbol_renders"
+    },
+    "sf_symbols" : {
+      "columns" : [
+        {
+          "name" : "name",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "scope",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "categories_json",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "keywords_json",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "aliases_json",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "availability_json",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "order_index",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "bundle_path",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "bundle_version",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "updated_at",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "bitmap_only",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "codepoint",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "codepoint_version",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "render_unsupported",
+          "notNull" : true,
+          "type" : "INTEGER"
+        }
+      ],
+      "name" : "sf_symbols"
+    },
+    "snapshot_meta" : {
+      "columns" : [
+        {
+          "name" : "key",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "value",
+          "notNull" : false,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "snapshot_meta"
+    },
+    "sync_checkpoint" : {
+      "columns" : [
+        {
+          "name" : "key",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "value",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "updated_at",
+          "notNull" : true,
+          "type" : "TEXT"
+        }
+      ],
+      "name" : "sync_checkpoint"
+    },
+    "update_log" : {
+      "columns" : [
+        {
+          "name" : "id",
+          "notNull" : false,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "timestamp",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "root_slug",
+          "notNull" : false,
+          "type" : "TEXT"
+        },
+        {
+          "name" : "action",
+          "notNull" : true,
+          "type" : "TEXT"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "new_count",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "mod_count",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "del_count",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "defaultValue" : "0",
+          "name" : "err_count",
+          "notNull" : true,
+          "type" : "INTEGER"
+        },
+        {
+          "name" : "duration_ms",
+          "notNull" : false,
+          "type" : "INTEGER"
+        }
+      ],
+      "name" : "update_log",
+      "rowidAlias" : "id"
+    }
+  },
+  "triggers" : {
+    "documents_ad" : {
+      "name" : "documents_ad",
+      "normalizedSQL" : "create trigger documents_ad after delete on documents begin delete from documents_fts where rowid = old.id; delete from documents_trigram where rowid = old.id; end"
+    },
+    "documents_ai" : {
+      "name" : "documents_ai",
+      "normalizedSQL" : "create trigger documents_ai after insert on documents begin insert into documents_fts(rowid, title, abstract, declaration, headings, key) values (new.id, new.title, new.abstract_text, new.declaration_text, new.headings, new.key); insert into documents_trigram(rowid, title) values (new.id, new.title); end"
+    },
+    "documents_au" : {
+      "name" : "documents_au",
+      "normalizedSQL" : "create trigger documents_au after update on documents begin delete from documents_fts where rowid = old.id; insert into documents_fts(rowid, title, abstract, declaration, headings, key) values (new.id, new.title, new.abstract_text, new.declaration_text, new.headings, new.key); delete from documents_trigram where rowid = old.id; insert into documents_trigram(rowid, title) values (new.id, new.title); end"
+    }
+  }
+}

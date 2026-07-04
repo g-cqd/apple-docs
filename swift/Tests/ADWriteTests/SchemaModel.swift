@@ -15,7 +15,7 @@ import Foundation
 /// ``TableModel/rowidAlias`` (the only PK form ADDB models as a true PK) plus the
 /// implied unique-index set, which captures composite / non-integer PKs
 /// identically on both engines (see SchemaModel comparison notes).
-struct ColumnModel: Equatable, Comparable, Sendable {
+struct ColumnModel: Equatable, Comparable, Sendable, Codable {
     var name: String
     /// Logical storage class, upper-cased: "INTEGER" | "REAL" | "TEXT" | "BLOB".
     var type: String
@@ -32,7 +32,7 @@ struct ColumnModel: Equatable, Comparable, Sendable {
 }
 
 /// One table's logical shape.
-struct TableModel: Equatable, Sendable {
+struct TableModel: Equatable, Sendable, Codable {
     var name: String
     /// Columns in declared order (order matters — both engines preserve it).
     var columns: [ColumnModel]
@@ -55,7 +55,7 @@ struct TableModel: Equatable, Sendable {
 /// One secondary / implied index. `unique` covers both explicit `CREATE UNIQUE
 /// INDEX` and the `sqlite_autoindex_*` rows that UNIQUE constraints / composite
 /// PKs synthesize on both engines.
-struct IndexModel: Equatable, Comparable, Sendable {
+struct IndexModel: Equatable, Comparable, Sendable, Codable {
     var name: String
     var table: String
     /// Key columns in order.
@@ -66,7 +66,7 @@ struct IndexModel: Equatable, Comparable, Sendable {
 }
 
 /// One FTS5 virtual table's logical config.
-struct FTSModel: Equatable, Comparable, Sendable {
+struct FTSModel: Equatable, Comparable, Sendable, Codable {
     var name: String
     var columns: [String]
     /// Whitespace-joined tokenizer spec, e.g. "porter unicode61" or
@@ -80,7 +80,7 @@ struct FTSModel: Equatable, Comparable, Sendable {
 
 /// One trigger, compared by its normalized body so whitespace / casing noise from
 /// either engine's round-trip doesn't cause false diffs.
-struct TriggerModel: Equatable, Comparable, Sendable {
+struct TriggerModel: Equatable, Comparable, Sendable, Codable {
     var name: String
     /// The trigger's defining SQL, normalized: collapsed whitespace, upper-cased
     /// keywords are NOT forced (the parser-agnostic compare lowercases the whole
@@ -92,7 +92,7 @@ struct TriggerModel: Equatable, Comparable, Sendable {
 }
 
 /// The whole catalog, normalized for cross-engine comparison.
-struct CatalogModel: Equatable, Sendable {
+struct CatalogModel: Equatable, Sendable, Codable {
     var tables: [String: TableModel]
     var indexes: [String: IndexModel]
     var fts: [String: FTSModel]
