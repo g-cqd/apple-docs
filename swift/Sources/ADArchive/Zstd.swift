@@ -62,6 +62,15 @@ struct ZstdLib: @unchecked Sendable {
     // round-trips through `decompressFrame` (which reads it via getFrameContentSize).
     let compressBound: @convention(c) (Int) -> Int
     let compress: @convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int, Int32) -> Int
+    // Streaming decompression (the snapshot `.tar.zst` install extract). A DStream
+    // context inflates a multi-GB frame in bounded chunks — the whole-frame
+    // `decompress` above caps at 32 MiB and would need the full output in RAM.
+    let createDStream: @convention(c) () -> OpaquePointer?
+    let freeDStream: @convention(c) (OpaquePointer?) -> Int
+    let initDStream: @convention(c) (OpaquePointer?) -> Int
+    let decompressStream: @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Int
+    let dStreamInSize: @convention(c) () -> Int
+    let dStreamOutSize: @convention(c) () -> Int
 
     func errorName(_ code: Int) -> String {
         guard let cstr = getErrorName(code) else { return "zstd error \(code)" }
@@ -178,7 +187,16 @@ enum Zstd {
                     "ZSTD_compressBound", as: (@convention(c) (Int) -> Int).self),
                 let compress = sym(
                     "ZSTD_compress",
-                    as: (@convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int, Int32) -> Int).self)
+                    as: (@convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int, Int32) -> Int).self),
+                let createDStream = sym("ZSTD_createDStream", as: (@convention(c) () -> OpaquePointer?).self),
+                let freeDStream = sym("ZSTD_freeDStream", as: (@convention(c) (OpaquePointer?) -> Int).self),
+                let initDStream = sym("ZSTD_initDStream", as: (@convention(c) (OpaquePointer?) -> Int).self),
+                let decompressStream = sym(
+                    "ZSTD_decompressStream",
+                    as: (@convention(c) (OpaquePointer?, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Int)
+                        .self),
+                let dStreamInSize = sym("ZSTD_DStreamInSize", as: (@convention(c) () -> Int).self),
+                let dStreamOutSize = sym("ZSTD_DStreamOutSize", as: (@convention(c) () -> Int).self)
             else { continue }
             // ZSTD_compressStream2 + the parameter API appeared in 1.4.0.
             guard version() >= 10400 else { continue }
@@ -188,6 +206,8 @@ enum Zstd {
                 compressStream2: stream, isError: isErr, getErrorName: errName,
                 cStreamOutSize: outSize, decompress: decompress, getFrameContentSize: frameContentSize,
                 compressBound: compressBound, compress: compress,
+                createDStream: createDStream, freeDStream: freeDStream, initDStream: initDStream,
+                decompressStream: decompressStream, dStreamInSize: dStreamInSize, dStreamOutSize: dStreamOutSize,
             )
         }
         return nil
