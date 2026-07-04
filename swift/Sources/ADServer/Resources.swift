@@ -88,35 +88,42 @@ private func isSfSymbolResource(_ uri: String) -> Bool {
 /// ADRender's rasterizer. Not covered by a parity gate (inspection-faithful to the
 /// JS shape + mime types).
 private func sfSymbolResource(_ conn: StorageConnection, uri: String) -> MCPResourceResult {
-    guard let p = parseSfSymbolUri(uri) else { return .notFound(uri) }
-    let format = p.format == "svg" ? "svg" : "png"
-    let isPublic = p.scope == "public"
-    let pointSize = min(max(p.query["size"].flatMap { Int($0) } ?? 64, 8), 1024)
-    let weight =
-        isPublic ? (SymbolWeight(rawValue: (p.query["weight"] ?? "").lowercased())?.rawValue ?? "regular") : "regular"
-    let scale =
-        isPublic ? (SymbolScale(rawValue: (p.query["scale"] ?? "").lowercased())?.rawValue ?? "medium") : "medium"
-    let rawColor = p.query["color"] ?? p.query["fg"] ?? "#000000"
-    let color =
-        (format == "svg" && rawColor.lowercased() == "currentcolor") ? "currentColor" : sfNormalizeColor(rawColor)
-    let background = sfNormalizeBackground(p.query["background"] ?? p.query["bg"])
+    // SF Symbol rasterization (PDF/PNG/SVG) needs AppKit/CoreGraphics — Darwin only. On other platforms
+    // the resource is simply not-found (the render_sf_symbol tool reports the same).
+    #if canImport(AppKit)
+        guard let p = parseSfSymbolUri(uri) else { return .notFound(uri) }
+        let format = p.format == "svg" ? "svg" : "png"
+        let isPublic = p.scope == "public"
+        let pointSize = min(max(p.query["size"].flatMap { Int($0) } ?? 64, 8), 1024)
+        let weight =
+            isPublic
+            ? (SymbolWeight(rawValue: (p.query["weight"] ?? "").lowercased())?.rawValue ?? "regular") : "regular"
+        let scale =
+            isPublic ? (SymbolScale(rawValue: (p.query["scale"] ?? "").lowercased())?.rawValue ?? "medium") : "medium"
+        let rawColor = p.query["color"] ?? p.query["fg"] ?? "#000000"
+        let color =
+            (format == "svg" && rawColor.lowercased() == "currentcolor") ? "currentColor" : sfNormalizeColor(rawColor)
+        let background = sfNormalizeBackground(p.query["background"] ?? p.query["bg"])
 
-    guard let symbol = conn.getSfSymbol(scope: p.scope, name: p.name) else { return .notFound(uri) }
-    if let unsupported = symbol.renderUnsupported, unsupported != 0 { return .notFound(uri) }
+        guard let symbol = conn.getSfSymbol(scope: p.scope, name: p.name) else { return .notFound(uri) }
+        if let unsupported = symbol.renderUnsupported, unsupported != 0 { return .notFound(uri) }
 
-    if format == "svg" {
-        guard let pdf = SymbolPdf.render(name: p.name, scope: p.scope, weight: weight, scale: scale),
-            let svg = try? SymbolPdfToSvg.convert(
-                pdf, options: .init(name: p.name, pointSize: pointSize, color: color, background: background))
+        if format == "svg" {
+            guard let pdf = SymbolPdf.render(name: p.name, scope: p.scope, weight: weight, scale: scale),
+                let svg = try? SymbolPdfToSvg.convert(
+                    pdf, options: .init(name: p.name, pointSize: pointSize, color: color, background: background))
+            else { return .notFound(uri) }
+            return .contents([MCPResourceContent(uri: uri, text: svg, mimeType: "image/svg+xml; charset=utf-8")])
+        }
+        guard
+            let png = SymbolPng.render(
+                name: p.name, scope: p.scope, pointSize: Double(pointSize), color: color, background: background,
+                style: .init(weight: weight, scale: scale))
         else { return .notFound(uri) }
-        return .contents([MCPResourceContent(uri: uri, text: svg, mimeType: "image/svg+xml; charset=utf-8")])
-    }
-    guard
-        let png = SymbolPng.render(
-            name: p.name, scope: p.scope, pointSize: Double(pointSize), color: color, background: background,
-            style: .init(weight: weight, scale: scale))
-    else { return .notFound(uri) }
-    return .contents([MCPResourceContent(uri: uri, blob: Data(png).base64EncodedString(), mimeType: "image/png")])
+        return .contents([MCPResourceContent(uri: uri, blob: Data(png).base64EncodedString(), mimeType: "image/png")])
+    #else
+        return .notFound(uri)
+    #endif
 }
 
 /// `apple-docs://sf-symbol/{scope}/{name}.{format}?query` → its parts. `name` is
