@@ -17,87 +17,54 @@ public import ADSQLModel
 extension Database {
     /// Backfills the six denorm columns for every `documents` row that still needs it (`root_slug IS NULL`
     /// — the writer never sets the v28 denorm set, so NULL marks an un-backfilled row). Incremental: a
-    /// re-crawl that appended pages backfills only those, and a fully-populated corpus updates zero rows
-    /// (no per-row `documents_au` FTS-trigger re-encode). Idempotent (a re-run recomputes the same values).
-    /// Runs in one pass: read the roots map, project the SQL-folded scalars, write each row.
+    /// re-crawl that appended pages backfills only the new rows' folds, and a fully-populated corpus updates
+    /// zero rows. Idempotent (a re-run recomputes the same values). Runs as BULK statements — one scan for
+    /// the SQL-folded columns + a bounded per-root override for `root_display` — to stay linear (see below).
     public func backfillSearchDenorm() throws(DBError) {
         // The year/track folds use `JSON_EXTRACT`, which is opt-in (ADSQLJSON). The denorm serving path
         // needs JSON registered anyway (the `$sources_json` filter uses `json_each`), so enabling it here
         // makes the backfill self-sufficient; `enableJSON()` is idempotent registration.
         enableJSON()
 
-        // roots.slug → display_name. The denorm join is `roots r ON r.slug = d.framework`, so a document's
-        // framework keys into this map; a miss falls back to the framework itself (the COALESCE default).
+        // roots.slug → display_name, for the `root_display` override below (the one column needing the
+        // roots join, which the engine can't do as a correlated subquery).
         var rootDisplayBySlug: [String: String] = [:]
         for row in try prepare("SELECT slug, display_name FROM roots").all() {
             guard case .text(let slug) = row["slug"] else { continue }
             if case .text(let display) = row["display_name"] { rootDisplayBySlug[slug] = display }
         }
 
-        // The engine folds title/key/track + the year extract exactly as the §2.2 query does; framework is
-        // carried through for the Swift-side roots COALESCE.
-        let projected = try prepare(
-            """
-            SELECT id,
-                   LOWER(title) AS title_lc,
-                   LOWER(documents.key) AS key_lc,
-                   JSON_EXTRACT(source_metadata, '$.year') AS year_raw,
-                   LOWER(COALESCE(JSON_EXTRACT(source_metadata, '$.track'), '')) AS track_lc,
-                   framework
-            FROM documents
-            WHERE root_slug IS NULL
-            """
-        )
-        .all()
+        // Nothing to backfill? `root_slug` is the framework after this runs and NULL before it, so one NULL
+        // probe answers it (prepareForDenormServing guards the same; kept so a direct call is a no-op too).
+        guard try !prepare("SELECT 1 FROM documents WHERE root_slug IS NULL LIMIT 1").all().isEmpty else {
+            return
+        }
 
-        guard !projected.isEmpty else { return }
-        let updateSQL = """
-            UPDATE documents SET
-              title_lc = $title_lc, key_lc = $key_lc, year_num = $year_num,
-              track_lc = $track_lc, root_display = $root_display, root_slug = $root_slug
-            WHERE id = $id
-            """
-
-        // Suspend the `documents` FTS-sync triggers around the write: the six denorm columns aren't in
-        // documents_fts / documents_trigram, so the blanket `documents_au AFTER UPDATE` would re-encode a
-        // whole posting list per row for NOTHING — quadratic over N. Suspending makes the pass linear; the
-        // FTS content is untouched, so the index stays correct. One transaction: a throw rolls the whole
-        // thing back with the triggers intact.
+        // Suspend the `documents` FTS-sync triggers, then backfill in BULK. A per-row `UPDATE … WHERE id=?`
+        // is O(N²): ADDB collects an UPDATE's matches by a full table scan (`Writer.collectMatches`), so one
+        // scan per row. Instead ONE scan folds the five SQL-computable columns + the `root_slug = framework`
+        // default, then a bounded per-root pass overrides `root_display` — O(roots·N), not O(N²). The six
+        // columns aren't FTS-indexed, so suspending the au trigger loses nothing and skips a posting
+        // re-encode per row. One transaction: a throw rolls it all back with the triggers intact.
         try suspendingTriggers(on: "documents") { (txn) throws(DBError) in
-            for row in projected {
-                guard case .integer(let id) = row["id"] else { continue }
-                let framework: String = {
-                    guard case .text(let f) = row["framework"] else { return "" }
-                    return f
-                }()
-                // root_display = COALESCE(r.display_name, framework); root_slug = COALESCE(r.slug, framework)
-                // where r.slug == framework on a hit (the join key), so root_slug is `framework` either way.
-                let display = rootDisplayBySlug[framework]
+            _ = try txn.run(
+                """
+                UPDATE documents SET
+                  title_lc = LOWER(title),
+                  key_lc = LOWER(documents.key),
+                  year_num = CAST(JSON_EXTRACT(source_metadata, '$.year') AS INTEGER),
+                  track_lc = LOWER(COALESCE(JSON_EXTRACT(source_metadata, '$.track'), '')),
+                  root_slug = framework,
+                  root_display = framework
+                WHERE root_slug IS NULL
+                """)
+            // root_display = COALESCE(r.display_name, framework): override the framework default for each
+            // root whose display differs (bounded by the root count, not the document count).
+            for (slug, display) in rootDisplayBySlug where display != slug {
                 _ = try txn.run(
-                    updateSQL,
-                    [
-                        "id": .integer(id),
-                        "title_lc": row["title_lc"] ?? .null,
-                        "key_lc": row["key_lc"] ?? .null,
-                        // year_num = CAST(json_extract(…,'$.year') AS INTEGER): json_extract already yields
-                        // an integer Value for a JSON integer; a non-integer / absent year folds to NULL.
-                        "year_num": integerOrNull(row["year_raw"]),
-                        "track_lc": row["track_lc"] ?? .text(""),
-                        "root_display": .text(display ?? framework),
-                        "root_slug": .text(framework)
-                    ])
+                    "UPDATE documents SET root_display = $display WHERE framework = $slug",
+                    ["display": .text(display), "slug": .text(slug)])
             }
         }
-    }
-}
-
-/// `CAST(x AS INTEGER)`-style coercion to the `year_num` column: an integer Value passes through, a real
-/// truncates, anything else (text/blob/NULL/absent) is NULL — matching the oracle's CAST of a non-numeric
-/// `json_extract` result to NULL for this corpus (years are JSON integers).
-private func integerOrNull(_ value: Value?) -> Value {
-    switch value {
-        case .some(.integer(let i)): return .integer(i)
-        case .some(.real(let d)): return .integer(Int64(d))
-        default: return .null
     }
 }
