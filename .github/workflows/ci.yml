@@ -124,7 +124,9 @@ jobs:
         run: brew list zstd >/dev/null 2>&1 || brew install zstd
       - name: swift test (--sanitize=${{ matrix.sanitizer }})
         working-directory: swift
-        run: swift test --sanitize=${{ matrix.sanitizer }} --no-parallel
+        # APPLEDOCS_DEV gates the ADTestKit target (Package.swift); the test sources import it, so
+        # the manifest must expose it here just as the lint/build steps do.
+        run: APPLEDOCS_DEV=1 swift test --sanitize=${{ matrix.sanitizer }} --no-parallel
 
   test:
     strategy:
@@ -247,7 +249,8 @@ jobs:
 
       - name: Swift tests
         working-directory: swift
-        run: swift test --enable-code-coverage
+        # APPLEDOCS_DEV gates the ADTestKit target (Package.swift) the test sources import.
+        run: APPLEDOCS_DEV=1 swift test --enable-code-coverage
 
       # Export the Swift test coverage (linux leg only) and merge it into the
       # same Codecov project as the JS lcov. Non-fatal: a toolchain that can't
@@ -256,7 +259,8 @@ jobs:
         if: matrix.target == 'linux-x64'
         working-directory: swift
         run: |
-          bin="$(swift build --show-bin-path)"
+          # Same APPLEDOCS_DEV manifest as the test step, so the resolved graph (and bin path) match.
+          bin="$(APPLEDOCS_DEV=1 swift build --show-bin-path)"
           testbin="$(find "$bin" -name '*PackageTests.xctest' | head -1)"
           llvm-cov export -format=lcov \
             -instr-profile "$bin/codecov/default.profdata" "$testbin" \

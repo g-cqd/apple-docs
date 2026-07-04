@@ -111,19 +111,19 @@ struct ADDBReadParityTests {
         }
     }
 
-    // MARK: - the one dialect gap
+    // MARK: - freshness (MAX aggregate)
 
-    /// `staleRootRows()` (the freshness helper) is the ONLY read method whose SQL
-    /// does not run on ADDB: it uses `MAX(timestamp)`, and the ADDB engine
-    /// implements only the `COUNT` / `SUM` aggregates. On SQLite it returns the
-    /// per-root last-update rows; on ADDB the query throws and the method degrades
-    /// to `[]`. Pinned so the gap is explicit (and this test starts passing the
-    /// day ADDB gains `MAX`). Every OTHER status read (corpusStats — COUNT + SUM,
-    /// snapshot_meta, capabilities) is byte-identical (see `statusIsIdentical…`).
-    @Test func staleRootRowsIsTheOneDialectGap() throws {
+    /// `staleRootRows()` (the freshness helper) runs `SELECT root_slug, MAX(timestamp) … GROUP BY
+    /// root_slug`. It was formerly the ONE read-path dialect gap — the ADDB engine implemented only
+    /// COUNT/SUM, so the `MAX(timestamp)` query degraded to `[]`. ADDB now implements MAX/MIN/AVG,
+    /// so both backends return the same per-root last-update rows (also folded into `statusString`).
+    @Test func staleRootRowsMatchesAcrossBackends() throws {
         try withBothBackends { sqlite, addb in
-            #expect(!sqlite.staleRootRows().isEmpty, "SQLite should return per-root freshness rows")
-            #expect(addb.staleRootRows().isEmpty, "ADDB lacks MAX() ⇒ staleRootRows degrades to empty")
+            let a = sqlite.staleRootRows()
+            #expect(!a.isEmpty, "SQLite should return per-root freshness rows")
+            #expect(
+                staleString(a) == staleString(addb.staleRootRows()),
+                "staleRootRows diverged:\nsqlite \(staleString(a))\naddb   \(staleString(addb.staleRootRows()))")
         }
     }
 
@@ -253,10 +253,14 @@ struct ADDBReadParityTests {
         }
         s += "snapshotTag=\(opt(c.getSnapshotMeta("snapshot_tag")))\n"
         s += "hasBodyIndex=\(c.hasBodyIndex()) hasSections=\(c.hasTable("document_sections"))\n"
-        // NOTE: `staleRootRows()` is deliberately excluded here — its `MAX(timestamp)` is an
-        // aggregate ADDB does not implement (only COUNT/SUM), so it is a documented dialect gap
-        // pinned separately by `staleRootRowsIsTheOneDialectGap` below.
+        s += staleString(c.staleRootRows())  // MAX(timestamp) — implemented on both backends
         return s
+    }
+
+    /// `staleRootRows()` serialized in slug order (GROUP BY leaves the order engine-defined, so
+    /// sort before comparing) — one `stale <slug>=<lastUpdate>` line per root.
+    private func staleString(_ rows: [(slug: String, lastUpdate: String)]) -> String {
+        rows.sorted { $0.slug < $1.slug }.map { "stale \($0.slug)=\($0.lastUpdate)\n" }.joined()
     }
 
     private func rootString(_ c: StorageConnection, _ slug: String) -> String {
