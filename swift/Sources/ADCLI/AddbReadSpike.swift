@@ -96,6 +96,7 @@ struct AddbReadSpikeCommand: ParsableCommand {
         print("")
 
         var goAll = true
+        var parityAll = true
         var pooledAddb: [Double] = []
         var pooledSqlite: [Double] = []
 
@@ -112,6 +113,16 @@ struct AddbReadSpikeCommand: ParsableCommand {
             let addbCount = try addbRows(database, addbParams).count
             let sqliteCount = connection.ftsRows(sqliteParams)?.count ?? -1
             let countNote = addbCount == sqliteCount ? "" : "  [COUNT MISMATCH]"
+
+            // WS-C parity guard: the restructured rank-only WAND path
+            // (`searchPagesDenormRows`) MUST equal the score-all oracle
+            // (`searchPagesDenormRowsScoreAll`, `… ORDER BY tier, rank`) row-for-row
+            // (path + tier + rank + order). Proven before the timings are trusted.
+            let wandRows = try database.searchPagesDenormRows(addbParams)
+            let oracleRows = try database.searchPagesDenormRowsScoreAll(addbParams)
+            let parity = wandRows == oracleRows
+            parityAll = parityAll && parity
+            let parityNote = parity ? "PARITY OK" : "PARITY FAIL"
 
             for _ in 0..<warmup {
                 _ = try addbRows(database, addbParams)
@@ -138,7 +149,7 @@ struct AddbReadSpikeCommand: ParsableCommand {
             let s = Stats(sqliteTimes)
             let go = a.p50 < 0.97 * s.p50 && a.p95 <= s.p95
             goAll = goAll && go
-            print("probe \"\(probe.query)\" (rows \(addbCount))\(countNote)")
+            print("probe \"\(probe.query)\" (rows \(addbCount))\(countNote)  [\(parityNote)]")
             print("  addb   p50 \(fmt(a.p50))µs  p95 \(fmt(a.p95))µs  mean \(fmt(a.mean))µs")
             print("  sqlite p50 \(fmt(s.p50))µs  p95 \(fmt(s.p95))µs  mean \(fmt(s.mean))µs")
             print("  → \(go ? "GO" : "NO-GO") (p50 ratio \(fmt(a.p50 / s.p50)), p95 ratio \(fmt(a.p95 / s.p95)))")
@@ -151,6 +162,7 @@ struct AddbReadSpikeCommand: ParsableCommand {
         print("POOLED  addb p50 \(fmt(pa.p50))µs p95 \(fmt(pa.p95))µs · sqlite p50 \(fmt(ps.p50))µs p95 \(fmt(ps.p95))µs")
         print("GATE (pooled): \(pooledGo ? "GO" : "NO-GO") — ADDB p50 \(fmt(pa.p50 / ps.p50))× / p95 \(fmt(pa.p95 / ps.p95))× of SQLite")
         print("GATE (every probe): \(goAll ? "GO" : "NO-GO")")
+        print("PARITY (WAND vs score-all, all probes): \(parityAll ? "OK" : "FAIL")")
     }
 
     private func addbRows(_ database: Database, _ params: ADSQLSearch.SearchPagesParams) throws
