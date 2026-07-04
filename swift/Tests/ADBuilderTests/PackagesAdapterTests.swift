@@ -15,34 +15,33 @@ import Testing
 
 @Suite("PackagesAdapter — GitHub README packages")
 struct PackagesAdapterTests {
-
     // MARK: - normalize (README path)
 
     @Test("normalize (README path) overrides title/abstract and appends Package Metadata")
     func normalizeReadme() throws {
         let key = "packages/apple/swift-nio"
         let input = #"""
-        {
-          "repo": {
-            "name": "swift-nio",
-            "full_name": "apple/swift-nio",
-            "html_url": "https://github.com/apple/swift-nio",
-            "description": "Event-driven network application framework",
-            "language": null,
-            "default_branch": "main",
-            "topics": [],
-            "owner": { "login": "apple" }
-          },
-          "readme": {
-            "text": "# SwiftNIO\n\nSwiftNIO is a cross-platform asynchronous event-driven network application framework.\n\n## Overview\n\nDetails here.\n",
-            "path": "README.md",
-            "htmlUrl": "https://github.com/apple/swift-nio/blob/main/README.md",
-            "downloadUrl": "https://raw.githubusercontent.com/apple/swift-nio/main/README.md"
-          },
-          "syncScope": "official",
-          "fetchMode": "raw"
-        }
-        """#
+            {
+              "repo": {
+                "name": "swift-nio",
+                "full_name": "apple/swift-nio",
+                "html_url": "https://github.com/apple/swift-nio",
+                "description": "Event-driven network application framework",
+                "language": null,
+                "default_branch": "main",
+                "topics": [],
+                "owner": { "login": "apple" }
+              },
+              "readme": {
+                "text": "# SwiftNIO\n\nSwiftNIO is a cross-platform asynchronous event-driven network application framework.\n\n## Overview\n\nDetails here.\n",
+                "path": "README.md",
+                "htmlUrl": "https://github.com/apple/swift-nio/blob/main/README.md",
+                "downloadUrl": "https://raw.githubusercontent.com/apple/swift-nio/main/README.md"
+              },
+              "syncScope": "official",
+              "fetchMode": "raw"
+            }
+            """#
         let payload = SourcePayload.json(Array(input.utf8))
         let page = try PackagesAdapter().normalize(key, payload)
 
@@ -83,20 +82,20 @@ struct PackagesAdapterTests {
     func normalizeSynthesized() throws {
         let key = "packages/apple/swift-log"
         let input = #"""
-        {
-          "repo": {
-            "name": "swift-log",
-            "full_name": "apple/swift-log",
-            "description": "A Logging API for Swift",
-            "default_branch": "main",
-            "topics": [],
-            "owner": { "login": "apple" }
-          },
-          "readme": null,
-          "syncScope": "official",
-          "fetchMode": "raw"
-        }
-        """#
+            {
+              "repo": {
+                "name": "swift-log",
+                "full_name": "apple/swift-log",
+                "description": "A Logging API for Swift",
+                "default_branch": "main",
+                "topics": [],
+                "owner": { "login": "apple" }
+              },
+              "readme": null,
+              "syncScope": "official",
+              "fetchMode": "raw"
+            }
+            """#
         let payload = SourcePayload.json(Array(input.utf8))
         let page = try PackagesAdapter().normalize(key, payload)
 

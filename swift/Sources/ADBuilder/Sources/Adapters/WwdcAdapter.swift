@@ -269,9 +269,11 @@ public final class WwdcAdapter: SourceAdapter, @unchecked Sendable {
         let title = extractAsciiwwdcTitle(rawText, year: year, sessionId: sessionId)
         let url = "\(appleBase)/wwdc\(year)/\(sessionId)/"
 
-        let sourceMetadata = JsJson.object([
-            ("year", .int(year)), ("sessionId", .string(sessionId)), ("source", .string("asciiwwdc"))
-        ]).serialized()
+        let sourceMetadata =
+            JsJson.object([
+                ("year", .int(year)), ("sessionId", .string(sessionId)), ("source", .string("asciiwwdc"))
+            ])
+            .serialized()
 
         let document = NormalizedDocument(
             sourceType: type, key: key, title: title, kind: "wwdc-session", role: "article",
@@ -395,8 +397,9 @@ public final class WwdcAdapter: SourceAdapter, @unchecked Sendable {
     static func extractSessionIds(_ html: String, year: Int) -> [String] {
         var seen = Set<String>()
         var ids: [String] = []
-        for id in regexGroups("/videos/play/wwdc\(year)/(\\d+)/?[\"']", in: html, group: 1) {
-            if seen.insert(id).inserted { ids.append(id) }
+        for id in regexGroups("/videos/play/wwdc\(year)/(\\d+)/?[\"']", in: html, group: 1)
+        where seen.insert(id).inserted {
+            ids.append(id)
         }
         return ids
     }
@@ -433,8 +436,9 @@ public final class WwdcAdapter: SourceAdapter, @unchecked Sendable {
         // Strip noise elements (site chrome), iterating each tag to a fixed point.
         var cleaned = html
         for tag in ["script", "style", "noscript", "nav", "header", "footer"] {
-            guard let regex = try? NSRegularExpression(
-                pattern: "<\(tag)[\\s>][\\s\\S]*?</\(tag)>", options: [.caseInsensitive])
+            guard
+                let regex = try? NSRegularExpression(
+                    pattern: "<\(tag)[\\s>][\\s\\S]*?</\(tag)>", options: [.caseInsensitive])
             else { continue }
             var previous: String
             repeat {
@@ -455,7 +459,8 @@ public final class WwdcAdapter: SourceAdapter, @unchecked Sendable {
 
         let allParagraphs = regexGroups(
             "<p[^>]*>([\\s\\S]*?)</p>", in: afterH1, group: 1, options: [.caseInsensitive]
-        ).map { stripHtmlTags($0) }.filter { !$0.isEmpty }
+        )
+        .map { stripHtmlTags($0) }.filter { !$0.isEmpty }
 
         // Description: first substantial paragraph (the abstract), else the first.
         let description = allParagraphs.first(where: { jsLength($0) > 30 }) ?? allParagraphs.first
@@ -484,8 +489,9 @@ public final class WwdcAdapter: SourceAdapter, @unchecked Sendable {
 
     /// `extractChaptersFromHtml` — the `<h2>Chapters</h2><ul>…</ul>` list items.
     static func extractChapters(_ html: String) -> [String] {
-        guard let match = firstMatch(
-            "<h2[^>]*>\\s*Chapters\\s*</h2>\\s*<ul[^>]*>([\\s\\S]*?)</ul>", html, options: [.caseInsensitive])
+        guard
+            let match = firstMatch(
+                "<h2[^>]*>\\s*Chapters\\s*</h2>\\s*<ul[^>]*>([\\s\\S]*?)</ul>", html, options: [.caseInsensitive])
         else { return [] }
         let inner = (html as NSString).substring(with: match.range(at: 1))
         return regexGroups("<li[^>]*>([\\s\\S]*?)</li>", in: inner, group: 1, options: [.caseInsensitive])
@@ -566,9 +572,12 @@ public final class WwdcAdapter: SourceAdapter, @unchecked Sendable {
         {
             return fallback
         }
-        guard let firstLine = text.components(separatedBy: "\n").first(where: {
-            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }) else { return fallback }
+        guard
+            let firstLine = text.components(separatedBy: "\n")
+                .first(where: {
+                    !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                })
+        else { return fallback }
 
         let candidate = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
         if firstMatch("^\\[?\\d{2}:\\d{2}", candidate) == nil, jsLength(candidate) > 0, jsLength(candidate) < 200 {
@@ -676,12 +685,13 @@ public final class WwdcAdapter: SourceAdapter, @unchecked Sendable {
     ) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return [] }
         let ns = text as NSString
-        return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap { match in
-            guard match.numberOfRanges > group, match.range(at: group).location != NSNotFound else {
-                return nil
+        return regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+            .compactMap { match in
+                guard match.numberOfRanges > group, match.range(at: group).location != NSNotFound else {
+                    return nil
+                }
+                return ns.substring(with: match.range(at: group))
             }
-            return ns.substring(with: match.range(at: group))
-        }
     }
 
     static func replaceRegex(_ pattern: String, in text: String, with template: String) -> String {

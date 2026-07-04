@@ -39,10 +39,18 @@ public final class ExternalDoccAdapter: SourceAdapter, @unchecked Sendable {
 
     /// Always-on archives (deterministic inclusion), in the JS object-literal order.
     static let curatedArchives: [(slug: String, archive: Archive)] = [
-        ("carekit", Archive(displayName: "CareKit", kind: "framework",
-            baseUrl: "https://carekit-apple.github.io/CareKit")),
-        ("private-cloud-compute", Archive(displayName: "Private Cloud Compute Security Guide",
-            kind: "guide", baseUrl: "https://security.apple.com")),
+        (
+            "carekit",
+            Archive(
+                displayName: "CareKit", kind: "framework",
+                baseUrl: "https://carekit-apple.github.io/CareKit")
+        ),
+        (
+            "private-cloud-compute",
+            Archive(
+                displayName: "Private Cloud Compute Security Guide",
+                kind: "guide", baseUrl: "https://security.apple.com")
+        ),
         ("docc", Archive(displayName: "DocC", kind: "tooling", baseUrl: "https://www.swift.org"))
     ]
 
@@ -85,9 +93,10 @@ public final class ExternalDoccAdapter: SourceAdapter, @unchecked Sendable {
             // JS `upsertRoot(slug, displayName, kind, type, seedPath=slug, sourceType=type)`. The DB
             // ownership skip (a slug already owned by another source_type) is driver-side here — the
             // Swift SourceContext carries no `db`, matching SwiftDoccAdapter's port.
-            roots.append(DiscoveredRoot(
-                slug: slug, displayName: archive.displayName, kind: archive.kind,
-                source: Self.type, seedPath: slug, sourceType: Self.type))
+            roots.append(
+                DiscoveredRoot(
+                    slug: slug, displayName: archive.displayName, kind: archive.kind,
+                    source: Self.type, seedPath: slug, sourceType: Self.type))
             keys.append(contentsOf: await enumerate(slug, archive, context))
         }
         return DiscoveryResult(keys: keys, roots: roots)
@@ -176,21 +185,23 @@ public final class ExternalDoccAdapter: SourceAdapter, @unchecked Sendable {
         // behaviour-equivalent to the JS inline probe since `seen`/`archives` dedupe by slug).
         var seen = Set<String>()
         var candidates: [(slug: String, baseUrl: String, entryKey: String, title: String?)] = []
-        document.root["sections"].forEachElement { section in
-            section["groups"].forEachElement { group in
-                group["technologies"].forEachElement { tech in
-                    guard let id = tech["destination"]["identifier"].string,
-                        let parsed = Self.parseDoccArchiveUrl(id),
-                        archives[parsed.slug] == nil, !seen.contains(parsed.slug)
-                    else { return }
-                    seen.insert(parsed.slug)
-                    candidates.append(
-                        (parsed.slug, parsed.baseUrl, parsed.entryKey, tech["title"].string))
-                }
+        document.root["sections"]
+            .forEachElement { section in
+                section["groups"]
+                    .forEachElement { group in
+                        group["technologies"]
+                            .forEachElement { tech in
+                                guard let id = tech["destination"]["identifier"].string,
+                                    let parsed = Self.parseDoccArchiveUrl(id),
+                                    archives[parsed.slug] == nil, !seen.contains(parsed.slug)
+                                else { return }
+                                seen.insert(parsed.slug)
+                                candidates.append(
+                                    (parsed.slug, parsed.baseUrl, parsed.entryKey, tech["title"].string))
+                            }
+                    }
             }
-        }
-        for candidate in candidates {
-            guard await probe(candidate.baseUrl, candidate.entryKey, context) else { continue }
+        for candidate in candidates where await probe(candidate.baseUrl, candidate.entryKey, context) {
             archives[candidate.slug] = Archive(
                 displayName: candidate.title ?? candidate.slug, kind: "framework",
                 baseUrl: candidate.baseUrl)

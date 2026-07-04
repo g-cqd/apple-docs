@@ -141,7 +141,7 @@ public struct SampleCodeAdapter: SourceAdapter {
         // TabletopKit
         "tabletopkit/synchronizing-group-gameplay-with-tabletopkit",
         // Combine
-        "combine/using-combine-for-your-app-s-asynchronous-code",
+        "combine/using-combine-for-your-app-s-asynchronous-code"
     ]
 
     public init() {}
@@ -260,9 +260,11 @@ public struct SampleCodeAdapter: SourceAdapter {
     /// An empty framework is FALSY in JS ⇒ an empty `frameworks` array.
     static func sampleSourceMetadata(_ framework: String?) -> String {
         let frameworks: [JsJson] = (framework?.isEmpty ?? true) ? [] : [.string(framework!)]
-        return JsJson.object([
-            ("sampleProject", .bool(true)),
-            ("frameworks", .array(frameworks)),
-        ]).serialized()
+        return
+            JsJson.object([
+                ("sampleProject", .bool(true)),
+                ("frameworks", .array(frameworks))
+            ])
+            .serialized()
     }
 }

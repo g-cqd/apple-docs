@@ -78,8 +78,10 @@ struct AppleDoccAdapterTests {
 
     // MARK: - discover (technologies index → all DocC roots + per-root seed key)
 
-    @Test("discover builds DocC roots from the technologies index (KIND_MAP, dedupe, HIG excluded)")
-    func discover() async throws {
+    /// Runs `discover` against a stub serving the technologies index (404 otherwise); returns the result +
+    /// the client for the request assertions. Shared by the split tests below (each stays under the 250 ms
+    /// type-check budget — the single-body form with all the `map(\.…) == […]` comparisons tripped it).
+    private func discoverResult() async throws -> (result: DiscoveryResult, client: StubHTTPClient) {
         let client = StubHTTPClient { request in
             let url = request.head.url?.absoluteString ?? ""
             if url == "https://developer.apple.com/tutorials/data/documentation/technologies.json" {
@@ -88,25 +90,33 @@ struct AppleDoccAdapterTests {
             return httpResponse(404)
         }
         let context = SourceContext(client: client, rateLimiter: instantRateLimiter())
-        let result = try await AppleDoccAdapter().discover(context)
+        return (try await AppleDoccAdapter().discover(context), client)
+    }
 
-        // Roots: one per unique slug, in first-seen order; group name → kind via KIND_MAP; title from
-        // the technology; source = the adapter type. HIG's https:// destination is rejected → no `design`.
-        #expect(result.roots.map(\.slug) == ["swiftui", "uikit", "foundation", "xcode"])
-        #expect(result.roots.map(\.kind) == ["framework", "framework", "framework", "tooling"])
-        #expect(result.roots.map(\.displayName) == ["SwiftUI", "UIKit", "Foundation", "Xcode"])
+    @Test("discover builds DocC roots from the technologies index (KIND_MAP, dedupe, HIG excluded)")
+    func discoverRoots() async throws {
+        let (result, _) = try await discoverResult()
+        // One root per unique slug in first-seen order; group name → kind via KIND_MAP; title from the
+        // technology; source = the adapter type. HIG's https:// destination is rejected → no `design`.
+        let slugs: [String] = result.roots.map(\.slug)
+        let kinds: [String] = result.roots.map(\.kind)
+        let displays: [String] = result.roots.map(\.displayName)
+        #expect(slugs == ["swiftui", "uikit", "foundation", "xcode"])
+        #expect(kinds == ["framework", "framework", "framework", "tooling"])
+        #expect(displays == ["SwiftUI", "UIKit", "Foundation", "Xcode"])
         #expect(result.roots.allSatisfy { $0.source == "apple-docc" })
-        #expect(!result.roots.map(\.slug).contains("design"))
+        #expect(!slugs.contains("design"))
+    }
 
-        // Each root is seeded at its slug (the JS `keys: roots.map(root => root.slug)`) — the driver
-        // starts each root's BFS from this key.
-        #expect(result.keys == ["swiftui", "uikit", "foundation", "xcode"])
-
+    @Test("discover seeds each root at its slug + hits only the technologies index")
+    func discoverKeysAndRequest() async throws {
+        let (result, client) = try await discoverResult()
+        // Each root is seeded at its slug (the JS `keys: roots.map(root => root.slug)`).
+        let keys: [String] = result.keys
+        #expect(keys == ["swiftui", "uikit", "foundation", "xcode"])
         // Exactly one request, to the technologies index.
-        #expect(client.requests.count == 1)
-        #expect(
-            client.requests.first?.head.url?.absoluteString
-                == "https://developer.apple.com/tutorials/data/documentation/technologies.json")
+        let urls: [String] = client.requests.compactMap { $0.head.url?.absoluteString }
+        #expect(urls == ["https://developer.apple.com/tutorials/data/documentation/technologies.json"])
     }
 
     @Test("discover throws when the technologies index is unavailable")
@@ -223,8 +233,9 @@ struct AppleDoccAdapterTests {
 
     @Test("extractReferences yields resolved documentation keys, dropping external symbols")
     func extractReferences() {
-        let refs = AppleDoccAdapter().extractReferences(
-            "swiftui/view", .json(Array(Self.pageJSON.utf8)))
+        let refs = AppleDoccAdapter()
+            .extractReferences(
+                "swiftui/view", .json(Array(Self.pageJSON.utf8)))
         #expect(refs == ["swiftui/text"])
     }
 

@@ -38,7 +38,7 @@ public struct PackagesAdapter: SourceAdapter {
         ("apple", "swift-foundation"),
         ("swiftlang", "swift"), ("swiftlang", "swift-syntax"), ("swiftlang", "swift-package-manager"),
         ("swiftlang", "swift-docc"), ("swiftlang", "swift-testing"), ("swiftlang", "swift-evolution"),
-        ("swiftlang", "swift-markdown"),
+        ("swiftlang", "swift-markdown")
     ]
 
     public init() {}
@@ -97,10 +97,18 @@ public struct PackagesAdapter: SourceAdapter {
             throw AdapterError.unexpectedPayload("packages: payload missing repository metadata for \(key)")
         }
         let readme = decoded.readme
-        let scope = decoded.syncScope == "full" ? "full" : decoded.syncScope == "official" ? "official"
-            : Self.packageCatalogScope()
-        let fetchMode = decoded.fetchMode == "api" ? "api" : decoded.fetchMode == "raw" ? "raw"
-            : Self.packageFetchMode()
+        let scope =
+            decoded.syncScope == "full"
+            ? "full"
+            : decoded.syncScope == "official"
+                ? "official"
+                : Self.packageCatalogScope()
+        let fetchMode =
+            decoded.fetchMode == "api"
+            ? "api"
+            : decoded.fetchMode == "raw"
+                ? "raw"
+                : Self.packageFetchMode()
         let source = fetchMode == "raw" ? "raw" : "github-api"
 
         let sourceMetadata = Self.sourceMetadataJSON(
@@ -187,19 +195,23 @@ public struct PackagesAdapter: SourceAdapter {
             let repoJSON = Self.synthesizeRepoShape(
                 owner: owner, repo: repo, branch: branch, description: description)
 
-            let payload = JsJson.object([
-                ("repo", repoJSON),
-                ("readme", readme?.json ?? .null),
-                ("syncScope", .string(scope)),
-                ("fetchMode", .string("raw")),
-            ]).serialized()
-            let etag = JsJson.object([
-                ("source", .string("raw")),
-                ("repo", .null),
-                ("readme", (readme?.etag).map(JsJson.string) ?? .null),
-                ("branch", .string(branch)),
-                ("readmeFilename", (readme?.path).map(JsJson.string) ?? .null),
-            ]).serialized()
+            let payload =
+                JsJson.object([
+                    ("repo", repoJSON),
+                    ("readme", readme?.json ?? .null),
+                    ("syncScope", .string(scope)),
+                    ("fetchMode", .string("raw"))
+                ])
+                .serialized()
+            let etag =
+                JsJson.object([
+                    ("source", .string("raw")),
+                    ("repo", .null),
+                    ("readme", (readme?.etag).map(JsJson.string) ?? .null),
+                    ("branch", .string(branch)),
+                    ("readmeFilename", (readme?.path).map(JsJson.string) ?? .null)
+                ])
+                .serialized()
             return FetchResult(
                 key: key, payload: .json(Array(payload.utf8)), etag: etag, lastModified: readme?.lastModified)
         }
@@ -265,8 +277,9 @@ public struct PackagesAdapter: SourceAdapter {
             ("readmePath", (readme?.path).map(JsJson.string) ?? .null),
             ("readmeUrl", (readme?.htmlUrl ?? readme?.downloadUrl).map(JsJson.string) ?? .null),
             ("pushedAt", repo.pushed_at.map(JsJson.string) ?? .null),
-            ("updatedAt", repo.updated_at.map(JsJson.string) ?? .null),
-        ]).serialized()
+            ("updatedAt", repo.updated_at.map(JsJson.string) ?? .null)
+        ])
+        .serialized()
     }
 
     // MARK: - markdown synthesis + section helpers (ports of packages/markdown.js)
@@ -292,11 +305,12 @@ public struct PackagesAdapter: SourceAdapter {
 
     /// Reassign each section's `sortOrder` to its index (JS `reindexSections`).
     static func reindex(_ sections: [NormalizedSection]) -> [NormalizedSection] {
-        sections.enumerated().map { index, section in
-            var copy = section
-            copy.sortOrder = index
-            return copy
-        }
+        sections.enumerated()
+            .map { index, section in
+                var copy = section
+                copy.sortOrder = index
+                return copy
+            }
     }
 
     static func ensureAbstractSection(_ sections: [NormalizedSection], abstractText: String?)
@@ -366,7 +380,7 @@ public struct PackagesAdapter: SourceAdapter {
             ("owner", .object([("login", .string(owner))])),
             ("license", .null),
             ("pushed_at", .null),
-            ("updated_at", .null),
+            ("updated_at", .null)
         ])
     }
 
@@ -391,7 +405,7 @@ public struct PackagesAdapter: SourceAdapter {
             ("owner", (repo.owner?.login).map { JsJson.object([("login", .string($0))]) } ?? .null),
             ("license", licenseJson(repo.license)),
             ("pushed_at", repo.pushed_at.map(JsJson.string) ?? .null),
-            ("updated_at", repo.updated_at.map(JsJson.string) ?? .null),
+            ("updated_at", repo.updated_at.map(JsJson.string) ?? .null)
         ])
     }
 
@@ -399,7 +413,7 @@ public struct PackagesAdapter: SourceAdapter {
         guard let license else { return .null }
         return .object([
             ("spdx_id", license.spdx_id.map(JsJson.string) ?? .null),
-            ("name", license.name.map(JsJson.string) ?? .null),
+            ("name", license.name.map(JsJson.string) ?? .null)
         ])
     }
 
@@ -425,7 +439,7 @@ public struct PackagesAdapter: SourceAdapter {
                 ("downloadUrl", .string(downloadUrl)),
                 ("etag", etag.map(JsJson.string) ?? .null),
                 ("lastModified", lastModified.map(JsJson.string) ?? .null),
-                ("branch", .string(branch)),
+                ("branch", .string(branch))
             ])
         }
     }
@@ -528,9 +542,11 @@ public struct PackagesAdapter: SourceAdapter {
         guard let match = regex.firstMatch(in: trimmed, range: NSRange(location: 0, length: nsText.length)),
             match.numberOfRanges > 2
         else { return nil }
-        let owner = nsText.substring(with: match.range(at: 1)).removingPercentEncoding
+        let owner =
+            nsText.substring(with: match.range(at: 1)).removingPercentEncoding
             ?? nsText.substring(with: match.range(at: 1))
-        let repo = nsText.substring(with: match.range(at: 2)).removingPercentEncoding
+        let repo =
+            nsText.substring(with: match.range(at: 2)).removingPercentEncoding
             ?? nsText.substring(with: match.range(at: 2))
         return (owner, repo)
     }
