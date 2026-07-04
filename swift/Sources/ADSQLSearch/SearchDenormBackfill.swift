@@ -50,34 +50,43 @@ extension Database {
         )
         .all()
 
-        let update = try prepare(
-            """
+        guard !projected.isEmpty else { return }
+        let updateSQL = """
             UPDATE documents SET
               title_lc = $title_lc, key_lc = $key_lc, year_num = $year_num,
               track_lc = $track_lc, root_display = $root_display, root_slug = $root_slug
             WHERE id = $id
-            """)
+            """
 
-        for row in projected {
-            guard case .integer(let id) = row["id"] else { continue }
-            let framework: String = {
-                guard case .text(let f) = row["framework"] else { return "" }
-                return f
-            }()
-            // root_display = COALESCE(r.display_name, framework); root_slug = COALESCE(r.slug, framework)
-            // where r.slug == framework on a hit (the join key), so root_slug is `framework` either way.
-            let display = rootDisplayBySlug[framework]
-            _ = try update.run([
-                "id": .integer(id),
-                "title_lc": row["title_lc"] ?? .null,
-                "key_lc": row["key_lc"] ?? .null,
-                // year_num = CAST(json_extract(…,'$.year') AS INTEGER): json_extract already yields an
-                // integer Value for a JSON integer; a non-integer / absent year folds to NULL.
-                "year_num": integerOrNull(row["year_raw"]),
-                "track_lc": row["track_lc"] ?? .text(""),
-                "root_display": .text(display ?? framework),
-                "root_slug": .text(framework)
-            ])
+        // Suspend the `documents` FTS-sync triggers around the write: the six denorm columns aren't in
+        // documents_fts / documents_trigram, so the blanket `documents_au AFTER UPDATE` would re-encode a
+        // whole posting list per row for NOTHING — quadratic over N. Suspending makes the pass linear; the
+        // FTS content is untouched, so the index stays correct. One transaction: a throw rolls the whole
+        // thing back with the triggers intact.
+        try suspendingTriggers(on: "documents") { (txn) throws(DBError) in
+            for row in projected {
+                guard case .integer(let id) = row["id"] else { continue }
+                let framework: String = {
+                    guard case .text(let f) = row["framework"] else { return "" }
+                    return f
+                }()
+                // root_display = COALESCE(r.display_name, framework); root_slug = COALESCE(r.slug, framework)
+                // where r.slug == framework on a hit (the join key), so root_slug is `framework` either way.
+                let display = rootDisplayBySlug[framework]
+                _ = try txn.run(
+                    updateSQL,
+                    [
+                        "id": .integer(id),
+                        "title_lc": row["title_lc"] ?? .null,
+                        "key_lc": row["key_lc"] ?? .null,
+                        // year_num = CAST(json_extract(…,'$.year') AS INTEGER): json_extract already yields
+                        // an integer Value for a JSON integer; a non-integer / absent year folds to NULL.
+                        "year_num": integerOrNull(row["year_raw"]),
+                        "track_lc": row["track_lc"] ?? .text(""),
+                        "root_display": .text(display ?? framework),
+                        "root_slug": .text(framework)
+                    ])
+            }
         }
     }
 }
