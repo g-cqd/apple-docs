@@ -92,7 +92,7 @@ private func decode(_ bytes: [UInt8]) -> Decoded {
         defer { _ = lib.closeV2(db) }
 
         func exec(_ sql: String) {
-            let s = PreparedStatement(lib: lib, db: db, sql: sql)
+            let s = SQLiteStatement(lib: lib, db: db, sql: sql)
             #expect(s != nil)
             _ = lib.step(s!.stmt)
         }
@@ -100,7 +100,7 @@ private func decode(_ bytes: [UInt8]) -> Decoded {
         exec("INSERT INTO t VALUES (42, 3.5, 'héllo', NULL, x'00ff')")
         exec("INSERT INTO t VALUES (-7, 0.0, '', NULL, NULL)")
 
-        let stmt = try #require(PreparedStatement(lib: lib, db: db, sql: "SELECT i, r, s, n, b FROM t ORDER BY i DESC"))
+        let stmt = try #require(SQLiteStatement(lib: lib, db: db, sql: "SELECT i, r, s, n, b FROM t ORDER BY i DESC"))
         var out: [UInt8] = []
         expectTrue(stmt.run(into: &out))
         let d = decode(out)

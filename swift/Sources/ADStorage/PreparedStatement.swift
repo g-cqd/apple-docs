@@ -1,7 +1,12 @@
-// A cached sqlite3_stmt wrapper. One statement per SQL string, owned by a
-// Connection, reused across calls. reset + clear_bindings run on teardown
-// of every execution so stale bindings from a prior call can never leak
-// into the next and silently return wrong rows.
+// The libsqlite3 `StorageStatement`. A cached sqlite3_stmt wrapper: one
+// statement per SQL string, owned by a `SQLiteConnection`, reused across calls.
+// reset + clear_bindings run on teardown of every execution so stale bindings
+// from a prior call can never leak into the next and silently return wrong rows.
+//
+// `run`/`runJSON` are the shared `RowFraming` defaults (StorageBackend.swift):
+// this type only supplies the accessors + the zero-copy text/blob byte hooks,
+// so the framing loop is written once and produces byte-identical output on
+// both backends.
 
 import ADFCore
 import ADJSONCore
@@ -12,21 +17,10 @@ import ADJSONCore
     import Glibc
 #endif
 
-/// A bound value for a named parameter. `.null` binds SQL NULL.
-enum BindValue {
-    case null
-    case int(Int64)
-    case double(Double)
-    case text(String)
-}
-
-final class PreparedStatement {
+final class SQLiteStatement: StorageStatement {
     private let lib: SQLiteLib
     private let db: OpaquePointer
     let stmt: OpaquePointer
-    // Column-name bytes are constant for a prepared statement — collect once on
-    // first runJSON (avoids ~N String allocations per call).
-    private var jsonNames: [[UInt8]]?
 
     init?(lib: SQLiteLib, db: OpaquePointer, sql: String) {
         self.lib = lib
@@ -46,8 +40,8 @@ final class PreparedStatement {
         _ = lib.finalize(stmt)
     }
 
-    /// Binds a value to the named parameter (e.g. "$query"). Unknown names
-    /// are ignored (index 0) — the SQL simply has no such placeholder.
+    /// Binds a value to the named parameter (e.g. "$query"). Unknown names are
+    /// ignored (index 0) — the SQL simply has no such placeholder.
     func bind(_ name: String, _ value: BindValue) {
         let idx = name.withCString { lib.bindParameterIndex(stmt, $0) }
         guard idx > 0 else { return }
@@ -68,83 +62,21 @@ final class PreparedStatement {
         }
     }
 
-    /// Steps the statement to completion, framing every result row into `out`
-    /// as `[u32 columnCount][u32 rowCount]` then per row `columnCount` cells,
-    /// each `[u8 tag][value]`:
-    ///   tag 0 NULL (no value), 1 INTEGER [i64 LE], 2 REAL [f64 LE],
-    ///   3 TEXT [u32 len][utf8], 4 BLOB [u32 len][bytes].
-    /// This mirrors sqlite3_column_type's dynamic mapping exactly. Returns
-    /// false on a step error. Always resets + clears bindings before returning.
-    func run(into out: inout [UInt8]) -> Bool {
-        defer {
-            _ = lib.reset(stmt)
-            _ = lib.clearBindings(stmt)
+    /// Binds a String to a positional (1-based) `?` parameter. SQLITE_TRANSIENT:
+    /// sqlite copies the bytes during the call.
+    func bindText(_ index: Int32, _ value: String) {
+        let bytes = Array(value.utf8)
+        bytes.withUnsafeBufferPointer { buf in
+            _ = lib.bindText(stmt, index, buf.baseAddress, Int32(buf.count), sqliteTransient)
         }
-        let columnCount = lib.columnCount(stmt)
-        let columnHeaderOffset = out.count
-        appendU32(&out, UInt32(bitPattern: columnCount))
-        appendU32(&out, 0)  // rowCount placeholder, patched after stepping
-        var rowCount: UInt32 = 0
-        while true {
-            let rc = lib.step(stmt)
-            if rc == SQLite.done { break }
-            guard rc == SQLite.row else { return false }
-            for col in 0 ..< columnCount {
-                appendCell(&out, column: col)
-            }
-            rowCount &+= 1
-        }
-        patchU32(&out, at: columnHeaderOffset + 4, rowCount)
-        return true
     }
 
-    /// Steps to completion, framing rows as a JSON array of objects keyed by
-    /// column name — hand-rolled to `out` (NO Foundation; JSONEncoder is ~57×
-    /// slower on Linux). Per-cell typing: NULL/BLOB → null, INTEGER/REAL →
-    /// number, TEXT → escaped string. Returns false on a step error. Always
-    /// resets + clears bindings.
-    func runJSON(into out: inout [UInt8]) -> Bool {
-        defer {
-            _ = lib.reset(stmt)
-            _ = lib.clearBindings(stmt)
-        }
-        let columnCount = lib.columnCount(stmt)
-        let names: [[UInt8]]
-        if let cached = jsonNames {
-            names = cached
-        } else {
-            var collected: [[UInt8]] = []
-            collected.reserveCapacity(Int(columnCount))
-            for i in 0 ..< columnCount {
-                collected.append(lib.columnName(stmt, i).map { Array(String(cString: $0).utf8) } ?? [])
-            }
-            jsonNames = collected
-            names = collected
-        }
-        out.append(UInt8(ascii: "["))
-        var firstRow = true
-        while true {
-            let rc = lib.step(stmt)
-            if rc == SQLite.done { break }
-            guard rc == SQLite.row else { return false }
-            if !firstRow { out.append(UInt8(ascii: ",")) }
-            firstRow = false
-            out.append(UInt8(ascii: "{"))
-            for col in 0 ..< columnCount {
-                if col > 0 { out.append(UInt8(ascii: ",")) }
-                out.append(UInt8(ascii: "\""))
-                names[Int(col)].withUnsafeBufferPointer { appendJSONEscaped(&out, $0) }
-                out.append(UInt8(ascii: "\""))
-                out.append(UInt8(ascii: ":"))
-                appendJSONCell(&out, column: col)
-            }
-            out.append(UInt8(ascii: "}"))
-        }
-        out.append(UInt8(ascii: "]"))
-        return true
+    /// Binds an Int64 to a positional (1-based) `?` parameter.
+    func bindInt64(_ index: Int32, _ value: Int64) {
+        _ = lib.bindInt64(stmt, index, value)
     }
 
-    // MARK: - row iteration (for the in-process cascade)
+    // MARK: - row iteration
 
     /// Steps once; returns the raw sqlite rc (SQLite.row / .done / error).
     func step() -> Int32 { lib.step(stmt) }
@@ -161,7 +93,7 @@ final class PreparedStatement {
 
     /// The dynamic SQLite type of a result column (SQLite.type*). Used by the
     /// section codec to distinguish a TEXT cell (pass through) from a BLOB
-    /// (zstd-compacted) one.
+    /// (zstd-compacted) one, and by the shared framer.
     func columnType(_ col: Int32) -> Int32 { lib.columnType(stmt, col) }
 
     /// The result column's name (`sqlite3_column_name`) — the dynamic-row
@@ -180,20 +112,6 @@ final class PreparedStatement {
         return Array(UnsafeRawBufferPointer(start: ptr, count: n).bindMemory(to: UInt8.self))
     }
 
-    /// Binds a String to a positional (1-based) `?` parameter. SQLITE_TRANSIENT:
-    /// sqlite copies the bytes during the call.
-    func bindText(_ index: Int32, _ value: String) {
-        let bytes = Array(value.utf8)
-        bytes.withUnsafeBufferPointer { buf in
-            _ = lib.bindText(stmt, index, buf.baseAddress, Int32(buf.count), sqliteTransient)
-        }
-    }
-
-    /// Binds an Int64 to a positional (1-based) `?` parameter.
-    func bindInt64(_ index: Int32, _ value: Int64) {
-        _ = lib.bindInt64(stmt, index, value)
-    }
-
     func text(_ col: Int32) -> String? {
         guard lib.columnType(stmt, col) != SQLite.typeNull, let ptr = lib.columnText(stmt, col) else {
             return nil
@@ -210,52 +128,27 @@ final class PreparedStatement {
         lib.columnType(stmt, col) == SQLite.typeNull ? nil : lib.columnDouble(stmt, col)
     }
 
-    private func appendJSONCell(_ out: inout [UInt8], column col: Int32) {
-        switch lib.columnType(stmt, col) {
-            case SQLite.typeInteger:
-                appendInt(&out, lib.columnInt64(stmt, col))
-            case SQLite.typeFloat:
-                let d = lib.columnDouble(stmt, col)
-                out.append(contentsOf: (d.isFinite ? String(d) : "null").utf8)
-            case SQLite.typeText:
-                let ptr = lib.columnText(stmt, col)
-                let n = Int(lib.columnBytes(stmt, col))
-                out.append(UInt8(ascii: "\""))
-                if n > 0, let ptr { appendJSONEscaped(&out, UnsafeBufferPointer(start: ptr, count: n)) }
-                out.append(UInt8(ascii: "\""))
-            default:  // NULL or BLOB (searchPages projects neither)
-                out.append(contentsOf: "null".utf8)
+    // MARK: - zero-copy byte access for the shared framer
+
+    /// column_text first, then column_bytes returns the utf8 byte count — the
+    /// same order the framed TEXT cell used inline.
+    func withColumnTextBytes(_ col: Int32, _ body: (UnsafeBufferPointer<UInt8>) -> Void) {
+        let ptr = lib.columnText(stmt, col)
+        let n = Int(lib.columnBytes(stmt, col))
+        if let ptr, n > 0 {
+            body(UnsafeBufferPointer(start: ptr, count: n))
+        } else {
+            body(UnsafeBufferPointer(start: nil, count: 0))
         }
     }
 
-    private func appendCell(_ out: inout [UInt8], column col: Int32) {
-        switch lib.columnType(stmt, col) {
-            case SQLite.typeInteger:
-                out.append(1)
-                appendI64(&out, lib.columnInt64(stmt, col))
-            case SQLite.typeFloat:
-                out.append(2)
-                appendF64(&out, lib.columnDouble(stmt, col))
-            case SQLite.typeText:
-                out.append(3)
-                // column_text first, then column_bytes returns the utf8 byte count.
-                let ptr = lib.columnText(stmt, col)
-                let n = Int(lib.columnBytes(stmt, col))
-                appendU32(&out, UInt32(n))
-                if n > 0, let ptr {
-                    out.append(contentsOf: UnsafeBufferPointer(start: ptr, count: n))
-                }
-            case SQLite.typeBlob:
-                out.append(4)
-                let ptr = lib.columnBlob(stmt, col)
-                let n = Int(lib.columnBytes(stmt, col))
-                appendU32(&out, UInt32(n))
-                if n > 0, let ptr {
-                    out.append(
-                        contentsOf: UnsafeRawBufferPointer(start: ptr, count: n).bindMemory(to: UInt8.self))
-                }
-            default:  // SQLITE_NULL
-                out.append(0)
+    func withColumnBlobBytes(_ col: Int32, _ body: (UnsafeBufferPointer<UInt8>) -> Void) {
+        let ptr = lib.columnBlob(stmt, col)
+        let n = Int(lib.columnBytes(stmt, col))
+        if let ptr, n > 0 {
+            body(UnsafeRawBufferPointer(start: ptr, count: n).bindMemory(to: UInt8.self))
+        } else {
+            body(UnsafeBufferPointer(start: nil, count: 0))
         }
     }
 }

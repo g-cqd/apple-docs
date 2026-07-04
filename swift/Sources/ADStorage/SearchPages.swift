@@ -69,12 +69,7 @@ public enum Storage {
     /// (unknown handle, prepare error, step error).
     public static func searchPages(handle: UInt64, _ params: SearchPagesParams) -> [UInt8]? {
         ConnectionRegistry.shared.withConnection(handle) { conn -> [UInt8]? in
-            guard let stmt = conn.statement(searchPagesSQL) else { return nil }
-            bindSearchPages(stmt, params)
-            var out: [UInt8] = []
-            out.reserveCapacity(4096)
-            guard stmt.run(into: &out) else { return nil }
-            return out
+            conn.searchPagesFramed(params)
         } ?? nil
     }
 }
@@ -82,7 +77,7 @@ public enum Storage {
 /// Binds the 16 searchPages parameters. Shared by the FFI packed-binary path
 /// (`Storage.searchPages`) and the in-process JSON path
 /// (`StorageConnection.searchPagesJSON`).
-func bindSearchPages(_ stmt: PreparedStatement, _ params: SearchPagesParams) {
+func bindSearchPages(_ stmt: any StorageStatement, _ params: SearchPagesParams) {
     stmt.bind("$query", .text(params.query))
     stmt.bind("$raw", .text(params.raw))
     stmt.bind("$limit", .int(params.limit))

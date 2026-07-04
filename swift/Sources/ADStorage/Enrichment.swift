@@ -93,7 +93,7 @@ extension StorageConnection {
 /// Type-directed section content decode: TEXT passes through; a BLOB with
 /// the 4-byte zstd magic is inflated; any other BLOB is a best-effort
 /// UTF-8 decode.
-private func decodeSectionContent(_ stmt: PreparedStatement, _ col: Int32) -> String? {
+private func decodeSectionContent(_ stmt: any StorageStatement, _ col: Int32) -> String? {
     switch stmt.columnType(col) {
         case SQLite.typeNull: return nil
         case SQLite.typeText: return stmt.text(col)

@@ -107,7 +107,7 @@ private let sfCols =
 private let sfColsS =
     "s.name, s.scope, s.categories_json, s.keywords_json, s.aliases_json, s.availability_json, s.order_index, s.bundle_path, s.bundle_version, s.updated_at, s.codepoint, s.codepoint_version, s.bitmap_only, s.render_unsupported"
 
-private func readSfSymbolRow(_ stmt: PreparedStatement) -> SfSymbolRow {
+private func readSfSymbolRow(_ stmt: any StorageStatement) -> SfSymbolRow {
     SfSymbolRow(
         name: stmt.text(0) ?? "", scope: stmt.text(1) ?? "", categoriesJson: stmt.text(2),
         keywordsJson: stmt.text(3), aliasesJson: stmt.text(4), availabilityJson: stmt.text(5),
