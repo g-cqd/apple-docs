@@ -204,76 +204,89 @@ Findings, categorized:
    increment) into `CrawlDriver.crawl()`; backfilled the existing corpus via the new hidden
    `ad-cli _backfill-page-count` verb. Verified: 406/406 roots backfilled, `frameworks --json`
    now returns real data.
-2. **[Confirmed regression — root cause pinned down, not yet fixed]** The completed JS crawl
-   gave an exact ground truth that cracked this one open: JS's `design` (HIG) root has
-   **exactly 172 pages** — matching Swift's own `crawl_state` count for `root_slug='design'`
-   (172 processed, 1 failed) almost exactly. So the BFS seeding/same-root filter
-   (`CrawlDriver.slug(ofKey:)`) was never the problem — `crawl_state` had the right shape all
-   along. The actual bug: `CrawlDriver.crawlFrontier`'s `getPendingCrawlAny` pulls **every**
-   `pending` row with **no root/source filter** ("every root's pending work pooled into one
-   loop" — a deliberate perf choice for pooling one source's *own* many roots), but `sync-all`
-   calls `driver.crawl(rootId:rootIds:)` **once per source, sequentially**, each with `rootIds`
+2. **[Confirmed regression — fixed, `2b909e1` + `b9be460`]** The completed JS crawl gave an
+   exact ground truth that cracked this one open: JS's `design` (HIG) root has **exactly 172
+   pages** — matching Swift's own `crawl_state` count for `root_slug='design'` (172 processed,
+   1 failed) almost exactly. So the BFS seeding/same-root filter (`CrawlDriver.slug(ofKey:)`)
+   was never the problem — `crawl_state` had the right shape all along. The actual bug:
+   `CrawlDriver.crawlFrontier`'s `getPendingCrawlAny` pulled **every** `pending` row with **no
+   root/source filter** ("every root's pending work pooled into one loop" — a deliberate perf
+   choice for pooling one source's *own* many roots), but `sync-all` calls
+   `driver.crawl(rootId:rootIds:)` **once per source, sequentially**, each with `rootIds`
    scoped to only *that* source's own discovered roots. Any `pending` backlog left over from a
    *different* source (this corpus's history includes an earlier, long-running apple-docc
-   crawl from earlier in this project) gets vacuumed up by whichever source runs next — here,
+   crawl from earlier in this project) got vacuumed up by whichever source ran next — here,
    `hig` — and persisted via `rootId: rootIds[f.rootSlug] ?? rootId`: since the foreign
-   `root_slug` (e.g. `accelerate`) isn't in `hig`'s own `rootIds` (`["design": id]`), it falls
-   back to `hig`'s own default root, mis-stamping `pages.root_id` (and now, thanks to fix #1,
-   `roots.page_count`) with `design` on that page's first-ever persist. Confirmed directly:
-   `ad-cli frameworks --json` now reports `design: pageCount 155302` (matching the old
-   "155,130 persisted" log line almost exactly) while `crawl_state` and `documents.framework`
-   (string-derived from the path, immune to this bug) both correctly say `design` has 172.
-   `ad-cli browse`'s topic-tree walk uses the latter, which is why it showed "0 pages" even as
-   `page_count` showed 155K — two different queries, only one of them corrupted. Net effect:
-   `design`'s `page_count` is wildly inflated and whichever frameworks lost pages to the
-   fallback (e.g. `accelerate`: `page_count` 1,116 vs. `crawl_state`'s 8,652) undercount.
-   Fix direction (not yet implemented): scope `getPendingCrawlAny` to the calling `crawl()`
-   call's own root set (`WHERE root_slug IN (…)`, from `rootIds.keys`) so a source can only
-   ever drain its own backlog; existing corpora then need a one-time repair re-deriving
-   `pages.root_id` from `crawl_state.root_slug`/`documents.framework`. This also means fix #1's
-   backfill is *correctly implemented* but faithfully reflects an *already-corrupted*
-   `pages.root_id` on this particular corpus — the algorithm is right, the input data isn't.
-3. **[MCP tool contract diff — mix of known + newly found]** The live JS MCP implementation
-   is gone, so pulled the last commit before its deletion (`9078247`'s parent, `200a744`) and
-   diffed all 9 tools' schemas field-by-field against `Tools.swift`/`Tools+Inputs.swift`.
-   Every Swift input field is a strict subset of JS's — no field was renamed or removed, and
-   nothing is Swift-only. `list_taxonomy`, `search_sf_symbols`, and `list_apple_fonts`'
-   input are identical. The rest:
-   - `read_doc` — schema identical; behavior confirmed diverging exactly as
-     `Tools.swift:465-469`'s own comment says. JS's (now-deleted) `pagination.js`/
-     `page-builder.js` had a real binary-search paginator (`pageInfo`) and a match-excerpt
-     builder; Swift's handler only widens `includeSections`, never truncates or excerpts.
-   - `search_docs` — **missing in Swift, not previously flagged anywhere**: JS also has a
-     `read` bool (inline the top hit's full doc) plus the same pagination/match shape as
-     `read_doc`; Swift has neither.
-   - `browse` — **missing in Swift, not previously flagged**: JS paginates the page/children
-     array (`maxChars`/`page`); Swift's own `limit` cap (200) with no pagination means a root
-     with more pages than the cap is only partially reachable.
-   - `list_frameworks` — **newly found, no prior comment anywhere**: `maxChars`/`page` are
-     declared right in Swift's own `ListFrameworksInput` schema, but the handler never reads
-     either — it always returns the full unpaginated `roots` array regardless of what's
-     requested.
-   - `render_sf_symbol` / `render_font_text` — schema identical; both have behavioral gaps
-     already documented in `Tools.swift`'s own comments (Swift is live-render-only, missing
-     JS's disk-cache/prerendered fast path and its CoreText→hb-native→hb-view fallback
-     chain; a font-path containment check allows fewer roots) — confirms these are known,
-     not new.
-   - **Cross-cutting, systemic**: JS's zod schemas reject out-of-range input at decode time;
-     Swift's `@SchemaNumber` bounds are advisory-only, clamped server-side instead
-     (`QueryParse.swift`'s own comment confirms this is deliberate) — every tool's numeric
-     inputs behave differently on out-of-range values, not a per-tool issue.
-4. **[Known partial port, deliberately phased]** Several JS `web serve` HTTP routes have no
-   `ad-server` equivalent: `/api/fonts/text.svg`, `/api/fonts/subset`, `/api/fonts/file/:id`,
-   `/api/fonts/family/:id.zip`, and the `/api/symbols/(scope)/:name.(svg|png)` image-bytes
-   pattern. Git history confirms this is a deliberate phase boundary, not an oversight —
-   `5ed84c9` ("Completes Phase 2 (fonts + symbols metadata)") explicitly scoped that phase to
-   JSON metadata only. The rendering logic itself already exists as the `render_sf_symbol`/
-   `render_font_text` MCP tools; it just isn't also exposed as plain HTTP GETs yet.
-5. **[Intentional architecture difference]** JS's `web serve` bundles static-site + API in one
-   process; Swift splits static generation (`ad-cli web build`) from API/MCP hosting
-   (`ad-server serve`), so a bare `ad-server` 404s at `/`. Not a bug, but worth a clearer
-   operator-facing note (e.g. in `web deploy`'s printed instructions) — it was surprising in
-   practice this session.
+   `root_slug` (e.g. `accelerate`) wasn't in `hig`'s own `rootIds` (`["design": id]`), it fell
+   back to `hig`'s own default root, mis-stamping `pages.root_id` (and, via fix #1,
+   `roots.page_count`) with `design` on that page's first-ever persist. Confirmed directly
+   before the fix: `ad-cli frameworks --json` reported `design: pageCount 155302` (matching
+   the old "155,130 persisted" log line almost exactly) while `crawl_state` and
+   `documents.framework` (string-derived from the path, immune to this bug) both correctly
+   said `design` has 172 — `ad-cli browse`'s topic-tree walk uses the latter, which is why it
+   showed "0 pages" even as `page_count` showed 155K.
+   **Fix** (`2b909e1`): `getPendingCrawlAny` now takes the caller's own closed root-slug set
+   (`rootIds.keys` unioned with every depth-0 seed's own derived slug, computed once) and
+   filters `WHERE root_slug IN (…)`, so a source can never again drain a different source's
+   backlog. **Repair** (`b9be460`, `ad-cli _repair-page-root-ids`): re-derived `pages.root_id`
+   for the already-corrupted corpus from `crawl_state.root_slug` (via `documents` as the join
+   hub — `pages.path == documents.url`, `documents.key == crawl_state.path`; a direct
+   `pages.path == crawl_state.path` join is wrong, `pages.path` is the external URL and
+   `crawl_state.path` is the bare crawl key, a correction found mid-implementation). Verified
+   against `~/.apple-docs/apple-docs.db` (backed up first): 155,258/342,758 pages repaired, 790
+   left unresolved (a pre-existing, separate `apple-archive` gap, untouched rather than
+   guessed); `design` 155,302→172, `accelerate` 1,116→8,652, `swiftui` 6,395→8,867,
+   `appintents` 246→4,437, `foundation` 7,640→13,942 — every one an exact match to the JS
+   ground truth. Idempotent (a second run is a confirmed no-op).
+3. **[MCP tool contract diff — fixed, `2755664`]** The live JS MCP implementation is gone, so
+   pulled the last commit before its deletion (`9078247`'s parent, `200a744`) and diffed all 9
+   tools' schemas field-by-field against `Tools.swift`/`Tools+Inputs.swift`. Every Swift input
+   field was a strict subset of JS's — no field was renamed or removed, and nothing was
+   Swift-only. `list_taxonomy`, `search_sf_symbols`, and `list_apple_fonts`'s input were
+   already identical. The rest, all now fixed:
+   - `read_doc` — a real binary-search paginator (`Pagination.swift`/`DocumentPagination.swift`,
+     porting JS's deleted `pagination.js`/`page-builder.js`) and match-excerpt builder
+     (`MatchExcerpt.swift`, porting `buildMatchedDocumentPayload`) now back `maxChars`/`page`/
+     `match` for real — previously the handler only widened `includeSections` and did nothing
+     else, per its own now-obsolete comment.
+   - `search_docs` — gained the `read` bool (inlines the top hit via the same document
+     pagination/match machinery as `read_doc`, as `bestMatch`) plus the identical
+     `maxChars`/`page`/`match` shape.
+   - `browse` — gained `maxChars`/`page`, array-paginating both the flat `pages` listing and
+     the path-drill-in `children` listing (the bare-WWDC grouped-by-year shape is deliberately
+     left unpaginated — JS's own generic paginator would inject a spurious empty field onto
+     that shape; disclosed judgment call, not a literal port of that quirk).
+   - `list_frameworks` — the `maxChars`/`page` fields were already declared in the schema but
+     the handler never read them; now wired to the same array paginator.
+   - `render_sf_symbol` / `render_font_text` — schema was already identical; the render-side
+     gaps are closed by finding #7 below (fallback chain) — the disk-cache/prerendered fast
+     path is still pending on the prerender verb itself.
+   - **Cross-cutting, systemic** — fixed: JS's zod schemas reject out-of-range input at decode
+     time; Swift's `@SchemaNumber` bounds were advisory-only and clamped server-side instead.
+     Added `validateBound` (`QueryParse.swift`) and switched every MCP-tool-facing numeric
+     field to reject instead of clamp. The web query-string paths (`clampSearchLimit`/
+     `clampSymbolLimit`) are deliberately unchanged — they mirror JS's own web-layer clamp,
+     never zod-validated either.
+   Verified end-to-end via `ad-server mcp --db ~/.apple-docs/apple-docs.db` against the real
+   corpus: real pagination (e.g. `swiftui/view` at `maxChars=800` → `{page:1,totalPages:90,
+   hasNextPage:true}`), match excerpts, `search_docs read=true`, array pagination, and every
+   strict-rejection path.
+4. **[Fixed, `467456b`]** 4 of the 5 missing JS `web serve` HTTP routes now exist on
+   `ad-server`: `/api/fonts/text.svg`, `/api/fonts/file/:id`, `/api/fonts/family/:id.zip`, and
+   `/api/symbols/(public|private)/:name.(svg|png)` — matching JS's query params/cache headers/
+   404 shapes, sharing the same render primitives the MCP tools already use (no duplicated
+   logic). `/api/fonts/subset` is confirmed genuinely unportable, not merely unfinished: it
+   depends on `pyftsubset` (Python fontTools) via a worker pool, with no Swift equivalent
+   anywhere in this codebase or its dependencies — left unrouted (falls through to a generic
+   404) rather than faked. Also closed while here: font-file containment (`FontPathContainment`,
+   consolidating the MCP tool's check and adding the HTTP routes' 4th root) and a family-ZIP
+   `?subset=` path-traversal smell present in the original JS (closed via a validated closed
+   enum instead of embedding the raw query value into a cache path).
+5. **[Documented, `577b73d`]** JS's `web serve` bundles static-site + API in one process;
+   Swift splits static generation (`ad-cli web build`) from API/MCP hosting (`ad-server
+   serve`), so a bare `ad-server` 404s at `/`. Not a bug, but it surprised this project's own
+   operator in practice — `web deploy`'s printed instructions (human and JSON) now carry an
+   explicit note explaining the two-step flow.
 6. **[Resolved — corpus-level parity is good]** The JS crawl finished (`sync --full
    --aggressive --rate 500`, 1885s / ~31 min total for crawl + body-index + resources +
    symbol prerender + doctor + consolidate — vs. Swift's crawl-only pass taking considerably
@@ -291,8 +304,18 @@ Findings, categorized:
    symbol-variant SVGs baked to disk, 0 failed) as part of one run; Swift has no prerender
    verb yet (tracked separately as the SF-Symbol PRERENDER work, next up after F3's catalog
    sync). Concrete target size now known: ~273K rendered variants.
+8. **[New, found independently by two separate fixes above, not yet fixed]** `ad-cli browse`
+   (and presumably the `browse` MCP tool's flat-listing mode) shows "0 pages" for **every**
+   root — including ones the finding #2 fix/repair never touched (e.g. `swift-evolution`).
+   Root cause: `Sources/ADStorage/Browse.swift:43`'s `pagesByRoot` joins `pages p ON p.path =
+   d.key` — the same never-true predicate finding #2's repair had to route around
+   (`pages.path`/`documents.url` are the external URL; `documents.key`/`crawl_state.path` are
+   the bare crawl key), but this is a distinct, pre-existing defect in `Browse.swift`'s own
+   query, not something the `root_id` repair fixes. Needs the same documents-as-hub join
+   pattern `RepairPageRootIds.swift` already established.
 
-Everything above was confirmed by direct inspection of the finished JS and Swift corpora.
+Everything above except #8 has landed and was verified against the real corpus; #8 is a
+follow-up.
 
 ## 12. Parity harness design
 
