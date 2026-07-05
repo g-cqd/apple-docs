@@ -2,8 +2,8 @@
 // core of src/resources/apple-assets.js `syncAppleFonts`: the 8 Apple font families
 // + system / already-extracted discovery + variable-axis inspection (FontInspect),
 // upserted into apple_font_families / apple_font_files. The DMG download+extract half
-// (hdiutil, macOS-only) is a deferred `--download-fonts` follow-up; the snapshot ships
-// the extracted files, so a resync-skipped run still yields the family + system rows.
+// (hdiutil, macOS-only) is opt-in behind `--download-fonts`; the snapshot ships the
+// extracted files, so the default (flag-off) run still yields the family + system rows.
 
 import ADJSONCore
 import ADStorage
@@ -19,7 +19,7 @@ struct ResourcesCommand: ParsableCommand {
 }
 
 /// `ad-cli resources sync-fonts [--db …] [--home …] [--json]`.
-struct ResourcesSyncFontsCommand: ParsableCommand {
+struct ResourcesSyncFontsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sync-fonts",
         abstract: "Discover + index Apple fonts into apple_font_families / apple_font_files.")
@@ -33,7 +33,10 @@ struct ResourcesSyncFontsCommand: ParsableCommand {
     @Flag(name: .long, help: "Emit the result as JSON.")
     var json = false
 
-    func run() throws {
+    @Flag(name: .long, help: "macOS-only: download + extract the Apple font DMGs (hdiutil) before indexing.")
+    var downloadFonts = false
+
+    func run() async throws {
         let dataDir =
             home ?? ProcessInfo.processInfo.environment["APPLE_DOCS_HOME"]
             ?? "\(NSHomeDirectory())/.apple-docs"
@@ -42,22 +45,31 @@ struct ResourcesSyncFontsCommand: ParsableCommand {
             FileHandle.standardError.write(Data("ad-cli: cannot open corpus \(dbPath)\n".utf8))
             throw ExitCode(1)
         }
-        let result = FontSync.syncAppleFonts(connection, dataDir: dataDir, now: jsIsoNow())
+        let result = await FontSync.syncAppleFonts(
+            connection, dataDir: dataDir, now: jsIsoNow(), downloadFonts: downloadFonts,
+            warn: { message in FileHandle.standardError.write(Data("ad-cli: \(message)\n".utf8)) })
         if json {
-            print(
-                stringifyPretty(
-                    .obj([
-                        ("families", .int(Int64(result.families))),
-                        ("files", .int(Int64(result.files))),
-                        ("variable", .int(Int64(result.variable))),
-                        ("system", .int(Int64(result.system))),
-                        ("remote", .int(Int64(result.remote)))
-                    ])))
+            var pairs: [(String, JSONValue)] = [
+                ("families", .int(Int64(result.families))),
+                ("files", .int(Int64(result.files))),
+                ("variable", .int(Int64(result.variable))),
+                ("system", .int(Int64(result.system))),
+                ("remote", .int(Int64(result.remote)))
+            ]
+            // The download counts are only meaningful under --download-fonts; keep the default
+            // (flag-off) shape at the original five keys.
+            if downloadFonts {
+                pairs.append(("downloaded", .int(Int64(result.downloaded))))
+                pairs.append(("extracted", .int(Int64(result.extracted))))
+            }
+            print(stringifyPretty(.obj(pairs)))
         } else {
-            let line =
+            let base =
                 "fonts: \(result.families) families, \(result.files) files "
                 + "(\(result.variable) variable, \(result.system) system, \(result.remote) remote)"
-            print(line)
+            print(
+                downloadFonts
+                    ? base + ", \(result.downloaded) downloaded, \(result.extracted) extracted" : base)
         }
     }
 }
