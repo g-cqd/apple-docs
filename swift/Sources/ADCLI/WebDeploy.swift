@@ -56,6 +56,19 @@ private let deployInstructions: [(platform: String, steps: [String])] = [
     )
 ]
 
+/// The architecture note appended below the per-platform steps (human) / as a `note` field
+/// (JSON). Unlike the numbered `deployInstructions` above (a 1:1 port of the JS
+/// `web-deploy.js` table, which has no equivalent need for this), this is Swift-only: JS's
+/// `web serve` hosts the static site AND the API from one process, so its deploy steps never
+/// have to explain the split. Swift's `ad-cli web build` (static site only) and `ad-server
+/// serve` (API + MCP only, no static assets) are two separate steps — pointing a browser at a
+/// bare `ad-server` 404s at `/`, which surprised this project's own operator once already.
+private let architectureNote =
+    "Note: `ad-cli web build` produces the STATIC site only (what these steps deploy). "
+    + "Search/filters/fonts/symbols JSON APIs and the MCP endpoint are served separately by "
+    + "`ad-server serve` — host that alongside the static site (e.g. behind the same reverse "
+    + "proxy) if you need those; a bare `ad-server` has no `/` route to serve the site itself."
+
 /// `ad-cli web deploy [<platform>] [--json]`.
 struct WebDeployCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -79,11 +92,13 @@ struct WebDeployCommand: ParsableCommand {
                 stringifyPretty(
                     .obj([
                         ("platform", .string(entry.platform)),
-                        ("instructions", .array(entry.steps.map(JSONValue.string)))
+                        ("instructions", .array(entry.steps.map(JSONValue.string))),
+                        ("note", .string(architectureNote))
                     ])))
         } else {
             var lines = ["Deploy to \(entry.platform):", ""]
             lines.append(contentsOf: entry.steps)
+            lines.append(contentsOf: ["", architectureNote])
             print(lines.joined(separator: "\n"))
         }
     }
