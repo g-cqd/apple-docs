@@ -119,11 +119,11 @@ struct SyncCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
     var db: String
 
-    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 100).")
-    var concurrency: Int = 100
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 256).")
+    var concurrency: Int = 256
 
-    @Option(name: .long, help: "Rate-limiter budget in requests/sec (default 500, matching bun sync).")
-    var rate: Double = 500
+    @Option(name: .long, help: "Client-side rate-limiter budget in requests/sec (default 2000).")
+    var rate: Double = 2000
 
     @Flag(name: .long, help: "Emit the stats as JSON.")
     var json = false
@@ -196,11 +196,11 @@ struct SyncAllCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
     var db: String
 
-    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 100).")
-    var concurrency: Int = 100
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 256).")
+    var concurrency: Int = 256
 
-    @Option(name: .long, help: "Rate-limiter budget in requests/sec (default 500, matching bun sync).")
-    var rate: Double = 500
+    @Option(name: .long, help: "Client-side rate-limiter budget in requests/sec (default 2000).")
+    var rate: Double = 2000
 
     @Option(name: .long, help: "Comma-separated source subset (default: all native sources).")
     var only: String?
@@ -222,6 +222,7 @@ struct SyncAllCommand: AsyncParsableCommand {
         for source in sources {
             let now = jsIsoNow()
             do {
+                FileHandle.standardError.write(Data("[\(source)] discovering entry points…\n".utf8))
                 let adapter = try registry.adapter(for: source)
                 let discovery = try await adapter.discover(context)
                 guard !discovery.roots.isEmpty else {
@@ -230,14 +231,21 @@ struct SyncAllCommand: AsyncParsableCommand {
                     continue
                 }
                 let (rootId, rootIds) = try upsertCrawlRoots(database, discovery.roots, now: now)
+                let seeded = "[\(source)] \(discovery.roots.count) root(s) seeded — crawling…\n"
+                FileHandle.standardError.write(Data(seeded.utf8))
+                let sourceStart = Date()
                 let stats = try await driver.crawl(
                     sourceType: source, into: database, rootId: rootId, rootIds: rootIds,
                     context: context, now: now, maxConcurrency: concurrency,
                     onProgress: { progress in
                         // A long reference-following source (apple-docc: ~350K pages) is otherwise a
-                        // silent black box until it completes; stream its running counts to stderr.
+                        // silent black box until it completes; stream elapsed time, running counts,
+                        // and cumulative throughput to stderr so a stall (lines stop) is obvious.
+                        let secs = Date().timeIntervalSince(sourceStart)
+                        let pps = secs > 0 ? Int(Double(progress.persisted) / secs) : 0
                         let line =
-                            "[\(source)] … \(progress.persisted) persisted, \(progress.failed) failed (crawling)\n"
+                            "[\(source)] \(Int(secs))s … \(progress.persisted) persisted, "
+                            + "\(progress.failed) failed (\(pps)/s)\n"
                         FileHandle.standardError.write(Data(line.utf8))
                     })
                 totals.discovered += stats.discovered
