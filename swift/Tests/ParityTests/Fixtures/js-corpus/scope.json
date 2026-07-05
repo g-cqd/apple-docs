@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "sources": ["apple-docc"],
+  "appleDoccFrameworks": ["adsupport", "apptrackingtransparency", "signinwithapple"],
+  "keepFonts": false,
+  "keepSymbols": false
+}

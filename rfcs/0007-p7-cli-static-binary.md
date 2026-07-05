@@ -16,7 +16,14 @@
   2026-07-05** (§11): found + fixed one corpus-breaking regression (`roots.page_count`),
   characterized the remaining gaps, and produced a two-tier harness design (§12) —
   making the §9 "verb-for-verb golden parity" / "JS↔Swift corpus parity" gates concrete
-  for the first time instead of just declared.
+  for the first time instead of just declared. **Tier 1 is now built** (same day):
+  `swift/Tests/ParityTests` (§12) is a committed Swift Testing target driving `cli.js`
+  and `ad-cli` side by side over a committed, deterministic 3-framework/28-page fixture
+  corpus (§11 findings #9–#11 below) — 30 verb+arg cases, 27 clean, 3 real divergences
+  tracked via `withKnownIssue` (not silently excluded) so a regression widens loudly and
+  a fix is caught the moment it lands. Building it also caught finding #8's own doc entry
+  one commit stale: `2e657e7` (the tip when this was written) had already fixed it, so §11
+  is corrected below instead of re-reporting it as open.
 - **Audience**: maintainers. Like every RFC here this is repo documentation,
   not product documentation — not built or indexed by the docs site.
 - **Carries**: phase **P7** of the [RFC 0001](0001-swift-native-transition.md)
@@ -321,20 +328,62 @@ Findings, categorized:
    tens of GB" for what would currently be all-`render_unsupported` rows on this host), a full
    production bake is deliberately **not** run until that PDF bug is fixed — doing so now would
    only spend significant time and disk to record failures already proven by the 135-sample run.
-8. **[Fixed, `2e657e7`]** `ad-cli browse` (and presumably the `browse` MCP tool's flat-listing
-   mode) showed "0 pages" for **every** root — including ones the finding #2 fix/repair never
-   touched (e.g. `swift-evolution`), found independently by two of the fixes above while
-   working on finding #2. Root cause: `Browse.swift`'s `pagesByRoot` joined `pages p ON p.path
-   = d.key` — the same never-true predicate finding #2's repair had to route around
+8. **[Found independently by two separate fixes above — fixed, `2e657e7`]** `ad-cli browse`
+   (and presumably the `browse` MCP tool's flat-listing mode) showed "0 pages" for **every**
+   root — including ones the finding #2 fix/repair never touched (e.g. `swift-evolution`).
+   Root cause: `Sources/ADStorage/Browse.swift`'s `pagesByRoot` joined `pages p ON p.path =
+   d.key` — the same never-true predicate finding #2's repair had to route around
    (`pages.path`/`documents.url` are the external URL; `documents.key`/`crawl_state.path` are
-   the bare crawl key), a distinct, pre-existing defect in `Browse.swift`'s own query. Fixed by
-   joining through `documents.url` instead, the same hub `RepairPageRootIds.swift` established.
-   Verified: `swift-evolution` now shows 560 pages, `accelerate` shows 8,652 — both exact
-   matches to their known-correct totals.
+   the bare crawl key), a distinct, pre-existing defect in `Browse.swift`'s own query, not
+   something the `root_id` repair touched. **Fix**: the join now reads `pages p ON p.path =
+   d.url` (the documents-as-hub pattern `RepairPageRootIds.swift` already established).
+   Verified two ways: directly against the real, natively-crawled production corpus
+   (`~/.apple-docs/apple-docs.db`) while building the Tier 1 harness below, and by that
+   harness's own `browse <framework> --path <p>` (children) cases, which walk a different,
+   already-correct query and never depended on this fix. (This entry itself was one commit
+   stale in an earlier draft of this RFC — see finding #9 for how that surfaced.)
+9. **[New, found building the Tier 1 harness below, not yet fixed]** `ad-cli import`'s
+   SQLite→ADDB manifest (`ImportVerb.swift`) auto-copies the `pages` table verbatim — `pages`
+   is in none of its `skipTables`/`ftsTables`/`denorm` lists — but the JS crawler's
+   `pages.path` column holds a BARE relative path (`persist.js`'s `upsertPage` passes `path`
+   straight through; the full URL goes into a separate `pages.url` column via
+   `defaultDoccUrl`), while finding #8's fix assumes `pages.path == documents.url` — true for
+   a NATIVELY-crawled corpus (`CrawlDriver`/`CrawlPersist` write `page.document.url` straight
+   into `pages.path`) but never true for a corpus obtained by importing a bare JS SQLite
+   export. This harness's OWN Tier 1 fixture is built exactly that way (§12, for
+   determinism), so it hits this directly: `browse adsupport --json` against the Tier 1
+   Swift fixture returns an empty page list, while the identical query against the real
+   production corpus (imported once, then repeatedly re-crawled natively since — which would
+   self-heal `pages.path` via native's overwrite-on-upsert) returns real pages. First
+   surfaced as an apparent reproduction of finding #8 before the fixed join's actual
+   assumption was traced through both engines' write paths and found to hold only for one of
+   them. Out of this harness's scope to fix (an `ad-cli import` manifest question — probably
+   wants a `pages.path ← pages.url` denorm rule alongside the existing `documents` block);
+   tracked via `withKnownIssue` in `ParityCases.swift`, not fixed here.
+10. **[New, found building the Tier 1 harness below, not yet fixed]** `status --advanced`'s
+    `capabilities.searchBody` reads `false` against any `ad-cli import`-derived ADDB corpus,
+    even though body-tier search demonstrably WORKS there — the Tier 1 fixture's own
+    `search "alphanumeric"` case (a body-only term, absent from every title/abstract) returns
+    byte-identical hits on both engines. Root cause is the CAPABILITY PROBE itself, not
+    search: `StorageConnection.hasBodyIndex()` (`CorpusStats.swift`) runs `SELECT 1 FROM
+    documents_body_fts LIMIT 1` — an unqualified, no-`MATCH` scan of a contentless/
+    self-contained FTS5 table — which returns zero rows against ADDB's FTS5 shim where real
+    SQLite would return one. Narrow (one boolean, one verb) and excluded from the Tier 1
+    comparison rather than asserted false; a follow-up, not blocking.
+11. **[New, found building the Tier 1 harness below, not yet fixed]** `cli.js search`'s
+    `formatSearchResults` prints a `"Showing best-effort matches (query relaxed)."` preamble
+    when the ENTIRE result set is relaxed-tier; `ad-cli`'s formatter never emits it, even
+    though the hits themselves (badge, snippet, path, count) are byte-identical. Search.swift's
+    own doc comment asserted the native cascade "never produces a top-level `relaxed` flag...
+    matching the oracle for these queries" — true for the queries it was checked against, but
+    Tier 1 found a real query (a nonsense hyphenated phrase whose tokens still fuzzy-relax-match
+    real content) where the JS top-level flag does fire. An ADSearchCascade envelope-shape gap,
+    not a CLI-dispatch one; tracked via `withKnownIssue`, not fixed here.
 
-Everything above has landed except: real SF Symbol content baking (finding #7, blocked on the
-PDF-parser bug it surfaced) and that PDF-parser bug's own fix (tracked as a follow-up, not part
-of this audit's scope).
+Everything above has landed and was verified against the real corpus, except: real SF Symbol
+content baking (finding #7, blocked on the PDF-parser bug it surfaced), that PDF-parser bug's
+own fix, and #9/#10/#11 (Tier 1 harness findings specifically — none surfaces without a
+byte-level diff against a committed fixture) — all tracked as follow-ups, none blocking.
 
 ## 12. Parity harness design
 
@@ -344,13 +393,25 @@ reference-flipped per [RFC 0001](0001-swift-native-transition.md) §10) and CI's
 "JS↔Swift parity against the staged artifact" job (kernel/FFI-level only: native hashing +
 search-fusion, 6 spec files).
 
-**Tier 1 — CLI/HTTP verb-for-verb golden diff** (realizes §3/§9 directly). A small,
-deterministic, **committed** fixture corpus (a handful of real frameworks, not the full
-~340K-page corpus — speed and determinism over coverage) × a fixed arg matrix, driving
-`cli.js <verb>` (`APPLE_DOCS_NATIVE=off`) and `ad-cli <verb>` side by side. JSON output
-compared intrinsic-equal (parsed, deep-compared, volatile fields like timestamps excluded);
-human output byte-for-byte. Proposed home: `swift/Tests/ParityTests/` (Swift Testing,
-spawning `bun`/`ad-cli` via `Process`) — matches the existing suite's style.
+**Tier 1 — CLI/HTTP verb-for-verb golden diff** (realizes §3/§9 directly). **Built** (same
+day as the design): `swift/Tests/ParityTests/` (Swift Testing, spawning `bun cli.js` /
+`ad-cli` via `Process`) drives a fixed 30-case arg matrix across `version`/`frameworks`/
+`kinds`/`status`/`browse`/`read`/`search` against a small, deterministic, **committed**
+fixture corpus — `Fixtures/js-corpus` (a JS-crawled SQLite `apple-docs.db`, scoped via
+`scope.json` to 3 real, tiny frameworks — adsupport/apptrackingtransparency/signinwithapple,
+28 pages total, not the full ~340K-page corpus) and `Fixtures/swift-corpus` (the SAME corpus
+content, `ad-cli import`-derived into ADDB — one shared corpus, two engine-native files, so
+crawl-level nondeterminism can't leak into a CLI-dispatch gate). JSON output compared
+intrinsic-equal (`ADJSONCore`'s `JSONValue`, whose `==` already compares object members
+unordered while keeping arrays order-sensitive; volatile fields — an absolute fixture path, a
+storage-engine-specific byte count — redacted by dotted JSON path first); human output
+byte-for-byte (both engines gate ANSI styling on `isatty`, so a `Process`-piped comparison is
+plain text in practice). 27 of 30 cases match outright; 3 are real, tracked divergences run
+for real every time via `withKnownIssue` rather than silently excluded (findings #9/#10/#11
+above) — a regression widens loudly (a NEW failure inside the block still fails) and a fix is
+caught the moment it lands (Swift Testing flags "known issue not encountered"). Every tool
+lookup (`bun`, `ad-cli`, `node_modules`) degrades to a suite-wide skip, not a crash, when
+absent — the same discipline `SchemaParityTests`'s `bunAvailable` gate already established.
 
 **Tier 2 — Live server/MCP behavioral diff.** The JS MCP implementation no longer exists
 (`src/mcp` deleted; `mcp start`/`mcp serve` unconditionally require `ad-server`, no JS

@@ -5,6 +5,10 @@ node_modules/
 *.db
 *.db-wal
 *.db-shm
+# Exception: the Tier 1 CLI parity harness's committed, deterministic fixture corpora
+# (RFC 0007 §12) — a real but tiny (28-page) crawl, intentionally checked in so the gate
+# runs with no network/crawl dependency. See swift/Tests/ParityTests/FixtureRegeneration.swift.
+!swift/Tests/ParityTests/Fixtures/**/*.db
 
 # Build outputs
 dist/
