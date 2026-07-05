@@ -40,6 +40,11 @@ public struct CrawlDriver: Sendable {
     private let registry: SourceRegistry
     public init(registry: SourceRegistry) { self.registry = registry }
 
+    /// Emit a progress callback every this many processed (persisted + failed) pages,
+    /// so a long reference-following source (apple-docc: ~350K pages over hours) is
+    /// observable instead of a silent black box until completion.
+    static let progressInterval = 250
+
     /// Crawl one source end-to-end into `db`. Discovers keys; for each key already on disk with a stored
     /// HTTP validator, asks the adapter's conditional `check` whether the upstream changed and SKIPS the
     /// fetch when it hasn't (the incremental re-crawl). Survivors are then fetched + normalized (up to
@@ -53,7 +58,8 @@ public struct CrawlDriver: Sendable {
     @discardableResult
     public func crawl(
         sourceType: String, into db: Database, rootId: Int64, rootIds: [String: Int64] = [:],
-        context: SourceContext, now: String, maxConcurrency: Int = 8
+        context: SourceContext, now: String, maxConcurrency: Int = 8,
+        onProgress: (@Sendable (Stats) -> Void)? = nil
     ) async throws -> Stats {
         let adapter = try registry.adapter(for: sourceType)
         let discovery = try await adapter.discover(context)
@@ -63,7 +69,8 @@ public struct CrawlDriver: Sendable {
         if type(of: adapter).syncMode == .crawl {
             return try await crawlBFS(
                 adapter, discovery: discovery, rootId: rootId, rootIds: rootIds,
-                run: BFSRun(db: db, context: context, now: now, maxConcurrency: maxConcurrency))
+                run: BFSRun(db: db, context: context, now: now, maxConcurrency: maxConcurrency),
+                onProgress: onProgress)
         }
 
         var stats = Stats()
@@ -108,6 +115,9 @@ public struct CrawlDriver: Sendable {
                 } else {
                     stats.failed += 1
                 }
+                if let onProgress, (stats.persisted + stats.failed) % Self.progressInterval == 0 {
+                    onProgress(stats)
+                }
                 if let key = keys.next() {
                     let keyRootId = Self.rootId(forKey: key, rootIds: rootIds, default: rootId)
                     group.addTask { await self.fetchNormalize(adapter, key, keyRootId, context) }
@@ -134,7 +144,7 @@ public struct CrawlDriver: Sendable {
     /// `pool(batch, concurrency)` across all roots).
     private func crawlBFS(
         _ adapter: any SourceAdapter, discovery: DiscoveryResult, rootId: Int64,
-        rootIds: [String: Int64], run: BFSRun
+        rootIds: [String: Int64], run: BFSRun, onProgress: (@Sendable (Stats) -> Void)? = nil
     ) async throws -> Stats {
         // Index `crawl_state.status` once so pulling the pending frontier stays an index seek as the
         // processed pile grows (else `getPendingCrawlAny` degrades to an O(N) scan per pull).
@@ -145,7 +155,8 @@ public struct CrawlDriver: Sendable {
             try CrawlPersist.seedCrawlIfNew(run.db, path: key, rootSlug: Self.slug(ofKey: key), depth: 0)
         }
         var stats = Stats()
-        try await crawlFrontier(adapter, rootId: rootId, rootIds: rootIds, run: run, stats: &stats)
+        try await crawlFrontier(
+            adapter, rootId: rootId, rootIds: rootIds, run: run, stats: &stats, onProgress: onProgress)
         stats.discovered = stats.persisted + stats.failed
         return stats
     }
@@ -163,7 +174,7 @@ public struct CrawlDriver: Sendable {
     /// (references are seeded idempotently, so a cyclic graph converges).
     private func crawlFrontier(
         _ adapter: any SourceAdapter, rootId: Int64, rootIds: [String: Int64], run: BFSRun,
-        stats: inout Stats
+        stats: inout Stats, onProgress: (@Sendable (Stats) -> Void)? = nil
     ) async throws {
         let db = run.db
         let context = run.context
@@ -247,6 +258,9 @@ public struct CrawlDriver: Sendable {
                         try CrawlPersist.setCrawlState(
                             db, path: path, status: "failed", rootSlug: rootSlug, depth: depth, error: error)
                         stats.failed += 1
+                }
+                if let onProgress, (stats.persisted + stats.failed) % Self.progressInterval == 0 {
+                    onProgress(stats)
                 }
                 try fill()
             }
