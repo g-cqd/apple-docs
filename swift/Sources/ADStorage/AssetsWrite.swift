@@ -107,6 +107,47 @@ public struct SfSymbolUpsert: Sendable {
     }
 }
 
+/// An `sf_symbol_renders` cache-row upsert (the JS `upsertRender` argument). The offline bulk bake
+/// (`ad-cli resources prerender-symbols`) writes rows at fixed canonical params (svg,
+/// `SYMBOL_DEFAULT_RENDER_SIZE`, black, no background) with `mode: "prerender"`; a future writer for
+/// a live-request cache (were the in-process MCP server ever given a dataDir to root new files
+/// under) would use `mode: "live"`, matching the JS shape.
+public struct SfSymbolRenderUpsert: Sendable {
+    public var cacheKey: String
+    public var name: String
+    public var scope: String
+    public var format: String
+    public var mode: String?
+    public var weight: String?
+    public var symbolScale: String?
+    public var pointSize: Int?
+    public var color: String?
+    public var filePath: String
+    public var mimeType: String
+    public var sha256: String?
+    public var size: Int64?
+
+    public init(
+        cacheKey: String, name: String, scope: String, format: String, mode: String? = nil,
+        weight: String? = nil, symbolScale: String? = nil, pointSize: Int? = nil, color: String? = nil,
+        filePath: String, mimeType: String, sha256: String? = nil, size: Int64? = nil
+    ) {
+        self.cacheKey = cacheKey
+        self.name = name
+        self.scope = scope
+        self.format = format
+        self.mode = mode
+        self.weight = weight
+        self.symbolScale = symbolScale
+        self.pointSize = pointSize
+        self.color = color
+        self.filePath = filePath
+        self.mimeType = mimeType
+        self.sha256 = sha256
+        self.size = size
+    }
+}
+
 extension StorageConnection {
     /// `INSERT OR REPLACE INTO apple_font_families` (the JS `upsertAppleFontFamily`).
     /// Needs a writable connection; `updatedAt` is the caller's ISO timestamp.
@@ -190,6 +231,55 @@ extension StorageConnection {
         guard let upd = conn.prepareUncached(update) else { return false }
         bindSfSymbol(upd, symbol, updatedAt: updatedAt)
         return upd.step() == SQLite.done
+    }
+
+    /// Upsert an `sf_symbol_renders` cache row (the JS `upsertRender`). Unlike `sf_symbols`,
+    /// `cache_key` is a SINGLE-column PRIMARY KEY, so a plain `INSERT OR REPLACE` is correct here —
+    /// the composite-key `INSERT OR IGNORE` + `UPDATE` workaround above exists only because ADDB
+    /// rejects a MULTI-column `ON CONFLICT` target; a one-column PK upserts exactly like
+    /// `apple_font_families`/`apple_font_files` above, and every write here supplies the full row
+    /// (no partial-update columns to protect from a REPLACE), so there's nothing to lose.
+    @discardableResult
+    public func upsertSfSymbolRender(_ render: SfSymbolRenderUpsert, updatedAt: String) -> Bool {
+        let sql = """
+            INSERT OR REPLACE INTO sf_symbol_renders
+              (cache_key, name, scope, format, mode, weight, symbol_scale, point_size, color,
+               file_path, mime_type, sha256, size, updated_at)
+            VALUES ($cacheKey, $name, $scope, $format, $mode, $weight, $symbolScale, $pointSize, $color,
+               $filePath, $mimeType, $sha256, $size, $updatedAt)
+            """
+        guard let stmt = conn.prepareUncached(sql) else { return false }
+        stmt.bind("cacheKey", .text(render.cacheKey))
+        stmt.bind("name", .text(render.name))
+        stmt.bind("scope", .text(render.scope))
+        stmt.bind("format", .text(render.format))
+        stmt.bind("mode", render.mode.map(BindValue.text) ?? .null)
+        stmt.bind("weight", render.weight.map(BindValue.text) ?? .null)
+        stmt.bind("symbolScale", render.symbolScale.map(BindValue.text) ?? .null)
+        stmt.bind("pointSize", render.pointSize.map { BindValue.int(Int64($0)) } ?? .null)
+        stmt.bind("color", render.color.map(BindValue.text) ?? .null)
+        stmt.bind("filePath", .text(render.filePath))
+        stmt.bind("mimeType", .text(render.mimeType))
+        stmt.bind("sha256", render.sha256.map(BindValue.text) ?? .null)
+        stmt.bind("size", render.size.map(BindValue.int) ?? .null)
+        stmt.bind("updatedAt", .text(updatedAt))
+        return stmt.step() == SQLite.done
+    }
+
+    /// Flag an `sf_symbols` row as unrenderable on this build host (the JS `markRenderUnsupported`,
+    /// v27 `render_unsupported`) — set when EVERY variant the bulk prerender attempted for
+    /// `(scope, name)` failed to produce a PDF (the SF Symbols.app catalog can list names newer than
+    /// the running macOS's CoreGlyphs bundle). A plain `UPDATE`, so no upsert/`ON CONFLICT` concern
+    /// applies at all.
+    @discardableResult
+    public func markSfSymbolRenderUnsupported(scope: String, name: String) -> Bool {
+        guard
+            let stmt = conn.prepareUncached(
+                "UPDATE sf_symbols SET render_unsupported = 1 WHERE scope = $scope AND name = $name")
+        else { return false }
+        stmt.bind("scope", .text(scope))
+        stmt.bind("name", .text(name))
+        return stmt.step() == SQLite.done
     }
 
     private func bindSfSymbol(_ stmt: any StorageStatement, _ symbol: SfSymbolUpsert, updatedAt: String) {

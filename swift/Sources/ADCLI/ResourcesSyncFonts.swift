@@ -10,12 +10,15 @@ import ADStorage
 import ArgumentParser
 import Foundation
 
-/// The `resources` command group — bundled Apple resource syncs (fonts, later SF Symbols).
+/// The `resources` command group — bundled Apple resource syncs (fonts, SF Symbols catalog + bake).
 struct ResourcesCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "resources",
         abstract: "Sync bundled Apple resources (fonts, SF Symbols) into the corpus.",
-        subcommands: [ResourcesSyncFontsCommand.self, ResourcesSyncSymbolsCommand.self])
+        subcommands: [
+            ResourcesSyncFontsCommand.self, ResourcesSyncSymbolsCommand.self,
+            ResourcesPrerenderSymbolsCommand.self
+        ])
 }
 
 /// `ad-cli resources sync-fonts [--db …] [--home …] [--json]`.

@@ -515,7 +515,11 @@ let package = Package(
                 .product(name: "ADDB", package: "ADDB"),
                 .product(name: "ADJSONCore", package: "ADJSON"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
-                .product(name: "ArgumentParser", package: "swift-argument-parser")
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                // Crypto: SHA-256 content-hash for `sf_symbol_renders.sha256` rows the
+                // `resources prerender-symbols` verb bakes — same idiom as CrawlDriver's own
+                // `SHA256.hash(data:)` content-hash (ADBuilderPipeline, already in this graph).
+                .product(name: "Crypto", package: "swift-crypto")
             ],
             path: "Sources/ADCLI", swiftSettings: releaseCMO + strictSettings),
         // ADSQLSearch — apple-docs' `/search` serving over the in-process ADDB engine
