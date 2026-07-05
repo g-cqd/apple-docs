@@ -216,8 +216,35 @@ Findings, categorized:
    needs a trace through `DocC.extractReferences`/`Identifier.normalize` to pin down exactly.
    Tracked as a follow-up; the JS crawl (ground truth for HIG's real page count) will confirm
    the expected shape once it completes.
-3. **[Known partial port]** `read_doc`'s pagination/match-excerpt transforms are not yet
-   ported (already flagged in `Tools.swift:465-469`'s own comment) — confirmed still open.
+3. **[MCP tool contract diff — mix of known + newly found]** The live JS MCP implementation
+   is gone, so pulled the last commit before its deletion (`9078247`'s parent, `200a744`) and
+   diffed all 9 tools' schemas field-by-field against `Tools.swift`/`Tools+Inputs.swift`.
+   Every Swift input field is a strict subset of JS's — no field was renamed or removed, and
+   nothing is Swift-only. `list_taxonomy`, `search_sf_symbols`, and `list_apple_fonts`'
+   input are identical. The rest:
+   - `read_doc` — schema identical; behavior confirmed diverging exactly as
+     `Tools.swift:465-469`'s own comment says. JS's (now-deleted) `pagination.js`/
+     `page-builder.js` had a real binary-search paginator (`pageInfo`) and a match-excerpt
+     builder; Swift's handler only widens `includeSections`, never truncates or excerpts.
+   - `search_docs` — **missing in Swift, not previously flagged anywhere**: JS also has a
+     `read` bool (inline the top hit's full doc) plus the same pagination/match shape as
+     `read_doc`; Swift has neither.
+   - `browse` — **missing in Swift, not previously flagged**: JS paginates the page/children
+     array (`maxChars`/`page`); Swift's own `limit` cap (200) with no pagination means a root
+     with more pages than the cap is only partially reachable.
+   - `list_frameworks` — **newly found, no prior comment anywhere**: `maxChars`/`page` are
+     declared right in Swift's own `ListFrameworksInput` schema, but the handler never reads
+     either — it always returns the full unpaginated `roots` array regardless of what's
+     requested.
+   - `render_sf_symbol` / `render_font_text` — schema identical; both have behavioral gaps
+     already documented in `Tools.swift`'s own comments (Swift is live-render-only, missing
+     JS's disk-cache/prerendered fast path and its CoreText→hb-native→hb-view fallback
+     chain; a font-path containment check allows fewer roots) — confirms these are known,
+     not new.
+   - **Cross-cutting, systemic**: JS's zod schemas reject out-of-range input at decode time;
+     Swift's `@SchemaNumber` bounds are advisory-only, clamped server-side instead
+     (`QueryParse.swift`'s own comment confirms this is deliberate) — every tool's numeric
+     inputs behave differently on out-of-range values, not a per-tool issue.
 4. **[Known partial port, deliberately phased]** Several JS `web serve` HTTP routes have no
    `ad-server` equivalent: `/api/fonts/text.svg`, `/api/fonts/subset`, `/api/fonts/file/:id`,
    `/api/fonts/family/:id.zip`, and the `/api/symbols/(scope)/:name.(svg|png)` image-bytes
