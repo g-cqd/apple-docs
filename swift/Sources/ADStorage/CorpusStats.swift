@@ -200,6 +200,18 @@ extension StorageConnection {
         return stmt.text(0)
     }
 
+    /// `setSnapshotMeta(key, value)` — INSERT OR REPLACE into snapshot_meta.
+    /// Requires a writable connection (`StorageConnection(path:, writable: true)`);
+    /// mirrors the JS `db.setSnapshotMeta` used by `storage profile` + install.
+    @discardableResult
+    public func setSnapshotMeta(_ key: String, _ value: String) -> Bool {
+        guard let stmt = conn.prepareUncached("INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)")
+        else { return false }
+        stmt.bindText(1, key)
+        stmt.bindText(2, value)
+        return stmt.step() == SQLite.done
+    }
+
     /// database.hasTable: a `sqlite_master` table-existence probe. Delegates to
     /// the connection's existing probe (used by the capabilities block).
     public func hasTable(_ name: String) -> Bool {

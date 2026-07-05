@@ -12,8 +12,8 @@ import Foundation
 /// `ad-cli storage …` — the storage maintenance verb group.
 struct StorageCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "storage", abstract: "Corpus storage maintenance (stats, orphan checks).",
-        subcommands: [StorageStatsCommand.self, StorageCheckOrphansCommand.self])
+        commandName: "storage", abstract: "Corpus storage maintenance (stats, orphan checks, profile).",
+        subcommands: [StorageStatsCommand.self, StorageCheckOrphansCommand.self, StorageProfileCommand.self])
 }
 
 /// `ad-cli storage stats --db <PATH> [--json]` — the storage breakdown:
