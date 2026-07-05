@@ -276,20 +276,41 @@ public enum CrawlPersist {
         }
     }
 
-    /// The next `limit` `pending` rows across ALL roots (no root filter), each carrying its stored
-    /// `root_slug`. Feeds a cross-root BFS frontier: pooling every root's pending work into one wave keeps
+    /// The next `limit` `pending` rows across every root in `rootSlugs`, each carrying its stored
+    /// `root_slug`. Feeds a cross-root BFS frontier: pooling every root THIS CALL OWNS into one wave keeps
     /// the fetch fan-out saturated even when individual roots have narrow early levels — the JS
-    /// shared-semaphore crawl (`discover.js`, one pool across roots) rather than root-at-a-time. `limit` is
-    /// a trusted caller constant, interpolated (ADSQL's `LIMIT` takes no bind parameter).
+    /// shared-semaphore crawl (`discover.js`, one pool across roots) rather than root-at-a-time.
+    ///
+    /// `rootSlugs` is the hard boundary that keeps one source's `crawl()` call from ever draining a
+    /// DIFFERENT source's leftover backlog (RFC 0007 §11 finding #2): before this filter existed, an
+    /// interrupted source (e.g. a long-running `apple-docc` crawl) left `pending` rows that whichever
+    /// `.crawl`-mode source ran next — unrelated, with its own unrelated `rootIds` — would happily pull
+    /// and persist via that caller's `rootIds[f.rootSlug] ?? rootId` fallback, mis-stamping `pages.root_id`
+    /// with the WRONG source's default root. Scoping the pull to `rootSlugs` (the caller's own root set)
+    /// makes that fallback unreachable for foreign rows: they simply never surface here. An empty
+    /// `rootSlugs` can't match anything meaningful, so it short-circuits to no rows rather than degrading
+    /// to the old unfiltered (and now unsafe) behavior.
+    ///
+    /// `limit` is a trusted caller constant, interpolated (ADSQL's `LIMIT` takes no bind parameter); the
+    /// `root_slug IN (…)` list uses one `$s<N>` placeholder per slug — same discipline as
+    /// `markCrawlProcessed`'s batched `IN (…)`, since ADSQL's `IN` needs a literal placeholder per value,
+    /// not a single array bind.
     public static func getPendingCrawlAny(
-        _ db: Database, limit: Int = 10
+        _ db: Database, rootSlugs: Set<String>, limit: Int = 10
     ) throws(DBError) -> [(path: String, rootSlug: String, depth: Int)] {
-        let rows =
-            try db.prepare(
-                "SELECT path, root_slug, depth FROM crawl_state WHERE status = 'pending'"
-                    + " LIMIT \(Swift.max(0, limit))"
-            )
-            .all([:])
+        guard !rootSlugs.isEmpty else { return [] }
+        var placeholders: [String] = []
+        placeholders.reserveCapacity(rootSlugs.count)
+        var params: [String: Value] = [:]
+        for (index, slug) in rootSlugs.enumerated() {
+            placeholders.append("$s\(index)")
+            params["s\(index)"] = .text(slug)
+        }
+        let sql =
+            "SELECT path, root_slug, depth FROM crawl_state WHERE status = 'pending' AND root_slug IN ("
+            + placeholders.joined(separator: ", ") + ")"
+            + " LIMIT \(Swift.max(0, limit))"
+        let rows = try db.prepare(sql).all(params)
         return rows.compactMap { row in
             guard let path = cellText(row["path"]), let slug = cellText(row["root_slug"]) else {
                 return nil
