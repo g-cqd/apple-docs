@@ -5,6 +5,15 @@ public struct AppleFontFile: Sendable {
     public let id: String
     public let fileName: String
     public let format: String?
+    /// The on-disk path (system font dir or `<dataDir>/resources/fonts/extracted`) — needed by
+    /// the `/api/fonts/family/:id.zip` route to read the file's bytes. Always containment-checked
+    /// (`FontPathContainment`) before being read.
+    public let filePath: String?
+    /// Whether the file is a variable-axis font (the `?subset=variable` / `?subset=static` filter).
+    public let isVariable: Bool
+    /// `"remote"` (DMG-extracted) or `"system"` (discovered on-disk) — the `?subset=remote` /
+    /// `?subset=system` filter.
+    public let source: String?
 }
 
 public struct AppleFontFamily: Sendable {
@@ -20,6 +29,9 @@ public struct AppleFontFileRecord: Sendable {
     public let id: String
     public let filePath: String?
     public let format: String?
+    /// The original file name (e.g. `SF-Pro.ttf`) — used for the `Content-Disposition` filename
+    /// when `/api/fonts/file/:id` serves the file.
+    public let fileName: String?
     public let familyDisplayName: String?
 }
 
@@ -28,7 +40,7 @@ extension StorageConnection {
     /// nil = no such row / the table is absent.
     public func getAppleFontFileRecord(id: String) -> AppleFontFileRecord? {
         let sql = """
-            SELECT f.id, f.file_path, f.format, fam.display_name
+            SELECT f.id, f.file_path, f.format, f.file_name, fam.display_name
             FROM apple_font_files f JOIN apple_font_families fam ON fam.id = f.family_id
             WHERE f.id = ?
             """
@@ -36,7 +48,8 @@ extension StorageConnection {
         stmt.bindText(1, id)
         guard stmt.step() == SQLite.row, let rowId = stmt.text(0) else { return nil }
         return AppleFontFileRecord(
-            id: rowId, filePath: stmt.text(1), format: stmt.text(2), familyDisplayName: stmt.text(3))
+            id: rowId, filePath: stmt.text(1), format: stmt.text(2), fileName: stmt.text(3),
+            familyDisplayName: stmt.text(4))
     }
 
     /// families ⋈ files: families ORDER BY display_name, each family's files
@@ -51,7 +64,10 @@ extension StorageConnection {
         }
         guard
             let fileStmt = conn.prepareUncached(
-                "SELECT family_id, id, file_name, format FROM apple_font_files ORDER BY family_id, file_name")
+                """
+                SELECT family_id, id, file_name, format, file_path, is_variable, source
+                FROM apple_font_files ORDER BY family_id, file_name
+                """)
         else {
             return familyIds.map { AppleFontFamily(id: $0, files: []) }
         }
@@ -61,7 +77,9 @@ extension StorageConnection {
             else { continue }
             byFamily[familyId, default: []]
                 .append(
-                    AppleFontFile(id: id, fileName: fileName, format: fileStmt.text(3)))
+                    AppleFontFile(
+                        id: id, fileName: fileName, format: fileStmt.text(3), filePath: fileStmt.text(4),
+                        isVariable: (fileStmt.int(5) ?? 0) != 0, source: fileStmt.text(6)))
         }
         return familyIds.map { AppleFontFamily(id: $0, files: byFamily[$0] ?? []) }
     }
