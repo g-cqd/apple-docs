@@ -201,26 +201,54 @@ private func renderFontText(_ input: RenderFontTextInput, _ ctx: MCPToolContext)
         return .failure("Font file not found: \(input.fontId)")
     }
     let text = input.text ?? "Typography"
-    let pointSize = clampInteger(input.size ?? 96, min: 8, max: 512)
-    let family = font.familyDisplayName ?? ""
-
-    let content =
-        renderFontTextEngineChain(font: font, text: text, pointSize: pointSize)
-        ?? fontTextSvgFallback(fontFamily: family, text: text, pointSize: pointSize)
+    // dataDir: nil — MCPToolContext carries only a connection + logger (MCPCommand opens just
+    // --db), so only the 3 dataDir-independent system roots are checked; see
+    // `renderFontTextCore`'s own doc for the HTTP route's wider check.
+    let rendered = renderFontTextCore(font: font, text: text, size: input.size, dataDir: nil)
     // projectRenderFontText: { text, mimeType, content } in that key order.
     return .okValue(
         .object([
-            "text": .string(text),
-            "mimeType": .string("image/svg+xml; charset=utf-8"),
-            "content": .string(content)
+            "text": .string(rendered.text),
+            "mimeType": .string(rendered.mimeType),
+            "content": .string(rendered.content)
         ]))
+}
+
+/// The result of `renderFontTextCore` — `{ text, mimeType, content }`, matching the JS
+/// `projectRenderFontText` projection the MCP tool returns.
+struct FontTextRender: Sendable {
+    let text: String
+    let mimeType: String
+    let content: String
+}
+
+/// The shared `render_font_text` core (byte-faithful port of apple-fonts/render.js's CoreText
+/// path): clamps `pointSize`, then renders via CoreText when the font's path passes containment
+/// + looks like a real SFNT font, else falls back to the placeholder SVG. Shared by the MCP
+/// `render_font_text` tool above (`dataDir: nil`) and the HTTP `/api/fonts/text.svg` route
+/// (`dataDir` from `--home`/`$APPLE_DOCS_HOME`) — see `FontPathContainment`'s header comment for
+/// why the two callers check a different root set.
+func renderFontTextCore(font: AppleFontFileRecord, text: String, size: Int?, dataDir: String?) -> FontTextRender {
+    let pointSize = clampInteger(size ?? 96, min: 8, max: 512)
+    let family = font.familyDisplayName ?? ""
+
+    let content =
+        renderFontTextEngineChain(font: font, text: text, pointSize: pointSize, dataDir: dataDir)
+        ?? fontTextSvgFallback(fontFamily: family, text: text, pointSize: pointSize)
+    return FontTextRender(text: text, mimeType: "image/svg+xml; charset=utf-8", content: content)
 }
 
 /// The CoreText → hb-native → hb-view engine chain over `font`'s file, or nil
 /// when the path fails containment/SFNT validation or every engine fails —
-/// the caller falls back to the placeholder SVG exactly as JS does.
-private func renderFontTextEngineChain(font: AppleFontFileRecord, text: String, pointSize: Int) -> String? {
-    guard let path = font.filePath, fontPathWithinApprovedRoots(path), isLikelySfnt(path) else { return nil }
+/// the caller falls back to the placeholder SVG exactly as JS does. `dataDir`
+/// threads through to `FontPathContainment.isContained` (nil from the MCP tool,
+/// the resolved `--home`/`$APPLE_DOCS_HOME` from the HTTP route).
+private func renderFontTextEngineChain(
+    font: AppleFontFileRecord, text: String, pointSize: Int, dataDir: String?
+) -> String? {
+    guard let path = font.filePath, FontPathContainment.isContained(path, dataDir: dataDir),
+        isLikelySfnt(path)
+    else { return nil }
     #if canImport(CoreText)
         if let svg = FontText.renderSVG(fontPath: path, text: text, pointSize: Double(pointSize)) {
             return svg
@@ -288,14 +316,16 @@ private func renderSfSymbol(_ input: RenderSfSymbolInput, _ ctx: MCPToolContext)
 }
 
 /// normalizeColor (apple-assets-helpers.js): a trimmed `#RRGGBB(AA)` hex
-/// (case-insensitive) passes through; anything else → `#000000`.
-private func normalizeSymbolColor(_ value: String?) -> String {
+/// (case-insensitive) passes through; anything else → `#000000`. Shared with the HTTP
+/// `/api/symbols/<scope>/<name>.(svg|png)` route (`renderSfSymbolBytes`, RenderShared.swift).
+func normalizeSymbolColor(_ value: String?) -> String {
     let raw = (value ?? "#000000").trimmingCharacters(in: .whitespacesAndNewlines)
     return isHexColor(raw) ? raw : "#000000"
 }
 
 /// normalizeBackground: nil/empty/`transparent`/`none` → nil; `#RRGGBB(AA)` → raw; else nil.
-private func normalizeSymbolBackground(_ value: String?) -> String? {
+/// Shared with the HTTP symbol-render route (see `normalizeSymbolColor`).
+func normalizeSymbolBackground(_ value: String?) -> String? {
     guard let value else { return nil }
     let raw = value.trimmingCharacters(in: .whitespacesAndNewlines)
     if raw.isEmpty || raw == "transparent" || raw == "none" { return nil }
@@ -329,33 +359,10 @@ private func encodeURIComponentJS(_ s: String) -> String {
 }
 
 /// `clampInteger(value, min, max)` — JS `Math.min(Math.max(parseInt(value), min),
-/// max)`, NaN → min. The input is already an `Int?`, so the parse never fails.
-private func clampInteger(_ value: Int, min lo: Int, max hi: Int) -> Int {
+/// max)`, NaN → min. The input is already an `Int?`, so the parse never fails. Shared with the
+/// HTTP font-text and symbol-render routes (RenderShared.swift).
+func clampInteger(_ value: Int, min lo: Int, max hi: Int) -> Int {
     min(max(value, lo), hi)
-}
-
-/// `assertFontPathContained`'s 4-root allowlist (apple-fonts/safe-font-path.js):
-/// `/Library/Fonts`, `/System/Library/Fonts`, `~/Library/Fonts`, and
-/// `<dataDir>/resources/fonts/extracted` (where the DMG-extract sync step writes
-/// downloaded Apple fonts — `FontSync.swift`'s `extractedDir`). A path resolving
-/// under one of these (or equal to it) is safe. `dataDir` is resolved exactly
-/// like `CorpusOptions.path` (`$APPLE_DOCS_HOME`, else `~/.apple-docs`) — see the
-/// handler note above for the one narrow case (a bare `--home` CLI flag with no
-/// matching env var) this can't observe.
-private func fontPathWithinApprovedRoots(_ filePath: String) -> Bool {
-    guard !filePath.isEmpty else { return false }
-    let resolved = URL(fileURLWithPath: filePath).standardizedFileURL.path
-    let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
-    let envHome = ProcessInfo.processInfo.environment["APPLE_DOCS_HOME"]
-    let dataDir = URL(fileURLWithPath: envHome ?? "\(NSHomeDirectory())/.apple-docs").standardizedFileURL.path
-    let roots = [
-        "/Library/Fonts", "/System/Library/Fonts", home + "/Library/Fonts",
-        dataDir + "/resources/fonts/extracted"
-    ]
-    for root in roots where resolved == root || resolved.hasPrefix(root + "/") {
-        return true
-    }
-    return false
 }
 
 /// `isLikelySfnt(path)` — reads the 4-byte magic: OTTO/ttcf/wOFF/wOF2, or the

@@ -35,8 +35,15 @@ struct CorpusOptions: ParsableArguments {
     /// The resolved corpus path: `--db` if given, else `<home>/apple-docs.db`.
     var path: String {
         if let db, !db.isEmpty { return db }
-        let base = home ?? ProcessInfo.processInfo.environment["APPLE_DOCS_HOME"] ?? "\(NSHomeDirectory())/.apple-docs"
-        return "\(base)/apple-docs.db"
+        return "\(dataDir)/apple-docs.db"
+    }
+
+    /// The corpus "data directory" (JS `ctx.dataDir`) — resources live under it
+    /// (`resources/fonts/extracted`, `resources/fonts/zips`, …), independent of an explicit
+    /// `--db` override that points the DB file itself elsewhere. Same defaulting as `path`'s
+    /// base: `--home`, else `$APPLE_DOCS_HOME`, else `~/.apple-docs`.
+    var dataDir: String {
+        home ?? ProcessInfo.processInfo.environment["APPLE_DOCS_HOME"] ?? "\(NSHomeDirectory())/.apple-docs"
     }
 }
 
@@ -112,7 +119,7 @@ struct ServeCommand: AsyncParsableCommand {
             listeners: listeners(
                 endpoints(
                     config: siteConfig, mcpDispatcher: dispatcher, tls: tls, tlsPort: tlsPort,
-                    readiness: readiness),
+                    readiness: readiness, dataDir: corpus.dataDir),
                 defaultPort: port),
             pool: pool,
             envelope: buildEnvelope(),

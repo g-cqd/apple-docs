@@ -197,6 +197,233 @@ enum WebRoutes {
             body: w.finish(), contentType: "application/json;charset=utf-8",
             status: dbOk ? .ok : .serviceUnavailable)
     }
+
+    /// GET /api/fonts/text.svg?text=&fontId=&size=. `text` nil/empty → "Typography" (JS
+    /// `validateFontText`); over `fontTextMaxChars` UTF-16 units → a 400 JSON error. A missing/
+    /// unknown `fontId` is a plain 404 (JS: any `renderFontText` throw collapses to a bare
+    /// `new Response('Not Found', {status:404})`, matching every other font route's shape).
+    static func fontTextSvg(
+        _ conn: StorageConnection, fontId: String?, text: String?, size: Int?, dataDir: String
+    ) -> ResponseContent {
+        let resolvedText: String
+        if let text, !text.isEmpty {
+            guard text.utf16.count <= fontTextMaxChars else {
+                return jsonError(
+                    .badRequest, "text exceeds \(fontTextMaxChars) chars (got \(text.utf16.count))")
+            }
+            resolvedText = text
+        } else {
+            resolvedText = "Typography"
+        }
+        guard let fontId, !fontId.isEmpty, let font = conn.getAppleFontFileRecord(id: fontId) else {
+            return .notFound
+        }
+        let rendered = renderFontTextCore(font: font, text: resolvedText, size: size, dataDir: dataDir)
+        return .raw(body: Array(rendered.content.utf8), contentType: rendered.mimeType, status: .ok)
+    }
+
+    /// GET /api/fonts/file/:id. Serves the extracted font FILE directly (not a render) — 404 for
+    /// an unknown id or a `file_path` outside the approved roots (`FontPathContainment`, the
+    /// read-side of the sync-time containment invariant). Delegating to `.file(root:subpath:)`
+    /// gets a free strong size+mtime ETag, `If-None-Match` → 304, Range/206, and chunked
+    /// streaming — the engine's guarded static-file primitive, the same one backing `Static`/
+    /// `File` in the DSL.
+    static func fontFile(_ conn: StorageConnection, id: String, dataDir: String) -> ResponseContent {
+        guard let font = conn.getAppleFontFileRecord(id: id), let path = font.filePath, !path.isEmpty,
+            FontPathContainment.isContained(path, dataDir: dataDir)
+        else {
+            return .notFound
+        }
+        let resolved = URL(fileURLWithPath: path).standardizedFileURL.path
+        let directory = (resolved as NSString).deletingLastPathComponent
+        let baseName = (resolved as NSString).lastPathComponent
+        let ext = (baseName as NSString).pathExtension.lowercased()
+        var headers = HTTPFields()
+        headers.setValue(
+            contentDispositionAttachment(font.fileName ?? baseName), for: contentDispositionFieldName)
+        return .file(
+            root: directory, subpath: baseName, contentType: fontFileContentType(extension: ext),
+            headers: headers)
+    }
+
+    /// GET /api/fonts/family/:id.zip?subset=. Bundles a font family into a STORE-method ZIP,
+    /// persisted to `<dataDir>/resources/fonts/zips/` on first request; subsequent requests for
+    /// the same (family, subset, input fingerprint) serve the cached file via `.file` (free
+    /// ETag/304/Range). The hash in the cache filename keys on file name + size + mtime per
+    /// source file, so a font-corpus update lands a different cache entry automatically.
+    static func fontFamilyZip(
+        _ conn: StorageConnection, familyId: String, subset: FontZipSubset, dataDir: String
+    ) -> ResponseContent {
+        guard let family = conn.listAppleFonts().first(where: { $0.id == familyId }),
+            !family.files.isEmpty
+        else { return .notFound }
+        let filtered = family.files.filter { matchesFontSubset($0, subset) }
+        guard !filtered.isEmpty else { return .notFound }
+
+        var seenNames: Set<String> = []
+        var safeFiles: [SafeFontFile] = []
+        for file in filtered {
+            guard seenNames.insert(file.fileName).inserted,
+                let path = file.filePath, FontPathContainment.isContained(path, dataDir: dataDir),
+                let stat = fontFileStat(path)
+            else { continue }
+            safeFiles.append(
+                SafeFontFile(name: file.fileName, path: path, size: stat.size, mtime: stat.mtime))
+        }
+        guard !safeFiles.isEmpty else { return .notFound }
+
+        let fingerprint = safeFiles.map { "\($0.name)|\($0.size)|\($0.mtime)" }.joined(separator: "\n")
+        let hash = String(ConditionalRequest.sha256HexLower(Array(fingerprint.utf8)).prefix(16))
+        let suffix = subset == .all ? "" : "-\(subset.rawValue)"
+        let cacheDir = "\(dataDir)/resources/fonts/zips"
+        let cacheName = "\(familyId)\(suffix)-\(hash).zip"
+        let cachePath = "\(cacheDir)/\(cacheName)"
+
+        if !FileManager.default.fileExists(atPath: cachePath) {
+            var entries: [StoreZip.Entry] = []
+            for file in safeFiles {
+                guard let data = try? Data(contentsOf: URL(fileURLWithPath: file.path)) else { continue }
+                entries.append(StoreZip.Entry(name: file.name, data: Array(data)))
+            }
+            guard !entries.isEmpty else { return .notFound }
+            writeFontZipAtomically(StoreZip.build(entries), to: cachePath, in: cacheDir)
+        }
+        guard FileManager.default.fileExists(atPath: cachePath) else { return .notFound }
+
+        var headers = HTTPFields()
+        headers.setValue(
+            contentDispositionAttachment("\(familyId)\(suffix).zip"), for: contentDispositionFieldName)
+        return .file(root: cacheDir, subpath: cacheName, contentType: "application/zip", headers: headers)
+    }
+
+    /// GET /api/symbols/<public|private>/<name>.(svg|png). Live-renders only — no
+    /// prerendered-snapshot fast path and no on-disk render cache yet (matches the
+    /// `render_sf_symbol` MCP tool's own live-only behavior; the SF-Symbol prerender disk cache
+    /// is a separate, not-yet-landed task). Any failure (symbol not found, cataloged-but-
+    /// unsupported, or a render error) collapses to a plain 404 — JS instead renders the
+    /// corpus-aware themed 404 HTML page here, a page `ad-server` doesn't have: its web surface
+    /// is JSON/render endpoints only, and static HTML pages are `ad-cli web build`'s job, not
+    /// `ad-server serve`'s (rfcs/0007 §11 finding #5).
+    static func symbolRender(_ conn: StorageConnection, _ request: SymbolRenderRequest) -> ResponseContent {
+        do {
+            let outcome = try renderSfSymbolBytes(conn, request)
+            switch outcome {
+                case .svg(let svg):
+                    return .raw(body: Array(svg.utf8), contentType: outcome.mimeType, status: .ok)
+                case .png(let bytes):
+                    return .raw(body: bytes, contentType: outcome.mimeType, status: .ok)
+            }
+        } catch {
+            return .notFound
+        }
+    }
+
+    /// The full `/api/symbols/<scope>/<name>.(svg|png)` request: validate the query bag
+    /// (`validateSymbolRenderParams`) and either render or shape the 400. Kept separate from
+    /// `symbolRender` so a caller that already holds a validated `SymbolRenderRequest` (none
+    /// today, but the split mirrors the JS route's own validate-then-render structure) can skip
+    /// re-validating.
+    static func symbolRenderFromQuery(
+        _ conn: StorageConnection, scope: String, name: String, format: String, query: [String: String]
+    ) -> ResponseContent {
+        switch validateSymbolRenderParams(scope: scope, name: name, format: format, query: query) {
+            case .valid(let request): return symbolRender(conn, request)
+            case .invalid(let message): return jsonError(.badRequest, message)
+        }
+    }
+}
+
+/// The outcome of `validateSymbolRenderParams` — a plain two-case enum rather than `Result`,
+/// since the "invalid" payload is a plain `String` message and `String` doesn't conform to
+/// `Error` (so `Result<SymbolRenderRequest, String>` doesn't typecheck).
+enum SymbolParamValidation {
+    case valid(SymbolRenderRequest)
+    case invalid(String)
+}
+
+/// JS `FONT_TEXT_MAX_CHARS` — the `/api/fonts/text.svg` `?text=` length cap, counted in UTF-16
+/// code units (matching JS `String.length`).
+private let fontTextMaxChars = 256
+
+/// JS `ALLOWED_SYMBOL_SIZES` — a `Set`, so this is its exact insertion (= ascending) order; the
+/// 400 error message lists them in this order too.
+private let allowedSymbolSizes: [Int] = [8, 12, 16, 20, 24, 32, 48, 64, 96, 128, 256]
+
+/// A `{"error": message}` JSON body at `status` — matches JS `jsonResponse({error}, {status})`.
+private func jsonError(_ status: HTTPStatus, _ message: String) -> ResponseContent {
+    var w = JSONStreamWriter(capacity: 128)
+    w.beginObject()
+    w.key("error")
+    w.string(message)
+    w.endObject()
+    return .raw(body: w.finish(), contentType: "application/json;charset=utf-8", status: status)
+}
+
+/// The `/api/symbols/.../<name>.(svg|png)` query-param validation (JS `validateSymbolParams`,
+/// render-validation.js): each PRESENT-but-invalid param is a 400 with a specific message; an
+/// ABSENT param resolves to nil (the renderer's own default applies). `fg` takes priority over
+/// `color` when both are given (JS: `searchParams.get('fg') ?? searchParams.get('color')`).
+func validateSymbolRenderParams(
+    scope: String, name: String, format: String, query: [String: String]
+) -> SymbolParamValidation {
+    var size: Int?
+    if let raw = nonEmptyQueryValue(query["size"]) {
+        guard let parsed = Int(raw), allowedSymbolSizes.contains(parsed) else {
+            return .invalid("size must be one of: \(allowedSymbolSizes.map(String.init).joined(separator: ", "))")
+        }
+        size = parsed
+    }
+    let colorParam = nonEmptyQueryValue(query["fg"]) ?? nonEmptyQueryValue(query["color"])
+    if let colorParam, !matchesColorQueryPattern(colorParam) {
+        return .invalid("color must be a 6-character hex value (e.g. #FF8800 or FF8800)")
+    }
+    let backgroundParam = nonEmptyQueryValue(query["bg"])
+    if let backgroundParam, !matchesColorQueryPattern(backgroundParam) {
+        return .invalid("bg must be a 6-character hex value (e.g. #FF8800 or FF8800)")
+    }
+    var weight: String?
+    if let raw = nonEmptyQueryValue(query["weight"]) {
+        let lowered = raw.lowercased()
+        guard SymbolWeight(rawValue: lowered) != nil else {
+            return .invalid(
+                "weight must be one of: \(SymbolWeight.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
+        weight = lowered
+    }
+    var scale: String?
+    if let raw = nonEmptyQueryValue(query["scale"]) {
+        let lowered = raw.lowercased()
+        guard SymbolScale(rawValue: lowered) != nil else {
+            return .invalid(
+                "scale must be one of: \(SymbolScale.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
+        scale = lowered
+    }
+    return .valid(
+        SymbolRenderRequest(
+            scope: scope, name: name, format: format, size: size, color: colorParam,
+            background: backgroundParam, weight: weight, scale: scale))
+}
+
+/// `/^#?[0-9A-Fa-f]{6}$/` — an optional leading `#`, then exactly 6 ASCII hex digits (JS
+/// `COLOR_RE`). Distinct from `Tools.swift`'s `isHexColor` (the render-time normalizer): that one
+/// REQUIRES the `#` and accepts 6-OR-8 digits. A bare `FF8800` (no `#`) passes this route-level
+/// check but is silently reset to black by the deeper normalizer — exactly the two-stage
+/// behavior JS's own pipeline has (this route's validator, then the renderer's own normalizer).
+private func matchesColorQueryPattern(_ s: String) -> Bool {
+    var bytes = Array(s.utf8)
+    if bytes.first == UInt8(ascii: "#") { bytes.removeFirst() }
+    guard bytes.count == 6 else { return false }
+    return bytes.allSatisfy { byte in
+        (byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x46) || (byte >= 0x61 && byte <= 0x66)
+    }
+}
+
+/// `value` when non-nil and non-empty, else nil — `url.searchParams.get(k)` returns `""` for a
+/// bare `?k` with no `=`, and JS's validators treat that the same as absent.
+private func nonEmptyQueryValue(_ value: String?) -> String? {
+    guard let value, !value.isEmpty else { return nil }
+    return value
 }
 
 /// CSS `format(...)` hint.
@@ -293,6 +520,37 @@ func matchSymbolMetadataPath(_ path: Substring) -> (scope: String, name: String)
         return (scope, name)
     }
     return nil
+}
+
+/// Matches `^/api/symbols/(public|private)/(.+)\.(svg|png)$` → (scope, decoded name, format).
+func matchSymbolRenderPath(_ path: Substring) -> (scope: String, name: String, format: String)? {
+    for scope in ["public", "private"] {
+        let prefix = "/api/symbols/\(scope)/"
+        guard path.hasPrefix(prefix) else { continue }
+        for format in ["svg", "png"] {
+            let suffix = ".\(format)"
+            guard path.hasSuffix(suffix) else { continue }
+            let nameStart = path.index(path.startIndex, offsetBy: prefix.count)
+            let nameEnd = path.index(path.endIndex, offsetBy: -suffix.count)
+            guard nameStart < nameEnd else { continue }
+            guard let name = percentDecode(String(path[nameStart ..< nameEnd])) else { return nil }
+            return (scope, name, format)
+        }
+    }
+    return nil
+}
+
+/// Matches `^/api/fonts/family/([^/]+)\.zip$` → the decoded family id.
+func matchFontFamilyZipPath(_ path: Substring) -> String? {
+    let prefix = "/api/fonts/family/"
+    let suffix = ".zip"
+    guard path.hasPrefix(prefix), path.hasSuffix(suffix) else { return nil }
+    let start = path.index(path.startIndex, offsetBy: prefix.count)
+    let end = path.index(path.endIndex, offsetBy: -suffix.count)
+    guard start < end else { return nil }
+    let middle = path[start ..< end]
+    guard !middle.contains("/") else { return nil }
+    return percentDecode(String(middle))
 }
 
 private func titleIndexResponse(_ ti: TitleIndex) -> TitleIndexResponse {
