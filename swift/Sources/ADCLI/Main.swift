@@ -21,7 +21,7 @@ struct ADCLICommand: AsyncParsableCommand {
             SearchCommand.self, StatusCommand.self, CrawlCommand.self, SemanticProbeCommand.self,
             AddbWriteSpikeCommand.self, AddbReadSpikeCommand.self, ExtractSpikeCommand.self, WebCommand.self,
             ImportCommand.self, IndexCommand.self, SyncCommand.self, SyncAllCommand.self,
-            SnapshotCommand.self, VersionCommand.self,
+            SnapshotCommand.self, SetupCommand.self, VersionCommand.self,
             StorageCommand.self, OpsCommand.self, McpCommand.self
         ])
 }
