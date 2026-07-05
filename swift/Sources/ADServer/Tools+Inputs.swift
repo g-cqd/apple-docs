@@ -21,7 +21,6 @@ enum DeprecatedFilter: String, Codable, CaseIterable { case include, exclude, on
 
 @Schemable(dialect: .draft7)
 struct SearchDocsInput: Decodable {
-    // read/maxChars/page/match (inline + pagination + excerpts) — omitted.
     @SchemaInfo(description: #"Search terms, e.g. "NavigationStack"."#) var query: String
     /// Framework slug, e.g. swiftui, app-store-review.
     var framework: String?
@@ -34,12 +33,20 @@ struct SearchDocsInput: Decodable {
     @SchemaInfo(description: #"Min version per platform, e.g. {"ios":"17.0"}."#) var minVersion: MinVersion?
     /// Max results (default 25).
     @SchemaNumber(1 ... 100) var limit: Int?
+    /// Inline the top result's full content.
+    var read: Bool?
     /// WWDC session year.
     @SchemaNumber(type: .number) var year: Int?
     /// WWDC track.
     var track: String?
     /// Default include; use exclude when writing code.
     var deprecated: DeprecatedFilter?
+    /// Page size in chars (min 512).
+    @SchemaNumber(512...) var maxChars: Int?
+    /// 1-based page; needs maxChars.
+    @SchemaNumber(1...) var page: Int?
+    @SchemaInfo(description: "Return only excerpt windows around matches instead of full content.")
+    var match: MatchExcerpt?
 }
 
 @Schemable
@@ -139,7 +146,6 @@ struct RenderFontTextInput: Decodable {
 
 @Schemable(dialect: .draft7)
 struct BrowseInput: Decodable {
-    // maxChars/page (pagination) — omitted.
     /// Root slug, e.g. swiftui, design, wwdc.
     var framework: String
     /// Drill into a page, e.g. swiftui/view.
@@ -148,4 +154,8 @@ struct BrowseInput: Decodable {
     var year: Int?
     /// Max pages (default 100, cap 200).
     @SchemaNumber(1 ... 200) var limit: Int?
+    /// Page size in chars (min 512).
+    @SchemaNumber(512...) var maxChars: Int?
+    /// 1-based page; needs maxChars.
+    @SchemaNumber(1...) var page: Int?
 }
