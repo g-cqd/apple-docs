@@ -15,7 +15,7 @@ struct ResourcesCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "resources",
         abstract: "Sync bundled Apple resources (fonts, SF Symbols) into the corpus.",
-        subcommands: [ResourcesSyncFontsCommand.self])
+        subcommands: [ResourcesSyncFontsCommand.self, ResourcesSyncSymbolsCommand.self])
 }
 
 /// `ad-cli resources sync-fonts [--db …] [--home …] [--json]`.
