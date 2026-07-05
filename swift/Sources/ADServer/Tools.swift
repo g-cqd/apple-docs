@@ -166,27 +166,32 @@ private func searchSfSymbols(_ input: SearchSfSymbolsInput, _ ctx: MCPToolContex
 //
 // The JS render: getAppleFontFile(fontId) → text=String(text ?? "Typography"),
 // pointSize=clamp(size ?? 96, 8, 512) → assertFontPathContained(file_path,
-// dataDir) (else placeholder SVG) → isLikelySfnt probe → engine chain
-// (darwin: CoreText FIRST = `FontText.renderSVG` via the dylib) → placeholder on
-// failure. Result projects to `{ text, mimeType, content }` (font + format
-// dropped).
+// dataDir) (else placeholder SVG) → isLikelySfnt probe → engine chain (darwin:
+// CoreText, then hb-native, then hb-view; non-darwin: hb-native, then hb-view) →
+// placeholder on failure. Result projects to `{ text, mimeType, content }` (font
+// + format dropped).
 //
-// Two honest deviations from the JS oracle, both forced by the server having NO
-// dataDir (MCPCommand opens only --db; MCPToolContext is (connection, logger)):
-//   1. Path-safety: the JS allowlist roots are /Library/Fonts,
-//      /System/Library/Fonts, ~/Library/Fonts AND <dataDir>/resources/fonts/
-//      extracted. The first three are dataDir-independent and checked here
-//      identically; the 4th CANNOT be checked, so a font that lives ONLY under
-//      <dataDir>/.../extracted (the snapshot's downloaded Apple fonts) is treated
-//      as out-of-roots here → placeholder, whereas JS would render its glyphs.
-//      That is the one input class where this handler diverges from the oracle;
-//      it is reported, not hidden. System/home-root fonts and off-disk paths
-//      (the gate's seed) take the SAME branch as JS → byte-identical.
-//   2. Engine chain: only CoreText (`FontText.renderSVG`, the exact function the
-//      JS darwin path calls first) is invoked. The hb-native / hb-view
-//      fallbacks (used only when CoreText yields no outlines) are not chained, so
-//      a font CoreText can't outline falls to the placeholder here vs a HarfBuzz
-//      render in JS — a narrow darwin edge.
+// Engine chain — matches JS's `_resolveFontTextEngines` order exactly, first
+// non-nil result wins: CoreText (`FontText.renderSVG`, darwin-only) → hb-native
+// (`ADRender.HarfBuzzShaper.renderSVG`, the dlopen'd in-process HarfBuzz shim
+// RenderExports.swift already exposes over FFI for the JS native bridge — wired
+// into THIS chain too now) → hb-view (`ADRender.HbViewRenderer.renderSVG`, spawns
+// the system `hb-view` CLI when installed).
+//
+// One honest remaining deviation from the JS oracle, forced by the server having
+// no CLI-flag dataDir (MCPCommand opens only --db; `MCPToolContext` carries just
+// (connection, logger), so an explicit `--home` override on THIS process isn't
+// visible here): path-safety. The JS allowlist roots are /Library/Fonts,
+// /System/Library/Fonts, ~/Library/Fonts AND <dataDir>/resources/fonts/extracted.
+// The first three are dataDir-independent and checked identically; the 4th is now
+// ALSO checked, with dataDir resolved the same way `CorpusOptions.path` resolves
+// the corpus home (`$APPLE_DOCS_HOME`, else `~/.apple-docs`) — covering the
+// default and env-var configurations every stdio MCP client uses in practice. The
+// one narrower gap: a bare `--home /custom/path` CLI flag with no matching
+// `$APPLE_DOCS_HOME` still resolves to the default here, so a font that lives
+// ONLY under that custom home's `.../extracted` would (incorrectly) hit the
+// placeholder. Reported, not hidden; System/home-root fonts, the default/env-var
+// dataDir case, and off-root paths all match the JS oracle exactly.
 
 private func renderFontText(_ input: RenderFontTextInput, _ ctx: MCPToolContext) -> MCPToolResult {
     // getAppleFontFile(fontId) — a missing row is a not-found (JS NotFoundError →
@@ -199,19 +204,9 @@ private func renderFontText(_ input: RenderFontTextInput, _ ctx: MCPToolContext)
     let pointSize = clampInteger(input.size ?? 96, min: 8, max: 512)
     let family = font.familyDisplayName ?? ""
 
-    let content: String
-    // CoreText (FontText.renderSVG) is Darwin-only; elsewhere the placeholder SVG is the whole story.
-    #if canImport(CoreText)
-        if let path = font.filePath, fontPathWithinSystemRoots(path), isLikelySfnt(path),
-            let svg = FontText.renderSVG(fontPath: path, text: text, pointSize: Double(pointSize))
-        {
-            content = svg
-        } else {
-            content = fontTextSvgFallback(fontFamily: family, text: text, pointSize: pointSize)
-        }
-    #else
-        content = fontTextSvgFallback(fontFamily: family, text: text, pointSize: pointSize)
-    #endif
+    let content =
+        renderFontTextEngineChain(font: font, text: text, pointSize: pointSize)
+        ?? fontTextSvgFallback(fontFamily: family, text: text, pointSize: pointSize)
     // projectRenderFontText: { text, mimeType, content } in that key order.
     return .okValue(
         .object([
@@ -219,6 +214,22 @@ private func renderFontText(_ input: RenderFontTextInput, _ ctx: MCPToolContext)
             "mimeType": .string("image/svg+xml; charset=utf-8"),
             "content": .string(content)
         ]))
+}
+
+/// The CoreText → hb-native → hb-view engine chain over `font`'s file, or nil
+/// when the path fails containment/SFNT validation or every engine fails —
+/// the caller falls back to the placeholder SVG exactly as JS does.
+private func renderFontTextEngineChain(font: AppleFontFileRecord, text: String, pointSize: Int) -> String? {
+    guard let path = font.filePath, fontPathWithinApprovedRoots(path), isLikelySfnt(path) else { return nil }
+    #if canImport(CoreText)
+        if let svg = FontText.renderSVG(fontPath: path, text: text, pointSize: Double(pointSize)) {
+            return svg
+        }
+    #endif
+    if let bytes = HarfBuzzShaper.renderSVG(fontPath: path, text: text, pointSize: Double(pointSize)) {
+        return String(decoding: bytes, as: UTF8.self)
+    }
+    return HbViewRenderer.renderSVG(fontPath: path, text: text, pointSize: Double(pointSize))
 }
 
 /// renderSfSymbol (apple-symbols/render.js) live path: resolve the symbol, render
@@ -323,16 +334,23 @@ private func clampInteger(_ value: Int, min lo: Int, max hi: Int) -> Int {
     min(max(value, lo), hi)
 }
 
-/// The dataDir-INDEPENDENT subset of `assertFontPathContained`'s allowlist:
-/// `/Library/Fonts`, `/System/Library/Fonts`, `~/Library/Fonts`. A path resolving
-/// under one of these (or equal to it) is safe. The `<dataDir>/resources/fonts/
-/// extracted` root is omitted (no dataDir in-process) — see the handler note.
-private func fontPathWithinSystemRoots(_ filePath: String) -> Bool {
+/// `assertFontPathContained`'s 4-root allowlist (apple-fonts/safe-font-path.js):
+/// `/Library/Fonts`, `/System/Library/Fonts`, `~/Library/Fonts`, and
+/// `<dataDir>/resources/fonts/extracted` (where the DMG-extract sync step writes
+/// downloaded Apple fonts — `FontSync.swift`'s `extractedDir`). A path resolving
+/// under one of these (or equal to it) is safe. `dataDir` is resolved exactly
+/// like `CorpusOptions.path` (`$APPLE_DOCS_HOME`, else `~/.apple-docs`) — see the
+/// handler note above for the one narrow case (a bare `--home` CLI flag with no
+/// matching env var) this can't observe.
+private func fontPathWithinApprovedRoots(_ filePath: String) -> Bool {
     guard !filePath.isEmpty else { return false }
     let resolved = URL(fileURLWithPath: filePath).standardizedFileURL.path
     let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+    let envHome = ProcessInfo.processInfo.environment["APPLE_DOCS_HOME"]
+    let dataDir = URL(fileURLWithPath: envHome ?? "\(NSHomeDirectory())/.apple-docs").standardizedFileURL.path
     let roots = [
-        "/Library/Fonts", "/System/Library/Fonts", home + "/Library/Fonts"
+        "/Library/Fonts", "/System/Library/Fonts", home + "/Library/Fonts",
+        dataDir + "/resources/fonts/extracted"
     ]
     for root in roots where resolved == root || resolved.hasPrefix(root + "/") {
         return true
