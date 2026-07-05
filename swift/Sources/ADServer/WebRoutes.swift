@@ -152,8 +152,8 @@ enum WebRoutes {
         let manifest = SearchManifest(
             version: 2, titleCount: titleIndex.keys.count, aliasCount: aliasMap.count, shardCount: 0,
             files: [
-                "title-index": "title-index.\(String(sha256HexLower(titleBytes).prefix(10))).json",
-                "aliases": "aliases.\(String(sha256HexLower(aliasBytes).prefix(10))).json"
+                "title-index": "title-index.\(String(ConditionalRequest.sha256HexLower(titleBytes).prefix(10))).json",
+                "aliases": "aliases.\(String(ConditionalRequest.sha256HexLower(aliasBytes).prefix(10))).json"
             ],
             generatedAt: iso8601.string(from: Date()))
         return WebJSON.encode(manifest)
