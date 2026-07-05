@@ -484,6 +484,13 @@ let package = Package(
                 // system zlib) — already in the graph through ADStorage.
                 "ADArchive",
                 "ADContent",
+                // ADRender: the SF-Symbol renderer — `SymbolPdf.render` (symbol → PDF) plus the shared
+                // `SymbolPdfToSvg.convert` (PDF → SVG), relocated here from ad-server so BOTH products share
+                // the one byte-exact converter. This is the enabling edge for the forthcoming
+                // `resources symbol-prerender` verb (which needs `SymbolPdf.render` anyway); no verb yet.
+                // Cycle-free: ADRender pulls only ADBase + ADFCore (already in ADCLI's graph via ADStorage),
+                // and nothing can depend on the ADCLI executable target.
+                "ADRender",
                 "ADWebBuild",
                 // ADOps: the `ad-cli ops` verb group (render-all, install-daemons,
                 // deploy-update, pull-snapshot, watchdog, service, proxy, smoke-test,
