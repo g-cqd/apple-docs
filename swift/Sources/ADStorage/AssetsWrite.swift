@@ -77,6 +77,36 @@ public struct AppleFontFileUpsert: Sendable {
     }
 }
 
+/// An `sf_symbols` catalog-sync upsert row (the JS `upsertSfSymbol` argument). The JSON columns are
+/// pre-serialized by the caller; `availabilityJson` is nil when the CoreGlyphs plist has no entry.
+public struct SfSymbolUpsert: Sendable {
+    public var name: String
+    public var scope: String
+    public var categoriesJson: String
+    public var keywordsJson: String
+    public var aliasesJson: String
+    public var availabilityJson: String?
+    public var orderIndex: Int64?
+    public var bundlePath: String?
+    public var bundleVersion: String?
+
+    public init(
+        name: String, scope: String, categoriesJson: String, keywordsJson: String, aliasesJson: String,
+        availabilityJson: String? = nil, orderIndex: Int64? = nil, bundlePath: String? = nil,
+        bundleVersion: String? = nil
+    ) {
+        self.name = name
+        self.scope = scope
+        self.categoriesJson = categoriesJson
+        self.keywordsJson = keywordsJson
+        self.aliasesJson = aliasesJson
+        self.availabilityJson = availabilityJson
+        self.orderIndex = orderIndex
+        self.bundlePath = bundlePath
+        self.bundleVersion = bundleVersion
+    }
+}
+
 extension StorageConnection {
     /// `INSERT OR REPLACE INTO apple_font_families` (the JS `upsertAppleFontFamily`).
     /// Needs a writable connection; `updatedAt` is the caller's ISO timestamp.
@@ -131,5 +161,47 @@ extension StorageConnection {
         stmt.bind("size", file.size.map(BindValue.int) ?? .null)
         stmt.bind("updatedAt", .text(updatedAt))
         return stmt.step() == SQLite.done
+    }
+
+    /// Upsert an sf_symbols catalog row (the JS `upsertSfSymbol`). ADDB rejects a COMPOSITE ON CONFLICT
+    /// target, so this runs `INSERT OR IGNORE` (a fresh row leaves codepoint / render columns at their
+    /// DEFAULT) then `UPDATE`s the CoreGlyphs catalog fields — so the codepoint-stamp + mark-unrenderable
+    /// columns survive a re-sync. Keyed on the (scope, name) primary key.
+    @discardableResult
+    public func upsertSfSymbol(_ symbol: SfSymbolUpsert, updatedAt: String) -> Bool {
+        let insert = """
+            INSERT OR IGNORE INTO sf_symbols
+              (name, scope, categories_json, keywords_json, aliases_json, availability_json,
+               order_index, bundle_path, bundle_version, updated_at)
+            VALUES ($name, $scope, $categories, $keywords, $aliases, $availability,
+               $orderIndex, $bundlePath, $bundleVersion, $updatedAt)
+            """
+        guard let ins = conn.prepareUncached(insert) else { return false }
+        bindSfSymbol(ins, symbol, updatedAt: updatedAt)
+        guard ins.step() == SQLite.done else { return false }
+
+        let update = """
+            UPDATE sf_symbols SET
+              categories_json = $categories, keywords_json = $keywords, aliases_json = $aliases,
+              availability_json = $availability, order_index = $orderIndex, bundle_path = $bundlePath,
+              bundle_version = $bundleVersion, updated_at = $updatedAt
+            WHERE scope = $scope AND name = $name
+            """
+        guard let upd = conn.prepareUncached(update) else { return false }
+        bindSfSymbol(upd, symbol, updatedAt: updatedAt)
+        return upd.step() == SQLite.done
+    }
+
+    private func bindSfSymbol(_ stmt: any StorageStatement, _ symbol: SfSymbolUpsert, updatedAt: String) {
+        stmt.bind("name", .text(symbol.name))
+        stmt.bind("scope", .text(symbol.scope))
+        stmt.bind("categories", .text(symbol.categoriesJson))
+        stmt.bind("keywords", .text(symbol.keywordsJson))
+        stmt.bind("aliases", .text(symbol.aliasesJson))
+        stmt.bind("availability", symbol.availabilityJson.map(BindValue.text) ?? .null)
+        stmt.bind("orderIndex", symbol.orderIndex.map(BindValue.int) ?? .null)
+        stmt.bind("bundlePath", symbol.bundlePath.map(BindValue.text) ?? .null)
+        stmt.bind("bundleVersion", symbol.bundleVersion.map(BindValue.text) ?? .null)
+        stmt.bind("updatedAt", .text(updatedAt))
     }
 }
