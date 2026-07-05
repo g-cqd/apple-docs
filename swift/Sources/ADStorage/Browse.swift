@@ -37,10 +37,16 @@ extension StorageConnection {
     }
 
     /// getDocumentsByRoot: active pages of a root, joined to their documents, `ORDER BY d.key`.
+    /// Joins through `p.path = d.url` (the external URL both share), NOT `p.path = d.key` — a
+    /// document's `key` is the bare crawl key (e.g. `design/human-interface-guidelines`), a
+    /// different string from `pages.path` (the external URL); the old predicate was never
+    /// true, so this always returned zero rows (RFC 0007 §11 finding #8 — the same join-hub
+    /// correction `RepairPageRootIds.swift` established for the unrelated `pages.root_id`
+    /// mis-attribution, finding #2).
     public func pagesByRoot(_ slug: String) -> [BrowsePage] {
         let sql = """
             SELECT d.key, d.title, d.role, d.role_heading, d.abstract_text
-            FROM documents d JOIN pages p ON p.path = d.key JOIN roots r ON p.root_id = r.id
+            FROM documents d JOIN pages p ON p.path = d.url JOIN roots r ON p.root_id = r.id
             WHERE r.slug = ? AND p.status = 'active' ORDER BY d.key
             """
         guard let stmt = conn.prepareUncached(sql) else { return [] }
