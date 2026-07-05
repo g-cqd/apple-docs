@@ -110,6 +110,25 @@ public enum CrawlPersist {
         return rowid
     }
 
+    /// Recompute `roots.page_count` for one root (JS `db.updateRootPageCount(slug)`, called once a root's
+    /// crawl loop exhausts — `repos/roots.js` `UPDATE roots SET page_count = (SELECT COUNT(*) FROM pages
+    /// WHERE root_id = roots.id AND status = 'active') WHERE slug = ?`). ADDB's planner rejects a
+    /// correlated subquery inside an UPDATE (the same "derived table" gap `ADStorage/Frameworks.swift`
+    /// routes around for reads), so this reads the count with a plain SELECT first, then writes it back
+    /// with a plain UPDATE, instead of the JS's single correlated statement.
+    public static func refreshRootPageCount(_ db: Database, rootId: Int64) throws(DBError) {
+        let rows =
+            try db.prepare("SELECT COUNT(*) AS c FROM pages WHERE root_id = $root_id AND status = 'active'")
+            .all(["root_id": .integer(rootId)])
+        var count: Int64 = 0
+        if let row = rows.first, case .integer(let c)? = row["c"] { count = c }
+        try db.transaction { (txn) throws(DBError) in
+            _ = try txn.run(
+                "UPDATE roots SET page_count = $page_count WHERE id = $id",
+                ["page_count": .integer(count), "id": .integer(rootId)])
+        }
+    }
+
     // MARK: - reads
 
     /// The HTTP validators (`etag` / `last_modified`) stored for the page at `path`, or `nil` when no

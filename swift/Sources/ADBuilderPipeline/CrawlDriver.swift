@@ -67,10 +67,12 @@ public struct CrawlDriver: Sendable {
         // A reference-following source (`.crawl`, e.g. hig / apple-docc) drives a BFS over the
         // `crawl_state` frontier instead of the flat key list.
         if type(of: adapter).syncMode == .crawl {
-            return try await crawlBFS(
+            let stats = try await crawlBFS(
                 adapter, discovery: discovery, rootId: rootId, rootIds: rootIds,
                 run: BFSRun(db: db, context: context, now: now, maxConcurrency: maxConcurrency),
                 onProgress: onProgress)
+            try Self.refreshRootPageCounts(db, rootId: rootId, rootIds: rootIds)
+            return stats
         }
 
         var stats = Stats()
@@ -124,7 +126,19 @@ public struct CrawlDriver: Sendable {
                 }
             }
         }
+        try Self.refreshRootPageCounts(db, rootId: rootId, rootIds: rootIds)
         return stats
+    }
+
+    /// Recompute `roots.page_count` for every root this call touched (the JS `db.updateRootPageCount`,
+    /// called once per root after its own crawl loop exhausts) — every root in `rootIds` plus the default
+    /// `rootId` (a single-root source's only root, or a multi-root source's fallback).
+    private static func refreshRootPageCounts(_ db: Database, rootId: Int64, rootIds: [String: Int64]) throws {
+        var ids = Set(rootIds.values)
+        ids.insert(rootId)
+        for id in ids {
+            try CrawlPersist.refreshRootPageCount(db, rootId: id)
+        }
     }
 
     /// The rootId a key persists under: `rootIds[<leading path segment>]`, else the default `rootId`.
