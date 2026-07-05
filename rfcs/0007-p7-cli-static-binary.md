@@ -12,7 +12,11 @@
   Still gated on: the native web **static build** (kept shelling to `bun build` + a shiki
   coprocess as BUILD-only tools, operator decision), the `cli.js` sync/build pipeline, and
   the entry-point flip. Sequenced behind P6 / [RFC 0005](0005-server-framework.md) +
-  [RFC 0006](0006-codebase-health.md).
+  [RFC 0006](0006-codebase-health.md). **First end-to-end JS↔Swift parity audit ran
+  2026-07-05** (§11): found + fixed one corpus-breaking regression (`roots.page_count`),
+  characterized the remaining gaps, and produced a two-tier harness design (§12) —
+  making the §9 "verb-for-verb golden parity" / "JS↔Swift corpus parity" gates concrete
+  for the first time instead of just declared.
 - **Audience**: maintainers. Like every RFC here this is repo documentation,
   not product documentation — not built or indexed by the docs site.
 - **Carries**: phase **P7** of the [RFC 0001](0001-swift-native-transition.md)
@@ -177,7 +181,94 @@ Read-only and maintenance verbs (P7.1–P7.2) can proceed earlier — they ride
 the already-native ADStorage/ADContent/ADSearchCascade targets — so the CLI
 skeleton + golden harness are not blocked on P6.
 
-## 11. Outcome
+## 11. First parity audit (2026-07-05)
+
+The §9 gates ("verb-for-verb golden parity vs `cli.js`", "JS↔Swift corpus parity") had been
+declared but never exercised end-to-end. This audit ran a full crawl of the current Swift
+corpus (already fresh — 406 roots, 342K+ active pages, same-day) against a full isolated
+crawl of the frozen pre-Swift JS implementation as ground truth (`APPLE_DOCS_HOME=/tmp/js-crawl
+APPLE_DOCS_NATIVE=off bun cli.js sync --full` — `APPLE_DOCS_NATIVE=off` matters: `cli.js`
+otherwise silently delegates most verbs, including reads, to the native Swift binary by
+default, which would make the "comparison" compare Swift against itself).
+
+Findings, categorized:
+
+1. **[Confirmed regression — fixed, `ac61e28`]** `roots.page_count` was declared `DEFAULT 0`
+   and never incremented anywhere in the write path (verified by grepping the entire
+   `ADWrite`/`ADBuilderPipeline`/`ADStorage` write surface). `list_frameworks`/`browse` (CLI
+   and MCP tool) and the static build's homepage filter `WHERE page_count > 0`, so they
+   silently returned empty against ANY real corpus — `ad-cli frameworks --json` returned
+   `{"total":0,"roots":[]}` despite `status --advanced` showing 406 real roots with healthy
+   per-root counts. Ported the JS semantics (`repos/roots.js` `updateRootPageCount`, called
+   once per root after its crawl loop exhausts — a full recompute from `pages`, not an
+   increment) into `CrawlDriver.crawl()`; backfilled the existing corpus via the new hidden
+   `ad-cli _backfill-page-count` verb. Verified: 406/406 roots backfilled, `frameworks --json`
+   now returns real data.
+2. **[New, characterized — root cause not yet pinned down]** `hig`'s reference-following BFS
+   re-touches a huge number of already-crawled `apple-docc` pages (~155K in one `sync-all`
+   run) without capturing them: `pages`' `ON CONFLICT(path) DO UPDATE` never reassigns
+   `root_id`, so each touch updates a pre-existing row in place and stays under its original
+   (correct) framework root. Net effect: `hig`'s own progress counters are wildly misleading
+   (it's re-fetching, not discovering) and — the real problem — `design` (HIG's actual root)
+   ends up with **zero pages** (`ad-cli browse design` → "0 pages"): the HIG source produces
+   no usable content in the current corpus. Likely in how `HigAdapter`'s BFS resolves/
+   normalizes cross-references before `CrawlDriver.slug(ofKey:)`'s same-root filter applies —
+   needs a trace through `DocC.extractReferences`/`Identifier.normalize` to pin down exactly.
+   Tracked as a follow-up; the JS crawl (ground truth for HIG's real page count) will confirm
+   the expected shape once it completes.
+3. **[Known partial port]** `read_doc`'s pagination/match-excerpt transforms are not yet
+   ported (already flagged in `Tools.swift:465-469`'s own comment) — confirmed still open.
+4. **[Known partial port, deliberately phased]** Several JS `web serve` HTTP routes have no
+   `ad-server` equivalent: `/api/fonts/text.svg`, `/api/fonts/subset`, `/api/fonts/file/:id`,
+   `/api/fonts/family/:id.zip`, and the `/api/symbols/(scope)/:name.(svg|png)` image-bytes
+   pattern. Git history confirms this is a deliberate phase boundary, not an oversight —
+   `5ed84c9` ("Completes Phase 2 (fonts + symbols metadata)") explicitly scoped that phase to
+   JSON metadata only. The rendering logic itself already exists as the `render_sf_symbol`/
+   `render_font_text` MCP tools; it just isn't also exposed as plain HTTP GETs yet.
+5. **[Intentional architecture difference]** JS's `web serve` bundles static-site + API in one
+   process; Swift splits static generation (`ad-cli web build`) from API/MCP hosting
+   (`ad-server serve`), so a bare `ad-server` 404s at `/`. Not a bug, but worth a clearer
+   operator-facing note (e.g. in `web deploy`'s printed instructions) — it was surprising in
+   practice this session.
+6. **[In progress at time of writing]** Per-source/per-framework page-count diff against the
+   JS ground truth, and settling #2 with real numbers, are gated on the JS crawl finishing.
+
+Everything above except #6 was confirmed by direct inspection of the running corpus and
+codebase, independent of the JS crawl's completion.
+
+## 12. Parity harness design
+
+§3/§9 already name the target; this makes it concrete, composing with what exists rather than
+replacing it — the `da57610` schema-fixture gate (`SchemaParityTests`, schema-only, already
+reference-flipped per [RFC 0001](0001-swift-native-transition.md) §10) and CI's existing
+"JS↔Swift parity against the staged artifact" job (kernel/FFI-level only: native hashing +
+search-fusion, 6 spec files).
+
+**Tier 1 — CLI/HTTP verb-for-verb golden diff** (realizes §3/§9 directly). A small,
+deterministic, **committed** fixture corpus (a handful of real frameworks, not the full
+~340K-page corpus — speed and determinism over coverage) × a fixed arg matrix, driving
+`cli.js <verb>` (`APPLE_DOCS_NATIVE=off`) and `ad-cli <verb>` side by side. JSON output
+compared intrinsic-equal (parsed, deep-compared, volatile fields like timestamps excluded);
+human output byte-for-byte. Proposed home: `swift/Tests/ParityTests/` (Swift Testing,
+spawning `bun`/`ad-cli` via `Process`) — matches the existing suite's style.
+
+**Tier 2 — Live server/MCP behavioral diff.** The JS MCP implementation no longer exists
+(`src/mcp` deleted; `mcp start`/`mcp serve` unconditionally require `ad-server`, no JS
+fallback) — a live JS-vs-Swift MCP run is no longer possible. Per RFC 0001 §10's
+reference-flip convention (a frozen-external comparison converts to a self-regression golden
+at a domain's first deliberate divergence — exactly `da57610`'s own precedent), this tier is:
+(a) Swift-internal transport consistency — stdio `ad-server mcp` and HTTP `POST /mcp` must
+agree on every tool's response for the same input — plus (b) schema-contract validation
+against a frozen historical snapshot of the JS tool schemas (the last commit before
+deletion), regenerated only on a deliberate future contract change. The HTTP-route surface
+(JS `web serve` vs Swift `ad-server serve`) is the one place a true live JS-vs-Swift diff is
+still possible (JS's non-MCP HTTP server still exists) — folded into Tier 1's arg matrix
+rather than a separate tier.
+
+**CI wiring**: extend the existing "JS↔Swift parity" `ci.yml` job (currently kernel/FFI-only)
+with Tier 1, rather than adding a new job.
+
+## 13. Outcome
 
 One static Swift binary per platform that serves the entire `cli.js` surface
 with byte/contract parity; `package.json` runtime dependencies gone; the TS
