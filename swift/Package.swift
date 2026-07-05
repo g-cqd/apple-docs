@@ -618,6 +618,22 @@ let package = Package(
                 .product(name: "ADSQLModel", package: "ADSQL")
             ],
             swiftSettings: testSettings),
+        // ParityTests — the Tier 1 CLI/HTTP verb-for-verb golden parity gate (RFC 0007 §12),
+        // realizing the "verb-for-verb golden parity harness" §3/§9 already named. Spawns
+        // `bun cli.js <verb>` and the release-built `ad-cli <verb>` via `Process` against a
+        // committed, deterministic fixture corpus (Fixtures/js-corpus + Fixtures/swift-corpus —
+        // read via `#filePath`, like ADWriteTests' own fixture, not SPM resource bundling) and
+        // diffs stdout/exit-code: JSON intrinsically (ADJSONCore), human byte-for-byte. No local
+        // target dependency at all (deliberately decoupled from the churning ADCLI/ADStorage
+        // graph — it only needs ADJSON's `JSONValue` for the deep-equal comparator) — everything
+        // else is an out-of-process CLI invocation, exactly like the parity mechanism it gates.
+        .testTarget(
+            name: "ParityTests",
+            dependencies: [
+                .product(name: "ADJSONCore", package: "ADJSON"),
+                .product(name: "OrderedCollections", package: "swift-collections")
+            ],
+            swiftSettings: testSettings),
         // ADBuilderTests — the HTTP-client seam gate: the value types (request/response
         // mapping) + the streamed `ResponseBody` (`collect(upTo:)` size guard) of the
         // interim URLSession client. No live network — the transport behavior is proven
@@ -668,6 +684,10 @@ if isDev {
 // those graphs from the build. Inert unless the env var is set; CI / normal runs build
 // the whole package. (Back-compat: AD_ONLY_ADWRITE_TESTS still selects ADWriteTests.)
 let isolationClosures: [String: Set<String>] = [
+    // ParityTests pulls no local target at all (only the external ADJSON/swift-collections
+    // packages) — it drives `bun`/`ad-cli` out-of-process — so its isolation closure is itself
+    // alone, dropping the entire local target graph for the fastest possible iteration loop.
+    "ParityTests": ["ParityTests"],
     "ADBaseTests": ["ADBase", "ADBaseTests"],
     "ADContentTests": ["ADContent", "ADBase", "ADEmbed", "ADContentTests"],
     "ADWebBuildTests": ["ADWebBuild", "ADContent", "ADBase", "ADEmbed", "ADWebBuildTests"],
