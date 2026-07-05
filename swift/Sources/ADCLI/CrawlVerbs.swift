@@ -65,8 +65,14 @@ func loadIndexEmbedder(dbPath: String) throws -> Embedder {
 /// than the interactive 5 req/s; `burst` = the rate so a `--concurrency`-deep first wave isn't stalled
 /// on an empty token bucket.
 func crawlContext(rate: Double, concurrency: Int) -> SourceContext {
-    SourceContext(
-        client: URLSessionHTTPClient(maxConnectionsPerHost: concurrency),
+    // Each URLSession is one HTTP/2 connection to the origin, and the server caps ~65 in-flight
+    // streams per connection — so a single session plateaus a wide crawl at ~60 pages/s regardless
+    // of concurrency. A small pool lifts that: measured ~60 -> ~70 pages/s. The pool stays small
+    // because the SERIAL per-page persist (~70 pages/s, single-writer) is the dominant ceiling —
+    // two connections already over-feed it, so more just open idle sockets against the origin.
+    let connections = Swift.max(1, Swift.min(4, concurrency / 128))
+    return SourceContext(
+        client: URLSessionHTTPClient(maxConnectionsPerHost: concurrency, connections: connections),
         rateLimiter: RateLimiter(rate: rate, burst: Swift.max(rate, 1)))
 }
 
