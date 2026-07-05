@@ -22,7 +22,7 @@ struct ADCLICommand: AsyncParsableCommand {
             AddbWriteSpikeCommand.self, AddbReadSpikeCommand.self, ExtractSpikeCommand.self, WebCommand.self,
             ImportCommand.self, IndexCommand.self, SyncCommand.self, SyncAllCommand.self,
             SnapshotCommand.self, SetupCommand.self, VersionCommand.self,
-            StorageCommand.self, OpsCommand.self, McpCommand.self
+            StorageCommand.self, OpsCommand.self, McpCommand.self, ResourcesCommand.self
         ])
 }
 
