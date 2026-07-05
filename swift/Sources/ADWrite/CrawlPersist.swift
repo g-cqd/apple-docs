@@ -202,6 +202,42 @@ public enum CrawlPersist {
         return true
     }
 
+    /// Batched `seedCrawlIfNew`: probe every ref, then insert all genuinely-new ones in ONE transaction
+    /// instead of one transaction per ref. A reference-following page seeds many same-root refs (dozens on
+    /// a framework landing page), and the per-ref transaction was the crawl's dominant serial-write cost
+    /// (the single-writer ceiling that capped a wide crawl near ~70 pages/s). The probes stay per-path — an
+    /// index seek on the unique `path` — but the N inserts collapse to a single commit. Intra-batch duplicate
+    /// paths are de-duplicated first-wins, matching the per-ref loop where the second `seedCrawlIfNew` for a
+    /// path would find the first's freshly-committed row and skip. Returns the count newly seeded.
+    @discardableResult
+    public static func seedCrawlBatch(
+        _ db: Database, _ seeds: [(path: String, rootSlug: String, depth: Int)]
+    ) throws(DBError) -> Int {
+        guard !seeds.isEmpty else { return 0 }
+        var seen: Set<String> = []
+        var fresh: [(path: String, rootSlug: String, depth: Int)] = []
+        for seed in seeds where seen.insert(seed.path).inserted {
+            let existing = try db.prepare("SELECT 1 FROM crawl_state WHERE path = $path")
+                .all(["path": .text(seed.path)])
+            if existing.isEmpty { fresh.append(seed) }
+        }
+        guard !fresh.isEmpty else { return 0 }
+        try db.transaction { (txn) throws(DBError) in
+            for seed in fresh {
+                _ = try txn.run(
+                    """
+                    INSERT INTO crawl_state (path, status, root_slug, depth, error)
+                    VALUES ($path, 'pending', $root_slug, $depth, NULL)
+                    """,
+                    [
+                        "path": .text(seed.path), "root_slug": .text(seed.rootSlug),
+                        "depth": .integer(Int64(seed.depth))
+                    ])
+            }
+        }
+        return fresh.count
+    }
+
     /// The next batch of `pending` paths for a root (JS `getPendingCrawl`): `(path, depth)`, up to `limit`.
     /// `limit` is a trusted caller constant, interpolated (ADSQL's `LIMIT` takes no bind parameter).
     public static func getPendingCrawl(

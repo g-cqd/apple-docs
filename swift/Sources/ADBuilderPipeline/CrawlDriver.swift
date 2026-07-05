@@ -236,10 +236,12 @@ public struct CrawlDriver: Sendable {
                                 etag: f.etag, lastModified: f.lastModified, now: run.now)
                             stats.persisted += 1
                             // Same-root references only — a cross-root ref belongs to that root's own crawl.
-                            for ref in f.refs where Self.slug(ofKey: ref) == f.rootSlug {
-                                try CrawlPersist.seedCrawlIfNew(
-                                    db, path: ref, rootSlug: f.rootSlug, depth: f.depth + 1)
-                            }
+                            // ONE transaction for all of a page's seeds (vs one per ref): the per-ref
+                            // transaction was the crawl's dominant serial-write cost (the ~70 pages/s ceiling).
+                            let seeds = f.refs
+                                .filter { Self.slug(ofKey: $0) == f.rootSlug }
+                                .map { (path: $0, rootSlug: f.rootSlug, depth: f.depth + 1) }
+                            try CrawlPersist.seedCrawlBatch(db, seeds)
                             succeeded.append(f.statePath)
                             // Flush in `width`-sized bunches so a kill re-processes at most one window, while
                             // still amortizing the mark over many rows (the seek fast path makes it cheap).
