@@ -34,18 +34,19 @@ struct SymbolPdfParseError: Error {
 
 // MARK: - Public facade (symbol-pdf-to-svg.js)
 
-enum SymbolPdfToSvg {
+public enum SymbolPdfToSvg {
     /// Options for the converter, matching the JS `opts` bag
     /// (`{ name, pointSize, color, background }`) with the JS defaults applied at
     /// the `assembleSvg` boundary (name "", pointSize 128, color "currentColor",
     /// background nil).
-    struct Options {
+    public struct Options {
         var name: String
         var pointSize: Int
         var color: String
         var background: String?
 
-        init(name: String = "", pointSize: Int = 128, color: String = "currentColor", background: String? = nil) {
+        public init(name: String = "", pointSize: Int = 128, color: String = "currentColor", background: String? = nil)
+        {
             self.name = name
             self.pointSize = pointSize
             self.color = color
@@ -56,7 +57,7 @@ enum SymbolPdfToSvg {
     /// `symbolPdfToSvg(pdfBytes, opts)` — parse the single-page symbol PDF and
     /// emit a luminance-mask SVG. Throws `SymbolPdfParseError` on the same
     /// conditions the JS facade throws `ParseError`.
-    static func convert(_ pdfBytes: [UInt8], options: Options) throws -> String {
+    public static func convert(_ pdfBytes: [UInt8], options: Options) throws -> String {
         let objects = PdfObjects.collectObjects(pdfBytes)
         guard let page = PdfObjects.findPage(objects) else {
             throw SymbolPdfParseError("symbol PDF: no /Type /Page object found")
