@@ -23,13 +23,20 @@ struct ADServerCommand: AsyncParsableCommand {
         defaultSubcommand: ServeCommand.self)
 }
 
-/// The corpus path — every subcommand opens it.
+/// The corpus location — an explicit `--db`, or resolved from `--home` /
+/// `$APPLE_DOCS_HOME`, so `apple-docs-mcp` / `apple-docs web serve` need no `--db`.
 struct CorpusOptions: ParsableArguments {
-    @Option(name: .long, help: "Path to the corpus SQLite database.")
-    var db: String
+    @Option(name: .long, help: "Path to the corpus database (default: $APPLE_DOCS_HOME/apple-docs.db).")
+    var db: String?
 
-    func validate() throws {
-        guard !db.isEmpty else { throw ValidationError("--db must not be empty") }
+    @Option(name: .long, help: "Corpus home directory (default: $APPLE_DOCS_HOME, else ~/.apple-docs).")
+    var home: String?
+
+    /// The resolved corpus path: `--db` if given, else `<home>/apple-docs.db`.
+    var path: String {
+        if let db, !db.isEmpty { return db }
+        let base = home ?? ProcessInfo.processInfo.environment["APPLE_DOCS_HOME"] ?? "\(NSHomeDirectory())/.apple-docs"
+        return "\(base)/apple-docs.db"
     }
 }
 
@@ -72,7 +79,7 @@ struct ServeCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let dbPath = corpus.db
+        let dbPath = corpus.path
         let threadCount = max(1, threads)
         let loopCount = max(1, loops)
         let engineTransport = EngineTransport(rawValue: transport) ?? .posix
@@ -296,8 +303,8 @@ struct MCPCommand: ParsableCommand {
     func run() throws {
         let version = appVersion ?? SiteConfig().appVersion
         LoggingSystem.bootstrap(StreamLogHandler.standardError)
-        guard let connection = StorageConnection(path: corpus.db) else {
-            fail("ad-server: cannot open \(corpus.db)", code: 1)
+        guard let connection = StorageConnection(path: corpus.path) else {
+            fail("ad-server: cannot open \(corpus.path)", code: 1)
         }
         var logger = Logger(label: "ad-server-mcp")
         logger.logLevel = .info
@@ -321,8 +328,8 @@ struct BenchCommand: ParsableCommand {
     var iters: Int
 
     func run() throws {
-        guard let conn = StorageConnection(path: corpus.db) else {
-            fail("ad-server: cannot open \(corpus.db)", code: 1)
+        guard let conn = StorageConnection(path: corpus.path) else {
+            fail("ad-server: cannot open \(corpus.path)", code: 1)
         }
         guard let params = parseSearchParams("/search?q=view&framework=swiftui&limit=100") else {
             fail("ad-server: failed to parse benchmark query", code: 1)

@@ -78,8 +78,8 @@ struct SearchCommand: ParsableCommand {
     var json = false
 
     func run() throws {
-        guard let connection = StorageConnection(path: corpus.db) else {
-            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db)\n".utf8))
+        guard let connection = StorageConnection(path: corpus.path) else {
+            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.path)\n".utf8))
             throw ExitCode(1)
         }
 
@@ -87,7 +87,7 @@ struct SearchCommand: ParsableCommand {
         // models/minishlab/potion-retrieval-32M (as SemanticProbe does). A failed
         // load degrades to lexical-only (semantic == nil) — the same graceful
         // degrade the JS `semanticCandidates(...).catch(() => [])` provides.
-        let semantic = loadSearchSemanticContext(dbPath: corpus.db)
+        let semantic = loadSearchSemanticContext(dbPath: corpus.path)
 
         let params = SearchParams(
             query: query.joined(separator: " "),
@@ -116,7 +116,7 @@ struct SearchCommand: ParsableCommand {
     /// pagination, then `formatSearchRead` (human) / `{ hit, page }` (`--json`).
     private func runReadMode(connection: StorageConnection, outcome: SearchOutcome, top: SearchHitView) {
         let opts = LookupOptions(path: top.path, symbol: nil, framework: nil, section: nil)
-        var pageResult = lookup(opts, connection, dataDir: (corpus.db as NSString).deletingLastPathComponent)
+        var pageResult = lookup(opts, connection, dataDir: (corpus.path as NSString).deletingLastPathComponent)
         if let maxChars, pageResult.found, let content = pageResult.content {
             pageResult = paginateCliContent(
                 pageResult, content: content, maxChars: maxChars, pageNum: page ?? 1)

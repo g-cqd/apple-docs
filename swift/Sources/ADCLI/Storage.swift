@@ -28,11 +28,11 @@ struct StorageStatsCommand: ParsableCommand {
     var json = false
 
     func run() throws {
-        guard let connection = StorageConnection(path: corpus.db) else {
-            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db)\n".utf8))
+        guard let connection = StorageConnection(path: corpus.path) else {
+            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.path)\n".utf8))
             Foundation.exit(1)
         }
-        let stats = gatherStorageStats(connection: connection, dbArgument: corpus.db)
+        let stats = gatherStorageStats(connection: connection, dbArgument: corpus.path)
         print(json ? stringifyPretty(storageStatsJSON(stats)) : formatStorageStats(stats))
     }
 }
@@ -49,8 +49,8 @@ struct StorageCheckOrphansCommand: ParsableCommand {
     var json = false
 
     func run() throws {
-        guard let connection = StorageConnection(path: corpus.db) else {
-            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db)\n".utf8))
+        guard let connection = StorageConnection(path: corpus.path) else {
+            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.path)\n".utf8))
             Foundation.exit(1)
         }
         let value = checkOrphansJSON(connection)

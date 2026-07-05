@@ -26,13 +26,22 @@ struct ADCLICommand: AsyncParsableCommand {
         ])
 }
 
-/// The corpus path — required by every verb. Mirrors ad-server's `CorpusOptions`.
+/// The corpus location — an explicit `--db`, or resolved from `--home` /
+/// `$APPLE_DOCS_HOME`. This is what lets `ad-cli` stand in for the `apple-docs`
+/// command (which is home-oriented): the installed corpus needs no `--db`.
 struct CorpusOptions: ParsableArguments {
-    @Option(name: .long, help: "Path to the corpus SQLite database.")
-    var db: String
+    @Option(name: .long, help: "Path to the corpus database (default: $APPLE_DOCS_HOME/apple-docs.db).")
+    var db: String?
 
-    func validate() throws {
-        guard !db.isEmpty else { throw ValidationError("--db must not be empty") }
+    @Option(name: .long, help: "Corpus home directory (default: $APPLE_DOCS_HOME, else ~/.apple-docs).")
+    var home: String?
+
+    /// The resolved corpus path: `--db` if given, else `<home>/apple-docs.db` where
+    /// home = `--home`, else `$APPLE_DOCS_HOME`, else `~/.apple-docs`.
+    var path: String {
+        if let db, !db.isEmpty { return db }
+        let base = home ?? ProcessInfo.processInfo.environment["APPLE_DOCS_HOME"] ?? "\(NSHomeDirectory())/.apple-docs"
+        return "\(base)/apple-docs.db"
     }
 }
 
@@ -67,7 +76,7 @@ struct FrameworksCommand: ParsableCommand {
     var json = false
 
     func run() throws {
-        let connection = openCorpus(corpus.db)
+        let connection = openCorpus(corpus.path)
         // JS passes `opts.kind ?? null` raw to the bind (no trim); match exactly.
         let roots = connection.listFrameworkRoots(kind: kind)
         if json {
@@ -94,7 +103,7 @@ struct KindsCommand: ParsableCommand {
     var json = false
 
     func run() throws {
-        let connection = openCorpus(corpus.db)
+        let connection = openCorpus(corpus.path)
         // JS: `opts?.field ? String(opts.field).trim() : null`. Empty after the
         // trim is treated as no field (falls to the broad shape).
         let trimmed = field.map(trimWhitespace)
@@ -147,7 +156,7 @@ struct BrowseCommand: ParsableCommand {
     var json = false
 
     func run() throws {
-        let connection = openCorpus(corpus.db)
+        let connection = openCorpus(corpus.path)
 
         guard let root = connection.resolveRoot(framework) else {
             failBrowse("Unknown framework: \(framework)")
@@ -252,7 +261,7 @@ struct ReadCommand: ParsableCommand {
     var json = false
 
     func run() throws {
-        let connection = openCorpus(corpus.db)
+        let connection = openCorpus(corpus.path)
 
         // cli.js: a '/'-bearing target is a path; otherwise a symbol (with the
         // optional --framework disambiguator). --section widens the lookup.
@@ -264,7 +273,7 @@ struct ReadCommand: ParsableCommand {
         // cli.js `dataDir` = `--home` = the directory holding apple-docs.db (and
         // the markdown/ + raw-json content trees); the native verb derives it
         // from `--db`, exactly as `status` does.
-        var result = lookup(opts, connection, dataDir: (corpus.db as NSString).deletingLastPathComponent)
+        var result = lookup(opts, connection, dataDir: (corpus.path as NSString).deletingLastPathComponent)
         // Paginate only when --max-chars is given AND content rendered (JS:
         // `maxChars != null && result.found && result.content`).
         if let maxChars, result.found, let content = result.content {

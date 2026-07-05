@@ -84,15 +84,15 @@ struct StorageProfileCommand: ParsableCommand {
                     Data("Error: Unknown storage profile: \"\(name)\". Valid profiles: \(valid)\n".utf8))
                 throw ExitCode(1)
             }
-            guard let writer = StorageConnection(path: corpus.db, writable: true) else {
-                FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db) for writing\n".utf8))
+            guard let writer = StorageConnection(path: corpus.path, writable: true) else {
+                FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.path) for writing\n".utf8))
                 throw ExitCode(1)
             }
             _ = writer.setSnapshotMeta("storage_profile", name)
         }
 
-        guard let connection = StorageConnection(path: corpus.db) else {
-            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db)\n".utf8))
+        guard let connection = StorageConnection(path: corpus.path) else {
+            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.path)\n".utf8))
             throw ExitCode(1)
         }
         let active = StorageProfile.active(connection)
