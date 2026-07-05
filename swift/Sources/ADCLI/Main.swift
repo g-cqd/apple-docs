@@ -19,7 +19,8 @@ struct ADCLICommand: AsyncParsableCommand {
         subcommands: [
             FrameworksCommand.self, KindsCommand.self, BrowseCommand.self, ReadCommand.self,
             SearchCommand.self, StatusCommand.self, CrawlCommand.self, SemanticProbeCommand.self,
-            AddbWriteSpikeCommand.self, AddbReadSpikeCommand.self, ExtractSpikeCommand.self, WebCommand.self,
+            AddbWriteSpikeCommand.self, AddbReadSpikeCommand.self, ExtractSpikeCommand.self,
+            BackfillPageCountSpikeCommand.self, WebCommand.self,
             ImportCommand.self, IndexCommand.self, SyncCommand.self, SyncAllCommand.self,
             SnapshotCommand.self, SetupCommand.self, VersionCommand.self,
             StorageCommand.self, OpsCommand.self, McpCommand.self, ResourcesCommand.self
