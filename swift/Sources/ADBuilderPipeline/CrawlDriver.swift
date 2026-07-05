@@ -43,7 +43,7 @@ public struct CrawlDriver: Sendable {
     /// Emit a progress callback every this many processed (persisted + failed) pages,
     /// so a long reference-following source (apple-docc: ~350K pages over hours) is
     /// observable instead of a silent black box until completion.
-    static let progressInterval = 250
+    static let progressInterval = 100
 
     /// Crawl one source end-to-end into `db`. Discovers keys; for each key already on disk with a stored
     /// HTTP validator, asks the adapter's conditional `check` whether the upstream changed and SKIPS the
