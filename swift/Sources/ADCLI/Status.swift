@@ -42,12 +42,12 @@ struct StatusCommand: ParsableCommand {
     var json = false
 
     func run() throws {
-        guard let connection = StorageConnection(path: corpus.db) else {
-            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db)\n".utf8))
+        guard let connection = StorageConnection(path: corpus.path) else {
+            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.path)\n".utf8))
             throw ExitCode(1)
         }
 
-        let raw = gatherStatus(connection: connection, dbPath: corpus.db)
+        let raw = gatherStatus(connection: connection, dbPath: corpus.path)
 
         if json {
             let value = advanced ? statusAdvancedJSON(raw) : statusDefaultJSON(raw)

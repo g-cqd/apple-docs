@@ -31,14 +31,14 @@ struct SemanticProbeCommand: ParsableCommand {
     var topk: Int = 50
 
     func run() throws {
-        guard let connection = StorageConnection(path: corpus.db) else {
-            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db)\n".utf8))
+        guard let connection = StorageConnection(path: corpus.path) else {
+            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.path)\n".utf8))
             throw ExitCode(1)
         }
 
         // <dataDir> is the directory CONTAINING apple-docs.db; the model lives at
         // <dataDir>/resources/models/minishlab/potion-retrieval-32M.
-        let dataDir = (corpus.db as NSString).deletingLastPathComponent
+        let dataDir = (corpus.path as NSString).deletingLastPathComponent
         let modelDir = dataDir + "/resources/models/minishlab/potion-retrieval-32M"
 
         let embedder: Embedder

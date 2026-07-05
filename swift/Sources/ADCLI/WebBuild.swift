@@ -441,15 +441,15 @@ struct WebBuildCommand: ParsableCommand {
     var linksAuditJson: String?
 
     func run() throws {
-        guard let connection = StorageConnection(path: corpus.db) else {
-            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.db)\n".utf8))
+        guard let connection = StorageConnection(path: corpus.path) else {
+            FileHandle.standardError.write(Data("ad-cli: cannot open \(corpus.path)\n".utf8))
             throw ExitCode(1)
         }
         // The incremental cache writes (render index + checkpoint) go through a
         // second, UNguarded connection — build.js writes these on every build.
         // A corpus without the tables (or a read-only medium) degrades to a
         // full render (the accessors no-op).
-        let writer = StorageConnection(path: corpus.db, writable: true)
+        let writer = StorageConnection(path: corpus.path, writable: true)
         let isIncremental = incremental && !full
         // build.js: full builds stage into a crypto-suffixed tmp dir and
         // atomically swap; incremental writes IN PLACE.
