@@ -119,8 +119,8 @@ struct SyncCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
     var db: String
 
-    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 200).")
-    var concurrency: Int = 200
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 100).")
+    var concurrency: Int = 100
 
     @Option(name: .long, help: "Rate-limiter budget in requests/sec (default 500, matching bun sync).")
     var rate: Double = 500
@@ -196,8 +196,8 @@ struct SyncAllCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
     var db: String
 
-    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 200).")
-    var concurrency: Int = 200
+    @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 100).")
+    var concurrency: Int = 100
 
     @Option(name: .long, help: "Rate-limiter budget in requests/sec (default 500, matching bun sync).")
     var rate: Double = 500
@@ -232,7 +232,14 @@ struct SyncAllCommand: AsyncParsableCommand {
                 let (rootId, rootIds) = try upsertCrawlRoots(database, discovery.roots, now: now)
                 let stats = try await driver.crawl(
                     sourceType: source, into: database, rootId: rootId, rootIds: rootIds,
-                    context: context, now: now, maxConcurrency: concurrency)
+                    context: context, now: now, maxConcurrency: concurrency,
+                    onProgress: { progress in
+                        // A long reference-following source (apple-docc: ~350K pages) is otherwise a
+                        // silent black box until it completes; stream its running counts to stderr.
+                        let line =
+                            "[\(source)] … \(progress.persisted) persisted, \(progress.failed) failed (crawling)\n"
+                        FileHandle.standardError.write(Data(line.utf8))
+                    })
                 totals.discovered += stats.discovered
                 totals.persisted += stats.persisted
                 totals.skipped += stats.skipped
