@@ -152,10 +152,10 @@ public struct CrawlDriver: Sendable {
     static func slug(ofKey key: String) -> String { String(key.prefix { $0 != "/" }) }
 
     /// The reference-following (`.crawl`) path: seed the `crawl_state` frontier from the discovered keys,
-    /// then drain the WHOLE frontier — every root pooled into one loop — to exhaustion. Fetch+normalize run
-    /// `maxConcurrency`-wide per batch; every `db` write (persist / seed / state) stays on the single-writer
-    /// consuming side. Mirrors the JS `discover.js` crawl over the shared `crawl_state` queue (its one
-    /// `pool(batch, concurrency)` across all roots).
+    /// then drain the WHOLE frontier — every root THIS CALL OWNS pooled into one loop — to exhaustion.
+    /// Fetch+normalize run `maxConcurrency`-wide per batch; every `db` write (persist / seed / state) stays
+    /// on the single-writer consuming side. Mirrors the JS `discover.js` crawl over the shared `crawl_state`
+    /// queue (its one `pool(batch, concurrency)` across all roots).
     private func crawlBFS(
         _ adapter: any SourceAdapter, discovery: DiscoveryResult, rootId: Int64,
         rootIds: [String: Int64], run: BFSRun, onProgress: (@Sendable (Stats) -> Void)? = nil
@@ -168,27 +168,43 @@ public struct CrawlDriver: Sendable {
         for key in discovery.keys {
             try CrawlPersist.seedCrawlIfNew(run.db, path: key, rootSlug: Self.slug(ofKey: key), depth: 0)
         }
+        // The CLOSED set of `root_slug` values this call's frontier can ever contain: `rootIds`' own
+        // registered slugs (the normal case — every real caller populates this via `upsertCrawlRoots`)
+        // UNIONED with every depth-0 seed's own derived slug (covers a source whose discovered keys use a
+        // slug not present in its own `discovery.roots` — an adapter-level edge case — and the `rootIds:
+        // [:]` single-root convenience some callers/tests use). This is safe to compute ONCE, before the
+        // frontier loop starts, because a deeper seed always INHERITS its parent's `rootSlug` verbatim
+        // rather than re-deriving one (`crawlFrontier`'s `f.refs.filter { Self.slug(ofKey: $0) ==
+        // f.rootSlug }` copies `f.rootSlug`, never a freshly-computed slug) — so no root_slug outside this
+        // set can ever be seeded later. Over-including a slug this call doesn't end up using is harmless
+        // (nothing pending exists under it yet); the only thing that must never happen is UNDER-including
+        // one of this call's own roots, which would silently starve part of its own frontier.
+        let ownedRootSlugs = Set(rootIds.keys).union(discovery.keys.map { Self.slug(ofKey: $0) })
         var stats = Stats()
         try await crawlFrontier(
-            adapter, rootId: rootId, rootIds: rootIds, run: run, stats: &stats, onProgress: onProgress)
+            adapter, rootId: rootId, rootIds: rootIds, ownedRootSlugs: ownedRootSlugs, run: run,
+            stats: &stats, onProgress: onProgress)
         stats.discovered = stats.persisted + stats.failed
         return stats
     }
 
-    /// Drain the whole `crawl_state` frontier — every root's `pending` work pooled into one loop — as a
-    /// STREAMING sliding window: keep `maxConcurrency` fetches in flight AT ALL TIMES, refilling each slot
-    /// the instant a fetch completes rather than waiting for a whole barrier-synchronized wave. That is what
-    /// keeps the fan-out saturated: a single slow or hung fetch (up to the 30 s request deadline) ties up
-    /// only its own slot, where a barrier would leave the other `maxConcurrency - 1` workers idle until the
-    /// straggler timed out. Each completed page is persisted under its OWN root (`rootIds[row.rootSlug] ??
-    /// rootId`), its same-root references seeded one level deeper, and its path marked `processed` (batched);
-    /// a fetch/normalize/persist failure demotes the path to `failed` and is non-fatal. Every `db` write
-    /// happens on THIS serial task — child tasks only fetch/normalize, so the single-writer `db` never
-    /// crosses a task boundary (the flat path's discipline). Terminates when no `pending` paths remain
-    /// (references are seeded idempotently, so a cyclic graph converges).
+    /// Drain the whole `crawl_state` frontier belonging to `ownedRootSlugs` — every root THIS CALL OWNS,
+    /// pooled into one loop — as a STREAMING sliding window: keep `maxConcurrency` fetches in flight AT ALL
+    /// TIMES, refilling each slot the instant a fetch completes rather than waiting for a whole
+    /// barrier-synchronized wave. That is what keeps the fan-out saturated: a single slow or hung fetch (up
+    /// to the 30 s request deadline) ties up only its own slot, where a barrier would leave the other
+    /// `maxConcurrency - 1` workers idle until the straggler timed out. Each completed page is persisted
+    /// under its OWN root (`rootIds[row.rootSlug] ?? rootId`), its same-root references seeded one level
+    /// deeper, and its path marked `processed` (batched); a fetch/normalize/persist failure demotes the path
+    /// to `failed` and is non-fatal. Every `db` write happens on THIS serial task — child tasks only
+    /// fetch/normalize, so the single-writer `db` never crosses a task boundary (the flat path's
+    /// discipline). Terminates when no `pending` path remains WITHIN `ownedRootSlugs` (references are
+    /// seeded idempotently, so a cyclic graph converges) — a `pending` backlog under any OTHER root_slug
+    /// (a different source's own frontier, mid-crawl or abandoned) is invisible to this loop and is never
+    /// touched, drained, or mis-attributed to this call's root(s).
     private func crawlFrontier(
-        _ adapter: any SourceAdapter, rootId: Int64, rootIds: [String: Int64], run: BFSRun,
-        stats: inout Stats, onProgress: (@Sendable (Stats) -> Void)? = nil
+        _ adapter: any SourceAdapter, rootId: Int64, rootIds: [String: Int64], ownedRootSlugs: Set<String>,
+        run: BFSRun, stats: inout Stats, onProgress: (@Sendable (Stats) -> Void)? = nil
     ) async throws {
         let db = run.db
         let context = run.context
@@ -217,7 +233,7 @@ public struct CrawlDriver: Sendable {
                 try CrawlPersist.markCrawlProcessed(db, paths: succeeded)
                 succeeded.removeAll(keepingCapacity: true)
             }
-            buffer = try CrawlPersist.getPendingCrawlAny(db, limit: width * 8)
+            buffer = try CrawlPersist.getPendingCrawlAny(db, rootSlugs: ownedRootSlugs, limit: width * 8)
             offset = 0
             while offset < buffer.count {
                 let row = buffer[offset]
@@ -299,7 +315,7 @@ public struct CrawlDriver: Sendable {
 
     /// A BFS batch item's outcome, carried out of its child task. `.fetched` still needs the serial
     /// persist; `.failed` only needs its `crawl_state` demotion. Both carry the original state path, its
-    /// root slug (the frontier pools all roots, so each item names its own), and depth.
+    /// root slug (the frontier pools every root THIS CALL OWNS, so each item names its own), and depth.
     private enum BFSOutcome: Sendable {
         case fetched(BFSFetched)
         case failed(path: String, rootSlug: String, depth: Int, error: String)
@@ -307,8 +323,8 @@ public struct CrawlDriver: Sendable {
 
     /// One BFS page fetched + normalized in a child task. `statePath` is the `crawl_state` key the state
     /// row is keyed by; `storePath` is where the page persists (its doc URL, or the `/<key>` fallback);
-    /// `rootSlug` is the page's owning root (the cross-root frontier pools all roots into one wave).
-    /// `refs` is pre-extracted in the child (a pure step) so the consuming side only writes.
+    /// `rootSlug` is the page's owning root (the cross-root frontier pools every root this call owns into
+    /// one wave). `refs` is pre-extracted in the child (a pure step) so the consuming side only writes.
     private struct BFSFetched: Sendable {
         let statePath: String
         let storePath: String
