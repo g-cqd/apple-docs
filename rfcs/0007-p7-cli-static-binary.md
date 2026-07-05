@@ -300,22 +300,41 @@ Findings, categorized:
    private vs. Swift's already-validated 8,478 public (private not yet synced) — exact match.
    Fonts: JS 8 families / 167 files vs. Swift's already-validated 8 families / 165 files —
    effectively identical.
-7. **[New, quantified]** JS's `sync --full` includes SF Symbol **prerendering** (273,186
-   symbol-variant SVGs baked to disk, 0 failed) as part of one run; Swift has no prerender
-   verb yet (tracked separately as the SF-Symbol PRERENDER work, next up after F3's catalog
-   sync). Concrete target size now known: ~273K rendered variants.
-8. **[New, found independently by two separate fixes above, not yet fixed]** `ad-cli browse`
-   (and presumably the `browse` MCP tool's flat-listing mode) shows "0 pages" for **every**
-   root — including ones the finding #2 fix/repair never touched (e.g. `swift-evolution`).
-   Root cause: `Sources/ADStorage/Browse.swift:43`'s `pagesByRoot` joins `pages p ON p.path =
-   d.key` — the same never-true predicate finding #2's repair had to route around
+7. **[Verb landed, `1634e01`; real content baking blocked by a newly-found separate bug]**
+   JS's `sync --full` includes SF Symbol **prerendering** (273,186 symbol-variant SVGs baked to
+   disk, 0 failed) as part of one run; Swift now has `ad-cli resources prerender-symbols`
+   (bulk-bakes every catalog symbol × weight × scale variant into `sf_symbol_renders`, a bounded
+   concurrent render / serial persist loop mirroring `CrawlDriver`'s shape) and
+   `render_sf_symbol` checks that cache before live-rendering. Verified end-to-end against a
+   real corpus copy: resume/skip-if-already-rendered, concurrent-render-with-serial-persist,
+   and the MCP cache-hit/miss paths are all correct. **But** real content baking is currently
+   blocked on this build host by a separate, newly-diagnosed bug: CGPDFContext (macOS 27.0
+   beta) omits the `endobj` terminator for the symbol's content-stream object; `PdfObjects`'s
+   unbounded "find next endobj" scan then steals the *next* object's terminator instead,
+   silently skipping the `/Type /Page` object. Confirmed independent of the prerender work —
+   reproduces identically against the untouched, already-shipped live `render_sf_symbol` path
+   for unrelated symbols. PNG rendering (a different code path) is unaffected. A real run on
+   this host (5 symbols × 27 variants = 135) failed gracefully with this exact error for all
+   135, correctly marking every one `render_unsupported` and exiting 0 — not fixed here (a
+   byte-exact PDF-parser component with its own gates, RFC 0003 territory), tracked separately.
+   Given the disclosed cost of a full run (~57 min projected, and disk growth "on the order of
+   tens of GB" for what would currently be all-`render_unsupported` rows on this host), a full
+   production bake is deliberately **not** run until that PDF bug is fixed — doing so now would
+   only spend significant time and disk to record failures already proven by the 135-sample run.
+8. **[Fixed, `2e657e7`]** `ad-cli browse` (and presumably the `browse` MCP tool's flat-listing
+   mode) showed "0 pages" for **every** root — including ones the finding #2 fix/repair never
+   touched (e.g. `swift-evolution`), found independently by two of the fixes above while
+   working on finding #2. Root cause: `Browse.swift`'s `pagesByRoot` joined `pages p ON p.path
+   = d.key` — the same never-true predicate finding #2's repair had to route around
    (`pages.path`/`documents.url` are the external URL; `documents.key`/`crawl_state.path` are
-   the bare crawl key), but this is a distinct, pre-existing defect in `Browse.swift`'s own
-   query, not something the `root_id` repair fixes. Needs the same documents-as-hub join
-   pattern `RepairPageRootIds.swift` already established.
+   the bare crawl key), a distinct, pre-existing defect in `Browse.swift`'s own query. Fixed by
+   joining through `documents.url` instead, the same hub `RepairPageRootIds.swift` established.
+   Verified: `swift-evolution` now shows 560 pages, `accelerate` shows 8,652 — both exact
+   matches to their known-correct totals.
 
-Everything above except #8 has landed and was verified against the real corpus; #8 is a
-follow-up.
+Everything above has landed except: real SF Symbol content baking (finding #7, blocked on the
+PDF-parser bug it surfaced) and that PDF-parser bug's own fix (tracked as a follow-up, not part
+of this audit's scope).
 
 ## 12. Parity harness design
 
