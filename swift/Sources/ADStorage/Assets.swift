@@ -245,3 +245,49 @@ extension StorageConnection {
         return out
     }
 }
+
+// MARK: - SF Symbol render cache (sf_symbol_renders)
+
+/// One `sf_symbol_renders` row — the persistent render cache (JS `db.getRender(cacheKey)`).
+/// `filePath` points at the cached SVG on disk; `pointSize`/`color`/`weight`/`symbolScale` are the
+/// exact parameters that produced it (nil for columns a writer left unset).
+public struct SfSymbolRenderRow: Sendable {
+    public let cacheKey: String
+    public let name: String
+    public let scope: String
+    public let format: String
+    public let mode: String?
+    public let weight: String?
+    public let symbolScale: String?
+    public let pointSize: Int64?
+    public let color: String?
+    public let filePath: String
+    public let mimeType: String
+    public let sha256: String?
+    public let size: Int64?
+    public let updatedAt: String?
+}
+
+extension StorageConnection {
+    /// `sf_symbol_renders` lookup by its exact cache key (JS `getRender`) — the disk-cache-first
+    /// check `render_sf_symbol` runs before live-rendering. nil = no such row, or a pre-migration
+    /// corpus without the table.
+    public func getSfSymbolRender(cacheKey: String) -> SfSymbolRenderRow? {
+        guard conn.tableExists("sf_symbol_renders"),
+            let stmt = conn.prepareUncached(
+                """
+                SELECT cache_key, name, scope, format, mode, weight, symbol_scale, point_size, color,
+                       file_path, mime_type, sha256, size, updated_at
+                FROM sf_symbol_renders WHERE cache_key = ?
+                """)
+        else { return nil }
+        stmt.bindText(1, cacheKey)
+        guard stmt.step() == SQLite.row else { return nil }
+        return SfSymbolRenderRow(
+            cacheKey: stmt.text(0) ?? "", name: stmt.text(1) ?? "", scope: stmt.text(2) ?? "",
+            format: stmt.text(3) ?? "", mode: stmt.text(4), weight: stmt.text(5),
+            symbolScale: stmt.text(6), pointSize: stmt.int(7), color: stmt.text(8),
+            filePath: stmt.text(9) ?? "", mimeType: stmt.text(10) ?? "", sha256: stmt.text(11),
+            size: stmt.int(12), updatedAt: stmt.text(13))
+    }
+}

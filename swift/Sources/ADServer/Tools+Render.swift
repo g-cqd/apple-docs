@@ -116,11 +116,13 @@ private func renderFontTextEngineChain(
     return HbViewRenderer.renderSVG(fontPath: path, text: text, pointSize: Double(pointSize))
 }
 
-/// renderSfSymbol (apple-symbols/render.js) live path: resolve the symbol, render
-/// its PDF via ADRender, and convert to SVG (SymbolPdfToSvg). The in-process server
-/// has no dataDir/cache/snapshot layer, so this is the live render only; PNG bytes
-/// are fetched via the returned resource URI (not inlined). projectRenderSfSymbol
-/// drops file_path + (for png) svg → { name, scope, format, resourceUri, svg? }.
+/// renderSfSymbol (apple-symbols/render.js) live path: resolve the symbol, check the
+/// `sf_symbol_renders` disk cache FIRST (an exact-parameter hit — populated by the offline
+/// `ad-cli resources prerender-symbols` bulk bake, since this in-process server has no dataDir
+/// to root a NEW cache write in), and on a miss render its PDF via ADRender + convert to SVG
+/// (SymbolPdfToSvg). PNG bytes are fetched via the returned resource URI (not inlined) —
+/// untouched by this cache check, since this handler computes no inline PNG bytes at all today.
+/// projectRenderSfSymbol drops file_path + (for png) svg → { name, scope, format, resourceUri, svg? }.
 func renderSfSymbol(_ input: RenderSfSymbolInput, _ ctx: MCPToolContext) -> MCPToolResult {
     // SF Symbol PDF→SVG rasterization needs AppKit/CoreGraphics — Darwin only.
     #if canImport(AppKit)
@@ -153,6 +155,22 @@ func renderSfSymbol(_ input: RenderSfSymbolInput, _ ctx: MCPToolContext) -> MCPT
             "format": .string(format.rawValue), "resourceUri": .string(resourceUri)
         ]
         if format == .svg {
+            // Disk-cache-first (RFC 0003 §4's `sf_symbol_renders DB -> snapshot file -> live render`
+            // chain, collapsed to two tiers here since this in-process server has no dataDir to root
+            // a NEW cache write). A hit requires an EXACT parameter match to a row `ad-cli resources
+            // prerender-symbols` baked; a miss falls through to the live render below, byte-for-byte
+            // unchanged from before this cache check existed.
+            let cacheKey = SymbolRenderCacheKey.compute(
+                .init(
+                    scope: scope.rawValue, name: input.name, format: "svg", weight: weight, scale: scale,
+                    color: color, pointSize: pointSize, background: background))
+            if let cached = ctx.db.getSfSymbolRender(cacheKey: cacheKey),
+                let bytes = FileManager.default.contents(atPath: cached.filePath), !bytes.isEmpty
+            {
+                out["svg"] = .string(String(decoding: bytes, as: UTF8.self))
+                return .okValue(.object(out))
+            }
+
             guard let pdf = SymbolPdf.render(name: input.name, scope: scope.rawValue, weight: weight, scale: scale)
             else {
                 return .failure("SF Symbol render failed: \(scope.rawValue)/\(input.name)")
