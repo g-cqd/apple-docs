@@ -204,18 +204,35 @@ Findings, categorized:
    increment) into `CrawlDriver.crawl()`; backfilled the existing corpus via the new hidden
    `ad-cli _backfill-page-count` verb. Verified: 406/406 roots backfilled, `frameworks --json`
    now returns real data.
-2. **[New, characterized — root cause not yet pinned down]** `hig`'s reference-following BFS
-   re-touches a huge number of already-crawled `apple-docc` pages (~155K in one `sync-all`
-   run) without capturing them: `pages`' `ON CONFLICT(path) DO UPDATE` never reassigns
-   `root_id`, so each touch updates a pre-existing row in place and stays under its original
-   (correct) framework root. Net effect: `hig`'s own progress counters are wildly misleading
-   (it's re-fetching, not discovering) and — the real problem — `design` (HIG's actual root)
-   ends up with **zero pages** (`ad-cli browse design` → "0 pages"): the HIG source produces
-   no usable content in the current corpus. Likely in how `HigAdapter`'s BFS resolves/
-   normalizes cross-references before `CrawlDriver.slug(ofKey:)`'s same-root filter applies —
-   needs a trace through `DocC.extractReferences`/`Identifier.normalize` to pin down exactly.
-   Tracked as a follow-up; the JS crawl (ground truth for HIG's real page count) will confirm
-   the expected shape once it completes.
+2. **[Confirmed regression — root cause pinned down, not yet fixed]** The completed JS crawl
+   gave an exact ground truth that cracked this one open: JS's `design` (HIG) root has
+   **exactly 172 pages** — matching Swift's own `crawl_state` count for `root_slug='design'`
+   (172 processed, 1 failed) almost exactly. So the BFS seeding/same-root filter
+   (`CrawlDriver.slug(ofKey:)`) was never the problem — `crawl_state` had the right shape all
+   along. The actual bug: `CrawlDriver.crawlFrontier`'s `getPendingCrawlAny` pulls **every**
+   `pending` row with **no root/source filter** ("every root's pending work pooled into one
+   loop" — a deliberate perf choice for pooling one source's *own* many roots), but `sync-all`
+   calls `driver.crawl(rootId:rootIds:)` **once per source, sequentially**, each with `rootIds`
+   scoped to only *that* source's own discovered roots. Any `pending` backlog left over from a
+   *different* source (this corpus's history includes an earlier, long-running apple-docc
+   crawl from earlier in this project) gets vacuumed up by whichever source runs next — here,
+   `hig` — and persisted via `rootId: rootIds[f.rootSlug] ?? rootId`: since the foreign
+   `root_slug` (e.g. `accelerate`) isn't in `hig`'s own `rootIds` (`["design": id]`), it falls
+   back to `hig`'s own default root, mis-stamping `pages.root_id` (and now, thanks to fix #1,
+   `roots.page_count`) with `design` on that page's first-ever persist. Confirmed directly:
+   `ad-cli frameworks --json` now reports `design: pageCount 155302` (matching the old
+   "155,130 persisted" log line almost exactly) while `crawl_state` and `documents.framework`
+   (string-derived from the path, immune to this bug) both correctly say `design` has 172.
+   `ad-cli browse`'s topic-tree walk uses the latter, which is why it showed "0 pages" even as
+   `page_count` showed 155K — two different queries, only one of them corrupted. Net effect:
+   `design`'s `page_count` is wildly inflated and whichever frameworks lost pages to the
+   fallback (e.g. `accelerate`: `page_count` 1,116 vs. `crawl_state`'s 8,652) undercount.
+   Fix direction (not yet implemented): scope `getPendingCrawlAny` to the calling `crawl()`
+   call's own root set (`WHERE root_slug IN (…)`, from `rootIds.keys`) so a source can only
+   ever drain its own backlog; existing corpora then need a one-time repair re-deriving
+   `pages.root_id` from `crawl_state.root_slug`/`documents.framework`. This also means fix #1's
+   backfill is *correctly implemented* but faithfully reflects an *already-corrupted*
+   `pages.root_id` on this particular corpus — the algorithm is right, the input data isn't.
 3. **[MCP tool contract diff — mix of known + newly found]** The live JS MCP implementation
    is gone, so pulled the last commit before its deletion (`9078247`'s parent, `200a744`) and
    diffed all 9 tools' schemas field-by-field against `Tools.swift`/`Tools+Inputs.swift`.
@@ -257,11 +274,25 @@ Findings, categorized:
    (`ad-server serve`), so a bare `ad-server` 404s at `/`. Not a bug, but worth a clearer
    operator-facing note (e.g. in `web deploy`'s printed instructions) — it was surprising in
    practice this session.
-6. **[In progress at time of writing]** Per-source/per-framework page-count diff against the
-   JS ground truth, and settling #2 with real numbers, are gated on the JS crawl finishing.
+6. **[Resolved — corpus-level parity is good]** The JS crawl finished (`sync --full
+   --aggressive --rate 500`, 1885s / ~31 min total for crawl + body-index + resources +
+   symbol prerender + doctor + consolidate — vs. Swift's crawl-only pass taking considerably
+   longer, largely *because of* #2's wasted re-fetches). Aggregate counts, which are
+   unaffected by #2's per-root mis-attribution (a page is one active page regardless of which
+   `root_id` it's wrongly filed under): JS 354,455 active pages / 421 roots discovered / 408
+   crawled vs. Swift 342,758 active pages / 406 roots — an 11,697-page (~3.3%) gap, not the
+   feared order-of-magnitude one. Framework-level counts match exactly wherever #2 doesn't
+   interfere: `swift-evolution` 560, `swift-book` 43, `swift-docc` 1339, `guidelines`/
+   `app-store-review` 57 — all identical both sides. SF Symbols: JS 8,478 public / 1,640
+   private vs. Swift's already-validated 8,478 public (private not yet synced) — exact match.
+   Fonts: JS 8 families / 167 files vs. Swift's already-validated 8 families / 165 files —
+   effectively identical.
+7. **[New, quantified]** JS's `sync --full` includes SF Symbol **prerendering** (273,186
+   symbol-variant SVGs baked to disk, 0 failed) as part of one run; Swift has no prerender
+   verb yet (tracked separately as the SF-Symbol PRERENDER work, next up after F3's catalog
+   sync). Concrete target size now known: ~273K rendered variants.
 
-Everything above except #6 was confirmed by direct inspection of the running corpus and
-codebase, independent of the JS crawl's completion.
+Everything above was confirmed by direct inspection of the finished JS and Swift corpora.
 
 ## 12. Parity harness design
 
