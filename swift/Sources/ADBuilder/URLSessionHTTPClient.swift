@@ -18,12 +18,17 @@ import HTTPTypesFoundation
 #endif
 
 public struct URLSessionHTTPClient: HTTPClient {
-    private let session: URLSession
+    /// A pool of independent sessions. Each `URLSession` keeps its OWN connection pool, so with
+    /// HTTP/2 (one multiplexed connection per session to a given origin) N sessions == N
+    /// connections == N× the server's per-connection concurrent-stream budget. Measured:
+    /// developer.apple.com caps ~65 in-flight streams per connection, so a single session
+    /// plateaus a 256-wide crawl at ~60 pages/s; pooling lifts that near-linearly.
+    private let sessions: [URLSession]
 
     /// Inject a custom session (tests / a pinned trust store). Internal so `URLSession`
     /// (an internal Foundation import) stays out of the public surface.
     init(session: URLSession) {
-        self.session = session
+        self.sessions = [session]
     }
 
     /// The default crawl session: ephemeral (no shared cache so `304` is observable
@@ -31,12 +36,26 @@ public struct URLSessionHTTPClient: HTTPClient {
     /// the per-host connection cap to `maxConnectionsPerHost` (Foundation's default is 6,
     /// which would collapse a `maxConcurrency`-wide crawl to 6 in-flight requests against
     /// a single origin — the bottleneck on a latency-heavy host like developer.apple.com).
-    public init(maxConnectionsPerHost: Int = 100) {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.httpAdditionalHeaders = ["Accept-Encoding": "gzip, deflate"]
-        configuration.httpMaximumConnectionsPerHost = Swift.max(1, maxConnectionsPerHost)
-        self.session = URLSession(configuration: configuration)
+    public init(maxConnectionsPerHost: Int = 100, connections: Int = 1) {
+        self.sessions = (0 ..< Swift.max(1, connections))
+            .map { _ in
+                let configuration = URLSessionConfiguration.ephemeral
+                configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+                configuration.httpAdditionalHeaders = ["Accept-Encoding": "gzip, deflate"]
+                configuration.httpMaximumConnectionsPerHost = Swift.max(1, maxConnectionsPerHost)
+                return URLSession(configuration: configuration)
+            }
+    }
+
+    /// Pick the pool session for a request by a stable FNV-1a hash of its origin+path, so the
+    /// in-flight streams spread evenly across the connections with no shared cursor (keeps the
+    /// conformer a value type + lock-free). Single-session pools short-circuit.
+    private func session(for request: HTTPClientRequest) -> URLSession {
+        guard sessions.count > 1 else { return sessions[0] }
+        let key = (request.head.authority ?? "") + (request.head.path ?? "")
+        var hash: UInt64 = 1_469_598_103_934_665_603  // FNV-1a offset basis
+        for byte in key.utf8 { hash = (hash ^ UInt64(byte)) &* 1_099_511_628_211 }
+        return sessions[Int(hash % UInt64(sessions.count))]
     }
 
     public func send(_ request: HTTPClientRequest) async throws -> HTTPClientResponse {
@@ -47,7 +66,7 @@ public struct URLSessionHTTPClient: HTTPClient {
         if let body = request.body { urlRequest.httpBody = Data(body) }
 
         do {
-            let (data, response) = try await session.data(for: urlRequest)
+            let (data, response) = try await session(for: request).data(for: urlRequest)
             guard let httpResponse = (response as? HTTPURLResponse)?.httpResponse else {
                 throw HTTPClientError.connectionFailed("non-HTTP response")
             }
