@@ -104,23 +104,6 @@ extension ParityCase {
         "NEW finding (this harness) — ad-cli import copies pages.path verbatim from a bare-path "
         + "JS SQLite export, so the (already-fixed) pagesByRoot join (pages.path == documents.url) "
         + "never matches on an import-derived corpus, even though it works on a natively-crawled one."
-
-    /// A NEW finding from building this harness (not one of RFC 0007 §11's original 8): when a
-    /// query's ENTIRE result set comes from the lexical cascade's relaxed (OR/token-relaxed) tier —
-    /// not merely containing some relaxed-quality hits alongside exact ones — cli.js's
-    /// `formatSearchResults` prints a `"Showing best-effort matches (query relaxed)."` preamble
-    /// line the native `formatSearchResults` (Search.swift) never emits; every other line (the hit
-    /// itself, its `[relaxed]` badge, the trailing count) is byte-identical. Search.swift's own doc
-    /// comment asserts "the native cascade never produces a top-level `relaxed` flag... matching
-    /// the oracle for these queries" — true for the queries it was checked against, but this
-    /// harness found a real query (a nonsense hyphenated phrase whose tokens still fuzzy-relax-match
-    /// real content) where the top-level flag DOES fire on the JS side. Out of this harness's scope
-    /// to fix (it's an ADSearchCascade/envelope-shape question, not a CLI-dispatch one); noted for
-    /// a follow-up.
-    static let searchRelaxedPreambleFinding =
-        "NEW finding (this harness) — cli.js's formatSearchResults prints a top-level "
-        + "\"Showing best-effort matches (query relaxed).\" preamble when EVERY hit is relaxed-tier; "
-        + "ad-cli's formatter never emits it, even though the hits themselves already match exactly."
 }
 
 enum ParityCases {
@@ -226,12 +209,10 @@ enum ParityCases {
         // A genuinely empty result set (gibberish with no fuzzy/relaxed match at all — verified
         // both engines print the bare "No results for ..." line, no relaxed fallback fires).
         ParityCase(verb: "search", args: ["qxzvbjklmwpqrst"], format: .human),
-        // The relaxed-preamble finding (see the constant's doc comment): this specific hyphenated
-        // nonsense phrase's tokens still fuzzy-relax-match real content, so the ENTIRE result set is
-        // relaxed-tier — exactly the condition that trips it. Driven for real every run via
-        // `withKnownIssue`, same discipline as the browse #8 cases above.
-        ParityCase(
-            verb: "search", args: ["zzz-no-such-query-should-match-nothing"], format: .human,
-            knownIssue: ParityCase.searchRelaxedPreambleFinding)
+        // The relaxed-preamble regression guard (formerly a known-issue finding, fixed):
+        // this hyphenated nonsense phrase's tokens still relax-match real content, so the
+        // ENTIRE result set is relaxed-tier and both formatters must print the
+        // "Showing best-effort matches (query relaxed)." preamble.
+        ParityCase(verb: "search", args: ["zzz-no-such-query-should-match-nothing"], format: .human)
     ]
 }

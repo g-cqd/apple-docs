@@ -49,7 +49,17 @@ public struct SearchOutcome: Sendable {
     public let total: Int
     public let hasMore: Bool
     public let query: String
+    /// The relaxation tier that produced the ENTIRE result set (`pruned` /
+    /// `pruned-or` / `trigram`), nil when a strict/deep tier matched — the JS
+    /// command envelope's `relaxationTier` (search.js `runRelaxationCascade`).
+    /// Internal surface only: the projected wire envelope (`projectSearchResult`)
+    /// never emits it; the CLI human formatter reads `relaxed` for the
+    /// "best-effort matches" preamble, exactly like JS `result.relaxed`.
+    public let relaxationTier: String?
     public let envelope: [UInt8]
+
+    /// JS `relaxed: true` — set iff a relaxation tier produced the results.
+    public var relaxed: Bool { relaxationTier != nil }
 }
 
 struct ResultHit {
