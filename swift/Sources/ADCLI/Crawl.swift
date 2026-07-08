@@ -1,7 +1,7 @@
 // `ad-cli crawl <source>` — the native crawl WRITER verb. Mirrors the crawl phase of
 // the Bun `cli.js sync`: for ONE source, discover → fetch → normalize → persist into a
-// writable ADDB corpus, driven by `ADBuilderPipeline.CrawlDriver` over the ADWrite sinks
-// (`CrawlPersist`). The Bun `sync` stays the parity oracle (`scripts/verify-profiles.mjs`).
+// writable SQLite corpus (the JS `bun:sqlite` format — the storage pivot), driven by
+// `ADBuilderPipeline.CrawlDriver` over the ADWrite sinks (`CrawlPersist`).
 //
 // Scope (first slice): the natively-ported adapters — swift-org / swift-book /
 // swift-evolution. The remaining JS-only adapters, the post-crawl `IndexEmbeddings`
@@ -11,8 +11,8 @@
 
 import ADBuilder
 import ADBuilderPipeline
-import ADDB
 import ADJSONCore
+import ADStorage
 import ADWrite
 import ArgumentParser
 import Foundation
@@ -22,7 +22,7 @@ import Foundation
 /// persists each page under its own root; a single-root source yields a one-entry map + that root as
 /// the default. Assumes `roots` is non-empty (the verbs guard that first, for a clear error message).
 func upsertCrawlRoots(
-    _ database: Database, _ roots: [DiscoveredRoot], now: String
+    _ database: SQLiteWriteConnection, _ roots: [DiscoveredRoot], now: String
 ) throws -> (defaultRootId: Int64, rootIds: [String: Int64]) {
     var rootIds: [String: Int64] = [:]
     var defaultRootId: Int64 = 0
@@ -40,12 +40,13 @@ struct CrawlCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "crawl",
         abstract:
-            "Crawl one documentation source into a writable ADDB corpus (mirrors cli.js sync's crawl phase).")
+            "Crawl one documentation source into a writable SQLite corpus (mirrors cli.js sync's crawl phase).")
 
     @Argument(help: "Source to crawl (a natively-ported adapter).")
     var source: String
 
-    @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated to the latest schema if missing).")
+    @Option(
+        name: .long, help: "Path to the writable SQLite corpus (created + migrated to the latest schema if missing).")
     var db: String
 
     @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 8).")
@@ -85,11 +86,10 @@ struct CrawlCommand: AsyncParsableCommand {
             throw ExitCode(1)
         }
 
-        // Open (creating if needed) the ADDB corpus and bring it to the latest apple-docs schema.
-        let database: Database
+        // Open (creating if needed) the SQLite corpus and bring it to the latest apple-docs schema.
+        let database: SQLiteWriteConnection
         do {
-            database = try Database.open(
-                at: db, options: DatabaseOptions(readOnly: false, createIfMissing: true))
+            database = try SQLiteWriteConnection(path: db)
             _ = try migrateSchema(database)
         } catch {
             FileHandle.standardError.write(Data("ad-cli: cannot open/migrate \(db): \(error)\n".utf8))

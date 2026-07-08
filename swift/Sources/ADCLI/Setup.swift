@@ -10,8 +10,9 @@
 // font/symbol resource resync (the snapshot ships the resource index); the
 // prebuilt/compact profile materialize/compact steps (this sets the profile key;
 // the materialize/compact verbs run those). Snapshots ship no vectors, so the
-// index rebuild is required for semantic search — but it needs an ADDB corpus, so
-// a SQLite snapshot degrades to lexical-only (never blocks the install).
+// index rebuild runs here against the extracted SQLite corpus (the storage
+// pivot's one format); an index failure degrades to lexical-only, never blocking
+// the install.
 
 import ADArchive
 import ADJSONCore
@@ -126,8 +127,8 @@ struct SetupCommand: AsyncParsableCommand {
         }
         let documentCount = Int(corpus.storageTableCounts().documents)
 
-        // ── semantic index (snapshots ship no vectors). ADDB-only; a SQLite
-        //    snapshot degrades to lexical-only (import → index later). ──────────
+        // ── semantic index (snapshots ship no vectors): rebuild over the
+        //    extracted SQLite corpus; failure degrades to lexical-only. ─────────
         var semantic = "skipped"
         if !skipSemantic {
             do {
@@ -137,8 +138,7 @@ struct SetupCommand: AsyncParsableCommand {
                 let indexed = try IndexEmbeddings.run(database, embedder: embedder, full: true)
                 semantic = "ok (\(indexed.indexed)/\(indexed.total) docs, \(indexed.chunks) chunks)"
             } catch {
-                semantic =
-                    "lexical-only (semantic index needs an ADDB corpus — run `ad-cli import` then `ad-cli index`)"
+                semantic = "lexical-only (semantic index failed — run `ad-cli index` later)"
                 log("Semantic index skipped: \(error)")
             }
         }

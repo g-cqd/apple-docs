@@ -10,7 +10,7 @@
 // SHA-256 of the raw payload bytes (JS hashes `stableStringify(json)`, a separate noted follow-up).
 
 public import ADBuilder
-public import ADDB
+public import ADStorage
 public import ADWrite
 import Crypto
 import Foundation
@@ -27,12 +27,15 @@ public struct CrawlDriver: Sendable {
         public init() {}
     }
 
-    /// A `sync` outcome: the crawl stats plus the embedding-index result.
+    /// A `sync` outcome: the crawl stats, the body-index result (the JS sync's
+    /// post-crawl documents_body_fts phase), and the embedding-index result.
     public struct SyncResult: Sendable, Equatable {
         public var crawl: Stats
+        public var body: IndexBody.Result
         public var index: IndexEmbeddings.Result
-        public init(crawl: Stats, index: IndexEmbeddings.Result) {
+        public init(crawl: Stats, body: IndexBody.Result, index: IndexEmbeddings.Result) {
             self.crawl = crawl
+            self.body = body
             self.index = index
         }
     }
@@ -49,7 +52,7 @@ public struct CrawlDriver: Sendable {
     /// HTTP validator, asks the adapter's conditional `check` whether the upstream changed and SKIPS the
     /// fetch when it hasn't (the incremental re-crawl). Survivors are then fetched + normalized (up to
     /// `maxConcurrency` in flight — the network-bound steps run in parallel) and persisted serially as
-    /// they arrive (ADDB is single-writer, and `db` never crosses to a child task).
+    /// they arrive (the write connection is single-writer, and `db` never crosses to a child task).
     ///
     /// A multi-root flat source (e.g. swift-docc's three archives) passes `rootIds` — a `slug -> rootId`
     /// map — so each page persists under its own root: the key's leading path segment is its root slug
@@ -57,7 +60,7 @@ public struct CrawlDriver: Sendable {
     /// `rootId`; a single-root source leaves `rootIds` empty and everything lands under `rootId`.
     @discardableResult
     public func crawl(
-        sourceType: String, into db: Database, rootId: Int64, rootIds: [String: Int64] = [:],
+        sourceType: String, into db: SQLiteWriteConnection, rootId: Int64, rootIds: [String: Int64] = [:],
         context: SourceContext, now: String, maxConcurrency: Int = 8,
         onProgress: (@Sendable (Stats) -> Void)? = nil
     ) async throws -> Stats {
@@ -133,7 +136,9 @@ public struct CrawlDriver: Sendable {
     /// Recompute `roots.page_count` for every root this call touched (the JS `db.updateRootPageCount`,
     /// called once per root after its own crawl loop exhausts) — every root in `rootIds` plus the default
     /// `rootId` (a single-root source's only root, or a multi-root source's fallback).
-    private static func refreshRootPageCounts(_ db: Database, rootId: Int64, rootIds: [String: Int64]) throws {
+    private static func refreshRootPageCounts(_ db: SQLiteWriteConnection, rootId: Int64, rootIds: [String: Int64])
+        throws
+    {
         var ids = Set(rootIds.values)
         ids.insert(rootId)
         for id in ids {
@@ -307,7 +312,7 @@ public struct CrawlDriver: Sendable {
     /// `now` timestamp, and the per-batch fan-out width. Bundled into one value so the BFS helpers thread
     /// the crawl's fixed context without an overlong parameter list.
     private struct BFSRun {
-        let db: Database
+        let db: SQLiteWriteConnection
         let context: SourceContext
         let now: String
         let maxConcurrency: Int
@@ -363,7 +368,7 @@ public struct CrawlDriver: Sendable {
     /// The ETag stored for `key`'s page, or `nil` when the page is new, has no stored ETag, or the read
     /// fails. Read on the SERIAL side so `db` never crosses into a child task. A non-nil result is the
     /// trigger for the conditional `check`; `nil` means "no prior state" → always fetch (a fresh crawl).
-    private func pagePreviousEtag(_ db: Database, key: String) -> String? {
+    private func pagePreviousEtag(_ db: SQLiteWriteConnection, key: String) -> String? {
         let validator = try? CrawlPersist.pageValidator(db, path: Self.crawlPath(forKey: key))
         return validator?.etag
     }
@@ -409,20 +414,24 @@ public struct CrawlDriver: Sendable {
     /// pages searchable. A thin pass-through to `IndexEmbeddings.run`.
     @discardableResult
     public func index(
-        _ db: Database, embedder: some ChunkEmbedder, full: Bool = false
+        _ db: SQLiteWriteConnection, embedder: some ChunkEmbedder, full: Bool = false
     ) throws -> IndexEmbeddings.Result {
         try IndexEmbeddings.run(db, embedder: embedder, full: full)
     }
 
-    /// Crawl a source then index it — the full `ad-build sync` for one source.
+    /// Crawl a source, body-index it, then embed-index it — the full `ad-cli sync`
+    /// for one source. The body pass sits in the JS sync's position (post-crawl,
+    /// before anything reads documents_body_fts); incremental by default — only
+    /// documents updated since the last `body_indexed_at` stamp are re-rendered.
     public func sync(
-        sourceType: String, into db: Database, rootId: Int64, rootIds: [String: Int64] = [:],
+        sourceType: String, into db: SQLiteWriteConnection, rootId: Int64, rootIds: [String: Int64] = [:],
         context: SourceContext, now: String, embedder: some ChunkEmbedder
     ) async throws -> SyncResult {
         let crawlStats = try await crawl(
             sourceType: sourceType, into: db, rootId: rootId, rootIds: rootIds, context: context, now: now)
+        let bodyResult = try IndexBody.runIncremental(db, now: now)
         let indexResult = try IndexEmbeddings.run(db, embedder: embedder)
-        return SyncResult(crawl: crawlStats, index: indexResult)
+        return SyncResult(crawl: crawlStats, body: bodyResult, index: indexResult)
     }
 
     private static func rawBytes(_ payload: SourcePayload) -> [UInt8] {

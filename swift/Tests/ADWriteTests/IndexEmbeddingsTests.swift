@@ -17,9 +17,8 @@
 // the documents + `document_sections` the chunker reads are exactly what the crawl
 // writes.
 
-import ADDB
 import ADEmbed
-import ADSQLModel
+import ADStorage
 import ADTestKit
 import Foundation
 import Testing
@@ -95,52 +94,45 @@ struct IndexEmbeddingsTests {
 
     // MARK: - helpers
 
-    private func openMigrated(_ directory: URL, named: String) throws -> Database {
-        let db = try Database.open(
-            at: directory.appendingPathComponent(named).path, options: DatabaseOptions())
+    private func openMigrated(_ directory: URL, named: String) throws -> SQLiteWriteConnection {
+        let db = try SQLiteWriteConnection(path: directory.appendingPathComponent(named).path)
         _ = try migrateSchema(db)
         return db
     }
 
-    private func persist(_ db: Database, _ rootId: Int64, _ doc: NormalizedDoc) throws {
+    private func persist(_ db: SQLiteWriteConnection, _ rootId: Int64, _ doc: NormalizedDoc) throws {
         try CrawlPersist.persistNormalized(
             db, rootId: rootId, path: "/documentation/\(doc.document.key)", doc,
             hashes: .init(content: "ch-\(doc.document.key)", rawPayload: "rh-\(doc.document.key)"),
             now: "2026-06-20T00:00:00.000Z")
     }
 
-    private func documentId(_ db: Database, key: String) throws -> Int64 {
-        let rows = try db.prepare("SELECT id FROM documents WHERE key = $k").all(["k": .text(key)])
-        guard let row = rows.first, case .integer(let id) = row["id"] else {
+    private func documentId(_ db: SQLiteWriteConnection, key: String) throws -> Int64 {
+        guard let id = try db.get("SELECT id FROM documents WHERE key = $k", ["k": .text(key)])?.int("id")
+        else {
             Issue.record("no documents row for key \(key)")
             return -1
         }
         return id
     }
 
-    private func chunkRows(_ db: Database, documentId: Int64)
+    private func chunkRows(_ db: SQLiteWriteConnection, documentId: Int64)
         throws -> [(ord: Int64, bin: [UInt8], i8: [UInt8])]
     {
-        try db.prepare(
-            "SELECT ord, vec_bin, vec_i8 FROM document_chunks WHERE document_id = $d ORDER BY ord"
+        try db.all(
+            "SELECT ord, vec_bin, vec_i8 FROM document_chunks WHERE document_id = $d ORDER BY ord",
+            ["d": .integer(documentId)]
         )
-        .all(["d": .integer(documentId)])
         .map { row in
-            guard case .integer(let ord) = row["ord"], case .blob(let bin) = row["vec_bin"]
+            guard let ord = row.int("ord"), let bin = row.blob("vec_bin")
             else { return (ord: Int64(-1), bin: [], i8: []) }
-            let i8: [UInt8] = {
-                guard case .blob(let b) = row["vec_i8"] else { return [] }
-                return b
-            }()
-            return (ord: ord, bin: bin, i8: i8)
+            return (ord: ord, bin: bin, i8: row.blob("vec_i8") ?? [])
         }
     }
 
-    private func anchorVec(_ db: Database, documentId: Int64) throws -> [UInt8]? {
-        let rows = try db.prepare("SELECT vec FROM document_vectors WHERE document_id = $d")
-            .all(["d": .integer(documentId)])
-        if let row = rows.first, case .blob(let bytes) = row["vec"] { return bytes }
-        return nil
+    private func anchorVec(_ db: SQLiteWriteConnection, documentId: Int64) throws -> [UInt8]? {
+        try db.get("SELECT vec FROM document_vectors WHERE document_id = $d", ["d": .integer(documentId)])?
+            .blob("vec")
     }
 
     /// The chunker output for a fixture doc (kept out of the test body to stay under
@@ -152,10 +144,10 @@ struct IndexEmbeddingsTests {
     }
 
     /// `snapshot_meta` as a plain `[key: value]` map.
-    private func embedMeta(_ db: Database) throws -> [String: String] {
+    private func embedMeta(_ db: SQLiteWriteConnection) throws -> [String: String] {
         var map: [String: String] = [:]
-        for row in try db.prepare("SELECT key, value FROM snapshot_meta").all() {
-            guard case .text(let key) = row["key"], case .text(let value) = row["value"] else { continue }
+        for row in try db.all("SELECT key, value FROM snapshot_meta") {
+            guard let key = row.text("key"), let value = row.text("value") else { continue }
             map[key] = value
         }
         return map
@@ -164,7 +156,7 @@ struct IndexEmbeddingsTests {
     /// Assert every stored chunk code matches `signCode`/`i8Code` of the embedder
     /// output for the `Chunker.chunkDocument` text, and the anchor mirror is present.
     private func verify(
-        _ db: Database, key: String, expectedChunks: [String]
+        _ db: SQLiteWriteConnection, key: String, expectedChunks: [String]
     ) throws {
         let id = try documentId(db, key: key)
         let stored = try chunkRows(db, documentId: id)
@@ -190,7 +182,7 @@ struct IndexEmbeddingsTests {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let db = try openMigrated(dir, named: "embed.adsql")
+        let db = try openMigrated(dir, named: "embed.db")
         defer { db.close() }
         let rootId = try CrawlPersist.upsertRoot(
             db, slug: "swiftui", displayName: "SwiftUI", kind: "framework", source: "seed",
@@ -228,7 +220,7 @@ struct IndexEmbeddingsTests {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let db = try openMigrated(dir, named: "resume.adsql")
+        let db = try openMigrated(dir, named: "resume.db")
         defer { db.close() }
         let rootId = try CrawlPersist.upsertRoot(
             db, slug: "swiftui", displayName: "SwiftUI", kind: "framework", source: "seed",

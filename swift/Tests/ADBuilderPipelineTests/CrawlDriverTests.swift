@@ -3,8 +3,7 @@
 // asserting the stats and that one documents row landed per discovered key.
 
 import ADBuilder
-import ADDB
-import ADSQLModel
+import ADStorage
 import ADWrite
 import Foundation
 import HTTPTypes
@@ -35,8 +34,7 @@ struct CrawlDriverTests {
             .appendingPathComponent("crawldriver-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let db = try Database.open(
-            at: dir.appendingPathComponent("crawl.adsql").path, options: DatabaseOptions())
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("crawl.db").path)
         defer { db.close() }
         _ = try migrateSchema(db)
 
@@ -53,8 +51,7 @@ struct CrawlDriverTests {
         #expect(stats.persisted == stats.discovered)
         #expect(stats.failed == 0)
 
-        let rows = try db.prepare("SELECT COUNT(*) AS c FROM documents").all([:])
-        guard case .integer(let count) = rows.first?["c"] else {
+        guard let count = try db.get("SELECT COUNT(*) AS c FROM documents")?.int("c") else {
             Issue.record("no count row")
             return
         }
@@ -89,8 +86,7 @@ struct CrawlDriverTests {
             .appendingPathComponent("crawlsync-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let db = try Database.open(
-            at: dir.appendingPathComponent("sync.adsql").path, options: DatabaseOptions())
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("sync.db").path)
         defer { db.close() }
         _ = try migrateSchema(db)
 
@@ -109,8 +105,7 @@ struct CrawlDriverTests {
         #expect(result.index.indexed == result.crawl.persisted)
         #expect(result.index.chunks > 0)
 
-        let rows = try db.prepare("SELECT COUNT(*) AS c FROM document_chunks").all([:])
-        guard case .integer(let chunkCount) = rows.first?["c"] else {
+        guard let chunkCount = try db.get("SELECT COUNT(*) AS c FROM document_chunks")?.int("c") else {
             Issue.record("no chunk count")
             return
         }
@@ -150,8 +145,7 @@ struct CrawlDriverTests {
             .appendingPathComponent("crawlconc-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let db = try Database.open(
-            at: dir.appendingPathComponent("c.adsql").path, options: DatabaseOptions())
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("c.db").path)
         defer { db.close() }
         _ = try migrateSchema(db)
 
@@ -205,8 +199,7 @@ struct CrawlDriverTests {
             .appendingPathComponent("crawlflaky-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let db = try Database.open(
-            at: dir.appendingPathComponent("f.adsql").path, options: DatabaseOptions())
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("f.db").path)
         defer { db.close() }
         _ = try migrateSchema(db)
 
@@ -261,8 +254,7 @@ struct CrawlDriverTests {
             .appendingPathComponent("crawlmulti-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let db = try Database.open(
-            at: dir.appendingPathComponent("m.adsql").path, options: DatabaseOptions())
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("m.db").path)
         defer { db.close() }
         _ = try migrateSchema(db)
 
@@ -282,10 +274,10 @@ struct CrawlDriverTests {
         #expect(stats.failed == 0)
 
         // Each page attributed to its own root: alpha/one + alpha/two under alpha, beta/one under beta.
-        let rows = try db.prepare("SELECT root_id AS r, COUNT(*) AS c FROM pages GROUP BY root_id").all([:])
+        let rows = try db.all("SELECT root_id AS r, COUNT(*) AS c FROM pages GROUP BY root_id")
         var byRoot: [Int64: Int] = [:]
         for row in rows {
-            guard case .integer(let r) = row["r"], case .integer(let c) = row["c"] else { continue }
+            guard let r = row.int("r"), let c = row.int("c") else { continue }
             byRoot[r] = Int(c)
         }
         #expect(byRoot[alphaId] == 2)
@@ -336,8 +328,7 @@ struct CrawlDriverTests {
             .appendingPathComponent("crawlbfs-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let db = try Database.open(
-            at: dir.appendingPathComponent("bfs.adsql").path, options: DatabaseOptions())
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("bfs.db").path)
         defer { db.close() }
         _ = try migrateSchema(db)
 
@@ -363,11 +354,7 @@ struct CrawlDriverTests {
         let other = try CrawlPersist.getCrawlStats(db, rootSlug: "other")
         #expect(other.pending == 0 && other.processed == 0 && other.failed == 0)
 
-        let rows = try db.prepare("SELECT COUNT(*) AS c FROM pages").all([:])
-        #expect(
-            {
-                guard case .integer(let c)? = rows.first?["c"] else { return -1 }
-                return Int(c)
-            }() == 4)
+        let count = try db.get("SELECT COUNT(*) AS c FROM pages")?.int("c")
+        #expect(count == 4)
     }
 }

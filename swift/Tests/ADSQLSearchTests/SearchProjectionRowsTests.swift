@@ -13,7 +13,6 @@ import Foundation
 import Testing
 
 @testable import ADSQLSearch
-@testable import ADWrite
 
 private let seedTimestamp = "2026-06-21T00:00:00.000Z"
 
@@ -41,10 +40,10 @@ struct SearchProjectionRowsTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let db = try Database.open(at: dir.appendingPathComponent("t.adsql").path, options: DatabaseOptions())
         defer { db.close() }
-        try migrateSchema(db)
+        try migrateAddbSchema(db)
         db.enableFullTextSearch()  // direct-insert seeding fires the FTS trigger (see equivalence test)
 
-        _ = try CrawlPersist.upsertRoot(
+        _ = try upsertRootAddb(
             db, slug: "swiftui", displayName: "SwiftUI", kind: "framework", source: "apple",
             seedPath: nil, sourceType: nil, now: seedTimestamp)
 

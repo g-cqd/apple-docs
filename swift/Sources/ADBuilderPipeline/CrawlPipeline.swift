@@ -1,11 +1,11 @@
 // CrawlPipeline — the persist boundary. Maps the adapter layer's dependency-free
 // `ADBuilder.NormalizedPage` to `ADWrite.NormalizedDoc` (a 1:1 field copy — the field names match
 // deliberately) and drives `CrawlPersist.persistNormalized`. This is the ONLY place the storage-bound
-// ADWrite/ADDB graph meets the storage-free adapter + parser layer, so the adapters stay testable in
+// ADWrite/SQLite graph meets the storage-free adapter + parser layer, so the adapters stay testable in
 // isolation while the storage siblings churn.
 
 public import ADBuilder
-public import ADDB  // Database / DBError (MemberImportVisibility needs the declaring module)
+public import ADStorage  // SQLiteWriteConnection (MemberImportVisibility needs the declaring module)
 public import ADWrite
 
 public enum CrawlPipeline {
@@ -17,13 +17,13 @@ public enum CrawlPipeline {
             relationships: page.relationships.map(relationship))
     }
 
-    /// Persist a normalized page: map + `CrawlPersist.persistNormalized`, in one ADDB transaction.
+    /// Persist a normalized page: map + `CrawlPersist.persistNormalized`, in one SQLite transaction.
     /// `hashes` (content / raw-payload SHA-256) are the caller's — change-detection POLICY the crawl
     /// driver owns, not this boundary. `etag`/`lastModified` are the upstream HTTP validators the driver
     /// carries from `FetchResult`; they land in `pages.etag`/`last_modified` so the next re-crawl can read
     /// them back for a conditional check. Defaulted ⇒ the pure-mapping callers stay source-compatible.
     public static func persist(
-        _ page: NormalizedPage, into db: Database, rootId: Int64, path: String,
+        _ page: NormalizedPage, into db: SQLiteWriteConnection, rootId: Int64, path: String,
         hashes: CrawlPersist.DocumentHashes, etag: String? = nil, lastModified: String? = nil, now: String
     ) throws {
         try CrawlPersist.persistNormalized(

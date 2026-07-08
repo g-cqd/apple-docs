@@ -377,33 +377,33 @@ let package = Package(
                 .product(name: "ADFCore", package: "ADFoundation")
             ],
             swiftSettings: releaseCMO + strictSettings),
-        // ADWrite — SPIKE foundation for the native crawl WRITER on the ADDB engine
-        // (own on-disk format "ADSQLv0"). Proves the write path: open/create a
-        // writable ADDB db, run apple-docs `roots`/`pages` DDL, prepared INSERT +
-        // bind (text/int/BLOB/NULL) in one transaction (lastInsertRowid), read back
-        // via the query API. The full writer (32 apple-docs migrations + crawl
-        // persist) will be built on the API this pins. Depends on the ADDB engine
-        // products (ADDBExec executor + the ADDBMigrate framework the full writer
-        // will define its schema in) + ADSQL's ADSQLModel (the `Value` type). Same
-        // first-party AD* sibling resolution as ADSQLSearch; no new external dep.
-        // Consumed by ad-cli's hidden `_addb-write-spike` verb; NOT in the ADCore
-        // dylib graph.
+        // ADWrite — the native crawl WRITER on REAL SQLite (the storage pivot:
+        // the corpus format is the JS `bun:sqlite` format). The schema ladder
+        // (AppleDocsSchema — the verbatim JS migrations v1…v27), the crawl persist
+        // (CrawlPersist), the body-FTS indexer (IndexBody), the chunks/vectors
+        // writer (IndexEmbeddings), and the snapshot build (Snapshot) all write
+        // through ADStorage's `SQLiteWriteConnection` (the same dlopen'd libsqlite3
+        // the read path uses — ONE connection layer, no second dlopen).
+        // NOT in the ADCore dylib graph.
         .target(
             name: "ADWrite",
             dependencies: [
-                .product(name: "ADDB", package: "ADDB"),
-                .product(name: "ADDBExec", package: "ADDB"),
-                .product(name: "ADDBMigrate", package: "ADDB"),
-                .product(name: "ADSQLModel", package: "ADSQL"),
+                // ADStorage: the SQLite write connection (SQLiteWriteConnection) —
+                // no cycle: ADStorage never imports ADWrite.
+                "ADStorage",
+                // ADContent: the PlainText renderer the body-FTS indexer (IndexBody)
+                // renders document bodies through — the SAME renderer the JS
+                // `nativePlainTextBatch` calls via the FFI, so indexed bytes match.
+                "ADContent",
                 // ADEmbed: the Chunker (anchor + body chunks), Quantize (signCode →
                 // vec_bin / i8Code → vec_i8) and Embedder the chunks/vectors writer
                 // (IndexEmbeddings) is the native port of src/commands/index-embeddings.js.
                 "ADEmbed",
                 // ADArchive: ArchiveWriter.writeTarZst (deterministic tar.zst) for the
-                // snapshot build (Snapshot, port of src/commands/snapshot.js). Crypto:
+                // snapshot build (Snapshot, port of src/commands/snapshot.js) + the
+                // zstd codec (raw-payload embedding, section-content inflation). Crypto:
                 // swift-crypto SHA-256 for the DB/archive checksums + the .sha256 sidecar
-                // (the JS Bun.CryptoHasher('sha256')). Both are build-tool deps of the
-                // snapshot path only; NOT in the ADCore dylib graph.
+                // (the JS Bun.CryptoHasher('sha256')).
                 "ADArchive",
                 .product(name: "Crypto", package: "swift-crypto")
             ],
@@ -443,7 +443,7 @@ let package = Package(
         // ADWrite/ADDB churn never reaches the adapters — the NormalizedPage DTO is the seam).
         .target(
             name: "ADBuilderPipeline",
-            dependencies: ["ADBuilder", "ADWrite", .product(name: "ADDB", package: "ADDB")],
+            dependencies: ["ADBuilder", "ADWrite", "ADStorage"],
             swiftSettings: releaseCMO + strictSettings),
         // ADWebBuild — the native web static-site build (Phase D3a): page templates,
         // search artifacts, sitemaps, discovery, the build orchestrator. Calls the
@@ -474,8 +474,7 @@ let package = Package(
         // `OrderedCollections` backs the ordered-object builder. swift-argument-parser
         // is the only external CLI dep. Also hosts the hidden `_semantic-probe` verb
         // (ADSemantic + ADEmbed) used to self-verify Stage-1 semantic retrieval
-        // against the JS oracle, and the hidden `_addb-write-spike` verb (ADWrite)
-        // proving the native write path.
+        // against the JS oracle.
         .executableTarget(
             name: "ADCLI",
             dependencies: [
@@ -501,18 +500,10 @@ let package = Package(
                 "ADEmbed",
                 "ADWrite",
                 // ADBuilder (adapters + HTTP client + rate limiter) and ADBuilderPipeline
-                // (CrawlDriver) back the `crawl` write verb; ADDB supplies the writable
-                // `Database`/`DatabaseOptions` the crawl creates + migrates.
+                // (CrawlDriver) back the `crawl` write verb; ADStorage (already above)
+                // supplies the writable `SQLiteWriteConnection` the crawl creates + migrates.
                 "ADBuilder",
                 "ADBuilderPipeline",
-                // ADSQLSearch + ADDBImport/FTS/JSON: the hidden B0 read-spike
-                // (_addb-read-spike) imports the corpus into ADDB and measures
-                // searchPagesDenormRows against StorageConnection.ftsRows.
-                "ADSQLSearch",
-                .product(name: "ADDBImport", package: "ADDB"),
-                .product(name: "ADDBFTS", package: "ADDB"),
-                .product(name: "ADDBJSON", package: "ADDB"),
-                .product(name: "ADDB", package: "ADDB"),
                 .product(name: "ADJSONCore", package: "ADJSON"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
@@ -579,15 +570,15 @@ let package = Package(
             name: "ADSQLSearchTests",
             dependencies: [
                 "ADSQLSearch",
-                // ADDB (Database.open) + ADSQLModel (Value) back the backfill/RowDecoder gates; ADWrite
-                // (migrateSchema + CrawlPersist.upsertRoot) backs the denorm-vs-normalized search-equivalence
-                // gate, which runs both `searchPagesFramed*` forms over the REAL apple-docs schema on ADDB.
+                // ADDB (Database.open) + ADSQLModel (Value) back the backfill/RowDecoder gates; the
+                // local `AddbSchemaFixture` helper (the frozen ADDB rendering of the apple-docs
+                // schema — ADWrite itself writes REAL SQLite since the storage pivot) backs the
+                // denorm-vs-normalized search-equivalence gate over the ADDB read backend.
                 .product(name: "ADDB", package: "ADDB"),
                 .product(name: "ADSQLModel", package: "ADSQL"),
                 // ADDBFTS — the equivalence gate calls `enableFullTextSearch()` so the
                 // `documents_fts MATCH` in both search forms runs (FTS is opt-in, like JSON).
-                .product(name: "ADDBFTS", package: "ADDB"),
-                "ADWrite"
+                .product(name: "ADDBFTS", package: "ADDB")
             ],
             swiftSettings: testSettings),
         .testTarget(
@@ -597,25 +588,16 @@ let package = Package(
             name: "ADServerTests", dependencies: ["ad-server", "ADSearchCascade"],
             swiftSettings: testSettings),
         // ADWriteTests — the catalog-parity gate for the native apple-docs schema
-        // (ADWrite/AppleDocsSchema). Builds a fresh ADDB catalog via migrateSchema and
-        // introspects it through ADDB's public `txn.schema()` (the engine catalog), then
-        // shells out to `bun` from the apple-docs root to build the JS-migrated SQLite
-        // reference and read its sqlite_master / PRAGMA table_info, and asserts the two
-        // catalogs MATCH (tables, columns, indexes, triggers, FTS), normalizing ADDB's
-        // strict-typing representation and reporting any differences. Depends on ADWrite
-        // (+ the engine façade for the Schema model). No new external dep.
+        // (ADWrite/AppleDocsSchema). Builds a fresh SQLite catalog via migrateSchema,
+        // introspects it (sqlite_master / PRAGMA table_info — the same introspection
+        // the fixture-capture script runs), and asserts it MATCHES the committed JS
+        // reference catalog (Fixtures/js-sqlite-catalog.json) EXACTLY. Persist /
+        // embeddings / snapshot gates run over the same write connection.
         .testTarget(
             name: "ADWriteTests",
             dependencies: [
                 "ADWrite",
-                .product(name: "ADDB", package: "ADDB"),
-                .product(name: "ADDBMigrate", package: "ADDB"),
-                // ADDBImport — the "apple-docs swap gate". The persist PARITY gate
-                // uses it as the reference bridge: it ingests the JS-writer SQLite
-                // into a fresh ADDB DB (DB_ref), so the native persist (DB_native) is
-                // compared ADDB-to-ADDB. Additive test-only dep; no new external dep.
-                .product(name: "ADDBImport", package: "ADDB"),
-                .product(name: "ADSQLModel", package: "ADSQL")
+                "ADStorage"
             ],
             swiftSettings: testSettings),
         // ParityTests — the Tier 1 CLI/HTTP verb-for-verb golden parity gate (RFC 0007 §12),
@@ -644,8 +626,7 @@ let package = Package(
         .testTarget(
             name: "ADBuilderPipelineTests",
             dependencies: [
-                "ADBuilderPipeline", "ADBuilder", "ADWrite", .product(name: "ADDB", package: "ADDB"),
-                .product(name: "ADSQLModel", package: "ADSQL")
+                "ADBuilderPipeline", "ADBuilder", "ADWrite", "ADStorage"
             ], swiftSettings: testSettings),
         .testTarget(
             name: "ADWebBuildTests", dependencies: ["ADWebBuild"], swiftSettings: testSettings),
@@ -700,13 +681,16 @@ let isolationClosures: [String: Set<String>] = [
     "ADBaseTests": ["ADBase", "ADBaseTests"],
     "ADContentTests": ["ADContent", "ADBase", "ADEmbed", "ADContentTests"],
     "ADWebBuildTests": ["ADWebBuild", "ADContent", "ADBase", "ADEmbed", "ADWebBuildTests"],
-    "ADWriteTests": ["ADWrite", "ADEmbed", "ADArchive", "ADWriteTests"],
+    "ADWriteTests": [
+        "ADWrite", "ADEmbed", "ADArchive", "ADStorage", "ADSQLSearch", "ADBase", "ADContent",
+        "CSQLiteShim", "ADWriteTests"
+    ],
     // ADBuilder now pulls ADContent (→ ADBase, ADEmbed) for the DocC-JSON normalizer's
     // `ContentText` text reuse, so those local targets join the isolation closure.
     "ADBuilderTests": ["ADBuilder", "ADBuilderTests", "ADContent", "ADBase", "ADEmbed"],
     "ADBuilderPipelineTests": [
         "ADBuilder", "ADWrite", "ADEmbed", "ADArchive", "ADBuilderPipeline", "ADBuilderPipelineTests",
-        "ADContent", "ADBase"
+        "ADContent", "ADBase", "ADStorage", "ADSQLSearch", "CSQLiteShim"
     ],
     "ADStorageTests": ["ADStorage", "ADBase", "ADArchive", "CSQLiteShim", "ADSQLSearch", "ADStorageTests"],
     "ADArchiveTests": ["ADArchive", "ADArchiveTests"],

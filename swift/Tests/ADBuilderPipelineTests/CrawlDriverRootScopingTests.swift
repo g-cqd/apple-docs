@@ -7,8 +7,7 @@
 // `CrawlDriverIncrementalTests.swift`'s own precedent for splitting a growing suite).
 
 import ADBuilder
-import ADDB
-import ADSQLModel
+import ADStorage
 import ADWrite
 import Foundation
 import HTTPTypes
@@ -27,9 +26,9 @@ struct CrawlDriverRootScopingTests {
         SourceContext(client: StubClient(), rateLimiter: RateLimiter(rate: 1_000_000, burst: 1_000_000))
     }
 
-    private func freshDatabase(_ dir: URL, name: String) throws -> Database {
+    private func freshDatabase(_ dir: URL, name: String) throws -> SQLiteWriteConnection {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let db = try Database.open(at: dir.appendingPathComponent(name).path, options: DatabaseOptions())
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent(name).path)
         _ = try migrateSchema(db)
         return db
     }
@@ -68,7 +67,7 @@ struct CrawlDriverRootScopingTests {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("crawlforeign-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
-        let db = try freshDatabase(dir, name: "foreign.adsql")
+        let db = try freshDatabase(dir, name: "foreign.db")
         defer { db.close() }
 
         let now = "2026-06-20T00:00:00.000Z"
@@ -97,12 +96,8 @@ struct CrawlDriverRootScopingTests {
         #expect(foreign.pending == 1 && foreign.processed == 0 && foreign.failed == 0)
 
         // And no page was ever persisted for it (never fetched, let alone mis-attributed).
-        let rows = try db.prepare("SELECT COUNT(*) AS c FROM pages").all([:])
-        #expect(
-            {
-                guard case .integer(let c)? = rows.first?["c"] else { return -1 }
-                return Int(c)
-            }() == 1)
+        let count = try db.get("SELECT COUNT(*) AS c FROM pages")?.int("c")
+        #expect(count == 1)
     }
 
     /// A multi-root `.crawl` adapter: two roots ("m1"/"m2"), each with one seed key and one same-root
@@ -145,7 +140,7 @@ struct CrawlDriverRootScopingTests {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("crawlmultibfs-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
-        let db = try freshDatabase(dir, name: "multibfs.adsql")
+        let db = try freshDatabase(dir, name: "multibfs.db")
         defer { db.close() }
 
         let now = "2026-06-20T00:00:00.000Z"
@@ -169,10 +164,10 @@ struct CrawlDriverRootScopingTests {
         #expect(m2Stats.pending == 0 && m2Stats.processed == 2)
 
         // Each page attributed to its own root.
-        let rows = try db.prepare("SELECT root_id AS r, COUNT(*) AS c FROM pages GROUP BY root_id").all([:])
+        let rows = try db.all("SELECT root_id AS r, COUNT(*) AS c FROM pages GROUP BY root_id")
         var byRoot: [Int64: Int] = [:]
         for row in rows {
-            guard case .integer(let r) = row["r"], case .integer(let c) = row["c"] else { continue }
+            guard let r = row.int("r"), let c = row.int("c") else { continue }
             byRoot[r] = Int(c)
         }
         #expect(byRoot[m1Id] == 2)

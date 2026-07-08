@@ -3,10 +3,10 @@
 // owns, never a different source's leftover backlog (an interrupted earlier crawl's `pending` rows,
 // vacuumed up by whichever unrelated source ran next and mis-attributed via its own `rootIds[slug] ??
 // rootId` persist fallback). Exercises the query directly (no CrawlDriver/HTTP machinery), so the storage
-// boundary is pinned at its own layer rather than only observed end-to-end.
+// boundary is pinned at its own layer rather than only observed end-to-end. Runs on the REAL SQLite write
+// connection (the storage pivot's engine).
 
-import ADDB
-import ADSQLModel
+import ADStorage
 import Foundation
 import Testing
 
@@ -14,9 +14,8 @@ import Testing
 
 @Suite("CrawlPersist.getPendingCrawlAny root-slug scoping")
 struct CrawlPersistPendingCrawlTests {
-    private func freshDatabase(_ dir: URL) throws -> Database {
-        let db = try Database.open(
-            at: dir.appendingPathComponent("pending.adsql").path, options: DatabaseOptions())
+    private func freshDatabase(_ dir: URL) throws -> SQLiteWriteConnection {
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("pending.db").path)
         try migrateSchema(db)
         return db
     }

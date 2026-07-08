@@ -1,5 +1,5 @@
-// IndexEmbeddings — the native per-chunk embedding index writer on the ADDB engine
-// ("ADSQLv0"). The bit-faithful port of `indexEmbeddings`
+// IndexEmbeddings — the native per-chunk embedding index writer on REAL SQLite.
+// The bit-faithful port of `indexEmbeddings`
 // (apple-docs/src/commands/index-embeddings.js): for every document it builds the
 // body-aware chunk set (anchor + heading-aware body chunks), embeds each chunk,
 // and stores both quantized codes per chunk —
@@ -11,7 +11,7 @@
 // `embed_version` are recorded in `snapshot_meta` (written with the first batch,
 // idempotent) so the reader can width-guard a mismatched snapshot.
 //
-// ── JS → ADDB faithful reproduction ───────────────────────────────────────────
+// ── JS faithful reproduction ──────────────────────────────────────────────────
 //   • Chunking is `ADEmbed.Chunker.chunkDocument` (the bit-exact port of
 //     src/search/chunker.js — chunk 0 is the anchor).
 //   • Quantization is `ADEmbed.Quantize.signCode` / `.i8Code` (the bit-exact ports
@@ -19,8 +19,9 @@
 //   • The SQL is the literal JS text: the `document_chunks` upsert (chunks.js
 //     `upsertStmt`), the `document_vectors` anchor upsert (index-embeddings.js
 //     `anchorUpsert`), the per-doc `DELETE` (chunks.js `deleteByDocStmt`), and the
-//     resume / full document scans. `INSERT OR REPLACE` is parsed by the ADDB
-//     frontend (Writer `.replace`), so the upserts are verbatim.
+//     resume scan's `WHERE id NOT IN (SELECT document_id FROM document_chunks)`
+//     anti-join — restored verbatim (the interim ADDB engine could not run an
+//     `IN (SELECT …)` subquery and did the anti-join in Swift).
 //   • Resume semantics match: without `full`, only documents with no chunks are
 //     processed; an embedder version bump (`embedVersion`) forces a full re-embed
 //     BEFORE the resume scan (so an "up to date" store still re-embeds).
@@ -31,14 +32,9 @@
 // carries PLAIN TEXT (the writer path stores plain text; the zstd section codec is
 // compact/snapshot-only), so `content_text` is read straight as text — the same
 // state in which the JS `getSectionsByDocumentIds` finds it before `compact`.
-//
-// `public import ADDB` (`Database` is in `run`'s signature) and `public import
-// ADEmbed` (`Embedder` appears in the public `ChunkEmbedder` conformance below;
-// `Chunker`/`Quantize` back the implementation). `ADSQLModel` (`Value`/`DBError`)
-// is used only internally — `run` throws untyped — so it is an internal import.
-public import ADDB
+
 public import ADEmbed
-import ADSQLModel
+public import ADStorage
 
 /// The embedding seam the chunk-index writer drives — the Swift analogue of the
 /// JS injectable `opts.embedder`. A test passes a deterministic fake (so the gate
@@ -57,7 +53,7 @@ public protocol ChunkEmbedder {
 extension Embedder: ChunkEmbedder {}
 
 /// The native chunks/vectors writer — a namespace of pure write functions over an
-/// open, writable ADDB `Database` whose schema is already at `AppleDocsSchema`.
+/// open, writable SQLite connection whose schema is already at `AppleDocsSchema`.
 public enum IndexEmbeddings {
     /// The default pinned model id (`APPLE_DOCS_EMBED_MODEL` resolves the override
     /// JS-side; the caller passes the resolved value).
@@ -75,7 +71,7 @@ public enum IndexEmbeddings {
     /// Build (or resume) the per-chunk embedding index.
     ///
     /// - Parameters:
-    ///   - db: an open, writable ADDB database migrated to `AppleDocsSchema`.
+    ///   - db: an open, writable SQLite connection migrated to `AppleDocsSchema`.
     ///   - embedder: the chunk embedder (model2vec in production; a fake in tests).
     ///   - embedModel: the model id stamped into `snapshot_meta.embed_model`.
     ///   - embedVersion: the embedder behavior version (RFC 0001 §10). When set and
@@ -85,11 +81,11 @@ public enum IndexEmbeddings {
     ///   - full: re-embed every document (else only documents with no chunks).
     ///   - batchSize: documents per embed/transaction batch (JS `BATCH` = 64).
     ///   - onProgress: invoked after each committed batch with `(done, total)`.
-    /// - Throws: a ``DBError`` (or the embedder's error) if a storage write or embedding pass fails.
+    /// - Throws: a ``SQLiteWriteError`` (or the embedder's error) if a storage write or embedding pass fails.
     /// - Returns: the run ``Result``.
     @discardableResult
     public static func run(
-        _ db: Database,
+        _ db: SQLiteWriteConnection,
         embedder: some ChunkEmbedder,
         embedModel: String = defaultModel,
         embedVersion: Int? = nil,
@@ -101,35 +97,26 @@ public enum IndexEmbeddings {
         // invalidates stored chunks wholesale — resuming would mix versions. Checked
         // BEFORE the resume scan so an "up to date" v1 store still re-embeds under v2.
         var resolvedFull = full
-        if !resolvedFull, let embedVersion, try snapshotChunkCount(db) > 0 {
+        if !resolvedFull, let embedVersion, try chunkCount(db) > 0 {
             let stored = try getSnapshotMeta(db, "embed_version") ?? "1"
             if stored != String(embedVersion) { resolvedFull = true }
         }
 
-        // ── document scan: full (every doc) or resume (docs with no chunks) ──────
-        // The JS uses `WHERE id NOT IN (SELECT document_id FROM document_chunks)`, but
-        // the ADDB frontend does not support an `IN (SELECT …)` subquery, so the
-        // anti-join is done in Swift: read every document (id order), then drop the
-        // already-chunked ids on a resume. Same result set + order as the JS scan.
-        var docRows =
-            try db.prepare(
-                "SELECT id, title, abstract_text, headings FROM documents ORDER BY id"
-            )
-            .all().compactMap(DocRow.init)
-        if !resolvedFull {
-            let chunked = try chunkedDocumentIds(db)
-            docRows = docRows.filter { !chunked.contains($0.id) }
-        }
+        // ── document scan: full (every doc) or resume (docs with no chunks) — the
+        // literal JS scans, including the `NOT IN (SELECT …)` anti-join. ─────────
+        let scanSQL =
+            resolvedFull
+            ? "SELECT id, title, abstract_text, headings FROM documents ORDER BY id"
+            : "SELECT id, title, abstract_text, headings FROM documents "
+                + "WHERE id NOT IN (SELECT document_id FROM document_chunks) ORDER BY id"
+        let docRows = try db.all(scanSQL).compactMap(DocRow.init)
         let total = docRows.count
         if total == 0 {
             return Result(status: "ok", indexed: 0, total: 0, chunks: 0)
         }
 
-        // `"text"` is quoted: it is a reserved word, and the column is declared
-        // `"text" BLOB` (v25). ADDB's frontend rejects the bare identifier (SQLite
-        // tolerated it); quoting matches the schema and the JS column list semantically.
         let chunkUpsertSQL = """
-            INSERT OR REPLACE INTO document_chunks(document_id, ord, "text", vec_bin, vec_i8)
+            INSERT OR REPLACE INTO document_chunks(document_id, ord, text, vec_bin, vec_i8)
             VALUES ($doc, $ord, $text, $bin, $i8)
             """
         let anchorUpsertSQL =
@@ -168,16 +155,16 @@ public enum IndexEmbeddings {
                 if let embedVersion { try setSnapshotMeta(db, "embed_version", String(embedVersion)) }
             }
 
-            try db.transaction { (txn) throws(DBError) in
+            try db.transaction { () throws(SQLiteWriteError) in
                 for row in batch {  // clear stale ords on re-index (per-doc dedup)
-                    try txn.run(
+                    try db.run(
                         "DELETE FROM document_chunks WHERE document_id = $doc",
                         ["doc": .integer(row.id)])
                 }
                 for index in flat.indices {
                     let chunk = flat[index]
                     let code = codes[index]
-                    try txn.run(
+                    try db.run(
                         chunkUpsertSQL,
                         [
                             "doc": .integer(chunk.docId),
@@ -187,7 +174,7 @@ public enum IndexEmbeddings {
                             "i8": .blob(code.i8)
                         ])
                     if chunk.ord == 0 {
-                        try txn.run(
+                        try db.run(
                             anchorUpsertSQL,
                             ["id": .integer(chunk.docId), "vec": .blob(code.bin)])
                     }
@@ -204,20 +191,19 @@ public enum IndexEmbeddings {
     }
 
     // snapshot_meta single-row helpers (auto-commit each, as the JS does).
-    private static func setSnapshotMeta(_ db: Database, _ key: String, _ value: String) throws(DBError) {
-        try db.prepare("INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES ($key, $value)")
-            .run(["key": .text(key), "value": .text(value)])
+    static func setSnapshotMeta(_ db: SQLiteWriteConnection, _ key: String, _ value: String) throws(SQLiteWriteError) {
+        try db.run(
+            "INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES ($key, $value)",
+            ["key": .text(key), "value": .text(value)])
     }
 
-    private static func getSnapshotMeta(_ db: Database, _ key: String) throws(DBError) -> String? {
-        let rows = try db.prepare("SELECT value FROM snapshot_meta WHERE key = $key")
-            .all(["key": .text(key)])
-        return rows.first.flatMap { cellText($0["value"]) }
+    static func getSnapshotMeta(_ db: SQLiteWriteConnection, _ key: String) throws(SQLiteWriteError) -> String? {
+        try db.get("SELECT value FROM snapshot_meta WHERE key = $key", ["key": .text(key)])?
+            .text("value")
     }
 
-    private static func snapshotChunkCount(_ db: Database) throws(DBError) -> Int64 {
-        let rows = try db.prepare("SELECT COUNT(*) AS c FROM document_chunks").all()
-        return rows.first.flatMap { cellInt($0["c"]) } ?? 0
+    private static func chunkCount(_ db: SQLiteWriteConnection) throws(SQLiteWriteError) -> Int64 {
+        try db.get("SELECT COUNT(*) AS c FROM document_chunks")?.int("c") ?? 0
     }
 
     // MARK: - reads
@@ -229,23 +215,13 @@ public enum IndexEmbeddings {
         let abstractText: String?
         let headings: String?
 
-        init?(_ row: SQLRow) {
-            guard let id = cellInt(row["id"]) else { return nil }
+        init?(_ row: SQLiteRow) {
+            guard let id = row.int("id") else { return nil }
             self.id = id
-            self.title = cellText(row["title"])
-            self.abstractText = cellText(row["abstract_text"])
-            self.headings = cellText(row["headings"])
+            self.title = row.text("title")
+            self.abstractText = row.text("abstract_text")
+            self.headings = row.text("headings")
         }
-    }
-
-    /// The set of `document_id`s that already have chunks — the resume anti-join
-    /// (the Swift stand-in for the JS `id NOT IN (SELECT document_id …)`).
-    private static func chunkedDocumentIds(_ db: Database) throws(DBError) -> Set<Int64> {
-        var ids = Set<Int64>()
-        for row in try db.prepare("SELECT DISTINCT document_id FROM document_chunks").all() {
-            if let id = cellInt(row["document_id"]) { ids.insert(id) }
-        }
-        return ids
     }
 
     /// Batched `document_id → [Chunker.Section]` fetch, mirroring
@@ -253,53 +229,37 @@ public enum IndexEmbeddings {
     /// chunk order (and therefore each chunk's `ord`) is identical to the JS writer.
     /// `content_text` is read as plain text (the writer-path state at index time).
     private static func sections(
-        _ db: Database, forDocumentIds ids: [Int64]
-    ) throws(DBError) -> [Int64: [Chunker.Section]] {
+        _ db: SQLiteWriteConnection, forDocumentIds ids: [Int64]
+    ) throws(SQLiteWriteError) -> [Int64: [Chunker.Section]] {
         if ids.isEmpty { return [:] }
         var placeholders: [String] = []
-        var params: [String: Value] = [:]
+        var params: [String: SQLiteValue] = [:]
         placeholders.reserveCapacity(ids.count)
-        for (i, id) in ids.enumerated() {
-            let name = "d\(i)"
+        for (index, id) in ids.enumerated() {
+            let name = "d\(index)"
             placeholders.append("$\(name)")
             params[name] = .integer(id)
         }
-        let rows =
-            try db.prepare(
-                """
-                SELECT document_id, section_kind, heading, content_text, sort_order
-                FROM document_sections WHERE document_id IN (\(placeholders.joined(separator: ", ")))
-                ORDER BY document_id, sort_order, id
-                """
-            )
-            .all(params)
+        let rows = try db.all(
+            """
+            SELECT document_id, section_kind, heading, content_text, sort_order
+            FROM document_sections WHERE document_id IN (\(placeholders.joined(separator: ", ")))
+            ORDER BY document_id, sort_order, id
+            """,
+            params)
 
         var out: [Int64: [Chunker.Section]] = [:]
         for row in rows {
-            guard let docId = cellInt(row["document_id"]),
-                let kind = cellText(row["section_kind"])
-            else { continue }
+            guard let docId = row.int("document_id"), let kind = row.text("section_kind") else {
+                continue
+            }
             out[docId, default: []]
                 .append(
                     Chunker.Section(
                         kind: kind,
-                        heading: cellText(row["heading"]),
-                        contentText: cellText(row["content_text"])))
+                        heading: row.text("heading"),
+                        contentText: row.text("content_text")))
         }
         return out
     }
-}
-
-// MARK: - SQLRow cell readers
-
-/// Read a TEXT cell as `String?` (any non-text/NULL → nil).
-private func cellText(_ value: Value?) -> String? {
-    if case .text(let s) = value { return s }
-    return nil
-}
-
-/// Read an INTEGER cell as `Int64?` (any non-integer/NULL → nil).
-private func cellInt(_ value: Value?) -> Int64? {
-    if case .integer(let i) = value { return i }
-    return nil
 }

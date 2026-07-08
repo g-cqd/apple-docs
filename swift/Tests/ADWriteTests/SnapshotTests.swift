@@ -6,15 +6,14 @@
 //
 //   • the tag-derived `snapshot_created_at` + clamped mtimes are stable,
 //   • the byte-sorted member list + pinned zstd params make the archive stable,
-//   • and — the real question for the ADDB port — the cloned + mutated snapshot DB
-//     is itself byte-stable for the same committed generation + the same
-//     truncation/meta writes (so `dbChecksum` matches across builds).
+//   • and — the real question for the SQLite port — the VACUUM-INTO'd + mutated +
+//     re-VACUUMed snapshot DB is itself byte-stable for the same source corpus +
+//     the same truncation/meta writes (so `dbChecksum` matches across builds).
 //
 // It also checks the strict `--tag` allow-list (path-escape rejection) and the
 // sidecar format.
 
-import ADDB
-import ADSQLModel
+import ADStorage
 import Foundation
 import Testing
 
@@ -25,9 +24,8 @@ struct SnapshotTests {
     /// A minimal corpus: a root + two documents (each with a prose section), written
     /// through the REAL persist so pages/documents/sections are exactly what a crawl
     /// produces. The operational + regenerable tables exist (migrated) but are empty.
-    private func makeCorpus(_ directory: URL) throws -> Database {
-        let db = try Database.open(
-            at: directory.appendingPathComponent("corpus.adsql").path, options: DatabaseOptions())
+    private func makeCorpus(_ directory: URL) throws -> SQLiteWriteConnection {
+        let db = try SQLiteWriteConnection(path: directory.appendingPathComponent("corpus.db").path)
         _ = try migrateSchema(db)
         let now = "2026-06-20T00:00:00.000Z"
         let rootId = try CrawlPersist.upsertRoot(
@@ -65,7 +63,7 @@ struct SnapshotTests {
     /// `Snapshot.build` wrapper — hoists the labeled-argument call out of the test
     /// bodies so each stays under the 100ms type-check budget.
     private func build(
-        _ db: Database, into outDir: URL, tag: String = "snapshot-20260620",
+        _ db: SQLiteWriteConnection, into outDir: URL, tag: String = "snapshot-20260620",
         dataDir: String? = nil, schemaVersion: Int64 = 42
     ) throws -> Snapshot.Result {
         try Snapshot.build(
@@ -73,18 +71,15 @@ struct SnapshotTests {
     }
 
     /// `document_raw` as `documents.key → raw bytes`.
-    private func documentRawByKey(_ db: Database) throws -> [String: [UInt8]] {
-        let rows =
-            try db.prepare(
-                """
-                SELECT d.key AS key, r.raw AS raw FROM document_raw r
-                JOIN documents d ON d.id = r.document_id ORDER BY d.key
-                """
-            )
-            .all()
+    private func documentRawByKey(_ db: SQLiteWriteConnection) throws -> [String: [UInt8]] {
+        let rows = try db.all(
+            """
+            SELECT d.key AS key, r.raw AS raw FROM document_raw r
+            JOIN documents d ON d.id = r.document_id ORDER BY d.key
+            """)
         var byKey: [String: [UInt8]] = [:]
         for row in rows {
-            guard case .text(let key) = row["key"], case .blob(let bytes) = row["raw"] else { continue }
+            guard let key = row.text("key"), let bytes = row.blob("raw") else { continue }
             byKey[key] = bytes
         }
         return byKey

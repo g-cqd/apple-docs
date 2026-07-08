@@ -15,7 +15,6 @@ import Foundation
 import Testing
 
 @testable import ADSQLSearch
-@testable import ADWrite
 
 @Suite("search WAND rank restructure vs score-all parity (real schema, ADDB FTS)")
 struct SearchWANDRankParityTests {
@@ -26,7 +25,7 @@ struct SearchWANDRankParityTests {
     /// varies by index so bm25 orders non-trivially within each tier.
     private func seed(_ db: Database) throws {
         let now = "2026-06-20T00:00:00.000Z"
-        _ = try CrawlPersist.upsertRoot(
+        _ = try upsertRootAddb(
             db, slug: "swiftui", displayName: "SwiftUI", kind: "framework", source: "apple",
             seedPath: nil, sourceType: nil, now: now)
 
@@ -56,7 +55,7 @@ struct SearchWANDRankParityTests {
         let db = try Database.open(
             at: dir.appendingPathComponent("t.adsql").path, options: DatabaseOptions())
         defer { db.close() }
-        try migrateSchema(db)
+        try migrateAddbSchema(db)
         db.enableFullTextSearch()
         try seed(db)
         try db.prepareForDenormServing()
@@ -87,7 +86,7 @@ struct SearchWANDRankParityTests {
         let db = try Database.open(
             at: dir.appendingPathComponent("t.adsql").path, options: DatabaseOptions())
         defer { db.close() }
-        try migrateSchema(db)
+        try migrateAddbSchema(db)
         db.enableFullTextSearch()
         try seed(db)
         try db.prepareForDenormServing()
