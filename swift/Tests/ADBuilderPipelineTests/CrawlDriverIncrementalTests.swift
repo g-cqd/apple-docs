@@ -9,8 +9,7 @@
 // 100 ms type-check budget — the two-phase bodies tripped the hard gate.
 
 import ADBuilder
-import ADDB
-import ADSQLModel
+import ADStorage
 import ADWrite
 import Foundation
 import HTTPTypes
@@ -75,10 +74,9 @@ struct CrawlDriverIncrementalTests {
         }
     }
 
-    private func freshDatabase(_ dir: URL, now: String) throws -> (db: Database, rootId: Int64) {
+    private func freshDatabase(_ dir: URL, now: String) throws -> (db: SQLiteWriteConnection, rootId: Int64) {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let db = try Database.open(
-            at: dir.appendingPathComponent("inc.adsql").path, options: DatabaseOptions())
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("inc.db").path)
         try migrateSchema(db)
         let rootId = try CrawlPersist.upsertRoot(
             db, slug: "inc", displayName: "Inc", kind: "collection", source: "inc", now: now)

@@ -57,6 +57,7 @@ struct SQLiteLib: @unchecked Sendable {
     let clearBindings: @convention(c) (OpaquePointer?) -> Int32
     let bindParameterIndex: @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
     let bindText: @convention(c) (OpaquePointer?, Int32, UnsafeRawPointer?, Int32, UnsafeRawPointer?) -> Int32
+    let bindBlob: @convention(c) (OpaquePointer?, Int32, UnsafeRawPointer?, Int32, UnsafeRawPointer?) -> Int32
     let bindInt64: @convention(c) (OpaquePointer?, Int32, Int64) -> Int32
     let bindDouble: @convention(c) (OpaquePointer?, Int32, Double) -> Int32
     let bindNull: @convention(c) (OpaquePointer?, Int32) -> Int32
@@ -130,6 +131,11 @@ enum SQLiteLoader {
                     as: (@convention(c) (OpaquePointer?, Int32, UnsafeRawPointer?, Int32, UnsafeRawPointer?)
                         -> Int32)
                         .self),
+                let bindBlob = sym(
+                    "sqlite3_bind_blob",
+                    as: (@convention(c) (OpaquePointer?, Int32, UnsafeRawPointer?, Int32, UnsafeRawPointer?)
+                        -> Int32)
+                        .self),
                 let bindInt64 = sym(
                     "sqlite3_bind_int64", as: (@convention(c) (OpaquePointer?, Int32, Int64) -> Int32).self),
                 let bindDouble = sym(
@@ -170,7 +176,8 @@ enum SQLiteLoader {
             return SQLiteLib(
                 openV2: openV2, closeV2: closeV2, prepareV2: prepareV2, finalize: finalize, step: step,
                 reset: reset, clearBindings: clearBindings, bindParameterIndex: bindParameterIndex,
-                bindText: bindText, bindInt64: bindInt64, bindDouble: bindDouble, bindNull: bindNull,
+                bindText: bindText, bindBlob: bindBlob, bindInt64: bindInt64, bindDouble: bindDouble,
+                bindNull: bindNull,
                 columnCount: columnCount, columnName: columnName, columnType: columnType,
                 columnInt64: columnInt64, columnDouble: columnDouble, columnText: columnText,
                 columnBlob: columnBlob, columnBytes: columnBytes, errmsg: errmsg)

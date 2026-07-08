@@ -1,16 +1,15 @@
 // The WS-D write verbs beyond `crawl`: `index` (embedding index), `sync`
-// (crawl + index for one source), and `snapshot` (the distributable corpus
-// archive) — thin wiring over IndexEmbeddings.run / CrawlDriver.sync /
-// Snapshot.build. All operate on a writable ADDB corpus (the native crawl
-// store), like `ad-cli crawl`.
+// (crawl + body-index + embed-index for one source), `sync-all` (every native
+// source), and `snapshot` (the distributable corpus archive) — thin wiring over
+// IndexBody.run* / IndexEmbeddings.run / CrawlDriver.sync / Snapshot.build. All
+// operate on a writable SQLite corpus (the JS `bun:sqlite` format — the storage
+// pivot), like `ad-cli crawl`.
 
 import ADBuilder
 import ADBuilderPipeline
-import ADDB
-// ADDBMigrate: Migrator.Outcome members (finalVersion) — MemberImportVisibility.
-import ADDBMigrate
 import ADEmbed
 import ADJSONCore
+import ADStorage
 import ADWrite
 import ArgumentParser
 import Foundation
@@ -30,11 +29,10 @@ extension SourceRegistry {
     }
 }
 
-/// Open (creating + migrating) the writable ADDB corpus the write verbs share.
-func openCrawlCorpus(_ path: String) throws -> Database {
+/// Open (creating + migrating) the writable SQLite corpus the write verbs share.
+func openCrawlCorpus(_ path: String) throws -> SQLiteWriteConnection {
     do {
-        let database = try Database.open(
-            at: path, options: DatabaseOptions(readOnly: false, createIfMissing: true))
+        let database = try SQLiteWriteConnection(path: path)
         _ = try migrateSchema(database)
         return database
     } catch {
@@ -76,15 +74,15 @@ func crawlContext(rate: Double, concurrency: Int) -> SourceContext {
         rateLimiter: RateLimiter(rate: rate, burst: Swift.max(rate, 1)))
 }
 
-/// `ad-cli index --db <ADDB> [--full]` — build/resume the embedding index over
+/// `ad-cli index --db <DB> [--full]` — build/resume the embedding index over
 /// everything persisted (IndexEmbeddings.run; the post-crawl pass that makes
 /// crawled pages searchable).
 struct IndexCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "index",
-        abstract: "Build or resume the embedding index over a crawled ADDB corpus.")
+        abstract: "Build or resume the embedding index over a crawled SQLite corpus.")
 
-    @Option(name: .long, help: "Path to the writable ADDB corpus.")
+    @Option(name: .long, help: "Path to the writable SQLite corpus.")
     var db: String
 
     @Flag(name: .long, help: "Re-embed every document (else resume: only documents with no chunks).")
@@ -111,18 +109,18 @@ struct IndexCommand: ParsableCommand {
     }
 }
 
-/// `ad-cli sync <source> --db <ADDB>` — crawl one source then index it
-/// (CrawlDriver.sync — the native mirror of cli.js sync's crawl+index for one
-/// source).
+/// `ad-cli sync <source> --db <DB>` — crawl one source, then body-index and
+/// embed-index it (CrawlDriver.sync — the native mirror of cli.js sync's
+/// crawl + body-index for one source, plus the embedding index).
 struct SyncCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sync",
-        abstract: "Crawl one source into an ADDB corpus, then build its embedding index.")
+        abstract: "Crawl one source into a SQLite corpus, then build its body + embedding indexes.")
 
     @Argument(help: "Source to sync (native adapters only).")
     var source: String
 
-    @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
+    @Option(name: .long, help: "Path to the writable SQLite corpus (created + migrated if missing).")
     var db: String
 
     @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 256).")
@@ -179,27 +177,29 @@ struct SyncCommand: AsyncParsableCommand {
                         ("persisted", .int(Int64(result.crawl.persisted))),
                         ("skipped", .int(Int64(result.crawl.skipped))),
                         ("failed", .int(Int64(result.crawl.failed))),
+                        ("bodyIndexed", .int(Int64(result.body.indexed))),
                         ("index", indexResultJSON(result.index))
                     ])))
         } else {
             print(
                 "synced \(source): discovered \(result.crawl.discovered), persisted \(result.crawl.persisted), "
                     + "skipped \(result.crawl.skipped), failed \(result.crawl.failed); "
-                    + "index \(indexResultSummary(result.index))")
+                    + "body \(result.body.indexed) indexed; index \(indexResultSummary(result.index))")
         }
     }
 }
 
-/// `ad-cli sync-all --db <ADDB>` — crawl EVERY native source into the corpus (each
+/// `ad-cli sync-all --db <DB>` — crawl EVERY native source into the corpus (each
 /// source's discover → upsert-roots → crawl, flat or BFS per its syncMode), then build
-/// the embedding index once. The native mirror of `bun cli.js sync` over all sources;
-/// one source's failure is logged and never aborts the run.
+/// the body index (the JS sync's post-crawl phase) and the embedding index once. The
+/// native mirror of `bun cli.js sync` over all sources; one source's failure is logged
+/// and never aborts the run.
 struct SyncAllCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sync-all",
-        abstract: "Crawl every native source into an ADDB corpus, then build the embedding index once.")
+        abstract: "Crawl every native source into a SQLite corpus, then build the body + embedding indexes once.")
 
-    @Option(name: .long, help: "Path to the writable ADDB corpus (created + migrated if missing).")
+    @Option(name: .long, help: "Path to the writable SQLite corpus (created + migrated if missing).")
     var db: String
 
     @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 256).")
@@ -270,6 +270,11 @@ struct SyncAllCommand: AsyncParsableCommand {
             "crawled \(sources.count) sources: discovered \(totals.discovered), "
                 + "persisted \(totals.persisted), skipped \(totals.skipped), failed \(totals.failed)")
 
+        // The JS sync's post-crawl body-index phase runs unconditionally (the JS has
+        // no knob to skip it); --skip-index skips only the embedding pass.
+        let bodyResult = try IndexBody.runIncremental(database, now: jsIsoNow())
+        print("Body index complete: \(bodyResult.indexed) documents indexed, \(bodyResult.errors) errors")
+
         if !skipIndex {
             let embedder = try loadIndexEmbedder(dbPath: db)
             let indexResult = try driver.index(database, embedder: embedder)
@@ -278,15 +283,15 @@ struct SyncAllCommand: AsyncParsableCommand {
     }
 }
 
-/// `ad-cli snapshot --db <ADDB> --out <dir> --tag <snapshot-YYYYMMDD>` — build
+/// `ad-cli snapshot --db <DB> --out <dir> --tag <snapshot-YYYYMMDD>` — build
 /// the distributable snapshot archive (Snapshot.build; deterministic
 /// createdAt/mtimes derive from the tag).
 struct SnapshotCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "snapshot",
-        abstract: "Build the distributable snapshot archive from an ADDB corpus.")
+        abstract: "Build the distributable snapshot archive from a SQLite corpus.")
 
-    @Option(name: .long, help: "Path to the ADDB corpus to snapshot.")
+    @Option(name: .long, help: "Path to the SQLite corpus to snapshot.")
     var db: String
 
     @Option(name: .long, help: "Output directory for the archive + checksum + manifest.")

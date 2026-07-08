@@ -16,7 +16,6 @@ import Foundation
 import Testing
 
 @testable import ADSQLSearch
-@testable import ADWrite
 
 @Suite("search denorm vs normalized equivalence (real schema, ADDB FTS)")
 struct SearchDenormEquivalenceTests {
@@ -29,17 +28,17 @@ struct SearchDenormEquivalenceTests {
 
         let db = try Database.open(at: dir.appendingPathComponent("t.adsql").path, options: DatabaseOptions())
         defer { db.close() }
-        try migrateSchema(db)
+        try migrateAddbSchema(db)
         // This test SEEDS via direct INSERT, whose AFTER-INSERT trigger writes `documents_fts` — so FTS
         // must be registered before the inserts here. (The real 5A flow imports an already-built DB and
         // calls `prepareForDenormServing()` once after import; no early enable needed there.)
         db.enableFullTextSearch()
 
         let now = "2026-06-20T00:00:00.000Z"
-        _ = try CrawlPersist.upsertRoot(
+        _ = try upsertRootAddb(
             db, slug: "swiftui", displayName: "SwiftUI", kind: "framework", source: "apple",
             seedPath: nil, sourceType: nil, now: now)
-        _ = try CrawlPersist.upsertRoot(
+        _ = try upsertRootAddb(
             db, slug: "uikit", displayName: "UIKit", kind: "framework", source: "apple",
             seedPath: nil, sourceType: nil, now: now)
 

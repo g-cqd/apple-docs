@@ -7,8 +7,7 @@
 // the hard gate.
 
 import ADBuilder
-import ADDB
-import ADSQLModel
+import ADStorage
 import ADWrite
 import Foundation
 import Testing
@@ -56,15 +55,14 @@ struct CrawlPipelineTests {
     }
 
     /// Persists the sample page into a fresh migrated DB and reads back the three affected tables
-    /// (`SQLRow`s are self-contained, so the temp DB can close before the asserts run).
-    private func persistedRows() throws -> (documents: [SQLRow], sections: [SQLRow], relationships: [SQLRow]) {
+    /// (`SQLiteRow`s are self-contained, so the temp DB can close before the asserts run).
+    private func persistedRows() throws -> (documents: [SQLiteRow], sections: [SQLiteRow], relationships: [SQLiteRow]) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("adbuilderpipeline-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let db = try Database.open(
-            at: dir.appendingPathComponent("crawl.adsql").path, options: DatabaseOptions())
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("crawl.db").path)
         defer { db.close() }
         _ = try migrateSchema(db)
 
@@ -77,18 +75,14 @@ struct CrawlPipelineTests {
             samplePage, into: db, rootId: rootId, path: "/swift-org/install",
             hashes: .init(content: "c1", rawPayload: "r1"), now: now)
 
-        let documents =
-            try db
-            .prepare("SELECT title, source_type FROM documents WHERE key = $k")
-            .all(["k": .text("swift-org/install")])
-        let sections =
-            try db
-            .prepare("SELECT content_text FROM document_sections WHERE heading = $h")
-            .all(["h": .text("Linux")])
-        let relationships =
-            try db
-            .prepare("SELECT to_key, relation_type FROM document_relationships WHERE from_key = $k")
-            .all(["k": .text("swift-org/install")])
+        let documents = try db.all(
+            "SELECT title, source_type FROM documents WHERE key = $k",
+            ["k": .text("swift-org/install")])
+        let sections = try db.all(
+            "SELECT content_text FROM document_sections WHERE heading = $h", ["h": .text("Linux")])
+        let relationships = try db.all(
+            "SELECT to_key, relation_type FROM document_relationships WHERE from_key = $k",
+            ["k": .text("swift-org/install")])
         return (documents: documents, sections: sections, relationships: relationships)
     }
 

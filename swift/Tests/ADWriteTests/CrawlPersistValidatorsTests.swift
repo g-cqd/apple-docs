@@ -5,8 +5,7 @@
 // it to NULL), and (4) a non-nil etag on re-persist updates it. This is the storage half of the request-
 // skipping re-crawl — the driver (ADBuilderPipeline) reads `pageValidator` back to drive a conditional check.
 
-import ADDB
-import ADSQLModel
+import ADStorage
 import Foundation
 import Testing
 
@@ -14,12 +13,11 @@ import Testing
 
 @Suite("CrawlPersist incremental validators (etag / last_modified)")
 struct CrawlPersistValidatorsTests {
-    /// Open a fresh migrated ADDB in a throwaway dir and upsert a root; returns the db + its rootId.
+    /// Open a fresh migrated SQLite corpus in a throwaway dir and upsert a root; returns the db + its rootId.
     private func freshDatabase(
         _ dir: URL, slug: String = "test", now: String
-    ) throws -> (db: Database, rootId: Int64) {
-        let db = try Database.open(
-            at: dir.appendingPathComponent("validators.adsql").path, options: DatabaseOptions())
+    ) throws -> (db: SQLiteWriteConnection, rootId: Int64) {
+        let db = try SQLiteWriteConnection(path: dir.appendingPathComponent("validators.db").path)
         try migrateSchema(db)
         let rootId = try CrawlPersist.upsertRoot(
             db, slug: slug, displayName: "Test", kind: "collection", source: slug, now: now)

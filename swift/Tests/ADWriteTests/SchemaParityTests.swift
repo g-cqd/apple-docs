@@ -1,53 +1,42 @@
-// The apple-docs SCHEMA PARITY gate — the deliverable's proof.
+// The apple-docs SCHEMA PARITY gate — the storage pivot's proof.
 //
-// Builds the native ADDB catalog (ADWrite/migrateSchema → `txn.schema()`) and the
-// JS-migrated SQLite reference (DocsDatabase → sqlite_master / PRAGMA table_info),
-// projects BOTH into the engine-agnostic `CatalogModel`, and asserts they MATCH:
-// same tables (each with the same columns: name + type + notnull + default +
-// rowid-alias PK), same indexes (incl. the implied unique auto-indexes), same
-// triggers, same FTS virtual tables. On any mismatch the test prints a precise
-// diff and fails; it passes only on a full logical match.
-//
-// Strict-typing / representational normalizations relied on (each documented at
-// its normalization point and re-stated in the diff report):
-//   • ADDB stores a SQLite TEXT/INTEGER/REAL/BLOB affinity as its strict
-//     ColumnType — compared as the logical type name (identical token set).
-//   • Composite / non-integer PRIMARY KEYs are nil rowid-aliases on BOTH sides
-//     (each falls back to a hidden rowid + a `sqlite_autoindex_*` unique index,
-//     which the index set compares identically).
-//   • The partial predicate on idx_sf_symbols_codepoint and the per-index COLLATE
-//     on idx_documents_title_nocase are dropped by ADDB; the indexes still match
-//     on name/table/columns/uniqueness (predicate + per-index collation are not
-//     part of the logical comparison — noted in the report).
-//   • ADDB's `schema_version` migrator-cursor table is excluded (its apple-docs
-//     analog, `schema_meta`, exists on both sides).
+// Runs the NATIVE migration ladder (`ADWrite.migrateSchema` — the verbatim JS
+// migrations v1…v27 on REAL SQLite) against a fresh file, introspects the result
+// through the SAME `sqlite_master` / `PRAGMA table_info` projection the bun
+// fixture-capture script uses, and asserts the catalog EQUALS the committed
+// JS-migrated reference (`Fixtures/js-sqlite-catalog.json`) EXACTLY: same tables
+// (each with the same columns: name + type + notnull + default + rowid-alias PK),
+// same indexes (incl. the implied unique auto-indexes and their numbering, and
+// the partial `idx_sf_symbols_codepoint`), same triggers, same FTS virtual
+// tables. Both engines are SQLite now, so there are NO representational deltas —
+// any mismatch is a real ladder divergence and fails with a precise diff.
 
-import ADDBMigrate
+import ADStorage
 import Foundation
 import Testing
 
 @testable import ADWrite
 
-@Suite("apple-docs schema parity (native ADDB vs the committed JS SQLite reference)")
+@Suite("apple-docs schema parity (native SQLite ladder vs the committed JS SQLite reference)")
 struct SchemaParityTests {
     /// The JS-migrated SQLite catalog, captured ONCE from the Bun `bun:sqlite` migrations (see
     /// `captureReferenceFixture`) and frozen here as the parity reference — so the gate runs with no `bun`
-    /// or `src/` dependency (the JS is the original reference; it is now committed, per the RFC 0001 §10
-    /// reference-flip). Read from the source tree via `#filePath` (like ADEmbedTests' fixtures).
+    /// or `src/` dependency. Read from the source tree via `#filePath` (like ADEmbedTests' fixtures).
     static let fixtureURL = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().appendingPathComponent("Fixtures/js-sqlite-catalog.json")
 
-    @Test("native ADDB catalog matches the committed JS SQLite reference")
+    @Test("native SQLite catalog matches the committed JS SQLite reference exactly")
     func nativeCatalogMatchesReference() throws {
-        // ── Native ADDB catalog ──────────────────────────────────────────────
+        // ── Native catalog: fresh file + the production migration ladder ──────
         let tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("addb-parity-native-\(UUID().uuidString)")
+            .appendingPathComponent("sqlite-parity-native-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmpDir) }
 
-        let (native, outcome) = try ADDBCatalogExtractor.build(inDirectory: tmpDir.path)
-        // The migrator must have driven the cursor to the apple-docs latest version.
+        let (native, outcome) = try NativeCatalogExtractor.build(inDirectory: tmpDir.path)
+        // The ladder must land on the JS terminal version (SCHEMA_VERSION = 27).
         #expect(outcome.finalVersion == AppleDocsSchema.latestVersion)
+        #expect(outcome.startingVersion == 0)
 
         // ── Committed JS SQLite reference (no bun) ────────────────────────────
         let reference = try JSONDecoder()
@@ -58,6 +47,31 @@ struct SchemaParityTests {
         let report = SchemaDiff.compare(native: native, reference: reference)
         print(report.render())
         #expect(report.isMatch, "schema parity mismatch — see the printed diff above")
+    }
+
+    @Test("re-running the ladder on an up-to-date catalog is a no-op")
+    func migrateIsIdempotent() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sqlite-parity-idem-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let connection = try SQLiteWriteConnection(path: tmpDir.path + "/idem.db")
+        defer { connection.close() }
+        let first = try migrateSchema(connection)
+        #expect(first.appliedCount == AppleDocsSchema.latestVersion)
+
+        let second = try migrateSchema(connection)
+        #expect(second.appliedCount == 0)
+        #expect(second.startingVersion == AppleDocsSchema.latestVersion)
+        #expect(second.finalVersion == AppleDocsSchema.latestVersion)
+
+        // The apple-docs schema_meta row carries the terminal version (the JS
+        // runner's INSERT OR REPLACE).
+        let stored = try connection.get(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'")?
+            .text("value")
+        #expect(stored == String(AppleDocsSchema.latestVersion))
     }
 
     /// Regenerates `Fixtures/js-sqlite-catalog.json` from the live Bun `bun:sqlite` migrations. Disabled by
@@ -81,12 +95,6 @@ struct SchemaParityTests {
 
 /// A structural diff of two ``CatalogModel``s, rendered as a human-readable report.
 enum SchemaDiff {
-    /// apple-docs NATIVE columns absent from the JS reference catalog (the v28 search-denorm columns).
-    /// Dropped from the native side before the per-table column compare — see the note at the call site.
-    static let nativeOnlyColumns: [String: Set<String>] = [
-        "documents": ["title_lc", "key_lc", "year_num", "track_lc", "root_display", "root_slug"]
-    ]
-
     struct Report {
         var tableOnlyInNative: [String] = []
         var tableOnlyInReference: [String] = []
@@ -117,7 +125,7 @@ enum SchemaDiff {
         func render() -> String {
             var lines: [String] = []
             lines.append("══════════════════════════════════════════════════════════════════════")
-            lines.append("apple-docs SCHEMA PARITY — native ADDB (ADSQLv0) vs JS SQLite reference")
+            lines.append("apple-docs SCHEMA PARITY — native SQLite ladder vs JS SQLite reference")
             lines.append("══════════════════════════════════════════════════════════════════════")
             lines.append(
                 "native    : \(nativeCounts.tables) tables, \(nativeCounts.indexes) indexes, "
@@ -150,24 +158,12 @@ enum SchemaDiff {
             if isMatch {
                 lines.append("RESULT: ✅ FULL MATCH")
                 lines.append("")
-                lines.append("Representational normalizations relied on (logical parity, by design):")
-                lines.append("  • SQLite affinity ↔ ADDB strict ColumnType (compared by logical type name).")
-                lines.append("  • Composite/TEXT PKs → hidden rowid + sqlite_autoindex_* unique index on")
-                lines.append("    BOTH engines (rowid-alias PK is nil for both; the autoindex set matches).")
-                lines.append("  • PK-implies-NOT-NULL: SQLite reports notnull=0 for a TEXT/composite PK")
-                lines.append("    column (it doesn't enforce it); ADDB marks it NOT NULL. The reference")
-                lines.append("    is normalized to NOT NULL for non-rowid-alias PK columns to match.")
-                lines.append("  • Implied autoindexes compared as a per-table SET of (columns,unique):")
-                lines.append("    SQLite vs ADDB can assign the _1/_2 suffix in a different order when a")
-                lines.append("    table has both a composite PK and a UNIQUE (framework_synonyms); the")
-                lines.append("    unique column-sets are identical, only the numeric label order differs.")
-                lines.append("  • idx_sf_symbols_codepoint: partial predicate (WHERE codepoint IS NOT NULL)")
-                lines.append("    dropped by ADDB — index matches on name/table/columns/uniqueness.")
-                lines.append("  • idx_documents_title_nocase: per-index COLLATE NOCASE dropped by ADDB —")
-                lines.append("    index matches on name/table/columns/uniqueness.")
-                lines.append("  • CHECK constraints dropped by ADDB; SQLite never surfaces them in")
-                lines.append("    table_info, so column parity is unaffected.")
-                lines.append("  • ADDB schema_version (migrator cursor) excluded; schema_meta exists on both.")
+                lines.append("Both sides are real SQLite projected through ONE introspection (the")
+                lines.append("fixture-capture manifest grammar + SQLiteReferenceExtractor.parse), so")
+                lines.append("the comparison carries no cross-engine normalization: every table,")
+                lines.append("column (name/type/notnull/default/rowid-alias), index (explicit AND")
+                lines.append("implied autoindex, with numbering; partial predicate preserved by the")
+                lines.append("index_list projection), trigger, and FTS5 config matches the JS catalog.")
             } else {
                 lines.append("RESULT: ❌ MISMATCH")
             }
@@ -196,14 +192,9 @@ enum SchemaDiff {
         for name in nativeTableNames.intersection(refTableNames).sorted() {
             let nativeTable = native.tables[name]!
             let refTable = reference.tables[name]!
-            // apple-docs NATIVE columns with no JS-catalog equivalent (the v28 search-denorm columns on
-            // `documents`) are dropped from the native side before the column compare — the JS reference
-            // schema stops at v27 and never declares them. This is the documented native-only divergence
-            // (mirrors the `schema_version` table exclusion); every other column must still match exactly.
-            let nativeCompared = nativeTable.droppingColumns(Self.nativeOnlyColumns[name] ?? [])
-            if nativeCompared.columns != refTable.columns {
+            if nativeTable.columns != refTable.columns {
                 report.columnDiffs.append(
-                    columnDiffDescription(table: name, native: nativeCompared, reference: refTable))
+                    columnDiffDescription(table: name, native: nativeTable, reference: refTable))
             }
             if nativeTable.rowidAlias != refTable.rowidAlias {
                 report.rowidAliasDiffs.append(
@@ -212,58 +203,21 @@ enum SchemaDiff {
             }
         }
 
-        // Indexes. Split EXPLICIT (`CREATE INDEX idx_*`) from IMPLIED
-        // (`sqlite_autoindex_*`, synthesized by UNIQUE constraints / composite PKs).
-        //   • Explicit indexes are compared by NAME (their names are author-chosen
-        //     and identical on both engines).
-        //   • Implied autoindexes are compared per-table as a SET of (columns,
-        //     unique): SQLite and ADDB can assign the numeric suffix (_1/_2) in a
-        //     DIFFERENT ORDER when a table has BOTH a composite PK and a separate
-        //     UNIQUE (SQLite ordered the inline-column UNIQUE before the table-level
-        //     PK for framework_synonyms; ADDB lists the PK first). The LOGICAL
-        //     content — which column sets are unique — is identical; only the _N
-        //     label differs. A set comparison captures that faithfully while still
-        //     failing on a genuinely missing/extra/altered unique constraint.
-        func isImplied(_ name: String) -> Bool { name.hasPrefix("sqlite_autoindex_") }
-
-        let nativeExplicit = native.indexes.filter { !isImplied($0.key) }
-        let refExplicit = reference.indexes.filter { !isImplied($0.key) }
-        let nativeExplicitNames = Set(nativeExplicit.keys)
-        let refExplicitNames = Set(refExplicit.keys)
-        report.indexOnlyInNative = nativeExplicitNames.subtracting(refExplicitNames).sorted()
-        report.indexOnlyInReference = refExplicitNames.subtracting(nativeExplicitNames).sorted()
-        for name in nativeExplicitNames.intersection(refExplicitNames).sorted() {
-            let a = nativeExplicit[name]!
-            let b = refExplicit[name]!
+        // Indexes — compared by NAME across the board: both sides are SQLite
+        // replaying the SAME ladder, so even the `sqlite_autoindex_<t>_<n>`
+        // numbering must line up (and does; a divergence means the CREATE order
+        // drifted from the JS migrations).
+        let nativeIndexNames = Set(native.indexes.keys)
+        let refIndexNames = Set(reference.indexes.keys)
+        report.indexOnlyInNative = nativeIndexNames.subtracting(refIndexNames).sorted()
+        report.indexOnlyInReference = refIndexNames.subtracting(nativeIndexNames).sorted()
+        for name in nativeIndexNames.intersection(refIndexNames).sorted() {
+            let a = native.indexes[name]!
+            let b = reference.indexes[name]!
             if a != b {
                 report.indexDiffs.append(
                     "\(name): native(table=\(a.table) unique=\(a.unique) cols=\(a.columns)) "
                         + "≠ reference(table=\(b.table) unique=\(b.unique) cols=\(b.columns))")
-            }
-        }
-
-        // Implied autoindexes → per-table content sets, "table | col,col | unique".
-        func impliedSet(_ indexes: [String: IndexModel]) -> [String: Set<String>] {
-            var byTable: [String: Set<String>] = [:]
-            for index in indexes.values where isImplied(index.name) {
-                let signature = "\(index.columns.joined(separator: ",")) | unique=\(index.unique)"
-                byTable[index.table, default: []].insert(signature)
-            }
-            return byTable
-        }
-        let nativeImplied = impliedSet(native.indexes)
-        let refImplied = impliedSet(reference.indexes)
-        let impliedTables = Set(nativeImplied.keys).union(refImplied.keys).sorted()
-        for table in impliedTables {
-            let a = nativeImplied[table] ?? []
-            let b = refImplied[table] ?? []
-            if a != b {
-                let onlyNative = a.subtracting(b).sorted()
-                let onlyRef = b.subtracting(a).sorted()
-                var detail = "\(table): implied unique-index sets differ"
-                if !onlyNative.isEmpty { detail += "\n        only native   : \(onlyNative)" }
-                if !onlyRef.isEmpty { detail += "\n        only reference: \(onlyRef)" }
-                report.indexDiffs.append(detail)
             }
         }
 
