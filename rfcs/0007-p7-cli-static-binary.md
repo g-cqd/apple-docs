@@ -147,6 +147,27 @@ green on `main`:
   assets shipped in the snapshot). Runtime must not depend on Bun. **Open.**
 - **D-0007-3 · Overlap window length**: how many releases ship both entrypoints
   before the JS is deleted. Default: one green-on-`main` release. **Open.**
+- **D-0007-4 · Storage engine: drop ADDB, return to SQLite** (operator decision,
+  2026-07-08). The P5 "ADDB promotion" is reverted: apple-docs's corpus goes back to
+  real SQLite (via `ADStorage`'s existing libsqlite3 layer — the pre-promotion
+  "shipping read path"), the ADDB dependency is removed, and ADSQL is retained only
+  where a concrete consumer remains. The ADDB *repo* continues as its own project;
+  apple-docs simply stops using it as the corpus store. Rationale, from the
+  2026-07-05 parity-audit sessions' accumulated evidence: nearly every storage bug
+  and workaround was ADDB↔SQLite impedance — no VACUUM / composite `ON CONFLICT` /
+  correlated-subquery UPDATE (each forcing app-level detours in `CrawlPersist`),
+  UPDATE/DELETE full-scans needing engine seek fast-path work, the FTS-shim
+  existence-probe false-negative (§11 finding #10), the import denorm gap (§11
+  finding #9 — the import verb itself dissolves), the single-writer lock blocking
+  concurrent reader processes, and MVCC disk growth (~2.7GB for ~15K small rows in
+  the prerender test; a 4.3GB corpus vs ~2.6GB SQLite-equivalent). Consequences:
+  §11 findings #9/#10 become obsolete rather than fixed; the maintenance verbs
+  (`storage gc/compact`, `prune`, `index rebuild`) become full-fidelity ports
+  (VACUUM/FTS5 DDL/wal_checkpoint are real again); the schema fixture
+  (`js-sqlite-catalog.json`) becomes the literal schema truth instead of a
+  reference to approximate; snapshot archives converge back to the JS release
+  format. **Decided — implementation staged: schema+write path → read-path
+  cleanup + fixture regeneration → dependency removal → corpus recrawl.**
 
 ## 8. Phases (each independently committable + gated)
 
