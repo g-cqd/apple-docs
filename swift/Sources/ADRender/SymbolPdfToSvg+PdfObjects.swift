@@ -111,7 +111,15 @@ enum PdfObjects {
             range = StreamRange(
                 absStart: absStart, endObj: endObj, headerEnd: headerEnd, streamStart: streamStartRel)
         }
-        return (Record(id: id, dict: dict, range: range), endObj + 6)  // past "endobj"
+        // Resume the walk at the END OF THE HEADER, not past "endobj". The JS oracle's
+        // `matchAll(/(\d+)\s+(\d+)\s+obj\b/g)` advances `lastIndex` only past the matched
+        // header, INDEPENDENT of where this object's `endobj` lands — which makes it immune
+        // to CGPDFContext (macOS 27) omitting the content-stream object's terminator: this
+        // object's `indexOf("endobj")` then finds the NEXT object's terminator, and a
+        // `endObj + 6` resume would skip that neighbor entirely (observed: the `/Type /Page`
+        // object, killing every SVG conversion). Resuming at `headerEnd` re-scans body/stream
+        // bytes for headers exactly as the JS does — byte-exact enumeration parity.
+        return (Record(id: id, dict: dict, range: range), headerEnd)
     }
 
     /// Pass-2 stream slicing for one record: resolve the declared `/Length`

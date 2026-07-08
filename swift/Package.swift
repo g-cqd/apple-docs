@@ -660,6 +660,15 @@ let package = Package(
             name: "ADOpsTests",
             dependencies: ["ADOps"],
             resources: [.copy("Fixtures")],
+            swiftSettings: testSettings),
+        // ADRenderTests — the SF-Symbol PDF→SVG converter's regression gate. The
+        // committed fixture is a minimal CGPDFContext PDF (captured on macOS 27,
+        // which omits the content-stream object's `endobj`) pinning the object
+        // walk to the JS oracle's matchAll resume semantics.
+        .testTarget(
+            name: "ADRenderTests",
+            dependencies: ["ADRender"],
+            resources: [.copy("Fixtures")],
             swiftSettings: testSettings)
     ]
 )
@@ -703,7 +712,8 @@ let isolationClosures: [String: Set<String>] = [
     "ADArchiveTests": ["ADArchive", "ADArchiveTests"],
     // ADOps depends only on Foundation, so its closure is just the two targets —
     // isolates the ops parity gate from the churning ADServe/ADDB graph.
-    "ADOpsTests": ["ADOps", "ADOpsTests"]
+    "ADOpsTests": ["ADOps", "ADOpsTests"],
+    "ADRenderTests": ["ADRender", "ADBase", "ADRenderTests"]
 ]
 let isolateTarget: String? =
     Context.environment["AD_ISOLATE"]
