@@ -159,9 +159,12 @@ func formatSearchResults(_ outcome: SearchOutcome) -> String {
         return "No results for \"\(outcome.query)\""
     }
     var lines: [String] = []
-    // The native cascade never produces a top-level `relaxed` flag (the search
-    // verb has no relaxed-tier surface), so the "best-effort matches" preamble
-    // never fires — matching the oracle for these queries.
+    // JS: `if (result.relaxed)` — the whole result set came from a relaxation
+    // tier (the strict + deep tiers produced nothing), so flag it up front.
+    if outcome.relaxed {
+        lines.append(dim("Showing best-effort matches (query relaxed)."))
+        lines.append("")
+    }
     for r in outcome.hits {
         let quality = r.matchQuality
         let tag = qualityBadge(quality, r.distance)

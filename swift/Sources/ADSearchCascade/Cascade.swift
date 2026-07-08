@@ -126,7 +126,9 @@ public enum Cascade {
         -> SearchOutcome
     {
         guard let prepared = prepare(params) else {
-            return SearchOutcome(hits: [], total: 0, hasMore: false, query: "", envelope: emptyEnvelope)
+            return SearchOutcome(
+                hits: [], total: 0, hasMore: false, query: "", relaxationTier: nil,
+                envelope: emptyEnvelope)
         }
         // Framework-synonym expansion: run each strict tier once per framework
         // (canonical + synonyms) and concatenate, widening the framework filter set.
@@ -156,7 +158,7 @@ public enum Cascade {
 
     /// Runs `tier` once per framework (overriding `$framework`) and concatenates
     /// in framework order (the JS `frameworks.map(...).flat()`).
-    private static func fanout(
+    static func fanout(
         _ frameworks: [String?], _ params: SearchPagesParams,
         _ tier: (SearchPagesParams) -> [SearchRow]?
     ) -> [SearchRow] {
@@ -219,6 +221,10 @@ public enum Cascade {
         }
         addRows(trigram) { _ in "substring" }
 
+        // The tier that produced the (otherwise-empty) result set — JS search.js's
+        // `relaxationTier` from `runRelaxationCascade`, nil when strict/deep matched.
+        var relaxationTier: String?
+
         // Deep tiers need the connection (skipped in the pure conn == nil path).
         if let conn {
             // Tier 3: fuzzy Levenshtein — only when T1+T2 produced < 5 hits and the
@@ -249,7 +255,7 @@ public enum Cascade {
             // Relaxation cascade R1-R3 — only when the strict + deep tiers produced
             // NOTHING, the trimmed query is >= 4 UTF-16 units with no `"`, and it
             // tokenizes to >= 3 tokens.
-            appendRelaxationTiers(&results, &seen, p, conn)
+            relaxationTier = appendRelaxationTiers(&results, &seen, p, conn)
         }
 
         let intent = IntentDetector.detect(q)
@@ -287,55 +293,12 @@ public enum Cascade {
         if let conn { enrich(conn, &sliced, query: q) }
         let envelope = projectEnvelope(query: q, total: total, hasMore: hasMore, hits: sliced)
         return SearchOutcome(
-            hits: sliced.map(\.publicHit), total: total, hasMore: hasMore, query: q, envelope: envelope)
+            hits: sliced.map(\.publicHit), total: total, hasMore: hasMore, query: q,
+            relaxationTier: relaxationTier, envelope: envelope)
     }
 
-    /// Relaxation cascade R1–R3 — reached only when the strict + deep tiers produced NOTHING and the
-    /// trimmed query is >= 4 UTF-16 units (no `"`) tokenizing to >= 3 tokens: R1 pruned-AND, R2
-    /// pruned-OR, R3 trigram on a single high-signal token. Mirrors src/commands/search.js.
-    static func appendRelaxationTiers(
-        _ results: inout [ResultHit], _ seen: inout Set<String>, _ p: PreparedSearch,
-        _ conn: StorageConnection
-    ) {
-        let q = p.q
-        let filters = p.activeFilters
-        func addRows(_ rows: [SearchRow], quality: (SearchRow) -> String) {
-            for row in rows {
-                if !Filters.matches(row, filters) { continue }
-                if seen.insert(row.path).inserted {
-                    var hit = ResultHit(row, matchQuality: quality(row))
-                    hit.origIndex = results.count
-                    results.append(hit)
-                }
-            }
-        }
-        guard results.isEmpty, q.utf16.count >= 4, !q.contains("\"") else { return }
-        let tokens = Relaxation.tokenize(q)
-        guard tokens.count >= 3 else { return }
-        let pruned = Relaxation.pruneStopwords(tokens)
-        // R1 — pruned AND
-        if pruned.count >= 1 {
-            var params = p.ftsParams
-            params.query = FtsQuery.build(pruned.joined(separator: " "))
-            addRows(fanout(filters.frameworks, params) { conn.ftsRows($0) }) { _ in "relaxed" }
-        }
-        // R2 — pruned OR (lowercased, quote-stripped, OR-joined)
-        if results.isEmpty, pruned.count >= 2 {
-            var params = p.ftsParams
-            params.query =
-                pruned.map { "\"\(stripQuotes(JsString.lowercase($0)))\"" }.joined(separator: " OR ")
-            addRows(fanout(filters.frameworks, params) { conn.ftsRows($0) }) { _ in "relaxed-or" }
-        }
-        // R3 — trigram on a single high-signal token
-        if results.isEmpty {
-            let pool = pruned.isEmpty ? tokens : pruned
-            if let signal = Relaxation.pickHighSignalToken(pool), signal.utf16.count >= 3 {
-                var params = p.trigramParams
-                params.query = FtsQuery.trigram(signal)
-                addRows(fanout(filters.frameworks, params) { conn.trigramRows($0) }) { _ in "relaxed-token" }
-            }
-        }
-    }
+    // appendRelaxationTiers (R1–R3) lives in Cascade+Relaxation.swift — split out to
+    // keep this enum's body within the type-length gate.
 
     /// Snippet + relatedCount enrichment of the final page. Best-effort: a
     /// missing document_relationships table → getRelatedDocCounts returns nil →
@@ -435,7 +398,7 @@ public enum Cascade {
     }
 
     /// Removes every `"` (JS `.replace(/"/g, '')`) — for the R2 OR query terms.
-    private static func stripQuotes(_ s: String) -> String {
+    static func stripQuotes(_ s: String) -> String {
         String(s.unicodeScalars.filter { $0 != "\"" })
     }
 
