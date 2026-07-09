@@ -92,12 +92,27 @@ func crawlContext(rate: Double, concurrency: Int) -> SourceContext {
         rateLimiter: RateLimiter(rate: rate, burst: Swift.max(rate, 1)))
 }
 
-/// `ad-cli index --db <DB> [--full]` — build/resume the embedding index over
-/// everything persisted (IndexEmbeddings.run; the post-crawl pass that makes
-/// crawled pages searchable).
+/// `ad-cli index …` — the search-index verb group, mirroring the JS `apple-docs
+/// index <subcommand>` shape: `embeddings` (the semantic tier — also the
+/// DEFAULT, so the historical `ad-cli index --db <DB> [--full]` invocation
+/// keeps working) and `rebuild [body|trigram]` (the lexical FTS5 rebuilds).
+/// A pure group: a parent command must NOT declare its own options next to
+/// subcommands — ArgumentParser matches parent-declared names (`--db`) across
+/// the whole line, silently stealing them from the subcommand.
 struct IndexCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "index",
+        abstract: "Build or rebuild search indexes over a crawled SQLite corpus.",
+        subcommands: [IndexEmbeddingsCommand.self, IndexRebuildCommand.self],
+        defaultSubcommand: IndexEmbeddingsCommand.self)
+}
+
+/// `ad-cli index [embeddings] --db <DB> [--full]` — build/resume the embedding
+/// index over everything persisted (IndexEmbeddings.run; the post-crawl pass
+/// that makes crawled pages searchable).
+struct IndexEmbeddingsCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "embeddings",
         abstract: "Build or resume the embedding index over a crawled SQLite corpus.")
 
     @Option(name: .long, help: "Path to the writable SQLite corpus.")
