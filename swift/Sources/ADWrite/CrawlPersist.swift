@@ -171,6 +171,40 @@ public enum CrawlPersist {
         try db.run("CREATE INDEX IF NOT EXISTS idx_crawl_state_status ON crawl_state(status)")
     }
 
+    /// Reset every `processed` frontier row under `rootSlugs` back to `pending` — the forced full
+    /// re-fetch (`crawl --full`). The BFS then re-walks the whole tree, re-fetching every page: the
+    /// raw-json backfill path (a page's raw payload is only written at fetch time), and the migration
+    /// path for `raw_payload_hash` convention changes. `failed` rows are reset too (a retry is exactly
+    /// what a full pass wants); persist stays idempotent, so unchanged pages upsert in place. Returns
+    /// the number of rows reset.
+    @discardableResult
+    public static func resetCrawlFrontier(
+        _ db: SQLiteWriteConnection, rootSlugs: some Collection<String>
+    ) throws(SQLiteWriteError) -> Int {
+        guard !rootSlugs.isEmpty else { return 0 }
+        var placeholders: [String] = []
+        var params: [String: SQLiteValue] = [:]
+        for (index, slug) in rootSlugs.enumerated() {
+            placeholders.append("$s\(index)")
+            params["s\(index)"] = .text(slug)
+        }
+        let sql =
+            "UPDATE crawl_state SET status = 'pending', error = NULL WHERE status != 'pending' "
+            + "AND root_slug IN (" + placeholders.joined(separator: ", ") + ")"
+        let before =
+            try db.get(
+                "SELECT COUNT(*) AS c FROM crawl_state WHERE status = 'pending' AND root_slug IN ("
+                    + placeholders.joined(separator: ", ") + ")", params)?
+            .int("c") ?? 0
+        try db.run(sql, params)
+        let after =
+            try db.get(
+                "SELECT COUNT(*) AS c FROM crawl_state WHERE status = 'pending' AND root_slug IN ("
+                    + placeholders.joined(separator: ", ") + ")", params)?
+            .int("c") ?? 0
+        return Int(after - before)
+    }
+
     /// Seed a path as `pending` only if not already tracked (JS `seedCrawlIfNew`: an existence probe,
     /// then `setCrawlState(path, 'pending', …)`), so re-discovering a path never resets a
     /// `processed`/`failed` row. Returns `true` when a new row was inserted.

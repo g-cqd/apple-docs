@@ -70,6 +70,7 @@ public struct CrawlDriver: Sendable {
     public func crawl(
         sourceType: String, into db: SQLiteWriteConnection, rootId: Int64, rootIds: [String: Int64] = [:],
         context: SourceContext, now: String, maxConcurrency: Int = 8, dataDir: String? = nil,
+        force: Bool = false,
         onProgress: (@Sendable (Stats) -> Void)? = nil
     ) async throws -> Stats {
         let adapter = try registry.adapter(for: sourceType)
@@ -81,7 +82,7 @@ public struct CrawlDriver: Sendable {
             let stats = try await crawlBFS(
                 adapter, discovery: discovery, rootId: rootId, rootIds: rootIds,
                 run: BFSRun(db: db, context: context, now: now, maxConcurrency: maxConcurrency, dataDir: dataDir),
-                onProgress: onProgress)
+                force: force, onProgress: onProgress)
             try Self.refreshRootPageCounts(db, rootId: rootId, rootIds: rootIds)
             return stats
         }
@@ -96,7 +97,7 @@ public struct CrawlDriver: Sendable {
         var keysToFetch: [String] = []
         keysToFetch.reserveCapacity(discovery.keys.count)
         for key in discovery.keys {
-            if let etag = pagePreviousEtag(db, key: key),
+            if !force, let etag = pagePreviousEtag(db, key: key),
                 let result = try? await adapter.check(key, previousState: etag, context),
                 result.status == .unchanged
             {
@@ -171,7 +172,8 @@ public struct CrawlDriver: Sendable {
     /// queue (its one `pool(batch, concurrency)` across all roots).
     private func crawlBFS(
         _ adapter: any SourceAdapter, discovery: DiscoveryResult, rootId: Int64,
-        rootIds: [String: Int64], run: BFSRun, onProgress: (@Sendable (Stats) -> Void)? = nil
+        rootIds: [String: Int64], run: BFSRun, force: Bool = false,
+        onProgress: (@Sendable (Stats) -> Void)? = nil
     ) async throws -> Stats {
         // Index `crawl_state.status` once so pulling the pending frontier stays an index seek as the
         // processed pile grows (else `getPendingCrawlAny` degrades to an O(N) scan per pull).
@@ -193,6 +195,11 @@ public struct CrawlDriver: Sendable {
         // (nothing pending exists under it yet); the only thing that must never happen is UNDER-including
         // one of this call's own roots, which would silently starve part of its own frontier.
         let ownedRootSlugs = Set(rootIds.keys).union(discovery.keys.map { Self.slug(ofKey: $0) })
+        // The forced full pass (`crawl --full`): flip every processed/failed row this call owns back to
+        // pending so the frontier re-walks — and re-FETCHES — the whole tree (the raw-json backfill).
+        if force {
+            try CrawlPersist.resetCrawlFrontier(run.db, rootSlugs: ownedRootSlugs)
+        }
         var stats = Stats()
         try await crawlFrontier(
             adapter, rootId: rootId, rootIds: rootIds, ownedRootSlugs: ownedRootSlugs, run: run,

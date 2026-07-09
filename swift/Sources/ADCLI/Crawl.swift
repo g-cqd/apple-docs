@@ -52,6 +52,13 @@ struct CrawlCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 8).")
     var concurrency: Int = 8
 
+    @Flag(
+        name: .long,
+        help: ArgumentHelp(
+            "Force a full re-fetch: reset the source's processed frontier (and skip stored HTTP "
+                + "validators) so every page is fetched again — re-materializing raw-json for all of them."))
+    var full = false
+
     @Flag(name: .long, help: "Emit the crawl stats as JSON instead of the human summary.")
     var json = false
 
@@ -114,7 +121,7 @@ struct CrawlCommand: AsyncParsableCommand {
                 .crawl(
                     sourceType: source, into: database, rootId: rootId, rootIds: rootIds,
                     context: context, now: now, maxConcurrency: concurrency,
-                    dataDir: (db as NSString).deletingLastPathComponent)
+                    dataDir: (db as NSString).deletingLastPathComponent, force: full)
         } catch let code as ExitCode {
             throw code
         } catch {
