@@ -10,14 +10,15 @@ import ADStorage
 import ArgumentParser
 import Foundation
 
-/// The `resources` command group — bundled Apple resource syncs (fonts, SF Symbols catalog + bake).
+/// The `resources` command group — bundled Apple resource syncs (fonts, SF Symbols catalog + bake,
+/// the Xcode-docs enrichment).
 struct ResourcesCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "resources",
-        abstract: "Sync bundled Apple resources (fonts, SF Symbols) into the corpus.",
+        abstract: "Sync bundled Apple resources (fonts, SF Symbols, Xcode docs) into the corpus.",
         subcommands: [
             ResourcesSyncFontsCommand.self, ResourcesSyncSymbolsCommand.self,
-            ResourcesPrerenderSymbolsCommand.self
+            ResourcesPrerenderSymbolsCommand.self, ResourcesEnrichCommand.self
         ])
 }
 
@@ -45,8 +46,8 @@ struct ResourcesSyncFontsCommand: AsyncParsableCommand {
             ?? "\(NSHomeDirectory())/.apple-docs"
         let dbPath = db ?? "\(dataDir)/apple-docs.db"
         // writable: the resource sync IS a write pass; the default read connection is
-            // PRAGMA query_only post-pivot (D-0007-4), under which every upsert silently fails.
-            guard let connection = StorageConnection(path: dbPath, writable: true) else {
+        // PRAGMA query_only post-pivot (D-0007-4), under which every upsert silently fails.
+        guard let connection = StorageConnection(path: dbPath, writable: true) else {
             FileHandle.standardError.write(Data("ad-cli: cannot open corpus \(dbPath)\n".utf8))
             throw ExitCode(1)
         }
