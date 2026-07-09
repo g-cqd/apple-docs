@@ -173,9 +173,23 @@ green on `main`:
   `pagesByRoot` join reverted to the literal JS `p.path = d.key`; the parity
   harness unified on the one `js-corpus` fixture at 30/30 with zero known
   issues; the ADDB and ADSQL package dependencies removed) in the follow-up
-  commit. Remaining: corpus recrawl (both ADDB-era corpora and 2a+2b-interim
-  native SQLite corpora — whose `pages.path` still holds URLs — predate the
-  converged convention).**
+  commit. **COMPLETE (2026-07-09)** — the 2d corpus cutover ran end-to-end: a
+  fresh full crawl (342,876 pages at **849/s**, ~7× the ADDB-era rate; body
+  index 342,764 docs, 0 errors), the resource syncs (8 font families / 165
+  files; 8,478 public + 1,640 private symbols), and the **full 273,186-variant
+  SF-Symbol bake with 0 failures in 204s** (the JS run's own bake took 272s —
+  native is now faster at it), swapped into `~/.apple-docs/apple-docs.db`.
+  Ground-truth spot checks match the JS corpus exactly where the crawl had no
+  transient failures (`accelerate` 8,652, `design` 172); the previously-limboed
+  JS-side `cli-parity` suite went 16 fail → 0 fail after the swap. The cutover
+  also surfaced and fixed a stacked resource-write failure (`a067f72`): the
+  SQLite named-bind requiring the `$` sigil while `AssetsWrite` bound bare names
+  (silent no-op + `INSERT OR IGNORE` = phantom success), the `resources` verbs
+  opening `query_only` read connections, and attempt-counting sync counters.
+  Residual: 111 transient crawl failures (swift-evolution 27, wwdc 66,
+  apple-docc 18) await the unported `consolidate` retry pass; the semantic tier
+  is dormant on hosts without the embedder model resources — `sync`/`sync-all`
+  now skip the embedding pass with a warning instead of failing, matching JS.**
 
 ## 8. Phases (each independently committable + gated)
 
