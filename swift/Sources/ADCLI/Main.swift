@@ -22,8 +22,8 @@ struct ADCLICommand: AsyncParsableCommand {
             ExtractSpikeCommand.self, WebCommand.self,
             IndexCommand.self, SyncCommand.self, SyncAllCommand.self,
             SnapshotCommand.self, SetupCommand.self, VersionCommand.self,
-            StorageCommand.self, PruneCommand.self, OpsCommand.self, McpCommand.self,
-            ResourcesCommand.self
+            StorageCommand.self, PruneCommand.self, ConsolidateCommand.self, OpsCommand.self,
+            McpCommand.self, ResourcesCommand.self
         ])
 }
 

@@ -32,6 +32,16 @@ enum MaintenanceVerb {
             throw ExitCode(1)
         }
     }
+
+    /// ``run(_:)`` for the async maintenance verbs (`consolidate`).
+    static func runAsync<T>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch let error as MaintenanceError {
+            FileHandle.standardError.write(Data("Error: \(error.message)\n".utf8))
+            throw ExitCode(1)
+        }
+    }
 }
 
 /// `ad-cli storage gc [--drop markdown,html] [--older-than N] [--no-vacuum]`
