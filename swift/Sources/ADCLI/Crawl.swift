@@ -49,6 +49,9 @@ struct CrawlCommand: AsyncParsableCommand {
         name: .long, help: "Path to the writable SQLite corpus (created + migrated to the latest schema if missing).")
     var db: String
 
+    @Option(name: .long, help: "Client-side rate-limiter budget in requests/sec (default 2000).")
+    var rate: Double = 2000
+
     @Option(name: .long, help: "Max concurrent fetch+normalize tasks in flight (default 8).")
     var concurrency: Int = 8
 
@@ -104,7 +107,7 @@ struct CrawlCommand: AsyncParsableCommand {
         }
 
         let now = Self.iso8601.string(from: Date())
-        let context = SourceContext(client: URLSessionHTTPClient(), rateLimiter: RateLimiter())
+        let context = crawlContext(rate: rate, concurrency: concurrency)
 
         let stats: CrawlDriver.Stats
         do {
