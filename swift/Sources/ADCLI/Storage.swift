@@ -1,8 +1,10 @@
-// `ad-cli storage …` — the read-only F1 storage verbs mirroring cli.js
-// `storage stats` / `storage check-orphans` (src/cli/maintenance.js
-// dispatchStorage → src/commands/storage.js). The write subcommands (gc,
-// compact, materialize, profile) stay on the Bun path for now — the flip's
-// VERB_SPECS only delegates what ad-cli faithfully honours.
+// `ad-cli storage …` — the storage verbs mirroring cli.js `storage stats` /
+// `check-orphans` / `profile` / `gc` / `materialize` / `compact`
+// (src/cli/maintenance.js dispatchStorage → src/commands/storage.js +
+// storage-compact.js). The write verbs (gc/materialize/compact, in
+// StorageWriteVerbs.swift) ride the SQLite write path (SQLiteWriteConnection),
+// full-fidelity since the storage pivot made VACUUM / FTS5 DDL /
+// wal_checkpoint real again (RFC 0007 D-0007-4).
 
 import ADJSONCore
 import ADStorage
@@ -12,8 +14,11 @@ import Foundation
 /// `ad-cli storage …` — the storage maintenance verb group.
 struct StorageCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "storage", abstract: "Corpus storage maintenance (stats, orphan checks, profile).",
-        subcommands: [StorageStatsCommand.self, StorageCheckOrphansCommand.self, StorageProfileCommand.self])
+        commandName: "storage", abstract: "Corpus storage maintenance (stats, gc, compact, materialize, profile).",
+        subcommands: [
+            StorageStatsCommand.self, StorageCheckOrphansCommand.self, StorageProfileCommand.self,
+            StorageGcCommand.self, StorageMaterializeCommand.self, StorageCompactCommand.self
+        ])
 }
 
 /// `ad-cli storage stats --db <PATH> [--json]` — the storage breakdown:
