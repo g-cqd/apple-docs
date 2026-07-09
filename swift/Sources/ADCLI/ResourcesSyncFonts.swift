@@ -18,7 +18,8 @@ struct ResourcesCommand: ParsableCommand {
         abstract: "Sync bundled Apple resources (fonts, SF Symbols, Xcode docs) into the corpus.",
         subcommands: [
             ResourcesSyncFontsCommand.self, ResourcesSyncSymbolsCommand.self,
-            ResourcesPrerenderSymbolsCommand.self, ResourcesEnrichCommand.self
+            ResourcesPrerenderSymbolsCommand.self, ResourcesStampCodepointsCommand.self,
+            ResourcesEnrichCommand.self
         ])
 }
 

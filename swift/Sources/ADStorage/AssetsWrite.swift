@@ -283,6 +283,29 @@ extension StorageConnection {
         return stmt.step() == SQLite.done
     }
 
+    /// Stamp (or clear) a symbol's Unicode codepoint + the SF Symbols release it was resolved against
+    /// (the JS `assetsSymbols.updateCodepoint` → `db.updateSfSymbolCodepoint`). A plain `UPDATE` keyed
+    /// on the (scope, name) primary key: a `nil` codepoint writes SQL NULL (clears the stamp) and a
+    /// `nil` version writes NULL for `codepoint_version` — byte-for-byte the JS
+    /// `$codepoint: codepoint == null ? null : codepoint, $version: version ?? null`. Additive +
+    /// idempotent: re-running against the same font rewrites the same value, so the codepoint columns
+    /// survive a re-sync (which only touches the catalog fields, per `upsertSfSymbol`).
+    @discardableResult
+    public func updateSfSymbolCodepoint(
+        scope: String, name: String, codepoint: Int64?, version: String?
+    ) -> Bool {
+        guard
+            let stmt = conn.prepareUncached(
+                "UPDATE sf_symbols SET codepoint = $codepoint, codepoint_version = $version "
+                    + "WHERE scope = $scope AND name = $name")
+        else { return false }
+        stmt.bind("codepoint", codepoint.map(BindValue.int) ?? .null)
+        stmt.bind("version", version.map(BindValue.text) ?? .null)
+        stmt.bind("scope", .text(scope))
+        stmt.bind("name", .text(name))
+        return stmt.step() == SQLite.done
+    }
+
     private func bindSfSymbol(_ stmt: any StorageStatement, _ symbol: SfSymbolUpsert, updatedAt: String) {
         stmt.bind("name", .text(symbol.name))
         stmt.bind("scope", .text(symbol.scope))
