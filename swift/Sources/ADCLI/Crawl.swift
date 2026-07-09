@@ -113,7 +113,8 @@ struct CrawlCommand: AsyncParsableCommand {
             stats = try await CrawlDriver(registry: registry)
                 .crawl(
                     sourceType: source, into: database, rootId: rootId, rootIds: rootIds,
-                    context: context, now: now, maxConcurrency: concurrency)
+                    context: context, now: now, maxConcurrency: concurrency,
+                    dataDir: (db as NSString).deletingLastPathComponent)
         } catch let code as ExitCode {
             throw code
         } catch {
