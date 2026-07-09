@@ -58,6 +58,24 @@ func loadIndexEmbedder(dbPath: String) throws -> Embedder {
     }
 }
 
+/// `loadIndexEmbedder` for the SYNC verbs: nil-with-a-warning instead of exit-1 when the
+/// model resources are absent — the JS sync's behavior (its semantic tier goes dormant and
+/// the run succeeds). The explicit `ad-cli index` verb keeps the hard failure: there the
+/// user asked for exactly the thing that can't run.
+func loadIndexEmbedderIfAvailable(dbPath: String) -> Embedder? {
+    let dataDir = (dbPath as NSString).deletingLastPathComponent
+    let modelDir = dataDir + "/resources/models/minishlab/potion-retrieval-32M"
+    do {
+        return try loadPotionEmbedder(modelDir: modelDir)
+    } catch {
+        FileHandle.standardError.write(
+            Data(
+                "ad-cli: semantic index skipped — no embedder at \(modelDir) (\(error)); install the model resources (apple-docs setup) to enable the semantic tier\n"
+                    .utf8))
+        return nil
+    }
+}
+
 /// Build the crawl HTTP context. A bulk crawl is throughput-bound, not politeness-bound, so this
 /// mirrors the JS `sync` budget (rate 500 req/s — `config.js` `APPLE_DOCS_RATE` sync default) rather
 /// than the interactive 5 req/s; `burst` = the rate so a `--concurrency`-deep first wave isn't stalled
@@ -145,7 +163,7 @@ struct SyncCommand: AsyncParsableCommand {
             throw ExitCode(1)
         }
         let database = try openCrawlCorpus(db)
-        let embedder = try loadIndexEmbedder(dbPath: db)
+        let embedder = loadIndexEmbedderIfAvailable(dbPath: db)
         let now = jsIsoNow()
         let context = crawlContext(rate: rate, concurrency: concurrency)
 
@@ -276,9 +294,12 @@ struct SyncAllCommand: AsyncParsableCommand {
         print("Body index complete: \(bodyResult.indexed) documents indexed, \(bodyResult.errors) errors")
 
         if !skipIndex {
-            let embedder = try loadIndexEmbedder(dbPath: db)
-            let indexResult = try driver.index(database, embedder: embedder)
-            print("index: \(indexResultSummary(indexResult))")
+            if let embedder = loadIndexEmbedderIfAvailable(dbPath: db) {
+                let indexResult = try driver.index(database, embedder: embedder)
+                print("index: \(indexResultSummary(indexResult))")
+            } else {
+                print("index: skipped (no embedder)")
+            }
         }
     }
 }

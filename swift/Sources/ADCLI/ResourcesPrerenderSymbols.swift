@@ -97,7 +97,9 @@ struct ResourcesPrerenderSymbolsCommand: AsyncParsableCommand {
                 home ?? ProcessInfo.processInfo.environment["APPLE_DOCS_HOME"]
                 ?? "\(NSHomeDirectory())/.apple-docs"
             let dbPath = db ?? "\(dataDir)/apple-docs.db"
-            guard let connection = StorageConnection(path: dbPath) else {
+            // writable: the resource sync IS a write pass; the default read connection is
+            // PRAGMA query_only post-pivot (D-0007-4), under which every upsert silently fails.
+            guard let connection = StorageConnection(path: dbPath, writable: true) else {
                 writeStderr("ad-cli: cannot open corpus \(dbPath)\n")
                 throw ExitCode(1)
             }

@@ -121,14 +121,14 @@ public enum FontSync {
     ) async -> Result {
         let extractedDir = "\(dataDir)/resources/fonts/extracted"
         var result = Result()
-        result.families = families.count
         for family in families {
-            db.upsertAppleFontFamily(
+            let upserted = db.upsertAppleFontFamily(
                 AppleFontFamilyUpsert(
                     id: family.id, displayName: family.displayName, category: family.category,
                     sourceUrl: family.sourceUrl, extractedPath: "\(extractedDir)/\(family.id)",
                     status: "available"),
                 updatedAt: now)
+            if upserted { result.families += 1 }
         }
         // `--download-fonts`: fetch + extract each family's DMG before the index pass, then
         // re-upsert the family as `downloaded` with its source hash/size/path. Mirrors the JS
@@ -182,13 +182,16 @@ public enum FontSync {
         let id = String(Sha256.hexString("\(family.id):\(file.fileName)").prefix(24))
         let format = (file.fileName as NSString).pathExtension.lowercased()
         let styleName = parsed.italic ? "\(parsed.weight ?? "Regular") Italic" : parsed.weight
-        db.upsertAppleFontFile(
+        // Count SUCCESSES only (see SymbolSync's same rule): an attempt-count once
+        // masked a query_only connection as a healthy 167-file sync.
+        let upserted = db.upsertAppleFontFile(
             AppleFontFileUpsert(
                 id: id, familyId: family.id, fileName: file.fileName, filePath: file.filePath,
                 styleName: styleName, weight: parsed.weight, variant: parsed.variant, italic: parsed.italic,
                 format: format.isEmpty ? nil : format, source: source, isVariable: sfnt.isVariable,
                 axesJson: axesJSON(sfnt.axes), sha256: nil, size: size),
             updatedAt: now)
+        guard upserted else { return }
         if sfnt.isVariable { result.variable += 1 }
         if source == "remote" { result.remote += 1 }
         if source == "system" { result.system += 1 }
