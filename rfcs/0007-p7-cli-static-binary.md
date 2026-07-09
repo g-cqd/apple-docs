@@ -166,8 +166,16 @@ green on `main`:
   (VACUUM/FTS5 DDL/wal_checkpoint are real again); the schema fixture
   (`js-sqlite-catalog.json`) becomes the literal schema truth instead of a
   reference to approximate; snapshot archives converge back to the JS release
-  format. **Decided — implementation staged: schema+write path → read-path
-  cleanup + fixture regeneration → dependency removal → corpus recrawl.**
+  format. **Decided — implementation landed in two commits: stages 2a+2b
+  (schema + write path back on real SQLite) at `aeb9d6c`; stages 2c+2e+2f
+  (read path SQLite-only — `ADDBBackend` + the `ADSQLSearch` denorm tier
+  deleted; `pages.path` converged on the JS bare-crawl-key convention with the
+  `pagesByRoot` join reverted to the literal JS `p.path = d.key`; the parity
+  harness unified on the one `js-corpus` fixture at 30/30 with zero known
+  issues; the ADDB and ADSQL package dependencies removed) in the follow-up
+  commit. Remaining: corpus recrawl (both ADDB-era corpora and 2a+2b-interim
+  native SQLite corpora — whose `pages.path` still holds URLs — predate the
+  converged convention).**
 
 ## 8. Phases (each independently committable + gated)
 
@@ -363,7 +371,12 @@ Findings, categorized:
    harness's own `browse <framework> --path <p>` (children) cases, which walk a different,
    already-correct query and never depended on this fix. (This entry itself was one commit
    stale in an earlier draft of this RFC — see finding #9 for how that surfaced.)
-9. **[New, found building the Tier 1 harness below, not yet fixed]** `ad-cli import`'s
+   **[Superseded at storage-pivot stage 2c]**: the `2e657e7` join was correct only for the
+   URL-in-`pages.path` convention the ADDB-era native crawl had invented; the pivot made the
+   JS format THE corpus format, `CrawlDriver` now persists under the bare crawl key, and the
+   join is reverted to the original, literal JS `p.path = d.key` — see finding #9.
+9. **[Resolved by architecture at storage-pivot stage 2c (D-0007-4) — the convention itself
+   converged]** `ad-cli import`'s
    SQLite→ADDB manifest (`ImportVerb.swift`) auto-copies the `pages` table verbatim — `pages`
    is in none of its `skipTables`/`ftsTables`/`denorm` lists — but the JS crawler's
    `pages.path` column holds a BARE relative path (`persist.js`'s `upsertPage` passes `path`
@@ -378,20 +391,38 @@ Findings, categorized:
    self-heal `pages.path` via native's overwrite-on-upsert) returns real pages. First
    surfaced as an apparent reproduction of finding #8 before the fixed join's actual
    assumption was traced through both engines' write paths and found to hold only for one of
-   them. Out of this harness's scope to fix (an `ad-cli import` manifest question — probably
-   wants a `pages.path ← pages.url` denorm rule alongside the existing `documents` block);
-   tracked via `withKnownIssue` in `ParityCases.swift`, not fixed here.
-10. **[New, found building the Tier 1 harness below, not yet fixed]** `status --advanced`'s
-    `capabilities.searchBody` reads `false` against any `ad-cli import`-derived ADDB corpus,
-    even though body-tier search demonstrably WORKS there — the Tier 1 fixture's own
+   them. Originally out of scope (an `ad-cli import` manifest question) and tracked via
+   `withKnownIssue` in `ParityCases.swift`. **Resolution (stage 2c)**: the import verb itself
+   dissolved with D-0007-4, and the underlying two-conventions problem is gone at the root —
+   `CrawlDriver` now persists every page under its BARE crawl key (`pages.path` ==
+   `crawl_state.path` == `documents.key`, the JS persist.js convention; the full URL lives in
+   `pages.url`), and `pagesByRoot` is reverted to the original, literal JS join
+   (`p.path = d.key`) — full circle: original port had the JS join broken by the URL-in-path
+   native convention → #8 flipped the join to match that convention → the pivot made the JS
+   row format the only format, so the JS join is correct again for both engines' corpora. The
+   other JS-shaped `p.path = d.key` consumers (`frameworkTreeDocs`, `frameworkPageDocs`, the
+   link audit's known-path universe, `documentsMissingPageCount`) — silently wrong against
+   URL-keyed native corpora — became correct by the same convergence, unchanged. The two
+   `browse adsupport` known-issue cases pass outright; the harness runs 30/30 with zero
+   `withKnownIssue` wrappers (the mechanism itself is deleted from the harness).
+10. **[Resolved by architecture at storage-pivot stage 2c (D-0007-4) — the shim it probed is
+    gone]** `status --advanced`'s
+    `capabilities.searchBody` read `false` against any `ad-cli import`-derived ADDB corpus,
+    even though body-tier search demonstrably WORKED there — the Tier 1 fixture's own
     `search "alphanumeric"` case (a body-only term, absent from every title/abstract) returns
-    byte-identical hits on both engines. Root cause is the CAPABILITY PROBE itself, not
+    byte-identical hits on both engines. Root cause was the CAPABILITY PROBE itself, not
     search: `StorageConnection.hasBodyIndex()` (`CorpusStats.swift`) runs `SELECT 1 FROM
     documents_body_fts LIMIT 1` — an unqualified, no-`MATCH` scan of a contentless/
-    self-contained FTS5 table — which returns zero rows against ADDB's FTS5 shim where real
-    SQLite would return one. Narrow (one boolean, one verb) and excluded from the Tier 1
-    comparison rather than asserted false; a follow-up, not blocking.
-11. **[New, found building the Tier 1 harness below, not yet fixed]** `cli.js search`'s
+    self-contained FTS5 table — which returned zero rows against ADDB's FTS5 shim where real
+    SQLite returns one. **Resolution (stage 2c)**: the probe was always the byte-mirror of
+    the JS `repos/search.js` check and needed no change — with the ADDB backend deleted it
+    runs against genuine FTS5 only, returns `true` on a body-indexed corpus (verified against
+    the unified fixture and a fresh native `sync-all` crawl), and the harness's
+    `capabilities.searchBody` exclusion is removed: `status --advanced --json` compares the
+    field for real.
+11. **[Fixed, `e8ff710` — the cascade now surfaces the relaxation tier and the formatter prints
+    the preamble; the harness's former known-issue case is a plain must-pass regression guard]**
+    `cli.js search`'s
     `formatSearchResults` prints a `"Showing best-effort matches (query relaxed)."` preamble
     when the ENTIRE result set is relaxed-tier; `ad-cli`'s formatter never emits it, even
     though the hits themselves (badge, snippet, path, count) are byte-identical. Search.swift's
@@ -402,9 +433,10 @@ Findings, categorized:
     not a CLI-dispatch one; tracked via `withKnownIssue`, not fixed here.
 
 Everything above has landed and was verified against the real corpus, except: real SF Symbol
-content baking (finding #7, blocked on the PDF-parser bug it surfaced), that PDF-parser bug's
-own fix, and #9/#10/#11 (Tier 1 harness findings specifically — none surfaces without a
-byte-level diff against a committed fixture) — all tracked as follow-ups, none blocking.
+content baking (finding #7, blocked on the PDF-parser bug it surfaced) and that PDF-parser
+bug's own fix — tracked as follow-ups, not blocking. The three Tier 1 harness findings are
+closed: #11 fixed (`e8ff710`), #9/#10 resolved by architecture at storage-pivot stage 2c
+(D-0007-4) — the harness runs 30/30 with zero known issues.
 
 ## 12. Parity harness design
 
@@ -418,19 +450,21 @@ search-fusion, 6 spec files).
 day as the design): `swift/Tests/ParityTests/` (Swift Testing, spawning `bun cli.js` /
 `ad-cli` via `Process`) drives a fixed 30-case arg matrix across `version`/`frameworks`/
 `kinds`/`status`/`browse`/`read`/`search` against a small, deterministic, **committed**
-fixture corpus — `Fixtures/js-corpus` (a JS-crawled SQLite `apple-docs.db`, scoped via
-`scope.json` to 3 real, tiny frameworks — adsupport/apptrackingtransparency/signinwithapple,
-28 pages total, not the full ~340K-page corpus) and `Fixtures/swift-corpus` (the SAME corpus
-content, `ad-cli import`-derived into ADDB — one shared corpus, two engine-native files, so
-crawl-level nondeterminism can't leak into a CLI-dispatch gate). JSON output compared
+fixture corpus — `Fixtures/js-corpus`: a JS-crawled SQLite `apple-docs.db`, scoped via
+`scope.json` to 3 real, tiny frameworks (adsupport/apptrackingtransparency/signinwithapple,
+28 pages total, not the full ~340K-page corpus). Since the storage pivot (D-0007-4, stage
+2e) this one file is the WHOLE fixture — both engines read the same SQLite format, so the
+original second fixture (`Fixtures/swift-corpus`, the same content `ad-cli import`-derived
+into ADDB) is deleted; each engine still gets its own fresh copy per case so JS's
+render-cache/WAL write-backs never bleed into what `ad-cli` reads. JSON output compared
 intrinsic-equal (`ADJSONCore`'s `JSONValue`, whose `==` already compares object members
-unordered while keeping arrays order-sensitive; volatile fields — an absolute fixture path, a
-storage-engine-specific byte count — redacted by dotted JSON path first); human output
+unordered while keeping arrays order-sensitive; volatile fields — an absolute fixture path,
+the live-file byte count — redacted by dotted JSON path first); human output
 byte-for-byte (both engines gate ANSI styling on `isatty`, so a `Process`-piped comparison is
-plain text in practice). 27 of 30 cases match outright; 3 are real, tracked divergences run
-for real every time via `withKnownIssue` rather than silently excluded (findings #9/#10/#11
-above) — a regression widens loudly (a NEW failure inside the block still fails) and a fix is
-caught the moment it lands (Swift Testing flags "known issue not encountered"). Every tool
+plain text in practice). As first built, 27 of 30 cases matched outright and 3 tracked
+divergences ran via `withKnownIssue` (findings #9/#10/#11 above); with #11 fixed (`e8ff710`)
+and #9/#10 resolved by architecture at stage 2c, all 30 cases pass outright and the
+known-issue plumbing is deleted. Every tool
 lookup (`bun`, `ad-cli`, `node_modules`) degrades to a suite-wide skip, not a crash, when
 absent — the same discipline `SchemaParityTests`'s `bunAvailable` gate already established.
 

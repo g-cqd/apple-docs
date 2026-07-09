@@ -1,10 +1,12 @@
-// The libsqlite3 `StorageBackend`. A single read connection to a SQLite corpus
+// THE read connection (libsqlite3): a single connection to a SQLite corpus
 // DB, opened READWRITE so it participates cleanly in the WAL -shm wal-index;
 // `PRAGMA query_only = ON` then guarantees it never writes. One connection is
 // used by exactly one OS thread, so the statement cache needs no lock.
 //
-// This is the shipping read path renamed under the `StorageBackend` protocol
-// (no behavior change); `ADDBBackend` is the sibling native implementation.
+// This is the shipping read path — since the storage pivot (RFC 0007 D-0007-4,
+// stage 2c) the ONLY one: the interim ADDB sibling backend and the format
+// sniff that chose between them are deleted; `StorageConnection` holds this
+// type directly.
 
 #if canImport(Darwin)
     import Darwin
@@ -12,7 +14,7 @@
     import Glibc
 #endif
 
-final class SQLiteConnection: StorageBackend, @unchecked Sendable {
+final class SQLiteConnection: @unchecked Sendable {
     let lib: SQLiteLib
     let db: OpaquePointer
     let hasTrigram: Bool
@@ -111,10 +113,6 @@ final class SQLiteConnection: StorageBackend, @unchecked Sendable {
         guard stmt.runJSON(into: &out) else { return nil }
         return out
     }
-
-    /// No native FTS fast path — the caller runs the generic `searchPagesSQL`
-    /// statement + `SearchRow.decode` cascade.
-    func nativeFtsRows(_ params: SearchPagesParams) -> [SearchRow]? { nil }
 
     // MARK: - boot helpers
 

@@ -2,8 +2,8 @@
 // runs the adapter's conditional `check` BEFORE fetching, skipping unchanged pages. Two adapters pin the
 // two outcomes: one whose `check` always reports `.unchanged` (first crawl persists since there is no
 // prior validator yet; the re-crawl skips every key), and one that always reports `.modified` (the
-// re-crawl re-fetches + persists). Both normalize with `url == nil` so the persisted path is the
-// key-derived fallback `/<key>` — exactly what the driver looks the validator up by pre-fetch.
+// re-crawl re-fetches + persists). Pages persist under the bare crawl key (`pages.path` — the JS
+// persist.js convention) — exactly what the driver looks the validator up by pre-fetch.
 //
 // Split into one @Test per crawl outcome (shared crawl-twice helper) to stay inside the package's
 // 100 ms type-check budget — the two-phase bodies tripped the hard gate.
@@ -24,9 +24,9 @@ struct CrawlDriverIncrementalTests {
         }
     }
 
-    /// Three keys; `fetch` carries a per-key ETag (so the first crawl stores a validator); `normalize`
-    /// sets `url` to the key-derived path `/<key>` (pages.url is NOT NULL) so the page persists under the
-    /// SAME path the driver looks the validator up by pre-fetch (`CrawlDriver.crawlPath(forKey:)`). The
+    /// Three keys; `fetch` carries a per-key ETag (so the first crawl stores a validator). The page
+    /// persists under the bare crawl key — the SAME `pages.path` the driver looks the validator up by
+    /// pre-fetch (the JS persist.js convention; `url` here is just the stored `pages.url` value). The
     /// `check` outcome is the only thing that differs between the two adapters below.
     private static func keys(_ type: String) -> [String] { ["\(type)/a", "\(type)/b", "\(type)/c"] }
 

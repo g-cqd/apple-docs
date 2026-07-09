@@ -1,6 +1,6 @@
 // Corpus-key → web-path mapping. The native port of `src/lib/safe-path.js`'s
 // web-key surface (the file-storage helpers `safeFilename`/`keyPath` are not
-// ported — the Swift writer persists to ADDB, not per-key files).
+// ported — the Swift writer persists to the corpus DB, not per-key files).
 //
 // `safeWebDocKey` is the single boundary that both the live server (ad-server's
 // /docs/<key>/ link emission) and the static build use, so a corpus key that

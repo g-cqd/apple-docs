@@ -1,6 +1,6 @@
 // Gate for CrawlPipeline — the persist boundary. The pure mapping (ADBuilder.NormalizedPage →
 // ADWrite.NormalizedDoc) is checked field-for-field; the full persist is exercised against a fresh
-// migrated ADDB database (map → CrawlPersist → read the documents + document_sections rows back).
+// migrated SQLite database (map → CrawlPersist → read the documents + document_sections rows back).
 //
 // Split into one @Test per mapped collection / persisted table (file-scope typed fixtures, shared
 // persist helper) to stay inside the package's 100 ms type-check budget — the two-body form tripped

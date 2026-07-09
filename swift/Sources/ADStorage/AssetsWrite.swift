@@ -204,10 +204,12 @@ extension StorageConnection {
         return stmt.step() == SQLite.done
     }
 
-    /// Upsert an sf_symbols catalog row (the JS `upsertSfSymbol`). ADDB rejects a COMPOSITE ON CONFLICT
-    /// target, so this runs `INSERT OR IGNORE` (a fresh row leaves codepoint / render columns at their
-    /// DEFAULT) then `UPDATE`s the CoreGlyphs catalog fields — so the codepoint-stamp + mark-unrenderable
-    /// columns survive a re-sync. Keyed on the (scope, name) primary key.
+    /// Upsert an sf_symbols catalog row (the JS `upsertSfSymbol`). Runs `INSERT OR IGNORE` (a fresh
+    /// row leaves codepoint / render columns at their DEFAULT) then `UPDATE`s the CoreGlyphs catalog
+    /// fields — so the codepoint-stamp + mark-unrenderable columns survive a re-sync. Keyed on the
+    /// (scope, name) primary key. (The two-statement shape dates from the ADDB era — that engine
+    /// rejected a COMPOSITE `ON CONFLICT` target — and is kept as-is: row outcomes are identical to
+    /// the JS composite upsert.)
     @discardableResult
     public func upsertSfSymbol(_ symbol: SfSymbolUpsert, updatedAt: String) -> Bool {
         let insert = """
@@ -235,10 +237,9 @@ extension StorageConnection {
 
     /// Upsert an `sf_symbol_renders` cache row (the JS `upsertRender`). Unlike `sf_symbols`,
     /// `cache_key` is a SINGLE-column PRIMARY KEY, so a plain `INSERT OR REPLACE` is correct here —
-    /// the composite-key `INSERT OR IGNORE` + `UPDATE` workaround above exists only because ADDB
-    /// rejects a MULTI-column `ON CONFLICT` target; a one-column PK upserts exactly like
-    /// `apple_font_families`/`apple_font_files` above, and every write here supplies the full row
-    /// (no partial-update columns to protect from a REPLACE), so there's nothing to lose.
+    /// a one-column PK upserts exactly like `apple_font_families`/`apple_font_files` above, and
+    /// every write here supplies the full row (no partial-update columns to protect from a
+    /// REPLACE), so there's nothing to lose.
     @discardableResult
     public func upsertSfSymbolRender(_ render: SfSymbolRenderUpsert, updatedAt: String) -> Bool {
         let sql = """

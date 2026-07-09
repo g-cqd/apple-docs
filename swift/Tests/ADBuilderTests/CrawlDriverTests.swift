@@ -1,6 +1,6 @@
 // Gate for the registry-driven crawl flow: resolve an adapter by source type, fetch over the stub
 // transport, and normalize to a NormalizedPage — the dispatch path the crawl driver runs. (The
-// persist half of the vertical — NormalizedPage → ADDB rows — is gated in ADBuilderPipelineTests.)
+// persist half of the vertical — NormalizedPage → SQLite rows — is gated in ADBuilderPipelineTests.)
 
 import HTTPTypes
 import Testing

@@ -69,12 +69,10 @@ public struct SearchRow: Sendable {
 // MARK: - Tier queries (in-process; the cascade calls these on one connection)
 
 extension StorageConnection {
-    /// T1 FTS5 planner (bm25 + tier CASE). nil on a prepare/step error. A backend
-    /// with a native FTS fast path (ADDB → the parity-proven denorm rows) serves
-    /// it directly; libsqlite3 runs the `searchPagesSQL` statement + decode.
+    /// T1 FTS5 planner (bm25 + tier CASE). nil on a prepare/step error. Runs the
+    /// `searchPagesSQL` statement + decode (the JS `searchFtsStmt`, verbatim).
     public func ftsRows(_ params: SearchPagesParams) -> [SearchRow]? {
-        if let native = conn.nativeFtsRows(params) { return native }
-        return rows(sql: searchPagesSQL, params: params, hasRankTier: true)
+        rows(sql: searchPagesSQL, params: params, hasRankTier: true)
     }
 
     /// T1 title-exact (COLLATE NOCASE), rows tagged tier 0.

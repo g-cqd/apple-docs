@@ -1,5 +1,5 @@
 // Gate for CrawlDriver — the full source-agnostic crawl loop end-to-end: registry → discover →
-// fetch (stub transport) → normalize (ADHTML) → persist (CrawlPipeline) into a fresh migrated ADDB,
+// fetch (stub transport) → normalize (ADHTML) → persist (CrawlPipeline) into a fresh migrated SQLite corpus,
 // asserting the stats and that one documents row landed per discovered key.
 
 import ADBuilder

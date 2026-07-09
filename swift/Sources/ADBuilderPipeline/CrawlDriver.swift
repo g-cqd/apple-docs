@@ -8,6 +8,14 @@
 // documents/pages `content_hash` is SHA-256 of the STABLE-STRINGIFIED normalized doc (matching the
 // JS persist.js content_hash — `sha256(stableStringify(normalized))`); the `raw_payload_hash` stays
 // SHA-256 of the raw payload bytes (JS hashes `stableStringify(json)`, a separate noted follow-up).
+//
+// Path convention (RFC 0007 §11 findings #8/#9, resolved at storage-pivot stage 2c): a page persists
+// under its BARE crawl key — `pages.path` == `crawl_state.path` == `documents.key` (the JS persist.js
+// convention; `pipeline/persist.js` passes the crawl path straight through to `upsertPage`, and the
+// full external URL goes in the separate `pages.url` column). The ADDB-era driver instead stored
+// `page.document.url` in `pages.path`, which broke every JS-shaped `pages.path = documents.key` join
+// on natively-crawled corpora; converging on the JS key made those joins (browse/framework-tree/
+// web-build/link-audit/orphan-check) correct for BOTH engines' corpora again.
 
 public import ADBuilder
 public import ADStorage
@@ -263,10 +271,10 @@ public struct CrawlDriver: Sendable {
             while let outcome = try await group.next() {
                 switch outcome {
                     case .fetched(let f):
-                        inFlight.remove(f.statePath)
+                        inFlight.remove(f.path)
                         do {
                             try CrawlPipeline.persist(
-                                f.page, into: db, rootId: rootIds[f.rootSlug] ?? rootId, path: f.storePath,
+                                f.page, into: db, rootId: rootIds[f.rootSlug] ?? rootId, path: f.path,
                                 hashes: .init(content: f.contentHash, rawPayload: f.rawHash),
                                 etag: f.etag, lastModified: f.lastModified, now: run.now)
                             stats.persisted += 1
@@ -277,7 +285,7 @@ public struct CrawlDriver: Sendable {
                                 .filter { Self.slug(ofKey: $0) == f.rootSlug }
                                 .map { (path: $0, rootSlug: f.rootSlug, depth: f.depth + 1) }
                             try CrawlPersist.seedCrawlBatch(db, seeds)
-                            succeeded.append(f.statePath)
+                            succeeded.append(f.path)
                             // Flush in `width`-sized bunches so a kill re-processes at most one window, while
                             // still amortizing the mark over many rows (the seek fast path makes it cheap).
                             if succeeded.count >= width {
@@ -286,7 +294,7 @@ public struct CrawlDriver: Sendable {
                             }
                         } catch {
                             try CrawlPersist.setCrawlState(
-                                db, path: f.statePath, status: "failed", rootSlug: f.rootSlug, depth: f.depth,
+                                db, path: f.path, status: "failed", rootSlug: f.rootSlug, depth: f.depth,
                                 error: String(describing: error))
                             stats.failed += 1
                         }
@@ -326,13 +334,14 @@ public struct CrawlDriver: Sendable {
         case failed(path: String, rootSlug: String, depth: Int, error: String)
     }
 
-    /// One BFS page fetched + normalized in a child task. `statePath` is the `crawl_state` key the state
-    /// row is keyed by; `storePath` is where the page persists (its doc URL, or the `/<key>` fallback);
-    /// `rootSlug` is the page's owning root (the cross-root frontier pools every root this call owns into
-    /// one wave). `refs` is pre-extracted in the child (a pure step) so the consuming side only writes.
+    /// One BFS page fetched + normalized in a child task. `path` is the bare crawl key — BOTH the
+    /// `crawl_state` key the state row is keyed by AND the path the page persists under (`pages.path` /
+    /// `documents.key`, the JS persist.js convention; the full URL lands in the separate `pages.url`
+    /// column). `rootSlug` is the page's owning root (the cross-root frontier pools every root this call
+    /// owns into one wave). `refs` is pre-extracted in the child (a pure step) so the consuming side
+    /// only writes.
     private struct BFSFetched: Sendable {
-        let statePath: String
-        let storePath: String
+        let path: String
         let rootSlug: String
         let depth: Int
         let page: NormalizedPage
@@ -355,7 +364,7 @@ public struct CrawlDriver: Sendable {
             let refs = adapter.extractReferences(result.key, result.payload)
             return .fetched(
                 BFSFetched(
-                    statePath: path, storePath: page.document.url ?? Self.crawlPath(forKey: path),
+                    path: path,
                     rootSlug: rootSlug, depth: depth, page: page, refs: refs,
                     contentHash: Self.sha256Hex(Array(page.stableStringified().utf8)),
                     rawHash: Self.sha256Hex(Self.rawBytes(result.payload)),
@@ -368,20 +377,19 @@ public struct CrawlDriver: Sendable {
     /// The ETag stored for `key`'s page, or `nil` when the page is new, has no stored ETag, or the read
     /// fails. Read on the SERIAL side so `db` never crosses into a child task. A non-nil result is the
     /// trigger for the conditional `check`; `nil` means "no prior state" → always fetch (a fresh crawl).
+    /// Keyed by the bare crawl key — the SAME `pages.path` the persist writes (the JS persist.js
+    /// convention), so the incremental check always finds the row the previous crawl stored.
     private func pagePreviousEtag(_ db: SQLiteWriteConnection, key: String) -> String? {
-        let validator = try? CrawlPersist.pageValidator(db, path: Self.crawlPath(forKey: key))
+        let validator = try? CrawlPersist.pageValidator(db, path: key)
         return validator?.etag
     }
-
-    /// The storage path a key is persisted under when the normalized doc carries no URL — the same
-    /// `fetchNormalize` fallback. Used to look the validator up BEFORE the fetch, by the key alone.
-    static func crawlPath(forKey key: String) -> String { "/\(key)" }
 
     /// One fetched + normalized page (or nil on a per-key failure). Carried out of a child task. The
     /// `etag`/`lastModified` are the upstream HTTP validators (`FetchResult`), persisted for the next
     /// re-crawl's conditional check.
     private struct Fetched: Sendable {
         let page: NormalizedPage
+        /// The bare crawl key the page persists under (`pages.path`/`documents.key` — JS persist.js).
         let path: String
         /// The root this key resolved to (`crawl`'s `rootIds[slug] ?? rootId`), carried out of the child
         /// task so the serial persist attributes each page to its own root.
@@ -401,7 +409,7 @@ public struct CrawlDriver: Sendable {
             let result = try await adapter.fetch(key, context)
             let page = try adapter.normalize(result.key, result.payload)
             return Fetched(
-                page: page, path: page.document.url ?? Self.crawlPath(forKey: key), rootId: rootId,
+                page: page, path: key, rootId: rootId,
                 contentHash: Self.sha256Hex(Array(page.stableStringified().utf8)),
                 rawHash: Self.sha256Hex(Self.rawBytes(result.payload)),
                 etag: result.etag, lastModified: result.lastModified)

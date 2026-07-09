@@ -16,16 +16,16 @@ public final class ConnectionRegistry: @unchecked Sendable {
 
     private struct State {
         var next: UInt64 = 1
-        var connections: [UInt64: any StorageBackend] = [:]
+        var connections: [UInt64: SQLiteConnection] = [:]
     }
     private let state = Mutex(State())
 
     private init() {}
 
-    /// Opens a read connection and returns its handle, or nil if neither backend
-    /// (libsqlite3 / FTS5, or the native ADDB engine) can open the file.
+    /// Opens a read connection and returns its handle, or nil when libsqlite3 /
+    /// FTS5 / the file is unavailable.
     func open(path: String) -> UInt64? {
-        guard let conn = openStorageBackend(path: path, writable: false) else { return nil }
+        guard let conn = SQLiteConnection(path: path, writable: false) else { return nil }
         return state.withLock { state in
             let id = state.next
             state.next &+= 1
@@ -41,7 +41,7 @@ public final class ConnectionRegistry: @unchecked Sendable {
     /// Looks up the connection (under the lock) and runs `body` with it
     /// OUTSIDE the lock — the connection belongs to the calling thread, so a
     /// long query never blocks other workers' open/close/lookup.
-    func withConnection<R>(_ id: UInt64, _ body: (any StorageBackend) -> R) -> R? {
+    func withConnection<R>(_ id: UInt64, _ body: (SQLiteConnection) -> R) -> R? {
         guard let conn = state.withLock({ $0.connections[id] }) else { return nil }
         return body(conn)
     }

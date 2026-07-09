@@ -2,6 +2,12 @@
 // drives through BOTH `cli.js` and `ad-cli`. Read-only verbs only, per RFC 0007 §8/P7.1 — `sync`,
 // `setup`, `crawl`, and every write/maintenance verb are out of scope for this fast, deterministic,
 // fixture-driven tier (P7.2 gates those against a scratch corpus instead).
+//
+// Zero known issues: every case must pass outright. The two divergences this harness originally
+// tracked via `withKnownIssue` (RFC 0007 §11 findings #9/#10) were obsoleted by the storage pivot —
+// the corpus is one SQLite format again, `pages.path` is the bare crawl key on both engines, and
+// the real-FTS5 `hasBodyIndex` probe reads true — so the known-issue plumbing is deleted rather
+// than left as an empty mechanism.
 
 /// One verb+args parity case. The argument LIST is shared, identical text for both engines — the
 /// flag-name audit behind this harness (cross-checking `cli.js --help` / `src/cli/help.js` against
@@ -30,80 +36,34 @@ struct ParityCase: Sendable, CustomStringConvertible {
     /// Dotted JSON paths redacted from BOTH sides before comparing (see `ParityJSON.redacting`).
     /// Only meaningful for `.json` cases.
     var excludedJSONPaths: Set<String> = []
-    /// Non-nil marks a case that hits a KNOWN, already-diagnosed, tracked divergence — the
-    /// comparison still runs for real every time (via `withKnownIssue`), but a failure there is
-    /// recorded as a known issue rather than failing the suite. See the constants below for the
-    /// specific findings this currently covers.
-    var knownIssue: String?
 
     var description: String {
-        let label = args.isEmpty ? verb : "\(verb) \(args.joined(separator: " "))"
-        return knownIssue == nil ? label : "\(label) [known issue]"
+        args.isEmpty ? verb : "\(verb) \(args.joined(separator: " "))"
     }
 }
 
 extension ParityCase {
     // MARK: - documented volatile-field exclusions (status)
 
-    /// Fields the DEFAULT `status --json` shape can never byte-for-byte agree on across a SQLite
-    /// fixture (JS) and an ADDB fixture (Swift) derived from it via `ad-cli import`: the absolute
-    /// fixture directory (a fresh temp path per test run on each side), the byte-exact database
-    /// FILE size (two different storage engines' on-disk encodings of the same logical data — never
-    /// comparable), and the two content-cache directories this harness deliberately does not commit
-    /// (see FixtureRegeneration.swift's header). Both engines report `{size:0,files:0}` for those on
-    /// a PRISTINE fixture copy, but JS's `read`/`search --read` verbs write a markdown render-cache
-    /// back to disk as a side effect of rendering — relying on "both coincidentally report zero"
-    /// would be fragile the moment case ordering changes, so the fields are excluded outright rather
-    /// than trusted to coincide. `freshness.daysSinceSync` is derived from wall-clock "now" at the
+    /// Fields `status --json` can never reliably byte-for-byte agree on across the two engines'
+    /// fixture copies, even now that both copies are the SAME SQLite bytes: the absolute fixture
+    /// directory (a fresh temp path per test run on each side), and the two content-cache
+    /// directories this harness deliberately does not commit (see FixtureRegeneration.swift's
+    /// header) — both engines report `{size:0,files:0}` for those on a PRISTINE copy, but JS's
+    /// `read`/`search --read` verbs write a markdown render-cache back to disk as a side effect of
+    /// rendering, so "both coincidentally report zero" would be fragile the moment case ordering
+    /// changes. `databaseSize` stats a LIVE file each engine has already opened — the JS open flips
+    /// the fixture copy to WAL and can leave checkpoint effects, so the byte-exact size is an
+    /// artifact of each engine's own open, not of the corpus; excluded on principle rather than
+    /// trusted to coincide. `freshness.daysSinceSync` is derived from wall-clock "now" at the
     /// moment each engine is invoked — both read it within the same test run, moments apart, so it
-    /// matches in practice, but it is fundamentally time-of-test-run dependent, like a timestamp, so
-    /// it's excluded on principle rather than by lucky timing.
+    /// matches in practice, but it is fundamentally time-of-test-run dependent, like a timestamp,
+    /// so it too is excluded on principle. `capabilities.searchBody` (once excluded here for the
+    /// ADDB FTS-shim probe false-negative, RFC 0007 §11 finding #10) now compares for real — the
+    /// probe runs against genuine FTS5 on both sides.
     static let statusVolatilePaths: Set<String> = [
         "dataDir", "databaseSize", "rawJson", "markdown", "freshness.daysSinceSync"
     ]
-
-    /// Everything `statusVolatilePaths` excludes, PLUS `capabilities.searchBody` — a NEW finding
-    /// from building this harness (not one of RFC 0007 §11's original findings):
-    /// `StorageConnection.hasBodyIndex()`'s existence probe (`SELECT 1 FROM documents_body_fts
-    /// LIMIT 1`, no MATCH predicate) returns false against an `ad-cli import`-derived ADDB corpus
-    /// even though body-tier search demonstrably WORKS there — proven by this same harness's
-    /// `search "alphanumeric"` case (a body-only term absent from every title/abstract), which
-    /// returns byte-identical hits on both engines. Most likely an ADDB FTS5-shim quirk (an
-    /// unqualified, no-MATCH scan of a contentless/self-contained FTS5 table behaves differently
-    /// there than in real SQLite), not a search-functionality bug — but the PROBE itself reads wrong
-    /// on an imported corpus, so `capabilities.searchBody` is excluded here rather than asserted
-    /// false. Out of this harness's scope to fix (it's an ADStorage/ADDB-engine question); noted for
-    /// a follow-up.
-    static let statusAdvancedVolatilePaths: Set<String> = statusVolatilePaths.union(["capabilities.searchBody"])
-
-    // MARK: - documented known issues
-
-    /// A NEW finding from building this harness — NOT a reproduction of RFC 0007 §11 finding #8
-    /// (that one, `Browse.swift`'s `pagesByRoot` joining `pages.path = documents.key`, already
-    /// landed a fix in `2e657e7`: the join now reads `pages.path = documents.url`, and this
-    /// harness confirms it works — `browse <framework> --json` against the real, natively-crawled
-    /// production corpus (`~/.apple-docs/apple-docs.db`) returns real pages, not empty).
-    ///
-    /// The DISTINCT bug this harness actually found: `ad-cli import`'s SQLite→ADDB manifest
-    /// (`ImportVerb.swift`) auto-copies the `pages` table verbatim — `pages` appears in none of
-    /// its `skipTables`/`ftsTables`/`denorm` lists — but the JS crawler's `pages.path` column
-    /// holds a BARE relative path (`persist.js`'s `upsertPage` passes `path` straight through;
-    /// the full URL goes into a SEPARATE `pages.url` column via `defaultDoccUrl`), whereas the
-    /// (now-fixed) `pagesByRoot` join assumes `pages.path == documents.url` — true for a
-    /// NATIVELY-crawled corpus (`CrawlDriver`/`CrawlPersist` write `page.document.url` straight
-    /// into `pages.path`) but never true for a corpus obtained by importing a bare JS SQLite
-    /// export, exactly what this harness's own Tier 1 fixture-generation recipe does (for
-    /// determinism — see FixtureRegeneration.swift's header). A subsequent native crawl pass
-    /// would self-heal it (native upserts overwrite `pages.path` with the full URL), which is the
-    /// likely reason the live production corpus — imported once, then repeatedly re-crawled
-    /// natively — shows no symptom today; a fixture that is ONLY ever imported, never
-    /// native-crawled, has no such healing pass. Out of this harness's scope to fix (it's an
-    /// `ad-cli import` manifest question — probably wants a `pages.path ← pages.url` denorm rule
-    /// alongside the existing `documents` denorm block); tracked as a follow-up.
-    static let importedCorpusPagesPathFinding =
-        "NEW finding (this harness) — ad-cli import copies pages.path verbatim from a bare-path "
-        + "JS SQLite export, so the (already-fixed) pagesByRoot join (pages.path == documents.url) "
-        + "never matches on an import-derived corpus, even though it works on a natively-crawled one."
 }
 
 enum ParityCases {
@@ -130,31 +90,28 @@ enum ParityCases {
         ParityCase(verb: "kinds", args: ["--field", "role", "--json"], format: .json),
         ParityCase(verb: "kinds", args: ["--field", "kind"], format: .human),
 
-        // MARK: status — JSON only. The human formatter inlines the absolute `dataDir` path and the
-        // byte-exact formatted database size, both INHERENTLY different between a SQLite fixture and
-        // an ADDB fixture derived from it — there is no field-level exclusion mechanism for free
-        // text the way there is for JSON, so human `status` byte-identity was never a meaningful
-        // target for this fixture and is deliberately left out of the matrix (documented, not an
-        // oversight).
+        // MARK: status — JSON only. The human formatter inlines the absolute `dataDir` path (a
+        // fresh temp path per engine per case), and there is no field-level exclusion mechanism
+        // for free text the way there is for JSON, so human `status` byte-identity was never a
+        // meaningful target for this fixture and is deliberately left out of the matrix
+        // (documented, not an oversight). `--advanced` compares `capabilities.searchBody` for
+        // real — the once-excluded ADDB-shim probe false-negative (RFC 0007 §11 finding #10) is
+        // architecturally gone.
         ParityCase(
             verb: "status", args: ["--json"], format: .json,
             excludedJSONPaths: ParityCase.statusVolatilePaths),
         ParityCase(
             verb: "status", args: ["--advanced", "--json"], format: .json,
-            excludedJSONPaths: ParityCase.statusAdvancedVolatilePaths),
+            excludedJSONPaths: ParityCase.statusVolatilePaths),
 
-        // MARK: browse — the default page-listing variant hits the imported-corpus pages.path
-        // finding (see the constant's doc comment — NOT RFC 0007 §11 finding #8, which already
-        // landed a fix); both engines are still driven for real every run via `withKnownIssue`,
-        // so a fix is caught the moment it lands. The `--path` (children) variant walks a
-        // different query (`documentChildren`, not `pagesByRoot`) and is unaffected — a clean,
-        // must-pass case.
-        ParityCase(
-            verb: "browse", args: ["adsupport", "--json"], format: .json,
-            knownIssue: ParityCase.importedCorpusPagesPathFinding),
-        ParityCase(
-            verb: "browse", args: ["adsupport"], format: .human,
-            knownIssue: ParityCase.importedCorpusPagesPathFinding),
+        // MARK: browse — the default page-listing variant is the RFC 0007 §11 findings #8/#9
+        // full-circle regression guard: `pagesByRoot` runs the literal JS join
+        // (`pages.path = documents.key`), correct on both engines' corpora now that the storage
+        // pivot converged `pages.path` on the bare crawl key. These two cases were this harness's
+        // last `withKnownIssue` entries; they must now pass outright. The `--path` (children)
+        // variant walks a different query (`documentChildren`, not `pagesByRoot`).
+        ParityCase(verb: "browse", args: ["adsupport", "--json"], format: .json),
+        ParityCase(verb: "browse", args: ["adsupport"], format: .human),
         ParityCase(
             verb: "browse", args: ["signinwithapple", "--path", "signinwithapple", "--json"],
             format: .json),
@@ -193,12 +150,11 @@ enum ParityCases {
             format: .human),
 
         // MARK: search — lexical cascade, filtered, a body-only term (proves the FTS body tier
-        // itself works identically despite the `capabilities.searchBody` probe finding above),
-        // `--read` combined mode, and a no-results query. `APPLE_DOCS_SEMANTIC=off` is set
-        // process-wide by the test driver so neither engine's semantic tier can introduce
-        // nondeterminism (the fixture carries no indexed vectors/chunks anyway, so both would
-        // already degrade to lexical-only — the env var makes that intentional rather than
-        // coincidental).
+        // works identically), `--read` combined mode, and a no-results query.
+        // `APPLE_DOCS_SEMANTIC=off` is set process-wide by the test driver so neither engine's
+        // semantic tier can introduce nondeterminism (the fixture carries no indexed
+        // vectors/chunks anyway, so both would already degrade to lexical-only — the env var makes
+        // that intentional rather than coincidental).
         ParityCase(verb: "search", args: ["AdSupport", "--json"], format: .json),
         ParityCase(verb: "search", args: ["alphanumeric", "--json"], format: .json),
         ParityCase(

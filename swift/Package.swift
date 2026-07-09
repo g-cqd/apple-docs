@@ -82,25 +82,11 @@ let adfoundationDependency: Package.Dependency = {
     return .package(url: "https://github.com/g-cqd/ADFoundation.git", branch: "main")
 }()
 
-// ADSQL_PATH -> the ADSQL language package (its SQL + full-text-search surface over the
-// ADDB engine). Pulled ONLY by the server-side `ADSQLSearch` target (the moved
-// `/search` body), never by the zero-dependency `ADCore` dylib.
-let adsqlDependency: Package.Dependency = {
-    if let path = Context.environment["ADSQL_PATH"], !path.isEmpty {
-        return .package(path: path)
-    }
-    return .package(url: "https://github.com/g-cqd/ADSQL.git", branch: "main")
-}()
-
-// ADDB_PATH -> the ADDB engine + SQL EXECUTION package. Post-inversion ADDB hosts the executor
-// (`ADDBExec`) + the FTS/JSON supersets the `/search` query runs over; the `ADSQLSearch` target
-// executes against it (ADSQL is now the engine-free frontend, which `/search` no longer needs).
-let addbDependency: Package.Dependency = {
-    if let path = Context.environment["ADDB_PATH"], !path.isEmpty {
-        return .package(path: path)
-    }
-    return .package(url: "https://github.com/g-cqd/ADDB.git", branch: "main")
-}()
+// ADDB / ADSQL are no longer dependencies (RFC 0007 D-0007-4, stage 2f): the storage pivot
+// returned the corpus to real SQLite, stage 2c deleted the ADDB read backend + the ADSQLSearch
+// denorm search tier (their only consumers), and no target consumes any ADSQL product either —
+// both package dependencies are removed rather than kept speculatively. The ADDB/ADSQL repos
+// continue as their own projects; apple-docs simply no longer uses them.
 
 // ADConcurrency (the `ResourcePool` + `TaskProvider`/`Clock` seams) is folded into the ADFoundation
 // umbrella package; ad-server takes the `ADConcurrency` product from `package: "ADFoundation"` below,
@@ -184,8 +170,6 @@ let package = Package(
         // main via `ADJSON_PATH` (see above). ADFoundation's zero-dep `ADFCore` is the other static dep.
         adjsonDependency,
         adfoundationDependency,
-        adsqlDependency,
-        addbDependency,
         adserveDependency,
         adhtmlDependency,
         // ad-server-only. swift-http-types: type-safe HTTP headers/status; swift-log:
@@ -285,10 +269,12 @@ let package = Package(
         // correct ABI (disables the global memstatus allocator mutex).
         .target(name: "CSQLiteShim"),
         // Storage layer: SQLite C-interop via runtime dlopen (NOT a systemLibrary —
-        // same policy as ADArchive/Zstd: absent → JS bun:sqlite serves). The read
-        // path; the bun:sqlite writer is untouched. ADArchive provides the zstd
-        // decompress used by the section codec (enrichment) — both dlopen'd, so
-        // the dylib stays zero external dep.
+        // same policy as ADArchive/Zstd). Read path AND write connection over the
+        // one dlopen'd libsqlite3 — since the storage pivot (RFC 0007 D-0007-4,
+        // stage 2c) the corpus is real SQLite ONLY (the interim ADDB read backend
+        // is deleted), which restores the `ADCore` dylib to zero-external-dep
+        // (first-party static ADJSONCore/ADFCore only). ADArchive provides the
+        // zstd decompress used by the section codec (enrichment) — both dlopen'd.
         .target(
             name: "ADStorage",
             dependencies: [
@@ -296,19 +282,7 @@ let package = Package(
                 .product(name: "ADJSONCore", package: "ADJSON"),
                 // ADFCore: the shared little-endian `appendLE*`/`storeLE*` the row framer emits the
                 // §2.5 response wire bytes through (already in the dylib graph via ADCore → ADFCore).
-                .product(name: "ADFCore", package: "ADFoundation"),
-                // BUG-REPORTS B10(c): the native-corpus read backend. `StorageConnection` now opens
-                // EITHER libsqlite3 OR an ADDB corpus (`ADDBBackend`), so every read verb serves a
-                // crawl-written ADDB snapshot. The FTS ranked search routes to the parity-proven
-                // `ADSQLSearch` denorm path; the engine products back the generic read statement.
-                // (This edge makes the `ADCore` dylib no longer zero-external-dep — an intentional
-                // consequence of moving the read path onto the native engine; see the report.)
-                "ADSQLSearch",
-                .product(name: "ADDB", package: "ADDB"),
-                .product(name: "ADDBExec", package: "ADDB"),
-                .product(name: "ADDBFTS", package: "ADDB"),
-                .product(name: "ADDBJSON", package: "ADDB"),
-                .product(name: "ADSQLModel", package: "ADSQL")
+                .product(name: "ADFCore", package: "ADFoundation")
             ],
             swiftSettings: releaseCMO + strictSettings),
         // Search cascade: the byte-exact in-process port of the JS lexical search
@@ -361,8 +335,7 @@ let package = Package(
                 "ADStorage",
                 "ADContent",
                 "ADRender",
-                "ADSearchCascade",
-                "ADSQLSearch"
+                "ADSearchCascade"
             ],
             path: "Sources/ADServer", swiftSettings: releaseCMO + strictSettings),
         // ADSemantic — native semantic candidate retrieval (Stage 1). Ports the JS
@@ -413,7 +386,7 @@ let package = Package(
         // `HTTPClient` protocol (modeled on swift-http-types) + the interim
         // `URLSessionHTTPClient` conformer, per rfcs/adserve-http-client-requirements.md.
         // Depends ONLY on swift-http-types + Foundation today, so it builds independently
-        // of the churning ADDB/ADServe graph; the heavier deps (ADContent/ADWrite/ADEmbed/
+        // of the churning ADServe graph; the heavier deps (ADContent/ADWrite/ADEmbed/
         // ADArchive/ADFIO/ADHTML) are added as the crawler/web pieces land. NOT in the
         // ADCore dylib graph.
         .target(
@@ -440,7 +413,7 @@ let package = Package(
         // ADBuilderPipeline — the persist boundary. Maps the adapter layer's dependency-free
         // `NormalizedPage` to ADWrite's `NormalizedDoc` and drives `CrawlPersist.persistNormalized`.
         // Kept OUT of ADBuilder deliberately so the adapter + parser layer stays storage-free (the
-        // ADWrite/ADDB churn never reaches the adapters — the NormalizedPage DTO is the seam).
+        // ADWrite/storage churn never reaches the adapters — the NormalizedPage DTO is the seam).
         .target(
             name: "ADBuilderPipeline",
             dependencies: ["ADBuilder", "ADWrite", "ADStorage"],
@@ -513,22 +486,6 @@ let package = Package(
                 .product(name: "Crypto", package: "swift-crypto")
             ],
             path: "Sources/ADCLI", swiftSettings: releaseCMO + strictSettings),
-        // ADSQLSearch — apple-docs' `/search` serving over the in-process ADDB engine
-        // (the Swift body of the `ad_storage_search_pages` ABI): builds the main query,
-        // binds the filter bag, frames the projection into the response bytes. Moved here
-        // from the ADSQL package — it is apple-docs domain, not generic SQL. SERVER-ONLY:
-        // used by ad-server, NEVER by the `ADCore` dylib (which stays zero-external-dep).
-        .target(
-            name: "ADSQLSearch",
-            dependencies: [
-                .product(name: "ADDBExec", package: "ADDB"),
-                .product(name: "ADSQLModel", package: "ADSQL"),
-                .product(name: "ADDBFTS", package: "ADDB"),
-                .product(name: "ADDBJSON", package: "ADDB"),
-                // ADFCore: the shared little-endian `appendLE*` the §2.5 response framer emits through.
-                .product(name: "ADFCore", package: "ADFoundation")
-            ],
-            swiftSettings: releaseCMO + strictSettings),
         .target(
             name: "ADCore",
             dependencies: [
@@ -548,39 +505,7 @@ let package = Package(
             name: "ADContentTests",
             dependencies: ["ADContent", .product(name: "ADJSONCore", package: "ADJSON")],
             swiftSettings: testSettings),
-        .testTarget(
-            name: "ADStorageTests",
-            dependencies: [
-                "ADStorage",
-                // The B10(c) read-swap parity gate: build a SQLite corpus, import it to ADDB via
-                // `ADDBImport.importSQLite`, then diff the read verbs across BOTH backends.
-                // ADDBFTS/ADDBJSON enable the FTS + JSON function sets the import (FTS rebuild +
-                // denorm JSON folds) writes through.
-                .product(name: "ADDB", package: "ADDB"),
-                .product(name: "ADDBImport", package: "ADDB"),
-                .product(name: "ADDBFTS", package: "ADDB"),
-                .product(name: "ADDBJSON", package: "ADDB"),
-                .product(name: "ADSQLModel", package: "ADSQL")
-            ],
-            swiftSettings: testSettings),
-        // ADSQLSearchTests — byte-identity golden for the §2.5 response wire layout (`ResponseFraming`),
-        // the gate for the A1 endian consolidation. The server-only `ADSQLSearch` target had no test
-        // home; this also seats the future `SearchQuery`-vs-SQLite parity suite (Phase 5A).
-        .testTarget(
-            name: "ADSQLSearchTests",
-            dependencies: [
-                "ADSQLSearch",
-                // ADDB (Database.open) + ADSQLModel (Value) back the backfill/RowDecoder gates; the
-                // local `AddbSchemaFixture` helper (the frozen ADDB rendering of the apple-docs
-                // schema — ADWrite itself writes REAL SQLite since the storage pivot) backs the
-                // denorm-vs-normalized search-equivalence gate over the ADDB read backend.
-                .product(name: "ADDB", package: "ADDB"),
-                .product(name: "ADSQLModel", package: "ADSQL"),
-                // ADDBFTS — the equivalence gate calls `enableFullTextSearch()` so the
-                // `documents_fts MATCH` in both search forms runs (FTS is opt-in, like JSON).
-                .product(name: "ADDBFTS", package: "ADDB")
-            ],
-            swiftSettings: testSettings),
+        .testTarget(name: "ADStorageTests", dependencies: ["ADStorage"], swiftSettings: testSettings),
         .testTarget(
             name: "ADSearchCascadeTests", dependencies: ["ADSearchCascade"], swiftSettings: testSettings),
         // ADServeCoreTests + ADServeDSLTests moved to the standalone ADServe package.
@@ -602,13 +527,14 @@ let package = Package(
             swiftSettings: testSettings),
         // ParityTests — the Tier 1 CLI/HTTP verb-for-verb golden parity gate (RFC 0007 §12),
         // realizing the "verb-for-verb golden parity harness" §3/§9 already named. Spawns
-        // `bun cli.js <verb>` and the release-built `ad-cli <verb>` via `Process` against a
-        // committed, deterministic fixture corpus (Fixtures/js-corpus + Fixtures/swift-corpus —
-        // read via `#filePath`, like ADWriteTests' own fixture, not SPM resource bundling) and
-        // diffs stdout/exit-code: JSON intrinsically (ADJSONCore), human byte-for-byte. No local
-        // target dependency at all (deliberately decoupled from the churning ADCLI/ADStorage
-        // graph — it only needs ADJSON's `JSONValue` for the deep-equal comparator) — everything
-        // else is an out-of-process CLI invocation, exactly like the parity mechanism it gates.
+        // `bun cli.js <verb>` and the release-built `ad-cli <verb>` via `Process` against ONE
+        // committed, deterministic fixture corpus (Fixtures/js-corpus — both engines read the
+        // same SQLite format since the storage pivot; read via `#filePath`, like ADWriteTests'
+        // own fixture, not SPM resource bundling) and diffs stdout/exit-code: JSON intrinsically
+        // (ADJSONCore), human byte-for-byte. No local target dependency at all (deliberately
+        // decoupled from the churning ADCLI/ADStorage graph — it only needs ADJSON's `JSONValue`
+        // for the deep-equal comparator) — everything else is an out-of-process CLI invocation,
+        // exactly like the parity mechanism it gates.
         .testTarget(
             name: "ParityTests",
             dependencies: [
@@ -667,7 +593,7 @@ if isDev {
 
 // AD_ISOLATE=<TestTarget> — reduce the package to ONLY that test target's local
 // dependency closure for ISOLATED local verification while sibling packages (ADServe /
-// ADDB / ADJSON / …) are edited by other streams and intermittently fail to compile.
+// ADJSON / …) are edited by other streams and intermittently fail to compile.
 // `swift test` otherwise builds EVERY package target (incl. the ad-server executable →
 // the churning ADServeCore, and ad-cli/ADCore → ADJSONCore), so a single broken sibling
 // anywhere blocks an unrelated gate. Dropping every other target + all products removes
@@ -682,7 +608,7 @@ let isolationClosures: [String: Set<String>] = [
     "ADContentTests": ["ADContent", "ADBase", "ADEmbed", "ADContentTests"],
     "ADWebBuildTests": ["ADWebBuild", "ADContent", "ADBase", "ADEmbed", "ADWebBuildTests"],
     "ADWriteTests": [
-        "ADWrite", "ADEmbed", "ADArchive", "ADStorage", "ADSQLSearch", "ADBase", "ADContent",
+        "ADWrite", "ADEmbed", "ADArchive", "ADStorage", "ADBase", "ADContent",
         "CSQLiteShim", "ADWriteTests"
     ],
     // ADBuilder now pulls ADContent (→ ADBase, ADEmbed) for the DocC-JSON normalizer's
@@ -690,12 +616,12 @@ let isolationClosures: [String: Set<String>] = [
     "ADBuilderTests": ["ADBuilder", "ADBuilderTests", "ADContent", "ADBase", "ADEmbed"],
     "ADBuilderPipelineTests": [
         "ADBuilder", "ADWrite", "ADEmbed", "ADArchive", "ADBuilderPipeline", "ADBuilderPipelineTests",
-        "ADContent", "ADBase", "ADStorage", "ADSQLSearch", "CSQLiteShim"
+        "ADContent", "ADBase", "ADStorage", "CSQLiteShim"
     ],
-    "ADStorageTests": ["ADStorage", "ADBase", "ADArchive", "CSQLiteShim", "ADSQLSearch", "ADStorageTests"],
+    "ADStorageTests": ["ADStorage", "ADBase", "ADArchive", "CSQLiteShim", "ADStorageTests"],
     "ADArchiveTests": ["ADArchive", "ADArchiveTests"],
     // ADOps depends only on Foundation, so its closure is just the two targets —
-    // isolates the ops parity gate from the churning ADServe/ADDB graph.
+    // isolates the ops parity gate from the churning ADServe graph.
     "ADOpsTests": ["ADOps", "ADOpsTests"],
     "ADRenderTests": ["ADRender", "ADBase", "ADRenderTests"]
 ]
