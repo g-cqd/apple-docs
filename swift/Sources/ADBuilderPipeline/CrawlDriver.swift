@@ -433,12 +433,15 @@ public struct CrawlDriver: Sendable {
     /// documents updated since the last `body_indexed_at` stamp are re-rendered.
     public func sync(
         sourceType: String, into db: SQLiteWriteConnection, rootId: Int64, rootIds: [String: Int64] = [:],
-        context: SourceContext, now: String, embedder: some ChunkEmbedder
+        context: SourceContext, now: String, embedder: (some ChunkEmbedder)?
     ) async throws -> SyncResult {
         let crawlStats = try await crawl(
             sourceType: sourceType, into: db, rootId: rootId, rootIds: rootIds, context: context, now: now)
         let bodyResult = try IndexBody.runIncremental(db, now: now)
-        let indexResult = try IndexEmbeddings.run(db, embedder: embedder)
+        // nil embedder (no model resources on this host) ⇒ the embedding pass is SKIPPED,
+        // not failed — the JS sync's behavior with a dormant semantic tier: crawl + body
+        // index land, the run succeeds, and Result.skipped records the non-run.
+        let indexResult = try embedder.map { try IndexEmbeddings.run(db, embedder: $0) } ?? .skipped
         return SyncResult(crawl: crawlStats, body: bodyResult, index: indexResult)
     }
 

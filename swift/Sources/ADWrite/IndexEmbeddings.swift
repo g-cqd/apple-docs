@@ -66,6 +66,17 @@ public enum IndexEmbeddings {
         public let indexed: Int
         public let total: Int
         public let chunks: Int
+
+        public init(status: String, indexed: Int, total: Int, chunks: Int) {
+            self.status = status
+            self.indexed = indexed
+            self.total = total
+            self.chunks = chunks
+        }
+
+        /// The no-embedder outcome: the pass didn't run (model resources absent) — the JS
+        /// sync's dormant-semantic-tier behavior, distinct from an indexed-zero-docs run.
+        public static let skipped = Result(status: "skipped", indexed: 0, total: 0, chunks: 0)
     }
 
     /// Build (or resume) the per-chunk embedding index.

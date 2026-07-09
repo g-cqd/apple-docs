@@ -74,7 +74,7 @@ public enum SymbolSync {
 
         var count = 0
         for name in sorted {
-            db.upsertSfSymbol(
+            let upserted = db.upsertSfSymbol(
                 SfSymbolUpsert(
                     name: name, scope: scope,
                     categoriesJson: jsonStringArray(normalizeStringArray(categories[name])),
@@ -84,7 +84,11 @@ public enum SymbolSync {
                     orderIndex: orderIndex[name].map(Int64.init),
                     bundlePath: bundleDir, bundleVersion: version),
                 updatedAt: now)
-            count += 1
+            // Count SUCCESSES only: an attempt-count silently masks a read-only or
+            // constraint failure as a healthy sync (it did once -- the D-0007-4 cutover
+            // ran the catalog sync through a query_only connection and reported 8,478
+            // "synced" rows into an empty table).
+            if upserted { count += 1 }
         }
         return count
     }

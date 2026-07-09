@@ -39,10 +39,20 @@ final class SQLiteStatement: StorageStatement {
         _ = lib.finalize(stmt)
     }
 
-    /// Binds a value to the named parameter (e.g. "$query"). Unknown names are
-    /// ignored (index 0) — the SQL simply has no such placeholder.
+    /// Binds a value to the named parameter. Accepts the name WITH its sigil
+    /// ("$query") or bare ("query" → retried as "$query") — the bare form is the
+    /// ADDB-era convention `AssetsWrite`'s upserts still use, and
+    /// `sqlite3_bind_parameter_index` requires the full sigil-prefixed name, so
+    /// without the retry every bare-named bind silently no-oped (index 0) and an
+    /// `INSERT OR IGNORE` upsert then swallowed the NOT-NULL violation as phantom
+    /// success — the D-0007-4 cutover's empty-sf_symbols failure mode. Genuinely
+    /// unknown names are still ignored — the title-exact tier's SQL legitimately
+    /// has no `$query` placeholder.
     func bind(_ name: String, _ value: BindValue) {
-        let idx = name.withCString { lib.bindParameterIndex(stmt, $0) }
+        var idx = name.withCString { lib.bindParameterIndex(stmt, $0) }
+        if idx == 0, let first = name.first, first != "$", first != ":", first != "@" {
+            idx = "$\(name)".withCString { lib.bindParameterIndex(stmt, $0) }
+        }
         guard idx > 0 else { return }
         switch value {
             case .null:
