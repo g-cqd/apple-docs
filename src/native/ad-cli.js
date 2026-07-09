@@ -83,10 +83,23 @@ const VERB_SPECS = {
   version: { bool: ['json'] },
   'storage stats': { bool: ['json'] },
   'storage check-orphans': { bool: ['json'] },
-  // GET form only (maxPositional 0): `storage profile <name>` (the SET form, which applies the
-  // profile's table drops) falls back to Bun via the arity check until it earns its own gate.
-  // Byte-diffed identical (human + --json) against the oracle on a scratch corpus, 2026-07-09.
-  'storage profile': { bool: ['json'] },
+  // GET and SET forms — both byte-diffed identical (human + --json) against the oracle on a
+  // scratch corpus (set-form gate: `storage profile compact`/`balanced`, 2026-07-09).
+  'storage profile': { maxPositional: 1, bool: ['json'] },
+  // The write-path maintenance verbs, flipped after per-verb stdout byte-diffs against the
+  // oracle on scratch corpora (2026-07-09; the port itself was oracle-gated down to
+  // sha256-identical compacted cells). stderr DIAGNOSTICS deliberately differ in format
+  // (JS emits JSON log lines, native plain text) — stdout is the parity surface.
+  'storage gc': { string: ['drop'], int: ['older-than'], bool: ['json'] },
+  'storage materialize': { string: ['format', 'roots'], bool: ['json'] },
+  'storage compact': { bool: ['force', 'keep-raw', 'json'] },
+  prune: { bool: ['dry-run', 'no-vacuum', 'json'] },
+  consolidate: { bool: ['dry-run', 'minify', 'json'] },
+  // `index rebuild [body|trigram]`. NOT flipped: `index embeddings` (the native success line
+  // reads `indexed: …` vs the JS `index embeddings: {…}` summary, and its no-embedder path
+  // hard-fails where JS soft-reports — an output-alignment follow-up, tracked with
+  // `web build`/`snapshot build`, whose stdout shapes also still differ).
+  'index rebuild': { maxPositional: 1, bool: ['json'] },
   kinds: { string: ['field'], bool: ['json'] },
   status: { bool: ['advanced', 'json'] },
   browse: { minPositional: 1, maxPositional: 1, string: ['path'], int: ['limit', 'year'], bool: ['json'] },

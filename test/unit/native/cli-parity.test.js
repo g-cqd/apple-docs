@@ -292,7 +292,7 @@ d('storage parity: ad-cli == cli.js (stats + check-orphans)', () => {
     }
   }, 240_000) // four dir walks per stats invocation over the full corpus
 
-  test('flip: storage stats delegates; storage gc does NOT', async () => {
+  test('flip: storage stats delegates; storage gc delegates too (2026-07-09)', async () => {
     // End-to-end flip wiring against the SEEDED home (the live corpus would
     // add two more full dir walks here for no extra signal).
     const flip = Bun.spawnSync(['bun', join(ROOT, 'cli.js'), 'storage', 'stats', '--home', storeHome], {
@@ -301,10 +301,12 @@ d('storage parity: ad-cli == cli.js (stats + check-orphans)', () => {
       stderr: 'pipe',
     })
     expect(dec.decode(flip.stdout)).toBe(runJsEnv(['storage', 'stats'], {}, storeHome))
-    // The write subcommand must fall back to Bun: its spec is deliberately
-    // absent, so nativeCliArgs maps it to null.
+    // storage gc gained its own spec once the native maintenance verbs landed
+    // (byte-diffed against the oracle 2026-07-09), so it now delegates too; an
+    // out-of-spec flag still falls back to Bun.
     const { nativeCliArgs } = await import(join(ROOT, 'src/native/ad-cli.js'))
-    expect(nativeCliArgs({ command: 'storage', subcommand: 'gc', positional: [], flags: {}, dbPath: storeDb })).toBeNull()
+    expect(nativeCliArgs({ command: 'storage', subcommand: 'gc', positional: [], flags: {}, dbPath: storeDb })).toEqual(['storage', 'gc', '--db', storeDb])
+    expect(nativeCliArgs({ command: 'storage', subcommand: 'gc', positional: [], flags: { 'not-a-flag': true }, dbPath: storeDb })).toBeNull()
     expect(nativeCliArgs({ command: 'storage', subcommand: 'stats', positional: [], flags: { json: true }, dbPath: storeDb })).toEqual([
       'storage',
       'stats',
