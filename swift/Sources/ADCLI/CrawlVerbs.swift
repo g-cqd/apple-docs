@@ -126,7 +126,25 @@ struct IndexEmbeddingsCommand: ParsableCommand {
 
     func run() throws {
         let database = try openCrawlCorpus(db)
-        let embedder = try loadIndexEmbedder(dbPath: db)
+        // A missing embedder is a SOFT outcome, byte-matching the JS oracle
+        // (index-embeddings.js returns {status:'error', message} and cli.js's
+        // summary formatter prints it with exit 0 — no hard failure). The
+        // message text is the JS's verbatim, Bun-era advice included, so the
+        // flip stays byte-faithful; it gets reworded when the oracle freezes
+        // at I2.
+        guard let embedder = loadIndexEmbedderIfAvailable(dbPath: db) else {
+            let envelope = JSONValue.obj([
+                ("status", .string("error")),
+                (
+                    "message",
+                    .string(
+                        "Semantic embedder unavailable. The default model is native: fetch the bundle with `apple-docs setup --native` and keep APPLE_DOCS_NATIVE enabled (gated models additionally need `bun add @huggingface/transformers`)."
+                    )
+                )
+            ])
+            print(json ? stringifyPretty(envelope) : "index embeddings: \(stringifyCompact(envelope))")
+            return
+        }
         let result: IndexEmbeddings.Result
         do {
             result = try IndexEmbeddings.run(database, embedder: embedder, full: full)
@@ -134,10 +152,13 @@ struct IndexEmbeddingsCommand: ParsableCommand {
             FileHandle.standardError.write(Data("ad-cli: index failed: \(error)\n".utf8))
             throw ExitCode(1)
         }
+        // cli.js prints via the maintenance `summary('index embeddings')`
+        // formatter — `index embeddings: <JSON.stringify(result)>` — and the
+        // global --json path prints the raw result pretty.
         if json {
             print(stringifyPretty(indexResultJSON(result)))
         } else {
-            print("indexed: \(indexResultSummary(result))")
+            print("index embeddings: \(stringifyCompact(indexResultJSON(result)))")
         }
     }
 }

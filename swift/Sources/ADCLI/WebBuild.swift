@@ -512,6 +512,7 @@ struct WebBuildCommand: ParsableCommand {
         // (over-invalidation, never staleness).
         let templateVersion = nativeTemplateVersion()
         let runStartedAt = Int64(Date().timeIntervalSince1970)
+        let buildClockStart = Date()  // the formatWebBuild Duration line's basis (sub-second)
         if let writer {
             if !isIncremental {
                 writer.clearRenderIndex()
@@ -575,8 +576,10 @@ struct WebBuildCommand: ParsableCommand {
         // 11. Link audit — full unfiltered builds only (build.js:
         // `buildingAll && !skipDocs`). Classification failure of the WALK is a
         // build error; the stats land in the report (+ optionally on disk).
+        var linksAudit: LinksAuditResult?
         if !skipDocs {
             let audit = try WebLinksAudit.run(outDir: out, connection: connection)
+            linksAudit = audit
             report += "ad-cli: \(WebLinksAudit.summary(audit))\n"
             if let path = linksAuditJson {
                 guard
@@ -591,5 +594,45 @@ struct WebBuildCommand: ParsableCommand {
             for stub in result.stubs { report += "  - \(stub)\n" }
         }
         FileHandle.standardError.write(Data(report.utf8))
+
+        // STDOUT summary — the JS `formatWebBuild` block, byte-shaped (the native
+        // ledger above stays on stderr; cli.js's oracle prints THIS to stdout, and
+        // the CLI flip's byte-diff runs against it). `bold()` is TTY-gated in JS,
+        // so piped output is plain; the Duration value is inherently volatile
+        // (wall clock) — same as two JS runs differing.
+        let durationSeconds = Date().timeIntervalSince(buildClockStart)
+        var lines = ["Static site built", "  Pages built:   \(result.pagesBuilt)"]
+        if result.pagesSkipped != 0 { lines.append("  Pages skipped: \(result.pagesSkipped)") }
+        lines.append("  Frameworks:    \(result.frameworksBuilt)")
+        lines.append("  Output:        \(out)")
+        lines.append("  Duration:      \(String(format: "%.1f", durationSeconds))s")
+        if let audit = linksAudit {
+            lines.append(Self.linksSummaryLine(audit))
+        }
+        print(lines.joined(separator: "\n"))
+    }
+
+    /// The formatWebBuild `Links:` line — category counts comma-grouped like the
+    /// JS `toLocaleString('en-US')`.
+    private static func linksSummaryLine(_ audit: LinksAuditResult) -> String {
+        var by: [String: Int] = [:]
+        for (key, count) in audit.byCategory { by[key, default: 0] += count }
+        let total = grouped(audit.linksTotal)
+        let ok = grouped(by["internal_ok"] ?? 0)
+        let broken = grouped(by["internal_broken"] ?? 0)
+        let external = grouped(by["external_resolvable"] ?? 0)
+        let relative = grouped(by["relative_broken"] ?? 0)
+        return "  Links:         \(total) total · \(ok) ok, \(broken) broken, "
+            + "\(external) external_resolvable, \(relative) relative_broken"
+    }
+
+    private static func grouped(_ n: Int) -> String {
+        var digits = Array(String(n))
+        var i = digits.count - 3
+        while i > 0 {
+            digits.insert(",", at: i)
+            i -= 3
+        }
+        return String(digits)
     }
 }

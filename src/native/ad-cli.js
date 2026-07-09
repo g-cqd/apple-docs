@@ -95,11 +95,21 @@ const VERB_SPECS = {
   'storage compact': { bool: ['force', 'keep-raw', 'json'] },
   prune: { bool: ['dry-run', 'no-vacuum', 'json'] },
   consolidate: { bool: ['dry-run', 'minify', 'json'] },
-  // `index rebuild [body|trigram]`. NOT flipped: `index embeddings` (the native success line
-  // reads `indexed: …` vs the JS `index embeddings: {…}` summary, and its no-embedder path
-  // hard-fails where JS soft-reports — an output-alignment follow-up, tracked with
-  // `web build`/`snapshot build`, whose stdout shapes also still differ).
   'index rebuild': { maxPositional: 1, bool: ['json'] },
+  // Aligned + flipped 2026-07-09: the native summary/error envelopes now byte-match the JS
+  // (`index embeddings: {…}` incl. the soft no-embedder outcome, exit 0).
+  'index embeddings': { bool: ['full', 'json'] },
+  // Aligned + flipped 2026-07-09: the native build now prints the JS formatWebBuild summary
+  // block to stdout (its own ledger stays on stderr). Byte-shaped identical on both skip-docs
+  // and full builds incl. the comma-grouped Links line; the Duration VALUE is inherently
+  // volatile (wall clock), exactly as between two JS runs. No 'json' — the full JSON envelope
+  // (dirs/artifacts/…) is unaudited, so --json falls back to Bun. `snapshot build` stays
+  // unflipped: cross-engine archives are NOT byte-identical yet (821,107 vs 822,557 bytes on
+  // the same DB) — that determinism gap needs its own gate before the release artifact flips.
+  'web build': {
+    string: ['out', 'base-url', 'site-name'],
+    bool: ['skip-docs', 'incremental', 'full'],
+  },
   kinds: { string: ['field'], bool: ['json'] },
   status: { bool: ['advanced', 'json'] },
   browse: { minPositional: 1, maxPositional: 1, string: ['path'], int: ['limit', 'year'], bool: ['json'] },
