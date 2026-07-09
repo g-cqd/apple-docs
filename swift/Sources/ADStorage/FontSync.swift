@@ -1,8 +1,9 @@
 // The native Apple font sync — the portable core of src/resources/apple-assets.js
 // `syncAppleFonts`. Upserts the 8 Apple font families and indexes every discovered
 // font file (variable-axis inspected via FontInspect) into apple_font_families /
-// apple_font_files. The DMG download+extract half (`--download-fonts`, hdiutil) is
-// macOS-only and opt-in; this default path — the 8 family rows + system-font
+// apple_font_files. The DMG download+extract half (`--download-fonts`, hdiutil +
+// `pkgutil --expand-full` — Apple's font DMGs wrap their fonts in a .pkg installer)
+// is macOS-only and opt-in; this default path — the 8 family rows + system-font
 // discovery + already-extracted discovery — is pure Foundation and reproducible.
 
 import ADBase  // Sha256 for the stable file id
@@ -10,6 +11,12 @@ import Foundation
 
 #if canImport(FoundationNetworking)
     import FoundationNetworking  // URLSession lives here on Linux (the Foundation split)
+#endif
+
+#if canImport(Darwin)
+    import Darwin  // kill, SIGKILL (the tool-spawn deadline)
+#else
+    import Glibc
 #endif
 
 /// One of Apple's 8 downloadable font families (the JS APPLE_FONT_FAMILIES rows).
@@ -71,14 +78,17 @@ public enum FontSync {
         public let filePath: String
     }
 
-    /// One-level directory walk for font files (the JS `discoverAppleFontFiles`). Missing dirs are
-    /// skipped; entries are sorted so the index order is deterministic across runs.
+    /// Recursive directory walk for font files (the JS `discoverAppleFontFiles` over `walkFiles`,
+    /// which recurses — the DMG extractor drops each family's fonts into `extracted/<family>/`, so a
+    /// one-level scan of `extracted/` finds nothing). Missing dirs are skipped, `__MACOSX` is pruned,
+    /// duplicates are dropped by absolute path (the JS `seen` set), and entries are sorted at each
+    /// level so the index order is deterministic across runs (the JS order is filesystem-dependent).
     public static func discover(_ dirs: [String]) -> [DiscoveredFont] {
+        var seen: Set<String> = []
         var out: [DiscoveredFont] = []
         for dir in dirs {
-            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
-            for name in entries.sorted() where matches(name, fontFilePattern) {
-                out.append(DiscoveredFont(fileName: name, filePath: "\(dir)/\(name)"))
+            for file in fontFiles(under: dir) where seen.insert(file.filePath).inserted {
+                out.append(file)
             }
         }
         return out
@@ -212,15 +222,16 @@ public enum FontSync {
     private static func number(_ value: Double) -> String {
         value == value.rounded() && abs(value) < 1e15 ? String(Int64(value)) : String(value)
     }
+}
 
-    // MARK: - DMG download + extract (`--download-fonts`, macOS-only)
-    //
-    // The native port of src/resources/apple-fonts/sync.js's downloadFileIfNeeded /
-    // extractDmgFonts / hashFile — reached only under `--download-fonts`. The hdiutil mount
-    // makes it macOS-only. ADStorage can't reach ADOps' GhRelease / SHA256Hex without
-    // inverting the module layering, so these reimplement the same shape over Foundation +
-    // ADBase.Sha256.
-
+// MARK: - DMG download + extract (`--download-fonts`, macOS-only)
+//
+// The native port of src/resources/apple-fonts/sync.js's downloadFileIfNeeded /
+// extractDmgFonts / hashFile — reached only under `--download-fonts`. The hdiutil mount
+// makes it macOS-only. ADStorage can't reach ADOps' GhRelease / SHA256Hex without
+// inverting the module layering, so these reimplement the same shape over Foundation +
+// ADBase.Sha256. (A same-file extension: the enum body stays within the size gate.)
+extension FontSync {
     /// GET `url` to `filePath` when it's absent or empty; returns whether it downloaded (the JS
     /// `downloadFileIfNeeded`). `URLSession.downloadTask` streams the body to a temp file (bounded
     /// memory — the DMGs are tens of MB), moved into place so `filePath` only appears complete.
@@ -264,16 +275,26 @@ public enum FontSync {
         return true
     }
 
-    /// Attach `dmgPath` read-only, copy every font file found under the mounted volume(s) into
-    /// `destinationDir`, and always detach (the JS `extractDmgFonts`); returns the copied target
-    /// paths. `-plist` with NO forced `-mountpoint` + enumerate-every-mount handles the SLA-wrapped /
-    /// multi-volume Apple DMGs (forcing one mountpoint latched the wrong volume in the JS); `warn`
-    /// surfaces a detach leak that would otherwise be silent.
+    /// Attach `dmgPath` read-only, expand every `.pkg` installer found on the mounted volume(s)
+    /// (`pkgutil --expand-full` into a scratch dir — Apple's downloadable font DMGs ship their fonts
+    /// INSIDE a `.pkg`, not loose on the volume, so without this step every family extracts 0 fonts),
+    /// copy every font file found across the mounts + the expanded payloads into `destinationDir`,
+    /// and always detach + clean up (the JS `extractDmgFonts`); returns the copied target paths.
+    /// `-plist` with NO forced `-mountpoint` + enumerate-every-mount handles the SLA-wrapped /
+    /// multi-volume Apple DMGs (forcing one mountpoint latched the wrong volume in the JS); a failed
+    /// pkg expand is warn-and-skip, never fatal; `warn` also surfaces a detach leak that would
+    /// otherwise be silent.
     static func extractDmgFonts(
         _ dmgPath: String, to destinationDir: String, warn: ((String) -> Void)? = nil
     ) throws -> [String] {
         ensureDir(destinationDir)
-        let plist = try runHdiutil(["attach", "-readonly", "-nobrowse", "-noautoopen", "-plist", dmgPath])
+        // The pkg-payload scratch dir (the JS `mkdtemp(join(tmpdir(), 'apple-docs-font-pkg-'))`).
+        // Registered for cleanup FIRST so the LIFO defers replay the JS finally order: detach every
+        // mount, then remove the expanded payloads.
+        let expandedDir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(atPath: expandedDir) }
+        let plist = try runTool(
+            hdiutilPath, ["attach", "-readonly", "-nobrowse", "-noautoopen", "-plist", dmgPath])
         let mountPoints = try parseMountPoints(plist)
         guard !mountPoints.isEmpty else {
             // The attach may have mounted something we failed to parse — surface it rather than
@@ -283,28 +304,65 @@ public enum FontSync {
         defer {
             for mount in mountPoints {
                 // Best-effort, like the JS `.catch(() => {})` — but surface a leak via `warn`.
-                do { _ = try runHdiutil(["detach", mount]) } catch {
+                do { _ = try runTool(hdiutilPath, ["detach", mount]) } catch {
                     warn?("hdiutil detach failed for \(mount): \(error.localizedDescription)")
                 }
             }
         }
-        // Dedup by absolute path + sort by file name so the copied set and order are deterministic
-        // (the walk order is filesystem-dependent). Mirrors the JS.
-        var seen: Set<String> = []
-        var sources: [DiscoveredFont] = []
-        for mount in mountPoints {
-            for file in fontFiles(under: mount) where seen.insert(file.filePath).inserted {
-                sources.append(file)
-            }
-        }
+        expandPkgs(on: mountPoints, into: expandedDir, warn: warn)
+        // Discover across every mount + the expanded payloads (the JS
+        // `discoverAppleFontFiles([...mountPoints, expandedDir])` — dedup by absolute path), then
+        // sort by file name so the extracted set + copy order is deterministic (the walk order is
+        // filesystem-dependent). Mirrors the JS.
         var extracted: [String] = []
-        for source in sources.sorted(by: { $0.fileName < $1.fileName }) {
+        for source in discover(mountPoints + [expandedDir]).sorted(by: { $0.fileName < $1.fileName }) {
             let target = "\(destinationDir)/\(source.fileName)"
             try? FileManager.default.removeItem(atPath: target)  // copyItem won't overwrite; JS copyFile does
             try FileManager.default.copyItem(atPath: source.filePath, toPath: target)
             extracted.append(target)
         }
         return extracted
+    }
+
+    /// Expand every `.pkg` found under the mounted volumes into `expandedDir` via
+    /// `pkgutil --expand-full` (the JS loop over `findByExtension(mp, '.pkg')`). Each pkg lands in a
+    /// subdirectory named after its sanitized basename; a failed expand is a warn-and-skip, never
+    /// fatal (one bad installer must not abort the family, let alone the sync).
+    private static func expandPkgs(
+        on mountPoints: [String], into expandedDir: String, warn: ((String) -> Void)?
+    ) {
+        for mount in mountPoints {
+            for pkg in filesByExtension(under: mount, extension: "pkg") {
+                let out = "\(expandedDir)/\(sanitizeFileName((pkg as NSString).lastPathComponent))"
+                do {
+                    _ = try runTool(pkgutilPath, ["--expand-full", pkg, out])
+                } catch {
+                    warn?("pkgutil failed for \(pkg): \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    /// `apple-assets-helpers.js` `sanitizeFileName`: every run of characters outside
+    /// `[a-z0-9_.-]` (case-insensitive) collapses to one `-`, leading/trailing `-` runs are
+    /// stripped, and an empty result falls back to `"asset"`.
+    static func sanitizeFileName(_ value: String) -> String {
+        var out = ""
+        var pendingDash = false
+        for char in value {
+            let allowed =
+                char.isASCII && (char.isLetter || char.isNumber || char == "_" || char == "." || char == "-")
+            if allowed {
+                if pendingDash, !out.isEmpty { out.append("-") }
+                pendingDash = false
+                out.append(char)
+            } else {
+                pendingDash = true
+            }
+        }
+        while out.hasPrefix("-") { out.removeFirst() }
+        while out.hasSuffix("-") { out.removeLast() }
+        return out.isEmpty ? "asset" : out
     }
 
     /// SHA-256 hex of the whole file (the JS `hashFile` → `sha256(arrayBuffer)`). Reads the file
@@ -330,50 +388,99 @@ public enum FontSync {
         }
     }
 
-    /// Run `/usr/bin/hdiutil <args>` and return its stdout, throwing its stderr on a non-zero exit
-    /// (the JS `run` / `runCapture`). stdout is drained before the wait so a plist larger than the
-    /// pipe buffer can't wedge the child — hdiutil's output here is small either way.
-    private static func runHdiutil(_ args: [String]) throws -> Data {
+    static let hdiutilPath = "/usr/bin/hdiutil"
+    static let pkgutilPath = "/usr/sbin/pkgutil"
+
+    /// Run `executable args…` and return its stdout, throwing its stderr on a non-zero exit (the JS
+    /// `run` / `runCapture` over `spawnWithDeadline`). Both pipes drain on background queues so
+    /// output larger than a pipe buffer can never wedge the child, and the child is SIGKILLed past
+    /// `deadlineMs` (the JS bounds hdiutil attach/detach and `pkgutil --expand-full` at the same 60s
+    /// — each finishes in seconds on a normal DMG, so the deadline only bounds an OS-level hang; the
+    /// drain-then-deadline shape follows `ADRender.HbViewRenderer.run`).
+    private static func runTool(_ executable: String, _ args: [String], deadlineMs: Int = 60_000) throws -> Data {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = args
         let outPipe = Pipe()
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         do {
             try process.run()
         } catch {
-            throw FontSyncError("cannot spawn hdiutil: \(error.localizedDescription)")
+            throw FontSyncError("cannot spawn \(executable): \(error.localizedDescription)")
         }
-        let out = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let err = errPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        let stdout = PipeDrain(outPipe)
+        let stderr = PipeDrain(errPipe)
+        if exited.wait(timeout: .now() + .milliseconds(deadlineMs)) == .timedOut {
+            kill(process.processIdentifier, SIGKILL)
+            _ = stdout.wait(ms: 1_000)
+            _ = stderr.wait(ms: 1_000)
+            throw FontSyncError("\(executable) timed out after \(deadlineMs / 1_000)s")
+        }
+        _ = stdout.wait(ms: 5_000)
+        _ = stderr.wait(ms: 5_000)
         guard process.terminationStatus == 0 else {
-            let message = String(decoding: err, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            throw FontSyncError(message.isEmpty ? "hdiutil exited \(process.terminationStatus)" : message)
+            let message = String(decoding: stderr.data, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            throw FontSyncError(
+                message.isEmpty
+                    ? "\((executable as NSString).lastPathComponent) exited \(process.terminationStatus)"
+                    : message)
+        }
+        return stdout.data
+    }
+
+    /// A fresh private scratch directory for the expanded pkg payloads (`mkdtemp`, mode 0700 —
+    /// the `HbViewRenderer.makeStagingDir` idiom, unguessable so no fixed-name symlink race).
+    private static func makeScratchDir() throws -> String {
+        let template = NSTemporaryDirectory() + "apple-docs-font-pkg-XXXXXX"
+        var bytes = Array(template.utf8) + [0]
+        let path = bytes.withUnsafeMutableBufferPointer { buffer -> String? in
+            buffer.baseAddress.flatMap { mkdtemp($0) }.map { String(cString: $0) }
+        }
+        guard let path else { throw FontSyncError("mkdtemp failed (errno \(errno))") }
+        return path
+    }
+
+    /// Every font file under `dir` (recursive) — the JS `walkFiles` filter behind
+    /// `discoverAppleFontFiles`.
+    private static func fontFiles(under dir: String) -> [DiscoveredFont] {
+        var out: [DiscoveredFont] = []
+        walkFiles(under: dir) { name, full in
+            if matches(name, fontFilePattern) { out.append(DiscoveredFont(fileName: name, filePath: full)) }
         }
         return out
     }
 
-    /// Every font file under `dir` (recursive; skips `__MACOSX`) — the JS `walkFiles` /
-    /// `discoverAppleFontFiles` the extractor copies from. The one-level `discover` above is for the
-    /// flat extracted/ + system dirs; a mounted DMG nests its fonts.
-    private static func fontFiles(under dir: String) -> [DiscoveredFont] {
+    /// Every file under `dir` whose lowercased path extension is `ext` (the JS `findByExtension`,
+    /// which feeds the `.pkg` expansion).
+    private static func filesByExtension(under dir: String, extension ext: String) -> [String] {
+        var out: [String] = []
+        walkFiles(under: dir) { name, full in
+            if (name as NSString).pathExtension.lowercased() == ext { out.append(full) }
+        }
+        return out
+    }
+
+    /// Recursive file walk (the JS `walkFiles`): visits every regular file under `dir` as
+    /// `(leafName, fullPath)`, pruning `__MACOSX`. Entries are sorted at each level so every
+    /// consumer's order is deterministic (the JS readdir order is filesystem-dependent).
+    private static func walkFiles(under dir: String, _ visit: (String, String) -> Void) {
         let fileManager = FileManager.default
-        guard let entries = try? fileManager.contentsOfDirectory(atPath: dir) else { return [] }
-        var out: [DiscoveredFont] = []
-        for name in entries {
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: dir) else { return }
+        for name in entries.sorted() {
             let full = "\(dir)/\(name)"
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: full, isDirectory: &isDirectory) else { continue }
             if isDirectory.boolValue {
-                if name != "__MACOSX" { out.append(contentsOf: fontFiles(under: full)) }
-            } else if matches(name, fontFilePattern) {
-                out.append(DiscoveredFont(fileName: name, filePath: full))
+                if name != "__MACOSX" { walkFiles(under: full, visit) }
+            } else {
+                visit(name, full)
             }
         }
-        return out
     }
 
     /// `mkdir -p` (the JS `ensureDir`).
@@ -395,4 +502,27 @@ private struct FontSyncError: LocalizedError {
     let message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
+}
+
+/// Drains one pipe to EOF on a background queue (`HbViewRenderer`'s OutputBox + DispatchGroup
+/// pattern): the caller waits on process exit without ever blocking a pipe writer, then `wait`
+/// establishes the happens-before edge for reading `data`.
+private final class PipeDrain: @unchecked Sendable {
+    var data = Data()
+    private let drained = DispatchGroup()
+
+    init(_ pipe: Pipe) {
+        drained.enter()
+        DispatchQueue.global(qos: .utility)
+            .async {
+                self.data = pipe.fileHandleForReading.readDataToEndOfFile()
+                self.drained.leave()
+            }
+    }
+
+    /// True when the drain finished within `ms`.
+    @discardableResult
+    func wait(ms: Int) -> Bool {
+        drained.wait(timeout: .now() + .milliseconds(ms)) == .success
+    }
 }
