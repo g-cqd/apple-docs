@@ -18,11 +18,9 @@ import Testing
     "CLI verb-for-verb golden parity (RFC 0007 §12 Tier 1)",
     .enabled(if: ParityEnvironment.isAvailable, "\(ParityEnvironment.unavailableReason)"))
 struct CLIParityTests {
-    /// One invocation per `ParityCases.all` entry. A `knownIssue`-tagged case still runs the real
-    /// comparison every time (via `withKnownIssue`), so a regression widens visibly (a NEW failure
-    /// inside the known-issue block still fails loudly — `withKnownIssue` only absorbs the
-    /// EXPECTED failure) and a fix is caught the moment it lands (Swift Testing surfaces "known
-    /// issue not encountered" so the wrapper can be removed).
+    /// One invocation per `ParityCases.all` entry — every case must pass outright (the harness's
+    /// former `withKnownIssue` plumbing is gone: the storage pivot obsoleted both tracked
+    /// divergences, see ParityCases.swift's header).
     @Test("cli.js vs ad-cli", arguments: ParityCases.all)
     func verbParity(_ testCase: ParityCase) async throws {
         let bun = try #require(ParityEnvironment.bunPath, "bun unavailable despite suite gating")
@@ -46,19 +44,10 @@ struct CLIParityTests {
 
         let comparison = Self.compare(testCase, js: js, swift: swift)
 
-        if let knownIssue = testCase.knownIssue {
-            withKnownIssue(Comment(rawValue: knownIssue)) {
-                #expect(js.exitCode == testCase.expectedExitCode, "cli.js exit code (stderr: \(js.stderr))")
-                #expect(
-                    swift.exitCode == testCase.expectedExitCode, "ad-cli exit code (stderr: \(swift.stderr))")
-                #expect(comparison.isMatch, "\(comparison.detail)")
-            }
-        } else {
-            #expect(js.exitCode == testCase.expectedExitCode, "cli.js exit code (stderr: \(js.stderr))")
-            #expect(
-                swift.exitCode == testCase.expectedExitCode, "ad-cli exit code (stderr: \(swift.stderr))")
-            #expect(comparison.isMatch, "\(comparison.detail)")
-        }
+        #expect(js.exitCode == testCase.expectedExitCode, "cli.js exit code (stderr: \(js.stderr))")
+        #expect(
+            swift.exitCode == testCase.expectedExitCode, "ad-cli exit code (stderr: \(swift.stderr))")
+        #expect(comparison.isMatch, "\(comparison.detail)")
     }
 
     /// Env for every `cli.js` invocation: the mandatory native kill switch, the fixture home, and

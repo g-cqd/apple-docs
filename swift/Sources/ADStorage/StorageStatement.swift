@@ -1,21 +1,19 @@
-// The storage-backend abstraction. `StorageConnection`'s read methods used to
-// talk directly to a libsqlite3 `Connection` / `PreparedStatement`; they now
-// talk to these two protocols, so the SAME read path runs on EITHER libsqlite3
-// (`SQLiteConnection` / `SQLiteStatement`) or the native ADDB engine
-// (`ADDBBackend` / `ADDBStatement`). The corpus format is detected at open time
-// (`openStorageBackend`), so every existing call site keeps using
-// `StorageConnection` unchanged.
+// The statement abstraction the storage read methods code against. Since the
+// storage pivot (RFC 0007 D-0007-4, stage 2c) the corpus is real SQLite ONLY —
+// the interim dual-backend dispatch (the `StorageBackend` protocol, the ADDB
+// engine's `ADDBBackend`/`ADDBStatement`, and the `openStorageBackend` format
+// sniff) is deleted, and `StorageConnection` holds a concrete
+// `SQLiteConnection` directly. What remains here is the statement seam: the
+// bind-value vocabulary, the `StorageStatement` read surface `SQLiteStatement`
+// implements, and the shared row framer the FFI and JSON paths emit through.
 //
 // The step-result and column-type vocabulary is the frozen sqlite3 integer set
 // (`SQLite.row` = 100, `SQLite.done` = 101, `SQLite.type*` = 1…5 in
-// `SQLiteLib.swift`): the SQLite backend returns them natively and the ADDB
-// backend maps its `Value` cells onto the same constants, so the shared row
-// decoders (`SearchRow.decode`, `CorpusStats`, `Browse`, …) and the shared
-// framer below are backend-agnostic.
+// `SQLiteLib.swift`), which the shared row decoders (`SearchRow.decode`,
+// `CorpusStats`, `Browse`, …) and the framer below consume.
 
-/// A bound value for a named or positional parameter. `.null` binds SQL NULL.
-/// Backend-neutral: the SQLite statement binds it through `sqlite3_bind_*`, the
-/// ADDB statement maps it to an ADSQL `Value`.
+/// A bound value for a named or positional parameter. `.null` binds SQL NULL
+/// (through `sqlite3_bind_*`).
 enum BindValue {
     case null
     case int(Int64)
@@ -23,43 +21,9 @@ enum BindValue {
     case text(String)
 }
 
-/// The read-connection surface the storage read methods use. One implementation
-/// wraps libsqlite3 (`SQLiteConnection`), the other the ADDB engine
-/// (`ADDBBackend`). Used by exactly one thread at a time (the statement cache is
-/// unsynchronized), matching the pre-existing `Connection` contract.
-protocol StorageBackend: AnyObject, Sendable {
-    /// Snapshot-capability probes (mirror the old `Connection` stored flags), used
-    /// by the search tiers / read_doc to gate optional tables.
-    var hasTrigram: Bool { get }
-    var hasBodyFts: Bool { get }
-    var hasSections: Bool { get }
-    var hasRelationships: Bool { get }
-
-    /// The cached statement for `sql` (prepared on first use). One statement per
-    /// SQL string, reused across calls — the search hot path.
-    func statement(_ sql: String) -> (any StorageStatement)?
-    /// A statement prepared WITHOUT caching (for variable-arity IN(?,…) SQL).
-    func prepareUncached(_ sql: String) -> (any StorageStatement)?
-    /// Runtime table-existence probe (mirrors `database.hasTable`).
-    func tableExists(_ name: String) -> Bool
-
-    /// The framed searchPages payload (`[u32 colCount][u32 rowCount][cells…]`),
-    /// or nil on failure. SQLite runs `searchPagesSQL`; ADDB routes to the
-    /// parity-proven `searchPagesFramedDenorm`.
-    func searchPagesFramed(_ params: SearchPagesParams) -> [UInt8]?
-    /// The searchPages result as a JSON array of objects (UTF-8), or nil on
-    /// failure. SQLite frames `searchPagesSQL` rows; ADDB frames the denorm rows.
-    func searchPagesFramedJSON(_ params: SearchPagesParams) -> [UInt8]?
-    /// The FTS tier's decoded `[SearchRow]` when the backend has a native fast
-    /// path (ADDB → `searchPagesDenormRows`), else nil so the caller runs the
-    /// generic `searchPagesSQL` statement path.
-    func nativeFtsRows(_ params: SearchPagesParams) -> [SearchRow]?
-}
-
-/// A prepared statement's read surface. `SQLiteStatement` wraps a cached
-/// `sqlite3_stmt`; `ADDBStatement` wraps an ADDB `Statement` whose rows are
-/// materialized on first `step`. Both expose the identical accessor set so the
-/// row decoders and the shared framer are written once.
+/// A prepared statement's read surface: the accessor set the row decoders and
+/// the shared framer are written against. `SQLiteStatement` (a cached
+/// `sqlite3_stmt` wrapper) is the one implementation.
 protocol StorageStatement: AnyObject {
     // MARK: binding
     /// Binds to the named parameter (e.g. `"$query"`). Unknown names are ignored.
@@ -215,17 +179,4 @@ enum RowFraming {
                 out.append(contentsOf: "null".utf8)
         }
     }
-}
-
-// MARK: - backend factory (format detection)
-
-/// Opens the right read backend for `path`: try the native ADDB engine first
-/// (its `ADSQLv0` magic makes detection unambiguous), else fall back to
-/// libsqlite3. nil when neither can open the file. `writable` is honoured only
-/// by the SQLite backend (the web build's incremental cache); the ADDB backend
-/// always opens writable so `prepareForDenormServing` can populate the denorm
-/// columns.
-func openStorageBackend(path: String, writable: Bool) -> (any StorageBackend)? {
-    if let addb = ADDBBackend(path: path) { return addb }
-    return SQLiteConnection(path: path, writable: writable)
 }

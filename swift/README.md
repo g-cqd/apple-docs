@@ -39,9 +39,10 @@ AD_HTTP3=1 swift build       # opt-in QUIC/HTTP3 (raises the macOS floor to 26)
 
 ### Building against unpublished siblings
 
-The first-party `g-cqd/AD*` dependencies (ADFoundation, ADDB, ADJSON, ADSQL, and
+The first-party `g-cqd/AD*` dependencies (ADFoundation, ADJSON, ADHTML, ADServe, and
 the dev-only ADBuildTools/ADTestKit) resolve from their published `main` branch by
-default. While they are unpublished, point the manifest at local checkouts via the
+default. (ADDB and ADSQL are no longer dependencies — the storage pivot, RFC 0007
+D-0007-4, returned the corpus to real SQLite.) While they are unpublished, point the manifest at local checkouts via the
 `*_PATH` env overrides (see the `Context.environment[...]` blocks in `Package.swift`).
 The committed [`build.sh`](build.sh) wrapper does this for you — it exports every
 `*_PATH` to sibling checkouts beside this repo, then execs `swift`:

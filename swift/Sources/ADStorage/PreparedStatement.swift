@@ -3,10 +3,9 @@
 // reset + clear_bindings run on teardown of every execution so stale bindings
 // from a prior call can never leak into the next and silently return wrong rows.
 //
-// `run`/`runJSON` are the shared `RowFraming` defaults (StorageBackend.swift):
+// `run`/`runJSON` are the shared `RowFraming` defaults (StorageStatement.swift):
 // this type only supplies the accessors + the zero-copy text/blob byte hooks,
-// so the framing loop is written once and produces byte-identical output on
-// both backends.
+// so the framing loop lives in one place.
 
 import ADFCore
 import ADJSONCore
