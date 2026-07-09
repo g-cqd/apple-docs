@@ -27,7 +27,6 @@
 // The native crawl always persists sections, so this pass renders the document
 // fields alone in that case rather than reaching into the data dir.
 
-import ADArchive
 import ADContent
 public import ADStorage
 import Foundation
@@ -193,26 +192,8 @@ public enum IndexBody {
         return rows.map { row in
             SectionText(
                 heading: row.text("heading"),
-                contentText: sectionContent(row["content_text"]) ?? "",
+                contentText: SectionCodec.decodeText(row["content_text"]) ?? "",
                 sortOrder: Double(row.int("sort_order") ?? 0))
-        }
-    }
-
-    /// `decodeSectionContent` (storage/section-codec.js): TEXT passes through; a
-    /// BLOB is a zstd frame (magic 28 b5 2f fd) inflated, or plain UTF-8 bytes.
-    private static func sectionContent(_ value: SQLiteValue?) -> String? {
-        switch value {
-            case .text(let text):
-                return text
-            case .blob(let bytes):
-                if bytes.count >= 4, bytes[0] == 0x28, bytes[1] == 0xB5, bytes[2] == 0x2F, bytes[3] == 0xFD,
-                    let inflated = ZstdDecoder.decompress(bytes)
-                {
-                    return String(decoding: inflated, as: UTF8.self)
-                }
-                return String(decoding: bytes, as: UTF8.self)
-            default:
-                return nil
         }
     }
 
