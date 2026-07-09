@@ -214,7 +214,7 @@ struct SyncCommand: AsyncParsableCommand {
             result = try await CrawlDriver(registry: registry)
                 .sync(
                     sourceType: source, into: database, rootId: rootId, rootIds: rootIds, context: context,
-                    now: now, embedder: embedder)
+                    now: now, embedder: embedder, dataDir: (db as NSString).deletingLastPathComponent)
         } catch let code as ExitCode {
             throw code
         } catch {
@@ -297,6 +297,7 @@ struct SyncAllCommand: AsyncParsableCommand {
                 let stats = try await driver.crawl(
                     sourceType: source, into: database, rootId: rootId, rootIds: rootIds,
                     context: context, now: now, maxConcurrency: concurrency,
+                    dataDir: (db as NSString).deletingLastPathComponent,
                     onProgress: { progress in
                         // A long reference-following source (apple-docc: ~350K pages) is otherwise a
                         // silent black box until it completes; stream elapsed time, running counts,

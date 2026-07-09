@@ -69,7 +69,7 @@ public struct CrawlDriver: Sendable {
     @discardableResult
     public func crawl(
         sourceType: String, into db: SQLiteWriteConnection, rootId: Int64, rootIds: [String: Int64] = [:],
-        context: SourceContext, now: String, maxConcurrency: Int = 8,
+        context: SourceContext, now: String, maxConcurrency: Int = 8, dataDir: String? = nil,
         onProgress: (@Sendable (Stats) -> Void)? = nil
     ) async throws -> Stats {
         let adapter = try registry.adapter(for: sourceType)
@@ -80,7 +80,7 @@ public struct CrawlDriver: Sendable {
         if type(of: adapter).syncMode == .crawl {
             let stats = try await crawlBFS(
                 adapter, discovery: discovery, rootId: rootId, rootIds: rootIds,
-                run: BFSRun(db: db, context: context, now: now, maxConcurrency: maxConcurrency),
+                run: BFSRun(db: db, context: context, now: now, maxConcurrency: maxConcurrency, dataDir: dataDir),
                 onProgress: onProgress)
             try Self.refreshRootPageCounts(db, rootId: rootId, rootIds: rootIds)
             return stats
@@ -112,7 +112,7 @@ public struct CrawlDriver: Sendable {
             for _ in 0 ..< Swift.max(1, maxConcurrency) {
                 guard let key = keys.next() else { break }
                 let keyRootId = Self.rootId(forKey: key, rootIds: rootIds, default: rootId)
-                group.addTask { await self.fetchNormalize(adapter, key, keyRootId, context) }
+                group.addTask { await self.fetchNormalize(adapter, key, keyRootId, context, dataDir: dataDir) }
             }
             while let result = try await group.next() {
                 if let fetched = result {
@@ -133,7 +133,7 @@ public struct CrawlDriver: Sendable {
                 }
                 if let key = keys.next() {
                     let keyRootId = Self.rootId(forKey: key, rootIds: rootIds, default: rootId)
-                    group.addTask { await self.fetchNormalize(adapter, key, keyRootId, context) }
+                    group.addTask { await self.fetchNormalize(adapter, key, keyRootId, context, dataDir: dataDir) }
                 }
             }
         }
@@ -263,7 +263,8 @@ public struct CrawlDriver: Sendable {
                     inFlight.insert(row.path)
                     let (path, rootSlug, depth) = (row.path, row.rootSlug, row.depth)
                     group.addTask {
-                        await self.bfsFetch(adapter, path: path, rootSlug: rootSlug, depth: depth, context)
+                        await self.bfsFetch(
+                            adapter, path: path, rootSlug: rootSlug, depth: depth, context, dataDir: run.dataDir)
                     }
                 }
             }
@@ -324,6 +325,10 @@ public struct CrawlDriver: Sendable {
         let context: SourceContext
         let now: String
         let maxConcurrency: Int
+        /// When set, every fetched JSON payload is stableStringified + written to
+        /// `<dataDir>/raw-json/<key>.json` (persist.js's raw store — what
+        /// `Snapshot.embedRawPayloads` packs into `document_raw`).
+        let dataDir: String?
     }
 
     /// A BFS batch item's outcome, carried out of its child task. `.fetched` still needs the serial
@@ -356,18 +361,20 @@ public struct CrawlDriver: Sendable {
     /// execution in a task group. `rootSlug` (the page's owning root) is threaded through so the serial
     /// consumer can attribute + re-seed without re-deriving it. Any failure becomes `.failed` (non-fatal).
     private func bfsFetch(
-        _ adapter: any SourceAdapter, path: String, rootSlug: String, depth: Int, _ context: SourceContext
+        _ adapter: any SourceAdapter, path: String, rootSlug: String, depth: Int, _ context: SourceContext,
+        dataDir: String?
     ) async -> BFSOutcome {
         do {
             let result = try await adapter.fetch(path, context)
             let page = try adapter.normalize(result.key, result.payload)
             let refs = adapter.extractReferences(result.key, result.payload)
+            let raw = try Self.persistRaw(result.payload, key: path, dataDir: dataDir)
             return .fetched(
                 BFSFetched(
                     path: path,
                     rootSlug: rootSlug, depth: depth, page: page, refs: refs,
                     contentHash: Self.sha256Hex(Array(page.stableStringified().utf8)),
-                    rawHash: Self.sha256Hex(Self.rawBytes(result.payload)),
+                    rawHash: raw,
                     etag: result.etag, lastModified: result.lastModified))
         } catch {
             return .failed(path: path, rootSlug: rootSlug, depth: depth, error: String(describing: error))
@@ -403,15 +410,17 @@ public struct CrawlDriver: Sendable {
     }
 
     private func fetchNormalize(
-        _ adapter: any SourceAdapter, _ key: String, _ rootId: Int64, _ context: SourceContext
+        _ adapter: any SourceAdapter, _ key: String, _ rootId: Int64, _ context: SourceContext,
+        dataDir: String?
     ) async -> Fetched? {
         do {
             let result = try await adapter.fetch(key, context)
             let page = try adapter.normalize(result.key, result.payload)
+            let raw = try Self.persistRaw(result.payload, key: key, dataDir: dataDir)
             return Fetched(
                 page: page, path: key, rootId: rootId,
                 contentHash: Self.sha256Hex(Array(page.stableStringified().utf8)),
-                rawHash: Self.sha256Hex(Self.rawBytes(result.payload)),
+                rawHash: raw,
                 etag: result.etag, lastModified: result.lastModified)
         } catch {
             return nil
@@ -433,10 +442,11 @@ public struct CrawlDriver: Sendable {
     /// documents updated since the last `body_indexed_at` stamp are re-rendered.
     public func sync(
         sourceType: String, into db: SQLiteWriteConnection, rootId: Int64, rootIds: [String: Int64] = [:],
-        context: SourceContext, now: String, embedder: (some ChunkEmbedder)?
+        context: SourceContext, now: String, embedder: (some ChunkEmbedder)?, dataDir: String? = nil
     ) async throws -> SyncResult {
         let crawlStats = try await crawl(
-            sourceType: sourceType, into: db, rootId: rootId, rootIds: rootIds, context: context, now: now)
+            sourceType: sourceType, into: db, rootId: rootId, rootIds: rootIds, context: context, now: now,
+            dataDir: dataDir)
         let bodyResult = try IndexBody.runIncremental(db, now: now)
         // nil embedder (no model resources on this host) ⇒ the embedding pass is SKIPPED,
         // not failed — the JS sync's behavior with a dormant semantic tier: crawl + body
@@ -445,14 +455,14 @@ public struct CrawlDriver: Sendable {
         return SyncResult(crawl: crawlStats, body: bodyResult, index: indexResult)
     }
 
-    private static func rawBytes(_ payload: SourcePayload) -> [UInt8] {
+    static func rawBytes(_ payload: SourcePayload) -> [UInt8] {
         switch payload {
             case .html(let text), .markdown(let text): return Array(text.utf8)
             case .json(let bytes), .bytes(let bytes): return bytes
         }
     }
 
-    private static func sha256Hex(_ bytes: [UInt8]) -> String {
+    static func sha256Hex(_ bytes: [UInt8]) -> String {
         SHA256.hash(data: Data(bytes)).map { String(format: "%02x", $0) }.joined()
     }
 }
