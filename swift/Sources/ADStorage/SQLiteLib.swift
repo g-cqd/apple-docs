@@ -23,8 +23,10 @@ enum SQLite {
     static let done: Int32 = 101
 
     // open flags
+    static let openReadOnly: Int32 = 0x0000_0001
     static let openReadWrite: Int32 = 0x0000_0002
     static let openCreate: Int32 = 0x0000_0004
+    static let openURI: Int32 = 0x0000_0040
     static let openNoMutex: Int32 = 0x0000_8000
 
     // column types

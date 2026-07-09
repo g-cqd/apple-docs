@@ -64,6 +64,29 @@ final class SQLiteConnection: @unchecked Sendable {
         self.hasRelationships = SQLiteConnection.tableExists(lib, handle, "document_relationships")
     }
 
+    /// Read-only, IMMUTABLE open of a FOREIGN SQLite database — the Xcode MobileAsset docs index
+    /// under /System (the JS `openAssetDb`: `file:<path>?immutable=1`, READONLY | URI). `immutable=1`
+    /// skips locking and the WAL-index entirely, so nothing under /System is ever written (a plain
+    /// read-only open of a WAL database needs a writable/creatable `-shm`, which a SIP-protected
+    /// asset directory cannot guarantee). No corpus pragmas, no FTS5 requirement — this connection
+    /// only ever runs plain SELECTs against the asset's own tables.
+    init?(immutableAssetPath path: String) {
+        guard let lib = SQLiteLoader.shared else { return nil }
+        self.lib = lib
+        var handle: OpaquePointer?
+        let flags = SQLite.openReadOnly | SQLite.openURI | SQLite.openNoMutex
+        let rc = "file:\(path)?immutable=1".withCString { lib.openV2($0, &handle, flags, nil) }
+        guard rc == SQLite.ok, let handle else {
+            if let handle { _ = lib.closeV2(handle) }
+            return nil
+        }
+        self.db = handle
+        self.hasTrigram = false
+        self.hasBodyFts = false
+        self.hasSections = false
+        self.hasRelationships = false
+    }
+
     deinit {
         cache.removeAll()  // finalizes each statement via SQLiteStatement.deinit
         _ = lib.closeV2(db)
