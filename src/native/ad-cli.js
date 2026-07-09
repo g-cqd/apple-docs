@@ -66,6 +66,10 @@ const SEARCH_BOOL_FLAGS = ['no-fuzzy', 'no-deep', 'no-eager', 'read', 'json']
  * @property {string[]} [string]  string-valued flags (`--k v`), passed through only as strings
  * @property {string[]} [int]  flags accepted only as clean non-negative integer strings (`--k n`)
  * @property {string[]} [bool]  boolean flags emitted as bare `--k` when truthy (declare `json` last)
+ * @property {'db' | 'home' | 'none'} [corpusFlag]  how the corpus location is passed: `--db <dbPath>`
+ *   (default — the read verbs), `--home <dirname(dbPath)>` (verbs that embed the HOME itself in
+ *   their output, e.g. `mcp install`), or `'none'` (pure-stdout verbs whose native twin takes no
+ *   corpus flag at all, e.g. `web deploy`)
  */
 
 /**
@@ -79,6 +83,10 @@ const VERB_SPECS = {
   version: { bool: ['json'] },
   'storage stats': { bool: ['json'] },
   'storage check-orphans': { bool: ['json'] },
+  // GET form only (maxPositional 0): `storage profile <name>` (the SET form, which applies the
+  // profile's table drops) falls back to Bun via the arity check until it earns its own gate.
+  // Byte-diffed identical (human + --json) against the oracle on a scratch corpus, 2026-07-09.
+  'storage profile': { bool: ['json'] },
   kinds: { string: ['field'], bool: ['json'] },
   status: { bool: ['advanced', 'json'] },
   browse: { minPositional: 1, maxPositional: 1, string: ['path'], int: ['limit', 'year'], bool: ['json'] },
@@ -91,6 +99,15 @@ const VERB_SPECS = {
     int: SEARCH_INT_FLAGS,
     bool: SEARCH_BOOL_FLAGS,
   },
+  // Pure stdout (no corpus flag on the native twin). Known, deliberate divergence: the native
+  // output appends the build/serve architecture note (human + a `note` JSON field) explaining
+  // that `web build` emits the static site while `ad-server serve` hosts the APIs — an
+  // operator-approved addition, not drift (see WebDeploy.swift).
+  'web deploy': { maxPositional: 1, bool: ['json'], corpusFlag: 'none' },
+  // Embeds the resolved HOME in its printed client config, so it takes `--home`, not `--db`.
+  // Bare invocation only — any flag (--http/--endpoint) falls back to Bun until the flag-shape
+  // mismatch (JS `--http [url]` vs native `--http --endpoint <url>`) is reconciled.
+  'mcp install': { corpusFlag: 'home' },
 }
 
 /**
@@ -147,7 +164,9 @@ function validateFlags(verb, spec, pos, flags, dbPath) {
   }
 
   const positionals = max === 0 ? [] : spec.joinPositional ? [pos.join(' ')] : [...pos]
-  const args = [...verb, ...positionals, '--db', dbPath]
+  const corpusFlag = spec.corpusFlag ?? 'db'
+  const corpusArgs = corpusFlag === 'none' ? [] : corpusFlag === 'home' ? ['--home', dbPath.replace(/\/apple-docs\.db$/, '')] : ['--db', dbPath]
+  const args = [...verb, ...positionals, ...corpusArgs]
   for (const k of stringFlags) {
     if (typeof flags[k] === 'string') args.push(`--${k}`, flags[k])
   }

@@ -96,8 +96,11 @@ struct WebDeployCommand: ParsableCommand {
                         ("note", .string(architectureNote))
                     ])))
         } else {
-            var lines = ["Deploy to \(entry.platform):", ""]
-            lines.append(contentsOf: entry.steps)
+            // Byte-faithful to the JS `formatWebDeploy` (no colon; two-space step
+            // indent; JS `bold()` is TTY-gated so piped output is plain) — with the
+            // Swift-only architecture note appended after a blank line.
+            var lines = ["Deploy to \(entry.platform)", ""]
+            lines.append(contentsOf: entry.steps.map { "  \($0)" })
             lines.append(contentsOf: ["", architectureNote])
             print(lines.joined(separator: "\n"))
         }
