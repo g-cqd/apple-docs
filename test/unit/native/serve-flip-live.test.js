@@ -1,10 +1,15 @@
 // @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 /**
- * Live delegation smoke for the RFC 0005 Phase E web-serve flip. The EXACT argv
- * `nativeServeArgs()` builds for `apple-docs web serve` must be accepted by the
+ * Live delegation smoke for the RFC 0005 Phase E serve flip. The EXACT argv
+ * `nativeServeArgs()` builds for `apple-docs mcp serve` must be accepted by the
  * real ad-server and bring up a serving instance — this catches a mapping that
  * drifts away from the binary's ArgumentParser surface (a wrong flag name, or a
  * missing `serve` subcommand token).
+ *
+ * (`web serve` is HELD on the Bun path — nativeServeArgs returns null for it
+ * until ad-server serves the full site — so `mcp serve` is the surviving
+ * HTTP-serve mapping this suite drives; the hold itself is asserted in
+ * serve-flip.test.js.)
  *
  * Complements web-routes-parity (which hardcodes the argv + asserts byte parity)
  * by driving the argv through the SAME mapping cli.js uses, with ad-server as a
@@ -25,9 +30,8 @@ let dir
 let server
 let ready = false
 
-// The argv cli.js produces for `apple-docs web serve --port P --base-url U`.
-const buildArgs = (dbPath) =>
-  nativeServeArgs({ command: 'web', subcommand: 'serve', flags: { port: String(PORT), 'base-url': 'https://example.test' }, dbPath })
+// The argv cli.js produces for `apple-docs mcp serve --port P`.
+const buildArgs = (dbPath) => nativeServeArgs({ command: 'mcp', subcommand: 'serve', flags: { port: String(PORT) }, dbPath })
 
 if (existsSync(AD_SERVER)) {
   dir = mkdtempSync(join(tmpdir(), 'serve-flip-live-'))
@@ -51,7 +55,7 @@ if (existsSync(AD_SERVER)) {
   server = Bun.spawn([AD_SERVER, ...buildArgs(dbPath)], { stdout: 'ignore', stderr: 'ignore' })
 }
 
-describe.skipIf(!existsSync(AD_SERVER))('web serve flip — real ad-server accepts nativeServeArgs() argv', () => {
+describe.skipIf(!existsSync(AD_SERVER))('mcp serve flip — real ad-server accepts nativeServeArgs() argv', () => {
   beforeAll(async () => {
     for (let i = 0; i < 100; i++) {
       try {
@@ -72,13 +76,12 @@ describe.skipIf(!existsSync(AD_SERVER))('web serve flip — real ad-server accep
     if (dir) rmSync(dir, { recursive: true, force: true })
   })
 
-  test('argv leads with the serve subcommand and maps db/port/app-version/base-url', () => {
+  test('argv leads with the serve subcommand and maps db/port/app-version', () => {
     const argv = buildArgs(join(dir, 'apple-docs.db'))
     expect(argv[0]).toBe('serve')
     expect(argv).toContain('--db')
     expect(argv).toContain('--port')
     expect(argv).toContain('--app-version')
-    expect(argv).toContain('--base-url')
   })
 
   test('the mapped argv brings up a live server (/healthz ok)', () => {

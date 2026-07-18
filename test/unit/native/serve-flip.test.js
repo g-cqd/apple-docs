@@ -1,7 +1,9 @@
-// Unit gate for the RFC 0005 Phase E web-serve flip wiring (cli.js → ad-server):
-// the DEFAULT-OFF serve switch, the binary allowlist resolution, and the
-// invocation mapping with its conservative fall-back-to-Bun policy. Pure
-// functions — no process is spawned here (live parity is the ad-server suites).
+// Unit gate for the RFC 0005 Phase E serve-flip wiring (cli.js → ad-server):
+// the DEFAULT-ON serve switch, the binary allowlist resolution, and the
+// invocation mapping with its conservative fall-back-to-Bun policy — including
+// the `web serve` HOLD (every invocation stays on Bun until ad-server serves
+// the full site: HTML pages, /assets/*, /api/search). Pure functions — no
+// process is spawned here (live parity is the ad-server suites).
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -64,35 +66,18 @@ describe('adServerBinaryPath — allowlist resolution', () => {
   })
 })
 
-describe('nativeServeArgs — web serve mapping + conservative fallback', () => {
-  /** @type {string | undefined} */
-  let prevWebHost
-  beforeEach(() => {
-    prevWebHost = process.env.APPLE_DOCS_WEB_HOST
-    delete process.env.APPLE_DOCS_WEB_HOST
-  })
-  afterEach(() => {
-    if (prevWebHost === undefined) delete process.env.APPLE_DOCS_WEB_HOST
-    else process.env.APPLE_DOCS_WEB_HOST = prevWebHost
-  })
-
+describe('nativeServeArgs — web serve HELD on the Bun path', () => {
   /** @param {Record<string, unknown>} flags @returns {string[] | null} */
   const web = (flags) => nativeServeArgs({ command: 'web', subcommand: 'serve', flags, dbPath: DB })
 
-  test('default web serve pins the Bun default port (3000) + app-version', () => {
-    expect(web({})).toEqual(['serve', '--db', DB, '--port', '3000', '--app-version', VERSION])
-  })
-  test('explicit port + base-url pass through', () => {
-    expect(web({ port: '8080', 'base-url': 'https://x' })).toEqual(['serve', '--db', DB, '--port', '8080', '--app-version', VERSION, '--base-url', 'https://x'])
-  })
-  test('loopback host delegates; a non-loopback host falls back to Bun', () => {
-    expect(web({ host: '127.0.0.1' })).not.toBeNull()
-    expect(web({ host: '0.0.0.0' })).toBeNull()
-  })
-  test('rate-limit / metrics have no native equivalent → fall back to Bun', () => {
+  test('every web serve invocation falls back to Bun until ad-server serves the full site', () => {
+    // ad-server 404s the HTML pages, /assets/*, and /api/search today
+    // (reports/e2e/web-serve-ab.json) — delegating would break the verb.
+    expect(web({})).toBeNull()
+    expect(web({ port: '8080', 'base-url': 'https://x' })).toBeNull()
+    expect(web({ host: '127.0.0.1' })).toBeNull()
     expect(web({ 'rate-limit': true })).toBeNull()
     expect(web({ 'metrics-port': '9090' })).toBeNull()
-    expect(web({ 'metrics-host': '127.0.0.1' })).toBeNull()
   })
   test('non-serve verbs return null', () => {
     expect(nativeServeArgs({ command: 'search', subcommand: undefined, flags: {}, dbPath: DB })).toBeNull()
