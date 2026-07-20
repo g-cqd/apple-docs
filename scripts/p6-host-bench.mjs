@@ -97,7 +97,7 @@ try {
   console.log("\n=== searchPages over HTTP (concurrency 16, multi-framework) ===")
   const main = await bench(searchUrl(`http://127.0.0.1:${BUN_PORT}/search-main`))
   const pool = await bench(searchUrl(`http://127.0.0.1:${BUN_PORT}/search-pool`))
-  const nio = await bench(searchUrl(`http://127.0.0.1:${AD_PORT}/search`))
+  const nio = await bench(searchUrl(`http://127.0.0.1:${AD_PORT}/api/search`))
   line('(i)  Bun main-thread bun:sqlite', main)
   line('(ii) Bun worker-pool (postMessage)', pool)
   line('(iii) SwiftNIO in-process', nio)
@@ -110,7 +110,7 @@ try {
   console.log("\n=== healthz under search load (event-loop stall check) ===")
   let stop = false
   const flood = (async () => {
-    while (!stop) await fetch(searchUrl(`http://127.0.0.1:${AD_PORT}/search`)(Math.floor(Math.random() * 1e6))).then((r) => r.text())
+    while (!stop) await fetch(searchUrl(`http://127.0.0.1:${AD_PORT}/api/search`)(Math.floor(Math.random() * 1e6))).then((r) => r.text())
   })()
   const probes = []
   for (let i = 0; i < 50; i++) {

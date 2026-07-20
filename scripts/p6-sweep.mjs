@@ -67,7 +67,7 @@ async function ab(url, concurrency) {
 
 try {
   await Promise.all([waitHealthz(AD_PORT), waitHealthz(BUN_PORT)])
-  const adUrl = `http://127.0.0.1:${AD_PORT}/search?${QUERY}`
+  const adUrl = `http://127.0.0.1:${AD_PORT}/api/search?${QUERY}`
   const bunUrl = `http://127.0.0.1:${BUN_PORT}/search-core?${QUERY}`
   // Warm both (FTS5 verify, JIT, page cache).
   await ab(adUrl, 4); await ab(bunUrl, 4)

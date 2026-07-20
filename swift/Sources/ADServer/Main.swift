@@ -98,6 +98,10 @@ struct ServeCommand: AsyncParsableCommand {
         if let contentSignal { siteConfig.contentSignal = contentSignal }
         if let appVersion { siteConfig.appVersion = appVersion }
 
+        // The ADWebBuild page config (bundled + footer provenance), assembled once —
+        // constant for the process lifetime. Drives the on-demand HTML page routes.
+        let webConfig = makeWebSiteConfig(serverConfig: siteConfig, dbPath: dbPath)
+
         guard let pool = AnyConnectionPool.storage(path: dbPath, count: threadCount) else {
             fail("ad-server: cannot open \(dbPath) — libsqlite3/FTS5 unavailable?", code: 1)
         }
@@ -118,8 +122,8 @@ struct ServeCommand: AsyncParsableCommand {
         let server = HTTPServer(
             listeners: listeners(
                 endpoints(
-                    config: siteConfig, mcpDispatcher: dispatcher, tls: tls, tlsPort: tlsPort,
-                    readiness: readiness, dataDir: corpus.dataDir),
+                    config: siteConfig, webConfig: webConfig, mcpDispatcher: dispatcher, tls: tls,
+                    tlsPort: tlsPort, readiness: readiness, dataDir: corpus.dataDir),
                 defaultPort: port),
             pool: pool,
             envelope: buildEnvelope(),

@@ -57,7 +57,7 @@ try {
     // Phase 1: enrichment (snippet/relatedCount) is deferred — strip it from both sides.
     for (const r of jsProjected.results) { delete r.snippet; delete r.relatedCount }
     const jsJson = JSON.stringify(jsProjected)
-    const swiftJson = await (await fetch(`http://127.0.0.1:3037/search?q=${encodeURIComponent(q)}&limit=10`)).text()
+    const swiftJson = await (await fetch(`http://127.0.0.1:3037/api/search?q=${encodeURIComponent(q)}&limit=10`)).text()
     if (jsJson === swiftJson) {
       pass++
       console.log(`✓ "${q}"`)

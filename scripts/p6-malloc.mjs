@@ -38,7 +38,7 @@ async function waitHealthz() {
   throw new Error('never healthy')
 }
 async function ab(c) {
-  const p = Bun.spawn(['ab', '-k', '-c', String(c), '-n', String(N), `http://127.0.0.1:${PORT}/search?q=view&limit=100`], { stdout: 'pipe', stderr: 'ignore' })
+  const p = Bun.spawn(['ab', '-k', '-c', String(c), '-n', String(N), `http://127.0.0.1:${PORT}/api/search?q=view&limit=100`], { stdout: 'pipe', stderr: 'ignore' })
   const out = await new Response(p.stdout).text()
   await p.exited
   return Math.round(Number(out.match(/Requests per second:\s+([\d.]+)/)?.[1] ?? 0))

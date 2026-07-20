@@ -287,7 +287,7 @@ if (existsSync(AD_SERVER)) {
   server = Bun.spawn([AD_SERVER, '--db', dbPath, '--port', String(PORT), '--threads', '2'], { stdout: 'ignore', stderr: 'ignore' })
 }
 
-describe.skipIf(!existsSync(AD_SERVER))('search-cascade parity (Swift /search == JS search)', () => {
+describe.skipIf(!existsSync(AD_SERVER))('search-cascade parity (Swift /api/search == JS search)', () => {
   beforeAll(async () => {
     for (let i = 0; i < 100; i++) {
       try {
@@ -319,7 +319,7 @@ describe.skipIf(!existsSync(AD_SERVER))('search-cascade parity (Swift /search ==
       const result = await search({ query: q, limit: 10, offset: 0, noDeep: false, fuzzy: true }, ctx)
       const projected = projectSearchResult(result, { webPaths: false })
       const expected = JSON.stringify(projected)
-      const swift = await (await fetch(`http://127.0.0.1:${PORT}/search?q=${encodeURIComponent(q)}&limit=10`)).text()
+      const swift = await (await fetch(`http://127.0.0.1:${PORT}/api/search?q=${encodeURIComponent(q)}&limit=10`)).text()
       expect(swift).toBe(expected)
     })
   }
@@ -330,7 +330,7 @@ describe.skipIf(!existsSync(AD_SERVER))('search-cascade parity (Swift /search ==
       const result = await search({ query: f.q, limit: 10, offset: 0, noDeep: false, fuzzy: true, ...f.opts }, ctx)
       const projected = projectSearchResult(result, { webPaths: false })
       const expected = JSON.stringify(projected)
-      const swift = await (await fetch(`http://127.0.0.1:${PORT}/search?q=${encodeURIComponent(f.q)}&limit=10&${f.qs}`)).text()
+      const swift = await (await fetch(`http://127.0.0.1:${PORT}/api/search?q=${encodeURIComponent(f.q)}&limit=10&${f.qs}`)).text()
       expect(swift).toBe(expected)
     })
   }

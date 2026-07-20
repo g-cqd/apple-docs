@@ -332,7 +332,12 @@ let package = Package(
                 "ADStorage",
                 "ADContent",
                 "ADRender",
-                "ADSearchCascade"
+                "ADSearchCascade",
+                // ADWebBuild — the SQLite-free page renderers (LandingPages / DocPage /
+                // FrameworkPage). ad-server serves them on-demand per request via a
+                // StorageConnection-backed CorpusReader, the same renderers `ad-cli web
+                // build` writes to disk (already byte/DOM-identical to the Bun build).
+                "ADWebBuild"
             ],
             path: "Sources/ADServer", swiftSettings: releaseCMO + strictSettings),
         // ADSemantic — native semantic candidate retrieval (Stage 1). Ports the JS

@@ -46,7 +46,7 @@ async function ab(url, c) {
   return { rps: Number(out.match(/Requests per second:\s+([\d.]+)/)?.[1] ?? 0), p50: Number(out.match(/\s+50%\s+(\d+)/)?.[1] ?? 0), failed: Number(out.match(/Failed requests:\s+(\d+)/)?.[1] ?? 0) }
 }
 
-const url = `http://127.0.0.1:${PORT}/search?${QUERY}`
+const url = `http://127.0.0.1:${PORT}/api/search?${QUERY}`
 console.log(`\n=== ELG sweep (threads=${THREADS}, ab -k n=${N}, query: ${QUERY}) ===`)
 console.log(`  loops │  ${CS.map((c) => `c=${c} rps (p50ms)`).join('   ')}`)
 for (const loops of LOOPS) {

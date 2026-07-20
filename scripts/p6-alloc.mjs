@@ -48,7 +48,7 @@ async function ab(path, c = C) {
   return { rps: Number(out.match(/Requests per second:\s+([\d.]+)/)?.[1] ?? 0), p50: Number(out.match(/\s+50%\s+(\d+)/)?.[1] ?? 0) }
 }
 async function rowCount(q) {
-  return (await (await fetch(`http://127.0.0.1:${PORT}/search?q=${encodeURIComponent(q)}&limit=1`)).json()).total
+  return (await (await fetch(`http://127.0.0.1:${PORT}/api/search?q=${encodeURIComponent(q)}&limit=1`)).json()).total
 }
 
 async function boot(threads) {
@@ -65,7 +65,7 @@ try {
   console.log('  query         rows   rps   p50ms')
   for (const q of ['view', 'controller', 'metal', 'zzznomatch']) {
     const rows = await rowCount(q)
-    const r = await ab(`/search?q=${q}&limit=100`)
+    const r = await ab(`/api/search?q=${q}&limit=100`)
     console.log(`  ${q.padEnd(13)} ${String(rows).padStart(4)}  ${String(Math.round(r.rps)).padStart(5)}   ${r.p50}`)
   }
   // healthz under the SAME concurrency — the no-alloc, no-offload control.
@@ -79,7 +79,7 @@ try {
   for (const threads of [4, 6, 8, 10]) {
     srv = await boot(threads)
     await ab('/healthz')
-    const r = await ab('/search?q=view&limit=100')
+    const r = await ab('/api/search?q=view&limit=100')
     console.log(`  ${String(threads).padStart(7)}  ${String(Math.round(r.rps)).padStart(5)}   ${r.p50}`)
     srv.kill(); await srv.exited; await Bun.sleep(150)
   }

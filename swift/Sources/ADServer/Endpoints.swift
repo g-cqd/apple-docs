@@ -11,6 +11,7 @@ import ADSearchCascade
 import ADServeCore
 import ADServeDSL
 import ADStorage
+import ADWebBuild
 // HTTPCore: ADServe's engine re-based onto the HTTP package — the response
 // statuses, HTTPFields, and HTTPFieldName are defined there
 // (MemberImportVisibility requires importing the DEFINING module).
@@ -22,20 +23,22 @@ import HTTPCore
 /// directory (`CorpusOptions.dataDir` in Main.swift) the font routes containment-check against
 /// and cache into (`resources/fonts/extracted`, `resources/fonts/zips`).
 func endpoints(
-    config: SiteConfig, mcpDispatcher: MCPDispatcher, tls: TLSSource?, tlsPort: Int,
-    readiness: ServerReadiness, dataDir: String
+    config: SiteConfig, webConfig: ADWebBuild.SiteConfig, mcpDispatcher: MCPDispatcher,
+    tls: TLSSource?, tlsPort: Int, readiness: ServerReadiness, dataDir: String
 ) -> [Application] {
     Server {
         // Loopback (plaintext HTTP/1.1, behind Caddy) on the process default port.
         App(pool: .shared) {
             siteRoutes(
-                config: config, mcpDispatcher: mcpDispatcher, readiness: readiness, dataDir: dataDir)
+                config: config, webConfig: webConfig, mcpDispatcher: mcpDispatcher,
+                readiness: readiness, dataDir: dataDir)
         }
         // Optional in-process TLS listener — TLS 1.3 with ALPN (HTTP/2 + HTTP/1.1) on `tlsPort`.
         if let tls {
             App(port: tlsPort, protocol: .https(tls), pool: .shared) {
                 siteRoutes(
-                    config: config, mcpDispatcher: mcpDispatcher, readiness: readiness, dataDir: dataDir)
+                    config: config, webConfig: webConfig, mcpDispatcher: mcpDispatcher,
+                    readiness: readiness, dataDir: dataDir)
             }
         }
     }
@@ -106,7 +109,8 @@ func symbolRenderHandler(
 /// `MediaType`. The engine applies the cross-cutting envelope to every response.
 @RouteGroupBuilder
 func siteRoutes(
-    config: SiteConfig, mcpDispatcher: MCPDispatcher, readiness: ServerReadiness, dataDir: String
+    config: SiteConfig, webConfig: ADWebBuild.SiteConfig, mcpDispatcher: MCPDispatcher,
+    readiness: ServerReadiness, dataDir: String
 ) -> [RouteNode] {
     // Liveness — static, no storage, never cached.
     GET("healthz", pool: .none) { _ in
@@ -114,8 +118,11 @@ func siteRoutes(
     }
     .cache(.noStore)
 
-    // Lexical search cascade. `application/json` (no charset) + no cache, as Bun.
-    GET("search") { searchHandler($0) }
+    // The search LANDING PAGE (HTML shell; results are client-fetched from
+    // `/api/search`). Bun serves the HTML page here and the JSON cascade at
+    // `/api/search` — the cascade route moved into `Scope("api")` below. Pure
+    // siteConfig, no storage, non-hashable (no ETag/Cache-Control), as Bun.
+    GET("search", pool: .none) { _ in WebPages.searchPage(webConfig) }
 
     // Readiness — 503 while draining (orchestrators stop new traffic), else the DB probe.
     GET("readyz") { ctx in
@@ -125,6 +132,10 @@ func siteRoutes(
     .cache(.noStore)
 
     Scope("api") {
+        // Lexical search cascade JSON. `application/json` (no charset) + no cache,
+        // as Bun's `/api/search`. The web frontend (search.js / search-page.js) and
+        // the Caddy `@live` matcher both target this path.
+        GET("search") { searchHandler($0) }
         GET("filters") { ctx in .json(WebRoutes.filters(ctx.db), as: .json) }.cache(.apiCorpus)
         GET("fonts") { ctx in .json(WebRoutes.fonts(ctx.db), as: .json) }.etag
         GET("fonts/faces.css") { ctx in
