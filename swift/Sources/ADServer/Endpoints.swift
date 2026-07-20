@@ -118,11 +118,20 @@ func siteRoutes(
     }
     .cache(.noStore)
 
+    // ---- HTML landing pages (the Bun `pages.route.js` shells) ----
+    // Non-hashable text/html, status 200, no Cache-Control — the engine still
+    // applies the cross-cutting envelope. Corpus-backed pages use `.shared`
+    // (ctx.db); the search shell is pure siteConfig (`.none`).
+    GET("/") { ctx in WebPages.homePage(ctx, webConfig) }
+    GET("index.html") { ctx in WebPages.homePage(ctx, webConfig) }
     // The search LANDING PAGE (HTML shell; results are client-fetched from
     // `/api/search`). Bun serves the HTML page here and the JSON cascade at
-    // `/api/search` — the cascade route moved into `Scope("api")` below. Pure
-    // siteConfig, no storage, non-hashable (no ETag/Cache-Control), as Bun.
+    // `/api/search` — the cascade route moved into `Scope("api")` below.
     GET("search", pool: .none) { _ in WebPages.searchPage(webConfig) }
+    GET("fonts") { ctx in WebPages.fontsPage(ctx, webConfig) }
+    GET("symbols") { ctx in WebPages.symbolsPage(ctx, webConfig) }
+    // `/symbols/<name>` — the Bun `/^\/symbols\/.+$/` pattern serves the same shell.
+    GET(match: matchSymbolsPagePath) { ctx, _ in WebPages.symbolsPage(ctx, webConfig) }
 
     // Readiness — 503 while draining (orchestrators stop new traffic), else the DB probe.
     GET("readyz") { ctx in

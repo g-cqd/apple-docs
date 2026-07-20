@@ -321,6 +321,9 @@ let package = Package(
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "ADJSON", package: "ADJSON"),
+                // ADJSONCore — the Foundation-free tape `JSON` type ADWebBuild's
+                // CorpusReader passes (the /fonts embedded payload) + `ADJSON.parse`.
+                .product(name: "ADJSONCore", package: "ADJSON"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "ADServeCore", package: "ADServe"),
                 .product(name: "ADServeDSL", package: "ADServe"),

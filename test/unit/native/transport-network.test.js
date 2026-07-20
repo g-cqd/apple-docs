@@ -56,8 +56,8 @@ describe.skipIf(!existsSync(AD_SERVER))('Network.framework transport (--transpor
     expect(JSON.parse(await res.text()).db).toBe(true)
   })
 
-  test('/search (DB-backed, storage offload) served over the network transport', async () => {
-    const res = await fetch(`http://127.0.0.1:${PORT}/search?q=view`)
+  test('/api/search (DB-backed, storage offload) served over the network transport', async () => {
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/search?q=view`)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('application/json')
   })
