@@ -238,6 +238,19 @@ extension WebPages {
         guard !key.isEmpty else { return notFoundPage(web.config) }
         let conn = ctx.db
 
+        // Markdown via the `.md` URL suffix: `/docs/<key>.md` returns the same
+        // rendered body MCP read_doc / `ad-cli read` serve. A distinct URL is a
+        // distinct CDN cache key (vs `Accept` negotiation). Gated by markdownDocs.
+        if web.markdownDocs && key.hasSuffix(".md") {
+            let mdKey = String(key.dropLast(3))
+            if let resolved = resolveDocument(path: mdKey, symbol: nil, framework: nil, conn: conn),
+                let content = resolved.content
+            {
+                return markdownResponse(content)
+            }
+            return notFoundPage(web.config)
+        }
+
         // Framework listing first (the Bun `getRootBySlug(key)` order): a root
         // whose pages aren't just the self-page.
         if let root = conn.webBuildRoot(slug: key) {
@@ -301,6 +314,20 @@ extension WebPages {
     /// `notFoundResponse`.
     static func notFoundPage(_ config: ADWebBuild.SiteConfig) -> ResponseContent {
         .html(Array(LandingPages.renderNotFoundPage(config).utf8), status: .notFound)
+    }
+
+    /// Bun's `markdownResponse`: text/markdown + the token estimate + the
+    /// day-long cache. Hashable via the route's `.etag`. `x-markdown-tokens` =
+    /// `ceil(content.length / 4)` with JS String.length = UTF-16 code units.
+    static func markdownResponse(_ content: String) -> ResponseContent {
+        let tokens = (content.utf16.count + 3) / 4
+        var headers = HTTPFields()
+        headers.append(String(tokens), for: HTTPFieldName("x-markdown-tokens")!)
+        headers.append(
+            "public, max-age=86400, stale-while-revalidate=604800", for: HTTPFieldName("cache-control")!)
+        return .full(
+            body: Array(content.utf8), contentType: "text/markdown; charset=utf-8", status: .ok,
+            headers: headers)
     }
 
     // MARK: - corpus-row → template-model mapping (identical to ad-cli's reader)

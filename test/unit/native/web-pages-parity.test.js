@@ -134,4 +134,26 @@ describe.skipIf(!AVAILABLE)('web-pages parity (ad-server serve == ad-cli web bui
       expect(res.headers.get('cache-control')).toBeNull()
     })
   }
+
+  // The `/docs/<key>.md` variant: the body is the same rendered Markdown
+  // `ad-cli read <key>` prints (cli-parity-gated against Bun's lookup), modulo the
+  // CLI's single trailing newline. Headers: text/markdown, the token estimate, the
+  // day-long cache, and a content-hash ETag (Bun's markdownResponse).
+  const MD_KEYS = ['swiftui/view', 'foundation/urlsession']
+  for (const key of MD_KEYS) {
+    test(`GET /docs/${key}.md — Markdown == ad-cli read`, async () => {
+      const res = await fetch(`http://127.0.0.1:${PORT}/docs/${key}.md`)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('text/markdown; charset=utf-8')
+      expect(res.headers.get('cache-control')).toBe('public, max-age=86400, stale-while-revalidate=604800')
+      expect(res.headers.get('etag')).toMatch(/^"[0-9a-f]{16}"$/)
+      const served = await res.text()
+      // x-markdown-tokens = ceil(UTF-16 length / 4).
+      expect(res.headers.get('x-markdown-tokens')).toBe(String(Math.ceil(served.length / 4)))
+      const cli = Bun.spawnSync([AD_CLI, 'read', key, '--db', join(dir, 'apple-docs.db')], { env: ENV })
+      const expected = cli.stdout.toString()
+      expect(served.trimEnd()).toBe(expected.trimEnd())
+      expect(served.length).toBeGreaterThan(0)
+    })
+  }
 })
