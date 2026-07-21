@@ -11,12 +11,17 @@
 // serves from the immutable `dist/web/assets/` tree — so its output is
 // byte-identical to `ad-cli web build` and stable across restarts.
 
+import ADContent
 import ADJSONCore
 import ADStorage
 import ADWebBuild
 import ADServeCore
 import ADServeDSL
 import Foundation
+// HTTPCore: the response-status enum (`.notFound`) MemberImportVisibility requires
+// importing from its defining module (ADServe's engine re-based onto HTTP).
+import HTTPCore
+import Synchronization
 
 /// The build-time site configuration the ADWebBuild page templates close over,
 /// assembled once at server startup. Mirrors the `siteConfig` `ad-cli web build`
@@ -92,6 +97,42 @@ private func isWebCommitSha(_ candidate: String) -> Bool {
     let scalars = candidate.unicodeScalars
     guard scalars.count >= 7 && scalars.count <= 40 else { return false }
     return scalars.allSatisfy { ("0" ... "9").contains($0) || ("a" ... "f").contains($0) }
+}
+
+/// The per-server page-render context: the ADWebBuild config, the markdown-docs
+/// flag, and the lazily-read corpus link-resolution key set. Threaded through the
+/// route table (built once in Main.swift). `Sendable` — shared across request
+/// handlers, mutated only through the internal lock.
+final class WebDocContext: Sendable {
+    let config: ADWebBuild.SiteConfig
+    /// `siteConfig.markdownDocs` — `APPLE_DOCS_MARKDOWN_DOCS != "0"` (default on).
+    let markdownDocs: Bool
+    private let knownKeysCache = Mutex<Set<String>?>(nil)
+
+    init(config: ADWebBuild.SiteConfig, markdownDocs: Bool) {
+        self.config = config
+        self.markdownDocs = markdownDocs
+    }
+
+    /// The `SELECT key FROM documents` set the in-page link resolver needs, read
+    /// once and cached for the process lifetime. The JS render cache keys the same
+    /// set on the DB mtime; a read-only server never sees the corpus change under
+    /// it (a corpus swap is a redeploy → restart), so a plain once-cache suffices.
+    func knownKeys(_ conn: StorageConnection) -> Set<String> {
+        knownKeysCache.withLock { cache in
+            if let cached = cache { return cached }
+            let keys = conn.knownDocumentKeys()
+            cache = keys
+            return keys
+        }
+    }
+}
+
+/// Assemble the page-render context once at startup (mirrors `src/web/context.js`).
+func makeWebDocContext(serverConfig: SiteConfig, dbPath: String) -> WebDocContext {
+    let markdownDocs = (ProcessInfo.processInfo.environment["APPLE_DOCS_MARKDOWN_DOCS"] ?? "") != "0"
+    return WebDocContext(
+        config: makeWebSiteConfig(serverConfig: serverConfig, dbPath: dbPath), markdownDocs: markdownDocs)
 }
 
 /// Bridges a corpus `StorageConnection` to the ADWebBuild landing-page inputs — the
@@ -187,4 +228,146 @@ enum WebPages {
 /// `/symbols/` prefix, so there is no collision.
 func matchSymbolsPagePath(_ path: Substring) -> Bool? {
     path.hasPrefix("/symbols/") ? true : nil
+}
+
+extension WebPages {
+    /// `/docs/<key>` — dispatch: framework listing page (root slug) vs document
+    /// page vs the rendered 404. Both pages are HASHABLE (text/html + content-hash
+    /// ETag, no Cache-Control), as Bun's `HTML_HASHABLE`.
+    static func docsPage(_ ctx: StorageContext, _ web: WebDocContext, key: String) -> ResponseContent {
+        guard !key.isEmpty else { return notFoundPage(web.config) }
+        let conn = ctx.db
+
+        // Framework listing first (the Bun `getRootBySlug(key)` order): a root
+        // whose pages aren't just the self-page.
+        if let root = conn.webBuildRoot(slug: key) {
+            let docs = conn.frameworkPageDocs(root: key)
+            let isSelfRef = docs.count <= 1 && (docs.first?.path == key)
+            if !isSelfRef && !docs.isEmpty {
+                return frameworkPage(conn, root: root, docs: docs, config: web.config)
+            }
+        }
+
+        // Document page.
+        if let doc = conn.webBuildDocument(key: key) {
+            return documentPage(conn, doc: doc, web: web)
+        }
+        // NOTE: the Bun on-demand-fetch-from-Apple path (429 / 503 + Retry-After)
+        // needs corpus WRITES + the crawl pipeline — out of scope for the read-only
+        // server; a missing doc renders the 404 page, as Bun's terminal
+        // notFoundResponse. (Also unported: the resolveHashedWebKey retry for
+        // `~<hex12>` overlong-segment keys — those only arise on real oversized keys.)
+        return notFoundPage(web.config)
+    }
+
+    /// One document page — the writeAll doc-loop recipe for a single key
+    /// (enrichTopicSections + DocPage.render, `highlight: nil`).
+    private static func documentPage(
+        _ conn: StorageConnection, doc: WebBuildDoc, web: WebDocContext
+    ) -> ResponseContent {
+        let rawSections = conn.documentSections(doc.key).map(docSection)
+        let sections = BuildSite.enrichTopicSections(rawSections) { conn.roleHeadings(forKeys: $0) }
+        // DEVIATION: code blocks render as the `<pre><code>` fallback (highlight:
+        // nil). The build precomputes shiki highlighting (operator decision #2) and
+        // Caddy serves those pre-built pages from dist; ad-server's on-demand render
+        // is the un-highlighted fallback. The gate runs the build with
+        // APPLE_DOCS_NO_HIGHLIGHT=1 so both sides emit identical plain code.
+        let html = DocPage.render(
+            doc: docRecord(doc), sections: sections, config: web.config,
+            knownKeys: web.knownKeys(conn), ancestorTitles: ancestorTitles(conn, key: doc.key),
+            markdownDocs: web.markdownDocs, highlight: nil)
+        return .html(Array(html.utf8))
+    }
+
+    /// One framework listing page — reuses `planFrameworkPage` so the emitted
+    /// `data-tree-src` hash matches the build (and the `/data/frameworks` route).
+    private static func frameworkPage(
+        _ conn: StorageConnection, root: WebBuildRoot, docs: [FrameworkPageDoc],
+        config: ADWebBuild.SiteConfig
+    ) -> ResponseContent {
+        let framework = FrameworkRecord(
+            slug: root.slug, displayName: root.displayName, kind: root.kind,
+            sourceType: root.sourceType, url: nil)
+        let pages = BuildSite.planFrameworkPage(
+            framework: framework, documents: frameworkDocsJSON(docs), config: config,
+            treeEdges: conn.frameworkTreeEdges(root.slug).map { (fromKey: $0.fromKey, toKey: $0.toKey) },
+            scopeExtras: scopeExtras(conn, slug: root.slug))
+        // planFrameworkPage returns [sidecar?, html]; the HTML is the last artifact
+        // (the tree sidecar itself is served by the existing /data/frameworks route).
+        return .html(pages.last?.bytes ?? [])
+    }
+
+    /// The rendered 404 page (text/html, status 404, non-hashable) — Bun's
+    /// `notFoundResponse`.
+    static func notFoundPage(_ config: ADWebBuild.SiteConfig) -> ResponseContent {
+        .html(Array(LandingPages.renderNotFoundPage(config).utf8), status: .notFound)
+    }
+
+    // MARK: - corpus-row → template-model mapping (identical to ad-cli's reader)
+
+    private static func docRecord(_ w: WebBuildDoc) -> DocRecord {
+        DocRecord(
+            key: w.key, title: w.title, framework: w.framework, frameworkDisplay: w.frameworkDisplay,
+            roleHeading: w.roleHeading, isDeprecated: w.isDeprecated, isBeta: w.isBeta,
+            platformsJson: w.platformsJson, url: w.url, abstractText: w.abstractText, language: w.language)
+    }
+
+    private static func docSection(_ s: DocumentSectionRow) -> DocSection {
+        DocSection(
+            sectionKind: s.sectionKind, heading: s.heading, contentText: s.contentText,
+            contentJson: s.contentJSON, sortOrder: s.sortOrder)
+    }
+
+    /// render-cache.js `getAncestorTitles(key)`: the titles of `segs[0...i]` for
+    /// `i in 1..<segs.count-1` that are indexed (title not null).
+    private static func ancestorTitles(_ conn: StorageConnection, key: String) -> [String: String] {
+        let segs = key.split(separator: "/").map(String.init)
+        guard segs.count > 2 else { return [:] }
+        var partials: [String] = []
+        for i in 1 ..< (segs.count - 1) { partials.append(segs[0 ... i].joined(separator: "/")) }
+        return conn.titles(forKeys: partials)
+    }
+
+    /// `getPagesByRoot` rows → the `[JSON]` the framework page renders, through the
+    /// stringify twin + re-parse (identical to ad-cli's frameworkPageDocuments).
+    private static func frameworkDocsJSON(_ docs: [FrameworkPageDoc]) -> [JSON] {
+        guard !docs.isEmpty else { return [] }
+        let text = BuildSite.frameworkDocsJson(
+            docs.map {
+                FrameworkListingDoc(
+                    path: $0.path, title: $0.title, role: $0.role, roleHeading: $0.roleHeading,
+                    abstract: $0.abstract, sourceMetadata: $0.sourceMetadata, framework: $0.framework)
+            })
+        guard let root = try? ADJSON.parse(text, options: .init(maxDepth: 512)).root else { return [] }
+        return root.arrayValue
+    }
+
+    /// scope-group-data.js `loadScopeExtras(db, root)` — the HIG topic→category map
+    /// for the `design` root, empty elsewhere (identical to ad-cli's scopeExtras).
+    private static func scopeExtras(_ conn: StorageConnection, slug: String) -> ScopeExtras {
+        guard slug == "design" else { return ScopeExtras() }
+        let data = conn.higCategoryRows()
+        var orderIndex: [String: Int] = [:]
+        for (index, key) in data.order.enumerated() where orderIndex[key] == nil { orderIndex[key] = index }
+        var groups: [String: HigGroup] = [:]
+        for row in data.rows {
+            if row.parent == "design/human-interface-guidelines" { continue }
+            if let existing = groups[row.child], existing.parentPath.count >= row.parent.count { continue }
+            groups[row.child] = HigGroup(
+                label: row.parentTitle ?? row.parent, parentPath: row.parent,
+                order: orderIndex[row.parent] ?? orderIndex.count + 1)
+        }
+        return ScopeExtras(higGroups: groups)
+    }
+}
+
+/// Matches `/docs/<key>` (the Bun `/^\/docs\//` pattern) → the normalized corpus
+/// key: strip the `/docs/` prefix, one trailing slash, then a trailing
+/// `/index.html`. Returns "" for a bare `/docs/` (the handler renders the 404).
+func matchDocsPath(_ path: Substring) -> String? {
+    guard path.hasPrefix("/docs/") else { return nil }
+    var key = String(path.dropFirst(6))
+    if key.hasSuffix("/") { key = String(key.dropLast()) }
+    if key.hasSuffix("/index.html") { key = String(key.dropLast(11)) }
+    return key
 }

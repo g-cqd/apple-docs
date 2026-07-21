@@ -25,30 +25,38 @@ let distDir
 let server
 let ready = false
 
+// Highlight OFF on BOTH sides: ad-server renders doc code blocks as the
+// `<pre><code>` fallback (highlight: nil — the build precomputes shiki and Caddy
+// serves those from dist), so the build oracle must skip highlighting too for a
+// byte match. The shells carry no code blocks, so this is inert for them.
+const ENV = { ...process.env, APPLE_DOCS_NO_HIGHLIGHT: '1' }
+
 if (AVAILABLE) {
   dir = mkdtempSync(join(tmpdir(), 'web-pages-parity-'))
   distDir = join(dir, 'dist')
   const dbPath = join(dir, 'apple-docs.db')
   // 1. Seed the synthetic corpus (roots/docs/sections/fonts/symbols).
   const seed = Bun.spawnSync(['bun', SEED, dir, '--fonts'], { stdout: 'ignore', stderr: 'ignore' })
-  // 2. Static build — the byte oracle (itself DOM-identical to the Bun build).
+  // 2. FULL static build (renders /docs/* + framework pages) — the byte oracle,
+  //    itself DOM-identical to the Bun build.
   const build = Bun.spawnSync([AD_CLI, 'web', 'build', '--db', dbPath, '--out', distDir, '--site-name', SITE, '--base-url', '', '--app-version', '1.0.0'], {
     stdout: 'ignore',
     stderr: 'ignore',
+    env: ENV,
   })
   // 3. The live server on the same corpus + flags → same siteConfig → same bytes.
   if (seed.exitCode === 0 && build.exitCode === 0) {
     server = Bun.spawn([AD_SERVER, 'serve', '--db', dbPath, '--port', String(PORT), '--site-name', SITE, '--base-url', '', '--app-version', '1.0.0'], {
       stdout: 'ignore',
       stderr: 'ignore',
+      env: ENV,
     })
   }
 }
 
-// The served-path → built-file map. Every shell renders the same ADWebBuild
-// template the build writes; `/index.html` aliases `/`, and every `/symbols/<name>`
-// serves the one symbols shell (the Bun `/^\/symbols\/.+$/` pattern).
-const PAGES = [
+// Non-hashable shells (Bun `pages.route.js`): text/html, no ETag / Cache-Control.
+// `/index.html` aliases `/`; every `/symbols/<name>` serves the one symbols shell.
+const SHELL_PAGES = [
   { path: '/', file: 'index.html' },
   { path: '/index.html', file: 'index.html' },
   { path: '/search', file: 'search/index.html' },
@@ -56,6 +64,20 @@ const PAGES = [
   { path: '/symbols', file: 'symbols/index.html' },
   { path: '/symbols/star.fill', file: 'symbols/index.html' },
 ]
+
+// Hashable /docs pages (Bun `HTML_HASHABLE`): text/html + a content-hash ETag,
+// no Cache-Control. Document pages (DocPage) + framework listing pages
+// (FrameworkPage). `/docs/<key>/index.html` aliases `/docs/<key>`.
+const DOC_PAGES = [
+  { path: '/docs/swiftui/view', file: 'docs/swiftui/view/index.html' },
+  { path: '/docs/swiftui/view/index.html', file: 'docs/swiftui/view/index.html' },
+  { path: '/docs/swiftui/state', file: 'docs/swiftui/state/index.html' },
+  { path: '/docs/foundation/urlsession', file: 'docs/foundation/urlsession/index.html' },
+  { path: '/docs/swiftui', file: 'docs/swiftui/index.html' },
+  { path: '/docs/foundation', file: 'docs/foundation/index.html' },
+]
+
+const PAGES = [...SHELL_PAGES, ...DOC_PAGES]
 
 describe.skipIf(!AVAILABLE)('web-pages parity (ad-server serve == ad-cli web build)', () => {
   beforeAll(async () => {
@@ -77,24 +99,39 @@ describe.skipIf(!AVAILABLE)('web-pages parity (ad-server serve == ad-cli web bui
     if (dir) rmSync(dir, { recursive: true, force: true })
   })
 
-  test('the build produced the landing pages + the server came up', () => {
+  test('the build produced the landing + doc pages and the server came up', () => {
     expect(server).toBeDefined()
     expect(ready).toBe(true)
     for (const { file } of PAGES) expect(existsSync(join(distDir, file))).toBe(true)
   })
 
-  for (const { path, file } of PAGES) {
-    test(`GET ${path} — byte-identical to ${file}`, async () => {
-      const res = await fetch(`http://127.0.0.1:${PORT}${path}`)
-      expect(res.status).toBe(200)
-      // Non-hashable shell: text/html, no origin ETag / Cache-Control (as Bun).
-      expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
+  const assertByteIdentical = async (path, file) => {
+    const res = await fetch(`http://127.0.0.1:${PORT}${path}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    const served = new Uint8Array(await res.arrayBuffer())
+    const built = new Uint8Array(readFileSync(join(distDir, file)))
+    expect(served.length).toBe(built.length)
+    expect(Buffer.from(served).equals(Buffer.from(built))).toBe(true)
+    return res
+  }
+
+  for (const { path, file } of SHELL_PAGES) {
+    test(`GET ${path} — byte-identical shell, non-hashable`, async () => {
+      const res = await assertByteIdentical(path, file)
+      // Non-hashable shell: no origin ETag / Cache-Control (as Bun).
       expect(res.headers.get('cache-control')).toBeNull()
       expect(res.headers.get('etag')).toBeNull()
-      const served = new Uint8Array(await res.arrayBuffer())
-      const built = new Uint8Array(readFileSync(join(distDir, file)))
-      expect(served.length).toBe(built.length)
-      expect(Buffer.from(served).equals(Buffer.from(built))).toBe(true)
+    })
+  }
+
+  for (const { path, file } of DOC_PAGES) {
+    test(`GET ${path} — byte-identical doc page, hashable`, async () => {
+      const res = await assertByteIdentical(path, file)
+      // Hashable (Bun HTML_HASHABLE): a sha256[:16] content-hash ETag, no
+      // Cache-Control (only the .md variant carries max-age).
+      expect(res.headers.get('etag')).toMatch(/^"[0-9a-f]{16}"$/)
+      expect(res.headers.get('cache-control')).toBeNull()
     })
   }
 })

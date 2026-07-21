@@ -110,6 +110,74 @@ extension StorageConnection {
         return out
     }
 
+    /// A single `roots` row by slug — the live-serve `getRootBySlug(key)` for the
+    /// `/docs/<slug>` framework-vs-document dispatch. Projects the same fields as
+    /// `webBuildRoots()`.
+    public func webBuildRoot(slug: String) -> WebBuildRoot? {
+        guard
+            let stmt = conn.prepareUncached(
+                "SELECT slug, display_name, kind, source_type, page_count FROM roots WHERE slug = ?")
+        else { return nil }
+        stmt.bindText(1, slug)
+        guard stmt.step() == SQLite.row else { return nil }
+        return WebBuildRoot(
+            slug: stmt.text(0) ?? "", displayName: stmt.text(1), kind: stmt.text(2),
+            sourceType: stmt.text(3), pageCount: stmt.int(4) ?? 0)
+    }
+
+    /// A single document row by key — the by-key twin of `webBuildDocuments`
+    /// (identical projection, so the on-demand-served DocRecord matches the
+    /// build's byte-for-byte). The live-serve `DOC_BASE_QUERY.get(key)`.
+    public func webBuildDocument(key: String) -> WebBuildDoc? {
+        let sql = """
+            SELECT d.id, d.key, d.title, d.kind, d.role, d.role_heading, d.framework,
+                   d.abstract_text, d.source_type, d.language, d.url,
+                   d.platforms_json, d.is_deprecated, d.is_beta,
+                   COALESCE(r.display_name, d.framework) as framework_display
+            FROM documents d LEFT JOIN roots r ON r.slug = d.framework
+            WHERE d.key = ?
+            """
+        guard let stmt = conn.prepareUncached(sql) else { return nil }
+        stmt.bindText(1, key)
+        guard stmt.step() == SQLite.row else { return nil }
+        return WebBuildDoc(
+            id: stmt.int(0) ?? 0, key: stmt.text(1) ?? "", title: stmt.text(2),
+            kind: stmt.text(3), role: stmt.text(4), roleHeading: stmt.text(5),
+            framework: stmt.text(6), abstractText: stmt.text(7), sourceType: stmt.text(8),
+            language: stmt.text(9), url: stmt.text(10), platformsJson: stmt.text(11),
+            isDeprecated: (stmt.int(12) ?? 0) != 0, isBeta: (stmt.int(13) ?? 0) != 0,
+            frameworkDisplay: stmt.text(14))
+    }
+
+    /// `SELECT key, title FROM documents WHERE key IN (…) AND title IS NOT NULL` —
+    /// the on-demand-serve ancestor-title lookup (only the specific ancestor keys
+    /// of the page being rendered, vs the build's whole-corpus `ancestorTitleIndex`).
+    public func titles(forKeys keys: [String]) -> [String: String] {
+        keyedStringMap(column: "title", keys: keys)
+    }
+
+    /// `SELECT key, role_heading FROM documents WHERE key IN (…)` — render-cache.js
+    /// `getRoleHeadings(keys)`, scoped to the specific topic-item keys of one page.
+    public func roleHeadings(forKeys keys: [String]) -> [String: String] {
+        keyedStringMap(column: "role_heading", keys: keys)
+    }
+
+    /// Shared `SELECT key, <column> FROM documents WHERE <column> IS NOT NULL AND
+    /// key IN (?,?,…)` over a bounded key list (ancestors / topic items).
+    private func keyedStringMap(column: String, keys: [String]) -> [String: String] {
+        guard !keys.isEmpty else { return [:] }
+        let placeholders = Array(repeating: "?", count: keys.count).joined(separator: ",")
+        let sql =
+            "SELECT key, \(column) FROM documents WHERE \(column) IS NOT NULL AND key IN (\(placeholders))"
+        guard let stmt = conn.prepareUncached(sql) else { return [:] }
+        for (i, key) in keys.enumerated() { stmt.bindText(Int32(i + 1), key) }
+        var out: [String: String] = [:]
+        while stmt.step() == SQLite.row {
+            if let key = stmt.text(0), let value = stmt.text(1) { out[key] = value }
+        }
+        return out
+    }
+
     /// render-cache.js `getKnownKeys()` — `SELECT key FROM documents` as a Set.
     public func knownDocumentKeys() -> Set<String> {
         guard let stmt = conn.prepareUncached("SELECT key FROM documents") else { return [] }

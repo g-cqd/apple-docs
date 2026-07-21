@@ -23,21 +23,21 @@ import HTTPCore
 /// directory (`CorpusOptions.dataDir` in Main.swift) the font routes containment-check against
 /// and cache into (`resources/fonts/extracted`, `resources/fonts/zips`).
 func endpoints(
-    config: SiteConfig, webConfig: ADWebBuild.SiteConfig, mcpDispatcher: MCPDispatcher,
+    config: SiteConfig, web: WebDocContext, mcpDispatcher: MCPDispatcher,
     tls: TLSSource?, tlsPort: Int, readiness: ServerReadiness, dataDir: String
 ) -> [Application] {
     Server {
         // Loopback (plaintext HTTP/1.1, behind Caddy) on the process default port.
         App(pool: .shared) {
             siteRoutes(
-                config: config, webConfig: webConfig, mcpDispatcher: mcpDispatcher,
+                config: config, web: web, mcpDispatcher: mcpDispatcher,
                 readiness: readiness, dataDir: dataDir)
         }
         // Optional in-process TLS listener — TLS 1.3 with ALPN (HTTP/2 + HTTP/1.1) on `tlsPort`.
         if let tls {
             App(port: tlsPort, protocol: .https(tls), pool: .shared) {
                 siteRoutes(
-                    config: config, webConfig: webConfig, mcpDispatcher: mcpDispatcher,
+                    config: config, web: web, mcpDispatcher: mcpDispatcher,
                     readiness: readiness, dataDir: dataDir)
             }
         }
@@ -109,7 +109,7 @@ func symbolRenderHandler(
 /// `MediaType`. The engine applies the cross-cutting envelope to every response.
 @RouteGroupBuilder
 func siteRoutes(
-    config: SiteConfig, webConfig: ADWebBuild.SiteConfig, mcpDispatcher: MCPDispatcher,
+    config: SiteConfig, web: WebDocContext, mcpDispatcher: MCPDispatcher,
     readiness: ServerReadiness, dataDir: String
 ) -> [RouteNode] {
     // Liveness — static, no storage, never cached.
@@ -122,16 +122,20 @@ func siteRoutes(
     // Non-hashable text/html, status 200, no Cache-Control — the engine still
     // applies the cross-cutting envelope. Corpus-backed pages use `.shared`
     // (ctx.db); the search shell is pure siteConfig (`.none`).
-    GET("/") { ctx in WebPages.homePage(ctx, webConfig) }
-    GET("index.html") { ctx in WebPages.homePage(ctx, webConfig) }
+    GET("/") { ctx in WebPages.homePage(ctx, web.config) }
+    GET("index.html") { ctx in WebPages.homePage(ctx, web.config) }
     // The search LANDING PAGE (HTML shell; results are client-fetched from
     // `/api/search`). Bun serves the HTML page here and the JSON cascade at
     // `/api/search` — the cascade route moved into `Scope("api")` below.
-    GET("search", pool: .none) { _ in WebPages.searchPage(webConfig) }
-    GET("fonts") { ctx in WebPages.fontsPage(ctx, webConfig) }
-    GET("symbols") { ctx in WebPages.symbolsPage(ctx, webConfig) }
+    GET("search", pool: .none) { _ in WebPages.searchPage(web.config) }
+    GET("fonts") { ctx in WebPages.fontsPage(ctx, web.config) }
+    GET("symbols") { ctx in WebPages.symbolsPage(ctx, web.config) }
     // `/symbols/<name>` — the Bun `/^\/symbols\/.+$/` pattern serves the same shell.
-    GET(match: matchSymbolsPagePath) { ctx, _ in WebPages.symbolsPage(ctx, webConfig) }
+    GET(match: matchSymbolsPagePath) { ctx, _ in WebPages.symbolsPage(ctx, web.config) }
+    // `/docs/<key>` — framework listing / document page / rendered 404. Hashable
+    // (content-hash ETag, no Cache-Control), as Bun's HTML_HASHABLE.
+    GET(match: matchDocsPath) { ctx, key in WebPages.docsPage(ctx, web, key: key) }
+        .etag
 
     // Readiness — 503 while draining (orchestrators stop new traffic), else the DB probe.
     GET("readyz") { ctx in
