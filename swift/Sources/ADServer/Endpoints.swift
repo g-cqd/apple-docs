@@ -137,6 +137,18 @@ func siteRoutes(
     GET(match: matchDocsPath) { ctx, key in WebPages.docsPage(ctx, web, key: key) }
         .etag
 
+    // `/assets/*` + `/worker/*` — the DEV-fallback static routes (production Caddy
+    // serves them from dist). Non-JS raw from --web-root, JS from the --web-dist
+    // bundle, workers verbatim; immutable cache. No storage (pool: .none).
+    GET(match: matchAssetsPath, pool: .none) { (_: RequestContext, file: String) in
+        WebAssets.asset(web, file: file)
+    }
+    .cache(.immutable)
+    GET(match: matchWorkerPath, pool: .none) { (_: RequestContext, file: String) in
+        WebAssets.worker(web, file: file)
+    }
+    .cache(.immutable)
+
     // Readiness — 503 while draining (orchestrators stop new traffic), else the DB probe.
     GET("readyz") { ctx in
         readiness.isReady

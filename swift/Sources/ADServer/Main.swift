@@ -78,6 +78,14 @@ struct ServeCommand: AsyncParsableCommand {
     var contentSignal: String?
     @Option(name: .customLong("app-version"))
     var appVersion: String?
+    @Option(
+        name: .customLong("web-root"),
+        help: "The src/web checkout — serves raw non-JS /assets/* + verbatim /worker/* (dev fallback).")
+    var webRoot: String?
+    @Option(
+        name: .customLong("web-dist"),
+        help: "A `web build` output tree — serves the pre-built /assets/*.js bundles (dev fallback).")
+    var webDist: String?
 
     func validate() throws {
         guard EngineTransport(rawValue: transport) != nil else {
@@ -101,7 +109,8 @@ struct ServeCommand: AsyncParsableCommand {
         // The ADWebBuild page-render context (config + markdown-docs flag + the
         // lazily-cached link-resolution key set), assembled once — constant for the
         // process lifetime. Drives the on-demand HTML page routes.
-        let webContext = makeWebDocContext(serverConfig: siteConfig, dbPath: dbPath)
+        let webContext = makeWebDocContext(
+            serverConfig: siteConfig, dbPath: dbPath, assetsSrc: webRoot, assetsDist: webDist)
 
         guard let pool = AnyConnectionPool.storage(path: dbPath, count: threadCount) else {
             fail("ad-server: cannot open \(dbPath) — libsqlite3/FTS5 unavailable?", code: 1)

@@ -45,14 +45,49 @@ if (AVAILABLE) {
     env: ENV,
   })
   // 3. The live server on the same corpus + flags → same siteConfig → same bytes.
+  //    --web-root (src/web) serves raw non-JS /assets + verbatim /worker; --web-dist
+  //    (the build output) serves the pre-built /assets/*.js bundles.
   if (seed.exitCode === 0 && build.exitCode === 0) {
-    server = Bun.spawn([AD_SERVER, 'serve', '--db', dbPath, '--port', String(PORT), '--site-name', SITE, '--base-url', '', '--app-version', '1.0.0'], {
-      stdout: 'ignore',
-      stderr: 'ignore',
-      env: ENV,
-    })
+    server = Bun.spawn(
+      [
+        AD_SERVER,
+        'serve',
+        '--db',
+        dbPath,
+        '--port',
+        String(PORT),
+        '--site-name',
+        SITE,
+        '--base-url',
+        '',
+        '--app-version',
+        '1.0.0',
+        '--web-root',
+        join(ROOT, 'src/web'),
+        '--web-dist',
+        distDir,
+      ],
+      {
+        stdout: 'ignore',
+        stderr: 'ignore',
+        env: ENV,
+      },
+    )
   }
 }
+
+// The static-asset map. Non-JS /assets is served RAW from src/web (Bun serve does
+// NOT minify at serve time); /assets/*.js is the pre-built bundle from the dist
+// (byte-identical to Bun serve's on-the-fly bundle); /worker/* is verbatim from
+// src/web. Each entry: served path → the on-disk file it must byte-match.
+const SRC_WEB = join(ROOT, 'src/web')
+const ASSETS = [
+  { path: '/assets/style.css', file: join(SRC_WEB, 'assets/style.css'), ct: 'text/css; charset=utf-8' },
+  { path: '/assets/core.js', file: null, ct: 'text/javascript; charset=utf-8' }, // dist bundle (distDir set below)
+  { path: '/assets/listing.js', file: null, ct: 'text/javascript; charset=utf-8' },
+  { path: '/assets/search-page.js', file: null, ct: 'text/javascript; charset=utf-8' },
+  { path: '/worker/search-worker.js', file: join(SRC_WEB, 'worker/search-worker.js'), ct: 'text/javascript; charset=utf-8' },
+]
 
 // Non-hashable shells (Bun `pages.route.js`): text/html, no ETag / Cache-Control.
 // `/index.html` aliases `/`; every `/symbols/<name>` serves the one symbols shell.
@@ -156,4 +191,28 @@ describe.skipIf(!AVAILABLE)('web-pages parity (ad-server serve == ad-cli web bui
       expect(served.length).toBeGreaterThan(0)
     })
   }
+
+  // /assets/* + /worker/* — non-JS raw from src/web, JS from the dist bundle,
+  // workers verbatim; immutable cache. Byte-match the on-disk source/build file.
+  for (const { path, file, ct } of ASSETS) {
+    test(`GET ${path} — byte-identical, immutable`, async () => {
+      // .js entries resolve to the dist bundle; others to their src/web file.
+      const onDisk = file ?? join(distDir, 'assets', path.slice('/assets/'.length))
+      const res = await fetch(`http://127.0.0.1:${PORT}${path}`)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe(ct)
+      expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+      const served = new Uint8Array(await res.arrayBuffer())
+      const built = new Uint8Array(readFileSync(onDisk))
+      expect(served.length).toBe(built.length)
+      expect(Buffer.from(served).equals(Buffer.from(built))).toBe(true)
+    })
+  }
+
+  test('asset guards: traversal → 403/404, missing → 404', async () => {
+    // A literal `..` segment in the (encoded) path is rejected before any file read.
+    expect((await fetch(`http://127.0.0.1:${PORT}/assets/..%2fsecret`)).status).toBeGreaterThanOrEqual(400)
+    expect((await fetch(`http://127.0.0.1:${PORT}/assets/does-not-exist.css`)).status).toBe(404)
+    expect((await fetch(`http://127.0.0.1:${PORT}/worker/nope.js`)).status).toBe(404)
+  })
 })

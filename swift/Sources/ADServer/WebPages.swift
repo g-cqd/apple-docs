@@ -107,11 +107,22 @@ final class WebDocContext: Sendable {
     let config: ADWebBuild.SiteConfig
     /// `siteConfig.markdownDocs` — `APPLE_DOCS_MARKDOWN_DOCS != "0"` (default on).
     let markdownDocs: Bool
+    /// `--web-root` (the `src/web` checkout): the RAW static-asset source — non-JS
+    /// `/assets/*` (e.g. `style.css`, streamed un-minified, as Bun serve) + `/worker/*`
+    /// (verbatim). nil → those routes 404 (production Caddy owns them).
+    let assetsSrc: String?
+    /// `--web-dist` (a `web build` output tree): the PRE-BUILT JS bundles for
+    /// `/assets/*.js` — byte-identical to Bun serve's on-the-fly `bun build` output
+    /// (verified deterministic), but produced at build time (the operator's build-only
+    /// bun decision — ad-server never shells bun). nil → `/assets/*.js` 404.
+    let assetsDist: String?
     private let knownKeysCache = Mutex<Set<String>?>(nil)
 
-    init(config: ADWebBuild.SiteConfig, markdownDocs: Bool) {
+    init(config: ADWebBuild.SiteConfig, markdownDocs: Bool, assetsSrc: String?, assetsDist: String?) {
         self.config = config
         self.markdownDocs = markdownDocs
+        self.assetsSrc = assetsSrc
+        self.assetsDist = assetsDist
     }
 
     /// The `SELECT key FROM documents` set the in-page link resolver needs, read
@@ -129,10 +140,14 @@ final class WebDocContext: Sendable {
 }
 
 /// Assemble the page-render context once at startup (mirrors `src/web/context.js`).
-func makeWebDocContext(serverConfig: SiteConfig, dbPath: String) -> WebDocContext {
+func makeWebDocContext(
+    serverConfig: SiteConfig, dbPath: String, assetsSrc: String?, assetsDist: String?
+) -> WebDocContext {
     let markdownDocs = (ProcessInfo.processInfo.environment["APPLE_DOCS_MARKDOWN_DOCS"] ?? "") != "0"
     return WebDocContext(
-        config: makeWebSiteConfig(serverConfig: serverConfig, dbPath: dbPath), markdownDocs: markdownDocs)
+        config: makeWebSiteConfig(serverConfig: serverConfig, dbPath: dbPath), markdownDocs: markdownDocs,
+        assetsSrc: assetsSrc.flatMap { $0.isEmpty ? nil : $0 },
+        assetsDist: assetsDist.flatMap { $0.isEmpty ? nil : $0 })
 }
 
 /// Bridges a corpus `StorageConnection` to the ADWebBuild landing-page inputs — the
