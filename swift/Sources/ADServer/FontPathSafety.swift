@@ -40,8 +40,9 @@ enum FontPathContainment {
     static func isContained(_ filePath: String?, dataDir: String?) -> Bool {
         guard let filePath, !filePath.isEmpty else { return false }
         let resolved = URL(fileURLWithPath: filePath).standardizedFileURL.path
-        return approvedRoots(dataDir: dataDir).contains { root in
-            resolved == root || resolved.hasPrefix(root + "/")
-        }
+        return approvedRoots(dataDir: dataDir)
+            .contains { root in
+                resolved == root || resolved.hasPrefix(root + "/")
+            }
     }
 }
