@@ -13,8 +13,8 @@ Subcommands:
   embeddings           Build the semantic index (document_chunks: per-chunk
                        binary + int8 codes, plus the document_vectors anchor)
                        with the model2vec embedder. Runs automatically at
-                       setup; needs the optional @huggingface/transformers
-                       dep + the local model, otherwise lexical-only.
+                       setup; needs the local model (setup ships it),
+                       otherwise lexical-only.
 
 Options:
   --full               (embeddings) Re-chunk + re-embed every document.

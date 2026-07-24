@@ -59,7 +59,7 @@ describe('indexEmbeddings', () => {
     try {
       const res = await indexEmbeddings({}, ctx)
       expect(res.status).toBe('error')
-      expect(res.message).toMatch(/@huggingface\/transformers/)
+      expect(res.message).toMatch(/embedding model|apple-docs setup/)
     } finally {
       if (prev === undefined) delete process.env.APPLE_DOCS_SEMANTIC
       else process.env.APPLE_DOCS_SEMANTIC = prev

@@ -78,7 +78,7 @@ export async function ensureEmbeddingModel({ modelsDir, logger, embedder } = {})
   const isReleaseBuild = process.env.APPLE_DOCS_ALLOW_REMOTE_MODELS === '1'
   const active = embedder !== undefined ? embedder : await getEmbedder({ logger, modelsDir })
   if (!active) {
-    const message = 'embedder unavailable (optional @huggingface/transformers dependency or model missing)'
+    const message = 'embedder unavailable (embedding model missing or unreadable)'
     if (isReleaseBuild) throw new ValidationError(`Release build requires the embedding model to ship: ${message}`)
     return { status: 'skipped', message }
   }

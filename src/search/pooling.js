@@ -1,8 +1,8 @@
 /**
  * Pure, ONNX-free pooling + normalization helpers for the transformer
  * embedder backend (feature-extraction models). Kept separate from embedder.js
- * so the math is unit-testable without the optional `@huggingface/transformers`
- * dependency or any model download.
+ * so the math is unit-testable without loading `@huggingface/transformers`
+ * or any model download.
  *
  * A transformer's token output is a `[tokens × dims]` matrix; these collapse it
  * to a single `[dims]` sentence embedding (mean over real tokens, or the last

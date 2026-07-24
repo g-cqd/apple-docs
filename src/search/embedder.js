@@ -1,7 +1,7 @@
 /**
  * Lazy, process-cached query/document embedder backed by transformers.js
- * (the optional `@huggingface/transformers` dependency). Returns `null` when
- * the dependency or model is unavailable, so callers degrade to lexical-only.
+ * (the `@huggingface/transformers` dependency). Returns `null` when the
+ * model or ONNX runtime is unavailable, so callers degrade to lexical-only.
  *
  * Two backends, selected by `APPLE_DOCS_EMBED_MODEL` via the registry below:
  *   - **model2vec** (default, `potion-retrieval-32M`): a static EmbeddingBag —

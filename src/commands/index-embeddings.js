@@ -19,7 +19,7 @@ import { _resetVectorCache } from '../search/semantic.js'
  *
  * Resumable: without `--full`, only documents with no chunks are processed.
  * The embedder is injectable (`opts.embedder`) so tests use a deterministic
- * fake and never need the optional `@huggingface/transformers` dependency.
+ * fake and never load `@huggingface/transformers` or a model.
  *
  * @param {{ full?: boolean, embedder?: { embed(t: string): Promise<Float32Array> } }} opts
  * @param {{ db, dataDir?, logger, onProgress? }} ctx
@@ -41,7 +41,7 @@ export async function indexEmbeddings(opts, ctx) {
   if (!embedder) {
     return {
       status: 'error',
-      message: 'Semantic embedder unavailable. Install the optional dependency: `bun add @huggingface/transformers`.',
+      message: 'Semantic embedder unavailable — the embedding model was not found locally. It ships with `apple-docs setup`; set APPLE_DOCS_ALLOW_REMOTE_MODELS=1 to fetch it.',
     }
   }
 
