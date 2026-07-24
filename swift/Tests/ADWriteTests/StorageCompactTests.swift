@@ -5,6 +5,7 @@
 // stamps, and the prebuilt refusal.
 
 import ADStorage
+import ADTestKit
 import Foundation
 import Testing
 
@@ -39,10 +40,10 @@ struct StorageCompactTests {
 
         let result = try StorageCompact.run(corpus.db, now: now)
 
-        #expect(result.status == "ok")
-        #expect(result.sectionsCompressed == 2)  // both rows re-stored (neither cell was a BLOB)
-        #expect(result.rawDropped == 1)
-        #expect(result.profile == "compact")
+        expectEqual(result.status, "ok")
+        expectEqual(result.sectionsCompressed, 2)  // both rows re-stored (neither cell was a BLOB)
+        expectEqual(result.rawDropped, 1)
+        expectEqual(result.profile, "compact")
 
         // The long section is now a zstd BLOB that decodes back to the original;
         // the tiny one stays plain TEXT (compression would not shrink it).
@@ -54,8 +55,10 @@ struct StorageCompactTests {
             Issue.record("expected a BLOB content_text, got \(String(describing: longCell))")
             return
         }
-        #expect(Array(bytes.prefix(4)) == [0x28, 0xB5, 0x2F, 0xFD])
-        #expect(SectionCodec.decodeText(longCell) == longBody)
+        let magic: [UInt8] = Array(bytes.prefix(4))
+        expectEqual(magic, [0x28, 0xB5, 0x2F, 0xFD])
+        let decodedLong: String? = SectionCodec.decodeText(longCell)
+        expectEqual(decodedLong, longBody)
         let tinyCell = try corpus.db.get(
             "SELECT content_text FROM document_sections WHERE document_id = $id",
             ["id": .integer(try corpus.docId("swiftui/tiny"))])?["content_text"]
@@ -68,23 +71,25 @@ struct StorageCompactTests {
         let ddl = try corpus.db.get(
             "SELECT sql FROM sqlite_master WHERE name = 'documents_body_fts'")?
             .text("sql")
-        #expect(ddl?.contains("content=''") == true)
-        #expect(ddl?.contains("contentless_delete=1") == true)
+        let ddlText: String = ddl ?? ""
+        expectTrue(ddlText.contains("content=''"))
+        expectTrue(ddlText.contains("contentless_delete=1"))
         let hit = try corpus.db.get(
             "SELECT rowid FROM documents_body_fts WHERE documents_body_fts MATCH 'dramatically'")?
             .int("rowid")
-        #expect(hit == viewId)
+        expectEqual(hit, viewId)
 
         // Raw payloads gone (table retained), meta + profile stamped.
-        #expect(try corpus.count("SELECT COUNT(*) AS c FROM document_raw") == 0)
+        let rawRows: Int64 = try corpus.count("SELECT COUNT(*) AS c FROM document_raw")
+        expectEqual(rawRows, 0)
         let stamped = try corpus.db.get(
             "SELECT value FROM snapshot_meta WHERE key = 'sections_compressed'")?
             .text("value")
-        #expect(stamped == "1")
+        expectEqual(stamped, "1")
         let profile = try corpus.db.get(
             "SELECT value FROM snapshot_meta WHERE key = 'storage_profile'")?
             .text("value")
-        #expect(profile == "compact")
+        expectEqual(profile, "compact")
     }
 
     @Test("a second run skips rows whose cells are already BLOBs")
