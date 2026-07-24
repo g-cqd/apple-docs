@@ -5,6 +5,7 @@
     "": {
       "name": "apple-docs",
       "dependencies": {
+        "@huggingface/transformers": "^4.2.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "shiki": "^4.1.0",
       },
@@ -18,9 +19,6 @@
         "typescript": "^6.0.3",
         "vitepress": "^1.6.4",
         "vitepress-plugin-mermaid": "^2.0.17",
-      },
-      "optionalDependencies": {
-        "@huggingface/transformers": "^4.2.0",
       },
     },
   },
