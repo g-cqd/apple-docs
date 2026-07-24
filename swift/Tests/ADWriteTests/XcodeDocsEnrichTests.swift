@@ -7,6 +7,7 @@
 // and malformed-JSON skips, dry-run purity, and idempotent re-runs.
 
 import ADStorage
+import ADTestKit
 import Foundation
 import Testing
 
@@ -81,33 +82,13 @@ struct XcodeDocsEnrichTests {
         defer { corpus.destroy() }
         let stats = try runEnrich(corpus, assetDbPath, apply: true)
 
-        #expect(stats.pages == 6)
-        #expect(stats.anchorsSkipped == 1)
-        #expect(stats.usrBackfilled == 2)  // view + text (uiview has usr pre-set / none in asset)
-        #expect(stats.platformsBackfilled == 1)  // text only — view's crawl platforms stay
-        #expect(stats.novelInserted == 2)  // NewThing + the HIG page
+        expectEqual(stats.pages, 6)
+        expectEqual(stats.anchorsSkipped, 1)
+        expectEqual(stats.usrBackfilled, 2)  // view + text (uiview has usr pre-set / none in asset)
+        expectEqual(stats.platformsBackfilled, 1)  // text only — view's crawl platforms stay
+        expectEqual(stats.novelInserted, 2)  // NewThing + the HIG page
 
-        // usr backfill; the crawl's platforms_json is untouched.
-        let view = try corpus.db.get("SELECT usr, platforms_json FROM documents WHERE key = 'swiftui/view'")
-        #expect(view?.text("usr") == "s:7SwiftUI4ViewP")
-        #expect(view?.text("platforms_json") == #"{"ios":"13.0"}"#)
-
-        // Platform backfill: asset order, macCatalyst skipped, IEEE noise formatted, nums encoded.
-        let text = try corpus.db.get(
-            """
-            SELECT usr, platforms_json, min_ios, min_ios_num, min_macos, min_macos_num
-            FROM documents WHERE key = 'swiftui/text'
-            """)
-        #expect(text?.text("usr") == "s:7SwiftUI4TextV")  // symbol.preciseIdentifier fallback
-        #expect(text?.text("platforms_json") == #"{"ios":"17.2","macos":"10.15"}"#)
-        #expect(text?.text("min_ios") == "17.2")
-        #expect(text?.int("min_ios_num") == 17_002_000)
-        #expect(text?.text("min_macos") == "10.15")
-        #expect(text?.int("min_macos_num") == 10_015_000)
-
-        // Pre-set usr survives.
-        let uiview = try corpus.db.get("SELECT usr FROM documents WHERE key = 'uikit/uiview'")
-        #expect(uiview?.text("usr") == "c:objc(cs)UIView")
+        try assertBackfilledColumns(corpus)
 
         try assertNovelDocument(corpus)
         try assertNovelSections(corpus)
@@ -285,5 +266,31 @@ struct XcodeDocsEnrichTests {
                     "c": chunk.content.map(SQLiteValue.text) ?? .null
                 ])
         }
+    }
+
+    /// usr/platform backfill columns (split out of `applyMerge` to stay within the
+    /// per-function type-check budget).
+    private func assertBackfilledColumns(_ corpus: MaintenanceCorpus) throws {
+        // usr backfill; the crawl's platforms_json is untouched.
+        let view = try corpus.db.get("SELECT usr, platforms_json FROM documents WHERE key = 'swiftui/view'")
+        expectEqual(view?.text("usr"), "s:7SwiftUI4ViewP")
+        expectEqual(view?.text("platforms_json"), #"{"ios":"13.0"}"#)
+
+        // Platform backfill: asset order, macCatalyst skipped, IEEE noise formatted, nums encoded.
+        let text = try corpus.db.get(
+            """
+            SELECT usr, platforms_json, min_ios, min_ios_num, min_macos, min_macos_num
+            FROM documents WHERE key = 'swiftui/text'
+            """)
+        expectEqual(text?.text("usr"), "s:7SwiftUI4TextV")  // symbol.preciseIdentifier fallback
+        expectEqual(text?.text("platforms_json"), #"{"ios":"17.2","macos":"10.15"}"#)
+        expectEqual(text?.text("min_ios"), "17.2")
+        expectEqual(text?.int("min_ios_num"), 17_002_000)
+        expectEqual(text?.text("min_macos"), "10.15")
+        expectEqual(text?.int("min_macos_num"), 10_015_000)
+
+        // Pre-set usr survives.
+        let uiview = try corpus.db.get("SELECT usr FROM documents WHERE key = 'uikit/uiview'")
+        expectEqual(uiview?.text("usr"), "c:objc(cs)UIView")
     }
 }
