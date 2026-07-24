@@ -49,6 +49,14 @@ jobs:
       # ~2x faster end-to-end. A build failure here would surface in
       # 'Build archives' as the loader's one-line warning + JS serving —
       # never a broken snapshot.
+      # swift/Package.swift pins swift-tools-version 6.4, which no hosted image
+      # ships (macos-26 tops out at Swift 6.3.x). ci.yml's Swift jobs install the
+      # pinned swift.org dev snapshot for exactly this reason; this workflow never
+      # did, so `swift build` here read the 6.4 manifest with the stock 6.3.2
+      # driver and died — every Sunday from 2026-07-05 on.
+      - name: Install Swift 6.4 dev toolchain (macOS, pinned swift.org snapshot)
+        uses: g-cqd/ADBuildTools/.github/actions/setup-swift@v1
+
       - name: Cache SwiftPM build
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
@@ -59,14 +67,12 @@ jobs:
 
       - name: Build libAppleDocsCore (release)
         working-directory: swift
-        # Non-fatal by contract (see the comment above): the dylib is a speed
-        # optimisation, and every consumer of it already degrades to the JS
-        # path when it is absent. Without this the step hard-fails the job and
-        # takes the archive + binaries with it — which is exactly what happened
-        # every Sunday from 2026-06-21 on (link errors, then `swift-tools-version
-        # 6.4.0` vs the runner's 6.3.2, since this workflow never installs the
-        # pinned 6.4 dev snapshot that ci.yml's Swift jobs do). Last good
-        # snapshot before this gate started biting: 2026-06-14.
+        # Belt and braces after the toolchain step above: the dylib is a speed
+        # optimisation and every consumer already degrades to the JS path when it
+        # is absent, exactly as the comment above promises. Keeping this non-fatal
+        # means a future toolchain/link regression costs the week's *speed*, not
+        # the week's *snapshot* — the failure mode that silently blocked every
+        # release from 2026-06-21 to 2026-07-19 (last good build: 2026-06-14).
         continue-on-error: true
         run: swift build -c release
 
