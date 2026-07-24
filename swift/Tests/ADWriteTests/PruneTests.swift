@@ -5,6 +5,7 @@
 // nothing; scope validation refuses typo'd frameworks.
 
 import ADStorage
+import ADTestKit
 import Foundation
 import Testing
 
@@ -39,46 +40,23 @@ struct PruneTests {
         let corpus = try seeded()
         defer { corpus.destroy() }
         let doomedId = try corpus.docId("hig/buttons")
-        #expect(doomedId > 0)
+        expectTrue(doomedId > 0)
 
         let scope = CorpusScope(
             sources: ["swift-book"], appleDoccFrameworks: nil, keepFonts: true, keepSymbols: true)
         let summary = try Prune.run(corpus.db, dataDir: corpus.dataDir, scope: scope, options: options())
 
-        #expect(summary.status == "ok")
-        #expect(summary.rootsRemoved == 1)
-        #expect(summary.rootsKept == 1)
-        #expect(summary.pagesRemoved == 1)
-        #expect(summary.documentsRemoved == 1)
-        #expect(summary.filesRemoved == 1)  // the materialized hig/buttons.md
-        #expect(summary.byRoot == [Prune.RootPlan(slug: "hig", sourceType: "hig", pages: 1)])
+        expectEqual(summary.status, "ok")
+        expectEqual(summary.rootsRemoved, 1)
+        expectEqual(summary.rootsKept, 1)
+        expectEqual(summary.pagesRemoved, 1)
+        expectEqual(summary.documentsRemoved, 1)
+        expectEqual(summary.filesRemoved, 1)  // the materialized hig/buttons.md
+        let expectedByRoot: [Prune.RootPlan] = [Prune.RootPlan(slug: "hig", sourceType: "hig", pages: 1)]
+        expectEqual(summary.byRoot, expectedByRoot)
 
-        // Every hig trace is gone…
-        #expect(try corpus.count("SELECT COUNT(*) AS c FROM roots WHERE slug = 'hig'") == 0)
-        #expect(try corpus.count("SELECT COUNT(*) AS c FROM pages WHERE path = 'hig/buttons'") == 0)
-        #expect(try corpus.count("SELECT COUNT(*) AS c FROM documents WHERE key = 'hig/buttons'") == 0)
-        #expect(
-            try corpus.count(
-                "SELECT COUNT(*) AS c FROM document_sections WHERE document_id = \(doomedId)") == 0)
-        #expect(
-            try corpus.count(
-                "SELECT COUNT(*) AS c FROM documents_body_fts WHERE rowid = \(doomedId)") == 0)
-        #expect(
-            try corpus.count(
-                "SELECT COUNT(*) AS c FROM document_relationships WHERE from_key = 'hig/buttons'") == 0)
-        #expect(try corpus.count("SELECT COUNT(*) AS c FROM crawl_state WHERE root_slug = 'hig'") == 0)
-        #expect(
-            !FileManager.default.fileExists(
-                atPath: corpus.dir.appendingPathComponent("markdown/hig/buttons.md").path))
-
-        // …the kept root is intact with a refreshed page_count.
-        #expect(try corpus.count("SELECT COUNT(*) AS c FROM documents WHERE key = 'swift-book/intro'") == 1)
-        let kept = try corpus.db.get(
-            "SELECT page_count AS c FROM roots WHERE slug = 'swift-book'")?
-            .int("c")
-        #expect(kept == 1)
-        // The activity row was cleared on the way out.
-        #expect(try corpus.count("SELECT COUNT(*) AS c FROM activity") == 0)
+        try assertHigRemoved(corpus, doomedId: doomedId)
+        try assertKeptRootIntact(corpus)
     }
 
     @Test("dry-run reports the plan and changes nothing")
@@ -158,5 +136,42 @@ struct PruneTests {
         #expect(
             !FileManager.default.fileExists(
                 atPath: corpus.dir.appendingPathComponent("resources/symbols").path))
+    }
+
+    /// Every trace of the pruned root is gone (split out of the test body to stay
+    /// within the per-function type-check budget).
+    private func assertHigRemoved(_ corpus: MaintenanceCorpus, doomedId: Int64) throws {
+        let roots: Int64 = try corpus.count("SELECT COUNT(*) AS c FROM roots WHERE slug = 'hig'")
+        expectEqual(roots, 0)
+        let pages: Int64 = try corpus.count("SELECT COUNT(*) AS c FROM pages WHERE path = 'hig/buttons'")
+        expectEqual(pages, 0)
+        let docs: Int64 = try corpus.count("SELECT COUNT(*) AS c FROM documents WHERE key = 'hig/buttons'")
+        expectEqual(docs, 0)
+        let sections: Int64 = try corpus.count(
+            "SELECT COUNT(*) AS c FROM document_sections WHERE document_id = \(doomedId)")
+        expectEqual(sections, 0)
+        let fts: Int64 = try corpus.count(
+            "SELECT COUNT(*) AS c FROM documents_body_fts WHERE rowid = \(doomedId)")
+        expectEqual(fts, 0)
+        let rels: Int64 = try corpus.count(
+            "SELECT COUNT(*) AS c FROM document_relationships WHERE from_key = 'hig/buttons'")
+        expectEqual(rels, 0)
+        let crawl: Int64 = try corpus.count("SELECT COUNT(*) AS c FROM crawl_state WHERE root_slug = 'hig'")
+        expectEqual(crawl, 0)
+        let markdownPath: String = corpus.dir.appendingPathComponent("markdown/hig/buttons.md").path
+        expectFalse(FileManager.default.fileExists(atPath: markdownPath))
+    }
+
+    /// The kept root survives with a refreshed page_count, and the activity row is cleared.
+    private func assertKeptRootIntact(_ corpus: MaintenanceCorpus) throws {
+        let keptDocs: Int64 = try corpus.count(
+            "SELECT COUNT(*) AS c FROM documents WHERE key = 'swift-book/intro'")
+        expectEqual(keptDocs, 1)
+        let kept: Int64? = try corpus.db.get(
+            "SELECT page_count AS c FROM roots WHERE slug = 'swift-book'")?
+            .int("c")
+        expectEqual(kept, 1)
+        let activity: Int64 = try corpus.count("SELECT COUNT(*) AS c FROM activity")
+        expectEqual(activity, 0)
     }
 }
