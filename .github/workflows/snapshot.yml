@@ -59,6 +59,15 @@ jobs:
 
       - name: Build libAppleDocsCore (release)
         working-directory: swift
+        # Non-fatal by contract (see the comment above): the dylib is a speed
+        # optimisation, and every consumer of it already degrades to the JS
+        # path when it is absent. Without this the step hard-fails the job and
+        # takes the archive + binaries with it — which is exactly what happened
+        # every Sunday from 2026-06-21 on (link errors, then `swift-tools-version
+        # 6.4.0` vs the runner's 6.3.2, since this workflow never installs the
+        # pinned 6.4 dev snapshot that ci.yml's Swift jobs do). Last good
+        # snapshot before this gate started biting: 2026-06-14.
+        continue-on-error: true
         run: swift build -c release
 
       # Archive pipeline: snapshots ship as `.tar.zst` with `zstd -9 -T3`
