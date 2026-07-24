@@ -28,14 +28,17 @@ let strictSettings: [SwiftSetting] = [
 ]
 
 // Compile-time type-check timing warnings (flag slow expressions / function bodies). Unsafe flags, so
-// they live only on the internal (non-exported) test targets. Both budgets are 100ms: the slow bodies
-// (the renderer JSON literal, the RowCodec / archive suites) were fixed at the root — split into focused
-// tests, big literals hoisted to typed `let`s, chained `#expect`s moved to the kit's typed
-// `expectEqual`/`expectTrue` asserts — rather than relaxed, so a regression past 100ms is a hard error.
+// they live only on the internal (non-exported) test targets. The budget defaults to 100ms — the slow
+// bodies were fixed at the root (split into focused tests, big literals hoisted to typed `let`s, chained
+// `#expect`s moved to the kit's typed `expectEqual`/`expectTrue` asserts) rather than relaxed, so a
+// regression past the budget is a hard error. `AD_TYPECHECK_BUDGET_MS` raises it on shared CI runners
+// (calibrated 250) where WALL-CLOCK type-check time inflates under contention — the family knob; the
+// default keeps the strict 100ms locally.
+let typeCheckBudgetMS = Context.environment["AD_TYPECHECK_BUDGET_MS"].flatMap(Int.init) ?? 100
 let timingWarningFlags: [SwiftSetting] = [
     .unsafeFlags([
-        "-Xfrontend", "-warn-long-function-bodies=100",
-        "-Xfrontend", "-warn-long-expression-type-checking=100"
+        "-Xfrontend", "-warn-long-function-bodies=\(typeCheckBudgetMS)",
+        "-Xfrontend", "-warn-long-expression-type-checking=\(typeCheckBudgetMS)"
     ])
 ]
 

@@ -73,6 +73,8 @@ function classify(url, fn) {
   return 'unclassified'
 }
 
+const callersMode = args.includes('--callers')
+
 const profile = JSON.parse(readFileSync(file, 'utf8'))
 const nodesById = new Map(profile.nodes.map((n) => [n.id, n]))
 const samples = profile.samples
@@ -134,4 +136,36 @@ console.log('─'.repeat(60))
 const leaves = [...byLeaf.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN)
 for (const [loc, us] of leaves) {
   console.log(`${ms(us).padStart(8)}ms ${pct(us).padStart(5)}%  ${loc}`)
+}
+
+// --callers: native frames (bun:sqlite/runtime, empty url) carry no source
+// location, so a flame-graph hides WHICH JS call-site owns their time. This
+// walks each native leaf up to its nearest JS-frame ancestor and attributes
+// the self-time there — the view that found the §10(B) per-search COUNT(*).
+if (callersMode) {
+  const parent = new Map()
+  for (const n of profile.nodes) for (const c of n.children ?? []) parent.set(c, n.id)
+  const isJs = (n) => (n?.callFrame?.url || '').startsWith('file:')
+  const nearestJsCaller = (id) => {
+    let cur = parent.get(id)
+    while (cur != null) {
+      const n = nodesById.get(cur)
+      if (isJs(n)) return `${n.callFrame.functionName || '(anon)'}  ${shortUrl(n.callFrame.url)}:${n.callFrame.lineNumber + 1}`
+      cur = parent.get(cur)
+    }
+    return '(no js caller)'
+  }
+  const byCaller = new Map()
+  let nativeUs = 0
+  for (const [nodeId, us] of selfByNode) {
+    const n = nodesById.get(nodeId)
+    if ((n?.callFrame?.url || '').startsWith('file:')) continue // already located
+    byCaller.set(nearestJsCaller(nodeId), (byCaller.get(nearestJsCaller(nodeId)) ?? 0) + us)
+    nativeUs += us
+  }
+  console.log(`\nnative self-time (${ms(nativeUs)}ms) by nearest JS caller`)
+  console.log('─'.repeat(60))
+  for (const [caller, us] of [...byCaller.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN)) {
+    console.log(`${ms(us).padStart(8)}ms ${pct(us).padStart(5)}%  ${caller}`)
+  }
 }
