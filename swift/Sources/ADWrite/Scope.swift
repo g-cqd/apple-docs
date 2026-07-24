@@ -114,7 +114,15 @@ public enum ScopeLoader {
     /// JSONSerialization bridges JSON booleans to NSNumber; tell them apart
     /// from real numbers (JS `version: true` must NOT pass the `=== 1` check).
     private static func isBool(_ number: NSNumber) -> Bool {
-        CFGetTypeID(number) == CFBooleanGetTypeID()
+        #if canImport(Darwin)
+            return CFGetTypeID(number) == CFBooleanGetTypeID()
+        #else
+            // swift-corelibs-foundation does not surface CFGetTypeID to Swift.
+            // Its JSONSerialization decodes `true`/`false` into an NSNumber whose
+            // objCType is "c" (char), while JSON numbers decode as "q"/"d" — so
+            // the tag is as discriminating as the CFBoolean check is on Darwin.
+            return number.objCType.pointee == CChar(UInt8(ascii: "c"))
+        #endif
     }
 
     /// `JSON.stringify(value)` for the version error message (best effort).
