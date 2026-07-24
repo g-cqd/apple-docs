@@ -105,6 +105,10 @@ public final class SQLiteWriteConnection: @unchecked Sendable {
     ///   - writerPragmas: apply the JS writer pragma set (`applyPragmas`). `false`
     ///     opens a bare handle (busy_timeout only) — the snapshot copy's mode (the
     ///     JS opens the `VACUUM INTO` copy with no pragmas applied).
+    /// - Throws: `SQLiteWriteError.libraryUnavailable` when libsqlite3 cannot be
+    ///   loaded, or when the loaded build has no FTS5 (the schema's virtual tables
+    ///   would fail mid-migration); `SQLiteWriteError.cannotOpen` when
+    ///   `sqlite3_open_v2` rejects `path`.
     public init(path: String, writerPragmas: Bool = true) throws(SQLiteWriteError) {
         guard let lib = SQLiteLoader.shared else { throw SQLiteWriteError.libraryUnavailable }
         self.lib = lib
