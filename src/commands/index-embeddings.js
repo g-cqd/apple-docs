@@ -20,7 +20,7 @@ import { _resetVectorCache } from '../search/semantic.js'
  *
  * Resumable: without `--full`, only documents with no chunks are processed.
  * The embedder is injectable (`opts.embedder`) so tests use a deterministic
- * fake and never load `@huggingface/transformers` or a model.
+ * fake and never need the optional `@huggingface/transformers` dependency.
  *
  * @param {{ full?: boolean, embedder?: { embed(t: string): Promise<Float32Array> } }} opts
  * @param {{ db: any, dataDir?: any, logger: any, onProgress?: any }} ctx
