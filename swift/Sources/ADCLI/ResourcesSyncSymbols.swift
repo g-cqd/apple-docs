@@ -32,8 +32,8 @@ struct ResourcesSyncSymbolsCommand: ParsableCommand {
             ?? "\(NSHomeDirectory())/.apple-docs"
         let dbPath = db ?? "\(dataDir)/apple-docs.db"
         // writable: the resource sync IS a write pass; the default read connection is
-            // PRAGMA query_only post-pivot (D-0007-4), under which every upsert silently fails.
-            guard let connection = StorageConnection(path: dbPath, writable: true) else {
+        // PRAGMA query_only post-pivot (D-0007-4), under which every upsert silently fails.
+        guard let connection = StorageConnection(path: dbPath, writable: true) else {
             FileHandle.standardError.write(Data("ad-cli: cannot open corpus \(dbPath)\n".utf8))
             throw ExitCode(1)
         }
