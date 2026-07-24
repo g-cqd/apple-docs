@@ -84,8 +84,11 @@
     "qs": "^6.15.2",
     "brace-expansion": "^5.0.6",
     "vite": "^8.0.0",
-    "dompurify": "^3.4.11",
-    "protobufjs": "^7.6.4"
+    "dompurify": "^3.4.12",
+    "protobufjs": "^7.6.5",
+    "postcss": "^8.5.23",
+    "adm-zip": "^0.6.0",
+    "sharp": "^0.35.3"
   },
   "optionalDependencies": {
     "@huggingface/transformers": "^4.2.0"
