@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs burndown: pending JSDoc typing (remove when this file type-checks)
 // Live HTML-page serving parity: ad-server's on-demand landing pages must be
 // byte-identical to what `ad-cli web build` writes to disk for the same corpus.
 // The static build is already DOM-identical to the Bun build (the chrome-headless

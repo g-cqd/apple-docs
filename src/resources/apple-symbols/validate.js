@@ -22,7 +22,8 @@ import { getPrerenderedSymbolPath, symbolVariantMatrix } from './cache-key.js'
  * @param {{ db: any, dataDir: string }} ctx
  * @param {{ maxMissingSamples?: number }} [opts]
  * @returns {{ complete: boolean, missingCount: number, missing: string[],
- *   counts: { public: number, private: number }, skippedBitmapOnly?: any, skippedRenderUnsupported?: any }}
+ *   counts: { public: number, private: number }, skippedBitmapOnly?: any,
+ *   skippedRenderUnsupported?: any, skippedUnsupportedVariants?: any }}
  */
 export function validateSymbolMatrixComplete(ctx, opts = {}) {
   const maxSamples = Math.max(1, opts.maxMissingSamples ?? 50)
