@@ -7,6 +7,9 @@ import Foundation
 
 #if canImport(Compression)
     import Compression
+#else
+    // No Compression framework (Linux): inflate through ADArchive's dlopen'd system zlib.
+    import ADArchive
 #endif
 
 // MARK: - PDF object graph (pdf-objects.js)
@@ -315,14 +318,18 @@ enum PdfObjects {
     /// trailing 4-byte adler32 is ignored — `compression_stream` stops at the
     /// end of the deflate data. Returns nil on any decode error.
     static func inflateZlib(_ bytes: [UInt8]) -> [UInt8]? {
+        guard bytes.count >= 2 else { return nil }
         #if canImport(Compression)
-            guard bytes.count >= 2 else { return nil }
             // Strip the 2-byte zlib header. (Apple's CGPDFContext writes 78 01 / 78 9c.)
             let body = Array(bytes[2...])
             if body.isEmpty { return [] }
             return rawInflate(body)
         #else
-            return nil
+            // Linux: ADArchive's zlib binding. Its decode windowBits (15 + 32) auto-detect
+            // RFC1950 framing, so the 2-byte header stays on — no manual strip, and the
+            // adler32 trailer gets verified instead of ignored. Before this, every
+            // /FlateDecode stream returned nil and the converter threw "FlateDecode failed".
+            return Gzip.decompress(bytes)
         #endif
     }
 

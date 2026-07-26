@@ -261,6 +261,9 @@ let package = Package(
             name: "ADRender",
             dependencies: [
                 "ADBase",
+                // ADArchive: its dlopen'd system zlib is the FlateDecode seam for symbol-PDF
+                // streams on platforms with no Apple Compression framework (Linux).
+                "ADArchive",
                 // ADFCore: the shared `XMLEscape` the glyph/symbol SVG builders escape text through.
                 .product(name: "ADFCore", package: "ADFoundation")
             ],
