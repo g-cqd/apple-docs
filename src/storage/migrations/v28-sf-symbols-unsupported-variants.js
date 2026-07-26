@@ -17,11 +17,12 @@
  * counting anything else as missing, so genuine gaps stay loud), and the
  * v27 all-variants flag keeps its meaning for a wholly-absent glyph.
  */
+/** @param {import('bun:sqlite').Database} db */
 export function up(db) {
   try {
     db.run("ALTER TABLE sf_symbols ADD COLUMN unsupported_variants TEXT NOT NULL DEFAULT '[]'")
   } catch (e) {
     // Idempotent re-run.
-    if (!/duplicate column name/i.test(e.message ?? '')) throw e
+    if (!/duplicate column name/i.test(e instanceof Error ? e.message : '')) throw e
   }
 }

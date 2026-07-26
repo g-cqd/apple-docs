@@ -7,6 +7,7 @@
 
 import { buildResourceFtsQuery, parseJsonArray, parseJsonValue } from '../_helpers.js'
 
+/** @param {Record<string, any>} row */
 function normalizeSfSymbolRow(row) {
   return {
     ...row,
@@ -17,6 +18,7 @@ function normalizeSfSymbolRow(row) {
   }
 }
 
+/** @param {import('bun:sqlite').Database} db */
 export function createAssetsSymbolsRepo(db) {
   const upsertSymbolStmt = db.query(`
     INSERT INTO sf_symbols (
@@ -37,13 +39,9 @@ export function createAssetsSymbolsRepo(db) {
       bundle_version = excluded.bundle_version,
       updated_at = excluded.updated_at
   `)
-  const deleteFtsStmt = db.query(
-    'DELETE FROM sf_symbols_fts WHERE rowid = (SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?)',
-  )
+  const deleteFtsStmt = db.query('DELETE FROM sf_symbols_fts WHERE rowid = (SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?)')
   const getRowidStmt = db.query('SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?')
-  const insertFtsStmt = db.query(
-    'INSERT INTO sf_symbols_fts(rowid, name, keywords, categories, aliases) VALUES (?, ?, ?, ?, ?)',
-  )
+  const insertFtsStmt = db.query('INSERT INTO sf_symbols_fts(rowid, name, keywords, categories, aliases) VALUES (?, ?, ?, ?, ?)')
   const getSymbolStmt = db.query('SELECT * FROM sf_symbols WHERE scope = ? AND name = ?')
   const listCatalogStmt = db.query(`
     SELECT name, scope, categories_json, keywords_json, bitmap_only, render_unsupported, unsupported_variants, codepoint, codepoint_version
@@ -54,28 +52,24 @@ export function createAssetsSymbolsRepo(db) {
   // bundle representation) so the validator and snapshot completeness
   // gate skip it. Called from the prerender loop when the Swift worker
   // reports the symbol has no vector form.
-  const markBitmapOnlyStmt = db.query(
-    'UPDATE sf_symbols SET bitmap_only = 1 WHERE scope = $scope AND name = $name',
-  )
+  const markBitmapOnlyStmt = db.query('UPDATE sf_symbols SET bitmap_only = 1 WHERE scope = $scope AND name = $name')
   // v27: the catalog (current SF Symbols.app) can list names the build
   // host's macOS cannot draw at all; the prerender loop flags them when
   // every variant fails so the completeness gate skips them.
-  const markRenderUnsupportedStmt = db.query(
-    'UPDATE sf_symbols SET render_unsupported = 1 WHERE scope = $scope AND name = $name',
-  )
+  const markRenderUnsupportedStmt = db.query('UPDATE sf_symbols SET render_unsupported = 1 WHERE scope = $scope AND name = $name')
   // v28: the same host can also draw a symbol at only SOME variants (macos-26
   // has no ultralight square.and.arrow.up). Record the exact
   // `"<weight>/<scale>"` set the renderer could not produce so the
   // completeness gate skips those and keeps flagging everything else.
-  const setUnsupportedVariantsStmt = db.query(
-    'UPDATE sf_symbols SET unsupported_variants = $variants WHERE scope = $scope AND name = $name',
-  )
+  const setUnsupportedVariantsStmt = db.query('UPDATE sf_symbols SET unsupported_variants = $variants WHERE scope = $scope AND name = $name')
+  // Read back separately rather than through listCatalog(): that payload is
+  // /api/symbols/index.json, which is byte-parity-gated against ad-server, so a
+  // build-time-only field must not appear in it.
+  const listUnsupportedVariantsStmt = db.query("SELECT scope, name, unsupported_variants FROM sf_symbols WHERE unsupported_variants != '[]'")
   // v19: stamp the resolved Private Use Area codepoint at sync time.
   // Pass NULL to clear (e.g., when the dump can't reach the symbol
   // through SF-Pro.ttf's PUA cmap).
-  const updateCodepointStmt = db.query(
-    'UPDATE sf_symbols SET codepoint = $codepoint, codepoint_version = $version WHERE scope = $scope AND name = $name',
-  )
+  const updateCodepointStmt = db.query('UPDATE sf_symbols SET codepoint = $codepoint, codepoint_version = $version WHERE scope = $scope AND name = $name')
   // Search variants — empty query, FTS hit, fallback LIKE.
   const searchEmptyStmt = db.query(`
     SELECT * FROM sf_symbols
@@ -120,18 +114,13 @@ export function createAssetsSymbolsRepo(db) {
   // millions of distinct (size, color, weight, scale) combinations, that's
   // an unbounded disk-fill hazard. Two prune strategies, callable from a
   // serve-side cron in src/web/serve.js.
-  const renderCacheStatsStmt = db.query(
-    'SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as bytes FROM sf_symbol_renders',
-  )
-  const olderThanStmt = db.query(
-    'SELECT cache_key, file_path FROM sf_symbol_renders WHERE updated_at < ?',
-  )
-  const oldestForQuotaStmt = db.query(
-    'SELECT cache_key, file_path, size FROM sf_symbol_renders ORDER BY updated_at ASC, cache_key ASC',
-  )
+  const renderCacheStatsStmt = db.query('SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as bytes FROM sf_symbol_renders')
+  const olderThanStmt = db.query('SELECT cache_key, file_path FROM sf_symbol_renders WHERE updated_at < ?')
+  const oldestForQuotaStmt = db.query('SELECT cache_key, file_path, size FROM sf_symbol_renders ORDER BY updated_at ASC, cache_key ASC')
   const deleteRenderStmt = db.query('DELETE FROM sf_symbol_renders WHERE cache_key = ?')
 
   return {
+    /** @param {Record<string, any>} params */
     upsertSymbol(params) {
       upsertSymbolStmt.run({
         $name: params.name,
@@ -150,15 +139,10 @@ export function createAssetsSymbolsRepo(db) {
       deleteFtsStmt.run(params.scope, params.name)
       const rowid = getRowidStmt.get(params.scope, params.name)?.rowid
       if (rowid != null) {
-        insertFtsStmt.run(
-          rowid,
-          params.name,
-          (params.keywords ?? []).join(' '),
-          (params.categories ?? []).join(' '),
-          (params.aliases ?? []).join(' '),
-        )
+        insertFtsStmt.run(rowid, params.name, (params.keywords ?? []).join(' '), (params.categories ?? []).join(' '), (params.aliases ?? []).join(' '))
       }
     },
+    /** @param {string} scope @param {string} name */
     getSymbol(scope, name) {
       const row = getSymbolStmt.get(scope, name)
       return row ? normalizeSfSymbolRow(row) : null
@@ -166,26 +150,38 @@ export function createAssetsSymbolsRepo(db) {
     /** Lightweight catalog used by the /api/symbols/index.json endpoint —
      *  excludes large JSON sidecars so the gzipped payload stays small. */
     listCatalog() {
-      return listCatalogStmt.all().map(row => ({
+      return listCatalogStmt.all().map((row) => ({
         name: row.name,
         scope: row.scope,
         categories: parseJsonArray(row.categories_json),
         keywords: parseJsonArray(row.keywords_json),
         bitmapOnly: !!row.bitmap_only,
         renderUnsupported: !!row.render_unsupported,
-        unsupportedVariants: parseJsonArray(row.unsupported_variants),
         codepoint: row.codepoint ?? null,
         codepointVersion: row.codepoint_version ?? null,
       }))
     },
+    /** @param {string} scope @param {string} name */
     markBitmapOnly(scope, name) {
       markBitmapOnlyStmt.run({ $scope: scope, $name: name })
     },
+    /** @param {string} scope @param {string} name */
     markRenderUnsupported(scope, name) {
       markRenderUnsupportedStmt.run({ $scope: scope, $name: name })
     },
+    /** v28: the `"scope/name" -> ["<weight>/<scale>"]` map of variants this host
+     *  cannot draw. Build-time only (the snapshot completeness gate). */
+    unsupportedVariantsByKey() {
+      /** @type {Map<string, string[]>} */
+      const map = new Map()
+      for (const row of listUnsupportedVariantsStmt.all()) {
+        map.set(`${row.scope}/${row.name}`, parseJsonArray(row.unsupported_variants))
+      }
+      return map
+    },
     /** v28: record the `"<weight>/<scale>"` variants this host could not draw
-     *  for a symbol that renders at its other variants. */
+     *  for a symbol that renders at its other variants.
+     *  @param {string} scope @param {string} name @param {Iterable<string>} variants */
     setUnsupportedVariants(scope, name, variants) {
       setUnsupportedVariantsStmt.run({
         $scope: scope,
@@ -195,6 +191,7 @@ export function createAssetsSymbolsRepo(db) {
     },
     /** Stamp the resolved PUA codepoint + the SF Symbols version it came from
      *  (so the codepoint can be matched to the shipped font). Pass null to clear. */
+    /** @param {string} scope @param {string} name @param {number | null} codepoint @param {string | null} [version] */
     updateCodepoint(scope, name, codepoint, version = null) {
       updateCodepointStmt.run({
         $scope: scope,
@@ -206,26 +203,33 @@ export function createAssetsSymbolsRepo(db) {
     /** Hybrid search: FTS5 first, falls back to LIKE on parser failure
      *  (FTS5 trips on `?`, `:`, etc — the catalog has thousands of dotted
      *  symbol names so the fallback path is hit in practice). */
+    /** @param {string} [query] @param {{ limit?: any, scope?: string | null }} [opts] */
     searchSymbols(query = '', opts = {}) {
       const limit = Math.min(Math.max(Number.parseInt(opts.limit ?? 100, 10) || 100, 1), 500)
       const scope = opts.scope ?? null
       const q = String(query ?? '').trim()
-      const parseRows = rows => rows.map(normalizeSfSymbolRow)
+      /** @param {any[]} rows */
+      const parseRows = (rows) => rows.map(normalizeSfSymbolRow)
       if (!q) return parseRows(searchEmptyStmt.all({ $scope: scope, $limit: limit }))
       try {
-        return parseRows(searchFtsStmt.all({
-          $query: buildResourceFtsQuery(q),
-          $scope: scope,
-          $limit: limit,
-        }))
+        return parseRows(
+          searchFtsStmt.all({
+            $query: buildResourceFtsQuery(q),
+            $scope: scope,
+            $limit: limit,
+          }),
+        )
       } catch {
-        return parseRows(searchLikeStmt.all({
-          $scope: scope,
-          $like: `%${q.toLowerCase()}%`,
-          $limit: limit,
-        }))
+        return parseRows(
+          searchLikeStmt.all({
+            $scope: scope,
+            $like: `%${q.toLowerCase()}%`,
+            $limit: limit,
+          }),
+        )
       }
     },
+    /** @param {Record<string, any>} params */
     upsertRender(params) {
       upsertRenderStmt.run({
         $cache_key: params.cacheKey,
@@ -244,6 +248,7 @@ export function createAssetsSymbolsRepo(db) {
         $updated_at: new Date().toISOString(),
       })
     },
+    /** @param {string} cacheKey */
     getRender(cacheKey) {
       return getRenderStmt.get(cacheKey) ?? null
     },
@@ -260,16 +265,18 @@ export function createAssetsSymbolsRepo(db) {
      * @param {string} cutoffIso ISO timestamp; rows with updated_at < cutoffIso are removed.
      * @returns {{ removed: number, paths: string[] }}
      */
+    /** @param {string} cutoffIso */
     pruneRendersOlderThan(cutoffIso) {
       const rows = olderThanStmt.all(cutoffIso)
       for (const row of rows) deleteRenderStmt.run(row.cache_key)
-      return { removed: rows.length, paths: rows.map(r => r.file_path).filter(Boolean) }
+      return { removed: rows.length, paths: rows.map((r) => r.file_path).filter(Boolean) }
     },
     /**
      * Trim the render cache to a byte quota by removing oldest rows first.
      * No-op when current bytes ≤ maxBytes. Returns the same shape as
      * pruneRendersOlderThan so callers can rm the files.
      */
+    /** @param {number} maxBytes */
     pruneRendersToBytesQuota(maxBytes) {
       const stats = renderCacheStatsStmt.get()
       if ((stats?.bytes ?? 0) <= maxBytes) return { removed: 0, paths: [] }

@@ -52,7 +52,7 @@ export function markUnrenderableSymbols({ ctx, scope, variants, result, logger }
   if (partial.length > 0) {
     logger?.warn?.(
       `${partial.length} ${scope} symbol(s) unrenderable at SOME variants on this macOS: ` +
-      `${partial.slice(0, 8).join('; ')}${partial.length > 8 ? '; …' : ''}`,
+        `${partial.slice(0, 8).join('; ')}${partial.length > 8 ? '; …' : ''}`,
     )
   }
 }

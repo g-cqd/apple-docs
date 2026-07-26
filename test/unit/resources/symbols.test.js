@@ -355,14 +355,15 @@ describe('markUnrenderableSymbols', () => {
       { weight: 'regular', scale: 'small' },
       { weight: 'regular', scale: 'medium' },
     ]
-    const result = { failures: [
-      { scope: 'private', name: 'partial', weight: 'ultralight', scale: 'small', error: 'no glyph' },
-    ] }
+    const result = { failures: [{ scope: 'private', name: 'partial', weight: 'ultralight', scale: 'small', error: 'no glyph' }] }
     markUnrenderableSymbols({ ctx, scope: 'private', variants, result, logger: ctx.logger })
 
-    const row = db.listSfSymbolsCatalog().find(s => s.name === 'partial')
+    const row = db.listSfSymbolsCatalog().find((s) => s.name === 'partial')
     expect(row.renderUnsupported).toBe(false) // still drawable at its other variants
-    expect(row.unsupportedVariants).toEqual(['ultralight/small'])
+    // Build-time only: deliberately absent from the catalog payload, which is
+    // byte-parity-gated against ad-server's /api/symbols/index.json.
+    expect(row.unsupportedVariants).toBeUndefined()
+    expect(db.assetsSymbols.unsupportedVariantsByKey().get('private/partial')).toEqual(['ultralight/small'])
   })
 })
 
@@ -376,7 +377,7 @@ describe('validateSymbolMatrixComplete — unsupported variants (v28)', () => {
 
     // Record every variant except one as undrawable on this host: the gate must
     // stop counting those and keep the single real gap loud.
-    const all = before.missing.map(m => m.slice(m.indexOf('(') + 1, -1))
+    const all = before.missing.map((m) => m.slice(m.indexOf('(') + 1, -1))
     db.assetsSymbols.setUnsupportedVariants('private', 'partial', all.slice(1))
 
     const after = validateSymbolMatrixComplete(ctx)

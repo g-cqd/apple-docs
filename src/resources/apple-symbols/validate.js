@@ -19,14 +19,18 @@ import { getPrerenderedSymbolPath, symbolVariantMatrix } from './cache-key.js'
  * pre-renders. The DB catalog is the source of truth; if a row is in
  * `sf_symbols`, the snapshot must carry every variant of that name.
  *
- * @param {{ db: object, dataDir: string }} ctx
+ * @param {{ db: any, dataDir: string }} ctx
  * @param {{ maxMissingSamples?: number }} [opts]
  * @returns {{ complete: boolean, missingCount: number, missing: string[],
- *   counts: { public: number, private: number } }}
+ *   counts: { public: number, private: number }, skippedBitmapOnly?: any,
+ *   skippedRenderUnsupported?: any, skippedUnsupportedVariants?: any }}
  */
 export function validateSymbolMatrixComplete(ctx, opts = {}) {
   const maxSamples = Math.max(1, opts.maxMissingSamples ?? 50)
   const symbols = ctx.db?.listSfSymbolsCatalog?.() ?? []
+  // v28 lives outside the catalog payload (that one is byte-parity-gated against
+  // ad-server), so fetch the build-time map once here.
+  const unsupportedByKey = ctx.db?.assetsSymbols?.unsupportedVariantsByKey?.() ?? new Map()
   const counts = { public: 0, private: 0 }
   const skippedBitmapOnly = { public: 0, private: 0 }
   const skippedRenderUnsupported = { public: 0, private: 0 }
@@ -55,7 +59,7 @@ export function validateSymbolMatrixComplete(ctx, opts = {}) {
     // v28: the host draws this symbol, but not at every variant (macos-26 has
     // no ultralight square.and.arrow.up). Those specific variants are recorded
     // at prerender time and are not "missing" — nothing can produce them here.
-    const unsupportedVariants = new Set(symbol.unsupportedVariants ?? [])
+    const unsupportedVariants = new Set(unsupportedByKey.get(`${scope}/${symbol.name}`) ?? [])
     for (const variant of symbolVariantMatrix(scope)) {
       const key = `${variant.weight}/${variant.scale}`
       if (unsupportedVariants.has(key)) {
@@ -72,7 +76,12 @@ export function validateSymbolMatrixComplete(ctx, opts = {}) {
   }
 
   return {
-    complete: missingCount === 0, missingCount, missing, counts,
-    skippedBitmapOnly, skippedRenderUnsupported, skippedUnsupportedVariants,
+    complete: missingCount === 0,
+    missingCount,
+    missing,
+    counts,
+    skippedBitmapOnly,
+    skippedRenderUnsupported,
+    skippedUnsupportedVariants,
   }
 }
