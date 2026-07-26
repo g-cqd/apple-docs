@@ -46,7 +46,7 @@ export function createAssetsSymbolsRepo(db) {
   )
   const getSymbolStmt = db.query('SELECT * FROM sf_symbols WHERE scope = ? AND name = ?')
   const listCatalogStmt = db.query(`
-    SELECT name, scope, categories_json, keywords_json, bitmap_only, render_unsupported, codepoint, codepoint_version
+    SELECT name, scope, categories_json, keywords_json, bitmap_only, render_unsupported, unsupported_variants, codepoint, codepoint_version
     FROM sf_symbols
     ORDER BY scope, COALESCE(order_index, 999999), name
   `)
@@ -62,6 +62,13 @@ export function createAssetsSymbolsRepo(db) {
   // every variant fails so the completeness gate skips them.
   const markRenderUnsupportedStmt = db.query(
     'UPDATE sf_symbols SET render_unsupported = 1 WHERE scope = $scope AND name = $name',
+  )
+  // v28: the same host can also draw a symbol at only SOME variants (macos-26
+  // has no ultralight square.and.arrow.up). Record the exact
+  // `"<weight>/<scale>"` set the renderer could not produce so the
+  // completeness gate skips those and keeps flagging everything else.
+  const setUnsupportedVariantsStmt = db.query(
+    'UPDATE sf_symbols SET unsupported_variants = $variants WHERE scope = $scope AND name = $name',
   )
   // v19: stamp the resolved Private Use Area codepoint at sync time.
   // Pass NULL to clear (e.g., when the dump can't reach the symbol
@@ -166,6 +173,7 @@ export function createAssetsSymbolsRepo(db) {
         keywords: parseJsonArray(row.keywords_json),
         bitmapOnly: !!row.bitmap_only,
         renderUnsupported: !!row.render_unsupported,
+        unsupportedVariants: parseJsonArray(row.unsupported_variants),
         codepoint: row.codepoint ?? null,
         codepointVersion: row.codepoint_version ?? null,
       }))
@@ -175,6 +183,15 @@ export function createAssetsSymbolsRepo(db) {
     },
     markRenderUnsupported(scope, name) {
       markRenderUnsupportedStmt.run({ $scope: scope, $name: name })
+    },
+    /** v28: record the `"<weight>/<scale>"` variants this host could not draw
+     *  for a symbol that renders at its other variants. */
+    setUnsupportedVariants(scope, name, variants) {
+      setUnsupportedVariantsStmt.run({
+        $scope: scope,
+        $name: name,
+        $variants: JSON.stringify([...variants]),
+      })
     },
     /** Stamp the resolved PUA codepoint + the SF Symbols version it came from
      *  (so the codepoint can be matched to the shipped font). Pass null to clear. */

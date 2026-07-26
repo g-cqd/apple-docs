@@ -30,6 +30,7 @@ export function validateSymbolMatrixComplete(ctx, opts = {}) {
   const counts = { public: 0, private: 0 }
   const skippedBitmapOnly = { public: 0, private: 0 }
   const skippedRenderUnsupported = { public: 0, private: 0 }
+  const skippedUnsupportedVariants = { public: 0, private: 0 }
   const missing = []
   let missingCount = 0
 
@@ -51,15 +52,27 @@ export function validateSymbolMatrixComplete(ctx, opts = {}) {
       skippedRenderUnsupported[scope]++
       continue
     }
+    // v28: the host draws this symbol, but not at every variant (macos-26 has
+    // no ultralight square.and.arrow.up). Those specific variants are recorded
+    // at prerender time and are not "missing" — nothing can produce them here.
+    const unsupportedVariants = new Set(symbol.unsupportedVariants ?? [])
     for (const variant of symbolVariantMatrix(scope)) {
+      const key = `${variant.weight}/${variant.scale}`
+      if (unsupportedVariants.has(key)) {
+        skippedUnsupportedVariants[scope]++
+        continue
+      }
       const path = getPrerenderedSymbolPath(ctx, scope, symbol.name, variant)
       if (existsSync(path)) continue
       missingCount++
       if (missing.length < maxSamples) {
-        missing.push(`${scope}/${symbol.name} (${variant.weight}/${variant.scale})`)
+        missing.push(`${scope}/${symbol.name} (${key})`)
       }
     }
   }
 
-  return { complete: missingCount === 0, missingCount, missing, counts, skippedBitmapOnly, skippedRenderUnsupported }
+  return {
+    complete: missingCount === 0, missingCount, missing, counts,
+    skippedBitmapOnly, skippedRenderUnsupported, skippedUnsupportedVariants,
+  }
 }

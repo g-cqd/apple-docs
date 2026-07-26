@@ -343,4 +343,51 @@ describe('markUnrenderableSymbols', () => {
     expect(catalog.find(s => s.name === 'f1').renderUnsupported).toBe(true)
     expect(catalog.find(s => s.name === 'partial').renderUnsupported).toBe(false)
   })
+
+  // v28: a partial failure used to be left entirely unrecorded, so the
+  // completeness gate counted those variants as missing forever and no
+  // snapshot could build (macos-26 vs public/square.and.arrow.up ultralight).
+  test('records the exact failing variants for a partially-renderable symbol', async () => {
+    const { markUnrenderableSymbols } = await import('../../../src/resources/apple-symbols/mark-unrenderable.js')
+    db.upsertSfSymbol({ name: 'partial', scope: 'private', categories: [], keywords: [], orderIndex: 0 })
+    const variants = [
+      { weight: 'ultralight', scale: 'small' },
+      { weight: 'regular', scale: 'small' },
+      { weight: 'regular', scale: 'medium' },
+    ]
+    const result = { failures: [
+      { scope: 'private', name: 'partial', weight: 'ultralight', scale: 'small', error: 'no glyph' },
+    ] }
+    markUnrenderableSymbols({ ctx, scope: 'private', variants, result, logger: ctx.logger })
+
+    const row = db.listSfSymbolsCatalog().find(s => s.name === 'partial')
+    expect(row.renderUnsupported).toBe(false) // still drawable at its other variants
+    expect(row.unsupportedVariants).toEqual(['ultralight/small'])
+  })
+})
+
+describe('validateSymbolMatrixComplete — unsupported variants (v28)', () => {
+  test('skips recorded variants but still flags genuinely missing ones', async () => {
+    const { validateSymbolMatrixComplete } = await import('../../../src/resources/apple-symbols/validate.js')
+    db.upsertSfSymbol({ name: 'partial', scope: 'private', categories: [], keywords: [], orderIndex: 0 })
+
+    const before = validateSymbolMatrixComplete(ctx)
+    expect(before.missingCount).toBe(27) // 1 symbol x 27 private variants
+
+    // Record every variant except one as undrawable on this host: the gate must
+    // stop counting those and keep the single real gap loud.
+    const all = before.missing.map(m => m.slice(m.indexOf('(') + 1, -1))
+    db.assetsSymbols.setUnsupportedVariants('private', 'partial', all.slice(1))
+
+    const after = validateSymbolMatrixComplete(ctx)
+    expect(after.complete).toBe(false)
+    expect(after.missingCount).toBe(1)
+    expect(after.skippedUnsupportedVariants.private).toBe(26)
+
+    // With the last one recorded too, the gate lets the snapshot build.
+    db.assetsSymbols.setUnsupportedVariants('private', 'partial', all)
+    const done = validateSymbolMatrixComplete(ctx)
+    expect(done.complete).toBe(true)
+    expect(done.missingCount).toBe(0)
+  })
 })
