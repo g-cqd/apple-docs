@@ -82,6 +82,9 @@ async function dispatchConsolidate(_subcommand, _positional, flags, ctx) {
   const result = await consolidate({
     dryRun: !!flags['dry-run'],
     minify: !!flags.minify,
+    // Explicit `--minify` from the CLI always walks, even after the
+    // zero-result stamp gated sync's automatic pass.
+    forceMinify: !!flags.minify,
   }, ctx)
   return { result, formatter: summary('consolidate') }
 }

@@ -21,7 +21,9 @@ import { updateGuidelinesSource } from './update/guidelines.js'
 export async function update(opts, ctx) {
   const { db, dataDir, rateLimiter, logger } = ctx
   const startMs = Date.now()
-  const concurrency = ctx.semaphore?.max ?? opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '500', 10)
+  // Default aligned with sync's rate-limit-friendly cap (sync.js): the old
+  // 500 default let standalone `update` runs bypass the --aggressive guard.
+  const concurrency = ctx.semaphore?.max ?? opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '100', 10)
   const parallel = opts.parallel ?? 10
   const semaphore = ctx.semaphore ?? new Semaphore(concurrency)
   const requestedSources = normalizeList(opts.sources)
@@ -45,53 +47,65 @@ export async function update(opts, ctx) {
   let errCount = 0
 
   try {
-    if (adapters.some(adapter => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
-      try {
-        await discoverRoots(db, rateLimiter, logger)
-        adapterCtx.rootCatalogReady = true
-      } catch (e) {
-        logger.warn('Failed to refresh root catalog', { error: e.message })
+    // sync() runs root discovery and every adapter's discover() once and
+    // hands the bundle in — discovery is network-heavy (WWDC year indexes,
+    // GitHub trees, package catalogs) and used to run twice per sync.
+    let discoveriesBySource
+    let discoveryErrorsBySource
+    if (opts.discoveries) {
+      ({ discoveriesBySource, discoveryErrorsBySource } = opts.discoveries)
+      adapterCtx.rootCatalogReady = opts.rootCatalogReady ?? adapterCtx.rootCatalogReady
+    } else {
+      if (adapters.some(adapter => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
+        try {
+          await discoverRoots(db, rateLimiter, logger)
+          adapterCtx.rootCatalogReady = true
+        } catch (e) {
+          logger.warn('Failed to refresh root catalog', { error: e.message })
+        }
       }
+      const discovered = await discoverAdaptersInParallel(adapters, adapterCtx)
+      discoveriesBySource = discovered.discoveries
+      discoveryErrorsBySource = discovered.errors
     }
 
-    const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } =
-      await discoverAdaptersInParallel(adapters, adapterCtx)
+    // Adapters run concurrently: they target disjoint hosts (Apple CDN,
+    // GitHub, swift.org), so serializing them stacked each source's network
+    // wall time end to end while every other host's rate budget sat idle.
+    // The shared semaphore still caps aggregate in-flight fetches.
+    const outcomes = await Promise.allSettled(adapters.map(async (adapter) => {
+      const discoveryError = discoveryErrorsBySource.get(adapter.constructor.type)
+      if (discoveryError) {
+        logger.warn(`Discovery failed for source: ${adapter.constructor.type}`, { error: discoveryError.message })
+        return { errCount: 1 }
+      }
 
-    for (const adapter of adapters) {
+      const discovery = discoveriesBySource.get(adapter.constructor.type)
+      // Explicit --roots wins; otherwise scope.json may narrow the
+      // apple-docc adapter (and only that one) to its framework list.
+      const adapterRoots = requestedRoots ?? scopeRootsFor(adapter, opts.scope ?? null)
       try {
-        const discoveryError = discoveryErrorsBySource.get(adapter.constructor.type)
-        if (discoveryError) {
-          errCount++
-          logger.warn(`Discovery failed for source: ${adapter.constructor.type}`, { error: discoveryError.message })
-          continue
-        }
-
-        const discovery = discoveriesBySource.get(adapter.constructor.type)
-        // Explicit --roots wins; otherwise scope.json may narrow the
-        // apple-docc adapter (and only that one) to its framework list.
-        const adapterRoots = requestedRoots ?? scopeRootsFor(adapter, opts.scope ?? null)
-        let counts
         switch (adapter.constructor.syncMode) {
           case 'snapshot':
-            counts = await updateGuidelinesSource(adapter, discovery, adapterRoots, adapterCtx)
-            break
+            return await updateGuidelinesSource(adapter, discovery, adapterRoots, adapterCtx)
           case 'flat':
-            counts = await updateFlatSource(adapter, discovery, adapterRoots, concurrency, semaphore, adapterCtx)
-            break
+            return await updateFlatSource(adapter, discovery, adapterRoots, concurrency, semaphore, adapterCtx)
           default:
-            counts = await updateDoccSource(adapter, discovery, adapterRoots, concurrency, parallel, semaphore, adapterCtx)
-            break
+            return await updateDoccSource(adapter, discovery, adapterRoots, concurrency, parallel, semaphore, adapterCtx)
         }
-
-        newCount += counts.newCount
-        modCount += counts.modCount
-        unchangedCount += counts.unchangedCount
-        delCount += counts.delCount
-        errCount += counts.errCount
       } catch (e) {
-        errCount++
         logger.warn(`Update failed for source: ${adapter.constructor.type}`, { error: e.message })
+        return { errCount: 1 }
       }
+    }))
+
+    for (const outcome of outcomes) {
+      const counts = outcome.status === 'fulfilled' ? outcome.value : { errCount: 1 }
+      newCount += counts.newCount ?? 0
+      modCount += counts.modCount ?? 0
+      unchangedCount += counts.unchangedCount ?? 0
+      delCount += counts.delCount ?? 0
+      errCount += counts.errCount ?? 0
     }
 
     if (opts.indexBody) {
@@ -141,5 +155,7 @@ export async function update(opts, ctx) {
     // prepared statements reload against the post-write schema. WAL would
     // usually cover us without this; recycle is cheap when the pool is idle.
     try { await ctx.readerPool?.recycle?.() } catch { /* best-effort */ }
+    // Best-effort WAL truncate after a write-heavy run — see sync.js.
+    try { db.db.run('PRAGMA wal_checkpoint(TRUNCATE)') } catch { /* readers active */ }
   }
 }

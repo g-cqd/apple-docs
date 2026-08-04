@@ -4,6 +4,7 @@
 // and undiscovered keys get fetched fresh.
 
 import { persistNormalizedPage } from '../../pipeline/persist.js'
+import { pool } from '../../lib/pool.js'
 import {
   markFlatSourceFailed,
   markFlatSourceProcessed,
@@ -29,11 +30,24 @@ export async function updateFlatSource(adapter, discovery, requestedRoots, _conc
   }
 
   if (stalePages.length > 0) {
+    // Refuse to act on a discovery that lost more than half the tracked
+    // corpus (with a floor so small catalogs can still churn freely): a
+    // transiently truncated upstream listing — GitHub tree pagination, a
+    // half-parsed index — must not mass-tombstone thousands of pages in one
+    // run. A genuine catalog collapse still applies once an operator re-runs
+    // with the threshold acknowledged (the pages 404 individually anyway and
+    // fall to the per-page 3-strike gate over subsequent syncs).
+    const staleRatio = pages.length > 0 ? stalePages.length / pages.length : 0
     if (discovery.partial) {
       // Partial discovery (e.g. the packages adapter's curated 'official'
       // scope) enumerates a subset, not the source's full catalog — absence
       // from it proves nothing. Leave the extra pages untouched.
       logger.info(`Keeping ${stalePages.length} ${adapter.constructor.displayName} pages outside this partial discovery scope`)
+    } else if (stalePages.length > 100 && staleRatio > 0.5) {
+      logger.warn(
+        `Refusing to remove ${stalePages.length}/${pages.length} ${adapter.constructor.displayName} pages missing from discovery — ` +
+        'a drop this large usually means a truncated upstream listing, not real removals',
+      )
     } else {
       logger.info(`Removing ${stalePages.length} stale ${adapter.constructor.displayName} pages...`)
       db.markPagesDeleted(stalePages.map(page => page.path))
@@ -63,9 +77,42 @@ async function checkAndPullTrackedPages({
   adapter, trackedPages, root, discoveredKeySet, semaphore, ctx, counts, db, dataDir, logger,
 }) {
   logger.info(`Checking ${trackedPages.length} ${adapter.constructor.displayName} pages for updates...`)
-  const modified = []
 
-  await Promise.all(trackedPages.map(page =>
+  const pullModified = async (page) => {
+    try {
+      const fetchResult = await adapter.fetch(page.path, ctx)
+      const normalized = adapter.normalize(page.path, fetchResult.payload)
+      adapter.validateNormalizeResult(normalized)
+
+      await persistNormalizedPage({
+        db,
+        dataDir,
+        rootId: page.root_id,
+        path: page.path,
+        sourceType: adapter.constructor.type,
+        rawPayload: fetchResult.payload,
+        normalized,
+        etag: fetchResult.etag ?? null,
+        lastModified: fetchResult.lastModified ?? null,
+      })
+      if (root && discoveredKeySet.has(page.path)) {
+        markFlatSourceProcessed(db, root.slug, page.path)
+      }
+      counts.modCount++
+    } catch (e) {
+      if (root && discoveredKeySet.has(page.path)) {
+        markFlatSourceFailed(db, root.slug, page.path, e.message)
+      }
+      counts.errCount++
+      logger.warn(`Pull failed: ${page.path}`, { error: e.message })
+    }
+  }
+
+  // pool() streams dispatch instead of materializing one semaphore waiter
+  // per page up front; modified pages pull immediately in the same slot
+  // rather than waiting behind a full-check barrier.
+  const limit = Math.max(1, semaphore.max ?? 100)
+  await pool(trackedPages, limit, page =>
     semaphore.run(async () => {
       try {
         const result = await adapter.check(page.path, {
@@ -80,8 +127,8 @@ async function checkAndPullTrackedPages({
             clearTombstoneCounter(db, page.path)
             break
           case 'modified':
-            modified.push(page)
             clearTombstoneCounter(db, page.path)
+            await pullModified(page)
             break
           case 'deleted':
             // Per-page 404 from upstream is gated by the N=3 streak;
@@ -110,41 +157,7 @@ async function checkAndPullTrackedPages({
         logger.warn(`Check failed: ${page.path}`, { error: e.message })
       }
     }),
-  ))
-
-  if (modified.length === 0) return
-  logger.info(`Pulling ${modified.length} modified ${adapter.constructor.displayName} pages...`)
-  await Promise.all(modified.map(page =>
-    semaphore.run(async () => {
-      try {
-        const fetchResult = await adapter.fetch(page.path, ctx)
-        const normalized = adapter.normalize(page.path, fetchResult.payload)
-        adapter.validateNormalizeResult(normalized)
-
-        await persistNormalizedPage({
-          db,
-          dataDir,
-          rootId: page.root_id,
-          path: page.path,
-          sourceType: adapter.constructor.type,
-          rawPayload: fetchResult.payload,
-          normalized,
-          etag: fetchResult.etag ?? null,
-          lastModified: fetchResult.lastModified ?? null,
-        })
-        if (root && discoveredKeySet.has(page.path)) {
-          markFlatSourceProcessed(db, root.slug, page.path)
-        }
-        counts.modCount++
-      } catch (e) {
-        if (root && discoveredKeySet.has(page.path)) {
-          markFlatSourceFailed(db, root.slug, page.path, e.message)
-        }
-        counts.errCount++
-        logger.warn(`Pull failed: ${page.path}`, { error: e.message })
-      }
-    }),
-  ))
+  )
 }
 
 async function fetchNewKeys({
@@ -156,7 +169,8 @@ async function fetchNewKeys({
   const rootBySlug = new Map(roots.map(r => [r.slug, r]))
   const fallbackRootId = roots[0]?.id ?? null
 
-  await Promise.all(newKeys.map(key =>
+  const limit = Math.max(1, semaphore.max ?? 100)
+  await pool(newKeys, limit, key =>
     semaphore.run(async () => {
       try {
         const fetchResult = await adapter.fetch(key, ctx)
@@ -184,5 +198,5 @@ async function fetchNewKeys({
         logger.warn(`Fetch failed: ${key}`, { error: e.message })
       }
     }),
-  ))
+  )
 }

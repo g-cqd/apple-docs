@@ -30,7 +30,7 @@ export class AppleDoccAdapter extends SourceAdapter {
   }
 
   async check(key, previousState, ctx) {
-    const result = await checkDocPage(key, previousState?.etag ?? null, ctx.rateLimiter)
+    const result = await checkDocPage(key, previousState?.etag ?? null, ctx.rateLimiter, previousState?.lastModified ?? null)
     return this.validateCheckResult({
       status: result.status,
       changed: result.status === 'modified',

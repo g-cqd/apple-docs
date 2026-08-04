@@ -172,7 +172,9 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
 
   try {
     let sinceCommit = 0
-    for (const row of asset.query('SELECT asset_id, CAST(document AS TEXT) AS document FROM documents').all()) {
+    // iterate(), not all(): materializing every JSON blob of a full
+    // documentation corpus in one array is multi-GB of transient RSS.
+    for (const row of asset.query('SELECT asset_id, CAST(document AS TEXT) AS document FROM documents').iterate()) {
       if (row.asset_id.includes('#')) { stats.anchorsSkipped++; continue }
       stats.pages++
       const key = normalizeAssetUri(row.asset_id)

@@ -1,6 +1,5 @@
 import { ensureNormalizedDocument } from '../content/hydrate.js'
 import { renderPlainText } from '../content/render-text.js'
-import { decodeSectionContent } from '../storage/section-codec.js'
 
 /**
  * Index all document bodies into documents_body_fts.
@@ -12,8 +11,17 @@ export async function indexBodyFull(db, dataDir, logger, onProgress) {
 
 /**
  * Index only documents updated after the last body index build.
+ *
+ * If an interrupted FULL rebuild left its checkpoint behind, resume it
+ * instead: the full run already cleared the FTS table up front, so an
+ * incremental pass over `updated_at` would leave the index mostly empty
+ * while reporting success.
  */
 export async function indexBodyIncremental(db, dataDir, logger, onProgress) {
+  if (db.getSyncCheckpoint('body-index:full')) {
+    logger.info('Resuming interrupted full body index build...')
+    return indexNormalizedBody(db, dataDir, logger, null, onProgress)
+  }
   const lastIndexed = db.db.query("SELECT value FROM schema_meta WHERE key = 'body_indexed_at'").get()?.value ?? null
   return indexNormalizedBody(db, dataDir, logger, lastIndexed, onProgress)
 }
@@ -24,8 +32,13 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
     return { indexed: 0, total: 0, errors: 0 }
   }
 
+  // Stamp with the scan's START time, not completion: a document upserted
+  // while the id-ordered scan is past its id would otherwise carry an
+  // updated_at earlier than a completion-time stamp and be skipped by every
+  // future incremental run.
   const checkpointKey = since ? 'body-index:incremental' : 'body-index:full'
   const checkpoint = db.getSyncCheckpoint(checkpointKey)
+  const scanStartedAt = checkpoint?.scanStartedAt ?? new Date().toISOString()
   const resumeSince = checkpoint?.since ?? since
   const total = checkpoint?.total ?? db.db.query(
     resumeSince
@@ -73,21 +86,15 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
 
     if (documents.length === 0) break
 
+    // One batched IN(...) query per 500-doc page instead of one query per
+    // document (373k statement executions on a full rebuild otherwise).
+    const sectionsByDocId = db.getSectionsByDocumentIds(documents.map(d => d.id))
+
     const inserts = []
+    const staleDeletes = []
     for (const document of documents) {
       try {
-        let sections = db.db.query(`
-          SELECT section_kind, heading, content_text, content_json, sort_order
-          FROM document_sections
-          WHERE document_id = ?
-          ORDER BY sort_order, id
-        `).all(document.id).map(section => ({
-          sectionKind: section.section_kind,
-          heading: section.heading,
-          contentText: decodeSectionContent(section.content_text),
-          contentJson: decodeSectionContent(section.content_json),
-          sortOrder: section.sort_order,
-        }))
+        let sections = sectionsByDocId.get(document.id) ?? []
 
         if (sections.length === 0) {
           await ensureNormalizedDocument(db, dataDir, document.key, document.source_type ?? 'apple-docc')
@@ -98,6 +105,10 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
         if (body.length > 0) {
           inserts.push({ id: document.id, body })
           indexed++
+        } else if (since) {
+          // A changed document whose new body renders empty must drop its
+          // stale FTS row, or the old body keeps matching forever.
+          staleDeletes.push(document.id)
         }
       } catch {
         errors++
@@ -105,11 +116,14 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
       lastDocumentId = document.id
     }
 
-    if (inserts.length > 0) {
+    if (inserts.length > 0 || staleDeletes.length > 0) {
       db.db.run('BEGIN')
       try {
         for (const insert of inserts) {
           db.insertBody(insert.id, insert.body)
+        }
+        for (const id of staleDeletes) {
+          db.search.deleteBodyByDocId(id)
         }
         db.db.run('COMMIT')
       } catch (error) {
@@ -124,6 +138,7 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
       indexed,
       errors,
       lastDocumentId,
+      scanStartedAt,
     })
 
     onProgress?.({ indexed, total, errors, resumed: !!checkpoint, lastDocumentId })
@@ -132,7 +147,7 @@ async function indexNormalizedBody(db, dataDir, logger, since, onProgress) {
     }
   }
 
-  db.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('body_indexed_at', ?)", [new Date().toISOString()])
+  db.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('body_indexed_at', ?)", [scanStartedAt])
   db.clearSyncCheckpoint(checkpointKey)
   logger.info(`Body index complete: ${indexed} documents indexed, ${errors} errors`)
   return { indexed, total, errors }

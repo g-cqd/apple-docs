@@ -72,7 +72,15 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       source_metadata = COALESCE($source_metadata, documents.source_metadata),
       content_hash = COALESCE($content_hash, documents.content_hash),
       raw_payload_hash = COALESCE($raw_payload_hash, documents.raw_payload_hash),
-      updated_at = $now
+      -- Only advance updated_at on a real content change. updated_at is the
+      -- body-index incremental signal (WHERE updated_at > body_indexed_at):
+      -- bumping it on no-op re-persists made every touched-but-unchanged
+      -- document re-render its body FTS entry on the next sync.
+      updated_at = CASE
+        WHEN $content_hash IS NOT NULL AND $content_hash IS documents.content_hash
+          THEN documents.updated_at
+        ELSE $now
+      END
     RETURNING id
   `)
   const getByKeyStmt = db.query(`
@@ -284,10 +292,18 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
       if (idToKey.size > 0 && hasSectionsTable) {
         const ids = [...idToKey.keys()]
         const sPlaceholders = ids.map(() => '?').join(',')
+        // Cap sections per document: snippets are 220 chars, but WWDC
+        // transcripts carry hundreds of KB across dozens of sections —
+        // decoding and scanning all of them per result dominated warm
+        // search time. The first sections carry the intro/discussion the
+        // snippet window almost always lands in.
         const sections = db.query(`
-          SELECT document_id, section_kind, heading, content_text, sort_order
-          FROM document_sections WHERE document_id IN (${sPlaceholders})
-          ORDER BY sort_order
+          SELECT document_id, section_kind, heading, content_text, sort_order FROM (
+            SELECT document_id, section_kind, heading, content_text, sort_order,
+                   ROW_NUMBER() OVER (PARTITION BY document_id ORDER BY sort_order, id) AS rn
+            FROM document_sections WHERE document_id IN (${sPlaceholders})
+          ) WHERE rn <= 6
+          ORDER BY document_id, sort_order
         `).all(...ids)
         for (const s of sections) {
           const key = idToKey.get(s.document_id)

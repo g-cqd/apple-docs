@@ -45,10 +45,11 @@ export async function fetchDocPage(path, rateLimiter) {
  * Check if a page has changed via HEAD request.
  * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
  */
-export async function checkDocPage(path, etag, rateLimiter) {
+export async function checkDocPage(path, etag, rateLimiter, lastModified = null) {
   return checkResourceEtag(resolveUrl(path), etag, rateLimiter, {
     headers: { 'User-Agent': USER_AGENT },
     timeout: DEFAULT_TIMEOUT,
+    lastModified,
   })
 }
 

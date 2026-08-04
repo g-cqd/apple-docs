@@ -83,7 +83,10 @@ const TIER_LABELS = ['exact', 'prefix', 'contains', 'match']
  */
 export async function search(opts, ctx) {
   const { query, kind } = opts
-  const limit = Math.max(Number.parseInt(opts.limit, 10) || 100, 1)
+  // Default aligned with the MCP handler's 25: the old 100 made
+  // `requestedWindow` so fat that nearly every default query fell through
+  // to the deep body tier (a bm25 MATCH over the full body FTS corpus).
+  const limit = Math.max(Number.parseInt(opts.limit, 10) || 25, 1)
   const offset = Math.max(Number.parseInt(opts.offset, 10) || 0, 0)
   const requestedWindow = limit + offset
   const sourceTypes = normalizeSourceFilter(opts.source)
@@ -272,8 +275,12 @@ export async function search(opts, ctx) {
     }
   }
 
-  // Body search: merge or discard if we already have enough.
-  if (hasBody && (results.length < requestedWindow || noEager)) {
+  // Body search: only when the strict tiers came up genuinely short (or the
+  // caller forces it). Gating on the full requestedWindow made any query
+  // that returned fewer than `limit` title/abstract hits — i.e. most of
+  // them — pay the deep body-FTS scan.
+  const bodyTierThreshold = Math.min(requestedWindow, 15)
+  if (hasBody && (results.length < bodyTierThreshold || noEager)) {
     try {
       addResults(await runBody(), 'body')
     } catch (err) {

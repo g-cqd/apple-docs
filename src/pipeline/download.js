@@ -30,9 +30,17 @@ export async function downloadMissing(db, dataDir, rateLimiter, logger, onProgre
   const fetchPage = opts.fetchDocPage ?? fetchDocPage
   const persistPage = opts.persistFetchedDocPage ?? persistFetchedDocPage
 
+  // Route each fetch through the shared semaphore when provided: sizing the
+  // pool from `semaphore.max` without acquiring permits bypassed the global
+  // in-flight cap — harmless while download runs alone, a footgun the moment
+  // phases overlap.
+  const runFetch = typeof opts.semaphore?.run === 'function'
+    ? (path) => opts.semaphore.run(() => fetchPage(path, rateLimiter))
+    : (path) => fetchPage(path, rateLimiter)
+
   await pool(pages, concurrency, async ({ path, root_id: rootId, source_type: sourceType }) => {
     try {
-      const { json, etag, lastModified } = await fetchPage(path, rateLimiter)
+      const { json, etag, lastModified } = await runFetch(path)
       await persistPage({
         db,
         dataDir,

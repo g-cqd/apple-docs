@@ -58,6 +58,15 @@ export async function runAdapterStep(adapter, env) {
         return { type, mode, guidelinesResult }
       }
       case 'flat': {
+        // When sync's update phase already ran for this adapter it has done
+        // everything syncFlatSource would: checked tracked pages, tombstoned
+        // stale ones, and fetched new keys. Re-running here used to re-seed
+        // crawl_state (wiping the failure diagnostics update just wrote) and
+        // immediately re-attempt keys that failed seconds earlier.
+        if (env.updateHandledSources?.has(type)) {
+          logger.info(`Finished ${displayName} in ${Date.now() - stepStart}ms (handled by update phase)`)
+          return { type, mode, rootsCrawled: roots.length }
+        }
         const results = await syncFlatSource(adapter, discovery, roots, concurrency, adapterCtx)
         logger.info(`Finished ${displayName} in ${Date.now() - stepStart}ms`)
         return { type, mode, results, rootsCrawled: roots.length }

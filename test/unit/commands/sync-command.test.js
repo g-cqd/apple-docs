@@ -64,7 +64,9 @@ describe('sync command', () => {
       expect(result.failedSources).toContainEqual(
         { source: 'bad-source', error: 'discover boom' },
       )
-      expect(result.crawlResults['good-root']).toEqual({ processed: 0, total: 0, skipped: 0 })
+      // Flat sources are fully handled by the update phase; the crawl phase
+      // skips them instead of re-syncing the same keys a second time.
+      expect(result.crawlResults['good-root']).toBeUndefined()
     } finally {
       db.close()
     }

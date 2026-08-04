@@ -39,6 +39,7 @@ import { up as v25Up } from './v25-document-chunks.js'
 import { up as v26Up } from './v26-documents-usr.js'
 import { up as v27Up } from './v27-sf-symbols-render-unsupported.js'
 import { up as v28Up } from './v28-sf-symbols-unsupported-variants.js'
+import { up as v29Up } from './v29-fts-triggers-and-hot-indexes.js'
 
 export const MIGRATIONS = Object.freeze([
   { version: 1, up: v1Up },
@@ -69,6 +70,7 @@ export const MIGRATIONS = Object.freeze([
   { version: 26, up: v26Up },
   { version: 27, up: v27Up },
   { version: 28, up: v28Up },
+  { version: 29, up: v29Up },
 ])
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

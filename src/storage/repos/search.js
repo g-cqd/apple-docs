@@ -136,6 +136,10 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
     ORDER BY tier, CASE WHEN d.role = 'symbol' OR d.kind = 'symbol' THEN 0 ELSE 1 END, length(d.key)
     LIMIT $limit
   `)
+  // ORDER BY bm25 before LIMIT: without ranking, a broad substring
+  // ("view") matches tens of thousands of titles and SQLite returns the
+  // first $limit rows in FTS-cursor order — arbitrary docs, with the best
+  // matches potentially cut off before the JS rerank ever sees them.
   const searchTrigramStmt = hasTrigramTable
     ? db.query(`
         SELECT ${RESULT_COLUMNS}
@@ -144,6 +148,7 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         LEFT JOIN roots r ON r.slug = d.framework
         WHERE documents_trigram MATCH $query
           ${FILTER_PREDICATES}
+        ORDER BY bm25(documents_trigram)
         LIMIT $limit
       `)
     : null

@@ -39,7 +39,7 @@ export async function runBodyIndex({ db, dataDir, logger, fullRebuild }) {
  * Each task is wrapped in runStep so failures stay isolated and
  * activity tracking captures per-step duration.
  */
-export async function runResourcesPhase({ ctx, logger, scope }) {
+export async function runResourcesPhase({ ctx, logger, scope, fullRebuild = false }) {
   const failedSources = []
   let fontsResult = null
   let symbolsResult = null
@@ -108,7 +108,7 @@ export async function runResourcesPhase({ ctx, logger, scope }) {
     if (!sOutcome.ok || !keepSymbols || !keepFonts) return { ok: true, label: 'sync.sf-symbols-stamp', result: null, ms: 0 }
     return runStep(
       'sync.sf-symbols-stamp',
-      async () => stampSfSymbolCodepoints({}, ctx),
+      async () => stampSfSymbolCodepoints({ forceRefresh: fullRebuild }, ctx),
       { logger },
     )
   })

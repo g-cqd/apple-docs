@@ -11,7 +11,7 @@
  * runtime renderer can detect drift and bust the cache.
  */
 
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, renameSync, statSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -169,17 +169,46 @@ export async function prerenderSfSymbols(opts, ctx) {
 export { symbolSnapshotNeedsReset }
 
 async function renderScopeBucket({ scope, symbols, variants, ctx, concurrency, logger, onProgress, result }) {
+  // Build the on-disk inventory once and pre-filter the queue by set
+  // difference. The previous shape probed every symbol×weight×scale pair
+  // with existsSync+statSync (266k syscall pairs, ~23 s to skip a fully
+  // rendered snapshot) and spawned the Swift workers — seconds of cold
+  // start each — before knowing whether anything needed rendering.
+  const rendered = inventoryRenderedSymbols(join(ctx.dataDir, 'resources', 'symbols', scope === 'private' ? 'private' : 'public'))
   const queue = []
   for (const symbol of symbols) {
-    for (const variant of variants) queue.push({ symbol, ...variant })
+    for (const variant of variants) {
+      const filePath = getPrerenderedSymbolPath({ dataDir: ctx.dataDir }, scope, symbol.name, variant)
+      if (rendered.has(filePath)) {
+        result.skipped++
+      } else {
+        queue.push({ symbol, ...variant })
+      }
+    }
   }
+  onProgress?.(result)
+  if (queue.length === 0) return
+
   const workers = []
   const startWorker = () => spawnSymbolWorker({ scope, logger })
-  for (let i = 0; i < concurrency; i++) {
+  for (let i = 0; i < Math.min(concurrency, queue.length); i++) {
     const worker = await startWorker()
     workers.push(processSymbolQueue({ worker, queue, ctx, scope, result, onProgress, logger, restart: startWorker }))
   }
   await Promise.all(workers)
+}
+
+/** Rendered SVGs under `dir`, as a Set of absolute paths. Presence is
+ *  trustworthy because the render path writes atomically (tmp + rename) —
+ *  no per-file stat needed for 266k entries. */
+function inventoryRenderedSymbols(dir) {
+  const out = new Set()
+  if (!existsSync(dir)) return out
+  for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.svg')) continue
+    out.add(join(entry.parentPath ?? entry.path ?? dir, entry.name))
+  }
+  return out
 }
 
 async function processSymbolQueue({ worker, queue, ctx, scope, result, onProgress, logger, restart }) {
@@ -243,7 +272,11 @@ async function processSymbolQueue({ worker, queue, ctx, scope, result, onProgres
         background: null,
       })
       ensureDir(dirname(filePath))
-      await Bun.write(filePath, svg)
+      // Atomic write: the inventory pre-filter trusts file presence, so a
+      // crash mid-write must never leave a truncated .svg behind.
+      const tempPath = `${filePath}.tmp-${process.pid}`
+      await Bun.write(tempPath, svg)
+      renameSync(tempPath, filePath)
       result.rendered++
     } catch (error) {
       // Parser failure — the Swift worker is healthy, no restart needed.

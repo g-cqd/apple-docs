@@ -44,7 +44,13 @@ export function createPagesRepo(db) {
       min_watchos = COALESCE($min_watchos, pages.min_watchos),
       min_tvos = COALESCE($min_tvos, pages.min_tvos),
       min_visionos = COALESCE($min_visionos, pages.min_visionos),
-      status = 'active'
+      status = 'active',
+      -- A successful persist proves the page is alive: reset the 404 streak.
+      -- Without this, a page tombstoned at 3 strikes that later resurrects
+      -- keeps its stale counter and a single transient 404 re-deletes it,
+      -- defeating the 3-cycle gate exactly for the oscillating pages it
+      -- exists to protect.
+      consecutive_404_count = 0
     RETURNING id
   `)
   const getByPathStmt = db.query(

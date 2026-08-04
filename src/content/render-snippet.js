@@ -1,8 +1,15 @@
 import { renderPlainText } from './render-text.js'
 
+// Snippets are ~220 chars; scanning (and lowercasing) more than this much
+// document text per result buys nothing — the match window nearly always
+// lands in the opening prose, and unmatched terms fall back to the intro
+// truncation anyway.
+const SNIPPET_SCAN_LIMIT = 16 * 1024
+
 export function renderSnippet(document, sections = [], query = '', maxLength = 220) {
-  const text = renderPlainText(document, sections)
+  let text = renderPlainText(document, sections)
   if (!text) return ''
+  if (text.length > SNIPPET_SCAN_LIMIT) text = text.slice(0, SNIPPET_SCAN_LIMIT)
 
   const terms = query
     .toLowerCase()

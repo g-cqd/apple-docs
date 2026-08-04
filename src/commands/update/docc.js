@@ -1,94 +1,148 @@
 // Update path for DocC-shaped sources (apple-docc, hig, swift-docc) —
 // per-page check + pull, plus crawl-from-scratch for any new roots.
+//
+// For apple-docc the per-page HEAD sweep is gated per root by the ETag of
+// Apple's per-root index JSON (`/tutorials/data/index/<slug>`): a 304 on the
+// index skips every per-page check under that root. Measured on a live sync,
+// the ungated sweep was 343k HEADs over ~13 minutes for ~0.5% hits — the
+// index gate reduces a no-change sync to ~one conditional request per root.
+// A periodic full sweep (and every `--full` run) still checks each page
+// individually, because a content-only edit can change a page without
+// touching its root index.
 
 import { crawlRoot } from '../../pipeline/discover.js'
 import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { pool } from '../../lib/pool.js'
+import { checkResourceEtag } from '../../lib/fetch-with-retry.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'
 import { clearTombstoneCounter, gateAndTombstone404 } from './tombstone-policy.js'
 
+const INDEX_BASE = process.env.APPLE_DOCS_API_BASE ?? 'https://developer.apple.com/tutorials/data'
+const FULL_SWEEP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
+
 export async function updateDoccSource(adapter, discovery, requestedRoots, concurrency, parallel, semaphore, ctx) {
   const { db, dataDir, logger } = ctx
-  const pages = filterPagesByRoots(db.getPagesBySourceType(adapter.constructor.type), requestedRoots)
-  const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0 }
-  const modified = []
+  const sourceType = adapter.constructor.type
+  const allPages = filterPagesByRoots(db.getPagesBySourceType(sourceType), requestedRoots)
+  const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0, skippedCount: 0 }
+  const rootSlugById = new Map(db.getRoots().map(root => [root.id, root.slug]))
+
+  const { pages, skipped, commitIndexEtags } = sourceType === 'apple-docc' && allPages.length > 0
+    ? await gateByRootIndex(allPages, rootSlugById, ctx)
+    : { pages: allPages, skipped: 0, commitIndexEtags: null }
+  counts.skippedCount = skipped
+  if (skipped > 0) {
+    logger.info(`Index gate: skipped ${skipped} pages under unchanged roots`)
+  }
+
   const deleted = []
+  const errored = []
+  let modifiedCount = 0
   let checked = 0
+
+  const pullModified = async (page) => {
+    const fetchResult = await adapter.fetch(page.path, ctx)
+    const persisted = await persistFetchedDocPage({
+      db,
+      dataDir,
+      rootId: page.root_id,
+      path: page.path,
+      sourceType,
+      json: fetchResult.payload,
+      etag: fetchResult.etag,
+      lastModified: fetchResult.lastModified,
+    })
+    // A modified page is how new children announce themselves: Apple links
+    // new symbol pages from updated parents. Seed same-root references into
+    // crawl_state so the crawl phase picks them up — without this, new pages
+    // under fully-crawled roots are never discovered (the crawl only
+    // processes pending rows, and a fully-crawled root has none).
+    const rootSlug = rootSlugById.get(page.root_id)
+    if (rootSlug && Array.isArray(persisted?.references)) {
+      for (const refPath of persisted.references) {
+        if (refPath.split('/', 1)[0] === rootSlug) {
+          db.seedCrawlIfNew(refPath, rootSlug, (page.url_depth ?? 0) + 1)
+        }
+      }
+    }
+    counts.modCount++
+  }
+
+  const checkOne = async (page, { collectErrors }) => {
+    try {
+      const result = await adapter.check(page.path, {
+        etag: page.etag,
+        lastModified: page.last_modified,
+        contentHash: page.content_hash,
+      }, ctx)
+
+      switch (result.status) {
+        case 'unchanged':
+          counts.unchangedCount++
+          clearTombstoneCounter(db, page.path)
+          break
+        case 'modified':
+          // Pull immediately instead of parking behind a full-sweep barrier:
+          // a page found modified in the first second used to wait for the
+          // last of 343k checks before its GET started.
+          modifiedCount++
+          clearTombstoneCounter(db, page.path)
+          try {
+            await pullModified(page)
+          } catch (e) {
+            counts.errCount++
+            logger.warn(`Pull failed: ${page.path}`, { error: e.message })
+          }
+          break
+        case 'deleted':
+          // Gate tombstone behind N=3 consecutive 404s. Only push to
+          // `deleted` when the streak crosses the threshold; transient
+          // flaps stay active for another cycle.
+          if (gateAndTombstone404(db, page.path, logger)) {
+            deleted.push(page.path)
+          }
+          break
+        default:
+          if (collectErrors) errored.push(page)
+          else counts.errCount++
+          break
+      }
+    } catch (e) {
+      if (collectErrors) errored.push(page)
+      else counts.errCount++
+      logger.warn(`Check failed: ${page.path}`, { error: e.message })
+    }
+
+    checked++
+    if (checked % 1000 === 0) {
+      logger.info(`Checked ${checked}/${pages.length} (${modifiedCount} modified, ${deleted.length} deleted)`)
+    }
+  }
 
   if (pages.length > 0) {
     logger.info(`Checking ${pages.length} ${adapter.constructor.displayName} pages for updates (concurrency: ${concurrency})...`)
+    // pool() streams dispatch with an O(1) cursor; wrapping every page in
+    // semaphore.run up front used to park 343k waiter closures in the
+    // semaphore queue for the whole phase.
+    const limit = Math.max(1, Math.min(concurrency, semaphore.max ?? concurrency))
+    await pool(pages, limit, page => semaphore.run(() => checkOne(page, { collectErrors: true })))
+
+    // Errored checks were previously silent errCount increments with no
+    // retry until the next sync — the page skipped a full cycle of change
+    // detection. One in-run retry clears the transient bulk.
+    if (errored.length > 0) {
+      const retry = errored.splice(0)
+      logger.info(`Retrying ${retry.length} errored ${adapter.constructor.displayName} checks...`)
+      await pool(retry, limit, page => semaphore.run(() => checkOne(page, { collectErrors: false })))
+    }
+
+    logger.info(`Check complete for ${adapter.constructor.displayName}: ${counts.modCount} modified, ${deleted.length} deleted, ${counts.unchangedCount} unchanged, ${counts.errCount} errors, ${counts.skippedCount} index-gated`)
   }
 
-  await Promise.all(pages.map(page =>
-    semaphore.run(async () => {
-      try {
-        const result = await adapter.check(page.path, {
-          etag: page.etag,
-          lastModified: page.last_modified,
-          contentHash: page.content_hash,
-        }, ctx)
-
-        switch (result.status) {
-          case 'unchanged':
-            counts.unchangedCount++
-            clearTombstoneCounter(db, page.path)
-            break
-          case 'modified':
-            modified.push(page)
-            clearTombstoneCounter(db, page.path)
-            break
-          case 'deleted':
-            // Gate tombstone behind N=3 consecutive 404s. Only push to
-            // `deleted` when the streak crosses the threshold; transient
-            // flaps stay active for another cycle.
-            if (gateAndTombstone404(db, page.path, logger)) {
-              deleted.push(page.path)
-            }
-            break
-          default:
-            counts.errCount++
-            break
-        }
-      } catch (e) {
-        counts.errCount++
-        logger.warn(`Check failed: ${page.path}`, { error: e.message })
-      }
-
-      checked++
-      if (checked % 1000 === 0) {
-        logger.info(`Checked ${checked}/${pages.length} (${modified.length} modified, ${deleted.length} deleted)`)
-      }
-    }),
-  ))
-
-  if (pages.length > 0) {
-    logger.info(`Check complete for ${adapter.constructor.displayName}: ${modified.length} modified, ${deleted.length} deleted, ${counts.unchangedCount} unchanged, ${counts.errCount} errors`)
-  }
-
-  if (modified.length > 0) {
-    logger.info(`Pulling ${modified.length} modified ${adapter.constructor.displayName} pages...`)
-    await Promise.all(modified.map(page =>
-      semaphore.run(async () => {
-        try {
-          const fetchResult = await adapter.fetch(page.path, ctx)
-          await persistFetchedDocPage({
-            db,
-            dataDir,
-            rootId: page.root_id,
-            path: page.path,
-            sourceType: adapter.constructor.type,
-            json: fetchResult.payload,
-            etag: fetchResult.etag,
-            lastModified: fetchResult.lastModified,
-          })
-          counts.modCount++
-        } catch (e) {
-          counts.errCount++
-          logger.warn(`Pull failed: ${page.path}`, { error: e.message })
-        }
-      }),
-    ))
-  }
+  // Persist the fresh index ETags only now that this run actually checked
+  // the pages under those roots — a crash mid-check must not leave an ETag
+  // that would gate-skip unchecked pages on the next run.
+  commitIndexEtags?.()
 
   // Pages reach `deleted` only after gateAndTombstone404 has already
   // marked them; the loop here is just for the operator-visible count.
@@ -123,4 +177,60 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
   }
 
   return counts
+}
+
+/**
+ * Partition pages into { pages: needs-per-page-check, skipped } using the
+ * per-root index ETag. Falls back to checking everything on the periodic
+ * full sweep, on `--full` runs, and for roots whose index endpoint errors
+ * or is missing.
+ */
+async function gateByRootIndex(allPages, rootSlugById, ctx) {
+  const { db, logger } = ctx
+
+  const sweepKey = 'docc_full_sweep_at'
+  const lastSweep = db.db.query('SELECT value FROM schema_meta WHERE key = ?').get(sweepKey)?.value ?? null
+  const sweepDue = !lastSweep || (Date.now() - Date.parse(lastSweep)) > FULL_SWEEP_INTERVAL_MS
+  if (ctx.fullSync || sweepDue) {
+    // Stamp at sweep start so an interrupted sweep re-runs next time.
+    db.db.run('INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)', [sweepKey, new Date().toISOString()])
+    logger.info(ctx.fullSync ? 'Full sweep: --full run checks every page' : 'Full sweep: periodic per-page check due')
+    return { pages: allPages, skipped: 0, commitIndexEtags: null }
+  }
+
+  const pagesByRoot = new Map()
+  for (const page of allPages) {
+    let list = pagesByRoot.get(page.root_id)
+    if (!list) { list = []; pagesByRoot.set(page.root_id, list) }
+    list.push(page)
+  }
+
+  const getEtagStmt = db.db.query('SELECT index_etag FROM roots WHERE id = ?')
+  const setEtagStmt = db.db.query('UPDATE roots SET index_etag = ? WHERE id = ?')
+
+  const toCheck = []
+  const pendingEtags = []
+  let skipped = 0
+  const rootIds = [...pagesByRoot.keys()]
+  await pool(rootIds, 16, async (rootId) => {
+    const slug = rootSlugById.get(rootId)
+    const rootPages = pagesByRoot.get(rootId)
+    if (!slug) { toCheck.push(...rootPages); return }
+    const storedEtag = getEtagStmt.get(rootId)?.index_etag ?? null
+    const result = await checkResourceEtag(`${INDEX_BASE}/index/${slug}`, storedEtag, ctx.rateLimiter)
+    if (result.status === 'unchanged' && storedEtag) {
+      skipped += rootPages.length
+      return
+    }
+    // Modified, missing index (404), first sight (no stored etag), or error:
+    // fall through to per-page checks. The fresh etag is committed by the
+    // caller only after the page checks actually ran.
+    if (result.etag) pendingEtags.push({ rootId, etag: result.etag })
+    toCheck.push(...rootPages)
+  })
+
+  const commitIndexEtags = () => {
+    for (const { rootId, etag } of pendingEtags) setEtagStmt.run(etag, rootId)
+  }
+  return { pages: toCheck, skipped, commitIndexEtags }
 }

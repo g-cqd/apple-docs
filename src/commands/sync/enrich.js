@@ -17,7 +17,7 @@ import { runStep } from '../../lib/run-step.js'
 import { enrichFromAsset, findDocumentationAssets } from '../../sources/mobileasset-docs.js'
 import { fetchDocumentationAsset, resolveDownload } from '../../sources/mobileasset-fetch.js'
 
-export async function runEnrichPhase({ db, logger, assetDbPath = null, findAssets = findDocumentationAssets }) {
+export async function runEnrichPhase({ db, logger, assetDbPath = null, fullRebuild = false, findAssets = findDocumentationAssets }) {
   const resolveAssetDb = async () => {
     if (assetDbPath) return assetDbPath
     const local = findAssets()
@@ -39,7 +39,22 @@ export async function runEnrichPhase({ db, logger, assetDbPath = null, findAsset
   const step = await runStep('sync.enrich-xcode', async () => {
     const dbPath = await resolveAssetDb()
     if (!dbPath) return { skipped: true }
-    return enrichFromAsset(db, dbPath, { apply: true, logger })
+
+    // The asset directory is content-addressed (<sha1>.asset), so an
+    // unchanged path means an identical corpus — re-merging it scans and
+    // JSON-parses all ~327k asset pages (~20 s) to change nothing. `--full`
+    // still merges unconditionally so freshly recrawled pages get their USR
+    // backfill even against an unchanged asset.
+    const stampKey = 'xcode_enrich_asset'
+    const stamp = db.db.query('SELECT value FROM schema_meta WHERE key = ?').get(stampKey)?.value ?? null
+    if (!fullRebuild && stamp === dbPath) {
+      logger.info('Xcode documentation asset unchanged since last merge — skipping enrichment')
+      return { skipped: true, unchangedAsset: true }
+    }
+
+    const result = enrichFromAsset(db, dbPath, { apply: true, logger })
+    db.db.run('INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)', [stampKey, dbPath])
+    return result
   }, { logger })
 
   return step.ok ? step.result : { skipped: true, error: step.error.message }

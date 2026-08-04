@@ -49,9 +49,13 @@ const defaultRate = isCrawlCommand ? 500 : 5
 const defaultBurst = isCrawlCommand ? 500 : 2
 const rate = flags.rate != null ? Number.parseInt(flags.rate, 10) : (config.APPLE_DOCS_RATE ?? defaultRate)
 const burst = Math.max(rate, config.APPLE_DOCS_BURST ?? defaultBurst)
+// Per-host buckets only — no `primary` global bucket. A primary equal to a
+// single host's rate serialized every host (Apple CDN, GitHub, swift.org)
+// through one token stream: while the apple-docc check phase saturated it,
+// every other adapter's bucket sat idle, and the token dispenser's ~2ms
+// setTimeout granularity capped the whole sync at ~440 req/s.
 const rateLimiter = createHostBucketedLimiter({
   defaults: { rate, burst },
-  primary: { rate, burst },
 })
 
 const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))

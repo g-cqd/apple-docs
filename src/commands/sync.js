@@ -74,7 +74,18 @@ export async function sync(opts, ctx) {
 
   let updateResult = null
   try {
-    // 1. HEAD-check existing pages on every source for upstream modifications.
+    // 1. Root discovery for catalog-driven sources (apple-docc et al) and
+    //    every adapter's discover() — ONCE. Both the update step below and
+    //    the crawl phase consume this bundle; running discovery per phase
+    //    doubled the network-heavy discovers (WWDC year indexes, GitHub
+    //    trees, the SwiftPackageIndex catalog, the technologies index).
+    if (adapters.some(adapter => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
+      await discoverRoots(db, rateLimiter, logger)
+      adapterCtx.rootCatalogReady = true
+    }
+    const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } = await discoverAdaptersInParallel(adapters, adapterCtx)
+
+    // 2. HEAD-check existing pages on every source for upstream modifications.
     //    Pulls changed pages in place; deleted pages are tombstoned. Flat sources
     //    detect added/removed keys at the same time. Resource sync (fonts +
     //    symbols) is suppressed here — sync owns it as its own dedicated step
@@ -85,20 +96,30 @@ export async function sync(opts, ctx) {
       // Package Catalog) resolve their discovery scope from ctx.fullSync, and
       // omitting it made this update step discover only the curated 'official'
       // packages — tombstoning the entire previously-synced full catalog.
-      () => update({ skipFonts: true, skipSymbols: true, scope }, { ...ctx, semaphore, adapters, fullSync: fullRebuild }),
+      () => update({
+        skipFonts: true,
+        skipSymbols: true,
+        scope,
+        discoveries: { discoveriesBySource, discoveryErrorsBySource },
+        rootCatalogReady: adapterCtx.rootCatalogReady,
+      }, { ...ctx, semaphore, adapters, fullSync: fullRebuild }),
       { logger },
     )
     if (updateStep.ok) updateResult = updateStep.result
     db.setActivity('sync', null)
 
-    // 2. Root discovery for catalog-driven sources (apple-docc et al).
-    if (adapters.some(adapter => ROOT_CATALOG_SOURCE_TYPES.has(adapter.constructor.type))) {
-      await discoverRoots(db, rateLimiter, logger)
-      adapterCtx.rootCatalogReady = true
-    }
+    // Flat sources the update step fully handled (checked, tombstoned,
+    // fetched new keys) are skipped by the crawl phase below.
+    const updateHandledSources = updateStep.ok
+      ? new Set(adapters.filter(a => a.constructor.syncMode === 'flat').map(a => a.constructor.type))
+      : new Set()
 
-    const crawlOpts = { retryFailed: true, semaphore }
-    const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } = await discoverAdaptersInParallel(adapters, adapterCtx)
+    // Failed crawl entries are dominated by permanent misses (404ing
+    // dictionary keys, consistently-403 deprecated selectors); resetting all
+    // of them every run re-fetched thousands of known-dead URLs per sync.
+    // `--full` still retries everything; the consolidate phase's transient
+    // sweep handles the recoverable classes in between.
+    const crawlOpts = { retryFailed: fullRebuild, semaphore }
 
     // 3. Crawl every adapter end-to-end in parallel. Per-host rate limits in
     //    rateLimiter keep upstream load bounded; the global semaphore caps
@@ -119,6 +140,7 @@ export async function sync(opts, ctx) {
         concurrency,
         crawlOpts,
         scope,
+        updateHandledSources,
       })),
     )
 
@@ -168,7 +190,7 @@ export async function sync(opts, ctx) {
     //    pages from sources/roots that were deliberately excluded.
     const enrichResult = (ctx.adapters || scope)
       ? { skipped: true }
-      : await runEnrichPhase({ db, logger })
+      : await runEnrichPhase({ db, logger, fullRebuild })
 
     // 6. Body index + resources run concurrently. They touch disjoint tables
     //    (body index: documents_body_fts + schema_meta; resources:
@@ -177,7 +199,7 @@ export async function sync(opts, ctx) {
     //    + Swift-worker I/O overlap between the two phases.
     const [idxOutcome, resOutcome] = await Promise.all([
       runBodyIndex({ db, dataDir, logger, fullRebuild }),
-      runResourcesPhase({ ctx, logger, scope }),
+      runResourcesPhase({ ctx, logger, scope, fullRebuild }),
     ])
     const bodyIndexed = idxOutcome.indexed
     for (const failure of resOutcome.failedSources) failedSources.push(failure)
@@ -223,5 +245,10 @@ export async function sync(opts, ctx) {
   } finally {
     db.clearActivity()
     try { await ctx.readerPool?.recycle?.() } catch {}
+    // A multi-hour sync under WAL with long-lived readers can leave a WAL
+    // that passive autocheckpoints never truncate. Best-effort TRUNCATE
+    // after the recycle (no active readers from this process) returns the
+    // space and keeps reader page-cache behavior predictable.
+    try { db.db.run('PRAGMA wal_checkpoint(TRUNCATE)') } catch { /* readers active */ }
   }
 }

@@ -58,9 +58,14 @@ describe('runEnrichPhase', () => {
 
   test('is idempotent across two runs', async () => {
     await runEnrichPhase({ db, logger, assetDbPath: assetPath })
+    // An unchanged asset path short-circuits via the schema_meta stamp.
     const second = await runEnrichPhase({ db, logger, assetDbPath: assetPath })
-    expect(second.usrBackfilled).toBe(0)
-    expect(second.novelInserted).toBe(0)
+    expect(second.skipped).toBe(true)
+    expect(second.unchangedAsset).toBe(true)
+    // A forced re-merge (`--full`) against the same asset is a true no-op.
+    const third = await runEnrichPhase({ db, logger, assetDbPath: assetPath, fullRebuild: true })
+    expect(third.usrBackfilled).toBe(0)
+    expect(third.novelInserted).toBe(0)
     expect(db.db.query("SELECT COUNT(*) c FROM documents WHERE key='swiftui/view/novelmember'").get().c).toBe(1)
   })
 

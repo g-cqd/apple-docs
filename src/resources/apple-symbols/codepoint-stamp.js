@@ -28,6 +28,24 @@ import { dumpSymbolCodepoints, resolveSymbolFontPath } from './codepoint-dump.js
 export async function stampSfSymbolCodepoints(opts, ctx) {
   const { db, dataDir, logger } = ctx
 
+  // Fully-stamped catalog → nothing to do. Without this gate every sync paid
+  // the SF Symbols landing-page scrape plus a full Swift font dump (~45 s)
+  // to rewrite values that were already there. New symbols arrive from the
+  // catalog sync with a NULL codepoint, which reopens the gate; a new app
+  // release re-runs via `forceRefresh` (threaded from `--full`).
+  if (!opts?.forceRefresh && !opts?.appPath && !opts?.fontPath) {
+    const missing = db.db.query(
+      "SELECT COUNT(*) AS c FROM sf_symbols WHERE scope = 'public' AND codepoint IS NULL",
+    ).get()?.c ?? 0
+    if (missing === 0) {
+      const total = db.db.query("SELECT COUNT(*) AS c FROM sf_symbols WHERE scope = 'public'").get()?.c ?? 0
+      if (total > 0) {
+        logger?.info?.(`SF Symbol codepoints already stamped (${total} public symbols) — skipping`)
+        return { stamped: 0, total, fontPath: null, skipped: true }
+      }
+    }
+  }
+
   // Ensure a current SF Symbols.app is on disk before resolving paths.
   // Prefers /Applications when already current; downloads the latest
   // .dmg to <dataDir>/cache/sf-symbols/<version>/ otherwise. Caller can

@@ -201,25 +201,53 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
  * @returns {Promise<{ status: 'unchanged'|'modified'|'deleted'|'error', etag?: string }>}
  */
 export async function checkResourceEtag(url, previousEtag, rateLimiter, opts = {}) {
-  const { headers = {}, timeout = 30000 } = opts
+  const { headers = {}, timeout = 30000, lastModified = null } = opts
 
-  await acquireRateLimit(rateLimiter, url)
+  // Conditional-header fallback chain: without one, a plain HEAD returns 200
+  // and the caller re-downloads the page every sync forever (pages persisted
+  // without an upstream ETag — e.g. some CDN responses — were permanent
+  // false-positives).
+  const conditional = previousEtag
+    ? { 'If-None-Match': previousEtag }
+    : lastModified
+      ? { 'If-Modified-Since': lastModified }
+      : {}
 
-  try {
-    const res = await fetch(url, {
-      method: 'HEAD',
-      headers: {
-        ...headers,
-        ...(previousEtag ? { 'If-None-Match': previousEtag } : {}),
-      },
-      signal: AbortSignal.timeout(timeout),
-    })
+  // One retry on transient failure: at high concurrency against a CDN,
+  // sporadic timeouts/5xx are expected, and a silently dropped check means
+  // the page skips a full sync cycle of change detection.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await acquireRateLimit(rateLimiter, url)
+    try {
+      const res = await fetch(url, {
+        method: 'HEAD',
+        headers: { ...headers, ...conditional },
+        signal: AbortSignal.timeout(timeout),
+      })
 
-    if (res.status === 304) return { status: 'unchanged' }
-    if (res.status === 404) return { status: 'deleted' }
-    if (res.ok) return { status: 'modified', etag: res.headers.get('etag') }
-    return { status: 'error' }
-  } catch {
-    return { status: 'error' }
+      if (res.status === 304) return { status: 'unchanged' }
+      if (res.status === 404) return { status: 'deleted' }
+      if (res.ok) {
+        return {
+          status: 'modified',
+          etag: res.headers.get('etag'),
+          lastModified: res.headers.get('last-modified'),
+        }
+      }
+      if (res.status >= 500 || res.status === 429) {
+        if (attempt === 0) {
+          await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500))
+          continue
+        }
+      }
+      return { status: 'error' }
+    } catch {
+      if (attempt === 0) {
+        await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500))
+        continue
+      }
+      return { status: 'error' }
+    }
   }
+  return { status: 'error' }
 }

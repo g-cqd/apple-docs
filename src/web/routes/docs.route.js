@@ -60,7 +60,7 @@ const DOC_SECTIONS_QUERY = 'SELECT section_kind, heading, content_text, content_
  * @type {import('../route-registry.js').RouteHandler}
  */
 export async function docsHandler(request, ctx, url) {
-  const { db, dataDir, siteConfig, renderCache, rateLimiter, readerPool, frameworkTreeCache, frameworkTreeBySlug, invalidateDocumentCaches, onDemandGate } = ctx
+  const { db, dataDir, siteConfig, renderCache, rateLimiter, frameworkTreeCache, frameworkTreeBySlug, invalidateDocumentCaches, onDemandGate } = ctx
   const key = url.pathname.replace('/docs/', '').replace(/\/$/, '').replace(/\/index\.html$/, '')
   if (!key) return notFoundResponse(siteConfig)
 
@@ -161,7 +161,10 @@ export async function docsHandler(request, ctx, url) {
         onDemandGate?.recordMiss(key)
       }
       invalidateDocumentCaches({ key, title: doc?.title, roleHeading: doc?.role_heading })
-      try { await readerPool?.recycle?.() } catch {}
+      // No reader-pool recycle: under WAL, new read transactions see the
+      // committed write automatically. Recycling here tore down every
+      // worker per cold page view — rejecting all in-flight searches and
+      // paying N× (DB open + 10 GB mmap remap + statement preps).
     } catch (err) {
       if (err instanceof BackpressureError) {
         return new Response('Too many docs fetches in flight. Retry after 30s.\n', {
@@ -204,7 +207,7 @@ export async function docsHandler(request, ctx, url) {
         })
         sections = db.db.query(DOC_SECTIONS_QUERY).all(doc.id).map(decodeSectionRow)
         invalidateDocumentCaches({ key: doc.key, title: doc.title, roleHeading: doc.role_heading })
-        try { await readerPool?.recycle?.() } catch {}
+        // No recycle — see the on-demand persist path above.
       } catch {
         // fetch failed — render with empty sections
       }

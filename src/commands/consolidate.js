@@ -221,12 +221,27 @@ export async function consolidate(opts, ctx) {
     let minifySaved = 0
 
     if (opts.minify && !dryRun) {
-      const rawDir = join(dataDir, 'raw-json')
-      logger.info('Minifying JSON files...')
-      const result = minifyDir(rawDir, logger)
-      minified = result.count
-      minifySaved = result.saved
-      logger.info(`Minified ${minified} files, saved ${(minifySaved / 1e6).toFixed(1)} MB`)
+      // Every write path already emits minified JSON, so this pass can only
+      // ever find legacy files. Once a walk of the tree minifies nothing,
+      // stamp it done and stop re-walking ~343k files (measured 54 s per
+      // sync to minify 0 files). `consolidate --minify` standalone runs
+      // (opts.forceMinify) still walk unconditionally.
+      const minifyDoneKey = 'raw_json_minified'
+      const alreadyDone = !opts.forceMinify
+        && !!db.db.query('SELECT value FROM schema_meta WHERE key = ?').get(minifyDoneKey)
+      if (alreadyDone) {
+        logger.info('Raw JSON already minified — skipping walk')
+      } else {
+        const rawDir = join(dataDir, 'raw-json')
+        logger.info('Minifying JSON files...')
+        const result = minifyDir(rawDir, logger)
+        minified = result.count
+        minifySaved = result.saved
+        logger.info(`Minified ${minified} files, saved ${(minifySaved / 1e6).toFixed(1)} MB`)
+        if (minified === 0) {
+          db.db.run('INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)', [minifyDoneKey, new Date().toISOString()])
+        }
+      }
     }
 
     // Step 5: rebuild body index if requested
