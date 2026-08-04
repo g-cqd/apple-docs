@@ -14,6 +14,7 @@ import { crawlRoot } from '../../pipeline/discover.js'
 import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { pool } from '../../lib/pool.js'
 import { fetchRootIndex } from '../../apple/api.js'
+import { sha256 } from '../../lib/hash.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'
 import { clearTombstoneCounter, gateAndTombstone404 } from './tombstone-policy.js'
 
@@ -248,11 +249,14 @@ async function gateByRootIndex(allPages, rootSlugById, ctx) {
 
   const getEtagStmt = db.db.query('SELECT index_etag FROM roots WHERE id = ?')
   const setEtagStmt = db.db.query('UPDATE roots SET index_etag = ? WHERE id = ?')
+  const getHashStmt = db.db.query('SELECT value FROM schema_meta WHERE key = ?')
+  const setHashStmt = db.db.query('INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)')
 
   const toCheck = []
   const pendingEtags = []
   let skipped = 0
   let seeded = 0
+  let etagRotations = 0
   const rootIds = [...pagesByRoot.keys()]
   await pool(rootIds, 16, async (rootId) => {
     const slug = rootSlugById.get(rootId)
@@ -269,19 +273,41 @@ async function gateByRootIndex(allPages, rootSlugById, ctx) {
       return
     }
     if (result.status === 'modified' && result.json) {
+      // CDN edges rotate ETags without content changes (observed: ~70% of
+      // roots re-checked 40 minutes apart with byte-identical indexes).
+      // Hash the body as the authoritative change signal; a rotated ETag
+      // over identical content still skips the root's page checks.
+      const hashKey = `root_index_hash:${slug}`
+      const bodyHash = sha256(JSON.stringify(result.json))
+      const storedHash = getHashStmt.get(hashKey)?.value ?? null
+      if (storedHash === bodyHash) {
+        etagRotations++
+        skipped += rootPages.length
+        // Safe to adopt the fresh ETag immediately: content is unchanged,
+        // so nothing under this root goes unchecked.
+        if (result.etag) setEtagStmt.run(result.etag, rootId)
+        return
+      }
       seeded += seedNewPagesFromIndex(db, slug, result.json, rootPages)
+      if (result.etag) pendingEtags.push({ rootId, etag: result.etag, hashKey, bodyHash })
+      toCheck.push(...rootPages)
+      return
     }
-    // Modified, missing index (404), first sight (no stored etag), or error:
-    // fall through to per-page checks. The fresh etag is committed by the
-    // caller only after the page checks actually ran.
+    // Missing index (404), first sight (no stored etag), or error: fall
+    // through to per-page checks. The fresh etag is committed by the caller
+    // only after the page checks actually ran.
     if (result.etag) pendingEtags.push({ rootId, etag: result.etag })
     toCheck.push(...rootPages)
   })
 
   if (seeded > 0) logger.info(`Index diff: seeded ${seeded} new pages into the crawl queue`)
+  if (etagRotations > 0) logger.info(`Index gate: ${etagRotations} roots had rotated ETags over identical content`)
 
   const commitIndexEtags = () => {
-    for (const { rootId, etag } of pendingEtags) setEtagStmt.run(etag, rootId)
+    for (const { rootId, etag, hashKey, bodyHash } of pendingEtags) {
+      setEtagStmt.run(etag, rootId)
+      if (hashKey && bodyHash) setHashStmt.run(hashKey, bodyHash)
+    }
   }
   return { pages: toCheck, skipped, commitIndexEtags }
 }
