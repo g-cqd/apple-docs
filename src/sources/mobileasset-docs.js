@@ -78,6 +78,15 @@ export function normalizeAssetUri(uri) {
   return s.toLowerCase()
 }
 
+/** Apostrophe-insensitive comparison form. The asset's URIs strip apostrophes
+ *  from article slugs (`using-metal-to-draw-a-view's-contents` arrives as
+ *  `…-a-views-contents`) while the public crawl keeps them, so exact-key
+ *  matching alone would misclassify those pages as novel and insert
+ *  contentless duplicates under slugs that 404 on the public site. */
+export function simplifyKey(key) {
+  return String(key).replace(/['’]/g, '')
+}
+
 /** Apple `platforms[]` → { platformsJson, minIos, … } in project shape. */
 export function platformsToProject(platforms) {
   if (!Array.isArray(platforms) || platforms.length === 0) return null
@@ -135,8 +144,12 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
   const raw = projectDb.db
 
   const existing = new Map() // key → { id, hasPlatforms, hasUsr }
+  const existingSimplified = new Map() // apostrophe-stripped key → same entry
   for (const r of raw.query('SELECT id, key, platforms_json IS NOT NULL AS hp, usr IS NOT NULL AS hu FROM documents').all()) {
-    existing.set(r.key, { id: r.id, hasPlatforms: !!r.hp, hasUsr: !!r.hu })
+    const entry = { id: r.id, hasPlatforms: !!r.hp, hasUsr: !!r.hu }
+    existing.set(r.key, entry)
+    const simple = simplifyKey(r.key)
+    if (simple !== r.key) existingSimplified.set(simple, entry)
   }
 
   const setUsr = raw.query('UPDATE documents SET usr = $usr WHERE id = $id AND usr IS NULL')
@@ -166,7 +179,7 @@ export function enrichFromAsset(projectDb, assetDbPath, { apply = false, logger,
       let doc
       try { doc = JSON.parse(row.document) } catch { continue }
       const usr = doc.external_id ?? doc.symbol?.preciseIdentifier ?? null
-      const hit = existing.get(key)
+      const hit = existing.get(key) ?? existingSimplified.get(simplifyKey(key))
 
       if (hit) {
         begin()

@@ -81,7 +81,11 @@ export async function sync(opts, ctx) {
     //    further down so the work doesn't run twice.
     const updateStep = await runStep(
       'sync.update',
-      () => update({ skipFonts: true, skipSymbols: true, scope }, { ...ctx, semaphore, adapters }),
+      // fullSync must be threaded here too: scope-sensitive adapters (Swift
+      // Package Catalog) resolve their discovery scope from ctx.fullSync, and
+      // omitting it made this update step discover only the curated 'official'
+      // packages — tombstoning the entire previously-synced full catalog.
+      () => update({ skipFonts: true, skipSymbols: true, scope }, { ...ctx, semaphore, adapters, fullSync: fullRebuild }),
       { logger },
     )
     if (updateStep.ok) updateResult = updateStep.result

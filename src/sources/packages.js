@@ -105,8 +105,13 @@ export class PackagesAdapter extends SourceAdapter {
         keySet.add(packageKey(owner, repo))
         if (limit != null && keySet.size >= limit) break
       }
+      // The curated allowlist is a subset of the catalog, not an inventory:
+      // pages absent from it (the full SwiftPackageIndex catalog synced by a
+      // --full run) are NOT stale. `partial` tells the flat updater to skip
+      // stale-tombstoning; catalog removals only apply on full-scope runs.
       return this.validateDiscoveryResult({
         keys: [...keySet],
+        partial: true,
         roots: root ? [root] : undefined,
       })
     }

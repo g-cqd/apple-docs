@@ -93,7 +93,8 @@ export function createDocumentsRepo(db, { hasSectionsTable = false } = {}) {
   `)
   const getByRoleStmt = db.query(`
     SELECT d.key, d.key as path, d.title, d.role,
-           COALESCE(r.slug, d.framework) as root_slug, d.source_type as source_type
+           COALESCE(r.slug, d.framework) as root_slug, d.source_type as source_type,
+           d.source_metadata as source_metadata
     FROM documents d
     LEFT JOIN roots r ON r.slug = d.framework
     WHERE d.role = ?

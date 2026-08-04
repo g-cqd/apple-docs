@@ -286,6 +286,31 @@ export class DocsDatabase {
     this.deleteNormalizedDocument(path)
   }
 
+  /**
+   * Bulk tombstone. Deleting a document scans `document_relationships` for
+   * `to_key = ?` (v21 dropped idx_rel_to as a cold-path index), which is fine
+   * one-off but O(pages × 2M rows) for a batch. Build the index transiently,
+   * run the batch in one transaction, drop it again — v21's space/write-amp
+   * rationale keeps holding outside this call.
+   */
+  markPagesDeleted(paths) {
+    if (!paths?.length) return
+    if (paths.length < 50) {
+      for (const path of paths) this.markPageDeleted(path)
+      return
+    }
+    this.db.run('BEGIN')
+    try {
+      this.db.run('CREATE INDEX IF NOT EXISTS idx_rel_to_bulk_delete ON document_relationships(to_key)')
+      for (const path of paths) this.markPageDeleted(path)
+      this.db.run('DROP INDEX IF EXISTS idx_rel_to_bulk_delete')
+      this.db.run('COMMIT')
+    } catch (error) {
+      try { this.db.run('ROLLBACK') } catch { /* already rolled back */ }
+      throw error
+    }
+  }
+
   bumpConsecutive404(path) { return this.pages.bumpConsecutive404(path) }
   resetConsecutive404(path) { this.pages.resetConsecutive404(path) }
 

@@ -142,6 +142,11 @@ export class SampleCodeAdapter extends SourceAdapter {
     // role='sampleCode', which scales much better than a handwritten list.
     const dbSamples = ctx.db?.getPagesByRole?.('sampleCode') ?? []
     for (const page of dbSamples) {
+      // Documents merged from Xcode's offline asset are not part of the
+      // public crawl inventory: their slugs may be apostrophe-stripped or
+      // renamed variants that 404 on developer.apple.com. Only crawl-backed
+      // documents are fetchable sample-code entries.
+      if (typeof page.source_metadata === 'string' && page.source_metadata.includes('"enrichedFrom"')) continue
       const docKey = page.key ?? page.path
       if (!docKey) continue
       keySet.add(docKey.startsWith(`${ROOT_SLUG}/`) ? docKey : `${ROOT_SLUG}/${docKey}`)

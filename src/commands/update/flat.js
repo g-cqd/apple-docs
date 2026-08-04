@@ -29,10 +29,15 @@ export async function updateFlatSource(adapter, discovery, requestedRoots, _conc
   }
 
   if (stalePages.length > 0) {
-    logger.info(`Removing ${stalePages.length} stale ${adapter.constructor.displayName} pages...`)
-    for (const page of stalePages) {
-      db.markPageDeleted(page.path)
-      counts.delCount++
+    if (discovery.partial) {
+      // Partial discovery (e.g. the packages adapter's curated 'official'
+      // scope) enumerates a subset, not the source's full catalog — absence
+      // from it proves nothing. Leave the extra pages untouched.
+      logger.info(`Keeping ${stalePages.length} ${adapter.constructor.displayName} pages outside this partial discovery scope`)
+    } else {
+      logger.info(`Removing ${stalePages.length} stale ${adapter.constructor.displayName} pages...`)
+      db.markPagesDeleted(stalePages.map(page => page.path))
+      counts.delCount += stalePages.length
     }
   }
 
