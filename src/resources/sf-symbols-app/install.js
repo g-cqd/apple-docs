@@ -230,7 +230,7 @@ export async function ensureSfSymbolsApp(opts) {
   // window CodeQL flags on predictable-name temp files.
   const dmgStagingDir = await mkdtemp(join(versionedDir, '.download-'))
   const dmgPath = join(dmgStagingDir, `SF-Symbols-${version}.dmg.partial`)
-  logger?.info?.(`Downloading SF Symbols.app ${version} from ${latest.url}`)
+  logger?.info?.(`Downloading SF Symbols.app (major ${latest.major}) from ${latest.url}`)
   await downloadFile(latest.url, dmgPath, { fetcher, logger })
 
   // Guard against a CDN error/redirect body masquerading as the image:
@@ -248,13 +248,25 @@ export async function ensureSfSymbolsApp(opts) {
     await rm(dmgStagingDir, { recursive: true, force: true }).catch(() => {})
   }
 
+  // `version` above is derived from the download URL, whose `?N`
+  // cache-buster is NOT a minor version (SF-Symbols-8.dmg?2 ships app
+  // 8.0, not 8.2). Re-key the cache directory on the bundle's real
+  // CFBundleShortVersionString so the reported version, the manifest and
+  // the on-disk path all agree.
   const installedVersion = (await readInstalledVersion(appPath))?.short ?? version
+  let installedAppPath = appPath
+  if (installedVersion !== version) {
+    const installedDir = join(cacheRoot, installedVersion)
+    installedAppPath = join(installedDir, SF_SYMBOLS_APP)
+    await rm(installedDir, { recursive: true, force: true }).catch(() => {})
+    await rename(versionedDir, installedDir)
+  }
   const manifest = {
     url: latest.url,
     etag: latest.etag,
     lastModified: latest.lastModified,
     version: installedVersion,
-    appPath,
+    appPath: installedAppPath,
     installedAt: new Date().toISOString(),
   }
   await mkdir(cacheRoot, { recursive: true })
@@ -269,8 +281,8 @@ export async function ensureSfSymbolsApp(opts) {
     throw err
   }
 
-  logger?.info?.(`SF Symbols.app ${installedVersion} installed at ${appPath}`)
-  return { appPath, version: installedVersion, source: 'cache' }
+  logger?.info?.(`SF Symbols.app ${installedVersion} installed at ${installedAppPath}`)
+  return { appPath: installedAppPath, version: installedVersion, source: 'cache' }
 }
 
 /**

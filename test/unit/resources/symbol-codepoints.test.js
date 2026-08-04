@@ -85,6 +85,39 @@ describe('codepoint dump orchestrator', () => {
     expect(map.has('d')).toBe(false)
   })
 
+  test('pipelines names in chunks instead of one write per symbol', async () => {
+    // 600 names with the default chunkSize (256) must arrive in
+    // ceil(600/256) = 3 stdin writes, and every response must land on
+    // the right name (the worker echoes names in input order).
+    const names = Array.from({ length: 600 }, (_, i) => `sym.${i}`)
+    const writes = []
+    const fakeProc = createEchoProc(name => 0xe000 + (Number(name.split('.')[1]) % 0x1000), writes)
+    const { map, resolved, skipped } = await dumpSymbolCodepoints(names, {
+      fontPath: '/tmp/font.ttf',
+      spawn: () => fakeProc,
+    })
+    expect(writes.length).toBe(3)
+    expect(writes.map(w => w.split('\n').filter(Boolean).length)).toEqual([256, 256, 88])
+    expect(map.size).toBe(600)
+    expect(resolved).toBe(600)
+    expect(skipped).toBe(0)
+    expect(map.get('sym.0')).toBe(0xe000)
+    expect(map.get('sym.599')).toBe(0xe000 + (599 % 0x1000))
+  })
+
+  test('honors a custom chunkSize', async () => {
+    const names = Array.from({ length: 10 }, (_, i) => `sym.${i}`)
+    const writes = []
+    const fakeProc = createEchoProc(() => 0xe000, writes)
+    const { map } = await dumpSymbolCodepoints(names, {
+      fontPath: '/tmp/font.ttf',
+      spawn: () => fakeProc,
+      chunkSize: 4,
+    })
+    expect(writes.length).toBe(3) // 4 + 4 + 2
+    expect(map.size).toBe(10)
+  })
+
   test('isPrivateUseCodepoint covers all three PUA ranges and rejects outside', () => {
     const { isPrivateUseCodepoint } = _internals
     // Edge cases at every PUA boundary.
@@ -291,6 +324,37 @@ describe.skipIf(!isMacOS)('codepoint dump (real Swift worker, macOS-only)', () =
 })
 
 // ---- helpers ---------------------------------------------------------------
+
+/**
+ * Fake worker that answers every name written to stdin, in order, so
+ * pipelined (chunked) writes can be exercised. `writes` collects the raw
+ * stdin payloads for chunking assertions.
+ */
+function createEchoProc(codepointFor, writes = []) {
+  let controller
+  const encoder = new TextEncoder()
+  const stdout = new ReadableStream({ start(c) { controller = c } })
+  const stderr = new ReadableStream({ start(c) { c.close() } })
+  const close = () => { try { controller.close() } catch {} }
+  return {
+    stdout,
+    stderr,
+    stdin: {
+      write(text) {
+        writes.push(text)
+        const out = text
+          .split('\n')
+          .filter(Boolean)
+          .map(name => `${JSON.stringify({ name, codepoint: codepointFor(name) })}\n`)
+          .join('')
+        controller.enqueue(encoder.encode(out))
+      },
+      flush() {},
+      end: close,
+    },
+    kill: close,
+  }
+}
 
 function createFakeProc(lines, { closeAfter } = {}) {
   // Build a ReadableStream that emits the requested lines sequentially

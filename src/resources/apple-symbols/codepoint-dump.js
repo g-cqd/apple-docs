@@ -6,13 +6,23 @@ import { ValidationError } from '../../lib/errors.js'
  * One worker process per call. Long-lived: pipe N symbol names down
  * stdin, read N JSON lines back on stdout. The worker's startup cost
  * (~200ms cold + ~100ms PUA reverse-table build) is amortised across
- * the full catalog dump (~16k symbols), so per-symbol overhead is just
- * the line round-trip — measured at <0.5 ms per symbol locally.
+ * the full catalog dump (~16k symbols).
  *
- * Budget: a 30s wall-clock cap on the whole dump and a 5s line idle
- * cap. Exceeding either kills the worker and returns whatever was
- * already collected so sync can continue. The catalog rows that didn't
- * receive a response stay at codepoint=NULL until the next sync.
+ * Names are PIPELINED in chunks (default 256) rather than one lockstep
+ * write→read round trip per symbol: a whole chunk is written to stdin,
+ * then its responses are drained. The worker answers strictly in input
+ * order, so this stays deterministic while amortising the IPC/event-loop
+ * round trip (which cost ~100ms/symbol under load) across the chunk.
+ * Chunk sizes are kept well under the 64KB pipe buffer on both sides so
+ * neither end can deadlock on backpressure.
+ *
+ * Budget: the wall-clock cap scales with the requested work
+ * (`max(120s, 50ms × names)`) instead of a fixed 30s, plus a 5s
+ * per-line idle cap as a liveness check. Exceeding either kills the
+ * worker and returns whatever was already collected so sync can
+ * continue. The catalog rows that didn't receive a response stay at
+ * codepoint=NULL and are retried (and only they are re-requested) on
+ * the next sync.
  */
 
 import { existsSync } from 'node:fs'
@@ -103,7 +113,8 @@ export function resolveSymbolFontPath(_dataDir, opts = {}) {
  *
  * @param {string[]} names — list of catalog names to query
  * @param {{ fontPath: string, metadataDir?: string, logger?: object,
- *   spawn?: Function, wallClockMs?: number, lineTimeoutMs?: number }} opts
+ *   spawn?: Function, wallClockMs?: number, lineTimeoutMs?: number,
+ *   chunkSize?: number }} opts
  */
 export async function dumpSymbolCodepoints(names, opts) {
   const {
@@ -112,7 +123,15 @@ export async function dumpSymbolCodepoints(names, opts) {
     appPath,
     logger,
     spawn = defaultSpawn,
-    wallClockMs = 30_000,
+    // How many names are written to the worker before draining their
+    // responses. 256 names (~8KB) and 256 responses (~13KB) both fit
+    // comfortably inside the 64KB pipe buffer, so write-then-drain can
+    // never deadlock while still amortising the IPC round trip.
+    chunkSize = 256,
+    // Wall clock sized to the work: generous 50ms/symbol budget with a
+    // 2-minute floor. The steady-state pipelined rate is far faster;
+    // this is a hang guard, not a pace expectation.
+    wallClockMs = Math.max(120_000, names.length * 50),
     lineTimeoutMs = 5_000,
     // The first line carries the worker's cold start (Swift compile + font
     // load), which can exceed the steady-state line idle on slower machines.
@@ -174,48 +193,56 @@ export async function dumpSymbolCodepoints(names, opts) {
   let killed = false
   let firstLine = true
   try {
-    for (const name of names) {
+    outer:
+    for (let offset = 0; offset < names.length; offset += chunkSize) {
       if (Date.now() > wallClockDeadline) {
         logger?.warn?.(
           `codepoint dump exceeded ${wallClockMs}ms wall clock; processed ${map.size} of ${names.length}`,
         )
         break
       }
-      proc.stdin.write(`${name}\n`)
+      // Pipeline a whole chunk of names, then drain its responses. The
+      // worker replies strictly in input order, so results stay
+      // deterministic; the round trip is paid once per chunk instead of
+      // once per symbol.
+      const chunk = names.slice(offset, offset + chunkSize)
+      proc.stdin.write(chunk.map(name => `${name}\n`).join(''))
       await proc.stdin.flush?.()
-      let line
-      try {
-        line = await readLine(firstLine ? startupTimeoutMs : lineTimeoutMs)
-      } catch (error) {
-        logger?.warn?.(`codepoint dump aborted at ${name}: ${error.message}`)
-        break
-      }
-      if (line == null) break
-      if (firstLine) {
-        // Worker is warm — start the steady-state per-symbol wall-clock budget.
-        firstLine = false
-        wallClockDeadline = Date.now() + wallClockMs
-      }
-      const parsed = parseLine(line)
-      if (!parsed) continue
-      if (parsed.codepoint != null) {
-        // Defensive: reject anything outside the PUA. The Swift worker
-        // only walks PUA ranges, but a stale binary or font swap could
-        // in principle return Latin codepoints — we want to catch that
-        // here rather than store nonsense in the DB.
-        if (!isPrivateUseCodepoint(parsed.codepoint)) {
-          logger?.warn?.(
-            `codepoint dump: rejecting non-PUA codepoint ${parsed.codepoint} for ${parsed.name}`,
-          )
+      for (const name of chunk) {
+        let line
+        try {
+          line = await readLine(firstLine ? startupTimeoutMs : lineTimeoutMs)
+        } catch (error) {
+          logger?.warn?.(`codepoint dump aborted at ${name}: ${error.message}`)
+          break outer
+        }
+        if (line == null) break outer
+        if (firstLine) {
+          // Worker is warm — start the steady-state wall-clock budget.
+          firstLine = false
+          wallClockDeadline = Date.now() + wallClockMs
+        }
+        const parsed = parseLine(line)
+        if (!parsed) continue
+        if (parsed.codepoint != null) {
+          // Defensive: reject anything outside the PUA. The Swift worker
+          // only walks PUA ranges, but a stale binary or font swap could
+          // in principle return Latin codepoints — we want to catch that
+          // here rather than store nonsense in the DB.
+          if (!isPrivateUseCodepoint(parsed.codepoint)) {
+            logger?.warn?.(
+              `codepoint dump: rejecting non-PUA codepoint ${parsed.codepoint} for ${parsed.name}`,
+            )
+            map.set(parsed.name, null)
+            skipped++
+            continue
+          }
+          map.set(parsed.name, parsed.codepoint)
+          resolved++
+        } else {
           map.set(parsed.name, null)
           skipped++
-          continue
         }
-        map.set(parsed.name, parsed.codepoint)
-        resolved++
-      } else {
-        map.set(parsed.name, null)
-        skipped++
       }
     }
   } finally {

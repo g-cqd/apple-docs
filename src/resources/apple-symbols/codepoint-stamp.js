@@ -21,9 +21,10 @@ import { dumpSymbolCodepoints, resolveSymbolFontPath } from './codepoint-dump.js
 
 /**
  * @param {{ appPath?: string, fontPath?: string, metadataDir?: string,
- *   forceRefresh?: boolean }} opts
+ *   forceRefresh?: boolean, spawn?: Function }} opts
  * @param {{ db, dataDir, logger }} ctx
- * @returns {Promise<{ stamped: number, total: number, fontPath: string | null }>}
+ * @returns {Promise<{ stamped: number, total: number, requested?: number,
+ *   missing?: number, fontPath: string | null, skipped?: boolean }>}
  */
 export async function stampSfSymbolCodepoints(opts, ctx) {
   const { db, dataDir, logger } = ctx
@@ -90,12 +91,28 @@ export async function stampSfSymbolCodepoints(opts, ctx) {
   const catalog = db.listSfSymbolsCatalog().filter(symbol => symbol.scope === 'public')
   if (catalog.length === 0) return { stamped: 0, total: 0, fontPath }
 
-  const names = catalog.map(symbol => symbol.name)
+  // Resumable: outside an explicit `forceRefresh` (new app release →
+  // re-resolve everything), only dump the rows still missing a codepoint.
+  // A previously-interrupted dump then converges over retries instead of
+  // re-walking the full catalog every sync.
+  const targets = opts?.forceRefresh
+    ? catalog
+    : catalog.filter(symbol => symbol.codepoint == null)
+  if (targets.length === 0) {
+    logger?.info?.(
+      `SF Symbol codepoints already stamped (${catalog.length} public symbols) — nothing missing`,
+    )
+    return { stamped: 0, total: catalog.length, requested: 0, fontPath, skipped: true }
+  }
+
+  const names = targets.map(symbol => symbol.name)
   const { map } = await dumpSymbolCodepoints(names, {
     fontPath,
     metadataDir,
     appPath: usedAppPath,
     logger,
+    // Test seam: lets unit tests replace the Swift worker spawn.
+    ...(opts?.spawn ? { spawn: opts.spawn } : {}),
   })
 
   let stamped = 0
@@ -107,9 +124,22 @@ export async function stampSfSymbolCodepoints(opts, ctx) {
       logger?.warn?.(`failed to stamp codepoint for ${name}: ${err.message ?? err}`)
     }
   }
-  const pct = catalog.length === 0 ? 0 : ((stamped / catalog.length) * 100).toFixed(1)
-  logger?.info?.(
-    `Stamped codepoints on ${stamped} of ${catalog.length} public symbols (${pct}% coverage)`,
-  )
-  return { stamped, total: catalog.length, fontPath }
+  const missing = db.db.query(
+    "SELECT COUNT(*) AS c FROM sf_symbols WHERE scope = 'public' AND codepoint IS NULL",
+  ).get()?.c ?? 0
+  const pct = ((stamped / names.length) * 100).toFixed(1)
+  const summary =
+    `Stamped codepoints on ${stamped} of ${names.length} requested public symbols (${pct}% coverage)`
+  if (missing > 0) {
+    // Partial coverage must be loud: the dump died or timed out before
+    // finishing. The NULL rows re-open the skip gate, and the resumable
+    // path above re-requests only them on the next sync.
+    logger?.warn?.(
+      `${summary}; ${missing} of ${catalog.length} public symbols still lack a codepoint — ` +
+      `will retry the missing ones on the next sync`,
+    )
+  } else {
+    logger?.info?.(`${summary}; catalog fully stamped (${catalog.length} public symbols)`)
+  }
+  return { stamped, total: catalog.length, requested: names.length, missing, fontPath }
 }

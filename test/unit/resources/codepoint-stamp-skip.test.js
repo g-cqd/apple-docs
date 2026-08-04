@@ -39,3 +39,137 @@ describe('stampSfSymbolCodepoints skip gate', () => {
     db.close()
   })
 })
+
+describe('stampSfSymbolCodepoints resume + partial coverage', () => {
+  function seedCatalog(db) {
+    db.upsertSfSymbol({ name: 'star', scope: 'public', categories: [], keywords: [], orderIndex: 0 })
+    db.upsertSfSymbol({ name: 'heart', scope: 'public', categories: [], keywords: [], orderIndex: 1 })
+    db.upsertSfSymbol({ name: 'moon', scope: 'public', categories: [], keywords: [], orderIndex: 2 })
+    // 'star' is already stamped; 'heart' + 'moon' are missing.
+    db.updateSfSymbolCodepoint('public', 'star', 0xe100)
+  }
+
+  test('only dumps the symbols still missing codepoints', async () => {
+    const db = new DocsDatabase(':memory:')
+    seedCatalog(db)
+    const writes = []
+    const result = await stampSfSymbolCodepoints(
+      {
+        fontPath: '/tmp/fake.otf',
+        metadataDir: '/tmp/fake-metadata',
+        spawn: () => createEchoProc(() => 0xe000, writes),
+      },
+      { db, dataDir: '/tmp/apple-docs-stamp-test', logger: noopLogger },
+    )
+    const requestedNames = writes.join('').split('\n').filter(Boolean)
+    expect(requestedNames.sort()).toEqual(['heart', 'moon'])
+    expect(result.requested).toBe(2)
+    expect(result.stamped).toBe(2)
+    expect(result.missing).toBe(0)
+    expect(result.total).toBe(3)
+    // Previously-stamped row untouched; missing rows now stamped.
+    expect(db.getSfSymbol('public', 'star').codepoint).toBe(0xe100)
+    expect(db.getSfSymbol('public', 'heart').codepoint).toBe(0xe000)
+    expect(db.getSfSymbol('public', 'moon').codepoint).toBe(0xe000)
+    db.close()
+  })
+
+  test('forceRefresh re-dumps the whole catalog', async () => {
+    const db = new DocsDatabase(':memory:')
+    seedCatalog(db)
+    const writes = []
+    const result = await stampSfSymbolCodepoints(
+      {
+        forceRefresh: true,
+        fontPath: '/tmp/fake.otf',
+        metadataDir: '/tmp/fake-metadata',
+        spawn: () => createEchoProc(() => 0xe001, writes),
+      },
+      { db, dataDir: '/tmp/apple-docs-stamp-test', logger: noopLogger },
+    )
+    const requestedNames = writes.join('').split('\n').filter(Boolean)
+    expect(requestedNames.sort()).toEqual(['heart', 'moon', 'star'])
+    expect(result.requested).toBe(3)
+    expect(result.stamped).toBe(3)
+    expect(db.getSfSymbol('public', 'star').codepoint).toBe(0xe001)
+    db.close()
+  })
+
+  test('short-circuits (no dump) when nothing is missing but fontPath forces past the gate', async () => {
+    const db = new DocsDatabase(':memory:')
+    seedCatalog(db)
+    db.updateSfSymbolCodepoint('public', 'heart', 0xe101)
+    db.updateSfSymbolCodepoint('public', 'moon', 0xe102)
+    let spawned = 0
+    const result = await stampSfSymbolCodepoints(
+      {
+        fontPath: '/tmp/fake.otf',
+        metadataDir: '/tmp/fake-metadata',
+        spawn: () => { spawned++; return createEchoProc(() => 0xe000) },
+      },
+      { db, dataDir: '/tmp/apple-docs-stamp-test', logger: noopLogger },
+    )
+    expect(spawned).toBe(0)
+    expect(result.skipped).toBe(true)
+    expect(result.total).toBe(3)
+    db.close()
+  })
+
+  test('partial dump warns loudly with the deficit and leaves NULLs for retry', async () => {
+    const db = new DocsDatabase(':memory:')
+    seedCatalog(db)
+    const warnings = []
+    const logger = { ...noopLogger, warn: m => warnings.push(m) }
+    const result = await stampSfSymbolCodepoints(
+      {
+        fontPath: '/tmp/fake.otf',
+        metadataDir: '/tmp/fake-metadata',
+        // Worker dies after answering a single symbol.
+        spawn: () => createEchoProc(() => 0xe000, [], { dieAfter: 1 }),
+      },
+      { db, dataDir: '/tmp/apple-docs-stamp-test', logger },
+    )
+    expect(result.stamped).toBe(1)
+    expect(result.missing).toBe(1)
+    expect(warnings.some(w => /still lack a codepoint/.test(w))).toBe(true)
+    // The unanswered symbol stays NULL so the next sync re-requests it.
+    const nulls = db.db.query(
+      "SELECT name FROM sf_symbols WHERE scope = 'public' AND codepoint IS NULL",
+    ).all().map(r => r.name)
+    expect(nulls.length).toBe(1)
+    db.close()
+  })
+})
+
+// ---- helpers ---------------------------------------------------------------
+
+/**
+ * Fake Swift worker: answers every name written to stdin, in order.
+ * `writes` collects raw stdin payloads; `dieAfter` closes stdout after
+ * N responses to simulate a mid-dump crash.
+ */
+function createEchoProc(codepointFor, writes = [], { dieAfter = Infinity } = {}) {
+  let controller
+  let answered = 0
+  const encoder = new TextEncoder()
+  const stdout = new ReadableStream({ start(c) { controller = c } })
+  const stderr = new ReadableStream({ start(c) { c.close() } })
+  const close = () => { try { controller.close() } catch {} }
+  return {
+    stdout,
+    stderr,
+    stdin: {
+      write(text) {
+        writes.push(text)
+        for (const name of text.split('\n').filter(Boolean)) {
+          if (answered >= dieAfter) { close(); return }
+          controller.enqueue(encoder.encode(`${JSON.stringify({ name, codepoint: codepointFor(name) })}\n`))
+          answered++
+        }
+      },
+      flush() {},
+      end: close,
+    },
+    kill: close,
+  }
+}
