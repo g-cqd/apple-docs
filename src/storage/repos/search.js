@@ -385,6 +385,25 @@ export function createSearchRepo(db, { hasTrigramTable = false, hasBodyFtsTable 
         label: 'search.fuzzyCandidates',
       })
     },
+    /** Document frequency for each given trigram, via the fts5vocab
+     *  companion (v30). Returns Map<trigram, docCount>; empty Map when the
+     *  vocab table is absent (lite tier / pre-v30). The fuzzy tier uses it
+     *  to OR only the rarest query trigrams instead of unioning enormous
+     *  posting lists for common ones ("ion", "ing", …). */
+    trigramDocCounts(terms) {
+      if (!terms || terms.length === 0) return new Map()
+      const hasVocab = !!db
+        .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'documents_trigram_vocab'")
+        .get()
+      if (!hasVocab) return new Map()
+      const placeholders = terms.map(() => '?').join(',')
+      return safeCall(() => {
+        const rows = db
+          .query(`SELECT term, doc FROM documents_trigram_vocab WHERE term IN (${placeholders})`)
+          .all(...terms)
+        return new Map(rows.map(row => [row.term, row.doc]))
+      }, { default: new Map(), log: 'warn-once', label: 'search.trigramDocCounts' })
+    },
     getAllTitles() {
       return allTitlesStmt.all()
     },

@@ -309,7 +309,7 @@ export async function search(opts, ctx) {
   if (semanticPromise) {
     const sem = await semanticPromise
     if (sem.length > 0) {
-      fuseSemanticResults(results, sem, { ctx, activeFilters, seen, requestedWindow, parseRowPlatforms })
+      await fuseSemanticResults(results, sem, { ctx, activeFilters, seen, requestedWindow, parseRowPlatforms })
     }
   }
 
@@ -321,8 +321,13 @@ export async function search(opts, ctx) {
   // the whole response.
   try {
     const resultKeys = sliced.map(r => r.path)
-    const snippetData = ctx.db.getDocumentSnippetData(resultKeys)
-    const relatedCounts = ctx.db.getRelatedDocCounts(resultKeys)
+    // Reader-pool routed: section decode + plaintext render per result is
+    // the dominant post-cascade cost; on the main connection it serialized
+    // across concurrent MCP requests.
+    const [snippetData, relatedCounts] = await Promise.all([
+      runRead(ctx, 'getDocumentSnippetData', [resultKeys]),
+      runRead(ctx, 'getRelatedDocCounts', [resultKeys]),
+    ])
     for (const r of sliced) {
       const data = snippetData.get(r.path)
       if (data) r.snippet = renderSnippet(data.document, data.sections, q)

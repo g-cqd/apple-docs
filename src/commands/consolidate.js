@@ -70,6 +70,19 @@ export async function consolidate(opts, ctx) {
       }
       logger.info(`Cleaned ${cleaned} invalid + ${crossAdapter} cross-adapter false-positive entries`)
 
+      // Orphan relationship sweep: the pre-v29 delete path left rows whose
+      // endpoints no longer exist in `documents` (776 observed on the live
+      // corpus). Both subqueries hit the documents key index; cheap enough
+      // to run every consolidate.
+      if (!dryRun) {
+        const { changes: orphanRels } = db.db.run(`
+          DELETE FROM document_relationships
+          WHERE from_key NOT IN (SELECT key FROM documents)
+             OR to_key NOT IN (SELECT key FROM documents)
+        `)
+        if (orphanRels > 0) logger.info(`Swept ${orphanRels} orphan document relationships`)
+      }
+
       // Step 2: for remaining failures, check parent pages for correct URL
       const remaining = dryRun
         ? all.filter(failed => !isInvalidFailedPath(failed.path))

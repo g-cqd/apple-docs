@@ -67,8 +67,6 @@ async function doPersistFetchedDocPage({
         contentHash: normalizedHash,
         rawPayloadHash,
       })
-
-      db.markConverted(path)
     })
 
     await Promise.all([
@@ -150,8 +148,6 @@ async function doPersistNormalizedPage({
         contentHash: normalizedHash,
         rawPayloadHash,
       })
-
-      db.markConverted(path)
     })
 
     await Promise.all([
@@ -172,31 +168,27 @@ async function doPersistNormalizedPage({
 }
 
 function upsertPageFromDocument(db, rootId, path, doc, meta) {
+  // Ledger fields only. The content columns (title, role, abstract,
+  // platforms, declaration, doc_kind, min_*) are served exclusively from
+  // the `documents` row written in the same transaction — every production
+  // reader goes through getPage's documents-first path — so mirroring them
+  // here doubled the row-write cost of the hot sync path for nothing.
+  // convertedAt rides along so the separate markConverted UPDATE (a second
+  // row-image of the same pages row per persist) is folded into the upsert.
   return db.upsertPage({
     rootId,
     path,
     url: doc.url ?? meta.defaultUrl ?? null,
-    title: doc.title,
-    role: doc.role,
-    roleHeading: doc.roleHeading,
-    abstract: doc.abstractText,
-    platforms: doc.platformsJson,
-    declaration: doc.declarationText,
     etag: meta.etag,
     lastModified: meta.lastModified,
     contentHash: meta.rawPayloadHash,
     downloadedAt: meta.downloadedAt,
+    convertedAt: meta.downloadedAt,
     sourceType: doc.sourceType ?? meta.sourceTypeFallback ?? null,
     language: doc.language,
     isReleaseNotes: doc.isReleaseNotes,
     urlDepth: doc.urlDepth,
-    docKind: doc.kind,
     sourceMetadata: doc.sourceMetadata,
-    minIos: doc.minIos,
-    minMacos: doc.minMacos,
-    minWatchos: doc.minWatchos,
-    minTvos: doc.minTvos,
-    minVisionos: doc.minVisionos,
     skipDocumentSync: true,
   })
 }

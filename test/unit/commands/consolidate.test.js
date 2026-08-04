@@ -30,6 +30,41 @@ afterEach(() => {
 })
 
 describe('consolidate', () => {
+  test('minify walk stamps itself done after a zero-result pass and skips thereafter', async () => {
+    await consolidate({ minify: true }, { db, dataDir, rateLimiter, logger })
+    expect(db.db.query("SELECT value FROM schema_meta WHERE key = 'raw_json_minified'").get()).toBeTruthy()
+
+    // Second run: the walk is skipped (log line instead of a minify pass).
+    await consolidate({ minify: true }, { db, dataDir, rateLimiter, logger })
+    const skipLog = logger._calls.info.find(entry => String(entry[0]).includes('already minified'))
+    expect(skipLog).toBeTruthy()
+
+    // Explicit --minify (forceMinify) still walks.
+    await consolidate({ minify: true, forceMinify: true }, { db, dataDir, rateLimiter, logger })
+    const walkLog = logger._calls.info.filter(entry => String(entry[0]).includes('Minifying JSON files'))
+    expect(walkLog.length).toBeGreaterThanOrEqual(2)
+  })
+
+  test('sweeps orphan document relationships', async () => {
+    db.upsertNormalizedDocument({
+      document: { sourceType: 'apple-docc', key: 'swiftui/view', title: 'View' },
+      sections: [],
+      relationships: [{ toKey: 'swiftui/ghost', relationType: 'child', sortOrder: 0 }],
+    })
+    // Orphan both directions: a from_key with no document, and the to_key
+    // above which never existed.
+    db.db.run(
+      "INSERT INTO document_relationships (from_key, to_key, relation_type, sort_order) VALUES ('swiftui/gone', 'swiftui/view', 'child', 0)",
+    )
+    const before = db.db.query('SELECT COUNT(*) AS c FROM document_relationships').get().c
+    expect(before).toBe(2)
+
+    await consolidate({}, { db, dataDir, rateLimiter, logger })
+
+    const rows = db.db.query('SELECT from_key, to_key FROM document_relationships').all()
+    expect(rows).toEqual([])
+  })
+
   test('returns zeros for empty database', async () => {
     const result = await consolidate({ dryRun: true }, { db, dataDir, rateLimiter, logger })
     expect(result.analyzed).toBe(0)

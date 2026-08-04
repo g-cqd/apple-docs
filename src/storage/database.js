@@ -121,11 +121,25 @@ export class DocsDatabase {
   }
 
   upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
+    // Roots change rarely and are looked up once per persisted page —
+    // invalidate the memo on any root write.
+    this.#rootByIdCache.clear()
     return this.roots.upsertRoot(slug, displayName, kind, source, seedPath, sourceType)
   }
 
+  #rootByIdCache = new Map()
+
+  #getRootByIdCached(id) {
+    let root = this.#rootByIdCache.get(id)
+    if (root === undefined) {
+      root = this.roots.getRootById(id) ?? null
+      this.#rootByIdCache.set(id, root)
+    }
+    return root
+  }
+
   upsertPage(params) {
-    const root = params.rootId ? this.roots.getRootById(params.rootId) : null
+    const root = params.rootId ? this.#getRootByIdCached(params.rootId) : null
     const sourceType = params.sourceType ?? root?.source_type ?? 'apple-docc'
     const urlDepth = params.urlDepth ?? Math.max(0, (params.path?.split('/').length ?? 1) - 1)
 
@@ -236,6 +250,7 @@ export class DocsDatabase {
   clearBodyIndex() { this.search.clearBodyIndex() }
   getTrigramCandidates(trigram) { return this.search.getTrigramCandidates(trigram) }
   fuzzyTrigramCandidates(orQuery, limit) { return this.search.fuzzyTrigramCandidates(orQuery, limit) }
+  trigramDocCounts(terms) { return this.search.trigramDocCounts(terms) }
   getAllTitlesForFuzzy() { return this.search.getAllTitles() }
 
   /**

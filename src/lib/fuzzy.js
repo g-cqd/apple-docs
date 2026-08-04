@@ -71,10 +71,33 @@ export function _resetTrigramCache() { /* no-op */ }
  * @param {{ framework?: string, kind?: string, limit?: number, maxDist?: number, excludeIds?: Set<string|number> }} opts
  * @returns {Array<{ id: number, title: string, distance: number }>}
  */
+/** OR only the rarest few query trigrams. A 20-char query yields ~18
+ *  trigrams; ORing all of them forces FTS5 to union enormous posting lists
+ *  for common ones ("ion", "ing", "ate") across the whole title corpus.
+ *  For edit-distance ≤ 2 the target title shares all but at most 6 of the
+ *  query's trigrams, so any k ≥ 7 corpus-present trigrams guarantee at
+ *  least one match — and rare trigrams shrink the union by an order of
+ *  magnitude. Falls back to the full set when no DF source exists (pre-v30
+ *  / lite tier) or when too few trigrams are corpus-present. */
+const RAREST_TRIGRAM_COUNT = 8
+
+function selectRarestTrigrams(triSet, db) {
+  const terms = [...triSet]
+  if (terms.length <= RAREST_TRIGRAM_COUNT) return triSet
+  const counts = db.trigramDocCounts?.(terms)
+  if (!(counts instanceof Map) || counts.size === 0) return triSet
+  // Corpus-present only: a typo-mangled trigram matches nothing, and a
+  // trigram missing from the vocab has zero postings by definition.
+  const present = terms.filter(term => (counts.get(term) ?? 0) > 0)
+  if (present.length < RAREST_TRIGRAM_COUNT) return triSet
+  present.sort((a, b) => (counts.get(a) ?? 0) - (counts.get(b) ?? 0))
+  return new Set(present.slice(0, RAREST_TRIGRAM_COUNT))
+}
+
 export function fuzzyMatchTitles(query, db, { framework: _framework, kind: _kind, limit = 100, maxDist = 2, excludeIds = null } = {}) {
   const queryTrigrams = trigrams(query)
   if (queryTrigrams.size < 2) return []
-  const orQuery = buildTrigramOrQuery(queryTrigrams)
+  const orQuery = buildTrigramOrQuery(selectRarestTrigrams(queryTrigrams, db))
   if (!orQuery) return []
 
   // Over-fetch on the SQL side so we have room for the Levenshtein

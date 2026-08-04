@@ -22,3 +22,9 @@
 {"name":"seed-p50","value":11.141458,"unit":"ms","timestamp":"2026-04-17T18:00:34.593Z","runtime":"bun 1.3.12"}
 {"name":"seed-p95","value":13.129000000000001,"unit":"ms","timestamp":"2026-04-17T18:00:34.593Z","runtime":"bun 1.3.12"}
 {"name":"seed-p99","value":13.129000000000001,"unit":"ms","timestamp":"2026-04-17T18:00:34.593Z","runtime":"bun 1.3.12"}
+{"name":"search-p50","value":4.135708999999906,"unit":"ms","timestamp":"2026-08-04T17:25:06.296Z","runtime":"bun 1.3.14"}
+{"name":"search-p95","value":12.018624999999929,"unit":"ms","timestamp":"2026-08-04T17:25:06.296Z","runtime":"bun 1.3.14"}
+{"name":"search-p99","value":14.021624999999972,"unit":"ms","timestamp":"2026-08-04T17:25:06.296Z","runtime":"bun 1.3.14"}
+{"name":"highlight-p50","value":0.1306250000000091,"unit":"ms","timestamp":"2026-08-04T17:25:06.580Z","runtime":"bun 1.3.14"}
+{"name":"highlight-p95","value":0.29341700000000515,"unit":"ms","timestamp":"2026-08-04T17:25:06.580Z","runtime":"bun 1.3.14"}
+{"name":"highlight-p99","value":1.584875000000011,"unit":"ms","timestamp":"2026-08-04T17:25:06.580Z","runtime":"bun 1.3.14"}

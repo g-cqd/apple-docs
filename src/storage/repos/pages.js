@@ -12,13 +12,13 @@ export function createPagesRepo(db) {
   const upsertStmt = db.query(`
     INSERT INTO pages (
       root_id, path, url, title, role, role_heading, abstract, platforms, declaration,
-      etag, last_modified, content_hash, downloaded_at, status,
+      etag, last_modified, content_hash, downloaded_at, converted_at, status,
       source_type, language, is_release_notes, url_depth, doc_kind, source_metadata,
       min_ios, min_macos, min_watchos, min_tvos, min_visionos
     )
     VALUES (
       $root_id, $path, $url, $title, $role, $role_heading, $abstract, $platforms, $declaration,
-      $etag, $last_modified, $content_hash, $downloaded_at, 'active',
+      $etag, $last_modified, $content_hash, $downloaded_at, $converted_at, 'active',
       $source_type, $language, $is_release_notes, $url_depth, $doc_kind, $source_metadata,
       $min_ios, $min_macos, $min_watchos, $min_tvos, $min_visionos
     )
@@ -33,6 +33,7 @@ export function createPagesRepo(db) {
       last_modified = COALESCE($last_modified, pages.last_modified),
       content_hash = COALESCE($content_hash, pages.content_hash),
       downloaded_at = COALESCE($downloaded_at, pages.downloaded_at),
+      converted_at = COALESCE($converted_at, pages.converted_at),
       source_type = COALESCE($source_type, pages.source_type),
       language = COALESCE($language, pages.language),
       is_release_notes = COALESCE($is_release_notes, pages.is_release_notes),
@@ -110,6 +111,7 @@ export function createPagesRepo(db) {
         $last_modified: params.lastModified ?? null,
         $content_hash: params.contentHash ?? null,
         $downloaded_at: params.downloadedAt ?? null,
+        $converted_at: params.convertedAt ?? null,
         $source_type: params.sourceType,
         $language: params.language ?? null,
         $is_release_notes: params.isReleaseNotes == null ? 0 : (params.isReleaseNotes ? 1 : 0),

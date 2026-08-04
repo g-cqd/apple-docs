@@ -124,10 +124,10 @@ async function checkAndPullTrackedPages({
         switch (result.status) {
           case 'unchanged':
             counts.unchangedCount++
-            clearTombstoneCounter(db, page.path)
+            if ((page.consecutive_404_count ?? 0) > 0) clearTombstoneCounter(db, page.path)
             break
           case 'modified':
-            clearTombstoneCounter(db, page.path)
+            if ((page.consecutive_404_count ?? 0) > 0) clearTombstoneCounter(db, page.path)
             await pullModified(page)
             break
           case 'deleted':

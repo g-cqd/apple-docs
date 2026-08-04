@@ -72,6 +72,13 @@ export async function fetchGitHubTree(owner, repo, branch, rateLimiter) {
     timeout: DEFAULT_TIMEOUT,
     notFoundAs: 'http-error',
   })
+  // A truncated tree (>100k entries / 7 MB) is an incomplete inventory:
+  // every discover() built on it would misclassify the missing entries as
+  // stale. Fail the discovery loudly — the adapter is skipped this run —
+  // instead of silently returning a partial listing.
+  if (data.truncated) {
+    throw new Error(`GitHub tree listing truncated for ${owner}/${repo}@${branch} — discovery would be incomplete`)
+  }
   return data.tree
 }
 

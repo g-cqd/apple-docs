@@ -79,46 +79,95 @@ export async function crawlRoot(db, dataDir, rateLimiter, rootSlug, logger, onPr
     }
   }
 
-  // Batch size for pulling from the queue — pull more than we can run
-  // so the semaphore always has work to schedule
-  const batchSize = semaphore ? semaphore.max : (opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10))
+  // Concurrency for this root — pull more than we can run so the semaphore
+  // always has work to schedule.
+  const workerCount = semaphore ? semaphore.max : (opts.concurrency ?? Number.parseInt(process.env.APPLE_DOCS_CONCURRENCY ?? '5', 10))
   let processed = 0
 
-  while (true) {
-    const batch = db.getPendingCrawl(rootSlug, batchSize)
-    if (batch.length === 0) break
+  // Refill worker pool instead of batch barriers: the old shape awaited
+  // Promise.allSettled per 500-page batch, so one page burning the retry
+  // ladder (up to 60 s on Retry-After) stalled dispatch of the entire next
+  // batch — a convoy that cost 15-30% of cold-crawl wall clock. Workers now
+  // pull independently from a shared queue that refills from crawl_state
+  // whenever it drains; `inFlight` keeps a refill from re-issuing rows whose
+  // status hasn't flipped yet. Single-process ownership per root means no DB
+  // claim is needed.
+  let queue = []
+  let cursor = 0
+  // Paths taken from crawl_state but not yet completed (queued or in
+  // flight): a refill must not re-issue them — their crawl_state row is
+  // still 'pending' until processPage flips it at the end.
+  const pendingLocal = new Set()
+  let inFlightCount = 0
+  let sinceProgress = 0
 
-    const results = await Promise.allSettled(
-      batch.map(({ path, depth }) => {
+  const refill = () => {
+    const rows = db.getPendingCrawl(rootSlug, Math.max(workerCount * 2, 32))
+    for (const row of rows) {
+      if (pendingLocal.has(row.path)) continue
+      pendingLocal.add(row.path)
+      queue.push(row)
+    }
+    // Compact the consumed prefix so a large root doesn't accumulate an
+    // ever-growing array behind the cursor.
+    if (cursor > 4096) {
+      queue = queue.slice(cursor)
+      cursor = 0
+    }
+  }
+
+  const handleFailure = (path, reason) => {
+    // Upstream 404 / 403 churn dominates a cold-corpus crawl: Apple's
+    // parent pages list dictionary-key children that aren't served as
+    // standalone URLs, plus a few deprecated selectors that 403
+    // consistently. The doctor pass cleans these via parent re-resolution,
+    // so demote to debug — the failed-state row is the canonical record.
+    const message = reason?.message ?? ''
+    const isUpstreamMiss = message.startsWith('Not found:') || message.startsWith('HTTP 403')
+    const log = isUpstreamMiss ? logger.debug : logger.warn
+    log.call(logger, `Failed: ${path}`, { error: message })
+  }
+
+  const worker = async () => {
+    while (true) {
+      if (cursor >= queue.length) {
+        refill()
+        if (cursor >= queue.length) {
+          // Nothing pending — but a sibling's in-flight page may still seed
+          // new references. Only exit once the whole pool is idle.
+          if (inFlightCount === 0) return
+          await new Promise(resolve => setTimeout(resolve, 25))
+          continue
+        }
+      }
+      const { path, depth } = queue[cursor++]
+      inFlightCount++
+      try {
         const run = () => processPage(db, dataDir, rateLimiter, root.id, rootSlug, root.source_type, path, depth, logger, adapter)
-        return semaphore ? semaphore.run(run) : run()
-      })
-    )
-
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].status === 'fulfilled') {
+        await (semaphore ? semaphore.run(run) : run())
         processed++
-      } else {
-        // Upstream 404 / 403 churn dominates a cold-corpus crawl: Apple's
-        // parent pages list dictionary-key children (`is_in_intro_offer_
-        // period`, `expires_date_ms`, …) that aren't served as standalone
-        // URLs, plus a handful of properties named `composer` and a few
-        // deprecated WebKit selectors that 403 consistently. The doctor
-        // pass already cleans these up via parent-page re-resolution, so
-        // demote them to debug — the failed-state row in the DB is the
-        // canonical record. Anything else (network, parse, filesystem) is
-        // still surfaced loudly so we notice it.
-        const message = results[i].reason?.message ?? ''
-        const isUpstreamMiss = message.startsWith('Not found:') || message.startsWith('HTTP 403')
-        const log = isUpstreamMiss ? logger.debug : logger.warn
-        log.call(logger, `Failed: ${batch[i].path}`, { error: message })
+      } catch (reason) {
+        handleFailure(path, reason)
+      } finally {
+        inFlightCount--
+        pendingLocal.delete(path)
+      }
+      // Stats aggregate over crawl_state; once per ~250 completions is
+      // plenty for progress display (the old shape ran it per batch).
+      if (++sinceProgress >= 250) {
+        sinceProgress = 0
+        onProgress?.({ ...db.getCrawlStats(rootSlug), current: path })
       }
     }
+  }
 
-    onProgress?.({
-      ...db.getCrawlStats(rootSlug),
-      current: batch[batch.length - 1]?.path,
-    })
+  refill()
+  if (queue.length > 0) {
+    // Spawn the full pool even when the initial queue is tiny (a cold crawl
+    // starts from one seed row): idle workers wait on the in-flight check
+    // and pick up the fan-out as references get seeded.
+    await Promise.all(Array.from({ length: workerCount }, () => worker()))
+    onProgress?.({ ...db.getCrawlStats(rootSlug), current: null })
   }
 
   db.updateRootPageCount(rootSlug)

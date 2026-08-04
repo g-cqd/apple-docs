@@ -13,11 +13,10 @@
 import { crawlRoot } from '../../pipeline/discover.js'
 import { persistFetchedDocPage } from '../../pipeline/persist.js'
 import { pool } from '../../lib/pool.js'
-import { checkResourceEtag } from '../../lib/fetch-with-retry.js'
+import { fetchRootIndex } from '../../apple/api.js'
 import { filterPagesByRoots, selectRootsForAdapter } from '../command-helpers.js'
 import { clearTombstoneCounter, gateAndTombstone404 } from './tombstone-policy.js'
 
-const INDEX_BASE = process.env.APPLE_DOCS_API_BASE ?? 'https://developer.apple.com/tutorials/data'
 const FULL_SWEEP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 
 export async function updateDoccSource(adapter, discovery, requestedRoots, concurrency, parallel, semaphore, ctx) {
@@ -40,17 +39,16 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
   let modifiedCount = 0
   let checked = 0
 
-  const pullModified = async (page) => {
-    const fetchResult = await adapter.fetch(page.path, ctx)
+  const persistModifiedPayload = async (page, { json, etag, lastModified }) => {
     const persisted = await persistFetchedDocPage({
       db,
       dataDir,
       rootId: page.root_id,
       path: page.path,
       sourceType,
-      json: fetchResult.payload,
-      etag: fetchResult.etag,
-      lastModified: fetchResult.lastModified,
+      json,
+      etag,
+      lastModified,
     })
     // A modified page is how new children announce themselves: Apple links
     // new symbol pages from updated parents. Seed same-root references into
@@ -68,27 +66,54 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
     counts.modCount++
   }
 
+  const pullModified = async (page) => {
+    const fetchResult = await adapter.fetch(page.path, ctx)
+    await persistModifiedPayload(page, {
+      json: fetchResult.payload,
+      etag: fetchResult.etag,
+      lastModified: fetchResult.lastModified,
+    })
+  }
+
+  // The pages rows already carry consecutive_404_count, so the counter
+  // reset only needs a statement when there is actually a streak to clear —
+  // not one guarded no-op UPDATE per unchanged page (~343k per sweep).
+  const clearStreakIfAny = (page) => {
+    if ((page.consecutive_404_count ?? 0) > 0) clearTombstoneCounter(db, page.path)
+  }
+
+  const failedPaths = []
   const checkOne = async (page, { collectErrors }) => {
     try {
-      const result = await adapter.check(page.path, {
+      const previousState = {
         etag: page.etag,
         lastModified: page.last_modified,
         contentHash: page.content_hash,
-      }, ctx)
+      }
+      // Conditional GET when the adapter supports it: a 304 costs the same
+      // as the old HEAD, and a 200 carries the payload — no second request
+      // for modified pages.
+      const result = typeof adapter.checkAndFetch === 'function'
+        ? await adapter.checkAndFetch(page.path, previousState, ctx)
+        : await adapter.check(page.path, previousState, ctx)
 
       switch (result.status) {
         case 'unchanged':
           counts.unchangedCount++
-          clearTombstoneCounter(db, page.path)
+          clearStreakIfAny(page)
           break
         case 'modified':
           // Pull immediately instead of parking behind a full-sweep barrier:
           // a page found modified in the first second used to wait for the
           // last of 343k checks before its GET started.
           modifiedCount++
-          clearTombstoneCounter(db, page.path)
+          clearStreakIfAny(page)
           try {
-            await pullModified(page)
+            if (result.json) {
+              await persistModifiedPayload(page, result)
+            } else {
+              await pullModified(page)
+            }
           } catch (e) {
             counts.errCount++
             logger.warn(`Pull failed: ${page.path}`, { error: e.message })
@@ -103,13 +128,22 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
           }
           break
         default:
-          if (collectErrors) errored.push(page)
-          else counts.errCount++
+          if (collectErrors) {
+            errored.push(page)
+          } else {
+            counts.errCount++
+            failedPaths.push(page.path)
+            logger.debug?.(`Check errored: ${page.path}`, { error: result.error ?? 'check returned error status' })
+          }
           break
       }
     } catch (e) {
-      if (collectErrors) errored.push(page)
-      else counts.errCount++
+      if (collectErrors) {
+        errored.push(page)
+      } else {
+        counts.errCount++
+        failedPaths.push(page.path)
+      }
       logger.warn(`Check failed: ${page.path}`, { error: e.message })
     }
 
@@ -134,6 +168,13 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
       const retry = errored.splice(0)
       logger.info(`Retrying ${retry.length} errored ${adapter.constructor.displayName} checks...`)
       await pool(retry, limit, page => semaphore.run(() => checkOne(page, { collectErrors: false })))
+    }
+
+    if (failedPaths.length > 0) {
+      logger.warn(
+        `${failedPaths.length} ${adapter.constructor.displayName} checks still failing after retry; ` +
+        `sample: ${failedPaths.slice(0, 10).join(', ')}`,
+      )
     }
 
     logger.info(`Check complete for ${adapter.constructor.displayName}: ${counts.modCount} modified, ${deleted.length} deleted, ${counts.unchangedCount} unchanged, ${counts.errCount} errors, ${counts.skippedCount} index-gated`)
@@ -211,16 +252,24 @@ async function gateByRootIndex(allPages, rootSlugById, ctx) {
   const toCheck = []
   const pendingEtags = []
   let skipped = 0
+  let seeded = 0
   const rootIds = [...pagesByRoot.keys()]
   await pool(rootIds, 16, async (rootId) => {
     const slug = rootSlugById.get(rootId)
     const rootPages = pagesByRoot.get(rootId)
     if (!slug) { toCheck.push(...rootPages); return }
     const storedEtag = getEtagStmt.get(rootId)?.index_etag ?? null
-    const result = await checkResourceEtag(`${INDEX_BASE}/index/${slug}`, storedEtag, ctx.rateLimiter)
+    // Conditional GET (not HEAD): when the index changed, its body is the
+    // authoritative page inventory for the root — new pages are seeded into
+    // crawl_state from it directly, closing the discovery gap for pages
+    // that no modified parent happens to link.
+    const result = await fetchRootIndex(slug, storedEtag, ctx.rateLimiter)
     if (result.status === 'unchanged' && storedEtag) {
       skipped += rootPages.length
       return
+    }
+    if (result.status === 'modified' && result.json) {
+      seeded += seedNewPagesFromIndex(db, slug, result.json, rootPages)
     }
     // Modified, missing index (404), first sight (no stored etag), or error:
     // fall through to per-page checks. The fresh etag is committed by the
@@ -229,8 +278,37 @@ async function gateByRootIndex(allPages, rootSlugById, ctx) {
     toCheck.push(...rootPages)
   })
 
+  if (seeded > 0) logger.info(`Index diff: seeded ${seeded} new pages into the crawl queue`)
+
   const commitIndexEtags = () => {
     for (const { rootId, etag } of pendingEtags) setEtagStmt.run(etag, rootId)
   }
   return { pages: toCheck, skipped, commitIndexEtags }
+}
+
+/**
+ * Walk a root-index JSON (`interfaceLanguages` → recursive `children`
+ * trees) and seed every same-root documentation path the corpus doesn't
+ * track yet. Returns the number of newly seeded paths.
+ */
+function seedNewPagesFromIndex(db, slug, indexJson, rootPages) {
+  const known = new Set(rootPages.map(page => page.path))
+  const prefix = `${slug.toLowerCase()}/`
+  let seeded = 0
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return
+    if (typeof node.path === 'string' && !node.external) {
+      const key = node.path.replace(/^\/documentation\//i, '').toLowerCase()
+      if (key !== node.path && (key === slug || key.startsWith(prefix)) && !known.has(key)) {
+        known.add(key)
+        if (db.seedCrawlIfNew(key, slug, Math.max(0, key.split('/').length - 1))) seeded++
+      }
+    }
+    if (Array.isArray(node.children)) for (const child of node.children) visit(child)
+  }
+  const languages = indexJson?.interfaceLanguages ?? {}
+  for (const nodes of Object.values(languages)) {
+    if (Array.isArray(nodes)) for (const node of nodes) visit(node)
+  }
+  return seeded
 }

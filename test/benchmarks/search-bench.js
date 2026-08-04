@@ -1,5 +1,6 @@
 import { DocsDatabase } from '../../src/storage/database.js'
 import { search } from '../../src/commands/search.js'
+import { seedSearchCorpus } from './corpus.js'
 import { recordBenchmark, compareToPrevious } from './history.js'
 
 /**
@@ -9,32 +10,29 @@ import { recordBenchmark, compareToPrevious } from './history.js'
 async function main() {
   const shouldRecord = process.argv.includes('--record')
 
-  const db = new DocsDatabase(':memory:')
+  // 20k-document synthetic corpus with body FTS: measures the real tier
+  // cascade (title FTS → trigram → fuzzy → body bm25) instead of the JS
+  // orchestration overhead a 10-doc fixture reduced it to.
+  console.log('Seeding synthetic corpus (20k docs, 5k bodies)...')
+  const db = seedSearchCorpus(new DocsDatabase(':memory:'))
   const ctx = { db, dataDir: '/tmp', logger: { debug() {}, info() {}, warn() {}, error() {} } }
 
-  // Seed test data
-  const root = db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'test')
-  const symbols = ['View', 'Text', 'Button', 'List', 'NavigationStack', 'ScrollView', 'HStack', 'VStack', 'ZStack', 'Image']
-  for (const sym of symbols) {
-    db.upsertPage({
-      rootId: root.id,
-      path: `documentation/swiftui/${sym.toLowerCase()}`,
-      url: 'u',
-      title: sym,
-      role: 'symbol',
-      roleHeading: 'Structure',
-      abstract: `A ${sym} component for SwiftUI`,
-    })
-  }
+  // Mixed workload: exact symbols, multi-word phrases (deep-tier prone),
+  // fuzzy typos, and broad substrings (trigram-heavy).
+  const queries = [
+    'View', 'Text42', 'Creating a navigation in swiftui', 'Observable',
+    'anmation binding', 'scroll', 'Configuring a publisher in combine',
+    'Buffer7', 'metal pipeline texture', 'stat',
+  ]
 
   // Benchmark
   const iterations = 100
   const times = []
 
   for (let i = 0; i < iterations; i++) {
-    const query = symbols[i % symbols.length]
+    const query = queries[i % queries.length]
     const start = performance.now()
-    await search({ query, limit: 10, fuzzy: true, noDeep: true }, ctx)
+    await search({ query, limit: 10, fuzzy: true }, ctx)
     times.push(performance.now() - start)
   }
 

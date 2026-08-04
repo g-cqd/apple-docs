@@ -73,6 +73,7 @@ export async function sync(opts, ctx) {
   db.setActivity('sync', null)
 
   let updateResult = null
+  let resourcesPromise = null
   try {
     // 1. Root discovery for catalog-driven sources (apple-docc et al) and
     //    every adapter's discover() — ONCE. Both the update step below and
@@ -84,6 +85,12 @@ export async function sync(opts, ctx) {
       adapterCtx.rootCatalogReady = true
     }
     const { discoveries: discoveriesBySource, errors: discoveryErrorsBySource } = await discoverAdaptersInParallel(adapters, adapterCtx)
+
+    // Resources (fonts + SF Symbols catalog/prerender/stamp) touch only
+    // sf_symbols/apple_font_* tables and local bundles — fully disjoint from
+    // the corpus phases. Start them now so their disk/Swift-worker time
+    // overlaps the network-bound update+crawl phases; awaited at step 6.
+    resourcesPromise = runResourcesPhase({ ctx, logger, scope, fullRebuild })
 
     // 2. HEAD-check existing pages on every source for upstream modifications.
     //    Pulls changed pages in place; deleted pages are tombstoned. Flat sources
@@ -199,7 +206,7 @@ export async function sync(opts, ctx) {
     //    + Swift-worker I/O overlap between the two phases.
     const [idxOutcome, resOutcome] = await Promise.all([
       runBodyIndex({ db, dataDir, logger, fullRebuild }),
-      runResourcesPhase({ ctx, logger, scope, fullRebuild }),
+      resourcesPromise,
     ])
     const bodyIndexed = idxOutcome.indexed
     for (const failure of resOutcome.failedSources) failedSources.push(failure)
@@ -221,7 +228,13 @@ export async function sync(opts, ctx) {
 
     db.addUpdateLog({
       action: 'sync',
-      newCount: totalProcessed,
+      // Fold the update phase's counts in — the crawl-only number dropped
+      // every modified/deleted/errored page and all flat-source work from
+      // the operation log.
+      newCount: totalProcessed + (updateResult?.newCount ?? 0),
+      modCount: updateResult?.modCount ?? 0,
+      delCount: updateResult?.delCount ?? 0,
+      errCount: updateResult?.errCount ?? 0,
       durationMs,
     })
 
@@ -243,6 +256,9 @@ export async function sync(opts, ctx) {
       durationMs,
     }
   } finally {
+    // If sync aborted mid-flight, let the early-started resources phase
+    // settle before teardown — the WAL truncate below must not race it.
+    try { await resourcesPromise } catch { /* reported via failedSources */ }
     db.clearActivity()
     try { await ctx.readerPool?.recycle?.() } catch {}
     // A multi-hour sync under WAL with long-lived readers can leave a WAL

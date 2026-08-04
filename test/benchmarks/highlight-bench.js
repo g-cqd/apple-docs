@@ -1,7 +1,10 @@
 import { compareToPrevious, recordBenchmark } from './history.js'
 import { disposeHighlighter, highlightCode, initHighlighter } from '../../src/content/highlight.js'
 
-const REPEATS_PER_SNIPPET = 10
+// Unique snippet per timed call: repeating 50 snippets 10× meant ≥90% of
+// timed calls were LRU cache hits — the benchmark measured a Map.get, not
+// shiki. 500 distinct snippets keep every call a real highlight.
+const UNIQUE_SNIPPETS = 500
 
 function createSnippet(index) {
   const variants = [
@@ -41,8 +44,7 @@ async function main() {
   const shouldRecord = process.argv.includes('--record')
   await initHighlighter()
 
-  const corpus = Array.from({ length: 50 }, (_, index) => createSnippet(index))
-  const calls = corpus.flatMap(snippet => Array.from({ length: REPEATS_PER_SNIPPET }, () => snippet))
+  const calls = Array.from({ length: UNIQUE_SNIPPETS }, (_, index) => createSnippet(index))
   const times = []
 
   for (const { code, lang } of calls) {

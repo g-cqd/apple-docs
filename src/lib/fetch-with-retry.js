@@ -174,6 +174,16 @@ export async function fetchWithRetry(url, rateLimiter, opts = {}) {
     throw new NotFoundError(url)
   }
 
+  // Conditional-request support: callers sending If-None-Match /
+  // If-Modified-Since opt in to receiving the 304 instead of an HttpError.
+  if (res.status === 304 && opts.allowNotModified) {
+    return {
+      notModified: true,
+      etag: res.headers.get('etag'),
+      lastModified: res.headers.get('last-modified'),
+    }
+  }
+
   if (!res.ok) {
     throw new HttpError(res.status, url)
   }

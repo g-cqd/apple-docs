@@ -128,7 +128,19 @@ export function verifyCorpusIntegrity(db, dataDir, _logger) {
     const tier = db.getTier()
     checks.push({ name: 'raw_json_files', ok: true, detail: `raw-json directory not present${tier ? ` (${tier} tier)` : ''}` })
   } else {
-    const sampleDocs = db.db.query('SELECT key FROM documents ORDER BY RANDOM() LIMIT 10').all()
+    // Random rowid probes instead of ORDER BY RANDOM(): the latter is a
+    // full-scan sort of the whole documents table to pick 10 rows.
+    const maxId = db.db.query('SELECT MAX(id) AS m FROM documents').get()?.m ?? 0
+    const probeStmt = db.db.query('SELECT key FROM documents WHERE id >= ? ORDER BY id LIMIT 1')
+    const sampleDocs = []
+    const seenKeys = new Set()
+    for (let i = 0; i < 20 && sampleDocs.length < 10 && maxId > 0; i++) {
+      const row = probeStmt.get(1 + Math.floor(Math.random() * maxId))
+      if (row && !seenKeys.has(row.key)) {
+        seenKeys.add(row.key)
+        sampleDocs.push(row)
+      }
+    }
     let missingFiles = 0
     for (const doc of sampleDocs) {
       const filePath = join(rawJsonDir, `${doc.key}.json`)

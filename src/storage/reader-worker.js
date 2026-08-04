@@ -33,6 +33,11 @@ export const READ_OPS = new Set([
   // pre-filter bucket; routing it through a worker lets it overlap with the
   // FTS/trigram tiers rather than tail-appending to them on the main thread.
   'fuzzyMatchTitles',
+  // Result enrichment (snippets + related counts): section decode + text
+  // render per result used to run on the main connection, serializing
+  // across concurrent MCP requests. Both return Maps (structured-clone-safe).
+  'getDocumentSnippetData',
+  'getRelatedDocCounts',
 ])
 
 // Top-level worker bootstrap is guarded by `parentPort` so this module

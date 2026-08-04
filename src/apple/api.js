@@ -2,6 +2,7 @@ import {
   fetchWithRetry as _fetchWithRetry,
   checkResourceEtag,
 } from '../lib/fetch-with-retry.js'
+import { NotFoundError } from '../lib/errors.js'
 
 const TUTORIALS_BASE = process.env.APPLE_DOCS_API_BASE ?? 'https://developer.apple.com/tutorials/data'
 const USER_AGENT = 'apple-docs-mcp/1.0'
@@ -51,6 +52,68 @@ export async function checkDocPage(path, etag, rateLimiter, lastModified = null)
     timeout: DEFAULT_TIMEOUT,
     lastModified,
   })
+}
+
+/**
+ * Conditional GET: check-and-fetch in one request. Replaces the HEAD+GET
+ * pair for modified pages — a 304 costs the same as the old HEAD, and a
+ * 200 delivers the payload that would otherwise need a second round-trip.
+ *
+ * @param {string} path canonical doc path
+ * @param {{ etag?: string|null, lastModified?: string|null }} previousState
+ * @returns {Promise<
+ *   { status: 'unchanged' } |
+ *   { status: 'deleted' } |
+ *   { status: 'modified', json: object, etag: string|null, lastModified: string|null } |
+ *   { status: 'error', error: string }
+ * >}
+ */
+export async function fetchDocPageIfChanged(path, previousState, rateLimiter) {
+  const conditional = previousState?.etag
+    ? { 'If-None-Match': previousState.etag }
+    : previousState?.lastModified
+      ? { 'If-Modified-Since': previousState.lastModified }
+      : {}
+  try {
+    const result = await _fetchWithRetry(resolveUrl(path), rateLimiter, {
+      ...defaultOpts,
+      headers: { ...defaultOpts.headers, ...conditional },
+      allowNotModified: true,
+    })
+    if (result.notModified) return { status: 'unchanged' }
+    return { status: 'modified', json: result.data, etag: result.etag, lastModified: result.lastModified }
+  } catch (error) {
+    if (error instanceof NotFoundError) return { status: 'deleted' }
+    return { status: 'error', error: error.message }
+  }
+}
+
+/**
+ * Conditional GET of a root's navigation index (`/tutorials/data/index/<slug>`).
+ * The index lists every page under the root (path/title/type tree), so a
+ * changed index both gates per-page checks and announces new pages.
+ *
+ * @returns {Promise<
+ *   { status: 'unchanged' } |
+ *   { status: 'missing' } |
+ *   { status: 'modified', json: object, etag: string|null } |
+ *   { status: 'error' }
+ * >}
+ */
+export async function fetchRootIndex(slug, previousEtag, rateLimiter) {
+  const url = `${TUTORIALS_BASE}/index/${slug}`
+  try {
+    const result = await _fetchWithRetry(url, rateLimiter, {
+      ...defaultOpts,
+      headers: { ...defaultOpts.headers, ...(previousEtag ? { 'If-None-Match': previousEtag } : {}) },
+      allowNotModified: true,
+    })
+    if (result.notModified) return { status: 'unchanged' }
+    return { status: 'modified', json: result.data, etag: result.etag }
+  } catch (error) {
+    if (error instanceof NotFoundError) return { status: 'missing' }
+    return { status: 'error' }
+  }
 }
 
 /**

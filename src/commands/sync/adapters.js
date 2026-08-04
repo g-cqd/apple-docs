@@ -122,7 +122,10 @@ export async function crawlRoots(rootSlugs, parallel, concurrency, ctx, crawlOpt
         adapter,
       })
       const result = results[slug]
-      logger.info(`Done: ${slug} (${result.total} total, ${result.processed} new)`)
+      // `processed` is this run's work; the old log printed the root's
+      // lifetime crawl_state total, which read as if every root were fully
+      // re-crawled on warm syncs.
+      logger.info(`Done: ${slug} (${result.processed} new this run)`)
     } catch (e) {
       logger.error(`Crawl failed for ${slug}`, { error: e.message })
       results[slug] = { error: e.message }

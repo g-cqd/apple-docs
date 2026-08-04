@@ -1,4 +1,5 @@
 import { weightedRRF, hybridFusion, mmrSelect } from './fusion.js'
+import { runRead } from '../storage/reader-pool.js'
 import { hamming } from './embedding.js'
 import { matchesSearchFilters } from './filters.js'
 import { formatResult } from './format.js'
@@ -18,14 +19,18 @@ import { formatResult } from './format.js'
  * @param {{ ctx, activeFilters, seen: Set<string>, requestedWindow: number,
  *           parseRowPlatforms: (rows: Array) => void }} io
  */
-export function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, requestedWindow, parseRowPlatforms }) {
+export async function fuseSemanticResults(results, sem, { ctx, activeFilters, seen, requestedWindow, parseRowPlatforms }) {
   // Capture the lexical order + the rule-reranker's calibrated scores BEFORE
   // injecting semantic-only docs, so the lexical fusion signal reflects
   // ranking.js (BASE_SCORES + rules), not the post-injection set.
   const lexicalRanked = results.map(r => r.path)
   const lexicalScores = new Map(results.map(r => [r.path, r.score ?? 0]))
 
-  const byId = new Map(ctx.db.getSearchRecordsByIds(sem.map(c => c.documentId)).map(r => [r.id, r]))
+  // Reader-pool routed (this op is already in READ_OPS) — the direct
+  // main-connection call was the one remaining synchronous row fetch on
+  // the semantic path.
+  const records = await runRead(ctx, 'getSearchRecordsByIds', [sem.map(c => c.documentId)])
+  const byId = new Map(records.map(r => [r.id, r]))
   const semanticRanked = []
   const semanticScores = new Map()
   const vecByPath = new Map()

@@ -1,4 +1,4 @@
-import { checkDocPage, fetchDocPage } from '../apple/api.js'
+import { checkDocPage, fetchDocPage, fetchDocPageIfChanged } from '../apple/api.js'
 import { extractReferences } from '../apple/extractor.js'
 import { normalize } from '../content/normalize.js'
 import { discoverRoots } from '../pipeline/discover.js'
@@ -37,6 +37,15 @@ export class AppleDoccAdapter extends SourceAdapter {
       deleted: result.status === 'deleted',
       newState: { etag: result.etag ?? previousState?.etag ?? null },
     })
+  }
+
+  /**
+   * Conditional-GET check that delivers the payload on change: one request
+   * where check()+fetch() needed two. The update path prefers this when an
+   * adapter provides it.
+   */
+  async checkAndFetch(key, previousState, ctx) {
+    return fetchDocPageIfChanged(key, previousState, ctx.rateLimiter)
   }
 
   normalize(key, rawPayload) {
