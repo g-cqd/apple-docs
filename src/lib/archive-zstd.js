@@ -19,9 +19,10 @@ import { ValidationError } from "../lib/errors.js"
  * across reruns for a fixed level / thread count / zstd version (never use
  * `--adapt`). mtimes are clamped by the caller (snapshot.js). The gate in
  * `.github/workflows/snapshot.yml` verifies bit-identity across two builds.
- * No `--long`: its larger window adds marginal ratio but is rejected by some
- * zstd decoders (Bun's `DecompressionStream` on the consumer), so the default
- * level-9 window keeps every consumer able to decode.
+ * `--long=27` widens the match window to 128 MB — the dominant ratio lever
+ * on this corpus (cross-document DocC JSON redundancy far exceeds the
+ * default window) and verified decodable by Bun's zstd on the consumer
+ * (both `Bun.zstdDecompressSync` and `DecompressionStream('zstd')`).
  *
  * Decompression: macOS ships NO zstd and Apple's bsdtar lacks libzstd, so
  * the consumer (`apple-docs setup`) decodes with Bun's built-in zstd — no
@@ -38,9 +39,17 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { listFilesSorted } from './archive-7z.js'
 
 const DEFAULT_DEADLINE_MS = 60 * 60_000
-// -9 (ratio sweet spot) / -T3 (3-core runner). Pinned so the determinism gate
-// stays byte-stable; NEVER add --adapt, and NO --long (see header).
-const ZSTD_ARGS = ['-9', '-T3', '-q', '-f']
+// -9 (ratio sweet spot) / -T3 (3-core runner) / --long=27 (128 MB match
+// window). Long-window matching is the single biggest ratio lever on this
+// corpus: DocC JSON payloads and SVG renders repeat across the multi-GB tar
+// far beyond the default level-9 window (measured: 2183 MB → 1904 MB AND
+// 65 s → 24 s on the 6.6 GB snapshot tar — the wider window also finds
+// matches faster than entropy-coding unmatched bytes). Consumers decode
+// with Bun's zstd, which handles the 2^27 window on both
+// Bun.zstdDecompressSync and DecompressionStream('zstd') (verified on
+// Bun 1.3.x; the old "no --long" note predates that support).
+// Pinned so the determinism gate stays byte-stable; NEVER add --adapt.
+const ZSTD_ARGS = ['-9', '-T3', '--long=27', '-q', '-f']
 
 function findZstd() {
   const candidates = [process.env.ZSTD_BIN, '/opt/homebrew/bin/zstd', '/usr/local/bin/zstd', '/usr/bin/zstd']

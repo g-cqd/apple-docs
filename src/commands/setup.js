@@ -278,6 +278,47 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
       }
     }
 
+    // Snapshots ship document_raw as PLAIN TEXT so the archive's long-window
+    // zstd can dedup DocC JSON across documents (~4× better than per-blob
+    // frames). Re-encode per-blob here to restore the compact at-rest
+    // footprint (~5 GB → ~1.1 GB on disk). Type-directed decode means an
+    // interrupted or skipped pass still reads correctly — this is a disk
+    // optimization, never a correctness step.
+    try {
+      const { encodeSectionContent } = await import('../storage/section-codec.js')
+      const raw = verifyDb.db
+      const plainCount = raw.query("SELECT COUNT(*) AS c FROM document_raw WHERE typeof(raw) = 'text' AND raw != ''").get()?.c ?? 0
+      if (plainCount > 0) {
+        logger.info(`Compacting ${plainCount} raw payloads (per-blob zstd)…`)
+        const upd = raw.query('UPDATE document_raw SET raw = ? WHERE document_id = ?')
+        let compacted = 0
+        // id cursor, not a bare typeof filter: encodeSectionContent keeps
+        // tiny payloads as plain strings (compression would grow them), so
+        // a typeof-only loop would re-select those rows forever.
+        let cursor = -1
+        while (true) {
+          const batch = raw.query(
+            "SELECT document_id, raw FROM document_raw WHERE document_id > ? AND typeof(raw) = 'text' AND raw != '' ORDER BY document_id LIMIT 2000",
+          ).all(cursor)
+          if (batch.length === 0) break
+          raw.run('BEGIN')
+          for (const row of batch) {
+            const encoded = encodeSectionContent(row.raw)
+            if (typeof encoded !== 'string') {
+              upd.run(encoded, row.document_id)
+              compacted++
+            }
+            cursor = row.document_id
+          }
+          raw.run('COMMIT')
+        }
+        raw.run('VACUUM')
+        logger.info(`Compacted ${compacted} raw payloads.`)
+      }
+    } catch (e) {
+      logger?.warn?.(`Raw payload compaction skipped (reads work either way): ${e.message}`)
+    }
+
     if (skipSemantic !== true) {
       // Snapshots ship no vectors (GitHub asset-size headroom); the chunk
       // index is rebuilt here from the shipped sections + model, offline.

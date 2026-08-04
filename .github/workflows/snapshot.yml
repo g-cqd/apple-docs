@@ -36,12 +36,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
 
-      # Archive pipeline: snapshots ship as `.tar.zst` with `zstd -9 -T3`
-      # — ~15% smaller and ~5x faster than the prior `gzip -9`, which
-      # itself replaced LZMA2 / .7z after May 2026 corpus growth blew
-      # the 3-core M1 runner's wallclock budget (see
-      # docs/spikes/archive-format.md). `zstd` ships on macos-26 runners;
-      # consumers decompress in-process via Bun, so no host `zstd` is needed.
+      # Archive pipeline: snapshots ship as `.tar.zst` with
+      # `zstd -9 -T3 --long=27`. The long window dedups DocC JSON across
+      # documents (raw payloads are staged uncompressed for exactly this
+      # reason) — measured 2183 MB → ~950 MB vs the pre-long per-blob
+      # layout, and faster to compress. `zstd` ships on macos-26 runners;
+      # consumers decompress in-process via Bun (long-window capable), so
+      # no host `zstd` is needed.
       - name: Set data directory
         run: echo "APPLE_DOCS_HOME=${{ runner.temp }}/apple-docs" >> "$GITHUB_ENV"
 

@@ -9,7 +9,6 @@ import { createTarZstArchive } from '../lib/archive-zstd.js'
 import { validateSymbolMatrixComplete } from '../resources/apple-symbols/validate.js'
 import { copyTreeFast, ensureDir, writeJSON } from '../storage/files.js'
 import { withFileTempStore } from '../storage/pragmas.js'
-import { encodeSectionContent } from '../storage/section-codec.js'
 import { keyPath } from '../lib/safe-path.js'
 
 // Operational tables are truncated rather than dropped — DocsDatabase
@@ -80,13 +79,14 @@ function deterministicMtimeSeconds(tag) {
  * either ({@link REGENERABLE_TRUNCATE}) — setup rebuilds them locally from
  * the shipped sections + model.
  *
- * Archive pipeline: the snapshot is packaged as `.tar.zst` (zstd `-9 -T3`).
- * zstd is ~15% smaller AND ~5× faster than `gzip -9` on this corpus shape and
- * multithreaded, so it fits the GH macos-26 runner (3-core M1 / 7 GB) budget
- * with headroom. macOS ships no zstd and Apple's bsdtar lacks libzstd, so
- * consumers do NOT `tar --zstd`: `apple-docs setup` decompresses with Bun's
- * built-in zstd to a temp tar and extracts that (no system zstd / p7zip
- * needed). See src/lib/archive-zstd.js.
+ * Archive pipeline: the snapshot is packaged as `.tar.zst`
+ * (zstd `-9 -T3 --long=27`). The 128 MB long-window is the dominant ratio
+ * lever: raw payloads are staged as plain text inside the DB precisely so
+ * the archive pass can dedup DocC JSON across documents (~4× better than
+ * per-blob frames). macOS ships no zstd and Apple's bsdtar lacks libzstd,
+ * so consumers do NOT `tar --zstd`: `apple-docs setup` decompresses with
+ * Bun's built-in zstd (long-window capable) to a temp tar and extracts
+ * that (no system zstd / p7zip needed). See src/lib/archive-zstd.js.
  *
  * @param {{ out?: string, tag?: string, allowIncompleteSymbols?: boolean, embedModel?: string }} opts
  * @param {{ db, dataDir, logger }} ctx
@@ -158,10 +158,17 @@ export async function snapshotBuild(opts, ctx) {
         copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['build_macos', buildMacos])
       }
 
-      // 4b. Embed raw upstream payloads (zstd) into the snapshot DB so the
-      // single artifact carries everything; loose raw-json files are not
-      // shipped. Deterministic (zstd is stable for a fixed input), preserving
-      // the determinism gate. `storage materialize raw-json` unpacks them.
+      // 4b. Embed raw upstream payloads into the snapshot DB so the single
+      // artifact carries everything; loose raw-json files are not shipped.
+      // PLAIN TEXT, not per-blob zstd: the outer `zstd --long=27` archive
+      // pass dedups DocC JSON structure ACROSS documents and beats per-blob
+      // compression by ~4× (measured 1.3 MB vs 5.5 MB on a 40 MB sample) —
+      // per-blob encoding would hide that redundancy inside opaque frames.
+      // ~1.1 GB of near-incompressible archive bytes become ~0.3 GB.
+      // Consumers read either representation transparently
+      // (decodeSectionContent is type-directed) and `apple-docs setup`
+      // re-encodes rows per-blob after install to restore the compact
+      // at-rest footprint. Deterministic (byte-for-byte file copies).
       const rawJsonDir = join(dataDir, 'raw-json')
       if (existsSync(rawJsonDir)) {
         // document_raw exists in copyDb already (v23 ran before the VACUUM INTO).
@@ -171,12 +178,23 @@ export async function snapshotBuild(opts, ctx) {
         for (const d of copyDb.query('SELECT id, key FROM documents').all()) {
           const p = keyPath(dataDir, 'raw-json', d.key, '.json')
           if (!existsSync(p)) continue
-          ins.run(d.id, encodeSectionContent(readFileSync(p, 'utf8')))
+          ins.run(d.id, readFileSync(p, 'utf8'))
           packed++
         }
         copyDb.run('COMMIT')
         logger.info(`Embedded ${packed} raw payloads into the snapshot DB.`)
       }
+
+      // 4c. Null the legacy pages content columns. The persist path stopped
+      // writing them (documents is the single content source; verified zero
+      // production readers) — the stale copies were ~246 MB of duplicate
+      // text in every snapshot.
+      copyDb.run(`
+        UPDATE pages SET title = NULL, role = NULL, role_heading = NULL,
+          abstract = NULL, platforms = NULL, declaration = NULL, doc_kind = NULL,
+          min_ios = NULL, min_macos = NULL, min_watchos = NULL,
+          min_tvos = NULL, min_visionos = NULL
+      `)
 
       // copyDb is a raw handle with no pragmas applied — be explicit so
       // the rebuild temp never lands in RAM regardless of compile defaults.
@@ -262,6 +280,15 @@ export async function snapshotBuild(opts, ctx) {
     const modelsDir = join(dataDir, 'resources', 'models')
     if (existsSync(modelsDir)) {
       copyTreeFast(modelsDir, join(buildDir, 'resources', 'models'))
+      // Drop orphan local caches from the staged copy: `matrix-*.admx` is a
+      // converted-weights artifact no current code reads (nothing in src/
+      // references it), yet it duplicated the model's ~129 MB of
+      // near-incompressible fp32 in every snapshot.
+      for (const rel of listFilesSorted(join(buildDir, 'resources', 'models'))) {
+        if (/(^|\/)matrix-[^/]*\.admx(\.sha256)?$/.test(rel)) {
+          rmSync(join(buildDir, 'resources', 'models', rel), { force: true })
+        }
+      }
     }
 
     ensureDir(outDir)

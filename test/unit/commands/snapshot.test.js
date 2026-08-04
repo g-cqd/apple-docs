@@ -278,6 +278,36 @@ describe('snapshotBuild', () => {
     }
   })
 
+  test('embeds raw payloads as plain text and excludes orphan admx model caches', async () => {
+    mkdirSync(join(dataDir, 'raw-json', 'swiftui'), { recursive: true })
+    writeFileSync(join(dataDir, 'raw-json', 'swiftui', 'view.json'), JSON.stringify({ kind: 'symbol', title: 'View' }))
+    const modelBase = join(dataDir, 'resources', 'models', 'minishlab', 'potion-retrieval-32M')
+    mkdirSync(modelBase, { recursive: true })
+    writeFileSync(join(modelBase, 'tokenizer.json'), '{}')
+    writeFileSync(join(modelBase, 'matrix-v1.admx'), 'ADMX-ORPHAN-BYTES')
+    writeFileSync(join(modelBase, 'matrix-v1.admx.sha256'), 'x')
+
+    const result = await snapshotBuild({ out: outDir, tag: 'test-rawplain' }, { db, dataDir, logger })
+
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-rawplain-'))
+    try {
+      await extractTarZst(result.archivePath, extractDir)
+      // Raw rides in the DB as PLAIN TEXT so the archive's long-window zstd
+      // dedups it across documents; setup re-encodes per-blob after install.
+      const snapDb = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
+      const row = snapDb.query("SELECT typeof(raw) AS t, raw FROM document_raw LIMIT 1").get()
+      snapDb.close()
+      expect(row.t).toBe('text')
+      expect(JSON.parse(row.raw).title).toBe('View')
+      // The orphan converted-weights cache never ships.
+      const staged = join(extractDir, 'resources', 'models', 'minishlab', 'potion-retrieval-32M')
+      expect(existsSync(join(staged, 'tokenizer.json'))).toBe(true)
+      expect(existsSync(join(staged, 'matrix-v1.admx'))).toBe(false)
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
   test('ships the offline query-embedding model when present (F4)', async () => {
     // Stage a stand-in for the q8 ONNX model tree (resources/models/<modelId>/…)
     // so the snapshot picks it up for offline semantic search.
