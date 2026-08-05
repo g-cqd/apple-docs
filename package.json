@@ -79,9 +79,9 @@
     "shiki": "^4.1.0"
   },
   "overrides": {
-    "fast-uri": "^4.1.1",
-    "hono": "^4.12.32",
-    "ip-address": "^10.2.0",
+    "fast-uri": "^4.1.2",
+    "hono": "^4.13.0",
+    "ip-address": "^10.4.0",
     "@hono/node-server": "^2.0.11",
     "body-parser": "^2.3.0",
     "qs": "^6.15.2",

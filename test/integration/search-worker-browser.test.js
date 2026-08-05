@@ -26,14 +26,22 @@ const DB_PATH = join(homedir(), '.apple-docs', 'apple-docs.db')
 // schema-only DB file, so file-existence alone isn't enough — also check
 // that the corpus carries indexed documents. Otherwise the search probe
 // trivially returns 0 results and the assertion fails on a clean machine.
-const HAS_LOCAL_DB = existsSync(DB_PATH) && hasIndexedDocs(DB_PATH)
+//
+// "Some documents" is not enough either: a sync that is still running (or
+// was interrupted) leaves a partial corpus that satisfies COUNT(*) > 0
+// while the page this test probes for has not been crawled yet, turning a
+// mid-sync machine into a spurious red. Gate on the actual fixture the
+// assertions below depend on.
+const HAS_LOCAL_DB = existsSync(DB_PATH) && hasProbeFixture(DB_PATH)
 
-function hasIndexedDocs(path) {
+function hasProbeFixture(path) {
   try {
     const probe = new DocsDatabase(path)
-    const row = probe.db.query('SELECT COUNT(*) as n FROM documents').get()
+    const row = probe.db
+      .query("SELECT 1 AS ok FROM documents WHERE LOWER(key) LIKE '%swiftui/view%' LIMIT 1")
+      .get()
     probe.close()
-    return (row?.n ?? 0) > 0
+    return Boolean(row)
   } catch {
     return false
   }

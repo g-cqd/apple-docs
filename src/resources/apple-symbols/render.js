@@ -31,6 +31,7 @@ import {
   renderSymbolSvgFallback,
 } from './svg-helpers.js'
 import { symbolPdfToSvg } from '../symbol-pdf-to-svg.js'
+import { resolveSwiftBinary } from '../swift-binary.js'
 import {
   SYMBOL_PDF_SCRIPT,
   SYMBOL_PNG_SCRIPT,
@@ -195,7 +196,7 @@ async function renderSymbolPng({ name, scope, pointSize, weight = 'regular', sca
   await Bun.write(scriptPath, SYMBOL_PNG_SCRIPT)
   try {
     const { stdout, stderr, exitCode } = await spawnWithDeadline(
-      ['swift', scriptPath, name, scope, String(pointSize), color, background ?? '', weight, scale],
+      [resolveSwiftBinary(), scriptPath, name, scope, String(pointSize), color, background ?? '', weight, scale],
       { deadlineMs: 10_000 },
     )
     if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
@@ -218,7 +219,7 @@ async function renderSymbolToPdfBytes({ name, scope, weight = 'regular', scale =
   await Bun.write(scriptPath, SYMBOL_PDF_SCRIPT)
   try {
     const { stdout, stderr, exitCode } = await spawnWithDeadline(
-      ['swift', scriptPath, name, scope, weight, scale],
+      [resolveSwiftBinary(), scriptPath, name, scope, weight, scale],
       { deadlineMs: 10_000 },
     )
     if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)

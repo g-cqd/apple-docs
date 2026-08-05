@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ValidationError } from '../../lib/errors.js'
 import { SYMBOL_WORKER_SCRIPT } from '../swift-templates.js'
+import { resolveSwiftBinary } from '../swift-binary.js'
 
 export async function spawnSymbolWorker({ scope, logger }) {
   // Per-worker mkdtemp staging dir so the Swift script lives at an
@@ -20,7 +21,7 @@ export async function spawnSymbolWorker({ scope, logger }) {
   const stagingDir = await mkdtemp(join(tmpdir(), 'apple-docs-symbol-worker-'))
   const scriptPath = join(stagingDir, 'symbol-worker.swift')
   await Bun.write(scriptPath, SYMBOL_WORKER_SCRIPT)
-  const proc = Bun.spawn(['swift', scriptPath, scope], {
+  const proc = Bun.spawn([resolveSwiftBinary(), scriptPath, scope], {
     stdout: 'pipe',
     stderr: 'pipe',
     stdin: 'pipe',

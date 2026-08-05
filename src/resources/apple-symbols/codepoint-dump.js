@@ -27,6 +27,7 @@ import { ValidationError } from '../../lib/errors.js'
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { resolveSwiftBinary } from '../swift-binary.js'
 
 const PUA_RANGES = Object.freeze([
   [0xe000, 0xf8ff],
@@ -344,7 +345,7 @@ async function defaultSpawn({ fontPath, metadataDir, appPath = DEFAULT_APP_PATH,
   logger?.debug?.(`spawning codepoint worker against ${fontPath} (app=${appPath})`)
   const proc = Bun.spawn(
     [
-      'swift',
+      resolveSwiftBinary(),
       '-I', stageDir,
       '-F', stageDir,
       '-framework', 'SFSymbolsShared',

@@ -19,6 +19,7 @@ import {
 import { isLikelySfnt } from './sfnt.js'
 import { assertFontPathContained } from './safe-font-path.js'
 import { FONT_TEXT_SCRIPT } from '../swift-templates.js'
+import { resolveSwiftBinary } from '../swift-binary.js'
 import { NotFoundError, ValidationError } from '../../lib/errors.js'
 
 const ENGINE_ENV = 'APPLE_DOCS_FONT_RENDERER'
@@ -152,7 +153,7 @@ async function renderFontTextSvgCurves({ fontPath, text, pointSize }) {
   await Bun.write(scriptPath, FONT_TEXT_SCRIPT)
   try {
     const { stdout, stderr, exitCode } = await spawnWithDeadline(
-      ['swift', scriptPath, fontPath, text, String(pointSize)],
+      [resolveSwiftBinary(), scriptPath, fontPath, text, String(pointSize)],
       { deadlineMs: 10_000 },
     )
     if (exitCode !== 0) throw new ValidationError(stderr.trim() || `swift exited ${exitCode}`)
