@@ -15,9 +15,11 @@ export function fuzz(data) {
   const text = data.toString('utf8')
   const result = extractFrontmatter(text)
 
-  if (result == null || typeof result !== 'object') {
-    throw new Error(`extractFrontmatter returned ${JSON.stringify(result)}`)
-  }
+  // No explicit null/shape guard: extractFrontmatter returns an object
+  // literal on every path, so CodeQL correctly flags `result == null` as
+  // statically dead (js/comparison-between-incompatible-types). It also buys
+  // nothing — were it ever to return null, the property reads below throw a
+  // TypeError, which the fuzzer reports as a crash just the same.
   if (typeof result.body !== 'string') {
     throw new Error(`body is not a string: ${JSON.stringify(result.body)}`)
   }
