@@ -274,9 +274,9 @@ export async function snapshotBuild(opts, ctx) {
     if (existsSync(fontsExtractedDir)) {
       copyTreeFast(fontsExtractedDir, join(buildDir, 'resources', 'fonts', 'extracted'))
     }
-    // Offline query-embedding model (model2vec, ~126 MB fp32). Ships so a
-    // fresh install runs the semantic tier with no network. Absent → tier
-    // dormant (lexical-only). Static files → deterministic.
+    // Offline query-embedding model. Ships so a fresh install runs the
+    // semantic tier with no network. Absent → tier dormant (lexical-only).
+    // Static files → deterministic.
     const modelsDir = join(dataDir, 'resources', 'models')
     if (existsSync(modelsDir)) {
       copyTreeFast(modelsDir, join(buildDir, 'resources', 'models'))
@@ -288,6 +288,28 @@ export async function snapshotBuild(opts, ctx) {
         if (/(^|\/)matrix-[^/]*\.admx(\.sha256)?$/.test(rel)) {
           rmSync(join(buildDir, 'resources', 'models', rel), { force: true })
         }
+      }
+      // model2vec ships int8: replace the staged fp32 model.onnx with the
+      // deterministic `model2vec.q8` sidecar (129 MB → ~33 MB; fp32 weights
+      // barely compress under zstd so this is a near-full archive saving).
+      // Only the active model2vec spec is converted — feature-extraction
+      // models are real ONNX graphs and ship as-is. Roundtrip accuracy is
+      // pinned in model2vec-static.js (mean cosine 0.99997, 100% top-10
+      // parity); loadStaticModel2Vec prefers the sidecar automatically.
+      try {
+        const { resolveActiveSpec } = await import('../search/embedder.js')
+        const spec = resolveActiveSpec()
+        const stagedOnnx = join(buildDir, 'resources', 'models', spec.hfId, 'onnx', 'model.onnx')
+        if (spec.backend === 'model2vec' && existsSync(stagedOnnx)) {
+          const { extractEmbeddingMatrix, quantizeMatrixQ8, Q8_FILENAME } = await import('../search/model2vec-static.js')
+          const matrix = extractEmbeddingMatrix(new Uint8Array(await Bun.file(stagedOnnx).arrayBuffer()))
+          await Bun.write(join(buildDir, 'resources', 'models', spec.hfId, Q8_FILENAME), quantizeMatrixQ8(matrix))
+          rmSync(stagedOnnx, { force: true })
+          rmSync(join(buildDir, 'resources', 'models', spec.hfId, 'onnx'), { recursive: true, force: true })
+          logger.info(`Staged int8 embedding matrix (${matrix.rows}×${matrix.dims}) — dropped fp32 model.onnx from the archive.`)
+        }
+      } catch (e) {
+        logger.warn(`Model quantization skipped (shipping fp32 model.onnx): ${e.message}`)
       }
     }
 
