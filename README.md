@@ -4,7 +4,7 @@
 the terminal, browse it in your browser, and plug it into Claude, Codex,
 Cursor, or any other MCP client — fully offline once installed.
 
-One indexed corpus (~353,000 documents), three ways in:
+One indexed corpus (~393,000 documents), three ways in:
 
 - **CLI** — `apple-docs search "NavigationStack"` answers in milliseconds.
 - **MCP server** — your AI assistant cites real Apple docs instead of guessing.
@@ -27,7 +27,7 @@ bun run dev:setup    # install dependencies + link the CLI
 apple-docs setup     # download + install the latest snapshot
 ```
 
-`setup` downloads one verified archive (**1.89 GB**) and installs it in a few
+`setup` downloads one verified archive (**1.16 GB**) and installs it in a few
 minutes. After that, everything works offline:
 
 ```bash
@@ -52,6 +52,12 @@ Search takes both forms: exact symbol names and plain-English questions
 All three contain the full corpus and search identically — they only trade
 disk for read speed. Details and how to switch later:
 [`docs/configuration.md`](docs/configuration.md#storage-profiles).
+
+> Those disk figures come from the last full profile verification
+> (`snapshot-20260611`, ~353k documents). The corpus has grown since — a
+> `balanced` install of `snapshot-20260805-beta.2` measures ~11 GB — so
+> treat them as a floor and re-measure with
+> `bun scripts/verify-profiles.mjs` if the exact number matters.
 
 > Prefer a standalone binary or a production self-host? See
 > [`docs/installing.md`](docs/installing.md).
@@ -144,9 +150,13 @@ apple-docs sync          # resumable, idempotent refresh
 apple-docs sync --full   # clean rebuild
 ```
 
-`sync` also merges Xcode's offline documentation asset when one is available
-locally (USRs and a few thousand pages the public crawl can't see) — CI does
-this for every published snapshot, so installed snapshots already include it.
+`sync` runs the whole pipeline with the network features on by default:
+Apple's font DMGs, the embedding model, and Xcode's offline documentation
+asset (USRs and a few thousand pages the public crawl can't see — from a
+local Xcode install when present, else a ~650 MB cached CDN download). It
+finishes by refreshing the semantic index so newly enriched pages are
+searchable. Opt out per run with `--no-download-fonts`, `--no-fetch-models`,
+or `--no-enrich-fetch`.
 
 Build your own portable snapshot with `apple-docs snapshot build --out dist`,
 install it with `apple-docs setup --archive <path>`.

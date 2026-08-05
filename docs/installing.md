@@ -121,6 +121,10 @@ apple-docs setup
 The binary embeds everything except the corpus. `APPLE_DOCS_HOME`
 points it at a data directory (default `~/.apple-docs`).
 
+Semantic search works here too: the embedder is pure JavaScript over the
+model files `setup` fetches into the corpus, so it needs no native
+addon — the compiled binary gets the same search cascade as a Bun install.
+
 Verify:
 
 ```bash

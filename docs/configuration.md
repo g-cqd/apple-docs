@@ -24,8 +24,14 @@ serving speed. `setup` applies it in one step; there is no follow-up command.
 | `prebuilt` | ~10.5 GB | Materializes Markdown + HTML | Served from disk (fastest) |
 
 A full setup from a snapshot is **a few minutes** end to end, depending on
-download speed and system load. Measured from a local archive on Apple
-Silicon as of `snapshot-20260611` (1.89 GB download, 353,325 documents),
+download speed and system load. The timings and per-profile disk figures
+below are from the last full profile verification and have not been
+re-measured since; the corpus has grown to ~393,000 documents (and the
+archive has *shrunk* to 1.16 GB, since the embedding matrix now ships
+int8-quantized), so treat them as indicative and re-run
+`bun scripts/verify-profiles.mjs` when the exact number matters. Measured
+from a local archive on Apple Silicon as of `snapshot-20260611`
+(1.89 GB download, 353,325 documents),
 including the semantic index build: **178 s balanced**, **322 s compact**
 (body reindex + VACUUM), **304 s prebuilt** (materializes the full document
 set to Markdown + HTML — 361,823 files each). The beta snapshot of the same
@@ -125,7 +131,20 @@ prune` → periodic `apple-docs sync` stays scoped. Delete the file and
 | --- | --- | --- |
 | `APPLE_DOCS_HOME` | `~/.apple-docs` | Corpus location |
 | `APPLE_DOCS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
+| `APPLE_DOCS_LOG_STDOUT` | `0` | `1` routes `debug`/`info` to stdout and `warn`/`error` to stderr. Off by default because `mcp start` speaks JSON-RPC over stdout — set it only for HTTP daemons (see below). |
 | `APPLE_DOCS_DEBUG` | `false` | Bypass the public-output projection (raw envelopes leak through MCP/CLI/web). Local-debug only. |
+
+### Log streams
+
+By default every level goes to **stderr**. That is deliberate: `apple-docs
+mcp start` uses stdout as its JSON-RPC transport, so a log line there
+corrupts the protocol.
+
+The cost is that a long-running HTTP daemon writes its entire request log to
+whatever captures stderr. Under launchd that means the `.err.log` becomes
+the request log and real failures are buried in it. Set
+`APPLE_DOCS_LOG_STDOUT=1` for `web serve` and `mcp serve` (the reference ops
+plists do) to get the conventional split. Never set it for `mcp start`.
 
 ## Semantic search
 
@@ -174,6 +193,7 @@ requirement.
 | `APPLE_DOCS_ENRICH_FETCH` | unset | Legacy env for programmatic callers; the CLI now allows the ~650 MB Xcode-docs CDN download by default during `sync` (cached across runs; opt out with `--no-enrich-fetch`) |
 | `APPLE_DOCS_DOWNLOAD_FONTS` | unset | Legacy env for programmatic callers; the CLI now downloads font DMGs by default on `setup`/`sync` (opt out with `--no-download-fonts`) |
 | `APPLE_DOCS_SYMBOLS_OFFLINE` | `false` | Skip the live SF Symbols renderer (use bundled prerenders only) |
+| `APPLE_DOCS_SKIP_DISK_CHECK` | `0` | `1` skips the pre-extraction free-space check in `setup`. The check needs ~2× the decompressed archive (temp tar + extracted tree) and already fails open when free space cannot be read, so you should rarely need this. |
 
 The `packages` source defaults to a curated official allowlist and raw README
 fetching from `raw.githubusercontent.com`. To include the full Swift Package
