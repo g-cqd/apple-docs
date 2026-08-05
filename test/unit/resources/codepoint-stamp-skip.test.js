@@ -40,6 +40,59 @@ describe('stampSfSymbolCodepoints skip gate', () => {
   })
 })
 
+describe('stampSfSymbolCodepoints attempted-version gate', () => {
+  test('unresolvable-but-answered names are marked attempted and settle the gate', async () => {
+    const db = new DocsDatabase(':memory:')
+    db.upsertSfSymbol({ name: 'star', scope: 'public', categories: [], keywords: [], orderIndex: 0 })
+    db.upsertSfSymbol({ name: 'future.symbol', scope: 'public', categories: [], keywords: [], orderIndex: 1 })
+    const infos = []
+    const logger = { info: m => infos.push(m), warn() {}, error() {}, debug() {} }
+
+    // The worker answers both names; 'future.symbol' resolves to null
+    // (app/OS catalog version skew).
+    const result = await stampSfSymbolCodepoints(
+      {
+        fontPath: '/tmp/fake.otf',
+        metadataDir: '/tmp/fake-metadata',
+        spawn: () => createEchoProc(name => (name === 'star' ? 0xe100 : null)),
+      },
+      { db, dataDir: '/tmp/apple-docs-stamp-test', logger },
+    )
+    expect(result.stamped).toBe(1)
+    expect(result.missing).toBe(1)
+    expect(result.unanswered).toBe(0)
+    expect(infos.some(m => /not resolvable by SF Symbols\.app/.test(m))).toBe(true)
+    const row = db.db.query(
+      "SELECT codepoint, codepoint_attempted_version FROM sf_symbols WHERE name = 'future.symbol'",
+    ).get()
+    expect(row.codepoint).toBeNull()
+    expect(row.codepoint_attempted_version).toBeTruthy()
+
+    // Steady state: the settled NULL row no longer reopens the gate.
+    let spawned = 0
+    const second = await stampSfSymbolCodepoints(
+      { spawn: () => { spawned++; return createEchoProc(() => 0xe000) } },
+      { db, dataDir: '/tmp/apple-docs-stamp-test', logger },
+    )
+    expect(second.skipped).toBe(true)
+    expect(spawned).toBe(0)
+
+    // forceRefresh re-attempts settled rows.
+    const third = await stampSfSymbolCodepoints(
+      {
+        forceRefresh: true,
+        fontPath: '/tmp/fake.otf',
+        metadataDir: '/tmp/fake-metadata',
+        spawn: () => createEchoProc(() => 0xe200),
+      },
+      { db, dataDir: '/tmp/apple-docs-stamp-test', logger },
+    )
+    expect(third.stamped).toBe(2)
+    expect(db.getSfSymbol('public', 'future.symbol').codepoint).toBe(0xe200)
+    db.close()
+  })
+})
+
 describe('stampSfSymbolCodepoints resume + partial coverage', () => {
   function seedCatalog(db) {
     db.upsertSfSymbol({ name: 'star', scope: 'public', categories: [], keywords: [], orderIndex: 0 })
@@ -131,7 +184,8 @@ describe('stampSfSymbolCodepoints resume + partial coverage', () => {
     )
     expect(result.stamped).toBe(1)
     expect(result.missing).toBe(1)
-    expect(warnings.some(w => /still lack a codepoint/.test(w))).toBe(true)
+    expect(result.unanswered).toBe(1)
+    expect(warnings.some(w => /dump ended early/.test(w))).toBe(true)
     // The unanswered symbol stays NULL so the next sync re-requests it.
     const nulls = db.db.query(
       "SELECT name FROM sf_symbols WHERE scope = 'public' AND codepoint IS NULL",

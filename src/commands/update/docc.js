@@ -27,8 +27,16 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
   const counts = { newCount: 0, modCount: 0, unchangedCount: 0, delCount: 0, errCount: 0, skippedCount: 0 }
   const rootSlugById = new Map(db.getRoots().map(root => [root.id, root.slug]))
 
-  const { pages, skipped, commitIndexEtags } = sourceType === 'apple-docc' && allPages.length > 0
-    ? await gateByRootIndex(allPages, rootSlugById, ctx)
+  // The index pass runs for apple-docc even on a COLD corpus (allPages
+  // empty) and on sweep runs: seeding new pages from the per-root index is
+  // orthogonal to gating per-page checks, and a cold crawl that skipped it
+  // needed three syncs to reach full coverage (~35k index-only pages were
+  // invisible to reference walking).
+  const indexRoots = sourceType === 'apple-docc'
+    ? selectRootsForAdapter(adapter, discovery, db, requestedRoots)
+    : []
+  const { pages, skipped, commitIndexEtags } = indexRoots.length > 0
+    ? await gateByRootIndex(indexRoots, allPages, ctx)
     : { pages: allPages, skipped: 0, commitIndexEtags: null }
   counts.skippedCount = skipped
   if (skipped > 0) {
@@ -222,22 +230,29 @@ export async function updateDoccSource(adapter, discovery, requestedRoots, concu
 }
 
 /**
- * Partition pages into { pages: needs-per-page-check, skipped } using the
- * per-root index ETag. Falls back to checking everything on the periodic
- * full sweep, on `--full` runs, and for roots whose index endpoint errors
- * or is missing.
+ * Per-root index pass for apple-docc. Two orthogonal jobs:
+ *
+ *   1. SEEDING (always): conditional-GET each root's index JSON — the
+ *      authoritative page inventory — and seed unknown same-root paths into
+ *      crawl_state. Runs on cold corpora and sweep runs too: a 304 proves
+ *      the previously-seeded inventory is current, a 200 seeds the delta.
+ *
+ *   2. GATING (skipped on `--full` and the periodic sweep): partition the
+ *      tracked pages into { needs-per-page-check, skipped } using the index
+ *      ETag with a content-hash fallback (CDN edges rotate ETags over
+ *      identical bodies).
  */
-async function gateByRootIndex(allPages, rootSlugById, ctx) {
+async function gateByRootIndex(indexRoots, allPages, ctx) {
   const { db, logger } = ctx
 
   const sweepKey = 'docc_full_sweep_at'
   const lastSweep = db.db.query('SELECT value FROM schema_meta WHERE key = ?').get(sweepKey)?.value ?? null
   const sweepDue = !lastSweep || (Date.now() - Date.parse(lastSweep)) > FULL_SWEEP_INTERVAL_MS
-  if (ctx.fullSync || sweepDue) {
+  const checkAll = !!ctx.fullSync || sweepDue
+  if (checkAll) {
     // Stamp at sweep start so an interrupted sweep re-runs next time.
     db.db.run('INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)', [sweepKey, new Date().toISOString()])
     logger.info(ctx.fullSync ? 'Full sweep: --full run checks every page' : 'Full sweep: periodic per-page check due')
-    return { pages: allPages, skipped: 0, commitIndexEtags: null }
   }
 
   const pagesByRoot = new Map()
@@ -257,47 +272,39 @@ async function gateByRootIndex(allPages, rootSlugById, ctx) {
   let skipped = 0
   let seeded = 0
   let etagRotations = 0
-  const rootIds = [...pagesByRoot.keys()]
-  await pool(rootIds, 16, async (rootId) => {
-    const slug = rootSlugById.get(rootId)
-    const rootPages = pagesByRoot.get(rootId)
-    if (!slug) { toCheck.push(...rootPages); return }
-    const storedEtag = getEtagStmt.get(rootId)?.index_etag ?? null
-    // Conditional GET (not HEAD): when the index changed, its body is the
-    // authoritative page inventory for the root — new pages are seeded into
-    // crawl_state from it directly, closing the discovery gap for pages
-    // that no modified parent happens to link.
-    const result = await fetchRootIndex(slug, storedEtag, ctx.rateLimiter)
+  await pool(indexRoots, 16, async (root) => {
+    const rootPages = pagesByRoot.get(root.id) ?? []
+    const takePages = () => { if (!checkAll) toCheck.push(...rootPages) }
+    const storedEtag = getEtagStmt.get(root.id)?.index_etag ?? null
+    const result = await fetchRootIndex(root.slug, storedEtag, ctx.rateLimiter)
     if (result.status === 'unchanged' && storedEtag) {
-      skipped += rootPages.length
+      // 304: inventory unchanged since the last 200 (which already seeded
+      // its content) — nothing new to seed, and gated runs skip the pages.
+      if (!checkAll) skipped += rootPages.length
       return
     }
     if (result.status === 'modified' && result.json) {
-      // CDN edges rotate ETags without content changes (observed: ~70% of
-      // roots re-checked 40 minutes apart with byte-identical indexes).
-      // Hash the body as the authoritative change signal; a rotated ETag
-      // over identical content still skips the root's page checks.
-      const hashKey = `root_index_hash:${slug}`
+      const hashKey = `root_index_hash:${root.slug}`
       const bodyHash = sha256(JSON.stringify(result.json))
       const storedHash = getHashStmt.get(hashKey)?.value ?? null
       if (storedHash === bodyHash) {
+        // Rotated ETag over identical content: adopt the fresh ETag now
+        // (nothing goes unchecked — the content is proven unchanged).
         etagRotations++
-        skipped += rootPages.length
-        // Safe to adopt the fresh ETag immediately: content is unchanged,
-        // so nothing under this root goes unchecked.
-        if (result.etag) setEtagStmt.run(result.etag, rootId)
+        if (!checkAll) skipped += rootPages.length
+        if (result.etag) setEtagStmt.run(result.etag, root.id)
         return
       }
-      seeded += seedNewPagesFromIndex(db, slug, result.json, rootPages)
-      if (result.etag) pendingEtags.push({ rootId, etag: result.etag, hashKey, bodyHash })
-      toCheck.push(...rootPages)
+      seeded += seedNewPagesFromIndex(db, root.slug, result.json, rootPages)
+      if (result.etag) pendingEtags.push({ rootId: root.id, etag: result.etag, hashKey, bodyHash })
+      takePages()
       return
     }
     // Missing index (404), first sight (no stored etag), or error: fall
-    // through to per-page checks. The fresh etag is committed by the caller
-    // only after the page checks actually ran.
-    if (result.etag) pendingEtags.push({ rootId, etag: result.etag })
-    toCheck.push(...rootPages)
+    // through to per-page checks on gated runs. The fresh etag is committed
+    // by the caller only after the page checks actually ran.
+    if (result.etag) pendingEtags.push({ rootId: root.id, etag: result.etag })
+    takePages()
   })
 
   if (seeded > 0) logger.info(`Index diff: seeded ${seeded} new pages into the crawl queue`)
@@ -309,7 +316,7 @@ async function gateByRootIndex(allPages, rootSlugById, ctx) {
       if (hashKey && bodyHash) setHashStmt.run(hashKey, bodyHash)
     }
   }
-  return { pages: toCheck, skipped, commitIndexEtags }
+  return { pages: checkAll ? allPages : toCheck, skipped, commitIndexEtags }
 }
 
 /**

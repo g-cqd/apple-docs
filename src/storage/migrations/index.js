@@ -41,6 +41,7 @@ import { up as v27Up } from './v27-sf-symbols-render-unsupported.js'
 import { up as v28Up } from './v28-sf-symbols-unsupported-variants.js'
 import { up as v29Up } from './v29-fts-triggers-and-hot-indexes.js'
 import { up as v30Up } from './v30-trigram-vocab-and-role-index.js'
+import { up as v31Up } from './v31-codepoint-attempted-version.js'
 
 export const MIGRATIONS = Object.freeze([
   { version: 1, up: v1Up },
@@ -73,6 +74,7 @@ export const MIGRATIONS = Object.freeze([
   { version: 28, up: v28Up },
   { version: 29, up: v29Up },
   { version: 30, up: v30Up },
+  { version: 31, up: v31Up },
 ])
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version

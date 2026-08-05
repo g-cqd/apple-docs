@@ -74,8 +74,8 @@ function makeEnv({ sweepFresh = true } = {}) {
   return { db, root, adapter, ctx, checkedPaths }
 }
 
-const run = (adapter, ctx) =>
-  updateDoccSource(adapter, { keys: [], roots: [] }, null, 4, 1, new Semaphore(4), ctx)
+const run = (adapter, ctx, root) =>
+  updateDoccSource(adapter, { keys: [], roots: root ? [root] : [] }, null, 4, 1, new Semaphore(4), ctx)
 
 describe('updateDoccSource index gate', () => {
   beforeEach(() => {
@@ -89,7 +89,7 @@ describe('updateDoccSource index gate', () => {
     const { db, root, adapter, ctx, checkedPaths } = makeEnv()
     db.db.run('UPDATE roots SET index_etag = ? WHERE id = ?', [state.indexEtag, root.id])
 
-    const counts = await run(adapter, ctx)
+    const counts = await run(adapter, ctx, root)
 
     expect(checkedPaths).toEqual([])
     expect(counts.skippedCount).toBe(1)
@@ -100,7 +100,7 @@ describe('updateDoccSource index gate', () => {
   test('checks pages and stores the ETag on first sight (no stored ETag)', async () => {
     const { db, root, adapter, ctx, checkedPaths } = makeEnv()
 
-    const counts = await run(adapter, ctx)
+    const counts = await run(adapter, ctx, root)
 
     expect(checkedPaths).toEqual(['swiftui/view'])
     expect(counts.skippedCount).toBe(0)
@@ -129,7 +129,7 @@ describe('updateDoccSource index gate', () => {
       },
     }
 
-    await run(adapter, ctx)
+    await run(adapter, ctx, root)
 
     expect(checkedPaths).toEqual(['swiftui/view'])
     // The unknown same-root page was seeded; the tracked page and the
@@ -141,10 +141,10 @@ describe('updateDoccSource index gate', () => {
   })
 
   test('falls back to per-page checks when the index endpoint is missing (404)', async () => {
-    const { db, adapter, ctx, checkedPaths } = makeEnv()
+    const { db, root, adapter, ctx, checkedPaths } = makeEnv()
     state.indexStatus = 404
 
-    const counts = await run(adapter, ctx)
+    const counts = await run(adapter, ctx, root)
 
     expect(checkedPaths).toEqual(['swiftui/view'])
     expect(counts.skippedCount).toBe(0)
@@ -155,11 +155,12 @@ describe('updateDoccSource index gate', () => {
     const { db, root, adapter, ctx, checkedPaths } = makeEnv({ sweepFresh: false })
     db.db.run('UPDATE roots SET index_etag = ? WHERE id = ?', [state.indexEtag, root.id])
 
-    await run(adapter, ctx)
+    await run(adapter, ctx, root)
 
     expect(checkedPaths).toEqual(['swiftui/view'])
-    // No index request at all on a sweep.
-    expect(state.hits).toEqual([])
+    // Sweeps still run the index pass (seeding is orthogonal to gating);
+    // the matching ETag makes it a cheap 304.
+    expect(state.hits).toContain('/index/swiftui')
     // The sweep stamped itself at start.
     expect(db.db.query("SELECT value FROM schema_meta WHERE key = 'docc_full_sweep_at'").get()).toBeTruthy()
     db.close()
@@ -170,10 +171,46 @@ describe('updateDoccSource index gate', () => {
     db.db.run('UPDATE roots SET index_etag = ? WHERE id = ?', [state.indexEtag, root.id])
     ctx.fullSync = true
 
-    await run(adapter, ctx)
+    await run(adapter, ctx, root)
 
     expect(checkedPaths).toEqual(['swiftui/view'])
-    expect(state.hits).toEqual([])
+    expect(state.hits).toContain('/index/swiftui')
+    db.close()
+  })
+
+  test('cold corpus (no pages yet) still seeds the crawl queue from the index', async () => {
+    const db = new DocsDatabase(':memory:')
+    db.upsertRoot('swiftui', 'SwiftUI', 'framework', 'technologies')
+    const root = db.getRootBySlug('swiftui')
+    state.indexBody = {
+      interfaceLanguages: {
+        swift: [
+          { path: '/documentation/SwiftUI/View', title: 'View', type: 'symbol' },
+          { path: '/documentation/SwiftUI/Text', title: 'Text', type: 'symbol' },
+        ],
+      },
+    }
+    const adapter = {
+      constructor: { type: 'apple-docc', displayName: 'Apple Developer Documentation', syncMode: 'crawl' },
+      async check() { return { status: 'unchanged' } },
+    }
+    const ctx = {
+      db,
+      dataDir: '/tmp/apple-docs-gate-test',
+      logger: noopLogger,
+      rateLimiter: { rate: 100, async acquire() {} },
+      // Cold syncs run with --full: the sweep branch must not suppress seeding.
+      fullSync: true,
+    }
+    // Seed a pending row so the new-root crawl branch (which would hit the
+    // network for page fetches) is skipped by its pending>0 filter.
+    db.setCrawlState('swiftui', 'processed', 'swiftui', 0)
+
+    await run(adapter, ctx, root)
+
+    const pending = db.getPendingCrawl('swiftui', 10).map(r => r.path)
+    expect(pending).toContain('swiftui/view')
+    expect(pending).toContain('swiftui/text')
     db.close()
   })
 })
