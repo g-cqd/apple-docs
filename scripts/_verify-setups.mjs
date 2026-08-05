@@ -19,7 +19,7 @@
 import { existsSync, mkdirSync, rmSync, mkdtempSync } from 'node:fs'
 import { writeFileSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir, homedir } from 'node:os'
+import { homedir } from 'node:os'
 
 const ROOT = join(import.meta.dir, '..')
 const CLI = join(ROOT, 'cli.js')

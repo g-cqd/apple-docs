@@ -270,15 +270,18 @@ export async function ensureSfSymbolsApp(opts) {
     installedAt: new Date().toISOString(),
   }
   await mkdir(cacheRoot, { recursive: true })
-  // Create-exclusive + atomic rename so a hostile pre-placed symlink at
-  // manifestPath cannot redirect the write (CodeQL js/insecure-temporary-file).
-  const staging = join(cacheRoot, `.manifest.${process.pid}.${Date.now()}.tmp`)
+  // Stage in a mkdtemp dir, then rename into place. A `pid.timestamp` name
+  // is predictable, so a pre-placed symlink could redirect the write — `wx`
+  // closes the race but not the prediction (CodeQL js/insecure-temporary-file).
+  // mkdtemp is kernel-random and mode 0700, so neither the file nor its
+  // parent is guessable.
+  const stagingDir = await mkdtemp(join(cacheRoot, '.manifest-'))
+  const staging = join(stagingDir, 'manifest.json')
   try {
     await writeFile(staging, JSON.stringify(manifest, null, 2), { flag: 'wx', mode: 0o644 })
     await rename(staging, manifestPath)
-  } catch (err) {
-    await rm(staging, { force: true }).catch(() => {})
-    throw err
+  } finally {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => {})
   }
 
   logger?.info?.(`SF Symbols.app ${installedVersion} installed at ${installedAppPath}`)
