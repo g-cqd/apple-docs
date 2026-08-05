@@ -6,7 +6,7 @@ import { showHelp } from './src/cli/help.js'
 import { formatSearchResults, formatSearchRead, formatLookup, formatFrameworks, formatBrowse, formatStatus, formatSync, formatSetup, formatWebBuild, formatWebDeploy, formatTaxonomy } from './src/cli/formatter.js'
 import { DocsDatabase } from './src/storage/database.js'
 import { createLogger } from './src/lib/logger.js'
-import { createHostBucketedLimiter } from './src/lib/per-host-rate-limiter.js'
+import { createRateLimiter, metricsOpts, parseOptionalInt } from './src/cli/runtime.js'
 
 import { search } from './src/commands/search.js'
 import { lookup } from './src/commands/lookup.js'
@@ -24,18 +24,6 @@ import { installCrashHandlers, lifecycle } from './src/lib/lifecycle.js'
 
 const { command, subcommand, positional, flags } = parseArgs(process.argv)
 
-function parseOptionalInt(value) {
-  if (value == null) return undefined
-  const n = Number.parseInt(value, 10)
-  return Number.isFinite(n) ? n : undefined
-}
-
-// metrics-port/host on `mcp serve` + `web serve`. Spread into opts.
-function metricsOpts(flags) {
-  const p = parseOptionalInt(flags['metrics-port'])
-  return { ...(p != null && { metricsPort: p }), ...(flags['metrics-host'] && { metricsHost: flags['metrics-host'] }) }
-}
-
 if (flags.help || !command) {
   showHelp(command)
   process.exit(flags.help ? 0 : (command ? 0 : 1))
@@ -44,19 +32,7 @@ if (flags.help || !command) {
 const dataDir = flags.home ?? config.APPLE_DOCS_HOME
 const logLevel = flags.verbose ? 'debug' : config.APPLE_DOCS_LOG_LEVEL
 const logger = createLogger(logLevel)
-const isCrawlCommand = command === 'sync'
-const defaultRate = isCrawlCommand ? 500 : 5
-const defaultBurst = isCrawlCommand ? 500 : 2
-const rate = flags.rate != null ? Number.parseInt(flags.rate, 10) : (config.APPLE_DOCS_RATE ?? defaultRate)
-const burst = Math.max(rate, config.APPLE_DOCS_BURST ?? defaultBurst)
-// Per-host buckets only — no `primary` global bucket. A primary equal to a
-// single host's rate serialized every host (Apple CDN, GitHub, swift.org)
-// through one token stream: while the apple-docc check phase saturated it,
-// every other adapter's bucket sat idle, and the token dispenser's ~2ms
-// setTimeout granularity capped the whole sync at ~440 req/s.
-const rateLimiter = createHostBucketedLimiter({
-  defaults: { rate, burst },
-})
+const { rateLimiter } = createRateLimiter({ command, flags })
 
 const db = new DocsDatabase(join(dataDir, 'apple-docs.db'))
 const ctx = { db, dataDir, rateLimiter, logger }
