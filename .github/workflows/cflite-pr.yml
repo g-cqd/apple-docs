@@ -28,25 +28,26 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        sanitizer: [address, undefined]
     steps:
-      - name: Build fuzzers (${{ matrix.sanitizer }})
+      # sanitizer: none — JavaScript has no ASan/UBSan equivalent here, and
+      # the OSS-Fuzz builder rejects anything else outright ("JavaScript
+      # projects cannot be fuzzed with sanitizers"). Jazzer.js catches
+      # uncaught exceptions and our own assertion failures instead, which is
+      # what the targets are written against.
+      - name: Build fuzzers
         uses: google/clusterfuzzlite/actions/build_fuzzers@82652fb49e77bc29c35da1167bb286e93c6bcc05 # v1
         with:
           language: javascript
-          sanitizer: ${{ matrix.sanitizer }}
+          sanitizer: none
           # Needed so the action can diff against the base commit and only
           # report crashes the PR introduces.
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run fuzzers (${{ matrix.sanitizer }})
+      - name: Run fuzzers
         uses: google/clusterfuzzlite/actions/run_fuzzers@82652fb49e77bc29c35da1167bb286e93c6bcc05 # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 300
           mode: 'code-change'
-          sanitizer: ${{ matrix.sanitizer }}
+          sanitizer: none
           output-sarif: true
