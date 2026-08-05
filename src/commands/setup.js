@@ -15,6 +15,7 @@ import {
   formatSize,
   USER_AGENT,
 } from './setup/helpers.js'
+import { assertEnoughDiskForExtract } from './setup/disk-space.js'
 import { getProfile, setProfile } from '../storage/profiles.js'
 import { resolveStorageProfile } from './setup/profile.js'
 
@@ -204,6 +205,15 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
   try {
     if (db.getStats().totalPages > 0) priorProfile = getProfile(db)
   } catch { /* fresh or unreadable db — no profile to inherit */ }
+
+  // Disk preflight BEFORE anything destructive. The wipe below is not
+  // recoverable — a check that runs after it turns "not enough room" into
+  // "no corpus at all", which is what took the deployment host down: the
+  // guard aborted a --force install that had already deleted the old
+  // corpus, leaving the daemons serving an empty database. The probe fails
+  // open when free space can't be read, so it can only stop an install it
+  // is sure about.
+  if (isZst) assertEnoughDiskForExtract(archivePath, dataDir, { logger })
 
   db.close()
 

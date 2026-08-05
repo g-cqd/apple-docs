@@ -1,10 +1,11 @@
 // Small helpers shared by `apple-docs setup` — extracted from
 // src/commands/setup.js to keep that file under the 400-line ceiling.
 
-import { closeSync, openSync, readSync, rmSync, statfsSync } from 'node:fs'
+import { rmSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { HttpError, NotFoundError, ValidationError } from '../../lib/errors.js'
 import { getGitHubToken } from '../../lib/github.js'
+import { assertEnoughDiskForExtract, zstdContentSize } from './disk-space.js'
 
 const GITHUB_REPO = 'g-cqd/apple-docs'
 const USER_AGENT = 'apple-docs/2.0'
@@ -47,33 +48,9 @@ export function stripTarGz(p) {
  * zstd (`DecompressionStream`) and pipe plain tar to `tar -xf -`. Streaming
  * keeps memory bounded on a multi-GB archive; no system zstd required.
  */
-/**
- * Exact decompressed size from a zstd frame header (Frame_Content_Size),
- * or null when the frame doesn't record it. The snapshot builder compresses
- * a file input, so the CLI always writes FCS. RFC 8878 §3.1.1.1.
- */
-export function zstdContentSize(archivePath) {
-  try {
-    const fd = openSync(archivePath, 'r')
-    const head = Buffer.alloc(18)
-    const read = readSync(fd, head, 0, 18, 0)
-    closeSync(fd)
-    if (read < 6 || head.readUInt32LE(0) !== 0xfd2fb528) return null
-    const descriptor = head[4]
-    const fcsFlag = descriptor >> 6
-    const singleSegment = (descriptor >> 5) & 1
-    const dictIdFlag = descriptor & 3
-    let offset = 5
-    if (!singleSegment) offset += 1 // Window_Descriptor
-    offset += [0, 1, 2, 4][dictIdFlag]
-    if (fcsFlag === 0) return singleSegment ? head[offset] : null
-    if (fcsFlag === 1) return head.readUInt16LE(offset) + 256
-    if (fcsFlag === 2) return head.readUInt32LE(offset)
-    return Number(head.readBigUInt64LE(offset))
-  } catch {
-    return null
-  }
-}
+// zstdContentSize + the free-space probe live in ./disk-space.js.
+// Re-exported for callers that imported them from here.
+export { zstdContentSize }
 
 export async function extractTarZst(archivePath, dataDir) {
   // Decompress to a temp `.tar`, then extract from the real file. Streaming the
@@ -87,26 +64,7 @@ export async function extractTarZst(archivePath, dataDir) {
   // extracted tree — ~2× the decompressed size (~11 GB tar → ~22 GB peak on
   // the full snapshot). Failing here, before writing anything, beats dying
   // mid-extract with a partial tree ("No space left on device", observed).
-  if (process.env.APPLE_DOCS_SKIP_DISK_CHECK !== '1') {
-    const contentSize = zstdContentSize(archivePath)
-    const needed = contentSize != null
-      ? Math.ceil(contentSize * 2.05)
-      : Bun.file(archivePath).size * 12 // corpus compresses ~8.6×; margin for tar+tree
-    try {
-      const stat = statfsSync(dataDir)
-      const available = stat.bavail * stat.bsize
-      if (available < needed) {
-        throw new ValidationError(
-          `Not enough disk space to extract the snapshot: need ~${(needed / 1e9).toFixed(1)} GB free ` +
-          `(temp tar + extracted tree), have ${(available / 1e9).toFixed(1)} GB at ${dataDir}. ` +
-          'Free up space, choose a different APPLE_DOCS_HOME, or set APPLE_DOCS_SKIP_DISK_CHECK=1 to override.',
-        )
-      }
-    } catch (err) {
-      if (err instanceof ValidationError) throw err
-      // statfs unavailable on this platform — proceed without the guard.
-    }
-  }
+  assertEnoughDiskForExtract(archivePath, dataDir)
 
   const tarPath = join(dataDir, `.setup-extract-${process.pid}-${Date.now()}.tar`)
   try {
