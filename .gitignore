@@ -56,3 +56,13 @@ docs/.vitepress/cache/
 # Claude Code working tree (agent worktrees, plans, etc.)
 .claude/
 dist-beta/
+
+# Fuzzing artifacts — libFuzzer reproducers and corpora are run-local.
+# A crash-* file is a bug report, not something to commit; copy the input
+# into a unit test instead so the regression is pinned by the suite.
+crash-*
+leak-*
+timeout-*
+oom-*
+slow-unit-*
+fuzz/corpus/
