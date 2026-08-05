@@ -4,7 +4,11 @@ import {
 } from '../lib/fetch-with-retry.js'
 import { NotFoundError } from '../lib/errors.js'
 
-const TUTORIALS_BASE = process.env.APPLE_DOCS_API_BASE ?? 'https://developer.apple.com/tutorials/data'
+// Resolved per call, not at module load: tests point APPLE_DOCS_API_BASE at
+// a local server, and a module-load snapshot made that dependent on which
+// test file imported this module first (full-suite runs then hit the real
+// Apple API and flaked).
+const TUTORIALS_BASE = () => process.env.APPLE_DOCS_API_BASE ?? 'https://developer.apple.com/tutorials/data'
 const USER_AGENT = 'apple-docs-mcp/1.0'
 const DEFAULT_TIMEOUT = Number.parseInt(process.env.APPLE_DOCS_TIMEOUT ?? '30000', 10)
 const MAX_RETRIES = 3
@@ -16,9 +20,9 @@ const MAX_RETRIES = 3
  */
 function resolveUrl(path) {
   if (path.startsWith('design/')) {
-    return `${TUTORIALS_BASE}/${path}.json`
+    return `${TUTORIALS_BASE()}/${path}.json`
   }
-  return `${TUTORIALS_BASE}/documentation/${path}.json`
+  return `${TUTORIALS_BASE()}/documentation/${path}.json`
 }
 
 const defaultOpts = {
@@ -101,7 +105,7 @@ export async function fetchDocPageIfChanged(path, previousState, rateLimiter) {
  * >}
  */
 export async function fetchRootIndex(slug, previousEtag, rateLimiter) {
-  const url = `${TUTORIALS_BASE}/index/${slug}`
+  const url = `${TUTORIALS_BASE()}/index/${slug}`
   try {
     const result = await _fetchWithRetry(url, rateLimiter, {
       ...defaultOpts,
@@ -120,7 +124,7 @@ export async function fetchRootIndex(slug, previousEtag, rateLimiter) {
  * Fetch the technologies index to discover documentation roots.
  */
 export async function fetchTechnologies(rateLimiter) {
-  const url = `${TUTORIALS_BASE}/documentation/technologies.json`
+  const url = `${TUTORIALS_BASE()}/documentation/technologies.json`
   const { data, etag, lastModified } = await _fetchWithRetry(url, rateLimiter, defaultOpts)
   return { json: data, etag, lastModified }
 }
