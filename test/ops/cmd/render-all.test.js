@@ -92,11 +92,21 @@ describe('resolveOutput', () => {
     expect(resolveOutput(`${OPS}/caddy/Caddyfile.tpl`, OPS, {})).toBe(`${OPS}/caddy/Caddyfile`)
     expect(resolveOutput(`${OPS}/cloudflared/config.yml.tpl`, OPS, {})).toBe(`${OPS}/cloudflared/config.yml`)
   })
-  test('unknown launchd template falls back to default + warns', () => {
+  test('unknown launchd PLIST template falls back to default + warns', () => {
     const log = captureLogger()
     const out = resolveOutput(`${OPS}/launchd/something-new.plist.tpl`, OPS, {}, log)
     expect(out).toBe(`${OPS}/launchd/something-new.plist`)
     expect(log.chunks.some(c => c.kind === 'warn' && c.m.includes('unknown launchd'))).toBe(true)
+  })
+  test('non-plist launchd templates drop .tpl silently', () => {
+    // Only plists carry a label mapping; the sudoers and newsyslog files are
+    // named literally. Warning on them made every `render-all` noisy.
+    for (const name of ['newsyslog.apple-docs.conf', 'sudoers.apple-docs-launchctl']) {
+      const log = captureLogger()
+      const out = resolveOutput(`${OPS}/launchd/${name}.tpl`, OPS, {}, log)
+      expect(out).toBe(`${OPS}/launchd/${name}`)
+      expect(log.chunks.some(c => c.kind === 'warn')).toBe(false)
+    }
   })
 })
 

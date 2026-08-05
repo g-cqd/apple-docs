@@ -2,8 +2,19 @@ name: CodeQL
 
 # A17: GitHub-hosted SAST. Runs on every PR + push to main, plus a
 # weekly cron so a newly-published advisory against an already-merged
-# pattern surfaces without a code change. The matrix expands when we
-# add languages CodeQL covers (e.g. Swift in src/resources/apple-symbols/).
+# pattern surfaces without a code change.
+#
+# JS/TS only, deliberately. The matrix used to carry a `swift` leg; Swift is
+# a compiled language for CodeQL, so that job had to build the package, and
+# the only Swift on main is the RFC-0001 experiment under
+# rfcs/0001-swift-native-transition/p0/experiments/swift. Building it blew
+# past the 1-hour job cap and was cancelled (run 30183479244), failing the
+# workflow on every push while analysing nothing that ships.
+#
+# Re-add a swift leg only with a bounded build of real shipped Swift. The
+# Swift this project actually runs lives as template strings in
+# src/resources/swift-templates.js and is executed with `swift <script>` —
+# CodeQL cannot analyse it as source either way.
 
 on:
   push:

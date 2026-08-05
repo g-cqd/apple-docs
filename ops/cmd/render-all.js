@@ -97,12 +97,18 @@ export function resolveOutput(tpl, opsDir, vars, log) {
   const launchdDir = join(opsDir, 'launchd')
   const base = tpl.slice(tpl.lastIndexOf('/') + 1)
   const dir = tpl.slice(0, tpl.lastIndexOf('/'))
-  if (dir === launchdDir && base !== 'sudoers.apple-docs-launchctl.tpl') {
+  // Only *plist* templates need a label mapping — they render to
+  // `<LABEL>.plist`, and an unmapped one would silently land at the wrong
+  // filename, so that case warns. Everything else under launchd/ (the
+  // sudoers drop-in, the newsyslog config) is named literally and just
+  // drops `.tpl`; gating on the suffix keeps this from having to carry a
+  // hardcoded exception per non-plist file.
+  if (dir === launchdDir && base.endsWith('.plist.tpl')) {
     const labelVar = LAUNCHD_NAME_MAP[base]
     if (labelVar) {
       return join(dir, `${vars[labelVar]}.plist`)
     }
-    log?.warn?.(`render-all: unknown launchd template ${base} — rendering at default path`)
+    log?.warn?.(`render-all: unknown launchd plist template ${base} — rendering at default path`)
   }
   return tpl.replace(/\.tpl$/, '')
 }

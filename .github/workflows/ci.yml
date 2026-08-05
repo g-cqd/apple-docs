@@ -16,6 +16,12 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    # Every job gets a timeout. Without one a hung step runs to GitHub's
+    # 6-hour default while holding the `ci-<ref>` concurrency group, so every
+    # later push queues behind it and the branch silently stops being tested.
+    # Observed: `bun test --coverage --isolate` wedged on ubuntu for over an
+    # hour and stalled three subsequent runs.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
@@ -61,6 +67,9 @@ jobs:
         # the snapshot workflow uses.
         os: [ubuntu-latest, macos-26]
     runs-on: ${{ matrix.os }}
+    # Normal run is ~1 min on ubuntu and ~1.5 min on macOS; 20 leaves room
+    # for a cold cache without letting a wedged run hold the group.
+    timeout-minutes: 20
     env:
       APPLE_DOCS_NO_GIT_AUTH: '1'
     steps:
