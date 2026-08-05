@@ -1,0 +1,82 @@
+name: Fuzz
+
+# Runs the Jazzer.js targets in fuzz/ against the parsers that sit on a
+# trust boundary. See fuzz/README.md for the property each target asserts.
+#
+# Why not ClusterFuzzLite: its two layers contradict each other for
+# JavaScript. OSS-Fuzz's `compile` refuses to build a JS project with any
+# sanitizer ("JavaScript projects cannot be fuzzed with sanitizers"), while
+# CIFuzz's config validator rejects `none` — "Must be one of: ['address',
+# 'memory', 'undefined', 'coverage']". Every permitted value fails one side
+# or the other, so a CFL integration here cannot build at all. Jazzer.js is
+# the engine CFL would have used; this runs it directly.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'fuzz/**'
+      - '.github/workflows/fuzz.yml'
+  schedule:
+    # Sundays 04:00 UTC — ahead of the 06:00 snapshot build so the two
+    # don't contend for runners.
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [fuzz-storage-key, fuzz-tar-line, fuzz-zstd-header, fuzz-markdown]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+
+      # Corpus persists across runs so coverage compounds instead of
+      # restarting cold every time. restore-keys lets a PR seed from the
+      # last scheduled run's corpus.
+      - name: Restore corpus
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+
+      - name: Fuzz ${{ matrix.target }}
+        env:
+          # 60s per target on a PR keeps the gate quick; the weekly run digs
+          # for 10 minutes and hands its corpus to subsequent PRs.
+          DURATION: ${{ github.event_name == 'pull_request' && '60' || '600' }}
+        run: |
+          mkdir -p "fuzz/corpus/${{ matrix.target }}"
+          bun x jazzer "fuzz/${{ matrix.target }}.js" \
+            "fuzz/corpus/${{ matrix.target }}" \
+            --sync \
+            -- -max_total_time="$DURATION" -print_final_stats=1
+
+      # A crash file IS the bug report — keep it even though the step above
+      # already failed the job.
+      - name: Upload crash reproducers
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: |
+            crash-*
+            oom-*
+            timeout-*
+            leak-*
+          if-no-files-found: ignore
+          retention-days: 30
