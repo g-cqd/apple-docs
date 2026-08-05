@@ -14,8 +14,27 @@ const REDACT_KEY_RE = /token|secret|authorization|cookie|password|api[_-]?key|be
  */
 const REDACT_MAX_DEPTH = 8
 
-export function createLogger(level = process.env.APPLE_DOCS_LOG_LEVEL || 'info') {
+/**
+ * Everything goes to stderr by DEFAULT, and that default is load-bearing:
+ * `apple-docs mcp start` speaks JSON-RPC over stdout, so a stray log line
+ * there corrupts the protocol stream.
+ *
+ * The cost is that a long-lived HTTP daemon writes its entire request log to
+ * the "error" file. On the reference deployment that produced a 199 MB
+ * apple-docs-mcp.err.log consisting almost entirely of `info` request lines,
+ * with an empty .log beside it — real failures were invisible in the noise.
+ *
+ * `APPLE_DOCS_LOG_STDOUT=1` opts into the conventional split: debug/info to
+ * stdout, warn/error to stderr. Set it only where stdout is not a protocol
+ * channel — the ops launchd templates set it for the web and MCP *HTTP*
+ * daemons, never for the stdio server.
+ *
+ * @param {string} [level]
+ * @param {{ splitStreams?: boolean }} [opts]
+ */
+export function createLogger(level = process.env.APPLE_DOCS_LOG_LEVEL || 'info', opts = {}) {
   const threshold = LEVELS[level] ?? LEVELS.info
+  const splitStreams = opts.splitStreams ?? process.env.APPLE_DOCS_LOG_STDOUT === '1'
 
   function buildEntry(lvl, msg, data, requestId) {
     const entry = { ts: new Date().toISOString(), level: lvl, msg }
@@ -26,7 +45,9 @@ export function createLogger(level = process.env.APPLE_DOCS_LOG_LEVEL || 'info')
 
   function emit(lvl, msg, data, requestId) {
     if (LEVELS[lvl] < threshold) return
-    process.stderr.write(`${JSON.stringify(buildEntry(lvl, msg, data, requestId))}\n`)
+    const line = `${JSON.stringify(buildEntry(lvl, msg, data, requestId))}\n`
+    const stream = splitStreams && LEVELS[lvl] < LEVELS.warn ? process.stdout : process.stderr
+    stream.write(line)
   }
 
   function makeLogger(requestId) {

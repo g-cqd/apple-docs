@@ -54,6 +54,13 @@
         <string>/Users/${USER_NAME}</string>
         <key>APPLE_DOCS_HOME</key>
         <string>${DATA_DIR}</string>
+        <!-- Split the streams: info/debug to StandardOutPath, warn/error to
+             StandardErrorPath. Without this every request line lands in the
+             .err.log (199 MB of `info` observed) and real failures are
+             invisible. Safe here because these daemons serve HTTP; the
+             stdio MCP server must NEVER set this — stdout is its protocol. -->
+        <key>APPLE_DOCS_LOG_STDOUT</key>
+        <string>1</string>
     </dict>
 </dict>
 </plist>

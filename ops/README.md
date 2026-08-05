@@ -18,7 +18,8 @@ ops/
 ├── cmd/*.js                # one file per verb (deploy, install, watchdog, …)
 ├── lib/*.js                # env loader, launchctl wrapper, http probe, …
 ├── bin/*.sh                # thin shims so launchd plists keep working
-├── launchd/*.tpl           # system LaunchDaemons (incl. weekly auto-roll) + sudoers
+├── launchd/*.tpl           # system LaunchDaemons (incl. weekly auto-roll),
+│                           #   sudoers, and the newsyslog log-rotation drop-in
 ├── caddy/Caddyfile.tpl     # reverse proxy terminating TLS on localhost
 └── cloudflared/*.tpl       # two tunnels: one for the web UI, one for MCP
 ```
@@ -71,6 +72,23 @@ plists (and any cron/CI workflows that invoke them by path) continue to work
   scratch, but a daily `rsync` of `~/.apple-docs` is cheap insurance.
 - Monitoring — `/healthz` is exposed on both the web and MCP backends;
   point your uptime tool at `https://${PUBLIC_*_HOST}/healthz`.
+
+## Logs
+
+launchd appends to `StandardOutPath` / `StandardErrorPath` forever and
+rotates nothing, so `install` also drops a newsyslog(8) config at
+`/etc/newsyslog.d/` that rotates `ops/logs/*.log` past 10 MB, keeping 7
+gzipped generations. macOS runs newsyslog hourly; no extra daemon.
+
+The web and MCP **HTTP** daemons set `APPLE_DOCS_LOG_STDOUT=1`, which routes
+`debug`/`info` to the `.log` and `warn`/`error` to the `.err.log`. Without
+it the logger sends every level to stderr and the `.err.log` becomes the
+request log — a 199 MB file of `info` lines with the real failures buried
+in it, which is exactly what this host accumulated.
+
+Never set `APPLE_DOCS_LOG_STDOUT` for `apple-docs mcp start`: the stdio
+server speaks JSON-RPC over stdout and a log line there corrupts the
+protocol stream.
 
 ## Template variables
 

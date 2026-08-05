@@ -182,6 +182,21 @@ export default async function runInstallDaemons(ctx = {}) {
     renderedSudoers, sudoersFile,
   ], { deadlineMs: 5_000 })
 
+  // 9b. newsyslog drop-in so the daemon logs stop growing without bound.
+  // launchd never rotates StandardOutPath/StandardErrorPath; before this
+  // the reference host had a 199 MB apple-docs-mcp.err.log. Installed with
+  // the same root-owned, mode-0644 discipline as the plists.
+  logger.say('=== installing newsyslog drop-in ===')
+  const renderedNewsyslog = join(env.opsDir, 'launchd', 'newsyslog.apple-docs.conf')
+  if (existsSync(renderedNewsyslog)) {
+    await runner([
+      '/usr/bin/install', '-o', 'root', '-g', 'wheel', '-m', '644',
+      renderedNewsyslog, `/etc/newsyslog.d/${sudoersStem}.conf`,
+    ], { deadlineMs: 5_000 })
+  } else {
+    logger.warn(`newsyslog template not rendered at ${renderedNewsyslog} — run \`render-all\` first; skipping log rotation`)
+  }
+
   // 10. Smoke.
   logger.say('=== waiting 8s for tunnels and services to settle ===')
   await sleep(8_000)

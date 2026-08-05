@@ -55,6 +55,13 @@
         <string>/Users/${USER_NAME}</string>
         <key>APPLE_DOCS_HOME</key>
         <string>${DATA_DIR}</string>
+        <!-- Split the streams: info/debug to StandardOutPath, warn/error to
+             StandardErrorPath. Without this every request line lands in the
+             .err.log (199 MB of `info` observed) and real failures are
+             invisible. Safe here because these daemons serve HTTP; the
+             stdio MCP server must NEVER set this — stdout is its protocol. -->
+        <key>APPLE_DOCS_LOG_STDOUT</key>
+        <string>1</string>
         <!-- Cap concurrent heavy tool calls (search_docs, read_doc, browse)
              so the Bun event loop stays responsive for initialize / ping /
              tools/list under load. With the reader pool enabled below, heavy
