@@ -4,18 +4,21 @@
     "src/**/*.js",
     "test/**/*.js",
     "scripts/**/*.js",
-    "docs/.vitepress/config.mjs"
+    "docs/.vitepress/config.mjs",
+    "fuzz/fuzz-*.js"
   ],
   "project": [
     "src/**/*.js",
     "test/**/*.js",
     "scripts/**/*.js",
     "docs/.vitepress/**/*.{js,mjs}",
-    "!test/fixtures/**"
+    "!test/fixtures/**",
+    "fuzz/**/*.js"
   ],
   "ignoreDependencies": [
     "bun-types",
     "onnxruntime-node",
-    "onnxruntime-web"
+    "onnxruntime-web",
+    "@jazzer.js/core"
   ]
 }
