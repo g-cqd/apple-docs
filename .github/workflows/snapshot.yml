@@ -192,15 +192,36 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: 'Snapshot (${{ steps.tag.outputs.tag }}, macOS ${{ steps.provenance.outputs.build_macos }})'
           body_path: dist/release-body.md
-          files: |
-            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.tar.zst
-            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.tar.zst.sha256
-            dist/apple-docs-full-${{ steps.tag.outputs.tag }}.manifest.json
-            dist/status.json
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Assets upload in a retried shell step rather than via the release
+      # action's `files:` input. The 2026-08-02 run died on a transient
+      # undici "Headers Timeout Error" mid-upload with no retry, throwing
+      # away a 70-minute build. `gh release upload --clobber` is
+      # idempotent, so retrying after a partial upload just overwrites.
+      - name: Upload snapshot assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if gh release upload "$TAG" \
+                 "dist/apple-docs-full-$TAG.tar.zst" \
+                 "dist/apple-docs-full-$TAG.tar.zst.sha256" \
+                 "dist/apple-docs-full-$TAG.manifest.json" \
+                 dist/status.json \
+                 --clobber; then
+              echo "uploaded on attempt $attempt"
+              exit 0
+            fi
+            echo "upload attempt $attempt failed; retrying in $((attempt * 20))s" >&2
+            sleep $((attempt * 20))
+          done
+          echo "::error::snapshot asset upload failed after 5 attempts"
+          exit 1
 
   # Compiled CLI binaries ride the SAME release as the snapshot. They
   # used to live in a separate `release-binaries.yml` workflow triggered
@@ -248,12 +269,23 @@ jobs:
       - name: Generate checksum
         run: shasum -a 256 ${{ matrix.name }} > ${{ matrix.name }}.sha256
 
+      # Same retry rationale as "Upload snapshot assets" above — this is
+      # the step that actually failed on 2026-08-02 (Headers Timeout Error
+      # uploading the linux-x64 binary), leaving the release without its
+      # binaries.
       - name: Attach to release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
-        with:
-          tag_name: ${{ needs.build-snapshot.outputs.tag }}
-          files: |
-            ${{ matrix.name }}
-            ${{ matrix.name }}.sha256
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.build-snapshot.outputs.tag }}
+          ASSET: ${{ matrix.name }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber; then
+              echo "uploaded on attempt $attempt"
+              exit 0
+            fi
+            echo "upload attempt $attempt failed; retrying in $((attempt * 15))s" >&2
+            sleep $((attempt * 15))
+          done
+          echo "::error::binary upload failed after 5 attempts"
+          exit 1

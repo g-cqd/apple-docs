@@ -14,6 +14,7 @@ import { createOperationsRepo } from './repos/operations.js'
 import { createPagesRepo } from './repos/pages.js'
 import { createRootsRepo } from './repos/roots.js'
 import { createSearchRepo } from './repos/search.js'
+import * as tombstones from './tombstones.js'
 function deriveFrameworkFromPath(path) {
   if (!path) return null
   const parts = path.split('/').filter(Boolean)
@@ -121,25 +122,13 @@ export class DocsDatabase {
   }
 
   upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
-    // Roots change rarely and are looked up once per persisted page —
-    // invalidate the memo on any root write.
-    this.#rootByIdCache.clear()
     return this.roots.upsertRoot(slug, displayName, kind, source, seedPath, sourceType)
   }
 
-  #rootByIdCache = new Map()
-
-  #getRootByIdCached(id) {
-    let root = this.#rootByIdCache.get(id)
-    if (root === undefined) {
-      root = this.roots.getRootById(id) ?? null
-      this.#rootByIdCache.set(id, root)
-    }
-    return root
-  }
-
   upsertPage(params) {
-    const root = params.rootId ? this.#getRootByIdCached(params.rootId) : null
+    // getRootById is memoized inside the roots repo — this runs once per
+    // persisted page and roots change rarely.
+    const root = params.rootId ? this.roots.getRootById(params.rootId) : null
     const sourceType = params.sourceType ?? root?.source_type ?? 'apple-docc'
     const urlDepth = params.urlDepth ?? Math.max(0, (params.path?.split('/').length ?? 1) - 1)
 
@@ -296,47 +285,12 @@ export class DocsDatabase {
   getPagesBySourceType(sourceType) { return this.pages.getPagesBySourceType(sourceType) }
   getPagesByRole(role) { return this.documents.getDocumentsByRole(role) }
 
-  markPageDeleted(path) {
-    this.pages.markPageDeleted(path)
-    this.deleteNormalizedDocument(path)
-  }
-
-  /**
-   * Bulk tombstone. Deleting a document scans `document_relationships` for
-   * `to_key = ?` (v21 dropped idx_rel_to as a cold-path index), which is fine
-   * one-off but O(pages × 2M rows) for a batch. Build the index transiently,
-   * run the batch in one transaction, drop it again — v21's space/write-amp
-   * rationale keeps holding outside this call.
-   */
-  markPagesDeleted(paths) {
-    if (!paths?.length) return
-    if (paths.length < 50) {
-      for (const path of paths) this.markPageDeleted(path)
-      return
-    }
-    this.db.run('BEGIN')
-    try {
-      this.db.run('CREATE INDEX IF NOT EXISTS idx_rel_to_bulk_delete ON document_relationships(to_key)')
-      for (const path of paths) this.markPageDeleted(path)
-      this.db.run('DROP INDEX IF EXISTS idx_rel_to_bulk_delete')
-      this.db.run('COMMIT')
-    } catch (error) {
-      try { this.db.run('ROLLBACK') } catch { /* already rolled back */ }
-      throw error
-    }
-  }
+  markPageDeleted(path) { tombstones.markPageDeleted(this, path) }
+  markPagesDeleted(paths) { tombstones.markPagesDeleted(this, paths) }
+  deleteNormalizedDocument(key) { return tombstones.deleteNormalizedDocument(this, key) }
 
   bumpConsecutive404(path) { return this.pages.bumpConsecutive404(path) }
   resetConsecutive404(path) { this.pages.resetConsecutive404(path) }
-
-  deleteNormalizedDocument(key) {
-    const document = this.documents.getDocumentIdByKey(key)
-    if (!document) return false
-    this.search.deleteBodyByDocId(document.id)
-    this.documents.deleteSectionsByDocId(document.id)
-    this.documents.deleteDocumentByKey(key)
-    return true
-  }
 
   updatePageAfterDownload(path, etag, lastModified, contentHash) {
     this.pages.updatePageAfterDownload(path, etag, lastModified, contentHash)

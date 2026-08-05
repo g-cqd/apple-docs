@@ -4,6 +4,11 @@
  *
  * `upsertRoot` derives source_type from the slug + kind via
  * deriveRootSourceType so callers don't have to track the canonical map.
+ *
+ * `getRootById` is memoized: upsertPage resolves rootId → source_type once
+ * per persisted page, so a cold sync would otherwise re-run the same point
+ * lookup hundreds of thousands of times. Roots change rarely, and any
+ * upsertRoot drops the memo.
  */
 
 import { deriveRootSourceType } from '../source-types.js'
@@ -29,8 +34,11 @@ export function createRootsRepo(db) {
     "UPDATE roots SET page_count = (SELECT COUNT(*) FROM pages WHERE root_id = roots.id AND status = 'active') WHERE slug = ?",
   )
 
+  const byIdCache = new Map()
+
   return {
     upsertRoot(slug, displayName, kind, source, seedPath = null, sourceType = null) {
+      byIdCache.clear()
       return upsertStmt.get({
         $slug: slug,
         $display_name: displayName,
@@ -48,7 +56,12 @@ export function createRootsRepo(db) {
       return getBySlugStmt.get(slug)
     },
     getRootById(id) {
-      return getByIdStmt.get(id)
+      let root = byIdCache.get(id)
+      if (root === undefined) {
+        root = getByIdStmt.get(id) ?? null
+        byIdCache.set(id, root)
+      }
+      return root
     },
     /** Resolve by exact slug, then case-insensitive slug match, then
      *  case-insensitive display_name contains, then slug substring. */

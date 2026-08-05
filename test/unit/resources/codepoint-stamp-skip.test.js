@@ -27,15 +27,28 @@ describe('stampSfSymbolCodepoints skip gate', () => {
       "INSERT INTO sf_symbols (name, scope, codepoint, updated_at) VALUES ('star', 'public', NULL, datetime('now'))",
     )
 
-    // With a missing codepoint the gate opens; the run then fails to
-    // resolve a font (no SF Symbols.app in the test env) and reports the
-    // non-skipped empty result — proving the gate did not short-circuit.
+    // With a missing codepoint the gate opens and the run proceeds to the
+    // dump instead of short-circuiting.
+    //
+    // fontPath + spawn are both injected on purpose. `appPath` alone only
+    // bypasses the provisioner: resolveSymbolFontPath still falls back to
+    // /Applications/SF Symbols.app, so on any machine that has it
+    // installed (developer Macs, macOS runners) this test used to spawn
+    // the real Swift worker and take ~5 s — right at the default timeout.
+    const writes = []
     const result = await stampSfSymbolCodepoints(
-      { forceRefresh: false, appPath: '/nonexistent' },
+      {
+        forceRefresh: false,
+        fontPath: '/tmp/fake.otf',
+        metadataDir: '/tmp/fake-metadata',
+        spawn: () => createEchoProc(() => 0xe000, writes),
+      },
       { db, dataDir: '/tmp/apple-docs-stamp-test', logger: noopLogger },
     )
 
     expect(result.skipped).toBeUndefined()
+    // The gate did not short-circuit: the unstamped symbol was requested.
+    expect(writes.join('').split('\n').filter(Boolean)).toEqual(['star'])
     db.close()
   })
 })
